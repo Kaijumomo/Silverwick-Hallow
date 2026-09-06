@@ -15,6 +15,8 @@ import { SeatNotePopup } from "./SeatNotePopup";
 import { SeatNotePreview } from "./SeatNotePreview";
 import { PlayerTabs } from "./PlayerTabs";
 import { AlmanacBody } from "@/features/almanac/AlmanacBody";
+import { RemoteScreenBoundary } from "@/features/remote/RemoteScreenBoundary";
+import { DATA_ERROR_MESSAGE, CONNECTION_ERROR_MESSAGE } from "@/firebase/snapshots";
 
 type PlayerTab = "role" | "town" | "almanac";
 
@@ -23,6 +25,10 @@ type Props = {
 };
 
 export function PlayerScreen({ initialCode }: Props) {
+  return <RemoteScreenBoundary><PlayerScreenContent initialCode={initialCode} /></RemoteScreenBoundary>;
+}
+
+function PlayerScreenContent({ initialCode }: Props) {
   const status = usePlayerStore((s) => s.status);
   const code = usePlayerStore((s) => s.code);
   const requestedName = usePlayerStore((s) => s.requestedName);
@@ -31,6 +37,7 @@ export function PlayerScreen({ initialCode }: Props) {
   const publicLobby = usePlayerStore((s) => s.publicLobby);
   const revealed = usePlayerStore((s) => s.revealed);
   const error = usePlayerStore((s) => s.error);
+  const remoteData = usePlayerStore((s) => s.remoteData);
 
   const setRevealed = usePlayerStore((s) => s.setRevealed);
   const reset = usePlayerStore((s) => s.reset);
@@ -193,6 +200,17 @@ export function PlayerScreen({ initialCode }: Props) {
     );
   }
 
+  const remoteFailure = Object.values(remoteData).find((value) => value === "invalid" || value === "error");
+  if (remoteFailure) {
+    return (
+      <div className="player player-status" role="alert">
+        <h2>Game data unavailable</h2>
+        <p>{remoteFailure === "invalid" ? DATA_ERROR_MESSAGE : CONNECTION_ERROR_MESSAGE}</p>
+        <button className="btn" onClick={() => reset()}>Back to start</button>
+      </div>
+    );
+  }
+
   if (status === "waiting") {
     return (
       <div className="player player-status">
@@ -223,6 +241,10 @@ export function PlayerScreen({ initialCode }: Props) {
         </button>
       </div>
     );
+  }
+
+  if (!publicLobby) {
+    return <div className="player player-status" role="status"><h2>Waiting for game data…</h2><p>The Storyteller's game is synchronizing.</p></div>;
   }
 
   // Seated

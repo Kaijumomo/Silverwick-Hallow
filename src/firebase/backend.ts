@@ -21,7 +21,7 @@ export interface RoomBackend {
   set(path: string, value: Json): Promise<void>;
 
   /** Read a value once at `path`. Returns undefined if no data. */
-  get(path: string): Promise<Json | undefined>;
+  get(path: string): Promise<unknown>;
 
   /** Atomically apply a multi-path update (Firebase `update()` with paths as keys). */
   update(updates: Record<string, Json>): Promise<void>;
@@ -37,7 +37,7 @@ export interface RoomBackend {
   ): Promise<{ committed: true } | { committed: false; existing: Json }>;
 
   /** Subscribe to changes at `path`. Callback fires immediately with current value. */
-  subscribe(path: string, cb: (value: Json | undefined) => void): Unsubscribe;
+  subscribe(path: string, cb: (value: unknown) => void, onError?: (error: unknown) => void): Unsubscribe;
 
   /**
    * Arrange for `value` to be written at `path` when this client disconnects

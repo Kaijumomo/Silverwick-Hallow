@@ -141,6 +141,7 @@ export const PublicLobbyRecordSchema = z.object({
   fabled: z.array(z.string().min(1)),
   lorics: z.array(z.string().min(1)).default([]),
   winner: AlignmentSchema.optional(),
+  status: z.literal("ended").optional(),
 });
 
 // Looser variants for validating persisted (localStorage) state.

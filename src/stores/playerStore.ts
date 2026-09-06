@@ -32,6 +32,9 @@ export type TownNote = {
 export type TownNoteMap = Record<string, TownNote>;
 
 export type PlayerStore = {
+  /** Ephemeral remote validation status; never persisted. */
+  remoteData: { public: "waiting" | "ready" | "invalid" | "error"; self: "waiting" | "ready" | "invalid" | "error"; membership: "ready" | "invalid" | "error"; request: "ready" | "invalid" | "error" };
+  setRemoteData: (patch: Partial<PlayerStore["remoteData"]>) => void;
   code: string | null;
   uid: string | null;
   playerId: string | null;
@@ -85,6 +88,8 @@ export function migratePlayerState(state: unknown, fromVersion: number): unknown
 export const usePlayerStore = create<PlayerStore>()(
   persist(
     (set) => ({
+      remoteData: { public: "waiting", self: "waiting", membership: "ready", request: "ready" },
+      setRemoteData: (patch) => set((state) => ({ remoteData: { ...state.remoteData, ...patch } })),
       code: null,
       uid: null,
       playerId: null,
@@ -98,7 +103,8 @@ export const usePlayerStore = create<PlayerStore>()(
 
       setStatus: (status, error = null) => set({ status, error }),
       setSession: ({ code, uid, requestedName }) =>
-        set({ code, uid, requestedName, playerId: null, error: null }),
+        set({ code, uid, requestedName, playerId: null, error: null, self: null, publicLobby: null,
+          remoteData: { public: "waiting", self: "waiting", membership: "ready", request: "ready" } }),
       setPlayerId: (id) => set({ playerId: id }),
       setSelf: (self) => set({ self }),
       setPublic: (publicLobby) => set({ publicLobby }),
@@ -120,6 +126,7 @@ export const usePlayerStore = create<PlayerStore>()(
         }),
       setEnded: () =>
         set({
+          remoteData: { public: "waiting", self: "waiting", membership: "ready", request: "ready" },
           code: null,
           uid: null,
           playerId: null,
@@ -132,6 +139,7 @@ export const usePlayerStore = create<PlayerStore>()(
         }),
       reset: () =>
         set({
+          remoteData: { public: "waiting", self: "waiting", membership: "ready", request: "ready" },
           code: null,
           uid: null,
           playerId: null,

@@ -16,11 +16,10 @@ import { writeProjections } from "./sync";
 import type { OnlineMap } from "@/stores/projections";
 import type { RoomBackend } from "./backend";
 import type { PlayerId } from "@/stores/types";
+import { decodePresence, subscribeDecoded, DATA_ERROR_MESSAGE, CONNECTION_ERROR_MESSAGE, type PresenceMap } from "./snapshots";
 
 const WRITE_DEBOUNCE_MS = 200;
 
-type PresenceEntry = { online?: boolean; lastSeen?: number };
-type PresenceMap = Record<string, PresenceEntry>; // keyed by uid
 type RosterMap = Record<string, string>; // uid → playerId
 
 function deriveOnlineMap(roster: RosterMap, presence: PresenceMap): OnlineMap {
@@ -48,6 +47,12 @@ export function useStorytellerSync(
   // dependency array but are always read at flush time.
   const rosterRef = useRef<RosterMap>({});
   const presenceRef = useRef<PresenceMap>({});
+  const invalidReads = useRef(new Set<string>());
+  const reportRead = (source: string, error: string | null) => {
+    if (error) invalidReads.current.add(source);
+    else invalidReads.current.delete(source);
+    onSyncError?.(invalidReads.current.size ? (error ?? DATA_ERROR_MESSAGE) : null);
+  };
 
   // ---- Sync loop: subscribe to store changes, debounce, project + write.
   useEffect(() => {
@@ -66,7 +71,7 @@ export function useStorytellerSync(
       try {
         await writeProjections({ backend, code, stState: game, registry, online });
         // Clear any previous sync error banner on success.
-        onSyncError?.(null);
+        onSyncError?.(invalidReads.current.size ? DATA_ERROR_MESSAGE : null);
       } catch (e) {
         // eslint-disable-next-line no-console
         console.warn("[sync] writeProjections failed:", e instanceof Error ? e.message : e);
@@ -100,10 +105,15 @@ export function useStorytellerSync(
 
     // Watch presence for the lobby. When a uid's online flips, schedule a
     // re-projection so the public roster carries the new value.
-    const unsubPresence = backend.subscribe(
-      `lobbies/${code}/presence`,
-      (value) => {
-        presenceRef.current = (value as PresenceMap | undefined) ?? {};
+    const unsubPresence = subscribeDecoded(
+      backend, `lobbies/${code}/presence`, decodePresence,
+      (snapshot) => {
+        if (snapshot.status !== "ready") {
+          reportRead("presence", DATA_ERROR_MESSAGE);
+          return;
+        }
+        reportRead("presence", null);
+        presenceRef.current = snapshot.data;
         if (onPresenceUpdate) {
           const online = deriveOnlineMap(rosterRef.current, presenceRef.current);
           // Count pending devices currently showing presence online=true.
@@ -119,7 +129,7 @@ export function useStorytellerSync(
           onPresenceUpdate(online, pendingOnlineCount);
         }
         schedule();
-      }
+      }, () => reportRead("presence", CONNECTION_ERROR_MESSAGE)
     );
 
     return () => {
@@ -136,16 +146,19 @@ export function useStorytellerSync(
   useEffect(() => {
     if (!backend || !lobby) return;
     const code = lobby.code;
+    invalidReads.current.clear();
 
     const unsubRoster = watchRoster(backend, code, (raw) => {
+      reportRead("roster", null);
       const next: RosterMap = {};
       for (const entry of classifyRoster(raw)) {
         next[entry.uid] = entry.playerId;
       }
       rosterRef.current = next;
-    });
+    }, (message) => reportRead("roster", message));
 
     const unsubRequests = watchJoinRequests(backend, code, (requests) => {
+      reportRead("requests", null);
       const state = useStorytellerStore.getState();
       const game = state.game;
       if (!game) return;
@@ -155,7 +168,7 @@ export function useStorytellerSync(
       for (const [uid, name] of Object.entries(requests)) {
         state.addToPendingQueue(uid, name);
       }
-    });
+    }, (message) => reportRead("requests", message));
 
     return () => {
       unsubRoster();

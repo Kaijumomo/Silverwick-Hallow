@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { publicPath } from "./paths";
 import type { RoomBackend, Unsubscribe } from "./backend";
 import type { PublicLobbyRecord } from "@/stores/types";
+import { CONNECTION_ERROR_MESSAGE, DATA_ERROR_MESSAGE, decodePublicSnapshot, subscribeDecoded, type PublicSnapshot } from "./snapshots";
 
 // Public-only subscription. Reads ONLY `lobbies/{code}/public` — never the
 // storyteller, player-private, roster, or presence paths. Mirrors the inner
@@ -10,21 +11,19 @@ import type { PublicLobbyRecord } from "@/stores/types";
 export function subscribeToPublicLobby(
   backend: RoomBackend,
   code: string,
-  cb: (value: PublicLobbyRecord | null) => void
+  cb: (value: PublicLobbyRecord | null, snapshot: PublicSnapshot) => void,
+  onReadError?: () => void,
 ): Unsubscribe {
-  return backend.subscribe(publicPath(code), (value) => {
-    if (value === undefined || value === null) {
-      cb(null);
-      return;
-    }
-    cb(value as unknown as PublicLobbyRecord);
-  });
+  return subscribeDecoded(backend, publicPath(code), (raw) => decodePublicSnapshot(raw, code), (snapshot) => {
+    cb(snapshot.status === "ready" ? snapshot.data : null, snapshot);
+  }, onReadError);
 }
 
 export type UsePublicLobbyResult = {
   publicLobby: PublicLobbyRecord | null;
   ended: boolean;
   loading: boolean;
+  error: string | null;
 };
 
 export function usePublicLobby(
@@ -34,6 +33,7 @@ export function usePublicLobby(
   const [publicLobby, setPublicLobby] = useState<PublicLobbyRecord | null>(null);
   const [ended, setEnded] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!backend || !code) {
@@ -41,6 +41,7 @@ export function usePublicLobby(
       return;
     }
     setLoading(true);
+    setError(null);
     setEnded(false);
     setPublicLobby(null);
 
@@ -57,20 +58,17 @@ export function usePublicLobby(
       .get(publicPath(code))
       .then(() => {
         if (cancelled) return;
-        unsub = subscribeToPublicLobby(backend, code, (value) => {
-          setLoading(false);
-          if (value === null) {
-            setPublicLobby(null);
-            setEnded(false);
-            return;
-          }
-          if (value.status === "ended") {
-            setEnded(true);
-            setPublicLobby(value);
-            return;
-          }
-          setEnded(false);
+        unsub = subscribeToPublicLobby(backend, code, (value, snapshot) => {
+          if (cancelled) return;
+          setLoading(snapshot.status === "waiting");
+          setError(snapshot.status === "invalid" ? DATA_ERROR_MESSAGE : null);
+          setEnded(snapshot.status === "ended" || value?.status === "ended");
           setPublicLobby(value);
+        }, () => {
+          if (cancelled) return;
+          setLoading(false);
+          setPublicLobby(null);
+          setError(CONNECTION_ERROR_MESSAGE);
         });
       })
       .catch(() => {
@@ -78,6 +76,7 @@ export function usePublicLobby(
         setLoading(false);
         setPublicLobby(null);
         setEnded(false);
+        setError(CONNECTION_ERROR_MESSAGE);
       });
 
     return () => {
@@ -86,5 +85,5 @@ export function usePublicLobby(
     };
   }, [backend, code]);
 
-  return { publicLobby, ended, loading };
+  return { publicLobby, ended, loading, error };
 }

@@ -84,7 +84,7 @@ export class MemoryRoomBackend implements RoomBackend {
     this.notify(path);
   }
 
-  async get(path: string): Promise<Json | undefined> {
+  async get(path: string): Promise<unknown> {
     return clone(readPath(this.root, path));
   }
 
@@ -117,7 +117,7 @@ export class MemoryRoomBackend implements RoomBackend {
     return { committed: true };
   }
 
-  subscribe(path: string, cb: (value: Json | undefined) => void): Unsubscribe {
+  subscribe(path: string, cb: (value: unknown) => void, _onError?: (error: unknown) => void): Unsubscribe {
     this.subscribePaths.push(path);
     let set = this.listeners.get(path);
     if (!set) {

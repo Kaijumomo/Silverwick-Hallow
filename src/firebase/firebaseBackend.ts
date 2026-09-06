@@ -65,10 +65,10 @@ export class FirebaseRoomBackend implements RoomBackend {
     await rtdbSet(ref(this.db, path), value);
   }
 
-  async get(path: string): Promise<Json | undefined> {
+  async get(path: string): Promise<unknown> {
     const snap = await rtdbGet(ref(this.db, path));
     if (!snap.exists()) return undefined;
-    return snap.val() as Json;
+    return snap.val();
   }
 
   async update(updates: Record<string, Json>): Promise<void> {
@@ -94,11 +94,11 @@ export class FirebaseRoomBackend implements RoomBackend {
     };
   }
 
-  subscribe(path: string, cb: (value: Json | undefined) => void): Unsubscribe {
+  subscribe(path: string, cb: (value: unknown) => void, onError?: (error: unknown) => void): Unsubscribe {
     const r = ref(this.db, path);
     const off = onValue(r, (snap) => {
-      cb(snap.exists() ? (snap.val() as Json) : undefined);
-    });
+      cb(snap.exists() ? snap.val() : undefined);
+    }, onError);
     return off;
   }
 

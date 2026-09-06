@@ -12,8 +12,8 @@ import {
   playerPath,
 } from "./paths";
 import type { RoomBackend } from "./backend";
-import type { PlayerSelfRecord, PublicLobbyRecord } from "@/stores/types";
 import { friendlyFirebaseError } from "./errors";
+import { decodeJoinRequest, decodeRosterEntry, decodeSelfSnapshot, decodePublicSnapshot, subscribeDecoded } from "./snapshots";
 
 const HEARTBEAT_MS = 15_000;
 
@@ -50,22 +50,32 @@ export function usePlayerSync(backend: RoomBackend | null) {
   // the acknowledged request before probing public/ (also on refresh).
   useEffect(() => {
     if (!backend || !code || !uid) return;
-    return backend.subscribe(joinRequestPath(code, uid), (value) => {
-      setRequestSession(typeof value === "string" ? JSON.stringify([code, uid]) : null);
+    return subscribeDecoded(backend, joinRequestPath(code, uid), decodeJoinRequest, (snapshot) => {
+      usePlayerStore.getState().setRemoteData({ request: snapshot.status === "invalid" ? "invalid" : "ready" });
+      setRequestSession(snapshot.status === "ready" ? JSON.stringify([code, uid]) : null);
+    }, () => {
+      setRequestSession(null);
+      usePlayerStore.getState().setRemoteData({ request: "error" });
     });
   }, [backend, code, uid]);
 
   // Watch roster/{ownUid} for the playerId binding.
   useEffect(() => {
     if (!backend || !code || !uid) return;
-    const unsub = backend.subscribe(rosterEntryPath(code, uid), (value) => {
+    const unsub = subscribeDecoded(backend, rosterEntryPath(code, uid), decodeRosterEntry, (snapshot) => {
       const ps = usePlayerStore.getState();
       // Guard: don't clobber "ended" status. After the public/ subscription
       // calls setEnded(), this effect's cleanup hasn't run yet — Firebase can
       // still deliver a buffered roster value. Without the guard, the fall-
       // through below would write setStatus("seated") over "ended".
       if (ps.status === "ended") return;
-      if (typeof value !== "string" || value.length === 0) {
+      ps.setRemoteData({ membership: snapshot.status === "invalid" ? "invalid" : "ready" });
+      if (snapshot.status === "invalid") {
+        ps.setPlayerId(null);
+        ps.setSelf(null);
+        return;
+      }
+      if (snapshot.status === "waiting") {
         // No roster entry; if we'd been seated and got removed, surface that.
         if (ps.playerId) {
           ps.setStatus("error", "Removed from lobby.");
@@ -75,8 +85,13 @@ export function usePlayerSync(backend: RoomBackend | null) {
         return;
       }
       // Every roster value was written by the ST. Names exist only in requests.
-      ps.setPlayerId(value);
+      ps.setPlayerId(snapshot.data);
       ps.setStatus("seated");
+    }, () => {
+      const ps = usePlayerStore.getState();
+      ps.setRemoteData({ membership: "error" });
+      ps.setPlayerId(null);
+      ps.setSelf(null);
     });
     return () => unsub();
   }, [backend, code, uid]);
@@ -87,23 +102,27 @@ export function usePlayerSync(backend: RoomBackend | null) {
   // instead of hanging silently.
   useEffect(() => {
     if (!backend || !code || !playerId) return;
+    usePlayerStore.getState().setSelf(null);
+    usePlayerStore.getState().setRemoteData({ self: "waiting" });
     let active = true;
     let cleanup: (() => void) | null = null;
     backend.get(playerPath(code, playerId)).then(() => {
       if (!active) return;
-      cleanup = backend.subscribe(playerPath(code, playerId), (value) => {
+      cleanup = subscribeDecoded(backend, playerPath(code, playerId), decodeSelfSnapshot, (snapshot) => {
+        if (!active) return;
         const ps = usePlayerStore.getState();
         if (ps.status === "ended") return;
-        if (value === undefined || value === null) {
-          ps.setSelf(null);
-          return;
-        }
-        ps.setSelf(value as unknown as PlayerSelfRecord);
+        ps.setSelf(snapshot.status === "ready" ? snapshot.data : null);
+        ps.setRemoteData({ self: snapshot.status });
+      }, () => {
+        if (!active) return;
+        usePlayerStore.getState().setSelf(null);
+        usePlayerStore.getState().setRemoteData({ self: "error" });
       });
-    }).catch((e) => {
+    }).catch(() => {
       if (!active) return;
-      const friendly = friendlyFirebaseError(e, "player");
-      usePlayerStore.getState().setStatus("error", `${friendly.title}: ${friendly.message}`);
+      usePlayerStore.getState().setSelf(null);
+      usePlayerStore.getState().setRemoteData({ self: "error" });
     });
     return () => { active = false; cleanup?.(); };
   }, [backend, code, playerId]);
@@ -120,23 +139,25 @@ export function usePlayerSync(backend: RoomBackend | null) {
     let cleanup: (() => void) | null = null;
     backend.get(publicPath(code)).then(() => {
       if (!active) return;
-      cleanup = backend.subscribe(publicPath(code), (value) => {
+      cleanup = subscribeDecoded(backend, publicPath(code), (raw) => decodePublicSnapshot(raw, code), (snapshot) => {
+        if (!active) return;
         const ps = usePlayerStore.getState();
-        if (value === undefined || value === null) {
-          ps.setPublic(null);
-          return;
-        }
-        const pub = value as unknown as PublicLobbyRecord;
-        if (pub.status === "ended") {
+        if (ps.status === "ended") return;
+        if (snapshot.status === "ended" || (snapshot.status === "ready" && snapshot.data.status === "ended")) {
           ps.setEnded();
           return;
         }
-        ps.setPublic(pub);
+        ps.setPublic(snapshot.status === "ready" ? snapshot.data : null);
+        ps.setRemoteData({ public: snapshot.status });
+      }, () => {
+        if (!active) return;
+        usePlayerStore.getState().setPublic(null);
+        usePlayerStore.getState().setRemoteData({ public: "error" });
       });
-    }).catch((e) => {
+    }).catch(() => {
       if (!active) return;
-      const friendly = friendlyFirebaseError(e, "player");
-      usePlayerStore.getState().setStatus("error", `${friendly.title}: ${friendly.message}`);
+      usePlayerStore.getState().setPublic(null);
+      usePlayerStore.getState().setRemoteData({ public: "error" });
     });
     return () => { active = false; cleanup?.(); };
   }, [backend, code, playerId, hasRequest]);

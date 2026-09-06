@@ -13,6 +13,7 @@ import {
   storytellerUidPath,
 } from "./paths";
 import type { PlayerId, PlayerSelfRecord } from "@/stores/types";
+import { decodeRosterEntry, decodeJoinRequests, decodeRoster, decodeLobbyStatus, reportSnapshotProblem, SnapshotValidationError, subscribeDecoded, DATA_ERROR_MESSAGE, CONNECTION_ERROR_MESSAGE } from "./snapshots";
 
 // Confusable-glyph-free alphabet (no 0/O, 1/I/L). 30 chars, ~656bn 8-char codes.
 const ALPHABET = "BCDFGHJKLMNPQRSTVWXYZ23456789";
@@ -144,26 +145,25 @@ export async function readOwnRosterEntry(
   uid: string
 ): Promise<{ phase: "absent" } | { phase: "seated"; playerId: PlayerId }> {
   const value = await backend.get(rosterEntryPath(code, uid));
-  if (value === undefined || value === null) return { phase: "absent" };
-  if (typeof value !== "string" || value.length === 0) return { phase: "absent" };
-  return { phase: "seated", playerId: value };
+  const snapshot = decodeRosterEntry(value);
+  if (snapshot.status === "invalid") {
+    reportSnapshotProblem("roster entry", snapshot.issues);
+    throw new SnapshotValidationError();
+  }
+  return snapshot.status === "waiting" ? { phase: "absent" } : { phase: "seated", playerId: snapshot.data };
 }
 
 /** ST-only request collection. Never classify request text as a player ID. */
 export function watchJoinRequests(
   backend: RoomBackend,
   code: string,
-  cb: (requests: Record<string, string>) => void
+  cb: (requests: Record<string, string>) => void,
+  onInvalid?: (message: string) => void,
 ): () => void {
-  return backend.subscribe(joinRequestsPath(code), (value) => {
-    const requests: Record<string, string> = {};
-    if (value && typeof value === "object" && !Array.isArray(value)) {
-      for (const [uid, name] of Object.entries(value)) {
-        if (typeof name === "string" && name.trim() && name.length <= 20) requests[uid] = name;
-      }
-    }
-    cb(requests);
-  });
+  return subscribeDecoded(backend, joinRequestsPath(code), decodeJoinRequests, (snapshot) => {
+    if (snapshot.status === "ready") cb(snapshot.data);
+    else if (snapshot.status === "invalid") onInvalid?.(DATA_ERROR_MESSAGE);
+  }, () => onInvalid?.(CONNECTION_ERROR_MESSAGE));
 }
 
 // ---------------------------------------------------------------------------
@@ -203,7 +203,10 @@ export async function checkLobbyStatus(
   code: string
 ): Promise<"active" | "ended"> {
   const val = await backend.get(lobbyStatusPath(code));
-  return val === "ended" ? "ended" : "active";
+  const snapshot = decodeLobbyStatus(val);
+  if (snapshot.status === "ready") return snapshot.data;
+  if (snapshot.status === "invalid") reportSnapshotProblem("lobby status", snapshot.issues);
+  throw new SnapshotValidationError();
 }
 
 /**
@@ -214,24 +217,24 @@ export async function checkLobbyStatus(
 export function watchLobbyStatus(
   backend: RoomBackend,
   code: string,
-  cb: (status: "active" | "ended") => void
+  cb: (status: "active" | "ended") => void,
+  onInvalid?: (message: string) => void,
 ): () => void {
-  return backend.subscribe(lobbyStatusPath(code), (value) => {
-    cb(value === "ended" ? "ended" : "active");
-  });
+  return subscribeDecoded(backend, lobbyStatusPath(code), decodeLobbyStatus, (snapshot) => {
+    if (snapshot.status === "ready") cb(snapshot.data);
+    else if (snapshot.status === "invalid") onInvalid?.(DATA_ERROR_MESSAGE);
+  }, () => onInvalid?.(CONNECTION_ERROR_MESSAGE));
 }
 
 /** Watch the full roster object for changes. */
 export function watchRoster(
   backend: RoomBackend,
   code: string,
-  cb: (raw: Record<string, string> | null) => void
+  cb: (raw: Record<string, string> | null) => void,
+  onInvalid?: (message: string) => void,
 ): () => void {
-  return backend.subscribe(rosterPath(code), (value) => {
-    if (value === undefined || value === null) {
-      cb(null);
-      return;
-    }
-    cb(value as Record<string, string>);
-  });
+  return subscribeDecoded(backend, rosterPath(code), decodeRoster, (snapshot) => {
+    if (snapshot.status === "ready") cb(Object.keys(snapshot.data).length ? snapshot.data : null);
+    else if (snapshot.status === "invalid") onInvalid?.(DATA_ERROR_MESSAGE);
+  }, () => onInvalid?.(CONNECTION_ERROR_MESSAGE));
 }

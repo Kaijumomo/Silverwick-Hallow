@@ -7,10 +7,15 @@ import { ringRadius, seatPosition, tokenSizeForCount } from "@/features/grimoire
 import type { RoomBackend } from "@/firebase/backend";
 import { PublicSeat } from "./PublicSeat";
 import { PHASE_LABEL, selectActiveFabled, selectActiveLorics } from "./presenters";
+import { RemoteScreenBoundary } from "@/features/remote/RemoteScreenBoundary";
 
 type Props = { code: string };
 
 export function PublicDisplayScreen({ code }: Props) {
+  return <RemoteScreenBoundary key={code}><PublicDisplayContent code={code} /></RemoteScreenBoundary>;
+}
+
+function PublicDisplayContent({ code }: Props) {
   const [backend, setBackend] = useState<RoomBackend | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [size, setSize] = useState(800);
@@ -52,7 +57,7 @@ export function PublicDisplayScreen({ code }: Props) {
     return () => ro.disconnect();
   }, []);
 
-  const { publicLobby, ended, loading } = usePublicLobby(backend, code);
+  const { publicLobby, ended, loading, error } = usePublicLobby(backend, code);
 
   if (!isFirebaseConfigured()) {
     return (
@@ -70,10 +75,16 @@ export function PublicDisplayScreen({ code }: Props) {
       </div>
     );
   }
+  if (error) {
+    return <div className="public-display public-display-message" role="alert"><h2>Game data unavailable</h2><p>{error}</p></div>;
+  }
+  if (ended && !publicLobby) {
+    return <div className="public-display public-display-message" role="status"><h2>Game ended</h2></div>;
+  }
   if (!backend || loading) {
     return (
       <div className="public-display public-display-message">
-        <h2>Connecting…</h2>
+        <h2>{backend ? "Waiting for game data…" : "Connecting…"}</h2>
       </div>
     );
   }

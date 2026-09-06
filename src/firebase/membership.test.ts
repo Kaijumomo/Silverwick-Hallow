@@ -16,7 +16,10 @@ afterEach(cleanup);
 describe("membership join-flow compatibility (real hooks, memory transport)", () => {
   it("waits for a request, then accepts a binding even when the name equals the player ID", async () => {
     const b = new MemoryRoomBackend();
-    await b.set("lobbies/ROOM/public", { code: "ROOM", players: {}, seatOrder: [] });
+    await b.set("lobbies/ROOM/public", {
+      code: "ROOM", scriptId: "tb", phase: "setup", day: 0,
+      players: {}, seatOrder: [], fabled: [], lorics: [],
+    });
     renderHook(() => usePlayerSync(b));
     expect(b.subscribePaths).not.toContain("lobbies/ROOM/public");
 
@@ -41,7 +44,10 @@ describe("membership join-flow compatibility (real hooks, memory transport)", ()
   it("restores pending public access from the request after refresh", async () => {
     const b = new MemoryRoomBackend();
     await knockOnLobby(b, "ROOM", "bob", "Bob");
-    await b.set("lobbies/ROOM/public", { code: "ROOM", players: {}, seatOrder: [] });
+    await b.set("lobbies/ROOM/public", {
+      code: "ROOM", scriptId: "tb", phase: "setup", day: 0,
+      players: {}, seatOrder: [], fabled: [], lorics: [],
+    });
     usePlayerStore.getState().setSession({ code: "ROOM", uid: "bob", requestedName: "Bob" });
     renderHook(() => usePlayerSync(b));
     await waitFor(() => expect(usePlayerStore.getState().publicLobby).not.toBeNull());
