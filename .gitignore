@@ -7,5 +7,7 @@ dist-ssr
 .DS_Store
 .vite
 coverage
+firebase-debug.log
+database-debug.log
 .claude/
 .playwright-cli/

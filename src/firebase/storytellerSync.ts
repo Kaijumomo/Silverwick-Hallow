@@ -1,7 +1,6 @@
 // React hook that activates the ST-side Firebase sync when there's an
 // active lobby. Behavior:
-//   1. On mount (and whenever code/script changes), subscribe to roster
-//      changes. Auto-seat new knocks.
+//   1. Watch authoritative roster bindings and a separate pending request queue.
 //   2. Subscribe to local store changes; debounce 200ms; on each commit,
 //      call writeProjections() with the latest STPlayerRecord and presence.
 //   3. On unmount, unsubscribe everything.
@@ -12,7 +11,7 @@ import {
   useStorytellerStore,
 } from "@/stores/storytellerStore";
 import { buildRegistry } from "@/data/roleRegistry";
-import { classifyRoster, watchRoster } from "./lobby";
+import { classifyRoster, watchJoinRequests, watchRoster } from "./lobby";
 import { writeProjections } from "./sync";
 import type { OnlineMap } from "@/stores/projections";
 import type { RoomBackend } from "./backend";
@@ -27,9 +26,7 @@ type RosterMap = Record<string, string>; // uid → playerId
 function deriveOnlineMap(roster: RosterMap, presence: PresenceMap): OnlineMap {
   const out: OnlineMap = {};
   for (const [uid, value] of Object.entries(roster)) {
-    // value is either a name (knock) or playerId (seated). We only care about
-    // seated entries — only those have a stable id to map onto. Knocked
-    // players don't have a seat yet, so they don't appear in the public roster.
+    // Only ST-written player IDs appear in this collection.
     const playerId: PlayerId = value;
     const p = presence[uid];
     out[playerId] = !!p?.online;
@@ -109,8 +106,7 @@ export function useStorytellerSync(
         presenceRef.current = (value as PresenceMap | undefined) ?? {};
         if (onPresenceUpdate) {
           const online = deriveOnlineMap(rosterRef.current, presenceRef.current);
-          // Count knocking uids (roster value is a name, not a playerId) that
-          // are currently showing presence online=true.
+          // Count pending devices currently showing presence online=true.
           const seatedUids = new Set(Object.keys(rosterRef.current));
           const fullRoster = useStorytellerStore.getState().game?.players ?? {};
           const knownIds = new Set(Object.keys(fullRoster));
@@ -136,47 +132,34 @@ export function useStorytellerSync(
     };
   }, [backend, lobby?.code]);
 
-  // ---- Roster watch: route new knocks to pending queue (ST assigns manually).
+  // ---- Membership and request watches (ST still assigns seats manually).
   useEffect(() => {
     if (!backend || !lobby) return;
     const code = lobby.code;
 
-    const unsub = watchRoster(backend, code, (raw) => {
-      // Cache the roster for the presence merge — only seated entries (where
-      // value is a known playerId) get an OnlineMap entry.
+    const unsubRoster = watchRoster(backend, code, (raw) => {
       const next: RosterMap = {};
-      const state0 = useStorytellerStore.getState();
-      const game0 = state0.game;
-      const knownIds0 = new Set(Object.keys(game0?.players ?? {}));
-      for (const [uid, value] of Object.entries(raw ?? {})) {
-        if (typeof value === "string" && knownIds0.has(value)) {
-          next[uid] = value;
-        }
+      for (const entry of classifyRoster(raw)) {
+        next[entry.uid] = entry.playerId;
       }
       rosterRef.current = next;
+    });
 
+    const unsubRequests = watchJoinRequests(backend, code, (requests) => {
       const state = useStorytellerStore.getState();
       const game = state.game;
       if (!game) return;
-      const knownIds = new Set(Object.keys(game.players));
-      const entries = classifyRoster(raw, knownIds);
-
-      // Route genuine knocks to the pending queue; the ST will manually
-      // assign each pending player to an empty seat.
-      const knocks = entries.filter((e) => e.phase === "knock");
-      for (const knock of knocks) {
-        // Skip if already in pending queue or already seated (re-connect).
-        if (game.pendingPlayers[knock.uid]) continue;
-        const alreadySeated = entries.some(
-          (e) => e.uid === knock.uid && e.phase === "seated"
-        );
-        if (alreadySeated) continue;
-        useStorytellerStore.getState().addToPendingQueue(knock.uid, knock.name);
+      for (const uid of Object.keys(game.pendingPlayers)) {
+        if (!requests[uid]) useStorytellerStore.getState().removePendingPlayer(uid);
+      }
+      for (const [uid, name] of Object.entries(requests)) {
+        state.addToPendingQueue(uid, name);
       }
     });
 
     return () => {
-      unsub();
+      unsubRoster();
+      unsubRequests();
     };
   }, [backend, lobby?.code]);
 }

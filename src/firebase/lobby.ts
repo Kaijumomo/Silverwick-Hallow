@@ -3,6 +3,8 @@
 
 import type { Json, RoomBackend } from "./backend";
 import {
+  joinRequestPath,
+  joinRequestsPath,
   lobbyStatusPath,
   playerPath,
   rosterEntryPath,
@@ -60,13 +62,11 @@ export async function createLobby(
 }
 
 // ---------------------------------------------------------------------------
-// Roster transitions (see PROTOCOL.md)
+// Requests and authoritative membership (see PROTOCOL.md)
 // ---------------------------------------------------------------------------
-// `roster/{uid}` is a string. Phase 1 = the player's requested name. Phase 2 =
-// the playerId binding. We can tell which phase by checking whether the
-// value matches a known playerId.
+// Names live only in joinRequests/{uid}. Only the ST writes roster/{uid}.
 
-/** Player writes their requested name into roster/{uid}. Phase 1 of join. */
+/** Player creates a bounded request; never writes an authoritative binding. */
 export async function knockOnLobby(
   backend: RoomBackend,
   code: string,
@@ -75,8 +75,22 @@ export async function knockOnLobby(
 ): Promise<void> {
   const trimmed = requestedName.trim();
   if (!trimmed) throw new Error("Name is required.");
-  // Use setIfAbsent so a refresh doesn't overwrite a server-bound playerId.
-  await backend.setIfAbsent(rosterEntryPath(code, uid), trimmed);
+  if (trimmed.length > 20 || /[\r\n\t]/.test(trimmed)) {
+    throw new Error("Name must be a single line of at most 20 characters.");
+  }
+  // A seated reconnect needs no request. Rules enforce this independently.
+  if ((await readOwnRosterEntry(backend, code, uid)).phase === "seated") return;
+  await backend.setIfAbsent(joinRequestPath(code, uid), trimmed);
+}
+
+/** Player cancels their request, or the ST rejects it. Does not revoke a seat. */
+export async function cancelJoinRequest(backend: RoomBackend, code: string, uid: string): Promise<void> {
+  await backend.set(joinRequestPath(code, uid), null);
+}
+
+/** ST-only membership revocation. Rules deny subsequent private reads. */
+export async function revokeMembership(backend: RoomBackend, code: string, uid: string): Promise<void> {
+  await backend.set(rosterEntryPath(code, uid), null);
 }
 
 /**
@@ -99,6 +113,7 @@ export async function seatPlayer(
 ): Promise<void> {
   const updates: Record<string, Json> = {
     [rosterEntryPath(code, uid)]: playerId,
+    [joinRequestPath(code, uid)]: null,
   };
   if (selfRecord) {
     updates[playerPath(code, playerId)] = selfRecord as unknown as Json;
@@ -106,24 +121,18 @@ export async function seatPlayer(
   await backend.update(updates);
 }
 
-/** Inspect a roster snapshot and classify each entry. */
+/** Roster values are bindings, even if the matching local seat is absent. */
 export type RosterEntry =
-  | { uid: string; phase: "knock"; name: string }
   | { uid: string; phase: "seated"; playerId: PlayerId };
 
 export function classifyRoster(
-  raw: Record<string, string> | null | undefined,
-  knownPlayerIds: ReadonlySet<PlayerId>
+  raw: Record<string, string> | null | undefined
 ): RosterEntry[] {
   if (!raw) return [];
   const entries: RosterEntry[] = [];
   for (const [uid, value] of Object.entries(raw)) {
     if (typeof value !== "string" || value.length === 0) continue;
-    if (knownPlayerIds.has(value)) {
-      entries.push({ uid, phase: "seated", playerId: value });
-    } else {
-      entries.push({ uid, phase: "knock", name: value });
-    }
+    entries.push({ uid, phase: "seated", playerId: value });
   }
   return entries;
 }
@@ -133,15 +142,28 @@ export async function readOwnRosterEntry(
   backend: RoomBackend,
   code: string,
   uid: string
-): Promise<{ phase: "absent" } | { phase: "knock"; name: string } | { phase: "seated"; playerId: PlayerId }> {
+): Promise<{ phase: "absent" } | { phase: "seated"; playerId: PlayerId }> {
   const value = await backend.get(rosterEntryPath(code, uid));
   if (value === undefined || value === null) return { phase: "absent" };
   if (typeof value !== "string" || value.length === 0) return { phase: "absent" };
-  // We don't know the set of seated playerIds without a full roster snapshot.
-  // Caller decides; we return raw value with a "seated" guess that the caller
-  // can override after fetching the full roster. For the player flow, the
-  // caller checks against their own state.
   return { phase: "seated", playerId: value };
+}
+
+/** ST-only request collection. Never classify request text as a player ID. */
+export function watchJoinRequests(
+  backend: RoomBackend,
+  code: string,
+  cb: (requests: Record<string, string>) => void
+): () => void {
+  return backend.subscribe(joinRequestsPath(code), (value) => {
+    const requests: Record<string, string> = {};
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      for (const [uid, name] of Object.entries(value)) {
+        if (typeof name === "string" && name.trim() && name.length <= 20) requests[uid] = name;
+      }
+    }
+    cb(requests);
+  });
 }
 
 // ---------------------------------------------------------------------------

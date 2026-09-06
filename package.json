@@ -9,11 +9,12 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:rules": "vitest run --config vitest.rules.config.ts",
+    "test:rules": "firebase emulators:exec --project demo-silverwick-rules --only database --config firebase.rules-test.json \"npm run test:rules:run\"",
+    "test:rules:run": "node scripts/run-rules-tests.mjs",
     "typecheck": "tsc -b --noEmit",
     "rules:deploy": "firebase deploy --only database",
     "emulator": "firebase emulators:start --only database",
-    "test:full": "npm run typecheck && vitest run && npm run test:rules"
+    "test:full": "npm run typecheck && npm test && npm run test:rules"
   },
   "dependencies": {
     "firebase": "^12.12.1",
@@ -23,6 +24,7 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
+    "firebase-tools": "14.27.0",
     "@firebase/rules-unit-testing": "^5.0.0",
     "@testing-library/jest-dom": "^6.5.0",
     "@testing-library/react": "^16.0.1",

@@ -28,8 +28,8 @@ in env files.
 ## 3. Enable Anonymous Auth
 
 In Firebase Console → Authentication → Sign-in method → enable the
-**Anonymous** provider. Players authenticate anonymously to claim a roster
-slot.
+**Anonymous** provider. Players authenticate anonymously to submit their own
+join request. Only the Storyteller can write the authoritative roster binding.
 
 If you skip this, the app will show:
 > "Anonymous sign-in is disabled — Open Firebase Console → Authentication → Sign-in method, and enable the Anonymous provider for this project."
@@ -41,6 +41,10 @@ location, then **Test mode** is fine because we'll override the rules in the
 next step.
 
 ## 5. Deploy the security rules
+
+Before deploying the AUD-001 membership change to an existing project, follow
+[the migration procedure](src/firebase/MEMBERSHIP_MIGRATION.md). Old roster
+values were client-writable and cannot be treated as trusted memberships.
 
 ```
 npx firebase login           # one-time
@@ -65,9 +69,10 @@ if config comes from `localStorage`.
 
 ## Player join flow
 
-A player visits `<dev-server-url>/?join=ABCD` on their phone, enters their
-name, and waits for the ST to seat them. The ST's app auto-seats new
-knockers as they appear in the roster.
+A player visits the join link on their phone, enters the lobby code and name,
+and creates `joinRequests/{uid}`. The Storyteller sees the pending request and
+assigns it to a seat. An atomic write consumes the request and creates the
+Storyteller-controlled `roster/{uid}` binding, granting private role access.
 
 ## Features
 
@@ -102,31 +107,36 @@ npm test              # Vitest — protocol tests use MemoryRoomBackend
 npm run build         # Production bundle
 ```
 
-## Firebase rules tests (optional, requires emulator)
+## Firebase rules tests (required security verification)
+
+Install Java 21 and put `java` on PATH (or prepend `%JAVA_HOME%/bin`). Run
+`npm ci` to install the pinned local Firebase CLI; no global CLI/login is needed.
 
 ```
-# In one terminal
-npm run emulator       # firebase emulators:start --only database (requires Java)
-
-# In another terminal
 npm run test:rules
 ```
 
-These verify the security rules enforce the privacy boundary against
-adversarial uids.
+This starts a loopback-only RTDB emulator on port 9000 with the isolated
+`demo-silverwick-rules` project, runs the security tests, and stops the emulator.
+The first run downloads the emulator. Java/startup/port/rules errors fail the
+command. A fresh result report enforces at least one executed test, all passing,
+with no skipped/pending/todo tests. Fast `npm test` explicitly excludes the
+emulator suite. Run both commands for verification.
+
+To use an emulator already running locally, set
+`FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:9000` and run `npm run test:rules:run`.
+Only use a disposable emulator: the suite clears `demo-silverwick-rules` data.
+The suite refuses non-local addresses and never uses production credentials.
 
 ## Full pre-release test suite
 
 Run all checks (typecheck, unit tests, and rules tests) in a single command:
 
 ```
-# Start the emulator first (separate terminal), then:
 npm run test:full
 ```
 
-`test:full` = `typecheck` + `vitest run` + `test:rules`. The rules suite
-skips gracefully if the emulator is not running, so `test:full` is also safe
-to run without the emulator for a quick sanity check.
+`test:full` = `typecheck` + `npm test` + `test:rules`. Each stage must pass.
 
 ## Deploying
 
@@ -160,7 +170,7 @@ diagnostic output from leaking into players' browser consoles.
 
 ## Architecture documents
 
-- `src/firebase/PROTOCOL.md` — load-bearing decisions (roster two-phase
+- `src/firebase/PROTOCOL.md` — load-bearing decisions (request/membership
   protocol, reconnect policy, write strategy)
 - `src/firebase/PATH_AUDIT.md` — every RTDB path with its rule and access
   matrix

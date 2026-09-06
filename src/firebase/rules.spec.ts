@@ -1,278 +1,281 @@
-// Adversarial tests against `rules.json` using the Firebase RTDB emulator.
-// REQUIRES the emulator running on port 9000 (`npm run emulator`).
-// The tests SKIP themselves if the emulator isn't reachable so npm test
-// stays green when devs don't have firebase-tools installed.
-//
-// Run with: npm run test:rules
-
-import {
-  assertFails,
-  assertSucceeds,
-  initializeTestEnvironment,
-  type RulesTestEnvironment,
-} from "@firebase/rules-unit-testing";
+// Required emulator tests: setup failure fails the suite, never skips it.
+import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest";
-
-const PROJECT_ID = "new-blood-rules-test";
-const EMULATOR_HOST = "127.0.0.1";
-const EMULATOR_PORT = 9000;
+import type { Database } from "firebase/database";
+import { FirebaseRoomBackend } from "./firebaseBackend";
+import { cancelJoinRequest, createLobby, knockOnLobby, revokeMembership, seatPlayer } from "./lobby";
 
 let env: RulesTestEnvironment;
-let emulatorAvailable = false;
-
 beforeAll(async () => {
-  // Probe emulator. If unreachable, skip the entire suite gracefully.
-  try {
-    const res = await fetch(`http://${EMULATOR_HOST}:${EMULATOR_PORT}/.json`);
-    emulatorAvailable = res.ok || res.status === 401 || res.status === 404;
-  } catch {
-    emulatorAvailable = false;
+  const address = process.env.FIREBASE_DATABASE_EMULATOR_HOST;
+  if (!address || !/^(127\.0\.0\.1|localhost):\d+$/.test(address)) {
+    throw new Error("A local RTDB emulator is required. Run npm run test:rules.");
   }
-  if (!emulatorAvailable) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[rules.spec] Skipping — RTDB emulator not reachable at ${EMULATOR_HOST}:${EMULATOR_PORT}. Start with: npm run emulator`
-    );
-    return;
-  }
-  const rules = readFileSync(
-    resolve(__dirname, "rules.json"),
-    "utf-8"
-  );
+  const [host, port] = address.split(":");
   env = await initializeTestEnvironment({
-    projectId: PROJECT_ID,
-    database: {
-      rules,
-      host: EMULATOR_HOST,
-      port: EMULATOR_PORT,
-    },
+    projectId: "demo-silverwick-rules",
+    database: { host, port: Number(port), rules: readFileSync(resolve(__dirname, "rules.json"), "utf8") },
   });
 });
+afterAll(async () => { if (env) await env.cleanup(); });
+beforeEach(async () => { await env.clearDatabase(); });
 
-afterAll(async () => {
-  if (env) await env.cleanup();
-});
-
-beforeEach(async () => {
-  if (!emulatorAvailable) return;
-  await env.clearDatabase();
-});
-
-describe.skipIf(!emulatorAvailable)("Firebase RTDB security rules", () => {
-  const stUid = "uid-storyteller";
-  const aliceUid = "uid-alice";
-  const bobUid = "uid-bob";
-  const code = "ABCD";
-
-  /** Set up a lobby owned by `stUid`, with Alice seated as p-alice and a
-   *  bare-bones public projection. Uses an unrestricted writer so the
-   *  fixture itself isn't gated by rules under test. */
-  async function seedLobby() {
+describe("Firebase RTDB membership authorization", () => {
+  const code = "ABCD2345";
+  const st = "uid-storyteller";
+  const alice = "uid-alice";
+  const bob = "uid-bob";
+  const path = (suffix: string) => "lobbies/" + code + "/" + suffix;
+  const db = (uid: string) => env.authenticatedContext(uid).database();
+  // The modular SDK unwraps compat instances provided by rules-unit-testing.
+  const backend = (uid: string) => new FirebaseRoomBackend(db(uid) as unknown as Database);
+  const ref = (uid: string, suffix: string) => db(uid).ref(path(suffix));
+  async function seed() {
     await env.withSecurityRulesDisabled(async (ctx) => {
-      const db = ctx.database();
-      await db.ref(`lobbies/${code}`).set({
-        storytellerUid: stUid,
-        roster: { [aliceUid]: "p-alice" },
-        public: {
-          code,
-          scriptId: "tb",
-          phase: "setup",
-          day: 0,
-          seatOrder: ["p-alice"],
-          players: {
-            "p-alice": {
-              id: "p-alice",
-              name: "Alice",
-              seat: 0,
-              alive: true,
-              ghostVote: true,
-              online: true,
-              joinedAt: 0,
-              isTraveler: false,
-            },
-          },
-          fabled: [],
-        },
+      await ctx.database().ref("lobbies/" + code).set({
+        storytellerUid: st,
+        roster: { [alice]: "p-alice" },
+        public: { code, scriptId: "tb", phase: "setup", day: 0 },
         player: {
           "p-alice": { shownRole: "chef", shownAlignment: "good" },
+          "p-bob": { shownRole: "imp", shownAlignment: "evil" },
         },
-        storyteller: {
-          notes: "secret notes",
-          bluffs: ["chef", "saint", "virgin"],
-          players: {
-            "p-alice": { actualRole: "drunk", shownRole: "chef" },
-          },
-        },
+        storyteller: { notes: "secret", players: { "p-alice": { actualRole: "drunk" } } },
       });
     });
   }
 
-  // -------------------------------------------------------------------- 1
-  test("ST can claim storytellerUid when absent", async () => {
-    const ctx = env.authenticatedContext(stUid);
-    await assertSucceeds(
-      ctx.database().ref(`lobbies/${code}/storytellerUid`).set(stUid)
-    );
+  test("lobby helper claims a code with the caller's UID", async () => {
+    expect(await createLobby(backend(st), st, { codeGenerator: () => code })).toEqual({ code });
+    expect((await ref(st, "storytellerUid").once("value")).val()).toBe(st);
   });
 
-  // -------------------------------------------------------------------- 2
-  test("non-ST cannot overwrite an existing storytellerUid", async () => {
-    await seedLobby();
-    const attacker = env.authenticatedContext(bobUid);
-    await assertFails(
-      attacker.database().ref(`lobbies/${code}/storytellerUid`).set(bobUid)
-    );
+  test("owner claim cannot name another UID", async () => {
+    await assertFails(ref(bob, "storytellerUid").set(st));
   });
 
-  // -------------------------------------------------------------------- 3
-  test("ST can write storyteller/", async () => {
-    await seedLobby();
-    const st = env.authenticatedContext(stUid);
-    await assertSucceeds(
-      st.database().ref(`lobbies/${code}/storyteller/notes`).set("new note")
-    );
+  test("non-owner cannot overwrite ownership", async () => {
+    await seed();
+    await assertFails(ref(bob, "storytellerUid").set(bob));
   });
 
-  // -------------------------------------------------------------------- 4
-  test("seated player CANNOT read storyteller/", async () => {
-    await seedLobby();
-    const alice = env.authenticatedContext(aliceUid);
-    await assertFails(alice.database().ref(`lobbies/${code}/storyteller`).once("value"));
+  test("owner cannot delete or transfer ownership and orphan trusted bindings", async () => {
+    await seed();
+    await assertFails(ref(st, "storytellerUid").remove());
+    await assertFails(ref(st, "storytellerUid").set(bob));
   });
 
-  // -------------------------------------------------------------------- 5
-  test("seated player CANNOT write storyteller/", async () => {
-    await seedLobby();
-    const alice = env.authenticatedContext(aliceUid);
-    await assertFails(
-      alice.database().ref(`lobbies/${code}/storyteller/notes`).set("hijack")
-    );
-  });
-
-  // -------------------------------------------------------------------- 6
-  test("ST can write any roster entry", async () => {
-    await seedLobby();
-    const st = env.authenticatedContext(stUid);
-    await assertSucceeds(
-      st.database().ref(`lobbies/${code}/roster/${bobUid}`).set("p-bob")
-    );
-  });
-
-  // -------------------------------------------------------------------- 7
-  test("player can write their OWN roster entry only when absent (knock)", async () => {
-    // Lobby exists but Bob has not knocked yet.
+  test("an orphaned pre-existing lobby cannot be claimed by a new UID", async () => {
     await env.withSecurityRulesDisabled(async (ctx) => {
-      await ctx.database().ref(`lobbies/${code}/storytellerUid`).set(stUid);
+      await ctx.database().ref(path("player/p-alice")).set({ shownRole: "chef" });
     });
-    const bob = env.authenticatedContext(bobUid);
-    await assertSucceeds(
-      bob.database().ref(`lobbies/${code}/roster/${bobUid}`).set("Bob")
-    );
-    // A second knock attempt at the now-occupied path should fail (no
-    // self-overwrite).
-    await assertFails(
-      bob.database().ref(`lobbies/${code}/roster/${bobUid}`).set("Bob2")
-    );
+    await assertFails(ref(bob, "storytellerUid").set(bob));
   });
 
-  // -------------------------------------------------------------------- 8
-  test("player CANNOT write someone else's roster entry (no privilege escalation)", async () => {
-    await seedLobby();
-    const bob = env.authenticatedContext(bobUid);
-    await assertFails(
-      bob.database().ref(`lobbies/${code}/roster/${aliceUid}`).set("hijacked")
-    );
-    // And cannot overwrite storytellerUid via roster trickery
-    await assertFails(
-      bob.database().ref(`lobbies/${code}/storytellerUid`).set(bobUid)
-    );
+  test("authenticated anonymous UID can submit a valid request", async () => {
+    await seed();
+    const anonymous = env.authenticatedContext(bob, { firebase: { sign_in_provider: "anonymous", identities: {} } }).database();
+    await assertSucceeds(anonymous.ref(path("joinRequests/" + bob)).set("Bob"));
+    expect((await anonymous.ref(path("joinRequests/" + bob)).once("value")).val()).toBe("Bob");
   });
 
-  // -------------------------------------------------------------------- 9
-  test("seated player can read public/", async () => {
-    await seedLobby();
-    const alice = env.authenticatedContext(aliceUid);
-    await assertSucceeds(alice.database().ref(`lobbies/${code}/public`).once("value"));
+  test("request helper trims names, is idempotent, and never writes roster", async () => {
+    await seed();
+    const b = backend(bob);
+    await knockOnLobby(b, code, bob, "  Bob  ");
+    await knockOnLobby(b, code, bob, "Bob");
+    expect(await b.get(path("joinRequests/" + bob))).toBe("Bob");
+    expect(await b.get(path("roster/" + bob))).toBeUndefined();
   });
 
-  // -------------------------------------------------------------------- 10
-  test("player CANNOT read another player's player/{playerId}", async () => {
-    // Add Bob into the lobby with his own player path
+  test("player can cancel only their own request", async () => {
+    await seed();
+    await knockOnLobby(backend(bob), code, bob, "Bob");
+    await assertFails(ref(alice, "joinRequests/" + bob).remove());
+    await cancelJoinRequest(backend(bob), code, bob);
+    expect(await backend(bob).get(path("joinRequests/" + bob))).toBeUndefined();
+  });
+
+  test("player cannot create another UID's request or overwrite an existing request", async () => {
+    await seed();
+    await assertFails(ref(bob, "joinRequests/" + alice).set("Alice"));
+    await assertSucceeds(ref(bob, "joinRequests/" + bob).set("Bob"));
+    await assertFails(ref(bob, "joinRequests/" + bob).set("Changed"));
+  });
+
+  test("Storyteller can read the request queue and reject a request", async () => {
+    await seed();
+    await knockOnLobby(backend(bob), code, bob, "Bob");
+    expect((await ref(st, "joinRequests").once("value")).val()).toEqual({ [bob]: "Bob" });
+    await cancelJoinRequest(backend(st), code, bob);
+  });
+
+  test.each(["Bob", "p-alice", "p-bob"])("fresh player cannot write own roster as %s", async (value) => {
+    await seed();
+    await assertFails(ref(bob, "roster/" + bob).set(value));
+    await assertFails(ref(bob, "roster/" + bob).transaction(() => value));
+  });
+
+  test("original attack: a request naming a victim ID never grants private access", async () => {
+    await seed();
+    const attacker = db(bob);
+    await assertSucceeds(attacker.ref(path("joinRequests/" + bob)).set("p-alice"));
+    await assertSucceeds(attacker.ref(path("public")).once("value"));
+    await assertFails(attacker.ref(path("roster/" + bob)).set("p-alice"));
+    await assertFails(attacker.ref(path("player/p-alice")).once("value"));
+    expect((await attacker.ref(path("roster/" + bob)).once("value")).exists()).toBe(false);
+  });
+
+  test("ancestor and multipath writes cannot smuggle a roster binding", async () => {
+    await seed();
+    const attacker = db(bob);
+    await assertFails(attacker.ref(path("roster")).set({ [bob]: "p-alice" }));
+    await assertFails(attacker.ref("lobbies/" + code).update({
+      ["joinRequests/" + bob]: "Bob", ["roster/" + bob]: "p-alice",
+    }));
+    await assertFails(attacker.ref("lobbies/" + code).set({ storytellerUid: bob, roster: { [bob]: "p-alice" } }));
+  });
+
+  test("seating helper atomically consumes request, binds UID, and writes private projection", async () => {
+    await seed();
+    const b = backend(bob);
+    await knockOnLobby(b, code, bob, "Bob");
+    await seatPlayer(backend(st), code, bob, "p-bob", { shownRole: "imp", shownAlignment: "evil" });
+    expect(await b.get(path("joinRequests/" + bob))).toBeUndefined();
+    expect(await b.get(path("roster/" + bob))).toBe("p-bob");
+    expect(await b.get(path("player/p-bob"))).toEqual({ shownRole: "imp", shownAlignment: "evil" });
+    await knockOnLobby(b, code, bob, "Bob");
+    expect(await b.get(path("joinRequests/" + bob))).toBeUndefined();
+  });
+
+  test("Storyteller can seat a player before a role is assigned", async () => {
+    await seed();
+    await knockOnLobby(backend(bob), code, bob, "Bob");
+    await seatPlayer(backend(st), code, bob, "p-empty", null);
+    expect(await backend(bob).get(path("roster/" + bob))).toBe("p-empty");
+    expect(await backend(bob).get(path("player/p-empty"))).toBeUndefined();
+  });
+
+  test("seated player can read own record but not another player or the collection", async () => {
+    await seed();
+    await assertSucceeds(ref(alice, "player/p-alice").once("value"));
+    await assertFails(ref(alice, "player/p-bob").once("value"));
+    await assertFails(ref(alice, "player").once("value"));
+  });
+
+  test("players cannot alter/delete their binding or write another UID's binding", async () => {
+    await seed();
+    await assertFails(ref(alice, "roster/" + alice).set("p-bob"));
+    await assertFails(ref(alice, "roster/" + alice).remove());
+    await assertFails(ref(bob, "roster/" + alice).set("p-bob"));
+  });
+
+  test("revocation denies private reads even while the private record remains", async () => {
+    await seed();
+    await revokeMembership(backend(st), code, alice);
+    await assertFails(ref(alice, "player/p-alice").once("value"));
+    expect((await ref(st, "player/p-alice").once("value")).exists()).toBe(true);
+    await assertFails(ref(alice, "roster/" + alice).set("p-alice"));
+  });
+
+  test("revocation cancels an already-authorized live private subscription", async () => {
+    await seed();
+    const record = ref(alice, "player/p-alice");
+    let ready!: () => void;
+    const firstValue = new Promise<void>((resolve) => { ready = resolve; });
+    const denied = new Promise<Error>((resolve) => { record.on("value", () => ready(), resolve); });
+    try {
+      await firstValue;
+      await revokeMembership(backend(st), code, alice);
+      expect((await denied).message).toMatch(/permission_denied/i);
+    } finally { record.off(); }
+  });
+
+  test("Lobby A membership/ownership cannot authorize private reads or binds in Lobby B", async () => {
+    await seed();
     await env.withSecurityRulesDisabled(async (ctx) => {
-      await ctx.database().ref(`lobbies/${code}`).update({
-        [`roster/${bobUid}`]: "p-bob",
-        [`player/p-bob`]: { shownRole: "imp", shownAlignment: "evil" },
+      await ctx.database().ref("lobbies/OTHER234").set({
+        storytellerUid: "different-st", player: { "p-alice": { shownRole: "imp" } },
       });
     });
-    await seedLobby();
-    // Re-seed (clearDatabase wiped) then add Bob
-    await env.withSecurityRulesDisabled(async (ctx) => {
-      await ctx.database().ref(`lobbies/${code}`).update({
-        [`roster/${bobUid}`]: "p-bob",
-        [`player/p-bob`]: { shownRole: "imp", shownAlignment: "evil" },
-      });
-    });
-    const alice = env.authenticatedContext(aliceUid);
-    // Alice's own path: allowed
-    await assertSucceeds(alice.database().ref(`lobbies/${code}/player/p-alice`).once("value"));
-    // Bob's path: denied
-    await assertFails(alice.database().ref(`lobbies/${code}/player/p-bob`).once("value"));
+    await assertFails(db(alice).ref("lobbies/OTHER234/player/p-alice").once("value"));
+    await assertFails(db(alice).ref("lobbies/OTHER234/roster/" + alice).set("p-alice"));
+    await assertFails(db(st).ref("lobbies/OTHER234/roster/" + alice).set("p-alice"));
   });
 
-  // -------------------------------------------------------------------- 11
-  test("player CANNOT read full roster collection", async () => {
-    await seedLobby();
-    const alice = env.authenticatedContext(aliceUid);
-    await assertFails(alice.database().ref(`lobbies/${code}/roster`).once("value"));
-    // But CAN read their own roster entry
-    await assertSucceeds(alice.database().ref(`lobbies/${code}/roster/${aliceUid}`).once("value"));
+  test.each([
+    ["empty", ""], ["whitespace", "   "], ["oversized", "x".repeat(21)],
+    ["number", 42], ["boolean", true], ["object", { name: "Bob", playerId: "p-alice" }],
+    ["array", ["Bob"]], ["multiline", "Bob\nAlice"], ["untrimmed", " Bob "],
+    ["carriage-return", "Bob\rAlice"], ["tab", "Bob\tAlice"],
+  ])("rejects malformed request: %s", async (_label, value) => {
+    await seed();
+    await assertFails(ref(bob, "joinRequests/" + bob).set(value));
   });
 
-  // -------------------------------------------------------------------- 12
-  test("unauthenticated client cannot do anything", async () => {
-    await seedLobby();
-    const anon = env.unauthenticatedContext();
-    await assertFails(anon.database().ref(`lobbies/${code}/public`).once("value"));
-    await assertFails(anon.database().ref(`lobbies/${code}/storyteller`).once("value"));
-    await assertFails(
-      anon.database().ref(`lobbies/${code}/storytellerUid`).set("anon-claim")
-    );
+  test("accepts a 20-character request at the limit", async () => {
+    await seed();
+    await assertSucceeds(ref(bob, "joinRequests/" + bob).set("x".repeat(20)));
   });
 
-  // -------------------------------------------------------------------- 13
-  test("ST cannot write a non-string to storytellerUid", async () => {
-    const st = env.authenticatedContext(stUid);
-    await assertFails(
-      st.database().ref(`lobbies/${code}/storytellerUid`).set(42 as unknown as string)
-    );
+  test("nonexistent and ownerless lobbies deny new requests", async () => {
+    await assertFails(ref(bob, "joinRequests/" + bob).set("Bob"));
+    await env.withSecurityRulesDisabled(async (ctx) => { await ctx.database().ref(path("public/status")).set("active"); });
+    await assertFails(ref(bob, "joinRequests/" + bob).set("Bob"));
   });
 
-  // -------------------------------------------------------------------- 14
-  test("non-roster device CANNOT read public/ (roster membership required)", async () => {
-    await seedLobby();
-    // Bob exists as an authenticated user but has NOT knocked — not in roster.
-    const bob = env.authenticatedContext(bobUid);
-    await assertFails(bob.database().ref(`lobbies/${code}/public`).once("value"));
+  test("ended lobby denies new requests but permits cancellation", async () => {
+    await seed();
+    await knockOnLobby(backend(bob), code, bob, "Bob");
+    await ref(st, "public/status").set("ended");
+    await assertFails(ref("uid-new", "joinRequests/uid-new").set("New"));
+    await cancelJoinRequest(backend(bob), code, bob);
+    await assertFails(ref(bob, "joinRequests/" + bob).set("Bob"));
   });
 
-  // -------------------------------------------------------------------- 15
-  test("roster member CANNOT write to player/{playerId} (only ST may write)", async () => {
-    await seedLobby();
-    // Alice IS in the roster but is not the storyteller.
-    const alice = env.authenticatedContext(aliceUid);
-    await assertFails(
-      alice.database().ref(`lobbies/${code}/player/p-alice`).set({ shownRole: "imp" })
-    );
-    await assertFails(
-      alice.database().ref(`lobbies/${code}/player/p-alice`).set(null)
-    );
+  test("seated UID cannot also create a new request", async () => {
+    await seed();
+    await assertFails(ref(alice, "joinRequests/" + alice).set("Alice"));
   });
-});
 
-describe.skipIf(emulatorAvailable)("[rules.spec] emulator unavailable", () => {
-  test("skipped — start emulator with `npm run emulator` and re-run", () => {
-    expect(true).toBe(true);
+  test("players can read only their own request/binding, not the collections", async () => {
+    await seed();
+    await assertSucceeds(ref(bob, "joinRequests/" + bob).once("value"));
+    await assertSucceeds(ref(bob, "roster/" + bob).once("value"));
+    for (const suffix of ["joinRequests", "roster", "joinRequests/" + alice, "roster/" + alice]) {
+      await assertFails(ref(bob, suffix).once("value"));
+    }
+  });
+
+  test("public access follows request/membership, and only ST can write it", async () => {
+    await seed();
+    await assertFails(ref(bob, "public").once("value"));
+    await knockOnLobby(backend(bob), code, bob, "Bob");
+    await assertSucceeds(ref(bob, "public").once("value"));
+    await assertSucceeds(ref(alice, "public").once("value"));
+    await assertFails(ref(bob, "public/status").set("ended"));
+    await cancelJoinRequest(backend(bob), code, bob);
+    await assertFails(ref(bob, "public").once("value"));
+  });
+
+  test("Storyteller writes private data; players cannot read ST data or write private data", async () => {
+    await seed();
+    await assertSucceeds(ref(st, "storyteller/notes").set("updated"));
+    await assertFails(ref(alice, "storyteller").once("value"));
+    await assertFails(ref(alice, "storyteller/notes").set("attack"));
+    await assertFails(ref(alice, "player/p-alice").set({ shownRole: "imp" }));
+    await assertFails(ref(alice, "player/p-alice").remove());
+  });
+
+  test("unauthenticated clients cannot request, bind, claim, or read private/public data", async () => {
+    await seed();
+    const guest = env.unauthenticatedContext().database();
+    await assertFails(guest.ref(path("joinRequests/guest")).set("Guest"));
+    await assertFails(guest.ref(path("roster/guest")).set("p-alice"));
+    await assertFails(guest.ref("lobbies/NEW23456/storytellerUid").set("guest"));
+    await assertFails(guest.ref(path("player/p-alice")).once("value"));
+    await assertFails(guest.ref(path("public")).once("value"));
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   checkLobbyStatus,
+  cancelJoinRequest,
   classifyRoster,
   createLobby,
   endLobby,
@@ -10,14 +11,15 @@ import {
   seatPlayer,
   watchLobbyStatus,
   watchRoster,
+  watchJoinRequests,
 } from "./lobby";
 import { MemoryRoomBackend } from "./memoryBackend";
 
 describe("generateCode", () => {
-  it("produces a 4-char string from the safe alphabet", () => {
+  it("produces an 8-char string from the safe alphabet", () => {
     for (let i = 0; i < 100; i++) {
       const c = generateCode();
-      expect(c).toHaveLength(4);
+      expect(c).toHaveLength(8);
       expect(/^[BCDFGHJKLMNPQRSTVWXYZ23456789]+$/.test(c)).toBe(true);
     }
   });
@@ -58,16 +60,17 @@ describe("createLobby", () => {
 });
 
 describe("knockOnLobby — phase 1 of player join", () => {
-  it("writes the player's requested name into roster/{uid}", async () => {
+  it("writes the requested name only into joinRequests/{uid}", async () => {
     const b = new MemoryRoomBackend();
     await knockOnLobby(b, "ABCD", "uid-bob", "Bob");
-    expect(await b.get("lobbies/ABCD/roster/uid-bob")).toBe("Bob");
+    expect(await b.get("lobbies/ABCD/joinRequests/uid-bob")).toBe("Bob");
+    expect(await b.get("lobbies/ABCD/roster/uid-bob")).toBeUndefined();
   });
 
   it("trims whitespace", async () => {
     const b = new MemoryRoomBackend();
     await knockOnLobby(b, "ABCD", "uid", "  Bob  ");
-    expect(await b.get("lobbies/ABCD/roster/uid")).toBe("Bob");
+    expect(await b.get("lobbies/ABCD/joinRequests/uid")).toBe("Bob");
   });
 
   it("rejects an empty name", async () => {
@@ -85,13 +88,14 @@ describe("knockOnLobby — phase 1 of player join", () => {
     await knockOnLobby(b, "ABCD", "uid-bob", "Bob");
     // The binding stays intact
     expect(await b.get("lobbies/ABCD/roster/uid-bob")).toBe("p-12345");
+    expect(await b.get("lobbies/ABCD/joinRequests/uid-bob")).toBeUndefined();
   });
 });
 
 describe("seatPlayer — phase 2 atomic seating", () => {
   it("writes player/{id} and rebinds roster/{uid} in ONE update", async () => {
     const b = new MemoryRoomBackend();
-    await b.set("lobbies/ABCD/roster/uid-bob", "Bob");
+    await b.set("lobbies/ABCD/joinRequests/uid-bob", "Bob");
     await seatPlayer(b, "ABCD", "uid-bob", "p-1", {
       shownRole: "chef",
       shownAlignment: "good",
@@ -101,19 +105,21 @@ describe("seatPlayer — phase 2 atomic seating", () => {
       shownAlignment: "good",
     });
     expect(await b.get("lobbies/ABCD/roster/uid-bob")).toBe("p-1");
+    expect(await b.get("lobbies/ABCD/joinRequests/uid-bob")).toBeUndefined();
   });
 
-  it("with null selfRecord writes ONLY the roster binding (waiting-for-role flow)", async () => {
+  it("with null selfRecord binds the roster and consumes the request without writing a role", async () => {
     const b = new MemoryRoomBackend();
-    await b.set("lobbies/ABCD/roster/uid-bob", "Bob");
+    await b.set("lobbies/ABCD/joinRequests/uid-bob", "Bob");
     await seatPlayer(b, "ABCD", "uid-bob", "p-1", null);
     expect(await b.get("lobbies/ABCD/roster/uid-bob")).toBe("p-1");
     expect(await b.get("lobbies/ABCD/player/p-1")).toBeUndefined();
+    expect(await b.get("lobbies/ABCD/joinRequests/uid-bob")).toBeUndefined();
   });
 
   it("never writes roster→playerId without the matching player record (atomicity)", async () => {
     const b = new MemoryRoomBackend();
-    await b.set("lobbies/ABCD/roster/uid-bob", "Bob");
+    await b.set("lobbies/ABCD/joinRequests/uid-bob", "Bob");
     // Snapshot the writeLog length BEFORE seatPlayer to identify which writes
     // belong to it.
     const before = b.writeLog.length;
@@ -128,6 +134,7 @@ describe("seatPlayer — phase 2 atomic seating", () => {
     const paths = seatBatch.map((w) => w.path);
     expect(paths).toContain("lobbies/ABCD/player/p-1");
     expect(paths).toContain("lobbies/ABCD/roster/uid-bob");
+    expect(seatBatch).toContainEqual({ path: "lobbies/ABCD/joinRequests/uid-bob", value: null });
     const rosterEntry = seatBatch.find(
       (w) => w.path === "lobbies/ABCD/roster/uid-bob"
     );
@@ -136,33 +143,30 @@ describe("seatPlayer — phase 2 atomic seating", () => {
 });
 
 describe("classifyRoster", () => {
-  it("classifies entries by whether the value matches a known playerId", () => {
-    const known = new Set(["p-1", "p-2"]);
+  it("treats every roster value as a binding, never as a name or request", () => {
     const r = classifyRoster(
       {
         "uid-a": "p-1",
         "uid-b": "Bob",
         "uid-c": "p-2",
-      },
-      known
+      }
     );
     expect(r).toContainEqual({ uid: "uid-a", phase: "seated", playerId: "p-1" });
-    expect(r).toContainEqual({ uid: "uid-b", phase: "knock", name: "Bob" });
+    expect(r).toContainEqual({ uid: "uid-b", phase: "seated", playerId: "Bob" });
     expect(r).toContainEqual({ uid: "uid-c", phase: "seated", playerId: "p-2" });
   });
 
   it("returns an empty list for null/undefined", () => {
-    expect(classifyRoster(null, new Set())).toEqual([]);
-    expect(classifyRoster(undefined, new Set())).toEqual([]);
+    expect(classifyRoster(null)).toEqual([]);
+    expect(classifyRoster(undefined)).toEqual([]);
   });
 
   it("skips empty/non-string values defensively", () => {
     const r = classifyRoster(
       // @ts-expect-error — testing defensive skip
-      { "uid-a": "", "uid-b": null, "uid-c": "Bob" },
-      new Set()
+      { "uid-a": "", "uid-b": null, "uid-c": "Bob" }
     );
-    expect(r).toEqual([{ uid: "uid-c", phase: "knock", name: "Bob" }]);
+    expect(r).toEqual([{ uid: "uid-c", phase: "seated", playerId: "Bob" }]);
   });
 });
 
@@ -186,13 +190,14 @@ describe("watchRoster", () => {
     const seen: (Record<string, string> | null)[] = [];
     const off = watchRoster(b, "ABCD", (v) => seen.push(v));
     await knockOnLobby(b, "ABCD", "uid-bob", "Bob");
+    expect(seen).toEqual([null]); // requests do not modify the authoritative roster
     await seatPlayer(b, "ABCD", "uid-bob", "p-1", {
       shownRole: "chef",
       shownAlignment: "good",
     });
     off();
-    // initial null + at least one update after the knock + one after seating
-    expect(seen.length).toBeGreaterThanOrEqual(3);
+    // initial null + seating; the request itself never modifies this path
+    expect(seen.length).toBe(2);
     const last = seen[seen.length - 1];
     expect(last?.["uid-bob"]).toBe("p-1");
   });
@@ -209,6 +214,20 @@ describe("watchRoster", () => {
     expect(fires).toBe(1);
     // subscribePaths records the subscription was made (proof the path was wired).
     expect(b.subscribePaths).toContain("lobbies/ABCD/roster");
+  });
+});
+
+describe("watchJoinRequests", () => {
+  it("observes a request and its cancellation independently of membership", async () => {
+    const b = new MemoryRoomBackend();
+    const seen: Record<string, string>[] = [];
+    const off = watchJoinRequests(b, "ABCD", (requests) => seen.push(requests));
+    await knockOnLobby(b, "ABCD", "uid-bob", "p-alice");
+    expect(seen.at(-1)).toEqual({ "uid-bob": "p-alice" });
+    expect(await readOwnRosterEntry(b, "ABCD", "uid-bob")).toEqual({ phase: "absent" });
+    await cancelJoinRequest(b, "ABCD", "uid-bob");
+    expect(seen.at(-1)).toEqual({});
+    off();
   });
 });
 
@@ -297,9 +316,8 @@ describe("watchLobbyStatus", () => {
 
 // ---------------------------------------------------------------------------
 // joinLobby — session state after knock
-// Pre-join status check was removed: players can't read public/ before being
-// in the roster. Ended-lobby detection happens via the public/ subscription
-// in usePlayerSync, which fires immediately on subscribe.
+// The memory transport does not authorize operations. The emulator suite
+// separately proves missing/ended lobbies reject requests at the rules boundary.
 // ---------------------------------------------------------------------------
 
 import { joinLobby } from "./playerSync";
@@ -332,17 +350,13 @@ describe("joinLobby", () => {
     expect(ps.requestedName).toBe("Bob");
   });
 
-  it("knocks and enters 'waiting' even for an ended lobby — public/ subscription handles redirect", async () => {
-    // The knock itself succeeds regardless of lobby status; the public/
-    // subscription in usePlayerSync fires status="ended" and calls setEnded().
-    // Here we verify joinLobby doesn't fail on an ended lobby.
+  it("surfaces an emulator/rules rejection without installing a joined session", async () => {
     const b = new MemoryRoomBackend();
-    await endLobby(b, "ABCD");
+    b.setIfAbsent = async () => { throw new Error("PERMISSION_DENIED"); };
     await joinLobby(b, "ABCD", "uid-bob", "Bob");
     const ps = usePlayerStore.getState();
-    expect(ps.status).toBe("waiting");
-    // Session is persisted (will be cleared by setEnded() when subscription fires)
-    expect(ps.code).toBe("ABCD");
+    expect(ps.status).toBe("error");
+    expect(ps.code).toBeNull();
   });
 });
 
@@ -440,7 +454,6 @@ describe("usePlayerSync — real-time ended detection", () => {
         }
         return;
       }
-      if (value === ps.requestedName) { ps.setStatus("waiting"); return; }
       ps.setPlayerId(value);
       ps.setStatus("seated");
     });

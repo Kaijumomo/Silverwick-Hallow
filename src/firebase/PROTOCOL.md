@@ -2,56 +2,37 @@
 
 These decisions are not negotiable without revisiting the privacy boundary.
 
-## Path layout (matches `paths.ts` and `rules.json`)
+## Request and membership paths
 
-```
-lobbies/{code}/
-  storytellerUid          — string (the ST's uid). Whoever set this first owns
-                            the lobby. Rules enforce write-once.
-  roster                  — collection. ST-only read (.read scoped to ST).
-  roster/{uid}            — string. TWO PHASES (see below). Read = ST or self.
-  presence/{uid}          — { online, lastSeen }. Self-write only. Player
-                            arms onDisconnect → online:false at connect time;
-                            ST subscribes to the parent path and merges with
-                            roster to derive playerId-keyed online flags.
-  public/                 — town-view projection. ST writes; readable by ST or
-                            anyone with a roster entry (incl. knock state).
-  player/{playerId}       — per-player projection. ST writes; only the matching
-                            player reads (rule: roster/{auth.uid} === $playerId).
-  storyteller/            — full ST state. ST writes and reads only.
-```
+Names and authoritative IDs have separate paths. See
+[MEMBERSHIP_MIGRATION.md](MEMBERSHIP_MIGRATION.md) before deploying this protocol.
 
-**Rule note (added during 5-hardening pass):** `roster/$uid/.read` was added
-so a player can read their own roster entry. Without it, `runTransaction`
-on the player's knock path failed because the transaction's read step was
-denied by the ST-only collection rule. The collection-level
-`roster/.read` is now ST-only — players cannot enumerate the roster, only
-read their own slot.
+| Path in `lobbies/{code}` | Meaning and access |
+| --- | --- |
+| `storytellerUid` | Caller claims a completely new lobby as themselves; the owner cannot be transferred/deleted by clients |
+| `joinRequests/{uid}` | Untrusted name, 1–20 characters, no surrounding spaces, tabs or line breaks. Own create/cancel; ST may delete. Read by own UID and ST |
+| `roster/{uid}` | Player ID, always ST-written. Read by own UID and ST |
+| `public` | ST-written public projection; ST, request holders and members may read |
+| `player/{playerId}` | ST-written private projection; ST or matching same-lobby roster UID may read |
+| `storyteller` | ST-only full state |
+| `presence/{uid}` | Existing presence behavior, unchanged in this pass |
 
-## Roster — two-phase protocol
+The player calls `knockOnLobby`, which reads their own binding for reconnect
+and otherwise creates an absent request. The rules independently enforce an
+existing owner, a lobby not marked ended, no existing binding, and bounded text.
+A request that happens to equal a real player ID is still only a name.
 
-`roster/{uid}` is a single string field with two distinct meanings depending
-on whether the ST has seated this player yet.
+The Storyteller watches `joinRequests` for the pending queue and `roster` for
+bindings. Manual seating calls `seatPlayer`, which atomically deletes the
+request, writes the roster binding, and writes the private projection if present.
+A seat without a role retains the existing null-projection placeholder behavior.
+There is no name-versus-ID classification heuristic.
 
-**Phase 1 — knock-on-the-door (player writes):**
-- Player gets an anonymous uid.
-- Player writes `roster/{uid} = "<their requested name>"`.
-- Rules allow this only if the entry doesn't already exist (`!data.exists()`)
-  AND the path's uid matches `auth.uid`. So a player cannot impersonate.
-- At this point the value is the player's *requested name*, NOT a playerId.
-
-**Phase 2 — playerId binding (ST overwrites):**
-- ST watches `roster/`. On a new entry whose value is not a known playerId,
-  ST treats it as a join request, allocates a fresh `playerId`, and:
-- ST does a multi-path atomic update writing both:
-  - `player/{playerId}` ← projected `PlayerSelfRecord`
-  - `roster/{uid}` ← `playerId` (overwrites the name with the binding)
-- Now `roster/{auth.uid} === playerId` — the rule's read-gate is satisfied
-  exactly when the player record is in place. There is no gap window.
-
-The roster value transitions: `null → name → playerId`. It never returns to
-a previous shape (ST can rename via the `name` field on the player record;
-the `roster/{uid}` value stays as the playerId binding).
+Player hooks watch the own request and own binding independently. Public access
+starts after a request or binding is observed; private access starts only from
+the binding. `cancelJoinRequest` removes a request; `revokeMembership` removes
+the binding and Firebase cancels further private access. These helpers do not
+wire new undo/removal/rejection UI in this pass.
 
 ## Why we don't use `playerId === uid`
 
@@ -75,7 +56,7 @@ Two reasons:
 3. Re-establishes sync by calling `writeProjections` once with the local
    state. This re-uploads everything; any racing roster knock from a player
    that arrived during the refresh is read after sync starts.
-4. Subscribes to `roster/` to pick up any phase-1 knocks that landed during
+4. Subscribes to `joinRequests/` to pick up pending requests that landed during
    the refresh.
 
 This means: an ST refresh during gameplay does not lose ST state, but a

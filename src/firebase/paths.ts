@@ -6,6 +6,9 @@ export const storytellerUidPath = (code: string) =>
 export const rosterPath = (code: string) => `lobbies/${code}/roster`;
 export const rosterEntryPath = (code: string, uid: string) =>
   `lobbies/${code}/roster/${uid}`;
+export const joinRequestsPath = (code: string) => `lobbies/${code}/joinRequests`;
+export const joinRequestPath = (code: string, uid: string) =>
+  `lobbies/${code}/joinRequests/${uid}`;
 export const publicPath = (code: string) => `lobbies/${code}/public`;
 export const playerPath = (code: string, playerId: PlayerId) =>
   `lobbies/${code}/player/${playerId}`;

@@ -1,27 +1,35 @@
 # Firebase path/rule audit
 
-Every RTDB path the app reads or writes, with the rule that gates it. If you
-add a new path, add it here AND update `rules.json`.
+Membership paths below describe the AUD-001 implementation. Existing deployments
+must follow [MEMBERSHIP_MIGRATION.md](MEMBERSHIP_MIGRATION.md); old client-written
+roster entries are not evidence of valid membership.
 
-| Path | Used by code | Read by | Write by | Contains private data? | Rule allows what |
-|---|---|---|---|---|---|
-| `lobbies/{code}/storytellerUid` | `createLobby` (`setIfAbsent`), rules expressions everywhere | any authed user | only the original ST (write-once) | No (just a uid) | `.read: auth != null`. `.write: !data.exists() OR data === auth.uid` (write-once-then-self). `.validate: non-empty string` |
-| `lobbies/{code}/roster` (collection) | `watchRoster` (ST only) | ST only | (no direct writes) | Names of joined players (low-sensitivity) | `.read: storytellerUid === auth.uid` (ST only) |
-| `lobbies/{code}/roster/{uid}` | `knockOnLobby` (player), `seatPlayer` (ST), `usePlayerSync` (player watches own) | ST or self | ST always; player only their own and only if absent | Player's requested name (phase 1) or their playerId binding (phase 2) | `.read: storytellerUid === auth.uid OR uid === auth.uid`. `.write: storytellerUid === auth.uid OR (uid === auth.uid AND !data.exists())`. `.validate: non-empty string` |
-| `lobbies/{code}/public` | `writeProjections` (ST), `usePlayerSync` (player) | ST or seated/knocked player (anyone with a roster entry) | ST only | **No** — strictly public projection (no role/alignment/notes/bluffs/private) | `.read: storytellerUid === auth.uid OR roster/{auth.uid} exists`. `.write: storytellerUid === auth.uid` |
-| `lobbies/{code}/player/{playerId}` | `writeProjections` (ST writes all), `seatPlayer` (ST), `usePlayerSync` (player reads own) | ST or the matching player only | ST only | Yes — that player's `PlayerSelfRecord` (shownRole, shownAlignment, bluffs/fakeMinions if Lunatic) | `.read: storytellerUid === auth.uid OR roster/{auth.uid}.val() === $playerId`. `.write: storytellerUid === auth.uid` |
-| `lobbies/{code}/storyteller` | `writeProjections` (ST writes full state) | ST only | ST only | Yes — entire `StorytellerLobbyRecord` including all `actualRole`/`shownRole`/`behaviorMode`/`privateInfo`/`stNotes` | `.read: storytellerUid === auth.uid`. `.write: storytellerUid === auth.uid` |
-| `lobbies/{code}/presence/{uid}` | Player heartbeat. Player arms `onDisconnect → {online:false}`, then writes `{online:true, lastSeen}` and refreshes lastSeen every 30s. ST subscribes to the parent path. | ST or seated/knocked player | self only | No — just `{online, lastSeen}` | `.read: storytellerUid === auth.uid OR roster/{auth.uid} exists`. `.write: $uid === auth.uid`. `.validate: hasChildren(['online','lastSeen'])` |
+| Path within `lobbies/{code}` | Used by | Read by | Write by / validation |
+| --- | --- | --- | --- |
+| `storytellerUid` | `createLobby`, authorization rules | Authenticated clients | Caller claims a completely new lobby as themselves; owner can repeat that value, not delete or transfer it |
+| `joinRequests` | `watchJoinRequests` | ST | No parent write |
+| `joinRequests/{uid}` | `knockOnLobby`, `cancelJoinRequest`, `seatPlayer`, player hook | ST or same UID | Own absent request in existing/non-ended lobby, no existing binding; 1–20 characters, no surrounding spaces, tabs or line breaks. Own cancellation or ST deletion |
+| `roster` | `watchRoster` | ST | No parent write |
+| `roster/{uid}` | `seatPlayer`, `revokeMembership`, player hook | ST or same UID | ST only; nonempty string player ID or deletion |
+| `public` | Projections, player/public hooks | ST, own pending request, or own roster membership | ST only |
+| `player/{playerId}` | Projections, `seatPlayer`, player hook | ST or exact same-lobby UID→playerId binding | ST only |
+| `storyteller` | Projections | ST | ST only |
+| `presence/{uid}` | Existing heartbeat | ST or roster member | Same UID, existing online/lastSeen validation; unchanged |
 
-## Privilege escalation gates
+The parent presence subscription issue is still AUD-008 and is not fixed here.
 
-- A player **cannot** become ST: rules check `data.val() === auth.uid` on `storytellerUid`. The only writer is the uid that initially claimed it (write-once for new claims; identity self-check for re-writes).
-- A player **cannot** read another player's path: `player/{playerId}/.read` requires `roster/{auth.uid}.val() === $playerId`. Each authenticated player has at most one roster entry, which the ST controls. A second player could only read your `player/{X}` if their roster entry was bound to `X` — but the ST is the only writer who can do that.
-- A player **cannot** read the full roster: `roster/.read` is ST-only. Players only read `roster/{their-own-uid}`.
-- A player **cannot** read `storyteller/`: `.read` requires `storytellerUid === auth.uid`.
-- A player **cannot** write to `public/`, `player/*`, or `storyteller/`: all of those `.write` rules require `storytellerUid === auth.uid`.
-- A player **cannot** seat themselves with a forged playerId: their roster entry is initially their requested name (a string). The transition to a real playerId is done by ST via the `seatPlayer` multi-path update (which writes `player/{playerId}` AND rebinds `roster/{uid} = playerId` atomically). The player never has the write permission to fake this.
-- A player **cannot** overwrite a roster binding: `roster/$uid/.write` requires `($uid === auth.uid && !data.exists())` for player writes — only ST can update an existing entry.
+## Authorization invariant
+
+A request is untrusted display text and is never used in a private-read rule.
+Every authoritative roster write, including the first write, is ST-only.
+A request named `p-alice` cannot authorize `player/p-alice`. Deleting a roster
+binding revokes subsequent private access and cancels the authorized listener;
+it cannot erase data already delivered to a device.
+
+Only the owner writes public/private/ST projections. Player collection reads,
+other UID bindings/requests, parent writes, transactions, and multi-path attacks
+are exercised in the emulator suite. Rules, not client validation or the memory
+backend, establish these permissions.
 
 ## What writes go where (verified by `sync.test.ts`)
 

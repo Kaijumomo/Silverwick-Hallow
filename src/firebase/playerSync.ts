@@ -1,10 +1,11 @@
 // Player-side sync: watch roster/{ownUid} for the seating binding, then
 // subscribe to player/{playerId} (self) and public/ (town).
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePlayerStore } from "@/stores/playerStore";
 import { knockOnLobby } from "./lobby";
 import {
+  joinRequestPath,
   presencePath,
   publicPath,
   rosterEntryPath,
@@ -24,14 +25,11 @@ export async function joinLobby(
 ): Promise<void> {
   const player = usePlayerStore.getState();
   try {
-    // Knock immediately — we cannot read public/ before being in the roster,
-    // so there is no reliable pre-join status check available to players.
-    // If the lobby is already ended, the public/ subscription in usePlayerSync
-    // fires immediately on subscribe (status="ended") and calls setEnded(),
-    // redirecting the player before they see more than a brief "waiting" flash.
+    // Rules reject new requests for missing/ended lobbies. Commit the request
+    // before installing the session that starts public-data subscriptions.
     player.setStatus("knocking");
-    player.setSession({ code, uid, requestedName });
     await knockOnLobby(backend, code, uid, requestedName);
+    player.setSession({ code, uid, requestedName: requestedName.trim() });
     player.setStatus("waiting");
   } catch (e) {
     // eslint-disable-next-line no-console
@@ -45,6 +43,17 @@ export function usePlayerSync(backend: RoomBackend | null) {
   const code = usePlayerStore((s) => s.code);
   const uid = usePlayerStore((s) => s.uid);
   const playerId = usePlayerStore((s) => s.playerId);
+  const [requestSession, setRequestSession] = useState<string | null>(null);
+  const hasRequest = !!code && !!uid && requestSession === JSON.stringify([code, uid]);
+
+  // Pending requests grant public access, but never private access. Observe
+  // the acknowledged request before probing public/ (also on refresh).
+  useEffect(() => {
+    if (!backend || !code || !uid) return;
+    return backend.subscribe(joinRequestPath(code, uid), (value) => {
+      setRequestSession(typeof value === "string" ? JSON.stringify([code, uid]) : null);
+    });
+  }, [backend, code, uid]);
 
   // Watch roster/{ownUid} for the playerId binding.
   useEffect(() => {
@@ -65,13 +74,7 @@ export function usePlayerSync(backend: RoomBackend | null) {
         }
         return;
       }
-      // Phase 1 (still knock) vs phase 2 (binding).
-      if (value === ps.requestedName) {
-        // Still a knock — waiting for ST to seat.
-        ps.setStatus("waiting");
-        return;
-      }
-      // Treat anything else as a playerId binding.
+      // Every roster value was written by the ST. Names exist only in requests.
       ps.setPlayerId(value);
       ps.setStatus("seated");
     });
@@ -112,7 +115,7 @@ export function usePlayerSync(backend: RoomBackend | null) {
   // separate read on lobbies/${code}/status (which would need its own rule).
   // Permission probe guards against reconnecting to an already-ended lobby.
   useEffect(() => {
-    if (!backend || !code) return;
+    if (!backend || !code || (!playerId && !hasRequest)) return;
     let active = true;
     let cleanup: (() => void) | null = null;
     backend.get(publicPath(code)).then(() => {
@@ -136,7 +139,7 @@ export function usePlayerSync(backend: RoomBackend | null) {
       usePlayerStore.getState().setStatus("error", `${friendly.title}: ${friendly.message}`);
     });
     return () => { active = false; cleanup?.(); };
-  }, [backend, code]);
+  }, [backend, code, playerId, hasRequest]);
 
   // Presence: while seated, write presence/{uid} = { online: true, lastSeen }
   // and arm an onDisconnect that flips us to offline when the socket dies.
