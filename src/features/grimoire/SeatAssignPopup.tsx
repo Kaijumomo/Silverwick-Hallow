@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { useStorytellerStore } from "@/stores/storytellerStore";
-import { seatPlayer } from "@/firebase/lobby";
+import { seatPlayerAndCommit } from "@/firebase/membershipCommands";
 import type { RoomBackend } from "@/firebase/backend";
 import type { PlayerId } from "@/stores/types";
 
@@ -15,21 +16,34 @@ export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClo
   const pendingPlayers = useStorytellerStore((s) => s.game?.pendingPlayers ?? {});
   const assignPendingToSeat = useStorytellerStore((s) => s.assignPendingToSeat);
   const removePendingPlayer = useStorytellerStore((s) => s.removePendingPlayer);
+  const [busyUid, setBusyUid] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const entries = Object.entries(pendingPlayers);
 
   const handleAssign = async (uid: string) => {
-    const ok = assignPendingToSeat(uid, seatPlayerId);
-    if (!ok) return;
-    if (backend && code) {
-      try {
-        await seatPlayer(backend, code, uid, seatPlayerId, null);
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn("[SeatAssignPopup] seatPlayer failed:", e instanceof Error ? e.message : e);
+    if (busyUid) return;
+    setError(null);
+    setBusyUid(uid);
+    try {
+      if (backend && code) {
+        await seatPlayerAndCommit(
+          backend,
+          code,
+          uid,
+          seatPlayerId,
+          null,
+          () => assignPendingToSeat(uid, seatPlayerId),
+        );
+      } else if (!assignPendingToSeat(uid, seatPlayerId)) {
+        return;
       }
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not assign this player.");
+    } finally {
+      setBusyUid(null);
     }
-    onClose();
   };
 
   const handleReject = (uid: string) => {
@@ -53,10 +67,10 @@ export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClo
               <li key={uid} className="seat-assign-row">
                 <span className="seat-assign-name">{name}</span>
                 <div className="seat-assign-actions">
-                  <button className="btn btn-sm btn-gold" onClick={() => handleAssign(uid)}>
-                    Assign
+                  <button className="btn btn-sm btn-gold" onClick={() => handleAssign(uid)} disabled={busyUid !== null}>
+                    {busyUid === uid ? "Assigning…" : "Assign"}
                   </button>
-                  <button className="btn btn-sm btn-danger" onClick={() => handleReject(uid)}>
+                  <button className="btn btn-sm btn-danger" onClick={() => handleReject(uid)} disabled={busyUid !== null}>
                     Reject
                   </button>
                 </div>
@@ -64,6 +78,7 @@ export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClo
             ))}
           </ul>
         )}
+        {error && <p className="field-error" role="alert">{error}</p>}
       </div>
     </>
   );

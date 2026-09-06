@@ -5,7 +5,14 @@ import { resolve } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import type { Database } from "firebase/database";
 import { FirebaseRoomBackend } from "./firebaseBackend";
-import { cancelJoinRequest, createLobby, knockOnLobby, revokeMembership, seatPlayer } from "./lobby";
+import {
+  cancelJoinRequest,
+  createLobby,
+  knockOnLobby,
+  revokeMembership,
+  revokePlayerMembership,
+  seatPlayer,
+} from "./lobby";
 
 let env: RulesTestEnvironment;
 beforeAll(async () => {
@@ -191,6 +198,27 @@ describe("Firebase RTDB membership authorization", () => {
       await revokeMembership(backend(st), code, alice);
       expect((await denied).message).toMatch(/permission_denied/i);
     } finally { record.off(); }
+  });
+
+  test("player revocation clears both bindings atomically, leaves Bob alone, and is idempotent", async () => {
+    await seed();
+    await ref(st, "roster/" + bob).set("p-bob");
+
+    await revokePlayerMembership(backend(st), code, "p-alice");
+    expect((await ref(st, "roster/" + alice).once("value")).exists()).toBe(false);
+    expect((await ref(st, "player/p-alice").once("value")).exists()).toBe(false);
+    await assertFails(ref(alice, "player/p-alice").once("value"));
+    await assertSucceeds(ref(bob, "player/p-bob").once("value"));
+
+    await revokePlayerMembership(backend(st), code, "p-alice");
+    expect((await ref(st, "roster/" + bob).once("value")).val()).toBe("p-bob");
+    expect((await ref(st, "player/p-bob").once("value")).exists()).toBe(true);
+  });
+
+  test("a player cannot invoke storyteller revocation for another membership", async () => {
+    await seed();
+    await expect(revokePlayerMembership(backend(bob), code, "p-alice")).rejects.toThrow(/permission denied/i);
+    expect(await backend(st).get(path("roster/" + alice))).toBe("p-alice");
   });
 
   test("Lobby A membership/ownership cannot authorize private reads or binds in Lobby B", async () => {

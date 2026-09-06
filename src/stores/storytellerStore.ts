@@ -101,7 +101,10 @@ export type StorytellerStore = {
   removePendingPlayer: (uid: string) => void;
 
   addPlayer: (name: string) => void;
-  removePlayer: (id: PlayerId) => void;
+  /** Remove a player and its seat locally. Membership is revoked by the command layer first. */
+  removePlayer: (id: PlayerId) => boolean;
+  /** Turn a seated player into an empty seat locally. Membership is revoked first. */
+  unseatPlayer: (id: PlayerId) => boolean;
   renamePlayer: (id: PlayerId, name: string) => void;
   setSeatOrder: (order: PlayerId[]) => void;
   movePlayer: (id: PlayerId, direction: "left" | "right") => void;
@@ -391,7 +394,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
       },
 
       assignPendingToSeat: (uid, seatPlayerId) => {
-        const { game, undoStack } = get();
+        const { game } = get();
         if (!game) return false;
         const name = game.pendingPlayers[uid];
         if (!name) return false;
@@ -400,7 +403,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const newPending = { ...game.pendingPlayers };
         delete newPending[uid];
         set({
-          undoStack: pushUndo(game, undoStack),
+          // Membership transitions establish a new remote-consistency
+          // boundary; older snapshots must not resurrect a stale seat.
+          undoStack: [],
           game: {
             ...game,
             players: {
@@ -479,8 +484,8 @@ export const useStorytellerStore = create<StorytellerStore>()(
       },
 
       removePlayer: (id) => {
-        const { game, undoStack, selectedPlayerId } = get();
-        if (!game || !game.players[id]) return;
+        const { game, selectedPlayerId } = get();
+        if (!game || !game.players[id]) return false;
         const players = { ...game.players };
         delete players[id];
         const seatOrder = game.seatOrder.filter((p) => p !== id);
@@ -506,10 +511,34 @@ export const useStorytellerStore = create<StorytellerStore>()(
           renumbered[pid] = next;
         });
         set({
-          undoStack: pushUndo(game, undoStack),
+          // Membership transitions establish a new remote-consistency
+          // boundary; older snapshots must not resurrect a stale seat.
+          undoStack: [],
           game: { ...game, players: renumbered, seatOrder },
           selectedPlayerId: selectedPlayerId === id ? null : selectedPlayerId,
         });
+        return true;
+      },
+
+      unseatPlayer: (id) => {
+        const { game, selectedPlayerId } = get();
+        const existing = game?.players[id];
+        if (!game || !existing || existing.isEmpty) return false;
+        set({
+          // Membership-affecting changes deliberately do not enter the generic
+          // undo stack; clearing older snapshots prevents undo from restoring
+          // a remote membership that has already been revoked.
+          undoStack: [],
+          game: {
+            ...game,
+            players: {
+              ...game.players,
+              [id]: blankPlayer(id, "", existing.seat, true),
+            },
+          },
+          selectedPlayerId: selectedPlayerId === id ? null : selectedPlayerId,
+        });
+        return true;
       },
 
       renamePlayer: (id, name) => {

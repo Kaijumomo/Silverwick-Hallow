@@ -121,7 +121,13 @@ function shownRoleFilter(behavior: BehaviorMode): ((r: RoleDef) => boolean) | un
   return undefined;
 }
 
-export function PlayerDrawer({ player }: { player: STPlayerRecord }) {
+type PlayerDrawerProps = {
+  player: STPlayerRecord;
+  onRemove?: (id: string) => Promise<void> | void;
+  onUnseat?: (id: string) => Promise<void> | void;
+};
+
+export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) {
   const game = useStorytellerStore((s) => s.game);
   const script = useStorytellerStore((s) =>
     game ? selectScriptById(s, game.scriptId) : undefined
@@ -146,6 +152,8 @@ export function PlayerDrawer({ player }: { player: STPlayerRecord }) {
 
   const [nameDraft, setNameDraft] = useState(player.name);
   const [reminderDraft, setReminderDraft] = useState("");
+  const [membershipBusy, setMembershipBusy] = useState(false);
+  const [membershipError, setMembershipError] = useState<string | null>(null);
 
   useEffect(() => {
     setNameDraft(player.name);
@@ -199,6 +207,20 @@ export function PlayerDrawer({ player }: { player: STPlayerRecord }) {
       player.id,
       player.reminders.filter((_, i) => i !== idx)
     );
+  };
+
+  const runMembershipAction = async (action: () => Promise<void> | void) => {
+    if (membershipBusy) return;
+    setMembershipError(null);
+    setMembershipBusy(true);
+    try {
+      await action();
+      selectPlayer(null);
+    } catch (e) {
+      setMembershipError(e instanceof Error ? e.message : "Could not update this player's membership.");
+    } finally {
+      setMembershipBusy(false);
+    }
   };
 
   const effectiveAlignment: Alignment | "—" = (() => {
@@ -516,14 +538,25 @@ export function PlayerDrawer({ player }: { player: STPlayerRecord }) {
               <button
                 className="btn btn-sm btn-danger"
                 onClick={() => {
-                  if (window.confirm(`Remove ${player.name}?`)) {
-                    removePlayer(player.id);
-                  }
+                  if (!window.confirm(`Remove ${player.name}?`)) return;
+                  void runMembershipAction(() => onRemove ? onRemove(player.id) : void removePlayer(player.id));
                 }}
+                disabled={membershipBusy}
               >
                 Remove player
               </button>
+              <button
+                className="btn btn-sm"
+                onClick={() => {
+                  if (!window.confirm(`Unseat ${player.name}?`)) return;
+                  void runMembershipAction(() => onUnseat ? onUnseat(player.id) : void useStorytellerStore.getState().unseatPlayer(player.id));
+                }}
+                disabled={membershipBusy}
+              >
+                Unseat player
+              </button>
             </div>
+            {membershipError && <p className="field-error" role="alert">{membershipError}</p>}
           </section>
         </div>
       </aside>

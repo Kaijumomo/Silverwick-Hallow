@@ -11,6 +11,7 @@ import { LORICS } from "@/data/lorics";
 import { connectFirebase } from "@/firebase/session";
 import { isFirebaseConfigured } from "@/firebase/config";
 import { createLobby, endLobby, formatCode } from "@/firebase/lobby";
+import { revokePlayerAndCommit } from "@/firebase/membershipCommands";
 import { useStorytellerSync } from "@/firebase/storytellerSync";
 import { FirebaseConfigDialog } from "@/features/firebase/FirebaseConfigDialog";
 import { friendlyFirebaseError, type FriendlyError } from "@/firebase/errors";
@@ -61,6 +62,28 @@ export function GameScreen() {
     }
     window.setTimeout(() => setCopyToast(null), 1500);
   };
+
+  const revokeAndCommitPlayer = async (playerId: string, commitLocal: () => boolean) => {
+    if (!lobby) {
+      commitLocal();
+      return;
+    }
+    if (!backend) {
+      throw new Error("Firebase is reconnecting. The player was not changed locally.");
+    }
+    try {
+      await revokePlayerAndCommit(backend, lobby.code, playerId, commitLocal);
+    } catch (e) {
+      const friendly = friendlyFirebaseError(e, "st");
+      throw new Error(`${friendly.title}: ${friendly.message}`);
+    }
+  };
+
+  const removeSelectedPlayer = (playerId: string) =>
+    revokeAndCommitPlayer(playerId, () => useStorytellerStore.getState().removePlayer(playerId));
+
+  const unseatSelectedPlayer = (playerId: string) =>
+    revokeAndCommitPlayer(playerId, () => useStorytellerStore.getState().unseatPlayer(playerId));
 
   // Auto-open night panel whenever phase transitions to "night".
   useEffect(() => {
@@ -335,7 +358,13 @@ export function GameScreen() {
         <GrimoireCircle online={onlineMap} backend={backend} code={lobby?.code ?? ""} />
       </div>
 
-      {selected && <PlayerDrawer player={selected} />}
+      {selected && (
+        <PlayerDrawer
+          player={selected}
+          onRemove={removeSelectedPlayer}
+          onUnseat={unseatSelectedPlayer}
+        />
+      )}
       {almanacOpen && (
         <Almanac
           title={script ? `Almanac · ${script.name}` : "Almanac"}

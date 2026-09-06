@@ -112,6 +112,17 @@ export async function seatPlayer(
   playerId: PlayerId,
   selfRecord: PlayerSelfRecord | null
 ): Promise<void> {
+  const bindings = await readRosterBindings(backend, code);
+  const existingForUid = bindings[uid];
+  if (existingForUid && existingForUid !== playerId) {
+    throw new MembershipConflictError("This UID is already bound to another seat.");
+  }
+  const existingForPlayer = Object.entries(bindings).find(
+    ([boundUid, boundPlayerId]) => boundPlayerId === playerId && boundUid !== uid,
+  );
+  if (existingForPlayer) {
+    throw new MembershipConflictError("This seat is already bound to another UID.");
+  }
   const updates: Record<string, Json> = {
     [rosterEntryPath(code, uid)]: playerId,
     [joinRequestPath(code, uid)]: null,
@@ -122,9 +133,54 @@ export async function seatPlayer(
   await backend.update(updates);
 }
 
+/**
+ * Revoke the UID bound to a local player seat and delete its private
+ * projection in one Storyteller-authorized multi-path update. Repeating the
+ * operation is safe: an already-absent binding still clears the stale private
+ * path, if any.
+ */
+export async function revokePlayerMembership(
+  backend: RoomBackend,
+  code: string,
+  playerId: PlayerId,
+): Promise<{ uid: string | null }> {
+  const bindings = await readRosterBindings(backend, code);
+  const matches = Object.entries(bindings).filter(([, boundPlayerId]) => boundPlayerId === playerId);
+  if (matches.length > 1) {
+    throw new MembershipConflictError("This seat is bound to more than one UID.");
+  }
+  const uid = matches[0]?.[0] ?? null;
+  const updates: Record<string, Json> = {
+    [playerPath(code, playerId)]: null,
+  };
+  if (uid) updates[rosterEntryPath(code, uid)] = null;
+  await backend.update(updates);
+  return { uid };
+}
+
 /** Roster values are bindings, even if the matching local seat is absent. */
 export type RosterEntry =
   | { uid: string; phase: "seated"; playerId: PlayerId };
+
+export class MembershipConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MembershipConflictError";
+  }
+}
+
+/** Read and validate the authoritative UID → playerId bindings. */
+export async function readRosterBindings(
+  backend: RoomBackend,
+  code: string,
+): Promise<Record<string, string>> {
+  const snapshot = decodeRoster(await backend.get(rosterPath(code)));
+  if (snapshot.status === "invalid") {
+    reportSnapshotProblem("roster", snapshot.issues);
+    throw new SnapshotValidationError();
+  }
+  return snapshot.status === "ready" ? snapshot.data : {};
+}
 
 export function classifyRoster(
   raw: Record<string, string> | null | undefined
