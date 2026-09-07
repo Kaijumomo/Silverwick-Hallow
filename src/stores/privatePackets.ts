@@ -9,7 +9,6 @@ export type PrivateInfoApplicability = {
   bluffs: boolean;
   fakeMinions: boolean;
   extraText: boolean;
-  genericPacket: boolean;
 };
 
 /**
@@ -30,18 +29,20 @@ export function getPrivateInfoApplicability(
       || mode === "drunk_fake_role_behavior"
       || mode === "marionette_fake_good_behavior"
   );
-  const hasApplicableDraft = !!(
-    (player.privateInfo?.bluffs?.length && (fakeDemon || normalDemon))
-      || (player.privateInfo?.fakeMinions?.length && fakeDemon)
-      || (player.privateInfo?.extraText?.trim() && (simulatedInfo || fakeDemon))
-  );
   return {
     simulatedInfo,
     bluffs: fakeDemon || normalDemon,
     fakeMinions: fakeDemon,
-    extraText: simulatedInfo || fakeDemon,
-    genericPacket: simulatedInfo || fakeDemon || normalDemon || hasApplicableDraft || !!player.publishedPacket,
+    extraText: simulatedInfo || fakeDemon || !!player.shownRole && [
+      registry.get(player.shownRole)?.firstNightPrompt ?? registry.get(player.shownRole)?.ability,
+      registry.get(player.shownRole)?.otherNightPrompt ?? registry.get(player.shownRole)?.ability,
+    ].some(prompt => offersNightInformation(prompt ?? "")),
   };
+}
+
+/** Optional UI affordance from procedure text, never an ability resolver. */
+export function offersNightInformation(prompt: string): boolean {
+  return /\b(show|tell|learn|learns|information)\b/i.test(prompt);
 }
 
 export function hasPrivateDraft(player: STPlayerRecord): boolean {
@@ -74,7 +75,7 @@ export function previewPrivatePacket(player: STPlayerRecord, game: StorytellerLo
     throw new Error("Bluffs are not applicable to this player's shown identity.");
   }
   if (info.fakeMinions?.length && !applicable.fakeMinions) {
-    throw new Error("Fake Minions are only applicable to a simulated Demon packet.");
+    throw new Error("Minion selections are only applicable to an apparent Demon.");
   }
   if (info.extraText?.trim() && !applicable.extraText) {
     throw new Error("Extra information is not applicable to this player's current scenario.");
@@ -96,23 +97,9 @@ export function previewPrivatePacket(player: STPlayerRecord, game: StorytellerLo
   return { payload, fingerprint: JSON.stringify([player.packetEpoch ?? "", game.day, game.phase, payload]) };
 }
 
-export function packetReadiness(player: STPlayerRecord, game: StorytellerLobbyRecord, registry: RoleRegistry) {
-  if (!hasPrivateDraft(player)) return { state: "not configured" as const, error: null };
-  try {
-    const preview = previewPrivatePacket(player, game, registry);
-    return {
-      state: player.packetPreview?.fingerprint === preview.fingerprint ? "ready" as const : "configured" as const,
-      error: null,
-    };
-  } catch (error) {
-    return { state: "configured" as const, error: error instanceof Error ? error.message : "Review private information." };
-  }
-}
-
 /** Identity changes invalidate queued previews and previously published extras. */
 export function invalidatePrivatePacket<T extends STPlayerRecord>(player: T): T {
   const next = { ...player, packetEpoch: crypto.randomUUID() };
-  delete next.packetPreview;
   delete next.publishedPacket;
   return next;
 }

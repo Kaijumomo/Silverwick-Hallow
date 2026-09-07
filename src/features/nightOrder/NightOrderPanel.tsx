@@ -2,8 +2,8 @@ import { useRef, useState } from "react";
 import { computeNightOrder } from "./nightOrder";
 import type { NightStep } from "./nightOrder";
 import { useStorytellerStore } from "@/stores/storytellerStore";
-import { PrivatePacketPanel } from "@/features/players/PrivatePacketPanel";
-import { getPrivateInfoApplicability } from "@/stores/privatePackets";
+import { PlayerInformation } from "@/features/players/PlayerInformation";
+import { getPrivateInfoApplicability, offersNightInformation, previewPrivatePacket } from "@/stores/privatePackets";
 import { buildRegistry } from "@/data/roleRegistry";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import type { NightStepRecord, NightStepStatus, Script, StorytellerLobbyRecord } from "@/stores/types";
@@ -85,7 +85,6 @@ function StepCard({ step, record, day }: StepCardProps) {
           <span className="step-badges">
             {!step.alive     && <span className="step-badge step-badge-dead">dead</span>}
             {step.abilityUsed && <span className="step-badge step-badge-used">used</span>}
-            {step.isDeceived  && <span className="step-badge step-badge-deceived">fake</span>}
           </span>
         )}
       </div>
@@ -98,11 +97,7 @@ function StepCard({ step, record, day }: StepCardProps) {
       )}
 
       {step.kind === "player" && step.isDeceived && <p className="step-reminder">
-        Simulated wake — actual role: {step.actualRoleName}. Perform the shown procedure
-        with Storyteller-controlled information; this does not grant its ability or effects.
-      </p>}
-      {step.kind === "player" && step.isDeceived && <p className="behavior-help">
-        Review this player's private information task at the top before completing the wake.
+        Simulated wake — actually the {step.actualRoleName}. Follow the shown procedure; no real ability effects.
       </p>}
       {step.kind === "global" && <p className="step-player-name">
         Introduction recipients: {step.recipientIds?.map(id => players?.[id]?.name ?? "Unnamed player").join(", ") || "none — review manually"}.
@@ -113,6 +108,13 @@ function StepCard({ step, record, day }: StepCardProps) {
       {step.prompt && (
         <p className="step-prompt">{step.prompt}</p>
       )}
+
+      {step.kind === "player" && offersNightInformation(step.prompt) && <details className="information-review">
+        <summary>Give information</summary>
+        <PlayerInformation playerId={step.playerId} purpose="result" />
+      </details>}
+      <button className="btn btn-sm" disabled={status === "done"}
+        onClick={() => useStorytellerStore.getState().setNightStepStatus(day, step.stepKey, "done")}>Done</button>
 
       {/* Expandable reminder */}
       {step.reminder && (
@@ -182,9 +184,14 @@ export function NightOrderPanel({ game, script, onClose }: Props) {
   const isFirstNight = game.day === 1;
   const steps = computeNightOrder(game.players, game.seatOrder, script, isFirstNight);
   const registry = buildRegistry(script);
-  const packetPlayers = game.seatOrder.filter(id => {
+  const setupPlayers = game.seatOrder.filter(id => {
     const p = game.players[id];
-    return p && !p.isEmpty && getPrivateInfoApplicability(p, registry).genericPacket;
+    if (!p || p.isEmpty || !getPrivateInfoApplicability(p, registry).bluffs) return false;
+    if (isFirstNight) return true;
+    // Later nights only offer changed setup content, never an overdue task.
+    if (!p.privateInfo?.bluffs?.length && !p.privateInfo?.fakeMinions?.length) return false;
+    try { return JSON.stringify(previewPrivatePacket(p, game, registry).payload) !== JSON.stringify(p.publishedPacket?.payload); }
+    catch { return true; }
   });
 
   const progress = game.nightProgress ?? {};
@@ -215,24 +222,27 @@ export function NightOrderPanel({ game, script, onClose }: Props) {
       </div>
 
       <div className="night-panel-body">
-        {!!packetPlayers.length && <div aria-label="Private information tasks">
-          <p className="behavior-help">Private information tasks — preview and publish when appropriate tonight. These tasks are separate from ability order.</p>
-          {packetPlayers.map(id => <PrivatePacketPanel key={id} playerId={id} />)}
-        </div>}
         {steps.length === 0 ? (
           <p style={{ color: "var(--text-faint)", fontSize: "12px", fontStyle: "italic", padding: "8px 4px" }}>
             No night actions — configure shown identities for the intended wake procedures.
           </p>
         ) : (
           steps.map((step) => (
-            <StepCard
-              key={step.stepKey}
-              step={step}
-              record={progress[`${game.day}:${step.stepKey}`]}
-              day={game.day}
-            />
+            <div key={step.stepKey}>
+              <StepCard step={step} record={progress[`${game.day}:${step.stepKey}`]} day={game.day} />
+              {step.stepKey === "demonInfo" && setupPlayers.map(id => <details className="information-review" key={id}>
+                <summary>Setup information — {game.players[id]!.name}</summary>
+                <button className="btn btn-sm" onClick={() => useStorytellerStore.getState().selectPlayer(id)}>Edit setup information</button>
+                <PlayerInformation playerId={id} purpose="setup" />
+              </details>)}
+            </div>
           ))
         )}
+        {!isFirstNight && setupPlayers.map(id => <details className="information-review" key={id}>
+          <summary>Review changed setup information — {game.players[id]!.name}</summary>
+          <button className="btn btn-sm" onClick={() => useStorytellerStore.getState().selectPlayer(id)}>Edit setup information</button>
+          <PlayerInformation playerId={id} purpose="setup" />
+        </details>)}
       </div>
     </aside>
   );

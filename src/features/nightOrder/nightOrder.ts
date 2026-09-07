@@ -36,7 +36,6 @@ export type NightStep =
       actualRoleId: RoleId;
       actualRoleName: string;
       shownRoleId: RoleId;
-      packetPlayerId: PlayerId;
     };
 
 // ---------------------------------------------------------------------------
@@ -48,7 +47,7 @@ const DEMON_INFO_BASE = {
   stepKey: "demonInfo",
   order: 5,
   label: "Demon — learns Minions & Bluffs",
-  reminder: "Review intended team information and bluffs. Check simulated private-information tasks separately; configuration is not delivery.",
+  reminder: "Review the intended team information and bluffs before giving them to each player.",
 };
 
 const MINION_INFO_STEP: Extract<NightStep, { kind: "global" }> = {
@@ -135,7 +134,6 @@ export function computeNightOrder(
       actualRoleId: player.actualRole,
       actualRoleName: registry.get(player.actualRole)?.name ?? player.actualRole,
       shownRoleId: roleId,
-      packetPlayerId: playerId,
     });
   }
 

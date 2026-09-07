@@ -101,7 +101,6 @@ export const STPlayerRecordSchema = z.object({
   stNotes: z.string(),
   isTraveler: z.boolean(),
   privateInfo: PrivateInfoSchema.optional(),
-  packetPreview: z.object({ fingerprint: z.string(), payload: PlayerSelfRecordSchema }).optional(),
   publishedPacket: PrivatePacketSchema.optional(),
   packetEpoch: z.string().optional(),
 });

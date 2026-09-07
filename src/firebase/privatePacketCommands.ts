@@ -8,16 +8,14 @@ import { packetKey, usePacketDeliveryState } from "./packetDeliveryState";
 import type { SessionWriter } from "./writer";
 
 /** An explicit, serialized publication. ACK precedes the local publication mark. */
-export async function publishPrivatePacket(playerId: string, writer: SessionWriter | null = useSessionRuntime.getState().backend) {
+export async function publishPrivatePacket(playerId: string, preview: ReturnType<typeof previewPrivatePacket>, writer: SessionWriter | null = useSessionRuntime.getState().backend) {
   const initial = useStorytellerStore.getState();
   const lobby = initial.lobby;
-  const preview = initial.game?.players[playerId]?.packetPreview;
   if (!lobby || !writer || writer.code !== lobby.code || writer.sessionId !== lobby.sessionId) {
-    throw new Error("Connect to the active lobby before publishing.");
+    throw new Error("Connect to the active lobby before sending.");
   }
-  if (!preview) throw new Error("Preview this packet before publishing.");
   const key = packetKey(lobby.code, playerId);
-  if (usePacketDeliveryState.getState().queued[key]) throw new Error("This packet is already queued.");
+  if (usePacketDeliveryState.getState().queued[key]) throw new Error("This information is already queued.");
   usePacketDeliveryState.setState(s => ({ queued: { ...s.queued, [key]: true } }));
   try {
     await writer.runExclusive(async inner => {
@@ -26,20 +24,20 @@ export async function publishPrivatePacket(playerId: string, writer: SessionWrit
       const player = game?.players[playerId];
       const script = game && selectScriptById(state, game.scriptId);
       if (!game || !player || !script || state.lobby?.sessionId !== lobby.sessionId || state.lobby?.code !== lobby.code) {
-        throw new Error("The session or player changed. Review the packet again.");
+        throw new Error("The session or player changed. Review the information again.");
       }
       const registry = buildRegistry(script);
       const current = previewPrivatePacket(player, game, registry);
-      if (current.fingerprint !== preview.fingerprint || player.packetPreview?.fingerprint !== current.fingerprint) {
-        throw new Error("The packet changed after preview. Review it again.");
+      if (current.fingerprint !== preview.fingerprint) {
+        throw new Error("The information changed after preview. Review it again.");
       }
       const roster = await readRosterBindings(inner, lobby.code);
-      if (!Object.values(roster).includes(playerId)) throw new Error("Seat this player in the online lobby before publishing.");
+      if (!Object.values(roster).includes(playerId)) throw new Error("Seat this player in the online lobby before sending.");
       // Validate again after the network read, before submitting the snapshot.
       const latest = useStorytellerStore.getState();
       const latestPlayer = latest.game?.players[playerId];
       if (latest.game !== game || !latestPlayer || latest.lobby?.sessionId !== lobby.sessionId) {
-        throw new Error("The game changed while preparing delivery. Review and publish again.");
+        throw new Error("The game changed while preparing delivery. Review and send again.");
       }
       const publishedPacket = { id: crypto.randomUUID(), payload: current.payload, forDay: game.day, forPhase: game.phase };
       const snapshot = { ...game, players: { ...game.players, [playerId]: { ...player, publishedPacket } } };
@@ -51,7 +49,7 @@ export async function publishPrivatePacket(playerId: string, writer: SessionWrit
       const remaining = after.game?.players[playerId];
       if (after.lobby?.sessionId !== lobby.sessionId || !remaining || remaining.isEmpty
         || remaining.packetEpoch !== player.packetEpoch) {
-        throw new Error("Identity changed during publication. Reconnect to verify the latest information.");
+        throw new Error("Identity changed during delivery. Reconnect to verify the latest information.");
       }
       useStorytellerStore.setState({
         game: { ...after.game!, players: { ...after.game!.players, [playerId]: { ...remaining, publishedPacket } } },

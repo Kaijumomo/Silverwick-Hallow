@@ -3,7 +3,7 @@ import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore
 import { deriveAlignment } from "@/data/roleRegistry";
 import { TRAVELERS } from "@/data/travelers";
 import { needsShownIdentity } from "@/stores/identity";
-import { PrivatePacketPanel } from "./PrivatePacketPanel";
+import { PlayerInformation } from "./PlayerInformation";
 import { getPrivateInfoApplicability } from "@/stores/privatePackets";
 import { buildRegistry } from "@/data/roleRegistry";
 import { usePrivacyStore } from "@/stores/privacyStore";
@@ -494,7 +494,6 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
               player={player}
               roles={script.characters}
               roleById={roleById}
-              inPlayRoles={inPlayRoles}
               otherPlayers={Object.values(game.players)
                 .filter((p) => p.id !== player.id)
                 .sort((a, b) => a.seat - b.seat)}
@@ -502,8 +501,6 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
               onSetFakeMinions={(ids) => setFakeMinions(player.id, ids)}
             />
           )}
-
-          <PrivatePacketPanel playerId={player.id} />
 
           {role?.type === "demon" && player.behaviorMode === "normal" && (
             <DemonInfo
@@ -703,7 +700,7 @@ function DemonInfo({ player, roles, roleById, inPlayRoles, onSetBluffs }: DemonI
     <section className="drawer-section">
       <h3 className="drawer-section-title">Demon bluffs (ST private)</h3>
       <p className="behavior-help">
-        Configure 3 not-in-play characters, then preview and publish the packet to send these bluffs.
+        Choose 3 characters that are not in play.
       </p>
       <BluffSlotPicker
         bluffs={bluffs}
@@ -712,6 +709,7 @@ function DemonInfo({ player, roles, roleById, inPlayRoles, onSetBluffs }: DemonI
         onSetBluffs={onSetBluffs}
         inPlayRoles={inPlayRoles}
       />
+      <PlayerInformation playerId={player.id} purpose="setup" />
     </section>
   );
 }
@@ -724,7 +722,6 @@ type LunaticInfoProps = {
   player: STPlayerRecord;
   roles: RoleDef[];
   roleById: Map<string, RoleDef>;
-  inPlayRoles: Set<string>;
   otherPlayers: STPlayerRecord[];
   onSetBluffs: (bluffs: string[]) => void;
   onSetFakeMinions: (ids: string[]) => void;
@@ -734,7 +731,6 @@ function LunaticInfo({
   player,
   roles,
   roleById,
-  inPlayRoles,
   otherPlayers,
   onSetBluffs,
   onSetFakeMinions,
@@ -756,10 +752,9 @@ function LunaticInfo({
 
   return (
     <section className="drawer-section">
-      <h3 className="drawer-section-title">Simulated information draft (ST private)</h3>
+      <h3 className="drawer-section-title">Demon setup information</h3>
       <p className="behavior-help">
-        Configure intended bluffs and minions where appropriate to the shown
-        character. Preview and publish the packet separately to send it.
+        Choose the bluffs and players they will see as their Minions. Bluffs may be in play.
       </p>
 
       <BluffSlotPicker
@@ -767,11 +762,10 @@ function LunaticInfo({
         rolePool={goodPool}
         roleById={roleById}
         onSetBluffs={onSetBluffs}
-        inPlayRoles={inPlayRoles}
       />
 
       <div className="behavior-row">
-        <label>Fake minions:</label>
+        <label>Players shown as Minions:</label>
         <span className="label">{fakeMinions.length} chosen</span>
       </div>
       {otherPlayers.length === 0 ? (
@@ -791,6 +785,14 @@ function LunaticInfo({
           ))}
         </div>
       )}
+      <details className="information-review">
+        <summary>Additional setup information</summary>
+        <label className="information-input">Information
+          <textarea className="input" rows={2} maxLength={4000} value={player.privateInfo?.extraText ?? ""}
+            onChange={event => useStorytellerStore.getState().setPrivateText(player.id, event.target.value)} />
+        </label>
+      </details>
+      <PlayerInformation playerId={player.id} purpose="setup" />
     </section>
   );
 }

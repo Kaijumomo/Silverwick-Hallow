@@ -52,7 +52,7 @@ contain forbidden fields on `public/*` or `player/*`:
 
 ## Phase 6: explicit private packets
 
-Draft `privateInfo`, `packetPreview`, `packetEpoch`, and `publishedPacket`
+Draft `privateInfo`, `packetEpoch`, and `publishedPacket`
 metadata live only in Storyteller state and its owner-only checkpoint.
 Drafts and previews are never copied to a player path by a normal sync.
 `publishPrivatePacket` uses the existing session writer queue, authoritative

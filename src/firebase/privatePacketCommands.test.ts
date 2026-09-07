@@ -8,6 +8,9 @@ import { requireActiveSession } from "./lifecycle";
 import { SessionWriter } from "./writer";
 import { startStorytellerSession, useSessionRuntime } from "./storytellerSync";
 import { startPlayerHandshake } from "./playerSync";
+import { previewPrivatePacket } from "@/stores/privatePackets";
+import { buildRegistry } from "@/data/roleRegistry";
+import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { publishPrivatePacket } from "./privatePacketCommands";
 import { packetKey, usePacketDeliveryState } from "./packetDeliveryState";
 import { revokePlayerAndCommit } from "./membershipCommands";
@@ -46,36 +49,38 @@ async function setup(managed = false) {
   useSessionRuntime.setState({ backend: writer });
   await knockOnLobby(b, code, "alice", "Alice");
   await seatPlayer(writer, code, "alice", id, null);
-  store.getState().previewPrivateInfo(id);
-  return { b, id, other, writer, manager, session, lobby, p: () => store.getState().game!.players[id]! };
+
+  const review = () => previewPrivatePacket(store.getState().game!.players[id]!, store.getState().game!, buildRegistry(troubleBrewing));
+  return { b, id, other, writer, manager, session, lobby, review, p: () => store.getState().game!.players[id]! };
 }
 
 describe("explicit publication through the session writer", () => {
   it("requires preview and authorized seating; rejects stale previews without writing", async () => {
-    const { b, id, writer, p } = await setup();
+    const { b, id, writer, review, p } = await setup();
+    const previous = review();
     store.getState().setPrivateText(id, "Edited after preview");
-    await expect(publishPrivatePacket(id, writer)).rejects.toThrow(/changed after preview/);
+    await expect(publishPrivatePacket(id, previous, writer)).rejects.toThrow(/changed after preview/);
     expect(p().publishedPacket).toBeUndefined();
-    store.getState().previewPrivateInfo(id);
+
     await writer.set(`${root}/roster/alice`, null);
-    await expect(publishPrivatePacket(id, writer)).rejects.toThrow(/Seat this player/);
+    await expect(publishPrivatePacket(id, review(), writer)).rejects.toThrow(/Seat this player/);
     expect(await b.get(`${root}/player/${id}`)).toBeUndefined();
   });
 
   it("does not mark delivered before server ACK, and preserves edits made while queued", async () => {
-    const { b, id, writer, p } = await setup();
+    const { b, id, writer, review, p } = await setup();
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
     const update = b.update.bind(b);
     let waiting = false;
     b.update = async values => { waiting = true; await gate; await update(values); };
-    const sending = publishPrivatePacket(id, writer);
+    const sending = publishPrivatePacket(id, review(), writer);
     await waitFor(() => expect(waiting).toBe(true));
     const key = packetKey(code, id);
     expect(usePacketDeliveryState.getState().queued[key]).toBe(true);
     expect(usePacketDeliveryState.getState().receipts[key]).toBeUndefined();
     expect(p().publishedPacket).toBeUndefined();
-    await expect(publishPrivatePacket(id, writer)).rejects.toThrow(/already queued/);
+    await expect(publishPrivatePacket(id, review(), writer)).rejects.toThrow(/already queued/);
     store.getState().setPrivateText(id, "Next draft");
     release();
     await sending;
@@ -87,7 +92,7 @@ describe("explicit publication through the session writer", () => {
   });
 
   it.each(["before write", "lost response"])("retry after %s keeps one packet and one acknowledged revision", async failure => {
-    const { b, id, writer, p } = await setup();
+    const { b, id, writer, review, p } = await setup();
     const update = b.update.bind(b);
     const payloads: unknown[] = [];
     let calls = 0;
@@ -98,7 +103,7 @@ describe("explicit publication through the session writer", () => {
       await update(values);
       if (calls === 1) throw new Error("network response lost");
     };
-    await publishPrivatePacket(id, writer);
+    await publishPrivatePacket(id, review(), writer);
     expect(calls).toBe(failure === "before write" ? 2 : 1);
     for (const payload of payloads) expect(payload).toEqual(p().publishedPacket!.payload);
     expect(await b.get(`${root}/player/${id}`)).toEqual(p().publishedPacket!.payload);
@@ -106,16 +111,16 @@ describe("explicit publication through the session writer", () => {
   });
 
   it("failed publication never marks the local draft published", async () => {
-    const { b, id, writer, p } = await setup();
+    const { b, id, writer, review, p } = await setup();
     b.update = async () => { throw new Error("PERMISSION_DENIED"); };
-    await expect(publishPrivatePacket(id, writer)).rejects.toThrow("PERMISSION_DENIED");
+    await expect(publishPrivatePacket(id, review(), writer)).rejects.toThrow("PERMISSION_DENIED");
     expect(p().publishedPacket).toBeUndefined();
     expect(usePacketDeliveryState.getState().receipts[packetKey(code, id)]).toBeUndefined();
     expect(usePacketDeliveryState.getState().queued[packetKey(code, id)]).toBe(false);
   });
 
   it("player refresh and host takeover preserve published payload, not a newer unsent draft", async () => {
-    const { b, id, writer, manager, session, lobby, p } = await setup(true);
+    const { b, id, writer, manager, session, lobby, review, p } = await setup(true);
     const listen = () => {
       usePlayerStore.getState().setSession({ code, uid: "alice", requestedName: "Alice" });
       const stop = startPlayerHandshake(b, code, "alice");
@@ -123,7 +128,7 @@ describe("explicit publication through the session writer", () => {
       return stop;
     };
     const off = listen();
-    await publishPrivatePacket(id, writer);
+    await publishPrivatePacket(id, review(), writer);
     const published = p().publishedPacket!;
     await waitFor(() => expect(usePlayerStore.getState().self).toEqual(published.payload));
     store.getState().setPrivateText(id, "Unpublished second packet");
@@ -148,18 +153,18 @@ describe("explicit publication through the session writer", () => {
 
   it("host reconnect never publishes a configured-only preview", async () => {
     const { b, id, writer, manager, session, lobby, p } = await setup(true);
-    await waitFor(async () => expect(await b.get(`${root}/storyteller/players/${id}/packetPreview`)).toBeDefined());
+    await waitFor(async () => expect(await b.get(`${root}/storyteller/players/${id}/privateInfo`)).toBeDefined());
     manager!.stop(); await writer.dispose();
     const replacement = new SessionWriter(b, code, session.id);
     const recovered = await startStorytellerSession(b, lobby, replacement);
     disposals.push(async () => { recovered.stop(); await replacement.dispose(); });
-    expect(p().packetPreview).toBeDefined();
+    expect(p().privateInfo).toBeDefined();
     expect(p().publishedPacket).toBeUndefined();
     expect(await b.get(`${root}/player/${id}`)).toEqual({ shownRole: "imp", shownAlignment: "evil" });
   });
 
   it("identity changes during delivery never restore the old packet into the new perception", async () => {
-    const { b, id, writer, p } = await setup(true);
+    const { b, id, writer, review, p } = await setup(true);
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
     const update = b.update.bind(b);
@@ -168,8 +173,8 @@ describe("explicit publication through the session writer", () => {
       if (values[`${root}/player/${id}`] && !waiting) { waiting = true; await gate; }
       await update(values);
     };
-    const sending = publishPrivatePacket(id, writer);
-    const rejected = expect(sending).rejects.toThrow(/Identity changed during publication/);
+    const sending = publishPrivatePacket(id, review(), writer);
+    const rejected = expect(sending).rejects.toThrow(/Identity changed during delivery/);
     await waitFor(() => expect(waiting).toBe(true));
     store.getState().setShownRole(id, "chef");
     release();

@@ -90,8 +90,7 @@ export type STPlayerRecord = {
   stNotes: string;
   isTraveler: boolean;
   privateInfo?: PrivateInfo;
-  /** Draft edits never imply delivery. Preview and published snapshots are ST-only. */
-  packetPreview?: { fingerprint: string; payload: PlayerSelfRecord };
+  /** Draft edits never imply delivery. The last sent snapshot is ST-only. */
   publishedPacket?: PrivatePacket;
   /** Invalidates in-flight publication when identity is reset. */
   packetEpoch?: string;

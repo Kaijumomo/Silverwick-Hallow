@@ -11,6 +11,7 @@ import { writeProjections } from "./sync";
 import { makeSTPlayer, tbScript } from "@/test/fixtures";
 import { buildRegistry } from "@/data/roleRegistry";
 import { useStorytellerStore } from "@/stores/storytellerStore";
+import { previewPrivatePacket } from "@/stores/privatePackets";
 import { publishPrivatePacket } from "./privatePacketCommands";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import {
@@ -456,8 +457,8 @@ describe("Firebase RTDB membership authorization", () => {
     store.getState().setFakeMinions(id, [other]);
     store.getState().setBluffs(id, ["chef", "saint", "washerwoman"]);
     store.getState().setPrivateText(id, "Only Alice should receive this");
-    store.getState().previewPrivateInfo(id);
-    const preview = store.getState().game!.players[id]!.packetPreview!.payload;
+    const reviewed = previewPrivatePacket(store.getState().game!.players[id]!, store.getState().game!, buildRegistry(tbScript));
+    const preview = reviewed.payload;
     try {
       await writer.start();
       await knockOnLobby(backend(alice), code, alice, "Alice");
@@ -467,9 +468,9 @@ describe("Firebase RTDB membership authorization", () => {
       await writeProjections({ backend: writer, code, stState: store.getState().game!,
         registry: buildRegistry(tbScript), online: {}, membership: { [alice]: id, [bob]: other } });
       expect((await ref(alice, `player/${id}`).once("value")).val()).toEqual({ shownRole: "imp", shownAlignment: "evil" });
-      await assertFails(ref(alice, `storyteller/players/${id}/packetPreview`).once("value"));
+      await assertFails(ref(alice, `storyteller/players/${id}/privateInfo`).once("value"));
       await assertFails(ref(alice, "checkpoint").once("value"));
-      await publishPrivatePacket(id, writer);
+      await publishPrivatePacket(id, reviewed, writer);
       const payload = (await ref(alice, `player/${id}`).once("value")).val();
       expect(payload).toEqual(preview);
       expect(payload.minions).toEqual([{ id: other, name: "Bob", seat: 1 }]);

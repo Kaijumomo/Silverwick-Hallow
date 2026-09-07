@@ -6,7 +6,7 @@ import { LORICS } from "@/data/lorics";
 import { StorytellerStateSchema } from "./schemas";
 import { buildRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, needsShownIdentity } from "./identity";
-import { invalidatePrivatePacket, previewPrivatePacket, pruneInapplicablePrivateInfo } from "./privatePackets";
+import { invalidatePrivatePacket, pruneInapplicablePrivateInfo } from "./privatePackets";
 import { usePrivacyStore } from "./privacyStore";
 import type {
   Alignment,
@@ -122,7 +122,6 @@ export type StorytellerStore = {
   setBluffs: (id: PlayerId, bluffs: RoleId[]) => void;
   setFakeMinions: (id: PlayerId, playerIds: PlayerId[]) => void;
   setPrivateText: (id: PlayerId, text: string) => void;
-  previewPrivateInfo: (id: PlayerId) => void;
   setIsTraveler: (id: PlayerId, isTraveler: boolean) => void;
   setFabled: (fabled: RoleId[]) => void;
   setLorics: (lorics: RoleId[]) => void;
@@ -261,6 +260,9 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
     _migrationResetFlag = true;
     return CLEAN_STATE;
   }
+  // v9 drops obsolete saved previews through the schema allowlist, including
+  // undo snapshots. Drafts, sent information and the active session survive.
+  Object.assign(s, check.data);
   return state;
 }
 
@@ -734,16 +736,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
-      previewPrivateInfo: (id) => {
-        const state = get();
-        const game = state.game;
-        const player = game?.players[id];
-        const script = game && selectScriptById(state, game.scriptId);
-        if (!game || !player || !script) return;
-        const packetPreview = previewPrivatePacket(player, game, buildRegistry(script));
-        set({ game: patchPlayer(game, id, { packetPreview }) });
-      },
-
       setIsTraveler: (id, isTraveler) => {
         const { game, undoStack } = get();
         if (!game) return;
@@ -945,7 +937,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
     }),
     {
       name: "new-blood-st",
-      version: 8,
+      version: 9,
       storage: createJSONStorage(() => localStorage),
       migrate: migrateStoreState,
       partialize: (s) => ({

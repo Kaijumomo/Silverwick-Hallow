@@ -2401,3 +2401,12 @@
   border-radius: 4px;
   padding: 2px 8px;
 }
+
+/* Compact, contextual Storyteller information controls. */
+.player-information { display: grid; gap: 8px; padding: 8px 0; }
+.information-review { margin: 8px 0; font-size: 14px; }
+.information-review > summary { cursor: pointer; padding: 8px 0; }
+.information-input { display: grid; gap: 6px; }
+.information-input textarea { width: 100%; min-height: 64px; resize: vertical; }
+.player-information .sealed-card-extras { padding: 4px 0; gap: 4px; }
+.player-information .sealed-card-extras p { margin: 4px 0; }

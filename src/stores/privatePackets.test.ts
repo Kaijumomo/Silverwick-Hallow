@@ -4,9 +4,9 @@ import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { makeSTPlayer, roles } from "@/test/fixtures";
 import { wakeIdentity } from "./wakeIdentity";
 import { computeNightOrder } from "@/features/nightOrder/nightOrder";
-import { getPrivateInfoApplicability, packetReadiness, previewPrivatePacket } from "./privatePackets";
+import { getPrivateInfoApplicability, previewPrivatePacket } from "./privatePackets";
 import { projectToSelf } from "./projections";
-import { useStorytellerStore as store } from "./storytellerStore";
+import { migrateStoreState, useStorytellerStore as store } from "./storytellerStore";
 import { StorytellerGamePersistedSchema } from "./schemas";
 import { decodeSelfSnapshot } from "@/firebase/snapshots";
 
@@ -40,7 +40,7 @@ describe("AUD-013 wake identity is operational, never mechanical", () => {
     expect(wake.simulated).toBe(simulated);
     const steps = computeNightOrder({ p }, ["p"], troubleBrewing, false);
     expect(steps).toEqual([expect.objectContaining({
-      effectiveRoleId: shown, actualRoleId: actual, isDeceived: simulated, packetPlayerId: "p",
+      effectiveRoleId: shown, actualRoleId: actual, isDeceived: simulated,
     })]);
     expect(p).toEqual(before);
     expect(registry.get(p.actualRole)?.type).toBe(actual === "lunatic" || actual === "drunk" ? "outsider" : actual === "marionette" ? "minion" : "townsfolk");
@@ -82,11 +82,11 @@ describe("AUD-027 private packet boundary and lifecycle", () => {
     const lunatic = makeSTPlayer({ actualRole: "lunatic", shownRole: "imp", behaviorMode: "fake_demon_behavior" });
     const demon = makeSTPlayer({ actualRole: "imp", shownRole: "imp", behaviorMode: "normal" });
     const normal = makeSTPlayer({ actualRole: "chef", shownRole: "chef", behaviorMode: "normal" });
-    expect(getPrivateInfoApplicability(drunk, registry)).toMatchObject({ simulatedInfo: true, bluffs: false, fakeMinions: false, extraText: true, genericPacket: true });
-    expect(getPrivateInfoApplicability(marionette, registry)).toMatchObject({ simulatedInfo: true, bluffs: false, fakeMinions: false, extraText: true, genericPacket: true });
-    expect(getPrivateInfoApplicability(lunatic, registry)).toMatchObject({ simulatedInfo: true, bluffs: true, fakeMinions: true, extraText: true, genericPacket: true });
-    expect(getPrivateInfoApplicability(demon, registry)).toMatchObject({ simulatedInfo: false, bluffs: true, fakeMinions: false, genericPacket: true });
-    expect(getPrivateInfoApplicability(normal, registry)).toMatchObject({ simulatedInfo: false, bluffs: false, fakeMinions: false, extraText: false, genericPacket: false });
+    expect(getPrivateInfoApplicability(drunk, registry)).toMatchObject({ simulatedInfo: true, bluffs: false, fakeMinions: false, extraText: true });
+    expect(getPrivateInfoApplicability(marionette, registry)).toMatchObject({ simulatedInfo: true, bluffs: false, fakeMinions: false, extraText: true });
+    expect(getPrivateInfoApplicability(lunatic, registry)).toMatchObject({ simulatedInfo: true, bluffs: true, fakeMinions: true, extraText: true });
+    expect(getPrivateInfoApplicability(demon, registry)).toMatchObject({ simulatedInfo: false, bluffs: true, fakeMinions: false });
+    expect(getPrivateInfoApplicability(normal, registry)).toMatchObject({ simulatedInfo: false, bluffs: false, fakeMinions: false, extraText: true });
   });
 
   it("behavior changes prune fake Demon fields before they can be previewed or published", () => {
@@ -101,11 +101,9 @@ describe("AUD-027 private packet boundary and lifecycle", () => {
   });
 
   it("configured and previewed drafts remain private until explicit publication", () => {
-    const { id, p, game } = configured();
-    expect(packetReadiness(p(), game(), registry).state).toBe("configured");
+    const { p } = configured();
     expect(projectToSelf(p(), registry)).toEqual({ shownRole: "imp", shownAlignment: "evil" });
-    store.getState().previewPrivateInfo(id);
-    expect(packetReadiness(p(), game(), registry).state).toBe("ready");
+
     expect(p().publishedPacket).toBeUndefined();
     expect(projectToSelf(p(), registry)?.extraText).toBeUndefined();
   });
@@ -153,36 +151,35 @@ describe("AUD-027 private packet boundary and lifecycle", () => {
 
   it("editing a draft requires another preview and keeps earlier published information separate", () => {
     const { id, p, game } = configured();
-    store.getState().previewPrivateInfo(id);
-    const packet = { id: "ack", payload: p().packetPreview!.payload };
+
+    const packet = { id: "ack", payload: previewPrivatePacket(p(), game(), registry).payload };
     store.setState({ game: { ...game(), players: { ...game().players, [id]: { ...p(), publishedPacket: packet } } } });
     store.getState().setPrivateText(id, "Not yet published");
-    expect(packetReadiness(p(), game(), registry).state).toBe("configured");
     expect(projectToSelf(p(), registry)?.extraText).toBe("Your information tonight");
   });
 
   it.each(["shown", "actual", "alignment", "behavior"])("%s change invalidates previews and old delivery snapshots", change => {
     const { id, p, game } = configured();
-    store.getState().previewPrivateInfo(id);
+
     store.setState({ game: { ...game(), players: { ...game().players, [id]: { ...p(),
-      publishedPacket: { id: "ack", payload: p().packetPreview!.payload } } } } });
+      publishedPacket: { id: "ack", payload: previewPrivatePacket(p(), game(), registry).payload } } } } });
     if (change === "shown") store.getState().setShownRole(id, "chef");
     if (change === "actual") store.getState().assignRole(id, "drunk");
     if (change === "alignment") store.getState().setShownAlignment(id, "good");
     if (change === "behavior") store.getState().setBehaviorMode(id, "custom");
-    expect(p().packetPreview).toBeUndefined();
+    expect(p()).not.toHaveProperty("packetPreview");
     expect(p().publishedPacket).toBeUndefined();
     expect(projectToSelf(p(), registry)?.extraText).toBeUndefined();
   });
 
   it("validated restoration preserves draft, publication, and wake independently", () => {
     const { id, p, game } = configured();
-    store.getState().previewPrivateInfo(id);
+
     const saved = { ...game(), players: { ...game().players, [id]: { ...p(),
-      publishedPacket: { id: "ack", payload: p().packetPreview!.payload } } } };
+      publishedPacket: { id: "ack", payload: previewPrivatePacket(p(), game(), registry).payload } } } };
     const restored = StorytellerGamePersistedSchema.parse(JSON.parse(JSON.stringify(saved)));
     expect(wakeIdentity(restored.players[id]!, registry)?.role.id).toBe("imp");
-    expect(projectToSelf(restored.players[id]!, registry)).toEqual(p().packetPreview!.payload);
+    expect(projectToSelf(restored.players[id]!, registry)).toEqual(previewPrivatePacket(p(), game(), registry).payload);
     delete restored.players[id]!.publishedPacket;
     expect(projectToSelf(restored.players[id]!, registry)?.minions).toBeUndefined();
   });
@@ -190,40 +187,50 @@ describe("AUD-027 private packet boundary and lifecycle", () => {
   it("seat reuse clears private state and cannot change the names in an earlier packet", () => {
     const { id, other, p, game } = configured();
     const preview = previewPrivatePacket(p(), game(), registry);
-    store.getState().previewPrivateInfo(id);
+
     store.getState().unseatPlayer(other);
     store.getState().addToPendingQueue("replacement", "Replacement");
     store.getState().assignPendingToSeat("replacement", other);
     expect(preview.payload.minions![0]!.name).toBe("Bob");
-    expect(packetReadiness(p(), game(), registry).state).not.toBe("ready");
+    expect(previewPrivatePacket(p(), game(), registry).fingerprint).not.toBe(preview.fingerprint);
     store.getState().unseatPlayer(id);
     store.getState().addToPendingQueue("next", "Next");
     store.getState().assignPendingToSeat("next", id);
     expect(p().privateInfo).toBeUndefined();
-    expect(p().packetPreview).toBeUndefined();
+    expect(p()).not.toHaveProperty("packetPreview");
     expect(p().publishedPacket).toBeUndefined();
     expect(projectToSelf(p(), registry)).toBeNull();
   });
 
   it("new game cannot inherit private packets", () => {
-    const { id } = configured();
-    store.getState().previewPrivateInfo(id);
+    configured();
+
     store.getState().newGame("tb", { plannedPlayerCount: 2 });
     for (const p of Object.values(store.getState().game!.players)) {
       expect(p.privateInfo).toBeUndefined();
-      expect(p.packetPreview).toBeUndefined();
+      expect(p).not.toHaveProperty("packetPreview");
       expect(p.publishedPacket).toBeUndefined();
     }
   });
 
-  it("a new night requires a fresh preview without erasing already published information", () => {
+  it("a new night preserves sent information while rejecting old send contexts", () => {
     const { id, p, game } = configured();
-    store.getState().previewPrivateInfo(id);
-    const packet = { id: "ack", payload: p().packetPreview!.payload, forDay: game().day, forPhase: game().phase };
+
+    const before = previewPrivatePacket(p(), game(), registry);
+    const packet = { id: "ack", payload: before.payload, forDay: game().day, forPhase: game().phase };
     store.setState({ game: { ...game(), day: game().day + 1, players: { ...game().players, [id]: { ...p(), publishedPacket: packet } } } });
-    expect(packetReadiness(p(), game(), registry).state).toBe("configured");
     expect(projectToSelf(p(), registry)).toEqual(packet.payload);
-    store.getState().previewPrivateInfo(id);
-    expect(packetReadiness(p(), game(), registry).state).toBe("ready");
+    expect(previewPrivatePacket(p(), game(), registry).fingerprint).not.toBe(before.fingerprint);
+
   });
+});
+
+it("v9 migration removes saved previews and retains drafts and sent information", () => {
+  const { id, p, game } = configured();
+  const payload = previewPrivatePacket(p(), game(), registry).payload;
+  const legacy = { game: { ...game(), players: { ...game().players, [id]: { ...p(), packetPreview: { fingerprint: "old", payload }, publishedPacket: { id: "sent", payload } } } }, undoStack: [] };
+  const restored = migrateStoreState(legacy, 8) as typeof legacy;
+  expect(restored.game.players[id]).not.toHaveProperty("packetPreview");
+  expect(restored.game.players[id]!.privateInfo).toEqual(p().privateInfo);
+  expect(projectToSelf(restored.game.players[id]!, registry)).toEqual(payload);
 });
