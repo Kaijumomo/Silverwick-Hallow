@@ -3,6 +3,7 @@ import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore
 import { deriveAlignment } from "@/data/roleRegistry";
 import { TRAVELERS } from "@/data/travelers";
 import { needsShownIdentity } from "@/stores/identity";
+import { PrivatePacketPanel } from "./PrivatePacketPanel";
 import type {
   Alignment,
   BehaviorMode,
@@ -38,7 +39,7 @@ const BEHAVIOR_MODES: { value: BehaviorMode; label: string; help: string }[] = [
   {
     value: "drunk_fake_role_behavior",
     label: "Drunk (fake role)",
-    help: "Believes they are their shown role. Wake them at the shown role's night times; their info should be wrong.",
+    help: "Believes they are their shown role. Follow its simulated wake and choose the information manually; no truthful result is computed.",
   },
   {
     value: "fake_demon_behavior",
@@ -48,7 +49,7 @@ const BEHAVIOR_MODES: { value: BehaviorMode; label: string; help: string }[] = [
   {
     value: "marionette_fake_good_behavior",
     label: "Fake good (Marionette)",
-    help: "Believes they are a good Townsfolk. Sat next to the demon; gets a Minion-style intro from the ST.",
+    help: "Follows the shown good character's simulated wake. Excluded from the normal Minion introduction.",
   },
   {
     value: "poisoned",
@@ -456,7 +457,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
             </section>
           )}
 
-          {role && player.behaviorMode === "fake_demon_behavior" && (
+          {role && (player.behaviorMode === "fake_demon_behavior" || needsShownIdentity(player.actualRole)) && (
             <LunaticInfo
               player={player}
               roles={script.characters}
@@ -469,6 +470,8 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
               onSetFakeMinions={(ids) => setFakeMinions(player.id, ids)}
             />
           )}
+
+          <PrivatePacketPanel playerId={player.id} />
 
           {role?.type === "demon" && player.behaviorMode === "normal" && (
             <DemonInfo
@@ -668,7 +671,7 @@ function DemonInfo({ player, roles, roleById, inPlayRoles, onSetBluffs }: DemonI
     <section className="drawer-section">
       <h3 className="drawer-section-title">Demon bluffs (ST private)</h3>
       <p className="behavior-help">
-        These 3 not-in-play characters are shown to the Demon as bluffs.
+        Configure 3 not-in-play characters, then preview and publish the packet to send these bluffs.
       </p>
       <BluffSlotPicker
         bluffs={bluffs}
@@ -721,10 +724,10 @@ function LunaticInfo({
 
   return (
     <section className="drawer-section">
-      <h3 className="drawer-section-title">Lunatic info (ST private)</h3>
+      <h3 className="drawer-section-title">Simulated information draft (ST private)</h3>
       <p className="behavior-help">
-        Pick the 3 fake demon-bluff characters this Lunatic was shown, and
-        which players they were told are their fellow minions.
+        Configure intended bluffs and minions where appropriate to the shown
+        character. Preview and publish the packet separately to send it.
       </p>
 
       <BluffSlotPicker

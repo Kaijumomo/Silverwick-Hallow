@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildRegistry } from "@/data/roleRegistry";
-import { makeSTPlayer, tbScript } from "@/test/fixtures";
+import { makePublishedSTPlayer, tbScript } from "@/test/fixtures";
 import { TRAVELERS } from "@/data/travelers";
 import {
   projectLobbyToPublic,
@@ -28,7 +28,7 @@ const PRIVATE_FIELDS = [
 
 describe("projectToSelf — Drunk", () => {
   it("Drunk Chef projects shownRole=chef, shownAlignment=good", () => {
-    const drunk = makeSTPlayer({
+    const drunk = makePublishedSTPlayer({
       id: "p1",
       actualRole: "drunk",
       shownRole: "chef",
@@ -39,7 +39,7 @@ describe("projectToSelf — Drunk", () => {
     expect(self?.shownRole).toBe("chef");
     expect(self?.shownAlignment).toBe("good");
     expect(self?.bluffs).toBeUndefined();
-    expect(self?.fakeMinions).toBeUndefined();
+    expect(self?.minions).toBeUndefined();
     // Critical: actualRole never appears in self projection
     expect(JSON.stringify(self)).not.toContain("drunk");
     expect(JSON.stringify(self)).not.toContain("actualRole");
@@ -48,7 +48,7 @@ describe("projectToSelf — Drunk", () => {
 
 describe("projectToSelf — Lunatic", () => {
   it("Lunatic projects shownRole=imp, shownAlignment=evil, fake bluffs", () => {
-    const lunatic = makeSTPlayer({
+    const lunatic = makePublishedSTPlayer({
       id: "p2",
       name: "Bob",
       actualRole: "lunatic",
@@ -64,14 +64,15 @@ describe("projectToSelf — Lunatic", () => {
     expect(self?.shownRole).toBe("imp");
     expect(self?.shownAlignment).toBe("evil");
     expect(self?.bluffs).toEqual(["chef", "washerwoman", "saint"]);
-    expect(self?.fakeMinions).toEqual(["p3", "p4"]);
+    expect(self?.minions?.map(p => p.id)).toEqual(["p3", "p4"]);
+    expect(self).not.toHaveProperty("fakeMinions");
     expect(JSON.stringify(self)).not.toContain("lunatic");
   });
 });
 
 describe("projectToSelf — Marionette", () => {
   it("Marionette projects shownRole=townsfolk, shownAlignment=good", () => {
-    const marion = makeSTPlayer({
+    const marion = makePublishedSTPlayer({
       id: "p3",
       actualRole: "marionette",
       shownRole: "washerwoman",
@@ -87,14 +88,14 @@ describe("projectToSelf — Marionette", () => {
 
 describe("projectToSelf — normal", () => {
   it("Normal player projects explicitly configured shownRole", () => {
-    const p = makeSTPlayer({ actualRole: "chef", shownRole: "chef" });
+    const p = makePublishedSTPlayer({ actualRole: "chef", shownRole: "chef" });
     const self = projectToSelf(p, registry);
     expect(self?.shownRole).toBe("chef");
     expect(self?.shownAlignment).toBe("good");
   });
 
-  it("Real Demon's bluffs (real ones) project via privateInfo", () => {
-    const imp = makeSTPlayer({
+  it("Real Demon's explicitly published bluffs project", () => {
+    const imp = makePublishedSTPlayer({
       actualRole: "imp",
       shownRole: "imp",
       privateInfo: { bluffs: ["chef", "washerwoman", "saint"] },
@@ -108,7 +109,7 @@ describe("projectToSelf — normal", () => {
 
 describe("projectToSelf — explicit shownAlignment override", () => {
   it("respects explicit shownAlignment over derivation", () => {
-    const p = makeSTPlayer({
+    const p = makePublishedSTPlayer({
       actualRole: "chef",
       shownRole: "chef",
       shownAlignment: "evil", // weird ST override; trust it
@@ -120,7 +121,7 @@ describe("projectToSelf — explicit shownAlignment override", () => {
 
 describe("projectToSelf — clearing deception", () => {
   it("removing shownRole leaves identity unrevealed", () => {
-    const p = makeSTPlayer({
+    const p = makePublishedSTPlayer({
       actualRole: "drunk",
       shownRole: "chef",
       shownAlignment: null,
@@ -134,7 +135,7 @@ describe("projectToSelf — clearing deception", () => {
 
 describe("projectToPublic", () => {
   it("strips all role/alignment/private fields", () => {
-    const p = makeSTPlayer({
+    const p = makePublishedSTPlayer({
       actualRole: "lunatic",
       shownRole: "imp",
       shownAlignment: null,
@@ -160,10 +161,10 @@ describe("projectToPublic", () => {
   });
 
   it("includes publicDisplayRole only when set", () => {
-    const a = projectToPublic(makeSTPlayer({ publicDisplayRole: null }), false);
+    const a = projectToPublic(makePublishedSTPlayer({ publicDisplayRole: null }), false);
     expect(a.publicDisplayRole).toBeUndefined();
     const b = projectToPublic(
-      makeSTPlayer({ publicDisplayRole: "saint" }),
+      makePublishedSTPlayer({ publicDisplayRole: "saint" }),
       false
     );
     expect(b.publicDisplayRole).toBe("saint");
@@ -172,7 +173,7 @@ describe("projectToPublic", () => {
 
 describe("projectToSelf — Demon bluffs privacy", () => {
   it("real Demon's bluffs project into their own self record", () => {
-    const demon = makeSTPlayer({
+    const demon = makePublishedSTPlayer({
       actualRole: "imp",
       shownRole: "imp",
       privateInfo: { bluffs: ["chef", "saint", "washerwoman"] },
@@ -182,7 +183,7 @@ describe("projectToSelf — Demon bluffs privacy", () => {
   });
 
   it("Demon's self record never contains a Lunatic's bluffs", () => {
-    const demon = makeSTPlayer({
+    const demon = makePublishedSTPlayer({
       actualRole: "imp",
       shownRole: "imp",
       privateInfo: { bluffs: ["chef", "saint", "washerwoman"] },
@@ -196,7 +197,7 @@ describe("projectToSelf — Demon bluffs privacy", () => {
   });
 
   it("projectToPublic for a Demon never contains any bluff id", () => {
-    const demon = makeSTPlayer({
+    const demon = makePublishedSTPlayer({
       actualRole: "imp",
       shownRole: "imp",
       privateInfo: { bluffs: ["chef", "saint", "washerwoman"] },
@@ -227,13 +228,13 @@ describe("Lobby-level projections", () => {
       plannedPlayerCount: 0,
       pendingPlayers: {},
       players: {
-        p1: makeSTPlayer({
+        p1: makePublishedSTPlayer({
           id: "p1",
           actualRole: "imp",
           shownRole: "imp",
           privateInfo: { bluffs: ["chef", "washerwoman", "saint"] },
         }),
-        p2: makeSTPlayer({
+        p2: makePublishedSTPlayer({
           id: "p2",
           name: "Bob",
           seat: 1,
@@ -243,7 +244,7 @@ describe("Lobby-level projections", () => {
           behaviorMode: "fake_demon_behavior",
           privateInfo: { bluffs: ["poisoner", "baron", "scarletwoman"] },
         }),
-        p3: makeSTPlayer({
+        p3: makePublishedSTPlayer({
           id: "p3",
           name: "Cara",
           seat: 2,
@@ -381,7 +382,7 @@ describe("Privacy regression matrix — all behavior modes", () => {
 
   for (const row of rows) {
     it(`self projection: ${row.label}`, () => {
-      const p = makeSTPlayer({
+      const p = makePublishedSTPlayer({
         actualRole: row.actualRole,
         shownRole: row.shownRole,
         shownAlignment: row.shownAlignment,
@@ -396,7 +397,7 @@ describe("Privacy regression matrix — all behavior modes", () => {
     });
 
     it(`public projection: ${row.label} — actual role never leaks`, () => {
-      const p = makeSTPlayer({
+      const p = makePublishedSTPlayer({
         actualRole: row.actualRole,
         shownRole: row.shownRole,
         shownAlignment: row.shownAlignment,
@@ -419,7 +420,7 @@ describe("Privacy regression matrix — all behavior modes", () => {
   }
 
   it("evil traveler (explicit shownAlignment=evil) projects correctly", () => {
-    const p = makeSTPlayer({
+    const p = makePublishedSTPlayer({
       actualRole: "thief",
       shownRole: "thief",
       shownAlignment: "evil", // ST has marked this traveler as evil
@@ -438,7 +439,7 @@ describe("Privacy regression matrix — all behavior modes", () => {
   });
 
   it("Demon with bluffs: public never contains any bluff role id", () => {
-    const imp = makeSTPlayer({
+    const imp = makePublishedSTPlayer({
       actualRole: "imp",
       shownRole: "imp",
       behaviorMode: "normal",
@@ -468,7 +469,7 @@ describe("buildRegistry — traveler coverage", () => {
 
   it("projectToSelf does not throw for a traveler-assigned player", () => {
     const reg = buildRegistry(tbScript);
-    const p = makeSTPlayer({
+    const p = makePublishedSTPlayer({
       actualRole: "thief",
       shownRole: "thief",
       isTraveler: true,
@@ -480,7 +481,7 @@ describe("buildRegistry — traveler coverage", () => {
   });
 
   it("projectToPublic for a traveler does not contain actualRole or private data", () => {
-    const p = makeSTPlayer({
+    const p = makePublishedSTPlayer({
       actualRole: "thief",
       shownRole: "thief",
       isTraveler: true,

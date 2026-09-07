@@ -13,7 +13,7 @@ function makePlayers(defs: { id: string; role: string; seat: number; over?: Part
   const players: Record<string, STPlayerRecord> = {};
   const seatOrder: string[] = [];
   for (const { id, role, seat, over } of defs) {
-    players[id] = makeSTPlayer({ id, name: id, seat, actualRole: role, ...over });
+    players[id] = makeSTPlayer({ id, name: id, seat, actualRole: role, shownRole: role || null, ...over });
     seatOrder.push(id);
   }
   return { players, seatOrder };
@@ -109,7 +109,7 @@ describe("Drunk uses shownRole's night slot", () => {
     expect(ps[0]!.order).toBe(chefDef.firstNight);
   });
 
-  it("Drunk with no shownRole falls back to actualRole slot (no night action for Drunk)", () => {
+  it("Drunk with no shownRole has no inferred wake identity", () => {
     const { players, seatOrder } = makePlayers([
       {
         id: "p-drunk", role: "drunk", seat: 0,
@@ -148,16 +148,18 @@ describe("Lunatic uses shownRole (demon) night slot", () => {
 // Test 5: Marionette produces no player step
 // ---------------------------------------------------------------------------
 
-describe("Marionette produces no player step", () => {
-  it("player with marionette_fake_good_behavior is absent from results", () => {
+describe("Marionette simulated wake", () => {
+  it("Marionette follows the shown Fortune Teller procedure", () => {
     const { players, seatOrder } = makePlayers([
       {
-        id: "p-mar", role: "imp", seat: 0,
-        over: { behaviorMode: "marionette_fake_good_behavior" },
+        id: "p-mar", role: "marionette", seat: 0,
+        over: { behaviorMode: "marionette_fake_good_behavior", shownRole: "fortuneteller" },
       },
     ]);
     const steps = computeNightOrder(players, seatOrder, troubleBrewing, false);
-    expect(playerSteps(steps).some((s) => s.playerId === "p-mar")).toBe(false);
+    expect(playerSteps(steps)).toEqual([expect.objectContaining({
+      playerId: "p-mar", effectiveRoleId: "fortuneteller", actualRoleId: "marionette", isDeceived: true,
+    })]);
   });
 });
 

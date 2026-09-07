@@ -1,4 +1,23 @@
 import type { PlayerId, RoleDef, RoleId, STPlayerRecord, Script } from "@/stores/types";
+import { buildRegistry } from "@/data/roleRegistry";
+import { projectIdentity } from "@/stores/projections";
+
+/** Explicit already-published fixture for projection isolation tests. */
+export function makePublishedSTPlayer(over: Partial<STPlayerRecord> = {}): STPlayerRecord {
+  const player = makeSTPlayer(over);
+  const identity = projectIdentity(player, buildRegistry(tbScript));
+  if (identity && player.privateInfo) {
+    player.publishedPacket = {
+      id: "fixture-publication",
+      payload: { ...identity,
+        ...(player.privateInfo.bluffs ? { bluffs: player.privateInfo.bluffs } : {}),
+        ...(player.privateInfo.extraText ? { extraText: player.privateInfo.extraText } : {}),
+        ...(player.privateInfo.fakeMinions ? { minions: player.privateInfo.fakeMinions.map((id, seat) => ({ id, name: id, seat })) } : {}),
+      },
+    };
+  }
+  return player;
+}
 
 export const roles: Record<string, RoleDef> = {
   chef: { id: "chef", name: "Chef", type: "townsfolk", firstNight: 30 },

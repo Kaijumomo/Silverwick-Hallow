@@ -66,6 +66,23 @@ export const PrivateInfoSchema = z.object({
 
 export const StatusesSchema = z.record(z.string().min(1), z.boolean());
 
+export const PlayerSelfRecordSchema = z.object({
+  shownRole: z.string().min(1),
+  shownAlignment: AlignmentSchema,
+  bluffs: z.array(z.string().min(1)).optional(),
+  minions: z.array(z.object({
+    id: z.string().min(1), name: z.string().min(1), seat: z.number().int().nonnegative(),
+  })).optional(),
+  extraText: z.string().optional(),
+});
+
+export const PrivatePacketSchema = z.object({
+  id: z.string().min(1),
+  payload: PlayerSelfRecordSchema,
+  forDay: z.number().int().nonnegative().optional(),
+  forPhase: z.enum(["setup", "night", "day", "ended"]).optional(),
+});
+
 export const STPlayerRecordSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -84,14 +101,9 @@ export const STPlayerRecordSchema = z.object({
   stNotes: z.string(),
   isTraveler: z.boolean(),
   privateInfo: PrivateInfoSchema.optional(),
-});
-
-export const PlayerSelfRecordSchema = z.object({
-  shownRole: z.string().min(1),
-  shownAlignment: AlignmentSchema,
-  bluffs: z.array(z.string().min(1)).optional(),
-  fakeMinions: z.array(z.string().min(1)).optional(),
-  extraText: z.string().optional(),
+  packetPreview: z.object({ fingerprint: z.string(), payload: PlayerSelfRecordSchema }).optional(),
+  publishedPacket: PrivatePacketSchema.optional(),
+  packetEpoch: z.string().optional(),
 });
 
 export const PlayerPublicRecordSchema = z.object({

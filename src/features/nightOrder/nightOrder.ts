@@ -4,9 +4,9 @@ import type {
   RoleType,
   STPlayerRecord,
   Script,
-  RoleDef,
 } from "@/stores/types";
-import { getTraveler } from "@/data/travelers";
+import { buildRegistry } from "@/data/roleRegistry";
+import { wakeIdentity } from "@/stores/wakeIdentity";
 
 export type NightStep =
   | {
@@ -16,10 +16,11 @@ export type NightStep =
       prompt: string;
       reminder: string;
       order: number;
+      recipientIds?: PlayerId[];
     }
   | {
       kind: "player";
-      stepKey: string;       // "p:{playerId}"
+      stepKey: string;       // "p:{playerId}:{shownRoleId}"
       playerId: PlayerId;
       playerName: string;
       seat: number;
@@ -32,6 +33,10 @@ export type NightStep =
       reminder: string;
       order: number;
       isDeceived: boolean;
+      actualRoleId: RoleId;
+      actualRoleName: string;
+      shownRoleId: RoleId;
+      packetPlayerId: PlayerId;
     };
 
 // ---------------------------------------------------------------------------
@@ -43,50 +48,17 @@ const DEMON_INFO_BASE = {
   stepKey: "demonInfo",
   order: 5,
   label: "Demon — learns Minions & Bluffs",
-  reminder: "Demon must know all Minions and all 3 bluffs. If a Lunatic is in play they were woken first and given fake info.",
+  reminder: "Review intended team information and bluffs. Check simulated private-information tasks separately; configuration is not delivery.",
 };
 
-const MINION_INFO_STEP: NightStep = {
+const MINION_INFO_STEP: Extract<NightStep, { kind: "global" }> = {
   kind: "global",
   stepKey: "minionInfo",
   order: 7,
   label: "Minions — learn each other & the Demon",
-  prompt: "Wake all Minions together. They make eye contact. Show them who the Demon is.",
+  prompt: "Wake the listed Minion recipients together. They make eye contact. Show them who the Demon is.",
   reminder: "All Minions wake simultaneously. The Demon keeps their eyes closed. Marionette is NOT woken here.",
 };
-
-// ---------------------------------------------------------------------------
-// Effective role resolution per behavior mode
-// ---------------------------------------------------------------------------
-
-function effectiveRole(
-  player: STPlayerRecord,
-  roleMap: Map<RoleId, RoleDef>
-): { roleId: RoleId; roleDef: RoleDef; isDeceived: boolean } | null {
-  const mode = player.behaviorMode;
-
-  // Marionette produces no step.
-  if (mode === "marionette_fake_good_behavior") return null;
-
-  let roleId: RoleId;
-  let isDeceived = false;
-
-  if (mode === "drunk_fake_role_behavior" || mode === "fake_demon_behavior") {
-    // Wake at shownRole's time. If shownRole is unset the step is skipped —
-    // falling back to actualRole would reveal the actual identity in the UI.
-    if (!player.shownRole) return null;
-    roleId = player.shownRole;
-    isDeceived = true;
-  } else {
-    // normal | poisoned | custom — wake at actualRole's time.
-    roleId = player.actualRole;
-  }
-
-  const roleDef = roleMap.get(roleId);
-  if (!roleDef) return null;
-
-  return { roleId, roleDef, isDeceived };
-}
 
 // ---------------------------------------------------------------------------
 // Main export
@@ -98,16 +70,7 @@ export function computeNightOrder(
   script: Script,
   isFirstNight: boolean
 ): NightStep[] {
-  const roleMap = new Map<RoleId, RoleDef>(
-    script.characters.map((r) => [r.id, r])
-  );
-  for (const id of seatOrder) {
-    const p = players[id];
-    if (p?.isTraveler && p.actualRole) {
-      const t = getTraveler(p.actualRole);
-      if (t) roleMap.set(t.id, t);
-    }
-  }
+  const registry = buildRegistry(script);
 
   const steps: NightStep[] = [];
 
@@ -116,7 +79,7 @@ export function computeNightOrder(
     // Detect Marionette in play to annotate demonInfo prompt.
     const hasMarionette = seatOrder.some(
       (id) =>
-        players[id]?.behaviorMode === "marionette_fake_good_behavior"
+        players[id]?.actualRole === "marionette" || players[id]?.behaviorMode === "marionette_fake_good_behavior"
     );
     const demonInfoPrompt =
       "Wake the Demon. Show them: these are your Minions. These 3 characters are not in play (bluffs)." +
@@ -124,8 +87,13 @@ export function computeNightOrder(
         ? " If a Marionette is in play, indicate them to the Demon."
         : "");
 
-    steps.push({ ...DEMON_INFO_BASE, prompt: demonInfoPrompt });
-    steps.push(MINION_INFO_STEP);
+    const recipients = (type: RoleType) => seatOrder.filter(id => {
+      const p = players[id];
+      const wake = p && wakeIdentity(p, registry);
+      return !!wake && !wake.simulated && registry.get(p!.actualRole)?.type === type;
+    });
+    steps.push({ ...DEMON_INFO_BASE, prompt: demonInfoPrompt, recipientIds: recipients("demon") });
+    steps.push({ ...MINION_INFO_STEP, recipientIds: recipients("minion") });
   }
 
   // Player steps.
@@ -133,10 +101,10 @@ export function computeNightOrder(
     const player = players[playerId];
     if (!player || player.actualRole === "") continue;
 
-    const resolved = effectiveRole(player, roleMap);
+    const resolved = wakeIdentity(player, registry);
     if (!resolved) continue;
 
-    const { roleId, roleDef, isDeceived } = resolved;
+    const { role: roleDef, shownRoleId: roleId, simulated: isDeceived } = resolved;
 
     const orderValue = isFirstNight ? roleDef.firstNight : roleDef.otherNight;
     if (orderValue === undefined) continue; // no night action this night
@@ -151,7 +119,7 @@ export function computeNightOrder(
 
     steps.push({
       kind: "player",
-      stepKey: `p:${playerId}`,
+      stepKey: `p:${playerId}:${roleId}`,
       playerId,
       playerName: player.name,
       seat: player.seat,
@@ -164,6 +132,10 @@ export function computeNightOrder(
       reminder,
       order: orderValue,
       isDeceived,
+      actualRoleId: player.actualRole,
+      actualRoleName: registry.get(player.actualRole)?.name ?? player.actualRole,
+      shownRoleId: roleId,
+      packetPlayerId: playerId,
     });
   }
 

@@ -6,6 +6,7 @@ import { LORICS } from "@/data/lorics";
 import { StorytellerStateSchema } from "./schemas";
 import { buildRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, needsShownIdentity } from "./identity";
+import { invalidatePrivatePacket, previewPrivatePacket } from "./privatePackets";
 import type {
   Alignment,
   BehaviorMode,
@@ -119,6 +120,8 @@ export type StorytellerStore = {
   setBehaviorMode: (id: PlayerId, mode: BehaviorMode) => void;
   setBluffs: (id: PlayerId, bluffs: RoleId[]) => void;
   setFakeMinions: (id: PlayerId, playerIds: PlayerId[]) => void;
+  setPrivateText: (id: PlayerId, text: string) => void;
+  previewPrivateInfo: (id: PlayerId) => void;
   setIsTraveler: (id: PlayerId, isTraveler: boolean) => void;
   setFabled: (fabled: RoleId[]) => void;
   setLorics: (lorics: RoleId[]) => void;
@@ -337,7 +340,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
             abilityUsed: false,
           };
           delete next.privateInfo;
-          newPlayers[playerId] = next;
+          newPlayers[playerId] = invalidatePrivatePacket(next);
         });
 
         set({
@@ -613,7 +616,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           undoStack: pushUndo(game, undoStack),
           game: {
             ...game,
-            players: { ...game.players, [id]: next },
+            players: { ...game.players, [id]: invalidatePrivatePacket(next) },
           },
         });
       },
@@ -636,7 +639,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         delete next.privateInfo;
         set({
           undoStack: pushUndo(game, undoStack),
-          game: { ...game, players: { ...game.players, [id]: next } },
+          game: { ...game, players: { ...game.players, [id]: invalidatePrivatePacket(next) } },
         });
       },
 
@@ -645,7 +648,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!game) return;
         set({
           undoStack: pushUndo(game, undoStack),
-          game: patchPlayer(game, id, { shownAlignment: alignment }),
+          game: game.players[id] ? { ...game, players: { ...game.players, [id]: invalidatePrivatePacket({ ...game.players[id]!, shownAlignment: alignment }) } } : game,
         });
       },
 
@@ -654,7 +657,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!game) return;
         set({
           undoStack: pushUndo(game, undoStack),
-          game: patchPlayer(game, id, { behaviorMode: mode }),
+          game: game.players[id] ? { ...game, players: { ...game.players, [id]: invalidatePrivatePacket({ ...game.players[id]!, behaviorMode: mode }) } } : game,
         });
       },
 
@@ -690,7 +693,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!game) return;
         const player = game.players[id];
         if (!player) return;
-        const valid = playerIds.filter((pid) => !!game.players[pid] && pid !== id);
+        const valid = [...new Set(playerIds.filter((pid) => !!game.players[pid] && !game.players[pid]?.isEmpty && pid !== id))];
         const next = { ...player };
         if (valid.length === 0) {
           if (next.privateInfo) {
@@ -714,6 +717,29 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
+      setPrivateText: (id, text) => {
+        const { game, undoStack } = get();
+        const player = game?.players[id];
+        if (!game || !player) return;
+        const privateInfo = { ...player.privateInfo };
+        if (text.trim()) privateInfo.extraText = text.slice(0, 4000);
+        else delete privateInfo.extraText;
+        set({
+          undoStack: pushUndo(game, undoStack),
+          game: patchPlayer(game, id, { privateInfo }),
+        });
+      },
+
+      previewPrivateInfo: (id) => {
+        const state = get();
+        const game = state.game;
+        const player = game?.players[id];
+        const script = game && selectScriptById(state, game.scriptId);
+        if (!game || !player || !script) return;
+        const packetPreview = previewPrivatePacket(player, game, buildRegistry(script));
+        set({ game: patchPlayer(game, id, { packetPreview }) });
+      },
+
       setIsTraveler: (id, isTraveler) => {
         const { game, undoStack } = get();
         if (!game) return;
@@ -732,7 +758,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           undoStack: pushUndo(game, undoStack),
           game: {
             ...game,
-            players: { ...game.players, [id]: next },
+            players: { ...game.players, [id]: invalidatePrivatePacket(next) },
           },
         });
       },

@@ -57,6 +57,14 @@ export type PrivateInfo = {
   extraText?: string;
 };
 
+export type PrivatePacket = {
+  id: string;
+  payload: PlayerSelfRecord;
+  /** ST-only delivery context. Older snapshots may lack it. */
+  forDay?: number;
+  forPhase?: StorytellerLobbyRecord["phase"];
+};
+
 export type Statuses = Record<string, boolean>;
 
 export type GrimoireMode = "ring" | "freeRoam";
@@ -82,6 +90,11 @@ export type STPlayerRecord = {
   stNotes: string;
   isTraveler: boolean;
   privateInfo?: PrivateInfo;
+  /** Draft edits never imply delivery. Preview and published snapshots are ST-only. */
+  packetPreview?: { fingerprint: string; payload: PlayerSelfRecord };
+  publishedPacket?: PrivatePacket;
+  /** Invalidates in-flight publication when identity is reset. */
+  packetEpoch?: string;
   /** True for pre-allocated seats that haven't been assigned to a player yet. */
   isEmpty?: boolean;
 };
@@ -120,7 +133,8 @@ export type PlayerSelfRecord = {
   shownRole: RoleId;
   shownAlignment: Alignment;
   bluffs?: RoleId[];
-  fakeMinions?: PlayerId[];
+  /** Names/seats selected by the ST at publication time; no actual roles. */
+  minions?: { id: PlayerId; name: string; seat: number }[];
   extraText?: string;
 };
 

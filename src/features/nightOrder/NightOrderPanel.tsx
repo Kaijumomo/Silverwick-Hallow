@@ -2,6 +2,11 @@ import { useRef, useState } from "react";
 import { computeNightOrder } from "./nightOrder";
 import type { NightStep } from "./nightOrder";
 import { useStorytellerStore } from "@/stores/storytellerStore";
+import { PrivatePacketPanel } from "@/features/players/PrivatePacketPanel";
+import { hasPrivateDraft } from "@/stores/privatePackets";
+import { wakeIdentity } from "@/stores/wakeIdentity";
+import { needsShownIdentity } from "@/stores/identity";
+import { buildRegistry } from "@/data/roleRegistry";
 import type { NightStepRecord, NightStepStatus, Script, StorytellerLobbyRecord } from "@/stores/types";
 
 // ---------------------------------------------------------------------------
@@ -40,6 +45,7 @@ type StepCardProps = {
 };
 
 function StepCard({ step, record, day }: StepCardProps) {
+  const players = useStorytellerStore(s => s.game?.players);
   const status = record?.status ?? "pending";
   const notes = record?.notes ?? "";
   const notesRef = useRef<HTMLTextAreaElement>(null);
@@ -91,6 +97,18 @@ function StepCard({ step, record, day }: StepCardProps) {
           {step.playerName} · seat {step.seat + 1}
         </div>
       )}
+
+      {step.kind === "player" && step.isDeceived && <p className="step-reminder">
+        Simulated wake — actual role: {step.actualRoleName}. Perform the shown procedure
+        with Storyteller-controlled information; this does not grant its ability or effects.
+      </p>}
+      {step.kind === "player" && step.isDeceived && <p className="behavior-help">
+        Review this player's private information task at the top before completing the wake.
+      </p>}
+      {step.kind === "global" && <p className="step-player-name">
+        Introduction recipients: {step.recipientIds?.map(id => players?.[id]?.name ?? "Unnamed player").join(", ") || "none — review manually"}.
+        Simulated identities are excluded.
+      </p>}
 
       {/* Prompt text */}
       {step.prompt && (
@@ -149,6 +167,12 @@ type Props = {
 export function NightOrderPanel({ game, script, onClose }: Props) {
   const isFirstNight = game.day === 1;
   const steps = computeNightOrder(game.players, game.seatOrder, script, isFirstNight);
+  const registry = buildRegistry(script);
+  const packetPlayers = game.seatOrder.filter(id => {
+    const p = game.players[id];
+    return p && !p.isEmpty && (hasPrivateDraft(p) || p.publishedPacket
+      || wakeIdentity(p, registry)?.simulated || needsShownIdentity(p.actualRole));
+  });
 
   const progress = game.nightProgress ?? {};
   const resolvedCount = steps.filter((s) => {
@@ -178,9 +202,13 @@ export function NightOrderPanel({ game, script, onClose }: Props) {
       </div>
 
       <div className="night-panel-body">
+        {!!packetPlayers.length && <div aria-label="Private information tasks">
+          <p className="behavior-help">Private information tasks — preview and publish when appropriate tonight. These tasks are separate from ability order.</p>
+          {packetPlayers.map(id => <PrivatePacketPanel key={id} playerId={id} />)}
+        </div>}
         {steps.length === 0 ? (
           <p style={{ color: "var(--text-faint)", fontSize: "12px", fontStyle: "italic", padding: "8px 4px" }}>
-            No night actions — assign roles to players to see the order.
+            No night actions — configure shown identities for the intended wake procedures.
           </p>
         ) : (
           steps.map((step) => (

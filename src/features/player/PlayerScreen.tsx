@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { PrivateInformation } from "./PrivateInformation";
 import { usePlayerStore } from "@/stores/playerStore";
 import { connectFirebase } from "@/firebase/session";
 import { isFirebaseConfigured, getConfigSource } from "@/firebase/config";
@@ -379,13 +380,13 @@ function wikiUrlFor(name: string): string {
 // SealedCard — role reveal + per-bluff tap-to-reveal
 // ---------------------------------------------------------------------------
 
-function SealedCard({
+export function SealedCard({
   self,
   revealed,
   onReveal,
   onHide,
 }: {
-  self: { shownRole: string; shownAlignment: "good" | "evil"; bluffs?: string[]; fakeMinions?: string[] } | null;
+  self: import("@/stores/types").PlayerSelfRecord | null;
   revealed: boolean;
   onReveal: () => void;
   onHide: () => void;
@@ -468,6 +469,7 @@ function SealedCard({
           >
             Wiki ↗
           </a>
+          <PrivateInformation payload={self} />
           {self.bluffs && self.bluffs.length > 0 && (
             <div className="sealed-card-bluffs">
               <span className="label">Demon bluffs — tap to reveal individually</span>

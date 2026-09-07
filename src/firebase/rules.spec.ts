@@ -10,6 +10,8 @@ import { SessionWriter } from "./writer";
 import { writeProjections } from "./sync";
 import { makeSTPlayer, tbScript } from "@/test/fixtures";
 import { buildRegistry } from "@/data/roleRegistry";
+import { useStorytellerStore } from "@/stores/storytellerStore";
+import { publishPrivatePacket } from "./privatePacketCommands";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import {
   cancelJoinRequest,
@@ -434,6 +436,55 @@ describe("Firebase RTDB membership authorization", () => {
       await assertFails(ref(alice, "player/p-alice").once("value"));
       expect((await ref(st, "player/p-alice").once("value")).exists()).toBe(false);
     } finally { await writer.dispose(); }
+  });
+
+  test("AUD-027: preview stays private; explicit fake information delivery is guarded, isolated, and revocable", async () => {
+    const store = useStorytellerStore;
+    store.setState({ game: null, lobby: null, undoStack: [] });
+    const raw = new FirebaseRoomBackend(db(st) as unknown as Database);
+    await createLobby(raw, st, { codeGenerator: () => code });
+    const metadata = (await ref(st, "session").once("value")).val();
+    const writer = new SessionWriter(raw, code, metadata.id);
+    store.getState().newGame("tb");
+    store.getState().addPlayer("Alice");
+    store.getState().addPlayer("Bob");
+    const [id, other] = store.getState().game!.seatOrder as [string, string];
+    store.getState().setLobby({ code, uid: st, sessionId: metadata.id, status: "live" });
+    store.getState().assignRole(id, "lunatic");
+    store.getState().setShownRole(id, "imp");
+    store.getState().setFakeMinions(id, [other]);
+    store.getState().setBluffs(id, ["chef", "saint", "washerwoman"]);
+    store.getState().setPrivateText(id, "Only Alice should receive this");
+    store.getState().previewPrivateInfo(id);
+    const preview = store.getState().game!.players[id]!.packetPreview!.payload;
+    try {
+      await writer.start();
+      await knockOnLobby(backend(alice), code, alice, "Alice");
+      await seatPlayer(writer, code, alice, id, null);
+      await knockOnLobby(backend(bob), code, bob, "Bob");
+      await seatPlayer(writer, code, bob, other, null);
+      await writeProjections({ backend: writer, code, stState: store.getState().game!,
+        registry: buildRegistry(tbScript), online: {}, membership: { [alice]: id, [bob]: other } });
+      expect((await ref(alice, `player/${id}`).once("value")).val()).toEqual({ shownRole: "imp", shownAlignment: "evil" });
+      await assertFails(ref(alice, `storyteller/players/${id}/packetPreview`).once("value"));
+      await assertFails(ref(alice, "checkpoint").once("value"));
+      await publishPrivatePacket(id, writer);
+      const payload = (await ref(alice, `player/${id}`).once("value")).val();
+      expect(payload).toEqual(preview);
+      expect(payload.minions).toEqual([{ id: other, name: "Bob", seat: 1 }]);
+      for (const secret of ["actualRole", "actualAlignment", "lunatic", "behaviorMode", "stNotes", "packetPreview", "publishedPacket"])
+        expect(JSON.stringify(payload)).not.toContain(secret);
+      expect((await ref(st, `storyteller/players/${id}/actualRole`).once("value")).val()).toBe("lunatic");
+      await assertFails(ref(bob, `player/${id}`).once("value"));
+      await assertFails(ref(alice, `player/${id}/extraText`).set("forged delivery"));
+      await assertFails(ref(alice, `storyteller/players/${id}/publishedPacket`).once("value"));
+      await revokePlayerMembership(writer, code, id);
+      await assertFails(ref(alice, `player/${id}`).once("value"));
+      expect((await ref(st, `player/${id}`).once("value")).exists()).toBe(false);
+    } finally {
+      await writer.dispose();
+      store.setState({ game: null, lobby: null, undoStack: [] });
+    }
   });
 
   test("ending atomically revokes all access and rejects stale projections and joins", async () => {

@@ -47,5 +47,22 @@ contain forbidden fields on `public/*` or `player/*`:
   `reminders`, `bluffs`, `fakeMinions`
 - `player/{id}/` forbidden: `actualRole`, `behaviorMode`, `privateInfo`,
   `stNotes`, `abilityUsed`, `statuses`, `reminders`
-  (`shownRole`, `shownAlignment`, `bluffs`, `fakeMinions` are intentionally
+  (`shownRole`, `shownAlignment`, `bluffs`, `minions`, `extraText` are intentionally
   exposed on a player's *own* path — that's the projection's purpose)
+
+## Phase 6: explicit private packets
+
+Draft `privateInfo`, `packetPreview`, `packetEpoch`, and `publishedPacket`
+metadata live only in Storyteller state and its owner-only checkpoint.
+Drafts and previews are never copied to a player path by a normal sync.
+`publishPrivatePacket` uses the existing session writer queue, authoritative
+roster check, guarded atomic projection/checkpoint write, and retry receipts.
+Only the sanitized payload is written to the intended player's existing path.
+The internal draft key `fakeMinions` becomes neutral `minions` name/seat
+snapshots; neither the key nor actual team identities are published.
+
+Publication status means server acknowledgement, not player viewing or reading.
+Ephemeral receipts are rebuilt by the acknowledged recovery flush. Reconnect
+replays the saved published snapshot, not a newer draft. Identity changes
+invalidate the packet. Membership removal still revokes the same paths.
+No Firebase rule or authorization path was added.

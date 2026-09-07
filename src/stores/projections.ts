@@ -1,4 +1,5 @@
 import type { RoleRegistry } from "@/data/roleRegistry";
+import { PlayerSelfRecordSchema } from "./schemas";
 import type {
   PlayerId,
   PlayerPublicRecord,
@@ -8,7 +9,7 @@ import type {
   StorytellerLobbyRecord,
 } from "./types";
 
-export function projectToSelf(
+export function projectIdentity(
   p: STPlayerRecord,
   registry: RoleRegistry
 ): PlayerSelfRecord | null {
@@ -17,13 +18,16 @@ export function projectToSelf(
   if (p.isEmpty || !p.shownRole) return null;
   const shownRole = p.shownRole;
   const shownAlignment = p.shownAlignment ?? registry.alignmentOf(shownRole);
-  const out: PlayerSelfRecord = { shownRole, shownAlignment };
-  const pi = p.privateInfo;
-  if (pi?.bluffs && pi.bluffs.length > 0) out.bluffs = [...pi.bluffs];
-  if (pi?.fakeMinions && pi.fakeMinions.length > 0)
-    out.fakeMinions = [...pi.fakeMinions];
-  if (pi?.extraText) out.extraText = pi.extraText;
-  return out;
+  return { shownRole, shownAlignment };
+}
+
+export function projectToSelf(p: STPlayerRecord, registry: RoleRegistry): PlayerSelfRecord | null {
+  const identity = projectIdentity(p, registry);
+  if (!identity) return null;
+  const packet = p.publishedPacket?.payload;
+  if (!packet || packet.shownRole !== identity.shownRole || packet.shownAlignment !== identity.shownAlignment) return identity;
+  // Reuse the same allowlist as preview. Neither drafts nor ST metadata cross.
+  return PlayerSelfRecordSchema.parse(packet);
 }
 
 export function projectToPublic(

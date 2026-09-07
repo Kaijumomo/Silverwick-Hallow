@@ -6,6 +6,7 @@ import {
 import type { RoleRegistry } from "@/data/roleRegistry";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import type { Json, RoomBackend } from "./backend";
+import { acknowledgePackets } from "./packetDeliveryState";
 import {
   playerPath,
   publicPath,
@@ -66,4 +67,8 @@ export async function writeProjections(ctx: WriteContext): Promise<void> {
   updates[`lobbies/${code}/checkpoint`] = JSON.stringify({ game: stState, roster: ctx.membership ?? {} });
 
   await backend.update(updates);
+  acknowledgePackets(code, Object.fromEntries(Object.entries(stState.players)
+    .filter(([id, p]) => p.publishedPacket && selfMap[id]
+      && JSON.stringify(selfMap[id]) === JSON.stringify(p.publishedPacket.payload))
+    .map(([id, p]) => [id, p.publishedPacket!.id])));
 }

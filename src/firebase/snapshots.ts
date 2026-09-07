@@ -38,7 +38,7 @@ const publicShape = PublicLobbyRecordSchema.extend({
 const selfShape = PlayerSelfRecordSchema.extend({
   shownRole: id,
   bluffs: optionalNode(list),
-  fakeMinions: optionalNode(list),
+  minions: optionalNode(PlayerSelfRecordSchema.shape.minions.unwrap()),
   extraText: optionalNode(z.string()),
 });
 const request = z.string().min(1).max(20).refine((value) =>

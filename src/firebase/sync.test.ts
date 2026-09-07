@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { writeProjections } from "./sync";
 import { MemoryRoomBackend } from "./memoryBackend";
 import { buildRegistry } from "@/data/roleRegistry";
-import { tbScript, makeSTPlayer } from "@/test/fixtures";
+import { tbScript, makePublishedSTPlayer } from "@/test/fixtures";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
 // `public/` is the town view: NO role data of any kind, ever.
@@ -52,7 +52,7 @@ function makeLobby(): StorytellerLobbyRecord {
     plannedPlayerCount: 0,
     pendingPlayers: {},
     players: {
-      p1: makeSTPlayer({
+      p1: makePublishedSTPlayer({
         id: "p1",
         name: "Alice",
         seat: 0,
@@ -63,7 +63,7 @@ function makeLobby(): StorytellerLobbyRecord {
         reminders: ["killed Bob"],
         statuses: { protected: true },
       }),
-      p2: makeSTPlayer({
+      p2: makePublishedSTPlayer({
         id: "p2",
         name: "Bob",
         seat: 1,
@@ -77,7 +77,7 @@ function makeLobby(): StorytellerLobbyRecord {
         },
         stNotes: "Lunatic — pretend they are demon",
       }),
-      p3: makeSTPlayer({
+      p3: makePublishedSTPlayer({
         id: "p3",
         name: "Cara",
         seat: 2,
@@ -222,7 +222,7 @@ describe("writeProjections — privacy chokepoint", () => {
     const lobby = makeLobby();
     // Add an unassigned player
     lobby.seatOrder = [...lobby.seatOrder, "p4"];
-    lobby.players.p4 = makeSTPlayer({
+    lobby.players.p4 = makePublishedSTPlayer({
       id: "p4",
       name: "Dani",
       seat: 3,
@@ -272,11 +272,11 @@ describe("writeProjections — privacy chokepoint", () => {
     expect(await backend.get("lobbies/ABCD/storyteller/players/p1/actualRole")).toBe("imp");
   });
 
-  it("a Lunatic with NO privateInfo gets shownRole/alignment but no bluffs leak", async () => {
+  it("a Lunatic with an unpublished draft gets identity but no private information", async () => {
     const backend = new MemoryRoomBackend();
     const lobby = makeLobby();
-    // Strip the lunatic's privateInfo
-    delete lobby.players.p2!.privateInfo;
+    // A configured draft is not publication.
+    delete lobby.players.p2!.publishedPacket;
     await writeProjections({
       backend,
       code: "ABCD",
@@ -351,7 +351,7 @@ describe("writeProjections — privacy chokepoint", () => {
     const backend = new MemoryRoomBackend();
     const lobby = makeLobby();
     // ScarletWoman (minion → evil by default) but ST has overridden shownAlignment to good
-    lobby.players.p3 = makeSTPlayer({
+    lobby.players.p3 = makePublishedSTPlayer({
       id: "p3",
       name: "Cara",
       seat: 2,
