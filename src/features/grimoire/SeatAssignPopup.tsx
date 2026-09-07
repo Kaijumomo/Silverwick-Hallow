@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { seatPlayerAndCommit } from "@/firebase/membershipCommands";
+import { rejectJoinRequest } from "@/firebase/lobby";
+import { lifecycleMessage } from "@/firebase/lifecycle";
 import type { RoomBackend } from "@/firebase/backend";
 import type { PlayerId } from "@/stores/types";
 
@@ -26,6 +28,7 @@ export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClo
     setError(null);
     setBusyUid(uid);
     try {
+      if (code && !backend) throw new Error("Connection unavailable. Reconnect before assigning a seat.");
       if (backend && code) {
         await seatPlayerAndCommit(
           backend,
@@ -40,14 +43,21 @@ export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClo
       }
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not assign this player.");
+      setError(lifecycleMessage(e));
     } finally {
       setBusyUid(null);
     }
   };
 
-  const handleReject = (uid: string) => {
-    removePendingPlayer(uid);
+  const handleReject = async (uid: string) => {
+    if (busyUid) return;
+    setBusyUid(uid); setError(null);
+    try {
+      if (code && !backend) throw new Error("Connection unavailable.");
+      if (code && backend) await rejectJoinRequest(backend, code, uid);
+      removePendingPlayer(uid);
+    } catch (error) { setError(lifecycleMessage(error)); }
+    finally { setBusyUid(null); }
   };
 
   return (

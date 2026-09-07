@@ -2,9 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { usePlayerStore } from "@/stores/playerStore";
 import { connectFirebase } from "@/firebase/session";
 import { isFirebaseConfigured, getConfigSource } from "@/firebase/config";
-import { joinLobby, usePlayerSync } from "@/firebase/playerSync";
-import { checkLobbyStatus, normaliseCode } from "@/firebase/lobby";
-import { friendlyFirebaseError } from "@/firebase/errors";
+import { applyJoinIntent, joinLobby, leaveLobby, usePlayerSync } from "@/firebase/playerSync";
+import { lifecycleMessage } from "@/firebase/lifecycle";
 import { FirebaseConfigDialog } from "@/features/firebase/FirebaseConfigDialog";
 import type { RoomBackend } from "@/firebase/backend";
 import { lookupOfficialRole } from "@/data/officialRoles";
@@ -42,6 +41,8 @@ function PlayerScreenContent({ initialCode }: Props) {
   const setRevealed = usePlayerStore((s) => s.setRevealed);
   const reset = usePlayerStore((s) => s.reset);
 
+  const [retry, setRetry] = useState(0);
+  const [leaving, setLeaving] = useState(false);
   const [backend, setBackend] = useState<RoomBackend | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<PlayerTab>("role");
@@ -60,33 +61,30 @@ function PlayerScreenContent({ initialCode }: Props) {
       try {
         const { backend: b, uid } = await connectFirebase();
         if (!mounted) return;
+        applyJoinIntent(retry === 0 ? initialCode : undefined, uid);
         setBackend(b);
-        const ps = usePlayerStore.getState();
-        if (ps.code && ps.uid === uid) {
-          const lobbyStatus = await checkLobbyStatus(b, ps.code);
-          if (lobbyStatus === "ended") {
-            ps.setEnded();
-            return;
-          }
-          ps.setStatus(ps.playerId ? "seated" : "waiting");
-        } else if (ps.code && ps.uid && ps.uid !== uid) {
-          ps.setStatus("idle");
-        }
       } catch (e) {
         // eslint-disable-next-line no-console
         console.error("[player connect]", e instanceof Error ? e.message : e);
-        const friendly = friendlyFirebaseError(e, "player");
         usePlayerStore
           .getState()
-          .setStatus("error", `${friendly.title}: ${friendly.message}`);
+          .setStatus("error", lifecycleMessage(e));
       }
     })();
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [initialCode, retry]);
 
-  usePlayerSync(backend);
+  usePlayerSync(backend, retry);
+
+  const leave = async () => {
+    if (!backend || leaving) return;
+    setLeaving(true);
+    try { await leaveLobby(backend); }
+    catch (error) { usePlayerStore.getState().setStatus("error", lifecycleMessage(error)); }
+    finally { setLeaving(false); }
+  };
 
   // Script characters — used by Town note popup and Almanac tab.
   const scriptCharacters = useMemo((): RoleDef[] => {
@@ -128,14 +126,15 @@ function PlayerScreenContent({ initialCode }: Props) {
     }
     try {
       const { uid } = await connectFirebase();
-      await joinLobby(backend, joinCode.trim().toUpperCase(), uid, name);
+      await joinLobby(backend, joinCode, uid, name);
+      const joinedCode = usePlayerStore.getState().code;
+      if (joinedCode) window.history.replaceState(null, "", `?join=${encodeURIComponent(joinedCode)}`);
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error("[joinSubmit]", e instanceof Error ? e.message : e);
-      const friendly = friendlyFirebaseError(e, "player");
       usePlayerStore
         .getState()
-        .setStatus("error", `${friendly.title}: ${friendly.message}`);
+        .setStatus("error", lifecycleMessage(e));
     }
   };
 
@@ -192,7 +191,7 @@ function PlayerScreenContent({ initialCode }: Props) {
     );
   }
 
-  if (status === "connecting" || status === "knocking") {
+  if (status === "connecting" || status === "knocking" || status === "reconnecting") {
     return (
       <div className="player player-status">
         <h2 className="title">Connecting…</h2>
@@ -206,7 +205,8 @@ function PlayerScreenContent({ initialCode }: Props) {
       <div className="player player-status" role="alert">
         <h2>Game data unavailable</h2>
         <p>{remoteFailure === "invalid" ? DATA_ERROR_MESSAGE : CONNECTION_ERROR_MESSAGE}</p>
-        <button className="btn" onClick={() => reset()}>Back to start</button>
+        <button className="btn" onClick={() => setRetry(value => value + 1)}>Retry connection</button>
+        <button className="btn" onClick={leave} disabled={leaving}>Cancel / request to leave</button>
       </div>
     );
   }
@@ -220,7 +220,8 @@ function PlayerScreenContent({ initialCode }: Props) {
         </p>
         <button
           className="btn btn-sm btn-danger"
-          onClick={() => { reset(); }}
+          onClick={leave}
+          disabled={leaving}
         >
           Leave
         </button>
@@ -228,17 +229,18 @@ function PlayerScreenContent({ initialCode }: Props) {
     );
   }
 
-  if (status === "error") {
+  if (status === "error" || status === "rejected" || status === "revoked" || status === "notFound" || status === "leaving") {
     return (
       <div className="player player-status">
-        <h2 className="title">Disconnected</h2>
+        <h2 className="title">{status === "leaving" ? "Waiting for the Storyteller to confirm your departure" : "Lobby unavailable"}</h2>
         <div className="error-list" role="alert">
           <strong>Error:</strong>
           <p>{error}</p>
         </div>
-        <button className="btn" onClick={() => reset()}>
-          Reset
-        </button>
+        {status === "error" && <button className="btn" onClick={() => setRetry(value => value + 1)}>Retry connection</button>}
+        {status !== "leaving" && <button className="btn" onClick={status === "error" ? leave : reset} disabled={leaving}>
+          {status === "error" ? "Cancel / request to leave" : "Back to start"}
+        </button>}
       </div>
     );
   }
@@ -256,6 +258,7 @@ function PlayerScreenContent({ initialCode }: Props) {
         <span className="label">{publicLobby?.phase ?? "—"}</span>
       </header>
 
+      <button className="btn btn-sm" onClick={leave} disabled={leaving}>Request to leave lobby</button>
       <PlayerTabs active={activeTab} onChange={setActiveTab} />
 
       {activeTab === "role" && (
@@ -302,13 +305,12 @@ function PlayerJoinForm({
   const [formError, setFormError] = useState<string | null>(null);
 
   const submit = async () => {
-    const normCode = normaliseCode(code);
-    if (!normCode) { setFormError("Enter a lobby code."); return; }
+    if (!code.trim()) { setFormError("Enter a lobby code."); return; }
     if (!name.trim()) { setFormError("Enter your name."); return; }
     setFormError(null);
     setSubmitting(true);
     try {
-      await onSubmit(normCode, name);
+      await onSubmit(code, name);
     } finally {
       setSubmitting(false);
     }

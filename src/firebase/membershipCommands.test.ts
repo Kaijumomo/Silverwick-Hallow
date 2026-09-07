@@ -156,6 +156,7 @@ describe("membership commands", () => {
 
   it("moves an already-seated client to a controlled removed state after revocation", async () => {
     const backend = new MemoryRoomBackend();
+    await backend.set("lobbies/ROOM/session", { version: 2, id: "test-session", state: "active" });
     const uid = "uid-alice";
     const playerId = "p-alice";
     await backend.set(rosterEntryPath("ROOM", uid), playerId);
@@ -168,7 +169,7 @@ describe("membership commands", () => {
     await act(async () => {
       await revokePlayerMembership(backend, "ROOM", playerId);
     });
-    await waitFor(() => expect(usePlayerStore.getState().status).toBe("error"));
+    await waitFor(() => expect(usePlayerStore.getState().status).toBe("revoked"));
     expect(usePlayerStore.getState().error).toBe("Removed from lobby.");
     expect(usePlayerStore.getState().playerId).toBeNull();
     expect(usePlayerStore.getState().self).toBeNull();

@@ -25,6 +25,7 @@ export async function seatPlayerAndCommit(
   selfRecord: PlayerSelfRecord | null,
   commitLocal: () => boolean,
 ): Promise<void> {
+  if (backend.runExclusive) return backend.runExclusive(inner => seatPlayerAndCommit(inner, code, uid, playerId, selfRecord, commitLocal));
   await seatPlayer(backend, code, uid, playerId, selfRecord);
   if (commitLocal()) return;
 
@@ -47,6 +48,7 @@ export async function revokePlayerAndCommit(
   playerId: PlayerId,
   commitLocal: () => boolean,
 ): Promise<void> {
+  if (backend.runExclusive) return backend.runExclusive(inner => revokePlayerAndCommit(inner, code, playerId, commitLocal));
   await revokePlayerMembership(backend, code, playerId);
   // Both local mutations are idempotent: false means another local event
   // already reached the desired removed/unseated state.

@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { publicPath } from "./paths";
 import type { RoomBackend, Unsubscribe } from "./backend";
 import type { PublicLobbyRecord } from "@/stores/types";
+import { decodeSession, sessionPath } from "./lifecycle";
 import { CONNECTION_ERROR_MESSAGE, DATA_ERROR_MESSAGE, decodePublicSnapshot, subscribeDecoded, type PublicSnapshot } from "./snapshots";
 
 // Public-only subscription. Reads ONLY `lobbies/{code}/public` — never the
 // storyteller, player-private, roster, or presence paths. Mirrors the inner
-// public watcher in `playerSync.ts` (lines 99–116) but without coupling to
+// public watcher in `playerSync.ts` but without coupling to
 // `usePlayerStore` (which carries player-identity state).
 export function subscribeToPublicLobby(
   backend: RoomBackend,
@@ -46,43 +47,47 @@ export function usePublicLobby(
     setPublicLobby(null);
 
     let cancelled = false;
-    let unsub: (() => void) | null = null;
-
-    // Probe permission with a one-shot `get()` first. Firebase's `onValue`
-    // does not surface permission_denied to the value callback (it only goes
-    // to an unwired error callback), so an unauthorized device would otherwise
-    // hang on "loading" forever. `get()` rejects on permission_denied, which
-    // we map to the same "not found / not authorized" empty state as a
-    // missing lobby.
-    backend
-      .get(publicPath(code))
-      .then(() => {
-        if (cancelled) return;
-        unsub = subscribeToPublicLobby(backend, code, (value, snapshot) => {
-          if (cancelled) return;
+    let terminal = false;
+    let unsub: (() => void) | undefined;
+    const markEnded = () => {
+      terminal = true;
+      unsub?.();
+      setLoading(false); setPublicLobby(null); setError(null); setEnded(true);
+    };
+    const offSession = backend.subscribe(sessionPath(code), raw => {
+      if (cancelled || terminal) return;
+      try {
+        const session = decodeSession(raw);
+        if (!session) {
+          unsub?.(); unsub = undefined;
+          setLoading(false); setPublicLobby(null); setError("This lobby does not exist or has expired."); return;
+        }
+        if (session.state === "ended") { markEnded(); return; }
+        if (!unsub) unsub = subscribeToPublicLobby(backend, code, (value, snapshot) => {
+          if (cancelled || terminal) return;
+          if (snapshot.status === "ended" || value?.status === "ended") { markEnded(); return; }
           setLoading(snapshot.status === "waiting");
           setError(snapshot.status === "invalid" ? DATA_ERROR_MESSAGE : null);
-          setEnded(snapshot.status === "ended" || value?.status === "ended");
           setPublicLobby(value);
         }, () => {
-          if (cancelled) return;
-          setLoading(false);
-          setPublicLobby(null);
-          setError(CONNECTION_ERROR_MESSAGE);
+          if (cancelled || terminal) return;
+          setLoading(false); setPublicLobby(null); setError(CONNECTION_ERROR_MESSAGE);
+          // A terminal session read is still authorized after roster cleanup.
+          void backend.get(sessionPath(code)).then(value => {
+            if (!cancelled && decodeSession(value)?.state === "ended") markEnded();
+          }).catch(() => {});
         });
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setLoading(false);
-        setPublicLobby(null);
-        setEnded(false);
-        setError(CONNECTION_ERROR_MESSAGE);
-      });
-
-    return () => {
-      cancelled = true;
-      if (unsub) unsub();
-    };
+      } catch {
+        unsub?.(); unsub = undefined;
+        setLoading(false); setPublicLobby(null); setError(DATA_ERROR_MESSAGE);
+      }
+    }, () => {
+      if (!cancelled && !terminal) {
+        unsub?.(); unsub = undefined;
+        setLoading(false); setPublicLobby(null); setError(CONNECTION_ERROR_MESSAGE);
+      }
+    });
+    return () => { cancelled = true; offSession(); unsub?.(); };
   }, [backend, code]);
 
   return { publicLobby, ended, loading, error };

@@ -52,6 +52,14 @@ function clone<T>(v: T): T {
 }
 
 export class MemoryRoomBackend implements RoomBackend {
+  async transaction(path: string, change: (current: unknown) => Json | undefined): Promise<boolean> {
+    const next = change(clone(readPath(this.root, path)));
+    if (next === undefined) return false;
+    writePath(this.root, path, clone(next));
+    this.writeLog.push({ path, value: clone(next) });
+    this.notify(path);
+    return true;
+  }
   private root: Record<string, unknown> = {};
   private listeners: Map<string, Set<Listener>> = new Map();
   /** Records every set/update path written, in order. Available to tests. */

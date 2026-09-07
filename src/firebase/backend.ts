@@ -17,6 +17,9 @@ export type Json =
 export type Unsubscribe = () => void;
 
 export interface RoomBackend {
+  runExclusive?<T>(operation: (backend: RoomBackend) => Promise<T>): Promise<T>;
+  /** Atomic read/modify/write. Returning undefined aborts the transaction. */
+  transaction(path: string, change: (current: unknown) => Json | undefined): Promise<boolean>;
   /** Set a value at `path`. Equivalent to RTDB `set()`. */
   set(path: string, value: Json): Promise<void>;
 

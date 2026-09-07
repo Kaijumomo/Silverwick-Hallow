@@ -1,226 +1,208 @@
-// Player-side sync: watch roster/{ownUid} for the seating binding, then
-// subscribe to player/{playerId} (self) and public/ (town).
-
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { usePlayerStore } from "@/stores/playerStore";
-import { knockOnLobby } from "./lobby";
-import {
-  joinRequestPath,
-  presencePath,
-  publicPath,
-  rosterEntryPath,
-  playerPath,
-} from "./paths";
+import { canonicalJoin, cancelJoinRequest, knockOnLobby, normaliseCode } from "./lobby";
+import { joinRequestPath, publicPath, rosterEntryPath, playerPath, presencePath } from "./paths";
 import type { RoomBackend } from "./backend";
-import { friendlyFirebaseError } from "./errors";
-import { decodeJoinRequest, decodeRosterEntry, decodeSelfSnapshot, decodePublicSnapshot, subscribeDecoded } from "./snapshots";
+import { decodeJoinRequest, decodeRosterEntry, decodeSelfSnapshot, decodePublicSnapshot, SnapshotValidationError } from "./snapshots";
+import { decodeSession, isTransient, leavePath, lifecycleMessage, LifecycleError, outcomePath, requireActiveSession, retryTransient, sessionPath } from "./lifecycle";
 
-const HEARTBEAT_MS = 15_000;
-
-export async function joinLobby(
-  backend: RoomBackend,
-  code: string,
-  uid: string,
-  requestedName: string
-): Promise<void> {
-  const player = usePlayerStore.getState();
+/** Explicit URL intent wins. An empty ?join= opens the join form; the same
+ * nonempty code may resume only the same authenticated user's saved session. */
+export function applyJoinIntent(explicitCode: string | undefined, uid: string): boolean {
+  const saved = usePlayerStore.getState();
+  if (saved.uid !== uid || (explicitCode !== undefined && (!normaliseCode(explicitCode) || normaliseCode(explicitCode) !== saved.code))) {
+    saved.reset(); return false;
+  }
+  return !!saved.code;
+}
+export async function joinLobby(backend: RoomBackend, code: string, uid: string, name: string): Promise<void> {
+  const ps = usePlayerStore.getState();
+  ps.reset();
+  ps.setStatus("knocking");
   try {
-    // Rules reject new requests for missing/ended lobbies. Commit the request
-    // before installing the session that starts public-data subscriptions.
-    player.setStatus("knocking");
-    await knockOnLobby(backend, code, uid, requestedName);
-    player.setSession({ code, uid, requestedName: requestedName.trim() });
-    player.setStatus("waiting");
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.error("[joinLobby]", e instanceof Error ? e.message : e);
-    const friendly = friendlyFirebaseError(e, "player");
-    player.setStatus("error", `${friendly.title}: ${friendly.message}`);
+    const canonical = canonicalJoin(code, name);
+    const abort = new AbortController();
+    await retryTransient(async () => {
+      await requireActiveSession(backend, canonical.code);
+      const outcome = await backend.get(outcomePath(canonical.code, uid));
+      if (outcome != null) {
+        if (outcome !== "rejected" && outcome !== "revoked") throw new SnapshotValidationError();
+        throw new LifecycleError(outcome, outcome === "rejected" ? "Your join request was rejected." : "Removed from lobby.");
+      }
+      await knockOnLobby(backend, canonical.code, uid, canonical.name);
+    }, abort.signal);
+    ps.setSession({ code: canonical.code, uid, requestedName: canonical.name });
+    ps.setStatus("waiting");
+  } catch (error) {
+    ps.setStatus(error instanceof LifecycleError && ["notFound", "rejected", "revoked"].includes(error.kind) ? error.kind as "notFound" | "rejected" | "revoked" : "error", lifecycleMessage(error));
+    if (error instanceof LifecycleError && error.kind === "ended") ps.setEnded();
   }
 }
 
-export function usePlayerSync(backend: RoomBackend | null) {
-  const code = usePlayerStore((s) => s.code);
-  const uid = usePlayerStore((s) => s.uid);
-  const playerId = usePlayerStore((s) => s.playerId);
-  const [requestSession, setRequestSession] = useState<string | null>(null);
-  const hasRequest = !!code && !!uid && requestSession === JSON.stringify([code, uid]);
+export async function leaveLobby(backend: RoomBackend) {
+  const ps = usePlayerStore.getState();
+  if (!ps.code || !ps.uid) { ps.reset(); return; }
+  // A local cached ID is never authority: inspect the server binding.
+  const binding = decodeRosterEntry(await backend.get(rosterEntryPath(ps.code, ps.uid)));
+  if (binding.status === "invalid") throw new SnapshotValidationError();
+  if (binding.status === "ready") {
+    await backend.set(leavePath(ps.code, ps.uid), true);
+    ps.setStatus("leaving");
+  } else {
+    await cancelJoinRequest(backend, ps.code, ps.uid);
+    ps.reset();
+  }
+}
 
-  // Pending requests grant public access, but never private access. Observe
-  // the acknowledged request before probing public/ (also on refresh).
+export function usePlayerSync(backend: RoomBackend | null, retry = 0) {
+  const code = usePlayerStore(s => s.code);
+  const uid = usePlayerStore(s => s.uid);
   useEffect(() => {
     if (!backend || !code || !uid) return;
-    return subscribeDecoded(backend, joinRequestPath(code, uid), decodeJoinRequest, (snapshot) => {
-      usePlayerStore.getState().setRemoteData({ request: snapshot.status === "invalid" ? "invalid" : "ready" });
-      setRequestSession(snapshot.status === "ready" ? JSON.stringify([code, uid]) : null);
-    }, () => {
-      setRequestSession(null);
-      usePlayerStore.getState().setRemoteData({ request: "error" });
-    });
-  }, [backend, code, uid]);
+    return startPlayerHandshake(backend, code, uid);
+  }, [backend, code, uid, retry]);
+}
 
-  // Watch roster/{ownUid} for the playerId binding.
-  useEffect(() => {
-    if (!backend || !code || !uid) return;
-    const unsub = subscribeDecoded(backend, rosterEntryPath(code, uid), decodeRosterEntry, (snapshot) => {
-      const ps = usePlayerStore.getState();
-      // Guard: don't clobber "ended" status. After the public/ subscription
-      // calls setEnded(), this effect's cleanup hasn't run yet — Firebase can
-      // still deliver a buffered roster value. Without the guard, the fall-
-      // through below would write setStatus("seated") over "ended".
-      if (ps.status === "ended") return;
-      ps.setRemoteData({ membership: snapshot.status === "invalid" ? "invalid" : "ready" });
-      if (snapshot.status === "invalid") {
-        ps.setPlayerId(null);
-        ps.setSelf(null);
-        return;
-      }
-      if (snapshot.status === "waiting") {
-        // No roster entry; if we'd been seated and got removed, surface that.
-        if (ps.playerId) {
-          ps.setStatus("error", "Removed from lobby.");
-          ps.setPlayerId(null);
-          ps.setSelf(null);
-        }
-        return;
-      }
-      // Every roster value was written by the ST. Names exist only in requests.
-      ps.setPlayerId(snapshot.data);
-      ps.setStatus("seated");
-    }, () => {
-      const ps = usePlayerStore.getState();
-      ps.setRemoteData({ membership: "error" });
-      ps.setPlayerId(null);
-      ps.setSelf(null);
-    });
-    return () => unsub();
-  }, [backend, code, uid]);
-
-  // Subscribe to own player/{playerId} once seated.
-  // A permission probe runs first so that a stale reconnect (e.g. the game
-  // ended and the player's session is no longer valid) surfaces a clear error
-  // instead of hanging silently.
-  useEffect(() => {
-    if (!backend || !code || !playerId) return;
-    usePlayerStore.getState().setSelf(null);
-    usePlayerStore.getState().setRemoteData({ self: "waiting" });
-    let active = true;
-    let cleanup: (() => void) | null = null;
-    backend.get(playerPath(code, playerId)).then(() => {
-      if (!active) return;
-      cleanup = subscribeDecoded(backend, playerPath(code, playerId), decodeSelfSnapshot, (snapshot) => {
-        if (!active) return;
-        const ps = usePlayerStore.getState();
-        if (ps.status === "ended") return;
-        ps.setSelf(snapshot.status === "ready" ? snapshot.data : null);
-        ps.setRemoteData({ self: snapshot.status });
-      }, () => {
-        if (!active) return;
-        usePlayerStore.getState().setSelf(null);
-        usePlayerStore.getState().setRemoteData({ self: "error" });
-      });
-    }).catch(() => {
-      if (!active) return;
-      usePlayerStore.getState().setSelf(null);
-      usePlayerStore.getState().setRemoteData({ self: "error" });
-    });
-    return () => { active = false; cleanup?.(); };
-  }, [backend, code, playerId]);
-
-  // Subscribe to public/ — and detect lobby-ended from within the same
-  // subscription. The ST writes status="ended" to public/status via endLobby();
-  // this fires immediately on the next subscription tick. One subscription
-  // handles both normal updates and the game-ended signal, so there is no
-  // separate read on lobbies/${code}/status (which would need its own rule).
-  // Permission probe guards against reconnecting to an already-ended lobby.
-  useEffect(() => {
-    if (!backend || !code || (!playerId && !hasRequest)) return;
-    let active = true;
-    let cleanup: (() => void) | null = null;
-    backend.get(publicPath(code)).then(() => {
-      if (!active) return;
-      cleanup = subscribeDecoded(backend, publicPath(code), (raw) => decodePublicSnapshot(raw, code), (snapshot) => {
-        if (!active) return;
-        const ps = usePlayerStore.getState();
-        if (ps.status === "ended") return;
-        if (snapshot.status === "ended" || (snapshot.status === "ready" && snapshot.data.status === "ended")) {
-          ps.setEnded();
-          return;
-        }
-        ps.setPublic(snapshot.status === "ready" ? snapshot.data : null);
-        ps.setRemoteData({ public: snapshot.status });
-      }, () => {
-        if (!active) return;
-        usePlayerStore.getState().setPublic(null);
-        usePlayerStore.getState().setRemoteData({ public: "error" });
-      });
-    }).catch(() => {
-      if (!active) return;
-      usePlayerStore.getState().setPublic(null);
-      usePlayerStore.getState().setRemoteData({ public: "error" });
-    });
-    return () => { active = false; cleanup?.(); };
-  }, [backend, code, playerId, hasRequest]);
-
-  // Presence: while seated, write presence/{uid} = { online: true, lastSeen }
-  // and arm an onDisconnect that flips us to offline when the socket dies.
-  // A heartbeat refreshes lastSeen so a stale-but-online entry can be
-  // detected by the storyteller if needed.
-  useEffect(() => {
-    if (!backend || !code || !uid) return;
-    let active = true;
-    let cancelDisconnect: (() => Promise<void>) | null = null;
-    let heartbeat: ReturnType<typeof setInterval> | null = null;
-
-    const path = presencePath(code, uid);
-    const writeOnline = () =>
-      backend.set(path, { online: true, lastSeen: Date.now() });
-
-    (async () => {
-      try {
-        // Arm offline-on-disconnect first, so a transient failure between
-        // the two writes doesn't leave a stale "online" entry.
-        cancelDisconnect = await backend.onDisconnectSet(path, {
-          online: false,
-          lastSeen: Date.now(),
-        });
-        if (!active) {
-          await cancelDisconnect();
-          cancelDisconnect = null;
-          return;
-        }
-        await writeOnline();
-        if (!active) return;
-        heartbeat = setInterval(() => {
-          writeOnline().catch(() => {
-            // Heartbeat failures are non-fatal — onDisconnect handles real drops.
-          });
-        }, HEARTBEAT_MS);
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn("[presence]", e instanceof Error ? e.message : e);
-      }
+/** The only player handshake. Saved IDs are hints; subscriptions are installed
+ * from validated server membership, never from localStorage. */
+export function startPlayerHandshake(backend: RoomBackend, code: string, uid: string) {
+  const abort = new AbortController();
+  let active = true;
+  let queued = false;
+  let dirty = false;
+  let bound: string | null = null;
+  let publicSubscribed = false;
+  let privateOff = () => {};
+  let publicOff = () => {};
+  let cancelPresence: (() => Promise<void>) | undefined;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  const cleanups: (() => void)[] = [];
+  const ps = () => usePlayerStore.getState();
+  const current = () => active && ps().code === code && ps().uid === uid;
+  const hadSavedSeat = !!ps().playerId;
+  ps().setPlayerId(null); ps().setSelf(null); ps().setPublic(null);
+  ps().setRemoteData({ membership: "ready", request: "ready", self: "waiting", public: "waiting" });
+  ps().setStatus("reconnecting");
+  const stop = () => {
+    active = false; abort.abort();
+    cleanups.splice(0).forEach(off => off());
+    privateOff(); publicOff(); clearInterval(heartbeat);
+    void (async () => {
+      try { await cancelPresence?.(); await backend.set(presencePath(code, uid), { online: false, lastSeen: Date.now() }); }
+      catch { /* Disconnect handler or server expiry marks the device stale. */ }
     })();
-
-    return () => {
-      active = false;
-      if (heartbeat) clearInterval(heartbeat);
-      // Disarm the disconnect write and explicitly mark offline. The order
-      // matters: cancel first so the disconnect doesn't race with the set.
-      (async () => {
-        if (cancelDisconnect) {
-          try {
-            await cancelDisconnect();
-          } catch {
-            // Cancel failure is harmless — onDisconnect just becomes a no-op.
-          }
-        }
-        try {
-          await backend.set(path, { online: false, lastSeen: Date.now() });
-        } catch {
-          // Network may already be gone — ignore.
-        }
-      })();
+  };
+  const terminal = (kind: "ended" | "rejected" | "revoked" | "notFound", message: string) => {
+    if (!current()) return;
+    ps().setSelf(null); ps().setPlayerId(null); ps().setPublic(null);
+    ps().setRemoteData({ membership: "ready", request: "ready", self: "waiting", public: "waiting" });
+    if (kind === "ended") ps().setEnded(); else ps().setStatus(kind, message);
+    stop();
+  };
+  const fail = (error: unknown) => {
+    if (!current()) return;
+    ps().setSelf(null); ps().setPublic(null);
+    ps().setStatus("error", lifecycleMessage(error));
+  };
+  const watch = (path: string, receive: (value: unknown) => void) => {
+    let off = () => {};
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let attempts = 0;
+    const listen = () => {
+      off = backend.subscribe(path, value => {
+        if (!current()) return;
+        try { receive(value); } catch (error) { fail(error); }
+      }, error => {
+        if (!current()) return;
+        fail(error);
+        if (isTransient(error) && attempts++ < 3) timer = setTimeout(() => { off(); listen(); }, 250 * 2 ** (attempts - 1));
+        else schedule(); // Reconcile denied private/public reads with terminal membership/session.
+      });
     };
-  }, [backend, code, uid]);
+    listen();
+    return () => { off(); clearTimeout(timer); };
+  };
+  const startPresence = async () => {
+    if (heartbeat || cancelPresence || !current()) return;
+    try {
+      cancelPresence = await backend.onDisconnectSet(presencePath(code, uid), { online: false, lastSeen: Date.now() });
+      if (!current()) { await cancelPresence(); return; }
+      const write = () => backend.set(presencePath(code, uid), { online: true, lastSeen: Date.now() });
+      await write();
+      if (!current()) return;
+      heartbeat = setInterval(() => { void write().catch(fail); }, 15_000);
+    } catch (error) { fail(error); }
+  };
+  const reconcile = async () => {
+    const session = decodeSession(await backend.get(sessionPath(code)));
+    if (!current()) return;
+    if (!session) { terminal("notFound", "This lobby does not exist or has expired."); return; }
+    if (session.state === "ended") { terminal("ended", "This game has ended."); return; }
+    const outcome = await backend.get(outcomePath(code, uid));
+    if (!current()) return;
+    if (outcome != null) {
+      if (outcome !== "rejected" && outcome !== "revoked") throw new SnapshotValidationError();
+      terminal(outcome, outcome === "rejected" ? "Your join request was rejected." : "Removed from lobby."); return;
+    }
+    let membership = decodeRosterEntry(await backend.get(rosterEntryPath(code, uid)));
+    const request = decodeJoinRequest(await backend.get(joinRequestPath(code, uid)));
+    if (membership.status === "waiting" && request.status === "waiting") membership = decodeRosterEntry(await backend.get(rosterEntryPath(code, uid)));
+    if (!current()) return;
+    if (membership.status === "invalid" || request.status === "invalid") throw new SnapshotValidationError();
+    if (membership.status !== "ready" && request.status !== "ready") {
+      // Repeat session/outcome reads after a deletion so ending/acceptance
+      // delivered in a different callback order cannot look like rejection.
+      const latest = decodeSession(await backend.get(sessionPath(code)));
+      if (!current()) return;
+      if (latest?.state === "ended") { terminal("ended", "This game has ended."); return; }
+      terminal(bound || hadSavedSeat ? "revoked" : "rejected", bound || hadSavedSeat ? "Removed from lobby." : "Your request was cancelled or rejected."); return;
+    }
+    ps().setRemoteData({ membership: "ready", request: "ready" });
+    if (membership.status === "ready") {
+      const id = membership.data;
+      ps().setPlayerId(id);
+      if (ps().status !== "leaving") ps().setStatus("seated");
+      if (bound !== id) {
+        bound = id; privateOff(); ps().setSelf(null);
+        privateOff = watch(playerPath(code, id), raw => {
+          const self = decodeSelfSnapshot(raw);
+          ps().setSelf(self.status === "ready" ? self.data : null);
+          ps().setRemoteData({ self: self.status });
+        });
+      }
+    } else {
+      if (bound) { terminal("revoked", "Removed from lobby."); return; }
+      ps().setStatus("waiting");
+      if (request.status === "ready") usePlayerStore.setState({ requestedName: request.data });
+    }
+    if (!publicSubscribed) {
+      publicSubscribed = true;
+      publicOff = watch(publicPath(code), raw => {
+        const decoded = decodePublicSnapshot(raw, code);
+        if (decoded.status === "ended" || (decoded.status === "ready" && decoded.data.status === "ended")) { terminal("ended", "This game has ended."); return; }
+        ps().setPublic(decoded.status === "ready" ? decoded.data : null);
+        ps().setRemoteData({ public: decoded.status });
+      });
+    }
+    await startPresence();
+  };
+  function schedule() {
+    if (!current()) return;
+    dirty = true;
+    if (queued) return;
+    queued = true;
+    void (async () => {
+      try {
+        while (dirty && current()) {
+          dirty = false;
+          await retryTransient(reconcile, abort.signal, () => { if (current()) ps().setStatus("reconnecting"); });
+        }
+      } catch (error) { fail(error); }
+      finally { queued = false; }
+    })();
+  }
+  // These non-private paths are independently authorized for this UID.
+  for (const path of [sessionPath(code), outcomePath(code, uid), rosterEntryPath(code, uid), joinRequestPath(code, uid)]) cleanups.push(watch(path, schedule));
+  schedule();
+  return stop;
 }

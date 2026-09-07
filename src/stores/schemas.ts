@@ -154,7 +154,7 @@ const STPlayerRecordPersistedSchema = STPlayerRecordSchema.extend({
   isEmpty: z.boolean().optional(),
 });
 
-const StorytellerGamePersistedSchema = StorytellerLobbyRecordSchema.extend({
+export const StorytellerGamePersistedSchema = StorytellerLobbyRecordSchema.extend({
   code: z.string(),
   storytellerUid: z.string(),
   players: z.record(z.string(), STPlayerRecordPersistedSchema),
@@ -170,6 +170,7 @@ export const StorytellerStateSchema = z.object({
     .object({
       code: z.string().min(1),
       uid: z.string().min(1),
+      sessionId: z.string().optional(),
       status: z.enum(["live", "reconnecting"]),
     })
     .nullable()

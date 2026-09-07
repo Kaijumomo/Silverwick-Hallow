@@ -13,6 +13,7 @@ import {
   storytellerUidPath,
 } from "./paths";
 import type { PlayerId, PlayerSelfRecord } from "@/stores/types";
+import { sessionPath, outcomePath, leavePath, LifecycleError } from "./lifecycle";
 import { decodeRosterEntry, decodeJoinRequests, decodeRoster, decodeLobbyStatus, reportSnapshotProblem, SnapshotValidationError, subscribeDecoded, DATA_ERROR_MESSAGE, CONNECTION_ERROR_MESSAGE } from "./snapshots";
 
 // Confusable-glyph-free alphabet (no 0/O, 1/I/L). 30 chars, ~656bn 8-char codes.
@@ -27,6 +28,14 @@ export function formatCode(code: string): string {
 /** Strip hyphens and uppercase — normalise user-typed codes before matching. */
 export function normaliseCode(raw: string): string {
   return raw.replace(/-/g, "").toUpperCase().trim();
+}
+
+export function canonicalJoin(code: string, name: string) {
+  const canonicalCode = normaliseCode(code);
+  const canonicalName = name.trim();
+  if (!/^[A-Z0-9]{8}$/.test(canonicalCode)) throw new LifecycleError("invalid", "Enter a valid eight-character lobby code.");
+  if (!canonicalName || canonicalName.length > 20 || /[\r\n\t]/.test(canonicalName)) throw new LifecycleError("invalid", "Enter a name of 1–20 characters on one line.");
+  return { code: canonicalCode, name: canonicalName };
 }
 
 export function generateCode(length = 8): string {
@@ -54,6 +63,7 @@ export async function createLobby(
     const code = gen();
     const claim = await backend.setIfAbsent(storytellerUidPath(code), uid);
     if (claim.committed) {
+      await backend.set(sessionPath(code), { version: 2, id: crypto.randomUUID(), state: "active" });
       return { code };
     }
   }
@@ -91,7 +101,15 @@ export async function cancelJoinRequest(backend: RoomBackend, code: string, uid:
 
 /** ST-only membership revocation. Rules deny subsequent private reads. */
 export async function revokeMembership(backend: RoomBackend, code: string, uid: string): Promise<void> {
-  await backend.set(rosterEntryPath(code, uid), null);
+  await backend.update({ [rosterEntryPath(code, uid)]: null, [outcomePath(code, uid)]: "revoked", [leavePath(code, uid)]: null });
+}
+
+export async function rejectJoinRequest(backend: RoomBackend, code: string, uid: string): Promise<void> {
+  if (backend.runExclusive) return backend.runExclusive(inner => rejectJoinRequest(inner, code, uid));
+  if ((await readOwnRosterEntry(backend, code, uid)).phase === "seated") {
+    throw new MembershipConflictError("This player has already been seated. Use unseat or remove instead.");
+  }
+  await backend.update({ [joinRequestPath(code, uid)]: null, [outcomePath(code, uid)]: "rejected" });
 }
 
 /**
@@ -126,6 +144,7 @@ export async function seatPlayer(
   const updates: Record<string, Json> = {
     [rosterEntryPath(code, uid)]: playerId,
     [joinRequestPath(code, uid)]: null,
+    [outcomePath(code, uid)]: null,
   };
   if (selfRecord) {
     updates[playerPath(code, playerId)] = selfRecord as unknown as Json;
@@ -153,7 +172,11 @@ export async function revokePlayerMembership(
   const updates: Record<string, Json> = {
     [playerPath(code, playerId)]: null,
   };
-  if (uid) updates[rosterEntryPath(code, uid)] = null;
+  if (uid) {
+    updates[rosterEntryPath(code, uid)] = null;
+    updates[outcomePath(code, uid)] = "revoked";
+    updates[leavePath(code, uid)] = null;
+  }
   await backend.update(updates);
   return { uid };
 }
@@ -227,11 +250,10 @@ export function watchJoinRequests(
 // ---------------------------------------------------------------------------
 
 /**
- * ST-side: mark a lobby as ended and scrub private data.
- * Writes `status = "ended"` first so players redirect immediately, then
- * fire-and-forgets a best-effort multi-path null to clear `storyteller/`
- * and each `player/{id}` (private data). `roster/` and `public/` are left
- * intact — players need roster membership to read `public/` (see rules.json).
+ * Legacy status-only teardown retained for compatibility with older callers
+ * and unit tests. Production Storyteller sessions use SessionWriter.close(),
+ * which serializes the terminal session transition, fences stale writes, and
+ * clears all lifecycle paths in one guarded update.
  */
 export async function endLobby(
   backend: RoomBackend,
@@ -239,20 +261,17 @@ export async function endLobby(
   playerIds?: PlayerId[]
 ): Promise<void> {
   await backend.set(lobbyStatusPath(code), "ended");
-  // Best-effort scrub — null values delete nodes in RTDB multi-path updates.
+  // Null values delete nodes in an RTDB multi-path update.
   const cleanups: Record<string, Json> = { [storytellerPath(code)]: null };
   for (const pid of playerIds ?? []) {
     cleanups[playerPath(code, pid)] = null;
   }
-  backend.update(cleanups).catch((e) => {
-    // eslint-disable-next-line no-console
-    console.warn("[endLobby cleanup]", e instanceof Error ? e.message : e);
-  });
+  await backend.update(cleanups);
 }
 
 /**
- * Read lobby status once. Absent means the lobby is active (pre-close
- * lobbies have no status node). Returns "ended" only when explicitly set.
+ * Legacy status reader. New lifecycle code reads the validated v2 session
+ * record instead; absent status is treated as active for old callers only.
  */
 export async function checkLobbyStatus(
   backend: RoomBackend,
@@ -266,9 +285,8 @@ export async function checkLobbyStatus(
 }
 
 /**
- * Subscribe to lobby status changes. Fires immediately with the current
- * status, then on every change. Used by player clients to detect when the
- * ST has ended the game and tear down their session cleanly.
+ * Legacy status subscription retained for old display callers. New player and
+ * public flows subscribe to the validated v2 session record.
  */
 export function watchLobbyStatus(
   backend: RoomBackend,

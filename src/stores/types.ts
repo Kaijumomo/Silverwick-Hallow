@@ -143,6 +143,6 @@ export type PublicLobbyRecord = {
   fabled: RoleId[];
   lorics: RoleId[];
   winner?: Alignment;
-  /** Set to "ended" by endLobby() when the ST closes the game. */
+  /** Legacy projection marker; lifecycle state is authoritative in session. */
   status?: "ended";
 };

@@ -14,7 +14,12 @@ export type PlayerStatus =
   | "waiting"
   | "seated"
   | "ended"
-  | "error";
+  | "error"
+  | "reconnecting"
+  | "rejected"
+  | "revoked"
+  | "notFound"
+  | "leaving";
 
 export type TownNoteConfidence = "suspect" | "likely" | "confirm";
 

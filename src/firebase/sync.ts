@@ -15,9 +15,10 @@ import {
 // ---------------------------------------------------------------------------
 // THE LOAD-BEARING CHOKEPOINT
 // ---------------------------------------------------------------------------
-// `writeProjections` is the ONLY function in this codebase that writes to any
-// path other than `storyteller/`. Every other module that touches Firebase
-// goes through here. This makes the privacy boundary an API property: the
+// `writeProjections` is the only generic projection function that writes public
+// and private game views. Lifecycle and membership commands are intentional
+// exceptions. Every projection caller goes through this function, making the
+// privacy boundary an API property: the
 // projection helpers (`projectLobbyToPublic`, `projectLobbyToSelfMap`) strip
 // `actualRole`/`shownRole`/`behaviorMode`/`privateInfo`/`stNotes`/`statuses`
 // before anything reaches `public/*` or `player/{id}/*`.
@@ -32,6 +33,7 @@ export type WriteContext = {
   stState: StorytellerLobbyRecord;
   registry: RoleRegistry;
   online: OnlineMap;
+  membership?: Record<string, string>;
 };
 
 export async function writeProjections(ctx: WriteContext): Promise<void> {
@@ -61,6 +63,8 @@ export async function writeProjections(ctx: WriteContext): Promise<void> {
 
   // ST-private state. Only the ST can read this path (Firebase rules enforce).
   updates[storytellerPath(code)] = stState as unknown as Json;
+  // JSON preserves empty arrays/maps for a fully validated writer takeover.
+  updates[`lobbies/${code}/checkpoint`] = JSON.stringify({ game: stState, roster: ctx.membership ?? {} });
 
   await backend.update(updates);
 }

@@ -1,130 +1,126 @@
-# Lobby protocol — load-bearing decisions
+# Lobby protocol
 
-These decisions are not negotiable without revisiting the privacy boundary.
+This document describes the active Firebase protocol for Silverwick Hallow.
+Deploy the matching client and `rules.json` together. Existing pre-Phase-4
+lobbies use the legacy shape and must be retired rather than silently migrated.
+
+## Session and ownership
+
+Each new lobby has an eight-character confusable-glyph-free code and these
+identity records:
+
+| Path | Meaning and access |
+| --- | --- |
+| `storytellerUid` | Immutable authenticated owner; only the owner can claim it |
+| `session` | `{version: 2, id, state}` lifecycle record; authenticated reads, owner writes |
+| `writer` | Short-lived owner lease `{token, expiresAt}`; owner reads/writes |
+| `writeGuard` | Monotonic `{token, revision}` receipt used to fence stale writes |
+
+The Storyteller claims `storytellerUid` with `setIfAbsent`, then creates a new
+active session ID. A `SessionWriter` must acquire the lease before writing. It
+renews every ten seconds, expires after thirty seconds, and carries its token
+and an increasing revision on every projection or lifecycle update. Firebase
+rules reject an expired token, an old token, or an older revision. A second tab
+gets a controlled conflict; it can reclaim only after the lease expires.
 
 ## Request and membership paths
 
-Names and authoritative IDs have separate paths. See
-[MEMBERSHIP_MIGRATION.md](MEMBERSHIP_MIGRATION.md) before deploying this protocol.
+Names and authoritative IDs have separate paths. A request is never an
+authorization claim.
 
-| Path in `lobbies/{code}` | Meaning and access |
+| Path | Meaning and access |
 | --- | --- |
-| `storytellerUid` | Caller claims a completely new lobby as themselves; the owner cannot be transferred/deleted by clients |
-| `joinRequests/{uid}` | Untrusted name, 1–20 characters, no surrounding spaces, tabs or line breaks. Own create/cancel; ST may delete. Read by own UID and ST |
-| `roster/{uid}` | Player ID, always ST-written. Read by own UID and ST |
-| `public` | ST-written public projection; ST, request holders and members may read |
-| `player/{playerId}` | ST-written private projection; ST or matching same-lobby roster UID may read |
-| `storyteller` | ST-only full state |
-| `presence/{uid}` | Existing presence behavior, unchanged in this pass |
+| `joinRequests/{uid}` | Canonical 1–20 character name; own UID creates/cancels, Storyteller deletes; own UID and Storyteller read |
+| `roster/{uid}` | Storyteller-only authoritative UID → player ID binding; bound UID and Storyteller read |
+| `outcomes/{uid}` | Storyteller records `rejected` or `revoked`; that UID reads its outcome |
+| `leaveRequests/{uid}` | A seated UID requests departure; that UID creates, Storyteller consumes |
+| `public` | Storyteller projection; active request holders and members may read |
+| `player/{playerId}` | Storyteller private projection; only a UID bound to exactly that ID may read |
+| `storyteller` | Full Storyteller state; owner only |
+| `checkpoint` | Acknowledged game plus roster snapshot for takeover recovery; owner only |
+| `presence` | Parent read by the Storyteller; each UID reads/writes only its own child |
 
-The player calls `knockOnLobby`, which reads their own binding for reconnect
-and otherwise creates an absent request. The rules independently enforce an
-existing owner, a lobby not marked ended, no existing binding, and bounded text.
-A request that happens to equal a real player ID is still only a name.
+The join handshake normalizes the code and name once, validates the active
+session, checks any durable outcome, and creates an absent request. It never
+uses a persisted player ID as authorization. Seating and revocation reuse the
+Phase-3 Firebase-first membership commands. Rejection clears the request and
+records an outcome atomically; a stale reject cannot strand a player who was
+already seated. A player cancelling before acceptance clears its own request;
+a seated player writes a leave request that the Storyteller consumes through
+the same revocation command.
 
-The Storyteller watches `joinRequests` for the pending queue and `roster` for
-bindings. Manual seating calls `seatPlayer`, which atomically deletes the
-request, writes the roster binding, and writes the private projection if present.
-A seat without a role retains the existing null-projection placeholder behavior.
-There is no name-versus-ID classification heuristic.
+## Join and reconnect state
 
-Player hooks watch the own request and own binding independently. Public access
-starts after a request or binding is observed; private access starts only from
-the binding. `cancelJoinRequest` removes a request; `revokeMembership` removes
-the binding and Firebase cancels further private access. These helpers do not
-wire new undo/removal/rejection UI in this pass.
+Player state progresses through `knocking` → `waiting` → `seated`, with
+`reconnecting`, `rejected`, `revoked`, `notFound`, `ended`, and `error` as
+explicit recovery or terminal states. On refresh, the client reads session,
+outcome, its own roster entry, and its own request before installing listeners.
+Private data is subscribed only after an authoritative roster binding exists.
+Missing or ended sessions terminate promptly; malformed snapshots are rejected
+at the validation boundary.
 
-## Why we don't use `playerId === uid`
+An explicit `?join=` URL wins over a stale saved session. Without new intent, a
+saved session resumes only for the same authenticated UID and matching code.
+After a successful join the canonical code is written back to the URL so a
+refresh does not create a duplicate request.
 
-Two reasons:
-1. The ST can pre-populate seats *before* anyone joins (e.g., setup with 8
-   placeholder seats from prior games), and these seats have stable UUIDs
-   that have no auth identity.
-2. A player who refreshes (and re-runs anonymous auth) gets a *new* uid. If
-   `playerId === uid`, the player would lose their seat on refresh. With the
-   roster binding, we can also let the player's seat survive a re-auth by
-   ST re-binding `roster/{newUid} → existing playerId`. (This piece — the
-   re-bind UX — is in 5c, not 5a.)
+## Storyteller synchronization and recovery
 
-## Reconnect policy
+The active session manager is mounted at the app level, not on `GameScreen`.
+It owns the writer, projection debounce, request/roster/leave watchers,
+presence watcher, and session/lease conflict detection while the lobby is
+active. Navigation to Home or the New Game screen does not pause it. Ending or
+losing the session stops listeners and aborts pending work.
 
-**ST refresh:** *local store wins.* The ST is the only writer to `storyteller/`,
-`public/`, and `player/{...}`. On refresh, the ST app:
-1. Restores from localStorage (Zustand persist, already present).
-2. Re-authenticates anonymously (uid stable across refresh in the same
-   browser, but treat it as if it could change).
-3. Re-establishes sync by calling `writeProjections` once with the local
-   state. This re-uploads everything; any racing roster knock from a player
-   that arrived during the refresh is read after sync starts.
-4. Subscribes to `joinRequests/` to pick up pending requests that landed during
-   the refresh.
+On takeover, an acknowledged `checkpoint` is the recovery point. The current
+server session and roster are read first. The checkpoint game is restored only
+when the session ID still matches; membership differences are reconciled
+against the current roster, and an unresolvable current binding is revoked
+instead of being trusted. The initial projection is acknowledged before the
+writer is exposed to UI controls. Thus an older local snapshot cannot overwrite
+newer remote membership or an ended session.
 
-This means: an ST refresh during gameplay does not lose ST state, but a
-roster join request that arrived *during* the refresh is processed when the
-ST app sees it after reconnect. There is no merging of state — local always
-wins because there is no other writer.
+`writeProjections` remains the projection chokepoint. It writes public/private
+views, Storyteller state, and a checkpoint containing the game and the
+authoritative roster snapshot in one writer-guarded update. Membership commands
+are the only intentional lifecycle exceptions.
 
-**Player refresh:** *remote wins.* The player has no canonical state of
-their own to merge — they are a pure consumer of the projection. On refresh:
-1. Re-authenticate anonymously.
-2. Read `roster/{uid}` to discover own playerId (or rebind if needed).
-3. Subscribe to `player/{playerId}` and `public/`.
+## Presence
 
-## Write amplification — the strategy is "full projection on every change, debounced 200ms"
+The Storyteller subscribes to `presence` at the exact parent path authorized by
+the rules. Players can read and write only `presence/{theirUid}`; they cannot
+enumerate other players. Presence state is `unknown`, `ready`, or `error`.
+An error never becomes “everyone offline.” Confirmed offline values are shown
+only after a valid presence snapshot; missing/stale records remain unknown and
+expire locally after the documented heartbeat window.
 
-`writeProjections` writes the full lobby projection on every call. We do not
-diff per-player.
+## Ordering, end, and retry behavior
 
-Rationale:
-- A status-chip toggle and a role assignment both go through the same write.
-  Predictable cost is better than a complex diff that might miss an edge.
-- The projection functions are pure and deterministic given the input state,
-  so re-running them is cheap.
-- 200ms debounce prevents UI scrubbing (drag-reorder, fast toggling) from
-  saturating the write rate.
+All writer operations are serialized. `close()` first stops new commands,
+cancels old retry backoff, and publishes a guarded `public/status = ended`
+sentinel so new joins stop immediately. It then drains any already-started
+write, reacquires its lease, and performs one final guarded multi-path update
+that marks `session.state = ended` and removes roster, requests, leave requests,
+private projections, Storyteller state, and checkpoint. It then stops listeners.
+Rules allow no new join after the sentinel or projection after the session is
+ended, and stale revisions cannot revive it.
 
-To revisit if write costs become a real concern: implement per-path diff in
-`writeProjections` while keeping it as the sole API. Callers don't change.
+Transient network failures use bounded exponential backoff (250/500/1000 ms,
+four attempts including the initial call). Retry is cancelled when the writer
+or operation is stopped. Authorization, validation, conflict, and terminal
+session errors are not retried as network failures. A write retry first checks
+the guard receipt, so a lost acknowledgement does not duplicate an applied
+write.
 
-## TOCTOU on code generation
+## Migration and legacy data
 
-Use `setIfAbsent(lobbies/{code}/storytellerUid, uid)` (Firebase
-`runTransaction`) to claim a lobby. If the transaction returns
-`{ committed: false }`, regenerate a new code and retry. Never:
+This is a coordinated hard cutover. Retire legacy lobby nodes, deploy the rules,
+clear persisted lobby sessions, and create fresh codes. Legacy lobbies without a
+version-2 session are not joinable or writable by the new client. A persisted
+Storyteller lobby is cleared during the store migration; a new game always
+creates a fresh local identity and no lobby. No production migration is
+performed by the test suite.
 
-- Read code → check absent → write (TOCTOU race; two STs can claim the same
-  code in parallel).
-- Use a fixed code for testing — collision rate too high.
-
-The 4-character random code from `[BCDFGHJKLMNPQRSTVWXYZ23456789]` (no
-ambiguous-glyph chars) gives ~16M codes. Realistic collision rate at this
-scale is negligible, but the transaction is the seatbelt.
-
-## Lobby TTL — there is none
-
-Firebase Realtime Database has no built-in TTL mechanism for arbitrary paths.
-Lobbies are not automatically deleted after they end.
-
-**What we do:** When the ST calls `endLobby`, we:
-1. Write `public/status = "ended"` (immediate signal — players redirect).
-2. Null `storyteller/` and `player/{id}/` paths (scrub private data, best-effort).
-
-**What we do NOT do:** Delete `public/`, `roster/`, or `lobbies/{code}` itself.
-Players need a roster entry to read `public/` (rules gate), so leaving roster
-intact is correct. The top-level lobby node (and public/) can linger
-indefinitely without creating a privacy or cost problem at typical usage scales.
-
-**Future option:** A Cloud Function with a daily cleanup sweep could delete
-ended lobbies older than N hours using a timestamp field. Not implemented —
-the added complexity isn't justified until lobby volume becomes a concern.
-
-## The privacy chokepoint
-
-All writes outside `storyteller/` go through `writeProjections` in
-`sync.ts`. There must be no other call site that touches `public/...`,
-`player/{...}/...`, or `roster/{...}` *except* the join-protocol paths
-described above.
-
-The `sync.test.ts` suite asserts this is true at the unit-test layer by
-inspecting `MemoryRoomBackend.writeLog`. Adding a new sync write *without*
-adding it to the test suite is a code-review-blocking change.
+The protocol intentionally does not address role-deception, night-order,
+setup-analyzer, custom-script, or visual/mobile findings from later audit
+phases.

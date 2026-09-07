@@ -343,17 +343,19 @@ beforeEach(() => {
 describe("joinLobby", () => {
   it("knocks and enters 'waiting' for an active lobby", async () => {
     const b = new MemoryRoomBackend();
-    await joinLobby(b, "ABCD", "uid-bob", "Bob");
+    await b.set("lobbies/ABCD2345/session", { version: 2, id: "test-session", state: "active" });
+    await joinLobby(b, "ABCD2345", "uid-bob", "Bob");
     const ps = usePlayerStore.getState();
     expect(ps.status).toBe("waiting");
-    expect(ps.code).toBe("ABCD");
+    expect(ps.code).toBe("ABCD2345");
     expect(ps.requestedName).toBe("Bob");
   });
 
   it("surfaces an emulator/rules rejection without installing a joined session", async () => {
     const b = new MemoryRoomBackend();
     b.setIfAbsent = async () => { throw new Error("PERMISSION_DENIED"); };
-    await joinLobby(b, "ABCD", "uid-bob", "Bob");
+    await b.set("lobbies/ABCD2345/session", { version: 2, id: "test-session", state: "active" });
+    await joinLobby(b, "ABCD2345", "uid-bob", "Bob");
     const ps = usePlayerStore.getState();
     expect(ps.status).toBe("error");
     expect(ps.code).toBeNull();

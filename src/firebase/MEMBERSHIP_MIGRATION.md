@@ -14,10 +14,11 @@ performed by this implementation.
 | `public` | Existing public projection | ST only | ST, pending request UIDs, seated UIDs |
 | `player/{playerId}` | Existing private projection | ST only | ST or a UID bound to exactly this player ID in this lobby |
 
-Requests may be created only when an owner exists, `public/status` is not
-`ended`, and the requesting UID is not already seated. Absence of a status
-continues to mean active. Request cancellation remains possible after end.
-No expiry, new lifecycle state machine, or presence-rule redesign is included.
+Requests may be created only when an owner exists, the version-2 session is
+active, and the requesting UID is not already seated. The Phase-4 session
+record, writer lease, monotonic write fence, durable outcomes, and presence
+parent authorization are part of the coordinated protocol; legacy lobbies do
+not receive an implicit upgrade.
 
 `seatPlayer` atomically removes the request, writes the binding, and writes the
 private projection when supplied. A null projection preserves the existing
@@ -37,7 +38,8 @@ downloaded data cannot be recalled from a device.
    client. Do not deploy the new client while old rules remain active.
 4. Clear persisted Storyteller/player lobby sessions on participating devices,
    reload the updated client, and create fresh lobby codes. Old code/session
-   reuse is unsupported; the separate new-game lifecycle finding is deferred.
+   reuse is unsupported; every new game gets a new local identity and a new
+   multiplayer session when the Storyteller explicitly goes live.
 5. Resume service and verify request → manual seating → private read using the
    updated clients. Re-run `npm run test:rules` before deployment.
 
@@ -57,13 +59,11 @@ replacement, and a multi-path request-plus-roster attack.
 
 ## Scope intentionally deferred
 
-The current seat UI still makes a local assignment before remote acknowledgement;
-undo/removal are not connected to membership revocation (AUD-006/AUD-007).
-The revocation helper establishes the tested authorization operation without
-rewriting those flows. Reject/Leave UI and retry/session handling remain their
-existing behavior (AUD-009); the request cancellation helper and rules are ready
-for a later UI pass. Parent presence reads (AUD-008), new-game/end-game races
-(AUD-005/AUD-010), and all gameplay/data/style findings are unchanged.
+The Phase-3 seat/revoke commands remain Firebase-first and membership changes
+remain outside generic undo. Phase 4 adds the explicit join/reconnect/reject
+handshake, app-level sync ownership, ordered end operation, bounded retries,
+single-writer lease, and parent presence read. Gameplay/data/style findings
+outside these lifecycle concerns remain unchanged.
 
 The dedicated rules command fails if startup fails, setup cannot connect, no
 tests execute, any assertion fails, or any test is skipped/pending/todo. Ordinary

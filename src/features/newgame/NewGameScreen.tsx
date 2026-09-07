@@ -8,8 +8,12 @@ import { RolePickerPanel } from "./RolePickerPanel";
 import { ImportPanel } from "./ImportPanel";
 import { MIN_PLAYERS } from "@/data/setupCounts";
 import type { RoleId, Script } from "@/stores/types";
+import { closeMultiplayerSession } from "@/firebase/storytellerSync";
+import { lifecycleMessage } from "@/firebase/lifecycle";
 
 export function NewGameScreen() {
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
   const setView = useStorytellerStore((s) => s.setView);
   const newGame = useStorytellerStore((s) => s.newGame);
   const customScripts = useStorytellerStore((s) => s.customScripts);
@@ -58,7 +62,8 @@ export function NewGameScreen() {
     );
   };
 
-  const handleStart = () => {
+  const handleStart = async () => {
+    if (starting) return;
     if (!activeScript) return;
     if (
       game &&
@@ -66,12 +71,18 @@ export function NewGameScreen() {
     ) {
       return;
     }
-    newGame(activeScript.id, {
+    setStarting(true);
+    setStartError(null);
+    try {
+      await closeMultiplayerSession();
+      newGame(activeScript.id, {
       plannedPlayerCount: playerCount,
       plannedRoles: rolePool,
       plannedFabled,
       plannedLorics,
-    });
+      });
+    } catch (error) { setStartError(lifecycleMessage(error)); }
+    finally { setStarting(false); }
   };
 
   return (
@@ -142,12 +153,13 @@ export function NewGameScreen() {
 
       {/* Bottom action bar */}
       <footer className="ng-footer">
+        {startError && <p role="alert">{startError}</p>}
         <button className="btn" onClick={() => setView("home")}>
           Cancel
         </button>
         <button
           className="btn btn-gold ng-start-btn"
-          disabled={!activeScript}
+          disabled={!activeScript || starting}
           onClick={handleStart}
         >
           Start Game

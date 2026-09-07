@@ -61,6 +61,7 @@ export type AddScriptResult = { ok: true } | { ok: false; error: string };
 export type LobbyConnection = {
   code: string;
   uid: string;
+  sessionId?: string;
   status: "live" | "reconnecting";
 };
 
@@ -169,7 +170,7 @@ const patchPlayer = (
 const CLEAN_STATE = { game: null, view: "home" as const, undoStack: [] as never[], customScripts: {}, lobby: null };
 
 export function migrateStoreState(state: unknown, fromVersion: number): unknown {
-  const s = state as { game?: Record<string, unknown>; undoStack?: unknown[] };
+  const s = state as { game?: Record<string, unknown>; undoStack?: unknown[]; lobby?: unknown };
   if (fromVersion < 2) {
     if (s.game && !s.game.nightProgress) s.game.nightProgress = {};
     if (s.undoStack) {
@@ -241,6 +242,11 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
     }
   }
 
+  if (fromVersion < 8 && s?.lobby) {
+    s.lobby = null;
+    s.undoStack = [];
+    if (s.game) { s.game.code = ""; s.game.storytellerUid = "local"; }
+  }
   const check = StorytellerStateSchema.safeParse(state);
   if (!check.success) {
     // eslint-disable-next-line no-console
@@ -293,7 +299,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           plannedPlayerCount: count,
           pendingPlayers: {},
         };
-        set({ game, view: "game", undoStack: [], selectedPlayerId: null });
+        set({ game, lobby: null, pendingKnocks: [], view: "game", undoStack: [], selectedPlayerId: null });
       },
 
       dealRolePool: () => {
@@ -357,7 +363,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       selectPlayer: (id) => set({ selectedPlayerId: id }),
 
-      setLobby: (lobby) => set({ lobby }),
+      setLobby: (lobby) => set(state => ({ lobby, game: state.game && lobby ? { ...state.game, code: lobby.code, storytellerUid: lobby.uid } : state.game, undoStack: [] })),
 
       setLobbyStatus: (status) => {
         const { lobby } = get();
@@ -892,7 +898,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
     }),
     {
       name: "new-blood-st",
-      version: 7,
+      version: 8,
       storage: createJSONStorage(() => localStorage),
       migrate: migrateStoreState,
       partialize: (s) => ({

@@ -5,6 +5,8 @@ import { resolve } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest";
 import type { Database } from "firebase/database";
 import { FirebaseRoomBackend } from "./firebaseBackend";
+import type { Json } from "./backend";
+import { SessionWriter } from "./writer";
 import {
   cancelJoinRequest,
   createLobby,
@@ -37,12 +39,28 @@ describe("Firebase RTDB membership authorization", () => {
   const path = (suffix: string) => "lobbies/" + code + "/" + suffix;
   const db = (uid: string) => env.authenticatedContext(uid).database();
   // The modular SDK unwraps compat instances provided by rules-unit-testing.
-  const backend = (uid: string) => new FirebaseRoomBackend(db(uid) as unknown as Database);
+  let revision = 0;
+  // Existing membership scenarios submit ST mutations with a valid lease
+  // receipt. Unauthorized/player writes still use the unwrapped SDK.
+  class FixtureWriter extends FirebaseRoomBackend {
+    async set(target: string, value: Json) {
+      if (target.endsWith('/session')) return super.set(target, value);
+      return this.update({ [target]: value });
+    }
+    async update(updates: Record<string, Json>) {
+      return super.update({ ...updates, [path('writeGuard')]: { token: 'fixture-writer', revision: ++revision } });
+    }
+  }
+  const backend = (uid: string) => uid === st ? new FixtureWriter(db(uid) as unknown as Database) : new FirebaseRoomBackend(db(uid) as unknown as Database);
   const ref = (uid: string, suffix: string) => db(uid).ref(path(suffix));
   async function seed() {
+    revision = 0;
     await env.withSecurityRulesDisabled(async (ctx) => {
       await ctx.database().ref("lobbies/" + code).set({
         storytellerUid: st,
+        session: { version: 2, id: "test-session", state: "active" },
+        writer: { token: "fixture-writer", expiresAt: Date.now() + 30_000 },
+        writeGuard: { token: "fixture-writer", revision: 0 },
         roster: { [alice]: "p-alice" },
         public: { code, scriptId: "tb", phase: "setup", day: 0 },
         player: {
@@ -202,7 +220,7 @@ describe("Firebase RTDB membership authorization", () => {
 
   test("player revocation clears both bindings atomically, leaves Bob alone, and is idempotent", async () => {
     await seed();
-    await ref(st, "roster/" + bob).set("p-bob");
+    await backend(st).set(path("roster/" + bob), "p-bob");
 
     await revokePlayerMembership(backend(st), code, "p-alice");
     expect((await ref(st, "roster/" + alice).once("value")).exists()).toBe(false);
@@ -257,7 +275,7 @@ describe("Firebase RTDB membership authorization", () => {
   test("ended lobby denies new requests but permits cancellation", async () => {
     await seed();
     await knockOnLobby(backend(bob), code, bob, "Bob");
-    await ref(st, "public/status").set("ended");
+    await backend(st).set(path("public/status"), "ended");
     await assertFails(ref("uid-new", "joinRequests/uid-new").set("New"));
     await cancelJoinRequest(backend(bob), code, bob);
     await assertFails(ref(bob, "joinRequests/" + bob).set("Bob"));
@@ -290,7 +308,7 @@ describe("Firebase RTDB membership authorization", () => {
 
   test("Storyteller writes private data; players cannot read ST data or write private data", async () => {
     await seed();
-    await assertSucceeds(ref(st, "storyteller/notes").set("updated"));
+    await assertSucceeds(backend(st).set(path("storyteller/notes"), "updated"));
     await assertFails(ref(alice, "storyteller").once("value"));
     await assertFails(ref(alice, "storyteller/notes").set("attack"));
     await assertFails(ref(alice, "player/p-alice").set({ shownRole: "imp" }));
@@ -305,5 +323,105 @@ describe("Firebase RTDB membership authorization", () => {
     await assertFails(guest.ref("lobbies/NEW23456/storytellerUid").set("guest"));
     await assertFails(guest.ref(path("player/p-alice")).once("value"));
     await assertFails(guest.ref(path("public")).once("value"));
+  });
+
+  test("Storyteller reads the exact presence parent while players cannot enumerate it", async () => {
+    await seed();
+    await ref(alice, "presence/" + alice).set({ online: true, lastSeen: Date.now() });
+    await assertSucceeds(ref(st, "presence").once("value"));
+    await assertSucceeds(ref(alice, "presence/" + alice).once("value"));
+    await assertFails(ref(alice, "presence").once("value"));
+    await assertFails(ref(bob, "presence/" + alice).once("value"));
+  });
+
+  test("session metadata is readable before joining but only the owner can create it", async () => {
+    await seed();
+    await assertSucceeds(ref(bob, "session").once("value"));
+    await assertFails(ref(bob, "session/state").set("ended"));
+    await assertFails(ref(st, "session").remove());
+    await assertFails(backend(st).set(path("session"), { version: 2, id: "different", state: "active" }));
+  });
+
+  test("legacy lobbies without lifecycle metadata cannot accept joins or private reads", async () => {
+    await seed();
+    await env.withSecurityRulesDisabled(async ctx => { await ctx.database().ref(path("session")).remove(); });
+    await assertFails(ref(bob, "joinRequests/" + bob).set("Bob"));
+    await assertFails(ref(alice, "player/p-alice").once("value"));
+  });
+
+  test("rejected UID observes its outcome but cannot remove it or create another request", async () => {
+    await seed();
+    await knockOnLobby(backend(bob), code, bob, "Bob");
+    await backend(st).update({ [path("outcomes/" + bob)]: "rejected", [path("joinRequests/" + bob)]: null });
+    expect((await ref(bob, "outcomes/" + bob).once("value")).val()).toBe("rejected");
+    await assertFails(ref(bob, "outcomes/" + bob).remove());
+    await assertFails(ref(bob, "joinRequests/" + bob).set("Bob"));
+    await assertFails(ref(alice, "outcomes/" + bob).once("value"));
+  });
+
+  test("leaving is a request; players cannot revoke their own authoritative binding", async () => {
+    await seed();
+    await assertSucceeds(ref(alice, "leaveRequests/" + alice).set(true));
+    await assertFails(ref(bob, "leaveRequests/" + alice).set(true));
+    await assertFails(ref(alice, "roster/" + alice).remove());
+    await revokePlayerMembership(backend(st), code, "p-alice");
+    await assertFails(ref(alice, "player/p-alice").once("value"));
+    expect((await ref(alice, "leaveRequests/" + alice).once("value")).exists()).toBe(false);
+  });
+
+  test("a second writer is denied until expiry, then the old token is fenced", async () => {
+    await seed();
+    const raw = new FirebaseRoomBackend(db(st) as unknown as Database);
+    const second = new SessionWriter(raw, code, "test-session");
+    try {
+      await expect(second.start()).rejects.toThrow(/Another Storyteller/);
+      await env.withSecurityRulesDisabled(async ctx => { await ctx.database().ref(path("writer/expiresAt")).set(0); });
+      await second.start();
+      await second.set(path("storyteller/notes"), "new writer");
+      await assertFails(backend(st).update({ [path("storyteller/notes")]: "stale writer" }));
+      expect((await ref(st, "storyteller/notes").once("value")).val()).toBe("new writer");
+    } finally { await second.dispose(); }
+  });
+
+  test("a fresh session can acquire its first writer and publish with no previous receipt", async () => {
+    const raw = new FirebaseRoomBackend(db(st) as unknown as Database);
+    await createLobby(raw, st, { codeGenerator: () => code });
+    const metadata = (await ref(st, "session").once("value")).val();
+    const writer = new SessionWriter(raw, code, metadata.id);
+    try { await writer.start(); await writer.set(path("public"), { code, phase: "setup" }); }
+    finally { await writer.dispose(); }
+  });
+
+  test("ending atomically revokes all access and rejects stale projections and joins", async () => {
+    await seed();
+    await env.withSecurityRulesDisabled(async ctx => { await ctx.database().ref(path("writer/expiresAt")).set(0); });
+    const raw = new FirebaseRoomBackend(db(st) as unknown as Database);
+    const writer = new SessionWriter(raw, code, "test-session");
+    try {
+      await writer.start();
+      await writer.close(["p-alice", "p-bob"]);
+      expect((await ref(bob, "session/state").once("value")).val()).toBe("ended");
+      expect((await ref(st, "roster").once("value")).exists()).toBe(false);
+      await assertFails(ref(alice, "player/p-alice").once("value"));
+      await assertFails(ref(bob, "joinRequests/" + bob).set("Bob"));
+      await assertFails(raw.update({ [path("public")]: { phase: "day" }, [path("writeGuard")]: { token: writer.token, revision: 100 } }));
+      await assertFails(raw.set(path("session/state"), "active"));
+      await assertFails(raw.set(path("public"), { phase: "day" }));
+    } finally { await writer.dispose(); }
+  });
+
+  test("writer fields deny other UIDs, malformed leases, and unguarded owner writes", async () => {
+    await seed();
+    await assertFails(ref(bob, "writer").set({ token: "attack", expiresAt: Date.now() + 1000 }));
+    await assertFails(ref(st, "writer").set({ token: "fixture-writer", expiresAt: Date.now() + 100_000 }));
+    await assertFails(ref(st, "public").set({ phase: "day" }));
+    await assertFails(ref(st, "roster/" + bob).set("p-bob"));
+  });
+
+  test("an earlier revision cannot overwrite a later projection", async () => {
+    await seed();
+    await backend(st).set(path("public/day"), 1);
+    await assertFails(db(st).ref().update({ [path("public/day")]: 0, [path("writeGuard")]: { token: "fixture-writer", revision: 1 } }));
+    expect((await ref(st, "public/day").once("value")).val()).toBe(1);
   });
 });

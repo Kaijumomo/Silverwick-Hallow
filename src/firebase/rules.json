@@ -7,42 +7,98 @@
           ".write": "auth != null && newData.val() === auth.uid && ((!data.exists() && !data.parent().exists()) || data.val() === auth.uid)",
           ".validate": "newData.isString() && newData.val() === auth.uid"
         },
+        "session": {
+          ".read": "auth != null",
+          ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid && newData.exists() && ((!data.exists() && newData.child('state').val() === 'active') || (auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('writer/expiresAt').val() > now && newData.parent().child('writeGuard/token').val() === root.child('lobbies').child($code).child('writer/token').val() && (!root.child('lobbies').child($code).child('writeGuard').exists() || newData.parent().child('writeGuard/revision').val() > root.child('lobbies').child($code).child('writeGuard/revision').val()) && data.child('id').val() === newData.child('id').val() && newData.child('state').val() === 'ended'))",
+          ".validate": "newData.hasChildren(['version','id','state']) && newData.child('version').val() === 2 && newData.child('id').isString() && newData.child('id').val().length > 0 && (newData.child('state').val() === 'active' || newData.child('state').val() === 'ended')",
+          "version": {},
+          "id": {},
+          "state": {},
+          "$other": {
+            ".validate": false
+          }
+        },
+        "writer": {
+          ".read": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid",
+          ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid && newData.exists() && (root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' || newData.child('expiresAt').val() === 0) && (!data.exists() || data.child('token').val() === newData.child('token').val() || data.child('expiresAt').val() <= now)",
+          ".validate": "newData.hasChildren(['token','expiresAt']) && newData.child('token').isString() && newData.child('token').val().length > 0 && newData.child('expiresAt').isNumber() && newData.child('expiresAt').val() >= 0 && newData.child('expiresAt').val() <= now + 35000",
+          "token": {},
+          "expiresAt": {},
+          "$other": {
+            ".validate": false
+          }
+        },
+        "writeGuard": {
+          ".read": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid",
+          ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('writer/expiresAt').val() > now && newData.parent().child('writeGuard/token').val() === root.child('lobbies').child($code).child('writer/token').val() && (!root.child('lobbies').child($code).child('writeGuard').exists() || newData.parent().child('writeGuard/revision').val() > root.child('lobbies').child($code).child('writeGuard/revision').val())",
+          ".validate": "newData.hasChildren(['token','revision']) && newData.child('token').isString() && newData.child('revision').isNumber() && newData.child('revision').val() % 1 === 0 && newData.child('revision').val() > 0",
+          "token": {},
+          "revision": {},
+          "$other": {
+            ".validate": false
+          }
+        },
         "joinRequests": {
           ".read": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid",
+          ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('writer/expiresAt').val() > now && newData.parent().child('writeGuard/token').val() === root.child('lobbies').child($code).child('writer/token').val() && (!root.child('lobbies').child($code).child('writeGuard').exists() || newData.parent().child('writeGuard/revision').val() > root.child('lobbies').child($code).child('writeGuard/revision').val())",
           "$uid": {
             ".read": "auth != null && ($uid === auth.uid || root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid)",
-            ".write": "auth != null && ((root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid && !newData.exists()) || ($uid === auth.uid && (!newData.exists() || (!data.exists() && root.child('lobbies').child($code).child('storytellerUid').isString() && root.child('lobbies').child($code).child('public').child('status').val() !== 'ended' && !root.child('lobbies').child($code).child('roster').child(auth.uid).exists()))))",
+            ".write": "auth != null && $uid === auth.uid && (!newData.exists() || (!data.exists() && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('public/status').val() !== 'ended' && !root.child('lobbies').child($code).child('roster').child(auth.uid).exists() && !root.child('lobbies').child($code).child('outcomes').child(auth.uid).exists()))",
             ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 20 && !newData.val().beginsWith(' ') && !newData.val().endsWith(' ') && !newData.val().contains('\\n') && !newData.val().contains('\\r') && !newData.val().contains('\\t')"
           }
         },
         "roster": {
           ".read": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid",
+          ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('writer/expiresAt').val() > now && newData.parent().child('writeGuard/token').val() === root.child('lobbies').child($code).child('writer/token').val() && (!root.child('lobbies').child($code).child('writeGuard').exists() || newData.parent().child('writeGuard/revision').val() > root.child('lobbies').child($code).child('writeGuard/revision').val())",
           "$uid": {
             ".read": "auth != null && (root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid || $uid === auth.uid)",
-            ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid",
             ".validate": "newData.isString() && newData.val().length > 0"
           }
         },
+        "outcomes": {
+          ".read": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid",
+          ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('writer/expiresAt').val() > now && newData.parent().child('writeGuard/token').val() === root.child('lobbies').child($code).child('writer/token').val() && (!root.child('lobbies').child($code).child('writeGuard').exists() || newData.parent().child('writeGuard/revision').val() > root.child('lobbies').child($code).child('writeGuard/revision').val())",
+          "$uid": {
+            ".read": "auth != null && $uid === auth.uid",
+            ".validate": "newData.val() === 'rejected' || newData.val() === 'revoked'"
+          }
+        },
+        "leaveRequests": {
+          ".read": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid",
+          ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('writer/expiresAt').val() > now && newData.parent().child('writeGuard/token').val() === root.child('lobbies').child($code).child('writer/token').val() && (!root.child('lobbies').child($code).child('writeGuard').exists() || newData.parent().child('writeGuard/revision').val() > root.child('lobbies').child($code).child('writeGuard/revision').val())",
+          "$uid": {
+            ".read": "auth != null && $uid === auth.uid",
+            ".write": "auth != null && $uid === auth.uid && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('roster').child(auth.uid).exists() && newData.val() === true",
+            ".validate": "newData.val() === true"
+          }
+        },
         "public": {
-          ".read": "auth != null && (root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid || root.child('lobbies').child($code).child('roster').child(auth.uid).exists() || root.child('lobbies').child($code).child('joinRequests').child(auth.uid).exists())",
-          ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid"
+          ".read": "auth != null && (root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid || (root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && (root.child('lobbies').child($code).child('roster').child(auth.uid).exists() || root.child('lobbies').child($code).child('joinRequests').child(auth.uid).exists())))",
+          ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('writer/expiresAt').val() > now && newData.parent().child('writeGuard/token').val() === root.child('lobbies').child($code).child('writer/token').val() && (!root.child('lobbies').child($code).child('writeGuard').exists() || newData.parent().child('writeGuard/revision').val() > root.child('lobbies').child($code).child('writeGuard/revision').val())",
+          ".validate": "!data.child('status').exists() || data.child('status').val() !== 'ended' || newData.child('status').val() === 'ended'"
         },
         "player": {
+          ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('writer/expiresAt').val() > now && newData.parent().child('writeGuard/token').val() === root.child('lobbies').child($code).child('writer/token').val() && (!root.child('lobbies').child($code).child('writeGuard').exists() || newData.parent().child('writeGuard/revision').val() > root.child('lobbies').child($code).child('writeGuard/revision').val())",
           "$playerId": {
-            ".read": "auth != null && (root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid || root.child('lobbies').child($code).child('roster').child(auth.uid).val() === $playerId)",
-            ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid"
+            ".read": "auth != null && (root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid || (root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('roster').child(auth.uid).val() === $playerId))"
           }
         },
         "presence": {
+          ".read": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid",
           "$uid": {
-            ".read": "auth != null && (root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid || root.child('lobbies').child($code).child('roster').child(auth.uid).exists())",
-            ".write": "auth != null && $uid === auth.uid",
-            ".validate": "newData.hasChildren(['online', 'lastSeen'])"
+            ".read": "auth != null && $uid === auth.uid",
+            ".write": "auth != null && $uid === auth.uid && (!newData.exists() || newData.child('online').val() === false || (root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && (root.child('lobbies').child($code).child('roster').child(auth.uid).exists() || root.child('lobbies').child($code).child('joinRequests').child(auth.uid).exists())))",
+            ".validate": "newData.hasChildren(['online','lastSeen']) && newData.child('online').isBoolean() && newData.child('lastSeen').isNumber()"
           }
         },
         "storyteller": {
           ".read": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid",
-          ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid"
+          ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('writer/expiresAt').val() > now && newData.parent().child('writeGuard/token').val() === root.child('lobbies').child($code).child('writer/token').val() && (!root.child('lobbies').child($code).child('writeGuard').exists() || newData.parent().child('writeGuard/revision').val() > root.child('lobbies').child($code).child('writeGuard/revision').val())"
+        },
+        "checkpoint": {
+          ".read": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid",
+          ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('writer/expiresAt').val() > now && newData.parent().child('writeGuard/token').val() === root.child('lobbies').child($code).child('writer/token').val() && (!root.child('lobbies').child($code).child('writeGuard').exists() || newData.parent().child('writeGuard/revision').val() > root.child('lobbies').child($code).child('writeGuard/revision').val())",
+          ".validate": "newData.isString()"
         }
       }
     }

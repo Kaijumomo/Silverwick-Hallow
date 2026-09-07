@@ -46,6 +46,7 @@ export function initFirebase(cfg: FirebaseAppConfig): {
 }
 
 export async function ensureAuthUid(auth: Auth): Promise<string> {
+  await auth.authStateReady();
   if (auth.currentUser?.uid) {
     cachedUid = auth.currentUser.uid;
     return cachedUid;
@@ -61,11 +62,19 @@ export async function ensureAuthUid(auth: Auth): Promise<string> {
 export class FirebaseRoomBackend implements RoomBackend {
   constructor(private db: Database) {}
 
+  async transaction(path: string, change: (current: unknown) => Json | undefined): Promise<boolean> {
+    return (await runTransaction(ref(this.db, path), change, { applyLocally: false })).committed;
+  }
+
   async set(path: string, value: Json): Promise<void> {
     await rtdbSet(ref(this.db, path), value);
   }
 
   async get(path: string): Promise<unknown> {
+    // .info nodes are maintained by the SDK, not server REST reads.
+    if (path.startsWith(".info/")) return new Promise((resolve, reject) => {
+      onValue(ref(this.db, path), snapshot => resolve(snapshot.val()), reject, { onlyOnce: true });
+    });
     const snap = await rtdbGet(ref(this.db, path));
     if (!snap.exists()) return undefined;
     return snap.val();

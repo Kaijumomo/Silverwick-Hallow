@@ -140,6 +140,7 @@ describe("Firebase snapshot decoders", () => {
 describe("public Firebase boundary", () => {
   it("handles the original sparse lobby snapshot without exposing an unsafe model", async () => {
     const backend = new MemoryRoomBackend();
+    await backend.set("lobbies/ROOM/session", { version: 2, id: "test", state: "active" });
     await backend.set(publicPath("ROOM"), { phase: "setup", scriptId: "tb", day: 0 } as never);
     const { result } = renderHook(() => usePublicLobby(backend, "ROOM"));
 
@@ -156,6 +157,7 @@ describe("public Firebase boundary", () => {
 
   it("reports malformed data without crashing and recovers when a valid snapshot arrives", async () => {
     const backend = new MemoryRoomBackend();
+    await backend.set("lobbies/ROOM/session", { version: 2, id: "test", state: "active" });
     await backend.set(publicPath("ROOM"), { ...validPublic(), players: "not-a-map" } as never);
     const { result } = renderHook(() => usePublicLobby(backend, "ROOM"));
 
@@ -171,6 +173,7 @@ describe("public Firebase boundary", () => {
 
   it("keeps listening through a transient invalid snapshot", async () => {
     const backend = new MemoryRoomBackend();
+    await backend.set("lobbies/ROOM/session", { version: 2, id: "test", state: "active" });
     const statuses: string[] = [];
     const off = subscribeToPublicLobby(backend, "ROOM", (_value, snapshot) => statuses.push(snapshot.status));
 
@@ -184,6 +187,7 @@ describe("public Firebase boundary", () => {
 
   it("maps read failures to a controlled connection error", async () => {
     const backend = new MemoryRoomBackend();
+    await backend.set("lobbies/ROOM/session", { version: 2, id: "test", state: "active" });
     const seen: string[] = [];
     backend.subscribe = (_path, _cb, onError) => {
       onError?.(new Error("offline"));

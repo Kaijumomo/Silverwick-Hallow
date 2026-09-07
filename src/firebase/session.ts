@@ -31,7 +31,13 @@ export function getActiveUid(): string {
  * Idempotent — safe to call repeatedly. Lazy-loads the Firebase SDK on
  * first call so the SDK is excluded from the initial bundle.
  */
-export async function connectFirebase(): Promise<{ backend: RoomBackend; uid: string }> {
+let connecting: Promise<{ backend: RoomBackend; uid: string }> | null = null;
+export function connectFirebase(): Promise<{ backend: RoomBackend; uid: string }> {
+  if (!connecting) connecting = establishFirebase().finally(() => { connecting = null; });
+  return connecting;
+}
+
+async function establishFirebase(): Promise<{ backend: RoomBackend; uid: string }> {
   const cfg = loadFirebaseConfig();
   if (!cfg) {
     throw new Error("Firebase is not configured.");

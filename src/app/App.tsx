@@ -8,6 +8,7 @@ import { PlayerScreen } from "@/features/player/PlayerScreen";
 import { PublicDisplayScreen } from "@/features/publicDisplay/PublicDisplayScreen";
 import { isFirebaseConfigured } from "@/firebase/config";
 import { connectFirebase } from "@/firebase/session";
+import { StorytellerSession } from "@/firebase/StorytellerSession";
 
 function readJoinCodeFromUrl(): string | null {
   if (typeof window === "undefined") return null;
@@ -61,6 +62,7 @@ export function App() {
   }
   return (
     <div className="app">
+      <StorytellerSession />
       {migrationResetBanner && (
         <div className="error-list lobby-error" role="alert" style={{ position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 9999, maxWidth: 480 }}>
           <strong>Save data reset</strong>

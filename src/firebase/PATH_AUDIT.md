@@ -14,9 +14,14 @@ roster entries are not evidence of valid membership.
 | `public` | Projections, player/public hooks | ST, own pending request, or own roster membership | ST only |
 | `player/{playerId}` | Projections, `seatPlayer`, player hook | ST or exact same-lobby UID→playerId binding | ST only |
 | `storyteller` | Projections | ST | ST only |
-| `presence/{uid}` | Existing heartbeat | ST or roster member | Same UID, existing online/lastSeen validation; unchanged |
+| `session` | Lifecycle identity/state | Authenticated clients | Owner creates active v2 record; writer-fenced owner transitions it to ended |
+| `writer` / `writeGuard` | Single-writer lease and monotonic fence | Owner | Lease token/revision rules reject stale tabs and revisions |
+| `outcomes/{uid}` | Durable rejected/revoked result | That UID | Storyteller writer only |
+| `leaveRequests/{uid}` | Seated player's departure request | That UID and ST | Seated UID creates; Storyteller consumes |
+| `presence` / `presence/{uid}` | Presence aggregate and heartbeat | ST parent / own child | ST reads parent; each UID reads/writes only itself |
 
-The parent presence subscription issue is still AUD-008 and is not fixed here.
+The Storyteller now subscribes to the exact `presence` parent authorized by the
+rules (AUD-008). Player reads remain limited to their own child.
 
 ## Authorization invariant
 

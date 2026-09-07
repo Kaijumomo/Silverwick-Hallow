@@ -10,12 +10,12 @@ import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
 import { connectFirebase } from "@/firebase/session";
 import { isFirebaseConfigured } from "@/firebase/config";
-import { createLobby, endLobby, formatCode } from "@/firebase/lobby";
+import { createLobby, formatCode } from "@/firebase/lobby";
 import { revokePlayerAndCommit } from "@/firebase/membershipCommands";
-import { useStorytellerSync } from "@/firebase/storytellerSync";
+import { closeMultiplayerSession, useSessionRuntime } from "@/firebase/storytellerSync";
 import { FirebaseConfigDialog } from "@/features/firebase/FirebaseConfigDialog";
 import { friendlyFirebaseError, type FriendlyError } from "@/firebase/errors";
-import type { RoomBackend } from "@/firebase/backend";
+import { requireActiveSession, lifecycleMessage } from "@/firebase/lifecycle";
 
 const PHASE_LABEL: Record<string, string> = {
   setup: "Setup",
@@ -41,15 +41,14 @@ export function GameScreen() {
   const [almanacOpen, setAlmanacOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
   const [goLiveError, setGoLiveError] = useState<FriendlyError | null>(null);
-  const [syncError, setSyncError] = useState<string | null>(null);
-  const [backend, setBackend] = useState<RoomBackend | null>(null);
+  const { backend, online: onlineMap, pending: pendingOnlineCount, presence } = useSessionRuntime();
+  const [ending, setEnding] = useState(false);
+  const [goingLive, setGoingLive] = useState(false);
   const [nightPanelOpen, setNightPanelOpen] = useState(false);
   const [setupPanelOpen, setSetupPanelOpen] = useState(false);
   const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
   const [copyToast, setCopyToast] = useState<string | null>(null);
-  const [onlineCount, setOnlineCount] = useState(0);
-  const [onlineMap, setOnlineMap] = useState<Record<string, boolean>>({});
-  const [pendingOnlineCount, setPendingOnlineCount] = useState(0);
+  const onlineCount = Object.values(onlineMap).filter(Boolean).length;
   const closeOverflow = () => setOverflowMenuOpen(false);
 
   const copyLobbyCode = async () => {
@@ -95,49 +94,26 @@ export function GameScreen() {
     if (game?.phase === "setup") setSetupPanelOpen(true);
   }, [game?.phase]);
 
-  // Re-establish backend on mount when there's an existing lobby (reconnect path).
-  useEffect(() => {
-    let mounted = true;
-    if (!lobby || backend) return;
-    if (!isFirebaseConfigured()) return;
-    (async () => {
-      try {
-        const { backend: b } = await connectFirebase();
-        if (mounted) setBackend(b);
-      } catch (e) {
-        if (mounted) {
-          // eslint-disable-next-line no-console
-          console.error("[reconnect]", e instanceof Error ? e.message : e);
-          setGoLiveError(friendlyFirebaseError(e, "st"));
-        }
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [lobby, backend]);
-
-  useStorytellerSync(backend, setSyncError, (online, pendingCount) => {
-    setOnlineCount(Object.values(online).filter(Boolean).length);
-    setOnlineMap(online);
-    setPendingOnlineCount(pendingCount);
-  });
-
   const goLive = async () => {
+    if (goingLive) return;
+    setGoingLive(true);
     setGoLiveError(null);
     if (!isFirebaseConfigured()) {
       setConfigOpen(true);
+      setGoingLive(false);
       return;
     }
     try {
       const { backend: b, uid } = await connectFirebase();
       const { code } = await createLobby(b, uid);
-      setBackend(b);
-      setLobby({ code, uid, status: "live" });
+      const session = await requireActiveSession(b, code);
+      setLobby({ code, uid, sessionId: session.id, status: "live" });
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error("[goLive]", e instanceof Error ? e.message : e);
       setGoLiveError(friendlyFirebaseError(e, "st"));
+    } finally {
+      setGoingLive(false);
     }
   };
 
@@ -182,7 +158,7 @@ export function GameScreen() {
           )}
           {lobby && playerCount > 0 && (
             <span className="label" title="Players online">
-              {onlineCount}/{playerCount} online
+              {presence === "ready" ? `${onlineCount}/${playerCount} online` : "Presence unknown"}
             </span>
           )}
           {pendingQueueCount > 0 && (
@@ -251,7 +227,7 @@ export function GameScreen() {
             </button>
           )}
           {!lobby && (
-            <button className="btn btn-sm" onClick={() => { closeOverflow(); goLive(); }} title="Create a Firebase lobby and start syncing">
+            <button className="btn btn-sm" disabled={goingLive} onClick={() => { closeOverflow(); void goLive(); }} title="Create a Firebase lobby and start syncing">
               Go live
             </button>
           )}
@@ -288,20 +264,14 @@ export function GameScreen() {
           </button>
           <button
             className="btn btn-sm btn-danger"
-            onClick={() => {
+            disabled={ending}
+            onClick={async () => {
               closeOverflow();
-              if (window.confirm("End this game and return to home?")) {
-                // Fire-and-forget: write status=ended to Firebase so players
-                // are redirected immediately. Don't await — the local state
-                // clears regardless of whether the network write succeeds.
-                if (backend && lobby) {
-                  endLobby(backend, lobby.code, game.seatOrder).catch((e) => {
-                    // eslint-disable-next-line no-console
-                    console.warn("[endLobby]", e instanceof Error ? e.message : e);
-                  });
-                }
-                endGame();
-              }
+              if (ending || !window.confirm("End this game and return to home?")) return;
+              setEnding(true);
+              try { await closeMultiplayerSession(); endGame(); }
+              catch (error) { setGoLiveError({ title: "Could not end lobby", message: lifecycleMessage(error) }); }
+              finally { setEnding(false); }
             }}
           >
             End game
@@ -380,18 +350,6 @@ export function GameScreen() {
             goLive();
           }}
         />
-      )}
-      {syncError && (
-        <div className="error-list lobby-error sync-error" role="alert">
-          <strong>Sync issue</strong>
-          <p>{syncError}</p>
-          <button
-            className="btn btn-sm"
-            onClick={() => setSyncError(null)}
-          >
-            dismiss
-          </button>
-        </div>
       )}
       {goLiveError && (
         <div className="error-list lobby-error" role="alert">
