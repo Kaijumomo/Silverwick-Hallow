@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { buildRegistry } from "@/data/roleRegistry";
 import { selectScriptById, useStorytellerStore } from "@/stores/storytellerStore";
-import { packetReadiness, previewPrivatePacket } from "@/stores/privatePackets";
+import { getPrivateInfoApplicability, packetReadiness, previewPrivatePacket } from "@/stores/privatePackets";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { publishPrivatePacket } from "@/firebase/privatePacketCommands";
 import { packetKey, usePacketDeliveryState } from "@/firebase/packetDeliveryState";
@@ -18,6 +18,8 @@ export function PrivatePacketPanel({ playerId }: { playerId: string }) {
   const script = game && selectScriptById(state, game.scriptId);
   if (!game || !p || p.isEmpty || !script) return null;
   const registry = buildRegistry(script);
+  const applicability = getPrivateInfoApplicability(p, registry);
+  if (!applicability.genericPacket) return null;
   const readiness = packetReadiness(p, game, registry);
   const key = packetKey(state.lobby?.code ?? "", playerId);
   const queued = delivery.queued[key];
@@ -26,8 +28,9 @@ export function PrivatePacketPanel({ playerId }: { playerId: string }) {
     && p.publishedPacket?.forDay === game.day && p.publishedPacket?.forPhase === game.phase
     && JSON.stringify(p.packetPreview.payload) === JSON.stringify(p.publishedPacket?.payload);
   const label = queued ? "Queued — awaiting server" : currentPublished ? "Published" : readiness.state === "ready" ? "Previewed — ready to publish" : readiness.state;
+  const title = applicability.fakeMinions ? "Fake Demon information" : applicability.bluffs && !applicability.simulatedInfo ? "Demon bluff delivery" : "Simulated information";
   return <section className="drawer-section" aria-label={`Private information for ${p.name}`}>
-    <h3 className="drawer-section-title">Private information · {p.name}</h3>
+    <h3 className="drawer-section-title">{title} · {p.name}</h3>
     <p role="status">{label}</p>
     {published && !currentPublished && <p className="behavior-help">Earlier information is published; a new draft or night requires review and publication.</p>}
     {!backend && p.publishedPacket && <p className="behavior-help">Saved publication — reconnect to verify.</p>}
@@ -35,13 +38,13 @@ export function PrivatePacketPanel({ playerId }: { playerId: string }) {
       <summary>Last published packet{p.publishedPacket.forPhase !== undefined ? ` · ${p.publishedPacket.forPhase} ${p.publishedPacket.forDay}` : ""}</summary>
       <PrivateInformation payload={p.publishedPacket.payload} showIdentity showBluffs />
     </details>}
-    <label>
+    {applicability.extraText && <label>
       Information to send
       <textarea className="textarea" rows={3} maxLength={4000} value={p.privateInfo?.extraText ?? ""}
         onChange={event => state.setPrivateText(playerId, event.target.value)} />
-    </label>
-    <p className="behavior-help">Bluffs and minion selections are configured in the player editor. Choose information manually; a simulated wake grants no real ability.</p>
-    <button className="btn btn-sm" onClick={() => { state.selectPlayer(playerId); state.setView("game"); }}>Edit player information</button>
+    </label>}
+    <p className="behavior-help">{applicability.fakeMinions ? "Configure fake Demon information in the player editor, then preview and publish it." : applicability.bluffs && !applicability.simulatedInfo ? "Configure Demon bluffs above, then preview and publish them." : "Choose simulated information manually; a simulated wake grants no real ability."}</p>
+    {(applicability.fakeMinions || applicability.bluffs) && <button className="btn btn-sm" onClick={() => { state.selectPlayer(playerId); state.setView("game"); }}>Edit player information</button>}
     <button className="btn btn-sm" disabled={!!queued || readiness.state === "not configured"} onClick={() => {
       try { state.previewPrivateInfo(playerId); setError(null); }
       catch (error) { setError(error instanceof Error ? error.message : "Preview failed."); }

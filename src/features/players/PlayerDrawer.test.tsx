@@ -2,10 +2,14 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { PlayerDrawer } from "./PlayerDrawer";
+import { roles } from "@/test/fixtures";
+import { troubleBrewing } from "@/data/scripts/troubleBrewing";
+
+const qaScript = { ...troubleBrewing, id: "qa", characters: [...troubleBrewing.characters, roles.marionette!, roles.lunatic!] };
 
 beforeEach(() => {
-  store.setState({ game: null, lobby: null, undoStack: [] });
-  store.getState().newGame("tb");
+  store.setState({ game: null, lobby: null, undoStack: [], customScripts: { qa: qaScript } });
+  store.getState().newGame("qa");
   store.getState().addPlayer("Alice");
 });
 afterEach(cleanup);
@@ -38,4 +42,68 @@ it("Drunk has explicit shown-role controls even before a behavior mode is select
   fireEvent.click(perception.getByRole("button", { name: "clear" }));
   expect(current().shownRole).toBeNull();
   expect(screen.getByText("Role not revealed yet")).toBeInTheDocument();
+});
+
+it("Drunk shown as Empath gets simulated information, not Demon/Minion controls", () => {
+  render(<Drawer />);
+  fireEvent.click(screen.getByRole("button", { name: "Drunk outsider" }));
+  const perception = within(screen.getByText("Behavior & deception").closest("section")!);
+  fireEvent.click(perception.getByRole("button", { name: "Empath townsfolk" }));
+  expect(screen.getByText("Simulated information · Alice")).toBeInTheDocument();
+  expect(screen.queryByText("Fake minions:")).toBeNull();
+  expect(screen.queryByText("Bluffs:")).toBeNull();
+  expect(screen.queryByText(/Fake Demon information/)).toBeNull();
+});
+
+it("Marionette shown as Fortune Teller gets simulated information, not Demon/Minion controls", () => {
+  render(<Drawer />);
+  fireEvent.click(screen.getByRole("button", { name: "Marionette minion" }));
+  const perception = within(screen.getByText("Behavior & deception").closest("section")!);
+  fireEvent.click(perception.getByRole("button", { name: "Fortune Teller townsfolk" }));
+  expect(screen.getByText("Simulated information · Alice")).toBeInTheDocument();
+  expect(screen.queryByText("Fake minions:")).toBeNull();
+  expect(screen.queryByText("Bluffs:")).toBeNull();
+});
+
+it("Lunatic shown as Imp retains fake Demon controls", () => {
+  render(<Drawer />);
+  fireEvent.click(screen.getByRole("button", { name: "Lunatic outsider" }));
+  const perception = within(screen.getByText("Behavior & deception").closest("section")!);
+  fireEvent.change(perception.getByLabelText("Mode:"), { target: { value: "fake_demon_behavior" } });
+  fireEvent.click(perception.getByRole("button", { name: "Imp demon" }));
+  expect(screen.getByText("Fake minions:")).toBeInTheDocument();
+  expect(screen.getByText("Bluffs:")).toBeInTheDocument();
+  expect(screen.getByText("Fake Demon information · Alice")).toBeInTheDocument();
+});
+
+it("normal players do not receive an unnecessary packet panel", () => {
+  render(<Drawer />);
+  fireEvent.click(screen.getByRole("button", { name: "Chef townsfolk" }));
+  expect(screen.queryByText(/Simulated information ·/)).toBeNull();
+  expect(screen.queryByText(/Demon bluff delivery ·/)).toBeNull();
+  expect(screen.queryByText("Information to send")).toBeNull();
+});
+
+it("normal Demon keeps the bluff editor without an extra freeform packet editor", () => {
+  render(<Drawer />);
+  fireEvent.click(screen.getByRole("button", { name: "Imp demon" }));
+  expect(screen.getByText("Demon bluffs (ST private)")).toBeInTheDocument();
+  expect(screen.getByText("Demon bluff delivery · Alice")).toBeInTheDocument();
+  expect(screen.queryByText("Information to send")).toBeNull();
+});
+
+it("changing Lunatic behavior to Drunk or Normal prunes incompatible packet fields", () => {
+  render(<Drawer />);
+  fireEvent.click(screen.getByRole("button", { name: "Lunatic outsider" }));
+  const behavior = within(screen.getByText("Behavior & deception").closest("section")!);
+  fireEvent.change(behavior.getByLabelText("Mode:"), { target: { value: "fake_demon_behavior" } });
+  fireEvent.click(behavior.getByRole("button", { name: "Imp demon" }));
+  const selected = Object.values(store.getState().game!.players)[0]!.id;
+  store.getState().setFakeMinions(selected, []);
+  store.getState().setBluffs(selected, ["chef"]);
+  store.getState().setBehaviorMode(selected, "drunk_fake_role_behavior");
+  expect(store.getState().game!.players[selected]!.privateInfo).toBeUndefined();
+  store.getState().setBluffs(selected, ["chef"]);
+  store.getState().setBehaviorMode(selected, "normal");
+  expect(store.getState().game!.players[selected]!.privateInfo).toBeUndefined();
 });

@@ -451,6 +451,7 @@ describe("Firebase RTDB membership authorization", () => {
     const [id, other] = store.getState().game!.seatOrder as [string, string];
     store.getState().setLobby({ code, uid: st, sessionId: metadata.id, status: "live" });
     store.getState().assignRole(id, "lunatic");
+    store.getState().setBehaviorMode(id, "fake_demon_behavior");
     store.getState().setShownRole(id, "imp");
     store.getState().setFakeMinions(id, [other]);
     store.getState().setBluffs(id, ["chef", "saint", "washerwoman"]);

@@ -4,6 +4,8 @@ import { deriveAlignment } from "@/data/roleRegistry";
 import { TRAVELERS } from "@/data/travelers";
 import { needsShownIdentity } from "@/stores/identity";
 import { PrivatePacketPanel } from "./PrivatePacketPanel";
+import { getPrivateInfoApplicability } from "@/stores/privatePackets";
+import { buildRegistry } from "@/data/roleRegistry";
 import type {
   Alignment,
   BehaviorMode,
@@ -166,6 +168,8 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
     () => new Map((script?.characters ?? []).map((c) => [c.id, c])),
     [script]
   );
+  const registry = useMemo(() => script ? buildRegistry(script) : null, [script]);
+  const applicability = registry ? getPrivateInfoApplicability(player, registry) : null;
 
   // Roles currently assigned to any player — used to exclude from bluff pickers.
   const inPlayRoles = useMemo(
@@ -457,7 +461,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
             </section>
           )}
 
-          {role && (player.behaviorMode === "fake_demon_behavior" || needsShownIdentity(player.actualRole)) && (
+          {role && applicability?.fakeMinions && (
             <LunaticInfo
               player={player}
               roles={script.characters}

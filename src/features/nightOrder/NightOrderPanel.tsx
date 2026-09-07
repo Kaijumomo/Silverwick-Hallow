@@ -3,9 +3,7 @@ import { computeNightOrder } from "./nightOrder";
 import type { NightStep } from "./nightOrder";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { PrivatePacketPanel } from "@/features/players/PrivatePacketPanel";
-import { hasPrivateDraft } from "@/stores/privatePackets";
-import { wakeIdentity } from "@/stores/wakeIdentity";
-import { needsShownIdentity } from "@/stores/identity";
+import { getPrivateInfoApplicability } from "@/stores/privatePackets";
 import { buildRegistry } from "@/data/roleRegistry";
 import type { NightStepRecord, NightStepStatus, Script, StorytellerLobbyRecord } from "@/stores/types";
 
@@ -170,8 +168,7 @@ export function NightOrderPanel({ game, script, onClose }: Props) {
   const registry = buildRegistry(script);
   const packetPlayers = game.seatOrder.filter(id => {
     const p = game.players[id];
-    return p && !p.isEmpty && (hasPrivateDraft(p) || p.publishedPacket
-      || wakeIdentity(p, registry)?.simulated || needsShownIdentity(p.actualRole));
+    return p && !p.isEmpty && getPrivateInfoApplicability(p, registry).genericPacket;
   });
 
   const progress = game.nightProgress ?? {};

@@ -4,7 +4,7 @@ import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { makeSTPlayer, roles } from "@/test/fixtures";
 import { wakeIdentity } from "./wakeIdentity";
 import { computeNightOrder } from "@/features/nightOrder/nightOrder";
-import { packetReadiness, previewPrivatePacket } from "./privatePackets";
+import { getPrivateInfoApplicability, packetReadiness, previewPrivatePacket } from "./privatePackets";
 import { projectToSelf } from "./projections";
 import { useStorytellerStore as store } from "./storytellerStore";
 import { StorytellerGamePersistedSchema } from "./schemas";
@@ -18,6 +18,7 @@ function configured() {
   store.getState().addPlayer("Bob");
   const [id, other] = store.getState().game!.seatOrder as [string, string];
   store.getState().assignRole(id, "lunatic");
+  store.getState().setBehaviorMode(id, "fake_demon_behavior");
   store.getState().setShownRole(id, "imp");
   store.getState().setFakeMinions(id, [other]);
   store.getState().setBluffs(id, ["chef", "saint", "washerwoman"]);
@@ -75,6 +76,30 @@ describe("AUD-013 wake identity is operational, never mechanical", () => {
 });
 
 describe("AUD-027 private packet boundary and lifecycle", () => {
+  it("central applicability keeps fake Demon fields exclusive to the fake Demon scenario", () => {
+    const drunk = makeSTPlayer({ actualRole: "drunk", shownRole: "empath", behaviorMode: "drunk_fake_role_behavior" });
+    const marionette = makeSTPlayer({ actualRole: "marionette", shownRole: "fortuneteller", behaviorMode: "marionette_fake_good_behavior" });
+    const lunatic = makeSTPlayer({ actualRole: "lunatic", shownRole: "imp", behaviorMode: "fake_demon_behavior" });
+    const demon = makeSTPlayer({ actualRole: "imp", shownRole: "imp", behaviorMode: "normal" });
+    const normal = makeSTPlayer({ actualRole: "chef", shownRole: "chef", behaviorMode: "normal" });
+    expect(getPrivateInfoApplicability(drunk, registry)).toMatchObject({ simulatedInfo: true, bluffs: false, fakeMinions: false, extraText: true, genericPacket: true });
+    expect(getPrivateInfoApplicability(marionette, registry)).toMatchObject({ simulatedInfo: true, bluffs: false, fakeMinions: false, extraText: true, genericPacket: true });
+    expect(getPrivateInfoApplicability(lunatic, registry)).toMatchObject({ simulatedInfo: true, bluffs: true, fakeMinions: true, extraText: true, genericPacket: true });
+    expect(getPrivateInfoApplicability(demon, registry)).toMatchObject({ simulatedInfo: false, bluffs: true, fakeMinions: false, genericPacket: true });
+    expect(getPrivateInfoApplicability(normal, registry)).toMatchObject({ simulatedInfo: false, bluffs: false, fakeMinions: false, extraText: false, genericPacket: false });
+  });
+
+  it("behavior changes prune fake Demon fields before they can be previewed or published", () => {
+    const { id, p } = configured();
+    expect(p().privateInfo?.fakeMinions).toBeDefined();
+    expect(p().privateInfo?.bluffs).toBeDefined();
+    store.getState().setBehaviorMode(id, "drunk_fake_role_behavior");
+    expect(p().privateInfo).toEqual({ extraText: "Your information tonight" });
+    expect(previewPrivatePacket(p(), store.getState().game!, registry).payload.extraText).toBe("Your information tonight");
+    store.getState().setBehaviorMode(id, "normal");
+    expect(p().privateInfo).toEqual({ extraText: "Your information tonight" });
+  });
+
   it("configured and previewed drafts remain private until explicit publication", () => {
     const { id, p, game } = configured();
     expect(packetReadiness(p(), game(), registry).state).toBe("configured");

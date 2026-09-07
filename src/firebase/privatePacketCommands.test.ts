@@ -34,6 +34,7 @@ async function setup(managed = false) {
   const lobby = { code, uid: "host", sessionId: session.id, status: "live" as const };
   store.getState().setLobby(lobby);
   store.getState().assignRole(id, "lunatic");
+  store.getState().setBehaviorMode(id, "fake_demon_behavior");
   store.getState().setShownRole(id, "imp");
   store.getState().setFakeMinions(id, [other]);
   store.getState().setBluffs(id, ["chef", "saint", "washerwoman"]);

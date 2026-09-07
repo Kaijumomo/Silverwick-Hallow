@@ -21,6 +21,7 @@ function player(actual = "lunatic", shown = "imp") {
   store.getState().addPlayer("Bob");
   const [id, other] = store.getState().game!.seatOrder as [string, string];
   store.getState().assignRole(id, actual);
+  if (actual === "lunatic") store.getState().setBehaviorMode(id, "fake_demon_behavior");
   store.getState().setShownRole(id, shown);
   return { id, other };
 }

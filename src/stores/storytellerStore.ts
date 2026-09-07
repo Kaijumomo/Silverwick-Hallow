@@ -6,7 +6,7 @@ import { LORICS } from "@/data/lorics";
 import { StorytellerStateSchema } from "./schemas";
 import { buildRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, needsShownIdentity } from "./identity";
-import { invalidatePrivatePacket, previewPrivatePacket } from "./privatePackets";
+import { invalidatePrivatePacket, previewPrivatePacket, pruneInapplicablePrivateInfo } from "./privatePackets";
 import type {
   Alignment,
   BehaviorMode,
@@ -657,7 +657,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!game) return;
         set({
           undoStack: pushUndo(game, undoStack),
-          game: game.players[id] ? { ...game, players: { ...game.players, [id]: invalidatePrivatePacket({ ...game.players[id]!, behaviorMode: mode }) } } : game,
+          game: game.players[id] ? { ...game, players: { ...game.players, [id]: invalidatePrivatePacket(pruneInapplicablePrivateInfo({ ...game.players[id]!, behaviorMode: mode }, buildRegistry(selectScriptById(get(), game.scriptId) ?? { id: game.scriptId, name: game.scriptId, characters: [] }))) } } : game,
         });
       },
 
