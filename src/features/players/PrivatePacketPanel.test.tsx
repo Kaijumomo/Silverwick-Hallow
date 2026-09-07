@@ -8,8 +8,10 @@ import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { usePacketDeliveryState } from "@/firebase/packetDeliveryState";
 import { NightOrderPanel } from "@/features/nightOrder/NightOrderPanel";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
+import { usePrivacyStore } from "@/stores/privacyStore";
 
 beforeEach(() => {
+  usePrivacyStore.setState({ enabled: false });
   store.setState({ game: null, lobby: null, undoStack: [] });
   useSessionRuntime.setState({ backend: null });
   usePacketDeliveryState.setState({ receipts: {}, queued: {} });
@@ -76,6 +78,18 @@ describe("private information workflow UI", () => {
     act(() => store.getState().setPrivateText(id, "Pending information"));
     const task = screen.getByRole("region", { name: "Private information for Alice" });
     expect(within(task).getByRole("status")).toHaveTextContent("configured");
+    expect(store.getState().game!.players[id]!.publishedPacket).toBeUndefined();
+  });
+
+  it("privacy mode replaces the night sheet with a neutral notice", () => {
+    const { id } = player();
+    store.getState().setPhase("night");
+    usePrivacyStore.getState().setEnabled(true);
+    render(<NightOrderPanel game={store.getState().game!} script={troubleBrewing} onClose={() => {}} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Privacy Mode On");
+    expect(screen.getByText("Night details are hidden while Privacy Mode is on.")).toBeInTheDocument();
+    expect(screen.queryByText("Imp")).toBeNull();
+    expect(screen.queryByText("Fake Demon information")).toBeNull();
     expect(store.getState().game!.players[id]!.publishedPacket).toBeUndefined();
   });
 });

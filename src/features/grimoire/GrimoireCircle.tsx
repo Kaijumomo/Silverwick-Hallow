@@ -6,6 +6,7 @@ import { iconUrlFor } from "@/data/iconUrl";
 import type { GrimoireMode, PlayerId, RoleDef, Script, STPlayerRecord } from "@/stores/types";
 import { SeatAssignPopup } from "./SeatAssignPopup";
 import type { RoomBackend } from "@/firebase/backend";
+import { usePrivacyStore } from "@/stores/privacyStore";
 
 export function buildRoleDisplayMap(script: Script | undefined): Map<string, RoleDef> {
   const map = new Map((script?.characters ?? []).map((c) => [c.id, c]));
@@ -63,10 +64,12 @@ function Token({
   mode, draggedId, onRingDragStart, onRingDragEnd, onRingDropOn,
   onFreeRoamPointerDown, onClick, isGhost = false,
 }: TokenProps) {
-  const displayRole = shownRole ?? role;
-  const hasDeception =
+  const privacyMode = usePrivacyStore((s) => s.enabled);
+  const displayRole = privacyMode ? undefined : shownRole ?? role;
+  const hasDeception = !privacyMode && (
     player.behaviorMode !== "normal" ||
-    (!!player.shownRole && player.shownRole !== player.actualRole);
+    (!!player.shownRole && player.shownRole !== player.actualRole)
+  );
   const isDragSource = draggedId === player.id;
   const isDragTarget = draggedId !== null && draggedId !== player.id;
 
@@ -129,7 +132,9 @@ function Token({
     >
       <div className="token-disc-frame" style={{ width: size, height: size }}>
         <div className="token-disc" style={{ width: size, height: size }}>
-          {displayRole?.iconUrl !== undefined || displayRole ? (
+          {privacyMode ? (
+            <span className="token-private-mark" aria-hidden="true">•</span>
+          ) : displayRole?.iconUrl !== undefined || displayRole ? (
             <img
               className="token-art"
               src={iconUrlFor(displayRole ?? player.actualRole)}
@@ -144,13 +149,15 @@ function Token({
             <span className="token-presence offline" title="Offline" aria-label="Offline" />
           )}
         </div>
-        {STATUS_KINDS.filter((k) => player.statuses[k]).map((k) => (
+        {!privacyMode && STATUS_KINDS.filter((k) => player.statuses[k]).map((k) => (
           <span key={k} className={`status-chip status-chip-${k}`} title={k}>
             {STATUS_ICON[k]}
           </span>
         ))}
       </div>
-      {displayRole ? (
+      {privacyMode ? (
+        <div className="token-role token-role-private">role hidden</div>
+      ) : displayRole ? (
         <div className={`token-role type-${displayRole.type}`}>{displayRole.name}</div>
       ) : (
         <div className="token-role unassigned">unassigned</div>
@@ -159,12 +166,12 @@ function Token({
       {mode === "ring" && (
         <div className="token-seat-num">seat {player.seat + 1}</div>
       )}
-      {!player.alive && (
+      {!privacyMode && !player.alive && (
         <div className="token-ghost">
           {player.ghostVote ? "ghost vote" : "voted"}
         </div>
       )}
-      {player.reminders.length > 0 && (
+      {!privacyMode && player.reminders.length > 0 && (
         <div className="token-reminders">
           {player.reminders.slice(0, 4).map((r, i) => (
             <span key={i} className="reminder-pip">{r}</span>

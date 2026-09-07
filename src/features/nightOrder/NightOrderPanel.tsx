@@ -5,6 +5,7 @@ import { useStorytellerStore } from "@/stores/storytellerStore";
 import { PrivatePacketPanel } from "@/features/players/PrivatePacketPanel";
 import { getPrivateInfoApplicability } from "@/stores/privatePackets";
 import { buildRegistry } from "@/data/roleRegistry";
+import { usePrivacyStore } from "@/stores/privacyStore";
 import type { NightStepRecord, NightStepStatus, Script, StorytellerLobbyRecord } from "@/stores/types";
 
 // ---------------------------------------------------------------------------
@@ -163,6 +164,21 @@ type Props = {
 };
 
 export function NightOrderPanel({ game, script, onClose }: Props) {
+  const privacyMode = usePrivacyStore((s) => s.enabled);
+  if (privacyMode) {
+    return (
+      <aside className="night-panel privacy-safe-night" aria-label={`Night ${game.day} order`}>
+        <div className="night-panel-header">
+          <h2 className="night-panel-title">Night {game.day}</h2>
+          <span className="privacy-safe-label" role="status">Privacy Mode On</span>
+          <button className="btn btn-sm" onClick={onClose} aria-label="Close night panel">✕</button>
+        </div>
+        <div className="night-panel-body">
+          <p className="behavior-help">Night details are hidden while Privacy Mode is on.</p>
+        </div>
+      </aside>
+    );
+  }
   const isFirstNight = game.day === 1;
   const steps = computeNightOrder(game.players, game.seatOrder, script, isFirstNight);
   const registry = buildRegistry(script);

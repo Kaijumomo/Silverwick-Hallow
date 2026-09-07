@@ -6,6 +6,7 @@ import { needsShownIdentity } from "@/stores/identity";
 import { PrivatePacketPanel } from "./PrivatePacketPanel";
 import { getPrivateInfoApplicability } from "@/stores/privatePackets";
 import { buildRegistry } from "@/data/roleRegistry";
+import { usePrivacyStore } from "@/stores/privacyStore";
 import type {
   Alignment,
   BehaviorMode,
@@ -131,6 +132,31 @@ type PlayerDrawerProps = {
   onUnseat?: (id: string) => Promise<void> | void;
 };
 
+function PrivacySafeDrawer({ player, onClose }: { player: STPlayerRecord; onClose: () => void }) {
+  return (
+    <>
+      <div className="drawer-backdrop" onClick={onClose} />
+      <aside className="drawer privacy-safe-drawer" role="dialog" aria-label={`Player ${player.name}`}>
+        <div className="drawer-header">
+          <span className="drawer-name privacy-safe-name">Player</span>
+          <button className="btn btn-sm" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div className="drawer-body">
+          <section className="drawer-section">
+            <h3 className="drawer-section-title">Safe view</h3>
+            <p className="privacy-safe-player-name">{player.name || "Unnamed player"}</p>
+            <div className="drawer-row">
+              <span className="label">seat {player.seat + 1}</span>
+              <span className="label">{player.alive ? "Alive" : "Dead"}</span>
+            </div>
+            <p className="behavior-help">Storyteller details are hidden while Privacy Mode is on.</p>
+          </section>
+        </div>
+      </aside>
+    </>
+  );
+}
+
 export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) {
   const game = useStorytellerStore((s) => s.game);
   const script = useStorytellerStore((s) =>
@@ -154,6 +180,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   const setStatus = useStorytellerStore((s) => s.setStatus);
   const setReminders = useStorytellerStore((s) => s.setReminders);
   const setNotes = useStorytellerStore((s) => s.setNotes);
+  const privacyMode = usePrivacyStore((s) => s.enabled);
 
   const [nameDraft, setNameDraft] = useState(player.name);
   const [reminderDraft, setReminderDraft] = useState("");
@@ -183,6 +210,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   );
 
   if (!game || !script) return null;
+  if (privacyMode) return <PrivacySafeDrawer player={player} onClose={() => selectPlayer(null)} />;
   const role = player.actualRole ? roleById.get(player.actualRole) : undefined;
   const shownRoleDef = player.shownRole ? roleById.get(player.shownRole) ?? TRAVELERS.find(r => r.id === player.shownRole) : undefined;
 

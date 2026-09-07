@@ -114,6 +114,23 @@
   flex-wrap: wrap;
 }
 
+/* ===== Storyteller privacy mode ===== */
+.privacy-toggle {
+  min-height: 36px;
+  border-color: var(--border-strong);
+}
+.privacy-toggle.active {
+  color: var(--text);
+  background: rgba(110, 116, 130, 0.28);
+  border-color: rgba(180, 186, 200, 0.65);
+}
+.privacy-safe-label {
+  color: var(--text-faint);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
 /* Overflow toggle: hidden on wide viewports, shown on narrow */
 .phase-bar-overflow-btn {
   display: none;
@@ -323,6 +340,15 @@
   text-align: center;
   overflow: hidden;
   padding: 6px;
+}
+.token-private-mark {
+  color: var(--text-faint);
+  font-size: clamp(18px, 4vmin, 34px);
+  line-height: 1;
+}
+.token-role-private {
+  color: var(--text-faint);
+  font-style: italic;
 }
 .token:hover .token-disc,
 .token.selected .token-disc {
@@ -600,6 +626,19 @@
 }
 .drawer-name:focus {
   border-bottom-color: var(--border);
+}
+.privacy-safe-name {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.privacy-safe-player-name {
+  margin: 0;
+  font-size: 20px;
+  color: var(--text);
 }
 .drawer-body {
   flex: 1;
@@ -1513,6 +1552,9 @@
   flex-direction: column;
   gap: 5px;
 }
+.privacy-safe-night .night-panel-title {
+  color: var(--text-faint);
+}
 
 .step-card {
   background: rgba(0, 0, 0, 0.3);
@@ -2359,4 +2401,3 @@
   border-radius: 4px;
   padding: 2px 8px;
 }
-

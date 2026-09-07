@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { PlayerDrawer } from "./PlayerDrawer";
 import { roles } from "@/test/fixtures";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
+import { usePrivacyStore } from "@/stores/privacyStore";
 
 const qaScript = { ...troubleBrewing, id: "qa", characters: [...troubleBrewing.characters, roles.marionette!, roles.lunatic!] };
 
 beforeEach(() => {
+  usePrivacyStore.setState({ enabled: false });
   store.setState({ game: null, lobby: null, undoStack: [], customScripts: { qa: qaScript } });
   store.getState().newGame("qa");
   store.getState().addPlayer("Alice");
@@ -106,4 +108,26 @@ it("changing Lunatic behavior to Drunk or Normal prunes incompatible packet fiel
   store.getState().setBluffs(selected, ["chef"]);
   store.getState().setBehaviorMode(selected, "normal");
   expect(store.getState().game!.players[selected]!.privateInfo).toBeUndefined();
+});
+
+it("privacy mode keeps the player drawer safe and restores it when disabled", () => {
+  render(<Drawer />);
+  fireEvent.click(screen.getByRole("button", { name: "Drunk outsider" }));
+  const perception = within(screen.getByText("Behavior & deception").closest("section")!);
+  fireEvent.click(perception.getByRole("button", { name: "Empath townsfolk" }));
+  store.getState().setReminders(current().id, ["Poisoned", "Secret note"]);
+
+  act(() => usePrivacyStore.getState().setEnabled(true));
+  expect(screen.getByText("Storyteller details are hidden while Privacy Mode is on.")).toBeInTheDocument();
+  expect(screen.getByText("Alice")).toBeInTheDocument();
+  expect(screen.getByText("seat 1")).toBeInTheDocument();
+  expect(screen.queryByText("Actual role (ST private)")).toBeNull();
+  expect(screen.queryByText("Drunk")).toBeNull();
+  expect(screen.queryByText("Empath")).toBeNull();
+  expect(screen.queryByText("Poisoned")).toBeNull();
+  expect(screen.queryByText("Secret note")).toBeNull();
+
+  act(() => usePrivacyStore.getState().setEnabled(false));
+  expect(screen.getByText("Actual role (ST private)")).toBeInTheDocument();
+  expect(screen.getAllByText("Drunk").length).toBeGreaterThan(0);
 });

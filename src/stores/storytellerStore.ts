@@ -7,6 +7,7 @@ import { StorytellerStateSchema } from "./schemas";
 import { buildRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, needsShownIdentity } from "./identity";
 import { invalidatePrivatePacket, previewPrivatePacket, pruneInapplicablePrivateInfo } from "./privatePackets";
+import { usePrivacyStore } from "./privacyStore";
 import type {
   Alignment,
   BehaviorMode,
@@ -305,6 +306,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           plannedPlayerCount: count,
           pendingPlayers: {},
         };
+        usePrivacyStore.getState().reset();
         set({ game, lobby: null, pendingKnocks: [], view: "game", undoStack: [], selectedPlayerId: null });
       },
 
@@ -355,7 +357,8 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
-      endGame: () =>
+      endGame: () => {
+        usePrivacyStore.getState().reset();
         set({
           game: null,
           view: "home",
@@ -363,7 +366,8 @@ export const useStorytellerStore = create<StorytellerStore>()(
           selectedPlayerId: null,
           lobby: null,
           pendingKnocks: [],
-        }),
+        });
+      },
 
       setView: (view) => set({ view }),
 

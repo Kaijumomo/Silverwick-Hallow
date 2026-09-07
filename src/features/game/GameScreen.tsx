@@ -16,6 +16,7 @@ import { closeMultiplayerSession, useSessionRuntime } from "@/firebase/storytell
 import { FirebaseConfigDialog } from "@/features/firebase/FirebaseConfigDialog";
 import { friendlyFirebaseError, type FriendlyError } from "@/firebase/errors";
 import { requireActiveSession, lifecycleMessage } from "@/firebase/lifecycle";
+import { usePrivacyStore } from "@/stores/privacyStore";
 
 const PHASE_LABEL: Record<string, string> = {
   setup: "Setup",
@@ -37,6 +38,8 @@ export function GameScreen() {
   const setView = useStorytellerStore((s) => s.setView);
   const setLobby = useStorytellerStore((s) => s.setLobby);
   const selectedPlayerId = useStorytellerStore((s) => s.selectedPlayerId);
+  const privacyMode = usePrivacyStore((s) => s.enabled);
+  const togglePrivacyMode = usePrivacyStore((s) => s.toggle);
 
   const [almanacOpen, setAlmanacOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
@@ -188,6 +191,16 @@ export function GameScreen() {
               </button>
             </span>
           )}
+          <button
+            type="button"
+            className={`btn btn-sm privacy-toggle${privacyMode ? " active" : ""}`}
+            aria-pressed={privacyMode}
+            aria-label={privacyMode ? "Disable Privacy Mode" : "Enable Privacy Mode"}
+            onClick={togglePrivacyMode}
+            title={privacyMode ? "Show Storyteller details" : "Hide Storyteller details"}
+          >
+            {privacyMode ? "Privacy Mode On" : "Privacy Mode"}
+          </button>
         </div>
         {/* ⋮ toggle: visible only on narrow viewports via CSS */}
         <button
@@ -279,7 +292,7 @@ export function GameScreen() {
         </div>
       </header>
 
-      {(game.fabled.length > 0 || (game.lorics?.length ?? 0) > 0) && (
+      {!privacyMode && (game.fabled.length > 0 || (game.lorics?.length ?? 0) > 0) && (
         <div className="fabled-strip">
           {game.fabled.length > 0 && (
             <>
@@ -311,7 +324,7 @@ export function GameScreen() {
       )}
 
       <div className="game-body">
-        {game.phase === "setup" && setupPanelOpen && script && (
+        {game.phase === "setup" && setupPanelOpen && script && !privacyMode && (
           <SetupPanel
             game={game}
             script={script}
@@ -335,7 +348,7 @@ export function GameScreen() {
           onUnseat={unseatSelectedPlayer}
         />
       )}
-      {almanacOpen && (
+      {almanacOpen && !privacyMode && (
         <Almanac
           title={script ? `Almanac · ${script.name}` : "Almanac"}
           roles={almanacRoles}
