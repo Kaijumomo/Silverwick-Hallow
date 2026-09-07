@@ -7,6 +7,10 @@ import type { Database } from "firebase/database";
 import { FirebaseRoomBackend } from "./firebaseBackend";
 import type { Json } from "./backend";
 import { SessionWriter } from "./writer";
+import { writeProjections } from "./sync";
+import { makeSTPlayer, tbScript } from "@/test/fixtures";
+import { buildRegistry } from "@/data/roleRegistry";
+import type { StorytellerLobbyRecord } from "@/stores/types";
 import {
   cancelJoinRequest,
   createLobby,
@@ -390,6 +394,46 @@ describe("Firebase RTDB membership authorization", () => {
     const writer = new SessionWriter(raw, code, metadata.id);
     try { await writer.start(); await writer.set(path("public"), { code, phase: "setup" }); }
     finally { await writer.dispose(); }
+  });
+
+  test.each([
+    ["drunk", "chef", "good"],
+    ["marionette", "washerwoman", "good"],
+    ["lunatic", "imp", "evil"],
+  ])("AUD-004: %s publishes only shown identity through the guarded writer", async (actual, shown, alignment) => {
+    const raw = new FirebaseRoomBackend(db(st) as unknown as Database);
+    await createLobby(raw, st, { codeGenerator: () => code });
+    const metadata = (await ref(st, "session").once("value")).val();
+    const writer = new SessionWriter(raw, code, metadata.id);
+    const game: StorytellerLobbyRecord = {
+      code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
+      notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {},
+      rolePool: [], plannedPlayerCount: 1, pendingPlayers: {}, seatOrder: ["p-alice"],
+      players: { "p-alice": makeSTPlayer({ id: "p-alice", actualRole: actual!, shownRole: null,
+        shownAlignment: "evil", stNotes: "hidden", behaviorMode: "custom" }) },
+    };
+    const publish = () => writeProjections({ backend: writer, code, stState: game,
+      registry: buildRegistry(tbScript), online: {}, membership: { [alice]: "p-alice" } });
+    try {
+      await writer.start();
+      await knockOnLobby(backend(alice), code, alice, "Alice");
+      await seatPlayer(writer, code, alice, "p-alice", null);
+      await publish();
+      expect((await ref(alice, "player/p-alice").once("value")).val()).toBeNull();
+      expect((await ref(st, "storyteller/players/p-alice/actualRole").once("value")).val()).toBe(actual);
+      game.players["p-alice"]!.shownRole = shown!;
+      game.players["p-alice"]!.shownAlignment = null;
+      await publish();
+      const self = (await ref(alice, "player/p-alice").once("value")).val();
+      expect(self).toEqual({ shownRole: shown, shownAlignment: alignment });
+      expect(JSON.stringify(self)).not.toContain(actual);
+      await assertFails(ref(bob, "player/p-alice").once("value"));
+      await assertFails(ref(alice, "storyteller").once("value"));
+      await assertFails(ref(alice, "checkpoint").once("value"));
+      await revokePlayerMembership(writer, code, "p-alice");
+      await assertFails(ref(alice, "player/p-alice").once("value"));
+      expect((await ref(st, "player/p-alice").once("value")).exists()).toBe(false);
+    } finally { await writer.dispose(); }
   });
 
   test("ending atomically revokes all access and rejects stale projections and joins", async () => {

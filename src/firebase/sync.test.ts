@@ -57,6 +57,7 @@ function makeLobby(): StorytellerLobbyRecord {
         name: "Alice",
         seat: 0,
         actualRole: "imp",
+        shownRole: "imp",
         privateInfo: { bluffs: ["chef", "washerwoman", "saint"] },
         stNotes: "Imp; bluffs assigned night 1",
         reminders: ["killed Bob"],
@@ -256,8 +257,7 @@ describe("writeProjections — privacy chokepoint", () => {
     });
     // p1 (Imp) was written
     expect(await backend.get("lobbies/ABCD/player/p1")).toBeDefined();
-    // ST clears p1's role
-    lobby.players.p1!.actualRole = "";
+    // ST withdraws perception while keeping actual identity private.
     lobby.players.p1!.shownRole = null;
     delete lobby.players.p1!.privateInfo;
     await writeProjections({
@@ -269,6 +269,7 @@ describe("writeProjections — privacy chokepoint", () => {
     });
     // p1's projection is now removed
     expect(await backend.get("lobbies/ABCD/player/p1")).toBeUndefined();
+    expect(await backend.get("lobbies/ABCD/storyteller/players/p1/actualRole")).toBe("imp");
   });
 
   it("a Lunatic with NO privateInfo gets shownRole/alignment but no bluffs leak", async () => {

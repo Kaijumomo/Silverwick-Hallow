@@ -4,6 +4,8 @@ import { BUILTIN_SCRIPTS, BUILTIN_SCRIPT_IDS } from "@/data/scripts";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
 import { StorytellerStateSchema } from "./schemas";
+import { buildRegistry } from "@/data/roleRegistry";
+import { dealtIdentity, needsShownIdentity } from "./identity";
 import type {
   Alignment,
   BehaviorMode,
@@ -111,6 +113,7 @@ export type StorytellerStore = {
   movePlayer: (id: PlayerId, direction: "left" | "right") => void;
 
   assignRole: (id: PlayerId, roleId: RoleId | "") => void;
+  showAssignedRole: (id: PlayerId) => void;
   setShownRole: (id: PlayerId, roleId: RoleId | null) => void;
   setShownAlignment: (id: PlayerId, alignment: Alignment | null) => void;
   setBehaviorMode: (id: PlayerId, mode: BehaviorMode) => void;
@@ -321,16 +324,16 @@ export const useStorytellerStore = create<StorytellerStore>()(
           [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
         }
 
+        const script = selectScriptById(get(), game.scriptId);
+        if (!script) return;
+        const registry = buildRegistry(script);
         const newPlayers = { ...game.players };
         nonTravelerSeats.forEach((playerId, idx) => {
           const existing = newPlayers[playerId];
           if (!existing) return;
           const next: STPlayerRecord = {
             ...existing,
-            actualRole: shuffled[idx]!,
-            shownRole: null,
-            shownAlignment: null,
-            behaviorMode: "normal",
+            ...dealtIdentity(shuffled[idx]!, registry),
             abilityUsed: false,
           };
           delete next.privateInfo;
@@ -597,14 +600,12 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!game) return;
         const existing = game.players[id];
         if (!existing) return;
-        // Build the patch: clear all deception state including bluffs/fakeMinions.
-        // privateInfo is dropped entirely by overwriting and then deleting.
+        // Changing truth does not publish it or erase the player's perception.
+        // Role-specific private packets must be configured again.
         const next: STPlayerRecord = {
           ...existing,
           actualRole: roleId,
-          shownRole: null,
-          shownAlignment: null,
-          behaviorMode: "normal",
+          ...(roleId ? {} : { shownRole: null, shownAlignment: null, behaviorMode: "normal" as const }),
           abilityUsed: false,
         };
         delete next.privateInfo;
@@ -617,12 +618,25 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
+      showAssignedRole: (id) => {
+        const { game } = get();
+        const player = game?.players[id];
+        if (!player?.actualRole || needsShownIdentity(player.actualRole)) return;
+        get().setShownRole(id, player.actualRole);
+      },
+
       setShownRole: (id, roleId) => {
         const { game, undoStack } = get();
         if (!game) return;
+        const existing = game.players[id];
+        if (!existing) return;
+        // A new perception cannot inherit alignment overrides or packets from
+        // the previous identity. Null alignment derives only from shownRole.
+        const next = { ...existing, shownRole: roleId, shownAlignment: null };
+        delete next.privateInfo;
         set({
           undoStack: pushUndo(game, undoStack),
-          game: patchPlayer(game, id, { shownRole: roleId }),
+          game: { ...game, players: { ...game.players, [id]: next } },
         });
       },
 
@@ -709,6 +723,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
           ...existing,
           isTraveler,
           actualRole: "",
+          shownRole: null,
+          shownAlignment: null,
+          behaviorMode: "normal",
         };
         delete next.privateInfo;
         set({

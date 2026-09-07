@@ -68,7 +68,9 @@ export type STPlayerRecord = {
   seat: number;
   joinedAt: number;
   actualRole: RoleId;
+  /** Explicit intended identity for the next sync. Null means unrevealed. */
   shownRole: RoleId | null;
+  /** Null derives from shownRole only; never from actual identity. */
   shownAlignment: Alignment | null;
   behaviorMode: BehaviorMode;
   publicDisplayRole: RoleId | null;
@@ -113,6 +115,7 @@ export type StorytellerLobbyRecord = {
   pendingPlayers: Record<string, string>;
 };
 
+/** Delivered identity at player/{id}; an absent record means unrevealed. */
 export type PlayerSelfRecord = {
   shownRole: RoleId;
   shownAlignment: Alignment;

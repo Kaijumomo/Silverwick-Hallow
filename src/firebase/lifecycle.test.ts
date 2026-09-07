@@ -43,6 +43,61 @@ async function seat(writer: SessionWriter) {
 }
 
 describe("multiplayer lifecycle", () => {
+  it.each([
+    ["drunk", "chef", "good"],
+    ["marionette", "washerwoman", "good"],
+    ["lunatic", "imp", "evil"],
+  ])("AUD-004: %s perception survives retry, navigation, player refresh and host recovery", async (actual, shown, alignment) => {
+    const { b, writer, manager, lobby, session } = await host();
+    await joinLobby(b, code, "alice", "Alice");
+    const off = player(b);
+    const id = await seat(writer);
+    const store = useStorytellerStore;
+    store.getState().assignRole(id, actual!);
+    await waitFor(async () => expect(await b.get(`${root}/storyteller/players/${id}/actualRole`)).toBe(actual));
+    expect(await b.get(`${root}/player/${id}`)).toBeUndefined();
+    expect(usePlayerStore.getState().self).toBeNull();
+    const update = b.update.bind(b);
+    const attempts: unknown[] = [];
+    b.update = async values => {
+      const self = values[`${root}/player/${id}`];
+      if (self) {
+        attempts.push(self);
+        if (attempts.length === 1) throw new Error("network offline");
+      }
+      await update(values);
+    };
+    store.getState().setShownRole(id, shown!);
+    store.getState().setView("home");
+    await waitFor(() => expect(usePlayerStore.getState().self).toEqual({ shownRole: shown, shownAlignment: alignment }), { timeout: 3000 });
+    expect(attempts.length).toBeGreaterThanOrEqual(2);
+    for (const self of attempts) expect(self).toEqual({ shownRole: shown, shownAlignment: alignment });
+    b.update = update;
+    off();
+    usePlayerStore.getState().reset();
+    usePlayerStore.getState().setSession({ code, uid: "alice", requestedName: "Alice" });
+    player(b);
+    await waitFor(() => expect(usePlayerStore.getState().self).toEqual({ shownRole: shown, shownAlignment: alignment }));
+    manager.stop();
+    await writer.dispose();
+    // A stale local edit must not replace the acknowledged shown identity.
+    store.getState().setShownRole(id, "saint");
+    const replacement = new SessionWriter(b, code, session.id);
+    const recovered = await startStorytellerSession(b, lobby, replacement);
+    disposals.push(async () => { recovered.stop(); await replacement.dispose(); });
+    expect(store.getState().game!.players[id]!.shownRole).toBe(shown);
+    expect(store.getState().game!.players[id]!.actualRole).toBe(actual);
+    expect(await b.get(`${root}/player/${id}`)).toEqual({ shownRole: shown, shownAlignment: alignment });
+    store.getState().setShownRole(id, null);
+    await waitFor(() => expect(usePlayerStore.getState().self).toBeNull());
+    expect(await b.get(`${root}/player/${id}`)).toBeUndefined();
+    store.getState().setShownRole(id, shown!);
+    await waitFor(() => expect(usePlayerStore.getState().self?.shownRole).toBe(shown));
+    await revokePlayerAndCommit(replacement, code, id, () => store.getState().unseatPlayer(id));
+    expect(await b.get(`${root}/player/${id}`)).toBeUndefined();
+    await waitFor(() => expect(usePlayerStore.getState().self).toBeNull());
+  });
+
   it("creates, joins with canonical inputs, accepts, and subscribes only after server membership", async () => {
     const { b, writer } = await host();
     await joinLobby(b, " bcdf-2345 ", "alice", "  Alice  ");

@@ -111,6 +111,7 @@ describe("seatPlayer — phase 2 atomic seating", () => {
   it("with null selfRecord binds the roster and consumes the request without writing a role", async () => {
     const b = new MemoryRoomBackend();
     await b.set("lobbies/ABCD/joinRequests/uid-bob", "Bob");
+    await b.set("lobbies/ABCD/player/p-1", { shownRole: "imp", shownAlignment: "evil" });
     await seatPlayer(b, "ABCD", "uid-bob", "p-1", null);
     expect(await b.get("lobbies/ABCD/roster/uid-bob")).toBe("p-1");
     expect(await b.get("lobbies/ABCD/player/p-1")).toBeUndefined();

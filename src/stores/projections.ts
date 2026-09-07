@@ -11,8 +11,11 @@ import type {
 export function projectToSelf(
   p: STPlayerRecord,
   registry: RoleRegistry
-): PlayerSelfRecord {
-  const shownRole = p.shownRole ?? p.actualRole;
+): PlayerSelfRecord | null {
+  // No identity, alignment, or private packet is delivered until perception
+  // has been established explicitly. Never consult actualRole here.
+  if (p.isEmpty || !p.shownRole) return null;
+  const shownRole = p.shownRole;
   const shownAlignment = p.shownAlignment ?? registry.alignmentOf(shownRole);
   const out: PlayerSelfRecord = { shownRole, shownAlignment };
   const pi = p.privateInfo;
@@ -73,12 +76,8 @@ export function projectLobbyToSelfMap(
   const out: Record<PlayerId, PlayerSelfRecord> = {};
   for (const id of Object.keys(st.players)) {
     const p = st.players[id]!;
-    // Skip unassigned seats. `projectToSelf` requires a resolvable role
-    // (otherwise alignmentOf throws). An unassigned player has nothing to
-    // project — once the ST assigns a role, the next sync includes them.
-    const role = p.shownRole ?? p.actualRole;
-    if (!role) continue;
-    out[id] = projectToSelf(p, registry);
+    const self = projectToSelf(p, registry);
+    if (self) out[id] = self;
   }
   return out;
 }

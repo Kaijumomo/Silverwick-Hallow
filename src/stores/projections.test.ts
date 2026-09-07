@@ -36,10 +36,10 @@ describe("projectToSelf — Drunk", () => {
       behaviorMode: "drunk_fake_role_behavior",
     });
     const self = projectToSelf(drunk, registry);
-    expect(self.shownRole).toBe("chef");
-    expect(self.shownAlignment).toBe("good");
-    expect(self.bluffs).toBeUndefined();
-    expect(self.fakeMinions).toBeUndefined();
+    expect(self?.shownRole).toBe("chef");
+    expect(self?.shownAlignment).toBe("good");
+    expect(self?.bluffs).toBeUndefined();
+    expect(self?.fakeMinions).toBeUndefined();
     // Critical: actualRole never appears in self projection
     expect(JSON.stringify(self)).not.toContain("drunk");
     expect(JSON.stringify(self)).not.toContain("actualRole");
@@ -61,10 +61,10 @@ describe("projectToSelf — Lunatic", () => {
       },
     });
     const self = projectToSelf(lunatic, registry);
-    expect(self.shownRole).toBe("imp");
-    expect(self.shownAlignment).toBe("evil");
-    expect(self.bluffs).toEqual(["chef", "washerwoman", "saint"]);
-    expect(self.fakeMinions).toEqual(["p3", "p4"]);
+    expect(self?.shownRole).toBe("imp");
+    expect(self?.shownAlignment).toBe("evil");
+    expect(self?.bluffs).toEqual(["chef", "washerwoman", "saint"]);
+    expect(self?.fakeMinions).toEqual(["p3", "p4"]);
     expect(JSON.stringify(self)).not.toContain("lunatic");
   });
 });
@@ -79,29 +79,30 @@ describe("projectToSelf — Marionette", () => {
       behaviorMode: "marionette_fake_good_behavior",
     });
     const self = projectToSelf(marion, registry);
-    expect(self.shownRole).toBe("washerwoman");
-    expect(self.shownAlignment).toBe("good");
+    expect(self?.shownRole).toBe("washerwoman");
+    expect(self?.shownAlignment).toBe("good");
     expect(JSON.stringify(self)).not.toContain("marionette");
   });
 });
 
 describe("projectToSelf — normal", () => {
-  it("Normal player projects actualRole as shownRole when no deception", () => {
-    const p = makeSTPlayer({ actualRole: "chef" });
+  it("Normal player projects explicitly configured shownRole", () => {
+    const p = makeSTPlayer({ actualRole: "chef", shownRole: "chef" });
     const self = projectToSelf(p, registry);
-    expect(self.shownRole).toBe("chef");
-    expect(self.shownAlignment).toBe("good");
+    expect(self?.shownRole).toBe("chef");
+    expect(self?.shownAlignment).toBe("good");
   });
 
   it("Real Demon's bluffs (real ones) project via privateInfo", () => {
     const imp = makeSTPlayer({
       actualRole: "imp",
+      shownRole: "imp",
       privateInfo: { bluffs: ["chef", "washerwoman", "saint"] },
     });
     const self = projectToSelf(imp, registry);
-    expect(self.bluffs).toEqual(["chef", "washerwoman", "saint"]);
-    expect(self.shownRole).toBe("imp");
-    expect(self.shownAlignment).toBe("evil");
+    expect(self?.bluffs).toEqual(["chef", "washerwoman", "saint"]);
+    expect(self?.shownRole).toBe("imp");
+    expect(self?.shownAlignment).toBe("evil");
   });
 });
 
@@ -113,12 +114,12 @@ describe("projectToSelf — explicit shownAlignment override", () => {
       shownAlignment: "evil", // weird ST override; trust it
     });
     const self = projectToSelf(p, registry);
-    expect(self.shownAlignment).toBe("evil");
+    expect(self?.shownAlignment).toBe("evil");
   });
 });
 
 describe("projectToSelf — clearing deception", () => {
-  it("removing shownRole reverts to actualRole", () => {
+  it("removing shownRole leaves identity unrevealed", () => {
     const p = makeSTPlayer({
       actualRole: "drunk",
       shownRole: "chef",
@@ -127,8 +128,7 @@ describe("projectToSelf — clearing deception", () => {
     });
     const cleaned = { ...p, shownRole: null, behaviorMode: "normal" as const };
     const self = projectToSelf(cleaned, registry);
-    expect(self.shownRole).toBe("drunk");
-    expect(self.shownAlignment).toBe("good");
+    expect(self).toBeNull();
   });
 });
 
@@ -174,15 +174,17 @@ describe("projectToSelf — Demon bluffs privacy", () => {
   it("real Demon's bluffs project into their own self record", () => {
     const demon = makeSTPlayer({
       actualRole: "imp",
+      shownRole: "imp",
       privateInfo: { bluffs: ["chef", "saint", "washerwoman"] },
     });
     const self = projectToSelf(demon, registry);
-    expect(self.bluffs).toEqual(["chef", "saint", "washerwoman"]);
+    expect(self?.bluffs).toEqual(["chef", "saint", "washerwoman"]);
   });
 
   it("Demon's self record never contains a Lunatic's bluffs", () => {
     const demon = makeSTPlayer({
       actualRole: "imp",
+      shownRole: "imp",
       privateInfo: { bluffs: ["chef", "saint", "washerwoman"] },
     });
     // Verify that the Lunatic's role ids do not appear in the demon's projection.
@@ -196,6 +198,7 @@ describe("projectToSelf — Demon bluffs privacy", () => {
   it("projectToPublic for a Demon never contains any bluff id", () => {
     const demon = makeSTPlayer({
       actualRole: "imp",
+      shownRole: "imp",
       privateInfo: { bluffs: ["chef", "saint", "washerwoman"] },
     });
     const pub = JSON.stringify(projectToPublic(demon, true));
@@ -227,6 +230,7 @@ describe("Lobby-level projections", () => {
         p1: makeSTPlayer({
           id: "p1",
           actualRole: "imp",
+          shownRole: "imp",
           privateInfo: { bluffs: ["chef", "washerwoman", "saint"] },
         }),
         p2: makeSTPlayer({
@@ -316,7 +320,7 @@ describe("Privacy regression matrix — all behavior modes", () => {
     {
       label: "normal Townsfolk (Chef)",
       actualRole: "chef",
-      shownRole: null,
+      shownRole: "chef",
       shownAlignment: null,
       behaviorMode: "normal",
       expectPublicNoRole: "chef",
@@ -356,7 +360,7 @@ describe("Privacy regression matrix — all behavior modes", () => {
     {
       label: "Poisoned (still shown real role)",
       actualRole: "chef",
-      shownRole: null,
+      shownRole: "chef",
       shownAlignment: null,
       behaviorMode: "poisoned",
       expectPublicNoRole: "chef",
@@ -366,7 +370,7 @@ describe("Privacy regression matrix — all behavior modes", () => {
     {
       label: "Demon (Imp) — ST normal",
       actualRole: "imp",
-      shownRole: null,
+      shownRole: "imp",
       shownAlignment: null,
       behaviorMode: "normal",
       expectPublicNoRole: "imp",
@@ -384,8 +388,8 @@ describe("Privacy regression matrix — all behavior modes", () => {
         behaviorMode: row.behaviorMode,
       });
       const self = projectToSelf(p, registry);
-      expect(self.shownRole).toBe(row.expectSelfRole);
-      expect(self.shownAlignment).toBe(row.expectSelfAlign);
+      expect(self?.shownRole).toBe(row.expectSelfRole);
+      expect(self?.shownAlignment).toBe(row.expectSelfAlign);
       // actualRole must never appear in self projection
       expect(JSON.stringify(self)).not.toContain(`"actualRole"`);
       expect(JSON.stringify(self)).not.toContain(`"behaviorMode"`);
@@ -423,8 +427,8 @@ describe("Privacy regression matrix — all behavior modes", () => {
       isTraveler: true,
     });
     const self = projectToSelf(p, registry);
-    expect(self.shownRole).toBe("thief");
-    expect(self.shownAlignment).toBe("evil");
+    expect(self?.shownRole).toBe("thief");
+    expect(self?.shownAlignment).toBe("evil");
     expect(JSON.stringify(self)).not.toContain("actualRole");
     const pub = JSON.stringify(projectToPublic(p, true));
     for (const f of PRIVATE_FIELDS) {
@@ -436,6 +440,7 @@ describe("Privacy regression matrix — all behavior modes", () => {
   it("Demon with bluffs: public never contains any bluff role id", () => {
     const imp = makeSTPlayer({
       actualRole: "imp",
+      shownRole: "imp",
       behaviorMode: "normal",
       privateInfo: { bluffs: ["chef", "saint", "washerwoman"] },
     });
@@ -470,8 +475,8 @@ describe("buildRegistry — traveler coverage", () => {
     });
     expect(() => projectToSelf(p, reg)).not.toThrow();
     const self = projectToSelf(p, reg);
-    expect(self.shownRole).toBe("thief");
-    expect(self.shownAlignment).toBe("good");
+    expect(self?.shownRole).toBe("thief");
+    expect(self?.shownAlignment).toBe("good");
   });
 
   it("projectToPublic for a traveler does not contain actualRole or private data", () => {

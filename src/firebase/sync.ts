@@ -19,9 +19,9 @@ import {
 // and private game views. Lifecycle and membership commands are intentional
 // exceptions. Every projection caller goes through this function, making the
 // privacy boundary an API property: the
-// projection helpers (`projectLobbyToPublic`, `projectLobbyToSelfMap`) strip
-// `actualRole`/`shownRole`/`behaviorMode`/`privateInfo`/`stNotes`/`statuses`
-// before anything reaches `public/*` or `player/{id}/*`.
+// projection helpers construct allowlisted records: public views have no
+// private identity; self views contain only explicit shown identity and
+// intended private information. Actual identity is never a self fallback.
 //
 // If you find yourself writing to `public/...` or `player/...` outside this
 // file, stop — that's the kind of bug that ships role data to the wrong seat.
@@ -50,9 +50,8 @@ export async function writeProjections(ctx: WriteContext): Promise<void> {
   for (const [playerId, self] of Object.entries(selfMap)) {
     updates[playerPath(code, playerId)] = self as unknown as Json;
   }
-  // Clean up stale projections for players whose role was cleared. Without
-  // this, a player who was previously the Imp would keep reading "imp" from
-  // their player/{id} path even after the ST blanked their role.
+  // Withdraw stale records when shown identity is cleared, even if actual
+  // identity still exists. The player returns to the neutral waiting state.
   // Skip isEmpty seats — they are never assigned a player path.
   for (const [playerId, player] of Object.entries(stState.players)) {
     if (player.isEmpty) continue;

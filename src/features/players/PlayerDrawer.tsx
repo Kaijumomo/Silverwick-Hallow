@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
 import { deriveAlignment } from "@/data/roleRegistry";
 import { TRAVELERS } from "@/data/travelers";
+import { needsShownIdentity } from "@/stores/identity";
 import type {
   Alignment,
   BehaviorMode,
@@ -137,6 +138,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   const removePlayer = useStorytellerStore((s) => s.removePlayer);
   const movePlayer = useStorytellerStore((s) => s.movePlayer);
   const assignRole = useStorytellerStore((s) => s.assignRole);
+  const showAssignedRole = useStorytellerStore((s) => s.showAssignedRole);
   const setShownRole = useStorytellerStore((s) => s.setShownRole);
   const setShownAlignment = useStorytellerStore((s) => s.setShownAlignment);
   const setBehaviorMode = useStorytellerStore((s) => s.setBehaviorMode);
@@ -177,7 +179,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
 
   if (!game || !script) return null;
   const role = player.actualRole ? roleById.get(player.actualRole) : undefined;
-  const shownRoleDef = player.shownRole ? roleById.get(player.shownRole) : undefined;
+  const shownRoleDef = player.shownRole ? roleById.get(player.shownRole) ?? TRAVELERS.find(r => r.id === player.shownRole) : undefined;
 
   // When traveler, look up role from traveler list instead of script.
   const travelerRoleDef = player.isTraveler && player.actualRole
@@ -224,8 +226,9 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   };
 
   const effectiveAlignment: Alignment | "—" = (() => {
+    if (!player.shownRole) return "—";
     if (player.shownAlignment) return player.shownAlignment;
-    const ref = shownRoleDef ?? displayRole;
+    const ref = shownRoleDef;
     return ref ? deriveAlignment(ref) : "—";
   })();
 
@@ -356,6 +359,12 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
               selectedRoleId={player.actualRole || null}
               onPick={(id) => assignRole(player.id, id)}
             />
+            <p className="behavior-help">Assigning an actual role keeps the player's shown identity unchanged.</p>
+            {displayRole && !needsShownIdentity(player.actualRole) && (
+              <button className="btn btn-sm" onClick={() => showAssignedRole(player.id)}>
+                Show assigned role
+              </button>
+            )}
             {displayRole && (
               <div className="drawer-row">
                 <button
@@ -368,7 +377,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
             )}
           </section>
 
-          {displayRole && !player.isTraveler && (
+          {displayRole && (
             <section className="drawer-section">
               <h3 className="drawer-section-title">
                 Behavior &amp; deception
@@ -394,36 +403,31 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
                 {BEHAVIOR_MODES.find((m) => m.value === player.behaviorMode)?.help}
               </p>
 
-              {player.behaviorMode !== "normal" &&
-                player.behaviorMode !== "poisoned" &&
-                player.behaviorMode !== "custom" && (
-                  <>
-                    <div className="behavior-row">
-                      <label>Shown role:</label>
-                      {shownRoleDef ? (
-                        <span className={`role-display-label type-${shownRoleDef.type}`}>
-                          {shownRoleDef.name}
-                        </span>
-                      ) : (
-                        <span className="behavior-help">none</span>
-                      )}
-                      {shownRoleDef && (
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => setShownRole(player.id, null)}
-                        >
-                          clear
-                        </button>
-                      )}
-                    </div>
-                    <RolePickerGrid
-                      roles={script.characters}
-                      selectedRoleId={player.shownRole}
-                      onPick={(id) => setShownRole(player.id, id)}
-                      filter={shownRoleFilter(player.behaviorMode)}
-                    />
-                  </>
+              <div className="behavior-row">
+                <label>Shown role:</label>
+                {shownRoleDef ? (
+                  <span className={`role-display-label type-${shownRoleDef.type}`}>
+                    {shownRoleDef.name}
+                  </span>
+                ) : (
+                  <span className="behavior-help">Role not revealed yet</span>
                 )}
+                {shownRoleDef && (
+                  <button
+                    className="btn btn-sm btn-danger"
+                    onClick={() => setShownRole(player.id, null)}
+                  >
+                    clear
+                  </button>
+                )}
+              </div>
+              <RolePickerGrid
+                roles={rolePool}
+                selectedRoleId={player.shownRole}
+                onPick={(id) => setShownRole(player.id, id)}
+                filter={shownRoleFilter(player.behaviorMode)}
+              />
+              <p className="behavior-help">Choosing a shown role sends that identity when connected. Clearing it returns the player to waiting. Previously delivered information cannot be unseen.</p>
 
               <div className="behavior-row">
                 <label>Shown alignment:</label>

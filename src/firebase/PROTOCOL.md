@@ -121,6 +121,57 @@ Storyteller lobby is cleared during the store migration; a new game always
 creates a fresh local identity and no lobby. No production migration is
 performed by the test suite.
 
-The protocol intentionally does not address role-deception, night-order,
-setup-analyzer, custom-script, or visual/mobile findings from later audit
-phases.
+## Phase 5: actual, shown, and published identity (AUD-004)
+
+Actual role and behavior mode are authoritative Storyteller-only state in
+`storyteller` and `checkpoint`. Neither is read by the self projection.
+`shownRole` is explicit intended perception. A null shown role produces no
+self record, no alignment, and no private packet; the player sees the existing
+waiting card. A null shown alignment derives solely from the explicit shown
+role's definition. There is no independent actual-alignment field in this
+model; a full alignment redesign remains AUD-017.
+
+The published identity is the acknowledged `player/{id}` record, not the
+actual assignment or the player's local “tap to reveal” flag. The latter only
+seals a card whose data has already arrived. Store edits express intended
+perception; the existing serialized session writer publishes it with the
+Storyteller state and checkpoint. Pending or failed writes do not mean an
+identity was delivered. No new authorization path or delivery state machine
+is introduced.
+
+Bulk dealing uses the centralized `stores/identity.ts` setup policy to
+establish ordinary shown role/alignment explicitly. Drunk, Marionette, and
+Lunatic receive actual roles but no shown identity until configured. The
+Storyteller selects a Townsfolk for Drunk, a good character for Marionette, or
+a Demon for Lunatic. Shown alignment follows that perception. Their existing
+behavior modes are initialized for configuration; this phase adds no new
+false-role wake or false-team delivery behavior.
+
+Manual actual-role assignment does not publish identity. It preserves shown
+role/alignment and behavior, but removes the previous role's private packet.
+The drawer exposes shown identity controls for every assigned role and an
+explicit “Show assigned role” shortcut for ordinary roles. Changing shown role
+clears the prior alignment override and private packet. Clearing shown role
+withdraws the self record on the next acknowledged sync. Clearing actual role
+or changing Traveler status clears identity and packets. New games and
+unseated/reused seats start blank; seating with no identity atomically removes
+any stale private record before exposing the binding.
+
+Refresh and reconnect read only the authorized published self record.
+Storyteller recovery restores explicit perception from the acknowledged
+checkpoint, without reinitializing it from actual roles. Retries reuse the
+same guarded publication. Removal retains the Firebase-first revocation
+boundary.
+
+Existing records with null shown role are deliberately left unrevealed; there
+is no migration that guesses their identity from truth. On first successful
+sync with this client, stale self projections for such players are removed.
+Deploy the updated Storyteller client before using these guarantees in a live
+game: older clients still contain the fallback. Already delivered identities
+cannot be made secret again; affected games should start fresh.
+
+Deferred: AUD-013 false-role wakes, AUD-027 advanced fake-minion/team packets,
+AUD-017 independent alignment/state, and all other night-order, setup,
+custom-script, and visual findings. Existing explicitly configured private
+packets remain supported, but no automatic false-information delivery is
+added.

@@ -118,10 +118,10 @@ export async function rejectJoinRequest(backend: RoomBackend, code: string, uid:
  * available — without it, the player would see roster/{uid} === playerId
  * before player/{playerId} exists.
  *
- * If `selfRecord` is null (the seat has no role yet), only the roster bind
- * is written. The player will read `null` from `player/{playerId}` until
- * the ST assigns a role and the next sync write fills it in. The UI handles
- * "no role yet" gracefully via the sealed-card placeholder.
+ * If `selfRecord` is null (no published identity yet), the roster bind is
+ * written and any stale self record is deleted. The player reads `null`
+ * until the ST establishes shown identity and the next sync publishes it.
+ * The UI handles "no role yet" via the sealed-card placeholder.
  */
 export async function seatPlayer(
   backend: RoomBackend,
@@ -146,9 +146,8 @@ export async function seatPlayer(
     [joinRequestPath(code, uid)]: null,
     [outcomePath(code, uid)]: null,
   };
-  if (selfRecord) {
-    updates[playerPath(code, playerId)] = selfRecord as unknown as Json;
-  }
+  // An unrevealed seat must not retain an earlier occupant's projection.
+  updates[playerPath(code, playerId)] = selfRecord as unknown as Json;
   await backend.update(updates);
 }
 
