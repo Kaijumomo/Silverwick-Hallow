@@ -79,7 +79,6 @@ export function startPlayerHandshake(backend: RoomBackend, code: string, uid: st
   const cleanups: (() => void)[] = [];
   const ps = () => usePlayerStore.getState();
   const current = () => active && ps().code === code && ps().uid === uid;
-  const hadSavedSeat = !!ps().playerId;
   ps().setPlayerId(null); ps().setSelf(null); ps().setPublic(null);
   ps().setRemoteData({ membership: "ready", request: "ready", self: "waiting", public: "waiting" });
   ps().setStatus("reconnecting");
@@ -150,12 +149,13 @@ export function startPlayerHandshake(backend: RoomBackend, code: string, uid: st
     if (!current()) return;
     if (membership.status === "invalid" || request.status === "invalid") throw new SnapshotValidationError();
     if (membership.status !== "ready" && request.status !== "ready") {
-      // Repeat session/outcome reads after a deletion so ending/acceptance
-      // delivered in a different callback order cannot look like rejection.
-      const latest = decodeSession(await backend.get(sessionPath(code)));
-      if (!current()) return;
-      if (latest?.state === "ended") { terminal("ended", "This game has ended."); return; }
-      terminal(bound || hadSavedSeat ? "revoked" : "rejected", bound || hadSavedSeat ? "Removed from lobby." : "Your request was cancelled or rejected."); return;
+      // A request is only a pending artifact. Its disappearance (or a
+      // transiently stale roster read) is not authoritative rejection or
+      // revocation; those outcomes are written explicitly above. Keep the
+      // handshake alive so an accepted seat can recover when its binding
+      // becomes visible, regardless of listener ordering.
+      if (ps().status !== "waiting" && ps().status !== "seated") ps().setStatus("reconnecting");
+      return;
     }
     ps().setRemoteData({ membership: "ready", request: "ready" });
     if (membership.status === "ready") {
@@ -171,8 +171,10 @@ export function startPlayerHandshake(backend: RoomBackend, code: string, uid: st
         });
       }
     } else {
-      if (bound) { terminal("revoked", "Removed from lobby."); return; }
-      ps().setStatus("waiting");
+      // A missing binding is also ambiguous until the Storyteller writes the
+      // explicit revoked outcome. Keep reconnecting rather than converting a
+      // stale roster snapshot into a terminal removal.
+      ps().setStatus(bound ? "reconnecting" : "waiting");
       if (request.status === "ready") usePlayerStore.setState({ requestedName: request.data });
     }
     if (!publicSubscribed) {

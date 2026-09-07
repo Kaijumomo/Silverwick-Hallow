@@ -55,6 +55,9 @@ describe("multiplayer lifecycle", () => {
     const store = useStorytellerStore;
     store.getState().assignRole(id, actual!);
     await waitFor(async () => expect(await b.get(`${root}/storyteller/players/${id}/actualRole`)).toBe(actual));
+    expect(await b.get(`${root}/roster/alice`)).toBe(id);
+    expect(await b.get(`${root}/outcomes/alice`)).toBeUndefined();
+    expect(usePlayerStore.getState().status).toBe("seated");
     expect(await b.get(`${root}/player/${id}`)).toBeUndefined();
     expect(usePlayerStore.getState().self).toBeNull();
     const update = b.update.bind(b);
@@ -109,6 +112,36 @@ describe("multiplayer lifecycle", () => {
     await waitFor(() => expect(usePlayerStore.getState().playerId).toBe(id));
     expect(await b.get(`${root}/joinRequests/alice`)).toBeUndefined();
     expect(useStorytellerStore.getState().game!.players[id]!.isEmpty).toBe(false);
+  });
+
+  it("does not reject an accepted player when roster visibility briefly lags request removal", async () => {
+    const { b } = await host();
+    await joinLobby(b, code, "alice", "Alice");
+    player(b);
+    await waitFor(() => expect(usePlayerStore.getState().status).toBe("waiting"));
+
+    const id = useStorytellerStore.getState().game!.seatOrder[0]!;
+    const originalGet = b.get.bind(b);
+    let staleRosterReads = 2;
+    b.get = async path => {
+      if (path === `${root}/roster/alice` && staleRosterReads > 0) {
+        staleRosterReads -= 1;
+        return undefined;
+      }
+      return originalGet(path);
+    };
+
+    // Model the server's atomic acceptance while the player's first reads
+    // still observe the pre-acceptance roster snapshot.
+    await b.update({
+      [`${root}/roster/alice`]: id,
+      [`${root}/joinRequests/alice`]: null,
+      [`${root}/outcomes/alice`]: null,
+      [`${root}/player/${id}`]: null,
+    });
+    await waitFor(() => expect(usePlayerStore.getState().status).toBe("seated"), { timeout: 1000 });
+    expect(usePlayerStore.getState().playerId).toBe(id);
+    expect(usePlayerStore.getState().status).not.toBe("rejected");
   });
 
   it("rejection ends waiting and survives refresh", async () => {
