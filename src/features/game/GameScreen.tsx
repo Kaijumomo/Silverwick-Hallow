@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
 import { GrimoireCircle } from "@/features/grimoire/GrimoireCircle";
 import { PlayerDrawer } from "@/features/players/PlayerDrawer";
@@ -17,6 +17,7 @@ import { FirebaseConfigDialog } from "@/features/firebase/FirebaseConfigDialog";
 import { friendlyFirebaseError, type FriendlyError } from "@/firebase/errors";
 import { requireActiveSession, lifecycleMessage } from "@/firebase/lifecycle";
 import { usePrivacyStore } from "@/stores/privacyStore";
+import { useMediaQuery } from "@/components/useMediaQuery";
 
 const PHASE_LABEL: Record<string, string> = {
   setup: "Setup",
@@ -49,6 +50,8 @@ export function GameScreen() {
   const [goingLive, setGoingLive] = useState(false);
   const [nightPanelOpen, setNightPanelOpen] = useState(false);
   const [setupPanelOpen, setSetupPanelOpen] = useState(false);
+  const narrowScreen = useMediaQuery("(max-width: 760px)");
+  const moreActionsRef = useRef<HTMLButtonElement>(null);
   const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const onlineCount = Object.values(onlineMap).filter(Boolean).length;
@@ -127,6 +130,7 @@ export function GameScreen() {
 
   if (!game) return null;
   const selected = selectedPlayerId ? game.players[selectedPlayerId] : null;
+  const setupVisible = game.phase === "setup" && setupPanelOpen && !!script && !privacyMode;
   const seatedPlayers = Object.values(game.players).filter((p) => !p.isEmpty);
   const playerCount = seatedPlayers.length;
   const plannedSeatCount = game.seatOrder.length;
@@ -144,7 +148,7 @@ export function GameScreen() {
           : "Game ended";
 
   return (
-    <div className="game" data-phase={game.phase}>
+    <div className="game" data-phase={game.phase} data-setup-foreground={setupVisible && narrowScreen || undefined}>
       <header className="phase-bar">
         <div className="phase-bar-left">
           <span className="phase-pill" data-phase={game.phase}>
@@ -212,6 +216,7 @@ export function GameScreen() {
         {/* ⋮ toggle: visible only on narrow viewports via CSS */}
         <button
           className="btn btn-sm phase-bar-overflow-btn"
+          ref={moreActionsRef}
           onClick={() => setOverflowMenuOpen((o) => !o)}
           aria-label="More actions"
           aria-expanded={overflowMenuOpen}
@@ -331,11 +336,13 @@ export function GameScreen() {
       )}
 
       <div className="game-body">
-        {game.phase === "setup" && setupPanelOpen && script && !privacyMode && (
+        {setupVisible && script && (
           <SetupPanel
             game={game}
             script={script}
             onClose={() => setSetupPanelOpen(false)}
+            foreground={narrowScreen}
+            returnFocusRef={moreActionsRef}
           />
         )}
         {game.phase === "night" && nightPanelOpen && script && (

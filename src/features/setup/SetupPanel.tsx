@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useMemo, type RefObject } from "react";
+import { Modal } from "@/components/Modal";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { analyzeBag, analyzeBagCore, type SetupWarning } from "./setupAnalyzer";
 import { FABLED } from "@/data/fabled";
@@ -9,6 +10,8 @@ type Props = {
   game: StorytellerLobbyRecord;
   script: Script;
   onClose: () => void;
+  foreground?: boolean;
+  returnFocusRef?: RefObject<HTMLElement>;
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -35,7 +38,7 @@ function warningText(w: SetupWarning): string {
   }
 }
 
-export function SetupPanel({ game, script, onClose }: Props) {
+export function SetupPanel({ game, script, onClose, foreground = false, returnFocusRef }: Props) {
   const setFabled = useStorytellerStore((s) => s.setFabled);
   const setLorics = useStorytellerStore((s) => s.setLorics);
   const dealRolePool = useStorytellerStore((s) => s.dealRolePool);
@@ -100,20 +103,23 @@ export function SetupPanel({ game, script, onClose }: Props) {
     (w) => w.kind !== "setup-role-in-play"
   );
 
-  return (
-    <aside className="setup-panel" aria-label="Setup helper">
+  const summary = (
+    <span className="setup-panel-summary">
+      {analysis.nonTravelerCount} players
+      {analysis.travelerCount > 0 && ` · ${analysis.travelerCount} traveler${analysis.travelerCount !== 1 ? "s" : ""}`}
+      {analysis.unassignedCount > 0 && ` · ${analysis.unassignedCount} unassigned`}
+    </span>
+  );
+  const header = (
       <div className="setup-panel-header">
         <h2 className="setup-panel-title">Setup</h2>
-        <span className="setup-panel-summary">
-          {analysis.nonTravelerCount} players
-          {analysis.travelerCount > 0 && ` · ${analysis.travelerCount} traveler${analysis.travelerCount !== 1 ? "s" : ""}`}
-          {analysis.unassignedCount > 0 && ` · ${analysis.unassignedCount} unassigned`}
-        </span>
+        {summary}
         <button className="btn btn-sm" onClick={onClose} aria-label="Close setup panel">
           ✕
         </button>
       </div>
-
+  );
+  const body = (
       <div className="setup-panel-body">
         {/* Role pool summary — shown when a pre-picked pool exists */}
         {hasPool && (
@@ -236,6 +242,16 @@ export function SetupPanel({ game, script, onClose }: Props) {
           </div>
         </div>
       </div>
+  );
+  return foreground ? (
+    <Modal title="Setup" closeLabel="Close setup panel" onClose={onClose} className="setup-workspace" returnFocusRef={returnFocusRef}>
+      <div className="setup-workspace-summary">{summary}</div>
+      {body}
+    </Modal>
+  ) : (
+    <aside className="setup-panel" aria-label="Setup helper">
+      {header}
+      {body}
     </aside>
   );
 }

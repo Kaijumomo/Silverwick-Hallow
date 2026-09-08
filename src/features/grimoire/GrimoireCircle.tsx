@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
-import { ringRadius, seatPosition, tokenSizeForCount } from "./layout";
+import { fitTokenRing, grimoireDiameter, seatPosition, tokenSizeForCount, type TokenBounds } from "./layout";
 import { TRAVELERS } from "@/data/travelers";
 import { iconUrlFor } from "@/data/iconUrl";
 import type { GrimoireMode, PlayerId, RoleDef, Script, STPlayerRecord } from "@/stores/types";
@@ -247,17 +247,19 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
   const clearTokenPositions = useStorytellerStore((s) => s.clearTokenPositions);
 
   const canvasRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   // Track width + height separately so free-roam uses the full rectangle.
   const [canvasW, setCanvasW] = useState(680);
   const [canvasH, setCanvasH] = useState(680);
+  const [measuredTokens, setMeasuredTokens] = useState<TokenBounds[]>([]);
   const [ringDraggedId, setRingDraggedId] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [ghostPos, setGhostPos] = useState<{ x: number; y: number } | null>(null);
   const [assigningSeatId, setAssigningSeatId] = useState<PlayerId | null>(null);
 
   useEffect(() => {
-    if (!canvasRef.current) return;
-    const el = canvasRef.current;
+    if (!stageRef.current) return;
+    const el = stageRef.current;
     const ro = new ResizeObserver(([entry]) => {
       if (entry) {
         setCanvasW(entry.contentRect.width);
@@ -268,28 +270,47 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
     return () => ro.disconnect();
   }, []);
 
+  useEffect(() => {
+    const tokens = canvasRef.current?.querySelectorAll<HTMLElement>(".token");
+    if (!tokens?.length) return;
+    const measure = () => {
+      const bounds = Array.from(tokens, (token) => ({ width: token.offsetWidth, height: token.offsetHeight }));
+      setMeasuredTokens((previous) => JSON.stringify(previous) === JSON.stringify(bounds) ? previous : bounds);
+    };
+    const observer = new ResizeObserver(measure);
+    tokens.forEach((token) => observer.observe(token));
+    measure();
+    return () => observer.disconnect();
+  }, [game?.players, grimoireMode]);
+
   const roleById = useMemo(() => buildRoleDisplayMap(script), [script]);
 
   if (!game || !script) return null;
 
   const playerCount = game.seatOrder.length;
-  // Ring mode uses the square minimum for layout (unchanged behaviour).
-  const ringContainerSize = Math.min(canvasW, canvasH);
-  const ringTokenSize = tokenSizeForCount(playerCount);
-  const radius = ringRadius(ringContainerSize, ringTokenSize);
+  const ringContainerSize = grimoireDiameter(canvasW, canvasH);
+  const preferredTokenSize = Math.min(tokenSizeForCount(playerCount),
+    playerCount >= 12 && ringContainerSize < 700 ? 64 : 110);
+  const ringTokenSize = Math.max(44, Math.round(preferredTokenSize * Math.min(1, ringContainerSize / 600)));
+  const bounds = game.seatOrder.map((_, index) => measuredTokens[index] ?? { width: ringTokenSize, height: ringTokenSize + 60 });
+  const ring = fitTokenRing(ringContainerSize, ringTokenSize, bounds);
+  const radius = ring.radius;
+  const tokenBounds = { width: Math.max(0, ...bounds.map(b => b.width)), height: Math.max(0, ...bounds.map(b => b.height)) };
   const tokenSize = grimoireMode === "freeRoam" ? FREE_ROAM_TOKEN_SIZE : ringTokenSize;
 
   // Rectangular clamp — each axis bounded independently by the full canvas.
-  const half = tokenSize / 2;
-  const maxX = canvasW / 2 - half;
-  const maxY = canvasH / 2 - half;
+  const maxX = Math.max(0, (canvasW - Math.max(tokenSize, tokenBounds.width)) / 2 - 16);
+  const maxY = Math.max(0, (canvasH - Math.max(tokenSize, tokenBounds.height)) / 2 - 16);
   const clampX = (v: number) => Math.max(-maxX, Math.min(maxX, v));
   const clampY = (v: number) => Math.max(-maxY, Math.min(maxY, v));
 
   const getPos = (id: PlayerId, seatIndex: number) => {
-    const ring = seatPosition(seatIndex, playerCount, radius);
-    if (grimoireMode === "freeRoam") return tokenPositions[id] ?? ring;
-    return ring;
+    const point = seatPosition(seatIndex, playerCount, radius);
+    if (grimoireMode === "freeRoam") {
+      const saved = tokenPositions[id] ?? point;
+      return { x: clampX(saved.x), y: clampY(saved.y) };
+    }
+    return { x: point.x + ring.x, y: point.y + ring.y + (bounds[seatIndex]!.height - ringTokenSize) / 2 };
   };
 
   const switchToFreeRoam = () => {
@@ -391,9 +412,11 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
 
   return (
     <div className="grimoire-wrap">
+      <div className="grimoire-stage" ref={stageRef}>
       <div
         className="grimoire"
         data-mode={grimoireMode}
+        style={grimoireMode === "ring" ? { width: ringContainerSize, height: ringContainerSize } : undefined}
         ref={canvasRef}
         onPointerMove={handleCanvasPointerMove}
         onPointerUp={handleCanvasPointerUp}
@@ -477,6 +500,7 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
             +
           </button>
         )}
+      </div>
       </div>
 
       {/* Mode controls live outside the grimoire canvas so they never overlap tokens */}

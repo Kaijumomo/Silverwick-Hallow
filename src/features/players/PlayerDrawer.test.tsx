@@ -145,3 +145,39 @@ it("Lunatic bluff picker allows an in-play good character", () => {
   fireEvent.click(setup.getByRole("button", { name: "Chef townsfolk" }));
   expect(current().privateInfo?.bluffs).toEqual(["chef"]);
 });
+
+it("keeps drawer focus contained across privacy changes and restores the seat on Escape", () => {
+  function SelectedDrawer() {
+    const selected = store(s => s.selectedPlayerId);
+    const player = store(s => Object.values(s.game!.players)[0]!);
+    return <>
+      <button onClick={() => store.getState().selectPlayer(player.id)}>Alice seat</button>
+      {selected && <PlayerDrawer player={player} />}
+    </>;
+  }
+  render(<SelectedDrawer />);
+  const seat = screen.getByRole("button", { name: "Alice seat" });
+  seat.focus(); fireEvent.click(seat);
+  const name = screen.getByRole("textbox", { name: "Player name" });
+  expect(name).toHaveFocus();
+  fireEvent.change(name, { target: { value: "Alice edited" } });
+  expect(name).toHaveFocus();
+  fireEvent.keyDown(name, { key: "Tab", shiftKey: true });
+  expect(screen.getByRole("button", { name: "Unseat player" })).toHaveFocus();
+  fireEvent.keyDown(document.activeElement!, { key: "Tab" });
+  expect(name).toHaveFocus();
+  act(() => usePrivacyStore.getState().setEnabled(true));
+  const close = screen.getByRole("button", { name: "Close" });
+  expect(close).toHaveFocus();
+  fireEvent.keyDown(close, { key: "Tab" });
+  expect(close).toHaveFocus();
+  fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
+  expect(close).toHaveFocus();
+  expect(seat).toHaveAttribute("inert");
+  act(() => usePrivacyStore.getState().setEnabled(false));
+  expect(screen.getByRole("textbox", { name: "Player name" })).toHaveFocus();
+  fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(seat).toHaveFocus();
+  expect(seat).not.toHaveAttribute("inert");
+});

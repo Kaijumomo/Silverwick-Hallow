@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
 import { deriveAlignment } from "@/data/roleRegistry";
 import { TRAVELERS } from "@/data/travelers";
@@ -8,6 +8,7 @@ import { getPrivateInfoApplicability } from "@/stores/privatePackets";
 import { roleAuthority } from "@/data/canonical";
 import { evilInformationPolicy } from "@/features/nightOrder/nightRules";
 import { buildRegistry } from "@/data/roleRegistry";
+import { useModalBehavior } from "@/components/Modal";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import type {
   Alignment,
@@ -134,42 +135,36 @@ type PlayerDrawerProps = {
   onUnseat?: (id: string) => Promise<void> | void;
 };
 
-function PrivacySafeDrawer({ player, onClose }: { player: STPlayerRecord; onClose: () => void }) {
+function DrawerShell({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const drawerRef = useRef<HTMLElement>(null);
-  useEffect(() => {
-    const trigger = document.activeElement as HTMLElement | null;
-    drawerRef.current?.querySelector<HTMLElement>("button")?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { event.preventDefault(); onClose(); }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      if (trigger && document.contains(trigger)) trigger.focus();
-    };
-  }, [onClose]);
-  return (
-    <>
-      <div className="drawer-backdrop" onClick={onClose} />
-      <aside ref={drawerRef} className="drawer privacy-safe-drawer" role="dialog" aria-modal="true" aria-label={`Player ${player.name}`}>
-        <div className="drawer-header">
-          <span className="drawer-name privacy-safe-name">Player</span>
-          <button className="btn btn-sm" onClick={onClose} aria-label="Close">✕</button>
+  const layerRef = useRef<HTMLDivElement>(null);
+  useModalBehavior(drawerRef, layerRef, onClose);
+  return <div ref={layerRef}>
+    <div className="drawer-backdrop" onClick={onClose} aria-hidden="true" />
+    <aside ref={drawerRef} className="drawer" role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>
+      {children}
+    </aside>
+  </div>;
+}
+
+function PrivacySafeContents({ player, onClose }: { player: STPlayerRecord; onClose: () => void }) {
+  return <>
+    <div className="drawer-header">
+      <span className="drawer-name privacy-safe-name">Player</span>
+      <button className="btn btn-sm" onClick={onClose} aria-label="Close">✕</button>
+    </div>
+    <div className="drawer-body">
+      <section className="drawer-section">
+        <h3 className="drawer-section-title">Safe view</h3>
+        <p className="privacy-safe-player-name">{player.name || "Unnamed player"}</p>
+        <div className="drawer-row">
+          <span className="label">seat {player.seat + 1}</span>
+          <span className="label">{player.alive ? "Alive" : "Dead"}</span>
         </div>
-        <div className="drawer-body">
-          <section className="drawer-section">
-            <h3 className="drawer-section-title">Safe view</h3>
-            <p className="privacy-safe-player-name">{player.name || "Unnamed player"}</p>
-            <div className="drawer-row">
-              <span className="label">seat {player.seat + 1}</span>
-              <span className="label">{player.alive ? "Alive" : "Dead"}</span>
-            </div>
-            <p className="behavior-help">Storyteller details are hidden while Privacy Mode is on.</p>
-          </section>
-        </div>
-      </aside>
-    </>
-  );
+        <p className="behavior-help">Storyteller details are hidden while Privacy Mode is on.</p>
+      </section>
+    </div>
+  </>;
 }
 
 export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) {
@@ -201,30 +196,6 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   const [reminderDraft, setReminderDraft] = useState("");
   const [membershipBusy, setMembershipBusy] = useState(false);
   const [membershipError, setMembershipError] = useState<string | null>(null);
-  const drawerRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    const trigger = document.activeElement as HTMLElement | null;
-    drawerRef.current?.querySelector<HTMLElement>("input, button")?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { event.preventDefault(); selectPlayer(null); }
-      if (event.key !== "Tab" || !drawerRef.current) return;
-      const focusable = Array.from(drawerRef.current.querySelectorAll<HTMLElement>(
-        "button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex=\"-1\"])"
-      ));
-      if (focusable.length === 0) return;
-      const first = focusable[0]!;
-      const last = focusable[focusable.length - 1]!;
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      if (trigger && document.contains(trigger)) trigger.focus();
-    };
-  }, [player.id, selectPlayer]);
-
   useEffect(() => {
     setNameDraft(player.name);
   }, [player.id, player.name]);
@@ -248,7 +219,9 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   );
 
   if (!game || !script) return null;
-  if (privacyMode) return <PrivacySafeDrawer player={player} onClose={() => selectPlayer(null)} />;
+  if (privacyMode) return <DrawerShell title={`Player ${player.name}`} onClose={() => selectPlayer(null)}>
+    <PrivacySafeContents player={player} onClose={() => selectPlayer(null)} />
+  </DrawerShell>;
   const role = player.actualRole ? roleById.get(player.actualRole) : undefined;
   const shownRoleDef = player.shownRole ? roleById.get(player.shownRole) ?? TRAVELERS.find(r => r.id === player.shownRole) : undefined;
 
@@ -307,12 +280,11 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   const rolePool = player.isTraveler ? TRAVELERS : script.characters;
 
   return (
-    <>
-      <div className="drawer-backdrop" onClick={close} />
-      <aside ref={drawerRef} className="drawer" role="dialog" aria-modal="true" aria-label="Player editor">
+    <DrawerShell title="Player editor" onClose={close}>
         <div className="drawer-header">
           <input
             className="drawer-name"
+            aria-label="Player name"
             value={nameDraft}
             onChange={(e) => setNameDraft(e.target.value.slice(0, 20))}
             onBlur={commitName}
@@ -635,8 +607,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
             {membershipError && <p className="field-error" role="alert">{membershipError}</p>}
           </section>
         </div>
-      </aside>
-    </>
+    </DrawerShell>
   );
 }
 
