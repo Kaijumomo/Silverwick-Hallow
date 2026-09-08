@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { RoleDef, RoleType } from "@/stores/types";
 import { iconUrlFor } from "@/data/iconUrl";
+import { isCanonicalRole, roleAuthority } from "@/data/canonical";
 
 const TYPES: RoleType[] = [
   "townsfolk",
@@ -186,16 +187,17 @@ function AlmanacCard({
       </button>
       {expanded && (
         <div className="almanac-detail">
+          <p className="behavior-help">{roleAuthority(role)}</p>
           {role.ability && <p className="almanac-ability">{role.ability}</p>}
           {role.flavor && <p className="almanac-flavor">{role.flavor}</p>}
-          <a
+          {isCanonicalRole(role) && <a
             className="almanac-wiki"
             href={wikiUrlFor(role.name)}
             target="_blank"
             rel="noopener noreferrer"
           >
             Wiki ↗
-          </a>
+          </a>}
         </div>
       )}
     </li>

@@ -39,7 +39,7 @@ describe("AUD-013 wake identity is operational, never mechanical", () => {
     expect(wake.role.id).toBe(shown);
     expect(wake.simulated).toBe(simulated);
     const steps = computeNightOrder({ p }, ["p"], troubleBrewing, false);
-    expect(steps).toEqual([expect.objectContaining({
+    expect(steps.filter(step => step.kind === "player")).toEqual([expect.objectContaining({
       effectiveRoleId: shown, actualRoleId: actual, isDeceived: simulated,
     })]);
     expect(p).toEqual(before);
@@ -55,12 +55,12 @@ describe("AUD-013 wake identity is operational, never mechanical", () => {
 
   it("Marionette and Lunatic are excluded from real team introduction recipients", () => {
     const players = {
-      m: makeSTPlayer({ actualRole: "marionette", shownRole: "fortuneteller" }),
-      l: makeSTPlayer({ actualRole: "lunatic", shownRole: "imp" }),
-      d: makeSTPlayer({ actualRole: "imp", shownRole: "imp" }),
-      p: makeSTPlayer({ actualRole: "poisoner", shownRole: "poisoner" }),
+      m: makeSTPlayer({ id: "m", actualRole: "marionette", shownRole: "fortuneteller" }),
+      l: makeSTPlayer({ id: "l", actualRole: "lunatic", shownRole: "imp" }),
+      d: makeSTPlayer({ id: "d", actualRole: "imp", shownRole: "imp" }),
+      p: makeSTPlayer({ id: "p", actualRole: "poisoner", shownRole: "poisoner" }),
     };
-    const steps = computeNightOrder(players, Object.keys(players), troubleBrewing, true);
+    const steps = computeNightOrder(players, Object.keys(players), troubleBrewing, true, { fabled: ["toymaker"] });
     expect(steps.find(s => s.stepKey === "minionInfo")).toMatchObject({ recipientIds: ["p"] });
     expect(steps.find(s => s.stepKey === "demonInfo")).toMatchObject({ recipientIds: ["d"] });
   });

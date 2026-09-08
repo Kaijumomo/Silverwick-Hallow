@@ -8,6 +8,7 @@ import { publishPrivatePacket } from "@/firebase/privatePacketCommands";
 import { packetKey, usePacketDeliveryState } from "@/firebase/packetDeliveryState";
 import { PrivateInformation } from "@/features/player/PrivateInformation";
 import { usePrivacyStore } from "@/stores/privacyStore";
+import { setupInformationWarning } from "@/features/nightOrder/nightRules";
 
 /** Contextual send controls. Preview is derived, never stored or synchronized. */
 export function PlayerInformation({ playerId, purpose }: { playerId: string; purpose: "setup" | "result" }) {
@@ -21,6 +22,7 @@ export function PlayerInformation({ playerId, purpose }: { playerId: string; pur
   const script = game && selectScriptById(state, game.scriptId);
   if (hidden || !game || !p || p.isEmpty || !script) return null;
   const registry = buildRegistry(script);
+  const setupWarning = purpose === "setup" ? setupInformationWarning(Object.values(game.players), registry, game) : undefined;
   let preview: ReturnType<typeof previewPrivatePacket> | undefined;
   let invalid: string | undefined;
   if (hasPrivateDraft(p)) {
@@ -36,6 +38,7 @@ export function PlayerInformation({ playerId, purpose }: { playerId: string; pur
     p.publishedPacket?.forDay === game.day && p.publishedPacket?.forPhase === game.phase);
   const sendLabel = purpose === "result" ? "Send to player view" : p.privateInfo?.fakeMinions?.length ? "Send setup information" : "Send bluffs";
   return <div className="player-information" aria-label={`Information for ${p.name}`}>
+    {setupWarning && <p className="behavior-help">{setupWarning} Deliberate sending is a manual override, not a rules decision.</p>}
     {purpose === "result" && <label className="information-input">
       Information
       <textarea className="input" rows={2} maxLength={4000} value={p.privateInfo?.extraText ?? ""}

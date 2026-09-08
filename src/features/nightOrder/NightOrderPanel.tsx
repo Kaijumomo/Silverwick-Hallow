@@ -6,6 +6,7 @@ import { PlayerInformation } from "@/features/players/PlayerInformation";
 import { getPrivateInfoApplicability, offersNightInformation, previewPrivatePacket } from "@/stores/privatePackets";
 import { buildRegistry } from "@/data/roleRegistry";
 import { usePrivacyStore } from "@/stores/privacyStore";
+import { evilInformationPolicy } from "./nightRules";
 import type { NightStepRecord, NightStepStatus, Script, StorytellerLobbyRecord } from "@/stores/types";
 
 // ---------------------------------------------------------------------------
@@ -99,7 +100,7 @@ function StepCard({ step, record, day }: StepCardProps) {
       {step.kind === "player" && step.isDeceived && <p className="step-reminder">
         Simulated wake — actually the {step.actualRoleName}. Follow the shown procedure; no real ability effects.
       </p>}
-      {step.kind === "global" && <p className="step-player-name">
+      {step.kind === "global" && step.recipientIds !== undefined && <p className="step-player-name">
         Introduction recipients: {step.recipientIds?.map(id => players?.[id]?.name ?? "Unnamed player").join(", ") || "none — review manually"}.
         Simulated identities are excluded.
       </p>}
@@ -108,8 +109,9 @@ function StepCard({ step, record, day }: StepCardProps) {
       {step.prompt && (
         <p className="step-prompt">{step.prompt}</p>
       )}
+      {step.advisory && <p className="step-reminder">{step.advisory}</p>}
 
-      {step.kind === "player" && offersNightInformation(step.prompt) && <details className="information-review">
+      {step.kind === "player" && offersNightInformation(step.prompt + " " + step.reminder) && <details className="information-review">
         <summary>Give information</summary>
         <PlayerInformation playerId={step.playerId} purpose="result" />
       </details>}
@@ -182,11 +184,21 @@ export function NightOrderPanel({ game, script, onClose }: Props) {
     );
   }
   const isFirstNight = game.day === 1;
-  const steps = computeNightOrder(game.players, game.seatOrder, script, isFirstNight);
+  const steps = computeNightOrder(game.players, game.seatOrder, script, isFirstNight, game);
+  for (const key of Object.keys(game.nightProgress ?? {})) {
+    const prefix = `${game.day}:manual:`;
+    if (key.startsWith(prefix)) steps.push({
+      kind: "global", stepKey: key.slice(String(game.day).length + 1),
+      label: "Custom night step", prompt: "Storyteller-defined procedure. Use the notes below; complete or skip manually.",
+      reminder: "", order: Number.MAX_SAFE_INTEGER,
+    });
+  }
   const registry = buildRegistry(script);
+  const policy = evilInformationPolicy(game.seatOrder.map(id => game.players[id]!).filter(Boolean), registry, game);
   const setupPlayers = game.seatOrder.filter(id => {
     const p = game.players[id];
     if (!p || p.isEmpty || !getPrivateInfoApplicability(p, registry).bluffs) return false;
+    if (!policy.normalStartingInfo || policy.complex.length) return false;
     if (isFirstNight) return true;
     // Later nights only offer changed setup content, never an overdue task.
     if (!p.privateInfo?.bluffs?.length && !p.privateInfo?.fakeMinions?.length) return false;
@@ -230,7 +242,7 @@ export function NightOrderPanel({ game, script, onClose }: Props) {
           steps.map((step) => (
             <div key={step.stepKey}>
               <StepCard step={step} record={progress[`${game.day}:${step.stepKey}`]} day={game.day} />
-              {step.stepKey === "demonInfo" && setupPlayers.map(id => <details className="information-review" key={id}>
+              {step.kind === "global" && step.setupRecipientIds?.filter(id => setupPlayers.includes(id)).map(id => <details className="information-review" key={id}>
                 <summary>Setup information — {game.players[id]!.name}</summary>
                 <button className="btn btn-sm" onClick={() => useStorytellerStore.getState().selectPlayer(id)}>Edit setup information</button>
                 <PlayerInformation playerId={id} purpose="setup" />
@@ -243,6 +255,11 @@ export function NightOrderPanel({ game, script, onClose }: Props) {
           <button className="btn btn-sm" onClick={() => useStorytellerStore.getState().selectPlayer(id)}>Edit setup information</button>
           <PlayerInformation playerId={id} purpose="setup" />
         </details>)}
+        <button className="btn btn-sm" onClick={() => useStorytellerStore.getState().setNightStepNotes(
+          game.day, `manual:${crypto.randomUUID()}`, ""
+        )}>Add custom night step</button>
+        <p className="behavior-help">New or changed characters, gained abilities and past events may need a custom step.
+          Verify these conditions manually; this sheet does not reconstruct game history.</p>
       </div>
     </aside>
   );

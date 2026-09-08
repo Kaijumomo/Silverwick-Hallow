@@ -19,6 +19,12 @@ export type BehaviorMode =
   | "custom";
 
 export type RoleDef = {
+  provenance?: {
+    status: "official" | "official-experimental" | "homebrew" | "unverified";
+    source?: string;
+    revision?: string;
+    verifiedAt?: string;
+  };
   id: RoleId;
   name: string;
   type: RoleType;

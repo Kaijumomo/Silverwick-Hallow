@@ -42,7 +42,7 @@ export function getPrivateInfoApplicability(
 
 /** Optional UI affordance from procedure text, never an ability resolver. */
 export function offersNightInformation(prompt: string): boolean {
-  return /\b(show|tell|learn|learns|information)\b/i.test(prompt);
+  return /\b(show|tell|learn|learns|information|signal|nod)\b/i.test(prompt);
 }
 
 export function hasPrivateDraft(player: STPlayerRecord): boolean {

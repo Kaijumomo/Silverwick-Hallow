@@ -129,6 +129,8 @@ export function GameScreen() {
   const selected = selectedPlayerId ? game.players[selectedPlayerId] : null;
   const seatedPlayers = Object.values(game.players).filter((p) => !p.isEmpty);
   const playerCount = seatedPlayers.length;
+  const plannedSeatCount = game.seatOrder.length;
+  const emptySeatCount = Object.values(game.players).filter((p) => p.isEmpty).length;
   const aliveCount = seatedPlayers.filter((p) => p.alive).length;
   const pendingQueueCount = Object.keys(game.pendingPlayers ?? {}).length;
 
@@ -154,6 +156,11 @@ export function GameScreen() {
           <span className="label">
             {playerCount} {playerCount === 1 ? "player" : "players"}
           </span>
+          {emptySeatCount > 0 && (
+            <span className="label planned-seat-summary">
+              {emptySeatCount} empty of {plannedSeatCount} seats
+            </span>
+          )}
           {playerCount > 0 && (
             <span className="label" title="Alive of total players">
               {aliveCount}/{playerCount} alive

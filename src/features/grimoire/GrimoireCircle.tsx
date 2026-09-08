@@ -200,15 +200,12 @@ type EmptySeatProps = {
 
 function EmptySeat({ seatNumber, size, x, y, onClick }: EmptySeatProps) {
   return (
-    <div
+    <button
+      type="button"
       className="token empty-seat"
       style={{ left: `calc(50% + ${x}px)`, top: `calc(50% + ${y}px)` }}
       onClick={onClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); }
-      }}
+      aria-label={`Empty seat ${seatNumber}. Tap to fill this planned seat.`}
       title={`Seat ${seatNumber} — click to assign a player`}
     >
       <div className="token-disc-frame" style={{ width: size, height: size }}>
@@ -216,9 +213,9 @@ function EmptySeat({ seatNumber, size, x, y, onClick }: EmptySeatProps) {
           <span className="empty-seat-icon">+</span>
         </div>
       </div>
-      <div className="token-role empty-seat-label">empty</div>
+      <div className="token-role empty-seat-label">Empty seat</div>
       <div className="token-name empty-seat-num">Seat {seatNumber}</div>
-    </div>
+    </button>
   );
 }
 
@@ -239,7 +236,9 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
   );
   const selectedPlayerId = useStorytellerStore((s) => s.selectedPlayerId);
   const selectPlayer = useStorytellerStore((s) => s.selectPlayer);
-  const addPlayer = useStorytellerStore((s) => s.addPlayer);
+  const addPlayerToSeat = useStorytellerStore((s) => s.addPlayerToSeat);
+  const addEmptySeat = useStorytellerStore((s) => s.addEmptySeat);
+  const removePlayer = useStorytellerStore((s) => s.removePlayer);
   const setSeatOrder = useStorytellerStore((s) => s.setSeatOrder);
   const grimoireMode = useStorytellerStore((s) => s.grimoireMode);
   const tokenPositions = useStorytellerStore((s) => s.tokenPositions);
@@ -305,8 +304,9 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
 
   const handleAdd = () => {
     const name = window.prompt("Player name?");
-    if (name?.trim()) addPlayer(name);
+    if (name?.trim()) addPlayerToSeat(name);
   };
+  const handleAddSeat = () => addEmptySeat();
 
   // ── Free-roam pointer drag ────────────────────────────────────────────────
 
@@ -361,6 +361,9 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
 
   const modeControls = (
     <div className="grimoire-mode-controls">
+      <button className="grimoire-mode-btn" onClick={handleAddSeat} aria-label="Add empty planned seat">
+        + New seat
+      </button>
       {grimoireMode === "ring" ? (
         <button className="grimoire-mode-btn" onClick={switchToFreeRoam} title="Switch to free-roam layout">
           ⊞ Free Roam
@@ -489,6 +492,10 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
             backend={backend}
             code={code}
             onClose={() => setAssigningSeatId(null)}
+            onRemoveSeat={() => {
+              removePlayer(assigningSeatId);
+              setAssigningSeatId(null);
+            }}
           />
         );
       })()}

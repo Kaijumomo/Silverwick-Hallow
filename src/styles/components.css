@@ -552,6 +552,13 @@
   gap: 6px;
   flex-shrink: 0;
 }
+.seat-assign-footer {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+  padding-top: 12px;
+}
 
 .add-player-btn {
   position: absolute;
@@ -1731,6 +1738,222 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* ===== Phase 8 responsive/accessibility polish ===== */
+.dialog-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+.dialog-layer > .dialog {
+  z-index: 70;
+}
+.dialog-close,
+.drawer-header .btn,
+.seat-assign-actions .btn {
+  min-width: 44px;
+  min-height: 44px;
+}
+.btn-sm { min-height: 44px; }
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role="button"]:focus-visible,
+.token:focus-visible {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 3px;
+}
+
+.game-body,
+.grimoire-wrap {
+  min-width: 0;
+}
+.grimoire {
+  width: min(100%, calc(100dvh - 180px));
+  height: auto;
+  aspect-ratio: 1;
+}
+.token-name,
+.token-role {
+  max-width: min(110px, 24vw);
+}
+.token-name {
+  overflow-wrap: anywhere;
+}
+
+.token.empty-seat {
+  opacity: 1;
+  min-width: 64px;
+  min-height: 64px;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  font: inherit;
+}
+.token.empty-seat:hover,
+.token.empty-seat:focus-visible {
+  opacity: 1;
+}
+.empty-seat-disc {
+  background: rgba(196, 158, 80, 0.05) !important;
+  border: 2px dashed rgba(196, 158, 80, 0.7) !important;
+}
+.empty-seat-icon {
+  color: var(--gold-bright);
+  font-size: 30px;
+}
+.empty-seat-label {
+  color: var(--gold-soft) !important;
+  font-style: normal;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+}
+.empty-seat-num {
+  color: var(--text-dim) !important;
+}
+.step-status-btn,
+.grimoire-mode-btn,
+.toggle-pill,
+.chip,
+.reminder-preset {
+  min-height: 44px;
+}
+.step-status-btn {
+  min-width: 44px;
+}
+
+@media (max-width: 760px) {
+  .phase-bar {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+  .phase-bar-left {
+    flex: 1;
+    min-width: 0;
+    gap: 6px;
+  }
+  .phase-bar-overflow-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 4px 10px;
+  }
+  .phase-bar-right {
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+    position: fixed;
+    top: 62px;
+    right: 8px;
+    min-width: min(240px, calc(100vw - 16px));
+    padding: 8px;
+    gap: 6px;
+    z-index: 55;
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: -4px 8px 30px rgba(0,0,0,.7);
+  }
+  .phase-bar-right.open { display: flex; }
+  .phase-bar-right .btn,
+  .phase-bar-right .btn-sm,
+  .phase-bar-right .btn-gold,
+  .phase-bar-right .btn-danger {
+    width: 100%;
+    justify-content: flex-start;
+    text-align: left;
+  }
+  .phase-overflow-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 54;
+  }
+  .game-body {
+    position: relative;
+    overflow: hidden;
+  }
+  .grimoire-wrap {
+    width: 100%;
+    padding: 10px 10px 58px;
+  }
+  .grimoire {
+    width: min(100%, calc(100dvh - 170px));
+  }
+  .setup-panel,
+  .night-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: 100%;
+    max-height: min(76dvh, 680px);
+    border-right: 0;
+    border-top: 1px solid var(--border-strong);
+    border-radius: 16px 16px 0 0;
+    z-index: 45;
+    box-shadow: 0 -10px 30px rgba(0,0,0,.55);
+  }
+  .setup-panel-body,
+  .night-panel-body {
+    min-height: 0;
+  }
+  .drawer {
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    width: 100%;
+    height: min(90dvh, 760px);
+    max-height: 90dvh;
+    border-left: 0;
+    border-top: 1px solid var(--border-strong);
+    border-radius: 18px 18px 0 0;
+    animation: drawer-up .18s ease-out;
+  }
+  .drawer-body {
+    padding: 14px;
+  }
+  .dialog {
+    width: calc(100% - 20px);
+    max-height: calc(100dvh - 20px);
+    border-radius: 14px;
+  }
+  .dialog-lg {
+    width: calc(100% - 20px);
+    height: calc(100dvh - 20px);
+  }
+  .dialog-header {
+    padding: 10px 12px;
+  }
+  .dialog-body {
+    padding: 12px;
+  }
+}
+@keyframes drawer-up {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@media (min-width: 761px) and (max-width: 1100px) {
+  .setup-panel,
+  .night-panel { width: 320px; }
+  .grimoire-wrap { padding: 14px; }
+}
+
+@media (max-width: 420px) {
+  .phase-pill { letter-spacing: .12em; padding-inline: 9px; }
+  .day-counter { display: none; }
+  .phase-bar-left > .label[title] { display: none; }
+  .token-name { font-size: 12px; max-width: 27vw; }
+  .token-role { max-width: 25vw; }
 }
 
 /* Bag chips row */

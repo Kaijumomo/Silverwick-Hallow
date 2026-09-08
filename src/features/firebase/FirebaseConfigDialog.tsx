@@ -5,6 +5,7 @@ import {
   type FirebaseAppConfig,
 } from "@/firebase/config";
 import { clearActiveBackend } from "@/firebase/session";
+import { Modal } from "@/components/Modal";
 
 type Props = {
   onClose: () => void;
@@ -38,15 +39,7 @@ export function FirebaseConfigDialog({ onClose, onSaved }: Props) {
   ) => setDraft((d) => ({ ...d, [key]: value }));
 
   return (
-    <>
-      <div className="dialog-backdrop" onClick={onClose} />
-      <div className="dialog" role="dialog" aria-label="Configure Firebase">
-        <header className="dialog-header">
-          <h2 className="dialog-title">Configure Firebase</h2>
-          <button className="btn btn-sm" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
-        </header>
+    <Modal title="Configure Firebase" onClose={onClose}>
         <div className="dialog-body">
           <p className="behavior-help">
             Paste your Firebase Realtime Database credentials. The apiKey is
@@ -107,7 +100,6 @@ export function FirebaseConfigDialog({ onClose, onSaved }: Props) {
             </button>
           </div>
         </div>
-      </div>
-    </>
+    </Modal>
   );
 }

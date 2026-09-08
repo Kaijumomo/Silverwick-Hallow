@@ -1,6 +1,7 @@
 import { useState, type DragEvent, type ChangeEvent } from "react";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { parseClocktowerScript } from "@/data/customScript";
+import { Modal } from "@/components/Modal";
 
 type Tab = "paste" | "upload";
 
@@ -76,15 +77,7 @@ export function ScriptImportDialog({ onClose, onImported }: ImportDialogProps) {
   };
 
   return (
-    <>
-      <div className="dialog-backdrop" onClick={onClose} />
-      <div className="dialog" role="dialog" aria-label="Import script">
-        <header className="dialog-header">
-          <h2 className="dialog-title">Import script</h2>
-          <button className="btn btn-sm" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
-        </header>
+    <Modal title="Import script" onClose={onClose}>
         <div className="dialog-tabs">
           <button
             className="tab"
@@ -154,7 +147,6 @@ export function ScriptImportDialog({ onClose, onImported }: ImportDialogProps) {
             </div>
           )}
         </div>
-      </div>
-    </>
+    </Modal>
   );
 }

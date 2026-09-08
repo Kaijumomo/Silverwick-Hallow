@@ -3,6 +3,7 @@ import { computeNightOrder } from "./nightOrder";
 import type { NightStep } from "./nightOrder";
 import { makeSTPlayer } from "@/test/fixtures";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
+import { canonicalOrder } from "@/data/canonical";
 import type { STPlayerRecord } from "@/stores/types";
 
 // ---------------------------------------------------------------------------
@@ -38,12 +39,13 @@ describe("computeNightOrder — first night", () => {
     { id: "p-empath",   role: "empath",   seat: 3 },
     { id: "p-chef",     role: "chef",     seat: 4 },
     { id: "p-ft",       role: "fortuneteller", seat: 5 },
+    { id: "p-soldier",  role: "soldier", seat: 6 },
   ]);
 
-  it("starts with global demonInfo and minionInfo steps", () => {
+  it("starts with Minion information before Demon information", () => {
     const steps = computeNightOrder(players, seatOrder, troubleBrewing, true);
-    expect(steps[0]?.stepKey).toBe("demonInfo");
-    expect(steps[1]?.stepKey).toBe("minionInfo");
+    expect(steps[0]?.stepKey).toBe("minionInfo");
+    expect(steps[1]?.stepKey).toBe("demonInfo");
   });
 
   it("produces the correct player sequence: poisoner → chef → empath → fortuneteller → spy (imp absent)", () => {
@@ -127,7 +129,7 @@ describe("Drunk uses shownRole's night slot", () => {
 // ---------------------------------------------------------------------------
 
 describe("Lunatic uses shownRole (demon) night slot", () => {
-  it("Lunatic with shownRole=imp appears in imp's other-night slot", () => {
+  it("Lunatic performs the shown Imp procedure before the real Demon", () => {
     const { players, seatOrder } = makePlayers([
       {
         id: "p-lunatic", role: "lunatic", seat: 0,
@@ -139,8 +141,8 @@ describe("Lunatic uses shownRole (demon) night slot", () => {
     expect(ps).toHaveLength(1);
     expect(ps[0]!.effectiveRoleId).toBe("imp");
     expect(ps[0]!.isDeceived).toBe(true);
-    const impDef = troubleBrewing.characters.find((r) => r.id === "imp")!;
-    expect(ps[0]!.order).toBe(impDef.otherNight);
+    expect(ps[0]!.order).toBe(canonicalOrder("lunatic", false));
+    expect(ps[0]!.prompt).toBe(troubleBrewing.characters.find(r => r.id === "imp")!.otherNightPrompt);
   });
 });
 
@@ -181,15 +183,14 @@ describe("Unassigned player skipped", () => {
 // Test 7: Dead player is still included
 // ---------------------------------------------------------------------------
 
-describe("Dead player still included", () => {
-  it("player with alive=false appears with alive=false in the step", () => {
+describe("Dead player eligibility", () => {
+  it("dead Spy has no ordinary wake absent a retained-ability exception", () => {
     const { players, seatOrder } = makePlayers([
       { id: "p-dead-spy", role: "spy", seat: 0, over: { alive: false } },
     ]);
     const steps = computeNightOrder(players, seatOrder, troubleBrewing, true);
     const ps = playerSteps(steps);
-    expect(ps).toHaveLength(1);
-    expect(ps[0]!.alive).toBe(false);
+    expect(ps).toHaveLength(0);
   });
 });
 
@@ -219,18 +220,18 @@ describe("Tiebreaker: same order → sorted by seat", () => {
 // Test 9: Marionette in play annotates demonInfo prompt
 // ---------------------------------------------------------------------------
 
-describe("Marionette annotates demonInfo prompt", () => {
-  it("demonInfo prompt mentions Marionette when a player has marionette_fake_good_behavior", () => {
+describe("Marionette setup is separate from team introductions", () => {
+  it("the actual Marionette has a Demon-information procedure even in a small game", () => {
     const { players, seatOrder } = makePlayers([
       { id: "p-imp", role: "imp", seat: 0 },
       {
-        id: "p-mar", role: "imp", seat: 1,
-        over: { behaviorMode: "marionette_fake_good_behavior" },
+        id: "p-mar", role: "marionette", seat: 1,
+        over: { behaviorMode: "marionette_fake_good_behavior", shownRole: "fortuneteller" },
       },
     ]);
     const steps = computeNightOrder(players, seatOrder, troubleBrewing, true);
-    const demonInfo = steps.find((s) => s.stepKey === "demonInfo");
-    expect(demonInfo?.prompt).toContain("Marionette");
+    expect(steps.find(s => s.stepKey === "demonInfo")).toBeUndefined();
+    expect(steps.find(s => s.stepKey === "admin:p-mar:marionette")?.prompt).toContain("Marionette");
   });
 
   it("demonInfo prompt does NOT mention Marionette when none are in play", () => {
@@ -238,8 +239,7 @@ describe("Marionette annotates demonInfo prompt", () => {
       { id: "p-imp", role: "imp", seat: 0 },
     ]);
     const steps = computeNightOrder(players, seatOrder, troubleBrewing, true);
-    const demonInfo = steps.find((s) => s.stepKey === "demonInfo");
-    expect(demonInfo?.prompt).not.toContain("Marionette");
+    expect(steps.some(s => s.stepKey.includes("marionette"))).toBe(false);
   });
 });
 

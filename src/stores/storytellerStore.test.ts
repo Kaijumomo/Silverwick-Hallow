@@ -227,6 +227,30 @@ describe("setIsTraveler", () => {
   });
 });
 
+describe("planned seat workflow", () => {
+  it("fills a planned empty seat before adding a new seat", () => {
+    useStorytellerStore.getState().newGame("tb", { plannedPlayerCount: 2 });
+    const planned = useStorytellerStore.getState().game!;
+    const firstSeat = planned.seatOrder[0]!;
+    useStorytellerStore.getState().addPlayerToSeat("Alice");
+    const after = useStorytellerStore.getState().game!;
+    expect(after.seatOrder).toHaveLength(2);
+    expect(after.players[firstSeat]!.name).toBe("Alice");
+    expect(after.players[firstSeat]!.isEmpty).toBe(false);
+  });
+
+  it("supports deliberately adding and removing an empty planned seat", () => {
+    useStorytellerStore.getState().newGame("tb", { plannedPlayerCount: 1 });
+    useStorytellerStore.getState().addEmptySeat();
+    const game = useStorytellerStore.getState().game!;
+    expect(game.seatOrder).toHaveLength(2);
+    expect(Object.values(game.players).filter((p) => p.isEmpty)).toHaveLength(2);
+    expect(useStorytellerStore.getState().removePlayer(game.seatOrder[1]!)).toBe(true);
+    expect(useStorytellerStore.getState().game!.seatOrder).toHaveLength(1);
+    expect(useStorytellerStore.getState().game!.plannedPlayerCount).toBe(1);
+  });
+});
+
 describe("setFabled", () => {
   it("setFabled writes fabled array to game", () => {
     useStorytellerStore.getState().newGame("tb");

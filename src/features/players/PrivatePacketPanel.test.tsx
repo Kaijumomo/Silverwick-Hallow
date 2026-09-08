@@ -74,6 +74,7 @@ describe("private information workflow UI", () => {
 
   it("night procedure comes first and Lunatic setup is a collapsed introduction action", () => {
     player();
+    store.getState().setFabled(["toymaker"]);
     store.getState().advancePhase();
     const view = render(<NightOrderPanel game={store.getState().game!} script={troubleBrewing} onClose={() => {}} />);
     const body = view.container.querySelector(".night-panel-body")!;

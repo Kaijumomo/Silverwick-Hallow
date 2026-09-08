@@ -106,6 +106,10 @@ export type StorytellerStore = {
   removePendingPlayer: (uid: string) => void;
 
   addPlayer: (name: string) => void;
+  /** Fill the first planned empty seat, falling back to a new seat when none exist. */
+  addPlayerToSeat: (name: string) => void;
+  /** Add one deliberate empty planned seat. */
+  addEmptySeat: () => void;
   /** Remove a player and its seat locally. Membership is revoked by the command layer first. */
   removePlayer: (id: PlayerId) => boolean;
   /** Turn a seated player into an empty seat locally. Membership is revoked first. */
@@ -501,6 +505,46 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
+      addPlayerToSeat: (name) => {
+        const { game } = get();
+        if (!game) return;
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        const emptyId = game.seatOrder.find((id) => game.players[id]?.isEmpty);
+        if (!emptyId) {
+          get().addPlayer(trimmed);
+          return;
+        }
+        const seat = game.players[emptyId];
+        if (!seat) return;
+        set({
+          undoStack: pushUndo(game, get().undoStack),
+          game: {
+            ...game,
+            players: {
+              ...game.players,
+              [emptyId]: { ...seat, name: trimmed.slice(0, 20), isEmpty: false },
+            },
+          },
+        });
+      },
+
+      addEmptySeat: () => {
+        const { game } = get();
+        if (!game) return;
+        const id = newId();
+        const seat = game.seatOrder.length;
+        set({
+          undoStack: pushUndo(game, get().undoStack),
+          game: {
+            ...game,
+            players: { ...game.players, [id]: blankPlayer(id, "", seat, true) },
+            seatOrder: [...game.seatOrder, id],
+            plannedPlayerCount: Math.max(game.plannedPlayerCount, seat + 1),
+          },
+        });
+      },
+
       removePlayer: (id) => {
         const { game, selectedPlayerId } = get();
         if (!game || !game.players[id]) return false;
@@ -532,7 +576,14 @@ export const useStorytellerStore = create<StorytellerStore>()(
           // Membership transitions establish a new remote-consistency
           // boundary; older snapshots must not resurrect a stale seat.
           undoStack: [],
-          game: { ...game, players: renumbered, seatOrder },
+          game: {
+            ...game,
+            players: renumbered,
+            seatOrder,
+            plannedPlayerCount: game.players[id]?.isEmpty
+              ? Math.min(game.plannedPlayerCount, seatOrder.length)
+              : game.plannedPlayerCount,
+          },
           selectedPlayerId: selectedPlayerId === id ? null : selectedPlayerId,
         });
         return true;

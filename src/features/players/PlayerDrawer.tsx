@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
 import { deriveAlignment } from "@/data/roleRegistry";
 import { TRAVELERS } from "@/data/travelers";
 import { needsShownIdentity } from "@/stores/identity";
 import { PlayerInformation } from "./PlayerInformation";
 import { getPrivateInfoApplicability } from "@/stores/privatePackets";
+import { roleAuthority } from "@/data/canonical";
+import { evilInformationPolicy } from "@/features/nightOrder/nightRules";
 import { buildRegistry } from "@/data/roleRegistry";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import type {
@@ -133,10 +135,23 @@ type PlayerDrawerProps = {
 };
 
 function PrivacySafeDrawer({ player, onClose }: { player: STPlayerRecord; onClose: () => void }) {
+  const drawerRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const trigger = document.activeElement as HTMLElement | null;
+    drawerRef.current?.querySelector<HTMLElement>("button")?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); onClose(); }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      if (trigger && document.contains(trigger)) trigger.focus();
+    };
+  }, [onClose]);
   return (
     <>
       <div className="drawer-backdrop" onClick={onClose} />
-      <aside className="drawer privacy-safe-drawer" role="dialog" aria-label={`Player ${player.name}`}>
+      <aside ref={drawerRef} className="drawer privacy-safe-drawer" role="dialog" aria-modal="true" aria-label={`Player ${player.name}`}>
         <div className="drawer-header">
           <span className="drawer-name privacy-safe-name">Player</span>
           <button className="btn btn-sm" onClick={onClose} aria-label="Close">✕</button>
@@ -186,6 +201,29 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   const [reminderDraft, setReminderDraft] = useState("");
   const [membershipBusy, setMembershipBusy] = useState(false);
   const [membershipError, setMembershipError] = useState<string | null>(null);
+  const drawerRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const trigger = document.activeElement as HTMLElement | null;
+    drawerRef.current?.querySelector<HTMLElement>("input, button")?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); selectPlayer(null); }
+      if (event.key !== "Tab" || !drawerRef.current) return;
+      const focusable = Array.from(drawerRef.current.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex=\"-1\"])"
+      ));
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      if (trigger && document.contains(trigger)) trigger.focus();
+    };
+  }, [player.id, selectPlayer]);
 
   useEffect(() => {
     setNameDraft(player.name);
@@ -271,7 +309,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   return (
     <>
       <div className="drawer-backdrop" onClick={close} />
-      <aside className="drawer" role="dialog" aria-label="Player editor">
+      <aside ref={drawerRef} className="drawer" role="dialog" aria-modal="true" aria-label="Player editor">
         <div className="drawer-header">
           <input
             className="drawer-name"
@@ -383,6 +421,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
                 {displayRole.ability && (
                   <p className="role-display-ability">{displayRole.ability}</p>
                 )}
+                <p className="behavior-help">{roleAuthority(displayRole)}</p>
               </div>
             ) : (
               <p className="behavior-help">No role assigned yet.</p>
@@ -507,7 +546,8 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
               player={player}
               roles={script.characters}
               roleById={roleById}
-              inPlayRoles={inPlayRoles}
+              inPlayRoles={registry && evilInformationPolicy(Object.values(game.players), registry, game).allowInPlayBluffs ? new Set() : inPlayRoles}
+              allowInPlay={!!registry && evilInformationPolicy(Object.values(game.players), registry, game).allowInPlayBluffs}
               onSetBluffs={(b) => setBluffs(player.id, b)}
             />
           )}
@@ -683,6 +723,7 @@ function BluffSlotPicker({
 // ---------------------------------------------------------------------------
 
 type DemonInfoProps = {
+  allowInPlay?: boolean;
   player: STPlayerRecord;
   roles: RoleDef[];
   roleById: Map<string, RoleDef>;
@@ -690,7 +731,7 @@ type DemonInfoProps = {
   onSetBluffs: (bluffs: string[]) => void;
 };
 
-function DemonInfo({ player, roles, roleById, inPlayRoles, onSetBluffs }: DemonInfoProps) {
+function DemonInfo({ player, roles, roleById, inPlayRoles, onSetBluffs, allowInPlay }: DemonInfoProps) {
   const bluffs = player.privateInfo?.bluffs ?? [];
   const goodPool = roles.filter(
     (r) => r.type === "townsfolk" || r.type === "outsider"
@@ -700,7 +741,7 @@ function DemonInfo({ player, roles, roleById, inPlayRoles, onSetBluffs }: DemonI
     <section className="drawer-section">
       <h3 className="drawer-section-title">Demon bluffs (ST private)</h3>
       <p className="behavior-help">
-        Choose 3 characters that are not in play.
+        {allowInPlay ? "Pope: choose 3 good characters; in-play good characters may also be bluffs." : "Choose 3 good characters that are not in play."}
       </p>
       <BluffSlotPicker
         bluffs={bluffs}

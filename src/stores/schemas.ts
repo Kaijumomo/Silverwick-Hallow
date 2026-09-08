@@ -34,6 +34,10 @@ export const RoleDefSchema = z
     iconUrl: z.string().optional(),
     firstNight: z.number().optional(),
     otherNight: z.number().optional(),
+    provenance: z.object({
+      status: z.enum(["official", "official-experimental", "homebrew", "unverified"]),
+      source: z.string().optional(), revision: z.string().optional(), verifiedAt: z.string().optional(),
+    }).optional(),
     firstNightPrompt: z.string().optional(),
     otherNightPrompt: z.string().optional(),
     firstNightReminder: z.string().optional(),

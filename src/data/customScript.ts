@@ -23,6 +23,14 @@ function normalizeRole(
 ): { ok: true; role: RoleDef } | { ok: false; error: string } {
   // clocktower.online uses `team` rather than `type`
   const candidate: Record<string, unknown> = { ...raw };
+  // A supplied object is a custom definition, even if it reuses an official ID.
+  candidate.provenance = { status: "homebrew" };
+  for (const key of ["firstNight", "otherNight"]) {
+    const order = candidate[key];
+    if (typeof order === "number" && (!Number.isFinite(order) || order < 0)) {
+      return { ok: false, error: `Character at index ${index}: ${key} must be finite and nonnegative (0 means no wake).` };
+    }
+  }
   if (candidate.team !== undefined && candidate.type === undefined) {
     candidate.type = candidate.team;
     delete candidate.team;

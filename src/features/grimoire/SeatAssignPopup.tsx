@@ -5,6 +5,7 @@ import { rejectJoinRequest } from "@/firebase/lobby";
 import { lifecycleMessage } from "@/firebase/lifecycle";
 import type { RoomBackend } from "@/firebase/backend";
 import type { PlayerId } from "@/stores/types";
+import { Modal } from "@/components/Modal";
 
 type Props = {
   seatPlayerId: PlayerId;
@@ -12,9 +13,10 @@ type Props = {
   backend: RoomBackend | null;
   code: string;
   onClose: () => void;
+  onRemoveSeat?: () => void;
 };
 
-export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClose }: Props) {
+export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClose, onRemoveSeat }: Props) {
   const pendingPlayers = useStorytellerStore((s) => s.game?.pendingPlayers ?? {});
   const assignPendingToSeat = useStorytellerStore((s) => s.assignPendingToSeat);
   const removePendingPlayer = useStorytellerStore((s) => s.removePendingPlayer);
@@ -61,13 +63,7 @@ export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClo
   };
 
   return (
-    <>
-      <div className="seat-assign-backdrop" onClick={onClose} />
-      <div className="seat-assign-popup" role="dialog" aria-label={`Assign player to seat ${seatNumber}`}>
-        <div className="seat-assign-header">
-          <span className="seat-assign-title">Assign to Seat {seatNumber}</span>
-          <button className="btn btn-sm" onClick={onClose} aria-label="Close">✕</button>
-        </div>
+    <Modal title={`Assign player to seat ${seatNumber}`} onClose={onClose} className="seat-assign-popup">
 
         {entries.length === 0 ? (
           <p className="seat-assign-empty">No players waiting yet.</p>
@@ -89,7 +85,13 @@ export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClo
           </ul>
         )}
         {error && <p className="field-error" role="alert">{error}</p>}
-      </div>
-    </>
+        {onRemoveSeat && (
+          <div className="seat-assign-footer">
+            <button className="btn btn-sm btn-danger" onClick={onRemoveSeat}>
+              Remove unused seat
+            </button>
+          </div>
+        )}
+    </Modal>
   );
 }
