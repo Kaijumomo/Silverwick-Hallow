@@ -10,6 +10,8 @@ import { invalidatePrivatePacket, pruneInapplicablePrivateInfo } from "./private
 import { usePrivacyStore } from "./privacyStore";
 import { analyzeSetup } from "@/features/setup/setupAnalyzer";
 import { selectSetupContext } from "@/features/setup/setupContext";
+import { arrivalsAreTravelers, newTravelerArrival, publicTravelerRole, travelerDemonInformation, travelerNeedsFirstNight, travelerNeedsArrivalCheck } from "./travelers";
+import { getTraveler } from "@/data/travelers";
 import type { SetupCommandResult } from "@/features/setup/setupReadiness";
 import type {
   Alignment,
@@ -57,6 +59,13 @@ const blankPlayer = (id: PlayerId, name: string, seat: number, isEmpty = false):
   isTraveler: false,
   isEmpty,
 });
+
+// Used only when creating an arrival or filling an empty seat. A planned
+// ordinary identity must not become a late arrival's identity.
+const arrivalPlayer = (player: STPlayerRecord, phase: string): STPlayerRecord =>
+  arrivalsAreTravelers(phase) && !player.isTraveler
+    ? { ...blankPlayer(player.id, player.name, player.seat, player.isEmpty), isTraveler: true, travelerArrival: newTravelerArrival() }
+    : player;
 
 const clone = <T,>(v: T): T =>
   typeof structuredClone === "function"
@@ -133,6 +142,11 @@ export type StorytellerStore = {
   setFakeMinions: (id: PlayerId, playerIds: PlayerId[]) => void;
   setPrivateText: (id: PlayerId, text: string) => void;
   setIsTraveler: (id: PlayerId, isTraveler: boolean) => void;
+  setTravelerAlignment: (id: PlayerId, alignment: Alignment) => void;
+  prepareTravelerDemon: (id: PlayerId) => void;
+  completeTravelerInformation: (id: PlayerId) => void;
+  completeTravelerArrivalCheck: (id: PlayerId) => void;
+  exileTraveler: (id: PlayerId) => void;
   setFabled: (fabled: RoleId[]) => void;
   setLorics: (lorics: RoleId[]) => void;
 
@@ -184,6 +198,10 @@ const patchPlayer = (
 };
 
 const CLEAN_STATE = { game: null, view: "home" as const, undoStack: [] as never[], customScripts: {}, lobby: null };
+
+const resetTravelerNightProgress = (game: StorytellerLobbyRecord, id: PlayerId) =>
+  Object.fromEntries(Object.entries(game.nightProgress).filter(([key]) =>
+    !key.startsWith(`${game.day}:travelerArrival:${id}:`) && !key.startsWith(`${game.day}:p:${id}:`)));
 
 export function migrateStoreState(state: unknown, fromVersion: number): unknown {
   const s = state as { game?: Record<string, unknown>; undoStack?: unknown[]; lobby?: unknown };
@@ -270,6 +288,16 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
     if (Array.isArray(s.undoStack)) {
       for (const entry of s.undoStack) {
         if (entry && typeof entry === "object") delete (entry as Record<string, unknown>).startingNonTravelerCount;
+      }
+    }
+  }
+  // v11 introduces optional current Traveler facts. Leave legacy alignment,
+  // completion and exile unknown. Public character can be recovered from truth.
+  if (fromVersion < 11) {
+    for (const entry of [s.game, ...(s.undoStack ?? [])]) {
+      const players = (entry as { players?: Record<string, STPlayerRecord> } | undefined)?.players;
+      for (const p of Object.values(players ?? {})) {
+        if (p.isTraveler) p.publicDisplayRole = publicTravelerRole(p)?.id ?? null;
       }
     }
   }
@@ -474,7 +502,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
             ...game,
             players: {
               ...game.players,
-              [seatPlayerId]: { ...seat, name, isEmpty: false },
+              [seatPlayerId]: arrivalPlayer({ ...seat, name, isEmpty: false }, game.phase),
             },
             pendingPlayers: newPending,
           },
@@ -536,7 +564,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!trimmed) return;
         const id = newId();
         const seat = game.seatOrder.length;
-        const player = blankPlayer(id, trimmed, seat);
+        const player = arrivalPlayer(blankPlayer(id, trimmed, seat), game.phase);
         set({
           undoStack: pushUndo(game, undoStack),
           game: {
@@ -565,7 +593,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
             ...game,
             players: {
               ...game.players,
-              [emptyId]: { ...seat, name: trimmed.slice(0, 20), isEmpty: false },
+              [emptyId]: arrivalPlayer({ ...seat, name: trimmed.slice(0, 20), isEmpty: false }, game.phase),
             },
           },
         });
@@ -580,7 +608,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           undoStack: pushUndo(game, get().undoStack),
           game: {
             ...game,
-            players: { ...game.players, [id]: blankPlayer(id, "", seat, true) },
+            players: { ...game.players, [id]: arrivalPlayer(blankPlayer(id, "", seat, true), game.phase) },
             seatOrder: [...game.seatOrder, id],
           },
         });
@@ -606,10 +634,8 @@ export const useStorytellerStore = create<StorytellerStore>()(
             const pi = { ...next.privateInfo };
             if (filtered.length > 0) pi.fakeMinions = filtered;
             else delete pi.fakeMinions;
-            next = {
-              ...next,
-              privateInfo: Object.keys(pi).length > 0 ? pi : undefined,
-            };
+            if (Object.keys(pi).length > 0) next.privateInfo = pi;
+            else delete next.privateInfo;
           }
           renumbered[pid] = next;
         });
@@ -698,19 +724,30 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!game) return;
         const existing = game.players[id];
         if (!existing) return;
-        // Changing truth does not publish it or erase the player's perception.
+        if (existing.isTraveler && roleId && !getTraveler(roleId)) return;
+        if (!existing.isTraveler && getTraveler(roleId)) return;
+        if (existing.actualRole === roleId) return;
+        // Ordinary truth changes preserve perception. Traveler assignment
+        // explicitly publishes only its public character, never its alignment.
         // Role-specific private packets must be configured again.
         const next: STPlayerRecord = {
           ...existing,
           actualRole: roleId,
           ...(roleId ? {} : { shownRole: null, shownAlignment: null, behaviorMode: "normal" as const }),
           abilityUsed: false,
+          ...(existing.isTraveler ? {
+            publicDisplayRole: roleId || null,
+            shownRole: roleId || null,
+            shownAlignment: null,
+            travelerArrival: newTravelerArrival(),
+          } : {}),
         };
         delete next.privateInfo;
         set({
           undoStack: pushUndo(game, undoStack),
           game: {
             ...game,
+            ...(existing.isTraveler ? { nightProgress: resetTravelerNightProgress(game, id) } : {}),
             players: { ...game.players, [id]: invalidatePrivatePacket(next) },
           },
         });
@@ -830,6 +867,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!game) return;
         const existing = game.players[id];
         if (!existing) return;
+        if (existing.isTraveler === isTraveler) return;
         const next: STPlayerRecord = {
           ...existing,
           isTraveler,
@@ -837,15 +875,65 @@ export const useStorytellerStore = create<StorytellerStore>()(
           shownRole: null,
           shownAlignment: null,
           behaviorMode: "normal",
+          publicDisplayRole: null,
         };
+        delete next.actualAlignment;
+        delete next.exiled;
+        delete next.travelerArrival;
+        if (isTraveler) next.travelerArrival = newTravelerArrival();
         delete next.privateInfo;
         set({
           undoStack: pushUndo(game, undoStack),
           game: {
             ...game,
+            nightProgress: resetTravelerNightProgress(game, id),
             players: { ...game.players, [id]: invalidatePrivatePacket(next) },
           },
         });
+      },
+
+      setTravelerAlignment: (id, alignment) => {
+        const { game, undoStack } = get();
+        const p = game?.players[id];
+        if (!game || !p?.isTraveler || p.actualAlignment === alignment) return;
+        const next = invalidatePrivatePacket({ ...p, actualAlignment: alignment,
+          travelerArrival: { ...(p.travelerArrival ?? newTravelerArrival()), demonInfoComplete: false } });
+        delete next.privateInfo;
+        set({ undoStack: pushUndo(game, undoStack), game: { ...game, players: { ...game.players, [id]: next } } });
+      },
+
+      prepareTravelerDemon: (id) => {
+        const { game, undoStack } = get();
+        const p = game?.players[id];
+        const script = game && selectScriptById(get(), game.scriptId);
+        if (!game || !p || !script) return;
+        const result = travelerDemonInformation(p, game, buildRegistry(script));
+        if (!result.demon) return;
+        set({ undoStack: pushUndo(game, undoStack), game: patchPlayer(game, id,
+          { privateInfo: { travelerDemon: result.demon.id } }) });
+      },
+
+      completeTravelerInformation: (id) => {
+        const { game, undoStack } = get();
+        const p = game?.players[id];
+        if (!game || !p || !publicTravelerRole(p) || p.actualAlignment !== "evil" || !p.alive || p.exiled) return;
+        set({ undoStack: pushUndo(game, undoStack), game: patchPlayer(game, id,
+          { travelerArrival: { ...(p.travelerArrival ?? newTravelerArrival()), demonInfoComplete: true } }) });
+      },
+
+      exileTraveler: (id) => {
+        const { game, undoStack } = get();
+        const p = game?.players[id];
+        if (!game || !p?.isTraveler || !p.alive || p.exiled) return;
+        set({ undoStack: pushUndo(game, undoStack), game: patchPlayer(game, id, { exiled: true, alive: false }) });
+      },
+
+      completeTravelerArrivalCheck: (id) => {
+        const { game, undoStack } = get();
+        const p = game?.players[id];
+        if (!game || !p || !travelerNeedsArrivalCheck(p) || !p.actualAlignment || !p.alive || p.exiled) return;
+        set({ undoStack: pushUndo(game, undoStack), game: patchPlayer(game, id,
+          { travelerArrival: { ...(p.travelerArrival ?? newTravelerArrival()), arrivalCheckComplete: true } }) });
       },
 
       setFabled: (fabled) => {
@@ -876,6 +964,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const player = game.players[id];
         if (!player) return;
         const patch: Partial<STPlayerRecord> = { alive };
+        if (alive && player.exiled) patch.exiled = false;
         if (alive && !player.alive) patch.ghostVote = true;
         set({
           undoStack: pushUndo(game, undoStack),
@@ -972,10 +1061,20 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const key = `${day}:${stepKey}`;
         const np = game.nightProgress ?? {};
         const existing: NightStepRecord = np[key] ?? { status: "pending", notes: "" };
+        let players = game.players;
+        const traveler = Object.values(players).find(p => p.isTraveler && travelerNeedsFirstNight(p) &&
+          (stepKey === `travelerArrival:${p.id}:${p.actualRole}` || day === 1 && stepKey === `p:${p.id}:${p.actualRole}`));
+        if (traveler && game.phase === "night" && game.day === day && traveler.alive && !traveler.exiled) {
+          const arrival = { ...(traveler.travelerArrival ?? newTravelerArrival()), firstNightComplete: status === "done" };
+          if (status === "done") arrival.completedAtNight = day;
+          else delete arrival.completedAtNight;
+          players = { ...players, [traveler.id]: { ...traveler, travelerArrival: arrival } };
+        }
         set({
           undoStack: pushUndo(game, undoStack),
           game: {
             ...game,
+            players,
             nightProgress: { ...np, [key]: { ...existing, status } },
           },
         });
@@ -1004,9 +1103,15 @@ export const useStorytellerStore = create<StorytellerStore>()(
         for (const [k, v] of Object.entries(game.nightProgress ?? {})) {
           if (!k.startsWith(prefix)) next[k] = v;
         }
+        const players = Object.fromEntries(Object.entries(game.players).map(([id, p]) => {
+          if (p.travelerArrival?.completedAtNight !== day) return [id, p];
+          const arrival = { ...p.travelerArrival, firstNightComplete: false };
+          delete arrival.completedAtNight;
+          return [id, { ...p, travelerArrival: arrival }];
+        }));
         set({
           undoStack: pushUndo(game, undoStack),
-          game: { ...game, nightProgress: next },
+          game: { ...game, players, nightProgress: next },
         });
       },
 
@@ -1037,7 +1142,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
     }),
     {
       name: "new-blood-st",
-      version: 10,
+      version: 11,
       storage: createJSONStorage(() => localStorage),
       migrate: migrateStoreState,
       partialize: (s) => ({

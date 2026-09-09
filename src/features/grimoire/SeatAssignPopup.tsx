@@ -6,6 +6,7 @@ import { lifecycleMessage } from "@/firebase/lifecycle";
 import type { RoomBackend } from "@/firebase/backend";
 import type { PlayerId } from "@/stores/types";
 import { Modal } from "@/components/Modal";
+import { arrivalsAreTravelers } from "@/stores/travelers";
 
 type Props = {
   seatPlayerId: PlayerId;
@@ -18,10 +19,12 @@ type Props = {
 
 export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClose, onRemoveSeat }: Props) {
   const pendingPlayers = useStorytellerStore((s) => s.game?.pendingPlayers ?? {});
+  const activeArrival = useStorytellerStore((s) => arrivalsAreTravelers(s.game?.phase ?? "setup"));
   const assignPendingToSeat = useStorytellerStore((s) => s.assignPendingToSeat);
   const removePendingPlayer = useStorytellerStore((s) => s.removePendingPlayer);
   const [busyUid, setBusyUid] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [traveler, setTraveler] = useState(() => !!useStorytellerStore.getState().game?.players[seatPlayerId]?.isTraveler);
 
   const entries = Object.entries(pendingPlayers);
 
@@ -42,6 +45,13 @@ export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClo
         );
       } else if (!assignPendingToSeat(uid, seatPlayerId)) {
         return;
+      }
+      const store = useStorytellerStore.getState();
+      // Re-read after the Firebase-first command: play may have begun while
+      // assignment was pending. Never undo the command's Traveler default.
+      if (!arrivalsAreTravelers(store.game?.phase ?? "setup")) store.setIsTraveler(seatPlayerId, traveler);
+      if (useStorytellerStore.getState().game?.players[seatPlayerId]?.isTraveler) {
+        store.selectPlayer(seatPlayerId);
       }
       onClose();
     } catch (e) {
@@ -64,6 +74,8 @@ export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClo
 
   return (
     <Modal title={`Assign player to seat ${seatNumber}`} onClose={onClose} className="seat-assign-popup">
+        {activeArrival ? <p>Arriving as a Traveler</p> : <label className="drawer-row"><input type="checkbox" checked={traveler} disabled={busyUid !== null}
+          onChange={e => setTraveler(e.target.checked)} />Arriving as a Traveler</label>}
 
         {entries.length === 0 ? (
           <p className="seat-assign-empty">No players waiting yet.</p>

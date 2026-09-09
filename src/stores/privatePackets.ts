@@ -3,6 +3,7 @@ import type { STPlayerRecord, StorytellerLobbyRecord } from "./types";
 import { PlayerSelfRecordSchema } from "./schemas";
 import { projectIdentity } from "./projections";
 import { needsShownIdentity } from "./identity";
+import { newTravelerArrival, travelerDemonInformation } from "./travelers";
 
 export type PrivateInfoApplicability = {
   simulatedInfo: boolean;
@@ -47,7 +48,7 @@ export function offersNightInformation(prompt: string): boolean {
 
 export function hasPrivateDraft(player: STPlayerRecord): boolean {
   const info = player.privateInfo;
-  return !!(info?.bluffs?.length || info?.fakeMinions?.length || info?.extraText?.trim());
+  return !!(info?.travelerDemon || info?.bluffs?.length || info?.fakeMinions?.length || info?.extraText?.trim());
 }
 
 /** Remove fields made incompatible by an explicit behavior-mode change. */
@@ -70,6 +71,12 @@ export function previewPrivatePacket(player: STPlayerRecord, game: StorytellerLo
   if (!identity) throw new Error("Configure the shown identity before previewing information.");
   if (!hasPrivateDraft(player)) throw new Error("Configure private information before previewing.");
   const info = player.privateInfo!;
+  let demon;
+  if (info.travelerDemon) {
+    const result = travelerDemonInformation(player, game, registry);
+    if (!result.demon || result.demon.id !== info.travelerDemon) throw new Error(result.check ?? "The Demon changed. Review arrival information again.");
+    demon = result.demon;
+  }
   const applicable = getPrivateInfoApplicability(player, registry);
   if (info.bluffs?.length && !applicable.bluffs) {
     throw new Error("Bluffs are not applicable to this player's shown identity.");
@@ -90,6 +97,7 @@ export function previewPrivatePacket(player: STPlayerRecord, game: StorytellerLo
   if (bluffs?.some(id => !registry.get(id))) throw new Error("Review bluff selections: a character is unavailable.");
   const payload = PlayerSelfRecordSchema.parse({
     ...identity,
+    ...(demon ? { demon } : {}),
     ...(bluffs ? { bluffs } : {}),
     ...(minions.length ? { minions } : {}),
     ...(info.extraText?.trim() ? { extraText: info.extraText.trim() } : {}),
@@ -100,6 +108,9 @@ export function previewPrivatePacket(player: STPlayerRecord, game: StorytellerLo
 /** Identity changes invalidate queued previews and previously published extras. */
 export function invalidatePrivatePacket<T extends STPlayerRecord>(player: T): T {
   const next = { ...player, packetEpoch: crypto.randomUUID() };
+  if (player.isTraveler && player.publishedPacket?.payload.demon) {
+    next.travelerArrival = { ...(player.travelerArrival ?? newTravelerArrival()), demonInfoComplete: false };
+  }
   delete next.publishedPacket;
   return next;
 }

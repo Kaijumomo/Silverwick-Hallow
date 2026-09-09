@@ -82,6 +82,8 @@ export function analyzeSetup(context: SetupContext): SetupAnalysis {
       add("traveler-type:" + p.id, "blocker", `Review ${p.name}'s Traveler flag and actual character type.`, "assigned", actions, p.id);
     // Deal atomically replaces ordinary perceptions; Traveler identities survive it.
     if (p.shownRole) inspectRole(p.shownRole, "shared", actions, p.id);
+    if (p.isTraveler && !p.actualAlignment) add("traveler-alignment:" + p.id, "check",
+      `${p.name}: choose actual Traveler alignment in their arrival controls. Shown alignment is not Storyteller truth.`, "assigned", actions, p.id);
   }
 
   // Perception may intentionally remain unset. Explain the existing runtime

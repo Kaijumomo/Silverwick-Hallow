@@ -7,6 +7,7 @@ import type { GrimoireMode, PlayerId, RoleDef, Script, STPlayerRecord } from "@/
 import { SeatAssignPopup } from "./SeatAssignPopup";
 import type { RoomBackend } from "@/firebase/backend";
 import { usePrivacyStore } from "@/stores/privacyStore";
+import { arrivalsAreTravelers, publicTravelerRole } from "@/stores/travelers";
 
 export function buildRoleDisplayMap(script: Script | undefined): Map<string, RoleDef> {
   const map = new Map((script?.characters ?? []).map((c) => [c.id, c]));
@@ -65,7 +66,8 @@ function Token({
   onFreeRoamPointerDown, onClick, isGhost = false,
 }: TokenProps) {
   const privacyMode = usePrivacyStore((s) => s.enabled);
-  const displayRole = privacyMode ? undefined : shownRole ?? role;
+  const publicRole = publicTravelerRole(player);
+  const displayRole = privacyMode ? publicRole : shownRole ?? role;
   const hasDeception = !privacyMode && (
     player.behaviorMode !== "normal" ||
     (!!player.shownRole && player.shownRole !== player.actualRole)
@@ -132,7 +134,7 @@ function Token({
     >
       <div className="token-disc-frame" style={{ width: size, height: size }}>
         <div className="token-disc" style={{ width: size, height: size }}>
-          {privacyMode ? (
+          {privacyMode && !publicRole ? (
             <span className="token-private-mark" aria-hidden="true">•</span>
           ) : displayRole?.iconUrl !== undefined || displayRole ? (
             <img
@@ -155,7 +157,7 @@ function Token({
           </span>
         ))}
       </div>
-      {privacyMode ? (
+      {privacyMode && !publicRole ? (
         <div className="token-role token-role-private">role hidden</div>
       ) : displayRole ? (
         <div className={`token-role type-${displayRole.type}`}>{displayRole.name}</div>
@@ -324,10 +326,31 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
   };
 
   const handleAdd = () => {
-    const name = window.prompt("Player name?");
-    if (name?.trim()) addPlayerToSeat(name);
+    if (arrivalsAreTravelers(game.phase) && code) { handleAddTraveler(); return; }
+    const name = window.prompt(arrivalsAreTravelers(game.phase) ? "Traveler name?" : "Player name?");
+    if (name?.trim()) {
+      const id = game.seatOrder.find(id => game.players[id]?.isEmpty);
+      addPlayerToSeat(name);
+      const store = useStorytellerStore.getState();
+      const addedId = id ?? store.game?.seatOrder.at(-1);
+      if (addedId && store.game?.players[addedId]?.isTraveler) store.selectPlayer(addedId);
+    }
   };
   const handleAddSeat = () => addEmptySeat();
+  const handleAddTraveler = () => {
+    const store = useStorytellerStore.getState();
+    if (code) {
+      store.addEmptySeat();
+      const id = useStorytellerStore.getState().game?.seatOrder.at(-1);
+      if (id) { store.setIsTraveler(id, true); setAssigningSeatId(id); }
+      return;
+    }
+    const name = window.prompt("Traveler name?");
+    if (!name?.trim()) return;
+    store.addPlayer(name);
+    const id = useStorytellerStore.getState().game?.seatOrder.at(-1);
+    if (id) { store.setIsTraveler(id, true); store.selectPlayer(id); }
+  };
 
   // ── Free-roam pointer drag ────────────────────────────────────────────────
 
@@ -382,9 +405,10 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
 
   const modeControls = (
     <div className="grimoire-mode-controls">
-      <button className="grimoire-mode-btn" onClick={handleAddSeat} aria-label="Add empty planned seat">
-        + New seat
+      <button className="grimoire-mode-btn" onClick={handleAddSeat} aria-label={arrivalsAreTravelers(game.phase) ? "Add empty Traveler seat" : "Add empty planned seat"}>
+        + New {arrivalsAreTravelers(game.phase) ? "Traveler seat" : "seat"}
       </button>
+      <button className="grimoire-mode-btn" onClick={handleAddTraveler}>Add Traveler</button>
       {grimoireMode === "ring" ? (
         <button className="grimoire-mode-btn" onClick={switchToFreeRoam} title="Switch to free-roam layout">
           ⊞ Free Roam
@@ -432,7 +456,7 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
         {playerCount === 0 ? (
           <div className="grimoire-empty">
             <p>Add players to begin.</p>
-            <button className="btn btn-gold" onClick={handleAdd}>+ Add player</button>
+            <button className="btn btn-gold" onClick={handleAdd}>+ Add {arrivalsAreTravelers(game.phase) ? "Traveler" : "player"}</button>
           </div>
         ) : (
           game.seatOrder.map((id, i) => {
@@ -494,8 +518,8 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
           <button
             className="add-player-btn"
             onClick={handleAdd}
-            aria-label="Add player"
-            title="Add player"
+            aria-label={arrivalsAreTravelers(game.phase) ? "Add Traveler" : "Add player"}
+            title={arrivalsAreTravelers(game.phase) ? "Add Traveler" : "Add player"}
           >
             +
           </button>

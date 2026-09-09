@@ -58,6 +58,7 @@ export type Script = {
 };
 
 export type PrivateInfo = {
+  travelerDemon?: PlayerId;
   bluffs?: RoleId[];
   fakeMinions?: PlayerId[];
   extraText?: string;
@@ -95,6 +96,11 @@ export type STPlayerRecord = {
   reminders: string[];
   stNotes: string;
   isTraveler: boolean;
+  /** Current Storyteller truth; never derived from perception. Traveler-only in 9B. */
+  actualAlignment?: Alignment;
+  /** Missing means legacy/unknown, not completed. No inferred arrival history. */
+  travelerArrival?: { demonInfoComplete: boolean; firstNightComplete: boolean; completedAtNight?: number; arrivalCheckComplete?: boolean };
+  exiled?: boolean;
   privateInfo?: PrivateInfo;
   /** Draft edits never imply delivery. The last sent snapshot is ST-only. */
   publishedPacket?: PrivatePacket;
@@ -138,7 +144,9 @@ export type StorytellerLobbyRecord = {
 /** Delivered identity at player/{id}; an absent record means unrevealed. */
 export type PlayerSelfRecord = {
   shownRole: RoleId;
-  shownAlignment: Alignment;
+  /** Travelers have no default alignment. Only an explicit shown choice is sent. */
+  shownAlignment?: Alignment;
+  demon?: { id: PlayerId; name: string; seat: number };
   bluffs?: RoleId[];
   /** Names/seats selected by the ST at publication time; no actual roles. */
   minions?: { id: PlayerId; name: string; seat: number }[];

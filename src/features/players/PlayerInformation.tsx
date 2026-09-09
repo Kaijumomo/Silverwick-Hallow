@@ -11,7 +11,7 @@ import { usePrivacyStore } from "@/stores/privacyStore";
 import { setupInformationWarning } from "@/features/nightOrder/nightRules";
 
 /** Contextual send controls. Preview is derived, never stored or synchronized. */
-export function PlayerInformation({ playerId, purpose }: { playerId: string; purpose: "setup" | "result" }) {
+export function PlayerInformation({ playerId, purpose }: { playerId: string; purpose: "setup" | "result" | "traveler" }) {
   const state = useStorytellerStore();
   const backend = useSessionRuntime(s => s.backend);
   const delivery = usePacketDeliveryState();
@@ -34,9 +34,9 @@ export function PlayerInformation({ playerId, purpose }: { playerId: string; pur
   const current = projectToSelf(p, registry);
   const acknowledged = !!backend && !!p.publishedPacket && delivery.receipts[key] === p.publishedPacket.id;
   const matches = !!preview && JSON.stringify(current) === JSON.stringify(preview.payload);
-  const sent = acknowledged && matches && (purpose === "setup" ||
+  const sent = acknowledged && matches && (purpose !== "result" ||
     p.publishedPacket?.forDay === game.day && p.publishedPacket?.forPhase === game.phase);
-  const sendLabel = purpose === "result" ? "Send to player view" : p.privateInfo?.fakeMinions?.length ? "Send setup information" : "Send bluffs";
+  const sendLabel = purpose === "traveler" ? "Show Demon to Traveler" : purpose === "result" ? "Send to player view" : p.privateInfo?.fakeMinions?.length ? "Send setup information" : "Send bluffs";
   return <div className="player-information" aria-label={`Information for ${p.name}`}>
     {setupWarning && <p className="behavior-help">{setupWarning} Deliberate sending is a manual override, not a rules decision.</p>}
     {purpose === "result" && <label className="information-input">

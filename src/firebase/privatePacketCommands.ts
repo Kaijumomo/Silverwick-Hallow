@@ -6,6 +6,7 @@ import { writeProjections } from "./sync";
 import { useSessionRuntime } from "./storytellerSync";
 import { packetKey, usePacketDeliveryState } from "./packetDeliveryState";
 import type { SessionWriter } from "./writer";
+import { newTravelerArrival } from "@/stores/travelers";
 
 /** An explicit, serialized publication. ACK precedes the local publication mark. */
 export async function publishPrivatePacket(playerId: string, preview: ReturnType<typeof previewPrivatePacket>, writer: SessionWriter | null = useSessionRuntime.getState().backend) {
@@ -40,7 +41,10 @@ export async function publishPrivatePacket(playerId: string, preview: ReturnType
         throw new Error("The game changed while preparing delivery. Review and send again.");
       }
       const publishedPacket = { id: crypto.randomUUID(), payload: current.payload, forDay: game.day, forPhase: game.phase };
-      const snapshot = { ...game, players: { ...game.players, [playerId]: { ...player, publishedPacket } } };
+      const arrivalPatch = current.payload.demon ? { travelerArrival: {
+        ...(player.travelerArrival ?? newTravelerArrival()), demonInfoComplete: true,
+      } } : {};
+      const snapshot = { ...game, players: { ...game.players, [playerId]: { ...player, ...arrivalPatch, publishedPacket } } };
       await writeProjections({ backend: inner, code: lobby.code, stState: snapshot, registry,
         online: useSessionRuntime.getState().online, membership: roster });
       // Preserve draft edits made while the network was in flight. Never restore
@@ -52,7 +56,9 @@ export async function publishPrivatePacket(playerId: string, preview: ReturnType
         throw new Error("Identity changed during delivery. Reconnect to verify the latest information.");
       }
       useStorytellerStore.setState({
-        game: { ...after.game!, players: { ...after.game!.players, [playerId]: { ...remaining, publishedPacket } } },
+        game: { ...after.game!, players: { ...after.game!.players, [playerId]: { ...remaining, publishedPacket,
+          ...(current.payload.demon ? { travelerArrival: { ...(remaining.travelerArrival ?? newTravelerArrival()), demonInfoComplete: true } } : {}),
+        } } },
         // An undo snapshot must not roll back publication metadata.
         undoStack: [],
       });

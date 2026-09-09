@@ -3,6 +3,7 @@ import { buildRegistry } from "@/data/roleRegistry";
 import { canonicalOrder, canonicalRoles, isCanonicalRole, roleAuthority } from "@/data/canonical";
 import { wakeIdentity } from "@/stores/wakeIdentity";
 import { evilInformationPolicy, type NightContext } from "./nightRules";
+import { publicTravelerRole, travelerNeedsFirstNight } from "@/stores/travelers";
 
 export type NightStep =
   | {
@@ -15,6 +16,7 @@ export type NightStep =
       advisory?: string;
       recipientIds?: PlayerId[];
       setupRecipientIds?: PlayerId[];
+      travelerArrivalId?: PlayerId;
     }
   | {
       kind: "player";
@@ -44,7 +46,7 @@ type GlobalStep = Extract<NightStep, { kind: "global" }>;
 const FIRST_NIGHT_ADMIN = new Set(["king", "marionette", "snitch", "magician", "poppygrower"]);
 const DEATH_CHECKS = new Set(["ravenkeeper", "sage", "barber", "sweetheart", "moonchild",
   "grandmother", "banshee", "choirboy", "godfather", "gossip", "tinker", "hatter", "plaguedoctor", "farmer"]);
-const COMPLEX_ABILITIES = new Set(["alchemist", "philosopher", "cannibal", "amnesiac", "boffin"]);
+const COMPLEX_ABILITIES = new Set(["alchemist", "philosopher", "cannibal", "amnesiac", "boffin", "apprentice"]);
 
 export function computeNightOrder(
   players: Record<PlayerId, STPlayerRecord>,
@@ -126,6 +128,15 @@ export function computeNightOrder(
 
   const customOrders = new Map<number, string>();
   for (const player of seated) {
+    if (player.isTraveler && player.exiled) continue;
+    if (player.isTraveler && player.alive && !isFirstNight && travelerNeedsFirstNight(player) &&
+      (!player.travelerArrival?.firstNightComplete || player.travelerArrival.completedAtNight === context.day)) {
+      const role = publicTravelerRole(player)!;
+      global(`travelerArrival:${player.id}:${role.id}`, `${player.name} — ${role.name} arrival`,
+        role.firstNightPrompt ?? role.firstNightReminder ?? role.ability ?? "Review the character reference.", 0.25,
+        { travelerArrivalId: player.id, advisory: "Storyteller timing check: this Traveler's first night is not the game's first night. Place this procedure among tonight's actions manually. Resolve any gained ability separately; the normal repeat wake is suppressed for this arrival night." });
+      continue;
+    }
     if (!player.actualRole) continue;
     if (isFirstNight && player.alive && FIRST_NIGHT_ADMIN.has(player.actualRole) &&
         registry.get(player.actualRole)?.provenance?.status !== "homebrew" &&

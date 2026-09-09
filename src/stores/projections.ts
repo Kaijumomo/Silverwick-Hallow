@@ -1,5 +1,6 @@
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { PlayerSelfRecordSchema } from "./schemas";
+import { publicTravelerRole } from "./travelers";
 import type {
   PlayerId,
   PlayerPublicRecord,
@@ -17,6 +18,7 @@ export function projectIdentity(
   // has been established explicitly. Never consult actualRole here.
   if (p.isEmpty || !p.shownRole) return null;
   const shownRole = p.shownRole;
+  if (registry.get(shownRole)?.type === "traveler" && !p.shownAlignment) return { shownRole };
   const shownAlignment = p.shownAlignment ?? registry.alignmentOf(shownRole);
   return { shownRole, shownAlignment };
 }
@@ -44,7 +46,10 @@ export function projectToPublic(
     joinedAt: p.joinedAt,
     isTraveler: p.isTraveler,
   };
-  if (p.publicDisplayRole) out.publicDisplayRole = p.publicDisplayRole;
+  const traveler = publicTravelerRole(p);
+  if (p.isTraveler) {
+    if (traveler) out.publicDisplayRole = traveler.id;
+  } else if (p.publicDisplayRole) out.publicDisplayRole = p.publicDisplayRole;
   return out;
 }
 

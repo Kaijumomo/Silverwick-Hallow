@@ -63,6 +63,7 @@ export const ScriptSchema = z
   .passthrough();
 
 export const PrivateInfoSchema = z.object({
+  travelerDemon: z.string().min(1).optional(),
   bluffs: z.array(z.string().min(1)).optional(),
   fakeMinions: z.array(z.string().min(1)).optional(),
   extraText: z.string().optional(),
@@ -72,7 +73,8 @@ export const StatusesSchema = z.record(z.string().min(1), z.boolean());
 
 export const PlayerSelfRecordSchema = z.object({
   shownRole: z.string().min(1),
-  shownAlignment: AlignmentSchema,
+  shownAlignment: AlignmentSchema.optional(),
+  demon: z.object({ id: z.string().min(1), name: z.string().min(1), seat: z.number().int().nonnegative() }).optional(),
   bluffs: z.array(z.string().min(1)).optional(),
   minions: z.array(z.object({
     id: z.string().min(1), name: z.string().min(1), seat: z.number().int().nonnegative(),
@@ -104,6 +106,13 @@ export const STPlayerRecordSchema = z.object({
   reminders: z.array(z.string()),
   stNotes: z.string(),
   isTraveler: z.boolean(),
+  actualAlignment: AlignmentSchema.optional(),
+  travelerArrival: z.object({
+    demonInfoComplete: z.boolean(), firstNightComplete: z.boolean(),
+    completedAtNight: z.number().int().positive().optional(),
+    arrivalCheckComplete: z.boolean().optional(),
+  }).optional(),
+  exiled: z.boolean().optional(),
   privateInfo: PrivateInfoSchema.optional(),
   publishedPacket: PrivatePacketSchema.optional(),
   packetEpoch: z.string().optional(),

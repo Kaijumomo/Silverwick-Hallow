@@ -6,7 +6,8 @@ export function PrivateInformation({ payload, showIdentity = false, showBluffs =
   payload: PlayerSelfRecord; showIdentity?: boolean; showBluffs?: boolean;
 }) {
   return <div className="sealed-card-extras">
-    {showIdentity && <p>{lookupOfficialRole(payload.shownRole)?.name ?? payload.shownRole} · {payload.shownAlignment}</p>}
+    {showIdentity && <p>{lookupOfficialRole(payload.shownRole)?.name ?? payload.shownRole}{payload.shownAlignment && ` · ${payload.shownAlignment}`}</p>}
+    {payload.demon && <p>Demon: {payload.demon.name} · seat {payload.demon.seat + 1}</p>}
     {showBluffs && !!payload.bluffs?.length && <p>Bluffs: {payload.bluffs.map(id => lookupOfficialRole(id)?.name ?? id).join(", ")}</p>}
     {!!payload.minions?.length && <div>
       <span className="label">Your Minions</span>

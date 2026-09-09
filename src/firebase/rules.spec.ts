@@ -10,6 +10,7 @@ import { SessionWriter } from "./writer";
 import { writeProjections } from "./sync";
 import { makeSTPlayer, tbScript } from "@/test/fixtures";
 import { buildRegistry } from "@/data/roleRegistry";
+import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { previewPrivatePacket } from "@/stores/privatePackets";
 import { publishPrivatePacket } from "./privatePacketCommands";
@@ -487,6 +488,45 @@ describe("Firebase RTDB membership authorization", () => {
       await writer.dispose();
       store.setState({ game: null, lobby: null, undoStack: [] });
     }
+  });
+
+  test("Phase 9B: Traveler truth is owner-only; public character and explicit Demon delivery survive exile until departure", async () => {
+    const store = useStorytellerStore;
+    store.setState({ game: null, lobby: null, undoStack: [] });
+    const raw = new FirebaseRoomBackend(db(st) as unknown as Database);
+    await createLobby(raw, st, { codeGenerator: () => code });
+    const metadata = (await ref(st, "session").once("value")).val();
+    const writer = new SessionWriter(raw, code, metadata.id);
+    store.getState().newGame("tb"); store.getState().addPlayer("Traveler"); store.getState().addPlayer("Demon");
+    const [id, other] = store.getState().game!.seatOrder as [string, string];
+    store.getState().setLobby({ code, uid: st, sessionId: metadata.id, status: "live" });
+    store.getState().setIsTraveler(id, true); store.getState().assignRole(id, "thief");
+    store.getState().setTravelerAlignment(id, "evil"); store.getState().assignRole(other, "imp");
+    const flush = () => writeProjections({ backend: writer, code, stState: store.getState().game!,
+      registry: buildRegistry(troubleBrewing), online: {}, membership: { [alice]: id, [bob]: other } });
+    try {
+      await writer.start();
+      await knockOnLobby(backend(alice), code, alice, "Traveler"); await seatPlayer(writer, code, alice, id, null);
+      await knockOnLobby(backend(bob), code, bob, "Demon"); await seatPlayer(writer, code, bob, other, null);
+      await flush();
+      const pub = (await ref(bob, `public/players/${id}`).once("value")).val();
+      expect(pub.publicDisplayRole).toBe("thief"); expect(pub.actualAlignment).toBeUndefined();
+      expect((await ref(alice, `player/${id}`).once("value")).val()).toEqual({ shownRole: "thief" });
+      await assertFails(ref(alice, `storyteller/players/${id}/actualAlignment`).once("value"));
+      await assertFails(ref(alice, "checkpoint").once("value"));
+      await assertFails(ref(alice, `storyteller/players/${id}/actualAlignment`).set("good"));
+      store.getState().prepareTravelerDemon(id);
+      const preview = previewPrivatePacket(store.getState().game!.players[id]!, store.getState().game!, buildRegistry(troubleBrewing));
+      await publishPrivatePacket(id, preview, writer);
+      expect((await ref(alice, `player/${id}/demon`).once("value")).val()).toEqual({ id: other, name: "Demon", seat: 1 });
+      await assertFails(ref(bob, `player/${id}`).once("value"));
+      store.getState().exileTraveler(id); await flush();
+      expect((await ref(alice, `roster/${alice}`).once("value")).val()).toBe(id);
+      expect((await ref(alice, `player/${id}`).once("value")).exists()).toBe(true);
+      await revokePlayerMembership(writer, code, id);
+      await assertFails(ref(alice, `player/${id}`).once("value"));
+      await assertFails(ref(alice, "public").once("value"));
+    } finally { await writer.dispose(); store.setState({ game: null, lobby: null, undoStack: [] }); }
   });
 
   test("ending atomically revokes all access and rejects stale projections and joins", async () => {

@@ -423,7 +423,7 @@ describe("Privacy regression matrix — all behavior modes", () => {
     const p = makePublishedSTPlayer({
       actualRole: "thief",
       shownRole: "thief",
-      shownAlignment: "evil", // ST has marked this traveler as evil
+      shownAlignment: "evil", // Explicit perception; not actual alignment.
       behaviorMode: "normal",
       isTraveler: true,
     });
@@ -435,7 +435,7 @@ describe("Privacy regression matrix — all behavior modes", () => {
     for (const f of PRIVATE_FIELDS) {
       expect(pub, `public contained "${f}" for evil traveler`).not.toContain(`"${f}"`);
     }
-    expect(pub).not.toContain("thief");
+    expect(projectToPublic(p, true).publicDisplayRole).toBe("thief");
   });
 
   it("Demon with bluffs: public never contains any bluff role id", () => {
@@ -477,7 +477,7 @@ describe("buildRegistry — traveler coverage", () => {
     expect(() => projectToSelf(p, reg)).not.toThrow();
     const self = projectToSelf(p, reg);
     expect(self?.shownRole).toBe("thief");
-    expect(self?.shownAlignment).toBe("good");
+    expect(self?.shownAlignment).toBeUndefined();
   });
 
   it("projectToPublic for a traveler does not contain actualRole or private data", () => {

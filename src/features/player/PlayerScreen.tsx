@@ -448,9 +448,9 @@ export function SealedCard({
             <div className="sealed-card-name">
               {roleName}
               <span className={`label type-${roleType}`}>{roleType}</span>
-              <span className={`label alignment-${self.shownAlignment}`}>
+              {self.shownAlignment && <span className={`label alignment-${self.shownAlignment}`}>
                 {self.shownAlignment}
-              </span>
+              </span>}
             </div>
             {role?.ability && <p className="sealed-card-ability">{role.ability}</p>}
             {role?.flavor && <p className="sealed-card-flavor">{role.flavor}</p>}
@@ -588,6 +588,7 @@ function TownView({
                 <span className="town-name">
                   {p.name}
                   {isYou && " (you)"}
+                  {p.isTraveler && p.publicDisplayRole && <span className="label type-traveler">{lookupOfficialRole(p.publicDisplayRole)?.name ?? p.publicDisplayRole}</span>}
                 </span>
                 <span className="town-row-meta">
                   <span

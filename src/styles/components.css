@@ -1896,6 +1896,7 @@ select:focus-visible,
   }
   .night-panel {
     position: fixed;
+    background: var(--bg-night);
     left: 0;
     right: 0;
     bottom: 0;

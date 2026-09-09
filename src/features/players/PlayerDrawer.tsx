@@ -4,6 +4,8 @@ import { deriveAlignment } from "@/data/roleRegistry";
 import { TRAVELERS } from "@/data/travelers";
 import { needsShownIdentity } from "@/stores/identity";
 import { PlayerInformation } from "./PlayerInformation";
+import { TravelerArrival } from "./TravelerArrival";
+import { publicTravelerRole } from "@/stores/travelers";
 import { getPrivateInfoApplicability } from "@/stores/privatePackets";
 import { roleAuthority } from "@/data/canonical";
 import { evilInformationPolicy } from "@/features/nightOrder/nightRules";
@@ -157,6 +159,7 @@ function PrivacySafeContents({ player, onClose }: { player: STPlayerRecord; onCl
       <section className="drawer-section">
         <h3 className="drawer-section-title">Safe view</h3>
         <p className="privacy-safe-player-name">{player.name || "Unnamed player"}</p>
+        {publicTravelerRole(player) && <p>Traveler: {publicTravelerRole(player)!.name}</p>}
         <div className="drawer-row">
           <span className="label">seat {player.seat + 1}</span>
           <span className="label">{player.alive ? "Alive" : "Dead"}</span>
@@ -303,6 +306,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
         </div>
 
         <div className="drawer-body">
+          {player.isTraveler && <TravelerArrival playerId={player.id} />}
           <section className="drawer-section">
             <h3 className="drawer-section-title">Seat</h3>
             <div className="drawer-row">
@@ -332,6 +336,8 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
               >
                 {player.alive ? "Alive" : "Dead"}
               </button>
+              {player.isTraveler && <button className="btn btn-sm" disabled={!player.alive || !!player.exiled}
+                onClick={() => useStorytellerStore.getState().exileTraveler(player.id)}>{player.exiled ? "Exiled" : "Exile Traveler"}</button>}
               {!player.alive && (
                 <button
                   className="toggle-pill"
@@ -382,7 +388,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
             </div>
           </section>
 
-          <section className="drawer-section">
+          {!player.isTraveler && <section className="drawer-section">
             <h3 className="drawer-section-title">Actual role (ST private)</h3>
             {displayRole ? (
               <div className="role-display">
@@ -419,9 +425,9 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
                 </button>
               </div>
             )}
-          </section>
+          </section>}
 
-          {displayRole && (
+          {displayRole && !player.isTraveler && (
             <section className="drawer-section">
               <h3 className="drawer-section-title">
                 Behavior &amp; deception
@@ -591,7 +597,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
                 }}
                 disabled={membershipBusy}
               >
-                Remove player
+                {player.isTraveler ? "Traveler leaves game" : "Remove player"}
               </button>
               <button
                 className="btn btn-sm"

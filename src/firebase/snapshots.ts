@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getTraveler } from "@/data/travelers";
 import { PlayerSelfRecordSchema, PublicLobbyRecordSchema } from "@/stores/schemas";
 import type { PlayerSelfRecord, PublicLobbyRecord } from "@/stores/types";
 import type { RoomBackend, Unsubscribe } from "./backend";
@@ -40,6 +41,7 @@ const selfShape = PlayerSelfRecordSchema.extend({
   bluffs: optionalNode(list),
   minions: optionalNode(PlayerSelfRecordSchema.shape.minions.unwrap()),
   extraText: optionalNode(z.string()),
+  demon: optionalNode(PlayerSelfRecordSchema.shape.demon.unwrap()),
 });
 const request = z.string().min(1).max(20).refine((value) =>
   value.trim().length > 0 && !value.startsWith(" ") && !value.endsWith(" ") && !/[\r\n\t]/.test(value));
@@ -90,7 +92,7 @@ export function decodeSelfSnapshot(raw: unknown): Snapshot<PlayerSelfRecord> {
   if (raw == null) return WAITING;
   const partial = selfShape.partial().safeParse(raw);
   if (!partial.success) return invalid(partial.error);
-  if (partial.data.shownRole === undefined || partial.data.shownAlignment === undefined) return WAITING;
+  if (partial.data.shownRole === undefined || partial.data.shownAlignment === undefined && !getTraveler(partial.data.shownRole)) return WAITING;
   return parse(selfShape, raw);
 }
 export const decodeRosterEntry = (raw: unknown): Snapshot<string> => raw == null ? WAITING : parse(id, raw);

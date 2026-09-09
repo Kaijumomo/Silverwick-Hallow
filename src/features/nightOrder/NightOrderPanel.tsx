@@ -3,6 +3,8 @@ import { computeNightOrder } from "./nightOrder";
 import type { NightStep } from "./nightOrder";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { PlayerInformation } from "@/features/players/PlayerInformation";
+import { TravelerArrival } from "@/features/players/TravelerArrival";
+import { travelerGuidance } from "@/stores/travelers";
 import { getPrivateInfoApplicability, offersNightInformation, previewPrivatePacket } from "@/stores/privatePackets";
 import { buildRegistry } from "@/data/roleRegistry";
 import { usePrivacyStore } from "@/stores/privacyStore";
@@ -110,6 +112,8 @@ function StepCard({ step, record, day }: StepCardProps) {
         <p className="step-prompt">{step.prompt}</p>
       )}
       {step.advisory && <p className="step-reminder">{step.advisory}</p>}
+      {step.kind === "global" && step.travelerArrivalId && !players?.[step.travelerArrivalId]?.travelerArrival &&
+        <p className="step-reminder">Prior arrival completion is unknown. Verify before repeating.</p>}
 
       {step.kind === "player" && offersNightInformation(step.prompt + " " + step.reminder) && <details className="information-review">
         <summary>Give information</summary>
@@ -234,6 +238,10 @@ export function NightOrderPanel({ game, script, onClose }: Props) {
       </div>
 
       <div className="night-panel-body">
+        {game.seatOrder.filter(id => {
+          const p = game.players[id];
+          return p?.isTraveler && p.alive && !p.exiled && travelerGuidance(p).length > 0;
+        }).map(id => <TravelerArrival key={id} playerId={id} compact />)}
         {steps.length === 0 ? (
           <p style={{ color: "var(--text-faint)", fontSize: "12px", fontStyle: "italic", padding: "8px 4px" }}>
             No night actions — configure shown identities for the intended wake procedures.

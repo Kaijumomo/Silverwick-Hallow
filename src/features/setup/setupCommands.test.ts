@@ -153,7 +153,7 @@ describe("population and persisted history", () => {
   it("current local persistence and checkpoint schema preserve starting count", async () => {
     prepare();state().beginNightOne();
     const saved=localStorage.getItem("new-blood-st")!;
-    expect(JSON.parse(saved).version).toBe(10);
+    expect(JSON.parse(saved).version).toBe(11);
     store.setState({game:null});localStorage.setItem("new-blood-st",saved);
     await store.persist.rehydrate();expect(game().startingNonTravelerCount).toBe(5);
     const checkpoint=JSON.parse(JSON.stringify({game:game(),roster:{}}));
