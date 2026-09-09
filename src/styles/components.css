@@ -2665,3 +2665,17 @@ select:focus-visible,
 .information-input textarea { width: 100%; min-height: 64px; resize: vertical; }
 .player-information .sealed-card-extras { padding: 4px 0; gap: 4px; }
 .player-information .sealed-card-extras p { margin: 4px 0; }
+
+/* Setup findings stay within the existing independently scrollable shell. */
+.setup-findings, .setup-composition, .setup-pool-editor { overflow-wrap: anywhere; min-width: 0; }
+.setup-findings ul { padding-left: 20px; margin: 8px 0; }
+.setup-findings li { margin-bottom: 10px; }
+.setup-findings [data-severity="blocker"] { color: var(--danger, #ffb4ac); }
+.setup-findings summary, .setup-pool-editor summary { min-height: 44px; padding-block: 10px; cursor: pointer; }
+.setup-target { display: grid; gap: 6px; }
+.setup-target input, .setup-section select { width: 100%; min-height: 44px; }
+.setup-composition { margin-block: 10px; }
+.setup-composition small { display: block; }
+.setup-pool-editor ul { list-style: none; padding: 0; }
+.setup-pool-editor li { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-block: 6px; }
+.setup-pool-editor button { min-height: 44px; }

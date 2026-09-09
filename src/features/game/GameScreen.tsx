@@ -18,6 +18,8 @@ import { friendlyFirebaseError, type FriendlyError } from "@/firebase/errors";
 import { requireActiveSession, lifecycleMessage } from "@/firebase/lifecycle";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useMediaQuery } from "@/components/useMediaQuery";
+import { analyzeSetup } from "@/features/setup/setupAnalyzer";
+import { selectSetupContext } from "@/features/setup/setupContext";
 
 const PHASE_LABEL: Record<string, string> = {
   setup: "Setup",
@@ -54,6 +56,9 @@ export function GameScreen() {
   const moreActionsRef = useRef<HTMLButtonElement>(null);
   const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
   const [copyToast, setCopyToast] = useState<string | null>(null);
+  const [phaseError, setPhaseError] = useState<string | null>(null);
+  const startReadiness = useMemo(() => game?.phase === "setup"
+    ? analyzeSetup(selectSetupContext(game, script)).readiness.manual : undefined, [game, script]);
   const onlineCount = Object.values(onlineMap).filter(Boolean).length;
   const closeOverflow = () => setOverflowMenuOpen(false);
 
@@ -282,8 +287,13 @@ export function GameScreen() {
           </button>
           <button
             className="btn btn-gold"
-            onClick={() => { closeOverflow(); advancePhase(); }}
-            disabled={game.phase === "ended"}
+            onClick={() => {
+              closeOverflow();
+              const result = advancePhase();
+              setPhaseError(result.ok ? null : "Setup changed. Open Setup to review what needs attention.");
+            }}
+            disabled={game.phase === "ended" || startReadiness?.ok === false}
+            title={startReadiness?.ok === false ? "Open Setup to reconcile seats, roles, and the pool before starting." : undefined}
           >
             {advanceLabel}
           </button>
@@ -304,6 +314,7 @@ export function GameScreen() {
         </div>
       </header>
 
+      {phaseError && !privacyMode && <p role="alert">{phaseError}</p>}
       {!privacyMode && (game.fabled.length > 0 || (game.lorics?.length ?? 0) > 0) && (
         <div className="fabled-strip">
           {game.fabled.length > 0 && (

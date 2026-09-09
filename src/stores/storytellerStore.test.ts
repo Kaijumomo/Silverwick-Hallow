@@ -276,7 +276,11 @@ describe("setFabled", () => {
   it("game.fabled persists after advancing phase from setup to night", () => {
     useStorytellerStore.getState().newGame("tb");
     useStorytellerStore.getState().setFabled(["djinn", "doomsayer"]);
-    useStorytellerStore.getState().advancePhase(); // setup → night
+    useStorytellerStore.getState().addPlayer("Alice");
+    const id = useStorytellerStore.getState().game!.seatOrder[0]!;
+    useStorytellerStore.getState().assignRole(id, "chef");
+    useStorytellerStore.getState().setPlannedPlayerCount(1);
+    expect(useStorytellerStore.getState().advancePhase().ok).toBe(true);
     const game = useStorytellerStore.getState().game!;
     expect(game.phase).toBe("night");
     expect(game.fabled).toEqual(["djinn", "doomsayer"]);

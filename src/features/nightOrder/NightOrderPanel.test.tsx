@@ -24,7 +24,8 @@ function setup() {
   const id = store.getState().game!.seatOrder[0]!;
   store.getState().assignRole(id, "empath");
   store.getState().setShownRole(id, "empath");
-  store.getState().advancePhase();
+  store.getState().setPlannedPlayerCount(1);
+  expect(store.getState().advancePhase().ok).toBe(true);
 }
 it("custom steps can be added, edited, completed, and restored across remount without sending information", () => {
   setup();

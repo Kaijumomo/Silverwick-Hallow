@@ -162,7 +162,7 @@ export function NewGameScreen() {
           disabled={!activeScript || starting}
           onClick={handleStart}
         >
-          Start Game
+          Create setup
           {activeScript && (
             <span className="ng-start-meta">
               {" "}· {activeScript.name} · {playerCount} players

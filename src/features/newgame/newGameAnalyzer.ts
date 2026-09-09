@@ -1,21 +1,16 @@
-import { analyzeBagCore, type BagAnalysis } from "@/features/setup/setupAnalyzer";
-import type { RoleId, RoleDef } from "@/stores/types";
+import { analyzeSetup } from "@/features/setup/setupAnalyzer";
+import { selectSetupContext } from "@/features/setup/setupContext";
+import type { RoleId, RoleDef, StorytellerLobbyRecord } from "@/stores/types";
 
-/**
- * Analyse a pre-pick role pool without needing seated player records.
- * Delegates to `analyzeBagCore` so all setup-shift rules (Baron, Godfather,
- * Fang Gu, Vigormortis) apply identically to the in-game SetupPanel.
- */
+/** Planning is allowed to be incomplete; the UI shows pool findings, not start gates. */
 export function analyzeRolePool(
-  rolePool: RoleId[],
-  plannedPlayerCount: number,
-  roleById: Map<RoleId, RoleDef>
-): BagAnalysis {
-  return analyzeBagCore({
-    nonTravelerCount: plannedPlayerCount,
-    travelerCount: 0,
-    assignedRoleIds: rolePool,
-    unassignedCount: Math.max(0, plannedPlayerCount - rolePool.length),
-    roleById,
-  });
+  rolePool: RoleId[], plannedPlayerCount: number, roleById: Map<RoleId, RoleDef>,
+  fabled: RoleId[] = [], lorics: RoleId[] = [],
+) {
+  const game: StorytellerLobbyRecord = {
+    code: "", storytellerUid: "local", scriptId: "planning", phase: "setup", day: 0,
+    players: {}, seatOrder: [], rolePool, plannedPlayerCount, fabled, lorics,
+    bluffs: [], notes: "", nightProgress: {}, pendingPlayers: {},
+  };
+  return analyzeSetup(selectSetupContext(game, { id: "planning", name: "Planning", characters: [...roleById.values()] }));
 }

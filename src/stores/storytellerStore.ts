@@ -8,6 +8,9 @@ import { buildRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, needsShownIdentity } from "./identity";
 import { invalidatePrivatePacket, pruneInapplicablePrivateInfo } from "./privatePackets";
 import { usePrivacyStore } from "./privacyStore";
+import { analyzeSetup } from "@/features/setup/setupAnalyzer";
+import { selectSetupContext } from "@/features/setup/setupContext";
+import type { SetupCommandResult } from "@/features/setup/setupReadiness";
 import type {
   Alignment,
   BehaviorMode,
@@ -90,7 +93,10 @@ export type StorytellerStore = {
   tokenPositions: Record<PlayerId, TokenPosition>;
 
   newGame: (scriptId: string, opts?: NewGameOpts) => void;
-  dealRolePool: () => void;
+  dealRolePool: () => SetupCommandResult;
+  beginNightOne: () => SetupCommandResult;
+  setPlannedPlayerCount: (count: number) => void;
+  setRolePool: (roles: RoleId[]) => void;
   endGame: () => void;
   setView: (view: "home" | "game" | "newgame") => void;
   selectPlayer: (id: PlayerId | null) => void;
@@ -137,8 +143,8 @@ export type StorytellerStore = {
   setReminders: (id: PlayerId, reminders: string[]) => void;
   setNotes: (id: PlayerId, notes: string) => void;
 
-  setPhase: (phase: StorytellerLobbyRecord["phase"]) => void;
-  advancePhase: () => void;
+  setPhase: (phase: StorytellerLobbyRecord["phase"]) => SetupCommandResult;
+  advancePhase: () => SetupCommandResult;
 
   setNightStepStatus: (day: number, stepKey: string, status: NightStepStatus) => void;
   setNightStepNotes: (day: number, stepKey: string, notes: string) => void;
@@ -257,6 +263,16 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
     s.undoStack = [];
     if (s.game) { s.game.code = ""; s.game.storytellerUid = "local"; }
   }
+  // v10 adds an optional starting population. Earlier snapshots cannot prove
+  // this history; never derive it from their current attendance or roles.
+  if (fromVersion < 10) {
+    if (s.game) delete s.game.startingNonTravelerCount;
+    if (Array.isArray(s.undoStack)) {
+      for (const entry of s.undoStack) {
+        if (entry && typeof entry === "object") delete (entry as Record<string, unknown>).startingNonTravelerCount;
+      }
+    }
+  }
   const check = StorytellerStateSchema.safeParse(state);
   if (!check.success) {
     // eslint-disable-next-line no-console
@@ -318,15 +334,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       dealRolePool: () => {
         const { game, undoStack } = get();
-        if (!game || game.phase !== "setup") return;
+        if (!game) return { ok: false, message: "No game is open." };
+        const script = selectScriptById(get(), game.scriptId);
+        const context = selectSetupContext(game, script);
+        const ready = analyzeSetup(context).readiness.deal;
+        if (!ready.ok) return ready;
         const pool = game.rolePool ?? [];
-        if (pool.length === 0) return;
-
-        const nonTravelerSeats = game.seatOrder.filter((id) => {
-          const p = game.players[id];
-          return p && !p.isTraveler && !p.isEmpty;
-        });
-        if (pool.length !== nonTravelerSeats.length) return;
+        const nonTravelerSeats = context.ordinary.map(p => p.id);
 
         // Fisher-Yates shuffle
         const shuffled = [...pool];
@@ -335,9 +349,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
         }
 
-        const script = selectScriptById(get(), game.scriptId);
-        if (!script) return;
-        const registry = buildRegistry(script);
+        const registry = context.registry!;
         const newPlayers = { ...game.players };
         nonTravelerSeats.forEach((playerId, idx) => {
           const existing = newPlayers[playerId];
@@ -359,8 +371,38 @@ export const useStorytellerStore = create<StorytellerStore>()(
             rolePool: [],
             phase: "night",
             day: 1,
+            ...(game.startingNonTravelerCount === undefined && game.day === 0
+              ? { startingNonTravelerCount: context.population.occupiedNonTravelerCount } : {}),
           },
         });
+        return { ok: true };
+      },
+
+      beginNightOne: () => {
+        const { game, undoStack } = get();
+        if (!game) return { ok: false, message: "No game is open." };
+        const context = selectSetupContext(game, selectScriptById(get(), game.scriptId));
+        const ready = analyzeSetup(context).readiness.manual;
+        if (!ready.ok) return ready;
+        set({
+          undoStack: pushUndo(game, undoStack),
+          game: { ...game, phase: "night", day: 1,
+            ...(game.startingNonTravelerCount === undefined && game.day === 0
+              ? { startingNonTravelerCount: context.population.occupiedNonTravelerCount } : {}) },
+        });
+        return { ok: true };
+      },
+
+      setPlannedPlayerCount: (count) => {
+        const { game, undoStack } = get();
+        if (!game || game.phase !== "setup" || !Number.isSafeInteger(count) || count < 1) return;
+        set({ undoStack: pushUndo(game, undoStack), game: { ...game, plannedPlayerCount: count } });
+      },
+
+      setRolePool: (roles) => {
+        const { game, undoStack } = get();
+        if (!game || game.phase !== "setup") return;
+        set({ undoStack: pushUndo(game, undoStack), game: { ...game, rolePool: [...roles] } });
       },
 
       endGame: () => {
@@ -540,7 +582,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
             ...game,
             players: { ...game.players, [id]: blankPlayer(id, "", seat, true) },
             seatOrder: [...game.seatOrder, id],
-            plannedPlayerCount: Math.max(game.plannedPlayerCount, seat + 1),
           },
         });
       },
@@ -580,9 +621,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
             ...game,
             players: renumbered,
             seatOrder,
-            plannedPlayerCount: game.players[id]?.isEmpty
-              ? Math.min(game.plannedPlayerCount, seatOrder.length)
-              : game.plannedPlayerCount,
           },
           selectedPlayerId: selectedPlayerId === id ? null : selectedPlayerId,
         });
@@ -897,21 +935,25 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       setPhase: (phase) => {
         const { game, undoStack } = get();
-        if (!game) return;
+        if (!game) return { ok: false, message: "No game is open." };
+        if (game.phase === "ended" && phase !== "ended")
+          return { ok: false, message: "This game has ended. Create a new setup to play again." };
+        if (game.phase === "setup" && (phase === "night" || phase === "day")) {
+          return get().beginNightOne();
+        }
         set({
           undoStack: pushUndo(game, undoStack),
           game: { ...game, phase },
         });
+        return { ok: true };
       },
 
       advancePhase: () => {
         const { game, undoStack } = get();
-        if (!game) return;
+        if (!game) return { ok: false, message: "No game is open." };
+        if (game.phase === "setup") return get().beginNightOne();
         let { phase, day } = game;
-        if (phase === "setup") {
-          phase = "night";
-          day = 1;
-        } else if (phase === "night") {
+        if (phase === "night") {
           phase = "day";
         } else if (phase === "day") {
           phase = "night";
@@ -921,6 +963,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           undoStack: pushUndo(game, undoStack),
           game: { ...game, phase, day },
         });
+        return { ok: true };
       },
 
       setNightStepStatus: (day, stepKey, status) => {
@@ -971,6 +1014,12 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const { undoStack } = get();
         if (undoStack.length === 0) return;
         const previous = undoStack[undoStack.length - 1]!;
+        // Undo can restore a pre-existing live snapshot after returning to Setup.
+        // Validate that snapshot too; never use Undo as an unguarded first start.
+        if (get().game?.phase === "setup" && (previous.phase === "night" || previous.phase === "day")) {
+          const context = selectSetupContext({ ...previous, phase: "setup" }, selectScriptById(get(), previous.scriptId));
+          if (!analyzeSetup(context).readiness.manual.ok) return;
+        }
         set({
           game: clone(previous),
           undoStack: undoStack.slice(0, -1),
@@ -988,7 +1037,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
     }),
     {
       name: "new-blood-st",
-      version: 9,
+      version: 10,
       storage: createJSONStorage(() => localStorage),
       migrate: migrateStoreState,
       partialize: (s) => ({

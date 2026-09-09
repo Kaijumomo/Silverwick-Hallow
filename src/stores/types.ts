@@ -129,6 +129,8 @@ export type StorytellerLobbyRecord = {
   rolePool: RoleId[];
   /** Target player count chosen at New Game setup time. */
   plannedPlayerCount: number;
+  /** Confirmed ordinary population at first successful start; unknown for legacy games. ST-only. */
+  startingNonTravelerCount?: number;
   /** Players who have knocked but not yet been assigned to a seat. uid → requested name. */
   pendingPlayers: Record<string, string>;
 };

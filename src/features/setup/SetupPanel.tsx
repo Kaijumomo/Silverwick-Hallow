@@ -1,7 +1,11 @@
-import { useMemo, type RefObject } from "react";
+import { useMemo, useState, type RefObject } from "react";
 import { Modal } from "@/components/Modal";
 import { useStorytellerStore } from "@/stores/storytellerStore";
-import { analyzeBag, analyzeBagCore, type SetupWarning } from "./setupAnalyzer";
+import { usePrivacyStore } from "@/stores/privacyStore";
+import { analyzeSetup } from "./setupAnalyzer";
+import { selectSetupContext, type SetupAction } from "./setupContext";
+import { SetupFindings, CompositionSummary } from "./SetupFindings";
+import { isBagType } from "./setupPolicies";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
 import type { Script, StorytellerLobbyRecord } from "@/stores/types";
@@ -14,244 +18,104 @@ type Props = {
   returnFocusRef?: RefObject<HTMLElement>;
 };
 
-const TYPE_LABELS: Record<string, string> = {
-  townsfolk: "T",
-  outsider: "O",
-  minion: "M",
-  demon: "D",
-};
-
-function warningText(w: SetupWarning): string {
-  switch (w.kind) {
-    case "count-out-of-range":
-      return `${w.count} players is outside the supported range (5–15).`;
-    case "no-demon":
-      return "No Demon is assigned.";
-    case "multiple-demons":
-      return `${w.count} Demons are assigned (expected 1).`;
-    case "type-mismatch": {
-      const base = `${w.type}: ${w.actual} assigned, ${w.expected} expected`;
-      return w.reason ? `${base} (${w.reason})` : base;
-    }
-    case "setup-role-in-play":
-      return `${w.roleName}: ${w.effectText}`;
-  }
-}
-
 export function SetupPanel({ game, script, onClose, foreground = false, returnFocusRef }: Props) {
-  const setFabled = useStorytellerStore((s) => s.setFabled);
-  const setLorics = useStorytellerStore((s) => s.setLorics);
-  const dealRolePool = useStorytellerStore((s) => s.dealRolePool);
-
-  const roleById = useMemo(
-    () => new Map(script.characters.map((r) => [r.id, r])),
-    [script.characters]
-  );
-
+  const store = useStorytellerStore();
+  const hidden = usePrivacyStore(s => s.enabled);
+  const [workflow, setWorkflow] = useState<SetupAction>(game.rolePool.length ? "deal" : "manual");
+  const [error, setError] = useState<string | null>(null);
+  const analysis = useMemo(() => analyzeSetup(selectSetupContext(game, script)), [game, script]);
+  if (hidden) return null;
+  const p = analysis.population;
   const pool = game.rolePool ?? [];
-  const hasPool = pool.length > 0;
-
-  const nonTravelerSeats = game.seatOrder.filter((id) => {
-    const p = game.players[id];
-    return p && !p.isTraveler;
-  });
-  const seatCount = nonTravelerSeats.length;
-  const poolReady = hasPool && pool.length === seatCount;
-  const poolMismatch = hasPool && pool.length !== seatCount;
-
-  // If there's a pool, analyse it. Otherwise fall back to the per-player analysis.
-  const analysis = useMemo(() => {
-    if (hasPool) {
-      return analyzeBagCore({
-        nonTravelerCount: seatCount,
-        travelerCount: game.seatOrder.filter((id) => game.players[id]?.isTraveler).length,
-        assignedRoleIds: pool,
-        unassignedCount: Math.max(0, seatCount - pool.length),
-        roleById,
-      });
-    }
-    return analyzeBag(game.players, roleById);
-  }, [hasPool, pool, seatCount, game.players, game.seatOrder, roleById]);
-
+  const ready = analysis.readiness[workflow];
+  const findings = analysis.findings.filter(f =>
+    (!f.actions || f.actions.includes(workflow)) &&
+    (f.severity === "blocker" || f.source === "shared" || f.source === (workflow === "deal" ? "pool" : "assigned")));
   const selectedFabled = new Set(game.fabled);
   const selectedLorics = new Set(game.lorics ?? []);
-
-  const toggleFabled = (id: string) => {
-    if (selectedFabled.has(id)) {
-      setFabled(game.fabled.filter((f) => f !== id));
-    } else {
-      setFabled([...game.fabled, id]);
-    }
+  const summary = <span className="setup-panel-summary">
+    {p.targetNonTravelerCount ?? "Target unset"}{p.targetNonTravelerCount !== null ? " planned" : ""}
+    {" · "}{p.occupiedNonTravelerCount} seated · {p.emptyPlannedSeatCount} empty
+    {p.occupiedTravelerCount > 0 && ` · ${p.occupiedTravelerCount} Traveler${p.occupiedTravelerCount === 1 ? "" : "s"}`}
+  </span>;
+  const run = () => {
+    const result = workflow === "deal" ? store.dealRolePool() : store.beginNightOne();
+    setError(result.ok ? null : result.message);
   };
-
-  const toggleLoric = (id: string) => {
-    const current = game.lorics ?? [];
-    if (selectedLorics.has(id)) {
-      setLorics(current.filter((l) => l !== id));
-    } else {
-      setLorics([...current, id]);
-    }
-  };
-
-  const bagTypes = ["townsfolk", "outsider", "minion", "demon"] as const;
-
-  const setupNotes = analysis.warnings.filter(
-    (w): w is Extract<SetupWarning, { kind: "setup-role-in-play" }> =>
-      w.kind === "setup-role-in-play"
-  );
-  const otherWarnings = analysis.warnings.filter(
-    (w) => w.kind !== "setup-role-in-play"
-  );
-
-  const summary = (
-    <span className="setup-panel-summary">
-      {analysis.nonTravelerCount} players
-      {analysis.travelerCount > 0 && ` · ${analysis.travelerCount} traveler${analysis.travelerCount !== 1 ? "s" : ""}`}
-      {analysis.unassignedCount > 0 && ` · ${analysis.unassignedCount} unassigned`}
-    </span>
-  );
-  const header = (
-      <div className="setup-panel-header">
-        <h2 className="setup-panel-title">Setup</h2>
-        {summary}
-        <button className="btn btn-sm" onClick={onClose} aria-label="Close setup panel">
-          ✕
-        </button>
+  const body = <div className="setup-panel-body">
+    <div className="setup-section">
+      <label className="setup-target">Intended non-Traveler players
+        <input className="input" type="number" min="1" step="1" aria-label="Intended non-Traveler players"
+          value={game.plannedPlayerCount || ""}
+          onChange={e => { store.setPlannedPlayerCount(Number(e.target.value)); setError(null); }} />
+      </label>
+      <p className="behavior-help">{p.totalPhysicalSeatCount} physical seats. Offline players remain seated.
+        Fill or remove unused seats in the grimoire; edit the target deliberately.</p>
+      <label>Assignment workflow
+        <select className="select" aria-label="Assignment workflow" value={workflow}
+          onChange={e => { setWorkflow(e.target.value as SetupAction); setError(null); }}>
+          <option value="deal">Random / app-assisted deal</option>
+          <option value="manual">Manual Storyteller assignment</option>
+        </select>
+      </label>
+      <SetupFindings findings={findings} />
+      <button className="btn btn-gold setup-deal-btn" disabled={!ready.ok} onClick={run}
+        aria-describedby="setup-action-help">
+        {workflow === "deal" ? "Deal roles & begin Night 1" : "Begin Night 1 with assigned roles"}
+      </button>
+      <p id="setup-action-help" className="behavior-help">
+        {ready.ok ? "Warnings and Storyteller checks do not prevent starting." : ready.message}
+      </p>
+      {error && <p role="alert">{error}</p>}
+    </div>
+    <div className="setup-section">
+      <CompositionSummary label="Planned pool" analysis={analysis.pool} />
+      <CompositionSummary label="Assigned truth" analysis={analysis.assigned} />
+      <details className="setup-pool-editor">
+        <summary>Edit role pool ({pool.length})</summary>
+        <p className="behavior-help">The pool holds future actual roles. Dealing replaces ordinary assignments.
+          Clear it to use manually assigned roles.</p>
+        <label>Add a role
+          <select className="select" aria-label="Add pooled role" value=""
+            onChange={e => { if (e.target.value) store.setRolePool([...pool, e.target.value]); }}>
+            <option value="">Choose a character</option>
+            {[...new Map(script.characters.filter(r => isBagType(r.type)).map(r => [r.id, r])).values()]
+              .map(r => <option value={r.id} key={r.id}>{r.name}</option>)}
+          </select>
+        </label>
+        <ul>{pool.map((id, i) => <li key={i}>
+          {script.characters.find(r => r.id === id)?.name ?? id}
+          <button className="btn btn-sm" aria-label={`Remove pooled ${script.characters.find(r => r.id === id)?.name ?? id} ${i + 1}`}
+            onClick={() => store.setRolePool(pool.filter((_, index) => index !== i))}>Remove</button>
+        </li>)}</ul>
+        {pool.length > 0 && <button className="btn btn-sm" onClick={() => { store.setRolePool([]); setWorkflow("manual"); setError(null); }}>
+          Clear pool — keep assignments
+        </button>}
+      </details>
+    </div>
+    {([
+      ["Fabled", FABLED, selectedFabled, game.fabled, store.setFabled],
+      ["Lorics", LORICS, selectedLorics, game.lorics ?? [], store.setLorics],
+    ] as const).map(([label, catalog, selected, current, setter]) => <div className="setup-section" key={label}>
+      <div className="setup-section-title">{label}</div>
+      <p className="behavior-help">Modifiers, not seated players.</p>
+      <div className={label === "Fabled" ? "fabled-chips" : "loric-chips"}>
+        {catalog.map(r => <button key={r.id} className={`${label === "Fabled" ? "fabled" : "loric"}-chip${selected.has(r.id) ? " selected" : ""}`}
+          aria-pressed={selected.has(r.id)} title={r.ability}
+          onClick={() => setter(selected.has(r.id) ? current.filter(id => id !== r.id) : [...current, r.id])}>{r.name}</button>)}
       </div>
-  );
-  const body = (
-      <div className="setup-panel-body">
-        {/* Role pool summary — shown when a pre-picked pool exists */}
-        {hasPool && (
-          <div className="setup-section setup-pool-section">
-            <div className="setup-section-title">Role pool</div>
-            <div className="setup-pool-meta">
-              {pool.length} roles · {seatCount} seats
-            </div>
-            {poolMismatch && (
-              <div className="setup-warning">
-                <span className="setup-warning-icon">⚠</span>
-                <span>
-                  Pool has {pool.length} role{pool.length !== 1 ? "s" : ""} but{" "}
-                  {seatCount} seat{seatCount !== 1 ? "s" : ""} are filled.
-                  {pool.length > seatCount
-                    ? " Remove some roles or add more players."
-                    : " Add more roles or remove a player."}
-                </span>
-              </div>
-            )}
-            <button
-              className="btn btn-gold setup-deal-btn"
-              disabled={!poolReady}
-              onClick={dealRolePool}
-              title={
-                poolReady
-                  ? "Shuffle the pool and deal one role to each seated player"
-                  : `Pool (${pool.length}) must match seated players (${seatCount})`
-              }
-            >
-              Start Game — Deal Roles
-            </button>
-          </div>
-        )}
-
-        {/* Bag composition chips */}
-        <div className="setup-bag-chips">
-          {bagTypes.map((t) => {
-            const actual = analysis.actual[t];
-            const expected = analysis.expected?.[t] ?? null;
-            const mismatch = expected !== null && actual !== expected;
-            return (
-              <div
-                key={t}
-                className={`setup-chip setup-chip-${t}${mismatch ? " mismatch" : ""}`}
-                title={`${t}: ${actual} assigned${expected !== null ? `, ${expected} expected` : ""}`}
-              >
-                <span className="setup-chip-label">{TYPE_LABELS[t]}</span>
-                <span className="setup-chip-count">
-                  {actual}
-                  {expected !== null && <span className="setup-chip-expected">/{expected}</span>}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Setup-role notes */}
-        {setupNotes.length > 0 && (
-          <div className="setup-section">
-            <div className="setup-section-title">Setup roles in play</div>
-            {setupNotes.map((w, i) => (
-              <div key={i} className="setup-note">
-                <span className="setup-note-name">{w.roleName}</span>
-                <span className="setup-note-effect">{w.effectText}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Warnings */}
-        {otherWarnings.length > 0 && (
-          <div className="setup-section">
-            <div className="setup-section-title">Warnings</div>
-            {otherWarnings.map((w, i) => (
-              <div key={i} className="setup-warning">
-                <span className="setup-warning-icon">⚠</span>
-                <span>{warningText(w)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Fabled picker */}
-        <div className="setup-section">
-          <div className="setup-section-title">Fabled</div>
-          <div className="fabled-chips">
-            {FABLED.map((f) => (
-              <button
-                key={f.id}
-                className={`fabled-chip${selectedFabled.has(f.id) ? " selected" : ""}`}
-                aria-pressed={selectedFabled.has(f.id)}
-                title={f.ability}
-                onClick={() => toggleFabled(f.id)}
-              >
-                {f.name}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Loric picker */}
-        <div className="setup-section">
-          <div className="setup-section-title">Lorics</div>
-          <p className="behavior-help" style={{ margin: "0 0 6px" }}>
-            Storyteller-controlled. Not seated, never die.
-          </p>
-          <div className="loric-chips">
-            {LORICS.map((l) => (
-              <button
-                key={l.id}
-                className={`loric-chip${selectedLorics.has(l.id) ? " selected" : ""}`}
-                aria-pressed={selectedLorics.has(l.id)}
-                title={l.ability}
-                onClick={() => toggleLoric(l.id)}
-              >
-                {l.name}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-  );
-  return foreground ? (
-    <Modal title="Setup" closeLabel="Close setup panel" onClose={onClose} className="setup-workspace" returnFocusRef={returnFocusRef}>
-      <div className="setup-workspace-summary">{summary}</div>
-      {body}
-    </Modal>
-  ) : (
-    <aside className="setup-panel" aria-label="Setup helper">
-      {header}
-      {body}
-    </aside>
-  );
+      {current.filter(id => !catalog.some(r => r.id === id)).map(id =>
+        <button className="btn btn-sm" key={id} onClick={() => setter(current.filter(value => value !== id))}>
+          Remove unrecognized modifier {id}
+        </button>)}
+    </div>)}
+  </div>;
+  return foreground ? <Modal title="Setup" closeLabel="Close setup panel" onClose={onClose}
+    className="setup-workspace" returnFocusRef={returnFocusRef}>
+    <div className="setup-workspace-summary">{summary}</div>{body}
+  </Modal> : <aside className="setup-panel" aria-label="Setup helper">
+    <div className="setup-panel-header"><h2 className="setup-panel-title">Setup</h2>{summary}
+      <button className="btn btn-sm" onClick={onClose} aria-label="Close setup panel">✕</button>
+    </div>{body}
+  </aside>;
 }

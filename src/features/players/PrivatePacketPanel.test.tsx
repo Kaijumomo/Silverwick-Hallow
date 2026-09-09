@@ -33,6 +33,13 @@ function player(actual = "lunatic", shown = "imp") {
   store.getState().setShownRole(id, shown);
   return { id, other };
 }
+// These tests isolate night/delivery behavior, not setup readiness. Some use
+// deliberately partial or off-script identities, so establish the live fixture.
+function runningNight() {
+  store.setState({ game: { ...store.getState().game!, phase: "night", day: 1 } });
+  expect(store.getState().game!.phase).toBe("night");
+  expect(store.getState().game!.day).toBe(1);
+}
 describe("private information workflow UI", () => {
   it("derives a sanitized preview without sending or saving preview state", () => {
     const { id, other } = player();
@@ -73,9 +80,12 @@ describe("private information workflow UI", () => {
   });
 
   it("night procedure comes first and Lunatic setup is a collapsed introduction action", () => {
-    player();
+    const { other } = player();
+    // This test isolates an already-running night procedure, including a
+    // Lunatic not present in the TB fixture script; it does not exercise start.
+    store.getState().assignRole(other, "chef");
     store.getState().setFabled(["toymaker"]);
-    store.getState().advancePhase();
+    store.setState({ game: { ...store.getState().game!, phase: "night", day: 1 } });
     const view = render(<NightOrderPanel game={store.getState().game!} script={troubleBrewing} onClose={() => {}} />);
     const body = view.container.querySelector(".night-panel-body")!;
     expect(body.firstElementChild?.querySelector(".step-card")).toBeTruthy();
@@ -89,7 +99,7 @@ describe("private information workflow UI", () => {
 
   it("privacy mode replaces the night sheet with a neutral notice", () => {
     const { id } = player();
-    store.getState().setPhase("night");
+    runningNight();
     usePrivacyStore.getState().setEnabled(true);
     render(<NightOrderPanel game={store.getState().game!} script={troubleBrewing} onClose={() => {}} />);
     expect(screen.getByRole("status")).toHaveTextContent("Privacy Mode On");
@@ -101,7 +111,7 @@ describe("private information workflow UI", () => {
 });
 it.each([["drunk", "empath"], ["marionette", "fortuneteller"]])("%s has the shown information procedure and can finish physically", (actual, shown) => {
   const { id } = player(actual, shown);
-  store.getState().setPhase("night");
+  runningNight();
   const before = structuredClone(store.getState().game!.players[id]!);
   const view = render(<NightOrderPanel game={store.getState().game!} script={troubleBrewing} onClose={() => {}} />);
   const step = view.container.querySelectorAll(".step-card");
@@ -117,9 +127,10 @@ it.each([["drunk", "empath"], ["marionette", "fortuneteller"]])("%s has the show
 
 it.each(["soldier", "monk"])("Drunk shown %s has no generic information editor", shown => {
   player("drunk", shown);
-  store.getState().setPhase("night");
-  store.getState().advancePhase();
-  store.getState().advancePhase();
+  runningNight();
+  expect(store.getState().advancePhase().ok).toBe(true);
+  expect(store.getState().advancePhase().ok).toBe(true);
+  expect(store.getState().game).toMatchObject({ phase: "night", day: 2 });
   render(<NightOrderPanel game={store.getState().game!} script={troubleBrewing} onClose={() => {}} />);
   expect(screen.queryByLabelText("Information")).toBeNull();
   expect(screen.queryByText("Give information")).toBeNull();
@@ -146,7 +157,8 @@ it("only explicit Send submits the reviewed content, and Sent requires an acknow
   expect(screen.queryByText("Sent to player view")).toBeNull();
   await act(async () => finish());
   expect(screen.getByRole("status")).toHaveTextContent("Sent to player view");
-  act(() => { store.getState().setPhase("night"); store.getState().advancePhase(); store.getState().advancePhase(); });
+  act(() => { runningNight(); store.getState().advancePhase(); store.getState().advancePhase(); });
+  expect(store.getState().game).toMatchObject({ phase: "night", day: 2 });
   expect(screen.getByRole("status")).toHaveTextContent("Sent to player view");
   expect(screen.getByRole("button", { name: "Send bluffs" })).toBeDisabled();
   expect(publishPrivatePacket).toHaveBeenCalledTimes(1);
@@ -154,7 +166,7 @@ it("only explicit Send submits the reviewed content, and Sent requires an acknow
 it("ordinary poisoned Empath can optionally receive manually chosen information", () => {
   const { id } = player("empath", "empath");
   store.getState().setStatus(id, "poisoned", true);
-  store.getState().advancePhase();
+  runningNight();
   render(<NightOrderPanel game={store.getState().game!} script={troubleBrewing} onClose={() => {}} />);
   fireEvent.click(screen.getByText("Give information"));
   fireEvent.change(screen.getByLabelText("Information"), { target: { value: "0" } });

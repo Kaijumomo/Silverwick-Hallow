@@ -4,7 +4,7 @@ import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
 import { analyzeRolePool } from "./newGameAnalyzer";
 import type { RoleDef, RoleId } from "@/stores/types";
-import type { SetupWarning } from "@/features/setup/setupAnalyzer";
+import { SetupFindings, CompositionSummary } from "@/features/setup/SetupFindings";
 
 type Props = {
   scriptCharacters: RoleDef[];
@@ -30,23 +30,6 @@ const TYPE_COLOR: Record<string, string> = {
   minion: "type-minion",
   demon: "type-demon",
 };
-
-function warningText(w: SetupWarning): string {
-  switch (w.kind) {
-    case "count-out-of-range":
-      return `${w.count} players is outside the supported range (5–15).`;
-    case "no-demon":
-      return "No Demon selected.";
-    case "multiple-demons":
-      return `${w.count} Demons selected (expected 1).`;
-    case "type-mismatch": {
-      const base = `${w.type}: ${w.actual} selected, ${w.expected} expected`;
-      return w.reason ? `${base} (${w.reason})` : base;
-    }
-    case "setup-role-in-play":
-      return `${w.roleName}: ${w.effectText}`;
-  }
-}
 
 type RoleTileProps = {
   role: RoleDef;
@@ -92,8 +75,8 @@ export function RolePickerPanel({
   );
 
   const analysis = useMemo(
-    () => analyzeRolePool(rolePool, plannedPlayerCount, roleById),
-    [rolePool, plannedPlayerCount, roleById]
+    () => analyzeRolePool(rolePool, plannedPlayerCount, roleById, plannedFabled, plannedLorics),
+    [rolePool, plannedPlayerCount, roleById, plannedFabled, plannedLorics]
   );
 
   const poolSet = new Set(rolePool);
@@ -111,67 +94,11 @@ export function RolePickerPanel({
     return map;
   }, [scriptCharacters]);
 
-  const setupNotes = analysis.warnings.filter(
-    (w): w is Extract<SetupWarning, { kind: "setup-role-in-play" }> =>
-      w.kind === "setup-role-in-play"
-  );
-  const otherWarnings = analysis.warnings.filter(
-    (w) => w.kind !== "setup-role-in-play"
-  );
-
   return (
     <div className="ng-picker">
-      {/* Live bag count chips */}
-      <div className="ng-picker-chips">
-        {BAG_TYPES.map((t) => {
-          const actual = analysis.actual[t];
-          const expected = analysis.expected?.[t] ?? null;
-          const mismatch = expected !== null && actual !== expected;
-          return (
-            <div
-              key={t}
-              className={`setup-chip setup-chip-${t}${mismatch ? " mismatch" : ""}`}
-              title={`${t}: ${actual} selected${expected !== null ? `, ${expected} expected` : ""}`}
-            >
-              <span className="setup-chip-label">{t[0]!.toUpperCase()}</span>
-              <span className="setup-chip-count">
-                {actual}
-                {expected !== null && (
-                  <span className="setup-chip-expected">/{expected}</span>
-                )}
-              </span>
-            </div>
-          );
-        })}
-        <span className="ng-pool-total">
-          {rolePool.length} / {plannedPlayerCount} in pool
-        </span>
-      </div>
-
-      {/* Setup role notes */}
-      {setupNotes.length > 0 && (
-        <div className="setup-section">
-          <div className="setup-section-title">Setup effects</div>
-          {setupNotes.map((w, i) => (
-            <div key={i} className="setup-note">
-              <span className="setup-note-name">{w.roleName}</span>
-              <span className="setup-note-effect">{w.effectText}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Warnings */}
-      {otherWarnings.length > 0 && (
-        <div className="setup-section">
-          {otherWarnings.map((w, i) => (
-            <div key={i} className="setup-warning">
-              <span className="setup-warning-icon">⚠</span>
-              <span>{warningText(w)}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      <CompositionSummary label="Planned pool" analysis={analysis.pool} />
+      <SetupFindings findings={analysis.findings.filter(f =>
+        f.severity !== "blocker" && f.source !== "assigned" && f.code !== "planning-empty")} />
 
       {/* Role grids by type */}
       {BAG_TYPES.map((t) => {

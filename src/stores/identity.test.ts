@@ -50,7 +50,8 @@ describe("AUD-004 identity boundary", () => {
     store.setState({ customScripts: { audit: { ...tbScript, id: "audit" } } });
     store.getState().newGame("audit", { plannedRoles: ["chef", "imp", "drunk", "marionette", "lunatic"] });
     for (const name of ["A", "B", "C", "D", "E"]) store.getState().addPlayer(name);
-    store.getState().dealRolePool();
+    store.getState().setPlannedPlayerCount(5);
+    expect(store.getState().dealRolePool().ok).toBe(true);
     const game = store.getState().game!;
     expect(game.phase).toBe("night");
     for (const p of Object.values(game.players)) {

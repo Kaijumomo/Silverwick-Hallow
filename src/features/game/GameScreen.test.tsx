@@ -27,7 +27,7 @@ afterEach(() => {
 describe("Storyteller privacy mode", () => {
   it("conceals token identity and effects while preserving the current game", () => {
     const view = render(<GameScreen />);
-    expect(screen.getByText("Chef")).toBeInTheDocument();
+    expect(screen.getAllByText("Chef").length).toBeGreaterThan(0);
     expect(screen.getByAltText("poisoned")).toBeInTheDocument();
     expect(screen.getByText("Secret reminder")).toBeInTheDocument();
     const before = structuredClone(storyteller.getState().game);
@@ -49,6 +49,6 @@ describe("Storyteller privacy mode", () => {
     expect(screen.queryByText("Updated while hidden")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Disable Privacy Mode" }));
     expect(screen.getByText("Updated while hidden")).toBeInTheDocument();
-    expect(screen.getByText("Chef")).toBeInTheDocument();
+    expect(screen.getAllByText("Chef").length).toBeGreaterThan(0);
   });
 });
