@@ -8,7 +8,14 @@ import path from "node:path";
 export default defineConfig({
   resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
   test: {
-    include: ["src/firebase/rules.spec.ts"],
+    include: ["src/firebase/rules.spec.ts", "src/firebase/contract.spec.ts"],
+    // Both spec files initialize their own RulesTestEnvironment against the
+    // SAME running emulator and clearDatabase() in beforeEach. Running the
+    // two files concurrently (Vitest's default) would let one file's
+    // clearDatabase() race the other file's in-flight assertions against the
+    // same database. fileParallelism:false keeps emulator spec files
+    // strictly sequential; tests within a single file already run in order.
+    fileParallelism: false,
     globals: false,
     environment: "node",
     testTimeout: 20000,
