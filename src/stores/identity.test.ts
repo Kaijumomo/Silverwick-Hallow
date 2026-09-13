@@ -52,6 +52,7 @@ describe("AUD-004 identity boundary", () => {
     for (const name of ["A", "B", "C", "D", "E"]) store.getState().addPlayer(name);
     store.getState().setPlannedPlayerCount(5);
     expect(store.getState().dealRolePool().ok).toBe(true);
+    expect(store.getState().beginNightOne().ok).toBe(true);
     const game = store.getState().game!;
     expect(game.phase).toBe("night");
     for (const p of Object.values(game.players)) {

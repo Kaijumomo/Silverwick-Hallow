@@ -135,6 +135,8 @@ export type StorytellerLobbyRecord = {
   rolePool: RoleId[];
   /** Target player count chosen at New Game setup time. */
   plannedPlayerCount: number;
+  /** Current preparation step; absent in legacy games. Not an event history. */
+  setupRolesDealt?: boolean;
   /** Confirmed ordinary population at first successful start; unknown for legacy games. ST-only. */
   startingNonTravelerCount?: number;
   /** Players who have knocked but not yet been assigned to a seat. uid → requested name. */

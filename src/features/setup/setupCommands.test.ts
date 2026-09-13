@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useStorytellerStore as store, migrateStoreState } from "@/stores/storytellerStore";
 import { StorytellerGamePersistedSchema, StorytellerStateSchema } from "@/stores/schemas";
 import { projectLobbyToPublic, projectLobbyToSelfMap } from "@/stores/projections";
@@ -45,10 +45,12 @@ describe("one setup command gate", () => {
     prepare();expect(run().ok).toBe(true);expect(game().phase).toBe("night");expect(game().day).toBe(1);
     expect(game().startingNonTravelerCount).toBe(5);
   });
-  it("deals ordinary actual roles and records the reconciled population", () => {
+  it("deals ordinary roles, then records the starting population only when night begins", () => {
     prepare(true);expect(state().dealRolePool().ok).toBe(true);
-    expect(game().rolePool).toEqual([]);expect(game().startingNonTravelerCount).toBe(5);
+    expect(game().rolePool).toEqual([]);expect(game().startingNonTravelerCount).toBeUndefined();
+    expect(game().phase).toBe("setup");expect(game().day).toBe(0);expect(game().setupRolesDealt).toBe(true);
     expect(Object.values(game().players).map(p=>p.actualRole).sort()).toEqual(standardRoles(5).sort());
+    expect(state().beginNightOne().ok).toBe(true);expect(game().startingNonTravelerCount).toBe(5);
   });
   it("execution rejects stale UI readiness", () => {
     prepare(true);
@@ -98,6 +100,40 @@ describe("one setup command gate", () => {
 });
 
 describe("population and persisted history", () => {
+  it("random dealing still shuffles the selected pool", () => {
+    prepare(true);
+    const random=vi.spyOn(Math,"random").mockReturnValue(0);
+    try {
+      expect(state().dealRolePool().ok).toBe(true);
+      const roles=standardRoles(5);
+      expect(game().seatOrder.map(id=>game().players[id]!.actualRole)).toEqual([...roles.slice(1),roles[0]]);
+      expect(random).toHaveBeenCalledTimes(4);
+    } finally {random.mockRestore();}
+  });
+  it("the dealt preparation step survives local reload and private checkpoint decoding", async () => {
+    prepare(true);state().dealRolePool();
+    const saved=localStorage.getItem("new-blood-st")!;
+    expect(JSON.parse(saved).version).toBe(11);
+    store.setState({game:null});localStorage.setItem("new-blood-st",saved);await store.persist.rehydrate();
+    expect(game()).toMatchObject({phase:"setup",day:0,setupRolesDealt:true});
+    expect(StorytellerGamePersistedSchema.parse(JSON.parse(JSON.stringify(game()))).setupRolesDealt).toBe(true);
+    for(const data of [projectLobbyToPublic(game(),{}),projectLobbyToSelfMap(game(),buildRegistry(setupScript))])
+      expect(JSON.stringify(data)).not.toContain("setupRolesDealt");
+  });
+  it("undo restores each preparation step without inventing deal history", () => {
+    prepare(true);state().dealRolePool();state().beginNightOne();state().undo();
+    expect(game()).toMatchObject({phase:"setup",setupRolesDealt:true});
+    state().undo();expect(game().setupRolesDealt).toBeUndefined();expect(game().rolePool).toEqual(standardRoles(5));
+  });
+  it("a replacement pool reopens preparation while clearing a pool never fabricates a deal", () => {
+    prepare(true);state().setRolePool([]);expect(game().setupRolesDealt).not.toBe(true);
+    state().setRolePool(standardRoles(5));state().dealRolePool();state().setRolePool(standardRoles(5));
+    expect(game().setupRolesDealt).toBe(false);expect(state().beginNightOne().ok).toBe(false);
+  });
+  it("legacy setup does not gain a made-up deal marker", () => {
+    const legacy=StorytellerGamePersistedSchema.parse(setupGame());
+    expect(Object.hasOwn(legacy,"setupRolesDealt")).toBe(false);
+  });
   it.each(["add","fill","empty","remove-empty","remove-player","unseat","traveler","queue","membership"] as const)(
     "%s never silently rewrites the target", kind => {
       prepare();

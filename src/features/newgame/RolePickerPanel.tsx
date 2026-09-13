@@ -96,7 +96,8 @@ export function RolePickerPanel({
 
   return (
     <div className="ng-picker">
-      <CompositionSummary label="Planned pool" analysis={analysis.pool} />
+      <CompositionSummary target={plannedPlayerCount || null} analysis={analysis.pool} />
+      <p className="setup-selection-count">{rolePool.length} / {plannedPlayerCount || "—"} roles selected</p>
       <SetupFindings findings={analysis.findings.filter(f =>
         f.severity !== "blocker" && f.source !== "assigned" && f.code !== "planning-empty")} />
 
@@ -124,7 +125,8 @@ export function RolePickerPanel({
       })}
 
       {/* Fabled strip */}
-      <div className="ng-type-section">
+      <details className="ng-type-section setup-modifiers"><summary>Fabled &amp; Lorics</summary>
+      <div>
         <div className="ng-type-heading type-fabled">Fabled</div>
         <div className="ng-role-grid">
           {FABLED.map((f) => (
@@ -158,6 +160,7 @@ export function RolePickerPanel({
           ))}
         </div>
       </div>
+      </details>
     </div>
   );
 }

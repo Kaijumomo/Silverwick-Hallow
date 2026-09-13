@@ -1,0 +1,38 @@
+# Phase 9C — Setup experience
+
+1. **Starting state.** Verified before editing: HEAD `07f01e18caf4a57d70889a869d1009cfb49bbb33`, branch `main`, synchronized with `origin/main`, clean working tree. No commit or push is part of this phase.
+
+2. **UX problems found.** Setup presented manual assignment and random dealing as competing initial modes, displayed both planned and assigned composition, repeated related findings, and used diagnostic labels. Its deal button also started Night 1 immediately. The new view needed a distinct review step after dealing.
+
+3. **Visual and workflow changes.** Setup now emphasizes the editable ordinary player count, four expected character counts, selected-role progress, one concise next step, and one gold primary action. Detailed findings and Fabled/Loric choices start collapsed. The role editor uses canonical names/icons grouped by character type, selected states with checkmarks, and a sticky selection count/Done choosing action. Additional copies can be added or reduced individually. New Game's role picker uses the same composition presentation. Setup's toolbar also reports Travelers separately.
+
+4. **Initial deal.** The normal flow is choose the count, select the role pool, seat the ordinary players, then **Deal roles**. Randomization is implicit. The existing Fisher–Yates shuffle, eligible ordinary recipients, execution-time analyzer gate, and actual/shown identity policy remain intact. Travelers are excluded. No manual/random selector or competing initial manual-start button remains. Underlying individual assignment and phase commands retain their existing safeguards.
+
+5. **Status presentation.** Missing seating produces “Seat N more players” and Go to seating. Missing roles produces “Choose N more roles” and Choose roles. Structurally ready preparation produces Ready to deal and Deal roles. Other structural problems lead to Review setup. Relevant warnings/checks get one short preview that opens the full findings. They do not veto a structurally safe deal/start. Unconfigured setup asks for a count and never reports a false ready/no-issues state. The analyzer's findings, severity, and action gates remain authoritative.
+
+6. **Composition.** The display reads existing analyzer candidates and the centralized 5–15 count table. Supported character and Fabled modifiers adjust the expected distribution without changing the ordinary target. Variable results show ranges and exact allowed combinations on demand. Unsupported interactions explicitly show a Storyteller check and label the standard distribution as a baseline before special setup. Travelers remain separate. Canonical rules and policies were not copied or rewritten.
+
+7. **Post-deal and persistence.** Dealing clears the pool and leaves the game in Setup; **Begin Night 1** becomes the next action. Pre-deal pool management disappears, and individual changes belong in the grimoire/player drawer. Begin Night 1 independently rechecks the existing assigned-role readiness and records the starting ordinary population at that transition. A narrowly scoped optional private `setupRolesDealt` boolean preserves the current preparation step across reload, checkpoint decoding, and undo. Persistence stays at **v11**: the field is backward-compatible and absent in legacy data, with no invented deal history. Existing running games returning to Setup use their existing day state. New optional values are omitted when absent; public/self projection allowlists do not expose the field. No persistence architecture or general history migration was introduced.
+
+8. **Responsive, accessibility, and privacy.** Phone Setup retains the opaque, safe-area-aware foreground modal and independent scrolling. Shared modal semantics, Tab/Shift+Tab containment, Escape, and focus restoration remain intact. Opening/closing role editing moves focus to the relevant heading/action. The overview uses text labels as well as color, and selection does not generate a chatty live region. The primary action is at least 50px tall. Tablet portrait uses a compact two-column overview; its height was reduced after rendered inspection to preserve grimoire space. Desktop retains a sidebar. Privacy Mode removes sensitive Setup content from the DOM/accessibility tree while the public-safe overall count remains in the toolbar.
+
+9. **Verification.** Final standalone gates:
+
+   | Gate | Passed | Failed | Skipped |
+   | --- | ---: | ---: | ---: |
+   | Focused setup + identity, four files | 166 | 0 | 0 |
+   | Normal `npm test`, 42 files | 664 | 0 | 0 |
+   | `npm run test:rules:run`, local emulator | 58 | 0 | 0 |
+   | `npm run test:full` | 664 normal + 58 emulator | 0 | 0 |
+
+   The focused group includes 30 Setup UI tests, 46 setup-command tests, 70 unchanged analyzer tests, and 20 identity tests. Typecheck, the combined full gate, production build, and diff check all passed. The rules command ran through `npm run test:rules`, which starts the local demo Firebase emulator and invokes `test:rules:run`; no rules or authority changes were made. Earlier development failures were obsolete UI/deal assertions and one test typing issue; all were resolved before these final gates.
+
+10. **Rendered review.** Real Setup/GameScreen components were exercised with isolated local fixtures at **390×844**, **820×1180**, **1440×900**, and **1920×1080**. At every size the ten scenarios were rendered and checked for action, composition, privacy removal, and horizontal overflow: no selected roles, incomplete pool, missing seats, ready pool, Baron adjustment, Storyteller check, Traveler present, dealt roles, Privacy Mode, and 15 players. Representative screenshots across these states were visually inspected at each size. **1180×820** additionally covered tablet landscape and role editing. Actual phone interactions covered role selection, sticky completion controls, Deal roles → Begin Night 1, Night Assistant activation, Tab/Shift+Tab wrapping, Escape/focus restoration, Privacy Mode toggling, and an individual role change in the drawer after dealing. This was a local rendered review, not a production multiplayer/device session. Temporary fixture sources were removed.
+
+11. **Boundaries and independent review.** No Phase 9 analyzer/context/policy/readiness/provenance redesign, Firebase authority/writer change, canonical-data change, Traveler lifecycle redesign, or night-order-engine change. No nomination/voting system, Phase 10 history/event sourcing, full Traveler ability automation, or custom-script redesign. A separate read-only reviewer reported two nonblocking presentation issues; both were corrected and regression-tested. Its final review was PASS with no remaining concrete findings. That review inspected source and did not independently rerun the browser or verification gates.
+
+12. **Final Git state.** Changes remain unstaged and uncommitted on the starting HEAD. Modified source/test/style files: `src/features/game/GameScreen.tsx`; `src/features/newgame/RolePickerPanel.tsx`; `src/features/setup/SetupFindings.tsx`, `SetupPanel.tsx`, `SetupPanel.test.tsx`, `setupCommands.test.ts`; `src/stores/identity.test.ts`, `schemas.ts`, `storytellerStore.ts`, `types.ts`; `src/styles/components.css`. Added: this handoff, `src/features/setup/RolePoolEditor.tsx`, and `src/features/setup/setupPresentation.ts`.
+
+   All eleven modified files and three added files are intentional. Tracked build metadata was restored; generated build output and emulator logs were moved outside the workspace. No temporary browser fixture, unexpected file, staged change, commit, or push remains.
+
+13. **Verdict.** READY FOR PHASE 9C HUMAN REVIEW
