@@ -415,6 +415,17 @@ describe("OPUS-007 contract: real client pathways against enforced Firebase rule
     manager = await startStorytellerSession(stBackend, lobby, writer);
     expect(useSessionRuntime.getState().error).toBeNull();
 
+    // Count real Firebase write attempts from here on — the shutdown proof
+    // below needs to show the count stops advancing, not just that some
+    // local flag reads a particular way (Phase 9C.1 REVISE, finding 2: the
+    // previous `useSessionRuntime.getState().backend === null` assertion was
+    // ineffective because bare startStorytellerSession never sets `backend`
+    // to the writer in the first place, so it read null before AND after the
+    // failure regardless of whether the writer actually stopped).
+    let updateAttempts = 0;
+    const originalUpdate = stBackend.update.bind(stBackend);
+    stBackend.update = async updates => { updateAttempts++; return originalUpdate(updates); };
+
     // Precondition seeding ONLY (Section 14/9 policy): force the writer's own
     // lease to look expired while keeping its token unchanged. Every
     // assertion below still runs through the normal, rules-enforced writer
@@ -436,12 +447,43 @@ describe("OPUS-007 contract: real client pathways against enforced Firebase rule
     await new Promise(resolve => setTimeout(resolve, 300));
     expect(useSessionRuntime.getState().error).not.toBeNull();
 
-    // The writer/session stops per current failure semantics; no forbidden
-    // state landed.
-    expect(useSessionRuntime.getState().backend).toBeNull();
+    // Exactly one real Firebase write attempt was made for the denied
+    // flush: a permission denial is non-transient, so the writer's own
+    // retry loop never repeats it (same invariant CONTRACT-005 proves for a
+    // fenced-out writer's direct commit).
+    const attemptsAtDenial = updateAttempts;
+    expect(attemptsAtDenial).toBe(1);
+
+    // STRENGTHENED SHUTDOWN PROOF (Phase 9C.1 REVISE, finding 2). Meaningful,
+    // externally observable production behavior that actually distinguishes
+    // "writer stopped" from "writer still running": attempt a further
+    // production write directly through the writer, and separately schedule
+    // a further production flush the normal way (mutating the Storyteller
+    // store, exactly like the denied write above). If the stop-on-failure
+    // call in writer.ts's commit() catch were ever removed, both of these
+    // would reach Firebase again (a fresh, real permission_denied each time,
+    // since the lease is still expired) and `updateAttempts` would climb
+    // past `attemptsAtDenial`. Because the writer has genuinely stopped,
+    // neither one issues a new Firebase write attempt at all.
+    await expect(writer.runExclusive(async inner => {
+      await inner.update({ [`lobbies/${code}/storyteller/notes`]: "must never reach Firebase" });
+    })).rejects.toThrow(/closing|writable|stopped|cancelled/i);
+    expect(updateAttempts).toBe(attemptsAtDenial);
+
+    useStorytellerStore.getState().addPlayer("Carol");
+    await new Promise(resolve => setTimeout(resolve, 500));
+    expect(updateAttempts).toBe(attemptsAtDenial);
+
+    // Corroborating (not substituting): the writer's own internal state
+    // agrees with the externally observed behavior above.
+    expect(writer.isStopped()).toBe(true);
+
+    // No forbidden state landed either.
     const publicState = await stBackend.get(`lobbies/${code}/public`);
     expect(publicState).toMatchObject({ code });
     expect(JSON.stringify(publicState)).not.toContain("Bob");
+    expect(JSON.stringify(publicState)).not.toContain("Carol");
+    expect(await stBackend.get(`lobbies/${code}/storyteller/notes`)).not.toBe("must never reach Firebase");
   });
 
   test("CONTRACT-005: a fenced-out writer's own retry/guard-receipt logic never reports a denied write as successful", async () => {
@@ -495,4 +537,95 @@ describe("OPUS-007 contract: real client pathways against enforced Firebase rule
     // display token here.
     await expect(nmBackend.get(`lobbies/${code}/public`)).rejects.toThrow(/permission[_ ]denied/i);
   });
+
+  test("CONTRACT-007: a lease-renewal denial's terminal write error survives an older write's belated success (Phase 9C.1 REVISE, finding 1)", async () => {
+    // Reproduces, against real enforced emulator rules, the exact ordering
+    // Astra found in production:
+    //   1. Firebase accepts a write but its completion is delayed.
+    //   2. A later lease renewal receives a real permission_denied.
+    //   3. Production stops the writer and surfaces the denial.
+    //   4. The older successful write's completion is released.
+    //   5. Its success must NOT clear the same "write" error owner.
+    //   6. The writer stays stopped AND the error stays visible.
+    //
+    // The lease-renewal interval is the one operation in SessionWriter that
+    // runs outside the commit queue (writer.ts's `runExclusive`/`this.tail`
+    // serializes every commit strictly FIFO, so a second commit can never
+    // race an in-flight one — only the independent renewal timer can). That
+    // is why the real race Astra found requires the renewal path specifically.
+    const code = "CT7AAAAA", st = "ct7-storyteller";
+    const rawSpy = backendFor(st);
+    const originalUpdate = rawSpy.update.bind(rawSpy);
+
+    // TEST-ONLY delay wrapper around the REAL backend's update(), for exactly
+    // one write: the real Firebase call fires immediately and is left to
+    // genuinely settle on its own — the wrapper only withholds that outcome
+    // from the caller until this test releases it. Nothing about the write's
+    // real outcome is fabricated or altered (same non-interception technique
+    // CONTRACT-002/CONTRACT-005 already use at this backend boundary).
+    let delayNext = false;
+    let olderRealSettled = false;
+    let releaseOlderWrite: () => void = () => {};
+    const olderWriteGate = new Promise<void>(resolve => { releaseOlderWrite = resolve; });
+    rawSpy.update = async updates => {
+      if (!delayNext) return originalUpdate(updates);
+      delayNext = false;
+      const real = originalUpdate(updates);
+      real.then(() => { olderRealSettled = true; }, () => { olderRealSettled = true; });
+      await olderWriteGate;
+      return real;
+    };
+
+    await createLobby(rawSpy, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(rawSpy, code);
+    // Same report wiring useStorytellerSync gives the writer in the app.
+    const writer = new SessionWriter(rawSpy, code, session.id, error =>
+      reportRuntimeError("write", error ? lifecycleMessage(error) : null));
+    disposals.push(() => writer.dispose());
+    await writer.start();
+
+    // The OLDER write: its completion will be delayed, but it lands for real
+    // against the emulator while the session is still genuinely active and
+    // the lease is still genuinely valid.
+    delayNext = true;
+    const olderWrite = writer.set(`lobbies/${code}/storyteller/notes`, "older write");
+    await vi.waitFor(() => {
+      if (!olderRealSettled) throw new Error("expected the older write to actually complete against Firebase first");
+    }, { timeout: 3000, interval: 20 });
+
+    // Precondition seeding ONLY (never the assertion itself, per Section 10
+    // policy): make the session look inactive so the writer's own NEXT
+    // scheduled lease renewal — the one operation outside the commit queue,
+    // so it can genuinely race the still-in-flight older write above —
+    // receives a REAL, rules-enforced permission_denied rather than a
+    // fabricated one. The `writer` path's rule requires an active v2 session
+    // for any non-zero-expiry write; renewal always writes a non-zero
+    // expiresAt with this writer's own unchanged token, so with the session
+    // inactive the rule denies it outright (this is not the app-level
+    // "another tab" conflict path — no other token is involved).
+    await env.withSecurityRulesDisabled(async ctx => {
+      await ctx.database().ref(`lobbies/${code}/session/state`).set("ended");
+    });
+
+    // Wait for the real renewal interval (LEASE_MS/3 = 10s) to fire, receive
+    // the real denial, stop the writer, and surface the error — with no
+    // arbitrary delay or timing assumption baked into production: this is
+    // production's own real, scheduled renewal cadence.
+    await vi.waitFor(() => {
+      if (useSessionRuntime.getState().error == null) throw new Error("expected the real lease-renewal denial to surface a write error");
+    }, { timeout: 15000, interval: 100 });
+    const terminalMessage = useSessionRuntime.getState().error;
+    expect(terminalMessage).not.toBeNull();
+    expect(writer.isStopped()).toBe(true);
+
+    // NOW release the older write's already-successful completion.
+    releaseOlderWrite();
+    await olderWrite;
+
+    // The stopped-writer error must remain visible: the belated success must
+    // not have cleared the same "write" error owner it does not own.
+    expect(useSessionRuntime.getState().error).toBe(terminalMessage);
+    expect(useSessionRuntime.getState().error).not.toBeNull();
+    expect(writer.isStopped()).toBe(true);
+  }, 25000);
 });

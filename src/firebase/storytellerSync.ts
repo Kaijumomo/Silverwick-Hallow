@@ -146,7 +146,13 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
     const membership = decodeRoster(await inner.get(`lobbies/${lobby.code}/roster`));
     if (membership.status !== "ready") throw new SnapshotValidationError();
     await writeProjections({ backend: inner, code: lobby.code, stState: state.game, registry: buildRegistry(script), online: useSessionRuntime.getState().online, membership: membership.data });
-  }).then(() => report("write"), error => {
+  }).then(() => {
+    // This flush's commit may have been in flight before a terminal stop
+    // (e.g. a real lease-renewal denial) landed it successfully afterward.
+    // Ownership of the "write" error belongs to the stop, not to this
+    // belated success — only a genuine restart may clear it.
+    if (!writer.isStopped()) report("write");
+  }, error => {
     report("write", error);
     if (initial) throw error;
   });

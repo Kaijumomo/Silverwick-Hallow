@@ -22,6 +22,14 @@ export class SessionWriter implements RoomBackend {
     if (this.stopped) throw new LifecycleError("cancelled", "Session cancelled.");
   }
 
+  /** Whether a terminal writer/session/lease failure has already stopped this
+   * writer. A commit that was in flight before that point may still resolve
+   * successfully afterward (Firebase accepted it before the stop); ownership
+   * of the "write" error belongs to the stop, not to that belated success. */
+  isStopped() {
+    return this.stopped;
+  }
+
   constructor(private raw: RoomBackend, readonly code: string, readonly sessionId: string, private report: (error: unknown | null) => void = () => {}) {
     this.root = `lobbies/${code}`;
     this.direct = {
@@ -139,7 +147,12 @@ export class SessionWriter implements RoomBackend {
       if (!this.closing) this.stop();
       throw error;
     }
-    this.report(null);
+    // A commit sent before a terminal stop (e.g. a real lease-renewal denial)
+    // can still land successfully afterward. That belated success belongs to
+    // this one write, not to the writer's lifetime — it must not clear an
+    // error the stop already surfaced. Once stopped, only a genuine restart
+    // (a new writer/session) may clear the "write" error.
+    if (!this.stopped) this.report(null);
   }
   get(path: string) { return this.raw.get(path); }
   subscribe(path: string, cb: (raw: unknown) => void, error?: (error: unknown) => void) { return this.raw.subscribe(path, cb, error); }

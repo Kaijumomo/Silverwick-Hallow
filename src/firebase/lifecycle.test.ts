@@ -282,6 +282,59 @@ describe("multiplayer lifecycle", () => {
     expect(useSessionRuntime.getState().error).not.toBeNull();
   });
 
+  it("a delayed flush's belated success does not mask a stopped-writer error it does not own (runtime error ownership, Phase 9C.1 REVISE finding 1)", async () => {
+    // Companion, fast-suite unit check for storytellerSync.ts's flush()
+    // success handler, using this file's own established style of injected
+    // (not rules-produced) errors. The dedicated regression reproducing
+    // Astra's full ordering against REAL enforced Firebase rules — including
+    // the real lease-renewal permission_denied — lives in
+    // src/firebase/contract.spec.ts (CONTRACT-007); that test alone proves
+    // the writer.ts-level half of this fix. This test isolates the OTHER
+    // half: flush()'s own outer `.then(() => report("write"))` in
+    // storytellerSync.ts is a second, independent producer for the same
+    // "write" key, and a delayed flush's belated success must not let it
+    // clear an error a stop already surfaced, regardless of what stopped it.
+    const b = new MemoryRoomBackend();
+    const { writer } = await host(b);
+    expect(useSessionRuntime.getState().error).toBeNull();
+
+    // Hold back ONE write's completion after it has already applied to the
+    // backend — models "Firebase accepted a write but its completion was
+    // delayed" without altering the write's actual outcome.
+    const originalUpdate = b.update.bind(b);
+    let intercepted = false;
+    let releaseOlderWrite: () => void = () => {};
+    const gate = new Promise<void>(resolve => { releaseOlderWrite = resolve; });
+    b.update = async updates => {
+      if (intercepted) return originalUpdate(updates);
+      intercepted = true;
+      await originalUpdate(updates);
+      await gate;
+    };
+
+    // Trigger a flush through the normal store-subscription path; its
+    // commit applies immediately but its resolution is held back above.
+    useStorytellerStore.getState().addPlayer("Alice");
+    await waitFor(() => expect(intercepted).toBe(true));
+
+    // Simulate the terminal stop a real lease-renewal denial produces
+    // (CONTRACT-007 proves this exact call sequence — writer.stop() then a
+    // "write"-domain report — against enforced Firebase rules): the
+    // writer's own onStop hook fires before this belated flush is released.
+    reportRuntimeError("write", "Terminal write failure.");
+    writer.stop();
+    expect(writer.isStopped()).toBe(true);
+
+    // Release the delayed flush's already-applied write and let the settling
+    // promise chain (commit -> runExclusive -> flush's own handler) drain.
+    releaseOlderWrite();
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    // The stopped-writer error must remain visible: flush()'s own success
+    // handler must not have cleared the "write" error it does not own.
+    expect(useSessionRuntime.getState().error).toBe("Terminal write failure.");
+  });
+
   it("serializes delayed projections and drains them before ending", async () => {
     const { b, session } = await setup();
     const writer = new SessionWriter(b, code, session.id);
