@@ -30,6 +30,7 @@ import { SessionWriter } from "./writer";
 import { writeProjections } from "./sync";
 import { createLobby, readRosterBindings, revokePlayerMembership, seatPlayer } from "./lobby";
 import { joinLobby, startPlayerHandshake } from "./playerSync";
+import { playerPath } from "./paths";
 import { reportRuntimeError, startStorytellerSession, useSessionRuntime } from "./storytellerSync";
 import { lifecycleMessage, requireActiveSession } from "./lifecycle";
 import { friendlyFirebaseError } from "./errors";
@@ -208,6 +209,39 @@ describe("OPUS-007 contract: real client pathways against enforced Firebase rule
     const code = "CT2AAAAA", st = "ct2-storyteller", alice = "ct2-alice";
     const { aliceBackend, writer, id } = await establishSeatedPlayer(code, st, alice, dispose => disposals.push(dispose));
 
+    // TEST-ONLY tracer wrapped around the REAL FirebaseRoomBackend.subscribe,
+    // for exactly one path: this player's private player/{id} listener (same
+    // technique CONTRACT-005 already uses to wrap `update` on a real
+    // backend). It delegates untouched for every other path (session,
+    // outcome, roster, joinRequest, public), and for the traced path it
+    // invokes the ORIGINAL, UNMODIFIED production onError callback FIRST —
+    // never intercepting, altering, or fabricating what it receives — then
+    // records only that the real callback fired, the real error Firebase
+    // gave it, and the player store's `self` value immediately after that
+    // production callback returned.
+    //
+    // Why this is needed: self===null alone cannot attribute WHICH listener
+    // cleared it. Removing the roster binding also denies the PUBLIC
+    // listener (public access depends on roster/joinRequest status too, and
+    // seatPlayer already cleared this player's joinRequest), and every
+    // watch()-installed onError in playerSync.ts — private, public, or
+    // otherwise — funnels into the same shared fail() handler, which
+    // unconditionally clears self regardless of which path was denied.
+    // Instrumenting the subscribe() boundary for the private path
+    // specifically proves the private listener's own onError really ran,
+    // instead of inferring it from store state a different listener could
+    // equally have produced.
+    const tracedPath = playerPath(code, id);
+    const originalSubscribe = aliceBackend.subscribe.bind(aliceBackend);
+    const privateDenials: { error: unknown; selfImmediatelyAfter: unknown }[] = [];
+    aliceBackend.subscribe = (path, cb, onError) => {
+      if (path !== tracedPath || !onError) return originalSubscribe(path, cb, onError);
+      return originalSubscribe(path, cb, error => {
+        onError(error); // the real, unmodified production handler runs first
+        privateDenials.push({ error, selfImmediatelyAfter: usePlayerStore.getState().self });
+      });
+    };
+
     const stop = startPlayerHandshake(aliceBackend, code, alice);
     disposals.push(stop);
     await waitForPlayer(s => s.status === "seated" && s.playerId === id && s.self !== null, "seated before revocation");
@@ -222,14 +256,35 @@ describe("OPUS-007 contract: real client pathways against enforced Firebase rule
       [`lobbies/${code}/roster/${alice}`]: null,
       [`lobbies/${code}/player/${id}`]: null,
     });
-    // self===null is the load-bearing proof that the real subscription's
-    // onError path reacted to the denial. `status` normally moves off
-    // "seated" in the same beat (typically to "error" then "reconnecting"),
-    // but a reconcile racing the very same multi-path denial can rarely
-    // leave it transiently unchanged until Phase B's unconditional write
-    // forces a fresh read — this is the already-deferred reconnect-state
-    // race (OPUS-001, Phase 9C.2), not a 9C.1 regression, so it is checked
-    // best-effort here rather than gating the test on it.
+
+    // A. Source-attribution proof: the LIVE private player/{id} subscription
+    // really received its own permission-denied onError callback from the
+    // real emulator + enforced rules — observed directly at the real
+    // backend's subscribe() boundary, not inferred from store state a
+    // different listener (e.g. public) could equally have produced. If the
+    // production private-listener onError were broken or never invoked, this
+    // wait times out and the test fails here.
+    await vi.waitFor(() => {
+      if (privateDenials.length === 0) {
+        throw new Error("expected the live private player/{id} subscription's own onError to fire with a real permission denial");
+      }
+    }, { timeout: 5000, interval: 100 });
+    const [denial] = privateDenials;
+    expect(String(denial.error instanceof Error ? denial.error.message : denial.error)).toMatch(/permission[_ ]denied/i);
+    // B. The load-bearing proof: by the moment the ORIGINAL production
+    // private-listener callback (fail()) had returned, secret state was
+    // already cleared — recorded synchronously right after that specific
+    // callback executed, not merely eventually true somewhere in the store.
+    expect(denial.selfImmediatelyAfter).toBeNull();
+
+    // Corroborate with the store's own eventual convergence too (this does
+    // not substitute for the source-attributed proof above). `status`
+    // normally moves off "seated" in the same beat (typically to "error"
+    // then "reconnecting"), but a reconcile racing the very same multi-path
+    // denial can rarely leave it transiently unchanged until Phase B's
+    // unconditional write forces a fresh read — this is the already-deferred
+    // reconnect-state race (OPUS-001, Phase 9C.2), not a 9C.1 regression, so
+    // it is checked best-effort here rather than gating the test on it.
     await waitForPlayer(s => s.self === null, "the real denied private read cleared secret state");
     await waitForPlayer(s => s.status !== "seated", "status reflects the denial", 1500).catch(() => {});
 
