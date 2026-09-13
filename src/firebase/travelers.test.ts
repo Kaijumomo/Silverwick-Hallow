@@ -21,7 +21,7 @@ const disposals: (() => void | Promise<void>)[] = [];
 beforeEach(() => {
   store.setState({ game: null, lobby: null, undoStack: [] });
   usePlayerStore.getState().reset();
-  useSessionRuntime.setState({ backend: null, online: {}, error: null });
+  useSessionRuntime.setState({ backend: null, online: {}, errors: {}, error: null });
   usePacketDeliveryState.setState({ receipts: {}, queued: {} });
 });
 afterEach(async () => { for (const dispose of disposals.splice(0).reverse()) await dispose(); });

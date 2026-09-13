@@ -6,8 +6,8 @@ import { MemoryRoomBackend } from "./memoryBackend";
 import { createLobby, rejectJoinRequest } from "./lobby";
 import { SessionWriter } from "./writer";
 import { applyJoinIntent, joinLobby, leaveLobby, startPlayerHandshake } from "./playerSync";
-import { startStorytellerSession, useSessionRuntime, useStorytellerSync } from "./storytellerSync";
-import { requireActiveSession, retryTransient, sessionPath } from "./lifecycle";
+import { reportRuntimeError, startStorytellerSession, useSessionRuntime, useStorytellerSync } from "./storytellerSync";
+import { lifecycleMessage, requireActiveSession, retryTransient, sessionPath } from "./lifecycle";
 import { revokePlayerAndCommit, seatPlayerAndCommit } from "./membershipCommands";
 
 const code = "BCDF2345";
@@ -16,7 +16,7 @@ const disposals: (() => void | Promise<void>)[] = [];
 beforeEach(() => {
   useStorytellerStore.setState({ game: null, lobby: null, undoStack: [] });
   usePlayerStore.getState().reset();
-  useSessionRuntime.setState({ backend: null, error: null, presence: "unknown", online: {}, pending: 0 });
+  useSessionRuntime.setState({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0 });
 });
 afterEach(async () => { cleanup(); for (const dispose of disposals.splice(0).reverse()) await dispose(); vi.useRealTimers(); });
 async function setup(b = new MemoryRoomBackend()) {
@@ -253,6 +253,32 @@ describe("multiplayer lifecycle", () => {
     await host(b);
     expect(useSessionRuntime.getState().presence).toBe("error");
     expect(useSessionRuntime.getState().online).toEqual({});
+    expect(useSessionRuntime.getState().error).not.toBeNull();
+  });
+
+  it("a successful writer operation does not mask an unresolved presence error (runtime error ownership)", async () => {
+    const b = new MemoryRoomBackend();
+    const original = b.subscribe.bind(b);
+    b.subscribe = (path, receive, onError) => {
+      if (path === `${root}/presence`) { onError?.(new Error("PERMISSION_DENIED")); return () => {}; }
+      return original(path, receive, onError);
+    };
+    const ready = await setup(b);
+    // Mirrors the real production wiring in useStorytellerSync: the writer's
+    // own report callback routes through the shared "write" source.
+    const writer = new SessionWriter(b, code, ready.session.id, error =>
+      reportRuntimeError("write", error ? lifecycleMessage(error) : null));
+    const manager = await startStorytellerSession(b, ready.lobby, writer);
+    disposals.push(async () => { manager.stop(); await writer.dispose(); });
+
+    expect(useSessionRuntime.getState().presence).toBe("error");
+    expect(useSessionRuntime.getState().error).not.toBeNull();
+
+    // A direct, successful writer operation outside the debounced flush must
+    // not clear an error it does not own.
+    await writer.set(`${root}/storyteller/notes`, "ping");
+
+    expect(useSessionRuntime.getState().presence).toBe("error");
     expect(useSessionRuntime.getState().error).not.toBeNull();
   });
 

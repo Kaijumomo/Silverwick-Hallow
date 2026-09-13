@@ -342,6 +342,21 @@ describe("Firebase RTDB membership authorization", () => {
     await assertFails(ref(bob, "presence/" + alice).once("value"));
   });
 
+  test("presence lastSeen must be a nonnegative integer; a negative timestamp cannot poison the map", async () => {
+    await seed();
+    // OPUS-007 remediation: a negative lastSeen (used to defeat the client's
+    // staleness math / decoder) is rejected at the rules layer, not just the
+    // client decoder.
+    await assertFails(ref(alice, "presence/" + alice).set({ online: false, lastSeen: -1 }));
+    await assertFails(ref(alice, "presence/" + alice).set({ online: true, lastSeen: -1 }));
+    // A fractional value is not an integer timestamp either.
+    await assertFails(ref(alice, "presence/" + alice).set({ online: true, lastSeen: 1.5 }));
+    // A valid offline shape still succeeds for an authorized (seated) UID.
+    await assertSucceeds(ref(alice, "presence/" + alice).set({ online: false, lastSeen: 0 }));
+    // Valid heartbeat shapes still succeed.
+    await assertSucceeds(ref(alice, "presence/" + alice).set({ online: true, lastSeen: Date.now() }));
+  });
+
   test("session metadata is readable before joining but only the owner can create it", async () => {
     await seed();
     await assertSucceeds(ref(bob, "session").once("value"));

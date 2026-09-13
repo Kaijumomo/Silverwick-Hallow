@@ -16,14 +16,25 @@ import { connectFirebase } from "./session";
 
 type Runtime = {
   backend: SessionWriter | null;
+  /** Source-keyed runtime errors. `error` below is derived from this map so a
+   * success can clear only the source it owns, never an unrelated failure. */
+  errors: Partial<Record<string, string>>;
   error: string | null;
   presence: "unknown" | "ready" | "error";
   online: OnlineMap;
   pending: number;
   retry: number;
 };
-export const useSessionRuntime = create<Runtime>(() => ({ backend: null, error: null, presence: "unknown", online: {}, pending: 0, retry: 0 }));
+export const useSessionRuntime = create<Runtime>(() => ({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, retry: 0 }));
 export const retryStorytellerSession = () => useSessionRuntime.setState(s => ({ retry: s.retry + 1 }));
+/** Central ownership for `useSessionRuntime.error`: each source may set or
+ * clear only its own entry; the derived field is recomputed from the rest. */
+export function reportRuntimeError(source: string, message: string | null) {
+  const errors = { ...useSessionRuntime.getState().errors };
+  if (message != null) errors[source] = message; else delete errors[source];
+  const values = Object.values(errors).filter((value): value is string => !!value);
+  useSessionRuntime.setState({ errors, error: values.length ? values.join(" ") : null });
+}
 let closeCurrent: (() => Promise<void>) | null = null;
 
 export async function closeMultiplayerSession() {
@@ -48,8 +59,8 @@ export function useStorytellerSync(backend: RoomBackend | null) {
     let cancelled = false;
     let stop: (() => void) | undefined;
     const writer = new SessionWriter(backend, lobby.code, lobby.sessionId ?? "", error =>
-      useSessionRuntime.setState({ error: error ? lifecycleMessage(error) : null }));
-    useSessionRuntime.setState({ backend: null, error: null, presence: "unknown", online: {}, pending: 0 });
+      reportRuntimeError("write", error ? lifecycleMessage(error) : null));
+    useSessionRuntime.setState({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0 });
     void startStorytellerSession(backend, lobby, writer).then(session => {
       if (cancelled) { session.stop(); return; }
       stop = session.stop;
@@ -58,7 +69,7 @@ export function useStorytellerSync(backend: RoomBackend | null) {
     }).catch(error => {
       writer.stop();
       void writer.dispose().catch(() => {});
-      if (!cancelled) useSessionRuntime.setState({ backend: null, error: lifecycleMessage(error) });
+      if (!cancelled) { reportRuntimeError("session", lifecycleMessage(error)); useSessionRuntime.setState({ backend: null }); }
     });
     return () => {
       cancelled = true;
@@ -67,7 +78,7 @@ export function useStorytellerSync(backend: RoomBackend | null) {
       stop?.();
       void writer.dispose().catch(error => {
         // Expiry recovers a release which cannot reach Firebase.
-        useSessionRuntime.setState({ error: lifecycleMessage(error) });
+        reportRuntimeError("write", lifecycleMessage(error));
       });
       useSessionRuntime.setState({ backend: null, presence: "unknown", online: {}, pending: 0 });
     };
@@ -116,13 +127,9 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   let roster: Record<string, string> = {};
   let presence: Record<string, { online: boolean; lastSeen: number }> = {};
   let requests: Record<string, string> = {};
-  const errors = new Map<string, string>();
   const cleanups: (() => void)[] = [];
   const leaving = new Set<string>();
-  const report = (source: string, error?: unknown) => {
-    if (error) errors.set(source, lifecycleMessage(error)); else errors.delete(source);
-    useSessionRuntime.setState({ error: [...errors.values()].join(" ") || null });
-  };
+  const report = (source: string, error?: unknown) => reportRuntimeError(source, error ? lifecycleMessage(error) : null);
   const updateOnline = () => {
     const online: OnlineMap = {};
     for (const [uid, id] of Object.entries(useSessionRuntime.getState().presence === "ready" ? roster : {})) {

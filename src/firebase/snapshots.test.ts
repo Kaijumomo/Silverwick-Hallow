@@ -129,11 +129,35 @@ describe("Firebase snapshot decoders", () => {
 
     expect(decodePresence(null)).toEqual({ status: "ready", data: {} });
     expect(decodePresence({ bob: { online: true, lastSeen: 1 } }).status).toBe("ready");
-    expect(decodePresence({ bob: { online: "yes", lastSeen: 1 } }).status).toBe("invalid");
+    // A malformed individual row is dropped, not treated as atomic decode
+    // failure for the whole presence map (see the dedicated test below).
+    expect(decodePresence({ bob: { online: "yes", lastSeen: 1 } })).toEqual({ status: "ready", data: {} });
     expect(decodeLobbyStatus(null)).toEqual({ status: "ready", data: "active" });
     expect(decodeLobbyStatus("active")).toEqual({ status: "ready", data: "active" });
     expect(decodeLobbyStatus("ended")).toEqual({ status: "ready", data: "ended" });
     expect(decodeLobbyStatus("broken").status).toBe("invalid");
+  });
+
+  it("isolates malformed presence rows instead of poisoning the whole map (defense against negative-timestamp presence writes)", () => {
+    // 1. Valid entries decode normally.
+    expect(decodePresence({ bob: { online: true, lastSeen: 5 } }))
+      .toEqual({ status: "ready", data: { bob: { online: true, lastSeen: 5 } } });
+
+    // 2. A negative lastSeen entry is dropped, not merely rejected wholesale.
+    expect(decodePresence({ bob: { online: false, lastSeen: -1 } }))
+      .toEqual({ status: "ready", data: {} });
+
+    // 3. Mixed valid + invalid: the malicious/malformed row never poisons a
+    // legitimate co-player's presence.
+    expect(decodePresence({
+      bob: { online: false, lastSeen: -1 },
+      alice: { online: true, lastSeen: 42 },
+    })).toEqual({ status: "ready", data: { alice: { online: true, lastSeen: 42 } } });
+
+    // 4. A structurally non-record root is still reported invalid.
+    expect(decodePresence("garbage").status).toBe("invalid");
+    expect(decodePresence(42).status).toBe("invalid");
+    expect(decodePresence(["a"]).status).toBe("invalid");
   });
 });
 

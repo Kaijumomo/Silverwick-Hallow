@@ -45,10 +45,10 @@ const selfShape = PlayerSelfRecordSchema.extend({
 });
 const request = z.string().min(1).max(20).refine((value) =>
   value.trim().length > 0 && !value.startsWith(" ") && !value.endsWith(" ") && !/[\r\n\t]/.test(value));
-const presence = z.record(id, z.object({
+const presenceEntry = z.object({
   online: z.boolean(), lastSeen: z.number().int().nonnegative(),
-}));
-export type PresenceMap = z.infer<typeof presence>;
+});
+export type PresenceMap = Record<string, z.infer<typeof presenceEntry>>;
 
 function invalid(error: z.ZodError): { status: "invalid"; issues: SnapshotIssue[] } {
   // Keep field locations/codes for developers, never raw values or Zod messages
@@ -99,7 +99,22 @@ export const decodeRosterEntry = (raw: unknown): Snapshot<string> => raw == null
 export const decodeJoinRequest = (raw: unknown): Snapshot<string> => raw == null ? WAITING : parse(request, raw);
 export const decodeRoster = (raw: unknown): Snapshot<Record<string, string>> => parse(emptyNode(z.record(id, id), {}), raw);
 export const decodeJoinRequests = (raw: unknown): Snapshot<Record<string, string>> => parse(emptyNode(z.record(id, request), {}), raw);
-export const decodePresence = (raw: unknown): Snapshot<PresenceMap> => parse(emptyNode(presence, {}), raw);
+/**
+ * One malicious/malformed presence row must never poison the whole map: a
+ * single bad entry is dropped, not treated as atomic decode failure for
+ * every other (valid) uid's presence. Only a structurally non-record root
+ * (not even an object) is reported invalid.
+ */
+export function decodePresence(raw: unknown): Snapshot<PresenceMap> {
+  if (raw == null) return { status: "ready", data: {} };
+  if (typeof raw !== "object" || Array.isArray(raw)) return invalidField("presence", "invalid_type");
+  const data: PresenceMap = {};
+  for (const [uid, value] of Object.entries(raw as Record<string, unknown>)) {
+    const entry = presenceEntry.safeParse(value);
+    if (entry.success) data[uid] = entry.data;
+  }
+  return { status: "ready", data };
+}
 export const decodeLobbyStatus = (raw: unknown): Snapshot<"active" | "ended"> =>
   raw == null ? { status: "ready", data: "active" } : parse(z.enum(["active", "ended"]), raw);
 

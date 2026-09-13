@@ -3,7 +3,7 @@ import { useStorytellerStore } from "@/stores/storytellerStore";
 import { connectFirebase } from "./session";
 import type { RoomBackend } from "./backend";
 import { lifecycleMessage } from "./lifecycle";
-import { retryStorytellerSession, useSessionRuntime, useStorytellerSync } from "./storytellerSync";
+import { reportRuntimeError, retryStorytellerSession, useSessionRuntime, useStorytellerSync } from "./storytellerSync";
 
 export function StorytellerSession() {
   const lobby = useStorytellerStore(s => s.lobby);
@@ -17,7 +17,7 @@ export function StorytellerSession() {
       if (!active) return;
       if (connection.uid !== lobby.uid) throw new Error("Session authorization changed.");
       setBackend(connection.backend);
-    }).catch(error => { if (active) useSessionRuntime.setState({ error: lifecycleMessage(error) }); });
+    }).catch(error => { if (active) reportRuntimeError("connect", lifecycleMessage(error)); });
     return () => { active = false; };
   }, [lobby?.code, retry]);
   useStorytellerSync(backend);

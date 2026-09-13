@@ -88,7 +88,7 @@
           "$uid": {
             ".read": "auth != null && $uid === auth.uid",
             ".write": "auth != null && $uid === auth.uid && (!newData.exists() || newData.child('online').val() === false || (root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && (root.child('lobbies').child($code).child('roster').child(auth.uid).exists() || root.child('lobbies').child($code).child('joinRequests').child(auth.uid).exists())))",
-            ".validate": "newData.hasChildren(['online','lastSeen']) && newData.child('online').isBoolean() && newData.child('lastSeen').isNumber()"
+            ".validate": "newData.hasChildren(['online','lastSeen']) && newData.child('online').isBoolean() && newData.child('lastSeen').isNumber() && newData.child('lastSeen').val() >= 0 && newData.child('lastSeen').val() % 1 === 0"
           }
         },
         "storyteller": {
