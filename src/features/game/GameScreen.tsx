@@ -18,8 +18,6 @@ import { friendlyFirebaseError, type FriendlyError } from "@/firebase/errors";
 import { requireActiveSession, lifecycleMessage } from "@/firebase/lifecycle";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useMediaQuery } from "@/components/useMediaQuery";
-import { analyzeSetup } from "@/features/setup/setupAnalyzer";
-import { selectSetupContext } from "@/features/setup/setupContext";
 
 const PHASE_LABEL: Record<string, string> = {
   setup: "Setup",
@@ -57,8 +55,6 @@ export function GameScreen() {
   const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const [phaseError, setPhaseError] = useState<string | null>(null);
-  const startReadiness = useMemo(() => game?.phase === "setup"
-    ? analyzeSetup(selectSetupContext(game, script)).readiness.manual : undefined, [game, script]);
   const onlineCount = Object.values(onlineMap).filter(Boolean).length;
   const closeOverflow = () => setOverflowMenuOpen(false);
 
@@ -138,6 +134,8 @@ export function GameScreen() {
   const setupVisible = game.phase === "setup" && setupPanelOpen && !!script && !privacyMode;
   const seatedPlayers = Object.values(game.players).filter((p) => !p.isEmpty);
   const playerCount = seatedPlayers.length;
+  const setupTravelerCount = game.phase === "setup" ? seatedPlayers.filter(p => p.isTraveler).length : 0;
+  const displayedPlayerCount = playerCount - setupTravelerCount;
   const plannedSeatCount = game.seatOrder.length;
   const emptySeatCount = Object.values(game.players).filter((p) => p.isEmpty).length;
   const aliveCount = seatedPlayers.filter((p) => p.alive).length;
@@ -163,7 +161,8 @@ export function GameScreen() {
             <span className="day-counter">Day {game.day}</span>
           )}
           <span className="label">
-            {playerCount} {playerCount === 1 ? "player" : "players"}
+            {displayedPlayerCount} {displayedPlayerCount === 1 ? "player" : "players"}
+            {setupTravelerCount > 0 && ` · ${setupTravelerCount} Traveler${setupTravelerCount === 1 ? "" : "s"}`}
           </span>
           {emptySeatCount > 0 && (
             <span className="label planned-seat-summary">
@@ -240,7 +239,7 @@ export function GameScreen() {
           </button>
           {game.phase === "setup" && (
             <button
-              className="btn btn-sm"
+              className={`btn ${setupPanelOpen ? "btn-sm" : "btn-gold"}`}
               onClick={() => { closeOverflow(); setSetupPanelOpen((o) => !o); }}
               title={setupPanelOpen ? "Hide setup helper" : "Show setup helper"}
             >
@@ -285,18 +284,17 @@ export function GameScreen() {
           >
             ↶ Undo
           </button>
-          <button
+          {game.phase !== "setup" && <button
             className="btn btn-gold"
             onClick={() => {
               closeOverflow();
               const result = advancePhase();
               setPhaseError(result.ok ? null : "Setup changed. Open Setup to review what needs attention.");
             }}
-            disabled={game.phase === "ended" || startReadiness?.ok === false}
-            title={startReadiness?.ok === false ? "Open Setup to reconcile seats, roles, and the pool before starting." : undefined}
+            disabled={game.phase === "ended"}
           >
             {advanceLabel}
-          </button>
+          </button>}
           <button
             className="btn btn-sm btn-danger"
             disabled={ending}

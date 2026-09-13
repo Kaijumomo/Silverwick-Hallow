@@ -397,10 +397,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
             ...game,
             players: newPlayers,
             rolePool: [],
-            phase: "night",
-            day: 1,
-            ...(game.startingNonTravelerCount === undefined && game.day === 0
-              ? { startingNonTravelerCount: context.population.occupiedNonTravelerCount } : {}),
+            setupRolesDealt: true,
           },
         });
         return { ok: true };
@@ -430,7 +427,8 @@ export const useStorytellerStore = create<StorytellerStore>()(
       setRolePool: (roles) => {
         const { game, undoStack } = get();
         if (!game || game.phase !== "setup") return;
-        set({ undoStack: pushUndo(game, undoStack), game: { ...game, rolePool: [...roles] } });
+        set({ undoStack: pushUndo(game, undoStack), game: { ...game, rolePool: [...roles],
+          ...(roles.length ? { setupRolesDealt: false } : {}) } });
       },
 
       endGame: () => {
