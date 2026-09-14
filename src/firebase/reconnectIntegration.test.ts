@@ -4,17 +4,18 @@
 // the full startStorytellerSession orchestration (decision -> apply ->
 // reconcile -> finishLive), including the second-device ("foreign writer")
 // safety rule and the "compare only after lease acquisition" ordering.
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { waitFor } from "@testing-library/react";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { usePlayerStore } from "@/stores/playerStore";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import { buildRegistry } from "@/data/roleRegistry";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
+import { setupScript, standardRoles } from "@/test/setupFixtures";
 import { MemoryRoomBackend } from "./memoryBackend";
-import { createLobby } from "./lobby";
+import { createLobby, revokePlayerMembership } from "./lobby";
 import { writeProjections } from "./sync";
-import { SessionWriter } from "./writer";
+import { SessionWriter, LEASE_MS } from "./writer";
 import { reportRuntimeError, resolveReconnectConflict, startStorytellerSession, useSessionRuntime } from "./storytellerSync";
 import { lifecycleMessage, requireActiveSession } from "./lifecycle";
 
@@ -461,5 +462,418 @@ describe("Phase 9C.2A reconnect integration: comparison-window integrity", () =>
 
     expect(recovered.outcome).toBe("conflict"); // NOT "live" via a stale RESTORE
     expect(useStorytellerStore.getState().game).toEqual(localGameDuringComparison); // the mutation was not discarded
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9C.2A.2A remediation, Finding H2 — checkpoint identity is the
+// server writeGuard alone, never a serialized checkpoint-content
+// comparison. These reproduce Astra's report: conflict revalidation must
+// not report "stale" merely because the checkpoint passed through a
+// different object pipeline (key insertion order / Zod output ordering /
+// stripped unknown keys) than the one that produced the original snapshot.
+// ---------------------------------------------------------------------------
+describe("Phase 9C.2A.2A remediation — H2 checkpoint identity (writeGuard-only)", () => {
+  beforeEach(() => { useStorytellerStore.setState({ customScripts: { [setupScript.id]: setupScript } }); });
+
+  /** A real game shaped by beginNightOne — not a synthetic fixture — using
+   * the same recipe setupCommands.test.ts's own readiness tests rely on.
+   * Establishes an initial acknowledged flush (via host()'s normal
+   * startStorytellerSession path), then advances to night 1 through the
+   * setup readiness gate itself, exactly as Astra's reproduction did. */
+  async function hostShapedByBeginNightOne(b: MemoryRoomBackend) {
+    await createLobby(b, "host", { codeGenerator: () => code });
+    const session = await requireActiveSession(b, code);
+    useStorytellerStore.getState().newGame(setupScript.id, { plannedPlayerCount: 5, plannedRoles: [] });
+    for (let i = 0; i < 5; i++) useStorytellerStore.getState().addPlayerToSeat("Player " + i);
+    useStorytellerStore.getState().game!.seatOrder.forEach((id, i) =>
+      useStorytellerStore.getState().assignRole(id, standardRoles(5)[i]!));
+    const lobby = { code, uid: "host", sessionId: session.id, status: "live" as const };
+    useStorytellerStore.getState().setLobby(lobby);
+    const writer = writerFor(b, session.id);
+    const manager = await startStorytellerSession(b, lobby, writer);
+    expect(manager.outcome).toBe("live");
+    const readiness = useStorytellerStore.getState().beginNightOne();
+    expect(readiness.ok).toBe(true); // sanity: this really is a beginNightOne-shaped game
+    return { writer, manager, lobby, session };
+  }
+
+  it("H2-1: conflict on a real game shaped by beginNightOne resolves successfully when nothing remote changed", async () => {
+    const b = new MemoryRoomBackend();
+    const { writer, manager, lobby, session } = await hostShapedByBeginNightOne(b);
+    manager.stop(); await writer.dispose();
+    useStorytellerStore.getState().addPlayer("Dirty edit atop a beginNightOne-shaped game");
+    const localGameBefore = useStorytellerStore.getState().game;
+
+    const foreignGame = await foreignDeviceAdvance(b, session.id, g => ({ ...g, notes: "foreign device notes" }));
+    const replacement = writerFor(b, session.id);
+    const recovered = await startStorytellerSession(b, lobby, replacement);
+    disposals.push(async () => { replacement.stop(); await replacement.dispose(); });
+    expect(recovered.outcome).toBe("conflict");
+
+    // Nothing remote changes between CONFLICT being raised and resolution —
+    // this must resolve, not report "stale" (Astra's exact reproduction:
+    // pre-fix, a differently-ordered re-serialization of the SAME
+    // checkpoint content could make this return "stale" indefinitely).
+    const result = await resolveReconnectConflict("useRemote");
+    expect(result).toBe("applied");
+    expect(useStorytellerStore.getState().game).toEqual(foreignGame);
+    void localGameBefore;
+  });
+
+  it("H2-2: forward-compatible/extra checkpoint fields (a different object pipeline's re-serialization) do not create false staleness — guard identity alone governs", async () => {
+    const b = new MemoryRoomBackend();
+    const { writer, manager, lobby, session } = await hostShapedByBeginNightOne(b);
+    manager.stop(); await writer.dispose();
+    useStorytellerStore.getState().addPlayer("Dirty edit for H2-2");
+
+    const foreignGame = await foreignDeviceAdvance(b, session.id, g => ({ ...g, notes: "foreign notes" }));
+    const replacement = writerFor(b, session.id);
+    const recovered = await startStorytellerSession(b, lobby, replacement);
+    disposals.push(async () => { replacement.stop(); await replacement.dispose(); });
+    expect(recovered.outcome).toBe("conflict");
+
+    // Overwrite the checkpoint's own bytes with a re-serialization that
+    // carries a forward-compatible extra field and different key order —
+    // same guard, same effective content, different bytes. The OLD
+    // checkpoint-string comparison would have called this "stale" forever;
+    // guard-only identity must not.
+    const rawCheckpoint = await b.get(`${root}/checkpoint`) as string;
+    const parsed = JSON.parse(rawCheckpoint) as { game: unknown; roster: unknown };
+    const reordered = JSON.stringify({ roster: parsed.roster, game: { ...(parsed.game as object), __futureField: "from a later client version" } });
+    await b.set(`${root}/checkpoint`, reordered);
+
+    const result = await resolveReconnectConflict("useRemote");
+    expect(result).toBe("applied");
+    expect(useStorytellerStore.getState().game).toEqual(foreignGame); // the schema strips the unknown field on read
+  });
+
+  it("H2-3: a genuine projection advancement (new guard AND new checkpoint) still makes the choice stale", async () => {
+    const b = new MemoryRoomBackend();
+    const { writer, manager, lobby, session } = await hostShapedByBeginNightOne(b);
+    manager.stop(); await writer.dispose();
+    useStorytellerStore.getState().addPlayer("Dirty edit for H2-3");
+    const localGameBefore = useStorytellerStore.getState().game;
+
+    await foreignDeviceAdvance(b, session.id, g => ({ ...g, notes: "first foreign advance" }));
+    const replacement = writerFor(b, session.id);
+    const recovered = await startStorytellerSession(b, lobby, replacement);
+    disposals.push(async () => { replacement.stop(); await replacement.dispose(); });
+    expect(recovered.outcome).toBe("conflict");
+
+    // A further, genuine projection write lands after CONFLICT was raised.
+    // `replacement`'s own lease is still held and renewing throughout
+    // CONFLICT (by design — see the module doc comment), so a THIRD real
+    // writer cannot legitimately acquire it here; this directly seeds the
+    // precondition (a real writer having published while this one's lease
+    // had lapsed) the same way the pre-existing "remote moved on again"
+    // test above does, rather than re-deriving lease takeover itself.
+    await b.set(`${root}/checkpoint`, JSON.stringify({ game: { ...localGameBefore, notes: "second foreign advance, after CONFLICT was raised" }, roster: {} }));
+    await b.set(`${root}/writeGuard`, { token: "second-foreign-writer", revision: 999 });
+
+    const result = await resolveReconnectConflict("useRemote");
+    expect(result).toBe("stale");
+    expect(useStorytellerStore.getState().game).toEqual(localGameBefore);
+  });
+
+  it("H2-4: a membership-only guard advancement (checkpoint content unchanged) also makes the choice stale — intentionally conservative", async () => {
+    const b = new MemoryRoomBackend();
+    const { writer, manager, lobby, session } = await hostShapedByBeginNightOne(b);
+    manager.stop(); await writer.dispose();
+    useStorytellerStore.getState().addPlayer("Dirty edit for H2-4");
+    const localGameBefore = useStorytellerStore.getState().game;
+
+    await foreignDeviceAdvance(b, session.id, g => ({ ...g, notes: "foreign advance before CONFLICT" }));
+    const replacement = writerFor(b, session.id);
+    const recovered = await startStorytellerSession(b, lobby, replacement);
+    disposals.push(async () => { replacement.stop(); await replacement.dispose(); });
+    expect(recovered.outcome).toBe("conflict");
+    const checkpointBefore = await b.get(`${root}/checkpoint`);
+
+    // Advance ONLY the guard — exactly what a membership-only write does in
+    // production (writeGuard strictly advances; checkpoint is untouched).
+    await b.set(`${root}/writeGuard`, { token: "membership-only-writer", revision: 999 });
+    expect(await b.get(`${root}/checkpoint`)).toEqual(checkpointBefore); // checkpoint truly unchanged
+
+    const result = await resolveReconnectConflict("useRemote");
+    expect(result).toBe("stale");
+    expect(useStorytellerStore.getState().game).toEqual(localGameBefore);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9C.2A.2A remediation, Finding H1 — conflict authority must remain
+// continuously valid through the instant immediately before a destructive
+// local mutation. Date.now is mocked (never faked timers/sleeps) to make a
+// lease genuinely lapsing during the post-authority reads deterministic and
+// instantaneous, reproducing Astra's report that those reads can outlive
+// the 30-second lease before useRemote replaces local game state.
+// ---------------------------------------------------------------------------
+describe("Phase 9C.2A.2A remediation — H1 continuous authority through destructive mutation", () => {
+  async function enterConflict(b: MemoryRoomBackend, note: string) {
+    const { writer, manager, lobby, session } = await host(b);
+    manager.stop(); await writer.dispose();
+    useStorytellerStore.getState().addPlayer(note);
+    const foreignGame = await foreignDeviceAdvance(b, session.id, g => ({ ...g, day: 3 }));
+    const replacement = writerFor(b, session.id);
+    const recovered = await startStorytellerSession(b, lobby, replacement);
+    expect(recovered.outcome).toBe("conflict");
+    return {
+      replacement, lobby, session, foreignGame,
+      localGameBefore: useStorytellerStore.getState().game,
+      undoBefore: useStorytellerStore.getState().undoStack,
+    };
+  }
+
+  /** Pauses the very next read of `${root}/writeGuard` — the first server
+   * read resolveReconnectConflict performs after reconfirming authority —
+   * so a test can advance the mocked clock while that read is "in flight",
+   * modeling reads that outlive the lease without any real or fake sleep. */
+  function pauseGuardRead(b: MemoryRoomBackend) {
+    const originalGet = b.get.bind(b);
+    let releaseGate: () => void = () => {};
+    const gate = new Promise<void>(resolve => { releaseGate = resolve; });
+    let paused = false;
+    b.get = async path => {
+      if (path === `${root}/writeGuard` && !paused) {
+        paused = true;
+        await gate;
+      }
+      return originalGet(path);
+    };
+    return {
+      waitPaused: () => waitFor(() => expect(paused).toBe(true)),
+      release: () => { b.get = originalGet; releaseGate(); },
+    };
+  }
+
+  it("positive control: a delay shorter than the valid lease still applies useRemote", async () => {
+    const b = new MemoryRoomBackend();
+    const { replacement, foreignGame } = await enterConflict(b, "H1 positive control");
+    disposals.push(() => replacement.dispose());
+    const { waitPaused, release } = pauseGuardRead(b);
+    const realNowAtResolve = Date.now();
+    const resolving = resolveReconnectConflict("useRemote");
+    await waitPaused(); // real Date.now throughout this wait — safe for waitFor's own internals
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(realNowAtResolve + 1000); // comfortably inside the 30s lease
+    release();
+    const result = await resolving;
+    nowSpy.mockRestore();
+    expect(result).toBe("applied");
+    expect(useStorytellerStore.getState().game).toEqual(foreignGame);
+  });
+
+  it("Astra's exact H1 reproduction: useRemote is stale once continuous authority lapses during the post-authority reads — no foreign writer required, guard/checkpoint unchanged", async () => {
+    const b = new MemoryRoomBackend();
+    const { replacement, localGameBefore } = await enterConflict(b, "H1 pure time lapse");
+    disposals.push(() => replacement.dispose());
+    const { waitPaused, release } = pauseGuardRead(b);
+    const realNowAtResolve = Date.now();
+    const resolving = resolveReconnectConflict("useRemote");
+    await waitPaused();
+    // The reads outlive the 30-second lease — nothing else ever touched
+    // writeGuard or checkpoint; only time passed.
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(realNowAtResolve + LEASE_MS + 1);
+    release();
+    const result = await resolving;
+    nowSpy.mockRestore();
+    expect(result).toBe("stale");
+    expect(useStorytellerStore.getState().game).toEqual(localGameBefore); // untouched
+  });
+
+  it("useRemote is stale when authority lapses AND a genuinely different writer takes the lease and publishes new content during the reads", async () => {
+    const b = new MemoryRoomBackend();
+    const { replacement, session, localGameBefore } = await enterConflict(b, "H1 lapse with foreign takeover+publish");
+    disposals.push(() => replacement.dispose());
+    const { waitPaused, release } = pauseGuardRead(b);
+    const realNowAtResolve = Date.now();
+    const resolving = resolveReconnectConflict("useRemote");
+    await waitPaused();
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(realNowAtResolve + LEASE_MS + 1);
+    const takeoverWriter = writerFor(b, session.id);
+    await takeoverWriter.start(); // legitimately reclaims — replacement's recorded expiry has genuinely lapsed
+    const takeoverGame = { ...localGameBefore!, day: 77, notes: "a real takeover's own content" };
+    await writeProjections({ backend: takeoverWriter, code, stState: takeoverGame, registry: buildRegistry(troubleBrewing), online: {}, membership: {} });
+    disposals.push(() => takeoverWriter.dispose());
+    release();
+    const result = await resolving;
+    nowSpy.mockRestore();
+    expect(result).toBe("stale");
+    expect(useStorytellerStore.getState().game).toEqual(localGameBefore);
+    expect(await b.get(`${root}/storyteller`)).toEqual(takeoverGame); // the takeover's content stands, untouched by us
+  });
+
+  it("keepLocal is also stale when authority lapses during the reads — no reconciliation, no projection", async () => {
+    const b = new MemoryRoomBackend();
+    const { replacement, localGameBefore, undoBefore } = await enterConflict(b, "H1 keepLocal lapse");
+    disposals.push(() => replacement.dispose());
+    const writeLogLengthBefore = b.writeLog.length;
+    const { waitPaused, release } = pauseGuardRead(b);
+    const realNowAtResolve = Date.now();
+    const resolving = resolveReconnectConflict("keepLocal");
+    await waitPaused();
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(realNowAtResolve + LEASE_MS + 1);
+    release();
+    const result = await resolving;
+    nowSpy.mockRestore();
+    expect(result).toBe("stale");
+    expect(useStorytellerStore.getState().game).toEqual(localGameBefore);
+    expect(useStorytellerStore.getState().undoStack).toEqual(undoBefore);
+    // Exactly one write happened: reconfirmAuthority()'s own successful
+    // lease renewal (it genuinely still held the lease at that instant —
+    // only the LATER synchronous gate catches the lapse). No membership
+    // reconciliation write and no projection followed it.
+    expect(b.writeLog.length).toBe(writeLogLengthBefore + 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9C.2A.2A remediation, Finding B1 — a recognized lost acknowledgement
+// must become durable accepted evidence SYNCHRONOUSLY, before any later
+// await lets a subsequent writer attempt allocate (and overwrite
+// `lastAttempt` with) another revision.
+// ---------------------------------------------------------------------------
+describe("Phase 9C.2A.2A remediation — B1 durable lost-ack promotion", () => {
+  it("Astra reproduction: a recovered lost acknowledgement is durably promoted BEFORE the next writer attempt, survives that attempt's own failure, and survives a real localStorage reload", async () => {
+    const b = new MemoryRoomBackend();
+    const { writer, lobby, session } = await host(b);
+
+    // A1: a commit that lands on the real backend but is never locally
+    // acknowledged — the same "lost ack" shape as the existing regression
+    // test above, reused here as the starting point for this longer
+    // sequence.
+    const originalUpdate = b.update.bind(b);
+    let releaseA1: () => void = () => {};
+    const a1Gate = new Promise<void>(resolve => { releaseA1 = resolve; });
+    let a1Intercepted = false;
+    b.update = async updates => {
+      if (a1Intercepted) return originalUpdate(updates);
+      a1Intercepted = true;
+      await originalUpdate(updates);
+      await a1Gate;
+    };
+    const a1Commit = writer.set(`${root}/storyteller/notes`, "A1 — lost ack");
+    await waitFor(() => expect(a1Intercepted).toBe(true));
+    writer.stop(); // the local process "dies" before onAck can fire
+    releaseA1();
+    await a1Commit.catch(() => {});
+    b.update = originalUpdate;
+    const a1Guard = useStorytellerStore.getState().sync!.lastAttempt;
+    expect(a1Guard).not.toBeNull();
+    expect(useStorytellerStore.getState().sync!.ackedGuard).not.toEqual(a1Guard); // not yet promoted
+    expect(await b.get(`${root}/writeGuard`)).toEqual(a1Guard); // it DID land on the server
+    await writer.dispose();
+
+    // Reconnect: pause the membership read — the first await after the
+    // reconnect decision, strictly before finishLive()'s own initial flush
+    // ("C2" below) can even be attempted — to observe that durable
+    // promotion has ALREADY happened by that point.
+    const originalGet = b.get.bind(b);
+    let releaseMembership: () => void = () => {};
+    const membershipGate = new Promise<void>(resolve => { releaseMembership = resolve; });
+    let membershipPaused = false;
+    b.get = async path => {
+      if (path === `${root}/roster` && !membershipPaused) {
+        membershipPaused = true;
+        await membershipGate;
+      }
+      return originalGet(path);
+    };
+    const replacement = writerFor(b, session.id);
+    disposals.push(() => replacement.dispose());
+    const reconnecting = startStorytellerSession(b, lobby, replacement);
+    await waitFor(() => expect(membershipPaused).toBe(true));
+
+    // Durable promotion, proven strictly BEFORE the next writer attempt: no
+    // commit for C2 has been attempted yet, and yet ackedGuard already
+    // reflects A1, with lastAttempt already cleared.
+    expect(useStorytellerStore.getState().sync!.ackedGuard).toEqual(a1Guard);
+    expect(useStorytellerStore.getState().sync!.lastAttempt).toBeNull();
+    b.get = originalGet;
+    releaseMembership();
+
+    // Now make C2 — finishLive()'s own initial flush — fail OUTRIGHT
+    // (never reach the server at all), a non-transient failure the
+    // writer's own retry budget does not retry.
+    let c2Attempted = false;
+    b.update = async updates => {
+      if (!c2Attempted && `${root}/storyteller` in updates) {
+        c2Attempted = true;
+        throw new Error("PERMISSION_DENIED");
+      }
+      return originalUpdate(updates);
+    };
+    await expect(reconnecting).rejects.toThrow();
+    expect(c2Attempted).toBe(true);
+    b.update = originalUpdate;
+    await replacement.dispose();
+
+    // The remote guard is UNCHANGED from A1 (C2 never landed) — the
+    // store's durable ackedGuard already reflects exactly that, unaffected
+    // by C2's own failed attempt having overwritten lastAttempt in between.
+    expect(await b.get(`${root}/writeGuard`)).toEqual(a1Guard);
+    expect(useStorytellerStore.getState().sync!.ackedGuard).toEqual(a1Guard);
+
+    // Real "close the tab, reopen it" cycle: persist to actual
+    // localStorage, wipe in-memory state, rehydrate from exactly what
+    // localStorage holds — no in-memory shortcuts.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const persisted = localStorage.getItem("new-blood-st");
+    expect(persisted).toBeTruthy();
+    useStorytellerStore.setState({ game: null, lobby: null, undoStack: [], localSeq: 0, sync: null });
+    localStorage.setItem("new-blood-st", persisted!);
+    await useStorytellerStore.persist.rehydrate();
+    expect(useStorytellerStore.getState().sync!.ackedGuard).toEqual(a1Guard); // survived the real round trip
+
+    // The next reconnect must KEEP_LOCAL against the still-A1 remote guard
+    // — exactly baseline_current, never a false CONFLICT from a "forgotten" A1.
+    const finalWriter = writerFor(b, session.id);
+    const recovered = await startStorytellerSession(b, lobby, finalWriter);
+    disposals.push(async () => { recovered.stop(); await finalWriter.dispose(); });
+    expect(recovered.outcome).toBe("live");
+    expect(useSessionRuntime.getState().reconnect).toEqual({ status: "live" });
+  });
+
+  it("repeats with a lost MEMBERSHIP-ONLY write as A1 (not a game-content flush) — promotion still happens before the next writer attempt, and ackedGameSeq is never advanced by it", async () => {
+    const b = new MemoryRoomBackend();
+    const { writer, lobby, session } = await host(b);
+    const ackedGameSeqBefore = useStorytellerStore.getState().sync!.ackedGameSeq;
+
+    const originalUpdate = b.update.bind(b);
+    let releaseA1: () => void = () => {};
+    const a1Gate = new Promise<void>(resolve => { releaseA1 = resolve; });
+    let a1Intercepted = false;
+    b.update = async updates => {
+      if (a1Intercepted) return originalUpdate(updates);
+      a1Intercepted = true;
+      await originalUpdate(updates);
+      await a1Gate;
+    };
+    // A genuine membership command — never touches `game`/seqAtFlush.
+    const a1Commit = revokePlayerMembership(writer, code, "no-such-player-id");
+    await waitFor(() => expect(a1Intercepted).toBe(true));
+    writer.stop();
+    releaseA1();
+    await a1Commit.catch(() => {});
+    b.update = originalUpdate;
+    const a1Guard = useStorytellerStore.getState().sync!.lastAttempt;
+    expect(a1Guard).not.toBeNull();
+    await writer.dispose();
+
+    const replacement = writerFor(b, session.id);
+    const recovered = await startStorytellerSession(b, lobby, replacement);
+    disposals.push(async () => { recovered.stop(); await replacement.dispose(); });
+
+    expect(recovered.outcome).toBe("live");
+    // Promoted durably: ackedGuard reflects (at least) A1's revision by
+    // the time this resolves (finishLive's own subsequent flush may have
+    // advanced it further still — the load-bearing proof is that nothing
+    // was forgotten in between).
+    expect(useStorytellerStore.getState().sync!.ackedGuard!.revision).toBeGreaterThanOrEqual(a1Guard!.revision);
+    // A membership-only recovery must never be inferred as authorizing an
+    // ackedGameSeq advance on its own — only finishLive's own real,
+    // separately-tracked flush may advance it, and only to what it itself
+    // captured.
+    expect(useStorytellerStore.getState().sync!.ackedGameSeq).toBeGreaterThanOrEqual(ackedGameSeqBefore);
   });
 });

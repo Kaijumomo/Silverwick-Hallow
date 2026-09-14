@@ -150,6 +150,79 @@ describe("sync metadata: noteWriterAttempt / noteWriterAck (writer-authority ack
   });
 });
 
+describe("sync metadata: promoteRecoveredAck (Finding B1 — durable lost-ack promotion)", () => {
+  beforeEach(() => useStorytellerStore.getState().ensureSyncScope(CODE, SESSION));
+
+  it("sets ackedGuard to the recovered guard and clears lastAttempt, leaving ackedGameSeq untouched", () => {
+    useStorytellerStore.getState().noteWriterAttempt(CODE, SESSION, { token: "writer-A", revision: 6 });
+    useStorytellerStore.getState().acknowledgeGameFlush(CODE, SESSION, 3);
+    useStorytellerStore.getState().promoteRecoveredAck(CODE, SESSION, { token: "writer-A", revision: 6 });
+    expect(useStorytellerStore.getState().sync).toEqual({
+      code: CODE, sessionId: SESSION,
+      ackedGuard: { token: "writer-A", revision: 6 },
+      ackedGameSeq: 3, // unchanged by promotion — never inferred/guessed from a recovered guard alone
+      lastAttempt: null,
+    });
+  });
+
+  it("is a no-op for a scope mismatch — never promotes evidence into an unrelated scope's sync", () => {
+    useStorytellerStore.getState().noteWriterAttempt(CODE, SESSION, { token: "writer-A", revision: 6 });
+    const before = useStorytellerStore.getState().sync;
+    useStorytellerStore.getState().promoteRecoveredAck("OTHR6789", "other-session", { token: "writer-A", revision: 6 });
+    expect(useStorytellerStore.getState().sync).toEqual(before);
+  });
+
+  it("is a no-op when lastAttempt does not exactly equal the guard being promoted (mismatched revision)", () => {
+    useStorytellerStore.getState().noteWriterAttempt(CODE, SESSION, { token: "writer-A", revision: 6 });
+    const before = useStorytellerStore.getState().sync;
+    useStorytellerStore.getState().promoteRecoveredAck(CODE, SESSION, { token: "writer-A", revision: 7 });
+    expect(useStorytellerStore.getState().sync).toEqual(before);
+  });
+
+  it("is a no-op when lastAttempt does not exactly equal the guard being promoted (mismatched token)", () => {
+    useStorytellerStore.getState().noteWriterAttempt(CODE, SESSION, { token: "writer-A", revision: 6 });
+    const before = useStorytellerStore.getState().sync;
+    useStorytellerStore.getState().promoteRecoveredAck(CODE, SESSION, { token: "writer-C", revision: 6 });
+    expect(useStorytellerStore.getState().sync).toEqual(before);
+  });
+
+  it("is a no-op when there is no lastAttempt recorded at all", () => {
+    const before = useStorytellerStore.getState().sync;
+    useStorytellerStore.getState().promoteRecoveredAck(CODE, SESSION, { token: "writer-A", revision: 6 });
+    expect(useStorytellerStore.getState().sync).toEqual(before);
+  });
+
+  it("never lowers ackedGuard.revision: a recovered guard behind the already-accepted baseline leaves ackedGuard untouched but still clears the matching lastAttempt", () => {
+    useStorytellerStore.getState().noteWriterAttempt(CODE, SESSION, { token: "writer-A", revision: 3 });
+    // A later, independent acknowledgement (e.g. a fresh writer's own
+    // commit) has already advanced the accepted baseline past this
+    // recovered attempt by the time promotion runs.
+    useStorytellerStore.getState().noteWriterAck(CODE, SESSION, { token: "writer-B", revision: 10 });
+    useStorytellerStore.getState().noteWriterAttempt(CODE, SESSION, { token: "writer-A", revision: 3 });
+    useStorytellerStore.getState().promoteRecoveredAck(CODE, SESSION, { token: "writer-A", revision: 3 });
+    expect(useStorytellerStore.getState().sync?.ackedGuard).toEqual({ token: "writer-B", revision: 10 }); // never regressed
+    expect(useStorytellerStore.getState().sync?.lastAttempt).toBeNull();
+  });
+
+  it("promotes even when there is no prior accepted baseline (ackedGuard null)", () => {
+    useStorytellerStore.getState().noteWriterAttempt(CODE, SESSION, { token: "writer-A", revision: 1 });
+    expect(useStorytellerStore.getState().sync?.ackedGuard).toBeNull();
+    useStorytellerStore.getState().promoteRecoveredAck(CODE, SESSION, { token: "writer-A", revision: 1 });
+    expect(useStorytellerStore.getState().sync?.ackedGuard).toEqual({ token: "writer-A", revision: 1 });
+    expect(useStorytellerStore.getState().sync?.lastAttempt).toBeNull();
+  });
+
+  it("does not touch game or localSeq", () => {
+    useStorytellerStore.getState().newGame("tb");
+    const seqBefore = useStorytellerStore.getState().localSeq;
+    const gameBefore = useStorytellerStore.getState().game;
+    useStorytellerStore.getState().noteWriterAttempt(CODE, SESSION, { token: "writer-A", revision: 1 });
+    useStorytellerStore.getState().promoteRecoveredAck(CODE, SESSION, { token: "writer-A", revision: 1 });
+    expect(useStorytellerStore.getState().localSeq).toBe(seqBefore);
+    expect(useStorytellerStore.getState().game).toBe(gameBefore);
+  });
+});
+
 describe("sync metadata: acknowledgeGameFlush (game-content acknowledgement is separate from writer-authority acknowledgement)", () => {
   beforeEach(() => useStorytellerStore.getState().ensureSyncScope(CODE, SESSION));
 

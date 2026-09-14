@@ -12,7 +12,7 @@ import { revokePlayerMembership } from "./lobby";
 import type { RoomBackend } from "./backend";
 import type { OnlineMap } from "@/stores/projections";
 import { decodePresence, decodeRoster, decodeJoinRequests, SnapshotValidationError } from "./snapshots";
-import { SessionWriter } from "./writer";
+import { SessionWriter, FENCE_MARGIN_MS, type AuthorityHandle } from "./writer";
 import { decodeSession, guardSchema, isTransient, leaseSchema, lifecycleMessage, LifecycleError, sessionPath } from "./lifecycle";
 import { connectFirebase } from "./session";
 import { decideReconnect, type CheckpointState, type ReconnectIncoherentReason } from "./reconnectDecision";
@@ -437,6 +437,17 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
     remoteGuard: observedGuard,
   });
 
+  // Finding B1: a recognized lost acknowledgement must become durable
+  // accepted evidence SYNCHRONOUSLY — before any later await gives a
+  // subsequent writer attempt (membership reconciliation, the initial
+  // flush inside finishLive(), anything else below) a chance to allocate,
+  // and overwrite `lastAttempt` with, another revision before the recovery
+  // is durable. No await occurs between decideReconnect returning this
+  // outcome and this call.
+  if (decision.type === "KEEP_LOCAL" && decision.reason === "lost_ack_recovered") {
+    useStorytellerStore.getState().promoteRecoveredAck(lobby.code, scopeSessionId, decision.recoveredGuard);
+  }
+
   // Invalid checkpoint with no evidenced local claim at stake: nothing
   // local is at risk, so preserve the pre-9C.2A hard-failure behavior
   // instead of inventing a new automatic outcome for this specific reason.
@@ -457,19 +468,17 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
         ? { status: "conflict", remoteGuard: observedGuard }
         : { status: "incoherent", reason: decision.reason },
     });
-    if (decision.type === "CONFLICT" && restored) {
+    if (decision.type === "CONFLICT") {
       // CONFLICT is only ever reached with a valid, parsed checkpoint and a
       // non-null remote guard (the decision's own rule ordering routes
       // "no checkpoint"/"invalid checkpoint"/"no baseline"/"rewind" to
-      // other outcomes first), so both are always available here.
-      currentConflict = {
-        raw, lobby, writer,
-        snapshotGuard: observedGuard,
-        snapshotCheckpointRaw: JSON.stringify(restored),
-        remoteGame: restored.game,
-        remoteRoster: restored.roster,
-        finishLive,
-      };
+      // other outcomes first) — narrow to the non-null GuardStamp the state
+      // machine guarantees here (Finding H2). Checkpoint CONTENT is
+      // deliberately not cached alongside it: resolution re-reads the
+      // checkpoint fresh, gated by this guard identity alone, never by a
+      // cached serialization (see resolveReconnectConflict).
+      if (!observedGuard) throw new Error("Invariant violated: CONFLICT reached with a null remote guard.");
+      currentConflict = { raw, lobby, writer, snapshotGuard: observedGuard, finishLive };
     }
     return {
       outcome: decision.type === "CONFLICT" ? "conflict" as const : "incoherent" as const,
@@ -499,15 +508,26 @@ type PendingConflict = {
   raw: RoomBackend;
   lobby: LobbyConnection;
   writer: SessionWriter;
-  /** The guard observed when CONFLICT was raised — compared byte-for-byte
-   * (via re-parsing) against a fresh read before applying an explicit
-   * choice, never through decideReconnect again. */
-  snapshotGuard: GuardStamp | null;
-  /** The exact validated {game, roster} observed when CONFLICT was raised,
-   * serialized once for a cheap, exact staleness comparison. */
-  snapshotCheckpointRaw: string;
-  remoteGame: StorytellerLobbyRecord;
-  remoteRoster: Record<string, string>;
+  /** The writeGuard observed when CONFLICT was raised — the SOLE identity
+   * used to detect remote staleness on resolution (Finding H2). Compared
+   * against a fresh read (token AND revision, exact match) before applying
+   * an explicit choice, never through decideReconnect again. Always
+   * non-null: decideReconnect's own rule ordering only ever reaches
+   * CONFLICT after establishing a valid checkpoint and a non-null
+   * remoteGuard (narrowed at the one call site that constructs this).
+   * Checkpoint CONTENT is deliberately not cached here — writeProjections
+   * is the sole checkpoint writer, and Firebase rules require every
+   * checkpoint write to be part of an update whose writeGuard revision
+   * strictly advances, so guard equality against this snapshot alone
+   * already proves the checkpoint has not changed through the supported
+   * production write path. Comparing serialized checkpoint content in
+   * addition to this — as an earlier revision did — made conflict
+   * revalidation sensitive to object-key insertion order, Zod output
+   * ordering, and stripped-unknown-keys differences between the object
+   * pipeline that produced the snapshot and the one that reads it back,
+   * which could report a semantically-unchanged checkpoint as stale
+   * indefinitely. */
+  snapshotGuard: GuardStamp;
   finishLive: () => Promise<{ outcome: "live"; stop: () => void; close: () => Promise<void> }>;
 };
 let currentConflict: PendingConflict | null = null;
@@ -534,12 +554,15 @@ export type ConflictResolutionResult = "applied" | "stale" | "none";
  * the polished conflict UX itself is a later 9C.2 stage. This is
  * deliberately a DIFFERENT operation from the automatic decision function:
  * it never calls decideReconnect and never lets a stale choice through.
- * Before applying either choice it re-confirms writer authority and
- * re-reads the current guard/checkpoint, comparing them against the exact
- * snapshot the conflict was raised from. If authority was lost or the
- * remote has moved on, the choice is not applied ("stale") — the caller
- * (a later UI stage) is expected to return to comparison/observing, e.g.
- * via retryStorytellerSession().
+ * Before applying either choice it re-confirms writer authority, re-reads
+ * the current guard (Finding H2: the sole staleness signal — never a
+ * checkpoint-content comparison), and synchronously re-proves that
+ * authority is STILL continuously held through the instant immediately
+ * before any destructive local mutation (Finding H1). If authority was
+ * lost — at reconfirmation, or found lapsed by the synchronous gate right
+ * before applying — or the remote has moved on, the choice is not applied
+ * ("stale") — the caller (a later UI stage) is expected to return to
+ * comparison/observing, e.g. via retryStorytellerSession().
  */
 export async function resolveReconnectConflict(choice: "keepLocal" | "useRemote"): Promise<ConflictResolutionResult> {
   const pending = currentConflict;
@@ -551,43 +574,68 @@ export async function resolveReconnectConflict(choice: "keepLocal" | "useRemote"
   // Re-confirm ACTUAL server writer authority before trusting anything
   // else (Luna review, Finding 2). A different Storyteller writer can
   // acquire the server lease while this writer's own isStopped() still
-  // reads false and writeGuard/checkpoint remain byte-identical (the new
-  // writer simply hasn't published a projection yet) — neither
-  // isStopped() nor guard/checkpoint equality alone can detect that.
-  // reconfirmAuthority() reuses the exact same lease-renewal transaction
-  // the writer's own renewal interval already runs; it resolves only if
-  // this writer still owns, or can validly reclaim, the exclusive lease,
-  // and a successful call extends that lease. The guard/checkpoint
-  // re-reads and comparison below therefore happen under a freshly
-  // renewed lease, not stale local knowledge — no second write/authority
-  // path.
+  // reads false and writeGuard remains unchanged (the new writer simply
+  // hasn't published a projection yet) — isStopped() alone cannot detect
+  // that. reconfirmAuthority() reuses the exact same lease-renewal
+  // transaction the writer's own renewal interval already runs; it
+  // resolves only if this writer still owns, or can validly reclaim, the
+  // exclusive lease, and returns an AuthorityHandle representing that
+  // confirmed continuous-authority interval (Finding H1) — re-validated
+  // synchronously via holdsAuthority() immediately before the destructive
+  // mutation below, never trusted as still current after the reads that
+  // follow: those reads can outlive the 30-second lease, and a single
+  // isStopped() check taken before them is not enough (Astra's exact
+  // reproduction) — no second write/authority path either way.
+  let authority: AuthorityHandle;
   try {
-    await writer.reconfirmAuthority();
+    authority = await writer.reconfirmAuthority();
   } catch {
     return "stale";
   }
 
   const guardRaw = await raw.get(`lobbies/${lobby.code}/writeGuard`);
   const currentGuard = guardRaw != null ? guardSchema.parse(guardRaw) : null;
-  const checkpointRaw = await raw.get(`lobbies/${lobby.code}/checkpoint`);
+
+  // Checkpoint CONTENT is read fresh here, as needed to obtain the actual
+  // remote game for "useRemote" — never compared byte-for-byte against a
+  // cached snapshot (Finding H2 — see PendingConflict's own doc comment
+  // for why guard equality alone already proves the checkpoint has not
+  // changed through the supported production path). Skipped for
+  // "keepLocal", which never needs remote game content.
+  let restored: { game: StorytellerLobbyRecord; roster: Record<string, string> } | null = null;
+  if (choice === "useRemote") {
+    restored = (await readCheckpoint(raw, lobby)).restored;
+  }
+
   if (writer.isStopped()) return "stale";
-  const guardMatches = currentGuard === null
-    ? pending.snapshotGuard === null
-    : pending.snapshotGuard !== null && currentGuard.token === pending.snapshotGuard.token && currentGuard.revision === pending.snapshotGuard.revision;
-  const checkpointMatches = typeof checkpointRaw === "string" && JSON.stringify(JSON.parse(checkpointRaw)) === pending.snapshotCheckpointRaw;
-  if (!guardMatches || !checkpointMatches) return "stale";
+
+  if (currentGuard === null || currentGuard.token !== pending.snapshotGuard.token || currentGuard.revision !== pending.snapshotGuard.revision) {
+    return "stale"; // remote has moved on since CONFLICT was raised
+  }
+
+  // Synchronous authority gate (Finding H1): NOTHING awaits between this
+  // check and the destructive mutation it guards below (for "useRemote";
+  // for "keepLocal" it still gates reconciliation, which can itself mutate
+  // local game state, for the same reason). If this writer's continuous
+  // hold on the exact interval `authority` represents has lapsed, or been
+  // reclaimed after a gap, since reconfirmAuthority() above — even though
+  // isStopped() may still read false, not having caught up yet — the
+  // choice is stale rather than applied against content whose authority
+  // is no longer provable.
+  if (!writer.holdsAuthority(authority, FENCE_MARGIN_MS)) return "stale";
 
   const inScope = () => {
     const current = useStorytellerStore.getState().lobby;
     return current?.code === lobby.code && current.sessionId === lobby.sessionId;
   };
-  if (choice === "useRemote" && inScope()) {
-    useStorytellerStore.getState().restoreRemoteCheckpoint(pending.remoteGame, currentGuard);
+  if (choice === "useRemote") {
+    if (!restored) return "stale"; // guard matched but the checkpoint failed to validate — never silently apply
+    if (inScope()) useStorytellerStore.getState().restoreRemoteCheckpoint(restored.game, currentGuard);
   }
   // "keepLocal": retain local state exactly as-is — nothing to apply here.
   const membership = decodeRoster(await raw.get(`lobbies/${lobby.code}/roster`));
   if (membership.status !== "ready") throw new SnapshotValidationError();
-  if (inScope()) await reconcileMembership(writer, lobby.code, membership.data, choice === "useRemote" ? pending.remoteRoster : null);
+  if (inScope()) await reconcileMembership(writer, lobby.code, membership.data, choice === "useRemote" ? restored!.roster : null);
 
   const live = await pending.finishLive();
   closeCurrent = live.close;

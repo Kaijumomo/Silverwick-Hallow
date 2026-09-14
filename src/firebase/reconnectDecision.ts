@@ -59,10 +59,36 @@ export type ReconnectIncoherentReason =
    * silently guessed past. */
   | "server_rewind";
 
+/** Why a KEEP_LOCAL outcome was reached (Finding B1). A caller must be able
+ * to tell a recognized lost acknowledgement apart from every other
+ * KEEP_LOCAL reason, because only the lost-ack case carries a guard that
+ * must be promoted to durable accepted evidence — synchronously, before any
+ * later writer attempt can allocate another revision — or a subsequent
+ * writer attempt can overwrite the only record that the lost commit was
+ * ever acknowledged. */
+export type KeepLocalReason =
+  /** No remote checkpoint exists at all (case 1) — nothing to compare. */
+  | "no_checkpoint"
+  /** The remote guard exactly equals the already-accepted baseline (case
+   * 7) — no server commit has advanced beyond what local already knows. */
+  | "baseline_current";
+
 export type ReconnectDecision =
   /** Retain the local game untouched. Reconcile membership, then let the
    * normal initial projection flush publish the surviving local snapshot. */
-  | { type: "KEEP_LOCAL" }
+  | { type: "KEEP_LOCAL"; reason: KeepLocalReason }
+  /** A commit genuinely landed on the server but this device never
+   * recorded its acknowledgement (crash/close between the write landing
+   * and the response being processed) — recognized by an exact
+   * token/revision match against the persisted unresolved `lastAttempt`
+   * (case 5). `recoveredGuard` is that same matched guard, returned so the
+   * caller can promote it to durable accepted evidence before anything
+   * else can allocate a new revision (Finding B1). Never carries any
+   * inference about `ackedGameSeq` — the recovered commit could equally
+   * have been a projection flush or a membership-only write, and only
+   * durable seq-to-guard evidence (which this decision does not have)
+   * could tell those apart. */
+  | { type: "KEEP_LOCAL"; reason: "lost_ack_recovered"; recoveredGuard: GuardStamp }
   /** Replace local game with the validated remote checkpoint and adopt the
    * observed remote guard as the new accepted baseline. */
   | { type: "RESTORE" }
@@ -95,7 +121,7 @@ export function decideReconnect(inputs: ReconnectInputs): ReconnectDecision {
 
   // 1. No checkpoint exists at all: there is nothing remote to restore, and
   // nothing to conflict with. Local — if any — simply continues.
-  if (checkpoint.kind === "absent") return { type: "KEEP_LOCAL" };
+  if (checkpoint.kind === "absent") return { type: "KEEP_LOCAL", reason: "no_checkpoint" };
 
   const scopedSync = sync && scopeMatches(sync, scope) ? sync : null;
   const dirty = localGameInScope && scopedSync !== null && localSeq > scopedSync.ackedGameSeq;
@@ -140,8 +166,13 @@ export function decideReconnect(inputs: ReconnectInputs): ReconnectDecision {
   // the rewind check above has already cleared this remote guard as at or
   // ahead of any accepted baseline, so a genuine lost-ack match (always at
   // or ahead of the baseline it was attempted against) is never rejected.
+  // Finding B1: this specific reason carries `recoveredGuard` — the exact
+  // matched guard — so the caller can promote it to durable accepted
+  // evidence synchronously, before anything else can allocate a new
+  // revision over it. Deliberately not decomposed into a bare KEEP_LOCAL:
+  // every other KEEP_LOCAL reason needs no such promotion.
   if (scopedSync.lastAttempt && remoteGuard && guardsEqual(scopedSync.lastAttempt, remoteGuard)) {
-    return { type: "KEEP_LOCAL" };
+    return { type: "KEEP_LOCAL", reason: "lost_ack_recovered", recoveredGuard: remoteGuard };
   }
 
   // 6. We have no confirmed baseline yet for this scope (e.g. the very
@@ -162,7 +193,7 @@ export function decideReconnect(inputs: ReconnectInputs): ReconnectDecision {
   // 7. Remote guard equals the accepted baseline exactly: no server commit
   // has advanced beyond what local already knows about. Keep local as-is
   // (this also means: do not clear undo).
-  if (guardsEqual(remoteGuard, scopedSync.ackedGuard)) return { type: "KEEP_LOCAL" };
+  if (guardsEqual(remoteGuard, scopedSync.ackedGuard)) return { type: "KEEP_LOCAL", reason: "baseline_current" };
 
   // 8. Remote has advanced beyond the accepted baseline and this is not a
   // recognized lost acknowledgement. This is the core second-device safety

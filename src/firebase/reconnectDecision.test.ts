@@ -28,10 +28,10 @@ const base = (overrides: Partial<ReconnectInputs> = {}): ReconnectInputs => ({
 
 describe("decideReconnect: no checkpoint", () => {
   it("KEEP_LOCAL when there is no remote checkpoint at all, even with sync metadata present", () => {
-    expect(decideReconnect(base({ checkpoint: { kind: "absent" } }))).toEqual({ type: "KEEP_LOCAL" });
+    expect(decideReconnect(base({ checkpoint: { kind: "absent" } }))).toEqual({ type: "KEEP_LOCAL", reason: "no_checkpoint" });
   });
   it("KEEP_LOCAL when there is no checkpoint and also no local game (nothing to restore, nothing to keep)", () => {
-    expect(decideReconnect(base({ checkpoint: { kind: "absent" }, localGameInScope: false, sync: null }))).toEqual({ type: "KEEP_LOCAL" });
+    expect(decideReconnect(base({ checkpoint: { kind: "absent" }, localGameInScope: false, sync: null }))).toEqual({ type: "KEEP_LOCAL", reason: "no_checkpoint" });
   });
 });
 
@@ -55,10 +55,10 @@ describe("decideReconnect: legacy / no sync metadata / scope mismatch", () => {
 
 describe("decideReconnect: equal guard baseline", () => {
   it("KEEP_LOCAL when the remote guard exactly equals the accepted baseline (no server commit has advanced)", () => {
-    expect(decideReconnect(base({ remoteGuard: guard("writer-A", 5) }))).toEqual({ type: "KEEP_LOCAL" });
+    expect(decideReconnect(base({ remoteGuard: guard("writer-A", 5) }))).toEqual({ type: "KEEP_LOCAL", reason: "baseline_current" });
   });
   it("KEEP_LOCAL at equal baseline even when local is dirty (must not clear undo just because nothing advanced)", () => {
-    expect(decideReconnect(base({ remoteGuard: guard("writer-A", 5), localSeq: 999 }))).toEqual({ type: "KEEP_LOCAL" });
+    expect(decideReconnect(base({ remoteGuard: guard("writer-A", 5), localSeq: 999 }))).toEqual({ type: "KEEP_LOCAL", reason: "baseline_current" });
   });
 });
 
@@ -81,18 +81,18 @@ describe("decideReconnect: remote advanced beyond baseline — clean vs dirty lo
 });
 
 describe("decideReconnect: lost acknowledgement", () => {
-  it("KEEP_LOCAL when the remote guard exactly matches the persisted unresolved lastAttempt (token AND revision)", () => {
+  it("KEEP_LOCAL (reason lost_ack_recovered, carrying the recovered guard) when the remote guard exactly matches the persisted unresolved lastAttempt (token AND revision)", () => {
     expect(decideReconnect(base({
       sync: sync({ ackedGuard: guard("writer-A", 5), lastAttempt: guard("writer-A", 6) }),
       remoteGuard: guard("writer-A", 6),
-    }))).toEqual({ type: "KEEP_LOCAL" });
+    }))).toEqual({ type: "KEEP_LOCAL", reason: "lost_ack_recovered", recoveredGuard: guard("writer-A", 6) });
   });
   it("lost-ack recognition does not require local to be dirty (an attempt may have been membership-only)", () => {
     expect(decideReconnect(base({
       sync: sync({ ackedGuard: guard("writer-A", 5), ackedGameSeq: 10, lastAttempt: guard("writer-A", 6) }),
       remoteGuard: guard("writer-A", 6),
       localSeq: 10,
-    }))).toEqual({ type: "KEEP_LOCAL" });
+    }))).toEqual({ type: "KEEP_LOCAL", reason: "lost_ack_recovered", recoveredGuard: guard("writer-A", 6) });
   });
   it("mismatched revision (same token as lastAttempt, different revision) is NOT a lost-ack match — falls through to advanced-baseline handling", () => {
     expect(decideReconnect(base({
@@ -112,7 +112,7 @@ describe("decideReconnect: lost acknowledgement", () => {
     expect(decideReconnect(base({
       sync: sync({ ackedGuard: guard("writer-A", 5), lastAttempt: null }),
       remoteGuard: guard("writer-A", 5),
-    }))).toEqual({ type: "KEEP_LOCAL" }); // via equal-baseline, not lost-ack
+    }))).toEqual({ type: "KEEP_LOCAL", reason: "baseline_current" }); // via equal-baseline, not lost-ack
   });
 });
 
@@ -156,14 +156,14 @@ describe("decideReconnect: server rewind", () => {
       sync: sync({ ackedGuard: guard("writer-A", 5), ackedGameSeq: 5, lastAttempt: guard("writer-A", 6) }),
       remoteGuard: guard("writer-A", 6), // ahead of the baseline (5) — a genuine lost ack, not a rewind
       localSeq: 6,
-    }))).toEqual({ type: "KEEP_LOCAL" });
+    }))).toEqual({ type: "KEEP_LOCAL", reason: "lost_ack_recovered", recoveredGuard: guard("writer-A", 6) });
   });
   it("exact lost acknowledgement with no prior accepted baseline (ackedGuard null) still returns KEEP_LOCAL — the rewind gate only fires when a baseline exists", () => {
     expect(decideReconnect(base({
       sync: sync({ ackedGuard: null, ackedGameSeq: 0, lastAttempt: guard("writer-A", 1) }),
       remoteGuard: guard("writer-A", 1),
       localSeq: 1,
-    }))).toEqual({ type: "KEEP_LOCAL" });
+    }))).toEqual({ type: "KEEP_LOCAL", reason: "lost_ack_recovered", recoveredGuard: guard("writer-A", 1) });
   });
 });
 
@@ -185,6 +185,30 @@ describe("decideReconnect: invalid checkpoint", () => {
       const decision = decideReconnect(base({ checkpoint: { kind: "invalid" }, localSeq }));
       expect(decision.type).toBe("INCOHERENT");
     }
+  });
+});
+
+describe("decideReconnect: KEEP_LOCAL reason discrimination (Finding B1)", () => {
+  it("lost_ack_recovered is distinguishable from every other KEEP_LOCAL reason and carries the recovered guard", () => {
+    const recovered = decideReconnect(base({
+      sync: sync({ ackedGuard: guard("writer-A", 5), lastAttempt: guard("writer-A", 6) }),
+      remoteGuard: guard("writer-A", 6),
+    }));
+    expect(recovered.type).toBe("KEEP_LOCAL");
+    if (recovered.type !== "KEEP_LOCAL") throw new Error("unreachable");
+    expect(recovered.reason).toBe("lost_ack_recovered");
+    if (recovered.reason !== "lost_ack_recovered") throw new Error("unreachable");
+    expect(recovered.recoveredGuard).toEqual(guard("writer-A", 6));
+
+    const noCheckpoint = decideReconnect(base({ checkpoint: { kind: "absent" } }));
+    expect(noCheckpoint).toEqual({ type: "KEEP_LOCAL", reason: "no_checkpoint" });
+    expect(noCheckpoint).not.toEqual(recovered);
+    expect("recoveredGuard" in noCheckpoint).toBe(false);
+
+    const baselineCurrent = decideReconnect(base({ remoteGuard: guard("writer-A", 5) }));
+    expect(baselineCurrent).toEqual({ type: "KEEP_LOCAL", reason: "baseline_current" });
+    expect(baselineCurrent).not.toEqual(recovered);
+    expect("recoveredGuard" in baselineCurrent).toBe(false);
   });
 });
 

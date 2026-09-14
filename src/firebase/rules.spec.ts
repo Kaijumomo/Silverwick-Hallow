@@ -576,4 +576,38 @@ describe("Firebase RTDB membership authorization", () => {
     await assertFails(db(st).ref().update({ [path("public/day")]: 0, [path("writeGuard")]: { token: "fixture-writer", revision: 1 } }));
     expect((await ref(st, "public/day").once("value")).val()).toBe(1);
   });
+
+  // Phase 9C.2A.2A remediation, Finding H2: checkpoint identity is the
+  // server writeGuard alone (never a serialized checkpoint comparison) —
+  // sound only because the rules below make it so: a checkpoint write is
+  // never accepted unless it is bundled, in the same multi-path update,
+  // with a writeGuard revision that strictly exceeds the current one.
+  test("H2: checkpoint cannot be written without a strictly advancing writeGuard revision, in the same update", async () => {
+    await seed(); // seeds writeGuard at revision 0
+    // No writeGuard at all in the write.
+    await assertFails(ref(st, "checkpoint").set(JSON.stringify({ game: {}, roster: {} })));
+    expect((await ref(st, "checkpoint").once("value")).exists()).toBe(false);
+    // Bundled with a writeGuard revision that does not strictly exceed the
+    // current one (0) is denied.
+    await assertFails(db(st).ref().update({
+      [path("checkpoint")]: JSON.stringify({ game: {}, roster: {} }),
+      [path("writeGuard")]: { token: "fixture-writer", revision: 0 },
+    }));
+    expect((await ref(st, "checkpoint").once("value")).exists()).toBe(false);
+    // Bundled with a strictly advancing revision succeeds — the exact
+    // invariant Finding H2's checkpoint identity fix relies on: checkpoint
+    // changed implies writeGuard strictly advanced.
+    await assertSucceeds(db(st).ref().update({
+      [path("checkpoint")]: JSON.stringify({ game: {}, roster: {} }),
+      [path("writeGuard")]: { token: "fixture-writer", revision: 1 },
+    }));
+    expect((await ref(st, "checkpoint").once("value")).val()).toBe(JSON.stringify({ game: {}, roster: {} }));
+    // Reusing the now-current revision (1) — not a NEW one — is denied too:
+    // strictly greater, never merely different.
+    await assertFails(db(st).ref().update({
+      [path("checkpoint")]: JSON.stringify({ game: {}, roster: {}, notes: "different content, same revision" }),
+      [path("writeGuard")]: { token: "fixture-writer", revision: 1 },
+    }));
+    expect((await ref(st, "checkpoint").once("value")).val()).toBe(JSON.stringify({ game: {}, roster: {} }));
+  });
 });

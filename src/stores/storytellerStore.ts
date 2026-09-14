@@ -205,6 +205,26 @@ export type StorytellerStore = {
    * writer remained active. Never advances past what was actually
    * acknowledged, and never regresses. Does not touch `game`. */
   acknowledgeGameFlush: (code: string, sessionId: string, seqAtFlush: number) => void;
+  /** Durably promotes a recognized lost acknowledgement (Finding B1) to
+   * accepted baseline state. Reconnect can recognize, from `lastAttempt`
+   * alone, that a commit genuinely landed on the server but was never
+   * acknowledged locally — but until THIS is called, that fact survives
+   * only as `lastAttempt`, which any later writer attempt is free to
+   * overwrite before the recovery is durable. Call synchronously, with no
+   * await in between, right after recognizing the recovery and before any
+   * further await that could let another writer attempt allocate a new
+   * revision (see storytellerSync.ts's reconnect call site).
+   *
+   * Verifies scope; verifies `lastAttempt` exactly equals `guard` (else a
+   * no-op — never promotes a mismatched or already-superseded attempt);
+   * never lowers `ackedGuard.revision`; sets `ackedGuard = guard`; clears
+   * `lastAttempt`. Deliberately never touches `ackedGameSeq`: the recovered
+   * commit could equally have been a projection flush or a membership-only
+   * write, and without durable seq-to-guard evidence distinguishing those,
+   * only under-reporting local dirtiness would be safe to skip — so this
+   * never advances it. Over-reporting dirty state is acceptable; falsely
+   * reporting clean is not. */
+  promoteRecoveredAck: (code: string, sessionId: string, guard: GuardStamp) => void;
   /** Atomically replace `game` with a validated remote checkpoint, clear
    * undo (because remote state was deliberately accepted), and make the
    * restored game clean with respect to the current local sequence by
@@ -1272,6 +1292,20 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!state.sync || state.sync.code !== code || state.sync.sessionId !== sessionId) return {};
         if (state.sync.ackedGameSeq >= seqAtFlush) return {}; // never regress, never re-advance redundantly
         return { sync: { ...state.sync, ackedGameSeq: seqAtFlush } };
+      }),
+
+      promoteRecoveredAck: (code, sessionId, guard) => set(state => {
+        if (!state.sync || state.sync.code !== code || state.sync.sessionId !== sessionId) return {};
+        const attempt = state.sync.lastAttempt;
+        if (!attempt || attempt.token !== guard.token || attempt.revision !== guard.revision) return {};
+        const currentRevision = state.sync.ackedGuard?.revision ?? -1;
+        return {
+          sync: {
+            ...state.sync,
+            ackedGuard: guard.revision > currentRevision ? guard : state.sync.ackedGuard,
+            lastAttempt: null,
+          },
+        };
       }),
 
       restoreRemoteCheckpoint: (game, guard) => set(state => ({

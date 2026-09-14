@@ -26,7 +26,7 @@ import { resolve } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import type { Database } from "firebase/database";
 import { FirebaseRoomBackend } from "./firebaseBackend";
-import { SessionWriter } from "./writer";
+import { SessionWriter, LEASE_MS } from "./writer";
 import { writeProjections } from "./sync";
 import { createLobby, readRosterBindings, revokePlayerMembership, seatPlayer } from "./lobby";
 import { joinLobby, startPlayerHandshake } from "./playerSync";
@@ -928,4 +928,212 @@ describe("OPUS-007 contract: real client pathways against enforced Firebase rule
     // the normal writer path (bumping writeGuard's revision) — asserting
     // writeGuard above already proves that never happened.
   }, 30000);
+});
+
+/** Precondition seeding ONLY (Section 10/14 policy) — same technique
+ * OPUS-001-CONTRACT-1/2/3 above already use, hoisted to module scope so the
+ * H1/H3 remediation suites below (declared outside that describe block)
+ * can reuse it too: force a lease to look expired so the next
+ * SessionWriter's own real, rules-enforced acquisition can legitimately
+ * succeed. */
+async function forceLeaseExpiry(code: string) {
+  await env.withSecurityRulesDisabled(async ctx => {
+    await ctx.database().ref(`lobbies/${code}/writer/expiresAt`).set(0);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Phase 9C.2A.2A remediation, Finding H1 — continuous authority through
+// destructive mutation, proven against a REAL emulator with rules enforced
+// throughout, and — deliberately — with NO mocked clock: the real Firebase
+// SDK's own internals (transaction rerun scheduling, connection health)
+// depend on Date.now() too, so mocking it globally alongside a live
+// connection is unsafe here. Instead this genuinely waits out the real 30s
+// lease while this writer's own periodic renewal is prevented from
+// extending it (its underlying transaction calls are made to hang, exactly
+// as an unresponsive network would, never via writer.stop() or a fake
+// clock) — reproducing Astra's report (reads outliving the lease before
+// useRemote replaces local game state) with real elapsed time.
+// ---------------------------------------------------------------------------
+describe("OPUS-001-CONTRACT-H1: continuous authority against real enforced rules", () => {
+  test("useRemote is stale once this writer's own bookkeeping shows continuous authority has genuinely lapsed during the post-authority reads — Astra's exact H1 reproduction, real rules and real elapsed time throughout", async () => {
+    const code = "OP4AAAAA", st = "op4-storyteller";
+    const deviceA1 = backendFor(st);
+    await createLobby(deviceA1, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(deviceA1, code);
+    const lobby = { code, uid: st, sessionId: session.id, status: "live" as const };
+    useStorytellerStore.getState().newGame("tb");
+    useStorytellerStore.getState().addPlayer("Alice");
+    useStorytellerStore.getState().setLobby(lobby);
+    const writerA1 = new SessionWriter(deviceA1, code, session.id, error =>
+      reportRuntimeError("write", error ? lifecycleMessage(error) : null));
+    const managerA1 = await startStorytellerSession(deviceA1, lobby, writerA1);
+    managerA1.stop();
+    await writerA1.dispose();
+    await forceLeaseExpiry(code);
+
+    const deviceB = backendFor(st);
+    const writerB = new SessionWriter(deviceB, code, session.id);
+    await writerB.start();
+    const foreignGame = { ...useStorytellerStore.getState().game!, day: 5, notes: "device B's own content" };
+    await writeProjections({
+      backend: writerB, code, stState: foreignGame,
+      registry: buildRegistry(troubleBrewing), online: {}, membership: {},
+    });
+    await writerB.dispose();
+    await forceLeaseExpiry(code);
+
+    useStorytellerStore.getState().addPlayer("Unacknowledged local edit under real H1 lapse");
+    const localGameBefore = useStorytellerStore.getState().game;
+
+    const deviceA2 = backendFor(st);
+    const writerA2 = new SessionWriter(deviceA2, code, session.id);
+    const managerA2 = await startStorytellerSession(deviceA2, lobby, writerA2);
+    disposals.push(() => writerA2.dispose());
+    expect(managerA2.outcome).toBe("conflict");
+    const guardBefore = await deviceA2.get(`lobbies/${code}/writeGuard`);
+    const checkpointBefore = await deviceA2.get(`lobbies/${code}/checkpoint`);
+
+    // Let exactly the NEXT /writer transaction (reconfirmAuthority()'s own
+    // renewal, called synchronously at the very start of
+    // resolveReconnectConflict) through normally; every /writer transaction
+    // AFTER that — in particular this writer's own periodic renewal
+    // interval's next tick — hangs forever, exactly as an unresponsive
+    // network would. leaseExpiresAt is therefore frozen at whatever
+    // reconfirmAuthority() just set it to, while real time keeps moving.
+    const originalTransaction = deviceA2.transaction.bind(deviceA2);
+    let writerTransactionCount = 0;
+    deviceA2.transaction = (transactionPath, change) => {
+      if (transactionPath === `lobbies/${code}/writer`) {
+        writerTransactionCount++;
+        if (writerTransactionCount > 1) return new Promise<boolean>(() => {});
+      }
+      return originalTransaction(transactionPath, change);
+    };
+
+    // Pause the very next guard read — the first server read
+    // resolveReconnectConflict performs AFTER reconfirming authority — so
+    // the real wait below lands strictly between reconfirmAuthority()
+    // succeeding and the synchronous authority gate being checked.
+    const originalGet = deviceA2.get.bind(deviceA2);
+    let releaseGate: () => void = () => {};
+    const gate = new Promise<void>(resolve => { releaseGate = resolve; });
+    let paused = false;
+    deviceA2.get = async readPath => {
+      if (readPath === `lobbies/${code}/writeGuard` && !paused) {
+        paused = true;
+        await gate;
+      }
+      return originalGet(readPath);
+    };
+
+    const resolving = resolveReconnectConflict("useRemote");
+    await vi.waitFor(() => {
+      if (!paused) throw new Error("expected the guard read to be paused");
+    }, { timeout: 5000, interval: 20 });
+
+    // Genuinely wait past the real 30s lease — no mocked clock, no fake
+    // timers. Nothing else touches writeGuard/checkpoint during this wait.
+    await new Promise(resolve => setTimeout(resolve, LEASE_MS + 2000));
+
+    deviceA2.get = originalGet;
+    releaseGate();
+    const result = await resolving;
+    deviceA2.transaction = originalTransaction;
+
+    expect(result).toBe("stale");
+    expect(useStorytellerStore.getState().game).toEqual(localGameBefore); // untouched
+    expect(await deviceA2.get(`lobbies/${code}/writeGuard`)).toEqual(guardBefore); // unchanged throughout
+    expect(await deviceA2.get(`lobbies/${code}/checkpoint`)).toEqual(checkpointBefore);
+  }, 45000);
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9C.2A.2A remediation, Finding H3 — disposal must prove lease
+// release, against a real emulator with rules enforced throughout. `release()`
+// no longer uses a transaction at all (the historical bug's precondition —
+// a transaction updater invoked against a locally-cached, possibly-stale
+// view of /writer that can legitimately abort without ever reaching the
+// server), so the empty-cache class of bug this closes cannot recur by
+// construction; the tests below prove the DIRECT fenced write's observable
+// behavior across every outcome the finding's classification names.
+// ---------------------------------------------------------------------------
+describe("OPUS-001-CONTRACT-H3: disposal proves lease release against real enforced rules", () => {
+  test("H3-1: a successful dispose() genuinely changes server state — verified via an independent connection, not merely a locally-resolved promise", async () => {
+    const code = "H31AAAAA", st = "h31-storyteller";
+    const raw = backendFor(st);
+    await createLobby(raw, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(raw, code);
+    const writer = new SessionWriter(raw, code, session.id);
+    await writer.start();
+    await writer.dispose();
+    // A genuinely independent connection/context confirms the server no
+    // longer regards this token's lease as valid.
+    const lease = await backendFor(st).get(`lobbies/${code}/writer`) as { token: string; expiresAt: number } | undefined;
+    expect(!lease || lease.token !== writer.token || lease.expiresAt <= Date.now()).toBe(true);
+  });
+
+  test("H3-2: successful dispose() allows an immediate replacement writer to acquire the lease — no forced-expiry precondition needed", async () => {
+    const code = "H32AAAAA", st = "h32-storyteller";
+    const raw = backendFor(st);
+    await createLobby(raw, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(raw, code);
+    const writer = new SessionWriter(raw, code, session.id);
+    await writer.start();
+    await writer.dispose(); // no forceLeaseExpiry: dispose() alone must be sufficient
+    const replacement = new SessionWriter(backendFor(st), code, session.id);
+    disposals.push(() => replacement.dispose());
+    await replacement.start(); // must succeed immediately, not throw "Another Storyteller tab..."
+    expect(await backendFor(st).get(`lobbies/${code}/writer`)).toMatchObject({ token: replacement.token });
+  });
+
+  test("H3-3: disposing a stale writer whose lease was legitimately reclaimed by another valid writer resolves without altering the foreign lease", async () => {
+    const code = "H33AAAAA", st = "h33-storyteller";
+    const rawA = backendFor(st);
+    await createLobby(rawA, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(rawA, code);
+    const writerA = new SessionWriter(rawA, code, session.id);
+    await writerA.start();
+    await forceLeaseExpiry(code);
+    const writerB = new SessionWriter(backendFor(st), code, session.id);
+    disposals.push(() => writerB.dispose());
+    await writerB.start(); // legitimately reclaims — writerA is now stale
+    const foreignLeaseBefore = await backendFor(st).get(`lobbies/${code}/writer`);
+
+    await writerA.dispose(); // stale writer disposes AFTER already losing the lease — must not throw
+
+    const foreignLeaseAfter = await backendFor(st).get(`lobbies/${code}/writer`);
+    expect(foreignLeaseAfter).toEqual(foreignLeaseBefore); // untouched by the stale writer's disposal
+  });
+
+  test("H3-4: a release that cannot reach the server over the network causes dispose() to reject, rather than silently reporting success", async () => {
+    const code = "H34AAAAA", st = "h34-storyteller";
+    const raw = backendFor(st);
+    await createLobby(raw, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(raw, code);
+    const writer = new SessionWriter(raw, code, session.id);
+    await writer.start();
+    const originalSet = raw.set.bind(raw);
+    let calls = 0;
+    raw.set = async () => { calls++; throw new Error("network offline"); };
+    await expect(writer.dispose()).rejects.toThrow();
+    expect(calls).toBeGreaterThan(1); // the writer's own retry budget was actually spent, not a single silent guess
+    raw.set = originalSet;
+    await writer.dispose(); // clean up for real, now that "the network" is back
+  }, 15000);
+
+  test("H3-5: rapid reconnect stays healthy against real enforced rules — dispose then immediately re-acquire, repeated", async () => {
+    const code = "H35AAAAA", st = "h35-storyteller";
+    const seedBackend = backendFor(st);
+    await createLobby(seedBackend, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(seedBackend, code);
+    let previous: SessionWriter | null = null;
+    for (let i = 0; i < 3; i++) {
+      if (previous) await previous.dispose();
+      const writer = new SessionWriter(backendFor(st), code, session.id);
+      await writer.start(); // must never spuriously fail with "Another Storyteller tab..."
+      previous = writer;
+    }
+    disposals.push(() => previous!.dispose());
+  });
 });

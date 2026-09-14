@@ -3,6 +3,31 @@ import type { GuardStamp } from "@/stores/types";
 import { guardSchema, leaseSchema, LifecycleError, requireActiveSession, retryTransient, sessionPath } from "./lifecycle";
 
 export const LEASE_MS = 30_000;
+/** Default synchronous fencing margin for `holdsAuthority` (Finding H1):
+ * the buffer, in ms, subtracted from a lease's recorded expiry before it is
+ * treated as no longer provably valid. Comfortably smaller than the renewal
+ * cadence (LEASE_MS / 3) so ordinary renewal never trips it, while still
+ * absorbing clock-estimate slop around the instant of a destructive commit. */
+export const FENCE_MARGIN_MS = 1000;
+
+/** A proof that this writer held (or validly reclaimed) the exclusive
+ * `writer` lease continuously, returned by `reconfirmAuthority()`. Checked
+ * synchronously via `holdsAuthority()` immediately before a destructive
+ * mutation that must never apply against content compared under authority
+ * that has since lapsed or been reclaimed after a gap (Finding H1). Not
+ * itself proof of anything once time has passed or the writer has moved to
+ * a new epoch — it must be re-validated at the point of use, not cached. */
+export type AuthorityHandle = {
+  epoch: number;
+  expiresAt: number;
+};
+
+function isPermissionDenied(error: unknown): boolean {
+  if (error instanceof LifecycleError) return false;
+  const code = typeof error === "object" && error !== null ? String((error as { code?: unknown }).code ?? "") : "";
+  const message = error instanceof Error ? error.message : String(error);
+  return /permission[_-]denied/i.test(code) || /permission[_-]denied/i.test(message);
+}
 
 /** One tab owns one lease. Every data write carries its token and revision;
  * Firebase rules fence delayed writes from expired or replaced writers. */
@@ -24,6 +49,16 @@ export class SessionWriter implements RoomBackend {
   private stopped = false;
   private closing = false;
   private renewal: ReturnType<typeof setInterval> | undefined;
+  /** The exact expiry this writer most recently, successfully wrote to the
+   * server for its own lease (Finding H1). Updated on every successful
+   * start()/renew(), never guessed or extrapolated between renewals. */
+  private leaseExpiresAt = 0;
+  /** Bumped only when a renewal *reclaims* a lease this writer's own
+   * bookkeeping shows had already lapsed — never on an ordinary renewal of
+   * a still-valid lease. A handle from `reconfirmAuthority()` whose epoch no
+   * longer matches proves this writer's hold was not continuous since that
+   * handle was issued, even if `isStopped()` has not (yet) caught up. */
+  private leaseEpoch = 0;
   readonly token = crypto.randomUUID();
   readonly root: string;
   private readonly direct: RoomBackend;
@@ -64,7 +99,15 @@ export class SessionWriter implements RoomBackend {
     const offset = await this.raw.get(".info/serverTimeOffset");
     this.offset = typeof offset === "number" && Number.isFinite(offset) ? offset : 0;
     await this.renew();
-    if (this.stopped) { await this.release(); throw new LifecycleError("cancelled", "Session cancelled."); }
+    if (this.stopped) {
+      // This writer's own later dispose() (always invoked by the disposal
+      // barrier once this rejection settles) is the canonical place a
+      // release failure surfaces; here, the session was cancelled — that is
+      // always the right error to throw regardless of this best-effort
+      // early release attempt's own outcome.
+      await this.release().catch(() => {});
+      throw new LifecycleError("cancelled", "Session cancelled.");
+    }
     const guard = await this.raw.get(`${this.root}/writeGuard`);
     this.assertActive();
     const observed = guard != null ? guardSchema.parse(guard) : null;
@@ -77,6 +120,13 @@ export class SessionWriter implements RoomBackend {
   private async renew() {
     if (this.stopped) throw new LifecycleError("cancelled", "Session closed.");
     const now = Date.now() + this.offset;
+    // A renewal that finds this writer's own previously-recorded lease
+    // already lapsed is a RECLAIM, not a continuation of the same
+    // ownership interval — captured before the transaction runs so it
+    // reflects this writer's own bookkeeping, not a value the transaction's
+    // (possibly multiply-invoked) updater could see differently (Finding
+    // H1: "leaseEpoch does not change on ordinary renewal").
+    const reclaiming = now >= this.leaseExpiresAt;
     const acquired = await this.raw.transaction(`${this.root}/writer`, current => {
       if (this.stopped) return undefined;
       const lease = current == null ? null : leaseSchema.parse(current);
@@ -84,6 +134,8 @@ export class SessionWriter implements RoomBackend {
       return { token: this.token, expiresAt: now + LEASE_MS };
     });
     if (!acquired) throw new LifecycleError("conflict", "Another Storyteller tab controls this lobby. Close it, then retry after 30 seconds.");
+    if (reclaiming) this.leaseEpoch++;
+    this.leaseExpiresAt = now + LEASE_MS;
   }
   /** Synchronously re-proves current server writer authority by reusing the
    * exact same lease-acquisition/renewal transaction the renewal interval
@@ -93,15 +145,67 @@ export class SessionWriter implements RoomBackend {
    * lease is currently valid); a successful call also extends that lease
    * by another LEASE_MS. Production behavior — real callers (explicit
    * reconnect-conflict resolution) rely on this to confirm authority
-   * before applying a Storyteller's choice, not a test-only hook. */
-  async reconfirmAuthority(): Promise<void> {
+   * before applying a Storyteller's choice, not a test-only hook.
+   *
+   * Returns an AuthorityHandle (Finding H1) representing the confirmed
+   * continuous-authority interval as of THIS call — it is a snapshot, not
+   * a live claim, and must be re-validated via `holdsAuthority()`
+   * synchronously, immediately before any destructive use, never cached
+   * across an intervening await. */
+  async reconfirmAuthority(): Promise<AuthorityHandle> {
     await this.renew();
+    return { epoch: this.leaseEpoch, expiresAt: this.leaseExpiresAt };
   }
-  private async release() {
-    await this.raw.transaction(`${this.root}/writer`, current => {
-      const lease = leaseSchema.safeParse(current);
-      return lease.success && lease.data.token === this.token ? { token: this.token, expiresAt: 0 } : undefined;
-    });
+  /** Synchronous production check (Finding H1): does this writer still
+   * provably hold the exact continuous-authority interval `handle`
+   * represents, with at least `marginMs` of headroom before it could have
+   * lapsed? No I/O, no await — callers gate a destructive mutation on this
+   * with nothing else in between, so a lease that lapses or gets reclaimed
+   * DURING a slow intervening read (the exact race Astra reproduced: reads
+   * outliving the 30s lease before `useRemote` replaced local game state)
+   * is caught here rather than trusted on stale evidence. Deliberately more
+   * than `!isStopped()` alone: the passive renewal interval only notices a
+   * lapse on its own ~10s cadence, so a check that only asked "has anything
+   * already stopped this writer" could still read true during exactly the
+   * window this exists to close. */
+  holdsAuthority(handle: AuthorityHandle, marginMs: number): boolean {
+    if (this.stopped) return false;
+    if (this.leaseEpoch !== handle.epoch) return false;
+    const now = Date.now() + this.offset;
+    return now + marginMs < this.leaseExpiresAt;
+  }
+  /** Releases this writer's lease with a fenced, single direct write rather
+   * than a transaction (Finding H3): a transaction's updater can be invoked
+   * against a locally-cached, possibly-stale `null` view of `/writer` and
+   * legitimately abort without ever reaching the server — `dispose()` must
+   * never resolve as if released when that happened. `set()` instead goes
+   * straight to the server; Firebase rules (unchanged) already enforce the
+   * exact fencing this needs: our own token may always release itself,
+   * `expiresAt: 0` is explicitly permitted regardless of session state, and
+   * a foreign token's still-valid lease cannot be overwritten. */
+  private async release(): Promise<void> {
+    // Independent of `this.abort` — stop() (always called before dispose()
+    // reaches here) aborts that controller, and reusing it would make
+    // disposal cancel its own release attempt before a single request went
+    // out. Fresh per call; nothing else needs to cancel a release in flight.
+    const controller = new AbortController();
+    try {
+      await retryTransient(() => this.raw.set(`${this.root}/writer`, { token: this.token, expiresAt: 0 }), controller.signal);
+      return; // The server accepted the write: release is confirmed.
+    } catch (error) {
+      if (!isPermissionDenied(error)) throw error; // Network/other failure: server state unproven — propagate.
+    }
+    // Denied: this token no longer unconditionally owns the write. Read
+    // current server truth to classify WHY, rather than guessing.
+    const current = await this.raw.get(`${this.root}/writer`);
+    const lease = leaseSchema.safeParse(current);
+    if (!lease.success) return; // Absent/malformed: no valid lease exists to hold us back.
+    const now = Date.now() + this.offset;
+    if (lease.data.token !== this.token) return; // A foreign token already owns it, valid or not — we are not the owner either way.
+    if (lease.data.expiresAt <= now) return; // Our own record is already expired server-side.
+    // Our own token still shows a currently-valid lease and the direct
+    // write was still denied: the release did not genuinely happen.
+    throw new LifecycleError("conflict", "Could not confirm the writer lease was released.");
   }
   stop() {
     if (this.stopped) return;

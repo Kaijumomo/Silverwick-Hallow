@@ -38,20 +38,21 @@ describe("disposal barrier: rapid retry / double reconnect", () => {
     await waitFor(() => expect(useSessionRuntime.getState().backend).not.toBeNull());
     const writer1 = useSessionRuntime.getState().backend!;
 
-    // Hold back the very next /writer transaction — this is writer1's own
-    // release() call, queued by its disposal once the upcoming retry's
+    // Hold back the very next /writer set() — this is writer1's own
+    // release() call (Finding H3: release is now a single fenced set(), not
+    // a transaction), queued by its disposal once the upcoming retry's
     // cleanup fires (dispose() is chained, not called synchronously in the
     // cleanup itself).
-    const originalTransaction = b.transaction.bind(b);
+    const originalSet = b.set.bind(b);
     let releaseGate: () => void = () => {};
     const gate = new Promise<void>(resolve => { releaseGate = resolve; });
     let intercepted = false;
-    b.transaction = async (path, change) => {
+    b.set = async (path, value) => {
       if (path === `${root}/writer` && !intercepted) {
         intercepted = true;
         await gate;
       }
-      return originalTransaction(path, change);
+      return originalSet(path, value);
     };
 
     act(() => { retryStorytellerSession(); });
@@ -66,7 +67,7 @@ describe("disposal barrier: rapid retry / double reconnect", () => {
     expect(useSessionRuntime.getState().errors.session).toBeUndefined();
     expect(useSessionRuntime.getState().backend).toBeNull(); // not yet re-acquired
 
-    b.transaction = originalTransaction;
+    b.set = originalSet;
     releaseGate();
 
     await waitFor(() => expect(useSessionRuntime.getState().backend).not.toBeNull());
