@@ -77,6 +77,37 @@ export type Statuses = Record<string, boolean>;
 export type GrimoireMode = "ring" | "freeRoam";
 export type TokenPosition = { x: number; y: number };
 
+/** `writeGuard` is not literally allocated by Firebase: a SessionWriter reads
+ * the current server guard after acquiring its lease, initializes its local
+ * revision counter from that observation, and increments it locally for each
+ * commit thereafter. Firebase rules enforce that accepted revisions only
+ * increase. Treat a GuardStamp as client-allocated from server-observed
+ * state, with server-enforced monotonic ordering — never as a timestamp. */
+export type GuardStamp = {
+  token: string;
+  revision: number;
+};
+
+/** Persisted Storyteller reconnect/acknowledgement metadata, scoped to one
+ * (code, sessionId) pair. See src/firebase/reconnectDecision.ts (Phase
+ * 9C.2A, OPUS-001) for how this is used to decide reconnect outcomes. */
+export type SyncMeta = {
+  code: string;
+  sessionId: string;
+  /** Latest server guard this local store has positively accepted as its
+   * durable baseline — from our own writer's success, or an accepted
+   * (automatic or explicit) remote restore. */
+  ackedGuard: GuardStamp | null;
+  /** Highest local game sequence known to have been included in a
+   * successful projection/checkpoint flush. */
+  ackedGameSeq: number;
+  /** Most recent allocated writer revision whose outcome may need
+   * reconciliation after an interruption. An atomic token/revision pair —
+   * never decomposed into independent loose fields that could accidentally
+   * combine values from different writer instances. */
+  lastAttempt: GuardStamp | null;
+};
+
 export type STPlayerRecord = {
   id: PlayerId;
   name: string;

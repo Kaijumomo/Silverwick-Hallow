@@ -9,7 +9,7 @@ import { useStorytellerSync } from "./storytellerSync";
 
 beforeEach(() => {
   usePlayerStore.getState().reset();
-  useStorytellerStore.setState({ game: null, lobby: null, undoStack: [] });
+  useStorytellerStore.setState({ game: null, lobby: null, undoStack: [], sync: null, localSeq: 0 });
 });
 afterEach(cleanup);
 

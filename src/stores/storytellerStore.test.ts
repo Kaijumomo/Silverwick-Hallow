@@ -385,4 +385,52 @@ describe("migrateStoreState", () => {
     // Second read must return false — flag was consumed.
     expect(takeMigrationResetFlag()).toBe(false);
   });
+
+  // -------------------------------------------------------------------------
+  // Phase 9C.2A (OPUS-001): v11 -> v12 reconnect watermark migration
+  // -------------------------------------------------------------------------
+  it("v11->v12: a legacy store with no localSeq/sync fields migrates safely, initializing localSeq at 0 and sync at null", () => {
+    const state = { game: minimalPersistedGame(), undoStack: [] };
+    const result = migrateStoreState(state, 11) as { localSeq: number; sync: unknown };
+    expect(takeMigrationResetFlag()).toBe(false);
+    expect(result.localSeq).toBe(0);
+    expect(result.sync).toBeNull();
+  });
+
+  it("v11->v12: does not invent acknowledgement evidence from an existing legacy game's content", () => {
+    // A legacy game with substantial content (multiple players, mid-game
+    // phase) must still migrate to sync:null — its size/phase/day is never
+    // treated as proof of prior acknowledgement.
+    const state = {
+      game: minimalPersistedGame({
+        phase: "night", day: 3,
+        players: { a: { id: "a", name: "Alice", seat: 0, joinedAt: 1, actualRole: "chef", shownRole: null, shownAlignment: null, behaviorMode: "normal", publicDisplayRole: null, alive: true, ghostVote: true, abilityUsed: false, statuses: {}, reminders: [], stNotes: "", isTraveler: false } },
+        seatOrder: ["a"],
+      }),
+      undoStack: [],
+    };
+    const result = migrateStoreState(state, 11) as { sync: unknown; game: Record<string, unknown> };
+    expect(result.sync).toBeNull();
+    expect(result.game.day).toBe(3); // content itself is preserved...
+    // ...but that content carries no acknowledgement weight (see
+    // reconnectDecision's "no sync metadata" rule: a valid remote checkpoint
+    // always outranks unevidenced legacy local state).
+  });
+
+  it("v11->v12 does not crash on a legacy store already at a later-but-still-pre-12 hypothetical version and passes schema validation", () => {
+    const state = { game: minimalPersistedGame(), undoStack: [], lobby: null };
+    expect(() => migrateStoreState(state, 11)).not.toThrow();
+    expect(takeMigrationResetFlag()).toBe(false);
+  });
+
+  it("a current (v12) state with populated sync/localSeq passes through unchanged (same reference, same values)", () => {
+    const state = {
+      game: minimalPersistedGame(), undoStack: [], localSeq: 7,
+      sync: { code: "ABCD2345", sessionId: "s1", ackedGuard: { token: "t", revision: 2 }, ackedGameSeq: 5, lastAttempt: null },
+    };
+    const result = migrateStoreState(state, 12) as { localSeq: number; sync: unknown };
+    expect(result).toBe(state);
+    expect(result.localSeq).toBe(7);
+    expect(result.sync).toEqual(state.sync);
+  });
 });

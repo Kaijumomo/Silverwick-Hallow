@@ -1,4 +1,5 @@
 import type { Json, RoomBackend } from "./backend";
+import type { GuardStamp } from "@/stores/types";
 import { guardSchema, leaseSchema, LifecycleError, requireActiveSession, retryTransient, sessionPath } from "./lifecycle";
 
 export const LEASE_MS = 30_000;
@@ -7,6 +8,15 @@ export const LEASE_MS = 30_000;
  * Firebase rules fence delayed writes from expired or replaced writers. */
 export class SessionWriter implements RoomBackend {
   onStop?: () => void;
+  /** Fires with {token, revision} the instant a commit allocates that
+   * revision — before the network round trip resolves. Phase 9C.2A plumbing
+   * only; does not alter what Firebase writes or weaken retry/fencing. */
+  onAttempt?: (guard: GuardStamp) => void;
+  /** Fires with {token, revision} only when that exact commit has genuinely
+   * succeeded AND this writer has not since terminally stopped — the same
+   * gate `report(null)` already uses below, so a belated post-stop success
+   * can never reach this hook either. */
+  onAck?: (guard: GuardStamp) => void;
   private tail: Promise<unknown> = Promise.resolve();
   private abort = new AbortController();
   private revision = 0;
@@ -40,7 +50,14 @@ export class SessionWriter implements RoomBackend {
       onDisconnectSet: (path, value) => this.onDisconnectSet(path, value),
     };
   }
-  async start() {
+  /** Returns the server guard observed immediately after this writer
+   * acquired its lease — the raw value stored at `writeGuard` before this
+   * writer has committed anything, or null if none exists yet (a brand new
+   * lobby). This is `writeGuard` as data, not as this writer's own identity:
+   * its token (if any) belongs to whichever writer committed last, never to
+   * `this.token`. Reconnect compares against this, never a snapshot taken
+   * before the lease was held. */
+  async start(): Promise<GuardStamp | null> {
     this.assertActive();
     const session = await requireActiveSession(this.raw, this.code);
     if (session.id !== this.sessionId) throw new LifecycleError("invalid", "Saved game does not match this lobby.");
@@ -50,10 +67,12 @@ export class SessionWriter implements RoomBackend {
     if (this.stopped) { await this.release(); throw new LifecycleError("cancelled", "Session cancelled."); }
     const guard = await this.raw.get(`${this.root}/writeGuard`);
     this.assertActive();
-    if (guard != null) this.revision = guardSchema.parse(guard).revision;
+    const observed = guard != null ? guardSchema.parse(guard) : null;
+    if (observed) this.revision = observed.revision;
     this.renewal = setInterval(() => {
       void retryTransient(() => this.renew(), this.abort.signal).catch(error => { this.stop(); this.report(error); });
     }, LEASE_MS / 3);
+    return observed;
   }
   private async renew() {
     if (this.stopped) throw new LifecycleError("cancelled", "Session closed.");
@@ -129,7 +148,9 @@ export class SessionWriter implements RoomBackend {
     if (Object.keys(updates).some(path => !path.startsWith(this.root + "/"))) throw new LifecycleError("invalid", "A write targeted another lobby.");
     const revision = ++this.revision;
     const guardPath = `${this.root}/writeGuard`;
-    const payload = { ...updates, [guardPath]: { token: this.token, revision } };
+    const stamp: GuardStamp = { token: this.token, revision };
+    const payload = { ...updates, [guardPath]: stamp };
+    this.onAttempt?.(stamp);
     try { await retryTransient(async () => {
       // Read the receipt on retry: an acknowledged server write with a lost
       // response must not be repeated under a different revision.
@@ -150,9 +171,10 @@ export class SessionWriter implements RoomBackend {
     // A commit sent before a terminal stop (e.g. a real lease-renewal denial)
     // can still land successfully afterward. That belated success belongs to
     // this one write, not to the writer's lifetime — it must not clear an
-    // error the stop already surfaced. Once stopped, only a genuine restart
-    // (a new writer/session) may clear the "write" error.
-    if (!this.stopped) this.report(null);
+    // error the stop already surfaced, nor advance any reconnect watermark.
+    // Once stopped, only a genuine restart (a new writer/session) may clear
+    // the "write" error or the acknowledgement state.
+    if (!this.stopped) { this.report(null); this.onAck?.(stamp); }
   }
   get(path: string) { return this.raw.get(path); }
   subscribe(path: string, cb: (raw: unknown) => void, error?: (error: unknown) => void) { return this.raw.subscribe(path, cb, error); }

@@ -17,6 +17,7 @@ import type {
   Alignment,
   BehaviorMode,
   GrimoireMode,
+  GuardStamp,
   NightStepRecord,
   NightStepStatus,
   PlayerId,
@@ -24,6 +25,7 @@ import type {
   Script,
   STPlayerRecord,
   StorytellerLobbyRecord,
+  SyncMeta,
   TokenPosition,
 } from "./types";
 
@@ -101,6 +103,17 @@ export type StorytellerStore = {
   grimoireMode: GrimoireMode;
   tokenPositions: Record<PlayerId, TokenPosition>;
 
+  // --- Phase 9C.2A (OPUS-001) reconnect/acknowledgement watermarks -------
+  /** Local game-content mutation counter. Increases exactly once per game
+   * mutation that should eventually be represented by a projection/
+   * checkpoint (see the central bumping `set` wrapper below). Never
+   * wall-clock; never advances for UI-only/local-layout state. */
+  localSeq: number;
+  /** Persisted reconnect metadata scoped to the current (code, sessionId).
+   * Null means "no evidence" — a legacy v11 store, or no scope established
+   * yet. See src/firebase/reconnectDecision.ts. */
+  sync: SyncMeta | null;
+
   newGame: (scriptId: string, opts?: NewGameOpts) => void;
   dealRolePool: () => SetupCommandResult;
   beginNightOne: () => SetupCommandResult;
@@ -169,6 +182,38 @@ export type StorytellerStore = {
   setGrimoireMode: (mode: GrimoireMode) => void;
   setTokenPosition: (id: PlayerId, x: number, y: number) => void;
   clearTokenPositions: () => void;
+
+  // --- Phase 9C.2A (OPUS-001) reconnect/acknowledgement plumbing ---------
+  /** Establish (or preserve) sync metadata for exactly this scope. A no-op
+   * when `sync` already matches (code, sessionId) — creating a replacement
+   * SessionWriter must never overwrite unresolved `lastAttempt` evidence
+   * for the same scope. Only replaces `sync` outright on a genuine scope
+   * change (a different lobby/session than what's currently tracked). */
+  ensureSyncScope: (code: string, sessionId: string) => void;
+  /** Record that a writer commit was attempted with this exact
+   * token/revision pair, for this scope. Does not touch `game` — writer
+   * attempts are not game-content mutations. */
+  noteWriterAttempt: (code: string, sessionId: string, guard: GuardStamp) => void;
+  /** Record that a writer commit genuinely succeeded while the writer
+   * remained active, for this scope. Advances `ackedGuard` and reconciles
+   * a matching `lastAttempt`. Also used to promote the accepted guard when
+   * reconnect recognizes a lost acknowledgement. Does not touch `game`. */
+  noteWriterAck: (code: string, sessionId: string, guard: GuardStamp) => void;
+  /** Advance `ackedGameSeq` to exactly `seqAtFlush` — the localSeq value
+   * captured at the same moment the flushed game snapshot was captured —
+   * once that specific projection flush has genuinely succeeded while the
+   * writer remained active. Never advances past what was actually
+   * acknowledged, and never regresses. Does not touch `game`. */
+  acknowledgeGameFlush: (code: string, sessionId: string, seqAtFlush: number) => void;
+  /** Atomically replace `game` with a validated remote checkpoint, clear
+   * undo (because remote state was deliberately accepted), and make the
+   * restored game clean with respect to the current local sequence by
+   * setting `ackedGameSeq` to it and `ackedGuard` to the newly accepted
+   * remote guard (null only in the legacy/no-writeGuard-yet edge case).
+   * This one replacement is deliberately exempt from the general "a `game`
+   * change bumps localSeq" rule: adopting remote content is the opposite
+   * of new local intent. */
+  restoreRemoteCheckpoint: (game: StorytellerLobbyRecord, guard: GuardStamp | null) => void;
 };
 
 const pushUndo = (
@@ -301,6 +346,17 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
       }
     }
   }
+  // v12 (Phase 9C.2A, OPUS-001) introduces localSeq/sync reconnect
+  // watermarks. A legacy v11 store never tracked them: initialize localSeq
+  // safely at 0 and leave sync null. Never invent acknowledgement evidence
+  // from a legacy game's prior content, timestamps, or size — a valid
+  // remote checkpoint outranks unevidenced legacy local state (see
+  // reconnectDecision's "no sync metadata" rule).
+  if (fromVersion < 12) {
+    const withSync = s as { localSeq?: number; sync?: unknown };
+    withSync.localSeq = 0;
+    withSync.sync = null;
+  }
   const check = StorytellerStateSchema.safeParse(state);
   if (!check.success) {
     // eslint-disable-next-line no-console
@@ -314,15 +370,59 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   return state;
 }
 
+const guardsEqual = (a: GuardStamp | null, b: GuardStamp | null): boolean =>
+  a !== null && b !== null && a.token === b.token && a.revision === b.revision;
+
+/** Internal escape hatch: a `set` partial carrying this key bypasses the
+ * central localSeq-bumping wrapper below. Never exported — only
+ * `restoreRemoteCheckpoint` (the one legitimate "adopt different game
+ * content without declaring new local intent" mutation) uses it, and it is
+ * stripped before the partial reaches zustand. */
+const SKIP_LOCAL_SEQ = Symbol("skipLocalSeq");
+type StorytellerPatch =
+  | (Partial<StorytellerStore> & { [SKIP_LOCAL_SEQ]?: boolean })
+  | ((state: StorytellerStore) => Partial<StorytellerStore> & { [SKIP_LOCAL_SEQ]?: boolean });
+
 export const useStorytellerStore = create<StorytellerStore>()(
   persist(
-    (set, get) => ({
+    (rawSet, get) => {
+      // Central, reviewable game-mutation mechanism (Phase 9C.2A, section 2):
+      // every existing action below still calls plain `set(...)` — this
+      // shadows that name for the rest of the creator closure, so no
+      // individual action needed to change. Any partial that changes `game`
+      // to a new, non-null reference bumps `localSeq` exactly once,
+      // automatically, with no per-action bookkeeping to forget. Actions
+      // that only touch UI-only/local-layout fields (view, selectedPlayerId,
+      // grimoireMode, tokenPositions, pendingKnocks, customScripts, lobby,
+      // sync, localSeq itself) never include `game` in their partial, so
+      // they never bump it. The one deliberate exception — adopting a
+      // validated remote checkpoint, which must NOT read as new unsaved
+      // Storyteller intent — goes through restoreRemoteCheckpoint, which
+      // tags its partial with SKIP_LOCAL_SEQ.
+      //
+      // The cast back to `typeof rawSet` is the single contained boundary
+      // where this wrapper's own permissive parameter type meets zustand's
+      // real (overloaded, middleware-augmented) setter type; every action
+      // below type-checks against that exact original type, unchanged.
+      const set = ((partial: StorytellerPatch, replace?: boolean) => {
+        rawSet((state: StorytellerStore) => {
+          const resolved = typeof partial === "function" ? partial(state) : partial;
+          const { [SKIP_LOCAL_SEQ]: skip, ...patch } = resolved;
+          if (!skip && "game" in patch && patch.game !== state.game && patch.game != null) {
+            return { ...patch, localSeq: state.localSeq + 1 };
+          }
+          return patch;
+        }, replace as Parameters<typeof rawSet>[1]);
+      }) as unknown as typeof rawSet;
+      return {
       game: null,
       view: "home",
       undoStack: [],
       selectedPlayerId: null,
       customScripts: {},
       lobby: null,
+      localSeq: 0,
+      sync: null,
       pendingKnocks: [],
       grimoireMode: "ring",
       tokenPositions: {},
@@ -1137,10 +1237,51 @@ export const useStorytellerStore = create<StorytellerStore>()(
         })),
 
       clearTokenPositions: () => set({ tokenPositions: {} }),
-    }),
+
+      ensureSyncScope: (code, sessionId) => set(state => {
+        if (state.sync && state.sync.code === code && state.sync.sessionId === sessionId) return {};
+        return { sync: { code, sessionId, ackedGuard: null, ackedGameSeq: 0, lastAttempt: null } };
+      }),
+
+      noteWriterAttempt: (code, sessionId, guard) => set(state => {
+        if (!state.sync || state.sync.code !== code || state.sync.sessionId !== sessionId) return {};
+        return { sync: { ...state.sync, lastAttempt: guard } };
+      }),
+
+      noteWriterAck: (code, sessionId, guard) => set(state => {
+        if (!state.sync || state.sync.code !== code || state.sync.sessionId !== sessionId) return {};
+        return {
+          sync: {
+            ...state.sync,
+            ackedGuard: guard,
+            // A successful active-writer acknowledgement reconciles the
+            // matching lastAttempt; it must not clear an unrelated one (a
+            // newer attempt already in flight would never equal this guard).
+            lastAttempt: guardsEqual(state.sync.lastAttempt, guard) ? null : state.sync.lastAttempt,
+          },
+        };
+      }),
+
+      acknowledgeGameFlush: (code, sessionId, seqAtFlush) => set(state => {
+        if (!state.sync || state.sync.code !== code || state.sync.sessionId !== sessionId) return {};
+        if (state.sync.ackedGameSeq >= seqAtFlush) return {}; // never regress, never re-advance redundantly
+        return { sync: { ...state.sync, ackedGameSeq: seqAtFlush } };
+      }),
+
+      restoreRemoteCheckpoint: (game, guard) => set(state => ({
+        game,
+        undoStack: [],
+        selectedPlayerId: null,
+        sync: state.sync && state.sync.code === game.code
+          ? { ...state.sync, ackedGuard: guard, ackedGameSeq: state.localSeq }
+          : { code: game.code, sessionId: state.sync?.sessionId ?? state.lobby?.sessionId ?? "", ackedGuard: guard, ackedGameSeq: state.localSeq, lastAttempt: null },
+        [SKIP_LOCAL_SEQ]: true,
+      })),
+      };
+    },
     {
       name: "new-blood-st",
-      version: 11,
+      version: 12,
       storage: createJSONStorage(() => localStorage),
       migrate: migrateStoreState,
       partialize: (s) => ({
@@ -1151,6 +1292,8 @@ export const useStorytellerStore = create<StorytellerStore>()(
         lobby: s.lobby,
         grimoireMode: s.grimoireMode,
         tokenPositions: s.tokenPositions,
+        localSeq: s.localSeq,
+        sync: s.sync,
       }),
     }
   )

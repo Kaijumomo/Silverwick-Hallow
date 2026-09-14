@@ -14,7 +14,7 @@ const code = "BCDF2345";
 const root = `lobbies/${code}`;
 const disposals: (() => void | Promise<void>)[] = [];
 beforeEach(() => {
-  useStorytellerStore.setState({ game: null, lobby: null, undoStack: [] });
+  useStorytellerStore.setState({ game: null, lobby: null, undoStack: [], sync: null, localSeq: 0 });
   usePlayerStore.getState().reset();
   useSessionRuntime.setState({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0 });
 });
@@ -83,14 +83,20 @@ describe("multiplayer lifecycle", () => {
     await waitFor(() => expect(usePlayerStore.getState().self).toEqual({ shownRole: shown, shownAlignment: alignment }));
     manager.stop();
     await writer.dispose();
-    // A stale local edit must not replace the acknowledged shown identity.
+    // Phase 9C.2A (OPUS-001) reproduction: this edit is made AFTER the
+    // writer stopped, so it was never flushed/acknowledged — it is newer
+    // unacknowledged local work, not a "stale" edit. The replacement
+    // writer's observed remote guard still equals the accepted baseline
+    // (nothing else has committed), so reconnect must KEEP_LOCAL: this
+    // edit survives and gets published by the initial flush, instead of
+    // being silently clobbered by the older acknowledged checkpoint.
     store.getState().setShownRole(id, "saint");
     const replacement = new SessionWriter(b, code, session.id);
     const recovered = await startStorytellerSession(b, lobby, replacement);
     disposals.push(async () => { recovered.stop(); await replacement.dispose(); });
-    expect(store.getState().game!.players[id]!.shownRole).toBe(shown);
+    expect(store.getState().game!.players[id]!.shownRole).toBe("saint");
     expect(store.getState().game!.players[id]!.actualRole).toBe(actual);
-    expect(await b.get(`${root}/player/${id}`)).toEqual({ shownRole: shown, shownAlignment: alignment });
+    expect(await b.get(`${root}/player/${id}`)).toEqual({ shownRole: "saint", shownAlignment: "good" });
     store.getState().setShownRole(id, null);
     await waitFor(() => expect(usePlayerStore.getState().self).toBeNull());
     expect(await b.get(`${root}/player/${id}`)).toBeUndefined();
@@ -456,6 +462,43 @@ describe("multiplayer lifecycle", () => {
     await expect(starting).rejects.toMatchObject({ kind: "cancelled" });
     expect(b.subscribePaths).toEqual([]);
     expect(b.writeLog.some(write => write.path === `${root}/checkpoint`)).toBe(false);
+    await writer.dispose();
+  });
+
+  it("Phase 9C.2A (OPUS-001): a stop during the membership-reconciliation window (after restore, before listeners) cancels the reconnect attempt and installs no watchers", async () => {
+    // Companion to the checkpoint-read cancellation test above, covering the
+    // LATER window section 11 specifically calls out: writer.onStop must be
+    // wired before checkpoint comparison/restoration, not just before the
+    // checkpoint get. A stop landing during reconcileMembership's own awaits
+    // (here, revokePlayerMembership's internal roster re-read) must still
+    // cancel cleanly — no live watchers installed.
+    const { b, lobby, session } = await setup();
+    const initial = useStorytellerStore.getState().game!;
+    const id = initial.seatOrder[0]!; // pre-allocated, still empty
+    await b.set(`${root}/checkpoint`, JSON.stringify({ game: initial, roster: {} }));
+    // Live roster claims this empty seat for a uid with no matching pending
+    // entry — reconcileMembership's second loop will call
+    // revokePlayerMembership(writer, code, id), which re-reads the roster.
+    await b.set(`${root}/roster/ghost-uid`, id);
+    const writer = new SessionWriter(b, code, session.id);
+    let release!: () => void;
+    const originalGet = b.get.bind(b);
+    let rosterReads = 0;
+    b.get = async path => {
+      if (path === `${root}/roster`) {
+        rosterReads++;
+        // The 1st read is startStorytellerSession's own membership read; the
+        // 2nd is inside revokePlayerMembership, during reconciliation.
+        if (rosterReads === 2) await new Promise<void>(resolve => { release = resolve; });
+      }
+      return originalGet(path);
+    };
+    const starting = startStorytellerSession(b, lobby, writer);
+    await waitFor(() => expect(release).toBeDefined());
+    writer.stop();
+    release();
+    await expect(starting).rejects.toThrow();
+    expect(b.subscribePaths).toEqual([]);
     await writer.dispose();
   });
 

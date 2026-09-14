@@ -19,7 +19,7 @@ const code = "BCDF2345";
 const root = `lobbies/${code}`;
 const disposals: (() => void | Promise<void>)[] = [];
 beforeEach(() => {
-  store.setState({ game: null, lobby: null, undoStack: [] });
+  store.setState({ game: null, lobby: null, undoStack: [], sync: null, localSeq: 0 });
   usePlayerStore.getState().reset();
   useSessionRuntime.setState({ backend: null, online: {}, errors: {}, error: null });
   usePacketDeliveryState.setState({ receipts: {}, queued: {} });

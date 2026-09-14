@@ -187,6 +187,19 @@ export const StorytellerGamePersistedSchema = StorytellerLobbyRecordSchema.exten
   pendingPlayers: z.record(z.string(), z.string()).default({}),
 });
 
+export const GuardStampSchema = z.object({
+  token: z.string().min(1),
+  revision: z.number().int().nonnegative(),
+});
+
+export const SyncMetaSchema = z.object({
+  code: z.string().min(1),
+  sessionId: z.string().min(1),
+  ackedGuard: GuardStampSchema.nullable(),
+  ackedGameSeq: z.number().int().nonnegative(),
+  lastAttempt: GuardStampSchema.nullable(),
+});
+
 export const StorytellerStateSchema = z.object({
   game: StorytellerGamePersistedSchema.nullable().optional(),
   view: z.enum(["home", "game", "newgame"]).optional(),
@@ -205,4 +218,9 @@ export const StorytellerStateSchema = z.object({
   tokenPositions: z
     .record(z.object({ x: z.number(), y: z.number() }))
     .optional(),
+  /** Local game-content mutation counter. Never wall-clock; see
+   * src/firebase/reconnectDecision.ts. Legacy (pre-v12) states have none —
+   * migration initializes it, never inferring evidence from prior content. */
+  localSeq: z.number().int().nonnegative().optional(),
+  sync: SyncMetaSchema.nullable().optional(),
 });

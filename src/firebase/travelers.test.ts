@@ -19,7 +19,7 @@ import { StorytellerGamePersistedSchema } from "@/stores/schemas";
 const code = "BCDF2345", root = `lobbies/${code}`;
 const disposals: (() => void | Promise<void>)[] = [];
 beforeEach(() => {
-  store.setState({ game: null, lobby: null, undoStack: [] });
+  store.setState({ game: null, lobby: null, undoStack: [], sync: null, localSeq: 0 });
   usePlayerStore.getState().reset();
   useSessionRuntime.setState({ backend: null, online: {}, errors: {}, error: null });
   usePacketDeliveryState.setState({ receipts: {}, queued: {} });
@@ -59,18 +59,27 @@ describe("Phase 9B membership and private delivery", () => {
     expect(before.isTraveler).toBe(false); expect(before.travelerArrival).toBeUndefined();
     expect(await b.get(`${root}/roster/bob`)).toBe(other);
   });
-  it("writer takeover restores acknowledged Traveler truth and completion over stale local state", async () => {
+  it("writer takeover (Phase 9C.2A/OPUS-001): newer unacknowledged local Traveler truth survives reconnect over the older acknowledged checkpoint", async () => {
     const { b, id, writer, manager, lobby, review } = await setup();
     await publishPrivatePacket(id, review(), writer);
     manager.stop(); await writer.dispose();
+    // This edit happens AFTER the writer stopped, so it was never
+    // flushed/acknowledged — it is newer unacknowledged local work, not
+    // stale data. The next writer's observed remote guard still equals the
+    // accepted baseline (nothing else has committed since), so reconnect
+    // must KEEP_LOCAL rather than silently reverting to the older
+    // acknowledged checkpoint (the OPUS-001 fix).
     store.getState().setTravelerAlignment(id, "good");
     const nextWriter = new SessionWriter(b, code, lobby.sessionId);
     const nextManager = await startStorytellerSession(b, lobby, nextWriter);
     disposals.push(async () => { nextManager.stop(); await nextWriter.dispose(); });
     const restored = store.getState().game!.players[id]!;
-    expect(restored.actualAlignment).toBe("evil");
-    expect(restored.travelerArrival!.demonInfoComplete).toBe(true);
-    expect(restored.publishedPacket!.payload.demon).toBeDefined();
+    expect(restored.actualAlignment).toBe("good");
+    // setTravelerAlignment resets completion and invalidates the previously
+    // published packet — both are genuine consequences of the surviving
+    // local edit, not data loss.
+    expect(restored.travelerArrival!.demonInfoComplete).toBe(false);
+    expect(restored.publishedPacket).toBeUndefined();
     expect(await b.get(`${root}/public/players/${id}/publicDisplayRole`)).toBe("thief");
   });
   it("delivers only to the Traveler and persists ACK completion in the private checkpoint", async () => {

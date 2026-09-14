@@ -1,0 +1,151 @@
+// Phase 9C.2A — OPUS-001 Core Reconnect Integrity.
+//
+// A pure decision module: no Firebase, no Zustand, no I/O, no timers, no
+// wall-clock. It answers exactly one question — "given what the local store
+// remembers and what the server currently shows, what should reconnect do
+// with the local game?" — and returns one of four explicit outcomes.
+//
+// This module intentionally knows nothing about *how* its inputs were
+// gathered (lease acquisition, checkpoint parsing, store persistence). The
+// caller is responsible for acquiring writer authority first, snapshotting
+// local state, validating the remote checkpoint, and then applying the
+// returned decision. See src/firebase/storytellerSync.ts.
+
+// GuardStamp/SyncMeta are the canonical persisted shapes, defined in
+// src/stores/types.ts (a dependency-free leaf module) and re-exported here
+// so consumers of this decision module don't need a second import. This
+// keeps the dependency direction consistent with the rest of the codebase
+// (src/firebase/* depends on src/stores/*, never the reverse).
+export type { GuardStamp, SyncMeta } from "@/stores/types";
+import type { GuardStamp, SyncMeta } from "@/stores/types";
+
+/** The (code, sessionId) pair reconnect is being attempted against right now. */
+export type ReconnectScope = {
+  code: string;
+  sessionId: string;
+};
+
+export type CheckpointState =
+  | { kind: "absent" }
+  | { kind: "invalid" }
+  | { kind: "valid" };
+
+export type ReconnectInputs = {
+  /** Whether a local game exists and belongs to the scope being reconnected to. */
+  localGameInScope: boolean;
+  /** Local game-content sequence number at the moment of comparison. */
+  localSeq: number;
+  /** Persisted sync metadata, whatever scope it currently claims (or null). */
+  sync: SyncMeta | null;
+  /** The (code, sessionId) this reconnect attempt targets. */
+  scope: ReconnectScope;
+  /** Precomputed validity of the remote checkpoint (decoding/schema
+   * validation happens in the caller — this module does no I/O). */
+  checkpoint: CheckpointState;
+  /** The server guard observed immediately after this writer acquired its
+   * lease. Null means the server has no writeGuard yet (brand new lobby). */
+  remoteGuard: GuardStamp | null;
+};
+
+export type ReconnectIncoherentReason =
+  /** Malformed remote checkpoint; no evidenced local dirty claim exists.
+   * Callers preserve the legacy hard-failure behavior for this reason. */
+  | "invalid_checkpoint"
+  /** Malformed remote checkpoint while local carries unacknowledged work
+   * that a blind restore-or-throw would put at risk. */
+  | "invalid_checkpoint_dirty_local"
+  /** The server-observed guard revision is behind our own accepted
+   * baseline for this exact scope — an apparent server rewind. Never
+   * silently guessed past. */
+  | "server_rewind";
+
+export type ReconnectDecision =
+  /** Retain the local game untouched. Reconcile membership, then let the
+   * normal initial projection flush publish the surviving local snapshot. */
+  | { type: "KEEP_LOCAL" }
+  /** Replace local game with the validated remote checkpoint and adopt the
+   * observed remote guard as the new accepted baseline. */
+  | { type: "RESTORE" }
+  /** Remote has advanced beyond our accepted baseline while local carries
+   * unacknowledged work: neither side may be written automatically. */
+  | { type: "CONFLICT" }
+  /** Blocked recovery: never resolved automatically, no silent fallback. */
+  | { type: "INCOHERENT"; reason: ReconnectIncoherentReason };
+
+function guardsEqual(a: GuardStamp, b: GuardStamp): boolean {
+  return a.token === b.token && a.revision === b.revision;
+}
+
+function scopeMatches(sync: SyncMeta, scope: ReconnectScope): boolean {
+  return sync.code === scope.code && sync.sessionId === scope.sessionId;
+}
+
+/**
+ * Pure reconnect decision. The branches below are ordered by priority
+ * (most-certain / most-protective first): absence and validity of the
+ * checkpoint are resolved first, then scope/baseline evidence, then the
+ * exact lost-acknowledgement match, then server rewind, then the
+ * equal-baseline and advanced-baseline cases last.
+ */
+export function decideReconnect(inputs: ReconnectInputs): ReconnectDecision {
+  const { localGameInScope, localSeq, sync, scope, checkpoint, remoteGuard } = inputs;
+
+  // 1. No checkpoint exists at all: there is nothing remote to restore, and
+  // nothing to conflict with. Local — if any — simply continues.
+  if (checkpoint.kind === "absent") return { type: "KEEP_LOCAL" };
+
+  const scopedSync = sync && scopeMatches(sync, scope) ? sync : null;
+  const dirty = localGameInScope && scopedSync !== null && localSeq > scopedSync.ackedGameSeq;
+
+  // 2. The remote recovery object itself is malformed. Never discard local
+  // work because of that; but where there is no evidenced local claim at
+  // stake, preserve the pre-existing hard-failure behavior instead of
+  // inventing a new automatic outcome.
+  if (checkpoint.kind === "invalid") {
+    return dirty
+      ? { type: "INCOHERENT", reason: "invalid_checkpoint_dirty_local" }
+      : { type: "INCOHERENT", reason: "invalid_checkpoint" };
+  }
+
+  // From here, checkpoint.kind === "valid".
+
+  // 3. No sync metadata for this exact scope (legacy v11 store, a brand
+  // new scope, or a scope mismatch) — there is no evidence proving local is
+  // newer than the checkpoint. This intentionally preserves the pre-9C.2A
+  // recovery behavior for legacy/first-time data.
+  if (!scopedSync) return { type: "RESTORE" };
+
+  // 4. Lost acknowledgement: recognized ONLY by an exact atomic match of the
+  // persisted unresolved attempt's token AND revision against what the
+  // server now shows. A token alone (e.g. from a brand new writer) or a
+  // revision alone is never sufficient — never combine a token from one
+  // writer with a revision ceiling generated by another.
+  if (scopedSync.lastAttempt && remoteGuard && guardsEqual(scopedSync.lastAttempt, remoteGuard)) {
+    return { type: "KEEP_LOCAL" };
+  }
+
+  // 5. We have no confirmed baseline yet for this scope (e.g. the very
+  // first attempt for this scope failed in some other way, or this scope's
+  // sync was established without ever having a success). With no baseline
+  // to compare the remote guard against, and no lost-ack match, prefer the
+  // same "no evidence" bias as case 3.
+  if (!scopedSync.ackedGuard) return { type: "RESTORE" };
+
+  // 6. Apparent server rewind: the server-observed guard is missing
+  // entirely, or sits at a revision behind our own accepted baseline for
+  // this scope. Never silently guess past a rewind.
+  if (!remoteGuard || remoteGuard.revision < scopedSync.ackedGuard.revision) {
+    return { type: "INCOHERENT", reason: "server_rewind" };
+  }
+
+  // 7. Remote guard equals the accepted baseline exactly: no server commit
+  // has advanced beyond what local already knows about. Keep local as-is
+  // (this also means: do not clear undo).
+  if (guardsEqual(remoteGuard, scopedSync.ackedGuard)) return { type: "KEEP_LOCAL" };
+
+  // 8. Remote has advanced beyond the accepted baseline and this is not a
+  // recognized lost acknowledgement. This is the core second-device safety
+  // rule: a stale device may not publish over newer state written by
+  // another Storyteller device, but a clean stale device may safely adopt it.
+  return dirty ? { type: "CONFLICT" } : { type: "RESTORE" };
+}

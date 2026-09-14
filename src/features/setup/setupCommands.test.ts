@@ -113,7 +113,7 @@ describe("population and persisted history", () => {
   it("the dealt preparation step survives local reload and private checkpoint decoding", async () => {
     prepare(true);state().dealRolePool();
     const saved=localStorage.getItem("new-blood-st")!;
-    expect(JSON.parse(saved).version).toBe(11);
+    expect(JSON.parse(saved).version).toBe(12);
     store.setState({game:null});localStorage.setItem("new-blood-st",saved);await store.persist.rehydrate();
     expect(game()).toMatchObject({phase:"setup",day:0,setupRolesDealt:true});
     expect(StorytellerGamePersistedSchema.parse(JSON.parse(JSON.stringify(game()))).setupRolesDealt).toBe(true);
@@ -189,7 +189,7 @@ describe("population and persisted history", () => {
   it("current local persistence and checkpoint schema preserve starting count", async () => {
     prepare();state().beginNightOne();
     const saved=localStorage.getItem("new-blood-st")!;
-    expect(JSON.parse(saved).version).toBe(11);
+    expect(JSON.parse(saved).version).toBe(12);
     store.setState({game:null});localStorage.setItem("new-blood-st",saved);
     await store.persist.rehydrate();expect(game().startingNonTravelerCount).toBe(5);
     const checkpoint=JSON.parse(JSON.stringify({game:game(),roster:{}}));

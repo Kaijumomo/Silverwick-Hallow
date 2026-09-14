@@ -56,7 +56,7 @@ afterAll(async () => { if (env) await env.cleanup(); });
 const disposals: (() => void | Promise<void>)[] = [];
 beforeEach(async () => {
   await env.clearDatabase();
-  useStorytellerStore.setState({ game: null, lobby: null, undoStack: [] });
+  useStorytellerStore.setState({ game: null, lobby: null, undoStack: [], sync: null, localSeq: 0 });
   usePlayerStore.getState().reset();
   useSessionRuntime.setState({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, retry: 0 });
 });
@@ -628,4 +628,175 @@ describe("OPUS-007 contract: real client pathways against enforced Firebase rule
     expect(useSessionRuntime.getState().error).not.toBeNull();
     expect(writer.isStopped()).toBe(true);
   }, 25000);
+
+  // ---------------------------------------------------------------------
+  // Phase 9C.2A (OPUS-001) — reconnect decision against REAL enforced
+  // Firebase rules. rules.spec.ts already proves the underlying lease and
+  // revision fencing primitives this decision relies on ("an earlier
+  // revision cannot overwrite a later projection", "writer fields deny
+  // other UIDs..."); CONTRACT-005 above already proves a fenced-out
+  // writer's own commit is denied. What's new here — never exercised
+  // against a real emulator anywhere else — is startStorytellerSession's
+  // full reconnect decision itself reading a REAL enforced writeGuard and
+  // checkpoint and landing on the correct outcome.
+  // ---------------------------------------------------------------------
+
+  /** Precondition seeding ONLY (Section 14/9 policy) — same technique
+   * CONTRACT-005/CONTRACT-004 already use: force the lease to look expired
+   * so the next SessionWriter's own real, rules-enforced acquisition can
+   * legitimately succeed. A disposed writer's natural release() is not
+   * itself under test here (rules.spec.ts's own "a second writer is denied
+   * until expiry, then the old token is fenced" test already covers that
+   * expiry path); every assertion below still runs through the normal
+   * writer/decision path with rules enforced throughout. */
+  async function forceLeaseExpiry(code: string) {
+    await env.withSecurityRulesDisabled(async ctx => {
+      await ctx.database().ref(`lobbies/${code}/writer/expiresAt`).set(0);
+    });
+  }
+
+  test("OPUS-001-CONTRACT-1: a second real device's advancement is RESTOREd into a clean stale device, and CONFLICTs against a dirty one — real enforced rules", async () => {
+    const code = "OP1AAAAA", st = "op1-storyteller";
+
+    // --- Device A: establish the lobby and an initial acknowledged game.
+    const deviceA1 = backendFor(st);
+    await createLobby(deviceA1, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(deviceA1, code);
+    const lobby = { code, uid: st, sessionId: session.id, status: "live" as const };
+    useStorytellerStore.getState().newGame("tb");
+    useStorytellerStore.getState().addPlayer("Alice");
+    useStorytellerStore.getState().setLobby(lobby);
+    const writerA1 = new SessionWriter(deviceA1, code, session.id, error =>
+      reportRuntimeError("write", error ? lifecycleMessage(error) : null));
+    const managerA1 = await startStorytellerSession(deviceA1, lobby, writerA1);
+    // Device A "goes offline" clean: no local edits since the last flush.
+    managerA1.stop();
+    await writerA1.dispose();
+    await forceLeaseExpiry(code);
+
+    // --- Device B: a genuinely separate SessionWriter/backend instance for
+    // the same Storyteller uid, acquiring the now-released real lease and
+    // publishing different content through the real writeProjections path.
+    const deviceB = backendFor(st);
+    const writerB = new SessionWriter(deviceB, code, session.id);
+    await writerB.start();
+    const foreignGame = { ...useStorytellerStore.getState().game!, day: 11, notes: "device B's own content" };
+    await writeProjections({
+      backend: writerB, code, stState: foreignGame,
+      registry: buildRegistry(troubleBrewing), online: {}, membership: {},
+    });
+    await writerB.dispose(); // releases the real lease
+    await forceLeaseExpiry(code);
+
+    // --- Device A reconnects CLEAN: expect RESTORE.
+    const deviceA2 = backendFor(st);
+    const writerA2 = new SessionWriter(deviceA2, code, session.id);
+    const managerA2 = await startStorytellerSession(deviceA2, lobby, writerA2);
+    disposals.push(async () => { managerA2.stop(); await writerA2.dispose(); });
+    expect(managerA2.outcome).toBe("live");
+    expect(useStorytellerStore.getState().game!.day).toBe(11);
+    expect(useStorytellerStore.getState().game!.notes).toBe("device B's own content");
+    managerA2.stop();
+    await writerA2.dispose();
+    await forceLeaseExpiry(code);
+
+    // --- Device B advances again, so device A has a fresh real baseline to
+    // go stale against for the DIRTY half of this test.
+    const deviceB2 = backendFor(st);
+    const writerB2 = new SessionWriter(deviceB2, code, session.id);
+    await writerB2.start();
+    const foreignGame2 = { ...useStorytellerStore.getState().game!, day: 22, notes: "device B's second update" };
+    await writeProjections({
+      backend: writerB2, code, stState: foreignGame2,
+      registry: buildRegistry(troubleBrewing), online: {}, membership: {},
+    });
+    await writerB2.dispose();
+    await forceLeaseExpiry(code);
+
+    // Device A now makes an unacknowledged local edit — this is what makes
+    // reconnect DIRTY relative to whatever it last knew was acknowledged.
+    useStorytellerStore.getState().addPlayer("Unacknowledged local edit");
+    const dirtyLocalGame = useStorytellerStore.getState().game;
+
+    const deviceA3 = backendFor(st);
+    const writerA3 = new SessionWriter(deviceA3, code, session.id);
+    const managerA3 = await startStorytellerSession(deviceA3, lobby, writerA3);
+    disposals.push(() => writerA3.dispose());
+
+    // Core OPUS-001 second-device safety rule, proven against real
+    // enforced rules: a stale device may not publish its local state over
+    // newer real state written by another Storyteller device.
+    expect(managerA3.outcome).toBe("conflict");
+    expect(useStorytellerStore.getState().game).toEqual(dirtyLocalGame); // untouched
+    // Real RTDB omits empty/null fields on round-trip (an empty object or
+    // array node simply doesn't exist), so a raw read is compared on the
+    // discriminating content fields rather than a full deep-equal against
+    // an in-memory (never round-tripped) object.
+    const remoteAfterConflict = await deviceA3.get(`lobbies/${code}/storyteller`) as { day: number; notes: string };
+    expect(remoteAfterConflict.day).toBe(foreignGame2.day); // untouched
+    expect(remoteAfterConflict.notes).toBe(foreignGame2.notes); // untouched
+    await expect(managerA3.close()).rejects.toThrow(/conflict/i);
+  }, 30000);
+
+  test("OPUS-001-CONTRACT-2: a lost acknowledgement against a REAL enforced writeGuard is recognized without CONFLICT", async () => {
+    const code = "OP2AAAAA", st = "op2-storyteller";
+    const stBackend = backendFor(st);
+    await createLobby(stBackend, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(stBackend, code);
+    const lobby = { code, uid: st, sessionId: session.id, status: "live" as const };
+    useStorytellerStore.getState().newGame("tb");
+    useStorytellerStore.getState().addPlayer("Alice");
+    useStorytellerStore.getState().setLobby(lobby);
+    const writer = new SessionWriter(stBackend, code, session.id, error =>
+      reportRuntimeError("write", error ? lifecycleMessage(error) : null));
+    const manager = await startStorytellerSession(stBackend, lobby, writer);
+    disposals.push(async () => { manager.stop(); await writer.dispose(); });
+
+    // TEST-ONLY delay wrapper (same non-interception technique CONTRACT-007
+    // uses): the real Firebase write fires and genuinely settles on its
+    // own; only the caller's visibility into that outcome is withheld,
+    // until this test releases it — modeling a local process that dies
+    // after a commit has genuinely landed on the real server but before it
+    // could record the acknowledgement.
+    const originalUpdate = stBackend.update.bind(stBackend);
+    let release: () => void = () => {};
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let intercepted = false;
+    stBackend.update = async updates => {
+      if (intercepted) return originalUpdate(updates);
+      intercepted = true;
+      const result = await originalUpdate(updates);
+      await gate;
+      return result;
+    };
+    const committing = writer.set(`lobbies/${code}/storyteller/notes`, "in flight against real Firebase");
+    await vi.waitFor(() => { if (!intercepted) throw new Error("expected the real write to be in flight"); }, { timeout: 5000, interval: 50 });
+    const ackedGuardBefore = useStorytellerStore.getState().sync!.ackedGuard;
+    writer.stop();
+    release();
+    await committing.catch(() => {});
+    stBackend.update = originalUpdate;
+
+    const syncAfterStop = useStorytellerStore.getState().sync!;
+    expect(syncAfterStop.ackedGuard).toEqual(ackedGuardBefore); // not advanced by the belated success
+    expect(syncAfterStop.lastAttempt).not.toBeNull();
+    expect(await stBackend.get(`lobbies/${code}/writeGuard`)).toEqual(syncAfterStop.lastAttempt); // it DID land on the real server
+    await writer.dispose();
+    await forceLeaseExpiry(code); // seeds lease availability only — writeGuard (checked below) is untouched
+
+    // Dirty atop it, so this discriminates: an unrecognized lost ack would
+    // fall through to "remote advanced beyond baseline" + "dirty local" =
+    // CONFLICT instead of the correct KEEP_LOCAL.
+    useStorytellerStore.getState().addPlayer("Dirty edit atop the real lost ack");
+
+    const replacementBackend = backendFor(st);
+    const replacement = new SessionWriter(replacementBackend, code, session.id);
+    const recovered = await startStorytellerSession(replacementBackend, lobby, replacement);
+    disposals.push(async () => { recovered.stop(); await replacement.dispose(); });
+
+    expect(recovered.outcome).toBe("live");
+    expect(useSessionRuntime.getState().reconnect).toEqual({ status: "live" });
+    expect(useStorytellerStore.getState().game!.seatOrder.some(id =>
+      useStorytellerStore.getState().game!.players[id]!.name === "Dirty edit atop the real lost ack")).toBe(true);
+  }, 30000);
 });
