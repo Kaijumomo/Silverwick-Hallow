@@ -126,6 +126,45 @@ describe("decideReconnect: server rewind", () => {
   it("never silently guesses past a rewind even when local is clean", () => {
     expect(decideReconnect(base({ sync: sync({ ackedGuard: guard("writer-A", 9), ackedGameSeq: 20 }), remoteGuard: guard("writer-A", 3), localSeq: 20 }))).toEqual({ type: "INCOHERENT", reason: "server_rewind" });
   });
+
+  // Luna review (Finding 1): server rewind must outrank lost-ack recovery
+  // whenever an accepted baseline exists — checked BEFORE lost-ack matching,
+  // not after. A stale lastAttempt left over from a prior local lineage
+  // (restoreRemoteCheckpoint now clears it, but this is the defensive
+  // second layer) must never let an exact-match coincidence against a
+  // rewound guard masquerade as a legitimate lost acknowledgement.
+  it("server rewind returns INCOHERENT even when a stale lastAttempt exactly matches the rewound remote guard", () => {
+    const decision = decideReconnect(base({
+      sync: sync({ ackedGuard: guard("writer-B", 20), ackedGameSeq: 20, lastAttempt: guard("writer-A", 6) }),
+      remoteGuard: guard("writer-A", 6), // exactly equals lastAttempt, but is BEHIND the accepted baseline (revision 20)
+      localSeq: 20,
+    }));
+    expect(decision).toEqual({ type: "INCOHERENT", reason: "server_rewind" });
+    expect(decision).not.toEqual({ type: "KEEP_LOCAL" });
+  });
+  it("a stale lastAttempt equal to an older rewound server guard cannot return KEEP_LOCAL, even with local dirty", () => {
+    const decision = decideReconnect(base({
+      sync: sync({ ackedGuard: guard("writer-B", 20), ackedGameSeq: 5, lastAttempt: guard("writer-A", 6) }),
+      remoteGuard: guard("writer-A", 6),
+      localSeq: 11, // dirty relative to ackedGameSeq
+    }));
+    expect(decision.type).toBe("INCOHERENT");
+    expect(decision).not.toEqual({ type: "KEEP_LOCAL" });
+  });
+  it("a legitimate lost acknowledgement genuinely AHEAD of the accepted baseline still returns KEEP_LOCAL (rewind check does not reject it)", () => {
+    expect(decideReconnect(base({
+      sync: sync({ ackedGuard: guard("writer-A", 5), ackedGameSeq: 5, lastAttempt: guard("writer-A", 6) }),
+      remoteGuard: guard("writer-A", 6), // ahead of the baseline (5) — a genuine lost ack, not a rewind
+      localSeq: 6,
+    }))).toEqual({ type: "KEEP_LOCAL" });
+  });
+  it("exact lost acknowledgement with no prior accepted baseline (ackedGuard null) still returns KEEP_LOCAL — the rewind gate only fires when a baseline exists", () => {
+    expect(decideReconnect(base({
+      sync: sync({ ackedGuard: null, ackedGameSeq: 0, lastAttempt: guard("writer-A", 1) }),
+      remoteGuard: guard("writer-A", 1),
+      localSeq: 1,
+    }))).toEqual({ type: "KEEP_LOCAL" });
+  });
 });
 
 describe("decideReconnect: invalid checkpoint", () => {

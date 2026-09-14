@@ -31,7 +31,7 @@ import { writeProjections } from "./sync";
 import { createLobby, readRosterBindings, revokePlayerMembership, seatPlayer } from "./lobby";
 import { joinLobby, startPlayerHandshake } from "./playerSync";
 import { playerPath } from "./paths";
-import { reportRuntimeError, startStorytellerSession, useSessionRuntime } from "./storytellerSync";
+import { reportRuntimeError, resolveReconnectConflict, startStorytellerSession, useSessionRuntime } from "./storytellerSync";
 import { lifecycleMessage, requireActiveSession } from "./lifecycle";
 import { friendlyFirebaseError } from "./errors";
 import { useStorytellerStore } from "@/stores/storytellerStore";
@@ -798,5 +798,134 @@ describe("OPUS-007 contract: real client pathways against enforced Firebase rule
     expect(useSessionRuntime.getState().reconnect).toEqual({ status: "live" });
     expect(useStorytellerStore.getState().game!.seatOrder.some(id =>
       useStorytellerStore.getState().game!.players[id]!.name === "Dirty edit atop the real lost ack")).toBe(true);
+  }, 30000);
+
+  // ---------------------------------------------------------------------
+  // Luna review, Finding 2 — real enforced-rules regression. isStopped()
+  // and guard/checkpoint equality alone cannot detect a genuine server
+  // lease takeover that publishes no new projection; only reconfirming
+  // actual server writer authority (a real renew() transaction against the
+  // real `writer` path) can. reconnectIntegration.test.ts already proves
+  // this against MemoryRoomBackend; what's new here is the same regression
+  // against a REAL RTDB emulator with rules.json enforced throughout — the
+  // truth being tested (who legitimately owns the writer lease right now)
+  // is exactly what rules.json's own writer-path CAS adjudicates, so a
+  // fake/in-memory lease can only approximate it. withSecurityRulesDisabled
+  // is used below ONLY to force the conflicted writer's own lease to look
+  // expired (the same precondition-seeding technique OPUS-001-CONTRACT-1
+  // and CONTRACT-004/005 already use to model a long backgrounded-tab
+  // pause) — the takeover writer's real acquisition, and the authority
+  // reconfirmation resolveReconnectConflict performs, both run under fully
+  // enforced rules.
+  // ---------------------------------------------------------------------
+
+  /** Establishes a real CONFLICT via two genuinely separate real writers
+   * (same technique as OPUS-001-CONTRACT-1), then has a real THIRD writer
+   * for the same storyteller identity legitimately reclaim the real
+   * `writer` lease — after forcing the conflicted writer's own lease to
+   * look expired — WITHOUT publishing any new checkpoint/writeGuard, so
+   * both remain byte-identical to the conflict snapshot. Returns everything
+   * a caller needs to assert the "stale" outcome. */
+  async function establishConflictWithRealLeaseTakeover(code: string, st: string) {
+    const deviceA1 = backendFor(st);
+    await createLobby(deviceA1, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(deviceA1, code);
+    const lobby = { code, uid: st, sessionId: session.id, status: "live" as const };
+    useStorytellerStore.getState().newGame("tb");
+    useStorytellerStore.getState().addPlayer("Alice");
+    useStorytellerStore.getState().setLobby(lobby);
+    const writerA1 = new SessionWriter(deviceA1, code, session.id, error =>
+      reportRuntimeError("write", error ? lifecycleMessage(error) : null));
+    const managerA1 = await startStorytellerSession(deviceA1, lobby, writerA1);
+    managerA1.stop();
+    await writerA1.dispose(); // clean release: no edits since the last flush
+    await forceLeaseExpiry(code);
+
+    // Device B: a genuinely separate real writer, same storyteller uid,
+    // publishes different content — the foreign lineage device A will
+    // conflict against.
+    const deviceB = backendFor(st);
+    const writerB = new SessionWriter(deviceB, code, session.id);
+    await writerB.start();
+    const foreignGame = { ...useStorytellerStore.getState().game!, day: 5, notes: "device B's own content" };
+    await writeProjections({
+      backend: writerB, code, stState: foreignGame,
+      registry: buildRegistry(troubleBrewing), online: {}, membership: {},
+    });
+    await writerB.dispose();
+    await forceLeaseExpiry(code);
+
+    // Device A reconnects DIRTY: an unacknowledged local edit makes this a
+    // real CONFLICT against device B's real remote content.
+    useStorytellerStore.getState().addPlayer("Unacknowledged local edit under real lease takeover");
+    const localGameBefore = useStorytellerStore.getState().game;
+
+    const deviceA2 = backendFor(st);
+    const writerA2 = new SessionWriter(deviceA2, code, session.id);
+    const managerA2 = await startStorytellerSession(deviceA2, lobby, writerA2);
+    expect(managerA2.outcome).toBe("conflict");
+    const undoBefore = useStorytellerStore.getState().undoStack;
+    const guardBefore = await deviceA2.get(`lobbies/${code}/writeGuard`);
+    const checkpointBefore = await deviceA2.get(`lobbies/${code}/checkpoint`);
+
+    // Force the CONFLICTED writer's own lease to look expired — precondition
+    // seeding only, same technique used throughout this suite — so a real
+    // fourth writer, the SAME storyteller identity (a genuinely different
+    // device/tab; rules.json only ever lets this uid hold this lobby's
+    // writer lease — see CONTRACT-003), can legitimately reclaim it through
+    // the real, enforced `writer` CAS. No checkpoint or writeGuard is
+    // published by this takeover.
+    await forceLeaseExpiry(code);
+    const deviceC = backendFor(st);
+    const takeoverWriter = new SessionWriter(deviceC, code, session.id);
+    await takeoverWriter.start(); // real, rules-enforced lease acquisition
+
+    // Nothing local has detected the loss yet: writerA2's own isStopped()
+    // still reads false (its renewal interval has not fired — LEASE_MS/3 is
+    // 10s, comfortably longer than this synchronous setup), and the remote
+    // guard/checkpoint are still byte-identical to the conflict snapshot.
+    expect(writerA2.isStopped()).toBe(false);
+    expect(await deviceA2.get(`lobbies/${code}/writeGuard`)).toEqual(guardBefore);
+    expect(await deviceA2.get(`lobbies/${code}/checkpoint`)).toEqual(checkpointBefore);
+
+    return { writerA2, takeoverWriter, deviceA2, localGameBefore, undoBefore, guardBefore, checkpointBefore };
+  }
+
+  test("OPUS-001-CONTRACT-3: 'useRemote' refuses to apply when another real writer has legitimately taken the server lease without publishing (Luna Finding 2) — real enforced rules", async () => {
+    const code = "OP3AAAAA", st = "op3-storyteller";
+    const { writerA2, takeoverWriter, deviceA2, localGameBefore, undoBefore, guardBefore, checkpointBefore } =
+      await establishConflictWithRealLeaseTakeover(code, st);
+    disposals.push(() => writerA2.dispose(), () => takeoverWriter.dispose());
+
+    // The load-bearing proof: only a real re-confirmation of server writer
+    // authority (a real renew() transaction against the real `writer` path,
+    // legitimately denied because takeoverWriter's token now holds it) can
+    // catch this — isStopped() and guard/checkpoint equality, checked above,
+    // both read as if nothing had changed.
+    const result = await resolveReconnectConflict("useRemote");
+
+    expect(result).toBe("stale");
+    expect(useStorytellerStore.getState().game).toEqual(localGameBefore); // local unchanged
+    expect(useStorytellerStore.getState().undoStack).toEqual(undoBefore); // undo unchanged
+    expect(await deviceA2.get(`lobbies/${code}/writeGuard`)).toEqual(guardBefore); // remote guard unchanged
+    expect(await deviceA2.get(`lobbies/${code}/checkpoint`)).toEqual(checkpointBefore); // remote checkpoint unchanged
+  }, 30000);
+
+  test("OPUS-001-CONTRACT-3: 'keepLocal' refuses to apply (no reconciliation, no projection) when another real writer has legitimately taken the server lease without publishing (Luna Finding 2) — real enforced rules", async () => {
+    const code = "OP3BAAAA", st = "op3b-storyteller";
+    const { writerA2, takeoverWriter, deviceA2, localGameBefore, undoBefore, guardBefore, checkpointBefore } =
+      await establishConflictWithRealLeaseTakeover(code, st);
+    disposals.push(() => writerA2.dispose(), () => takeoverWriter.dispose());
+
+    const result = await resolveReconnectConflict("keepLocal");
+
+    expect(result).toBe("stale");
+    expect(useStorytellerStore.getState().game).toEqual(localGameBefore);
+    expect(useStorytellerStore.getState().undoStack).toEqual(undoBefore);
+    expect(await deviceA2.get(`lobbies/${code}/writeGuard`)).toEqual(guardBefore);
+    expect(await deviceA2.get(`lobbies/${code}/checkpoint`)).toEqual(checkpointBefore);
+    // "keepLocal" applying would have published a fresh projection through
+    // the normal writer path (bumping writeGuard's revision) — asserting
+    // writeGuard above already proves that never happened.
   }, 30000);
 });

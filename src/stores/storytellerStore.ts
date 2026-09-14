@@ -210,9 +210,15 @@ export type StorytellerStore = {
    * restored game clean with respect to the current local sequence by
    * setting `ackedGameSeq` to it and `ackedGuard` to the newly accepted
    * remote guard (null only in the legacy/no-writeGuard-yet edge case).
-   * This one replacement is deliberately exempt from the general "a `game`
-   * change bumps localSeq" rule: adopting remote content is the opposite
-   * of new local intent. */
+   * Also clears `lastAttempt` unconditionally (Luna review, Finding 1):
+   * once a remote checkpoint has been deliberately accepted — explicitly
+   * or automatically — any unresolved attempt evidence from the prior
+   * local lineage is no longer meaningful and must not survive to be
+   * mistaken for a lost acknowledgement against a later, different remote
+   * guard (including one that represents a genuine server rewind relative
+   * to the newly accepted baseline). This one replacement is deliberately
+   * exempt from the general "a `game` change bumps localSeq" rule:
+   * adopting remote content is the opposite of new local intent. */
   restoreRemoteCheckpoint: (game: StorytellerLobbyRecord, guard: GuardStamp | null) => void;
 };
 
@@ -1272,8 +1278,16 @@ export const useStorytellerStore = create<StorytellerStore>()(
         game,
         undoStack: [],
         selectedPlayerId: null,
+        // lastAttempt is always explicitly cleared here (Luna review,
+        // Finding 1): a remote checkpoint being adopted — automatically
+        // or explicitly — means whatever this local lineage was in the
+        // middle of attempting is no longer relevant evidence. Preserving
+        // it would let a stale attempt from BEFORE this restore later be
+        // mistaken for a lost acknowledgement against a guard that is
+        // actually a server rewind relative to the newly accepted
+        // baseline.
         sync: state.sync && state.sync.code === game.code
-          ? { ...state.sync, ackedGuard: guard, ackedGameSeq: state.localSeq }
+          ? { ...state.sync, ackedGuard: guard, ackedGameSeq: state.localSeq, lastAttempt: null }
           : { code: game.code, sessionId: state.sync?.sessionId ?? state.lobby?.sessionId ?? "", ackedGuard: guard, ackedGameSeq: state.localSeq, lastAttempt: null },
         [SKIP_LOCAL_SEQ]: true,
       })),

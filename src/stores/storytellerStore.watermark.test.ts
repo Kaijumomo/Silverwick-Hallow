@@ -224,4 +224,21 @@ describe("restoreRemoteCheckpoint", () => {
     expect(useStorytellerStore.getState().localSeq).toBe(seqAfterRestore + 1);
     expect(useStorytellerStore.getState().localSeq).toBeGreaterThan(useStorytellerStore.getState().sync!.ackedGameSeq); // dirty again
   });
+
+  // Luna review (Finding 1, part A): accepting a remote checkpoint must
+  // consume any unresolved attempt evidence from the prior local lineage —
+  // otherwise a later, different remote guard could be mistaken for a lost
+  // acknowledgement against that now-irrelevant attempt.
+  it("clears a pre-existing lastAttempt when accepting a remote checkpoint, in the same-scope branch", () => {
+    useStorytellerStore.getState().noteWriterAttempt("", SESSION, { token: "writer-old-lineage", revision: 6 });
+    expect(useStorytellerStore.getState().sync?.lastAttempt).toEqual({ token: "writer-old-lineage", revision: 6 });
+    useStorytellerStore.getState().restoreRemoteCheckpoint(remoteGame(), { token: "writer-remote", revision: 9 });
+    expect(useStorytellerStore.getState().sync?.lastAttempt).toBeNull();
+  });
+
+  it("clears lastAttempt when accepting a remote checkpoint for a scope that didn't previously match (defensive: the fresh-scope branch already nulled it)", () => {
+    useStorytellerStore.setState({ sync: { code: "OTHR6789", sessionId: "other-session", ackedGuard: null, ackedGameSeq: 0, lastAttempt: { token: "writer-old-lineage", revision: 6 } } });
+    useStorytellerStore.getState().restoreRemoteCheckpoint(remoteGame(), { token: "writer-remote", revision: 9 });
+    expect(useStorytellerStore.getState().sync?.lastAttempt).toBeNull();
+  });
 });

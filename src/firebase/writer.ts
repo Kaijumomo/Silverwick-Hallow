@@ -85,6 +85,18 @@ export class SessionWriter implements RoomBackend {
     });
     if (!acquired) throw new LifecycleError("conflict", "Another Storyteller tab controls this lobby. Close it, then retry after 30 seconds.");
   }
+  /** Synchronously re-proves current server writer authority by reusing the
+   * exact same lease-acquisition/renewal transaction the renewal interval
+   * already runs — not a second authority path. Resolves only when this
+   * writer still owns, or can validly reclaim, the exclusive `writer`
+   * lease (rejecting, exactly like renew()/start() do, if another writer's
+   * lease is currently valid); a successful call also extends that lease
+   * by another LEASE_MS. Production behavior — real callers (explicit
+   * reconnect-conflict resolution) rely on this to confirm authority
+   * before applying a Storyteller's choice, not a test-only hook. */
+  async reconfirmAuthority(): Promise<void> {
+    await this.renew();
+  }
   private async release() {
     await this.raw.transaction(`${this.root}/writer`, current => {
       const lease = leaseSchema.safeParse(current);

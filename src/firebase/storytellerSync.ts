@@ -547,6 +547,26 @@ export async function resolveReconnectConflict(choice: "keepLocal" | "useRemote"
   currentConflict = null; // consumed exactly once, whichever way this resolves
   const { raw, lobby, writer } = pending;
   if (writer.isStopped()) return "stale";
+
+  // Re-confirm ACTUAL server writer authority before trusting anything
+  // else (Luna review, Finding 2). A different Storyteller writer can
+  // acquire the server lease while this writer's own isStopped() still
+  // reads false and writeGuard/checkpoint remain byte-identical (the new
+  // writer simply hasn't published a projection yet) — neither
+  // isStopped() nor guard/checkpoint equality alone can detect that.
+  // reconfirmAuthority() reuses the exact same lease-renewal transaction
+  // the writer's own renewal interval already runs; it resolves only if
+  // this writer still owns, or can validly reclaim, the exclusive lease,
+  // and a successful call extends that lease. The guard/checkpoint
+  // re-reads and comparison below therefore happen under a freshly
+  // renewed lease, not stale local knowledge — no second write/authority
+  // path.
+  try {
+    await writer.reconfirmAuthority();
+  } catch {
+    return "stale";
+  }
+
   const guardRaw = await raw.get(`lobbies/${lobby.code}/writeGuard`);
   const currentGuard = guardRaw != null ? guardSchema.parse(guardRaw) : null;
   const checkpointRaw = await raw.get(`lobbies/${lobby.code}/checkpoint`);

@@ -351,6 +351,75 @@ describe("Phase 9C.2A reconnect integration: foreign-lineage (second device)", (
     expect(result).toBe("stale");
     expect(useStorytellerStore.getState().game).toEqual(localGameBefore); // the stale choice was never applied
   });
+
+  /**
+   * Luna review, Finding 2. Enters CONFLICT normally, then simulates a
+   * genuinely different legitimate writer acquiring the server lease
+   * WITHOUT publishing a new projection — writeGuard and checkpoint stay
+   * byte-identical to the conflict snapshot, and the original conflicted
+   * writer's own isStopped() still reads false (no live listeners are
+   * installed while in CONFLICT, so nothing local has detected the loss).
+   * Neither isStopped() nor guard/checkpoint equality can catch this —
+   * only reconfirming actual server lease ownership can.
+   */
+  async function enterConflictThenLoseLeaseWithoutProjection(b: MemoryRoomBackend) {
+    const { writer, manager, lobby, session } = await host(b);
+    manager.stop(); await writer.dispose();
+    useStorytellerStore.getState().addPlayer("Dirty Local Edit Under Lease Takeover");
+    await foreignDeviceAdvance(b, session.id, g => ({ ...g, day: 1 }));
+    const replacement = writerFor(b, session.id);
+    const recovered = await startStorytellerSession(b, lobby, replacement);
+    expect(recovered.outcome).toBe("conflict");
+    const localGameBefore = useStorytellerStore.getState().game;
+    const undoBefore = useStorytellerStore.getState().undoStack;
+    const guardBefore = await b.get(`${root}/writeGuard`);
+    const checkpointBefore = await b.get(`${root}/checkpoint`);
+
+    // Another legitimate writer acquires the lease directly (no projection
+    // published, so guard/checkpoint stay exactly as they were) — this
+    // models a real takeover, not a fabricated permission denial.
+    await b.set(`${root}/writer`, { token: "another-legitimate-writer-token", expiresAt: Date.now() + 30_000 });
+    expect(replacement.isStopped()).toBe(false); // locally, nothing detected the loss
+
+    return { replacement, lobby, localGameBefore, undoBefore, guardBefore, checkpointBefore };
+  }
+
+  it("authority-loss regression (Luna Finding 2): 'useRemote' applies nothing when another writer has taken the lease without publishing", async () => {
+    const b = new MemoryRoomBackend();
+    const { replacement, localGameBefore, undoBefore, guardBefore, checkpointBefore } =
+      await enterConflictThenLoseLeaseWithoutProjection(b);
+    disposals.push(async () => { replacement.stop(); await replacement.dispose(); });
+    const writeLogLengthBefore = b.writeLog.length;
+
+    const result = await resolveReconnectConflict("useRemote");
+
+    expect(result).toBe("stale");
+    expect(useStorytellerStore.getState().game).toEqual(localGameBefore); // local unchanged
+    expect(useStorytellerStore.getState().undoStack).toEqual(undoBefore); // undo unchanged
+    expect(await b.get(`${root}/writeGuard`)).toEqual(guardBefore); // remote guard unchanged
+    expect(await b.get(`${root}/checkpoint`)).toEqual(checkpointBefore); // remote checkpoint unchanged
+    // No reconciliation mutation and no projection from the stale resolver:
+    // the only write since the snapshot was captured is the lease-takeover
+    // seed itself, already reflected in writeLogLengthBefore.
+    expect(b.writeLog.length).toBe(writeLogLengthBefore);
+  });
+
+  it("authority-loss regression (Luna Finding 2): 'keepLocal' applies nothing (no reconciliation, no projection) when another writer has taken the lease without publishing", async () => {
+    const b = new MemoryRoomBackend();
+    const { replacement, localGameBefore, undoBefore, guardBefore, checkpointBefore } =
+      await enterConflictThenLoseLeaseWithoutProjection(b);
+    disposals.push(async () => { replacement.stop(); await replacement.dispose(); });
+    const writeLogLengthBefore = b.writeLog.length;
+
+    const result = await resolveReconnectConflict("keepLocal");
+
+    expect(result).toBe("stale");
+    expect(useStorytellerStore.getState().game).toEqual(localGameBefore);
+    expect(useStorytellerStore.getState().undoStack).toEqual(undoBefore);
+    expect(await b.get(`${root}/writeGuard`)).toEqual(guardBefore);
+    expect(await b.get(`${root}/checkpoint`)).toEqual(checkpointBefore);
+    expect(b.writeLog.length).toBe(writeLogLengthBefore);
+  });
 });
 
 describe("Phase 9C.2A reconnect integration: comparison-window integrity", () => {
