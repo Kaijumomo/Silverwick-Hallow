@@ -1049,6 +1049,127 @@ describe("OPUS-001-CONTRACT-H1: continuous authority against real enforced rules
 });
 
 // ---------------------------------------------------------------------------
+// Phase 9C.2A.2A remediation, Finding H1 follow-up (Luna review) —
+// membership reconciliation must be fenced by the SAME synchronous
+// authority gate as restoreRemoteCheckpoint(): reconcileMembership's own
+// local mutations (unseatPlayer/assignPendingToSeat) and its awaited
+// server revocations previously ran entirely AFTER the gate, behind an
+// additional un-gated roster read — so a lease that lapsed specifically
+// during THAT read could still let a stale local membership mutation
+// through. Proven here against a real emulator with rules enforced
+// throughout and a real elapsed 30s+ wait — no mocked clock.
+// ---------------------------------------------------------------------------
+describe("OPUS-001-CONTRACT-H1-FOLLOWUP: membership reconciliation fencing against real enforced rules", () => {
+  test("useRemote is stale once the roster read outlives the real 30s lease — no local membership mutation, no server write", async () => {
+    const code = "OP5AAAAA", st = "op5-storyteller";
+    const ghostUid = "op5-ghost-uid"; // bound in the checkpoint's own embedded roster, never in the live roster
+    const deviceA1 = backendFor(st);
+    await createLobby(deviceA1, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(deviceA1, code);
+    const lobby = { code, uid: st, sessionId: session.id, status: "live" as const };
+    useStorytellerStore.getState().newGame("tb");
+    useStorytellerStore.getState().addPlayer("Alice");
+    useStorytellerStore.getState().setLobby(lobby);
+    const seatId = useStorytellerStore.getState().game!.seatOrder[0]!;
+    const writerA1 = new SessionWriter(deviceA1, code, session.id, error =>
+      reportRuntimeError("write", error ? lifecycleMessage(error) : null));
+    const managerA1 = await startStorytellerSession(deviceA1, lobby, writerA1);
+    managerA1.stop();
+    await writerA1.dispose();
+    await forceLeaseExpiry(code);
+
+    // Device B publishes a checkpoint whose OWN embedded roster binds
+    // ghostUid to seatId (this becomes `restored.roster`, the prior-roster
+    // diff target for useRemote) with that seat shown occupied — while the
+    // LIVE `/roster` node (a separate path, untouched by writeProjections)
+    // never gets that binding at all. This is exactly "a seat this device
+    // once believed was uid-bound, absent now" — reconciliation must
+    // unseat it.
+    const deviceB = backendFor(st);
+    const writerB = new SessionWriter(deviceB, code, session.id);
+    await writerB.start();
+    const foreignGame = {
+      ...useStorytellerStore.getState().game!, day: 5,
+      players: { ...useStorytellerStore.getState().game!.players,
+        [seatId]: { ...useStorytellerStore.getState().game!.players[seatId]!, name: "Ghost", isEmpty: false } },
+    };
+    await writeProjections({
+      backend: writerB, code, stState: foreignGame,
+      registry: buildRegistry(troubleBrewing), online: {}, membership: { [ghostUid]: seatId },
+    });
+    await writerB.dispose();
+    await forceLeaseExpiry(code);
+
+    useStorytellerStore.getState().addPlayer("Unacknowledged local edit under real H1-followup lapse");
+    const localGameBefore = useStorytellerStore.getState().game;
+    const undoBefore = useStorytellerStore.getState().undoStack;
+
+    const deviceA2 = backendFor(st);
+    const writerA2 = new SessionWriter(deviceA2, code, session.id);
+    const managerA2 = await startStorytellerSession(deviceA2, lobby, writerA2);
+    disposals.push(() => writerA2.dispose());
+    expect(managerA2.outcome).toBe("conflict");
+    const guardBefore = await deviceA2.get(`lobbies/${code}/writeGuard`);
+    const checkpointBefore = await deviceA2.get(`lobbies/${code}/checkpoint`);
+    const rosterBefore = await deviceA2.get(`lobbies/${code}/roster`);
+
+    // Let exactly the next /writer transaction (reconfirmAuthority()'s own
+    // renewal) through; every one after that hangs forever — this
+    // writer's own periodic renewal can never extend the lease again, so
+    // leaseExpiresAt stays frozen while real time keeps moving.
+    const originalTransaction = deviceA2.transaction.bind(deviceA2);
+    let writerTransactionCount = 0;
+    deviceA2.transaction = (transactionPath, change) => {
+      if (transactionPath === `lobbies/${code}/writer`) {
+        writerTransactionCount++;
+        if (writerTransactionCount > 1) return new Promise<boolean>(() => {});
+      }
+      return originalTransaction(transactionPath, change);
+    };
+
+    // Pause the roster read specifically — Luna's exact reproduction step:
+    // "delay the roster read long enough that the lease expires".
+    const originalGet = deviceA2.get.bind(deviceA2);
+    let releaseGate: () => void = () => {};
+    const gate = new Promise<void>(resolve => { releaseGate = resolve; });
+    let paused = false;
+    deviceA2.get = async readPath => {
+      if (readPath === `lobbies/${code}/roster` && !paused) {
+        paused = true;
+        await gate;
+      }
+      return originalGet(readPath);
+    };
+
+    const resolving = resolveReconnectConflict("useRemote");
+    await vi.waitFor(() => {
+      if (!paused) throw new Error("expected the roster read to be paused");
+    }, { timeout: 5000, interval: 20 });
+
+    // Genuinely wait past the real 30s lease — no mocked clock.
+    await new Promise(resolve => setTimeout(resolve, LEASE_MS + 2000));
+
+    deviceA2.get = originalGet;
+    releaseGate();
+    const result = await resolving;
+    deviceA2.transaction = originalTransaction;
+
+    expect(result).toBe("stale");
+    expect(useStorytellerStore.getState().game).toEqual(localGameBefore); // untouched entirely
+    expect(useStorytellerStore.getState().undoStack).toEqual(undoBefore);
+    // Specifically: no membership-driven local mutation occurred — the
+    // seat that WOULD have been unseated is exactly as it was locally.
+    expect(useStorytellerStore.getState().game!.players[seatId]).toEqual(localGameBefore!.players[seatId]);
+    // No server writes from the stale resolver — writeGuard, checkpoint
+    // and roster are all exactly as they were (the takeover-free lease
+    // renewal attempts above never landed either, since they hung).
+    expect(await deviceA2.get(`lobbies/${code}/writeGuard`)).toEqual(guardBefore);
+    expect(await deviceA2.get(`lobbies/${code}/checkpoint`)).toEqual(checkpointBefore);
+    expect(await deviceA2.get(`lobbies/${code}/roster`)).toEqual(rosterBefore);
+  }, 45000);
+});
+
+// ---------------------------------------------------------------------------
 // Phase 9C.2A.2A remediation, Finding H3 — disposal must prove lease
 // release, against a real emulator with rules enforced throughout. `release()`
 // no longer uses a transaction at all (the historical bug's precondition —

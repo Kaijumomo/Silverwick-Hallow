@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { z } from "zod";
 import { selectScriptById, useStorytellerStore, type LobbyConnection } from "@/stores/storytellerStore";
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
-import type { GuardStamp } from "@/stores/types";
+import type { GuardStamp, PlayerId } from "@/stores/types";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import { buildRegistry } from "@/data/roleRegistry";
 import { writeProjections } from "./sync";
@@ -135,8 +135,18 @@ export function useStorytellerSync(backend: RoomBackend | null) {
 
 /**
  * Reconcile authoritative (live, server-side) roster state against whichever
- * game state currently survives in the local store — regardless of whether
- * it got there via KEEP_LOCAL or RESTORE (Phase 9C.2A, section 9).
+ * game state survives locally — regardless of whether it got there via
+ * KEEP_LOCAL or RESTORE (Phase 9C.2A, section 9). Split into three phases
+ * (Finding H1 follow-up — Luna review) so a caller that must gate a
+ * destructive local mutation behind a synchronous authority check can do
+ * so: `buildMembershipReconciliation` is pure (no I/O, no store mutation —
+ * safe to call at any point, including ahead of a gate);
+ * `applyMembershipReconciliationLocally` performs every local store
+ * mutation synchronously (no awaits — safe to run with nothing in between
+ * it and a synchronous gate); `performMembershipRevocations` is the async
+ * phase, deferred until local mutation is fully complete, and remains
+ * protected by ordinary SessionWriter/Firebase revision fencing regardless
+ * of what happens to authority afterward.
  *
  * `priorRoster` — a previously-believed uid->seat snapshot to diff against
  * — is optional and used for exactly one purpose: catching a seat whose
@@ -152,35 +162,77 @@ export function useStorytellerSync(backend: RoomBackend | null) {
  * (this is the exact reconciliation the old checkpoint-only code
  * performed). KEEP_LOCAL has no such prior snapshot to diff against and
  * passes null, skipping this specific check — live watchers (re)installed
- * right after this function returns cover departures going forward.
+ * right after reconciliation cover departures going forward.
  *
  * The second pass is unconditional and roster-embedding-independent: a
  * live-claimed uid whose local seat is still empty is recovered from
- * pendingPlayers, or, failing that, its stale remote binding is revoked.
- * Membership-driven changes made here flow through the normal store
- * actions, so they participate in localSeq/dirty tracking exactly like any
- * other Storyteller mutation. Does not redesign the Phase 9C.3 leave
- * workflow.
+ * pendingPlayers, or, failing that, its stale remote binding is queued for
+ * revocation. Membership-driven changes made here flow through the normal
+ * store actions, so they participate in localSeq/dirty tracking exactly
+ * like any other Storyteller mutation. Does not redesign the Phase 9C.3
+ * leave workflow.
  */
-async function reconcileMembership(
-  writer: SessionWriter,
-  code: string,
+type MembershipReconciliationPlan = {
+  toUnseat: PlayerId[];
+  toRecoverPending: { uid: string; seatId: PlayerId }[];
+  toRevoke: PlayerId[];
+};
+
+/** Pure: computes the plan from a single explicit snapshot of the game it
+ * will run against. The caller chooses that snapshot — the current local
+ * game for KEEP_LOCAL, or the not-yet-applied checkpoint game for
+ * useRemote/RESTORE (restoreRemoteCheckpoint itself may run later, closer
+ * to any authority gate; this needs only the game content, not the store
+ * mutation) — so this can be computed ahead of a synchronous gate without
+ * waiting for that mutation to actually land. No I/O, no store mutation.
+ *
+ * `toUnseat`'s own ids are always disjoint from `membership`'s value set
+ * (that is exactly the condition below that adds one to `toUnseat`), so
+ * evaluating both passes against the SAME single snapshot of `game` is
+ * safe — the two passes never read or decide based on each other's ids. */
+function buildMembershipReconciliation(
+  game: StorytellerLobbyRecord | null,
   membership: Record<string, string>,
   priorRoster: Record<string, string> | null,
-) {
+): MembershipReconciliationPlan {
+  const toUnseat: PlayerId[] = [];
   if (priorRoster) {
     const currentSeats = new Set(Object.values(membership));
     for (const [uid, id] of Object.entries(priorRoster)) {
-      if (membership[uid] !== id && !currentSeats.has(id)) useStorytellerStore.getState().unseatPlayer(id);
+      if (membership[uid] !== id && !currentSeats.has(id)) toUnseat.push(id);
     }
   }
   // A crash can occur between the remote membership ACK and the next
-  // checkpoint/flush. Recover known pending seats, revoke unresolvable binds.
+  // checkpoint/flush. Recover known pending seats, queue unresolvable
+  // binds for revocation.
+  const toRecoverPending: { uid: string; seatId: PlayerId }[] = [];
+  const toRevoke: PlayerId[] = [];
   for (const [uid, id] of Object.entries(membership)) {
-    const state = useStorytellerStore.getState();
-    if (state.game?.players[id]?.isEmpty && state.game.pendingPlayers[uid]) state.assignPendingToSeat(uid, id);
-    if (!state.game?.players[id] || useStorytellerStore.getState().game?.players[id]?.isEmpty) await revokePlayerMembership(writer, code, id);
+    const player = game?.players[id];
+    const recoverable = !!(player?.isEmpty && game?.pendingPlayers[uid]);
+    if (recoverable) toRecoverPending.push({ uid, seatId: id });
+    // Mirrors recovery's own effect: a recoverable seat will no longer be
+    // empty once applied, so it never also needs revoking.
+    if (recoverable ? false : (!player || player.isEmpty)) toRevoke.push(id);
   }
+  return { toUnseat, toRecoverPending, toRevoke };
+}
+
+/** Synchronous local mutation phase: no awaits, no I/O. Safe to run
+ * immediately after a synchronous authority gate with nothing in between
+ * (Finding H1 follow-up). */
+function applyMembershipReconciliationLocally(plan: MembershipReconciliationPlan) {
+  for (const id of plan.toUnseat) useStorytellerStore.getState().unseatPlayer(id);
+  for (const { uid, seatId } of plan.toRecoverPending) useStorytellerStore.getState().assignPendingToSeat(uid, seatId);
+}
+
+/** Async server-write phase — always runs only after local mutation is
+ * fully complete. These writes stay protected by the existing
+ * SessionWriter/Firebase revision fencing regardless of what happens to
+ * authority after this point: losing it here is acceptable (Finding H1
+ * follow-up) — the writes are simply rejected. */
+async function performMembershipRevocations(writer: SessionWriter, code: string, plan: MembershipReconciliationPlan) {
+  for (const id of plan.toRevoke) await revokePlayerMembership(writer, code, id);
 }
 
 export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConnection, writer: SessionWriter) {
@@ -498,7 +550,11 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   const membership = decodeRoster(await raw.get(`lobbies/${lobby.code}/roster`));
   assertCurrent();
   if (membership.status !== "ready") throw new SnapshotValidationError();
-  if (sameSession()) await reconcileMembership(writer, lobby.code, membership.data, decision.type === "RESTORE" ? restored?.roster ?? null : null);
+  if (sameSession()) {
+    const plan = buildMembershipReconciliation(useStorytellerStore.getState().game, membership.data, decision.type === "RESTORE" ? restored?.roster ?? null : null);
+    applyMembershipReconciliationLocally(plan);
+    await performMembershipRevocations(writer, lobby.code, plan);
+  }
   if (stopped) throw new LifecycleError("cancelled", "Session stopped during reconnect.");
 
   return finishLive();
@@ -607,35 +663,70 @@ export async function resolveReconnectConflict(choice: "keepLocal" | "useRemote"
     restored = (await readCheckpoint(raw, lobby)).restored;
   }
 
+  // The authoritative roster is read here too — ALL required network reads
+  // happen before the final authority gate below, so nothing async remains
+  // between that gate and the local mutations it guards (Finding H1
+  // follow-up, Luna review: reconcileMembership's own membership-driven
+  // local mutations — unseatPlayer/assignPendingToSeat — and its internal
+  // awaited server revocations previously ran entirely AFTER the gate,
+  // meaning a single check at entry could not protect a LATER local
+  // mutation from applying once authority had already lapsed mid-reconciliation).
+  const membershipRaw = await raw.get(`lobbies/${lobby.code}/roster`);
+
   if (writer.isStopped()) return "stale";
 
   if (currentGuard === null || currentGuard.token !== pending.snapshotGuard.token || currentGuard.revision !== pending.snapshotGuard.revision) {
     return "stale"; // remote has moved on since CONFLICT was raised
   }
 
-  // Synchronous authority gate (Finding H1): NOTHING awaits between this
-  // check and the destructive mutation it guards below (for "useRemote";
-  // for "keepLocal" it still gates reconciliation, which can itself mutate
-  // local game state, for the same reason). If this writer's continuous
-  // hold on the exact interval `authority` represents has lapsed, or been
-  // reclaimed after a gap, since reconfirmAuthority() above — even though
-  // isStopped() may still read false, not having caught up yet — the
-  // choice is stale rather than applied against content whose authority
-  // is no longer provable.
-  if (!writer.holdsAuthority(authority, FENCE_MARGIN_MS)) return "stale";
+  if (choice === "useRemote" && !restored) return "stale"; // guard matched but the checkpoint failed to validate — never silently apply
+
+  const membership = decodeRoster(membershipRaw);
+  if (membership.status !== "ready") throw new SnapshotValidationError();
 
   const inScope = () => {
     const current = useStorytellerStore.getState().lobby;
     return current?.code === lobby.code && current.sessionId === lobby.sessionId;
   };
-  if (choice === "useRemote") {
-    if (!restored) return "stale"; // guard matched but the checkpoint failed to validate — never silently apply
-    if (inScope()) useStorytellerStore.getState().restoreRemoteCheckpoint(restored.game, currentGuard);
+  // Pure — no I/O, no store mutation — so it may be computed ahead of the
+  // gate. The snapshot it plans against is the effective post-choice game:
+  // for "useRemote" that is the checkpoint's own game content (the actual
+  // restoreRemoteCheckpoint() store mutation happens after the gate, right
+  // before this plan is applied — this only needs the CONTENT, not that
+  // mutation having already landed); for "keepLocal" it is simply the
+  // current local game, which nothing between here and the gate can change.
+  const effectiveGame = choice === "useRemote" ? restored!.game : useStorytellerStore.getState().game;
+  const plan = buildMembershipReconciliation(effectiveGame, membership.data, choice === "useRemote" ? restored!.roster : null);
+
+  // Synchronous authority gate (Finding H1): NOTHING awaits between this
+  // check and the completion of every local mutation below — not
+  // restoreRemoteCheckpoint(), not the membership reconciliation's own
+  // local mutations (Finding H1 follow-up: those previously ran after an
+  // additional awaited roster read and interleaved with awaited server
+  // revocations, so a single check here alone would not have protected
+  // them). If this writer's continuous hold on the exact interval
+  // `authority` represents has lapsed, or been reclaimed after a gap,
+  // since reconfirmAuthority() above — even though isStopped() may still
+  // read false, not having caught up yet — the choice is stale rather
+  // than applied against content whose authority is no longer provable.
+  if (!writer.holdsAuthority(authority, FENCE_MARGIN_MS)) return "stale";
+
+  if (choice === "useRemote" && inScope()) {
+    useStorytellerStore.getState().restoreRemoteCheckpoint(restored!.game, currentGuard);
   }
-  // "keepLocal": retain local state exactly as-is — nothing to apply here.
-  const membership = decodeRoster(await raw.get(`lobbies/${lobby.code}/roster`));
-  if (membership.status !== "ready") throw new SnapshotValidationError();
-  if (inScope()) await reconcileMembership(writer, lobby.code, membership.data, choice === "useRemote" ? restored!.roster : null);
+  // "keepLocal": retain local state exactly as-is — restoreRemoteCheckpoint
+  // is simply skipped. Either way, every local membership mutation the
+  // plan calls for happens synchronously right here, still with no await
+  // since the gate above.
+  if (inScope()) applyMembershipReconciliationLocally(plan);
+
+  // Async server-write phase — only now, after ALL local mutation from
+  // this choice is complete. These writes remain protected by ordinary
+  // SessionWriter/Firebase revision fencing; losing authority from this
+  // point on is acceptable (see performMembershipRevocations's own doc
+  // comment) — the critical invariant was that every LOCAL mutation above
+  // occurred while authority was still synchronously proven valid.
+  if (inScope()) await performMembershipRevocations(writer, lobby.code, plan);
 
   const live = await pending.finishLive();
   closeCurrent = live.close;

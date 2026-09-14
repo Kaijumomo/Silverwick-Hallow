@@ -877,3 +877,174 @@ describe("Phase 9C.2A.2A remediation — B1 durable lost-ack promotion", () => {
     expect(useStorytellerStore.getState().sync!.ackedGameSeq).toBeGreaterThanOrEqual(ackedGameSeqBefore);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 9C.2A.2A remediation, Finding H1 follow-up (Luna review) —
+// membership reconciliation must be fenced by the SAME synchronous
+// authority gate as restoreRemoteCheckpoint(): its own local mutations
+// (unseatPlayer/assignPendingToSeat) previously ran after an ADDITIONAL,
+// un-gated roster read and interleaved with awaited server revocations, so
+// a lease that lapsed specifically during that later read could still let
+// a stale local membership mutation through even though the earlier
+// checkpoint-restore gate had already passed.
+// ---------------------------------------------------------------------------
+describe("Phase 9C.2A.2A remediation — H1 follow-up: membership reconciliation fencing", () => {
+  const ghostUid = "h1-followup-ghost-uid";
+  const bobUid = "h1-followup-bob-uid";
+
+  /** Enters CONFLICT via a foreign device whose checkpoint exercises BOTH
+   * membership-driven local mutation paths reconciliation can take:
+   * `vanishSeatId` is bound to `ghostUid` in the checkpoint's OWN embedded
+   * roster (the `priorRoster` diff target for useRemote) but is NOT bound
+   * to her in the LIVE `/roster` — triggering unseatPlayer. `recoverSeatId`
+   * is EMPTY with a matching pendingPlayers entry in the checkpoint's game,
+   * while the LIVE `/roster` DOES bind `bobUid` to it — triggering
+   * assignPendingToSeat. */
+  async function enterConflictWithMembershipWork(b: MemoryRoomBackend) {
+    const { writer, manager, lobby, session } = await host(b);
+    manager.stop(); await writer.dispose();
+    useStorytellerStore.getState().addPlayer("H1-follow-up dirty edit");
+    // Also queue bobUid locally, so the "recover" scenario is exercisable
+    // for BOTH choices: useRemote recovers from the checkpoint's OWN
+    // pendingPlayers (set below); keepLocal must recover from exactly
+    // this local queue, since it never touches the checkpoint at all.
+    useStorytellerStore.getState().addToPendingQueue(bobUid, "Bob");
+    const localGameBefore = useStorytellerStore.getState().game;
+    const undoBefore = useStorytellerStore.getState().undoStack;
+
+    const foreignWriter = writerFor(b, session.id);
+    await foreignWriter.start();
+    const baseGame = await foreignWriter.get(`${root}/storyteller`) as unknown as StorytellerLobbyRecord;
+    const [vanishSeatId, recoverSeatId] = baseGame.seatOrder as [string, string];
+    const foreignGame: StorytellerLobbyRecord = {
+      ...structuredClone(baseGame),
+      day: 9,
+      players: {
+        ...structuredClone(baseGame.players),
+        [vanishSeatId]: { ...baseGame.players[vanishSeatId]!, name: "Ghost (checkpoint-only)", isEmpty: false },
+        [recoverSeatId]: { ...baseGame.players[recoverSeatId]!, isEmpty: true },
+      },
+      pendingPlayers: { [bobUid]: "Bob" },
+    };
+    await writeProjections({
+      backend: foreignWriter, code, stState: foreignGame,
+      registry: buildRegistry(troubleBrewing), online: {},
+      membership: { [ghostUid]: vanishSeatId }, // embedded in the CHECKPOINT only
+    });
+    await foreignWriter.dispose();
+    // The LIVE roster: ghostUid is NOT bound (her checkpoint-era binding
+    // has vanished); bobUid IS bound to the recover seat (his membership
+    // write landed even though the local assignPendingToSeat mutation
+    // that should have accompanied it never did).
+    await b.set(`${root}/roster/${bobUid}`, recoverSeatId);
+
+    const replacement = writerFor(b, session.id);
+    const recovered = await startStorytellerSession(b, lobby, replacement);
+    expect(recovered.outcome).toBe("conflict");
+    return { replacement, lobby, session, foreignGame, localGameBefore, undoBefore, vanishSeatId, recoverSeatId };
+  }
+
+  /** Pauses the very next read of `${root}/roster` — Luna's exact
+   * reproduction step: "delay the roster read long enough that the lease
+   * expires". */
+  function pauseRosterRead(b: MemoryRoomBackend) {
+    const originalGet = b.get.bind(b);
+    let releaseGate: () => void = () => {};
+    const gate = new Promise<void>(resolve => { releaseGate = resolve; });
+    let paused = false;
+    b.get = async path => {
+      if (path === `${root}/roster` && !paused) {
+        paused = true;
+        await gate;
+      }
+      return originalGet(path);
+    };
+    return {
+      waitPaused: () => waitFor(() => expect(paused).toBe(true)),
+      release: () => { b.get = originalGet; releaseGate(); },
+    };
+  }
+
+  it("Luna reproduction: useRemote is stale when the roster read outlives the lease and another writer takes authority — no local membership mutation, no server write", async () => {
+    const b = new MemoryRoomBackend();
+    const { replacement, session, localGameBefore, undoBefore, vanishSeatId, recoverSeatId } = await enterConflictWithMembershipWork(b);
+    disposals.push(() => replacement.dispose());
+    // Filtered the same way it's checked below: writer-lease-path writes
+    // (ordinary renewals, takeovers) are expected and unrelated to this
+    // assertion, which is specifically about revocation/projection writes.
+    const writeLogLengthBefore = b.writeLog.filter(w => w.path !== `${root}/writer`).length;
+    const { waitPaused, release } = pauseRosterRead(b);
+    const realNowAtResolve = Date.now();
+    const resolving = resolveReconnectConflict("useRemote");
+    await waitPaused(); // real Date.now throughout this wait — safe for waitFor's own internals
+
+    // Authority lapses purely from elapsed (mocked) time, AND a genuinely
+    // different writer takes over — both halves of Luna's reproduction.
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(realNowAtResolve + LEASE_MS + 1);
+    const takeoverWriter = writerFor(b, session.id);
+    await takeoverWriter.start(); // legitimately reclaims — replacement's recorded expiry has genuinely lapsed
+    disposals.push(() => takeoverWriter.dispose());
+    release();
+    const result = await resolving;
+    nowSpy.mockRestore();
+
+    expect(result).toBe("stale");
+    expect(useStorytellerStore.getState().game).toEqual(localGameBefore); // untouched entirely
+    expect(useStorytellerStore.getState().undoStack).toEqual(undoBefore);
+    // Specifically: neither membership-driven local mutation occurred.
+    expect(useStorytellerStore.getState().game!.players[vanishSeatId]).toEqual(localGameBefore!.players[vanishSeatId]);
+    expect(useStorytellerStore.getState().game!.players[recoverSeatId]).toEqual(localGameBefore!.players[recoverSeatId]);
+    expect(useStorytellerStore.getState().game!.pendingPlayers).toEqual(localGameBefore!.pendingPlayers);
+    // No server writes from the stale resolver — the takeover's own lease
+    // acquisition (a `${root}/writer` write) is the only write since the
+    // snapshot; no revocation, no projection.
+    expect(b.writeLog.filter(w => w.path !== `${root}/writer`).length).toBe(writeLogLengthBefore);
+  });
+
+  it("positive control: a delay shorter than the valid lease still applies useRemote and performs both reconciliation local mutations correctly", async () => {
+    const b = new MemoryRoomBackend();
+    const { replacement, vanishSeatId, recoverSeatId } = await enterConflictWithMembershipWork(b);
+    disposals.push(() => replacement.dispose());
+    const { waitPaused, release } = pauseRosterRead(b);
+    const realNowAtResolve = Date.now();
+    const resolving = resolveReconnectConflict("useRemote");
+    await waitPaused();
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(realNowAtResolve + 1000); // comfortably inside the 30s lease
+    release();
+    const result = await resolving;
+    nowSpy.mockRestore();
+
+    expect(result).toBe("applied");
+    // Restored to the foreign checkpoint's content, then reconciled: the
+    // vanish seat is unseated (ghostUid's binding vanished from the live
+    // roster); the recover seat is filled from pendingPlayers (bob).
+    const game = useStorytellerStore.getState().game!;
+    expect(game.players[vanishSeatId]!.isEmpty).toBe(true);
+    expect(game.players[recoverSeatId]!.isEmpty).toBe(false);
+    expect(game.players[recoverSeatId]!.name).toBe("Bob");
+    expect(game.pendingPlayers[bobUid]).toBeUndefined();
+  });
+
+  it("keepLocal path also performs pending-player recovery correctly when authority remains valid (no priorRoster, so no unseat is attempted)", async () => {
+    const b = new MemoryRoomBackend();
+    const { replacement, localGameBefore, recoverSeatId } = await enterConflictWithMembershipWork(b);
+    disposals.push(() => replacement.dispose());
+    const { waitPaused, release } = pauseRosterRead(b);
+    const realNowAtResolve = Date.now();
+    const resolving = resolveReconnectConflict("keepLocal");
+    await waitPaused();
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(realNowAtResolve + 1000);
+    release();
+    const result = await resolving;
+    nowSpy.mockRestore();
+
+    expect(result).toBe("applied");
+    const game = useStorytellerStore.getState().game!;
+    // keepLocal: local game content is unchanged except for the live
+    // membership reconciliation that always runs regardless of choice.
+    expect(game.day).toBe(localGameBefore!.day);
+    expect(game.players[recoverSeatId]!.isEmpty).toBe(false);
+    expect(game.players[recoverSeatId]!.name).toBe("Bob");
+    expect(game.pendingPlayers[bobUid]).toBeUndefined();
+  });
+});
