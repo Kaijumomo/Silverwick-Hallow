@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { PlayerDrawer } from "./PlayerDrawer";
@@ -180,4 +180,106 @@ it("keeps drawer focus contained across privacy changes and restores the seat on
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(seat).toHaveFocus();
   expect(seat).not.toHaveAttribute("inert");
+});
+
+// Phase 9C.5 (OPUS-005): ST notes become component-local draft state.
+// Typing must never reach the store; a boundary (blur or close) commits the
+// final value exactly once.
+describe("ST notes edit-session boundary (Phase 9C.5)", () => {
+  const notesField = () => screen.getByPlaceholderText("Private notes for this seat…");
+
+  it("typing stays local; blur commits exactly once with one meaningful undo entry, and undo restores the prior value", () => {
+    const id = current().id;
+    store.getState().setNotes(id, "A");
+    const seqBefore = store.getState().localSeq;
+    const undoLengthBefore = store.getState().undoStack.length;
+    render(<Drawer />);
+    const notes = notesField();
+    const gameBeforeTyping = store.getState().game;
+
+    fireEvent.change(notes, { target: { value: "AB" } });
+    fireEvent.change(notes, { target: { value: "AB2" } });
+    fireEvent.change(notes, { target: { value: "B" } });
+
+    // Before blur: authoritative state, localSeq, and undo are all untouched,
+    // and the `game` reference itself never changed (no reference-change
+    // notification attributable to typing).
+    expect(notes).toHaveValue("B");
+    expect(current().stNotes).toBe("A");
+    expect(store.getState().localSeq).toBe(seqBefore);
+    expect(store.getState().undoStack.length).toBe(undoLengthBefore);
+    expect(store.getState().game).toBe(gameBeforeTyping);
+
+    fireEvent.blur(notes);
+
+    expect(current().stNotes).toBe("B");
+    expect(store.getState().localSeq).toBe(seqBefore + 1);
+    expect(store.getState().undoStack.length).toBe(undoLengthBefore + 1);
+    expect(store.getState().undoStack.at(-1)!.players[id]!.stNotes).toBe("A");
+
+    // A subsequent close after the blur must not create a second commit.
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(current().stNotes).toBe("B");
+    expect(store.getState().localSeq).toBe(seqBefore + 1);
+    expect(store.getState().undoStack.length).toBe(undoLengthBefore + 1);
+
+    store.getState().undo();
+    expect(current().stNotes).toBe("A");
+  });
+
+  it("closing a still-dirty drawer (no prior blur) commits the draft exactly once", () => {
+    store.getState().setNotes(current().id, "A");
+    const seqBefore = store.getState().localSeq;
+    const undoLengthBefore = store.getState().undoStack.length;
+    render(<Drawer />);
+    fireEvent.change(notesField(), { target: { value: "B" } });
+    expect(current().stNotes).toBe("A");
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(current().stNotes).toBe("B");
+    expect(store.getState().localSeq).toBe(seqBefore + 1);
+    expect(store.getState().undoStack.length).toBe(undoLengthBefore + 1);
+  });
+
+  it("an edit session that ends back at the original value produces zero authoritative mutations", () => {
+    store.getState().setNotes(current().id, "A");
+    const seqBefore = store.getState().localSeq;
+    const undoLengthBefore = store.getState().undoStack.length;
+    render(<Drawer />);
+    const notes = notesField();
+
+    fireEvent.change(notes, { target: { value: "AB" } });
+    fireEvent.change(notes, { target: { value: "A" } });
+    fireEvent.blur(notes);
+
+    expect(current().stNotes).toBe("A");
+    expect(store.getState().localSeq).toBe(seqBefore);
+    expect(store.getState().undoStack.length).toBe(undoLengthBefore);
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(store.getState().localSeq).toBe(seqBefore);
+    expect(store.getState().undoStack.length).toBe(undoLengthBefore);
+  });
+
+  it("switching to a different player resets the draft from that player's committed notes", () => {
+    store.getState().setNotes(current().id, "Alice's notes");
+    store.getState().addPlayer("Bob");
+    const bobId = store.getState().game!.seatOrder[1]!;
+    store.getState().setNotes(bobId, "Bob's notes");
+
+    function TwoPlayerDrawer({ playerId }: { playerId: string }) {
+      const p = store(s => s.game!.players[playerId]!);
+      return <PlayerDrawer player={p} />;
+    }
+    const view = render(<TwoPlayerDrawer playerId={current().id} />);
+    expect(notesField()).toHaveValue("Alice's notes");
+    fireEvent.change(notesField(), { target: { value: "unsaved edit" } });
+    expect(notesField()).toHaveValue("unsaved edit");
+
+    view.rerender(<TwoPlayerDrawer playerId={bobId} />);
+    expect(notesField()).toHaveValue("Bob's notes");
+    // The abandoned draft for Alice never reached the store.
+    expect(store.getState().game!.players[current().id]!.stNotes).toBe("Alice's notes");
+  });
 });

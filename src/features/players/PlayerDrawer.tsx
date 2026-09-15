@@ -3,7 +3,7 @@ import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore
 import { deriveAlignment } from "@/data/roleRegistry";
 import { TRAVELERS } from "@/data/travelers";
 import { needsShownIdentity } from "@/stores/identity";
-import { PlayerInformation } from "./PlayerInformation";
+import { PlayerInformation, commitExtraTextDraft } from "./PlayerInformation";
 import { TravelerArrival } from "./TravelerArrival";
 import { publicTravelerRole } from "@/stores/travelers";
 import { getPrivateInfoApplicability } from "@/stores/privatePackets";
@@ -199,9 +199,13 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   const [reminderDraft, setReminderDraft] = useState("");
   const [membershipBusy, setMembershipBusy] = useState(false);
   const [membershipError, setMembershipError] = useState<string | null>(null);
+  const [notesDraft, setNotesDraft] = useState(player.stNotes);
   useEffect(() => {
     setNameDraft(player.name);
   }, [player.id, player.name]);
+  useEffect(() => {
+    setNotesDraft(player.stNotes);
+  }, [player.id, player.stNotes]);
 
   const roleById = useMemo(
     () => new Map((script?.characters ?? []).map((c) => [c.id, c])),
@@ -235,7 +239,19 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
 
   const displayRole = role ?? travelerRoleDef;
 
-  const close = () => selectPlayer(null);
+  const commitNotes = () => {
+    const latest = useStorytellerStore.getState().game?.players[player.id];
+    if (latest && notesDraft !== latest.stNotes) {
+      setNotes(player.id, notesDraft);
+    }
+  };
+
+  const close = () => {
+    // Closing (button, Escape, or backdrop) is a commit boundary for the
+    // notes draft, same as blur — a still-dirty draft must not be lost.
+    commitNotes();
+    selectPlayer(null);
+  };
 
   const commitName = () => {
     if (nameDraft.trim() && nameDraft.trim() !== player.name) {
@@ -580,8 +596,9 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
             <h3 className="drawer-section-title">ST notes</h3>
             <textarea
               className="textarea"
-              value={player.stNotes}
-              onChange={(e) => setNotes(player.id, e.target.value)}
+              value={notesDraft}
+              onChange={(e) => setNotesDraft(e.target.value)}
+              onBlur={commitNotes}
               placeholder="Private notes for this seat…"
             />
           </section>
@@ -768,6 +785,12 @@ function LunaticInfo({
     }
   };
 
+  const [extraTextDraft, setExtraTextDraft] = useState(player.privateInfo?.extraText ?? "");
+  useEffect(() => {
+    setExtraTextDraft(player.privateInfo?.extraText ?? "");
+  }, [player.id, player.privateInfo?.extraText]);
+  const commitExtraText = () => commitExtraTextDraft(player.id, extraTextDraft);
+
   return (
     <section className="drawer-section">
       <h3 className="drawer-section-title">Demon setup information</h3>
@@ -806,11 +829,13 @@ function LunaticInfo({
       <details className="information-review">
         <summary>Additional setup information</summary>
         <label className="information-input">Information
-          <textarea className="input" rows={2} maxLength={4000} value={player.privateInfo?.extraText ?? ""}
-            onChange={event => useStorytellerStore.getState().setPrivateText(player.id, event.target.value)} />
+          <textarea className="input" rows={2} maxLength={4000} value={extraTextDraft}
+            onChange={event => setExtraTextDraft(event.target.value)}
+            onBlur={commitExtraText} />
         </label>
       </details>
-      <PlayerInformation playerId={player.id} purpose="setup" />
+      <PlayerInformation playerId={player.id} purpose="setup"
+        pendingExtraText={{ value: extraTextDraft, commit: commitExtraText }} />
     </section>
   );
 }

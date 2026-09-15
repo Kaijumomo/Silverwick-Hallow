@@ -185,3 +185,113 @@ it("unchanged Demon bluffs are not a task on later nights", () => {
   expect(screen.queryByText(/setup information/i)).toBeNull();
   expect(screen.queryByRole("button", { name: "Send bluffs" })).toBeNull();
 });
+
+// Phase 9C.5 (OPUS-005): the private extraText field becomes component-local
+// draft state. Typing must never reach the store; blur or Send commits the
+// final value exactly once, and Send always publishes from now-authoritative
+// (post-commit) state rather than a stale render-time preview.
+describe("private extra-text edit-session boundary (Phase 9C.5)", () => {
+  it("typing stays local; blur commits exactly once and the live preview reflects the draft before commit", () => {
+    const { id, other } = player();
+    store.getState().setFakeMinions(id, [other]);
+    const seqBefore = store.getState().localSeq;
+    const undoLengthBefore = store.getState().undoStack.length;
+    render(<PlayerInformation playerId={id} purpose="result" />);
+    const info = screen.getByLabelText("Information");
+    const gameBeforeTyping = store.getState().game;
+
+    fireEvent.change(info, { target: { value: "Choose t" } });
+    fireEvent.change(info, { target: { value: "Choose two players tonight" } });
+
+    // Before blur: authoritative extraText, localSeq, and undo are all
+    // untouched, and the `game` reference itself never changed.
+    expect(info).toHaveValue("Choose two players tonight");
+    expect(store.getState().game!.players[id]!.privateInfo?.extraText).toBeUndefined();
+    expect(store.getState().localSeq).toBe(seqBefore);
+    expect(store.getState().undoStack.length).toBe(undoLengthBefore);
+    expect(store.getState().game).toBe(gameBeforeTyping);
+
+    // The Player View preview is derived live from the uncommitted draft via
+    // a transient overlay — never written to the store.
+    const preview = screen.getByText("Player view").closest("details")!;
+    expect(preview).toHaveTextContent("Choose two players tonight");
+    expect(store.getState().game!.players[id]).not.toHaveProperty("packetPreview");
+
+    fireEvent.blur(info);
+
+    expect(store.getState().game!.players[id]!.privateInfo?.extraText).toBe("Choose two players tonight");
+    expect(store.getState().localSeq).toBe(seqBefore + 1);
+    expect(store.getState().undoStack.length).toBe(undoLengthBefore + 1);
+  });
+
+  it("an unchanged extra-text edit session produces zero authoritative mutations", () => {
+    const { id, other } = player();
+    store.getState().setFakeMinions(id, [other]);
+    store.getState().setPrivateText(id, "Steady message");
+    const seqBefore = store.getState().localSeq;
+    const undoLengthBefore = store.getState().undoStack.length;
+    render(<PlayerInformation playerId={id} purpose="result" />);
+    const info = screen.getByLabelText("Information");
+
+    fireEvent.change(info, { target: { value: "Steady message!" } });
+    fireEvent.change(info, { target: { value: "Steady message" } });
+    fireEvent.blur(info);
+
+    expect(store.getState().game!.players[id]!.privateInfo?.extraText).toBe("Steady message");
+    expect(store.getState().localSeq).toBe(seqBefore);
+    expect(store.getState().undoStack.length).toBe(undoLengthBefore);
+  });
+
+  it("clearing previously committed extra text removes it via existing setter semantics, with a single edit-session mutation and no stale preview", () => {
+    const { id, other } = player();
+    store.getState().setFakeMinions(id, [other]);
+    store.getState().setPrivateText(id, "Existing message");
+    expect(store.getState().game!.players[id]!.privateInfo?.extraText).toBe("Existing message");
+    const seqBefore = store.getState().localSeq;
+    const undoLengthBefore = store.getState().undoStack.length;
+
+    render(<PlayerInformation playerId={id} purpose="result" />);
+    const info = screen.getByLabelText("Information");
+    expect(info).toHaveValue("Existing message");
+
+    fireEvent.change(info, { target: { value: "" } });
+    fireEvent.blur(info);
+
+    expect(store.getState().game!.players[id]!.privateInfo?.extraText).toBeUndefined();
+    expect(store.getState().localSeq).toBe(seqBefore + 1);
+    expect(store.getState().undoStack.length).toBe(undoLengthBefore + 1);
+    expect(screen.queryByText("Existing message")).toBeNull();
+  });
+
+  it("Send commits a dirty draft exactly once, without requiring blur first, and publishes text built from now-authoritative state", async () => {
+    const { id, other } = player();
+    store.getState().setFakeMinions(id, [other]);
+    store.getState().setLobby({ code: "BCDF2345", uid: "host", sessionId: "session", status: "live" });
+    useSessionRuntime.setState({ backend: new SessionWriter(new MemoryRoomBackend(), "BCDF2345", "session") });
+    let published: { payload: Record<string, unknown>; fingerprint: string } | undefined;
+    vi.mocked(publishPrivatePacket).mockImplementation(async (_id, reviewed) => {
+      published = reviewed;
+    });
+
+    render(<PlayerInformation playerId={id} purpose="result" />);
+    const info = screen.getByLabelText("Information");
+    fireEvent.change(info, { target: { value: "Choose two players tonight" } });
+    // No blur — the draft is still only local UI state at this point.
+    expect(store.getState().game!.players[id]!.privateInfo?.extraText).toBeUndefined();
+    const seqBefore = store.getState().localSeq;
+    const undoLengthBefore = store.getState().undoStack.length;
+
+    fireEvent.click(screen.getByRole("button", { name: "Send to player view" }));
+
+    // Send committed the dirty draft exactly once — one normal game mutation.
+    expect(store.getState().game!.players[id]!.privateInfo?.extraText).toBe("Choose two players tonight");
+    expect(store.getState().localSeq).toBe(seqBefore + 1);
+    expect(store.getState().undoStack.length).toBe(undoLengthBefore + 1);
+
+    expect(publishPrivatePacket).toHaveBeenCalledTimes(1);
+    // The published preview is the canonical one, rebuilt from committed
+    // authoritative state — never a stale render-time preview.
+    expect(published?.payload.extraText).toBe("Choose two players tonight");
+    expect(published?.payload.minions).toEqual([{ id: other, name: "Bob", seat: 1 }]);
+  });
+});
