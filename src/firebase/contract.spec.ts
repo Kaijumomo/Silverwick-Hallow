@@ -29,7 +29,7 @@ import { FirebaseRoomBackend } from "./firebaseBackend";
 import { SessionWriter, LEASE_MS } from "./writer";
 import { writeProjections } from "./sync";
 import { createLobby, readRosterBindings, revokePlayerMembership, seatPlayer } from "./lobby";
-import { joinLobby, startPlayerHandshake } from "./playerSync";
+import { joinLobby, leaveLobby, startPlayerHandshake } from "./playerSync";
 import { playerPath } from "./paths";
 import { reportRuntimeError, resolveReconnectConflict, startStorytellerSession, useSessionRuntime } from "./storytellerSync";
 import { lifecycleMessage, requireActiveSession } from "./lifecycle";
@@ -1365,6 +1365,17 @@ describe("OPUS-001-CONTRACT-H1-GAP2: valid-authority reconciliation that require
     const writerB = new SessionWriter(deviceB, code, session.id);
     await writerB.start();
     await seatPlayer(writerB, code, ghostUid, seatId, { shownRole: "chef", shownAlignment: "good" });
+    // ...and ghostUid genuinely files a leave request through the real
+    // player-side production path (leaveLobby), under her own auth, per
+    // rules.json's leaveRequests/$uid rule (requires the roster binding
+    // seatPlayer just created). This is a normal rules-enforced client
+    // write — not test-only seeding via withSecurityRulesDisabled — so
+    // there is a genuine pre-existing leaveRequests/{ghostUid} record for
+    // revocation to clean up (Luna: the prior assertion was vacuous
+    // without this).
+    const ghostBackend = backendFor(ghostUid);
+    usePlayerStore.getState().setSession({ code, uid: ghostUid, requestedName: "Ghost" });
+    await leaveLobby(ghostBackend);
     // ...but the checkpoint about to be published shows that seat
     // unoccupied and unrecoverable (no matching pendingPlayers entry) — a
     // crash between the remote membership ACK and the next local flush,
@@ -1397,6 +1408,10 @@ describe("OPUS-001-CONTRACT-H1-GAP2: valid-authority reconciliation that require
     // before resolution — this is what revocation must clean up.
     expect(await deviceA2.get(`lobbies/${code}/roster/${ghostUid}`)).toBe(seatId);
     expect(await deviceA2.get(`lobbies/${code}/player/${seatId}`)).toEqual({ shownRole: "chef", shownAlignment: "good" });
+    // Sanity: the leave request genuinely exists before resolution — this
+    // is what revocation must also clean up (rules.json's
+    // leaveRequests/$uid schema stores exactly the literal `true`).
+    expect(await deviceA2.get(`lobbies/${code}/leaveRequests/${ghostUid}`)).toBe(true);
 
     // Authority remains valid throughout — no lease games here. Gap 1
     // proves the fencing; this proves the positive path it fences.
@@ -1419,6 +1434,10 @@ describe("OPUS-001-CONTRACT-H1-GAP2: valid-authority reconciliation that require
     // ...and recorded per existing command semantics, exactly like any
     // other revocation.
     expect(await deviceA2.get(`lobbies/${code}/outcomes/${ghostUid}`)).toBe("revoked");
+    // ...and her genuinely pre-existing leave request (asserted present,
+    // above) is cleaned up by the same revocation write — no longer
+    // vacuous: existing leave request -> reconciliation revocation ->
+    // leave request removed.
     expect(await deviceA2.get(`lobbies/${code}/leaveRequests/${ghostUid}`)).toBeUndefined();
 
     // Single write path: writeGuard advanced through writerA2's own normal
