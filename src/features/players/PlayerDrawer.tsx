@@ -225,9 +225,24 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
     [game?.players]
   );
 
+  const commitNotes = () => {
+    const latest = useStorytellerStore.getState().game?.players[player.id];
+    if (latest && notesDraft !== latest.stNotes) {
+      setNotes(player.id, notesDraft);
+    }
+  };
+
+  // Shared by every dismissal path — normal close button/Escape/backdrop and
+  // the Privacy Mode safe-view shell alike — so a dirty notes draft is never
+  // silently discarded regardless of which shell is currently showing.
+  const close = () => {
+    commitNotes();
+    selectPlayer(null);
+  };
+
   if (!game || !script) return null;
-  if (privacyMode) return <DrawerShell title={`Player ${player.name}`} onClose={() => selectPlayer(null)}>
-    <PrivacySafeContents player={player} onClose={() => selectPlayer(null)} />
+  if (privacyMode) return <DrawerShell title={`Player ${player.name}`} onClose={close}>
+    <PrivacySafeContents player={player} onClose={close} />
   </DrawerShell>;
   const role = player.actualRole ? roleById.get(player.actualRole) : undefined;
   const shownRoleDef = player.shownRole ? roleById.get(player.shownRole) ?? TRAVELERS.find(r => r.id === player.shownRole) : undefined;
@@ -238,20 +253,6 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
     : undefined;
 
   const displayRole = role ?? travelerRoleDef;
-
-  const commitNotes = () => {
-    const latest = useStorytellerStore.getState().game?.players[player.id];
-    if (latest && notesDraft !== latest.stNotes) {
-      setNotes(player.id, notesDraft);
-    }
-  };
-
-  const close = () => {
-    // Closing (button, Escape, or backdrop) is a commit boundary for the
-    // notes draft, same as blur — a still-dirty draft must not be lost.
-    commitNotes();
-    selectPlayer(null);
-  };
 
   const commitName = () => {
     if (nameDraft.trim() && nameDraft.trim() !== player.name) {

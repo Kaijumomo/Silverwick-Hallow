@@ -282,4 +282,52 @@ describe("ST notes edit-session boundary (Phase 9C.5)", () => {
     // The abandoned draft for Alice never reached the store.
     expect(store.getState().game!.players[current().id]!.stNotes).toBe("Alice's notes");
   });
+
+  // Luna High verification revision: the Privacy Mode safe-view shell must
+  // share the same close/commit boundary as the normal drawer, so switching
+  // to Privacy Mode mid-edit never silently discards a dirty draft.
+  describe("Privacy Mode dismissal commits a dirty notes draft (Luna High revision)", () => {
+    it("the privacy-safe Close button commits the dirty draft exactly once", () => {
+      const id = current().id;
+      store.getState().setNotes(id, "A");
+      const seqBefore = store.getState().localSeq;
+      const undoLengthBefore = store.getState().undoStack.length;
+      render(<Drawer />);
+
+      fireEvent.change(notesField(), { target: { value: "B" } });
+      expect(current().stNotes).toBe("A");
+
+      act(() => usePrivacyStore.getState().setEnabled(true));
+      // Switching to the privacy-safe view must not itself commit or
+      // discard the still-dirty draft.
+      expect(screen.getByText("Storyteller details are hidden while Privacy Mode is on.")).toBeInTheDocument();
+      expect(current().stNotes).toBe("A");
+      expect(store.getState().localSeq).toBe(seqBefore);
+      expect(store.getState().undoStack.length).toBe(undoLengthBefore);
+
+      fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+      expect(current().stNotes).toBe("B");
+      expect(store.getState().localSeq).toBe(seqBefore + 1);
+      expect(store.getState().undoStack.length).toBe(undoLengthBefore + 1);
+    });
+
+    it("dismissing the privacy-safe drawer with Escape commits the dirty draft exactly once", () => {
+      const id = current().id;
+      store.getState().setNotes(id, "A");
+      const seqBefore = store.getState().localSeq;
+      const undoLengthBefore = store.getState().undoStack.length;
+      render(<Drawer />);
+
+      fireEvent.change(notesField(), { target: { value: "B" } });
+      act(() => usePrivacyStore.getState().setEnabled(true));
+      expect(current().stNotes).toBe("A");
+
+      fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+
+      expect(current().stNotes).toBe("B");
+      expect(store.getState().localSeq).toBe(seqBefore + 1);
+      expect(store.getState().undoStack.length).toBe(undoLengthBefore + 1);
+    });
+  });
 });
