@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { PlayerInformation } from "./PlayerInformation";
+import { PlayerInformation, commitExtraTextDraft } from "./PlayerInformation";
 import { vi } from "vitest";
 import { publishPrivatePacket } from "@/firebase/privatePacketCommands";
 import { SessionWriter } from "@/firebase/writer";
@@ -293,5 +293,54 @@ describe("private extra-text edit-session boundary (Phase 9C.5)", () => {
     // authoritative state — never a stale render-time preview.
     expect(published?.payload.extraText).toBe("Choose two players tonight");
     expect(published?.payload.minions).toEqual([{ id: other, name: "Bob", seat: 1 }]);
+  });
+
+  // Luna verification revision: commitExtraTextDraft must dirty-check the
+  // *effective* value setPrivateText would store (whitespace-only canonicalizes
+  // to absence), not the raw draft string, so a whitespace-only edit against
+  // an already-absent value is never treated as a real mutation.
+  describe("whitespace-only drafts canonicalize to absence before the dirty check", () => {
+    it("entering whitespace-only text when extraText is already absent is a no-op", () => {
+      const { id } = player();
+      const seqBefore = store.getState().localSeq;
+      const undoLengthBefore = store.getState().undoStack.length;
+      const gameBefore = store.getState().game;
+
+      commitExtraTextDraft(id, "   ");
+
+      expect(store.getState().game!.players[id]!.privateInfo?.extraText).toBeUndefined();
+      expect(store.getState().localSeq).toBe(seqBefore);
+      expect(store.getState().undoStack.length).toBe(undoLengthBefore);
+      expect(store.getState().game).toBe(gameBefore);
+    });
+
+    it("changing existing extraText to whitespace-only removes it with exactly one mutation", () => {
+      const { id } = player();
+      store.getState().setPrivateText(id, "Existing message");
+      expect(store.getState().game!.players[id]!.privateInfo?.extraText).toBe("Existing message");
+      const seqBefore = store.getState().localSeq;
+      const undoLengthBefore = store.getState().undoStack.length;
+
+      commitExtraTextDraft(id, "   ");
+
+      expect(store.getState().game!.players[id]!.privateInfo?.extraText).toBeUndefined();
+      expect(store.getState().localSeq).toBe(seqBefore + 1);
+      expect(store.getState().undoStack.length).toBe(undoLengthBefore + 1);
+    });
+
+    it("re-running commitExtraTextDraft with the same whitespace draft after removal is a no-op", () => {
+      const { id } = player();
+      store.getState().setPrivateText(id, "Existing message");
+
+      commitExtraTextDraft(id, "   ");
+      expect(store.getState().game!.players[id]!.privateInfo?.extraText).toBeUndefined();
+      const seqAfterRemoval = store.getState().localSeq;
+      const undoLengthAfterRemoval = store.getState().undoStack.length;
+
+      commitExtraTextDraft(id, "   ");
+
+      expect(store.getState().localSeq).toBe(seqAfterRemoval);
+      expect(store.getState().undoStack.length).toBe(undoLengthAfterRemoval);
+    });
   });
 });

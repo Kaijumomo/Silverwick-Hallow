@@ -15,12 +15,19 @@ import type { STPlayerRecord } from "@/stores/types";
  * setup information" field) that Send must fold in before publishing. */
 export type PendingExtraTextDraft = { value: string; commit: () => void };
 
-/** Commit a local extra-text draft through setPrivateText, but only when it
- * differs from the latest authoritative value — repeated commit boundaries
- * (blur, then Send) must never produce duplicate game mutations. */
+/** Commit a local extra-text draft through setPrivateText, but only when the
+ * value it would actually store differs from the latest authoritative value
+ * — repeated commit boundaries (blur, then Send) must never produce
+ * duplicate game mutations, and a whitespace-only draft that setPrivateText
+ * would canonicalize to "absent" must not count as dirty when extraText is
+ * already absent. Mirrors setPrivateText's own trim/absence semantics
+ * without changing setPrivateText itself. */
 export function commitExtraTextDraft(playerId: string, draft: string): void {
   const latest = useStorytellerStore.getState().game?.players[playerId];
-  if (latest && draft !== (latest.privateInfo?.extraText ?? "")) {
+  if (!latest) return;
+  const committedDraft = draft.trim() ? draft.slice(0, 4000) : "";
+  const authoritative = latest.privateInfo?.extraText ?? "";
+  if (committedDraft !== authoritative) {
     useStorytellerStore.getState().setPrivateText(playerId, draft);
   }
 }
