@@ -150,3 +150,164 @@ describe("SessionWriter.reconfirmAuthority failure path", () => {
     await expect(second.start()).rejects.toThrow(/Another Storyteller/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 9C.2A.2A remediation (OPUS-001) — SessionWriter.renew() now decides
+// continuity from the server lease record the COMMITTING transaction
+// invocation observed, never from a `now`/reclaim decision made before that
+// transaction was awaited (Finding H1's root cause). The suite above already
+// exercises the observable epoch/expiresAt behavior end to end; these tests
+// enumerate the task's required minimum coverage explicitly, including the
+// updater-retry cases that require simulating Firebase invoking the same
+// transaction's updater more than once before one invocation's return value
+// actually commits — MemoryRoomBackend's own transaction() only ever calls
+// its updater once, so those two tests wrap it to fabricate that behavior.
+// ---------------------------------------------------------------------------
+describe("SessionWriter.renew() — server-observed continuity (Finding H1 remediation)", () => {
+  it("1. first successful acquisition advances leaseEpoch from 0 to 1", async () => {
+    const { b, session } = await setup();
+    const writer = new SessionWriter(b, code, session.id);
+    disposals.push(() => writer.dispose());
+    await writer.start(); // start()'s own renew() IS the first acquisition
+    const handle = await writer.reconfirmAuthority(); // ordinary renewal right after — epoch unchanged from start()'s own bump
+    expect(handle.epoch).toBe(1);
+  });
+
+  it("2. an uninterrupted same-writer renewal (still valid) preserves the epoch", async () => {
+    const { b, session } = await setup();
+    const writer = new SessionWriter(b, code, session.id);
+    disposals.push(() => writer.dispose());
+    await writer.start();
+    const handle1 = await writer.reconfirmAuthority();
+    const handle2 = await writer.reconfirmAuthority(); // still comfortably within the lease just confirmed
+    expect(handle2.epoch).toBe(handle1.epoch);
+  });
+
+  it("3. renewal after this writer's own lease has genuinely expired server-side advances the epoch", async () => {
+    const { b, session } = await setup();
+    const writer = new SessionWriter(b, code, session.id);
+    disposals.push(() => writer.dispose());
+    const baseNow = Date.now();
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(baseNow);
+    await writer.start();
+    const handle1 = await writer.reconfirmAuthority();
+
+    nowSpy.mockReturnValue(baseNow + LEASE_MS + 1); // past the server-recorded expiresAt
+    const handle2 = await writer.reconfirmAuthority();
+
+    expect(handle2.epoch).toBe(handle1.epoch + 1);
+  });
+
+  it("4. reacquisition over a released foreign lease (foreign token, expiresAt: 0) advances the epoch", async () => {
+    const { b, session } = await setup();
+    const writer = new SessionWriter(b, code, session.id);
+    disposals.push(() => writer.dispose());
+    await writer.start();
+    const handle1 = await writer.reconfirmAuthority();
+
+    // A foreign writer legitimately released — a real production shape,
+    // not this writer's own bookkeeping lapsing.
+    await b.set(`lobbies/${code}/writer`, { token: "some-foreign-writer-token", expiresAt: 0 });
+
+    const handle2 = await writer.reconfirmAuthority();
+    expect(handle2.epoch).toBe(handle1.epoch + 1);
+    expect(writer.holdsAuthority(handle1, FENCE_MARGIN_MS)).toBe(false);
+    expect(writer.holdsAuthority(handle2, FENCE_MARGIN_MS)).toBe(true);
+  });
+
+  it("5. a failed/uncommitted renewal (blocked by another writer's still-valid lease) changes neither leaseEpoch nor leaseExpiresAt", async () => {
+    const { b, session } = await setup();
+    const writer = new SessionWriter(b, code, session.id);
+    disposals.push(() => writer.dispose());
+    const baseNow = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(baseNow);
+    await writer.start();
+    const handle1 = await writer.reconfirmAuthority();
+    expect(writer.holdsAuthority(handle1, FENCE_MARGIN_MS)).toBe(true);
+
+    // A foreign writer's still-valid lease now blocks any renewal.
+    await b.set(`lobbies/${code}/writer`, { token: "another-writer-token", expiresAt: baseNow + LEASE_MS });
+
+    await expect(writer.reconfirmAuthority()).rejects.toThrow(/Another Storyteller/);
+
+    // Neither leaseEpoch nor leaseExpiresAt moved: the old handle reads
+    // exactly as it did before the failed attempt.
+    expect(writer.holdsAuthority(handle1, FENCE_MARGIN_MS)).toBe(true);
+  });
+
+  it("6. transaction updater retry: an earlier invocation looks continuous, but the FINAL (committing) invocation proves discontinuity — epoch MUST increment", async () => {
+    const { b, session } = await setup();
+    const writer = new SessionWriter(b, code, session.id);
+    disposals.push(() => writer.dispose());
+    await writer.start();
+    const handle1 = await writer.reconfirmAuthority();
+
+    const path = `lobbies/${code}/writer`;
+    const originalTransaction = b.transaction.bind(b);
+    b.transaction = async (txPath, change) => {
+      if (txPath !== path) return originalTransaction(txPath, change);
+      // Simulated retry: the FIRST invocation Firebase makes sees a
+      // fabricated, still-continuous self lease — if this were the
+      // deciding invocation, the epoch would NOT move. It is discarded.
+      change({ token: writer.token, expiresAt: Date.now() + LEASE_MS });
+      // The FINAL invocation — the one whose return value actually
+      // commits — sees a foreign, released lease: genuinely discontinuous.
+      const finalResult = change({ token: "some-other-writer-token", expiresAt: 0 });
+      if (finalResult === undefined) return false;
+      return originalTransaction(txPath, () => finalResult);
+    };
+
+    const handle2 = await writer.reconfirmAuthority();
+    b.transaction = originalTransaction;
+
+    expect(handle2.epoch).toBe(handle1.epoch + 1); // followed the FINAL invocation, not the first
+  });
+
+  it("7. transaction updater retry (reverse): an earlier invocation looks discontinuous, but the FINAL (committing) invocation proves continuous self-ownership — epoch must NOT move", async () => {
+    const { b, session } = await setup();
+    const writer = new SessionWriter(b, code, session.id);
+    disposals.push(() => writer.dispose());
+    await writer.start();
+    const handle1 = await writer.reconfirmAuthority();
+
+    const path = `lobbies/${code}/writer`;
+    const originalTransaction = b.transaction.bind(b);
+    b.transaction = async (txPath, change) => {
+      if (txPath !== path) return originalTransaction(txPath, change);
+      // Simulated retry: the FIRST invocation sees a fabricated foreign,
+      // released lease — if this were the deciding invocation, the epoch
+      // WOULD move. It is discarded.
+      change({ token: "some-other-writer-token", expiresAt: 0 });
+      // The FINAL invocation — the one whose return value actually
+      // commits — sees this writer's own still-valid lease: genuinely
+      // continuous.
+      const finalResult = change({ token: writer.token, expiresAt: Date.now() + LEASE_MS });
+      if (finalResult === undefined) return false;
+      return originalTransaction(txPath, () => finalResult);
+    };
+
+    const handle2 = await writer.reconfirmAuthority();
+    b.transaction = originalTransaction;
+
+    expect(handle2.epoch).toBe(handle1.epoch); // followed the FINAL invocation only — unchanged
+  });
+
+  it("8. a continuously renewed writer keeps an old AuthorityHandle valid across more than one lease duration, as long as authority never became discontinuous", async () => {
+    const { b, session } = await setup();
+    const writer = new SessionWriter(b, code, session.id);
+    disposals.push(() => writer.dispose());
+    const baseNow = Date.now();
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(baseNow);
+    await writer.start();
+    const originalHandle = await writer.reconfirmAuthority();
+
+    // Renew several times, always while still comfortably valid — never
+    // lapsing — spanning more than one full LEASE_MS in total.
+    for (let i = 1; i <= 4; i++) {
+      nowSpy.mockReturnValue(baseNow + i * (LEASE_MS / 2));
+      await writer.reconfirmAuthority();
+    }
+
+    expect(writer.holdsAuthority(originalHandle, FENCE_MARGIN_MS)).toBe(true);
+  });
+});

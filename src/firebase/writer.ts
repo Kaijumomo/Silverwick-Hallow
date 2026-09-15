@@ -3,11 +3,15 @@ import type { GuardStamp } from "@/stores/types";
 import { guardSchema, leaseSchema, LifecycleError, requireActiveSession, retryTransient, sessionPath } from "./lifecycle";
 
 export const LEASE_MS = 30_000;
-/** Default synchronous fencing margin for `holdsAuthority` (Finding H1):
- * the buffer, in ms, subtracted from a lease's recorded expiry before it is
- * treated as no longer provably valid. Comfortably smaller than the renewal
- * cadence (LEASE_MS / 3) so ordinary renewal never trips it, while still
- * absorbing clock-estimate slop around the instant of a destructive commit. */
+/** Default synchronous fencing margin (Finding H1): the buffer, in ms,
+ * subtracted from a lease's recorded expiry before it is treated as no
+ * longer provably valid. Used twice — by `holdsAuthority` for its
+ * synchronous pre-mutation check, and inside `renew()`'s own transaction
+ * updater to decide whether the server lease record it observed is safely
+ * continuous or must be treated as a gap. Comfortably smaller than the
+ * renewal cadence (LEASE_MS / 3) so ordinary renewal never trips it, while
+ * still absorbing clock-estimate slop around the instant of a destructive
+ * commit. */
 export const FENCE_MARGIN_MS = 1000;
 
 /** A proof that this writer held (or validly reclaimed) the exclusive
@@ -53,11 +57,17 @@ export class SessionWriter implements RoomBackend {
    * server for its own lease (Finding H1). Updated on every successful
    * start()/renew(), never guessed or extrapolated between renewals. */
   private leaseExpiresAt = 0;
-  /** Bumped only when a renewal *reclaims* a lease this writer's own
-   * bookkeeping shows had already lapsed — never on an ordinary renewal of
-   * a still-valid lease. A handle from `reconfirmAuthority()` whose epoch no
-   * longer matches proves this writer's hold was not continuous since that
-   * handle was issued, even if `isStopped()` has not (yet) caught up. */
+  /** Identifies one uninterrupted generation of this writer's authority.
+   * Bumped by `renew()` whenever the server lease record its own committing
+   * transaction observed proves authority was NOT continuously held by this
+   * writer's current token since the prior renewal — never decided from
+   * this writer's own pre-transaction bookkeeping, which can be stale by
+   * the time the transaction actually commits (Finding H1: a renewal begun
+   * while genuinely valid can still resume, after a real delay, into a gap
+   * a different writer legitimately filled and vacated in between). A
+   * handle from `reconfirmAuthority()` whose epoch no longer matches proves
+   * this writer's hold was not continuous since that handle was issued,
+   * even if `isStopped()` has not (yet) caught up. */
   private leaseEpoch = 0;
   readonly token = crypto.randomUUID();
   readonly root: string;
@@ -119,23 +129,50 @@ export class SessionWriter implements RoomBackend {
   }
   private async renew() {
     if (this.stopped) throw new LifecycleError("cancelled", "Session closed.");
-    const now = Date.now() + this.offset;
-    // A renewal that finds this writer's own previously-recorded lease
-    // already lapsed is a RECLAIM, not a continuation of the same
-    // ownership interval — captured before the transaction runs so it
-    // reflects this writer's own bookkeeping, not a value the transaction's
-    // (possibly multiply-invoked) updater could see differently (Finding
-    // H1: "leaseEpoch does not change on ordinary renewal").
-    const reclaiming = now >= this.leaseExpiresAt;
+    // Continuity (Finding H1) is decided from the server lease record the
+    // transaction invocation that actually COMMITS observed — never from a
+    // `now` or reclaim/no-reclaim decision made before this transaction was
+    // even awaited. A renewal that begins while this writer's lease is
+    // still genuinely valid can still resume, after a real delay, into a
+    // gap a different writer legitimately filled and released in between;
+    // deciding from pre-transaction bookkeeping would miss exactly that.
+    let observation: { continuous: boolean; expiresAt: number } | null = null;
     const acquired = await this.raw.transaction(`${this.root}/writer`, current => {
+      // Firebase may invoke this updater more than once per transaction
+      // (local-cache retry, server contention) before one invocation's
+      // return value actually commits. The capture is therefore reset at
+      // the very start of every invocation and never accumulated across
+      // retries — only the invocation associated with the eventual commit
+      // may leave a non-null observation behind, and an aborted invocation
+      // (stopped, or blocked by a foreign valid lease) always leaves it
+      // null.
+      observation = null;
       if (this.stopped) return undefined;
+      const now = Date.now() + this.offset;
       const lease = current == null ? null : leaseSchema.parse(current);
       if (lease && lease.token !== this.token && lease.expiresAt > now) return undefined;
-      return { token: this.token, expiresAt: now + LEASE_MS };
+      const continuous = lease != null && lease.token === this.token && lease.expiresAt > now + FENCE_MARGIN_MS;
+      const expiresAt = now + LEASE_MS;
+      observation = { continuous, expiresAt };
+      return { token: this.token, expiresAt };
     });
     if (!acquired) throw new LifecycleError("conflict", "Another Storyteller tab controls this lobby. Close it, then retry after 30 seconds.");
-    if (reclaiming) this.leaseEpoch++;
-    this.leaseExpiresAt = now + LEASE_MS;
+    // TS cannot narrow `observation` itself across the closure that mutates
+    // it (it stays typed as the pre-transaction `null` at this point), so
+    // this asserts the declared type back so `if (!settled)` below narrows
+    // normally — a type-system workaround only, not a runtime assumption:
+    // the defensive check right after still fails closed for real.
+    const settled = observation as { continuous: boolean; expiresAt: number } | null;
+    // Defensive: a committed transaction's winning invocation always sets
+    // `observation` immediately before returning the value that commits, so
+    // this should be unreachable — but fail closed rather than assume
+    // continuity if it is ever somehow reached.
+    if (!settled) throw new LifecycleError("conflict", "Lease renewal could not be verified.");
+    // Synchronous — no await/Promise boundary between this decision and the
+    // expiry it commits alongside it — so nothing else can observe one
+    // updated without the other.
+    if (!settled.continuous) this.leaseEpoch++;
+    this.leaseExpiresAt = settled.expiresAt;
   }
   /** Synchronously re-proves current server writer authority by reusing the
    * exact same lease-acquisition/renewal transaction the renewal interval

@@ -26,7 +26,7 @@ import { resolve } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import type { Database } from "firebase/database";
 import { FirebaseRoomBackend } from "./firebaseBackend";
-import { SessionWriter, LEASE_MS } from "./writer";
+import { SessionWriter, LEASE_MS, FENCE_MARGIN_MS } from "./writer";
 import { writeProjections } from "./sync";
 import { createLobby, readRosterBindings, revokePlayerMembership, seatPlayer } from "./lobby";
 import { joinLobby, leaveLobby, startPlayerHandshake } from "./playerSync";
@@ -1446,6 +1446,250 @@ describe("OPUS-001-CONTRACT-H1-GAP2: valid-authority reconciliation that require
     expect(guardAfter.token).toBe(writerA2.token);
     expect(guardAfter.revision).toBeGreaterThan(guardBefore.revision);
   }, 30000);
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9C.2A.2A remediation (OPUS-001-CONTRACT-H1-DELAYED-RENEWAL) — the
+// exact real-emulator race the architecture review reproduced: renew()
+// previously decided whether a renewal was a "reclaim" (and therefore
+// whether to advance leaseEpoch) from a `now` captured, and a
+// continuous-vs-reclaiming decision made, BEFORE its own Firebase
+// transaction was ever awaited. A renewal that begins while this writer's
+// lease is still genuinely valid, but whose real transaction is then
+// delayed — exactly as a stalled network call delays it — long enough that
+// the lease expires and a completely separate real writer legitimately
+// takes over AND releases before the delayed transaction finally resolves,
+// would, under the old code, refresh leaseExpiresAt without ever bumping
+// leaseEpoch: "reclaiming" had already been decided (false) from
+// pre-transaction bookkeeping that still believed the old lease was valid.
+// The pre-gap AuthorityHandle would then incorrectly continue to satisfy
+// holdsAuthority()'s epoch check (and, if checked too soon after the delay,
+// even its expiry check — this test's timing deliberately keeps the delayed
+// renewal's OWN real transaction dispatch late enough in this writer's
+// valid window that only the epoch check can catch it, not a coincidental
+// expiry mismatch — see the mutation proof in the review notes).
+//
+// This proves the fix: continuity is decided from the server lease record
+// the transaction invocation that actually commits observed, so a delayed
+// renewal resuming after a real authority gap always advances the epoch and
+// invalidates any handle issued before the gap — while leaving the writer
+// itself free to reacquire and mint a fresh, valid handle afterward. Real
+// emulator, rules enforced throughout, no mocked clock (same discipline as
+// OPUS-001-CONTRACT-H1-TAKEOVER above); only the renewal transaction's
+// dispatch to the server is deliberately delayed — this writer's own
+// background renewal-interval tick, which fires while its lease is still
+// genuinely valid, exactly as the reproduction's "A begins renewal while
+// valid" step describes — and it overlaps with the resolver's own
+// already-completed reconfirmAuthority() call, the concurrent-renewal case
+// Finding H1 requires stay safe without a mutex.
+// ---------------------------------------------------------------------------
+describe("OPUS-001-CONTRACT-H1-DELAYED-RENEWAL: a renewal begun while valid, whose real transaction only resolves after a genuine foreign takeover and release, must advance the epoch and invalidate the pre-gap handle", () => {
+  test("useRemote is stale once a delayed renewal legitimately reacquires the lease across a real foreign takeover/release; a freshly reconfirmed handle afterward remains valid", async () => {
+    const code = "OP9AAAAA", st = "op9-storyteller";
+    const ghostUid = "op9-ghost-uid"; // genuinely seated on the LIVE roster; unresolvable against the restored checkpoint
+    const deviceA1 = backendFor(st);
+    await createLobby(deviceA1, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(deviceA1, code);
+    const lobby = { code, uid: st, sessionId: session.id, status: "live" as const };
+    useStorytellerStore.getState().newGame("tb");
+    useStorytellerStore.getState().addPlayer("Alice");
+    useStorytellerStore.getState().setLobby(lobby);
+    const seatId = useStorytellerStore.getState().game!.seatOrder[0]!;
+    const writerA1 = new SessionWriter(deviceA1, code, session.id, error =>
+      reportRuntimeError("write", error ? lifecycleMessage(error) : null));
+    const managerA1 = await startStorytellerSession(deviceA1, lobby, writerA1);
+    managerA1.stop();
+    await writerA1.dispose();
+    await forceLeaseExpiry(code);
+
+    // Device B publishes a checkpoint whose OWN embedded roster binds
+    // ghostUid to seatId (this becomes `restored.roster`, the prior-roster
+    // diff target for useRemote) with that seat shown occupied — while the
+    // LIVE `/roster` node (a separate path, untouched by writeProjections)
+    // never gets that binding at all (same technique as
+    // OPUS-001-CONTRACT-H1-FOLLOWUP/H1-TAKEOVER above). This is exactly "a
+    // seat this device once believed was uid-bound, absent now" — a real,
+    // non-vacuous reconciliation target if authority incorrectly held —
+    // and, being a purely LOCAL unseat rather than a network revocation,
+    // it keeps this test's failure mode a clean assertion mismatch rather
+    // than a rules-level write rejection if the epoch gate is ever bypassed.
+    const deviceB = backendFor(st);
+    const writerB = new SessionWriter(deviceB, code, session.id);
+    await writerB.start();
+    const foreignGame = {
+      ...useStorytellerStore.getState().game!, day: 5,
+      players: { ...useStorytellerStore.getState().game!.players,
+        [seatId]: { ...useStorytellerStore.getState().game!.players[seatId]!, name: "Ghost", isEmpty: false } },
+    };
+    await writeProjections({
+      backend: writerB, code, stState: foreignGame,
+      registry: buildRegistry(troubleBrewing), online: {}, membership: { [ghostUid]: seatId },
+    });
+    await writerB.dispose();
+    await forceLeaseExpiry(code);
+
+    useStorytellerStore.getState().addPlayer("Unacknowledged local edit under real delayed renewal");
+    const localGameBefore = useStorytellerStore.getState().game;
+    const undoBefore = useStorytellerStore.getState().undoStack;
+
+    const deviceA2 = backendFor(st);
+    const writerA2 = new SessionWriter(deviceA2, code, session.id);
+    const startedAt = Date.now(); // anchors A2's own real 30s lease window below
+    const managerA2 = await startStorytellerSession(deviceA2, lobby, writerA2);
+    disposals.push(() => writerA2.dispose());
+    expect(managerA2.outcome).toBe("conflict");
+    const guardBefore = await deviceA2.get(`lobbies/${code}/writeGuard`);
+    const rosterBefore = await deviceA2.get(`lobbies/${code}/roster`);
+
+    // Intercept /writer transactions on deviceA2. Everything BEFORE the
+    // roster read pauses (below) — in particular resolveReconnectConflict's
+    // own reconfirmAuthority(), the very first thing it does — passes
+    // straight through: item 1 of the reproduction, the resolver must
+    // receive a real AuthorityHandle. The FIRST /writer transaction AFTER
+    // the roster read pauses is this writer's own background
+    // renewal-interval tick, firing while its lease is still genuinely
+    // valid — that one is captured rather than dispatched: its real
+    // Firebase transaction is held back exactly as a stalled network call
+    // would hold it, until this test explicitly releases it below.
+    // Anything beyond that (a later interval tick) must never be allowed to
+    // interfere and hangs forever, exactly as an unresponsive network
+    // would.
+    const originalTransaction = deviceA2.transaction.bind(deviceA2);
+    const writerPath = `lobbies/${code}/writer`;
+    let paused = false;
+    let blocked = false;
+    let releaseDelayedRenewal: (() => void) | null = null;
+    // Exposed so the test can await the REAL dispatched transaction's own
+    // settlement below, rather than assuming it has already landed on the
+    // server the instant `releaseDelayedRenewal()` returns.
+    let delayedTransactionSettled: Promise<boolean> | null = null;
+    deviceA2.transaction = (transactionPath, change) => {
+      if (transactionPath !== writerPath || !paused) return originalTransaction(transactionPath, change);
+      if (blocked) return new Promise<boolean>(() => {}); // hang forever
+      blocked = true;
+      return new Promise<boolean>(resolve => {
+        releaseDelayedRenewal = () => {
+          const real = originalTransaction(transactionPath, change);
+          delayedTransactionSettled = real;
+          resolve(real);
+        };
+      });
+    };
+
+    // Pause the roster read — the last server read before the final
+    // authority gate — exactly like OPUS-001-CONTRACT-H1-TAKEOVER.
+    const originalGet = deviceA2.get.bind(deviceA2);
+    let releaseGate: () => void = () => {};
+    const gate = new Promise<void>(resolve => { releaseGate = resolve; });
+    deviceA2.get = async readPath => {
+      if (readPath === `lobbies/${code}/roster` && !paused) {
+        paused = true;
+        await gate;
+      }
+      return originalGet(readPath);
+    };
+
+    const resolving = resolveReconnectConflict("useRemote");
+    await vi.waitFor(() => {
+      if (!paused) throw new Error("expected the roster read to be paused");
+    }, { timeout: 5000, interval: 20 });
+
+    // A's own background renewal-interval tick fires (every LEASE_MS / 3,
+    // per SessionWriter.start()) — a real concurrent renewal, distinct from
+    // the resolver's own already-completed reconfirmAuthority() above —
+    // while A's lease is still genuinely valid, and is captured rather than
+    // dispatched.
+    await vi.waitFor(() => {
+      if (!releaseDelayedRenewal) throw new Error("expected the delayed renewal's transaction to be captured");
+    }, { timeout: 15000, interval: 50 });
+
+    // Genuinely wait until shortly after A's real 30s lease (anchored at
+    // `startedAt`) has expired — no mocked clock. Nothing can renew it in
+    // the meantime: the resolver's own reconfirmAuthority() already ran
+    // once, and the captured renewal above is held; any further interval
+    // tick hangs forever.
+    const targetTime = startedAt + LEASE_MS + 2000;
+    const remainingWait = targetTime - Date.now();
+    if (remainingWait > 0) await new Promise(resolve => setTimeout(resolve, remainingWait));
+
+    // A genuinely separate real SessionWriter for the same storyteller
+    // identity legitimately acquires the now-expired /writer lease under
+    // fully enforced rules, publishes newer guard/checkpoint/roster state
+    // through the real production path, and then legitimately releases —
+    // all while A's delayed renewal transaction is still held back.
+    const deviceC = backendFor(st);
+    const takeoverWriter = new SessionWriter(deviceC, code, session.id);
+    await takeoverWriter.start();
+    const takeoverGame = { ...foreignGame, day: 9, notes: "takeover writer's own newer content" };
+    await writeProjections({
+      backend: takeoverWriter, code, stState: takeoverGame,
+      registry: buildRegistry(troubleBrewing), online: {}, membership: {},
+    });
+    await takeoverWriter.dispose();
+
+    const guardAfterTakeover = await deviceA2.get(`lobbies/${code}/writeGuard`);
+    const checkpointAfterTakeover = await deviceA2.get(`lobbies/${code}/checkpoint`);
+    const rosterAfterTakeover = await deviceA2.get(`lobbies/${code}/roster`);
+    expect(guardAfterTakeover).not.toEqual(guardBefore); // genuinely newer than the conflict snapshot
+
+    // Resume A's delayed renewal — its real Firebase transaction now
+    // finally runs, against the CURRENT server record (the takeover
+    // writer's released lease), and legitimately reacquires /writer for A.
+    // Awaited directly (not assumed to have landed already) so the
+    // subsequent server read below observes its actual outcome.
+    releaseDelayedRenewal!();
+    await delayedTransactionSettled;
+    const writerNodeAfterReacquire = await deviceA2.get(writerPath) as { token: string; expiresAt: number };
+    expect(writerNodeAfterReacquire.token).toBe(writerA2.token); // A genuinely reacquired the real lease
+
+    // Resume the paused roster read.
+    deviceA2.get = originalGet;
+    releaseGate();
+    // Awaited through a try/catch rather than a bare `await`: if the epoch
+    // gate is ever bypassed, the resolver does not merely return the wrong
+    // string — it proceeds into finishLive()'s own initial flush, whose
+    // writeGuard revision collides with the takeover writer's already-newer
+    // one and is rejected by Firebase's own revision-monotonicity rule, so
+    // the whole call rejects instead of resolving. Capturing that here
+    // turns it into a clear, diagnosable assertion below rather than an
+    // uncaught rejection escaping the test.
+    let result: string | undefined;
+    let unexpectedRejection: unknown;
+    try { result = await resolving; }
+    catch (error) { unexpectedRejection = error; }
+    deviceA2.transaction = originalTransaction;
+
+    expect(unexpectedRejection).toBeUndefined();
+    // The resolver's pre-gap handle is stale: the delayed renewal advanced
+    // the epoch out from under it.
+    expect(result).toBe("stale");
+
+    // No stale local restoration, no undo mutation, and specifically no
+    // local membership mutation — the seat that WOULD have been unseated
+    // (per B's checkpoint-embedded ghostUid binding, absent from the live
+    // roster) is exactly as it was locally, and no outcome/revocation was
+    // ever recorded for ghostUid (there is no live binding for her to
+    // revoke in the first place — this setup isolates the toUnseat branch,
+    // exactly like H1-FOLLOWUP/H1-TAKEOVER above).
+    expect(useStorytellerStore.getState().game).toEqual(localGameBefore);
+    expect(useStorytellerStore.getState().undoStack).toEqual(undoBefore);
+    expect(useStorytellerStore.getState().game!.players[seatId]).toEqual(localGameBefore!.players[seatId]);
+    expect(await deviceA2.get(`lobbies/${code}/outcomes/${ghostUid}`)).toBeUndefined();
+    // No overwrite of the takeover writer's newer state — guard, checkpoint
+    // and roster remain exactly as it left them.
+    expect(await deviceA2.get(`lobbies/${code}/writeGuard`)).toEqual(guardAfterTakeover);
+    expect(await deviceA2.get(`lobbies/${code}/checkpoint`)).toEqual(checkpointAfterTakeover);
+    expect(await deviceA2.get(`lobbies/${code}/roster`)).toEqual(rosterAfterTakeover);
+    expect(await deviceA2.get(`lobbies/${code}/roster`)).toEqual(rosterBefore); // untouched throughout
+
+    // A itself is not permanently dead: a NEW AuthorityHandle, obtained
+    // after the reacquisition above, is genuinely valid. Reacquisition is
+    // allowed for future work — only the specific handle issued before the
+    // gap (held by the now-resolved resolver above) never becomes valid
+    // again.
+    const freshHandle = await writerA2.reconfirmAuthority();
+    expect(writerA2.holdsAuthority(freshHandle, FENCE_MARGIN_MS)).toBe(true);
+  }, 45000);
 });
 
 // ---------------------------------------------------------------------------
