@@ -3,7 +3,7 @@ import { usePlayerStore } from "@/stores/playerStore";
 import { canonicalJoin, cancelJoinRequest, knockOnLobby, normaliseCode } from "./lobby";
 import { joinRequestPath, publicPath, rosterEntryPath, playerPath, presencePath } from "./paths";
 import type { RoomBackend } from "./backend";
-import { decodeJoinRequest, decodeRosterEntry, decodeSelfSnapshot, decodePublicSnapshot, SnapshotValidationError } from "./snapshots";
+import { decodeJoinRequest, decodeLeaveRequest, decodeRosterEntry, decodeSelfSnapshot, decodePublicSnapshot, SnapshotValidationError } from "./snapshots";
 import { decodeSession, isTransient, leavePath, lifecycleMessage, LifecycleError, outcomePath, requireActiveSession, retryTransient, sessionPath } from "./lifecycle";
 
 /** Explicit URL intent wins. An empty ?join= opens the join form; the same
@@ -161,7 +161,18 @@ export function startPlayerHandshake(backend: RoomBackend, code: string, uid: st
     if (membership.status === "ready") {
       const id = membership.data;
       ps().setPlayerId(id);
-      if (ps().status !== "leaving") ps().setStatus("seated");
+      // Phase 9C.3 (OPUS-003): the player's own leaveRequests/{uid} is the
+      // authoritative signal for "leaving" vs "seated" while membership is
+      // bound — this is what lets a Storyteller rejection (which clears only
+      // this node) recover the player from the pending-leave screen back to
+      // normal seated operation, and what lets a fresh reconnect show
+      // "leaving" for a request that was already pending. Read fresh on
+      // every reconcile pass, never cached, and never trusted once the
+      // "revoked" outcome has already returned above.
+      const leaveRequest = decodeLeaveRequest(await backend.get(leavePath(code, uid)));
+      if (!current()) return;
+      if (leaveRequest.status !== "ready") throw new SnapshotValidationError();
+      ps().setStatus(leaveRequest.data ? "leaving" : "seated");
       if (bound !== id) {
         bound = id; privateOff(); ps().setSelf(null);
         privateOff = watch(playerPath(code, id), raw => {
@@ -204,7 +215,7 @@ export function startPlayerHandshake(backend: RoomBackend, code: string, uid: st
     })();
   }
   // These non-private paths are independently authorized for this UID.
-  for (const path of [sessionPath(code), outcomePath(code, uid), rosterEntryPath(code, uid), joinRequestPath(code, uid)]) cleanups.push(watch(path, schedule));
+  for (const path of [sessionPath(code), outcomePath(code, uid), rosterEntryPath(code, uid), joinRequestPath(code, uid), leavePath(code, uid)]) cleanups.push(watch(path, schedule));
   schedule();
   return stop;
 }

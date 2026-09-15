@@ -11,6 +11,7 @@ import { lookupOfficialRole } from "@/data/officialRoles";
 import { getBuiltinScript } from "@/data/scripts";
 import { iconUrlFor } from "@/data/iconUrl";
 import type { PublicLobbyRecord, RoleDef } from "@/stores/types";
+import { Modal } from "@/components/Modal";
 import { SeatNotePopup } from "./SeatNotePopup";
 import { SeatNotePreview } from "./SeatNotePreview";
 import { PlayerTabs } from "./PlayerTabs";
@@ -44,6 +45,7 @@ function PlayerScreenContent({ initialCode }: Props) {
 
   const [retry, setRetry] = useState(0);
   const [leaving, setLeaving] = useState(false);
+  const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
   const [backend, setBackend] = useState<RoomBackend | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<PlayerTab>("role");
@@ -230,18 +232,29 @@ function PlayerScreenContent({ initialCode }: Props) {
     );
   }
 
-  if (status === "error" || status === "rejected" || status === "revoked" || status === "notFound" || status === "leaving") {
+  if (status === "leaving") {
     return (
       <div className="player player-status">
-        <h2 className="title">{status === "leaving" ? "Waiting for the Storyteller to confirm your departure" : "Lobby unavailable"}</h2>
+        <h2 className="title">Leave request pending</h2>
+        <p className="behavior-help">
+          Your seat is still reserved. Waiting for the Storyteller to accept or decline your request.
+        </p>
+      </div>
+    );
+  }
+
+  if (status === "error" || status === "rejected" || status === "revoked" || status === "notFound") {
+    return (
+      <div className="player player-status">
+        <h2 className="title">Lobby unavailable</h2>
         <div className="error-list" role="alert">
           <strong>Error:</strong>
           <p>{error}</p>
         </div>
         {status === "error" && <button className="btn" onClick={() => setRetry(value => value + 1)}>Retry connection</button>}
-        {status !== "leaving" && <button className="btn" onClick={status === "error" ? leave : reset} disabled={leaving}>
+        <button className="btn" onClick={status === "error" ? leave : reset} disabled={leaving}>
           {status === "error" ? "Cancel / request to leave" : "Back to start"}
-        </button>}
+        </button>
       </div>
     );
   }
@@ -259,7 +272,26 @@ function PlayerScreenContent({ initialCode }: Props) {
         <span className="label">{publicLobby?.phase ?? "—"}</span>
       </header>
 
-      <button className="btn btn-sm" onClick={leave} disabled={leaving}>Request to leave lobby</button>
+      <button className="btn btn-sm" onClick={() => setConfirmLeaveOpen(true)} disabled={leaving}>Request to leave lobby</button>
+      {confirmLeaveOpen && (
+        <Modal title="Request to leave?" onClose={() => setConfirmLeaveOpen(false)}>
+          <div className="dialog-body">
+            <p className="behavior-help">
+              You will remain seated in the game until the Storyteller accepts your request.
+            </p>
+            <div className="dialog-row">
+              <button className="btn btn-sm" onClick={() => setConfirmLeaveOpen(false)}>Cancel</button>
+              <button
+                className="btn btn-sm btn-danger"
+                onClick={() => { setConfirmLeaveOpen(false); void leave(); }}
+                disabled={leaving}
+              >
+                Request to leave
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
       <PlayerTabs active={activeTab} onChange={setActiveTab} />
 
       {activeTab === "role" && (

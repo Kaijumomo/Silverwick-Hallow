@@ -30,6 +30,7 @@ import { SessionWriter, LEASE_MS, FENCE_MARGIN_MS } from "./writer";
 import { writeProjections } from "./sync";
 import { createLobby, readRosterBindings, revokePlayerMembership, seatPlayer } from "./lobby";
 import { joinLobby, leaveLobby, startPlayerHandshake } from "./playerSync";
+import { acceptLeaveRequest, rejectLeaveRequest } from "./membershipCommands";
 import { playerPath } from "./paths";
 import { reportRuntimeError, resolveReconnectConflict, startStorytellerSession, useSessionRuntime } from "./storytellerSync";
 import { lifecycleMessage, requireActiveSession } from "./lifecycle";
@@ -1446,6 +1447,87 @@ describe("OPUS-001-CONTRACT-H1-GAP2: valid-authority reconciliation that require
     expect(guardAfter.token).toBe(writerA2.token);
     expect(guardAfter.revision).toBeGreaterThan(guardBefore.revision);
   }, 30000);
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9C.3 (OPUS-003) contract coverage — the request/approval workflow's
+// own real-client-against-enforced-rules proof. Every step below is the
+// same production entry point the app itself calls: the real player client
+// (leaveLobby/startPlayerHandshake) and the real Storyteller command layer
+// (acceptLeaveRequest/rejectLeaveRequest), against rules.json enforced by
+// the emulator throughout — never withSecurityRulesDisabled around the
+// operation under test. The load-bearing proof both flows share: writing
+// the request alone (leaveLobby) never destroys roster/private membership;
+// only an explicit Storyteller decision does.
+// ---------------------------------------------------------------------------
+describe("OPUS-003-CONTRACT: real player client + enforced rules prove both the reject and accept leave-request flows", () => {
+  test("reject flow: a real leave request survives Storyteller rejection and the player's handshake returns to seated with private access intact", async () => {
+    const code = "OPC3AAAA", st = "opc3-storyteller", alice = "opc3-alice";
+    const { stBackend, aliceBackend, writer, id } = await establishSeatedPlayer(code, st, alice, dispose => disposals.push(dispose));
+
+    const stop = startPlayerHandshake(aliceBackend, code, alice);
+    disposals.push(stop);
+    await waitForPlayer(s =>
+      s.status === "seated" && s.playerId === id && s.self !== null && s.error === null,
+      "a live seated state with private data before any leave request");
+
+    // Real player client, real enforced rules: the request itself must not
+    // touch membership.
+    await leaveLobby(aliceBackend);
+    expect(await stBackend.get(`lobbies/${code}/leaveRequests/${alice}`)).toBe(true);
+    expect(await stBackend.get(`lobbies/${code}/roster/${alice}`)).toBe(id);
+    expect(await stBackend.get(`lobbies/${code}/player/${id}`)).not.toBeUndefined();
+    expect(await stBackend.get(`lobbies/${code}/outcomes/${alice}`)).toBeUndefined();
+    await waitForPlayer(s => s.status === "leaving", "leaving while the request is pending");
+
+    // Explicit Storyteller rejection ("keep seated"), through the existing
+    // fenced writer path — clears only the request.
+    await rejectLeaveRequest(writer, code, alice);
+
+    expect(await stBackend.get(`lobbies/${code}/leaveRequests/${alice}`)).toBeUndefined();
+    expect(await stBackend.get(`lobbies/${code}/roster/${alice}`)).toBe(id);
+    expect(await stBackend.get(`lobbies/${code}/outcomes/${alice}`)).toBeUndefined();
+
+    // The player's real, still-live handshake recovers on its own — no
+    // reconnect needed — and private access remains valid.
+    await waitForPlayer(s =>
+      s.status === "seated" && s.playerId === id && s.self !== null && s.error === null,
+      "recovered to seated with private access still valid after rejection");
+  }, 20000);
+
+  test("accept flow: a real leave request survives while pending, then Storyteller acceptance runs the existing Firebase-first revocation and the player terminates as revoked", async () => {
+    const code = "OPC3BAAA", st = "opc3b-storyteller", alice = "opc3b-alice";
+    const { stBackend, aliceBackend, writer, id } = await establishSeatedPlayer(code, st, alice, dispose => disposals.push(dispose));
+
+    const stop = startPlayerHandshake(aliceBackend, code, alice);
+    disposals.push(stop);
+    await waitForPlayer(s => s.status === "seated" && s.playerId === id, "seated before any leave request");
+
+    await leaveLobby(aliceBackend);
+    // Roster/private data remain intact while pending — writing the request
+    // alone never destroys membership.
+    expect(await stBackend.get(`lobbies/${code}/roster/${alice}`)).toBe(id);
+    expect(await stBackend.get(`lobbies/${code}/player/${id}`)).not.toBeUndefined();
+    await waitForPlayer(s => s.status === "leaving", "leaving while the request is pending");
+
+    // Explicit Storyteller acceptance re-resolves the current uid->playerId
+    // binding and runs the existing Firebase-first revocation path.
+    await acceptLeaveRequest(writer, code, alice, playerId => useStorytellerStore.getState().unseatPlayer(playerId));
+
+    expect(await stBackend.get(`lobbies/${code}/roster/${alice}`)).toBeUndefined();
+    expect(await stBackend.get(`lobbies/${code}/player/${id}`)).toBeUndefined();
+    expect(await stBackend.get(`lobbies/${code}/leaveRequests/${alice}`)).toBeUndefined();
+    expect(await stBackend.get(`lobbies/${code}/outcomes/${alice}`)).toBe("revoked");
+    // The seat itself survives as an empty/planned seat.
+    expect(useStorytellerStore.getState().game!.players[id]).toBeDefined();
+    expect(useStorytellerStore.getState().game!.players[id]!.isEmpty).toBe(true);
+
+    // The revoked outcome becomes visible to the player's real, still-live
+    // handshake, and it terminates as removed/revoked.
+    await waitForPlayer(s =>
+      s.status === "revoked" && s.playerId === null && s.self === null,
+      "terminated as revoked, with private access cleared");
+  }, 20000);
 });
 
 // ---------------------------------------------------------------------------

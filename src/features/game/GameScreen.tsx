@@ -11,7 +11,7 @@ import { LORICS } from "@/data/lorics";
 import { connectFirebase } from "@/firebase/session";
 import { isFirebaseConfigured } from "@/firebase/config";
 import { createLobby, formatCode } from "@/firebase/lobby";
-import { revokePlayerAndCommit } from "@/firebase/membershipCommands";
+import { acceptLeaveRequest, rejectLeaveRequest, revokePlayerAndCommit } from "@/firebase/membershipCommands";
 import { closeMultiplayerSession, useSessionRuntime } from "@/firebase/storytellerSync";
 import { FirebaseConfigDialog } from "@/features/firebase/FirebaseConfigDialog";
 import { friendlyFirebaseError, type FriendlyError } from "@/firebase/errors";
@@ -45,7 +45,9 @@ export function GameScreen() {
   const [almanacOpen, setAlmanacOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
   const [goLiveError, setGoLiveError] = useState<FriendlyError | null>(null);
-  const { backend, online: onlineMap, pending: pendingOnlineCount, presence } = useSessionRuntime();
+  const { backend, online: onlineMap, pending: pendingOnlineCount, presence, leaveRequests } = useSessionRuntime();
+  const [leaveInFlight, setLeaveInFlight] = useState<Set<string>>(new Set());
+  const [leaveErrors, setLeaveErrors] = useState<Record<string, string>>({});
   const [ending, setEnding] = useState(false);
   const [goingLive, setGoingLive] = useState(false);
   const [nightPanelOpen, setNightPanelOpen] = useState(false);
@@ -90,6 +92,52 @@ export function GameScreen() {
 
   const unseatSelectedPlayer = (playerId: string) =>
     revokeAndCommitPlayer(playerId, () => useStorytellerStore.getState().unseatPlayer(playerId));
+
+  // Phase 9C.3 (OPUS-003): pending-departure surface. A stale error for a
+  // uid whose request has since resolved (accepted, rejected, or otherwise
+  // cleared) elsewhere must not resurface against a later, unrelated
+  // request from the same uid.
+  useEffect(() => {
+    setLeaveErrors(prev => {
+      const next: Record<string, string> = {};
+      for (const uid of Object.keys(prev)) if (uid in leaveRequests) next[uid] = prev[uid]!;
+      return next;
+    });
+  }, [leaveRequests]);
+
+  const setLeaveBusy = (uid: string, busy: boolean) => setLeaveInFlight(prev => {
+    const next = new Set(prev);
+    if (busy) next.add(uid); else next.delete(uid);
+    return next;
+  });
+
+  const acceptLeave = async (uid: string) => {
+    if (!lobby || !backend || leaveInFlight.has(uid)) return;
+    setLeaveBusy(uid, true);
+    setLeaveErrors(prev => { const { [uid]: _omit, ...rest } = prev; return rest; });
+    try {
+      await acceptLeaveRequest(backend, lobby.code, uid, playerId => useStorytellerStore.getState().unseatPlayer(playerId));
+    } catch (e) {
+      const friendly = friendlyFirebaseError(e, "st");
+      setLeaveErrors(prev => ({ ...prev, [uid]: `${friendly.title}: ${friendly.message}` }));
+    } finally {
+      setLeaveBusy(uid, false);
+    }
+  };
+
+  const keepPlayerSeated = async (uid: string) => {
+    if (!lobby || !backend || leaveInFlight.has(uid)) return;
+    setLeaveBusy(uid, true);
+    setLeaveErrors(prev => { const { [uid]: _omit, ...rest } = prev; return rest; });
+    try {
+      await rejectLeaveRequest(backend, lobby.code, uid);
+    } catch (e) {
+      const friendly = friendlyFirebaseError(e, "st");
+      setLeaveErrors(prev => ({ ...prev, [uid]: `${friendly.title}: ${friendly.message}` }));
+    } finally {
+      setLeaveBusy(uid, false);
+    }
+  };
 
   // Auto-open night panel whenever phase transitions to "night".
   useEffect(() => {
@@ -341,6 +389,34 @@ export function GameScreen() {
               })}
             </>
           )}
+        </div>
+      )}
+
+      {Object.keys(leaveRequests).length > 0 && (
+        <div className="leave-requests-bar" role="region" aria-label="Leave requests">
+          <span className="leave-requests-bar-title">Leave requests</span>
+          {Object.entries(leaveRequests).map(([uid, requestPlayerId]) => {
+            const seat = requestPlayerId ? game.players[requestPlayerId] : undefined;
+            const name = seat && !seat.isEmpty ? seat.name : "A player";
+            const busy = leaveInFlight.has(uid);
+            const rowError = leaveErrors[uid];
+            return (
+              <div className="leave-request-row" key={uid}>
+                <span className="leave-request-text">{name} requested to leave</span>
+                <button className="btn btn-sm" disabled={busy} onClick={() => void keepPlayerSeated(uid)}>
+                  Keep seated
+                </button>
+                <button className="btn btn-sm btn-danger" disabled={busy} onClick={() => void acceptLeave(uid)}>
+                  Accept leave
+                </button>
+                {rowError && (
+                  <div className="error-list leave-request-error" role="alert">
+                    <p>{rowError}</p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

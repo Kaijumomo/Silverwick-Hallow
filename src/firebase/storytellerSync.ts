@@ -7,7 +7,6 @@ import type { GuardStamp, PlayerId } from "@/stores/types";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import { buildRegistry } from "@/data/roleRegistry";
 import { writeProjections } from "./sync";
-import { revokePlayerAndCommit } from "./membershipCommands";
 import { revokePlayerMembership } from "./lobby";
 import type { RoomBackend } from "./backend";
 import type { OnlineMap } from "@/stores/projections";
@@ -39,8 +38,17 @@ type Runtime = {
   pending: number;
   retry: number;
   reconnect: ReconnectRuntimeStatus;
+  /** Phase 9C.3 (OPUS-003): observational-only view of leaveRequests, keyed
+   * by requesting uid, valued with the live roster's current playerId for
+   * that uid (or null if the roster does not currently resolve it). Runtime
+   * only — never persisted, never checkpointed, never reconnect-decision
+   * evidence, never authoritative. Purely for the Storyteller UI to display
+   * pending departures and let the Storyteller decide; accepting a request
+   * always re-resolves the uid->playerId binding fresh rather than trusting
+   * this map (see acceptLeaveRequest). */
+  leaveRequests: Record<string, string | null>;
 };
-export const useSessionRuntime = create<Runtime>(() => ({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, retry: 0, reconnect: { status: "live" } }));
+export const useSessionRuntime = create<Runtime>(() => ({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, retry: 0, reconnect: { status: "live" }, leaveRequests: {} }));
 export const retryStorytellerSession = () => useSessionRuntime.setState(s => ({ retry: s.retry + 1 }));
 /** Central ownership for `useSessionRuntime.error`: each source may set or
  * clear only its own entry; the derived field is recomputed from the rest. */
@@ -90,7 +98,7 @@ export function useStorytellerSync(backend: RoomBackend | null) {
     let stop: (() => void) | undefined;
     const writer = new SessionWriter(backend, lobby.code, lobby.sessionId ?? "", error =>
       reportRuntimeError("write", error ? lifecycleMessage(error) : null));
-    useSessionRuntime.setState({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, reconnect: { status: "live" } });
+    useSessionRuntime.setState({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, reconnect: { status: "live" }, leaveRequests: {} });
     const previousDisposal = disposalBarrier.current;
     const started = previousDisposal.then(() => {
       if (cancelled) return undefined;
@@ -128,7 +136,7 @@ export function useStorytellerSync(backend: RoomBackend | null) {
           reportRuntimeError("write", lifecycleMessage(error));
         })
       );
-      useSessionRuntime.setState({ backend: null, presence: "unknown", online: {}, pending: 0, reconnect: { status: "live" } });
+      useSessionRuntime.setState({ backend: null, presence: "unknown", online: {}, pending: 0, reconnect: { status: "live" }, leaveRequests: {} });
     };
   }, [backend, lobby?.code, lobby?.sessionId, retry]);
 }
@@ -282,8 +290,10 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   let roster: Record<string, string> = {};
   let presence: Record<string, { online: boolean; lastSeen: number }> = {};
   let requests: Record<string, string> = {};
+  // Phase 9C.3 (OPUS-003): raw requesting uids observed at leaveRequests.
+  // Never consumed automatically — see the "leaveRequests" watch() below.
+  let leaveUids: Record<string, true> = {};
   const cleanups: (() => void)[] = [];
-  const leaving = new Set<string>();
   const report = (source: string, error?: unknown) => reportRuntimeError(source, error ? lifecycleMessage(error) : null);
   function stop() {
     if (stopped) return;
@@ -291,7 +301,7 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
     clearTimeout(timer);
     cleanups.splice(0).forEach(off => off());
     writer.stop();
-    useSessionRuntime.setState({ backend: null, presence: "unknown", online: {} });
+    useSessionRuntime.setState({ backend: null, presence: "unknown", online: {}, leaveRequests: {} });
   }
   // Wired here — before the checkpoint read/restore/reconcile window below,
   // not after live watchers are installed — so a lease-renewal failure
@@ -307,6 +317,18 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
       if (p && (!p.online || Date.now() - p.lastSeen < 45_000)) online[id] = p.online;
     }
     useSessionRuntime.setState({ online, pending: Object.keys(requests).filter(uid => presence[uid]?.online).length });
+  };
+  // Phase 9C.3 (OPUS-003): derive the runtime pending-leave view from the two
+  // snapshots it depends on. Roster and leaveRequests watch() callbacks may
+  // arrive in either order (independent Firebase subscriptions), so this is
+  // invoked from BOTH watchers below rather than only the one that changed —
+  // recomputing from current `roster`/`leaveUids` every time either fires.
+  // Never treated as authority: acceptLeaveRequest always re-resolves the
+  // uid->playerId binding fresh instead of trusting this derived map.
+  const updateLeaveRequests = () => {
+    const leaveRequests: Record<string, string | null> = {};
+    for (const uid of Object.keys(leaveUids)) leaveRequests[uid] = roster[uid] ?? null;
+    useSessionRuntime.setState({ leaveRequests });
   };
   const flush = (initial = false) => {
     // Captured the same moment the flushed game snapshot is captured, inside
@@ -408,7 +430,7 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
     watch("roster", value => {
       const decoded = decodeRoster(value);
       if (decoded.status !== "ready") throw new SnapshotValidationError();
-      roster = decoded.data; updateOnline(); schedule();
+      roster = decoded.data; updateOnline(); updateLeaveRequests(); schedule();
     });
     watch("joinRequests", value => {
       const decoded = decodeJoinRequests(value);
@@ -426,19 +448,19 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
       }).catch(error => report("requests", error));
       updateOnline();
     });
+    // Phase 9C.3 (OPUS-003): observational only. Earlier code treated every
+    // request as pre-approved and immediately revoked/unseated the
+    // requesting uid here — the player-authored request effectively WAS an
+    // automatic departure. A player-authored write must never itself
+    // destroy authoritative membership or seat identity: this watcher now
+    // only maintains the runtime `leaveRequests` view (section 3) for the
+    // Storyteller UI. Actually accepting or rejecting a request is an
+    // explicit Storyteller decision — see acceptLeaveRequest/
+    // rejectLeaveRequest in membershipCommands.ts, invoked only from a
+    // deliberate Storyteller UI action.
     watch("leaveRequests", value => {
-      const leaves = z.record(z.literal(true)).parse(value ?? {});
-      for (const uid of Object.keys(leaves)) {
-        if (leaving.has(uid)) continue;
-        leaving.add(uid);
-        void writer.runExclusive(async inner => {
-          const bindings = decodeRoster(await inner.get(`lobbies/${lobby.code}/roster`));
-          if (bindings.status !== "ready") throw new SnapshotValidationError();
-          const id = bindings.data[uid];
-          if (id) await revokePlayerAndCommit(inner, lobby.code, id, () => useStorytellerStore.getState().unseatPlayer(id));
-          else await inner.set(`lobbies/${lobby.code}/leaveRequests/${uid}`, null);
-        }).catch(error => report("leave", error)).finally(() => leaving.delete(uid));
-      }
+      leaveUids = z.record(z.literal(true)).parse(value ?? {});
+      updateLeaveRequests();
     });
     // A stop occurring specifically during the six watch() installations
     // just above (e.g. an immediately-observed ended session) is caught

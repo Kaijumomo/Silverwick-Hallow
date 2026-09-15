@@ -23,6 +23,7 @@ import {
   revokePlayerMembership,
   seatPlayer,
 } from "./lobby";
+import { acceptLeaveRequest, rejectLeaveRequest } from "./membershipCommands";
 
 let env: RulesTestEnvironment;
 beforeAll(async () => {
@@ -390,6 +391,57 @@ describe("Firebase RTDB membership authorization", () => {
     await revokePlayerMembership(backend(st), code, "p-alice");
     await assertFails(ref(alice, "player/p-alice").once("value"));
     expect((await ref(alice, "leaveRequests/" + alice).once("value")).exists()).toBe(false);
+  });
+
+  // Phase 9C.3 (OPUS-003): the request/approval workflow's remaining
+  // security-boundary proofs. "leaving is a request" above already proves a
+  // seated player can create only their own request and cannot revoke their
+  // own binding; these extend that boundary to the unseated case, outcome
+  // forgery, cross-UID reads, and the Storyteller's own fenced accept/reject
+  // paths.
+
+  test("an unseated player cannot create a leave request", async () => {
+    await seed(); // only alice ("p-alice") is seated; bob has no roster binding
+    await assertFails(ref(bob, "leaveRequests/" + bob).set(true));
+    expect((await ref(st, "leaveRequests/" + bob).once("value")).exists()).toBe(false);
+  });
+
+  test("a player cannot forge their own revoked outcome", async () => {
+    await seed();
+    await assertFails(ref(alice, "outcomes/" + alice).set("revoked"));
+    await assertFails(ref(alice, "outcomes/" + alice).set("rejected"));
+  });
+
+  test("an unrelated authenticated user cannot read another player's leave request", async () => {
+    await seed();
+    await assertSucceeds(ref(alice, "leaveRequests/" + alice).set(true));
+    await assertFails(ref(bob, "leaveRequests/" + alice).once("value"));
+    // The Storyteller — the other party the workflow authorizes — still can.
+    expect((await ref(st, "leaveRequests/" + alice).once("value")).val()).toBe(true);
+  });
+
+  test("Storyteller rejection clears only the leave request through the fenced writer path, leaving roster and private data intact", async () => {
+    await seed();
+    await assertSucceeds(ref(alice, "leaveRequests/" + alice).set(true));
+
+    await rejectLeaveRequest(backend(st), code, alice);
+
+    expect((await ref(st, "leaveRequests/" + alice).once("value")).exists()).toBe(false);
+    expect((await ref(st, "roster/" + alice).once("value")).val()).toBe("p-alice");
+    expect((await ref(alice, "player/p-alice").once("value")).val()).toEqual({ shownRole: "chef", shownAlignment: "good" });
+    expect((await ref(st, "outcomes/" + alice).once("value")).exists()).toBe(false);
+  });
+
+  test("Storyteller acceptance through the existing revocation path removes membership and private access", async () => {
+    await seed();
+    await assertSucceeds(ref(alice, "leaveRequests/" + alice).set(true));
+
+    await acceptLeaveRequest(backend(st), code, alice, () => true);
+
+    expect((await ref(st, "roster/" + alice).once("value")).exists()).toBe(false);
+    expect((await ref(st, "leaveRequests/" + alice).once("value")).exists()).toBe(false);
+    expect((await ref(st, "outcomes/" + alice).once("value")).val()).toBe("revoked");
+    await assertFails(ref(alice, "player/p-alice").once("value"));
   });
 
   test("a second writer is denied until expiry, then the old token is fenced", async () => {

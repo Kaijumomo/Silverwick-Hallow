@@ -99,6 +99,10 @@ export const decodeRosterEntry = (raw: unknown): Snapshot<string> => raw == null
 export const decodeJoinRequest = (raw: unknown): Snapshot<string> => raw == null ? WAITING : parse(request, raw);
 export const decodeRoster = (raw: unknown): Snapshot<Record<string, string>> => parse(emptyNode(z.record(id, id), {}), raw);
 export const decodeJoinRequests = (raw: unknown): Snapshot<Record<string, string>> => parse(emptyNode(z.record(id, request), {}), raw);
+/** A player's own leaveRequests/{uid}. Strictly `true` or absent — never
+ * trusted as authority, only as a hint for handshake reconciliation. */
+export const decodeLeaveRequest = (raw: unknown): Snapshot<boolean> =>
+  raw == null ? { status: "ready", data: false } : parse(z.literal(true), raw);
 /**
  * One malicious/malformed presence row must never poison the whole map: a
  * single bad entry is dropped, not treated as atomic decode failure for

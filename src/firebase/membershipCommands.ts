@@ -1,9 +1,11 @@
 import type { PlayerSelfRecord, PlayerId } from "@/stores/types";
 import type { RoomBackend } from "./backend";
 import {
+  readRosterBindings,
   revokePlayerMembership,
   seatPlayer,
 } from "./lobby";
+import { leavePath } from "./lifecycle";
 
 export class MembershipOperationError extends Error {
   constructor(message: string) {
@@ -53,4 +55,45 @@ export async function revokePlayerAndCommit(
   // Both local mutations are idempotent: false means another local event
   // already reached the desired removed/unseated state.
   commitLocal();
+}
+
+/**
+ * Explicit Storyteller acceptance of a player's leave request (Phase 9C.3,
+ * OPUS-003). The requesting uid's playerId is re-resolved from the CURRENT
+ * live roster — a playerId captured earlier by the calling UI is never
+ * trusted, since the binding may have moved on since the request was last
+ * observed. When a binding still exists this reuses the existing
+ * Firebase-first revocation path (revokePlayerMembership, then the local
+ * commit) unchanged: the same one write path atomically clears the roster
+ * binding and private projection, sets the existing "revoked" outcome, and
+ * clears the leave request — the seat itself is left as an empty/planned
+ * seat, never removed. When the uid no longer has a binding (it left, or
+ * the request is otherwise stale), this is pure cleanup: only the leave
+ * request is cleared, and no unrelated local seat is touched.
+ */
+export async function acceptLeaveRequest(
+  backend: RoomBackend,
+  code: string,
+  uid: string,
+  commitLocal: (playerId: PlayerId) => boolean,
+): Promise<void> {
+  if (backend.runExclusive) return backend.runExclusive(inner => acceptLeaveRequest(inner, code, uid, commitLocal));
+  const bindings = await readRosterBindings(backend, code);
+  const playerId = bindings[uid];
+  if (!playerId) {
+    await backend.set(leavePath(code, uid), null);
+    return;
+  }
+  await revokePlayerAndCommit(backend, code, playerId, () => commitLocal(playerId));
+}
+
+/**
+ * Explicit Storyteller rejection ("keep seated") of a player's leave
+ * request. Clears only leaveRequests/{uid} through the Storyteller's
+ * existing fenced writer path — never roster, the private projection,
+ * outcomes, or any local Storyteller/seat state.
+ */
+export async function rejectLeaveRequest(backend: RoomBackend, code: string, uid: string): Promise<void> {
+  if (backend.runExclusive) return backend.runExclusive(inner => rejectLeaveRequest(inner, code, uid));
+  await backend.set(leavePath(code, uid), null);
 }

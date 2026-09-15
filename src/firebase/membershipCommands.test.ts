@@ -5,15 +5,22 @@ import { usePlayerStore } from "@/stores/playerStore";
 import { MemoryRoomBackend } from "./memoryBackend";
 import type { Json } from "./backend";
 import { joinRequestPath, playerPath, rosterEntryPath } from "./paths";
+import { leavePath } from "./lifecycle";
 import {
   revokePlayerMembership,
   seatPlayer,
 } from "./lobby";
-import { revokePlayerAndCommit, seatPlayerAndCommit } from "./membershipCommands";
+import { acceptLeaveRequest, rejectLeaveRequest, revokePlayerAndCommit, seatPlayerAndCommit } from "./membershipCommands";
 import { usePlayerSync } from "./playerSync";
 
 class FailingUpdateBackend extends MemoryRoomBackend {
   async update(_updates: Record<string, Json>): Promise<void> {
+    throw new Error("offline");
+  }
+}
+
+class FailingSetBackend extends MemoryRoomBackend {
+  async set(_path: string, _value: Json): Promise<void> {
     throw new Error("offline");
   }
 }
@@ -173,5 +180,143 @@ describe("membership commands", () => {
     expect(usePlayerStore.getState().error).toBe("Removed from lobby.");
     expect(usePlayerStore.getState().playerId).toBeNull();
     expect(usePlayerStore.getState().self).toBeNull();
+  });
+
+  // -------------------------------------------------------------------------
+  // Phase 9C.3 (OPUS-003): explicit Storyteller accept/reject commands.
+  // -------------------------------------------------------------------------
+
+  it("accepts a leave request through the existing Firebase-first revocation path, preserving the seat as empty", async () => {
+    const backend = new MemoryRoomBackend();
+    const { uid, playerId } = prepareSeat();
+    await seatPlayerAndCommit(backend, "ROOM", uid, playerId, null, () =>
+      useStorytellerStore.getState().assignPendingToSeat(uid, playerId),
+    );
+    await backend.set(playerPath("ROOM", playerId), { shownRole: "chef", shownAlignment: "good" });
+    await backend.set(leavePath("ROOM", uid), true);
+
+    await acceptLeaveRequest(backend, "ROOM", uid, (pid) => useStorytellerStore.getState().unseatPlayer(pid));
+
+    expect(await backend.get(rosterEntryPath("ROOM", uid))).toBeUndefined();
+    expect(await backend.get(playerPath("ROOM", playerId))).toBeUndefined();
+    expect(await backend.get(leavePath("ROOM", uid))).toBeUndefined();
+    expect(await backend.get("lobbies/ROOM/outcomes/" + uid)).toBe("revoked");
+    // The seat itself survives as an empty/planned seat — never removed.
+    expect(useStorytellerStore.getState().game!.players[playerId]).toBeDefined();
+    expect(useStorytellerStore.getState().game!.players[playerId]!.isEmpty).toBe(true);
+  });
+
+  it("acceptance always re-resolves uid -> playerId from the CURRENT roster, never a caller-assumed id", async () => {
+    const backend = new MemoryRoomBackend();
+    const { uid, playerId: firstSeat } = prepareSeat();
+    await seatPlayerAndCommit(backend, "ROOM", uid, firstSeat, null, () =>
+      useStorytellerStore.getState().assignPendingToSeat(uid, firstSeat),
+    );
+    // An unrelated, genuinely occupied local seat with no uid binding at all
+    // (a Storyteller-typed name) — this must never be touched.
+    useStorytellerStore.getState().addPlayerToSeat("Bob");
+    const secondSeat = useStorytellerStore.getState().game!.seatOrder.find(
+      (id) => id !== firstSeat && !useStorytellerStore.getState().game!.players[id]!.isEmpty,
+    )!;
+    await backend.set(leavePath("ROOM", uid), true);
+    // Simulate the live roster resolving this uid to a DIFFERENT seat than
+    // whatever a caller might otherwise have assumed (firstSeat).
+    await backend.set(rosterEntryPath("ROOM", uid), secondSeat);
+
+    await acceptLeaveRequest(backend, "ROOM", uid, (pid) => useStorytellerStore.getState().unseatPlayer(pid));
+
+    // The CURRENT (re-resolved) binding was revoked/unseated...
+    expect(await backend.get(rosterEntryPath("ROOM", uid))).toBeUndefined();
+    expect(useStorytellerStore.getState().game!.players[secondSeat]!.isEmpty).toBe(true);
+    // ...while the original seat, never re-resolved to by this acceptance,
+    // is untouched.
+    expect(useStorytellerStore.getState().game!.players[firstSeat]!.isEmpty).toBe(false);
+  });
+
+  it("clears a stale leave request with no current roster binding without touching any local seat (stale cleanup)", async () => {
+    const backend = new MemoryRoomBackend();
+    const { uid, playerId } = prepareSeat();
+    await backend.set(leavePath("ROOM", "uid-ghost"), true);
+    let commitLocalCalled = false;
+
+    await acceptLeaveRequest(backend, "ROOM", "uid-ghost", () => { commitLocalCalled = true; return true; });
+
+    expect(commitLocalCalled).toBe(false);
+    expect(await backend.get(leavePath("ROOM", "uid-ghost"))).toBeUndefined();
+    // The unrelated pending player/seat is untouched.
+    expect(useStorytellerStore.getState().game!.pendingPlayers).toEqual({ [uid]: "Alice" });
+    expect(useStorytellerStore.getState().game!.players[playerId]!.isEmpty).toBe(true);
+  });
+
+  it("repeated acceptance is safe once the binding is already resolved (idempotent)", async () => {
+    const backend = new MemoryRoomBackend();
+    const { uid, playerId } = prepareSeat();
+    await seatPlayerAndCommit(backend, "ROOM", uid, playerId, null, () =>
+      useStorytellerStore.getState().assignPendingToSeat(uid, playerId),
+    );
+    await backend.set(leavePath("ROOM", uid), true);
+    const commitLocal = (pid: string) => useStorytellerStore.getState().unseatPlayer(pid);
+
+    await acceptLeaveRequest(backend, "ROOM", uid, commitLocal);
+    expect(useStorytellerStore.getState().game!.players[playerId]!.isEmpty).toBe(true);
+
+    await expect(acceptLeaveRequest(backend, "ROOM", uid, commitLocal)).resolves.toBeUndefined();
+    expect(useStorytellerStore.getState().game!.players[playerId]!.isEmpty).toBe(true);
+  });
+
+  it("does not change the local seat when accepting a leave request cannot reach Firebase", async () => {
+    const backend = new FailingUpdateBackend();
+    const { uid, playerId } = prepareSeat();
+    await backend.set(rosterEntryPath("ROOM", uid), playerId);
+    const player = useStorytellerStore.getState().game!.players[playerId]!;
+    useStorytellerStore.setState({
+      game: {
+        ...useStorytellerStore.getState().game!,
+        players: { ...useStorytellerStore.getState().game!.players, [playerId]: { ...player, name: "Alice", isEmpty: false } },
+        pendingPlayers: {},
+      },
+    });
+
+    await expect(
+      acceptLeaveRequest(backend, "ROOM", uid, (pid) => useStorytellerStore.getState().unseatPlayer(pid)),
+    ).rejects.toThrow("offline");
+    expect(useStorytellerStore.getState().game!.players[playerId]!.isEmpty).toBe(false);
+  });
+
+  it("rejects (\"keeps seated\") a leave request by clearing only leaveRequests/{uid}", async () => {
+    const backend = new MemoryRoomBackend();
+    const { uid, playerId } = prepareSeat();
+    await seatPlayerAndCommit(backend, "ROOM", uid, playerId, null, () =>
+      useStorytellerStore.getState().assignPendingToSeat(uid, playerId),
+    );
+    await backend.set(playerPath("ROOM", playerId), { shownRole: "chef", shownAlignment: "good" });
+    await backend.set(leavePath("ROOM", uid), true);
+
+    await rejectLeaveRequest(backend, "ROOM", uid);
+
+    expect(await backend.get(leavePath("ROOM", uid))).toBeUndefined();
+    expect(await backend.get(rosterEntryPath("ROOM", uid))).toBe(playerId);
+    expect(await backend.get(playerPath("ROOM", playerId))).toEqual({ shownRole: "chef", shownAlignment: "good" });
+    expect(await backend.get("lobbies/ROOM/outcomes/" + uid)).toBeUndefined();
+    expect(useStorytellerStore.getState().game!.players[playerId]!.isEmpty).toBe(false);
+  });
+
+  it("repeated rejection is safe once the leave request is already cleared (idempotent)", async () => {
+    const backend = new MemoryRoomBackend();
+    await backend.set(leavePath("ROOM", "uid-alice"), true);
+
+    await rejectLeaveRequest(backend, "ROOM", "uid-alice");
+    expect(await backend.get(leavePath("ROOM", "uid-alice"))).toBeUndefined();
+
+    await expect(rejectLeaveRequest(backend, "ROOM", "uid-alice")).resolves.toBeUndefined();
+    expect(await backend.get(leavePath("ROOM", "uid-alice"))).toBeUndefined();
+  });
+
+  it("leaves the leave request unresolved when rejection cannot reach Firebase", async () => {
+    const backend = new FailingSetBackend();
+    await backend.update({ [leavePath("ROOM", "uid-alice")]: true });
+
+    await expect(rejectLeaveRequest(backend, "ROOM", "uid-alice")).rejects.toThrow("offline");
+    expect(await backend.get(leavePath("ROOM", "uid-alice"))).toBe(true);
   });
 });

@@ -8,7 +8,7 @@ import { SessionWriter } from "./writer";
 import { applyJoinIntent, joinLobby, leaveLobby, startPlayerHandshake } from "./playerSync";
 import { reportRuntimeError, startStorytellerSession, useSessionRuntime, useStorytellerSync } from "./storytellerSync";
 import { lifecycleMessage, requireActiveSession, retryTransient, sessionPath } from "./lifecycle";
-import { revokePlayerAndCommit, seatPlayerAndCommit } from "./membershipCommands";
+import { acceptLeaveRequest, rejectLeaveRequest, revokePlayerAndCommit, seatPlayerAndCommit } from "./membershipCommands";
 
 const code = "BCDF2345";
 const root = `lobbies/${code}`;
@@ -160,11 +160,14 @@ describe("multiplayer lifecycle", () => {
     await waitFor(() => expect(usePlayerStore.getState().status).toBe("rejected"));
   });
 
-  it("cancels a pending request before clearing local state", async () => {
+  it("cancels a pending request before clearing local state, rather than creating a leave request (Phase 9C.3)", async () => {
     const { b } = await setup();
     await joinLobby(b, code, "alice", "Alice");
     await leaveLobby(b);
     expect(await b.get(`${root}/joinRequests/alice`)).toBeUndefined();
+    // An unseated/waiting player's cancellation is not gated by Storyteller
+    // approval — no leaveRequests entry is ever created for it.
+    expect(await b.get(`${root}/leaveRequests/alice`)).toBeUndefined();
     expect(usePlayerStore.getState().code).toBeNull();
   });
 
@@ -174,6 +177,22 @@ describe("multiplayer lifecycle", () => {
     b.set = async () => { throw new Error("offline"); };
     await expect(leaveLobby(b)).rejects.toThrow("offline");
     expect(usePlayerStore.getState().code).toBe(code);
+  });
+
+  it("Phase 9C.3 (OPUS-003): a seated player's leave request writes only leaveRequests/{uid}=true, leaving roster, private data, and outcome untouched", async () => {
+    const { b, writer } = await host();
+    await joinLobby(b, code, "alice", "Alice"); player(b);
+    const id = await seat(writer);
+    await waitFor(() => expect(usePlayerStore.getState().status).toBe("seated"));
+    await b.set(`${root}/player/${id}`, { shownRole: "chef", shownAlignment: "good" });
+
+    await leaveLobby(b);
+
+    expect(await b.get(`${root}/leaveRequests/alice`)).toBe(true);
+    expect(await b.get(`${root}/roster/alice`)).toBe(id);
+    expect(await b.get(`${root}/player/${id}`)).toEqual({ shownRole: "chef", shownAlignment: "good" });
+    expect(await b.get(`${root}/outcomes/alice`)).toBeUndefined();
+    expect(useStorytellerStore.getState().game!.players[id]!.isEmpty).toBe(false);
   });
 
   it("nonexistent, legacy and malformed codes return controlled outcomes", async () => {
@@ -502,15 +521,82 @@ describe("multiplayer lifecycle", () => {
     await writer.dispose();
   });
 
-  it("seated leave is acknowledged by the existing membership command", async () => {
+  it("seated leave becomes a pending request; only explicit Storyteller acceptance revokes", async () => {
+    // Phase 9C.3 (OPUS-003): a player-authored leaveRequests/{uid} write
+    // must never itself destroy authoritative membership. The request
+    // alone leaves roster/private state untouched; only an explicit
+    // Storyteller acceptance drives the existing Firebase-first revocation.
     const { b, writer } = await host();
     await joinLobby(b, code, "alice", "Alice"); player(b);
     const id = await seat(writer);
     await waitFor(() => expect(usePlayerStore.getState().status).toBe("seated"));
+    await b.set(`${root}/player/${id}`, { shownRole: "chef", shownAlignment: "good" });
     await leaveLobby(b);
+    await waitFor(() => expect(usePlayerStore.getState().status).toBe("leaving"));
+    expect(await b.get(`${root}/roster/alice`)).toBe(id);
+    expect(useStorytellerStore.getState().game!.players[id]!.isEmpty).toBe(false);
+
+    await acceptLeaveRequest(writer, code, "alice", playerId => useStorytellerStore.getState().unseatPlayer(playerId));
     await waitFor(() => expect(usePlayerStore.getState().status).toBe("revoked"));
     expect(await b.get(`${root}/roster/alice`)).toBeUndefined();
+    expect(await b.get(`${root}/player/${id}`)).toBeUndefined();
+    expect(await b.get(`${root}/leaveRequests/alice`)).toBeUndefined();
+    expect(await b.get(`${root}/outcomes/alice`)).toBe("revoked");
+    // The seat itself survives as an empty/planned seat — never removed.
+    expect(useStorytellerStore.getState().game!.players[id]).toBeDefined();
     expect(useStorytellerStore.getState().game!.players[id]!.isEmpty).toBe(true);
+  });
+
+  it("Phase 9C.3: the leaveRequests watcher is observational only — no automatic revocation, and the runtime view tracks appearance/disappearance", async () => {
+    const { b, writer } = await host();
+    await joinLobby(b, code, "alice", "Alice"); player(b);
+    const id = await seat(writer);
+    await waitFor(() => expect(usePlayerStore.getState().status).toBe("seated"));
+
+    await b.set(`${root}/leaveRequests/alice`, true);
+    await waitFor(() => expect(useSessionRuntime.getState().leaveRequests).toEqual({ alice: id }));
+    // Give any (incorrect) automatic consumer a chance to run before asserting
+    // nothing was revoked/unseated.
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(await b.get(`${root}/roster/alice`)).toBe(id);
+    expect(useStorytellerStore.getState().game!.players[id]!.isEmpty).toBe(false);
+
+    await b.set(`${root}/leaveRequests/alice`, null);
+    await waitFor(() => expect(useSessionRuntime.getState().leaveRequests).toEqual({}));
+  });
+
+  it("Phase 9C.3: the runtime leaveRequests view recomputes correctly regardless of roster/leaveRequests listener ordering, and never acts on an unresolved uid", async () => {
+    const { b } = await host();
+    // leaveRequests observed for a uid with NO matching roster entry yet
+    // (independent listener ordering: this watcher's own event can arrive
+    // before roster reflects the binding) must resolve to null, not throw
+    // or act on any local seat.
+    await b.set(`${root}/leaveRequests/ghost`, true);
+    await waitFor(() => expect(useSessionRuntime.getState().leaveRequests).toEqual({ ghost: null }));
+    // Roster catches up afterward — the derived view recomputes from
+    // whichever snapshot changes, not just whichever fired first.
+    await b.set(`${root}/roster/ghost`, "p-ghost-seat");
+    await waitFor(() => expect(useSessionRuntime.getState().leaveRequests).toEqual({ ghost: "p-ghost-seat" }));
+  });
+
+  it("Phase 9C.3: Storyteller rejection ('keep seated') clears only the leave request and returns the player to seated", async () => {
+    const { b, writer } = await host();
+    await joinLobby(b, code, "alice", "Alice"); player(b);
+    const id = await seat(writer);
+    await waitFor(() => expect(usePlayerStore.getState().status).toBe("seated"));
+    await b.set(`${root}/player/${id}`, { shownRole: "chef", shownAlignment: "good" });
+    await leaveLobby(b);
+    await waitFor(() => expect(usePlayerStore.getState().status).toBe("leaving"));
+
+    await rejectLeaveRequest(writer, code, "alice");
+
+    expect(await b.get(`${root}/leaveRequests/alice`)).toBeUndefined();
+    expect(await b.get(`${root}/roster/alice`)).toBe(id);
+    expect(await b.get(`${root}/player/${id}`)).toEqual({ shownRole: "chef", shownAlignment: "good" });
+    expect(await b.get(`${root}/outcomes/alice`)).toBeUndefined();
+    expect(useStorytellerStore.getState().game!.players[id]!.isEmpty).toBe(false);
+    await waitFor(() => expect(usePlayerStore.getState().status).toBe("seated"));
+    expect(usePlayerStore.getState().self).toEqual({ shownRole: "chef", shownAlignment: "good" });
   });
 
   it("revocation remains terminal after reconnect and cannot be undone locally", async () => {
