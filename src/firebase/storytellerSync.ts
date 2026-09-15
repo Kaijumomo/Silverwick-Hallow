@@ -508,6 +508,16 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   if (useStorytellerStore.getState().localSeq !== comparisonSeq) {
     comparisonSeq = useStorytellerStore.getState().localSeq;
   }
+  // Phase 9C.2B.2B (Astra RESTORE local-evidence revision): bind the exact
+  // local sequence the decision below is about to be made against. A RESTORE
+  // outcome is valid ONLY for this local evidence — it means "remote newer,
+  // local clean AT decisionLocalSeq". A normal Storyteller UI mutation during
+  // the later roster await advances localSeq and injects new local intent,
+  // making that RESTORE authorization stale; the authority gates cannot catch
+  // it because writer authority stays continuously valid the whole time. This
+  // is re-checked synchronously, for RESTORE only, immediately before RESTORE
+  // mutates local state (see the RESTORE local-evidence gate below).
+  const decisionLocalSeq = comparisonSeq;
   const scope = { code: lobby.code, sessionId: scopeSessionId };
   const decision = decideReconnect({
     localGameInScope: useStorytellerStore.getState().game?.code === lobby.code,
@@ -606,6 +616,26 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   // inventing a new reconnect outcome or silently reusing this stale plan.
   if (!writer.holdsAuthority(startupAuthority, FENCE_MARGIN_MS)) {
     throw new LifecycleError("conflict", "Another Storyteller tab now controls this lobby.");
+  }
+
+  // RESTORE local-evidence gate (Phase 9C.2B.2B, Astra revision): NOTHING
+  // awaits between this check and restoreRemoteCheckpoint() below, so once
+  // this synchronous section begins no user action can interleave. RESTORE
+  // replaces the local game with the checkpoint's, clears undo, and records
+  // observedGuard as the accepted-clean baseline — valid ONLY while the local
+  // side is still the clean state decideReconnect() classified as safe to
+  // discard. A normal Storyteller UI mutation during the roster await (writer
+  // authority stayed continuously valid, so both authority gates above pass)
+  // advances localSeq and turns "remote newer / local clean" into "remote
+  // newer / local has new intent": applying RESTORE now would silently discard
+  // that edit AND, worse, mark it acknowledged/clean. Cancel this stale
+  // attempt WITHOUT mutation — the edit stays dirty so the NEXT reconnect
+  // classifies both-sides-diverged normally (CONFLICT) via the existing
+  // decision table. Narrow to RESTORE: KEEP_LOCAL intentionally keeps the
+  // current (now-edited) local game as the surviving side, so a mutation here
+  // does not invalidate it (its plan already uses the current local game).
+  if (willRestore && useStorytellerStore.getState().localSeq !== decisionLocalSeq) {
+    throw new LifecycleError("cancelled", "The local game changed during reconnect. Retry to compare the latest state.");
   }
 
   if (willRestore && sameSession()) {

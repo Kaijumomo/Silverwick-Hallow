@@ -1387,3 +1387,168 @@ describe("Phase 9C.2B.1 revision — startup guard/authority coherence (G1 -> G2
     expect(await b.get(`${root}/storyteller`)).toEqual(foreignGame);
   });
 });
+
+describe("Phase 9C.2B.2B revision — RESTORE local-evidence coherence (edit during roster await)", () => {
+  // Astra's proven blocker, promoted to permanent regression. Writer authority
+  // stays continuously VALID throughout — the coherent startup pair and both
+  // authority gates are correct and untouched. The defect is purely LOCAL: a
+  // RESTORE decision is chosen against clean local evidence, then a normal
+  // Storyteller UI mutation during the awaited roster read injects new local
+  // intent, and the earlier RESTORE (which discards local, clears undo, and
+  // records the guard as the accepted-clean baseline) would be applied anyway —
+  // silently losing the edit AND marking the discarded sequence acknowledged.
+
+  it("RESTORE + local edit during the roster await: authority stays valid, but the stale RESTORE is cancelled — the edit survives, undo is not cleared, sync is not falsely marked clean, and the newer remote is untouched", async () => {
+    const b = new MemoryRoomBackend();
+    const { writer, manager, lobby, session } = await host(b);
+    manager.stop(); await writer.dispose(); // local starts CLEAN
+
+    // Legitimate newer remote checkpoint → decideReconnect() correctly picks RESTORE.
+    const foreignGame = await foreignDeviceAdvance(b, session.id, g => ({ ...g, day: 42, notes: "legit newer remote" }));
+    const foreignGuard = await b.get(`${root}/writeGuard`);
+    const ackedSeqBefore = useStorytellerStore.getState().sync!.ackedGameSeq;
+
+    // Pause the roster read — the exact window between the RESTORE decision and
+    // its application (step 7 of Astra's reproduction).
+    const originalGet = b.get.bind(b);
+    let releaseGate: () => void = () => {};
+    const gate = new Promise<void>(resolve => { releaseGate = resolve; });
+    let paused = false;
+    b.get = async path => {
+      if (path === `${root}/roster` && !paused) { paused = true; await gate; }
+      return originalGet(path);
+    };
+
+    const replacementA = writerFor(b, session.id);
+    disposals.push(() => replacementA.dispose());
+    const startingA = startStorytellerSession(b, lobby, replacementA);
+    await waitFor(() => expect(paused).toBe(true));
+
+    // Normal Storyteller UI action through the real store command path, while
+    // the roster read is still awaited. localSeq advances; local is now dirty.
+    useStorytellerStore.getState().addPlayer("Roster-window local edit");
+    const editedSeq = useStorytellerStore.getState().localSeq;
+    const editedGame = useStorytellerStore.getState().game;
+    const undoAfterEdit = useStorytellerStore.getState().undoStack;
+    const hasEdit = () => useStorytellerStore.getState().game!.seatOrder.some(
+      id => useStorytellerStore.getState().game!.players[id]!.name === "Roster-window local edit");
+    expect(editedSeq).toBeGreaterThan(ackedSeqBefore); // the edit is genuinely new intent
+    expect(undoAfterEdit.length).toBeGreaterThan(0);
+    expect(hasEdit()).toBe(true);
+
+    b.get = originalGet;
+    releaseGate();
+
+    // Authority never lapsed, so the cancellation must be attributable to LOCAL
+    // evidence, not the authority fence: it carries the local-change message,
+    // never the "another Storyteller tab" authority message.
+    await expect(startingA).rejects.toThrow(/local game changed/i);
+    await expect(startingA).rejects.not.toThrow(/another Storyteller/i);
+
+    // Explicitly prove authority remained valid and uninterrupted — its epoch
+    // never advanced beyond start()'s own single acquisition (no takeover, no
+    // expiry ever happened here).
+    const handle = await replacementA.reconfirmAuthority();
+    expect(handle.epoch).toBe(1);
+    expect(replacementA.holdsAuthority(handle, FENCE_MARGIN_MS)).toBe(true);
+
+    // The Storyteller's edit survived: local game not restored to the
+    // checkpoint, undo not cleared.
+    expect(useStorytellerStore.getState().game).toEqual(editedGame);
+    expect(hasEdit()).toBe(true);
+    expect(useStorytellerStore.getState().undoStack).toEqual(undoAfterEdit);
+
+    // sync was NOT falsely advanced to mark the discarded edit clean: the
+    // accepted baseline is exactly where it was, and local is still dirty.
+    expect(useStorytellerStore.getState().sync!.ackedGameSeq).toBe(ackedSeqBefore);
+    expect(useStorytellerStore.getState().localSeq).toBe(editedSeq);
+    expect(useStorytellerStore.getState().localSeq).toBeGreaterThan(useStorytellerStore.getState().sync!.ackedGameSeq);
+
+    // No stale RESTORE-derived membership mutation; the newer remote
+    // checkpoint/guard/game remain untouched.
+    expect(useStorytellerStore.getState().game).not.toEqual(foreignGame);
+    expect(await b.get(`${root}/storyteller`)).toEqual(foreignGame);
+    expect(await b.get(`${root}/writeGuard`)).toEqual(foreignGuard);
+  });
+
+  it("recovery: after the stale RESTORE cancels with local now dirty, a fresh reconnect against the same newer remote classifies both-sides-diverged as CONFLICT via the existing table", async () => {
+    const b = new MemoryRoomBackend();
+    const { writer, manager, lobby, session } = await host(b);
+    manager.stop(); await writer.dispose();
+
+    const foreignGame = await foreignDeviceAdvance(b, session.id, g => ({ ...g, day: 21 }));
+
+    // First attempt: RESTORE cancelled by an edit during the roster await.
+    const originalGet = b.get.bind(b);
+    let releaseGate: () => void = () => {};
+    const gate = new Promise<void>(resolve => { releaseGate = resolve; });
+    let paused = false;
+    b.get = async path => {
+      if (path === `${root}/roster` && !paused) { paused = true; await gate; }
+      return originalGet(path);
+    };
+    const replacementA = writerFor(b, session.id);
+    disposals.push(() => replacementA.dispose());
+    const first = startStorytellerSession(b, lobby, replacementA);
+    await waitFor(() => expect(paused).toBe(true));
+    useStorytellerStore.getState().addPlayer("Recovered-into-conflict edit");
+    b.get = originalGet;
+    releaseGate();
+    await expect(first).rejects.toThrow(/local game changed/i);
+    await replacementA.dispose(); // release the lease so a fresh attempt can reclaim
+
+    // Local is now genuinely dirty; the remote is unchanged and still newer.
+    expect(useStorytellerStore.getState().localSeq).toBeGreaterThan(useStorytellerStore.getState().sync!.ackedGameSeq);
+
+    // Second attempt: a fresh reconnect. The existing decision table sees newer
+    // remote + newer local unacknowledged work → CONFLICT. No new semantics.
+    const replacementB = writerFor(b, session.id);
+    const recovered = await startStorytellerSession(b, lobby, replacementB);
+    disposals.push(async () => { recovered.stop(); await replacementB.dispose(); });
+
+    expect(recovered.outcome).toBe("conflict");
+    expect(useSessionRuntime.getState().reconnect.status).toBe("conflict");
+    // Neither side written: local keeps its edit, remote keeps its own content.
+    expect(useStorytellerStore.getState().game!.seatOrder.some(
+      id => useStorytellerStore.getState().game!.players[id]!.name === "Recovered-into-conflict edit")).toBe(true);
+    expect(await b.get(`${root}/storyteller`)).toEqual(foreignGame);
+  });
+
+  it("KEEP_LOCAL positive control: a local edit during the roster await is NOT cancelled — the RESTORE gate is narrow, so KEEP_LOCAL keeps the current (edited) local game and goes live", async () => {
+    const b = new MemoryRoomBackend();
+    const { writer, manager, lobby, session } = await host(b);
+    manager.stop(); await writer.dispose();
+    // No foreign advance: the server guard still equals the accepted baseline →
+    // decideReconnect() picks KEEP_LOCAL (baseline_current), whose surviving
+    // side is intentionally the CURRENT local game.
+
+    const originalGet = b.get.bind(b);
+    let releaseGate: () => void = () => {};
+    const gate = new Promise<void>(resolve => { releaseGate = resolve; });
+    let paused = false;
+    b.get = async path => {
+      if (path === `${root}/roster` && !paused) { paused = true; await gate; }
+      return originalGet(path);
+    };
+
+    const replacement = writerFor(b, session.id);
+    const starting = startStorytellerSession(b, lobby, replacement);
+    await waitFor(() => expect(paused).toBe(true));
+
+    useStorytellerStore.getState().addPlayer("KEEP_LOCAL roster-window edit");
+    const editedSeq = useStorytellerStore.getState().localSeq;
+
+    b.get = originalGet;
+    releaseGate();
+    const recovered = await starting;
+    disposals.push(async () => { recovered.stop(); await replacement.dispose(); });
+
+    // Not cancelled: KEEP_LOCAL goes live, and the edit made during the roster
+    // await is preserved (KEEP_LOCAL's surviving side is the current local
+    // game, so the narrow RESTORE-only gate must not touch it).
+    expect(recovered.outcome).toBe("live");
+    expect(useStorytellerStore.getState().game!.seatOrder.some(
+      id => useStorytellerStore.getState().game!.players[id]!.name === "KEEP_LOCAL roster-window edit")).toBe(true);
+    expect(useStorytellerStore.getState().localSeq).toBe(editedSeq);
+  });
+});
