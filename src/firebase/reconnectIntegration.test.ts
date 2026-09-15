@@ -15,7 +15,7 @@ import { setupScript, standardRoles } from "@/test/setupFixtures";
 import { MemoryRoomBackend } from "./memoryBackend";
 import { createLobby, revokePlayerMembership } from "./lobby";
 import { writeProjections } from "./sync";
-import { SessionWriter, LEASE_MS } from "./writer";
+import { SessionWriter, LEASE_MS, FENCE_MARGIN_MS } from "./writer";
 import { reportRuntimeError, resolveReconnectConflict, startStorytellerSession, useSessionRuntime } from "./storytellerSync";
 import { lifecycleMessage, requireActiveSession } from "./lifecycle";
 
@@ -1235,5 +1235,155 @@ describe("Phase 9C.2B.1 remediation — automatic startup authority fence", () =
     // Unseated: her checkpoint-era binding vanished from the live roster —
     // proof the new gate does not block normal, in-time reconciliation.
     expect(useStorytellerStore.getState().game!.players[vanishSeatId]!.isEmpty).toBe(true);
+  });
+});
+
+describe("Phase 9C.2B.1 revision — startup guard/authority coherence (G1 -> G2 -> reacquire)", () => {
+  // Luna's proven blocker, promoted to permanent regression. The defect the
+  // earlier 41922a6 shape allowed: the guard reconnect compares
+  // (observedGuard) and the AuthorityHandle that gates the decision could
+  // belong to DIFFERENT authority generations, because the guard was read by
+  // start() while the handle came from a SEPARATE, later reconfirmAuthority()
+  // that could straddle a takeover. A writer that observes G1, loses authority
+  // to a legitimate takeover which publishes G2, then legitimately REACQUIRES
+  // (a new, VALID generation) must never carry its pre-gap G1 forward: a
+  // post-gap valid handle may not legitimize a pre-gap guard. Both tests drive
+  // the real startStorytellerSession production path.
+
+  it("G1 -> G2 -> reacquire: a startup that observed G1, was taken over (G2), then legitimately reacquired must reject rather than combine pre-gap G1 with post-gap authority — B's newer G2 game survives", async () => {
+    const b = new MemoryRoomBackend();
+    const { writer, manager, lobby, session } = await host(b);
+    // A's own last acknowledged commit IS the current server guard (no foreign
+    // advance yet): the guard A observes at startup equals its accepted
+    // baseline — the exact shape that decides KEEP_LOCAL (baseline_current)
+    // and would flush A's stale local game over any newer remote if trusted.
+    manager.stop(); await writer.dispose();
+    const localGameBefore = useStorytellerStore.getState().game;
+    const undoBefore = useStorytellerStore.getState().undoStack;
+    const syncBefore = useStorytellerStore.getState().sync;
+
+    // Pause A's startup AT the writeGuard read (the authority/guard boundary
+    // the coherent pair must span) and hand it back the PRE-gap guard value G1
+    // — exactly what start() observed the instant before the takeover — while
+    // the takeover and A's own reacquisition happen during the pause.
+    const originalGet = b.get.bind(b);
+    let releaseGate: () => void = () => {};
+    const gate = new Promise<void>(resolve => { releaseGate = resolve; });
+    let paused = false;
+    let staleGuard: unknown;
+    b.get = async path => {
+      if (path === `${root}/writeGuard` && !paused) {
+        paused = true;
+        staleGuard = await originalGet(path); // capture G1 as observed pre-gap
+        await gate;
+        return staleGuard;                     // ...and return exactly that, post-gap
+      }
+      return originalGet(path);
+    };
+
+    const replacementA = writerFor(b, session.id);
+    disposals.push(() => replacementA.dispose());
+    const startingA = startStorytellerSession(b, lobby, replacementA);
+    await waitFor(() => expect(paused).toBe(true));
+
+    // 4. A's own continuous authority lapses purely from elapsed (mocked) time.
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.now() + LEASE_MS + 1);
+    // 5-7. B legitimately reclaims the now-expired lease, publishes newer G2
+    // game + guard, and releases.
+    const takeoverWriter = writerFor(b, session.id);
+    disposals.push(() => takeoverWriter.dispose());
+    await takeoverWriter.start();
+    const baseGameRaw = await b.get(`${root}/storyteller`);
+    const takeoverGame = { ...(baseGameRaw as unknown as StorytellerLobbyRecord), day: 77, notes: "B's newer G2 content" };
+    await writeProjections({ backend: takeoverWriter, code, stState: takeoverGame, registry: buildRegistry(troubleBrewing), online: {}, membership: {} });
+    const g2Guard = await b.get(`${root}/writeGuard`);
+    await takeoverWriter.dispose(); // B releases
+
+    // 8. A LEGITIMATELY reacquires the now-free lease: a genuinely new, VALID
+    // authority generation (leaseEpoch advances). The whole point is that this
+    // valid post-gap handle must NOT rescue the pre-gap G1 observation.
+    const reacquired = await replacementA.reconfirmAuthority();
+
+    b.get = originalGet;
+    releaseGate();
+
+    // 9. A resumes — and must reject, never accept a G1 read under the prior,
+    // now-superseded generation.
+    await expect(startingA).rejects.toThrow(/another/i);
+    // A genuinely holds VALID authority at this instant — proof the rejection
+    // is a generation-coherence rejection, not merely "A lost the lease".
+    expect(replacementA.holdsAuthority(reacquired, FENCE_MARGIN_MS)).toBe(true);
+    nowSpy.mockRestore();
+
+    // A never chose KEEP_LOCAL, never flushed, never promoted stale ACK
+    // evidence, never minted conflict identity from G1: local game/undo/sync
+    // are exactly as before it started.
+    expect(useStorytellerStore.getState().game).toEqual(localGameBefore);
+    expect(useStorytellerStore.getState().undoStack).toEqual(undoBefore);
+    expect(useStorytellerStore.getState().sync).toEqual(syncBefore);
+    expect(useSessionRuntime.getState().reconnect.status).not.toBe("conflict");
+    // B's newer G2 game AND guard survive intact — A's older local game was
+    // never uploaded over them.
+    expect(await b.get(`${root}/storyteller`)).toEqual(takeoverGame);
+    expect(await b.get(`${root}/writeGuard`)).toEqual(g2Guard);
+  });
+
+  it("decision-side gate: authority lost + reacquired during the checkpoint read cancels a would-be CONFLICT rather than minting a conflict identity from pre-gap G1", async () => {
+    const b = new MemoryRoomBackend();
+    const { writer, manager, lobby, session } = await host(b);
+    manager.stop(); await writer.dispose();
+    // Local carries unacknowledged work AND the server has legitimately
+    // advanced beyond A's baseline (G1): this evidence decides CONFLICT, which
+    // returns BEFORE the final RESTORE/membership gate — so ONLY a gate placed
+    // before the decision itself can stop a conflict identity being minted
+    // from a guard observed across an authority gap.
+    useStorytellerStore.getState().addPlayer("Dirty local edit");
+    const localGameBefore = useStorytellerStore.getState().game;
+    const foreignGame = await foreignDeviceAdvance(b, session.id, g => ({ ...g, day: 12, notes: "foreign advance -> G1" }));
+
+    // The coherent {G1, handle} pair is established fine; pause strictly at the
+    // checkpoint read so the gap happens AFTER start() has returned.
+    const originalGet = b.get.bind(b);
+    let releaseGate: () => void = () => {};
+    const gate = new Promise<void>(resolve => { releaseGate = resolve; });
+    let paused = false;
+    b.get = async path => {
+      if (path === `${root}/checkpoint` && !paused) {
+        paused = true;
+        await gate;
+      }
+      return originalGet(path);
+    };
+
+    const replacementA = writerFor(b, session.id);
+    disposals.push(() => replacementA.dispose());
+    const startingA = startStorytellerSession(b, lobby, replacementA);
+    await waitFor(() => expect(paused).toBe(true));
+
+    // A's authority lapses; B legitimately takes and releases the lease; A
+    // legitimately REACQUIRES a new, valid generation — all during the read.
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.now() + LEASE_MS + 1);
+    const takeoverWriter = writerFor(b, session.id);
+    disposals.push(() => takeoverWriter.dispose());
+    await takeoverWriter.start();
+    await takeoverWriter.dispose();
+    const reacquired = await replacementA.reconfirmAuthority();
+
+    b.get = originalGet;
+    releaseGate();
+
+    await expect(startingA).rejects.toThrow(/another/i);
+    // A holds VALID authority — just a newer generation than the checkpoint was
+    // compared against — so the cancellation is coherence, not lease loss.
+    expect(replacementA.holdsAuthority(reacquired, FENCE_MARGIN_MS)).toBe(true);
+    nowSpy.mockRestore();
+
+    // No conflict identity was minted from the stale G1/checkpoint pairing:
+    // runtime never entered "conflict".
+    expect(useSessionRuntime.getState().reconnect.status).not.toBe("conflict");
+    // Neither side was written: A kept its own dirty local, and the remote
+    // still shows the foreign device's own content.
+    expect(useStorytellerStore.getState().game).toEqual(localGameBefore);
+    expect(await b.get(`${root}/storyteller`)).toEqual(foreignGame);
   });
 });

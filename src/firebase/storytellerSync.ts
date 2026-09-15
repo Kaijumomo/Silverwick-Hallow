@@ -253,21 +253,22 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   useStorytellerStore.getState().ensureSyncScope(lobby.code, scopeSessionId);
   writer.onAttempt = guard => useStorytellerStore.getState().noteWriterAttempt(lobby.code, scopeSessionId, guard);
   writer.onAck = guard => useStorytellerStore.getState().noteWriterAck(lobby.code, scopeSessionId, guard);
-  // The guard observed after lease acquisition, before this writer has
-  // committed anything — belongs to whichever writer committed last (or
-  // null on a brand new lobby). Compared against the persisted baseline by
-  // the reconnect decision (Phase 9C.2A, section 5/6); adopted as the new
-  // baseline on RESTORE.
-  const observedGuard = await writer.start();
-  // Phase 9C.2B.1: a continuous AuthorityHandle spanning every async read
-  // this automatic startup performs below (checkpoint, roster), reusing the
-  // exact same lease-renewal transaction reconfirmAuthority() already runs
-  // for explicit conflict resolution (Finding H1) — not a parallel
-  // authority model. Re-validated synchronously via holdsAuthority()
-  // immediately before any destructive local mutation those reads feed
-  // (see the final gate below), never trusted as still current once an
-  // intervening read has actually returned.
-  const startupAuthority = await writer.reconfirmAuthority();
+  // Phase 9C.2B.1 (revision): acquire authority and observe the guard as ONE
+  // coherent snapshot. `observedGuard` is the guard after lease acquisition,
+  // before this writer has committed anything — belongs to whichever writer
+  // committed last (or null on a brand new lobby); compared against the
+  // persisted baseline by the reconnect decision (Phase 9C.2A, section 5/6),
+  // adopted as the new baseline on RESTORE. `startupAuthority` is the
+  // AuthorityHandle for the exact uninterrupted authority generation that
+  // guard was read under — start() captured it before, and synchronously
+  // re-proved it after, the guard read, so the two cannot straddle a takeover.
+  // This replaces the earlier decoupled start()+reconfirmAuthority() pair,
+  // whose separate reconfirm could establish a POST-gap handle beside a
+  // PRE-gap guard (Luna's G1->G2->reacquire finding). Re-validated
+  // synchronously via holdsAuthority() at each gate below, spanning every
+  // async read this automatic startup performs (checkpoint, roster) — never
+  // trusted as still current once an intervening read has actually returned.
+  const { observedGuard, authorityHandle: startupAuthority } = await writer.start();
 
   // --- Lifecycle state (Phase 9C.2A, section 11) --------------------------
   // Declared, and the writer's stop hook wired, BEFORE any checkpoint
@@ -485,6 +486,25 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   const { state: checkpointState, restored } = await readCheckpoint(raw, lobby);
   assertCurrent();
   if (stopped) throw new LifecycleError("cancelled", "Session stopped during reconnect.");
+
+  // Decision-side authority gate (Phase 9C.2B.1 revision): the checkpoint was
+  // just read across an await; before the reconnect DECISION or any effect it
+  // produces, synchronously re-prove that the same startup authority
+  // generation still holds. NOTHING awaits between this check and every
+  // decision-side effect below — decideReconnect, promoteRecoveredAck, the
+  // CONFLICT/INCOHERENT runtime state and its currentConflict.snapshotGuard,
+  // and the acceptance of observedGuard as reconnect identity are all
+  // synchronous from here. If authority lapsed or was reclaimed after a gap
+  // during the checkpoint read — even though `stopped` may not have caught up
+  // (the passive renewal interval only notices a lapse on its ~10s cadence) —
+  // a decision made from this checkpoint would combine a pre-gap guard with a
+  // post-takeover checkpoint under authority no longer provable (Luna's
+  // finding). Cancel through the ordinary rejected-promise path instead,
+  // never inventing an outcome or promoting evidence from that stale pairing.
+  if (!writer.holdsAuthority(startupAuthority, FENCE_MARGIN_MS)) {
+    throw new LifecycleError("conflict", "Another Storyteller tab now controls this lobby.");
+  }
+
   if (useStorytellerStore.getState().localSeq !== comparisonSeq) {
     comparisonSeq = useStorytellerStore.getState().localSeq;
   }
@@ -577,7 +597,8 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   // startup by Phase 9C.2B.1): NOTHING awaits between this check and the
   // completion of every local mutation below. If this writer's continuous
   // hold on the exact interval `startupAuthority` represents has lapsed, or
-  // been reclaimed after a gap, since reconfirmAuthority() above — even
+  // been reclaimed after a gap, since that coherent startup snapshot (the
+  // guard and this handle were bound to one generation by start()) — even
   // though `stopped` may not have caught up yet (the passive renewal
   // interval only notices a lapse on its own ~10s cadence) — startup is
   // cancelled through the ordinary rejected-promise path a stale/lost-

@@ -26,6 +26,22 @@ export type AuthorityHandle = {
   expiresAt: number;
 };
 
+/** A coherent startup snapshot (Phase 9C.2B.1 revision): the `writeGuard`
+ * this writer observed immediately after acquiring its lease, paired with an
+ * AuthorityHandle for the SAME uninterrupted authority generation that guard
+ * was read under. `start()` captures the handle BEFORE the (async) guard read
+ * and synchronously re-proves it AFTER, so the two can never belong to
+ * different generations: a writer that loses authority and later legitimately
+ * reacquires cannot present a pre-gap guard beside a post-gap handle. The
+ * automatic Storyteller startup consumes both together (Finding H1; the exact
+ * G1->G2->reacquire gap Luna proved) — never a guard from one call and a
+ * handle from a separate, later reconfirmAuthority() that could straddle a
+ * takeover. */
+export type StartupSnapshot = {
+  observedGuard: GuardStamp | null;
+  authorityHandle: AuthorityHandle;
+};
+
 function isPermissionDenied(error: unknown): boolean {
   if (error instanceof LifecycleError) return false;
   const code = typeof error === "object" && error !== null ? String((error as { code?: unknown }).code ?? "") : "";
@@ -95,14 +111,20 @@ export class SessionWriter implements RoomBackend {
       onDisconnectSet: (path, value) => this.onDisconnectSet(path, value),
     };
   }
-  /** Returns the server guard observed immediately after this writer
-   * acquired its lease — the raw value stored at `writeGuard` before this
-   * writer has committed anything, or null if none exists yet (a brand new
-   * lobby). This is `writeGuard` as data, not as this writer's own identity:
-   * its token (if any) belongs to whichever writer committed last, never to
-   * `this.token`. Reconnect compares against this, never a snapshot taken
-   * before the lease was held. */
-  async start(): Promise<GuardStamp | null> {
+  /** Acquires the lease and returns a coherent {observedGuard, authorityHandle}
+   * StartupSnapshot (Phase 9C.2B.1 revision). `observedGuard` is the server
+   * guard observed immediately after this writer acquired its lease — the raw
+   * value stored at `writeGuard` before this writer has committed anything, or
+   * null if none exists yet (a brand new lobby). This is `writeGuard` as data,
+   * not as this writer's own identity: its token (if any) belongs to whichever
+   * writer committed last, never to `this.token`. `authorityHandle` proves the
+   * uninterrupted authority generation that same guard was read under: it is
+   * captured before the guard read and synchronously re-proven after, so the
+   * caller can gate every subsequent reconnect step on it (holdsAuthority) and
+   * know guard and authority are one generation. Reconnect compares against
+   * `observedGuard`, never a snapshot taken before the lease was held; a lease
+   * that lapses or is reclaimed during the guard read rejects here instead. */
+  async start(): Promise<StartupSnapshot> {
     this.assertActive();
     const session = await requireActiveSession(this.raw, this.code);
     if (session.id !== this.sessionId) throw new LifecycleError("invalid", "Saved game does not match this lobby.");
@@ -118,14 +140,29 @@ export class SessionWriter implements RoomBackend {
       await this.release().catch(() => {});
       throw new LifecycleError("cancelled", "Session cancelled.");
     }
+    // Phase 9C.2B.1 (revision): capture the AuthorityHandle for the generation
+    // renew() just established BEFORE the async writeGuard read below, then
+    // synchronously re-prove it AFTER (holdsAuthority, no await in between) —
+    // so the guard this returns and the handle that authorizes every later
+    // reconnect step are bound to ONE uninterrupted authority generation. If
+    // this writer's lease lapses, or is reclaimed after a gap, while the guard
+    // read is in flight, the re-check rejects the guard rather than accepting
+    // one read under authority that is no longer the generation this handle
+    // represents (Finding H1; the G1->G2->reacquire gap Luna proved once lived
+    // in the old start()/reconfirmAuthority() boundary, where a post-gap valid
+    // handle could silently legitimize a pre-gap guard).
+    const authorityHandle: AuthorityHandle = { epoch: this.leaseEpoch, expiresAt: this.leaseExpiresAt };
     const guard = await this.raw.get(`${this.root}/writeGuard`);
     this.assertActive();
+    if (!this.holdsAuthority(authorityHandle, FENCE_MARGIN_MS)) {
+      throw new LifecycleError("conflict", "Another Storyteller tab controls this lobby. Close it, then retry after 30 seconds.");
+    }
     const observed = guard != null ? guardSchema.parse(guard) : null;
     if (observed) this.revision = observed.revision;
     this.renewal = setInterval(() => {
       void retryTransient(() => this.renew(), this.abort.signal).catch(error => { this.stop(); this.report(error); });
     }, LEASE_MS / 3);
-    return observed;
+    return { observedGuard: observed, authorityHandle };
   }
   private async renew() {
     if (this.stopped) throw new LifecycleError("cancelled", "Session closed.");
