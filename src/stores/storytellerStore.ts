@@ -31,6 +31,12 @@ import type {
 
 const UNDO_LIMIT = 20;
 
+/** The persisted store's current schema version — also the single source
+ * `merge` (Phase 9C.2B.2) passes to migrateStoreState when Zustand's own
+ * persist middleware skips calling `migrate` outright, which it does
+ * whenever the persisted version already equals this one. */
+const STORE_VERSION = 12;
+
 let _migrationResetFlag = false;
 /** Returns true (once) when migrate() discarded incompatible persisted state. */
 export function takeMigrationResetFlag(): boolean {
@@ -1329,9 +1335,25 @@ export const useStorytellerStore = create<StorytellerStore>()(
     },
     {
       name: "new-blood-st",
-      version: 12,
+      version: STORE_VERSION,
       storage: createJSONStorage(() => localStorage),
       migrate: migrateStoreState,
+      // Phase 9C.2B.2 (hardening): Zustand only invokes `migrate` above when
+      // the persisted version differs from STORE_VERSION — a persisted blob
+      // already tagged at the current version bypasses it (and therefore
+      // migrateStoreState's own validation-or-reset tail) entirely,
+      // hydrating unchanged no matter what it contains. `merge` runs on
+      // EVERY rehydration regardless of version match, so routing the
+      // (possibly already-migrated) persisted state through the exact same
+      // canonical validator here — one path, never duplicated rules —
+      // closes that gap without weakening or duplicating migration's own
+      // cross-version behavior; a genuinely valid current-version save
+      // still round-trips unchanged (migrateStoreState is a no-op once
+      // fromVersion is no longer less than any of its own thresholds).
+      merge: (persistedState, currentState) => {
+        if (persistedState == null) return currentState;
+        return { ...currentState, ...(migrateStoreState(persistedState, STORE_VERSION) as Partial<StorytellerStore>) };
+      },
       partialize: (s) => ({
         game: s.game,
         view: s.view,

@@ -434,3 +434,88 @@ describe("migrateStoreState", () => {
     expect(result.sync).toEqual(state.sync);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 9C.2B.2 (hardening): current-version (v12) persisted state must be
+// validated too. Zustand's persist middleware only calls `migrate` — and
+// therefore migrateStoreState's own validate-or-reset tail — when the
+// persisted version differs from the store's version; a blob already
+// tagged v12 previously bypassed that entirely and hydrated unchanged no
+// matter what it contained. These exercise the REAL rehydrate() path (not
+// migrateStoreState() called directly), because that is exactly the gap:
+// the fix lives in the persist config's `merge`, not in migrateStoreState.
+// ---------------------------------------------------------------------------
+describe("Phase 9C.2B.2 — current-version (v12) persisted state validation", () => {
+  const STORAGE_KEY = "new-blood-st";
+
+  beforeEach(() => {
+    // The outer beforeEach doesn't touch sync/localSeq; reset them
+    // explicitly too, or a prior test's successful hydration would leak
+    // into this one before rehydrateFrom() below ever runs.
+    useStorytellerStore.setState({ game: null, view: "home", undoStack: [], customScripts: {}, lobby: null, localSeq: 0, sync: null });
+    takeMigrationResetFlag(); // drain so each test starts clean
+  });
+
+  async function rehydrateFrom(state: Record<string, unknown>) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ state, version: 12 }));
+    await useStorytellerStore.persist.rehydrate();
+  }
+
+  const baseState = (sync: unknown, localSeq: unknown) => ({
+    game: minimalPersistedGame(), undoStack: [], view: "home" as const,
+    customScripts: {}, lobby: null, localSeq, sync,
+  });
+
+  it("a valid v12 state round-trips unchanged through a real rehydrate cycle", async () => {
+    const sync = { code: "ABCD2345", sessionId: "s1", ackedGuard: { token: "t", revision: 2 }, ackedGameSeq: 5, lastAttempt: null };
+    await rehydrateFrom(baseState(sync, 7));
+    expect(useStorytellerStore.getState().localSeq).toBe(7);
+    expect(useStorytellerStore.getState().sync).toEqual(sync);
+    expect(useStorytellerStore.getState().game).toMatchObject({ scriptId: "tb" });
+    expect(takeMigrationResetFlag()).toBe(false);
+  });
+
+  it("ackedGameSeq > localSeq is rejected: the contradictory watermark never reaches reconnect as trusted evidence", async () => {
+    const sync = { code: "ABCD2345", sessionId: "s1", ackedGuard: null, ackedGameSeq: 999, lastAttempt: null };
+    await rehydrateFrom(baseState(sync, 5)); // the Phase 9C.2B.2 reproduction: localSeq=5, ackedGameSeq=999
+    expect(useStorytellerStore.getState().sync).toBeNull();
+    expect(useStorytellerStore.getState().game).toBeNull(); // the existing controlled reset path (CLEAN_STATE)
+    expect(takeMigrationResetFlag()).toBe(true);
+  });
+
+  it("a missing required sync field (sessionId) is rejected", async () => {
+    const sync = { code: "ABCD2345", ackedGuard: null, ackedGameSeq: 0, lastAttempt: null };
+    await rehydrateFrom(baseState(sync, 0));
+    expect(useStorytellerStore.getState().sync).toBeNull();
+    expect(takeMigrationResetFlag()).toBe(true);
+  });
+
+  it("a non-numeric counter is rejected", async () => {
+    const sync = { code: "ABCD2345", sessionId: "s1", ackedGuard: null, ackedGameSeq: "5", lastAttempt: null };
+    await rehydrateFrom(baseState(sync, 5));
+    expect(useStorytellerStore.getState().sync).toBeNull();
+    expect(takeMigrationResetFlag()).toBe(true);
+  });
+
+  it("a negative counter is rejected", async () => {
+    const sync = { code: "ABCD2345", sessionId: "s1", ackedGuard: null, ackedGameSeq: -1, lastAttempt: null };
+    await rehydrateFrom(baseState(sync, 5));
+    expect(useStorytellerStore.getState().sync).toBeNull();
+    expect(takeMigrationResetFlag()).toBe(true);
+  });
+
+  it("an unsafe integer counter is rejected even when internally consistent with localSeq", async () => {
+    const unsafe = Number.MAX_SAFE_INTEGER + 10;
+    const sync = { code: "ABCD2345", sessionId: "s1", ackedGuard: null, ackedGameSeq: unsafe, lastAttempt: null };
+    await rehydrateFrom(baseState(sync, unsafe));
+    expect(useStorytellerStore.getState().sync).toBeNull();
+    expect(takeMigrationResetFlag()).toBe(true);
+  });
+
+  it("malformed guard metadata (an empty token) is rejected", async () => {
+    const sync = { code: "ABCD2345", sessionId: "s1", ackedGuard: { token: "", revision: 2 }, ackedGameSeq: 0, lastAttempt: null };
+    await rehydrateFrom(baseState(sync, 5));
+    expect(useStorytellerStore.getState().sync).toBeNull();
+    expect(takeMigrationResetFlag()).toBe(true);
+  });
+});
