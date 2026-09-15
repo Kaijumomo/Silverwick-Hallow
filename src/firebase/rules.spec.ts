@@ -2,7 +2,7 @@
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import type { Database } from "firebase/database";
 import { FirebaseRoomBackend } from "./firebaseBackend";
 import type { Json } from "./backend";
@@ -507,6 +507,90 @@ describe("Firebase RTDB membership authorization", () => {
     } finally { await writer.dispose(); }
   });
 
+  // Phase 9C.4 (OPUS-004) — proves the setup all-or-none projection barrier
+  // through the REAL writer, REAL enforced rules.json, and REAL live listeners
+  // for two real authenticated players — not a unit-level projection check.
+  test("OPUS-004: the setup all-or-none barrier holds through the real writer, enforced rules, and live listeners", async () => {
+    const raw = new FirebaseRoomBackend(db(st) as unknown as Database);
+    await createLobby(raw, st, { codeGenerator: () => code });
+    const metadata = (await ref(st, "session").once("value")).val();
+    const writer = new SessionWriter(raw, code, metadata.id);
+    const game: StorytellerLobbyRecord = {
+      code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
+      notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {},
+      rolePool: [], plannedPlayerCount: 2, pendingPlayers: {}, seatOrder: ["p-alice", "p-bob"],
+      players: {
+        // Alice: concealed role, no shownRole yet — the negative-space case.
+        "p-alice": makeSTPlayer({ id: "p-alice", seat: 0, actualRole: "lunatic",
+          shownRole: null, shownAlignment: null, behaviorMode: "normal" }),
+        // Bob: a normal, fully-configured ordinary identity.
+        "p-bob": makeSTPlayer({ id: "p-bob", seat: 1, actualRole: "chef", shownRole: "chef" }),
+      },
+    };
+    const publish = () => writeProjections({ backend: writer, code, stState: game,
+      registry: buildRegistry(tbScript), online: {}, membership: { [alice]: "p-alice", [bob]: "p-bob" } });
+
+    const aliceValues: unknown[] = [];
+    const bobValues: unknown[] = [];
+    const aliceRecord = ref(alice, "player/p-alice");
+    const bobRecord = ref(bob, "player/p-bob");
+    try {
+      await writer.start();
+      await knockOnLobby(backend(alice), code, alice, "Alice");
+      await seatPlayer(writer, code, alice, "p-alice", null);
+      await knockOnLobby(backend(bob), code, bob, "Bob");
+      await seatPlayer(writer, code, bob, "p-bob", null);
+
+      // Real live client subscriptions ("start both real player handshakes"),
+      // using the same subscribe() boundary playerSync.ts builds on. Attached
+      // once each player is seated (read-authorized) but still fully within
+      // the barred window — before either record is ever published.
+      aliceRecord.on("value", snap => aliceValues.push(snap.val()));
+      bobRecord.on("value", snap => bobValues.push(snap.val()));
+      await vi.waitFor(() => { if (!aliceValues.length) throw new Error("Alice's live listener has not fired yet"); });
+      await vi.waitFor(() => { if (!bobValues.length) throw new Error("Bob's live listener has not fired yet"); });
+      expect(aliceValues.at(-1)).toBeNull();
+      expect(bobValues.at(-1)).toBeNull();
+
+      // Publish while Alice's (concealed) perception is still unconfigured.
+      // All-or-none: Bob's own otherwise-complete record must be withheld too.
+      await publish();
+      expect((await ref(alice, "player/p-alice").once("value")).val()).toBeNull();
+      expect((await ref(bob, "player/p-bob").once("value")).val()).toBeNull();
+      await assertFails(ref(alice, "player/p-bob").once("value"));
+      await assertFails(ref(bob, "player/p-alice").once("value"));
+      // Across the barred window, the live listeners never observed anything
+      // but self === null.
+      expect(aliceValues.every(v => v === null)).toBe(true);
+      expect(bobValues.every(v => v === null)).toBe(true);
+
+      // Configure the final concealed shown identity and publish once.
+      game.players["p-alice"]!.shownRole = "imp";
+      game.players["p-alice"]!.shownAlignment = null;
+      await publish();
+
+      const aliceSelf = { shownRole: "imp", shownAlignment: "evil" };
+      const bobSelf = { shownRole: "chef", shownAlignment: "good" };
+      expect((await ref(alice, "player/p-alice").once("value")).val()).toEqual(aliceSelf);
+      expect((await ref(bob, "player/p-bob").once("value")).val()).toEqual(bobSelf);
+      await assertFails(ref(alice, "player/p-bob").once("value"));
+      await assertFails(ref(bob, "player/p-alice").once("value"));
+
+      // The SAME live listeners, established during the barred window,
+      // eventually converge to each player's own correct identity — proving
+      // no Storyteller-paced state ever existed where one occupied ordinary
+      // player had a published identity while the other stayed withheld.
+      await vi.waitFor(() => { if (!aliceValues.length || aliceValues.at(-1) === null) throw new Error("Alice's live listener has not converged yet"); });
+      await vi.waitFor(() => { if (!bobValues.length || bobValues.at(-1) === null) throw new Error("Bob's live listener has not converged yet"); });
+      expect(aliceValues.at(-1)).toEqual(aliceSelf);
+      expect(bobValues.at(-1)).toEqual(bobSelf);
+    } finally {
+      aliceRecord.off();
+      bobRecord.off();
+      await writer.dispose();
+    }
+  });
+
   test("AUD-027: preview stays private; explicit fake information delivery is guarded, isolated, and revocable", async () => {
     const store = useStorytellerStore;
     store.setState({ game: null, lobby: null, undoStack: [] });
@@ -519,6 +603,11 @@ describe("Firebase RTDB membership authorization", () => {
     store.getState().addPlayer("Bob");
     const [id, other] = store.getState().game!.seatOrder as [string, string];
     store.getState().setLobby({ code, uid: st, sessionId: metadata.id, status: "live" });
+    // Phase 9C.4: ordinary setup publication is all-or-none. Bob (other)
+    // must have a complete identity too, or the barrier would withhold
+    // Alice's own otherwise-complete record — unrelated to what this proves.
+    store.getState().assignRole(other, "washerwoman");
+    store.getState().setShownRole(other, "washerwoman");
     store.getState().assignRole(id, "lunatic");
     store.getState().setBehaviorMode(id, "fake_demon_behavior");
     store.getState().setShownRole(id, "imp");

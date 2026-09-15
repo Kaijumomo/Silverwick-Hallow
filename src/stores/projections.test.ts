@@ -453,6 +453,120 @@ describe("Privacy regression matrix — all behavior modes", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Phase 9C.4 (OPUS-004) — Setup ordinary private-identity publication barrier
+// ---------------------------------------------------------------------------
+// While game.phase === "setup", ordinary (non-Traveler, occupied) private
+// identity publication is all-or-none, derived directly from the same
+// per-seat projection this file already exercises above — never restated
+// independently. See projectLobbyToSelfMap in ./projections.ts.
+
+describe("projectLobbyToSelfMap — Phase 9C.4 setup privacy barrier", () => {
+  function setupLobby(players: StorytellerLobbyRecord["players"]): StorytellerLobbyRecord {
+    return {
+      code: "SETUP01", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
+      bluffs: [], fabled: [], lorics: [], notes: "ST-only",
+      seatOrder: Object.keys(players), nightProgress: {}, rolePool: [],
+      plannedPlayerCount: Object.keys(players).length, pendingPlayers: {}, players,
+    };
+  }
+  const complete = (id: string, seat: number) => makePublishedSTPlayer({
+    id, seat, actualRole: "chef", shownRole: "chef",
+  });
+  const incompleteOrdinary = (id: string, seat: number, actualRole = "drunk") => makePublishedSTPlayer({
+    id, seat, actualRole, shownRole: null, shownAlignment: null, behaviorMode: "normal",
+  });
+  const validTraveler = (id: string, seat: number) => makePublishedSTPlayer({
+    id, seat, isTraveler: true, actualRole: "thief", shownRole: "thief",
+  });
+
+  it("A: an incomplete ordinary set publishes NO ordinary records", () => {
+    const lobby = setupLobby({ p1: complete("p1", 0), p2: incompleteOrdinary("p2", 1) });
+    const selves = projectLobbyToSelfMap(lobby, registry);
+    expect(selves).toEqual({});
+  });
+
+  it("B: a complete ordinary set publishes every ordinary record", () => {
+    const lobby = setupLobby({ p1: complete("p1", 0), p2: complete("p2", 1) });
+    const selves = projectLobbyToSelfMap(lobby, registry);
+    expect(Object.keys(selves).sort()).toEqual(["p1", "p2"]);
+    expect(selves.p1!.shownRole).toBe("chef");
+    expect(selves.p2!.shownRole).toBe("chef");
+  });
+
+  it("C: re-arming — complete, then cleared, then restored, all within Setup", () => {
+    const readyLobby = setupLobby({ p1: complete("p1", 0), p2: complete("p2", 1) });
+    expect(Object.keys(projectLobbyToSelfMap(readyLobby, registry)).sort()).toEqual(["p1", "p2"]);
+
+    const clearedLobby = setupLobby({
+      p1: complete("p1", 0),
+      p2: { ...complete("p2", 1), shownRole: null, shownAlignment: null },
+    });
+    expect(projectLobbyToSelfMap(clearedLobby, registry)).toEqual({});
+
+    const restoredLobby = setupLobby({ p1: complete("p1", 0), p2: complete("p2", 1) });
+    expect(Object.keys(projectLobbyToSelfMap(restoredLobby, registry)).sort()).toEqual(["p1", "p2"]);
+  });
+
+  it("D: multiple concealed players — no ordinary records until every one is configured", () => {
+    const bothUnconfigured = setupLobby({
+      p1: incompleteOrdinary("p1", 0, "drunk"),
+      p2: incompleteOrdinary("p2", 1, "marionette"),
+    });
+    expect(projectLobbyToSelfMap(bothUnconfigured, registry)).toEqual({});
+
+    const oneConfigured = setupLobby({
+      p1: { ...incompleteOrdinary("p1", 0, "drunk"), shownRole: "chef" },
+      p2: incompleteOrdinary("p2", 1, "marionette"),
+    });
+    expect(projectLobbyToSelfMap(oneConfigured, registry)).toEqual({});
+
+    const bothConfigured = setupLobby({
+      p1: { ...incompleteOrdinary("p1", 0, "drunk"), shownRole: "chef" },
+      p2: { ...incompleteOrdinary("p2", 1, "marionette"), shownRole: "washerwoman" },
+    });
+    expect(Object.keys(projectLobbyToSelfMap(bothConfigured, registry)).sort()).toEqual(["p1", "p2"]);
+  });
+
+  it("E: a valid Traveler identity survives an otherwise-barred ordinary Setup", () => {
+    const lobby = setupLobby({ p1: incompleteOrdinary("p1", 0), t1: validTraveler("t1", 1) });
+    const selves = projectLobbyToSelfMap(lobby, registry);
+    expect(selves.p1).toBeUndefined();
+    expect(selves.t1).toEqual({ shownRole: "thief" });
+  });
+
+  it("F: an empty planned ordinary seat does not arm the barrier", () => {
+    const lobby = setupLobby({
+      p1: complete("p1", 0),
+      empty: makePublishedSTPlayer({ id: "empty", seat: 1, isEmpty: true, name: "", actualRole: "", shownRole: null }),
+    });
+    const selves = projectLobbyToSelfMap(lobby, registry);
+    expect(Object.keys(selves)).toEqual(["p1"]);
+  });
+
+  it("G: an occupied ordinary player with an actual role but no projected self identity arms the barrier", () => {
+    const lobby = setupLobby({ p1: complete("p1", 0), p2: incompleteOrdinary("p2", 1) });
+    expect(projectLobbyToSelfMap(lobby, registry).p1).toBeUndefined();
+  });
+
+  it("H: an occupied ordinary player with no actual role arms the barrier even with a malformed shownRole present", () => {
+    const lobby = setupLobby({
+      p1: complete("p1", 0),
+      // Malformed: shownRole is set despite no actualRole ever being assigned.
+      p2: makePublishedSTPlayer({ id: "p2", seat: 1, actualRole: "", shownRole: "chef", shownAlignment: "good" }),
+    });
+    const selves = projectLobbyToSelfMap(lobby, registry);
+    expect(selves).toEqual({});
+  });
+
+  it("I: outside Setup, existing per-seat projection semantics are unchanged (no all-or-none)", () => {
+    const lobby = { ...setupLobby({ p1: complete("p1", 0), p2: incompleteOrdinary("p2", 1) }), phase: "night" as const };
+    const selves = projectLobbyToSelfMap(lobby, registry);
+    expect(Object.keys(selves)).toEqual(["p1"]);
+    expect(selves.p2).toBeUndefined();
+  });
+});
+
 describe("buildRegistry — traveler coverage", () => {
   it("all TRAVELERS IDs are resolvable without throwing", () => {
     const reg = buildRegistry(tbScript);

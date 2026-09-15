@@ -86,17 +86,26 @@ export function analyzeSetup(context: SetupContext): SetupAnalysis {
       `${p.name}: choose actual Traveler alignment in their arrival controls. Shown alignment is not Storyteller truth.`, "assigned", actions, p.id);
   }
 
-  // Perception may intentionally remain unset. Explain the existing runtime
-  // limitation without substituting actual identity or blocking ST judgment.
-  for (const [players, actions, label] of [
-    [context.ordinary, ["manual"], "ordinary"],
-    [context.travelers, ["deal", "manual"], "traveler"],
-  ] as const) {
-    const missing = players.filter(p => p.actualRole && !p.shownRole);
-    if (missing.length) add("missing-perception:" + label, "check",
-      `Review shown identities for ${missing.map(p => p.name).join(", ")}. Silverwick cannot derive their character wake procedures or deliver their player identities until perception is configured. Use the seat's identity controls, or handle those procedures manually if concealment is intentional.`,
-      "shared", [...actions]);
-  }
+  // Ordinary perception (Phase 9C.4 / OPUS-004): concealed identity (Drunk,
+  // Marionette, Lunatic, ...) intentionally has no shownRole until the
+  // Storyteller configures it, and the projection barrier withholds EVERY
+  // ordinary private identity while any is unconfigured. Leaving this a mere
+  // "check" would let the Storyteller proceed to Night 1 with players
+  // holding no role card at all — a live negative-space leak — so it blocks
+  // beginning the game, not dealing (which is what creates this temporary
+  // concealed state in the first place).
+  const missingOrdinary = context.ordinary.filter(p => p.actualRole && !p.shownRole);
+  if (missingOrdinary.length) add("missing-perception:ordinary", "blocker",
+    `Choose the identity each player will see before beginning Night 1: ${missingOrdinary.map(p => p.name).join(", ")}.`,
+    "shared", ["manual"]);
+
+  // Traveler perception may intentionally remain unset — Travelers are
+  // exempt from the 9C.4 all-or-none publication barrier, so there is no
+  // structural leak to block on here, only Storyteller judgment.
+  const missingTraveler = context.travelers.filter(p => p.actualRole && !p.shownRole);
+  if (missingTraveler.length) add("missing-perception:traveler", "check",
+    `Review shown identities for ${missingTraveler.map(p => p.name).join(", ")}. Silverwick cannot derive their character wake procedures or deliver their player identities until perception is configured. Use the seat's identity controls, or handle those procedures manually if concealment is intentional.`,
+    "shared", ["deal", "manual"]);
 
   const modifierDefs: RoleDef[] = [];
   for (const [ids, catalog, category] of [

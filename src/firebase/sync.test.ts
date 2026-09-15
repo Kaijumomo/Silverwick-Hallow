@@ -373,3 +373,77 @@ describe("writeProjections — privacy chokepoint", () => {
     expect(p3.shownAlignment).toBe("good");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 9C.4 (OPUS-004) — the setup all-or-none barrier flushes atomically
+// through this same chokepoint. writeProjections gains no setup-specific
+// policy of its own: it just keeps nulling any player path the (barrier-
+// aware) self map withdraws, exactly as the pre-existing withdrawal loop
+// already does for an ordinary shownRole clear.
+// ---------------------------------------------------------------------------
+
+describe("writeProjections — Phase 9C.4 setup barrier atomicity", () => {
+  function setupLobby(p2ShownRole: string | null): StorytellerLobbyRecord {
+    return {
+      code: "SETP", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
+      bluffs: [], fabled: [], lorics: [], notes: "",
+      seatOrder: ["p1", "p2", "t1"], nightProgress: {}, rolePool: [],
+      plannedPlayerCount: 2, pendingPlayers: {},
+      players: {
+        p1: makePublishedSTPlayer({ id: "p1", seat: 0, actualRole: "chef", shownRole: "chef" }),
+        p2: makePublishedSTPlayer({ id: "p2", seat: 1, actualRole: "drunk",
+          shownRole: p2ShownRole, shownAlignment: p2ShownRole ? "good" : null,
+          behaviorMode: p2ShownRole ? "normal" : "normal" }),
+        t1: makePublishedSTPlayer({ id: "t1", seat: 2, isTraveler: true, actualRole: "thief", shownRole: "thief" }),
+      },
+    };
+  }
+  function spyOnUpdate(backend: MemoryRoomBackend) {
+    const calls: Record<string, unknown>[] = [];
+    const raw = backend.update.bind(backend);
+    backend.update = async (updates) => { calls.push(updates); await raw(updates); };
+    return calls;
+  }
+
+  it("a barred setup flush is one update: every ordinary path null/absent, Traveler/public/storyteller/checkpoint still land", async () => {
+    const backend = new MemoryRoomBackend();
+    // Pre-seed p1's path to prove the barrier actively withdraws it, not merely omits a new write.
+    await backend.set("lobbies/SETP/player/p1", { shownRole: "chef", shownAlignment: "good" });
+    const calls = spyOnUpdate(backend);
+
+    // p2 (Drunk) has no configured shown identity — the ordinary set is
+    // incomplete, so p1's otherwise-complete record must be withheld too.
+    await writeProjections({ backend, code: "SETP", stState: setupLobby(null), registry, online: {} });
+
+    expect(calls).toHaveLength(1);
+    const update = calls[0]!;
+    expect(update["lobbies/SETP/player/p1"]).toBeNull();
+    expect(update["lobbies/SETP/player/p2"]).toBeNull();
+    expect(update["lobbies/SETP/player/t1"]).toEqual({ shownRole: "thief" });
+    expect(update["lobbies/SETP/public"]).toBeDefined();
+    expect(update["lobbies/SETP/storyteller"]).toBeDefined();
+    expect(update["lobbies/SETP/checkpoint"]).toBeDefined();
+
+    expect(await backend.get("lobbies/SETP/player/p1")).toBeUndefined();
+    expect(await backend.get("lobbies/SETP/player/p2")).toBeUndefined();
+    expect(await backend.get("lobbies/SETP/player/t1")).toBeDefined();
+  });
+
+  it("the completing flush publishes every ordinary self record together in one update", async () => {
+    const backend = new MemoryRoomBackend();
+    const calls = spyOnUpdate(backend);
+
+    // p2 now has a configured (different, concealed) shown identity — the
+    // ordinary set is complete.
+    await writeProjections({ backend, code: "SETP", stState: setupLobby("washerwoman"), registry, online: {} });
+
+    expect(calls).toHaveLength(1);
+    const update = calls[0]!;
+    expect(update["lobbies/SETP/player/p1"]).toEqual({ shownRole: "chef", shownAlignment: "good" });
+    expect(update["lobbies/SETP/player/p2"]).toEqual({ shownRole: "washerwoman", shownAlignment: "good" });
+    expect(update["lobbies/SETP/player/t1"]).toEqual({ shownRole: "thief" });
+
+    expect(await backend.get("lobbies/SETP/player/p1")).toEqual({ shownRole: "chef", shownAlignment: "good" });
+    expect(await backend.get("lobbies/SETP/player/p2")).toEqual({ shownRole: "washerwoman", shownAlignment: "good" });
+  });
+});

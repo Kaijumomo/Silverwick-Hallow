@@ -279,6 +279,7 @@ describe("setFabled", () => {
     useStorytellerStore.getState().addPlayer("Alice");
     const id = useStorytellerStore.getState().game!.seatOrder[0]!;
     useStorytellerStore.getState().assignRole(id, "chef");
+    useStorytellerStore.getState().showAssignedRole(id);
     useStorytellerStore.getState().setPlannedPlayerCount(1);
     expect(useStorytellerStore.getState().advancePhase().ok).toBe(true);
     const game = useStorytellerStore.getState().game!;

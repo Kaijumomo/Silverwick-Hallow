@@ -35,6 +35,10 @@ export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClo
     try {
       if (code && !backend) throw new Error("Connection unavailable. Reconnect before assigning a seat.");
       if (backend && code) {
+        // selfRecord must stay null here: Setup identity publication is
+        // governed by the Phase 9C.4 projection barrier (see
+        // projectLobbyToSelfMap), not by seating. Production seating must
+        // never seed a player self record directly.
         await seatPlayerAndCommit(
           backend,
           code,

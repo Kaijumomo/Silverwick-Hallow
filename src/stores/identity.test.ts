@@ -45,23 +45,34 @@ describe("AUD-004 identity boundary", () => {
     expect(projectToSelf(p, registry)).toBeNull();
   });
 
-  it("bulk dealing initializes ordinary roles and leaves deceptive identities unconfigured", () => {
+  it("bulk dealing initializes ordinary roles but blocks Night 1 until deceptive identities are configured (Phase 9C.4)", () => {
     // The fixture contains all three deceptive roles in one script.
     store.setState({ customScripts: { audit: { ...tbScript, id: "audit" } } });
     store.getState().newGame("audit", { plannedRoles: ["chef", "imp", "drunk", "marionette", "lunatic"] });
     for (const name of ["A", "B", "C", "D", "E"]) store.getState().addPlayer(name);
     store.getState().setPlannedPlayerCount(5);
+    // Dealing is what creates the temporary concealed-perception state, so it
+    // must remain allowed even though the deceptive roles stay unrevealed.
     expect(store.getState().dealRolePool().ok).toBe(true);
-    expect(store.getState().beginNightOne().ok).toBe(true);
-    const game = store.getState().game!;
-    expect(game.phase).toBe("night");
-    for (const p of Object.values(game.players)) {
+    const dealt = store.getState().game!;
+    for (const p of Object.values(dealt.players)) {
       const concealed = cases.some(([role]) => role === p.actualRole);
       expect(projectToSelf(p, registry)).toEqual(concealed ? null : {
         shownRole: p.actualRole, shownAlignment: registry.alignmentOf(p.actualRole),
       });
       expect(p.shownRole).toBe(concealed ? null : p.actualRole);
     }
+    // Publishing an ordinary player's identity while a concealed player has
+    // none would leak "everyone else got a role card but I didn't" — so
+    // beginning the game is blocked while any concealed player is unset.
+    expect(store.getState().beginNightOne().ok).toBe(false);
+    expect(store.getState().game!.phase).toBe("setup");
+
+    for (const p of Object.values(dealt.players)) {
+      if (cases.some(([role]) => role === p.actualRole)) store.getState().setShownRole(p.id, "saint");
+    }
+    expect(store.getState().beginNightOne().ok).toBe(true);
+    expect(store.getState().game!.phase).toBe("night");
   });
 
   it("manual assignment is private until the explicit ordinary publication action", () => {

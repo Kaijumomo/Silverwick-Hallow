@@ -150,15 +150,17 @@ describe("provenance, definitions and duplicates", () => {
 });
 
 describe("structural and manual checks", () => {
-  it("missing perception prompts manual review without mutating truth or blocking", () => {
+  it("missing ordinary perception blocks a manual start but never mutates truth (Phase 9C.4)", () => {
     const g=setupGame(standardRoles(5));
+    for(const p of Object.values(g.players))p.shownRole=null;
     const before=JSON.stringify(g);
     const a=analyze(g);
-    expect(a.findings.find(f=>f.code==="missing-perception:ordinary")).toMatchObject({severity:"check",actions:["manual"]});
-    expect(a.readiness.manual.ok).toBe(true);
+    expect(a.findings.find(f=>f.code==="missing-perception:ordinary")).toMatchObject({severity:"blocker",actions:["manual"]});
+    expect(a.readiness.manual.ok).toBe(false);
     expect(JSON.stringify(g)).toBe(before);
     for(const p of Object.values(g.players))p.shownRole=p.actualRole;
     expect(codes(g)).not.toContain("missing-perception:ordinary");
+    expect(analyze(g).readiness.manual.ok).toBe(true);
   });
   it("unresolved Traveler perception needs review in either assignment workflow", () => {
     const g=setupGame(standardRoles(5));

@@ -14,7 +14,13 @@ beforeEach(() => {
 function prepare(pool = false) {
   store.getState().newGame(setupScript.id,{plannedPlayerCount:5,plannedRoles:pool?standardRoles(5):[]});
   for(let i=0;i<5;i++)store.getState().addPlayerToSeat("Player "+i);
-  if(!pool)store.getState().game!.seatOrder.forEach((id,i)=>store.getState().assignRole(id,standardRoles(5)[i]!));
+  if(!pool)store.getState().game!.seatOrder.forEach((id,i)=>{
+    store.getState().assignRole(id,standardRoles(5)[i]!);
+    // Manual assignment leaves perception unconfigured (assignRole never
+    // seeds shownRole) — a "ready" manual fixture must explicitly reveal it,
+    // just as a Storyteller would before Night 1 (Phase 9C.4).
+    store.getState().showAssignedRole(id);
+  });
 }
 const state = () => store.getState();
 const game = () => state().game!;
@@ -96,6 +102,81 @@ describe("one setup command gate", () => {
   it("Undo of a successful start restores planning without a made-up baseline", () => {
     prepare();state().beginNightOne();state().undo();
     expect(game().phase).toBe("setup");expect(game().startingNonTravelerCount).toBeUndefined();
+  });
+});
+
+describe("Phase 9C.4 (OPUS-004) — concealed-perception readiness gate", () => {
+  // standardRoles(6) includes exactly one concealed role (the outsider slot
+  // is "drunk"), giving a real dealt pool that reproduces the negative-space
+  // scenario: everyone else gets a role card, the Drunk gets none.
+  function prepareConcealed() {
+    store.getState().newGame(setupScript.id, { plannedPlayerCount: 6, plannedRoles: standardRoles(6) });
+    for (let i = 0; i < 6; i++) store.getState().addPlayerToSeat("Player " + i);
+  }
+  const drunkId = () => Object.values(game().players).find(p => p.actualRole === "drunk")!.id;
+
+  it("1: dealRolePool() remains allowed when the pool contains a concealed role", () => {
+    prepareConcealed();
+    expect(state().dealRolePool().ok).toBe(true);
+    expect(game().setupRolesDealt).toBe(true);
+    expect(game().players[drunkId()]!.actualRole).toBe("drunk");
+  });
+
+  it("2: immediately after dealing, the concealed player's perception is unset and beginNightOne is blocked", () => {
+    prepareConcealed();
+    state().dealRolePool();
+    expect(game().players[drunkId()]!.shownRole).toBeNull();
+    const ready = analyzeSetup(selectSetupContext(game(), setupScript)).readiness.manual;
+    expect(ready.ok).toBe(false);
+    expect(state().beginNightOne().ok).toBe(false);
+    expect(game().phase).toBe("setup");
+  });
+
+  it("3-4: configuring the concealed shown identity completes the ordinary self map and allows Night 1", () => {
+    prepareConcealed();
+    state().dealRolePool();
+    state().setShownRole(drunkId(), "chef");
+    expect(Object.keys(projectLobbyToSelfMap(game(), buildRegistry(setupScript))).sort())
+      .toEqual([...game().seatOrder].sort());
+    expect(state().beginNightOne().ok).toBe(true);
+    expect(game().phase).toBe("night");
+  });
+
+  it("5: an unconfigured Traveler stays a nonblocking Storyteller check, never the ordinary publication blocker", () => {
+    prepareConcealed();
+    state().dealRolePool();
+    state().setShownRole(drunkId(), "chef"); // ordinary set fully configured
+    state().addPlayer("Traveler");
+    const travelerId = game().seatOrder.at(-1)!;
+    state().setIsTraveler(travelerId, true);
+    state().assignRole(travelerId, "thief");
+    state().setShownRole(travelerId, null); // simulate unconfigured Traveler perception
+    const findings = analyzeSetup(selectSetupContext(game(), setupScript)).findings;
+    expect(findings.find(f => f.code === "missing-perception:traveler")).toMatchObject({ severity: "check" });
+    expect(findings.some(f => f.code === "missing-perception:ordinary")).toBe(false);
+    expect(state().beginNightOne().ok).toBe(true);
+  });
+
+  it.each(actions)("6-7: %s cannot bypass the concealed-perception blocker", (_name, run) => {
+    prepareConcealed();
+    state().dealRolePool();
+    const before = state();
+    expect(run().ok).toBe(false);
+    expect(state()).toBe(before);
+    expect(game().phase).toBe("setup");
+  });
+
+  it("8: a blocked start attempt leaves nothing for undo to bypass into Night 1", () => {
+    prepareConcealed();
+    state().dealRolePool();
+    const beforeAttempt = state();
+    expect(state().beginNightOne().ok).toBe(false);
+    expect(state()).toBe(beforeAttempt); // the failed attempt itself never mutated state, so nothing was pushed for it
+    state().undo();
+    // undo() unwinds the last successful command (the deal) — never anything
+    // resembling a bypassed Night 1, since the blocked attempt never ran.
+    expect(game().phase).toBe("setup");
+    expect(game().setupRolesDealt).toBeUndefined();
   });
 });
 

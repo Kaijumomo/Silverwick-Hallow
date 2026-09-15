@@ -1,5 +1,6 @@
 import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
 import { previewPrivatePacket } from "@/stores/privatePackets";
+import { projectLobbyToSelfMap } from "@/stores/projections";
 import { buildRegistry } from "@/data/roleRegistry";
 import { readRosterBindings } from "./lobby";
 import { writeProjections } from "./sync";
@@ -45,6 +46,15 @@ export async function publishPrivatePacket(playerId: string, preview: ReturnType
         ...(player.travelerArrival ?? newTravelerArrival()), demonInfoComplete: true,
       } } : {};
       const snapshot = { ...game, players: { ...game.players, [playerId]: { ...player, ...arrivalPatch, publishedPacket } } };
+      // Phase 9C.4 (OPUS-004): reuse the exact projection that governs
+      // publication. If the 9C.4 setup barrier is withholding this target
+      // (an occupied ordinary seat while another ordinary seat's perception
+      // remains unconfigured), writeProjections would silently write no
+      // private record for them — this must never resolve as a delivered
+      // packet.
+      if (!projectLobbyToSelfMap(snapshot, registry)[playerId]) {
+        throw new Error("Set the identity every player will see before sending information.");
+      }
       await writeProjections({ backend: inner, code: lobby.code, stState: snapshot, registry,
         online: useSessionRuntime.getState().online, membership: roster });
       // Preserve draft edits made while the network was in flight. Never restore

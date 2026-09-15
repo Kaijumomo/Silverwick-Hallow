@@ -486,8 +486,12 @@ describe("Phase 9C.2A.2A remediation — H2 checkpoint identity (writeGuard-only
     const session = await requireActiveSession(b, code);
     useStorytellerStore.getState().newGame(setupScript.id, { plannedPlayerCount: 5, plannedRoles: [] });
     for (let i = 0; i < 5; i++) useStorytellerStore.getState().addPlayerToSeat("Player " + i);
-    useStorytellerStore.getState().game!.seatOrder.forEach((id, i) =>
-      useStorytellerStore.getState().assignRole(id, standardRoles(5)[i]!));
+    useStorytellerStore.getState().game!.seatOrder.forEach((id, i) => {
+      useStorytellerStore.getState().assignRole(id, standardRoles(5)[i]!);
+      // Manual assignment leaves perception unconfigured; a "ready"
+      // beginNightOne-shaped game must reveal it explicitly (Phase 9C.4).
+      useStorytellerStore.getState().showAssignedRole(id);
+    });
     const lobby = { code, uid: "host", sessionId: session.id, status: "live" as const };
     useStorytellerStore.getState().setLobby(lobby);
     const writer = writerFor(b, session.id);

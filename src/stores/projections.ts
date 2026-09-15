@@ -88,5 +88,20 @@ export function projectLobbyToSelfMap(
     const self = projectToSelf(p, registry);
     if (self) out[id] = self;
   }
+  // Phase 9C.4 (OPUS-004): while a game is in Setup, ordinary private
+  // identity publication is all-or-none — derived from this same projection
+  // result, never restated from shownRole/shownAlignment/concealed-role
+  // rules. A concealed player (Drunk, Marionette, Lunatic, ...) has no
+  // shownRole until the Storyteller configures one, so publishing seat by
+  // seat would let an ordinary player notice "everyone else got a role card
+  // but I didn't" — a first-person negative-space leak. Traveler entries are
+  // untouched: Traveler identity publication remains independent.
+  if (st.phase === "setup") {
+    const ordinary = Object.values(st.players).filter(p => !p.isEmpty && !p.isTraveler);
+    const complete = ordinary.every(p => !!p.actualRole && !!out[p.id]);
+    if (!complete) {
+      for (const p of ordinary) delete out[p.id];
+    }
+  }
   return out;
 }

@@ -61,6 +61,20 @@ describe("membership commands", () => {
     expect(useStorytellerStore.getState().game!.pendingPlayers).toEqual({});
   });
 
+  it("Phase 9C.4: production seating (selfRecord=null) never seeds a player self identity during Setup", async () => {
+    // Mirrors the production call site (SeatAssignPopup.tsx), which always
+    // passes null here. Setup identity publication is governed exclusively
+    // by the Phase 9C.4 projection barrier (projectLobbyToSelfMap), never by
+    // seating itself — seatPlayer's selfRecord parameter remains structurally
+    // capable of writing one directly, but production must never use it to.
+    const backend = new MemoryRoomBackend();
+    const { uid, playerId } = prepareSeat();
+    await seatPlayerAndCommit(backend, "ROOM", uid, playerId, null, () =>
+      useStorytellerStore.getState().assignPendingToSeat(uid, playerId),
+    );
+    expect(await backend.get(playerPath("ROOM", playerId))).toBeUndefined();
+  });
+
   it("leaves local state untouched when seating fails remotely", async () => {
     const backend = new FailingUpdateBackend();
     const { uid, playerId } = prepareSeat();

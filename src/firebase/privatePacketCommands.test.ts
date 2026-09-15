@@ -39,6 +39,11 @@ async function setup(managed = false) {
   store.getState().assignRole(id, "lunatic");
   store.getState().setBehaviorMode(id, "fake_demon_behavior");
   store.getState().setShownRole(id, "imp");
+  // Phase 9C.4: ordinary setup publication is all-or-none. Bob must have a
+  // complete identity too, or the barrier would withhold Alice's own record
+  // regardless of her own configuration — unrelated to what this file tests.
+  store.getState().assignRole(other, "washerwoman");
+  store.getState().setShownRole(other, "washerwoman");
   store.getState().setFakeMinions(id, [other]);
   store.getState().setBluffs(id, ["chef", "saint", "washerwoman"]);
   store.getState().setPrivateText(id, "First information");
@@ -183,5 +188,54 @@ describe("explicit publication through the session writer", () => {
     expect(p().publishedPacket).toBeUndefined();
     await waitFor(async () => expect(await b.get(`${root}/player/${id}`)).toEqual({ shownRole: "chef", shownAlignment: "good" }));
     expect(usePacketDeliveryState.getState().receipts[packetKey(code, id)]).toBeUndefined();
+  });
+});
+
+describe("Phase 9C.4 (OPUS-004) — setup publication barrier preflight", () => {
+  it("A: a barred ordinary target is never marked delivered", async () => {
+    const { b, id, other, writer, review, p } = await setup();
+    // Un-configuring Bob's perception makes the ordinary set incomplete,
+    // withholding Alice's own otherwise-complete record too (all-or-none).
+    store.getState().setShownRole(other, null);
+    await expect(publishPrivatePacket(id, review(), writer)).rejects.toThrow(/identity/i);
+    expect(p().publishedPacket).toBeUndefined();
+    expect(await b.get(`${root}/player/${id}`)).toBeUndefined();
+    expect(usePacketDeliveryState.getState().receipts[packetKey(code, id)]).toBeUndefined();
+    expect(usePacketDeliveryState.getState().queued[packetKey(code, id)]).toBe(false);
+  });
+
+  it("B: a complete ordinary set publishes normally", async () => {
+    const { b, id, writer, review, p } = await setup();
+    await publishPrivatePacket(id, review(), writer);
+    expect(p().publishedPacket).toBeDefined();
+    expect(await b.get(`${root}/player/${id}`)).toEqual(p().publishedPacket!.payload);
+  });
+
+  it("C: a valid Traveler packet publishes while ordinary setup identity remains barred", async () => {
+    const { b, other, writer } = await setup();
+    store.getState().addPlayer("Cara");
+    const travelerId = store.getState().game!.seatOrder.at(-1)!;
+    store.getState().setIsTraveler(travelerId, true);
+    store.getState().assignRole(travelerId, "beggar"); // auto-reveals the Traveler's shown identity
+    store.getState().setPrivateText(travelerId, "Traveler information");
+    store.getState().setShownRole(other, null); // bar the ordinary set
+    await knockOnLobby(b, code, "cara", "Cara");
+    await seatPlayer(writer, code, "cara", travelerId, null);
+    const registry = buildRegistry(troubleBrewing);
+    const preview = previewPrivatePacket(store.getState().game!.players[travelerId]!, store.getState().game!, registry);
+    await publishPrivatePacket(travelerId, preview, writer);
+    expect(store.getState().game!.players[travelerId]!.publishedPacket).toBeDefined();
+    expect(await b.get(`${root}/player/${travelerId}`)).toBeDefined();
+    // The ordinary target remains withheld throughout.
+    expect(await b.get(`${root}/player/${other}`)).toBeUndefined();
+  });
+
+  it("D: active-game (outside Setup) publication is unaffected by other players' perception", async () => {
+    const { b, id, other, writer, review, p } = await setup();
+    store.getState().setShownRole(other, null); // would bar Setup; irrelevant once the game is live
+    store.setState({ game: { ...store.getState().game!, phase: "night", day: 1 } });
+    await publishPrivatePacket(id, review(), writer);
+    expect(p().publishedPacket).toBeDefined();
+    expect(await b.get(`${root}/player/${id}`)).toEqual(p().publishedPacket!.payload);
   });
 });
