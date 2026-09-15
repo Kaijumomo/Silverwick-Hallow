@@ -24,7 +24,7 @@ import { assertFails, initializeTestEnvironment, type RulesTestEnvironment } fro
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
-import type { Database } from "firebase/database";
+import { goOffline, goOnline, type Database } from "firebase/database";
 import { FirebaseRoomBackend } from "./firebaseBackend";
 import { SessionWriter, LEASE_MS, FENCE_MARGIN_MS } from "./writer";
 import { writeProjections } from "./sync";
@@ -1455,36 +1455,70 @@ describe("OPUS-001-CONTRACT-H1-GAP2: valid-authority reconciliation that require
 // whether to advance leaseEpoch) from a `now` captured, and a
 // continuous-vs-reclaiming decision made, BEFORE its own Firebase
 // transaction was ever awaited. A renewal that begins while this writer's
-// lease is still genuinely valid, but whose real transaction is then
-// delayed — exactly as a stalled network call delays it — long enough that
-// the lease expires and a completely separate real writer legitimately
-// takes over AND releases before the delayed transaction finally resolves,
-// would, under the old code, refresh leaseExpiresAt without ever bumping
-// leaseEpoch: "reclaiming" had already been decided (false) from
-// pre-transaction bookkeeping that still believed the old lease was valid.
-// The pre-gap AuthorityHandle would then incorrectly continue to satisfy
-// holdsAuthority()'s epoch check (and, if checked too soon after the delay,
-// even its expiry check — this test's timing deliberately keeps the delayed
-// renewal's OWN real transaction dispatch late enough in this writer's
-// valid window that only the epoch check can catch it, not a coincidental
-// expiry mismatch — see the mutation proof in the review notes).
+// lease is still genuinely valid, but whose REAL, already-dispatched-to-the-
+// SDK Firebase transaction is then stalled — long enough that the lease
+// expires and a completely separate real writer legitimately takes over AND
+// releases before that transaction finally resolves — would, under the old
+// code, refresh leaseExpiresAt without ever bumping leaseEpoch: "reclaiming"
+// had already been decided (false) from pre-transaction bookkeeping that
+// still believed the old lease was valid.
 //
-// This proves the fix: continuity is decided from the server lease record
-// the transaction invocation that actually commits observed, so a delayed
-// renewal resuming after a real authority gap always advances the epoch and
-// invalidates any handle issued before the gap — while leaving the writer
-// itself free to reacquire and mint a fresh, valid handle afterward. Real
-// emulator, rules enforced throughout, no mocked clock (same discipline as
-// OPUS-001-CONTRACT-H1-TAKEOVER above); only the renewal transaction's
-// dispatch to the server is deliberately delayed — this writer's own
-// background renewal-interval tick, which fires while its lease is still
-// genuinely valid, exactly as the reproduction's "A begins renewal while
-// valid" step describes — and it overlaps with the resolver's own
-// already-completed reconfirmAuthority() call, the concurrent-renewal case
-// Finding H1 requires stay safe without a mutex.
+// PROOF FIDELITY (Luna, second pass): an earlier version of this test
+// monkey-patched deviceA2.transaction itself to hold a plain JS Promise
+// BEFORE ever calling the real Firebase backend's transaction() — proving
+// only that renew() awaits *something* spanning the gap, not that a REAL,
+// already-in-flight Firebase transaction survives it. This version never
+// intercepts backend.transaction() at all. Instead it uses the Firebase
+// client SDK's own real connectivity controls (goOffline/goOnline) on this
+// writer's own actual Database connection: every one of this writer's own
+// real runTransaction() calls on /writer — the resolver's own
+// reconfirmAuthority() (still online, giving the resolver its pre-gap
+// handle) and, crucially, this writer's own background renewal-interval
+// ticks that fire once offline — genuinely enters the Firebase SDK's
+// backend transaction path (a real read-modify-write cycle registered with
+// the SDK's own pending-transaction machinery), and is then held unresolved
+// — by the SDK's own documented offline-queuing behavior, not a test stub —
+// across the entire real gap: this writer's real 30s lease expiring, a
+// genuinely separate writer legitimately acquiring and publishing through
+// /writer, and legitimately releasing it. Reconnecting (goOnline) makes the
+// SDK itself flush and re-resolve those queued transactions against the
+// CURRENT server record, exactly as it would after any real network drop —
+// this is what "resumes/retries/resolves against the post-takeover state"
+// means for a real RTDB transaction, not a simulated approximation of it.
+//
+// goOffline/goOnline operate only on this writer's own Database instance
+// (each backendFor() call opens a genuinely independent connection — never
+// shared across devices, confirmed by B/C's takeover succeeding below while
+// A2 is offline), so this is a real, isolated network partition for this
+// writer alone: TEST-ONLY (both are public firebase/database SDK functions
+// called directly from this spec, never a production hook), and no
+// production API, timing constant, or SessionWriter internal is touched.
+//
+// Timing: going offline immediately after the resolver's own
+// reconfirmAuthority() call (rather than delaying that trigger) is
+// deliberate on two counts. First, it fixes this writer's REAL server lease
+// deadline at that renewal's own expiry — if further online renewals were
+// allowed to keep extending it (this writer's own renewal interval would
+// otherwise refresh the real lease every LEASE_MS/3), "a separate writer
+// legitimately acquires /writer" could never actually happen on any bounded
+// real-time budget. Second, since every renewal after that point is queued
+// offline and none of their `await`s resolve until reconnection, the old
+// code's pre-await `now`/`reclaiming` capture for EACH of them is compared
+// against `leaseExpiresAt` as this renewal's own call left it — never
+// advanced further offline — so all of them read as "still valid" and none
+// bump the epoch once they finally do resolve; deliberately never delaying
+// the trigger itself close to real expiry (as a naive read of "trigger
+// late" might do) avoids the OTHER failure mode: a stale
+// `now + LEASE_MS` from a too-early trigger masking the epoch defect behind
+// a coincidental EXPIRY mismatch in holdsAuthority() instead of the epoch
+// mismatch this test exists to isolate (see the mutation proof in the
+// review notes) — going offline early leaves ~2 renewal-interval ticks
+// genuinely in flight across the gap by the time reconnection resolves
+// them, each one a real transaction proving the same closure contract, not
+// weakening it.
 // ---------------------------------------------------------------------------
-describe("OPUS-001-CONTRACT-H1-DELAYED-RENEWAL: a renewal begun while valid, whose real transaction only resolves after a genuine foreign takeover and release, must advance the epoch and invalidate the pre-gap handle", () => {
-  test("useRemote is stale once a delayed renewal legitimately reacquires the lease across a real foreign takeover/release; a freshly reconfirmed handle afterward remains valid", async () => {
+describe("OPUS-001-CONTRACT-H1-DELAYED-RENEWAL: a renewal begun while valid, whose REAL in-flight Firebase transaction only resolves after a genuine foreign takeover and release, must advance the epoch and invalidate the pre-gap handle", () => {
+  test("useRemote is stale once this writer's own real, already-dispatched renewal transactions legitimately reacquire the lease across a real foreign takeover/release; a freshly reconfirmed handle afterward remains valid", async () => {
     const code = "OP9AAAAA", st = "op9-storyteller";
     const ghostUid = "op9-ghost-uid"; // genuinely seated on the LIVE roster; unresolvable against the restored checkpoint
     const deviceA1 = backendFor(st);
@@ -1532,7 +1566,14 @@ describe("OPUS-001-CONTRACT-H1-DELAYED-RENEWAL: a renewal begun while valid, who
     const localGameBefore = useStorytellerStore.getState().game;
     const undoBefore = useStorytellerStore.getState().undoStack;
 
-    const deviceA2 = backendFor(st);
+    // A2's own real Database connection, retained alongside the
+    // FirebaseRoomBackend wrapper backendFor() would otherwise build alone,
+    // specifically so this test can drive REAL SDK connectivity
+    // (goOffline/goOnline) on it below — a genuinely independent connection
+    // from every other device in this test (each backendFor() call opens
+    // its own; devices B and C below remain fully online throughout).
+    const db2 = env.authenticatedContext(st).database() as unknown as Database;
+    const deviceA2 = new FirebaseRoomBackend(db2);
     const writerA2 = new SessionWriter(deviceA2, code, session.id);
     const startedAt = Date.now(); // anchors A2's own real 30s lease window below
     const managerA2 = await startStorytellerSession(deviceA2, lobby, writerA2);
@@ -1540,45 +1581,15 @@ describe("OPUS-001-CONTRACT-H1-DELAYED-RENEWAL: a renewal begun while valid, who
     expect(managerA2.outcome).toBe("conflict");
     const guardBefore = await deviceA2.get(`lobbies/${code}/writeGuard`);
     const rosterBefore = await deviceA2.get(`lobbies/${code}/roster`);
-
-    // Intercept /writer transactions on deviceA2. Everything BEFORE the
-    // roster read pauses (below) — in particular resolveReconnectConflict's
-    // own reconfirmAuthority(), the very first thing it does — passes
-    // straight through: item 1 of the reproduction, the resolver must
-    // receive a real AuthorityHandle. The FIRST /writer transaction AFTER
-    // the roster read pauses is this writer's own background
-    // renewal-interval tick, firing while its lease is still genuinely
-    // valid — that one is captured rather than dispatched: its real
-    // Firebase transaction is held back exactly as a stalled network call
-    // would hold it, until this test explicitly releases it below.
-    // Anything beyond that (a later interval tick) must never be allowed to
-    // interfere and hangs forever, exactly as an unresponsive network
-    // would.
-    const originalTransaction = deviceA2.transaction.bind(deviceA2);
     const writerPath = `lobbies/${code}/writer`;
-    let paused = false;
-    let blocked = false;
-    let releaseDelayedRenewal: (() => void) | null = null;
-    // Exposed so the test can await the REAL dispatched transaction's own
-    // settlement below, rather than assuming it has already landed on the
-    // server the instant `releaseDelayedRenewal()` returns.
-    let delayedTransactionSettled: Promise<boolean> | null = null;
-    deviceA2.transaction = (transactionPath, change) => {
-      if (transactionPath !== writerPath || !paused) return originalTransaction(transactionPath, change);
-      if (blocked) return new Promise<boolean>(() => {}); // hang forever
-      blocked = true;
-      return new Promise<boolean>(resolve => {
-        releaseDelayedRenewal = () => {
-          const real = originalTransaction(transactionPath, change);
-          delayedTransactionSettled = real;
-          resolve(real);
-        };
-      });
-    };
 
     // Pause the roster read — the last server read before the final
-    // authority gate — exactly like OPUS-001-CONTRACT-H1-TAKEOVER.
+    // authority gate — exactly like OPUS-001-CONTRACT-H1-TAKEOVER. This
+    // portion is unchanged from the prior revision: it isolates
+    // holdsAuthority() as the remaining protection, which is not itself
+    // what this correction targets.
     const originalGet = deviceA2.get.bind(deviceA2);
+    let paused = false;
     let releaseGate: () => void = () => {};
     const gate = new Promise<void>(resolve => { releaseGate = resolve; });
     deviceA2.get = async readPath => {
@@ -1594,29 +1605,42 @@ describe("OPUS-001-CONTRACT-H1-DELAYED-RENEWAL: a renewal begun while valid, who
       if (!paused) throw new Error("expected the roster read to be paused");
     }, { timeout: 5000, interval: 20 });
 
-    // A's own background renewal-interval tick fires (every LEASE_MS / 3,
-    // per SessionWriter.start()) — a real concurrent renewal, distinct from
-    // the resolver's own already-completed reconfirmAuthority() above —
-    // while A's lease is still genuinely valid, and is captured rather than
-    // dispatched.
-    await vi.waitFor(() => {
-      if (!releaseDelayedRenewal) throw new Error("expected the delayed renewal's transaction to be captured");
-    }, { timeout: 15000, interval: 50 });
+    // By this point resolveReconnectConflict's own reconfirmAuthority() —
+    // the very first thing it does — has already genuinely completed
+    // ONLINE: the resolver holds its real pre-gap AuthorityHandle (item 2 of
+    // the reproduction). Going offline HERE, immediately, is what fixes A2's
+    // real server lease deadline at that renewal's own expiry: every one of
+    // this writer's own subsequent renewal-interval ticks (every LEASE_MS/3
+    // — no production timing touched, this is the writer's existing
+    // schedule) is about to fire, still genuinely believing itself
+    // authoritative (item 4), and each one's real runTransaction() call
+    // genuinely enters the Firebase SDK's own backend transaction path
+    // (item 5) — but with this connection offline, none of their awaits can
+    // resolve; the SDK queues each one exactly as it documents for a real
+    // network drop, not as a test stub. If any renewal were instead allowed
+    // to complete online after this point, it would keep re-extending the
+    // REAL server lease every ~10s, and "a separate writer legitimately
+    // acquires /writer" (item 6) could never happen on any bounded wait.
+    goOffline(db2);
 
-    // Genuinely wait until shortly after A's real 30s lease (anchored at
-    // `startedAt`) has expired — no mocked clock. Nothing can renew it in
-    // the meantime: the resolver's own reconfirmAuthority() already ran
-    // once, and the captured renewal above is held; any further interval
-    // tick hangs forever.
+    // Genuinely wait until well past A2's real 30s lease (anchored at
+    // `startedAt`, extended once by the resolver's own already-completed
+    // reconfirmAuthority() above, never again since every renewal from here
+    // is offline) has expired — no mocked clock. By now at least one, and
+    // typically two, of this writer's own renewal-interval ticks have fired
+    // and are genuinely queued offline on /writer, each a real transaction
+    // that began while this writer still believed itself authoritative.
     const targetTime = startedAt + LEASE_MS + 2000;
     const remainingWait = targetTime - Date.now();
     if (remainingWait > 0) await new Promise(resolve => setTimeout(resolve, remainingWait));
 
     // A genuinely separate real SessionWriter for the same storyteller
-    // identity legitimately acquires the now-expired /writer lease under
-    // fully enforced rules, publishes newer guard/checkpoint/roster state
-    // through the real production path, and then legitimately releases —
-    // all while A's delayed renewal transaction is still held back.
+    // identity, on its own always-online connection, legitimately acquires
+    // the now-expired /writer lease under fully enforced rules (item 6),
+    // publishes newer guard/checkpoint/roster state through the real
+    // production path (item 6), and then legitimately releases it (item
+    // 6) — all while A2's own real renewal transactions remain queued
+    // offline, having never observed any of this yet.
     const deviceC = backendFor(st);
     const takeoverWriter = new SessionWriter(deviceC, code, session.id);
     await takeoverWriter.start();
@@ -1627,20 +1651,28 @@ describe("OPUS-001-CONTRACT-H1-DELAYED-RENEWAL: a renewal begun while valid, who
     });
     await takeoverWriter.dispose();
 
-    const guardAfterTakeover = await deviceA2.get(`lobbies/${code}/writeGuard`);
-    const checkpointAfterTakeover = await deviceA2.get(`lobbies/${code}/checkpoint`);
-    const rosterAfterTakeover = await deviceA2.get(`lobbies/${code}/roster`);
+    // Read through deviceC (still online) rather than deviceA2, which is
+    // deliberately still offline at this point — a read on an offline
+    // connection with no cached value for the path would itself hang
+    // waiting for connectivity, which is not what these snapshots are for.
+    const guardAfterTakeover = await deviceC.get(`lobbies/${code}/writeGuard`);
+    const checkpointAfterTakeover = await deviceC.get(`lobbies/${code}/checkpoint`);
+    const rosterAfterTakeover = await deviceC.get(`lobbies/${code}/roster`);
     expect(guardAfterTakeover).not.toEqual(guardBefore); // genuinely newer than the conflict snapshot
 
-    // Resume A's delayed renewal — its real Firebase transaction now
-    // finally runs, against the CURRENT server record (the takeover
-    // writer's released lease), and legitimately reacquires /writer for A.
-    // Awaited directly (not assumed to have landed already) so the
-    // subsequent server read below observes its actual outcome.
-    releaseDelayedRenewal!();
-    await delayedTransactionSettled;
-    const writerNodeAfterReacquire = await deviceA2.get(writerPath) as { token: string; expiresAt: number };
-    expect(writerNodeAfterReacquire.token).toBe(writerA2.token); // A genuinely reacquired the real lease
+    // Reconnect A2 (item 7): the Firebase SDK itself — not this test — now
+    // flushes and resolves this writer's own queued renewal transactions
+    // against the CURRENT server record (the takeover writer's released
+    // lease), re-running their updaters against real, fresh data exactly as
+    // it documents for reconnection after a real network drop. Polled
+    // rather than awaited on a single held promise: this test never
+    // captured one, and should not need to — this writer's own real
+    // transactions resolve however many of them there genuinely are.
+    goOnline(db2);
+    await vi.waitFor(async () => {
+      const node = await deviceA2.get(writerPath) as { token: string; expiresAt: number } | undefined;
+      if (!node || node.token !== writerA2.token) throw new Error("expected A2 to have genuinely reacquired /writer after reconnecting");
+    }, { timeout: 15000, interval: 100 });
 
     // Resume the paused roster read.
     deviceA2.get = originalGet;
@@ -1657,7 +1689,6 @@ describe("OPUS-001-CONTRACT-H1-DELAYED-RENEWAL: a renewal begun while valid, who
     let unexpectedRejection: unknown;
     try { result = await resolving; }
     catch (error) { unexpectedRejection = error; }
-    deviceA2.transaction = originalTransaction;
 
     expect(unexpectedRejection).toBeUndefined();
     // The resolver's pre-gap handle is stale: the delayed renewal advanced
