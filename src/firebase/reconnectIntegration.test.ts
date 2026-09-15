@@ -1048,3 +1048,192 @@ describe("Phase 9C.2A.2A remediation — H1 follow-up: membership reconciliation
     expect(game.pendingPlayers[bobUid]).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 9C.2B.1 remediation — the automatic startup path (startStorytellerSession
+// itself, not resolveReconnectConflict) now carries its own continuous
+// AuthorityHandle across the checkpoint/roster reads it performs, gated by
+// the same synchronous holdsAuthority() check immediately before any
+// destructive local mutation (Finding H1, extended). Reproduces the real
+// race: startup's checkpoint/roster read is delayed past lease expiry, a
+// genuinely different writer legitimately takes over and publishes newer
+// state, and the delayed read resumes — the stale startup must not restore
+// remote content, clear undo, commit a stale sync baseline, or perform a
+// membership-driven local mutation; the takeover's own state must remain
+// untouched. `isStopped()`/the passive ~10s renewal interval alone cannot
+// catch this (no real 10s elapses in these tests), which is exactly why
+// the earlier automatic path was vulnerable.
+// ---------------------------------------------------------------------------
+describe("Phase 9C.2B.1 remediation — automatic startup authority fence", () => {
+  it("delayed checkpoint takeover: a startup whose checkpoint read outlives its own authority must not restore stale content, clear undo, or alter sync metadata — the genuine takeover's state remains intact", async () => {
+    const b = new MemoryRoomBackend();
+    const { writer, manager, lobby, session } = await host(b);
+    manager.stop(); await writer.dispose(); // local starts CLEAN
+
+    // An initial remote advance so the automatic decision would ordinarily
+    // be RESTORE once startup begins.
+    await foreignDeviceAdvance(b, session.id, g => ({ ...g, day: 5 }));
+    const localGameBefore = useStorytellerStore.getState().game;
+    const undoBefore = useStorytellerStore.getState().undoStack;
+    const syncBefore = useStorytellerStore.getState().sync;
+
+    const originalGet = b.get.bind(b);
+    let releaseGate: () => void = () => {};
+    const gate = new Promise<void>(resolve => { releaseGate = resolve; });
+    let paused = false;
+    b.get = async path => {
+      if (path === `${root}/checkpoint` && !paused) {
+        paused = true;
+        await gate;
+      }
+      return originalGet(path);
+    };
+
+    const replacementA = writerFor(b, session.id);
+    disposals.push(() => replacementA.dispose());
+    const startingA = startStorytellerSession(b, lobby, replacementA);
+    await waitFor(() => expect(paused).toBe(true));
+
+    // A's own continuous authority lapses purely from elapsed (mocked) time
+    // while its checkpoint read is still in flight...
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.now() + LEASE_MS + 1);
+    // ...and a genuinely different writer (B) legitimately reclaims the
+    // now-expired lease and publishes newer content.
+    const takeoverWriter = writerFor(b, session.id);
+    disposals.push(() => takeoverWriter.dispose());
+    await takeoverWriter.start(); // legitimately reclaims — A's recorded expiry has genuinely lapsed
+    const baseGameRaw = await b.get(`${root}/storyteller`);
+    const takeoverGame = { ...(baseGameRaw as unknown as StorytellerLobbyRecord), day: 77, notes: "a real takeover's own content" };
+    await writeProjections({ backend: takeoverWriter, code, stState: takeoverGame, registry: buildRegistry(troubleBrewing), online: {}, membership: {} });
+
+    b.get = originalGet;
+    releaseGate();
+
+    await expect(startingA).rejects.toThrow(/another/i);
+    nowSpy.mockRestore();
+
+    expect(useStorytellerStore.getState().game).toEqual(localGameBefore); // never restored to anything
+    expect(useStorytellerStore.getState().undoStack).toEqual(undoBefore); // never cleared
+    expect(useStorytellerStore.getState().sync).toEqual(syncBefore); // never committed a stale baseline
+    expect(await b.get(`${root}/storyteller`)).toEqual(takeoverGame); // B's state remains intact, untouched by A
+  });
+
+  it("delayed roster/membership takeover: authority lost after the checkpoint is processed but before membership reconciliation must not mutate local membership or revoke remotely", async () => {
+    const b = new MemoryRoomBackend();
+    const { writer, manager, lobby, session } = await host(b);
+    manager.stop(); await writer.dispose(); // local starts CLEAN
+
+    const foreignWriter = writerFor(b, session.id);
+    await foreignWriter.start();
+    const baseGame = await b.get(`${root}/storyteller`) as unknown as StorytellerLobbyRecord;
+    const [vanishSeatId] = baseGame.seatOrder as [string];
+    const foreignGame: StorytellerLobbyRecord = {
+      ...structuredClone(baseGame),
+      day: 9,
+      players: {
+        ...structuredClone(baseGame.players),
+        [vanishSeatId]: { ...baseGame.players[vanishSeatId]!, name: "Ghost (checkpoint-only)", isEmpty: false },
+      },
+    };
+    await writeProjections({
+      backend: foreignWriter, code, stState: foreignGame,
+      registry: buildRegistry(troubleBrewing), online: {},
+      membership: { "delayed-roster-ghost-uid": vanishSeatId }, // embedded in the CHECKPOINT only
+    });
+    await foreignWriter.dispose();
+    // The LIVE roster never binds this uid — her checkpoint-era binding has
+    // "vanished" — exactly what would trigger unseatPlayer on RESTORE.
+
+    const localGameBefore = useStorytellerStore.getState().game;
+    const undoBefore = useStorytellerStore.getState().undoStack;
+    const writeLogLengthBefore = b.writeLog.filter(w => w.path !== `${root}/writer`).length;
+
+    const originalGet = b.get.bind(b);
+    let releaseGate: () => void = () => {};
+    const gate = new Promise<void>(resolve => { releaseGate = resolve; });
+    let paused = false;
+    b.get = async path => {
+      if (path === `${root}/roster` && !paused) {
+        paused = true;
+        await gate;
+      }
+      return originalGet(path);
+    };
+
+    const replacementA = writerFor(b, session.id);
+    disposals.push(() => replacementA.dispose());
+    const startingA = startStorytellerSession(b, lobby, replacementA);
+    await waitFor(() => expect(paused).toBe(true));
+
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.now() + LEASE_MS + 1);
+    const takeoverWriter = writerFor(b, session.id);
+    disposals.push(() => takeoverWriter.dispose());
+    await takeoverWriter.start(); // legitimately reclaims — A's recorded expiry has genuinely lapsed
+
+    b.get = originalGet;
+    releaseGate();
+
+    await expect(startingA).rejects.toThrow(/another/i);
+    nowSpy.mockRestore();
+
+    expect(useStorytellerStore.getState().game).toEqual(localGameBefore); // never restored, never unseated
+    expect(useStorytellerStore.getState().undoStack).toEqual(undoBefore);
+    // No revocation/projection write from the stale startup — the
+    // takeover's own lease acquisition (a `${root}/writer` write) is the
+    // only write since the snapshot.
+    expect(b.writeLog.filter(w => w.path !== `${root}/writer`).length).toBe(writeLogLengthBefore);
+  });
+
+  it("positive control: a delay comfortably inside the valid lease still completes automatic RESTORE and membership reconciliation", async () => {
+    const b = new MemoryRoomBackend();
+    const { writer, manager, lobby, session } = await host(b);
+    manager.stop(); await writer.dispose();
+
+    const foreignWriter = writerFor(b, session.id);
+    await foreignWriter.start();
+    const baseGame = await b.get(`${root}/storyteller`) as unknown as StorytellerLobbyRecord;
+    const [vanishSeatId] = baseGame.seatOrder as [string];
+    const foreignGame: StorytellerLobbyRecord = {
+      ...structuredClone(baseGame),
+      day: 9,
+      players: {
+        ...structuredClone(baseGame.players),
+        [vanishSeatId]: { ...baseGame.players[vanishSeatId]!, name: "Ghost (checkpoint-only)", isEmpty: false },
+      },
+    };
+    await writeProjections({
+      backend: foreignWriter, code, stState: foreignGame,
+      registry: buildRegistry(troubleBrewing), online: {},
+      membership: { "positive-control-ghost-uid": vanishSeatId },
+    });
+    await foreignWriter.dispose();
+
+    const originalGet = b.get.bind(b);
+    let releaseGate: () => void = () => {};
+    const gate = new Promise<void>(resolve => { releaseGate = resolve; });
+    let paused = false;
+    b.get = async path => {
+      if (path === `${root}/roster` && !paused) {
+        paused = true;
+        await gate;
+      }
+      return originalGet(path);
+    };
+
+    const replacement = writerFor(b, session.id);
+    const starting = startStorytellerSession(b, lobby, replacement);
+    await waitFor(() => expect(paused).toBe(true));
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 1000); // comfortably inside the 30s lease
+    b.get = originalGet;
+    releaseGate();
+    const recovered = await starting;
+    nowSpy.mockRestore();
+    disposals.push(async () => { recovered.stop(); await replacement.dispose(); });
+
+    expect(recovered.outcome).toBe("live");
+    expect(useStorytellerStore.getState().game!.day).toBe(9);
+    // Unseated: her checkpoint-era binding vanished from the live roster —
+    // proof the new gate does not block normal, in-time reconciliation.
+    expect(useStorytellerStore.getState().game!.players[vanishSeatId]!.isEmpty).toBe(true);
+  });
+});

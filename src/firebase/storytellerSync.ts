@@ -259,6 +259,15 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   // the reconnect decision (Phase 9C.2A, section 5/6); adopted as the new
   // baseline on RESTORE.
   const observedGuard = await writer.start();
+  // Phase 9C.2B.1: a continuous AuthorityHandle spanning every async read
+  // this automatic startup performs below (checkpoint, roster), reusing the
+  // exact same lease-renewal transaction reconfirmAuthority() already runs
+  // for explicit conflict resolution (Finding H1) — not a parallel
+  // authority model. Re-validated synchronously via holdsAuthority()
+  // immediately before any destructive local mutation those reads feed
+  // (see the final gate below), never trusted as still current once an
+  // intervening read has actually returned.
+  const startupAuthority = await writer.reconfirmAuthority();
 
   // --- Lifecycle state (Phase 9C.2A, section 11) --------------------------
   // Declared, and the writer's stop hook wired, BEFORE any checkpoint
@@ -544,18 +553,51 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   // takeover must never upload an old tab's localStorage snapshot over a
   // genuinely newer remote game (RESTORE), nor discard newer unacknowledged
   // local work merely because a checkpoint happens to exist (KEEP_LOCAL).
-  if (decision.type === "RESTORE" && restored && sameSession()) {
-    useStorytellerStore.getState().restoreRemoteCheckpoint(restored.game, observedGuard);
-  }
+  //
+  // Phase 9C.2B.1: every remaining async read this path needs (the live
+  // roster) happens BEFORE the final authority gate below, mirroring
+  // resolveReconnectConflict's own ordering (Finding H1 follow-up) — a
+  // checkpoint/roster read that outlives startupAuthority must never let a
+  // stale automatic startup restore remote content, clear undo, commit a
+  // stale sync baseline, or perform a membership-driven local mutation
+  // against content compared under authority that is no longer provable.
+  const willRestore = decision.type === "RESTORE" && !!restored;
   const membership = decodeRoster(await raw.get(`lobbies/${lobby.code}/roster`));
   assertCurrent();
   if (membership.status !== "ready") throw new SnapshotValidationError();
-  if (sameSession()) {
-    const plan = buildMembershipReconciliation(useStorytellerStore.getState().game, membership.data, decision.type === "RESTORE" ? restored?.roster ?? null : null);
-    applyMembershipReconciliationLocally(plan);
-    await performMembershipRevocations(writer, lobby.code, plan);
+
+  // Pure — no I/O, no store mutation — computed ahead of the gate. For
+  // RESTORE this plans against the checkpoint's own (not-yet-applied) game
+  // content; for KEEP_LOCAL, the current local game, which nothing between
+  // here and the gate below can change.
+  const effectiveGame = willRestore ? restored!.game : useStorytellerStore.getState().game;
+  const plan = buildMembershipReconciliation(effectiveGame, membership.data, willRestore ? restored!.roster : null);
+
+  // Final synchronous authority gate (Finding H1, extended to automatic
+  // startup by Phase 9C.2B.1): NOTHING awaits between this check and the
+  // completion of every local mutation below. If this writer's continuous
+  // hold on the exact interval `startupAuthority` represents has lapsed, or
+  // been reclaimed after a gap, since reconfirmAuthority() above — even
+  // though `stopped` may not have caught up yet (the passive renewal
+  // interval only notices a lapse on its own ~10s cadence) — startup is
+  // cancelled through the ordinary rejected-promise path a stale/lost-
+  // authority failure already takes elsewhere in this function, never by
+  // inventing a new reconnect outcome or silently reusing this stale plan.
+  if (!writer.holdsAuthority(startupAuthority, FENCE_MARGIN_MS)) {
+    throw new LifecycleError("conflict", "Another Storyteller tab now controls this lobby.");
   }
+
+  if (willRestore && sameSession()) {
+    useStorytellerStore.getState().restoreRemoteCheckpoint(restored!.game, observedGuard);
+  }
+  if (sameSession()) applyMembershipReconciliationLocally(plan);
+
+  // Async server-write phase — only now, after every local mutation above
+  // is complete. Protected by ordinary SessionWriter/Firebase revision
+  // fencing regardless of what happens to authority from this point on
+  // (see performMembershipRevocations's own doc comment).
   if (stopped) throw new LifecycleError("cancelled", "Session stopped during reconnect.");
+  if (sameSession()) await performMembershipRevocations(writer, lobby.code, plan);
 
   return finishLive();
 }

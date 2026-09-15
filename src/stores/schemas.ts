@@ -189,14 +189,14 @@ export const StorytellerGamePersistedSchema = StorytellerLobbyRecordSchema.exten
 
 export const GuardStampSchema = z.object({
   token: z.string().min(1),
-  revision: z.number().int().nonnegative(),
+  revision: z.number().int().nonnegative().safe(),
 });
 
 export const SyncMetaSchema = z.object({
   code: z.string().min(1),
   sessionId: z.string().min(1),
   ackedGuard: GuardStampSchema.nullable(),
-  ackedGameSeq: z.number().int().nonnegative(),
+  ackedGameSeq: z.number().int().nonnegative().safe(),
   lastAttempt: GuardStampSchema.nullable(),
 });
 
@@ -221,6 +221,22 @@ export const StorytellerStateSchema = z.object({
   /** Local game-content mutation counter. Never wall-clock; see
    * src/firebase/reconnectDecision.ts. Legacy (pre-v12) states have none —
    * migration initializes it, never inferring evidence from prior content. */
-  localSeq: z.number().int().nonnegative().optional(),
+  localSeq: z.number().int().nonnegative().safe().optional(),
   sync: SyncMetaSchema.nullable().optional(),
+}).superRefine((data, ctx) => {
+  // Phase 9C.2B.2 (hardening): sync metadata is only ever meaningful
+  // alongside the localSeq counter it was watermarked against — never
+  // "repair" one from the other by guessing which value is correct; a
+  // structurally valid but semantically contradictory combination (e.g. an
+  // acknowledged game sequence ahead of the local counter it can only ever
+  // have been captured from, per acknowledgeGameFlush/restoreRemoteCheckpoint)
+  // is exactly the shape reconnect logic must never trust as evidence.
+  if (!data.sync) return;
+  if (data.localSeq === undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "sync metadata present without a localSeq counter", path: ["localSeq"] });
+    return;
+  }
+  if (data.sync.ackedGameSeq > data.localSeq) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "sync.ackedGameSeq exceeds localSeq", path: ["sync", "ackedGameSeq"] });
+  }
 });
