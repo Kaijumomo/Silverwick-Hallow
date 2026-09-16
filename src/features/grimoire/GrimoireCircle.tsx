@@ -345,8 +345,8 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
   };
 
   const handleAdd = () => {
-    if (arrivalsAreTravelers(game.phase) && code) { handleAddTraveler(); return; }
-    const name = window.prompt(arrivalsAreTravelers(game.phase) ? "Traveler name?" : "Player name?");
+    if (arrivalsAreTravelers(game) && code) { handleAddTraveler(); return; }
+    const name = window.prompt(arrivalsAreTravelers(game) ? "Traveler name?" : "Player name?");
     if (name?.trim()) {
       const id = game.seatOrder.find(id => game.players[id]?.isEmpty);
       addPlayerToSeat(name);
@@ -424,8 +424,8 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
 
   const modeControls = (
     <div className="grimoire-mode-controls">
-      <button className="grimoire-mode-btn" onClick={handleAddSeat} aria-label={arrivalsAreTravelers(game.phase) ? "Add empty Traveler seat" : "Add empty planned seat"}>
-        + New {arrivalsAreTravelers(game.phase) ? "Traveler seat" : "seat"}
+      <button className="grimoire-mode-btn" onClick={handleAddSeat} aria-label={arrivalsAreTravelers(game) ? "Add empty Traveler seat" : "Add empty planned seat"}>
+        + New {arrivalsAreTravelers(game) ? "Traveler seat" : "seat"}
       </button>
       <button className="grimoire-mode-btn" onClick={handleAddTraveler}>Add Traveler</button>
       {grimoireMode === "ring" ? (
@@ -475,7 +475,7 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
         {playerCount === 0 ? (
           <div className="grimoire-empty">
             <p>Add players to begin.</p>
-            <button className="btn btn-gold" onClick={handleAdd}>+ Add {arrivalsAreTravelers(game.phase) ? "Traveler" : "player"}</button>
+            <button className="btn btn-gold" onClick={handleAdd}>+ Add {arrivalsAreTravelers(game) ? "Traveler" : "player"}</button>
           </div>
         ) : (
           game.seatOrder.map((id, i) => {
@@ -538,8 +538,8 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
           <button
             className="add-player-btn"
             onClick={handleAdd}
-            aria-label={arrivalsAreTravelers(game.phase) ? "Add Traveler" : "Add player"}
-            title={arrivalsAreTravelers(game.phase) ? "Add Traveler" : "Add player"}
+            aria-label={arrivalsAreTravelers(game) ? "Add Traveler" : "Add player"}
+            title={arrivalsAreTravelers(game) ? "Add Traveler" : "Add player"}
           >
             +
           </button>

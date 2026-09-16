@@ -5,6 +5,10 @@ import { SnapshotValidationError } from "./snapshots";
 export const sessionPath = (code: string) => `lobbies/${code}/session`;
 export const outcomePath = (code: string, uid: string) => `lobbies/${code}/outcomes/${uid}`;
 export const leavePath = (code: string, uid: string) => `lobbies/${code}/leaveRequests/${uid}`;
+/** Self-scoped: a player's own chosen Traveler character (Phase 9 Setup
+ * finalization B4). Value is a Traveler catalogue role id, never an
+ * ordinary character. See applyTravelerChoice in membershipCommands.ts. */
+export const travelerChoicePath = (code: string, uid: string) => `lobbies/${code}/travelerChoices/${uid}`;
 export const sessionSchema = z.object({ version: z.literal(2), id: z.string().min(1), state: z.enum(["active", "ended"]) }).strict();
 export const leaseSchema = z.object({ token: z.string().min(1), expiresAt: z.number().finite() }).strict();
 export const guardSchema = z.object({ token: z.string().min(1), revision: z.number().int().nonnegative() }).strict();

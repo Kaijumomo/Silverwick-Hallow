@@ -1,6 +1,8 @@
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { isCanonicalRole } from "@/data/canonical";
 import { getTraveler } from "@/data/travelers";
+import { MAX_PLAYERS } from "@/data/setupCounts";
+import { isInitialRevealComplete } from "./identity";
 import type { STPlayerRecord, StorytellerLobbyRecord } from "./types";
 
 export const newTravelerArrival = (): NonNullable<STPlayerRecord["travelerArrival"]> => ({ demonInfoComplete: false, firstNightComplete: false });
@@ -48,5 +50,24 @@ export function travelerDemonInformation(p: STPlayerRecord, game: StorytellerLob
   const demon = demons[0]!;
   return { demon: { id: demon.id, name: demon.name, seat: demon.seat } };
 }
-/** Arrival policy only; existing occupied seats and reconnects keep their identity. */
-export const arrivalsAreTravelers = (phase: string): boolean => phase === "day" || phase === "night";
+/**
+ * Arrival policy only; existing occupied seats and reconnects keep their
+ * identity. A brand-new arrival defaults to a Traveler once the initial
+ * ordinary Reveal has committed the starting roster (Phase 9 Setup
+ * finalization B4: Reveal is ordinary-roster commitment -- new arrivals
+ * default Traveler from then on, including later Night/Day phases via
+ * isInitialRevealComplete's day > 0 rule), or once occupied ordinary seats
+ * have already reached the composition cap (ordinary players never exceed
+ * MAX_PLAYERS, regardless of arrival timing). Below the cap and before
+ * Reveal, a new arrival defaults ordinary.
+ */
+export function arrivalsAreTravelers(
+  game: Pick<StorytellerLobbyRecord, "day" | "setupRolesRevealed" | "players" | "seatOrder">
+): boolean {
+  if (isInitialRevealComplete(game)) return true;
+  const occupiedOrdinaryCount = [...new Set(game.seatOrder)].reduce((count, id) => {
+    const p = game.players[id];
+    return p && !p.isEmpty && !p.isTraveler ? count + 1 : count;
+  }, 0);
+  return occupiedOrdinaryCount >= MAX_PLAYERS;
+}

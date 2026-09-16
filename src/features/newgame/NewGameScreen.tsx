@@ -5,16 +5,23 @@ import { ScriptTabs } from "./ScriptTabs";
 import { PlayerCountTable } from "./PlayerCountTable";
 import { PlayerCountStepper } from "./PlayerCountStepper";
 import { ImportPanel } from "./ImportPanel";
-import { MIN_PLAYERS } from "@/data/setupCounts";
+import { MIN_PLAYERS, MAX_TOTAL_PLAYERS, minTravelersForTotal, maxTravelersForTotal, clampTravelersForTotal } from "@/data/setupCounts";
 import type { Script } from "@/stores/types";
 import { closeMultiplayerSession } from "@/firebase/storytellerSync";
 import { lifecycleMessage } from "@/firebase/lifecycle";
 
 /**
- * New Game plans the game (script + player count); it no longer builds the
- * character bag. That moves to the Grimoire Setup workspace, which the
- * Storyteller opens deliberately after entering the Grimoire -- Fill/Re-roll,
- * manual role selection, and Fabled/Lorics all live there now.
+ * New Game plans the game (script + total participants + intended
+ * Travelers); it no longer builds the character bag. That moves to the
+ * Grimoire Setup workspace, which the Storyteller opens deliberately after
+ * entering the Grimoire -- Fill/Re-roll, manual role selection, and
+ * Fabled/Lorics all live there now.
+ *
+ * Ordinary players = total participants - Travelers (Phase 9 Setup
+ * finalization B4). The Storyteller does not choose which seat is the
+ * Traveler here -- that is decided later inside the Grimoire. This screen
+ * only plans totals: total planned seats and an intended Traveler count,
+ * both cross-clamped so ordinary always stays within [5, 15].
  */
 export function NewGameScreen() {
   const [starting, setStarting] = useState(false);
@@ -29,7 +36,25 @@ export function NewGameScreen() {
   const [selectedScriptId, setSelectedScriptId] = useState<string | "import">(
     firstBuiltinId
   );
-  const [playerCount, setPlayerCount] = useState(MIN_PLAYERS);
+  const [totalCount, setTotalCount] = useState(MIN_PLAYERS);
+  const [travelerCount, setTravelerCount] = useState(0);
+  const ordinaryCount = totalCount - travelerCount;
+
+  const travelerMin = minTravelersForTotal(totalCount);
+  const travelerMax = maxTravelersForTotal(totalCount);
+
+  const handleTotalChange = (nextTotal: number) => {
+    setTotalCount(nextTotal);
+    setTravelerCount((current) => clampTravelersForTotal(nextTotal, current));
+  };
+
+  const handleTravelerChange = (nextTravelers: number) => {
+    setTravelerCount(clampTravelersForTotal(totalCount, nextTravelers));
+  };
+
+  const handleOrdinarySelect = (nextOrdinary: number) => {
+    handleTotalChange(nextOrdinary + travelerCount);
+  };
 
   const allScripts: Record<string, Script> = useMemo(
     () => ({ ...BUILTIN_SCRIPTS, ...customScripts }),
@@ -52,7 +77,7 @@ export function NewGameScreen() {
     setStartError(null);
     try {
       await closeMultiplayerSession();
-      newGame(activeScript.id, { plannedPlayerCount: playerCount });
+      newGame(activeScript.id, { plannedPlayerCount: totalCount, plannedTravelerCount: travelerCount });
     } catch (error) { setStartError(lifecycleMessage(error)); }
     finally { setStarting(false); }
   };
@@ -87,10 +112,31 @@ export function NewGameScreen() {
 
           <section className="ng-section">
             <h2 className="ng-section-title">Players</h2>
-            <PlayerCountStepper value={playerCount} onChange={setPlayerCount} />
+            <PlayerCountStepper
+              value={totalCount}
+              onChange={handleTotalChange}
+              min={MIN_PLAYERS}
+              max={MAX_TOTAL_PLAYERS}
+              label="players"
+            />
+            <div className="ng-traveler-stepper">
+              <PlayerCountStepper
+                value={travelerCount}
+                onChange={handleTravelerChange}
+                min={travelerMin}
+                max={travelerMax}
+                label="Travelers"
+                decrementLabel="Fewer Travelers"
+                incrementLabel="More Travelers"
+              />
+            </div>
+            <p className="ng-ordinary-line">Ordinary: <strong>{ordinaryCount}</strong></p>
+            <p className="ng-ordinary-note">
+              Composition is based on ordinary players. Travellers are separate.
+            </p>
             <PlayerCountTable
-              selected={playerCount}
-              onSelect={setPlayerCount}
+              selected={ordinaryCount}
+              onSelect={handleOrdinarySelect}
             />
           </section>
         </div>
@@ -110,7 +156,8 @@ export function NewGameScreen() {
           Create setup
           {activeScript && (
             <span className="ng-start-meta">
-              {" "}· {activeScript.name} · {playerCount} players
+              {" "}· {activeScript.name} · {totalCount} players
+              {travelerCount > 0 ? ` (${travelerCount} Traveler${travelerCount === 1 ? "" : "s"})` : ""}
             </span>
           )}
         </button>

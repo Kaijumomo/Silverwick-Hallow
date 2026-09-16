@@ -23,7 +23,7 @@ import {
   revokePlayerMembership,
   seatPlayer,
 } from "./lobby";
-import { acceptLeaveRequest, rejectLeaveRequest } from "./membershipCommands";
+import { acceptLeaveRequest, applyTravelerChoice, rejectLeaveRequest } from "./membershipCommands";
 import { requireActiveSession } from "./lifecycle";
 import {
   authorizePublicDisplay,
@@ -451,6 +451,54 @@ describe("Firebase RTDB membership authorization", () => {
     await assertFails(ref(alice, "player/p-alice").once("value"));
   });
 
+  // Phase 9 Setup finalization B4: a player's self-scoped Traveler
+  // character choice. Mirrors the leaveRequests boundary proofs above --
+  // same self-write shape, restricted to the supported Traveler catalogue.
+
+  test("a seated player can write their own Traveler choice, restricted to the supported catalogue", async () => {
+    await seed();
+    await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
+    expect((await ref(st, "travelerChoices/" + alice).once("value")).val()).toBe("thief");
+    await assertFails(ref(alice, "travelerChoices/" + alice).set("chef")); // not a Traveler
+    await assertFails(ref(alice, "travelerChoices/" + alice).set("nonexistent-role"));
+  });
+
+  test("a player cannot write another UID's Traveler choice", async () => {
+    await seed();
+    await assertFails(ref(bob, "travelerChoices/" + alice).set("thief"));
+  });
+
+  test("an unseated player cannot submit a Traveler choice", async () => {
+    await seed(); // only alice is seated
+    await assertFails(ref(bob, "travelerChoices/" + bob).set("thief"));
+    expect((await ref(st, "travelerChoices/" + bob).once("value")).exists()).toBe(false);
+  });
+
+  test("an unrelated authenticated user cannot read another player's Traveler choice; the Storyteller can", async () => {
+    await seed();
+    await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
+    await assertFails(ref(bob, "travelerChoices/" + alice).once("value"));
+    expect((await ref(st, "travelerChoices/" + alice).once("value")).val()).toBe("thief");
+  });
+
+  test("Storyteller applies a Traveler choice through the fenced writer path and clears the request", async () => {
+    await seed();
+    await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
+
+    let applied: string | null = null;
+    await applyTravelerChoice(backend(st), code, alice, "thief", (playerId) => { applied = playerId; });
+
+    expect(applied).toBe("p-alice");
+    expect((await ref(st, "travelerChoices/" + alice).once("value")).exists()).toBe(false);
+  });
+
+  test("a player may resubmit a different choice before the Storyteller applies it", async () => {
+    await seed();
+    await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
+    await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("scapegoat"));
+    expect((await ref(st, "travelerChoices/" + alice).once("value")).val()).toBe("scapegoat");
+  });
+
   test("a second writer is denied until expiry, then the old token is fenced", async () => {
     await seed();
     const raw = new FirebaseRoomBackend(db(st) as unknown as Database);
@@ -486,7 +534,7 @@ describe("Firebase RTDB membership authorization", () => {
     const game: StorytellerLobbyRecord = {
       code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
       notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {},
-      rolePool: [], plannedPlayerCount: 1, pendingPlayers: {}, seatOrder: ["p-alice"],
+      rolePool: [], plannedPlayerCount: 1, plannedTravelerCount: 0, pendingPlayers: {}, seatOrder: ["p-alice"],
       // This test isolates identity delivery through the real writer/rules,
       // not Setup deal/reveal gating (covered elsewhere) -- record the
       // initial reveal directly so the Phase 9C.4 barrier only withholds on
@@ -530,7 +578,7 @@ describe("Firebase RTDB membership authorization", () => {
     const game: StorytellerLobbyRecord = {
       code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
       notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {},
-      rolePool: [], plannedPlayerCount: 2, pendingPlayers: {}, seatOrder: ["p-alice", "p-bob"],
+      rolePool: [], plannedPlayerCount: 2, plannedTravelerCount: 0, pendingPlayers: {}, seatOrder: ["p-alice", "p-bob"],
       // This test isolates the completeness barrier, not Setup deal/reveal
       // gating -- record the initial reveal directly.
       setupRolesRevealed: true,

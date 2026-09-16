@@ -4,7 +4,9 @@ import { canonicalJoin, cancelJoinRequest, knockOnLobby, normaliseCode } from ".
 import { joinRequestPath, publicPath, rosterEntryPath, playerPath, presencePath } from "./paths";
 import type { RoomBackend } from "./backend";
 import { decodeJoinRequest, decodeLeaveRequest, decodeRosterEntry, decodeSelfSnapshot, decodePublicSnapshot, SnapshotValidationError } from "./snapshots";
-import { decodeSession, isTransient, leavePath, lifecycleMessage, LifecycleError, outcomePath, requireActiveSession, retryTransient, sessionPath } from "./lifecycle";
+import { decodeSession, isTransient, leavePath, lifecycleMessage, LifecycleError, outcomePath, requireActiveSession, retryTransient, sessionPath, travelerChoicePath } from "./lifecycle";
+import { TRAVELERS } from "@/data/travelers";
+import type { RoleId } from "@/stores/types";
 
 /** Explicit URL intent wins. An empty ?join= opens the join form; the same
  * nonempty code may resume only the same authenticated user's saved session. */
@@ -52,6 +54,23 @@ export async function leaveLobby(backend: RoomBackend) {
     await cancelJoinRequest(backend, ps.code, ps.uid);
     ps.reset();
   }
+}
+
+/**
+ * Player-side self-write of a chosen Traveler character (Phase 9 Setup
+ * finalization B4). Mirrors leaveLobby's shape: a self-scoped Firebase
+ * write, never a direct mutation of authoritative Storyteller state. The
+ * Storyteller's live client observes this and applies it through the
+ * existing assignRole() command -- see applyTravelerChoice in
+ * membershipCommands.ts. Restricted client-side to the supported Traveler
+ * catalogue as defense in depth; Firebase rules enforce the same
+ * restriction server-side.
+ */
+export async function chooseTraveler(backend: RoomBackend, roleId: RoleId): Promise<void> {
+  const ps = usePlayerStore.getState();
+  if (!ps.code || !ps.uid) throw new LifecycleError("cancelled", "Not connected to a lobby.");
+  if (!TRAVELERS.some(t => t.id === roleId)) throw new Error("Not a supported Traveler character.");
+  await backend.set(travelerChoicePath(ps.code, ps.uid), roleId);
 }
 
 export function usePlayerSync(backend: RoomBackend | null, retry = 0) {

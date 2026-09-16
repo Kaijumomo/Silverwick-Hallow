@@ -226,6 +226,7 @@ describe("Lobby-level projections", () => {
       nightProgress: {},
       rolePool: [],
       plannedPlayerCount: 0,
+      plannedTravelerCount: 0,
       pendingPlayers: {},
       players: {
         p1: makePublishedSTPlayer({
@@ -467,7 +468,7 @@ describe("projectLobbyToSelfMap — Phase 9C.4 setup privacy barrier", () => {
       code: "SETUP01", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
       bluffs: [], fabled: [], lorics: [], notes: "ST-only",
       seatOrder: Object.keys(players), nightProgress: {}, rolePool: [],
-      plannedPlayerCount: Object.keys(players).length, pendingPlayers: {}, players, ...over,
+      plannedPlayerCount: Object.keys(players).length, plannedTravelerCount: 0, pendingPlayers: {}, players, ...over,
     };
   }
   const complete = (id: string, seat: number) => makePublishedSTPlayer({
@@ -543,6 +544,24 @@ describe("projectLobbyToSelfMap — Phase 9C.4 setup privacy barrier", () => {
     const selves = projectLobbyToSelfMap(lobby, registry);
     expect(selves.p1).toBeUndefined();
     expect(selves.t1).toEqual({ shownRole: "thief" });
+  });
+
+  it("E2 (Phase 9 Setup finalization B4): a Traveler's configured alignment survives self-projection privately, never through the ordinary barrier or public view, while the barrier still withholds an incomplete ordinary set", () => {
+    const traveler = { ...validTraveler("t1", 1), actualAlignment: "evil" as const, shownAlignment: "good" as const };
+    const lobby = setupLobby({ p1: incompleteOrdinary("p1", 0), t1: traveler });
+    const selves = projectLobbyToSelfMap(lobby, registry);
+    // Ordinary barrier is still fully armed: p1 is incomplete, so no
+    // ordinary self record publishes at all.
+    expect(selves.p1).toBeUndefined();
+    // The Traveler's own self record carries only the shown alignment --
+    // never the private actual alignment.
+    expect(selves.t1).toEqual({ shownRole: "thief", shownAlignment: "good" });
+    // Public view never receives alignment in any form, for the Traveler
+    // or anyone else.
+    const pub = JSON.stringify(projectToPublic(lobby.players.t1!, true));
+    expect(pub).not.toContain("evil");
+    expect(pub).not.toContain("actualAlignment");
+    expect(pub).not.toContain("shownAlignment");
   });
 
   it("F: an empty planned ordinary seat does not arm the barrier", () => {

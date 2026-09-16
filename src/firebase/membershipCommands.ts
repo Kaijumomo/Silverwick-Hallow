@@ -1,11 +1,11 @@
-import type { PlayerSelfRecord, PlayerId } from "@/stores/types";
+import type { PlayerSelfRecord, PlayerId, RoleId } from "@/stores/types";
 import type { RoomBackend } from "./backend";
 import {
   readRosterBindings,
   revokePlayerMembership,
   seatPlayer,
 } from "./lobby";
-import { leavePath } from "./lifecycle";
+import { leavePath, travelerChoicePath } from "./lifecycle";
 
 export class MembershipOperationError extends Error {
   constructor(message: string) {
@@ -96,4 +96,32 @@ export async function acceptLeaveRequest(
 export async function rejectLeaveRequest(backend: RoomBackend, code: string, uid: string): Promise<void> {
   if (backend.runExclusive) return backend.runExclusive(inner => rejectLeaveRequest(inner, code, uid));
   await backend.set(leavePath(code, uid), null);
+}
+
+/**
+ * Applies a player's self-chosen Traveler character (Phase 9 Setup
+ * finalization B4). The requesting uid's playerId is re-resolved from the
+ * CURRENT live roster -- a playerId observed earlier by the calling watcher
+ * is never trusted, mirroring acceptLeaveRequest. `commitLocal` receives
+ * this freshly-resolved id and decides whether to apply it (it re-checks
+ * the player is still a Traveler and does not already carry this role,
+ * since the request may have been superseded by a Storyteller override or
+ * a status change since it was submitted) -- this is the exact same
+ * assignRole() command the Storyteller's own manual Traveler override
+ * uses, never a second mutation path. Always clears the request node
+ * afterward, whether or not a binding was found (stale requests are pure
+ * cleanup) -- the player may resubmit if the seat's binding recovers.
+ */
+export async function applyTravelerChoice(
+  backend: RoomBackend,
+  code: string,
+  uid: string,
+  roleId: RoleId,
+  commitLocal: (playerId: PlayerId, roleId: RoleId) => void,
+): Promise<void> {
+  if (backend.runExclusive) return backend.runExclusive(inner => applyTravelerChoice(inner, code, uid, roleId, commitLocal));
+  const bindings = await readRosterBindings(backend, code);
+  const playerId = bindings[uid];
+  if (playerId) commitLocal(playerId, roleId);
+  await backend.set(travelerChoicePath(code, uid), null);
 }

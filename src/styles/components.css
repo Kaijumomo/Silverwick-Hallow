@@ -203,6 +203,14 @@
   background: rgba(0, 0, 0, 0.3);
   color: var(--gold-soft);
 }
+.queue-pill-btn {
+  cursor: pointer;
+  font: inherit;
+}
+.queue-pill-btn:hover,
+.queue-pill-btn:focus-visible {
+  border-color: var(--gold);
+}
 .phase-pill[data-phase="night"] {
   border-color: rgba(120, 140, 220, 0.5);
   color: #a5b4dc;
@@ -1404,6 +1412,18 @@
   padding-bottom: 14px;
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
+}
+
+/* ===== Traveler choice panel (Phase 9 Setup finalization B4) ===== */
+.traveler-choice-panel {
+  width: 100%;
+  padding: 14px;
+  border: 1px solid var(--gold);
+  border-radius: var(--radius-lg);
+  background: rgba(196, 158, 80, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 /* ===== Sealed card ===== */

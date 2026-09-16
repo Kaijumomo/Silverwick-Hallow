@@ -82,8 +82,17 @@ export function analyzeSetup(context: SetupContext): SetupAnalysis {
       add("traveler-type:" + p.id, "blocker", `Review ${p.name}'s Traveler flag and actual character type.`, "assigned", actions, p.id);
     // Deal atomically replaces ordinary perceptions; Traveler identities survive it.
     if (p.shownRole) inspectRole(p.shownRole, "shared", actions, p.id);
-    if (p.isTraveler && !p.actualAlignment) add("traveler-alignment:" + p.id, "check",
-      `${p.name}: choose actual Traveler alignment in their arrival controls. Shown alignment is not Storyteller truth.`, "assigned", actions, p.id);
+    // Phase 9 Setup finalization B4: Night 1 readiness requires every
+    // starting Traveler's alignment configured, alongside their assigned
+    // character (missing-traveler-role, in readinessFindings) -- scoped to
+    // "begin" only, since alignment has no bearing on dealing the ordinary
+    // pool. Source "shared" (matching readinessFindings' own Traveler
+    // blockers), never "assigned": this is not an ordinary-bag coherence
+    // problem, so it must never gate Setup refinement's assignedBagIsCoherent
+    // (Shuffle/Swap/Edit Bag stay ordinary-only, per Phase 9 Setup
+    // finalization B3).
+    if (p.isTraveler && !p.actualAlignment) add("traveler-alignment:" + p.id, "blocker",
+      `${p.name}: choose actual Traveler alignment in their arrival controls before beginning Night 1.`, "shared", ["begin"], p.id);
   }
 
   // Ordinary perception (Phase 9C.4 / OPUS-004): concealed identity (Drunk,

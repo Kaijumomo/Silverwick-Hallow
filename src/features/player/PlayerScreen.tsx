@@ -3,7 +3,8 @@ import { PrivateInformation } from "./PrivateInformation";
 import { usePlayerStore } from "@/stores/playerStore";
 import { connectFirebase } from "@/firebase/session";
 import { isFirebaseConfigured, getConfigSource } from "@/firebase/config";
-import { applyJoinIntent, joinLobby, leaveLobby, usePlayerSync } from "@/firebase/playerSync";
+import { applyJoinIntent, chooseTraveler, joinLobby, leaveLobby, usePlayerSync } from "@/firebase/playerSync";
+import { TRAVELERS } from "@/data/travelers";
 import { lifecycleMessage } from "@/firebase/lifecycle";
 import { FirebaseConfigDialog } from "@/features/firebase/FirebaseConfigDialog";
 import type { RoomBackend } from "@/firebase/backend";
@@ -49,6 +50,8 @@ function PlayerScreenContent({ initialCode }: Props) {
   const [backend, setBackend] = useState<RoomBackend | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<PlayerTab>("role");
+  const [travelerChoiceBusy, setTravelerChoiceBusy] = useState(false);
+  const [travelerChoiceError, setTravelerChoiceError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -263,6 +266,25 @@ function PlayerScreenContent({ initialCode }: Props) {
     return <div className="player player-status" role="status"><h2>Waiting for game data…</h2><p>The Storyteller's game is synchronizing.</p></div>;
   }
 
+  // Phase 9 Setup finalization B4: the normal workflow is "Storyteller
+  // marks player as Traveler -> this device shows 'Choose your Traveler'".
+  // Driven entirely by the player's own public roster entry -- once the
+  // Storyteller (or this submission, once applied) sets a publicDisplayRole,
+  // this reactively clears with no separate bookkeeping. The Storyteller's
+  // manual override (TravelerArrival) remains fully available throughout;
+  // this is not a lock.
+  const myPublicRecord = playerId ? publicLobby.players[playerId] : undefined;
+  const needsTravelerChoice = !!myPublicRecord?.isTraveler && !myPublicRecord.publicDisplayRole;
+
+  const chooseTravelerRole = async (roleId: string) => {
+    if (!backend) { setTravelerChoiceError("Not connected. Reconnect and try again."); return; }
+    setTravelerChoiceError(null);
+    setTravelerChoiceBusy(true);
+    try { await chooseTraveler(backend, roleId); }
+    catch (e) { setTravelerChoiceError(lifecycleMessage(e)); }
+    finally { setTravelerChoiceBusy(false); }
+  };
+
   // Seated
   return (
     <div className="player player-seated">
@@ -292,6 +314,15 @@ function PlayerScreenContent({ initialCode }: Props) {
           </div>
         </Modal>
       )}
+
+      {needsTravelerChoice && (
+        <TravelerChoicePanel
+          busy={travelerChoiceBusy}
+          error={travelerChoiceError}
+          onChoose={chooseTravelerRole}
+        />
+      )}
+
       <PlayerTabs active={activeTab} onChange={setActiveTab} />
 
       {activeTab === "role" && (
@@ -317,6 +348,47 @@ function PlayerScreenContent({ initialCode }: Props) {
           <AlmanacBody roles={playerAlmanacRoles} />
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Traveler choice — player-side character picker (Phase 9 Setup
+// finalization B4). Restricted to the supported Traveler catalogue; never
+// shows ordinary characters.
+// ---------------------------------------------------------------------------
+
+function TravelerChoicePanel({
+  busy,
+  error,
+  onChoose,
+}: {
+  busy: boolean;
+  error: string | null;
+  onChoose: (roleId: string) => void;
+}) {
+  return (
+    <div className="traveler-choice-panel" role="region" aria-label="Choose your Traveler">
+      <h3 className="drawer-section-title">Choose your Traveler</h3>
+      <p className="behavior-help">
+        The Storyteller has marked you as a Traveler. Pick your character below — once chosen, it's shown to everyone right away.
+      </p>
+      <div className="role-picker-grid">
+        {TRAVELERS.map((r) => (
+          <button
+            key={r.id}
+            type="button"
+            className="role-card"
+            disabled={busy}
+            onClick={() => onChoose(r.id)}
+            title={r.ability}
+          >
+            <span className="role-card-name type-traveler">{r.name}</span>
+            <span className="role-card-type">traveler</span>
+          </button>
+        ))}
+      </div>
+      {error && <p className="field-error" role="alert">{error}</p>}
     </div>
   );
 }

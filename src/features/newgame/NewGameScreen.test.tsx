@@ -4,6 +4,12 @@ import { NewGameScreen } from "./NewGameScreen";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { MIN_PLAYERS, MAX_PLAYERS, SETUP_COUNTS } from "@/data/setupCounts";
 
+const moreTravelers = () => screen.getByRole("button", { name: "More Travelers" });
+const fewerTravelers = () => screen.getByRole("button", { name: "Fewer Travelers" });
+const morePlayers = () => screen.getByRole("button", { name: "More players" });
+const fewerPlayers = () => screen.getByRole("button", { name: "Fewer players" });
+const ordinaryLine = () => screen.getByText(/^Ordinary:/);
+
 beforeEach(() => {
   store.setState({ game: null, lobby: null, undoStack: [], customScripts: {}, view: "newgame" });
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
@@ -36,6 +42,89 @@ describe("A. New Game planning UI remains", () => {
     expect(screen.getByRole("row", { name: /^8 / })).toHaveAttribute("aria-selected", "true");
     expect(initialRow).toHaveAttribute("aria-selected", "false");
     expect(container.querySelector(".ng-stepper-value")).toHaveTextContent("8 players");
+  });
+});
+
+describe("A2. Traveller-aware population UI (Phase 9 Setup finalization B4)", () => {
+  it("shows a compact Travellers stepper defaulting to 0, an Ordinary line, and explanatory text", () => {
+    const { container } = render(<NewGameScreen />);
+    expect(moreTravelers()).toBeVisible();
+    expect(fewerTravelers()).toBeVisible();
+    expect(fewerTravelers()).toBeDisabled(); // 0 Travelers is already the floor for total=MIN_PLAYERS
+    const stepperValues = container.querySelectorAll(".ng-stepper-value");
+    expect(stepperValues[1]).toHaveTextContent("0 Travelers");
+    expect(ordinaryLine()).toHaveTextContent(`Ordinary: ${MIN_PLAYERS}`);
+    expect(screen.getByText("Composition is based on ordinary players. Travellers are separate.")).toBeVisible();
+  });
+
+  it("highlights the composition table row for the ordinary count, not total participants", () => {
+    render(<NewGameScreen />);
+    fireEvent.click(screen.getByRole("row", { name: /^10 / })); // sets ordinary (and total, 0 Travelers) to 10
+    fireEvent.click(moreTravelers()); // 10 total / 1 Traveller -> ordinary 9
+    expect(ordinaryLine()).toHaveTextContent("Ordinary: 9");
+    expect(screen.getByRole("row", { name: /^9 / })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("row", { name: /^10 / })).toHaveAttribute("aria-selected", "false");
+  });
+
+  it.each([
+    [10, 0, 10], [10, 1, 9], [10, 2, 8], [15, 0, 15], [10, 5, 5],
+  ])("total %i / %i Travellers -> ordinary %i", (total, travelers, ordinary) => {
+    render(<NewGameScreen />);
+    fireEvent.click(screen.getByRole("row", { name: new RegExp(`^${total} `) }));
+    for (let i = 0; i < travelers; i++) fireEvent.click(moreTravelers());
+    expect(ordinaryLine()).toHaveTextContent(`Ordinary: ${ordinary}`);
+  });
+
+  it("rejects 5/1: the Travellers stepper cannot increment at the floor total", () => {
+    render(<NewGameScreen />); // default total is MIN_PLAYERS (5)
+    expect(moreTravelers()).toBeDisabled();
+    fireEvent.click(moreTravelers()); // no-op: stepper refuses past its own max
+    expect(ordinaryLine()).toHaveTextContent(`Ordinary: ${MIN_PLAYERS}`);
+  });
+
+  it("rejects 10/6: the Travellers stepper stops incrementing once ordinary would drop below 5", () => {
+    render(<NewGameScreen />);
+    fireEvent.click(screen.getByRole("row", { name: /^10 / }));
+    for (let i = 0; i < 6; i++) fireEvent.click(moreTravelers());
+    expect(ordinaryLine()).toHaveTextContent("Ordinary: 5"); // floored at 5, never 4
+  });
+
+  it("16/1 minimum: incrementing total above 15 with 0 Travellers auto-raises Travellers to keep ordinary at 15", () => {
+    render(<NewGameScreen />);
+    fireEvent.click(screen.getByRole("row", { name: /^15 / })); // 15 total / 0 Travellers
+    fireEvent.click(morePlayers()); // -> 16 total
+    expect(ordinaryLine()).toHaveTextContent("Ordinary: 15");
+    expect(fewerTravelers()).toBeDisabled(); // 1 Traveller is now the minimum for total 16
+  });
+
+  it("18/3 and 20/5 minimums: continuing to raise total keeps auto-raising the Traveller floor", () => {
+    render(<NewGameScreen />);
+    fireEvent.click(screen.getByRole("row", { name: /^15 / }));
+    for (let i = 0; i < 3; i++) fireEvent.click(morePlayers()); // 15 -> 18
+    expect(ordinaryLine()).toHaveTextContent("Ordinary: 15");
+    for (let i = 0; i < 2; i++) fireEvent.click(morePlayers()); // 18 -> 20
+    expect(ordinaryLine()).toHaveTextContent("Ordinary: 15");
+  });
+
+  it("lowering total back down never silently discards an explicit Traveller count that is still legal", () => {
+    render(<NewGameScreen />);
+    fireEvent.click(screen.getByRole("row", { name: /^15 / }));
+    fireEvent.click(morePlayers()); // 16 total / 1 Traveller (auto-raised)
+    fireEvent.click(fewerPlayers()); // back to 15 total -- 1 Traveller remains legal (0-10 range), so it is kept
+    expect(ordinaryLine()).toHaveTextContent("Ordinary: 14");
+    expect(fewerTravelers()).toBeEnabled(); // still adjustable back down explicitly
+  });
+
+  it("passes the intended Traveller count into game creation, distinct from total planned seats", async () => {
+    render(<NewGameScreen />);
+    fireEvent.click(screen.getByRole("row", { name: /^10 / }));
+    fireEvent.click(moreTravelers());
+    fireEvent.click(moreTravelers()); // 10 total / 2 Travellers -> ordinary 8
+    fireEvent.click(screen.getByRole("button", { name: /Create setup/ }));
+    await waitFor(() => expect(store.getState().game).not.toBeNull());
+    const game = store.getState().game!;
+    expect(game.plannedPlayerCount).toBe(10);
+    expect(game.plannedTravelerCount).toBe(2);
   });
 });
 

@@ -13,6 +13,7 @@ import type { OnlineMap } from "@/stores/projections";
 import { decodePresence, decodeRoster, decodeJoinRequests, SnapshotValidationError } from "./snapshots";
 import { SessionWriter, FENCE_MARGIN_MS, type AuthorityHandle } from "./writer";
 import { decodeSession, guardSchema, isTransient, leaseSchema, lifecycleMessage, LifecycleError, sessionPath } from "./lifecycle";
+import { TRAVELERS } from "@/data/travelers";
 import { connectFirebase } from "./session";
 import { decideReconnect, type CheckpointState, type ReconnectIncoherentReason } from "./reconnectDecision";
 
@@ -47,8 +48,16 @@ type Runtime = {
    * always re-resolves the uid->playerId binding fresh rather than trusting
    * this map (see acceptLeaveRequest). */
   leaveRequests: Record<string, string | null>;
+  /** Phase 9 Setup finalization B4: observational-only view of
+   * travelerChoices, keyed by requesting uid, valued with the live
+   * roster's current playerId for that uid (or null if unresolved) and the
+   * chosen Traveler catalogue role id. Runtime only -- never persisted,
+   * never checkpointed, never authoritative. Applying a choice always
+   * re-resolves the uid->playerId binding fresh (see applyTravelerChoice)
+   * rather than trusting this map. */
+  travelerChoices: Record<string, { playerId: string | null; roleId: string }>;
 };
-export const useSessionRuntime = create<Runtime>(() => ({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, retry: 0, reconnect: { status: "live" }, leaveRequests: {} }));
+export const useSessionRuntime = create<Runtime>(() => ({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, retry: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {} }));
 export const retryStorytellerSession = () => useSessionRuntime.setState(s => ({ retry: s.retry + 1 }));
 /** Central ownership for `useSessionRuntime.error`: each source may set or
  * clear only its own entry; the derived field is recomputed from the rest. */
@@ -98,7 +107,7 @@ export function useStorytellerSync(backend: RoomBackend | null) {
     let stop: (() => void) | undefined;
     const writer = new SessionWriter(backend, lobby.code, lobby.sessionId ?? "", error =>
       reportRuntimeError("write", error ? lifecycleMessage(error) : null));
-    useSessionRuntime.setState({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, reconnect: { status: "live" }, leaveRequests: {} });
+    useSessionRuntime.setState({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {} });
     const previousDisposal = disposalBarrier.current;
     const started = previousDisposal.then(() => {
       if (cancelled) return undefined;
@@ -136,7 +145,7 @@ export function useStorytellerSync(backend: RoomBackend | null) {
           reportRuntimeError("write", lifecycleMessage(error));
         })
       );
-      useSessionRuntime.setState({ backend: null, presence: "unknown", online: {}, pending: 0, reconnect: { status: "live" }, leaveRequests: {} });
+      useSessionRuntime.setState({ backend: null, presence: "unknown", online: {}, pending: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {} });
     };
   }, [backend, lobby?.code, lobby?.sessionId, retry]);
 }
@@ -293,6 +302,11 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   // Phase 9C.3 (OPUS-003): raw requesting uids observed at leaveRequests.
   // Never consumed automatically — see the "leaveRequests" watch() below.
   let leaveUids: Record<string, true> = {};
+  // Phase 9 Setup finalization B4: raw requesting uid -> chosen Traveler
+  // role id observed at travelerChoices. Applying one is triggered
+  // separately (StorytellerSession's auto-apply effect) — this watch only
+  // maintains the runtime view, exactly like leaveRequests above.
+  let travelerChoiceUids: Record<string, string> = {};
   const cleanups: (() => void)[] = [];
   const report = (source: string, error?: unknown) => reportRuntimeError(source, error ? lifecycleMessage(error) : null);
   function stop() {
@@ -301,7 +315,7 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
     clearTimeout(timer);
     cleanups.splice(0).forEach(off => off());
     writer.stop();
-    useSessionRuntime.setState({ backend: null, presence: "unknown", online: {}, leaveRequests: {} });
+    useSessionRuntime.setState({ backend: null, presence: "unknown", online: {}, leaveRequests: {}, travelerChoices: {} });
   }
   // Wired here — before the checkpoint read/restore/reconcile window below,
   // not after live watchers are installed — so a lease-renewal failure
@@ -329,6 +343,15 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
     const leaveRequests: Record<string, string | null> = {};
     for (const uid of Object.keys(leaveUids)) leaveRequests[uid] = roster[uid] ?? null;
     useSessionRuntime.setState({ leaveRequests });
+  };
+  // Same shape of derivation as updateLeaveRequests, for the same reason:
+  // roster and travelerChoices watch() callbacks may arrive in either
+  // order, so this recomputes from current `roster`/`travelerChoiceUids`
+  // whenever either changes.
+  const updateTravelerChoices = () => {
+    const travelerChoices: Record<string, { playerId: string | null; roleId: string }> = {};
+    for (const [uid, roleId] of Object.entries(travelerChoiceUids)) travelerChoices[uid] = { playerId: roster[uid] ?? null, roleId };
+    useSessionRuntime.setState({ travelerChoices });
   };
   const flush = (initial = false) => {
     // Captured the same moment the flushed game snapshot is captured, inside
@@ -430,7 +453,7 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
     watch("roster", value => {
       const decoded = decodeRoster(value);
       if (decoded.status !== "ready") throw new SnapshotValidationError();
-      roster = decoded.data; updateOnline(); updateLeaveRequests(); schedule();
+      roster = decoded.data; updateOnline(); updateLeaveRequests(); updateTravelerChoices(); schedule();
     });
     watch("joinRequests", value => {
       const decoded = decodeJoinRequests(value);
@@ -462,7 +485,18 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
       leaveUids = z.record(z.literal(true)).parse(value ?? {});
       updateLeaveRequests();
     });
-    // A stop occurring specifically during the six watch() installations
+    // Phase 9 Setup finalization B4: observational only, exactly like
+    // leaveRequests above. Restricted to the supported Traveler catalogue
+    // -- Firebase rules already enforce this server-side, but a malformed
+    // legacy/foreign value must fail loudly (via receive's own try/catch)
+    // rather than silently apply an unsupported role. Applying a choice is
+    // a separate, deliberately auto-triggered effect (StorytellerSession),
+    // not this watcher's job.
+    watch("travelerChoices", value => {
+      travelerChoiceUids = z.record(z.enum(TRAVELERS.map(t => t.id) as [string, ...string[]])).parse(value ?? {});
+      updateTravelerChoices();
+    });
+    // A stop occurring specifically during the seven watch() installations
     // just above (e.g. an immediately-observed ended session) is caught
     // here, before unsubStore/stalePresence go live and before the initial
     // flush.

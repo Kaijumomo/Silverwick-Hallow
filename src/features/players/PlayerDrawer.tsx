@@ -192,6 +192,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   const [nameDraft, setNameDraft] = useState(player.name);
   const [reminderDraft, setReminderDraft] = useState("");
   const [refinementError, setRefinementError] = useState<string | null>(null);
+  const [travelerStatusError, setTravelerStatusError] = useState<string | null>(null);
   const [membershipBusy, setMembershipBusy] = useState(false);
   const [membershipError, setMembershipError] = useState<string | null>(null);
   const [notesDraft, setNotesDraft] = useState(player.stNotes);
@@ -399,7 +400,11 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
               <button
                 className="toggle-pill"
                 aria-pressed={player.isTraveler}
-                onClick={() => setIsTraveler(player.id, !player.isTraveler)}
+                onClick={() => {
+                  setTravelerStatusError(null);
+                  const result = setIsTraveler(player.id, !player.isTraveler);
+                  if (!result.ok) setTravelerStatusError(result.message ?? "Could not change Traveler status.");
+                }}
               >
                 {player.isTraveler ? "Traveler" : "Not a traveler"}
               </button>
@@ -409,6 +414,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
                 </span>
               )}
             </div>
+            {travelerStatusError && <p role="alert" className="field-error">{travelerStatusError}</p>}
           </section>
 
           {!player.isTraveler && <section className="drawer-section">

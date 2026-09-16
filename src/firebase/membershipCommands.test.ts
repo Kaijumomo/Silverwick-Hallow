@@ -5,12 +5,12 @@ import { usePlayerStore } from "@/stores/playerStore";
 import { MemoryRoomBackend } from "./memoryBackend";
 import type { Json } from "./backend";
 import { joinRequestPath, playerPath, rosterEntryPath } from "./paths";
-import { leavePath } from "./lifecycle";
+import { leavePath, travelerChoicePath } from "./lifecycle";
 import {
   revokePlayerMembership,
   seatPlayer,
 } from "./lobby";
-import { acceptLeaveRequest, rejectLeaveRequest, revokePlayerAndCommit, seatPlayerAndCommit } from "./membershipCommands";
+import { acceptLeaveRequest, applyTravelerChoice, rejectLeaveRequest, revokePlayerAndCommit, seatPlayerAndCommit } from "./membershipCommands";
 import { usePlayerSync } from "./playerSync";
 
 class FailingUpdateBackend extends MemoryRoomBackend {
@@ -332,5 +332,101 @@ describe("membership commands", () => {
 
     await expect(rejectLeaveRequest(backend, "ROOM", "uid-alice")).rejects.toThrow("offline");
     expect(await backend.get(leavePath("ROOM", "uid-alice"))).toBe(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // Phase 9 Setup finalization B4: player-side Traveler character choice,
+  // applied automatically (no Storyteller click) through the exact same
+  // assignRole() command the Storyteller's own manual override uses.
+  // -------------------------------------------------------------------------
+
+  it("applies a player's chosen Traveler character through assignRole and clears the request", async () => {
+    const backend = new MemoryRoomBackend();
+    const { uid, playerId } = prepareSeat();
+    await seatPlayerAndCommit(backend, "ROOM", uid, playerId, null, () =>
+      useStorytellerStore.getState().assignPendingToSeat(uid, playerId),
+    );
+    useStorytellerStore.getState().setIsTraveler(playerId, true);
+    await backend.set(travelerChoicePath("ROOM", uid), "thief");
+
+    const commitLocal = (pid: string, role: string) => {
+      const p = useStorytellerStore.getState().game!.players[pid]!;
+      if (p.isTraveler) useStorytellerStore.getState().assignRole(pid, role);
+    };
+    await applyTravelerChoice(backend, "ROOM", uid, "thief", commitLocal);
+
+    expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("thief");
+    expect(await backend.get(travelerChoicePath("ROOM", uid))).toBeUndefined();
+  });
+
+  it("re-resolves uid -> playerId from the CURRENT roster, never a caller-assumed id", async () => {
+    const backend = new MemoryRoomBackend();
+    const { uid, playerId: firstSeat } = prepareSeat();
+    await seatPlayerAndCommit(backend, "ROOM", uid, firstSeat, null, () =>
+      useStorytellerStore.getState().assignPendingToSeat(uid, firstSeat),
+    );
+    useStorytellerStore.getState().addPlayerToSeat("Bob");
+    const secondSeat = useStorytellerStore.getState().game!.seatOrder.find(
+      (id) => id !== firstSeat && !useStorytellerStore.getState().game!.players[id]!.isEmpty,
+    )!;
+    useStorytellerStore.getState().setIsTraveler(secondSeat, true);
+    await backend.set(rosterEntryPath("ROOM", uid), secondSeat);
+
+    const applied: string[] = [];
+    await applyTravelerChoice(backend, "ROOM", uid, "thief", (pid) => { applied.push(pid); });
+
+    expect(applied).toEqual([secondSeat]);
+  });
+
+  it("clears a stale request with no current roster binding, touching no local seat (stale cleanup)", async () => {
+    const backend = new MemoryRoomBackend();
+    await backend.set(travelerChoicePath("ROOM", "uid-ghost"), "thief");
+    let called = false;
+
+    await applyTravelerChoice(backend, "ROOM", "uid-ghost", "thief", () => { called = true; });
+
+    expect(called).toBe(false);
+    expect(await backend.get(travelerChoicePath("ROOM", "uid-ghost"))).toBeUndefined();
+  });
+
+  it("never applies to a player who is no longer a Traveler -- a Storyteller override or status change wins", async () => {
+    const backend = new MemoryRoomBackend();
+    const { uid, playerId } = prepareSeat();
+    await seatPlayerAndCommit(backend, "ROOM", uid, playerId, null, () =>
+      useStorytellerStore.getState().assignPendingToSeat(uid, playerId),
+    );
+    // Never marked a Traveler at all -- e.g. the Storyteller already
+    // converted them back to ordinary before this request was applied.
+    await backend.set(travelerChoicePath("ROOM", uid), "thief");
+
+    const commitLocal = (pid: string, role: string) => {
+      const p = useStorytellerStore.getState().game!.players[pid]!;
+      if (p.isTraveler) useStorytellerStore.getState().assignRole(pid, role);
+    };
+    await applyTravelerChoice(backend, "ROOM", uid, "thief", commitLocal);
+
+    expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("");
+    expect(await backend.get(travelerChoicePath("ROOM", uid))).toBeUndefined();
+  });
+
+  it("the Storyteller's manual Traveler override remains available after a player choice applies -- not a lock", async () => {
+    const backend = new MemoryRoomBackend();
+    const { uid, playerId } = prepareSeat();
+    await seatPlayerAndCommit(backend, "ROOM", uid, playerId, null, () =>
+      useStorytellerStore.getState().assignPendingToSeat(uid, playerId),
+    );
+    useStorytellerStore.getState().setIsTraveler(playerId, true);
+    await backend.set(travelerChoicePath("ROOM", uid), "thief");
+    const commitLocal = (pid: string, role: string) => {
+      const p = useStorytellerStore.getState().game!.players[pid]!;
+      if (p.isTraveler) useStorytellerStore.getState().assignRole(pid, role);
+    };
+    await applyTravelerChoice(backend, "ROOM", uid, "thief", commitLocal);
+    expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("thief");
+
+    // Storyteller manually overrides to a different Traveler character --
+    // the exact same generic assignRole() command, unrestricted.
+    useStorytellerStore.getState().assignRole(playerId, "scapegoat");
+    expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("scapegoat");
   });
 });

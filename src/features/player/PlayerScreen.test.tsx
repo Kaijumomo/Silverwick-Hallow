@@ -13,14 +13,14 @@ import { __setEnvOverrideForTests, clearFirebaseConfig, saveFirebaseConfig } fro
 // exactly how many times, and under which action, it is invoked.
 vi.mock("@/firebase/playerSync", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/firebase/playerSync")>();
-  return { ...actual, usePlayerSync: () => {}, leaveLobby: vi.fn(async () => {}) };
+  return { ...actual, usePlayerSync: () => {}, leaveLobby: vi.fn(async () => {}), chooseTraveler: vi.fn(async () => {}) };
 });
 vi.mock("@/firebase/session", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/firebase/session")>();
   return { ...actual, connectFirebase: async () => ({ backend: {} as never, uid: "alice" }) };
 });
 
-import { leaveLobby } from "@/firebase/playerSync";
+import { chooseTraveler, leaveLobby } from "@/firebase/playerSync";
 import { PlayerScreen } from "./PlayerScreen";
 
 const validCfg = {
@@ -55,10 +55,25 @@ function seedSeated() {
   });
 }
 
+function seedSeatedTraveler(publicDisplayRole?: string) {
+  seedSeated();
+  usePlayerStore.setState((s) => ({
+    self: null,
+    publicLobby: {
+      ...s.publicLobby!,
+      players: {
+        "p-alice": { ...s.publicLobby!.players["p-alice"]!, isTraveler: true, publicDisplayRole },
+      },
+    },
+  }));
+}
+
 beforeEach(() => {
   __setEnvOverrideForTests({});
   saveFirebaseConfig(validCfg);
   vi.mocked(leaveLobby).mockClear();
+  vi.mocked(chooseTraveler).mockClear();
+  vi.mocked(chooseTraveler).mockResolvedValue(undefined);
   seedSeated();
 });
 
@@ -94,5 +109,49 @@ describe("PlayerScreen leave confirmation (Phase 9C.3, OPUS-003)", () => {
     await waitFor(() => expect(leaveLobby).toHaveBeenCalledTimes(1));
     await act(async () => {});
     expect(screen.queryByText("Request to leave?")).toBeNull();
+  });
+});
+
+describe("PlayerScreen Traveler choice (Phase 9 Setup finalization B4)", () => {
+  it("an ordinary player never sees the Traveler picker", async () => {
+    render(<PlayerScreen />);
+    await screen.findByText("Request to leave lobby");
+    expect(screen.queryByText("Choose your Traveler")).toBeNull();
+  });
+
+  it("a designated Traveler with no chosen character sees the picker, restricted to the Traveler catalogue", async () => {
+    seedSeatedTraveler(undefined);
+    render(<PlayerScreen />);
+    await screen.findByText("Choose your Traveler");
+    // Restricted to the supported Traveler catalogue -- never an ordinary role.
+    expect(screen.getByRole("button", { name: /Scapegoat/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Chef$/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Imp$/ })).toBeNull();
+  });
+
+  it("choosing a character calls the self-scoped chooseTraveler command, never a Storyteller-only path", async () => {
+    seedSeatedTraveler(undefined);
+    render(<PlayerScreen />);
+    await screen.findByText("Choose your Traveler");
+    fireEvent.click(screen.getByRole("button", { name: /Scapegoat/ }));
+    await waitFor(() => expect(chooseTraveler).toHaveBeenCalledWith(expect.anything(), "scapegoat"));
+  });
+
+  it("surfaces a submission failure without silently succeeding", async () => {
+    vi.mocked(chooseTraveler).mockRejectedValueOnce(new Error("offline"));
+    seedSeatedTraveler(undefined);
+    render(<PlayerScreen />);
+    await screen.findByText("Choose your Traveler");
+    fireEvent.click(screen.getByRole("button", { name: /Scapegoat/ }));
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    // Still showing the picker -- nothing was silently applied.
+    expect(screen.getByText("Choose your Traveler")).toBeInTheDocument();
+  });
+
+  it("once a character is publicly assigned, the picker no longer shows (Storyteller override or applied choice alike)", async () => {
+    seedSeatedTraveler("thief");
+    render(<PlayerScreen />);
+    await screen.findByText("Request to leave lobby");
+    expect(screen.queryByText("Choose your Traveler")).toBeNull();
   });
 });

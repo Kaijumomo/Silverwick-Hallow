@@ -197,6 +197,32 @@ describe("structural and manual checks", () => {
     const g=setupGame(standardRoles(5));g.players.p0!.isTraveler=flag;g.players.p0!.actualRole=flag?"chef":"thief";
     expect(codes(g)).toContain("traveler-type:p0");expect(analyze(g).readiness.begin.ok).toBe(false);
   });
+  describe("Night 1 readiness requires starting Traveler completeness (Phase 9 Setup finalization B4)", () => {
+    function withTraveler(overrides: Partial<import("@/stores/types").STPlayerRecord> = {}) {
+      const g = setupGame(standardRoles(5));
+      g.players.t = makeSTPlayer({ id: "t", seat: 5, isTraveler: true, actualRole: "thief", ...overrides });
+      g.seatOrder.push("t");
+      return g;
+    }
+    it("blocks Night 1 when a starting Traveler has no character assigned", () => {
+      const g = withTraveler({ actualRole: "" });
+      const a = analyze(g);
+      expect(a.findings.find(f => f.code === "missing-traveler-role")).toMatchObject({ severity: "blocker" });
+      expect(a.readiness.begin.ok).toBe(false);
+    });
+    it("blocks Night 1 when a starting Traveler has no alignment configured", () => {
+      const g = withTraveler(); // actualRole set, actualAlignment absent
+      const a = analyze(g);
+      expect(a.findings.find(f => f.code === "traveler-alignment:t")).toMatchObject({ severity: "blocker" });
+      expect(a.readiness.begin.ok).toBe(false);
+    });
+    it("allows Night 1 once the starting Traveler has both a character and an alignment", () => {
+      const g = withTraveler({ actualAlignment: "good" });
+      const a = analyze(g);
+      expect(a.findings.some(f => f.code === "missing-traveler-role" || f.code === "traveler-alignment:t")).toBe(false);
+      expect(a.readiness.begin.ok).toBe(true);
+    });
+  });
   it("Fabled cannot be dealt to an ordinary seat", () => {
     expect(analyze(setupGame(standardRoles(5),{rolePool:["sentinel",...standardRoles(5).slice(1)]})).readiness.deal.ok).toBe(false);
   });

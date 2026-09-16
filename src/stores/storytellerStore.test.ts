@@ -225,6 +225,63 @@ describe("setIsTraveler", () => {
     expect(useStorytellerStore.getState().game!.players[p1]!.isTraveler).toBe(false);
     expect(useStorytellerStore.getState().game!.players[p1]!.actualRole).toBe("imp");
   });
+
+  // Phase 9 Setup finalization B4: explicit ordinary<->Traveler conversion
+  // bounds-checking. ordinary -> Traveler is always permitted; Traveler ->
+  // ordinary is refused only if it would raise occupied ordinary players
+  // above the 15-player composition cap.
+  describe("Phase 9 Setup finalization B4 bounds-checking", () => {
+    it("returns a SetupCommandResult ({ ok: true }) on a normal conversion", () => {
+      const { p1 } = setupGame();
+      expect(useStorytellerStore.getState().setIsTraveler(p1, true)).toEqual({ ok: true });
+    });
+
+    it("is a no-op returning { ok: true } when the player already has the requested status", () => {
+      const { p1 } = setupGame();
+      expect(useStorytellerStore.getState().setIsTraveler(p1, false)).toEqual({ ok: true });
+      expect(useStorytellerStore.getState().game!.players[p1]!.isTraveler).toBe(false);
+    });
+
+    it("refuses a nonexistent player", () => {
+      const { p1 } = setupGame();
+      const result = useStorytellerStore.getState().setIsTraveler(p1 + "-missing", true);
+      expect(result.ok).toBe(false);
+    });
+
+    it("ordinary -> Traveler is always allowed, even once occupied ordinary players are already at the 15-player cap", () => {
+      useStorytellerStore.getState().newGame("tb");
+      for (let i = 0; i < 15; i++) useStorytellerStore.getState().addPlayer("Player " + i);
+      const ids = useStorytellerStore.getState().game!.seatOrder;
+      expect(ids).toHaveLength(15);
+      const result = useStorytellerStore.getState().setIsTraveler(ids[0]!, true);
+      expect(result).toEqual({ ok: true });
+      expect(useStorytellerStore.getState().game!.players[ids[0]!]!.isTraveler).toBe(true);
+    });
+
+    it("Traveler -> ordinary is refused if it would raise occupied ordinary players above 15", () => {
+      useStorytellerStore.getState().newGame("tb");
+      // The 16th arrival defaults Traveler on its own (the ordinary cap is
+      // already reached by the first 15) -- see arrivalsAreTravelers.
+      for (let i = 0; i < 16; i++) useStorytellerStore.getState().addPlayer("Player " + i);
+      const sixteenth = useStorytellerStore.getState().game!.seatOrder[15]!;
+      expect(useStorytellerStore.getState().game!.players[sixteenth]!.isTraveler).toBe(true);
+      const before = useStorytellerStore.getState().game;
+      const result = useStorytellerStore.getState().setIsTraveler(sixteenth, false);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.message).toMatch(/maximum/i);
+      // Refused: no mutation at all, not even an undo-stack push.
+      expect(useStorytellerStore.getState().game).toBe(before);
+      expect(useStorytellerStore.getState().game!.players[sixteenth]!.isTraveler).toBe(true);
+    });
+
+    it("Traveler -> ordinary is allowed when the resulting ordinary count stays at or below 15", () => {
+      const { p1 } = setupGame();
+      useStorytellerStore.getState().setIsTraveler(p1, true);
+      const result = useStorytellerStore.getState().setIsTraveler(p1, false);
+      expect(result).toEqual({ ok: true });
+      expect(useStorytellerStore.getState().game!.players[p1]!.isTraveler).toBe(false);
+    });
+  });
 });
 
 describe("planned seat workflow", () => {

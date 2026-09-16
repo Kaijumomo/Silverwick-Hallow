@@ -50,7 +50,15 @@ export function selectSetupContext(game: StorytellerLobbyRecord, script?: Script
   return {
     game, script, registry: script ? buildRegistry(script) : undefined,
     population: {
-      targetNonTravelerCount: Number.isInteger(game.plannedPlayerCount) && game.plannedPlayerCount > 0 ? game.plannedPlayerCount : null,
+      // Ordinary composition target = total planned participants - the
+      // intended Traveler count out of that total (Phase 9 Setup
+      // finalization B4). Travelers never consume an ordinary bag slot, so
+      // this never derives from total occupancy either -- only the static
+      // plan. Floored at 0: a plan with more intended Travelers than total
+      // participants is never negative, just unresolved.
+      targetNonTravelerCount: Number.isInteger(game.plannedPlayerCount) && game.plannedPlayerCount > 0
+        ? Math.max(0, game.plannedPlayerCount - (game.plannedTravelerCount ?? 0))
+        : null,
       occupiedNonTravelerCount: ordinary.length,
       occupiedTravelerCount: travelers.length,
       emptyPlannedSeatCount: seated.filter(p => p.isEmpty && !p.isTraveler).length,

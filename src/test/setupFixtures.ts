@@ -44,7 +44,7 @@ export function setupGame(roles = standardRoles(), over: Partial<StorytellerLobb
   return {
     code: "", storytellerUid: "local", scriptId: setupScript.id, phase: "setup", day: 0,
     players: Object.fromEntries(players.map(p => [p.id,p])), seatOrder: players.map(p => p.id),
-    plannedPlayerCount: roles.length, rolePool: [], fabled: [], lorics: [], bluffs: [],
+    plannedPlayerCount: roles.length, plannedTravelerCount: 0, rolePool: [], fabled: [], lorics: [], bluffs: [],
     notes: "", nightProgress: {}, pendingPlayers: {}, ...over,
   };
 }

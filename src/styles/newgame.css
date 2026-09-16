@@ -151,6 +151,32 @@
   color: var(--text-dim);
 }
 
+.ng-traveler-stepper {
+  margin-top: 4px;
+}
+
+.ng-traveler-stepper .ng-stepper-value {
+  font-size: 18px;
+  min-width: 84px;
+}
+
+.ng-ordinary-line {
+  font-size: 14px;
+  color: var(--text);
+  margin: 4px 0 0;
+}
+
+.ng-ordinary-line strong {
+  color: var(--gold-soft);
+}
+
+.ng-ordinary-note {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 0 0 4px;
+  line-height: 1.4;
+}
+
 /* ===== Player count table ===== */
 .ng-count-table {
   width: 100%;

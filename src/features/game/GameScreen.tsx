@@ -5,6 +5,7 @@ import { PlayerDrawer } from "@/features/players/PlayerDrawer";
 import { Almanac } from "@/features/almanac/Almanac";
 import { NightOrderPanel } from "@/features/nightOrder/NightOrderPanel";
 import { SetupPanel } from "@/features/setup/SetupPanel";
+import { SeatAssignPopup } from "@/features/grimoire/SeatAssignPopup";
 import { TRAVELERS } from "@/data/travelers";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
@@ -54,6 +55,7 @@ export function GameScreen() {
   const [goingLive, setGoingLive] = useState(false);
   const [nightPanelOpen, setNightPanelOpen] = useState(false);
   const [setupPanelOpen, setSetupPanelOpen] = useState(false);
+  const [queuePopupOpen, setQueuePopupOpen] = useState(false);
   // Which roles in the bag Silverwick most recently auto-filled (Fill/Re-roll
   // Bag) -- lifted above SetupPanel so the pinned/generated distinction
   // survives closing and reopening Setup within this Grimoire session. Not
@@ -314,9 +316,15 @@ export function GameScreen() {
             </span>
           )}
           {pendingQueueCount > 0 && (
-            <span className="phase-pill" style={{ background: "rgba(196,158,80,0.18)", color: "var(--gold-bright)" }} title="Players in queue waiting to be assigned a seat">
+            <button
+              type="button"
+              className="phase-pill queue-pill-btn"
+              style={{ background: "rgba(196,158,80,0.18)", color: "var(--gold-bright)" }}
+              title="Open the waiting queue to assign or reject players"
+              onClick={() => setQueuePopupOpen(true)}
+            >
               {pendingQueueCount} in queue
-            </span>
+            </button>
           )}
           {lobby && pendingOnlineCount > 0 && (
             <span className="label" title="Players connected but not yet seated">
@@ -547,6 +555,14 @@ export function GameScreen() {
         )}
         <GrimoireCircle online={onlineMap} backend={backend} code={lobby?.code ?? ""} />
       </div>
+
+      {queuePopupOpen && (
+        <SeatAssignPopup
+          backend={backend}
+          code={lobby?.code ?? ""}
+          onClose={() => setQueuePopupOpen(false)}
+        />
+      )}
 
       {selected && (
         <PlayerDrawer

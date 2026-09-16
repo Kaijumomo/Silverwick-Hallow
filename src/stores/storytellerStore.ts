@@ -15,6 +15,7 @@ import { assignedBagIsCoherent, canRefineSetup, matchBagToAssignments } from "@/
 import { isBagType } from "@/features/setup/setupPolicies";
 import { arrivalsAreTravelers, newTravelerArrival, publicTravelerRole, travelerDemonInformation, travelerNeedsFirstNight, travelerNeedsArrivalCheck } from "./travelers";
 import { getTraveler } from "@/data/travelers";
+import { MAX_PLAYERS } from "@/data/setupCounts";
 import type { SetupCommandResult } from "@/features/setup/setupReadiness";
 import type {
   Alignment,
@@ -38,7 +39,7 @@ const UNDO_LIMIT = 20;
  * `merge` (Phase 9C.2B.2) passes to migrateStoreState when Zustand's own
  * persist middleware skips calling `migrate` outright, which it does
  * whenever the persisted version already equals this one. */
-const STORE_VERSION = 12;
+const STORE_VERSION = 13;
 
 let _migrationResetFlag = false;
 /** Returns true (once) when migrate() discarded incompatible persisted state. */
@@ -73,8 +74,8 @@ const blankPlayer = (id: PlayerId, name: string, seat: number, isEmpty = false):
 
 // Used only when creating an arrival or filling an empty seat. A planned
 // ordinary identity must not become a late arrival's identity.
-const arrivalPlayer = (player: STPlayerRecord, phase: string): STPlayerRecord =>
-  arrivalsAreTravelers(phase) && !player.isTraveler
+const arrivalPlayer = (player: STPlayerRecord, game: StorytellerLobbyRecord): STPlayerRecord =>
+  arrivalsAreTravelers(game) && !player.isTraveler
     ? { ...blankPlayer(player.id, player.name, player.seat, player.isEmpty), isTraveler: true, travelerArrival: newTravelerArrival() }
     : player;
 
@@ -94,6 +95,9 @@ export type LobbyConnection = {
 
 export type NewGameOpts = {
   plannedPlayerCount?: number;
+  /** Intended Traveler count out of plannedPlayerCount. Never derives the
+   * bag from total participants -- see setupContext's targetNonTravelerCount. */
+  plannedTravelerCount?: number;
   plannedRoles?: RoleId[];
   plannedFabled?: RoleId[];
   plannedLorics?: RoleId[];
@@ -190,7 +194,12 @@ export type StorytellerStore = {
   setBluffs: (id: PlayerId, bluffs: RoleId[]) => void;
   setFakeMinions: (id: PlayerId, playerIds: PlayerId[]) => void;
   setPrivateText: (id: PlayerId, text: string) => void;
-  setIsTraveler: (id: PlayerId, isTraveler: boolean) => void;
+  /** Explicit ordinary<->Traveler conversion for an occupied seat (Phase 9
+   * Setup finalization B4). Converting ordinary->Traveler is always
+   * permitted; converting Traveler->ordinary is refused if it would raise
+   * occupied ordinary players above MAX_PLAYERS. Never restarts the game or
+   * lobby, and never touches any other player's role. */
+  setIsTraveler: (id: PlayerId, isTraveler: boolean) => SetupCommandResult;
   setTravelerAlignment: (id: PlayerId, alignment: Alignment) => void;
   prepareTravelerDemon: (id: PlayerId) => void;
   completeTravelerInformation: (id: PlayerId) => void;
@@ -434,6 +443,21 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
     withSync.localSeq = 0;
     withSync.sync = null;
   }
+  // v13 (Phase 9 Setup finalization B4) introduces plannedTravelerCount, the
+  // intended Traveler count out of plannedPlayerCount. A legacy game never
+  // planned any Travelers explicitly -- default to 0, mirroring
+  // plannedPlayerCount's own v5 migration default.
+  if (fromVersion < 13) {
+    if (s.game && s.game.plannedTravelerCount === undefined) s.game.plannedTravelerCount = 0;
+    if (s.undoStack) {
+      s.undoStack = s.undoStack.map((entry) => {
+        if (!entry || typeof entry !== "object") return entry;
+        const e = entry as Record<string, unknown>;
+        if (e.plannedTravelerCount === undefined) e.plannedTravelerCount = 0;
+        return e;
+      });
+    }
+  }
   const check = StorytellerStateSchema.safeParse(state);
   if (!check.success) {
     // eslint-disable-next-line no-console
@@ -531,6 +555,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           nightProgress: {},
           rolePool: opts.plannedRoles ?? [],
           plannedPlayerCount: count,
+          plannedTravelerCount: opts.plannedTravelerCount ?? 0,
           pendingPlayers: {},
         };
         usePrivacyStore.getState().reset();
@@ -784,7 +809,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
             ...game,
             players: {
               ...game.players,
-              [seatPlayerId]: arrivalPlayer({ ...seat, name, isEmpty: false }, game.phase),
+              [seatPlayerId]: arrivalPlayer({ ...seat, name, isEmpty: false }, game),
             },
             pendingPlayers: newPending,
           },
@@ -846,7 +871,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!trimmed) return;
         const id = newId();
         const seat = game.seatOrder.length;
-        const player = arrivalPlayer(blankPlayer(id, trimmed, seat), game.phase);
+        const player = arrivalPlayer(blankPlayer(id, trimmed, seat), game);
         set({
           undoStack: pushUndo(game, undoStack),
           game: {
@@ -875,7 +900,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
             ...game,
             players: {
               ...game.players,
-              [emptyId]: arrivalPlayer({ ...seat, name: trimmed.slice(0, 20), isEmpty: false }, game.phase),
+              [emptyId]: arrivalPlayer({ ...seat, name: trimmed.slice(0, 20), isEmpty: false }, game),
             },
           },
         });
@@ -890,7 +915,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           undoStack: pushUndo(game, get().undoStack),
           game: {
             ...game,
-            players: { ...game.players, [id]: arrivalPlayer(blankPlayer(id, "", seat, true), game.phase) },
+            players: { ...game.players, [id]: arrivalPlayer(blankPlayer(id, "", seat, true), game) },
             seatOrder: [...game.seatOrder, id],
           },
         });
@@ -1146,10 +1171,18 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       setIsTraveler: (id, isTraveler) => {
         const { game, undoStack } = get();
-        if (!game) return;
+        if (!game) return { ok: false, message: "No game is open." };
         const existing = game.players[id];
-        if (!existing) return;
-        if (existing.isTraveler === isTraveler) return;
+        if (!existing) return { ok: false, message: "This player is not seated." };
+        if (existing.isTraveler === isTraveler) return { ok: true };
+        if (!isTraveler) {
+          // Traveler -> ordinary always increases occupied ordinary players,
+          // so only the composition ceiling can ever be violated -- refuse
+          // rather than silently exceed MAX_PLAYERS.
+          const occupiedOrdinary = selectSetupContext(game).population.occupiedNonTravelerCount;
+          if (occupiedOrdinary + 1 > MAX_PLAYERS)
+            return { ok: false, message: `Converting this Traveler to ordinary would raise ordinary players above the maximum of ${MAX_PLAYERS}.` };
+        }
         const next: STPlayerRecord = {
           ...existing,
           isTraveler,
@@ -1172,6 +1205,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
             players: { ...game.players, [id]: invalidatePrivatePacket(next) },
           },
         });
+        return { ok: true };
       },
 
       setTravelerAlignment: (id, alignment) => {

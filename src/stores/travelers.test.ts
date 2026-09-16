@@ -62,7 +62,9 @@ describe("Phase 9B Traveler identity and population", () => {
     expect(context.population).toMatchObject({ targetNonTravelerCount: 5, occupiedNonTravelerCount: 5, occupiedTravelerCount: 1, totalPhysicalSeatCount: 6 });
     expect(game().phase).toBe(phase); expect(game().plannedPlayerCount).toBe(5);
     expect(travelerGuidance(p())).toEqual(["Choose a Traveler character.", "Choose actual alignment privately."]);
-    expect(analyzeSetup(context).findings.some(f => f.code === "traveler-alignment:t" && f.severity === "check")).toBe(true);
+    // Phase 9 Setup finalization B4: unconfigured Traveler alignment now
+    // blocks Night 1 (never Deal) -- see setupAnalyzer.ts.
+    expect(analyzeSetup(context).findings.some(f => f.code === "traveler-alignment:t" && f.severity === "blocker")).toBe(true);
     expect(projectLobbyToPublic(game(), { t: false }).players.t!.publicDisplayRole).toBeUndefined();
     store.getState().removePlayer("t"); expect(game().plannedPlayerCount).toBe(5);
   });
@@ -187,7 +189,7 @@ describe("Phase 9B persistence", () => {
     store.getState().completeTravelerInformation("t"); store.getState().exileTraveler("t");
     const expected = JSON.parse(JSON.stringify(p()));
     const saved = localStorage.getItem("new-blood-st")!;
-    expect(JSON.parse(saved).version).toBe(12);
+    expect(JSON.parse(saved).version).toBe(13);
     store.setState({ game: null }); localStorage.setItem("new-blood-st", saved);
     await store.persist.rehydrate(); expect(p()).toEqual(expected);
   });

@@ -43,6 +43,7 @@ export function setupPresentation(game: StorytellerLobbyRecord, analysis: SetupA
   } else if (!ready.ok) {
     next = "review"; message = "Review setup before continuing";
     if (findings.some(f => f.code === "missing-traveler-role" || f.code.startsWith("traveler-type:"))) message = "Choose a character for each Traveler";
+    else if (findings.some(f => f.code.startsWith("traveler-alignment:"))) message = "Choose each Traveler's alignment";
     else if (findings.some(f => f.code === "missing-perception:ordinary")) message = "Choose the identity each player will see";
     else if (dealt && findings.some(f => f.code === "missing-assignments")) message = "Choose missing roles in the grimoire";
   } else { next = dealt ? "begin" : "deal"; message = dealt ? "Roles revealed" : "Ready to deal"; }

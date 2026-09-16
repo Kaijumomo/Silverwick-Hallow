@@ -189,6 +189,7 @@ describe("Phase 9C.4 (OPUS-004) — concealed-perception readiness gate", () => 
     state().setIsTraveler(travelerId, true);
     state().assignRole(travelerId, "thief");
     state().setShownRole(travelerId, null); // simulate unconfigured Traveler perception
+    state().setTravelerAlignment(travelerId, "good"); // isolates this test to perception, not B4's alignment gate
     const findings = analyzeSetup(selectSetupContext(game(), setupScript)).findings;
     expect(findings.find(f => f.code === "missing-perception:traveler")).toMatchObject({ severity: "check" });
     expect(findings.some(f => f.code === "missing-perception:ordinary")).toBe(false);
@@ -234,7 +235,7 @@ describe("population and persisted history", () => {
     prepare(true);state().dealRolePool();
     expect(game().setupRolesRevealed).toBe(false);
     const saved=localStorage.getItem("new-blood-st")!;
-    expect(JSON.parse(saved).version).toBe(12);
+    expect(JSON.parse(saved).version).toBe(13);
     store.setState({game:null});localStorage.setItem("new-blood-st",saved);await store.persist.rehydrate();
     expect(game()).toMatchObject({phase:"setup",day:0,setupRolesDealt:true,setupRolesRevealed:false});
     expect(StorytellerGamePersistedSchema.parse(JSON.parse(JSON.stringify(game()))).setupRolesDealt).toBe(true);
@@ -330,7 +331,7 @@ describe("population and persisted history", () => {
   it("current local persistence and checkpoint schema preserve starting count", async () => {
     dealt();state().beginNightOne();
     const saved=localStorage.getItem("new-blood-st")!;
-    expect(JSON.parse(saved).version).toBe(12);
+    expect(JSON.parse(saved).version).toBe(13);
     store.setState({game:null});localStorage.setItem("new-blood-st",saved);
     await store.persist.rehydrate();expect(game().startingNonTravelerCount).toBe(5);
     const checkpoint=JSON.parse(JSON.stringify({game:game(),roster:{}}));
@@ -341,5 +342,82 @@ describe("population and persisted history", () => {
     const publicData=projectLobbyToPublic(game(),{});
     const self=projectLobbyToSelfMap(game(),buildRegistry(setupScript));
     for(const data of [publicData,self])expect(JSON.stringify(data)).not.toContain("startingNonTravelerCount");
+  });
+});
+
+describe("Traveler designation before/after Deal (Phase 9 Setup finalization B4)", () => {
+  it("converting a seated ordinary player before Deal immediately updates ordinary count and composition, without a restart", () => {
+    prepare(true); // 5 ordinary seated, pooled, not yet dealt
+    const id = game().seatOrder[0]!;
+    const result = state().setIsTraveler(id, true);
+    expect(result.ok).toBe(true);
+    expect(game().phase).toBe("setup"); // no lobby/game restart
+    const context = selectSetupContext(game(), setupScript);
+    expect(context.population).toMatchObject({ occupiedNonTravelerCount: 4, occupiedTravelerCount: 1 });
+  });
+
+  it("converting a Traveler back to ordinary immediately updates ordinary count and composition too", () => {
+    prepare(true);
+    const id = game().seatOrder[0]!;
+    state().setIsTraveler(id, true);
+    const result = state().setIsTraveler(id, false);
+    expect(result.ok).toBe(true);
+    const context = selectSetupContext(game(), setupScript);
+    expect(context.population).toMatchObject({ occupiedNonTravelerCount: 5, occupiedTravelerCount: 0 });
+  });
+
+  it("converting a player to Traveler after private Deal preserves unaffected assignments, never auto-reshuffles, and blocks Reveal until corrected", () => {
+    store.getState().newGame(setupScript.id, { plannedPlayerCount: 6, plannedRoles: standardRoles(6) });
+    for (let i = 0; i < 6; i++) store.getState().addPlayerToSeat("Player " + i);
+    state().dealRolePool();
+
+    // standardRoles(6) is exactly standardRoles(5) plus one Outsider (drunk):
+    // converting whoever holds it leaves precisely a valid 5-composition.
+    const drunkId = game().seatOrder.find((id) => game().players[id]!.actualRole === "drunk")!;
+    const untouchedIds = game().seatOrder.filter((id) => id !== drunkId);
+    const before = new Map(untouchedIds.map((id) => [id, structuredClone(game().players[id])]));
+
+    const result = state().setIsTraveler(drunkId, true);
+    expect(result.ok).toBe(true);
+
+    // Every unaffected ordinary assignment survives exactly -- no auto-reshuffle.
+    for (const id of untouchedIds) expect(game().players[id]).toEqual(before.get(id));
+
+    // Setup is now invalid/incomplete relative to the still-6 planned target:
+    // Reveal is blocked until the Storyteller corrects it.
+    expect(state().revealRoles().ok).toBe(false);
+
+    // Corrected via the existing explicit "Planned" reconciliation lever
+    // (never automatic) -- exactly the pre-existing population-mismatch
+    // reconciliation pattern, now aware of the Traveler conversion.
+    state().setPlannedPlayerCount(5);
+    const context = selectSetupContext(game(), setupScript);
+    expect(context.population).toMatchObject({ targetNonTravelerCount: 5, occupiedNonTravelerCount: 5 });
+    expect(state().revealRoles().ok).toBe(true);
+  });
+
+  it("beginNightOne() itself is blocked while a starting Traveler lacks a character or alignment, matching analyzer readiness", () => {
+    dealt();
+    state().addPlayer("Traveler");
+    const travelerId = game().seatOrder.at(-1)!;
+    state().setIsTraveler(travelerId, true);
+    expect(state().beginNightOne().ok).toBe(false); // no character yet
+
+    state().assignRole(travelerId, "thief");
+    expect(state().beginNightOne().ok).toBe(false); // character set, alignment still missing
+
+    state().setTravelerAlignment(travelerId, "good");
+    expect(state().beginNightOne().ok).toBe(true);
+  });
+
+  it("a mid-Deal Traveler conversion never mutates any other seat's identity", () => {
+    prepare(true);
+    state().dealRolePool();
+    const before = structuredClone(game().players);
+    const id = game().seatOrder[0]!;
+    state().setIsTraveler(id, true);
+    for (const otherId of game().seatOrder.slice(1)) {
+      expect(game().players[otherId]).toEqual(before[otherId]);
+    }
   });
 });

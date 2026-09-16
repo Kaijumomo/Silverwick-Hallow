@@ -164,8 +164,14 @@ export type StorytellerLobbyRecord = {
   nightProgress: Record<string, NightStepRecord>;
   /** Pre-picked roles waiting to be dealt. ST-only — never written to public/*. */
   rolePool: RoleId[];
-  /** Target player count chosen at New Game setup time. */
+  /** Target total participant count chosen at New Game setup time. */
   plannedPlayerCount: number;
+  /** Intended Traveler count out of plannedPlayerCount, chosen at New Game
+   * setup time. Ordinary composition target = plannedPlayerCount -
+   * plannedTravelerCount. Deliberately not auto-synced with actual seated
+   * Traveler designations -- see setIsTraveler, which adjusts this value
+   * explicitly as part of an in-Grimoire conversion. */
+  plannedTravelerCount: number;
   /** Current preparation step; absent in legacy games. Not an event history. */
   setupRolesDealt?: boolean;
   /** True once the Storyteller has explicitly published the initial private
