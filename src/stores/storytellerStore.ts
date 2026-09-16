@@ -6,10 +6,11 @@ import { LORICS } from "@/data/lorics";
 import { StorytellerStateSchema } from "./schemas";
 import { buildRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, needsShownIdentity } from "./identity";
+import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 import { invalidatePrivatePacket, pruneInapplicablePrivateInfo } from "./privatePackets";
 import { usePrivacyStore } from "./privacyStore";
 import { analyzeSetup } from "@/features/setup/setupAnalyzer";
-import { selectSetupContext } from "@/features/setup/setupContext";
+import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
 import { arrivalsAreTravelers, newTravelerArrival, publicTravelerRole, travelerDemonInformation, travelerNeedsFirstNight, travelerNeedsArrivalCheck } from "./travelers";
 import { getTraveler } from "@/data/travelers";
 import type { SetupCommandResult } from "@/features/setup/setupReadiness";
@@ -122,6 +123,10 @@ export type StorytellerStore = {
 
   newGame: (scriptId: string, opts?: NewGameOpts) => void;
   dealRolePool: () => SetupCommandResult;
+  /** Explicitly publishes the private Deal to players. Never required to be
+   * online: a local/offline game still records that the Storyteller
+   * completed the initial reveal step. See revealReadiness.ts. */
+  revealRoles: () => SetupCommandResult;
   beginNightOne: () => SetupCommandResult;
   setPlannedPlayerCount: (count: number) => void;
   setRolePool: (roles: RoleId[]) => void;
@@ -530,8 +535,25 @@ export const useStorytellerStore = create<StorytellerStore>()(
             players: newPlayers,
             rolePool: [],
             setupRolesDealt: true,
+            // Deal establishes Storyteller truth only; every fresh initial
+            // deal requires its own explicit Reveal before publication.
+            setupRolesRevealed: false,
           },
         });
+        return { ok: true };
+      },
+
+      revealRoles: () => {
+        const { game, undoStack } = get();
+        if (!game) return { ok: false, message: "No game is open." };
+        if (game.phase !== "setup") return { ok: false, message: "This game is no longer in setup." };
+        if (!isPostDeal(game)) return { ok: false, message: "Deal the pool before revealing roles." };
+        const script = selectScriptById(get(), game.scriptId);
+        const context = selectSetupContext(game, script);
+        const readiness = initialRevealReadiness(context);
+        if (!readiness.ready) return { ok: false,
+          message: `${readiness.readyCount}/${readiness.totalCount} roles ready to reveal.` };
+        set({ undoStack: pushUndo(game, undoStack), game: { ...game, setupRolesRevealed: true } });
         return { ok: true };
       },
 
@@ -560,7 +582,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const { game, undoStack } = get();
         if (!game || game.phase !== "setup") return;
         set({ undoStack: pushUndo(game, undoStack), game: { ...game, rolePool: [...roles],
-          ...(roles.length ? { setupRolesDealt: false } : {}) } });
+          // Reopening the pool leaves preparation, so any prior deal/reveal
+          // evidence for it is no longer meaningful either.
+          ...(roles.length ? { setupRolesDealt: false, setupRolesRevealed: false } : {}) } });
       },
 
       endGame: () => {

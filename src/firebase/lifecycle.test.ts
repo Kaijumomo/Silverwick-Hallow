@@ -54,6 +54,10 @@ describe("multiplayer lifecycle", () => {
     const id = await seat(writer);
     const store = useStorytellerStore;
     store.getState().assignRole(id, actual!);
+    // This test isolates perception delivery/reconnect behavior, not Setup
+    // deal/reveal gating (covered in setupCommands.test.ts) -- record the
+    // initial reveal directly so the Phase 9C.4 barrier doesn't withhold it.
+    store.setState({ game: { ...store.getState().game!, setupRolesRevealed: true } });
     await waitFor(async () => expect(await b.get(`${root}/storyteller/players/${id}/actualRole`)).toBe(actual));
     expect(await b.get(`${root}/roster/alice`)).toBe(id);
     expect(await b.get(`${root}/outcomes/alice`)).toBeUndefined();

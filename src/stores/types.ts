@@ -168,6 +168,12 @@ export type StorytellerLobbyRecord = {
   plannedPlayerCount: number;
   /** Current preparation step; absent in legacy games. Not an event history. */
   setupRolesDealt?: boolean;
+  /** True once the Storyteller has explicitly published the initial private
+   * Deal to players. Deal never implies Reveal. Absent/false withholds
+   * ordinary self projections even when every identity is complete; see
+   * isInitialRevealComplete in ./identity.ts for the legacy day > 0
+   * compatibility rule. Reset to false by a fresh initial dealRolePool(). */
+  setupRolesRevealed?: boolean;
   /** Confirmed ordinary population at first successful start; unknown for legacy games. ST-only. */
   startingNonTravelerCount?: number;
   /** Players who have knocked but not yet been assigned to a seat. uid → requested name. */

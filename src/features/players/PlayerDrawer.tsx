@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
 import { deriveAlignment } from "@/data/roleRegistry";
 import { TRAVELERS } from "@/data/travelers";
-import { needsShownIdentity } from "@/stores/identity";
+import { needsShownIdentity, shownRoleFilter } from "@/stores/identity";
 import { PlayerInformation, commitExtraTextDraft } from "./PlayerInformation";
 import { TravelerArrival } from "./TravelerArrival";
 import { publicTravelerRole } from "@/stores/travelers";
@@ -120,15 +120,6 @@ function RolePickerGrid({
       })}
     </div>
   );
-}
-
-function shownRoleFilter(behavior: BehaviorMode): ((r: RoleDef) => boolean) | undefined {
-  if (behavior === "drunk_fake_role_behavior")
-    return (r) => r.type === "townsfolk";
-  if (behavior === "fake_demon_behavior") return (r) => r.type === "demon";
-  if (behavior === "marionette_fake_good_behavior")
-    return (r) => r.type === "townsfolk" || r.type === "outsider";
-  return undefined;
 }
 
 type PlayerDrawerProps = {

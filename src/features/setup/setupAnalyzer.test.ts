@@ -11,7 +11,9 @@ import type { StorytellerLobbyRecord, Script } from "@/stores/types";
 // policy (covered in setupCommands.test.ts), so games analyzed here are
 // assumed to already have a completed deal unless a test says otherwise.
 const analyze = (g: StorytellerLobbyRecord, s: Script = setupScript) =>
-  analyzeSetup(selectSetupContext({ ...g, setupRolesDealt: g.setupRolesDealt ?? true }, s));
+  analyzeSetup(selectSetupContext({ ...g,
+    setupRolesDealt: g.setupRolesDealt ?? true,
+    setupRolesRevealed: g.setupRolesRevealed ?? true }, s));
 const codes = (g: StorytellerLobbyRecord, s?: Script) => analyze(g,s).findings.map(f => f.code);
 const candidate = (t: number,o: number,m=1,d=1) => ({townsfolk:t,outsider:o,minion:m,demon:d});
 

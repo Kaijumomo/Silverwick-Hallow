@@ -1,12 +1,15 @@
 import type { SetupAnalysis } from "./setupAnalyzer";
-import { isPostDeal, type SetupFinding } from "./setupContext";
+import { isPostDeal, type SetupContext, type SetupFinding } from "./setupContext";
+import { initialRevealReadiness, type RevealReadiness } from "./revealReadiness";
+import { isInitialRevealComplete } from "@/stores/identity";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** Presentation only. Structural permission always comes from the analyzer. */
-export function setupPresentation(game: StorytellerLobbyRecord, analysis: SetupAnalysis) {
+export function setupPresentation(game: StorytellerLobbyRecord, analysis: SetupAnalysis, context: SetupContext) {
   const dealt = isPostDeal(game);
+  const revealed = isInitialRevealComplete(game);
   const action = dealt ? "begin" : "deal";
   const findings = analysis.findings.filter(f =>
     (!f.actions || f.actions.includes(action)) &&
@@ -14,8 +17,9 @@ export function setupPresentation(game: StorytellerLobbyRecord, analysis: SetupA
   const p = analysis.population;
   const target = p.targetNonTravelerCount;
   const ready = analysis.readiness[action];
-  let next: "count" | "seats" | "roles" | "review" | "deal" | "begin";
+  let next: "count" | "seats" | "roles" | "review" | "deal" | "reveal" | "begin";
   let message: string;
+  let revealReadiness: RevealReadiness | undefined;
   if (target === null) { next = "count"; message = "Choose the number of players"; }
   else if (p.occupiedNonTravelerCount < target) {
     next = "seats"; message = `Seat ${plural(target - p.occupiedNonTravelerCount, "more player")}`;
@@ -27,13 +31,22 @@ export function setupPresentation(game: StorytellerLobbyRecord, analysis: SetupA
     next = "roles";
     message = game.rolePool.length < target ? `Choose ${plural(target - game.rolePool.length, "more role")}`
       : `Remove ${plural(game.rolePool.length - target, "extra role")}`;
+  } else if (dealt && !revealed) {
+    // Deal establishes Storyteller truth privately; Reveal is the separate,
+    // explicit publication step. Travelers never gate this — their
+    // publication is independent of the ordinary Reveal button.
+    next = "reveal";
+    revealReadiness = initialRevealReadiness(context);
+    message = revealReadiness.ready
+      ? `${revealReadiness.readyCount}/${revealReadiness.totalCount} ready to reveal`
+      : `Roles dealt privately · ${revealReadiness.readyCount}/${revealReadiness.totalCount} ready`;
   } else if (!ready.ok) {
     next = "review"; message = "Review setup before continuing";
     if (findings.some(f => f.code === "missing-traveler-role" || f.code.startsWith("traveler-type:"))) message = "Choose a character for each Traveler";
     else if (findings.some(f => f.code === "missing-perception:ordinary")) message = "Choose the identity each player will see";
     else if (dealt && findings.some(f => f.code === "missing-assignments")) message = "Choose missing roles in the grimoire";
-  } else { next = dealt ? "begin" : "deal"; message = dealt ? "Roles dealt" : "Ready to deal"; }
-  return { dealt, findings, next, message, ready,
+  } else { next = dealt ? "begin" : "deal"; message = dealt ? "Roles revealed" : "Ready to deal"; }
+  return { dealt, revealed, findings, next, message, ready, revealReadiness,
     composition: dealt ? analysis.assigned : analysis.pool,
     checks: findings.filter(f => f.severity === "check" || f.severity === "warning") };
 }

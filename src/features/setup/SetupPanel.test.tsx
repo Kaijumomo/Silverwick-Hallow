@@ -25,14 +25,19 @@ function Panel({foreground=false,onClose=()=>{}}:{foreground?:boolean;onClose?:(
   return <SetupPanel game={game} script={setupScript} onClose={onClose} foreground={foreground} />;
 }
 describe("Phase 9C storyteller setup", () => {
-  it("offers one random deal followed by a separate Begin Night 1", () => {
+  it("offers one random deal, then an explicit Reveal, then a separate Begin Night 1", () => {
     render(<Panel/>);
     expect(screen.queryByLabelText("Assignment workflow")).toBeNull();
     expect(screen.queryByText(/Manual assignment|Random deal/i)).toBeNull();
     expect(screen.getByText(/Ready to deal/)).toBeVisible();
     fireEvent.click(screen.getByRole("button",{name:"Deal roles"}));
-    expect(store.getState().game).toMatchObject({phase:"setup",day:0,setupRolesDealt:true,rolePool:[]});
+    expect(store.getState().game).toMatchObject({phase:"setup",day:0,setupRolesDealt:true,setupRolesRevealed:false,rolePool:[]});
     expect(screen.queryByText("Role pool")).toBeNull();expect(screen.queryByRole("button",{name:"Edit roles"})).toBeNull();
+    // Deal does not imply Reveal: Begin Night 1 is not yet offered.
+    expect(screen.queryByRole("button",{name:"Begin Night 1"})).toBeNull();
+    expect(screen.getByRole("button",{name:"Reveal Roles"})).toBeEnabled();
+    fireEvent.click(screen.getByRole("button",{name:"Reveal Roles"}));
+    expect(store.getState().game).toMatchObject({setupRolesRevealed:true,phase:"setup"});
     fireEvent.click(screen.getByRole("button",{name:"Begin Night 1"}));
     expect(store.getState().game).toMatchObject({phase:"night",day:1,startingNonTravelerCount:5});
   });

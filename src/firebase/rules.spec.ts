@@ -487,6 +487,11 @@ describe("Firebase RTDB membership authorization", () => {
       code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
       notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {},
       rolePool: [], plannedPlayerCount: 1, pendingPlayers: {}, seatOrder: ["p-alice"],
+      // This test isolates identity delivery through the real writer/rules,
+      // not Setup deal/reveal gating (covered elsewhere) -- record the
+      // initial reveal directly so the Phase 9C.4 barrier only withholds on
+      // incompleteness, exactly what this test exercises.
+      setupRolesRevealed: true,
       players: { "p-alice": makeSTPlayer({ id: "p-alice", actualRole: actual!, shownRole: null,
         shownAlignment: "evil", stNotes: "hidden", behaviorMode: "custom" }) },
     };
@@ -526,6 +531,9 @@ describe("Firebase RTDB membership authorization", () => {
       code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
       notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {},
       rolePool: [], plannedPlayerCount: 2, pendingPlayers: {}, seatOrder: ["p-alice", "p-bob"],
+      // This test isolates the completeness barrier, not Setup deal/reveal
+      // gating -- record the initial reveal directly.
+      setupRolesRevealed: true,
       players: {
         // Alice: concealed role, no shownRole yet — the negative-space case.
         "p-alice": makeSTPlayer({ id: "p-alice", seat: 0, actualRole: "lunatic",
@@ -621,6 +629,9 @@ describe("Firebase RTDB membership authorization", () => {
     store.getState().setFakeMinions(id, [other]);
     store.getState().setBluffs(id, ["chef", "saint", "washerwoman"]);
     store.getState().setPrivateText(id, "Only Alice should receive this");
+    // This test isolates private-packet delivery, not Setup deal/reveal
+    // gating -- record the initial reveal directly.
+    store.setState({ game: { ...store.getState().game!, setupRolesRevealed: true } });
     const reviewed = previewPrivatePacket(store.getState().game!.players[id]!, store.getState().game!, buildRegistry(tbScript));
     const preview = reviewed.payload;
     try {

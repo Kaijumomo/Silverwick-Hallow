@@ -44,6 +44,10 @@ async function setup(managed = false) {
   // regardless of her own configuration — unrelated to what this file tests.
   store.getState().assignRole(other, "washerwoman");
   store.getState().setShownRole(other, "washerwoman");
+  // This file tests packet delivery mechanics, not Setup deal/reveal gating
+  // (covered in setupCommands.test.ts) -- record the initial reveal directly
+  // so the Phase 9C.4 barrier doesn't withhold this manually-assigned fixture.
+  store.setState({ game: { ...store.getState().game!, setupRolesRevealed: true } });
   store.getState().setFakeMinions(id, [other]);
   store.getState().setBluffs(id, ["chef", "saint", "washerwoman"]);
   store.getState().setPrivateText(id, "First information");

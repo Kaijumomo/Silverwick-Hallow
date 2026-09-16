@@ -33,8 +33,9 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
   const countInput = useRef<HTMLInputElement>(null);
   const details = useRef<HTMLDivElement>(null);
   const wasEditing = useRef(false);
-  const analysis = useMemo(() => analyzeSetup(selectSetupContext(game, script)), [game, script]);
-  const view = setupPresentation(game, analysis);
+  const context = useMemo(() => selectSetupContext(game, script), [game, script]);
+  const analysis = useMemo(() => analyzeSetup(context), [context]);
+  const view = setupPresentation(game, analysis, context);
   useEffect(() => {
     if (editing) heading.current?.focus();
     else if (wasEditing.current) primary.current?.focus();
@@ -54,12 +55,17 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
     if (view.next === "seats") { onClose(); return; }
     if (view.next === "roles") { setEditing(true); return; }
     if (view.next === "review") { openReview(); return; }
-    const result = view.next === "deal" ? store.dealRolePool() : store.beginNightOne();
+    const result = view.next === "deal" ? store.dealRolePool()
+      : view.next === "reveal" ? store.revealRoles()
+      : store.beginNightOne();
     setError(result.ok ? null : "Setup changed. Review the next step before continuing.");
   };
   const actionLabel = editing ? "Done choosing" : {
-    count: "Choose player count", seats: "Go to seating", roles: "Choose roles", review: "Review setup", deal: "Deal roles", begin: "Begin Night 1",
+    count: "Choose player count", seats: "Go to seating", roles: "Choose roles", review: "Review setup",
+    deal: "Deal roles", reveal: "Reveal Roles", begin: "Begin Night 1",
   }[view.next];
+  const primaryDisabled = view.next === "reveal" && !view.revealReadiness?.ready;
+  const messageReady = view.next === "reveal" ? !!view.revealReadiness?.ready : view.ready.ok;
   const body = <div className={`setup-panel-body setup-refined${editing ? " setup-editing" : ""}`}>
     <div className="setup-overview">
       <div className="setup-player-heading">
@@ -77,15 +83,16 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
       </div>
     </div>
     <div className="setup-next">
-      <p id="setup-next-step" className={`setup-next-message${view.ready.ok && (view.dealt || pool.length > 0) ? " ready" : ""}`}>
-        {!editing && (view.message === "Ready to deal" || view.message === "Roles dealt") ? <span aria-hidden="true">✓ </span> : null}
+      <p id="setup-next-step" className={`setup-next-message${messageReady && (view.dealt || pool.length > 0) ? " ready" : ""}`}>
+        {!editing && (view.message === "Ready to deal" || view.message === "Roles revealed") ? <span aria-hidden="true">✓ </span> : null}
         {editing ? `${pool.length} / ${p.targetNonTravelerCount ?? "—"} roles selected` : view.message}
       </p>
       {!editing && view.checks.length > 0 && <button className="setup-check-preview" onClick={openReview}>
         <span>{view.checks.some(f => f.severity === "check") ? "Storyteller check" : "Review roles"}</span>
         {findingSummary(view.checks[0]!)}
       </button>}
-      <button ref={primary} className="btn btn-gold setup-primary" aria-describedby="setup-next-step" onClick={run}>{actionLabel}</button>
+      <button ref={primary} className="btn btn-gold setup-primary" aria-describedby="setup-next-step"
+        disabled={primaryDisabled} onClick={run}>{actionLabel}</button>
       {error && <p role="alert" className="field-error">{error}</p>}
     </div>
     {editing && !view.dealt && <div>

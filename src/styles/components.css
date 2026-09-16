@@ -437,6 +437,16 @@
   color: var(--text-faint);
   text-transform: uppercase;
 }
+.token-needs-reveal {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gold-soft);
+  border: 1px solid var(--gold-soft);
+  border-radius: 3px;
+  padding: 1px 4px;
+  margin-top: 2px;
+}
 .token-reminders {
   display: flex;
   flex-wrap: wrap;

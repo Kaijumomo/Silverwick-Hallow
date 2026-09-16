@@ -1,3 +1,4 @@
+import { isInitialRevealComplete } from "@/stores/identity";
 import { isPostDeal, type SetupAction, type SetupContext, type SetupFinding } from "./setupContext";
 
 export type SetupCommandResult = { ok: true } | { ok: false; message: string };
@@ -23,6 +24,10 @@ export function readinessFindings(context: SetupContext): SetupFinding[] {
   // manual initial-assignment workflow. day > 0 or a recorded setupRolesDealt
   // is the only trustworthy evidence that one already happened.
   if (!isPostDeal(game)) block("not-dealt", "Deal the pool before beginning Night 1.", ["begin"]);
+  // Explicit Reveal is a separate, deliberate act from Deal. Scoped to only
+  // fire once dealt so its message never competes with "not-dealt" for a
+  // fresh, un-dealt Setup.
+  else if (!isInitialRevealComplete(game)) block("not-revealed", "Reveal roles before beginning Night 1.", ["begin"]);
   if (ordinary.some(p => !p.actualRole)) block("missing-assignments", "Assign an actual role to every ordinary player before beginning Night 1.", ["begin"]);
   if (travelers.some(p => !p.actualRole)) block("missing-traveler-role", "Assign an actual Traveler role before beginning Night 1.");
   return out;

@@ -462,12 +462,12 @@ describe("Privacy regression matrix — all behavior modes", () => {
 // independently. See projectLobbyToSelfMap in ./projections.ts.
 
 describe("projectLobbyToSelfMap — Phase 9C.4 setup privacy barrier", () => {
-  function setupLobby(players: StorytellerLobbyRecord["players"]): StorytellerLobbyRecord {
+  function setupLobby(players: StorytellerLobbyRecord["players"], over: Partial<StorytellerLobbyRecord> = {}): StorytellerLobbyRecord {
     return {
       code: "SETUP01", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
       bluffs: [], fabled: [], lorics: [], notes: "ST-only",
       seatOrder: Object.keys(players), nightProgress: {}, rolePool: [],
-      plannedPlayerCount: Object.keys(players).length, pendingPlayers: {}, players,
+      plannedPlayerCount: Object.keys(players).length, pendingPlayers: {}, players, ...over,
     };
   }
   const complete = (id: string, seat: number) => makePublishedSTPlayer({
@@ -486,25 +486,35 @@ describe("projectLobbyToSelfMap — Phase 9C.4 setup privacy barrier", () => {
     expect(selves).toEqual({});
   });
 
-  it("B: a complete ordinary set publishes every ordinary record", () => {
-    const lobby = setupLobby({ p1: complete("p1", 0), p2: complete("p2", 1) });
+  it("B: a complete ordinary set publishes every ordinary record once explicitly revealed", () => {
+    const lobby = setupLobby({ p1: complete("p1", 0), p2: complete("p2", 1) }, { setupRolesRevealed: true });
     const selves = projectLobbyToSelfMap(lobby, registry);
     expect(Object.keys(selves).sort()).toEqual(["p1", "p2"]);
     expect(selves.p1!.shownRole).toBe("chef");
     expect(selves.p2!.shownRole).toBe("chef");
   });
 
+  it("B2: Deal does not imply Reveal — a complete ordinary set stays withheld without the explicit reveal flag", () => {
+    const lobby = setupLobby({ p1: complete("p1", 0), p2: complete("p2", 1) });
+    expect(projectLobbyToSelfMap(lobby, registry)).toEqual({});
+  });
+
+  it("B3: a legacy/running game (day > 0) treats a complete ordinary set as revealed without the explicit flag", () => {
+    const lobby = setupLobby({ p1: complete("p1", 0), p2: complete("p2", 1) }, { day: 3 });
+    expect(Object.keys(projectLobbyToSelfMap(lobby, registry)).sort()).toEqual(["p1", "p2"]);
+  });
+
   it("C: re-arming — complete, then cleared, then restored, all within Setup", () => {
-    const readyLobby = setupLobby({ p1: complete("p1", 0), p2: complete("p2", 1) });
+    const readyLobby = setupLobby({ p1: complete("p1", 0), p2: complete("p2", 1) }, { setupRolesRevealed: true });
     expect(Object.keys(projectLobbyToSelfMap(readyLobby, registry)).sort()).toEqual(["p1", "p2"]);
 
     const clearedLobby = setupLobby({
       p1: complete("p1", 0),
       p2: { ...complete("p2", 1), shownRole: null, shownAlignment: null },
-    });
+    }, { setupRolesRevealed: true });
     expect(projectLobbyToSelfMap(clearedLobby, registry)).toEqual({});
 
-    const restoredLobby = setupLobby({ p1: complete("p1", 0), p2: complete("p2", 1) });
+    const restoredLobby = setupLobby({ p1: complete("p1", 0), p2: complete("p2", 1) }, { setupRolesRevealed: true });
     expect(Object.keys(projectLobbyToSelfMap(restoredLobby, registry)).sort()).toEqual(["p1", "p2"]);
   });
 
@@ -524,7 +534,7 @@ describe("projectLobbyToSelfMap — Phase 9C.4 setup privacy barrier", () => {
     const bothConfigured = setupLobby({
       p1: { ...incompleteOrdinary("p1", 0, "drunk"), shownRole: "chef" },
       p2: { ...incompleteOrdinary("p2", 1, "marionette"), shownRole: "washerwoman" },
-    });
+    }, { setupRolesRevealed: true });
     expect(Object.keys(projectLobbyToSelfMap(bothConfigured, registry)).sort()).toEqual(["p1", "p2"]);
   });
 
@@ -539,7 +549,7 @@ describe("projectLobbyToSelfMap — Phase 9C.4 setup privacy barrier", () => {
     const lobby = setupLobby({
       p1: complete("p1", 0),
       empty: makePublishedSTPlayer({ id: "empty", seat: 1, isEmpty: true, name: "", actualRole: "", shownRole: null }),
-    });
+    }, { setupRolesRevealed: true });
     const selves = projectLobbyToSelfMap(lobby, registry);
     expect(Object.keys(selves)).toEqual(["p1"]);
   });

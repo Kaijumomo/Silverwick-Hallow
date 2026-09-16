@@ -280,6 +280,7 @@ describe("setFabled", () => {
     useStorytellerStore.getState().setPlannedPlayerCount(1);
     // Initial ordinary distribution is always the randomized deal.
     expect(useStorytellerStore.getState().dealRolePool().ok).toBe(true);
+    expect(useStorytellerStore.getState().revealRoles().ok).toBe(true);
     expect(useStorytellerStore.getState().advancePhase().ok).toBe(true);
     const game = useStorytellerStore.getState().game!;
     expect(game.phase).toBe("night");

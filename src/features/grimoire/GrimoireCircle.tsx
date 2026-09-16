@@ -8,6 +8,9 @@ import { SeatAssignPopup } from "./SeatAssignPopup";
 import type { RoomBackend } from "@/firebase/backend";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { arrivalsAreTravelers, publicTravelerRole } from "@/stores/travelers";
+import { isInitialRevealComplete } from "@/stores/identity";
+import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
+import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 
 export function buildRoleDisplayMap(script: Script | undefined): Map<string, RoleDef> {
   const map = new Map((script?.characters ?? []).map((c) => [c.id, c]));
@@ -58,12 +61,16 @@ type TokenProps = {
   onFreeRoamPointerDown: (e: React.PointerEvent, id: string, x: number, y: number) => void;
   onClick: () => void;
   isGhost?: boolean;
+  /** Storyteller-only: this player's initial shown identity still needs
+   * configuration before Reveal Roles can complete. Never shown to players;
+   * never color-only. */
+  needsShownRole?: boolean;
 };
 
 function Token({
   player, role, shownRole, online, size, x, y, selected,
   mode, draggedId, onRingDragStart, onRingDragEnd, onRingDropOn,
-  onFreeRoamPointerDown, onClick, isGhost = false,
+  onFreeRoamPointerDown, onClick, isGhost = false, needsShownRole = false,
 }: TokenProps) {
   const privacyMode = usePrivacyStore((s) => s.enabled);
   const publicRole = publicTravelerRole(player);
@@ -163,6 +170,9 @@ function Token({
         <div className={`token-role type-${displayRole.type}`}>{displayRole.name}</div>
       ) : (
         <div className="token-role unassigned">unassigned</div>
+      )}
+      {!privacyMode && needsShownRole && (
+        <div className="token-needs-reveal">Needs shown role</div>
       )}
       <div className="token-name">{player.name}</div>
       {mode === "ring" && (
@@ -288,6 +298,15 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
   const roleById = useMemo(() => buildRoleDisplayMap(script), [script]);
 
   if (!game || !script) return null;
+
+  // Storyteller-only: while dealt-but-not-yet-revealed, mark exactly the
+  // ordinary players whose shown identity still needs configuration before
+  // Reveal Roles can complete. Never gates on color alone (see token-needs-
+  // reveal below); disappears immediately once revealed or once that
+  // player's own identity becomes ready.
+  const pendingRevealIds = game.phase === "setup" && isPostDeal(game) && !isInitialRevealComplete(game)
+    ? new Set(initialRevealReadiness(selectSetupContext(game, script)).pendingIds)
+    : new Set<PlayerId>();
 
   const playerCount = game.seatOrder.length;
   const ringContainerSize = grimoireDiameter(canvasW, canvasH);
@@ -484,6 +503,7 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
                 player={p}
                 role={p.actualRole ? roleById.get(p.actualRole) : undefined}
                 shownRole={p.shownRole ? roleById.get(p.shownRole) : undefined}
+                needsShownRole={pendingRevealIds.has(id)}
                 online={online?.[id]}
                 size={tokenSize}
                 x={isDragging && ghostPos ? ghostPos.x : pos.x}

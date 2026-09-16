@@ -124,6 +124,11 @@ async function establishSeatedPlayer(
   useStorytellerStore.getState().setLobby({ code, uid: st, sessionId: session.id, status: "live" });
   useStorytellerStore.getState().assignRole(id, "chef");
   useStorytellerStore.getState().setShownRole(id, "chef");
+  // This helper establishes "a legitimately seated, fully-configured
+  // player" as a starting fixture, not Setup deal/reveal gating itself --
+  // record the initial reveal directly so the Phase 9C.4 barrier doesn't
+  // withhold it.
+  useStorytellerStore.setState({ game: { ...useStorytellerStore.getState().game!, setupRolesRevealed: true } });
 
   const aliceBackend = backendFor(alice);
   await joinLobby(aliceBackend, code, alice, "Alice");
@@ -161,6 +166,9 @@ describe("OPUS-007 contract: real client pathways against enforced Firebase rule
     useStorytellerStore.getState().setLobby({ code, uid: st, sessionId: session.id, status: "live" });
     useStorytellerStore.getState().assignRole(id, "chef");
     useStorytellerStore.getState().setShownRole(id, "chef");
+    // This test isolates the live waiting -> seated handshake transition,
+    // not Setup deal/reveal gating -- record the initial reveal directly.
+    useStorytellerStore.setState({ game: { ...useStorytellerStore.getState().game!, setupRolesRevealed: true } });
 
     const aliceBackend = backendFor(alice);
     await joinLobby(aliceBackend, code, alice, "Alice");

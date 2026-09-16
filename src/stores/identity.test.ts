@@ -68,9 +68,18 @@ describe("AUD-004 identity boundary", () => {
     expect(store.getState().beginNightOne().ok).toBe(false);
     expect(store.getState().game!.phase).toBe("setup");
 
+    // Each concealed identity needs a shown role that satisfies its own
+    // policy (see shownRoleFilter): Drunk -> Townsfolk, Marionette -> a good
+    // character, Lunatic -> the Demon.
+    const validShown: Record<string, string> = { drunk: "chef", marionette: "washerwoman", lunatic: "imp" };
     for (const p of Object.values(dealt.players)) {
-      if (cases.some(([role]) => role === p.actualRole)) store.getState().setShownRole(p.id, "saint");
+      const shown = validShown[p.actualRole];
+      if (shown) store.getState().setShownRole(p.id, shown);
     }
+    // Deal does not imply Reveal: identities are complete but still private
+    // until the Storyteller explicitly reveals them.
+    expect(store.getState().beginNightOne().ok).toBe(false);
+    expect(store.getState().revealRoles().ok).toBe(true);
     expect(store.getState().beginNightOne().ok).toBe(true);
     expect(store.getState().game!.phase).toBe("night");
   });

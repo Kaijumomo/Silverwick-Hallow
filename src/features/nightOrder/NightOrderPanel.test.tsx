@@ -24,6 +24,7 @@ function setup() {
   store.getState().setPlannedPlayerCount(1);
   // Initial ordinary distribution is always the randomized deal.
   expect(store.getState().dealRolePool().ok).toBe(true);
+  expect(store.getState().revealRoles().ok).toBe(true);
   expect(store.getState().advancePhase().ok).toBe(true);
 }
 it("custom steps can be added, edited, completed, and restored across remount without sending information", () => {

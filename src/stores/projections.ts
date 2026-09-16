@@ -1,5 +1,6 @@
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { PlayerSelfRecordSchema } from "./schemas";
+import { isInitialRevealComplete } from "./identity";
 import { publicTravelerRole } from "./travelers";
 import type {
   PlayerId,
@@ -96,10 +97,16 @@ export function projectLobbyToSelfMap(
   // seat would let an ordinary player notice "everyone else got a role card
   // but I didn't" — a first-person negative-space leak. Traveler entries are
   // untouched: Traveler identity publication remains independent.
+  //
+  // Phase 9 Setup finalization (B2): Deal establishes Storyteller truth;
+  // Reveal is the separate, explicit act of publishing it. A complete
+  // ordinary identity set is necessary but no longer sufficient — the
+  // Storyteller must also have explicitly revealed roles (or this is a
+  // legacy/running game past its initial Setup; see isInitialRevealComplete).
   if (st.phase === "setup") {
     const ordinary = Object.values(st.players).filter(p => !p.isEmpty && !p.isTraveler);
     const complete = ordinary.every(p => !!p.actualRole && !!out[p.id]);
-    if (!complete) {
+    if (!complete || !isInitialRevealComplete(st)) {
       for (const p of ordinary) delete out[p.id];
     }
   }

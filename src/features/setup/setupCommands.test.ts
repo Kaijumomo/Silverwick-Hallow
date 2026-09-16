@@ -6,6 +6,7 @@ import { buildRegistry } from "@/data/roleRegistry";
 import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
 import { selectSetupContext } from "./setupContext";
 import { analyzeSetup } from "./setupAnalyzer";
+import { initialRevealReadiness } from "./revealReadiness";
 
 beforeEach(() => {
   localStorage.clear();
@@ -26,11 +27,13 @@ function prepare(pool = false) {
     store.getState().showAssignedRole(id);
   });
 }
-// The only supported route to a begin-ready fresh Day-0 game: pool it, then
-// run the real randomized deal.
+// The only supported route to a begin-ready fresh Day-0 game: pool it, run
+// the real randomized deal, then explicitly reveal (standardRoles(5) never
+// contains a concealed role, so reveal always succeeds immediately here).
 function dealt() {
   prepare(true);
   store.getState().dealRolePool();
+  store.getState().revealRoles();
 }
 const state = () => store.getState();
 const game = () => state().game!;
@@ -74,7 +77,11 @@ describe("one setup command gate", () => {
     prepare(true);expect(state().dealRolePool().ok).toBe(true);
     expect(game().rolePool).toEqual([]);expect(game().startingNonTravelerCount).toBeUndefined();
     expect(game().phase).toBe("setup");expect(game().day).toBe(0);expect(game().setupRolesDealt).toBe(true);
+    expect(game().setupRolesRevealed).toBe(false);
     expect(Object.values(game().players).map(p=>p.actualRole).sort()).toEqual(standardRoles(5).sort());
+    // Deal does not imply Reveal.
+    expect(state().beginNightOne().ok).toBe(false);
+    expect(state().revealRoles().ok).toBe(true);expect(game().setupRolesRevealed).toBe(true);
     expect(state().beginNightOne().ok).toBe(true);expect(game().startingNonTravelerCount).toBe(5);
   });
   it("execution rejects stale UI readiness", () => {
@@ -141,30 +148,39 @@ describe("Phase 9C.4 (OPUS-004) — concealed-perception readiness gate", () => 
     prepareConcealed();
     expect(state().dealRolePool().ok).toBe(true);
     expect(game().setupRolesDealt).toBe(true);
+    // P: any legitimate fresh initial deal resets Reveal to false.
+    expect(game().setupRolesRevealed).toBe(false);
     expect(game().players[drunkId()]!.actualRole).toBe("drunk");
   });
 
-  it("2: immediately after dealing, the concealed player's perception is unset and beginNightOne is blocked", () => {
+  it("2: immediately after dealing, the concealed player's perception is unset and beginNightOne/revealRoles are blocked", () => {
     prepareConcealed();
     state().dealRolePool();
     expect(game().players[drunkId()]!.shownRole).toBeNull();
     const ready = analyzeSetup(selectSetupContext(game(), setupScript)).readiness.begin;
     expect(ready.ok).toBe(false);
+    expect(initialRevealReadiness(selectSetupContext(game(), setupScript)).ready).toBe(false);
+    expect(state().revealRoles().ok).toBe(false);
     expect(state().beginNightOne().ok).toBe(false);
     expect(game().phase).toBe("setup");
   });
 
-  it("3-4: configuring the concealed shown identity completes the ordinary self map and allows Night 1", () => {
+  it("3-4: configuring the concealed shown identity makes it reveal-ready, but only explicit Reveal completes the ordinary self map and allows Night 1", () => {
     prepareConcealed();
     state().dealRolePool();
     state().setShownRole(drunkId(), "chef");
+    // Configured but not yet revealed: still private (Deal does not imply Reveal).
+    expect(projectLobbyToSelfMap(game(), buildRegistry(setupScript))).toEqual({});
+    expect(initialRevealReadiness(selectSetupContext(game(), setupScript)).ready).toBe(true);
+    expect(state().beginNightOne().ok).toBe(false);
+    expect(state().revealRoles().ok).toBe(true);
     expect(Object.keys(projectLobbyToSelfMap(game(), buildRegistry(setupScript))).sort())
       .toEqual([...game().seatOrder].sort());
     expect(state().beginNightOne().ok).toBe(true);
     expect(game().phase).toBe("night");
   });
 
-  it("5: an unconfigured Traveler stays a nonblocking Storyteller check, never the ordinary publication blocker", () => {
+  it("5: an unconfigured Traveler stays a nonblocking Storyteller check, never the ordinary Reveal/publication blocker", () => {
     prepareConcealed();
     state().dealRolePool();
     state().setShownRole(drunkId(), "chef"); // ordinary set fully configured
@@ -176,6 +192,7 @@ describe("Phase 9C.4 (OPUS-004) — concealed-perception readiness gate", () => 
     const findings = analyzeSetup(selectSetupContext(game(), setupScript)).findings;
     expect(findings.find(f => f.code === "missing-perception:traveler")).toMatchObject({ severity: "check" });
     expect(findings.some(f => f.code === "missing-perception:ordinary")).toBe(false);
+    expect(state().revealRoles().ok).toBe(true);
     expect(state().beginNightOne().ok).toBe(true);
   });
 
@@ -213,19 +230,30 @@ describe("population and persisted history", () => {
       expect(random).toHaveBeenCalledTimes(4);
     } finally {random.mockRestore();}
   });
-  it("the dealt preparation step survives local reload and private checkpoint decoding", async () => {
+  it("the dealt-but-not-revealed preparation step survives local reload and private checkpoint decoding", async () => {
     prepare(true);state().dealRolePool();
+    expect(game().setupRolesRevealed).toBe(false);
     const saved=localStorage.getItem("new-blood-st")!;
     expect(JSON.parse(saved).version).toBe(12);
     store.setState({game:null});localStorage.setItem("new-blood-st",saved);await store.persist.rehydrate();
-    expect(game()).toMatchObject({phase:"setup",day:0,setupRolesDealt:true});
+    expect(game()).toMatchObject({phase:"setup",day:0,setupRolesDealt:true,setupRolesRevealed:false});
     expect(StorytellerGamePersistedSchema.parse(JSON.parse(JSON.stringify(game()))).setupRolesDealt).toBe(true);
     for(const data of [projectLobbyToPublic(game(),{}),projectLobbyToSelfMap(game(),buildRegistry(setupScript))])
       expect(JSON.stringify(data)).not.toContain("setupRolesDealt");
   });
+  it("the revealed preparation step survives local reload and private checkpoint decoding", async () => {
+    dealt();
+    expect(game().setupRolesRevealed).toBe(true);
+    const saved=localStorage.getItem("new-blood-st")!;
+    store.setState({game:null});localStorage.setItem("new-blood-st",saved);await store.persist.rehydrate();
+    expect(game()).toMatchObject({phase:"setup",setupRolesDealt:true,setupRolesRevealed:true});
+    expect(StorytellerGamePersistedSchema.parse(JSON.parse(JSON.stringify(game()))).setupRolesRevealed).toBe(true);
+  });
   it("undo restores each preparation step without inventing deal history", () => {
-    prepare(true);state().dealRolePool();state().beginNightOne();state().undo();
-    expect(game()).toMatchObject({phase:"setup",setupRolesDealt:true});
+    prepare(true);state().dealRolePool();state().revealRoles();state().beginNightOne();state().undo();
+    expect(game()).toMatchObject({phase:"setup",setupRolesDealt:true,setupRolesRevealed:true});
+    state().undo();
+    expect(game()).toMatchObject({phase:"setup",setupRolesDealt:true,setupRolesRevealed:false});
     state().undo();expect(game().setupRolesDealt).toBeUndefined();expect(game().rolePool).toEqual(standardRoles(5));
   });
   it("a replacement pool reopens preparation while clearing a pool never fabricates a deal", () => {
@@ -233,9 +261,10 @@ describe("population and persisted history", () => {
     state().setRolePool(standardRoles(5));state().dealRolePool();state().setRolePool(standardRoles(5));
     expect(game().setupRolesDealt).toBe(false);expect(state().beginNightOne().ok).toBe(false);
   });
-  it("legacy setup does not gain a made-up deal marker", () => {
+  it("legacy setup does not gain a made-up deal or reveal marker", () => {
     const legacy=StorytellerGamePersistedSchema.parse(setupGame());
     expect(Object.hasOwn(legacy,"setupRolesDealt")).toBe(false);
+    expect(Object.hasOwn(legacy,"setupRolesRevealed")).toBe(false);
   });
   it.each(["add","fill","empty","remove-empty","remove-player","unseat","traveler","queue","membership"] as const)(
     "%s never silently rewrites the target", kind => {

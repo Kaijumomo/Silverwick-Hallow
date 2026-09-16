@@ -153,6 +153,7 @@ export const StorytellerLobbyRecordSchema = z.object({
   rolePool: z.array(z.string().min(1)).default([]),
   plannedPlayerCount: z.number().int().nonnegative().default(0),
   setupRolesDealt: z.boolean().optional(),
+  setupRolesRevealed: z.boolean().optional(),
   startingNonTravelerCount: z.number().int().positive().optional(),
   pendingPlayers: z.record(z.string(), z.string()).default({}),
 });

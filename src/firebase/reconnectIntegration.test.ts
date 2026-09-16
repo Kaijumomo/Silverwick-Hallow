@@ -490,6 +490,7 @@ describe("Phase 9C.2A.2A remediation — H2 checkpoint identity (writeGuard-only
     useStorytellerStore.getState().newGame(setupScript.id, { plannedPlayerCount: 5, plannedRoles: standardRoles(5) });
     for (let i = 0; i < 5; i++) useStorytellerStore.getState().addPlayerToSeat("Player " + i);
     expect(useStorytellerStore.getState().dealRolePool().ok).toBe(true);
+    expect(useStorytellerStore.getState().revealRoles().ok).toBe(true);
     const lobby = { code, uid: "host", sessionId: session.id, status: "live" as const };
     useStorytellerStore.getState().setLobby(lobby);
     const writer = writerFor(b, session.id);

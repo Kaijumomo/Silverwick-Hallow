@@ -383,10 +383,10 @@ describe("writeProjections — privacy chokepoint", () => {
 // ---------------------------------------------------------------------------
 
 describe("writeProjections — Phase 9C.4 setup barrier atomicity", () => {
-  function setupLobby(p2ShownRole: string | null): StorytellerLobbyRecord {
+  function setupLobby(p2ShownRole: string | null, revealed = false): StorytellerLobbyRecord {
     return {
       code: "SETP", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
-      bluffs: [], fabled: [], lorics: [], notes: "",
+      bluffs: [], fabled: [], lorics: [], notes: "", setupRolesRevealed: revealed,
       seatOrder: ["p1", "p2", "t1"], nightProgress: {}, rolePool: [],
       plannedPlayerCount: 2, pendingPlayers: {},
       players: {
@@ -429,13 +429,31 @@ describe("writeProjections — Phase 9C.4 setup barrier atomicity", () => {
     expect(await backend.get("lobbies/SETP/player/t1")).toBeDefined();
   });
 
-  it("the completing flush publishes every ordinary self record together in one update", async () => {
+  it("a complete-but-not-yet-revealed ordinary set still withholds every ordinary path (Deal does not imply Reveal)", async () => {
     const backend = new MemoryRoomBackend();
     const calls = spyOnUpdate(backend);
 
-    // p2 now has a configured (different, concealed) shown identity — the
-    // ordinary set is complete.
-    await writeProjections({ backend, code: "SETP", stState: setupLobby("washerwoman"), registry, online: {} });
+    // p2 has a configured shown identity -- the ordinary set is complete --
+    // but the Storyteller has not pressed Reveal Roles yet.
+    await writeProjections({ backend, code: "SETP", stState: setupLobby("washerwoman", false), registry, online: {} });
+
+    expect(calls).toHaveLength(1);
+    const update = calls[0]!;
+    expect(update["lobbies/SETP/player/p1"]).toBeNull();
+    expect(update["lobbies/SETP/player/p2"]).toBeNull();
+    expect(update["lobbies/SETP/player/t1"]).toEqual({ shownRole: "thief" });
+
+    expect(await backend.get("lobbies/SETP/player/p1")).toBeUndefined();
+    expect(await backend.get("lobbies/SETP/player/p2")).toBeUndefined();
+  });
+
+  it("the completing, explicitly revealed flush publishes every ordinary self record together in one update", async () => {
+    const backend = new MemoryRoomBackend();
+    const calls = spyOnUpdate(backend);
+
+    // p2 now has a configured (different, concealed) shown identity, the
+    // ordinary set is complete, and the Storyteller has explicitly revealed.
+    await writeProjections({ backend, code: "SETP", stState: setupLobby("washerwoman", true), registry, online: {} });
 
     expect(calls).toHaveLength(1);
     const update = calls[0]!;
