@@ -345,30 +345,59 @@ describe("population and persisted history", () => {
   });
 });
 
-describe("Traveler designation before/after Deal (Phase 9 Setup finalization B4)", () => {
-  it("converting a seated ordinary player before Deal immediately updates ordinary count and composition, without a restart", () => {
-    prepare(true); // 5 ordinary seated, pooled, not yet dealt
+describe("Traveler designation before/after Deal (Phase 9 Setup finalization B4, revised)", () => {
+  // 6 ordinary seeded so a single ordinary->Traveler conversion (6->5) never
+  // trips the 5-player floor by itself -- the floor itself is covered by
+  // its own dedicated tests below.
+  function prepareSix(pool = true) {
+    store.getState().newGame(setupScript.id, { plannedPlayerCount: 6, plannedRoles: pool ? standardRoles(6) : [] });
+    for (let i = 0; i < 6; i++) store.getState().addPlayerToSeat("Player " + i);
+  }
+
+  it("converting a seated ordinary player before Deal immediately syncs plannedTravelerCount and the ordinary target, without a restart", () => {
+    prepareSix();
     const id = game().seatOrder[0]!;
     const result = state().setIsTraveler(id, true);
     expect(result.ok).toBe(true);
     expect(game().phase).toBe("setup"); // no lobby/game restart
+    expect(game().plannedPlayerCount).toBe(6); // total participant count is unchanged
+    expect(game().plannedTravelerCount).toBe(1);
     const context = selectSetupContext(game(), setupScript);
-    expect(context.population).toMatchObject({ occupiedNonTravelerCount: 4, occupiedTravelerCount: 1 });
+    expect(context.population).toMatchObject({
+      occupiedNonTravelerCount: 5, occupiedTravelerCount: 1, targetNonTravelerCount: 5,
+    });
   });
 
-  it("converting a Traveler back to ordinary immediately updates ordinary count and composition too", () => {
-    prepare(true);
+  it("reverse conversion (Traveler -> ordinary) immediately restores plannedTravelerCount and the ordinary target when legal", () => {
+    prepareSix();
     const id = game().seatOrder[0]!;
-    state().setIsTraveler(id, true);
+    expect(state().setIsTraveler(id, true).ok).toBe(true);
     const result = state().setIsTraveler(id, false);
     expect(result.ok).toBe(true);
+    expect(game().plannedTravelerCount).toBe(0);
     const context = selectSetupContext(game(), setupScript);
-    expect(context.population).toMatchObject({ occupiedNonTravelerCount: 5, occupiedTravelerCount: 0 });
+    expect(context.population).toMatchObject({
+      occupiedNonTravelerCount: 6, occupiedTravelerCount: 0, targetNonTravelerCount: 6,
+    });
   });
 
-  it("converting a player to Traveler after private Deal preserves unaffected assignments, never auto-reshuffles, and blocks Reveal until corrected", () => {
-    store.getState().newGame(setupScript.id, { plannedPlayerCount: 6, plannedRoles: standardRoles(6) });
-    for (let i = 0; i < 6; i++) store.getState().addPlayerToSeat("Player " + i);
+  it("10 total / 0 Travellers: marking one player Traveller immediately makes 9-player composition authoritative", () => {
+    store.getState().newGame(setupScript.id, { plannedPlayerCount: 10, plannedRoles: standardRoles(10) });
+    for (let i = 0; i < 10; i++) store.getState().addPlayerToSeat("Player " + i);
+    const id = game().seatOrder[0]!;
+    expect(state().setIsTraveler(id, true).ok).toBe(true);
+    expect(game().plannedPlayerCount).toBe(10);
+    expect(game().plannedTravelerCount).toBe(1);
+    expect(selectSetupContext(game(), setupScript).population.targetNonTravelerCount).toBe(9);
+
+    // Reverse conversion restores 10 ordinary when legal.
+    expect(state().setIsTraveler(id, false).ok).toBe(true);
+    expect(game().plannedTravelerCount).toBe(0);
+    expect(selectSetupContext(game(), setupScript).population.targetNonTravelerCount).toBe(10);
+  });
+
+  it("converting a player to Traveler after private Deal preserves unaffected assignments, never auto-reshuffles, and the synced composition needs no separate reconciliation action", () => {
+    prepareSix();
     state().dealRolePool();
 
     // standardRoles(6) is exactly standardRoles(5) plus one Outsider (drunk):
@@ -383,17 +412,31 @@ describe("Traveler designation before/after Deal (Phase 9 Setup finalization B4)
     // Every unaffected ordinary assignment survives exactly -- no auto-reshuffle.
     for (const id of untouchedIds) expect(game().players[id]).toEqual(before.get(id));
 
-    // Setup is now invalid/incomplete relative to the still-6 planned target:
-    // Reveal is blocked until the Storyteller corrects it.
-    expect(state().revealRoles().ok).toBe(false);
-
-    // Corrected via the existing explicit "Planned" reconciliation lever
-    // (never automatic) -- exactly the pre-existing population-mismatch
-    // reconciliation pattern, now aware of the Traveler conversion.
-    state().setPlannedPlayerCount(5);
+    // Composition is immediately authoritative and consistent: no separate
+    // planned-vs-seated reconciliation action is required.
     const context = selectSetupContext(game(), setupScript);
     expect(context.population).toMatchObject({ targetNonTravelerCount: 5, occupiedNonTravelerCount: 5 });
     expect(state().revealRoles().ok).toBe(true);
+  });
+
+  it("5 ordinary players: converting one to Traveler is refused and leaves state unchanged", () => {
+    store.getState().newGame(setupScript.id, { plannedPlayerCount: 5, plannedRoles: standardRoles(5) });
+    for (let i = 0; i < 5; i++) store.getState().addPlayerToSeat("Player " + i);
+    const id = game().seatOrder[0]!;
+    const before = state();
+    const result = state().setIsTraveler(id, true);
+    expect(result.ok).toBe(false);
+    expect(state()).toBe(before); // no mutation at all
+    expect(game().players[id]!.isTraveler).toBe(false);
+    expect(game().plannedTravelerCount).toBe(0);
+  });
+
+  it("6 ordinary players: converting one to Traveler succeeds, landing exactly at the 5-player floor", () => {
+    prepareSix(false);
+    const id = game().seatOrder[0]!;
+    const result = state().setIsTraveler(id, true);
+    expect(result.ok).toBe(true);
+    expect(selectSetupContext(game(), setupScript).population.occupiedNonTravelerCount).toBe(5);
   });
 
   it("beginNightOne() itself is blocked while a starting Traveler lacks a character or alignment, matching analyzer readiness", () => {

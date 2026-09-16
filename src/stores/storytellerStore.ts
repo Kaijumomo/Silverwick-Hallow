@@ -15,7 +15,7 @@ import { assignedBagIsCoherent, canRefineSetup, matchBagToAssignments } from "@/
 import { isBagType } from "@/features/setup/setupPolicies";
 import { arrivalsAreTravelers, newTravelerArrival, publicTravelerRole, travelerDemonInformation, travelerNeedsFirstNight, travelerNeedsArrivalCheck } from "./travelers";
 import { getTraveler } from "@/data/travelers";
-import { MAX_PLAYERS } from "@/data/setupCounts";
+import { MAX_PLAYERS, MIN_PLAYERS } from "@/data/setupCounts";
 import type { SetupCommandResult } from "@/features/setup/setupReadiness";
 import type {
   Alignment,
@@ -195,10 +195,14 @@ export type StorytellerStore = {
   setFakeMinions: (id: PlayerId, playerIds: PlayerId[]) => void;
   setPrivateText: (id: PlayerId, text: string) => void;
   /** Explicit ordinary<->Traveler conversion for an occupied seat (Phase 9
-   * Setup finalization B4). Converting ordinary->Traveler is always
-   * permitted; converting Traveler->ordinary is refused if it would raise
-   * occupied ordinary players above MAX_PLAYERS. Never restarts the game or
-   * lobby, and never touches any other player's role. */
+   * Setup finalization B4, revised). Converting ordinary->Traveler is
+   * refused if it would drop occupied ordinary players below MIN_PLAYERS;
+   * converting Traveler->ordinary is refused if it would raise occupied
+   * ordinary players above MAX_PLAYERS. On success, plannedTravelerCount
+   * (and therefore the ordinary composition target) immediately snaps to
+   * match the new occupancy -- no separate planned-vs-seated reconciliation
+   * action is ever required. Never restarts the game or lobby, and never
+   * touches any other player's role. */
   setIsTraveler: (id: PlayerId, isTraveler: boolean) => SetupCommandResult;
   setTravelerAlignment: (id: PlayerId, alignment: Alignment) => void;
   prepareTravelerDemon: (id: PlayerId) => void;
@@ -1175,14 +1179,20 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const existing = game.players[id];
         if (!existing) return { ok: false, message: "This player is not seated." };
         if (existing.isTraveler === isTraveler) return { ok: true };
-        if (!isTraveler) {
-          // Traveler -> ordinary always increases occupied ordinary players,
-          // so only the composition ceiling can ever be violated -- refuse
-          // rather than silently exceed MAX_PLAYERS.
-          const occupiedOrdinary = selectSetupContext(game).population.occupiedNonTravelerCount;
-          if (occupiedOrdinary + 1 > MAX_PLAYERS)
-            return { ok: false, message: `Converting this Traveler to ordinary would raise ordinary players above the maximum of ${MAX_PLAYERS}.` };
-        }
+        // Phase 9 Setup finalization B4 revision: the resulting OCCUPIED
+        // ordinary count (never the total participant count) both gates
+        // this conversion and immediately becomes the new authoritative
+        // ordinary target -- no separate planned-vs-seated reconciliation
+        // action is ever required. This also self-heals any pre-existing
+        // drift between plannedTravelerCount and live occupancy (e.g. a
+        // participant added after New Game and only later designated a
+        // Traveler): the target simply snaps to whatever is true right now.
+        const occupiedOrdinary = selectSetupContext(game).population.occupiedNonTravelerCount;
+        const nextOccupiedOrdinary = isTraveler ? occupiedOrdinary - 1 : occupiedOrdinary + 1;
+        if (isTraveler && nextOccupiedOrdinary < MIN_PLAYERS)
+          return { ok: false, message: `Converting this player to a Traveler would drop ordinary players below the minimum of ${MIN_PLAYERS}.` };
+        if (!isTraveler && nextOccupiedOrdinary > MAX_PLAYERS)
+          return { ok: false, message: `Converting this Traveler to ordinary would raise ordinary players above the maximum of ${MAX_PLAYERS}.` };
         const next: STPlayerRecord = {
           ...existing,
           isTraveler,
@@ -1201,6 +1211,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           undoStack: pushUndo(game, undoStack),
           game: {
             ...game,
+            plannedTravelerCount: Math.max(0, game.plannedPlayerCount - nextOccupiedOrdinary),
             nightProgress: resetTravelerNightProgress(game, id),
             players: { ...game.players, [id]: invalidatePrivatePacket(next) },
           },

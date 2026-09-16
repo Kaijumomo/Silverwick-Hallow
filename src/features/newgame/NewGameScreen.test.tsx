@@ -2,7 +2,7 @@ import { cleanup, render, screen, fireEvent, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NewGameScreen } from "./NewGameScreen";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
-import { MIN_PLAYERS, MAX_PLAYERS, SETUP_COUNTS } from "@/data/setupCounts";
+import { MIN_PLAYERS, MAX_PLAYERS, MAX_TOTAL_PLAYERS, SETUP_COUNTS } from "@/data/setupCounts";
 
 const moreTravelers = () => screen.getByRole("button", { name: "More Travelers" });
 const fewerTravelers = () => screen.getByRole("button", { name: "Fewer Travelers" });
@@ -113,6 +113,25 @@ describe("A2. Traveller-aware population UI (Phase 9 Setup finalization B4)", ()
     fireEvent.click(fewerPlayers()); // back to 15 total -- 1 Traveller remains legal (0-10 range), so it is kept
     expect(ordinaryLine()).toHaveTextContent("Ordinary: 14");
     expect(fewerTravelers()).toBeEnabled(); // still adjustable back down explicitly
+  });
+
+  it("caps supported total participants at 20, independent of the Traveller catalogue size (Phase 9 Setup finalization B4 revision)", () => {
+    expect(MAX_TOTAL_PLAYERS).toBe(20);
+    render(<NewGameScreen />);
+    fireEvent.click(screen.getByRole("row", { name: /^15 / })); // 15 total / 0 Travellers
+    for (let i = 0; i < 10; i++) fireEvent.click(morePlayers()); // attempt to push well past 20
+    // The total stepper itself refuses past MAX_TOTAL_PLAYERS -- ordinary
+    // stays pinned at the 15-player cap via the minimum Traveller floor.
+    expect(morePlayers()).toBeDisabled();
+    expect(ordinaryLine()).toHaveTextContent("Ordinary: 15");
+  });
+
+  it("Traveller minimums above 15 total still work up to the new 20 cap", () => {
+    render(<NewGameScreen />);
+    fireEvent.click(screen.getByRole("row", { name: /^15 / }));
+    for (let i = 0; i < 5; i++) fireEvent.click(morePlayers()); // 15 -> 20
+    expect(ordinaryLine()).toHaveTextContent("Ordinary: 15"); // 20/5 minimum
+    expect(morePlayers()).toBeDisabled();
   });
 
   it("passes the intended Traveller count into game creation, distinct from total planned seats", async () => {

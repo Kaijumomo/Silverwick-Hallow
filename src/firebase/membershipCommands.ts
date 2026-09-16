@@ -100,17 +100,20 @@ export async function rejectLeaveRequest(backend: RoomBackend, code: string, uid
 
 /**
  * Applies a player's self-chosen Traveler character (Phase 9 Setup
- * finalization B4). The requesting uid's playerId is re-resolved from the
- * CURRENT live roster -- a playerId observed earlier by the calling watcher
- * is never trusted, mirroring acceptLeaveRequest. `commitLocal` receives
- * this freshly-resolved id and decides whether to apply it (it re-checks
- * the player is still a Traveler and does not already carry this role,
- * since the request may have been superseded by a Storyteller override or
- * a status change since it was submitted) -- this is the exact same
- * assignRole() command the Storyteller's own manual Traveler override
- * uses, never a second mutation path. Always clears the request node
- * afterward, whether or not a binding was found (stale requests are pure
- * cleanup) -- the player may resubmit if the seat's binding recovers.
+ * finalization B4, revised). The requesting uid's playerId is re-resolved
+ * from the CURRENT live roster -- a playerId observed earlier by the
+ * calling watcher is never trusted, mirroring acceptLeaveRequest.
+ * `commitLocal` receives this freshly-resolved id and decides whether to
+ * apply it. Precedence: a current Storyteller-assigned Traveler character
+ * always wins over an older pending player choice -- the caller applies the
+ * choice only when the seat is still a Traveler with NO character assigned
+ * yet; once any character is assigned (by this exact choice, a Storyteller
+ * override, or a status change), the request is stale/superseded and this
+ * function still clears it without commitLocal changing the role. This is
+ * the exact same assignRole() command the Storyteller's own manual Traveler
+ * override uses, never a second mutation path. Always clears the request
+ * node afterward, whether or not a binding was found (stale requests are
+ * pure cleanup) -- the player may resubmit if the seat's binding recovers.
  */
 export async function applyTravelerChoice(
   backend: RoomBackend,

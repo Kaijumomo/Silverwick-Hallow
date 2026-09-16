@@ -130,8 +130,12 @@ describe("AUD-004 identity boundary", () => {
     store.getState().assignRole(id, "imp");
     store.getState().showAssignedRole(id);
     store.getState().setBluffs(id, ["saint"]);
+    // Phase 9 Setup finalization B4 revision: setIsTraveler refuses ordinary
+    // -> Traveler once occupied ordinary would drop below 5 -- seed enough
+    // extra ordinary players first (unrelated to this test's actual focus).
+    if (action === "traveler") for (let i = 0; i < 5; i++) store.getState().addPlayer("Extra " + i);
     if (action === "clear") store.getState().assignRole(id, "");
-    else store.getState().setIsTraveler(id, true);
+    else expect(store.getState().setIsTraveler(id, true).ok).toBe(true);
     expect(current().shownRole).toBeNull();
     expect(current().shownAlignment).toBeNull();
     expect(current().privateInfo).toBeUndefined();

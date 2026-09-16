@@ -13,7 +13,17 @@ let id: string;
 beforeEach(() => {
   usePrivacyStore.setState({ enabled: false }); store.setState({ game: null, lobby: null, undoStack: [] });
   store.getState().newGame("tb"); store.getState().addPlayer("Visitor");
-  id = store.getState().game!.seatOrder[0]!; store.getState().setIsTraveler(id, true);
+  id = store.getState().game!.seatOrder[0]!;
+  // Phase 9 Setup finalization B4 revision: setIsTraveler refuses ordinary
+  // -> Traveler once occupied ordinary would drop below 5 -- seed enough
+  // extra ordinary players first (unrelated to this suite's actual focus).
+  // Each needs a real canonical actual role: travelerDemonInformation's
+  // "complex setup" check treats any unassigned seat as disqualifying.
+  for (const role of ["chef", "empath", "fortuneteller", "undertaker", "monk"]) {
+    store.getState().addPlayer("Extra " + role);
+    store.getState().assignRole(store.getState().game!.seatOrder.at(-1)!, role);
+  }
+  store.getState().setIsTraveler(id, true);
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 function Drawer() { const p = store(s => s.game!.players[id]!); return <PlayerDrawer player={p} />; }
@@ -24,13 +34,16 @@ it("offers compact public character and distinct actual alignment choices", () =
   expect(screen.getByText("Ready for play")).toBeInTheDocument();
   expect(screen.queryByText("Behavior & deception")).toBeNull();
   const p = store.getState().game!.players[id]!;
-  expect(projectToSelf(p, buildRegistry(troubleBrewing))).toEqual({ shownRole: "scapegoat" });
+  // Phase 9 Setup finalization B4 (revision): the actual alignment already
+  // reaches the Traveler's own self view privately, with no separate "show
+  // alignment" step required.
+  expect(projectToSelf(p, buildRegistry(troubleBrewing))).toEqual({ shownRole: "scapegoat", shownAlignment: "good" });
   fireEvent.click(screen.getByRole("button", { name: "Show alignment to Traveler" }));
   expect(store.getState().game!.players[id]!.shownAlignment).toBe("good");
 });
 it("evil arrival offers a private candidate and explicit delivery controls", () => {
   store.getState().assignRole(id, "thief"); store.getState().addPlayer("Demon player");
-  store.getState().assignRole(store.getState().game!.seatOrder[1]!, "imp");
+  store.getState().assignRole(store.getState().game!.seatOrder.at(-1)!, "imp");
   render(<Drawer />); fireEvent.click(screen.getByRole("button", { name: "Evil" }));
   fireEvent.click(screen.getByRole("button", { name: "Prepare Demon information" }));
   expect(screen.getByRole("button", { name: "Show Demon to Traveler" })).toBeDisabled();

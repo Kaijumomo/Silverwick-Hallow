@@ -721,6 +721,15 @@ describe("Firebase RTDB membership authorization", () => {
     const writer = new SessionWriter(raw, code, metadata.id);
     store.getState().newGame("tb"); store.getState().addPlayer("Traveler"); store.getState().addPlayer("Demon");
     const [id, other] = store.getState().game!.seatOrder as [string, string];
+    // Phase 9 Setup finalization B4 revision: setIsTraveler refuses ordinary
+    // -> Traveler once occupied ordinary would drop below 5 -- seed enough
+    // extra ordinary players first (unrelated to this test's actual focus).
+    // Each needs a real canonical actual role: travelerDemonInformation's
+    // "complex setup" check treats any unassigned seat as disqualifying.
+    for (const role of ["chef", "empath", "fortuneteller", "undertaker"]) {
+      store.getState().addPlayer("Extra " + role);
+      store.getState().assignRole(store.getState().game!.seatOrder.at(-1)!, role);
+    }
     store.getState().setLobby({ code, uid: st, sessionId: metadata.id, status: "live" });
     store.getState().setIsTraveler(id, true); store.getState().assignRole(id, "thief");
     store.getState().setTravelerAlignment(id, "evil"); store.getState().assignRole(other, "imp");
@@ -733,7 +742,7 @@ describe("Firebase RTDB membership authorization", () => {
       await flush();
       const pub = (await ref(bob, `public/players/${id}`).once("value")).val();
       expect(pub.publicDisplayRole).toBe("thief"); expect(pub.actualAlignment).toBeUndefined();
-      expect((await ref(alice, `player/${id}`).once("value")).val()).toEqual({ shownRole: "thief" });
+      expect((await ref(alice, `player/${id}`).once("value")).val()).toEqual({ shownRole: "thief", shownAlignment: "evil" });
       await assertFails(ref(alice, `storyteller/players/${id}/actualAlignment`).once("value"));
       await assertFails(ref(alice, "checkpoint").once("value"));
       await assertFails(ref(alice, `storyteller/players/${id}/actualAlignment`).set("good"));

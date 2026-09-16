@@ -27,16 +27,17 @@ export const SETUP_COUNTS: Record<number, BagCounts> = {
 export const MIN_PLAYERS = 5;
 export const MAX_PLAYERS = 15;
 
-/** Travelers are bounded by the size of the supported Traveler catalogue --
- * never plan more Travelers than there are distinct Traveler characters to
- * assign. */
+/** Defensive-only ceiling: a Traveler count can never exceed the number of
+ * distinct characters in the supported Traveler catalogue. Never used to
+ * derive MAX_TOTAL_PLAYERS -- the catalogue's size must not determine
+ * maximum attendance (Phase 9 Setup finalization B4 revision). */
 export const MAX_TRAVELERS = TRAVELERS.length;
 
-/** Total planned participants a New Game plan may declare: full ordinary
- * capacity plus the maximum number of Travelers the catalogue supports.
+/** Total planned participants a New Game plan may declare. Fixed at the
+ * standard supported game size, independent of the Traveler catalogue.
  * Ordinary players are never derived from this total directly -- see
  * ordinaryFromPlan below. */
-export const MAX_TOTAL_PLAYERS = MAX_PLAYERS + MAX_TRAVELERS;
+export const MAX_TOTAL_PLAYERS = 20;
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), hi);
 

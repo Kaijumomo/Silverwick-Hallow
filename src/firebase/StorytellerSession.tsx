@@ -39,6 +39,15 @@ export function StorytellerSession() {
  * Storyteller's override remains fully available afterward: applying a
  * choice is just another assignRole() call, not a lock. Independent of
  * which screen is visible, matching useStorytellerSync's own scope.
+ *
+ * Precedence (Phase 9 Setup finalization B4 revision): a current
+ * Storyteller-assigned Traveler character always wins over an older
+ * pending player choice. If the seat already carries a Traveler character
+ * by the time this request is processed -- whether the Storyteller assigned
+ * it before or after the player submitted their choice -- that assignment
+ * stands; the stale request is simply cleared, never overwritten back to
+ * the player's pick. A choice only ever applies to a Traveler who does not
+ * yet have a character.
  */
 export function useApplyTravelerChoices(backend: RoomBackend | null, code: string | undefined) {
   const travelerChoices = useSessionRuntime(s => s.travelerChoices);
@@ -48,10 +57,12 @@ export function useApplyTravelerChoices(backend: RoomBackend | null, code: strin
       if (!playerId) continue; // unresolved for now; retried once the roster resolves it
       void applyTravelerChoice(backend, code, uid, roleId, (id, role) => {
         const p = useStorytellerStore.getState().game?.players[id];
-        // Re-check eligibility against the freshly-resolved player: a
-        // Storyteller override or status change since submission must
-        // never be silently overwritten by a stale request.
-        if (p?.isTraveler && p.actualRole !== role) useStorytellerStore.getState().assignRole(id, role);
+        // Re-check eligibility against the freshly-resolved player: only an
+        // unassigned Traveler seat ever adopts the pending choice. A seat
+        // that already carries a character -- a Storyteller override, or
+        // this exact choice already applied -- keeps it; the request is
+        // stale/superseded and is cleared without changing the role.
+        if (p?.isTraveler && !p.actualRole) useStorytellerStore.getState().assignRole(id, role);
       });
     }
   }, [backend, code, travelerChoices]);

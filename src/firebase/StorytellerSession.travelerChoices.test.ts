@@ -20,12 +20,20 @@ beforeEach(resetStores);
 afterEach(() => { cleanup(); resetStores(); });
 
 describe("useApplyTravelerChoices", () => {
+  // setIsTraveler (Phase 9 Setup finalization B4 revision) refuses ordinary
+  // -> Traveler once occupied ordinary would drop below 5 -- seed enough
+  // extra ordinary players first so the single seat under test can convert.
+  function seedExtraOrdinary(n: number) {
+    for (let i = 0; i < n; i++) useStorytellerStore.getState().addPlayer("Extra " + i);
+  }
+
   it("applies an observed choice via assignRole and clears the Firebase request, with no Storyteller click", async () => {
     const backend = new MemoryRoomBackend();
     useStorytellerStore.getState().newGame("tb", { plannedPlayerCount: 1 });
     const playerId = useStorytellerStore.getState().game!.seatOrder[0]!;
     useStorytellerStore.getState().addPlayerToSeat("Alice");
-    useStorytellerStore.getState().setIsTraveler(playerId, true);
+    seedExtraOrdinary(5);
+    expect(useStorytellerStore.getState().setIsTraveler(playerId, true).ok).toBe(true);
     await backend.set(rosterEntryPath("ROOM", "uid-alice"), playerId);
     useSessionRuntime.setState({ travelerChoices: { "uid-alice": { playerId, roleId: "thief" } } });
 
@@ -47,6 +55,25 @@ describe("useApplyTravelerChoices", () => {
 
     await waitFor(async () => expect(await backend.get(travelerChoicePath("ROOM", "uid-alice"))).toBeUndefined());
     expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("");
+  });
+
+  it("a current Storyteller-assigned Traveler character wins over a stale pending choice", async () => {
+    const backend = new MemoryRoomBackend();
+    useStorytellerStore.getState().newGame("tb", { plannedPlayerCount: 1 });
+    const playerId = useStorytellerStore.getState().game!.seatOrder[0]!;
+    useStorytellerStore.getState().addPlayerToSeat("Alice");
+    seedExtraOrdinary(5);
+    expect(useStorytellerStore.getState().setIsTraveler(playerId, true).ok).toBe(true);
+    // Storyteller assigns Gunslinger before the pending Thief request is processed.
+    useStorytellerStore.getState().assignRole(playerId, "gunslinger");
+    await backend.set(rosterEntryPath("ROOM", "uid-alice"), playerId);
+    useSessionRuntime.setState({ travelerChoices: { "uid-alice": { playerId, roleId: "thief" } } });
+
+    renderHook(() => useApplyTravelerChoices(backend, "ROOM"));
+
+    await waitFor(async () => expect(await backend.get(travelerChoicePath("ROOM", "uid-alice"))).toBeUndefined());
+    // Gunslinger remains -- the stale Thief request never overwrote it.
+    expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("gunslinger");
   });
 
   it("skips unresolved requests without throwing", () => {

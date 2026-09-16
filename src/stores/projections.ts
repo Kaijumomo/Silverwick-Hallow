@@ -19,7 +19,16 @@ export function projectIdentity(
   // has been established explicitly. Never consult actualRole here.
   if (p.isEmpty || !p.shownRole) return null;
   const shownRole = p.shownRole;
-  if (registry.get(shownRole)?.type === "traveler" && !p.shownAlignment) return { shownRole };
+  if (registry.get(shownRole)?.type === "traveler") {
+    // Phase 9 Setup finalization B4 (revision): a Traveler receives their
+    // own Storyteller-selected alignment privately through this same
+    // self-projection, with no separate "show alignment" step required.
+    // An explicit shownAlignment override (e.g. a deliberate deception)
+    // still takes precedence when the Storyteller has set one; only the
+    // fallback when neither is configured omits alignment entirely.
+    const alignment = p.shownAlignment ?? p.actualAlignment;
+    return alignment ? { shownRole, shownAlignment: alignment } : { shownRole };
+  }
   const shownAlignment = p.shownAlignment ?? registry.alignmentOf(shownRole);
   return { shownRole, shownAlignment };
 }

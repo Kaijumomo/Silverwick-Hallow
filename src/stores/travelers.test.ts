@@ -28,12 +28,16 @@ function traveler(role = "thief") {
 beforeEach(() => store.setState({ game: setupGame(standardRoles(5)), lobby: null, undoStack: [], customScripts: { [setupScript.id]: setupScript } }));
 
 describe("Phase 9B Traveler identity and population", () => {
-  it.each(TRAVELERS.map(r => r.id))("publishes canonical %s without any actual alignment", role => {
+  it.each(TRAVELERS.map(r => r.id))("publishes canonical %s publicly, with the actual alignment reaching only the Traveler's own private self view", role => {
     traveler(role); store.getState().setTravelerAlignment("t", "evil");
     expect(p()).toMatchObject({ actualRole: role, publicDisplayRole: role, actualAlignment: "evil" });
-    expect(projectToSelf(p(), registry)).toEqual({ shownRole: role });
+    // Phase 9 Setup finalization B4 (revision): the Traveler's own self
+    // projection includes their Storyteller-selected alignment privately,
+    // with no separate "show alignment" step required.
+    expect(projectToSelf(p(), registry)).toEqual({ shownRole: role, shownAlignment: "evil" });
     const pub = projectToPublic(p(), false);
     expect(pub.publicDisplayRole).toBe(role);
+    // Public/other-player views never receive alignment in any form.
     for (const key of ["actualRole", "actualAlignment", "shownAlignment", "travelerArrival", "exiled", "privateInfo"])
       expect(pub).not.toHaveProperty(key);
     expect(decodeSelfSnapshot(projectToSelf(p(), registry)).status).toBe("ready");
@@ -78,7 +82,7 @@ describe("Phase 9B Traveler identity and population", () => {
     store.getState().completeTravelerArrivalCheck("t");
     expect(travelerGuidance(p())).toEqual([]);
     expect(projectToPublic(p(), true)).not.toHaveProperty("travelerArrival");
-    expect(projectToSelf(p(), registry)).toEqual({ shownRole: "gnome" });
+    expect(projectToSelf(p(), registry)).toEqual({ shownRole: "gnome", shownAlignment: "good" });
   });
 });
 
@@ -136,12 +140,12 @@ describe("Phase 9B personal first night", () => {
 });
 
 describe("Phase 9B permitted Demon information", () => {
-  it("previews only the Demon name/seat after explicit preparation", () => {
+  it("previews only the Demon name/seat after explicit preparation, alongside the Traveler's own private alignment", () => {
     traveler(); store.getState().setTravelerAlignment("t", "evil");
-    expect(projectToSelf(p(), registry)).toEqual({ shownRole: "thief" });
+    expect(projectToSelf(p(), registry)).toEqual({ shownRole: "thief", shownAlignment: "evil" });
     store.getState().prepareTravelerDemon("t");
     const preview = previewPrivatePacket(p(), game(), registry);
-    expect(preview.payload).toEqual({ shownRole: "thief", demon: { id: "p4", name: "Player 4", seat: 4 } });
+    expect(preview.payload).toEqual({ shownRole: "thief", shownAlignment: "evil", demon: { id: "p4", name: "Player 4", seat: 4 } });
     expect(projectToSelf(p(), registry)).not.toHaveProperty("demon");
   });
   it.each([undefined, "good"] as const)("shown evil never substitutes for actual %s", alignment => {

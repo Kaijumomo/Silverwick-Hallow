@@ -188,9 +188,13 @@ describe("Lunatic / deception state", () => {
 });
 
 describe("setIsTraveler", () => {
+  // Phase 9 Setup finalization B4 revision: ordinary -> Traveler is refused
+  // if it would drop occupied ordinary players below 5 -- seed enough
+  // ordinary players (6) that converting exactly one stays at the floor
+  // (5), not below it.
   function setupGame(): { p1: string } {
     useStorytellerStore.getState().newGame("tb");
-    useStorytellerStore.getState().addPlayer("Alice");
+    for (let i = 0; i < 6; i++) useStorytellerStore.getState().addPlayer("Player " + i);
     const order = useStorytellerStore.getState().game!.seatOrder;
     return { p1: order[0]! };
   }

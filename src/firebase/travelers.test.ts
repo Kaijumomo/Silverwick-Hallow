@@ -31,6 +31,16 @@ async function setup() {
   const session = await requireActiveSession(b, code);
   store.getState().newGame("tb"); store.getState().addPlayer("Traveler"); store.getState().addPlayer("Demon");
   const [id, other] = store.getState().game!.seatOrder as [string, string];
+  // Phase 9 Setup finalization B4 revision: setIsTraveler refuses ordinary
+  // -> Traveler once occupied ordinary would drop below 5 -- seed enough
+  // extra ordinary players first (unrelated to this suite's actual focus).
+  // Each needs a real canonical actual role: travelerDemonInformation's
+  // "complex setup" check treats any unassigned seat as disqualifying.
+  const extraRoles = ["chef", "empath", "fortuneteller", "undertaker"];
+  for (const role of extraRoles) {
+    store.getState().addPlayer("Extra " + role);
+    store.getState().assignRole(store.getState().game!.seatOrder.at(-1)!, role);
+  }
   const lobby = { code, uid: "host", sessionId: session.id, status: "live" as const };
   store.getState().setLobby(lobby);
   store.getState().setIsTraveler(id, true); store.getState().assignRole(id, "thief");
@@ -85,7 +95,7 @@ describe("Phase 9B membership and private delivery", () => {
   it("delivers only to the Traveler and persists ACK completion in the private checkpoint", async () => {
     const { b, id, other, writer, p, review } = await setup();
     await publishPrivatePacket(id, review(), writer);
-    expect(await b.get(`${root}/player/${id}`)).toEqual({ shownRole: "thief", demon: { id: other, name: "Demon", seat: 1 } });
+    expect(await b.get(`${root}/player/${id}`)).toEqual({ shownRole: "thief", shownAlignment: "evil", demon: { id: other, name: "Demon", seat: 1 } });
     expect(await b.get(`${root}/player/${other}`)).toBeUndefined();
     expect(p().travelerArrival!.demonInfoComplete).toBe(true);
     const checkpoint = JSON.parse(await b.get(`${root}/checkpoint`) as string);

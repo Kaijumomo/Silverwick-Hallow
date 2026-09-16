@@ -75,9 +75,26 @@ describe("clampTravelersForTotal / minTravelersForTotal / maxTravelersForTotal",
     expect(clampTravelersForTotal(20, 0)).toBe(5);
   });
 
-  it("never exceeds the Traveler catalogue size", () => {
-    expect(maxTravelersForTotal(MAX_TOTAL_PLAYERS)).toBe(MAX_TRAVELERS);
-    expect(clampTravelersForTotal(MAX_TOTAL_PLAYERS, MAX_TRAVELERS + 5)).toBe(MAX_TRAVELERS);
+  it("never exceeds the Traveler catalogue size (defensive; unreachable within the supported total range)", () => {
+    // At the supported maximum total (20), the largest legal Traveler count
+    // is 15 (5 ordinary floor), which is already below the catalogue size --
+    // the catalogue-size clamp only matters defensively above that range.
+    const hugeTotal = MAX_TRAVELERS + MAX_PLAYERS + 10;
+    expect(maxTravelersForTotal(hugeTotal)).toBe(MAX_TRAVELERS);
+    expect(clampTravelersForTotal(hugeTotal, MAX_TRAVELERS + 5)).toBe(MAX_TRAVELERS);
+  });
+
+  // Phase 9 Setup finalization B4 revision: the supported total range is a
+  // fixed 5-20, independent of the Traveler catalogue's size.
+  it("MAX_TOTAL_PLAYERS is fixed at 20, never derived from the Traveler catalogue", () => {
+    expect(MAX_TOTAL_PLAYERS).toBe(20);
+  });
+
+  it.each([
+    [15, 0], [16, 1], [18, 3], [20, 5],
+  ])("total %i supports a minimum of %i Travellers, keeping ordinary at the 15-player cap", (total, minTravelers) => {
+    expect(minTravelersForTotal(total)).toBe(minTravelers);
+    expect(ordinaryFromPlan(total, minTravelers)).toBe(MAX_PLAYERS);
   });
 
   it("keeps ordinary within [MIN_PLAYERS, MAX_PLAYERS] for every total/Traveler pair in range", () => {
