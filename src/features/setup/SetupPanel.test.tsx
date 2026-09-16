@@ -146,8 +146,8 @@ describe("Phase 9C storyteller setup", () => {
     expect(screen.getByText("+ 1 Traveler")).toBeVisible();
   });
   it("New Game uses canonical Sentinel ranges with exact combinations on demand", () => {
-    render(<RolePickerPanel scriptCharacters={setupScript.characters} rolePool={standardRoles(8)} plannedPlayerCount={8}
-      plannedFabled={["sentinel"]} plannedLorics={[]} onToggleRole={()=>{}} onToggleFabled={()=>{}} onToggleLoric={()=>{}}/>);
+    render(<RolePickerPanel scriptCharacters={setupScript.characters} rolePool={standardRoles(8)} generatedRoleIds={[]} plannedPlayerCount={8}
+      plannedFabled={["sentinel"]} plannedLorics={[]} onToggleRole={()=>{}} onToggleFabled={()=>{}} onToggleLoric={()=>{}} onFillResult={()=>{}}/>);
     expect(screen.getByText("4–6")).toBeVisible();expect(screen.getByText("0–2")).toBeVisible();
     expect(screen.getByText("Allowed combinations").closest("details")).not.toHaveAttribute("open");
     expect(screen.queryByText(/Reconcile the target/)).toBeNull();

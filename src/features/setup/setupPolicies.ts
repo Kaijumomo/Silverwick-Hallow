@@ -25,6 +25,7 @@ const uncertainComposition = new Set([
   "atheist", "legion", "lilmonsta", "summoner", "kazali", "lordoftyphon",
   "huntsman", "hermit", "xaan", "alchemist", "boffin", "amnesiac", "bootlegger",
 ]);
+export const hasUncertainComposition = (id: string) => uncertainComposition.has(id);
 export function compositionCandidates(target: number | null, roles: RoleDef[], modifiers: RoleDef[], hasJinx: boolean) {
   const all = [...roles, ...modifiers];
   const effects = all.filter(r => isCanonicalRole(r) && hasCountPolicy(r.id));

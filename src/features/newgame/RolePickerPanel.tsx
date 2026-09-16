@@ -1,20 +1,24 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { iconUrlFor } from "@/data/iconUrl";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
 import { analyzeRolePool } from "./newGameAnalyzer";
+import { fillRolePool } from "./fillRolePool";
+import type { BagCounts } from "@/data/setupCounts";
 import type { RoleDef, RoleId } from "@/stores/types";
 import { SetupFindings, CompositionSummary } from "@/features/setup/SetupFindings";
 
 type Props = {
   scriptCharacters: RoleDef[];
   rolePool: RoleId[];
+  generatedRoleIds: RoleId[];
   plannedFabled: RoleId[];
   plannedLorics: RoleId[];
   plannedPlayerCount: number;
   onToggleRole: (id: RoleId) => void;
   onToggleFabled: (id: RoleId) => void;
   onToggleLoric: (id: RoleId) => void;
+  onFillResult: (pool: RoleId[], generated: RoleId[]) => void;
 };
 
 const BAG_TYPES = ["townsfolk", "outsider", "minion", "demon"] as const;
@@ -62,12 +66,14 @@ function RoleTile({ role, selected, onToggle }: RoleTileProps) {
 export function RolePickerPanel({
   scriptCharacters,
   rolePool,
+  generatedRoleIds,
   plannedFabled,
   plannedLorics,
   plannedPlayerCount,
   onToggleRole,
   onToggleFabled,
   onToggleLoric,
+  onFillResult,
 }: Props) {
   const roleById = useMemo(
     () => new Map(scriptCharacters.map((r) => [r.id, r])),
@@ -82,6 +88,41 @@ export function RolePickerPanel({
   const poolSet = new Set(rolePool);
   const fabSet = new Set(plannedFabled);
   const loricSet = new Set(plannedLorics);
+
+  const pinnedIds = useMemo(
+    () => rolePool.filter((id) => !generatedRoleIds.includes(id)),
+    [rolePool, generatedRoleIds]
+  );
+
+  // Once the Storyteller resolves a multi-candidate composition, Fill/Re-roll
+  // keeps using it — fillRolePool re-validates it against freshly computed
+  // candidates every call, so a stale choice safely falls back to asking again.
+  const [chosenComposition, setChosenComposition] = useState<BagCounts | null>(null);
+
+  const target = plannedPlayerCount || null;
+
+  // Randomness-independent dry run: whether Fill/Re-roll would succeed right
+  // now, and why not if not. Every failure path in fillRolePool is decided
+  // before any random draw, so a fixed dummy generator previews it safely.
+  const assessment = useMemo(
+    () => fillRolePool({
+      pinnedIds, targetPlayerCount: target, scriptCharacters,
+      fabledIds: plannedFabled, loricIds: plannedLorics,
+      chosenComposition: chosenComposition ?? undefined, random: () => 0,
+    }),
+    [pinnedIds, target, scriptCharacters, plannedFabled, plannedLorics, chosenComposition]
+  );
+
+  const fillLabel = generatedRoleIds.length > 0 ? "Re-roll Bag" : "Fill the Bag";
+
+  const handleFillClick = () => {
+    const result = fillRolePool({
+      pinnedIds, targetPlayerCount: target, scriptCharacters,
+      fabledIds: plannedFabled, loricIds: plannedLorics,
+      chosenComposition: chosenComposition ?? undefined,
+    });
+    if (result.ok) onFillResult(result.pool, result.generated);
+  };
 
   const byType = useMemo(() => {
     const map = new Map<string, RoleDef[]>();
@@ -98,6 +139,33 @@ export function RolePickerPanel({
     <div className="ng-picker">
       <CompositionSummary target={plannedPlayerCount || null} analysis={analysis.pool} />
       <p className="setup-selection-count">{rolePool.length} / {plannedPlayerCount || "—"} roles selected</p>
+
+      <div className="ng-fill-bag">
+        {assessment.ok ? (
+          <button className="btn btn-gold ng-fill-btn" onClick={handleFillClick}>{fillLabel}</button>
+        ) : assessment.failure.reason === "multiple-candidates" ? (
+          <div className="ng-fill-candidates">
+            <p className="ng-fill-candidates-label">Fill using:</p>
+            <div className="ng-fill-candidates-options">
+              {assessment.failure.candidates.map((c, i) => (
+                <button
+                  key={i}
+                  className="btn btn-sm"
+                  onClick={() => setChosenComposition(c)}
+                >
+                  {c.townsfolk}T / {c.outsider}O / {c.minion}M / {c.demon}D
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="ng-fill-blocked">
+            <button className="btn ng-fill-btn" disabled>{fillLabel}</button>
+            <p className="ng-fill-message">{assessment.failure.message}</p>
+          </div>
+        )}
+      </div>
+
       <SetupFindings findings={analysis.findings.filter(f =>
         f.severity !== "blocker" && f.source !== "assigned" && f.code !== "planning-empty")} />
 

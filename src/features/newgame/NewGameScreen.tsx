@@ -26,6 +26,9 @@ export function NewGameScreen() {
   );
   const [playerCount, setPlayerCount] = useState(MIN_PLAYERS);
   const [rolePool, setRolePool] = useState<RoleId[]>([]);
+  // Roles Silverwick most recently auto-filled into rolePool (Fill/Re-roll Bag).
+  // Everything else in rolePool is Storyteller-pinned and survives a re-roll.
+  const [generatedRoleIds, setGeneratedRoleIds] = useState<RoleId[]>([]);
   const [plannedFabled, setPlannedFabled] = useState<RoleId[]>([]);
   const [plannedLorics, setPlannedLorics] = useState<RoleId[]>([]);
 
@@ -40,6 +43,7 @@ export function NewGameScreen() {
   const handleSelectScript = (id: string | "import") => {
     setSelectedScriptId(id);
     setRolePool([]);
+    setGeneratedRoleIds([]);
     setPlannedFabled([]);
     setPlannedLorics([]);
   };
@@ -48,6 +52,15 @@ export function NewGameScreen() {
     setRolePool((prev) =>
       prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id]
     );
+    // A deliberate click always means "intentional": clear any Fill/Re-roll
+    // generated-status for this id, whether it's being added fresh (so it
+    // becomes pinned) or removed (so it stops being tracked at all).
+    setGeneratedRoleIds((prev) => prev.filter((r) => r !== id));
+  };
+
+  const handleFillResult = (pool: RoleId[], generated: RoleId[]) => {
+    setRolePool(pool);
+    setGeneratedRoleIds(generated);
   };
 
   const toggleFabled = (id: RoleId) => {
@@ -133,18 +146,23 @@ export function NewGameScreen() {
           ) : activeScript ? (
             <section className="ng-section">
               <h2 className="ng-section-title">
-                {activeScript.name} · pick roles{" "}
-                <span className="ng-section-hint">(optional)</span>
+                {activeScript.name} · Characters{" "}
+                <span className="ng-section-hint">
+                  choose must-have roles, or Fill the Bag
+                </span>
               </h2>
               <RolePickerPanel
+                key={selectedScriptId}
                 scriptCharacters={activeScript.characters}
                 rolePool={rolePool}
+                generatedRoleIds={generatedRoleIds}
                 plannedFabled={plannedFabled}
                 plannedLorics={plannedLorics}
                 plannedPlayerCount={playerCount}
                 onToggleRole={toggleRole}
                 onToggleFabled={toggleFabled}
                 onToggleLoric={toggleLoric}
+                onFillResult={handleFillResult}
               />
             </section>
           ) : null}

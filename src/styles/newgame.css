@@ -201,6 +201,50 @@
   align-items: center;
 }
 
+.ng-fill-bag {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ng-fill-btn {
+  align-self: flex-start;
+}
+
+.ng-fill-blocked {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.ng-fill-message {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+.ng-fill-candidates {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ng-fill-candidates-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+.ng-fill-candidates-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .ng-pool-total {
   font-size: 12px;
   color: var(--text-dim);
