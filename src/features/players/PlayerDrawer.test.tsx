@@ -5,6 +5,7 @@ import { PlayerDrawer } from "./PlayerDrawer";
 import { roles } from "@/test/fixtures";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { usePrivacyStore } from "@/stores/privacyStore";
+import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
 
 const qaScript = { ...troubleBrewing, id: "qa", characters: [...troubleBrewing.characters, roles.marionette!, roles.lunatic!] };
 
@@ -329,5 +330,66 @@ describe("ST notes edit-session boundary (Phase 9C.5)", () => {
       expect(store.getState().localSeq).toBe(seqBefore + 1);
       expect(store.getState().undoStack.length).toBe(undoLengthBefore + 1);
     });
+  });
+});
+
+describe("Pre-Reveal Setup refinement (Phase 9 Setup finalization B3)", () => {
+  function dealtGame() {
+    const g = setupGame(standardRoles(5), { setupRolesDealt: true, setupRolesRevealed: false });
+    store.setState({ game: g, lobby: null, undoStack: [], customScripts: { [setupScript.id]: setupScript } });
+    return g;
+  }
+  function DrawerFor({ id }: { id: string }) {
+    const p = store((s) => s.game!.players[id]!);
+    return <PlayerDrawer player={p} />;
+  }
+
+  it("routes the actual-role picker through the Setup-specific override, resetting shown identity for the new assignment", () => {
+    const g = dealtGame();
+    const target = g.seatOrder[0]!; // washerwoman, shown washerwoman
+    render(<DrawerFor id={target} />);
+    expect(screen.getByText(
+      "Setup refinement: changing the actual role resets this player's shown identity for the new assignment."
+    )).toBeVisible();
+
+    const actualRoleSection = screen.getByText("Actual role (ST private)").closest("section")!;
+    fireEvent.click(within(actualRoleSection).getByRole("button", { name: "Drunk outsider" }));
+
+    expect(store.getState().game!.players[target]!.actualRole).toBe("drunk");
+    expect(store.getState().game!.players[target]!.shownRole).toBeNull(); // reset, never preserved
+  });
+
+  it("offers Swap role with… listing the other occupied ordinary players, and performs the swap", () => {
+    const g = dealtGame();
+    const [a, b] = g.seatOrder as [string, string];
+    render(<DrawerFor id={a} />);
+    const roleBBefore = store.getState().game!.players[b]!.actualRole;
+    const roleABefore = store.getState().game!.players[a]!.actualRole;
+
+    fireEvent.change(screen.getByLabelText("Swap role with…"), { target: { value: b } });
+
+    expect(store.getState().game!.players[a]!.actualRole).toBe(roleBBefore);
+    expect(store.getState().game!.players[b]!.actualRole).toBe(roleABefore);
+  });
+
+  it("Setup refinement controls disappear once Reveal has completed", () => {
+    const g = dealtGame();
+    store.getState().revealRoles();
+    render(<DrawerFor id={g.seatOrder[0]!} />);
+
+    expect(screen.queryByLabelText("Swap role with…")).toBeNull();
+    expect(screen.queryByText(/^Setup refinement:/)).toBeNull();
+  });
+
+  it("outside the refinement window, the actual-role picker keeps the generic assignRole() behavior", () => {
+    render(<Drawer />); // fresh, non-dealt game from the outer beforeEach
+    expect(screen.queryByLabelText("Swap role with…")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Chef townsfolk" }));
+    expect(current().actualRole).toBe("chef");
+    const actualRoleSection = screen.getByText("Actual role (ST private)").closest("section")!;
+    fireEvent.click(within(actualRoleSection).getByRole("button", { name: "Drunk outsider" }));
+    // Generic assignRole() preserves whatever shown identity already existed
+    // (here, still unrevealed) rather than resetting it for the new role.
+    expect(current().shownRole).toBeNull();
   });
 });

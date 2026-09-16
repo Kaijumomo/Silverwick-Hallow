@@ -7,6 +7,8 @@ import { selectSetupContext } from "./setupContext";
 import { SetupFindings, CompositionSummary } from "./SetupFindings";
 import { setupPresentation, findingSummary } from "./setupPresentation";
 import { BagEditor } from "./BagEditor";
+import { EditBagPanel } from "./EditBagPanel";
+import { currentDealtBag } from "./setupRefinement";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
 import type { RoleId, Script, StorytellerLobbyRecord } from "@/stores/types";
@@ -27,6 +29,7 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
   const store = useStorytellerStore();
   const hidden = usePrivacyStore(s => s.enabled);
   const [editing, setEditing] = useState(false);
+  const [editingBag, setEditingBag] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const primary = useRef<HTMLButtonElement>(null);
@@ -55,10 +58,23 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
     if (view.next === "seats") { onClose(); return; }
     if (view.next === "roles") { setEditing(true); return; }
     if (view.next === "review") { openReview(); return; }
-    const result = view.next === "deal" ? store.dealRolePool()
-      : view.next === "reveal" ? store.revealRoles()
-      : store.beginNightOne();
+    if (view.next === "reveal") {
+      const result = store.revealRoles();
+      setError(result.ok ? null : result.message ?? "Setup changed. Review the next step before continuing.");
+      return;
+    }
+    const result = view.next === "deal" ? store.dealRolePool() : store.beginNightOne();
     setError(result.ok ? null : "Setup changed. Review the next step before continuing.");
+  };
+  const shuffleRoles = () => {
+    setEditingBag(false);
+    const result = store.shuffleSetupRoles();
+    setError(result.ok ? null : result.message ?? "Could not shuffle roles.");
+  };
+  const applyBagEdit = (staged: RoleId[]) => {
+    const result = store.applyEditedBag(staged);
+    if (result.ok) { setEditingBag(false); setError(null); }
+    else setError(result.message ?? "Could not apply bag changes.");
   };
   const actionLabel = editing ? "Done choosing" : {
     count: "Choose player count", seats: "Go to seating", roles: "Choose roles", review: "Review setup",
@@ -95,6 +111,16 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
         disabled={primaryDisabled} onClick={run}>{actionLabel}</button>
       {error && <p role="alert" className="field-error">{error}</p>}
     </div>
+    {view.next === "reveal" && !editingBag && (
+      <div className="setup-refine-toolbar">
+        <button className="btn btn-sm" onClick={shuffleRoles}>Shuffle Roles</button>
+        <button className="btn btn-sm" onClick={() => setEditingBag(true)}>Edit Bag</button>
+      </div>
+    )}
+    {view.next === "reveal" && editingBag && (
+      <EditBagPanel script={script} initialBag={currentDealtBag(context)} ordinaryCount={p.occupiedNonTravelerCount}
+        onApply={applyBagEdit} onCancel={() => setEditingBag(false)} />
+    )}
     {editing && !view.dealt && <div>
       <h3 className="setup-editor-heading" ref={heading} tabIndex={-1}>Choose roles</h3>
       <BagEditor script={script} pool={pool} generatedRoleIds={generatedRoleIds}

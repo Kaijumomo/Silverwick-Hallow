@@ -2762,6 +2762,8 @@ select:focus-visible,
 .setup-modifier-choices [aria-pressed="true"] { color: var(--gold-bright); border-color: var(--gold-soft); background: rgba(196,158,80,.12); }
 .setup-editor-heading { font: 19px var(--font-display); margin: 0 0 20px; }
 .setup-bag-editor { display: flex; flex-direction: column; gap: 16px; }
+.setup-refine-toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+.setup-edit-bag-actions { justify-content: flex-end; }
 .setup-role-editor { display: grid; gap: 24px; }
 .setup-copy-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-block: 12px; }
 .setup-role-group .setup-eyebrow { display: flex; justify-content: space-between; gap: 8px; }

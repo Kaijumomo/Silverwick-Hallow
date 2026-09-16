@@ -4,13 +4,15 @@ import { BUILTIN_SCRIPTS, BUILTIN_SCRIPT_IDS } from "@/data/scripts";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
 import { StorytellerStateSchema } from "./schemas";
-import { buildRegistry } from "@/data/roleRegistry";
+import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, needsShownIdentity } from "./identity";
 import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 import { invalidatePrivatePacket, pruneInapplicablePrivateInfo } from "./privatePackets";
 import { usePrivacyStore } from "./privacyStore";
 import { analyzeSetup } from "@/features/setup/setupAnalyzer";
 import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
+import { assignedBagIsCoherent, canRefineSetup, matchBagToAssignments } from "@/features/setup/setupRefinement";
+import { isBagType } from "@/features/setup/setupPolicies";
 import { arrivalsAreTravelers, newTravelerArrival, publicTravelerRole, travelerDemonInformation, travelerNeedsFirstNight, travelerNeedsArrivalCheck } from "./travelers";
 import { getTraveler } from "@/data/travelers";
 import type { SetupCommandResult } from "@/features/setup/setupReadiness";
@@ -127,6 +129,29 @@ export type StorytellerStore = {
    * online: a local/offline game still records that the Storyteller
    * completed the initial reveal step. See revealReadiness.ts. */
   revealRoles: () => SetupCommandResult;
+  // --- Pre-Reveal Setup refinement (Phase 9 Setup finalization B3) -------
+  // Administration of the private Deal only — available strictly between a
+  // completed initial Deal and a completed initial Reveal (see
+  // canRefineSetup in features/setup/setupRefinement.ts). Distinct from the
+  // generic assignRole()/setShownRole(), which remain unchanged and keep
+  // serving later in-game character-change mechanics.
+  /** Fresh random redistribution of the current ordinary dealt bag across
+   * occupied ordinary players. Same characters, new assignment. */
+  shuffleSetupRoles: () => SetupCommandResult;
+  /** Exchanges the private role assignments of exactly two occupied,
+   * non-Traveler ordinary players. Composition-neutral. */
+  swapSetupRoles: (playerIdA: PlayerId, playerIdB: PlayerId) => SetupCommandResult;
+  /** Changes exactly one ordinary player's actual role to a fresh
+   * assignment, without touching any other player. May leave the setup
+   * composition-invalid — that is preserved as explicit Storyteller intent
+   * and surfaced by the analyzer rather than silently corrected. */
+  replaceSetupRole: (playerId: PlayerId, roleId: RoleId) => SetupCommandResult;
+  /** Applies a fully-staged edited bag (exactly one role per occupied
+   * ordinary seat). Preserves every existing assignment whose role
+   * occurrence survives in the new bag; only seats whose occurrence was
+   * removed are reassigned, deterministically, to the newly added
+   * occurrences. Never a full reshuffle. */
+  applyEditedBag: (stagedRoleIds: RoleId[]) => SetupCommandResult;
   beginNightOne: () => SetupCommandResult;
   setPlannedPlayerCount: (count: number) => void;
   setRolePool: (roles: RoleId[]) => void;
@@ -277,6 +302,21 @@ const patchPlayer = (
       [id]: { ...existing, ...patch },
     },
   };
+};
+
+/**
+ * A fresh private assignment for `role`: the same reset dealRolePool()
+ * performs per seat. Deceptive configuration from a previous assignment
+ * must never follow a player into an unrelated new one — normal roles get
+ * their deterministic shown identity, concealed roles become unresolved,
+ * role-specific private info/packets are cleared. Shared by Deal and every
+ * pre-Reveal Setup refinement command (Shuffle/Swap/Manual Override/Edit
+ * Bag Apply) so this reset has exactly one implementation.
+ */
+const freshAssignment = (existing: STPlayerRecord, role: RoleId, registry: RoleRegistry): STPlayerRecord => {
+  const next: STPlayerRecord = { ...existing, ...dealtIdentity(role, registry), abilityUsed: false };
+  delete next.privateInfo;
+  return invalidatePrivatePacket(next);
 };
 
 const CLEAN_STATE = { game: null, view: "home" as const, undoStack: [] as never[], customScripts: {}, lobby: null };
@@ -519,13 +559,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         nonTravelerSeats.forEach((playerId, idx) => {
           const existing = newPlayers[playerId];
           if (!existing) return;
-          const next: STPlayerRecord = {
-            ...existing,
-            ...dealtIdentity(shuffled[idx]!, registry),
-            abilityUsed: false,
-          };
-          delete next.privateInfo;
-          newPlayers[playerId] = invalidatePrivatePacket(next);
+          newPlayers[playerId] = freshAssignment(existing, shuffled[idx]!, registry);
         });
 
         set({
@@ -550,10 +584,104 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!isPostDeal(game)) return { ok: false, message: "Deal the pool before revealing roles." };
         const script = selectScriptById(get(), game.scriptId);
         const context = selectSetupContext(game, script);
+        // Reveal requires BOTH identity readiness and setup/composition
+        // readiness -- a Manual Override or Edit Bag apply may deliberately
+        // leave the setup composition-invalid, and that must still block
+        // Reveal even once every shown identity is otherwise complete.
+        const analysis = analyzeSetup(context);
+        if (!assignedBagIsCoherent(context, analysis))
+          return { ok: false, message: "Setup needs correction before revealing roles." };
         const readiness = initialRevealReadiness(context);
         if (!readiness.ready) return { ok: false,
           message: `${readiness.readyCount}/${readiness.totalCount} roles ready to reveal.` };
         set({ undoStack: pushUndo(game, undoStack), game: { ...game, setupRolesRevealed: true } });
+        return { ok: true };
+      },
+
+      shuffleSetupRoles: () => {
+        const { game, undoStack } = get();
+        if (!game) return { ok: false, message: "No game is open." };
+        const gate = canRefineSetup(game);
+        if (!gate.ok) return gate;
+        const script = selectScriptById(get(), game.scriptId);
+        const context = selectSetupContext(game, script);
+        const analysis = analyzeSetup(context);
+        if (!assignedBagIsCoherent(context, analysis))
+          return { ok: false, message: "Fix the current setup before shuffling roles." };
+        const registry = context.registry!;
+        const bag = [...context.assigned];
+        // Fisher-Yates shuffle -- a fresh private-assignment generation.
+        for (let i = bag.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [bag[i], bag[j]] = [bag[j]!, bag[i]!];
+        }
+        const newPlayers = { ...game.players };
+        context.ordinary.forEach((p, idx) => {
+          newPlayers[p.id] = freshAssignment(newPlayers[p.id]!, bag[idx]!, registry);
+        });
+        set({ undoStack: pushUndo(game, undoStack), game: { ...game, players: newPlayers } });
+        return { ok: true };
+      },
+
+      swapSetupRoles: (playerIdA, playerIdB) => {
+        const { game, undoStack } = get();
+        if (!game) return { ok: false, message: "No game is open." };
+        const gate = canRefineSetup(game);
+        if (!gate.ok) return gate;
+        if (playerIdA === playerIdB) return { ok: false, message: "Choose two different players." };
+        const a = game.players[playerIdA];
+        const b = game.players[playerIdB];
+        if (!a || !b || a.isEmpty || b.isEmpty) return { ok: false, message: "Both players must be seated." };
+        if (a.isTraveler || b.isTraveler) return { ok: false, message: "Travelers cannot use Setup Swap." };
+        if (!a.actualRole || !b.actualRole) return { ok: false, message: "Both players must have an actual role." };
+        const script = selectScriptById(get(), game.scriptId);
+        const registry = buildRegistry(script ?? { id: game.scriptId, name: game.scriptId, characters: [] });
+        const newA = freshAssignment(a, b.actualRole, registry);
+        const newB = freshAssignment(b, a.actualRole, registry);
+        set({
+          undoStack: pushUndo(game, undoStack),
+          game: { ...game, players: { ...game.players, [playerIdA]: newA, [playerIdB]: newB } },
+        });
+        return { ok: true };
+      },
+
+      replaceSetupRole: (playerId, roleId) => {
+        const { game, undoStack } = get();
+        if (!game) return { ok: false, message: "No game is open." };
+        const gate = canRefineSetup(game);
+        if (!gate.ok) return gate;
+        const player = game.players[playerId];
+        if (!player || player.isEmpty) return { ok: false, message: "This player is not seated." };
+        if (player.isTraveler) return { ok: false, message: "Travelers cannot use the Setup role override." };
+        const script = selectScriptById(get(), game.scriptId);
+        const role = script?.characters.find(r => r.id === roleId);
+        if (!role || !isBagType(role.type))
+          return { ok: false, message: "Choose a valid ordinary character for this script." };
+        const registry = buildRegistry(script!);
+        const next = freshAssignment(player, roleId, registry);
+        set({ undoStack: pushUndo(game, undoStack), game: { ...game, players: { ...game.players, [playerId]: next } } });
+        return { ok: true };
+      },
+
+      applyEditedBag: (stagedRoleIds) => {
+        const { game, undoStack } = get();
+        if (!game) return { ok: false, message: "No game is open." };
+        const gate = canRefineSetup(game);
+        if (!gate.ok) return gate;
+        const script = selectScriptById(get(), game.scriptId);
+        const context = selectSetupContext(game, script);
+        const ordinary = context.ordinary;
+        if (stagedRoleIds.length !== ordinary.length) return { ok: false,
+          message: `Choose exactly one role per occupied ordinary player (${stagedRoleIds.length}/${ordinary.length}).` };
+        const matched = matchBagToAssignments(ordinary.map(p => ({ playerId: p.id, role: p.actualRole })), stagedRoleIds);
+        if (!matched) return { ok: false, message: "Setup changed. Review the bag and try again." };
+        const registry = context.registry!;
+        const newPlayers = { ...game.players };
+        for (const { playerId, role, changed } of matched) {
+          if (!changed) continue;
+          newPlayers[playerId] = freshAssignment(newPlayers[playerId]!, role, registry);
+        }
+        set({ undoStack: pushUndo(game, undoStack), game: { ...game, players: newPlayers } });
         return { ok: true };
       },
 

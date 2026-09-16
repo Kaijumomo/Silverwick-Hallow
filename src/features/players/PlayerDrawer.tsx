@@ -3,6 +3,7 @@ import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore
 import { deriveAlignment } from "@/data/roleRegistry";
 import { TRAVELERS } from "@/data/travelers";
 import { needsShownIdentity, shownRoleFilter } from "@/stores/identity";
+import { canRefineSetup } from "@/features/setup/setupRefinement";
 import { PlayerInformation, commitExtraTextDraft } from "./PlayerInformation";
 import { TravelerArrival } from "./TravelerArrival";
 import { publicTravelerRole } from "@/stores/travelers";
@@ -171,6 +172,8 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   const removePlayer = useStorytellerStore((s) => s.removePlayer);
   const movePlayer = useStorytellerStore((s) => s.movePlayer);
   const assignRole = useStorytellerStore((s) => s.assignRole);
+  const replaceSetupRole = useStorytellerStore((s) => s.replaceSetupRole);
+  const swapSetupRoles = useStorytellerStore((s) => s.swapSetupRoles);
   const showAssignedRole = useStorytellerStore((s) => s.showAssignedRole);
   const setShownRole = useStorytellerStore((s) => s.setShownRole);
   const setShownAlignment = useStorytellerStore((s) => s.setShownAlignment);
@@ -188,6 +191,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
 
   const [nameDraft, setNameDraft] = useState(player.name);
   const [reminderDraft, setReminderDraft] = useState("");
+  const [refinementError, setRefinementError] = useState<string | null>(null);
   const [membershipBusy, setMembershipBusy] = useState(false);
   const [membershipError, setMembershipError] = useState<string | null>(null);
   const [notesDraft, setNotesDraft] = useState(player.stNotes);
@@ -204,6 +208,17 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   );
   const registry = useMemo(() => script ? buildRegistry(script) : null, [script]);
   const applicability = registry ? getPrivateInfoApplicability(player, registry) : null;
+  // Pre-Reveal Setup administration window: while it applies, the actual-role
+  // picker routes through the Setup-specific override (fresh identity reset)
+  // instead of the generic assignRole() (which deliberately preserves shown
+  // identity, for later in-game character changes).
+  const refinementAvailable = !!game && canRefineSetup(game).ok;
+  const otherOrdinaryPlayers = useMemo(
+    () => !game ? [] : game.seatOrder
+      .map((id) => game.players[id])
+      .filter((p): p is STPlayerRecord => !!p && !p.isEmpty && !p.isTraveler && p.id !== player.id),
+    [game, player.id]
+  );
 
   // Roles currently assigned to any player — used to exclude from bluff pickers.
   const inPlayRoles = useMemo(
@@ -415,9 +430,21 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
             <RolePickerGrid
               roles={rolePool}
               selectedRoleId={player.actualRole || null}
-              onPick={(id) => assignRole(player.id, id)}
+              onPick={(id) => {
+                setRefinementError(null);
+                if (refinementAvailable) {
+                  const result = replaceSetupRole(player.id, id);
+                  if (!result.ok) setRefinementError(result.message);
+                } else {
+                  assignRole(player.id, id);
+                }
+              }}
             />
-            <p className="behavior-help">Assigning an actual role keeps the player's shown identity unchanged.</p>
+            <p className="behavior-help">
+              {refinementAvailable
+                ? "Setup refinement: changing the actual role resets this player's shown identity for the new assignment."
+                : "Assigning an actual role keeps the player's shown identity unchanged."}
+            </p>
             {displayRole && !needsShownIdentity(player.actualRole) && (
               <button className="btn btn-sm" onClick={() => showAssignedRole(player.id)}>
                 Show assigned role
@@ -433,6 +460,30 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
                 </button>
               </div>
             )}
+            {refinementAvailable && otherOrdinaryPlayers.length > 0 && (
+              <div className="drawer-row">
+                <label htmlFor="setup-swap-with">Swap role with…</label>
+                <select
+                  id="setup-swap-with"
+                  className="select"
+                  value=""
+                  onChange={(e) => {
+                    const targetId = e.target.value;
+                    if (!targetId) return;
+                    setRefinementError(null);
+                    const result = swapSetupRoles(player.id, targetId);
+                    if (!result.ok) setRefinementError(result.message);
+                    e.target.value = "";
+                  }}
+                >
+                  <option value="">Choose a player</option>
+                  {otherOrdinaryPlayers.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {refinementError && <p role="alert" className="field-error">{refinementError}</p>}
           </section>}
 
           {displayRole && !player.isTraveler && (
