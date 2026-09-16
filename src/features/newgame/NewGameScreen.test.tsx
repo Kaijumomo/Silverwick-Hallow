@@ -1,8 +1,8 @@
-import { act, cleanup, render, screen, fireEvent } from "@testing-library/react";
+import { cleanup, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NewGameScreen } from "./NewGameScreen";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
-import { SETUP_COUNTS } from "@/data/setupCounts";
+import { MIN_PLAYERS, MAX_PLAYERS, SETUP_COUNTS } from "@/data/setupCounts";
 
 beforeEach(() => {
   store.setState({ game: null, lobby: null, undoStack: [], customScripts: {}, view: "newgame" });
@@ -10,74 +10,80 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-const selectionCount = () => screen.getByText(/\/ \d+ roles selected/).textContent!;
+describe("A. New Game planning UI remains", () => {
+  it("shows script selection, the planned player stepper, and the full composition table", () => {
+    const { container } = render(<NewGameScreen />);
+    expect(screen.getByRole("button", { name: "Trouble Brewing" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Sects & Violets" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Bad Moon Rising" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "+ Import" })).toBeVisible();
 
-describe("NewGameScreen Fill & Re-roll Bag", () => {
-  it("fills an empty bag into a complete valid composition and offers Re-roll next", () => {
+    expect(container.querySelector(".ng-stepper-value")).toHaveTextContent(`${MIN_PLAYERS} players`);
+
+    const table = screen.getByRole("table", { name: "Player count reference" });
+    for (let n = MIN_PLAYERS; n <= MAX_PLAYERS; n++) {
+      const row = screen.getByRole("row", { name: new RegExp(`^${n} `) });
+      expect(table).toContainElement(row);
+    }
+  });
+
+  it("highlights the currently selected player-count row", () => {
+    const { container } = render(<NewGameScreen />);
+    const initialRow = screen.getByRole("row", { name: new RegExp(`^${MIN_PLAYERS} `) });
+    expect(initialRow).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.click(screen.getByRole("row", { name: /^8 / }));
+    expect(screen.getByRole("row", { name: /^8 / })).toHaveAttribute("aria-selected", "true");
+    expect(initialRow).toHaveAttribute("aria-selected", "false");
+    expect(container.querySelector(".ng-stepper-value")).toHaveTextContent("8 players");
+  });
+});
+
+describe("B. Role selection is no longer owned by New Game", () => {
+  it("shows no ordinary role grid, Fill/Re-roll, or Fabled/Loric selectors", () => {
     render(<NewGameScreen />);
-    expect(screen.getByText(/roles selected/)).toHaveTextContent(`0 / ${SETUP_COUNTS[5]!.townsfolk + SETUP_COUNTS[5]!.outsider + SETUP_COUNTS[5]!.minion + SETUP_COUNTS[5]!.demon} roles selected`);
-    expect(screen.getByRole("button", { name: "Fill the Bag" })).toBeVisible();
-
-    act(() => { fireEvent.click(screen.getByRole("button", { name: "Fill the Bag" })); });
-
-    const total = SETUP_COUNTS[5]!.townsfolk + SETUP_COUNTS[5]!.outsider + SETUP_COUNTS[5]!.minion + SETUP_COUNTS[5]!.demon;
-    expect(selectionCount()).toBe(`${total} / ${total} roles selected`);
-    expect(screen.getByRole("button", { name: "Re-roll Bag" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Fill the Bag" })).toBeNull();
-  });
-
-  it("preserves a manually pinned role across Fill and a subsequent Re-roll", () => {
-    render(<NewGameScreen />);
-    act(() => { fireEvent.click(screen.getByRole("button", { name: "Empath" })); });
-    act(() => { fireEvent.click(screen.getByRole("button", { name: "Fill the Bag" })); });
-    expect(screen.getByRole("button", { name: "Empath" })).toHaveAttribute("aria-pressed", "true");
-
-    act(() => { fireEvent.click(screen.getByRole("button", { name: "Re-roll Bag" })); });
-    expect(screen.getByRole("button", { name: "Empath" })).toHaveAttribute("aria-pressed", "true");
-  });
-
-  it("L. changing player count after Fill does not silently regenerate the bag; Re-roll must be pressed explicitly", () => {
-    render(<NewGameScreen />);
-    act(() => { fireEvent.click(screen.getByRole("button", { name: "Fill the Bag" })); });
-    const fiveTotal = SETUP_COUNTS[5]!.townsfolk + SETUP_COUNTS[5]!.outsider + SETUP_COUNTS[5]!.minion + SETUP_COUNTS[5]!.demon;
-    expect(selectionCount()).toBe(`${fiveTotal} / ${fiveTotal} roles selected`);
-
-    // Move from 5 to 8 players via the stepper.
-    for (let i = 0; i < 3; i++) act(() => { fireEvent.click(screen.getByRole("button", { name: "More players" })); });
-
-    // The bag Silverwick already filled for 5 players is untouched -- still 5
-    // roles selected -- even though the target is now 8. No silent reroll.
-    const eightTotal = SETUP_COUNTS[8]!.townsfolk + SETUP_COUNTS[8]!.outsider + SETUP_COUNTS[8]!.minion + SETUP_COUNTS[8]!.demon;
-    expect(selectionCount()).toBe(`${fiveTotal} / ${eightTotal} roles selected`);
-    // The Storyteller must explicitly press Re-roll to complete the bag for the new count.
-    expect(screen.getByRole("button", { name: "Re-roll Bag" })).toBeVisible();
-
-    act(() => { fireEvent.click(screen.getByRole("button", { name: "Re-roll Bag" })); });
-    expect(selectionCount()).toBe(`${eightTotal} / ${eightTotal} roles selected`);
-  });
-
-  it("M. switching scripts resets any generated or pinned bag state -- nothing leaks into the new script", () => {
-    render(<NewGameScreen />);
-    act(() => { fireEvent.click(screen.getByRole("button", { name: "Empath" })); });
-    act(() => { fireEvent.click(screen.getByRole("button", { name: "Fill the Bag" })); });
-    expect(screen.getByRole("button", { name: "Re-roll Bag" })).toBeVisible();
-
-    act(() => { fireEvent.click(screen.getByRole("button", { name: "Sects & Violets" })); });
-
-    expect(selectionCount()).toMatch(/^0 \//);
-    expect(screen.getByRole("button", { name: "Fill the Bag" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Re-roll Bag" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Empath" })).toBeNull(); // Trouble Brewing tile is gone
+    expect(screen.queryByRole("button", { name: "Empath" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Imp" })).toBeNull();
+    expect(screen.queryByText("Fabled & Lorics")).toBeNull();
+    expect(screen.queryByText(/roles selected/)).toBeNull();
+  });
+});
+
+describe("C. New Game enters the Grimoire with planning data", () => {
+  it("creating a setup for Trouble Brewing @ 8 players produces the Grimoire with an empty pool", async () => {
+    render(<NewGameScreen />);
+    fireEvent.click(screen.getByRole("row", { name: /^8 / }));
+    fireEvent.click(screen.getByRole("button", { name: /Create setup/ }));
+    await waitFor(() => expect(store.getState().game).not.toBeNull());
+
+    const game = store.getState().game!;
+    expect(game.scriptId).toBe("tb");
+    expect(game.plannedPlayerCount).toBe(8);
+    expect(game.rolePool).toEqual([]);
+    expect(game.fabled).toEqual([]);
+    expect(game.lorics).toEqual([]);
+    expect(store.getState().view).toBe("game");
   });
 
-  it("O. Fill/Re-roll never touch Zustand game state or assign any player a role", () => {
+  it("creating a setup with the default player count uses the minimum stepper value", async () => {
     render(<NewGameScreen />);
-    expect(store.getState().game).toBeNull();
-    act(() => { fireEvent.click(screen.getByRole("button", { name: "Empath" })); });
-    act(() => { fireEvent.click(screen.getByRole("button", { name: "Fill the Bag" })); });
-    act(() => { fireEvent.click(screen.getByRole("button", { name: "Re-roll Bag" })); });
-    // dealRolePool()/newGame() are the only actions that create or touch game
-    // state; neither Fill nor Re-roll called them.
-    expect(store.getState().game).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Create setup/ }));
+    await waitFor(() => expect(store.getState().game).not.toBeNull());
+    expect(store.getState().game!.plannedPlayerCount).toBe(MIN_PLAYERS);
+    expect(store.getState().game!.rolePool).toEqual([]);
   });
+
+  it.each(Object.keys(SETUP_COUNTS).map(Number))(
+    "creating a setup for %i players always starts with an empty ordinary role pool",
+    async (count) => {
+      render(<NewGameScreen />);
+      fireEvent.click(screen.getByRole("row", { name: new RegExp(`^${count} `) }));
+      fireEvent.click(screen.getByRole("button", { name: /Create setup/ }));
+      await waitFor(() => expect(store.getState().game).not.toBeNull());
+      expect(store.getState().game!.rolePool).toEqual([]);
+      expect(store.getState().game!.plannedPlayerCount).toBe(count);
+    }
+  );
 });

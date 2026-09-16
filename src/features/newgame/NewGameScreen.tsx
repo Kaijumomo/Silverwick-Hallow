@@ -4,13 +4,18 @@ import { BUILTIN_SCRIPTS } from "@/data/scripts";
 import { ScriptTabs } from "./ScriptTabs";
 import { PlayerCountTable } from "./PlayerCountTable";
 import { PlayerCountStepper } from "./PlayerCountStepper";
-import { RolePickerPanel } from "./RolePickerPanel";
 import { ImportPanel } from "./ImportPanel";
 import { MIN_PLAYERS } from "@/data/setupCounts";
-import type { RoleId, Script } from "@/stores/types";
+import type { Script } from "@/stores/types";
 import { closeMultiplayerSession } from "@/firebase/storytellerSync";
 import { lifecycleMessage } from "@/firebase/lifecycle";
 
+/**
+ * New Game plans the game (script + player count); it no longer builds the
+ * character bag. That moves to the Grimoire Setup workspace, which the
+ * Storyteller opens deliberately after entering the Grimoire -- Fill/Re-roll,
+ * manual role selection, and Fabled/Lorics all live there now.
+ */
 export function NewGameScreen() {
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
@@ -25,12 +30,6 @@ export function NewGameScreen() {
     firstBuiltinId
   );
   const [playerCount, setPlayerCount] = useState(MIN_PLAYERS);
-  const [rolePool, setRolePool] = useState<RoleId[]>([]);
-  // Roles Silverwick most recently auto-filled into rolePool (Fill/Re-roll Bag).
-  // Everything else in rolePool is Storyteller-pinned and survives a re-roll.
-  const [generatedRoleIds, setGeneratedRoleIds] = useState<RoleId[]>([]);
-  const [plannedFabled, setPlannedFabled] = useState<RoleId[]>([]);
-  const [plannedLorics, setPlannedLorics] = useState<RoleId[]>([]);
 
   const allScripts: Record<string, Script> = useMemo(
     () => ({ ...BUILTIN_SCRIPTS, ...customScripts }),
@@ -39,41 +38,6 @@ export function NewGameScreen() {
 
   const activeScript =
     selectedScriptId !== "import" ? allScripts[selectedScriptId] : undefined;
-
-  const handleSelectScript = (id: string | "import") => {
-    setSelectedScriptId(id);
-    setRolePool([]);
-    setGeneratedRoleIds([]);
-    setPlannedFabled([]);
-    setPlannedLorics([]);
-  };
-
-  const toggleRole = (id: RoleId) => {
-    setRolePool((prev) =>
-      prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id]
-    );
-    // A deliberate click always means "intentional": clear any Fill/Re-roll
-    // generated-status for this id, whether it's being added fresh (so it
-    // becomes pinned) or removed (so it stops being tracked at all).
-    setGeneratedRoleIds((prev) => prev.filter((r) => r !== id));
-  };
-
-  const handleFillResult = (pool: RoleId[], generated: RoleId[]) => {
-    setRolePool(pool);
-    setGeneratedRoleIds(generated);
-  };
-
-  const toggleFabled = (id: RoleId) => {
-    setPlannedFabled((prev) =>
-      prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]
-    );
-  };
-
-  const toggleLoric = (id: RoleId) => {
-    setPlannedLorics((prev) =>
-      prev.includes(id) ? prev.filter((l) => l !== id) : [...prev, id]
-    );
-  };
 
   const handleStart = async () => {
     if (starting) return;
@@ -88,12 +52,7 @@ export function NewGameScreen() {
     setStartError(null);
     try {
       await closeMultiplayerSession();
-      newGame(activeScript.id, {
-      plannedPlayerCount: playerCount,
-      plannedRoles: rolePool,
-      plannedFabled,
-      plannedLorics,
-      });
+      newGame(activeScript.id, { plannedPlayerCount: playerCount });
     } catch (error) { setStartError(lifecycleMessage(error)); }
     finally { setStarting(false); }
   };
@@ -111,15 +70,19 @@ export function NewGameScreen() {
       </header>
 
       <div className="ng-body">
-        {/* Left column: script tabs + player count */}
         <div className="ng-left">
           <section className="ng-section">
             <h2 className="ng-section-title">Script</h2>
             <ScriptTabs
               customScripts={customScripts}
               selectedId={selectedScriptId}
-              onSelect={handleSelectScript}
+              onSelect={setSelectedScriptId}
             />
+            {selectedScriptId === "import" && (
+              <ImportPanel
+                onImported={(script) => setSelectedScriptId(script.id)}
+              />
+            )}
           </section>
 
           <section className="ng-section">
@@ -130,42 +93,6 @@ export function NewGameScreen() {
               onSelect={setPlayerCount}
             />
           </section>
-        </div>
-
-        {/* Right column: character grid or import panel */}
-        <div className="ng-right">
-          {selectedScriptId === "import" ? (
-            <section className="ng-section">
-              <h2 className="ng-section-title">Import script</h2>
-              <ImportPanel
-                onImported={(script) => {
-                  handleSelectScript(script.id);
-                }}
-              />
-            </section>
-          ) : activeScript ? (
-            <section className="ng-section">
-              <h2 className="ng-section-title">
-                {activeScript.name} · Characters{" "}
-                <span className="ng-section-hint">
-                  choose must-have roles, or Fill the Bag
-                </span>
-              </h2>
-              <RolePickerPanel
-                key={selectedScriptId}
-                scriptCharacters={activeScript.characters}
-                rolePool={rolePool}
-                generatedRoleIds={generatedRoleIds}
-                plannedFabled={plannedFabled}
-                plannedLorics={plannedLorics}
-                plannedPlayerCount={playerCount}
-                onToggleRole={toggleRole}
-                onToggleFabled={toggleFabled}
-                onToggleLoric={toggleLoric}
-                onFillResult={handleFillResult}
-              />
-            </section>
-          ) : null}
         </div>
       </div>
 
@@ -184,7 +111,6 @@ export function NewGameScreen() {
           {activeScript && (
             <span className="ng-start-meta">
               {" "}· {activeScript.name} · {playerCount} players
-              {rolePool.length > 0 && ` · ${rolePool.length} roles in pool`}
             </span>
           )}
         </button>

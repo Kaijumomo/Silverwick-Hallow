@@ -19,6 +19,7 @@ import { friendlyFirebaseError, type FriendlyError } from "@/firebase/errors";
 import { requireActiveSession, lifecycleMessage } from "@/firebase/lifecycle";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useMediaQuery } from "@/components/useMediaQuery";
+import type { RoleId } from "@/stores/types";
 
 const PHASE_LABEL: Record<string, string> = {
   setup: "Setup",
@@ -53,6 +54,11 @@ export function GameScreen() {
   const [goingLive, setGoingLive] = useState(false);
   const [nightPanelOpen, setNightPanelOpen] = useState(false);
   const [setupPanelOpen, setSetupPanelOpen] = useState(false);
+  // Which roles in the bag Silverwick most recently auto-filled (Fill/Re-roll
+  // Bag) -- lifted above SetupPanel so the pinned/generated distinction
+  // survives closing and reopening Setup within this Grimoire session. Not
+  // part of game/Firebase state: purely local UI provenance, never authority.
+  const [generatedRoleIds, setGeneratedRoleIds] = useState<RoleId[]>([]);
   const narrowScreen = useMediaQuery("(max-width: 760px)");
   const moreActionsRef = useRef<HTMLButtonElement>(null);
   const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
@@ -151,10 +157,9 @@ export function GameScreen() {
     if (game?.phase === "night") setNightPanelOpen(true);
   }, [game?.phase]);
 
-  // Auto-open setup panel whenever phase transitions to "setup".
-  useEffect(() => {
-    if (game?.phase === "setup") setSetupPanelOpen(true);
-  }, [game?.phase]);
+  // Setup is deliberately never auto-opened: Go Live and Setup are
+  // independent, parallel actions the Storyteller chooses between, and
+  // neither should push toward the other.
 
   // Phase 9C.6 (OPUS-002): ensure a Public Display capability exists once a
   // live lobby, its session id, and the LIVE runtime writer are all present.
@@ -529,6 +534,8 @@ export function GameScreen() {
             onClose={() => setSetupPanelOpen(false)}
             foreground={narrowScreen}
             returnFocusRef={moreActionsRef}
+            generatedRoleIds={generatedRoleIds}
+            onGeneratedRoleIdsChange={setGeneratedRoleIds}
           />
         )}
         {game.phase === "night" && nightPanelOpen && script && (

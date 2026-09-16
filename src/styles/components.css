@@ -2721,7 +2721,7 @@ select:focus-visible,
 .setup-player-heading label { display: flex; align-items: baseline; gap: 10px; font-family: var(--font-display); }
 .setup-player-heading input { width: 2.5em; min-height: 48px; padding: 0 4px; font-family: var(--font-display); font-size: 38px; color: var(--gold-bright); background: transparent; border: 0; border-bottom: 1px solid var(--border); }
 .setup-player-heading label > span { font-size: 17px; }
-.setup-travelers, .setup-caption { font-size: 14px; color: var(--text-dim); }
+.setup-travelers, .setup-caption, .setup-seated-count { font-size: 14px; color: var(--text-dim); }
 .setup-eyebrow { margin: 0 0 10px; font-family: var(--font-display); font-size: 12px; letter-spacing: .08em; font-weight: 600; }
 .setup-composition { margin: 24px 0; }
 .setup-composition-counts { margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
@@ -2751,6 +2751,7 @@ select:focus-visible,
 .setup-modifier-choices { display: flex; flex-wrap: wrap; gap: 8px; }
 .setup-modifier-choices [aria-pressed="true"] { color: var(--gold-bright); border-color: var(--gold-soft); background: rgba(196,158,80,.12); }
 .setup-editor-heading { font: 19px var(--font-display); margin: 0 0 20px; }
+.setup-bag-editor { display: flex; flex-direction: column; gap: 16px; }
 .setup-role-editor { display: grid; gap: 24px; }
 .setup-copy-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-block: 12px; }
 .setup-role-group .setup-eyebrow { display: flex; justify-content: space-between; gap: 8px; }

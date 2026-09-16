@@ -52,6 +52,7 @@ afterEach(() => {
 describe("responsive Storyteller workspace", () => {
   it("recalculates from stage width and height and caps large workspaces", () => {
     const view = render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "setup" })); // deliberately open Setup
     const stage = view.container.querySelector(".grimoire-stage")!;
     const canvas = view.container.querySelector(".grimoire")!;
     resizeStage(stage, 1040, 540);
@@ -65,6 +66,7 @@ describe("responsive Storyteller workspace", () => {
 
   it("preserves the practical diameter as seat count changes from 5 through 15", () => {
     const view = render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "setup" })); // deliberately open Setup
     const stage = view.container.querySelector(".grimoire-stage")!;
     const canvas = view.container.querySelector(".grimoire")!;
     resizeStage(stage, 1000, 650);
@@ -80,6 +82,7 @@ describe("responsive Storyteller workspace", () => {
   it("isolates mobile Setup and prevents focus from escaping to an underlying seat", () => {
     narrow = true;
     const view = render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "setup" })); // deliberately open Setup
     const dialog = screen.getByRole("dialog", { name: "Setup" });
     const seat = view.container.querySelector<HTMLElement>(".token.empty-seat")!;
     expect(dialog).toHaveAttribute("aria-modal", "true");
@@ -91,9 +94,10 @@ describe("responsive Storyteller workspace", () => {
     expect(dialog).toContainElement(document.activeElement as HTMLElement);
   });
 
-  it("closes auto-opened mobile Setup and restores access and focus to More actions", () => {
+  it("closes mobile Setup and restores access and focus to More actions", () => {
     narrow = true;
     const view = render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "setup" })); // deliberately open Setup
     fireEvent.click(screen.getByRole("button", { name: "Close setup panel" }));
     expect(screen.queryByRole("dialog", { name: "Setup" })).not.toBeInTheDocument();
     expect(view.container.querySelector(".game")).not.toHaveAttribute("data-setup-foreground");
@@ -104,6 +108,7 @@ describe("responsive Storyteller workspace", () => {
 
   it("switches an open Setup between desktop sidebar and mobile foreground on resize", () => {
     const view = render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "setup" })); // deliberately open Setup
     expect(screen.getByRole("complementary", { name: "Setup helper" })).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Setup" })).not.toBeInTheDocument();
     setNarrow(true);
@@ -120,6 +125,7 @@ describe("responsive Storyteller workspace", () => {
   it("removes active Setup when privacy is enabled and clears its background isolation", () => {
     narrow = true;
     const view = render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "setup" })); // deliberately open Setup
     const before = structuredClone(storyteller.getState().game);
     expect(screen.getByRole("dialog", { name: "Setup" })).toBeInTheDocument();
     // An external privacy change must also cleanly dismiss the foreground surface.

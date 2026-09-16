@@ -6,15 +6,24 @@ import { analyzeSetup } from "./setupAnalyzer";
 import { selectSetupContext } from "./setupContext";
 import { SetupFindings, CompositionSummary } from "./SetupFindings";
 import { setupPresentation, findingSummary } from "./setupPresentation";
-import { RolePoolEditor } from "./RolePoolEditor";
+import { BagEditor } from "./BagEditor";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
-import type { Script, StorytellerLobbyRecord } from "@/stores/types";
+import type { RoleId, Script, StorytellerLobbyRecord } from "@/stores/types";
 
 type Props = { game: StorytellerLobbyRecord; script: Script; onClose: () => void;
-  foreground?: boolean; returnFocusRef?: RefObject<HTMLElement> };
+  foreground?: boolean; returnFocusRef?: RefObject<HTMLElement>;
+  /** Which roles in game.rolePool Silverwick most recently auto-filled (Fill/
+   * Re-roll Bag), lifted above this panel so the distinction survives closing
+   * and reopening Setup within the same Grimoire session. Absent/lost state
+   * (a fresh mount, a hard reload) safely falls back to treating the whole
+   * pool as Storyteller-intentional, never silently replacing roles. */
+  generatedRoleIds?: RoleId[];
+  onGeneratedRoleIdsChange?: (ids: RoleId[]) => void;
+};
 
-export function SetupPanel({ game, script, onClose, foreground = false, returnFocusRef }: Props) {
+export function SetupPanel({ game, script, onClose, foreground = false, returnFocusRef,
+  generatedRoleIds = [], onGeneratedRoleIdsChange = () => {} }: Props) {
   const store = useStorytellerStore();
   const hidden = usePrivacyStore(s => s.enabled);
   const [editing, setEditing] = useState(false);
@@ -55,7 +64,8 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
     <div className="setup-overview">
       <div className="setup-player-heading">
         <label><input ref={countInput} type="number" min="1" step="1" aria-label="Players" value={game.plannedPlayerCount || ""}
-          onChange={e => { store.setPlannedPlayerCount(Number(e.target.value)); setError(null); }} /><span>Players</span></label>
+          onChange={e => { store.setPlannedPlayerCount(Number(e.target.value)); setError(null); }} /><span>Planned</span></label>
+        <span className="setup-seated-count">Seated: {p.occupiedNonTravelerCount}</span>
         {p.occupiedTravelerCount > 0 && <span className="setup-travelers">+ {p.occupiedTravelerCount} Traveler{p.occupiedTravelerCount === 1 ? "" : "s"}</span>}
       </div>
       <CompositionSummary analysis={view.composition} target={p.targetNonTravelerCount} />
@@ -80,7 +90,13 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
     </div>
     {editing && !view.dealt && <div>
       <h3 className="setup-editor-heading" ref={heading} tabIndex={-1}>Choose roles</h3>
-      <RolePoolEditor script={script} pool={pool} onChange={roles => { store.setRolePool(roles); setError(null); }} />
+      <BagEditor script={script} pool={pool} generatedRoleIds={generatedRoleIds}
+        fabledIds={game.fabled} loricIds={game.lorics} plannedPlayerCount={p.targetNonTravelerCount}
+        onPoolChange={(roles, generated) => {
+          store.setRolePool(roles);
+          onGeneratedRoleIdsChange(generated);
+          setError(null);
+        }} />
     </div>}
     <div ref={details} className="setup-details"><SetupFindings findings={view.findings} /></div>
     <details className="setup-modifiers"><summary>Fabled &amp; Lorics{game.fabled.length + game.lorics.length > 0 && ` · ${game.fabled.length + game.lorics.length} selected`}</summary>

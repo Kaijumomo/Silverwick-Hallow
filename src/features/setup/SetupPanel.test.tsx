@@ -7,7 +7,6 @@ import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
 import { makeSTPlayer } from "@/test/fixtures";
 import { SETUP_COUNTS } from "@/data/setupCounts";
 import { GameScreen } from "@/features/game/GameScreen";
-import { RolePickerPanel } from "@/features/newgame/RolePickerPanel";
 
 function prepare(roles=standardRoles(5)) {
   const game=setupGame(roles,{rolePool:roles});
@@ -137,17 +136,22 @@ describe("Phase 9C storyteller setup", () => {
     expect(within(dialog).getByLabelText("Players")).toBeInTheDocument();
   });
   it("GameScreen has no competing initial manual-start action", () => {
-    render(<GameScreen/>);expect(screen.queryByRole("button",{name:"Begin night 1"})).toBeNull();
+    render(<GameScreen/>);
+    fireEvent.click(screen.getByRole("button",{name:"setup"}));
+    expect(screen.queryByRole("button",{name:"Begin night 1"})).toBeNull();
     expect(screen.getByRole("button",{name:"Deal roles"})).toBeInTheDocument();
   });
   it("Setup toolbar keeps Travelers separate from ordinary players", () => {
     const game=store.getState().game!;game.players.t=makeSTPlayer({id:"t",seat:5,isTraveler:true,actualRole:"thief"});game.seatOrder.push("t");
-    render(<GameScreen/>);expect(screen.getByText("5 players · 1 Traveler")).toBeVisible();
+    render(<GameScreen/>);
+    expect(screen.getByText("5 players · 1 Traveler")).toBeVisible();
+    fireEvent.click(screen.getByRole("button",{name:"setup"}));
     expect(screen.getByText("+ 1 Traveler")).toBeVisible();
   });
-  it("New Game uses canonical Sentinel ranges with exact combinations on demand", () => {
-    render(<RolePickerPanel scriptCharacters={setupScript.characters} rolePool={standardRoles(8)} generatedRoleIds={[]} plannedPlayerCount={8}
-      plannedFabled={["sentinel"]} plannedLorics={[]} onToggleRole={()=>{}} onToggleFabled={()=>{}} onToggleLoric={()=>{}} onFillResult={()=>{}}/>);
+  it("Setup uses canonical Sentinel ranges with exact combinations on demand", () => {
+    store.getState().newGame(setupScript.id, { plannedPlayerCount: 8, plannedRoles: standardRoles(8), plannedFabled: ["sentinel"] });
+    for (let i = 0; i < 8; i++) store.getState().addPlayerToSeat("Player " + i);
+    render(<Panel/>);
     expect(screen.getByText("4–6")).toBeVisible();expect(screen.getByText("0–2")).toBeVisible();
     expect(screen.getByText("Allowed combinations").closest("details")).not.toHaveAttribute("open");
     expect(screen.queryByText(/Reconcile the target/)).toBeNull();
