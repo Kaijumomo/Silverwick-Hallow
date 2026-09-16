@@ -175,7 +175,15 @@ export function GameScreen() {
     }
     let cancelled = false;
     ensurePublicDisplayAccess(backend, lobby.code, lobby.sessionId)
-      .then(token => { if (!cancelled) setDisplayToken(token); })
+      .then(token => {
+        if (cancelled) return;
+        // A successful ensure clears any stale error from an earlier failed
+        // attempt (Luna revision) — otherwise a genuinely recovered
+        // capability would still show an obsolete/false error alongside a
+        // now-usable token.
+        setDisplayToken(token);
+        setDisplayLinkError(null);
+      })
       .catch(e => {
         if (cancelled) return;
         const friendly = friendlyFirebaseError(e, "st");
@@ -184,7 +192,15 @@ export function GameScreen() {
     return () => { cancelled = true; };
   }, [lobby?.code, lobby?.sessionId, backend]);
 
-  const displayLink = lobby && displayToken ? buildPublicDisplayLink(window.location, lobby.code, displayToken) : null;
+  // Luna revision: availability is derived from the CURRENT live runtime
+  // `backend`, not merely a previously-fetched `displayToken` — a stale
+  // token must not keep Open/Copy usable across a render where the runtime
+  // writer has already become unavailable but the passive effect above has
+  // not yet cleared it. This must never move into Zustand game state,
+  // persistence, checkpoint, projections, or localSeq/undo.
+  const displayLink = lobby && backend && displayToken
+    ? buildPublicDisplayLink(window.location, lobby.code, displayToken)
+    : null;
 
   const copyDisplayLink = async () => {
     if (!displayLink) return;
