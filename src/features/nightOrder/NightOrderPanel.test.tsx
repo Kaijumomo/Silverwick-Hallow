@@ -19,12 +19,11 @@ function Night() {
   return <NightOrderPanel game={game} script={troubleBrewing} onClose={() => {}} />;
 }
 function setup() {
-  store.getState().newGame("tb");
+  store.getState().newGame("tb", { plannedRoles: ["empath"] });
   store.getState().addPlayer("Alice");
-  const id = store.getState().game!.seatOrder[0]!;
-  store.getState().assignRole(id, "empath");
-  store.getState().setShownRole(id, "empath");
   store.getState().setPlannedPlayerCount(1);
+  // Initial ordinary distribution is always the randomized deal.
+  expect(store.getState().dealRolePool().ok).toBe(true);
   expect(store.getState().advancePhase().ok).toBe(true);
 }
 it("custom steps can be added, edited, completed, and restored across remount without sending information", () => {

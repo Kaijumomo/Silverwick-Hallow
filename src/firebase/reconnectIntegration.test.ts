@@ -480,18 +480,16 @@ describe("Phase 9C.2A.2A remediation — H2 checkpoint identity (writeGuard-only
    * the same recipe setupCommands.test.ts's own readiness tests rely on.
    * Establishes an initial acknowledged flush (via host()'s normal
    * startStorytellerSession path), then advances to night 1 through the
-   * setup readiness gate itself, exactly as Astra's reproduction did. */
+   * setup readiness gate itself, exactly as Astra's reproduction did.
+   * Initial ordinary distribution is always the randomized deal — there is
+   * no manual initial-assignment path — so this pools the roles and deals
+   * them rather than assigning them by hand. */
   async function hostShapedByBeginNightOne(b: MemoryRoomBackend) {
     await createLobby(b, "host", { codeGenerator: () => code });
     const session = await requireActiveSession(b, code);
-    useStorytellerStore.getState().newGame(setupScript.id, { plannedPlayerCount: 5, plannedRoles: [] });
+    useStorytellerStore.getState().newGame(setupScript.id, { plannedPlayerCount: 5, plannedRoles: standardRoles(5) });
     for (let i = 0; i < 5; i++) useStorytellerStore.getState().addPlayerToSeat("Player " + i);
-    useStorytellerStore.getState().game!.seatOrder.forEach((id, i) => {
-      useStorytellerStore.getState().assignRole(id, standardRoles(5)[i]!);
-      // Manual assignment leaves perception unconfigured; a "ready"
-      // beginNightOne-shaped game must reveal it explicitly (Phase 9C.4).
-      useStorytellerStore.getState().showAssignedRole(id);
-    });
+    expect(useStorytellerStore.getState().dealRolePool().ok).toBe(true);
     const lobby = { code, uid: "host", sessionId: session.id, status: "live" as const };
     useStorytellerStore.getState().setLobby(lobby);
     const writer = writerFor(b, session.id);

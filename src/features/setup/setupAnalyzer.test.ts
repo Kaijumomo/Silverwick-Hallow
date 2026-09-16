@@ -7,16 +7,26 @@ import { makeSTPlayer } from "@/test/fixtures";
 import { canonicalRoles } from "@/data/canonical";
 import type { StorytellerLobbyRecord, Script } from "@/stores/types";
 
-const analyze = (g: StorytellerLobbyRecord, s: Script = setupScript) => analyzeSetup(selectSetupContext(g,s));
+// Composition/provenance/structural analysis is this file's concern, not deal
+// policy (covered in setupCommands.test.ts), so games analyzed here are
+// assumed to already have a completed deal unless a test says otherwise.
+const analyze = (g: StorytellerLobbyRecord, s: Script = setupScript) =>
+  analyzeSetup(selectSetupContext({ ...g, setupRolesDealt: g.setupRolesDealt ?? true }, s));
 const codes = (g: StorytellerLobbyRecord, s?: Script) => analyze(g,s).findings.map(f => f.code);
 const candidate = (t: number,o: number,m=1,d=1) => ({townsfolk:t,outsider:o,minion:m,demon:d});
 
 describe("normalized setup population", () => {
+  it("a fresh Day-0 game with fully assigned roles still blocks begin readiness without a recorded deal", () => {
+    const g = setupGame(standardRoles(5)); // day:0, setupRolesDealt absent, rolePool: []
+    const a = analyzeSetup(selectSetupContext(g, setupScript)); // bypasses the file's dealt-by-default helper
+    expect(a.findings.find(f => f.code === "not-dealt")).toMatchObject({ severity: "blocker", actions: ["begin"] });
+    expect(a.readiness.begin.ok).toBe(false);
+  });
   it.each(Array.from({length:11},(_,i)=>i+5))("%i-player baseline", count => {
     const a=analyze(setupGame(standardRoles(count)));
     expect(a.assigned.actual).toEqual(SETUP_COUNTS[count]);
     expect(a.assigned.candidates).toEqual([SETUP_COUNTS[count]]);
-    expect(a.readiness.manual.ok).toBe(true);
+    expect(a.readiness.begin.ok).toBe(true);
   });
   it("keeps target, occupied, empty and Traveler facts separate", () => {
     const g=setupGame(standardRoles(5), {plannedPlayerCount:7});
@@ -26,7 +36,7 @@ describe("normalized setup population", () => {
     const a=analyze(g);
     expect(a.population).toEqual({targetNonTravelerCount:7,occupiedNonTravelerCount:5,occupiedTravelerCount:1,emptyPlannedSeatCount:1,totalPhysicalSeatCount:7});
     expect(a.assigned.actual).toEqual(SETUP_COUNTS[5]);
-    expect(a.readiness.manual.ok).toBe(false);
+    expect(a.readiness.begin.ok).toBe(false);
     expect(a.findings.find(f=>f.code==="planning-empty")?.severity).toBe("info");
   });
   it("uses actual roles even when shown roles and alignment disagree", () => {
@@ -36,17 +46,17 @@ describe("normalized setup population", () => {
   it("does not substitute a pool for assigned truth", () => {
     const g=setupGame(["","","","",""],{rolePool:standardRoles(5)});
     const a=analyze(g);expect(a.pool.roleCount).toBe(5);expect(a.assigned.roleCount).toBe(0);
-    expect(a.readiness.deal.ok).toBe(true);expect(a.readiness.manual.ok).toBe(false);
+    expect(a.readiness.deal.ok).toBe(true);expect(a.readiness.begin.ok).toBe(false);
   });
   it("explains both sources when both exist", () => {
     expect(codes(setupGame(standardRoles(5),{rolePool:standardRoles(5)}))).toContain("pool-and-assigned");
   });
   it("legacy zero target is unknown", () => {
     const a=analyze(setupGame(standardRoles(5),{plannedPlayerCount:0}));
-    expect(a.population.targetNonTravelerCount).toBeNull();expect(a.readiness.manual.ok).toBe(false);
+    expect(a.population.targetNonTravelerCount).toBeNull();expect(a.readiness.begin.ok).toBe(false);
   });
   it("small unusual games warn but remain operable", () => {
-    const a=analyze(setupGame(["imp"]));expect(a.readiness.manual.ok).toBe(true);
+    const a=analyze(setupGame(["imp"]));expect(a.readiness.begin.ok).toBe(true);
     expect(a.findings.find(f=>f.code==="unsupported-population")?.severity).toBe("warning");
   });
 });
@@ -67,7 +77,7 @@ describe("reviewed whole composition policies", () => {
     const a=analyze(setupGame(["chef","empath","washerwoman","librarian","undertaker","drunk","godfather","imp"]));
     expect(a.assigned.candidates).toEqual([candidate(6,0),candidate(4,2)]);
     expect(a.findings.find(f=>f.code==="composition:assigned")?.severity).toBe("warning");
-    expect(a.readiness.manual.ok).toBe(true);
+    expect(a.readiness.begin.ok).toBe(true);
   });
   it("Vigormortis exchanges an existing Outsider", () => {
     const a=analyze(setupGame(["chef","empath","washerwoman","librarian","undertaker","monk","drunk","poisoner","vigormortis"]));
@@ -94,7 +104,7 @@ describe("reviewed whole composition policies", () => {
   it.each(["atheist","legion","lilmonsta","hermit","xaan","alchemist","boffin","amnesiac"])("%s never receives precise ordinary expectations", id => {
     const a=analyze(setupGame([id,...standardRoles(5).slice(1)]));
     expect(a.assigned.candidates).toBeNull();expect(a.findings.some(f=>f.severity==="check")).toBe(true);
-    expect(a.readiness.manual.ok).toBe(true);
+    expect(a.readiness.begin.ok).toBe(true);
   });
 });
 
@@ -103,11 +113,11 @@ describe("provenance, definitions and duplicates", () => {
     const s={...setupScript,characters:setupScript.characters.map(r=>r.id==="baron"?{id:"baron",name:"Custom Baron",type:"minion" as const,provenance:{status:"homebrew" as const}}:r)};
     const a=analyze(setupGame(["chef","empath","washerwoman","baron","imp"]),s);
     expect(a.assigned.candidates).toBeNull();expect(a.assigned.actual).toEqual(SETUP_COUNTS[5]);
-    expect(a.readiness.manual.ok).toBe(true);expect(a.findings.some(f=>f.code==="custom:assigned")).toBe(true);
+    expect(a.readiness.begin.ok).toBe(true);expect(a.findings.some(f=>f.code==="custom:assigned")).toBe(true);
   });
   it("an unknown role blocks manual start without crashing", () => {
     const a=analyze(setupGame(["mystery",...standardRoles(5).slice(1)]));
-    expect(a.readiness.manual.ok).toBe(false);expect(a.assigned.candidates).toBeNull();
+    expect(a.readiness.begin.ok).toBe(false);expect(a.assigned.candidates).toBeNull();
     expect(a.findings.some(f=>f.code==="unresolved:assigned:mystery")).toBe(true);
   });
   it("unknown pooled role blocks dealing", () => {
@@ -119,17 +129,17 @@ describe("provenance, definitions and duplicates", () => {
   });
   it("identical repeated script definitions are harmless", () => {
     const s={...setupScript,characters:[...setupScript.characters,...canonicalRoles(["chef"])]};
-    expect(analyze(setupGame(standardRoles(5)),s).readiness.manual.ok).toBe(true);
+    expect(analyze(setupGame(standardRoles(5)),s).readiness.begin.ok).toBe(true);
   });
   it("runtime Traveler override of a homebrew definition is detected", () => {
     const s={...setupScript,characters:setupScript.characters.map(r=>r.id==="thief"?{id:"thief",name:"Homebrew thief",type:"traveler" as const}:r)};
     const g=setupGame(standardRoles(5));g.players.t=makeSTPlayer({id:"t",seat:5,isTraveler:true,actualRole:"thief"});g.seatOrder.push("t");
-    expect(analyze(g,s).readiness.manual.ok).toBe(false);
+    expect(analyze(g,s).readiness.begin.ok).toBe(false);
   });
   it("unexplained duplicates warn without blocking", () => {
     const a=analyze(setupGame(["washerwoman","washerwoman","washerwoman","poisoner","imp"]));
     expect(a.findings.find(f=>f.code==="duplicate:assigned:washerwoman")?.severity).toBe("warning");
-    expect(a.readiness.manual.ok).toBe(true);
+    expect(a.readiness.begin.ok).toBe(true);
   });
   it.each([2,3])("allows %i canonical Village Idiots with a drunk-choice check", n => {
     const a=analyze(setupGame([...Array(n).fill("villageidiot"),"poisoner","imp"]));
@@ -155,18 +165,18 @@ describe("structural and manual checks", () => {
     for(const p of Object.values(g.players))p.shownRole=null;
     const before=JSON.stringify(g);
     const a=analyze(g);
-    expect(a.findings.find(f=>f.code==="missing-perception:ordinary")).toMatchObject({severity:"blocker",actions:["manual"]});
-    expect(a.readiness.manual.ok).toBe(false);
+    expect(a.findings.find(f=>f.code==="missing-perception:ordinary")).toMatchObject({severity:"blocker",actions:["begin"]});
+    expect(a.readiness.begin.ok).toBe(false);
     expect(JSON.stringify(g)).toBe(before);
     for(const p of Object.values(g.players))p.shownRole=p.actualRole;
     expect(codes(g)).not.toContain("missing-perception:ordinary");
-    expect(analyze(g).readiness.manual.ok).toBe(true);
+    expect(analyze(g).readiness.begin.ok).toBe(true);
   });
   it("unresolved Traveler perception needs review in either assignment workflow", () => {
     const g=setupGame(standardRoles(5));
     g.players.t=makeSTPlayer({id:"t",seat:5,isTraveler:true,actualRole:"thief",shownRole:null});
     g.seatOrder.push("t");
-    expect(analyze(g).findings.find(f=>f.code==="missing-perception:traveler")).toMatchObject({severity:"check",actions:["deal","manual"]});
+    expect(analyze(g).findings.find(f=>f.code==="missing-perception:traveler")).toMatchObject({severity:"check",actions:["deal","begin"]});
   });
   it.each(["duplicate","dangling","orphan","wrong-id"])("%s seat state blocks both operations", mode => {
     const g=setupGame(standardRoles(5),{rolePool:standardRoles(5)});
@@ -174,23 +184,23 @@ describe("structural and manual checks", () => {
     if(mode==="dangling")g.seatOrder.push("absent");
     if(mode==="orphan")g.seatOrder.pop();
     if(mode==="wrong-id")g.players.p0!.id="other";
-    const a=analyze(g);expect(a.readiness.manual.ok).toBe(false);expect(a.readiness.deal.ok).toBe(false);
+    const a=analyze(g);expect(a.readiness.begin.ok).toBe(false);expect(a.readiness.deal.ok).toBe(false);
   });
   it("redundant seat numbering mismatch warns rather than corrupting counts", () => {
     const g=setupGame(standardRoles(5));g.players.p0!.seat=99;
-    expect(analyze(g).readiness.manual.ok).toBe(true);
+    expect(analyze(g).readiness.begin.ok).toBe(true);
     expect(codes(g)).toContain("seat-index:p0");
   });
   it.each([true,false])("Traveler type contradiction %s blocks manual start", flag => {
     const g=setupGame(standardRoles(5));g.players.p0!.isTraveler=flag;g.players.p0!.actualRole=flag?"chef":"thief";
-    expect(codes(g)).toContain("traveler-type:p0");expect(analyze(g).readiness.manual.ok).toBe(false);
+    expect(codes(g)).toContain("traveler-type:p0");expect(analyze(g).readiness.begin.ok).toBe(false);
   });
   it("Fabled cannot be dealt to an ordinary seat", () => {
     expect(analyze(setupGame(standardRoles(5),{rolePool:["sentinel",...standardRoles(5).slice(1)]})).readiness.deal.ok).toBe(false);
   });
   it("unknown or wrong-category modifiers require review without blocking", () => {
     const a=analyze(setupGame(standardRoles(5),{fabled:["pope","unknown"],lorics:["sentinel"]}));
-    expect(a.assigned.candidates).toBeNull();expect(a.readiness.manual.ok).toBe(true);
+    expect(a.assigned.candidates).toBeNull();expect(a.readiness.begin.ok).toBe(true);
     expect(a.findings.filter(f=>f.code.startsWith("modifier:"))).toHaveLength(3);
   });
   it.each([["huntsman","damsel"],["choirboy","king"]])("%s warns about missing %s", (id) => {
@@ -208,7 +218,7 @@ describe("structural and manual checks", () => {
   });
   it.each(["gardener","tor","bootlegger"])("%s is nonblocking Storyteller judgment", id => {
     const a=analyze(setupGame(standardRoles(5),{lorics:[id]}));
-    expect(a.readiness.manual.ok).toBe(true);
+    expect(a.readiness.begin.ok).toBe(true);
     expect(a.findings.find(f=>f.code==="modifier:"+id)?.severity).toBe("check");
   });
   it("findings sort blockers, checks, warnings, info", () => {

@@ -539,7 +539,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const { game, undoStack } = get();
         if (!game) return { ok: false, message: "No game is open." };
         const context = selectSetupContext(game, selectScriptById(get(), game.scriptId));
-        const ready = analyzeSetup(context).readiness.manual;
+        const ready = analyzeSetup(context).readiness.begin;
         if (!ready.ok) return ready;
         set({
           undoStack: pushUndo(game, undoStack),
@@ -1253,7 +1253,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // Validate that snapshot too; never use Undo as an unguarded first start.
         if (get().game?.phase === "setup" && (previous.phase === "night" || previous.phase === "day")) {
           const context = selectSetupContext({ ...previous, phase: "setup" }, selectScriptById(get(), previous.scriptId));
-          if (!analyzeSetup(context).readiness.manual.ok) return;
+          if (!analyzeSetup(context).readiness.begin.ok) return;
         }
         set({
           game: clone(previous),

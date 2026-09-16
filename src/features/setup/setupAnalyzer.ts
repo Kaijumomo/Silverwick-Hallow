@@ -19,7 +19,7 @@ export type SetupAnalysis = {
   pool: CompositionAnalysis;
   assigned: CompositionAnalysis;
   findings: SetupFinding[];
-  readiness: { deal: ReturnType<typeof setupReadiness>; manual: ReturnType<typeof setupReadiness> };
+  readiness: { deal: ReturnType<typeof setupReadiness>; begin: ReturnType<typeof setupReadiness> };
 };
 const rank = { blocker: 0, check: 1, warning: 2, info: 3 };
 export function sortSetupFindings(findings: SetupFinding[]) {
@@ -76,7 +76,7 @@ export function analyzeSetup(context: SetupContext): SetupAnalysis {
 
   for (const p of context.occupied) {
     if (!p.name.trim()) add("missing-name:" + p.id, "blocker", "Name each occupied player or mark the seat empty before starting.");
-    const actions: SetupAction[] = p.isTraveler ? ["deal", "manual"] : ["manual"];
+    const actions: SetupAction[] = p.isTraveler ? ["deal", "begin"] : ["begin"];
     const role = p.actualRole ? inspectRole(p.actualRole, "assigned", actions, p.id) : undefined;
     if (role && (p.isTraveler !== (role.type === "traveler") || !p.isTraveler && !isBagType(role.type)))
       add("traveler-type:" + p.id, "blocker", `Review ${p.name}'s Traveler flag and actual character type.`, "assigned", actions, p.id);
@@ -97,7 +97,7 @@ export function analyzeSetup(context: SetupContext): SetupAnalysis {
   const missingOrdinary = context.ordinary.filter(p => p.actualRole && !p.shownRole);
   if (missingOrdinary.length) add("missing-perception:ordinary", "blocker",
     `Choose the identity each player will see before beginning Night 1: ${missingOrdinary.map(p => p.name).join(", ")}.`,
-    "shared", ["manual"]);
+    "shared", ["begin"]);
 
   // Traveler perception may intentionally remain unset — Travelers are
   // exempt from the 9C.4 all-or-none publication barrier, so there is no
@@ -105,7 +105,7 @@ export function analyzeSetup(context: SetupContext): SetupAnalysis {
   const missingTraveler = context.travelers.filter(p => p.actualRole && !p.shownRole);
   if (missingTraveler.length) add("missing-perception:traveler", "check",
     `Review shown identities for ${missingTraveler.map(p => p.name).join(", ")}. Silverwick cannot derive their character wake procedures or deliver their player identities until perception is configured. Use the seat's identity controls, or handle those procedures manually if concealment is intentional.`,
-    "shared", ["deal", "manual"]);
+    "shared", ["deal", "begin"]);
 
   const modifierDefs: RoleDef[] = [];
   for (const [ids, catalog, category] of [
@@ -127,7 +127,7 @@ export function analyzeSetup(context: SetupContext): SetupAnalysis {
   }
   const unknownModifier = [...game.fabled, ...(game.lorics ?? [])].some(id => !modifierDefs.some(r => r.id === id));
   function composition(ids: string[], source: "pool" | "assigned"): CompositionAnalysis {
-    const actions: SetupAction[] = source === "pool" ? ["deal"] : ["manual"];
+    const actions: SetupAction[] = source === "pool" ? ["deal"] : ["begin"];
     const roles: RoleDef[] = [];
     for (const id of ids) {
       const role = source === "pool" ? inspectRole(id, source, actions) : registry?.get(id);
@@ -199,7 +199,7 @@ export function analyzeSetup(context: SetupContext): SetupAnalysis {
   const poolAnalysis = composition(pool, "pool");
   const assignedAnalysis = composition(assigned, "assigned");
   if (pool.length && assigned.length) add("pool-and-assigned", "warning",
-    "Both a role pool and actual assignments exist. Dealing replaces ordinary assignments; clear the pool to use manual assignments.");
+    "Both a role pool and actual assignments exist. Dealing will replace the current ordinary assignments.");
   if (population.targetNonTravelerCount !== null && (population.targetNonTravelerCount < 5 || population.targetNonTravelerCount > 15))
     add("unsupported-population", "warning", "Standard composition guidance covers 5–15 ordinary players. Review this population manually.");
   if (population.emptyPlannedSeatCount) add("planning-empty", "info",
@@ -210,6 +210,6 @@ export function analyzeSetup(context: SetupContext): SetupAnalysis {
   const sorted = sortSetupFindings(unique);
   return {
     population, pool: poolAnalysis, assigned: assignedAnalysis, findings: sorted,
-    readiness: { deal: setupReadiness(sorted, "deal"), manual: setupReadiness(sorted, "manual") },
+    readiness: { deal: setupReadiness(sorted, "deal"), begin: setupReadiness(sorted, "begin") },
   };
 }

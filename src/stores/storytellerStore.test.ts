@@ -274,13 +274,12 @@ describe("setFabled", () => {
   });
 
   it("game.fabled persists after advancing phase from setup to night", () => {
-    useStorytellerStore.getState().newGame("tb");
+    useStorytellerStore.getState().newGame("tb", { plannedRoles: ["chef"] });
     useStorytellerStore.getState().setFabled(["djinn", "doomsayer"]);
     useStorytellerStore.getState().addPlayer("Alice");
-    const id = useStorytellerStore.getState().game!.seatOrder[0]!;
-    useStorytellerStore.getState().assignRole(id, "chef");
-    useStorytellerStore.getState().showAssignedRole(id);
     useStorytellerStore.getState().setPlannedPlayerCount(1);
+    // Initial ordinary distribution is always the randomized deal.
+    expect(useStorytellerStore.getState().dealRolePool().ok).toBe(true);
     expect(useStorytellerStore.getState().advancePhase().ok).toBe(true);
     const game = useStorytellerStore.getState().game!;
     expect(game.phase).toBe("night");

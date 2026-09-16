@@ -1,7 +1,7 @@
 import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import type { Script, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 
-export type SetupAction = "deal" | "manual";
+export type SetupAction = "deal" | "begin";
 export type SetupSource = "pool" | "assigned" | "shared";
 export type SetupFinding = {
   code: string;
@@ -29,6 +29,17 @@ export type SetupContext = {
   pool: string[];
   assigned: string[];
 };
+
+/**
+ * A fresh Day-0 game only has evidence of a completed initial deal once
+ * dealRolePool() records setupRolesDealt; day > 0 means the game already left
+ * Setup at least once, which is the only other trustworthy signal — a
+ * running/legacy game returning to Setup must remain usable without
+ * fabricating deal history it cannot know occurred.
+ */
+export function isPostDeal(game: StorytellerLobbyRecord): boolean {
+  return !game.rolePool.length && (!!game.setupRolesDealt || game.day > 0);
+}
 
 /** No presence, roster, shown identity, or geometry enters population selection. */
 export function selectSetupContext(game: StorytellerLobbyRecord, script?: Script): SetupContext {

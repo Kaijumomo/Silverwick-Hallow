@@ -1,15 +1,13 @@
 import type { SetupAnalysis } from "./setupAnalyzer";
-import type { SetupFinding } from "./setupContext";
+import { isPostDeal, type SetupFinding } from "./setupContext";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
-// A running legacy game can return to Setup without inventing an initial deal.
-export const isPostDeal = (game: StorytellerLobbyRecord) => !game.rolePool.length && (!!game.setupRolesDealt || game.day > 0);
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** Presentation only. Structural permission always comes from the analyzer. */
 export function setupPresentation(game: StorytellerLobbyRecord, analysis: SetupAnalysis) {
   const dealt = isPostDeal(game);
-  const action = dealt ? "manual" : "deal";
+  const action = dealt ? "begin" : "deal";
   const findings = analysis.findings.filter(f =>
     (!f.actions || f.actions.includes(action)) &&
     (f.severity === "blocker" || f.source === "shared" || f.source === (dealt ? "assigned" : "pool") || f.code.startsWith("traveler-")));

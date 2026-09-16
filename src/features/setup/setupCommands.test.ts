@@ -11,6 +11,10 @@ beforeEach(() => {
   localStorage.clear();
   store.setState({game:null,lobby:null,undoStack:[],customScripts:{[setupScript.id]:setupScript}});
 });
+// pool=false manually assigns every ordinary role with no deal ever run —
+// there is no manual initial-assignment workflow, so this fixture proves the
+// begin gate blocks it, never that it succeeds. Use dealt() for a genuinely
+// ready-to-begin game.
 function prepare(pool = false) {
   store.getState().newGame(setupScript.id,{plannedPlayerCount:5,plannedRoles:pool?standardRoles(5):[]});
   for(let i=0;i<5;i++)store.getState().addPlayerToSeat("Player "+i);
@@ -22,10 +26,16 @@ function prepare(pool = false) {
     store.getState().showAssignedRole(id);
   });
 }
+// The only supported route to a begin-ready fresh Day-0 game: pool it, then
+// run the real randomized deal.
+function dealt() {
+  prepare(true);
+  store.getState().dealRolePool();
+}
 const state = () => store.getState();
 const game = () => state().game!;
 const actions = [
-  ["manual", ()=>state().beginNightOne()],
+  ["begin", ()=>state().beginNightOne()],
   ["advance", ()=>state().advancePhase()],
   ["phase-night", ()=>state().setPhase("night")],
   ["phase-day", ()=>state().setPhase("day")],
@@ -41,14 +51,23 @@ describe("one setup command gate", () => {
     expect(state()).toBe(before);
   });
   it.each(actions)("%s blocks missing identities with no partial mutation", (_name,run) => {
-    prepare();state().assignRole(game().seatOrder[0]!,"");
+    dealt();state().assignRole(game().seatOrder[0]!,"");
     const before=state();expect(run().ok).toBe(false);expect(state()).toBe(before);
   });
   it.each(actions)("%s cannot skip an undealt pool", (_name,run) => {
     prepare(true);const before=state();expect(run().ok).toBe(false);expect(state()).toBe(before);
   });
-  it.each(actions)("%s uses manual assignments and records starting population", (_name,run) => {
-    prepare();expect(run().ok).toBe(true);expect(game().phase).toBe("night");expect(game().day).toBe(1);
+  // Proof A (required behavior): a fresh Day-0 game cannot begin Night 1 from
+  // manual assignment alone, however completely it is otherwise configured —
+  // and none of these entry points may bypass that.
+  it.each(actions)("%s blocks a fully manually-assigned fresh setup with no randomized deal", (_name,run) => {
+    prepare();const before=state();expect(run().ok).toBe(false);expect(state()).toBe(before);
+    expect(game().phase).toBe("setup");
+  });
+  // Proof B: the same population, reached via the real deal, succeeds through
+  // every one of those entry points and still records the starting population.
+  it.each(actions)("%s succeeds once the initial randomized deal has completed", (_name,run) => {
+    dealt();expect(run().ok).toBe(true);expect(game().phase).toBe("night");expect(game().day).toBe(1);
     expect(game().startingNonTravelerCount).toBe(5);
   });
   it("deals ordinary roles, then records the starting population only when night begins", () => {
@@ -69,12 +88,15 @@ describe("one setup command gate", () => {
     prepare();state().setRolePool(["unknown",...standardRoles(5).slice(1)]);
     const before=state();expect(state().dealRolePool().ok).toBe(false);expect(state()).toBe(before);
   });
-  it("clearing the pool enables a completed manual workflow", () => {
+  // Proof E: clearing the pool must never fabricate a deal that never happened.
+  it("clearing the pool does not fabricate a deal for manually assigned roles", () => {
     prepare();state().setRolePool(standardRoles(5));expect(state().beginNightOne().ok).toBe(false);
-    state().setRolePool([]);expect(state().beginNightOne().ok).toBe(true);
+    state().setRolePool([]);expect(state().beginNightOne().ok).toBe(false);
+    expect(game().phase).toBe("setup");
   });
+  // Proof C: a post-deal manual correction to one seat still allows Night 1.
   it("warnings and Storyteller checks never act as rule vetoes", () => {
-    prepare();state().assignRole(game().seatOrder[0]!,"atheist");state().setLorics(["tor","gardener"]);
+    dealt();state().assignRole(game().seatOrder[0]!,"atheist");state().setLorics(["tor","gardener"]);
     expect(state().beginNightOne().ok).toBe(true);
   });
   it("Undo does not bypass readiness for an invalid live snapshot", () => {
@@ -100,7 +122,7 @@ describe("one setup command gate", () => {
     expect(Object.values(game().players).every(p => !!buildRegistry(setupScript).get(p.shownRole!))).toBe(true);
   });
   it("Undo of a successful start restores planning without a made-up baseline", () => {
-    prepare();state().beginNightOne();state().undo();
+    dealt();expect(state().beginNightOne().ok).toBe(true);state().undo();
     expect(game().phase).toBe("setup");expect(game().startingNonTravelerCount).toBeUndefined();
   });
 });
@@ -126,7 +148,7 @@ describe("Phase 9C.4 (OPUS-004) — concealed-perception readiness gate", () => 
     prepareConcealed();
     state().dealRolePool();
     expect(game().players[drunkId()]!.shownRole).toBeNull();
-    const ready = analyzeSetup(selectSetupContext(game(), setupScript)).readiness.manual;
+    const ready = analyzeSetup(selectSetupContext(game(), setupScript)).readiness.begin;
     expect(ready.ok).toBe(false);
     expect(state().beginNightOne().ok).toBe(false);
     expect(game().phase).toBe("setup");
@@ -238,17 +260,26 @@ describe("population and persisted history", () => {
     expect(selectSetupContext(game(),setupScript).population).toEqual(before);
   });
   it("starting count survives attendance changes and phase advancement", () => {
-    prepare();state().beginNightOne();state().removePlayer(game().seatOrder[0]!);state().advancePhase();
+    dealt();state().beginNightOne();state().removePlayer(game().seatOrder[0]!);state().advancePhase();
     expect(game().startingNonTravelerCount).toBe(5);expect(game().plannedPlayerCount).toBe(5);
   });
   it("starting count survives revisiting setup", () => {
-    prepare();state().beginNightOne();state().setPhase("setup");
+    dealt();state().beginNightOne();state().setPhase("setup");
     state().removePlayer(game().seatOrder[0]!);state().setPlannedPlayerCount(4);state().beginNightOne();
     expect(game().startingNonTravelerCount).toBe(5);
   });
+  // Proof F: a genuinely running/legacy game (day > 0, no setupRolesDealt
+  // marker at all) returning to Setup must remain usable — day > 0 is trusted
+  // evidence an initial deal already happened, without inventing one.
   it("legacy running history stays unknown even after returning to setup", () => {
-    store.setState({game:setupGame(standardRoles(5),{phase:"day",day:3})});
-    state().setPhase("setup");state().beginNightOne();expect(game().startingNonTravelerCount).toBeUndefined();
+    const legacy = setupGame(standardRoles(5),{phase:"day",day:3});
+    expect(Object.hasOwn(legacy, "setupRolesDealt")).toBe(false);
+    store.setState({game:legacy});
+    state().setPhase("setup");
+    expect(analyzeSetup(selectSetupContext(game(), setupScript)).readiness.begin.ok).toBe(true);
+    expect(state().beginNightOne().ok).toBe(true);
+    expect(game().phase).toBe("night");
+    expect(game().startingNonTravelerCount).toBeUndefined();
     expect(Object.hasOwn(game(), "startingNonTravelerCount")).toBe(false);
   });
   it("legacy re-deal omits unknown history rather than writing undefined to Firebase", () => {
@@ -268,7 +299,7 @@ describe("population and persisted history", () => {
     expect(migrated.undoStack![0]!.startingNonTravelerCount).toBeUndefined();
   });
   it("current local persistence and checkpoint schema preserve starting count", async () => {
-    prepare();state().beginNightOne();
+    dealt();state().beginNightOne();
     const saved=localStorage.getItem("new-blood-st")!;
     expect(JSON.parse(saved).version).toBe(12);
     store.setState({game:null});localStorage.setItem("new-blood-st",saved);
@@ -277,7 +308,7 @@ describe("population and persisted history", () => {
     expect(StorytellerGamePersistedSchema.parse(checkpoint.game).startingNonTravelerCount).toBe(5);
   });
   it("starting setup fact never enters public/self projections", () => {
-    prepare();state().beginNightOne();
+    dealt();state().beginNightOne();
     const publicData=projectLobbyToPublic(game(),{});
     const self=projectLobbyToSelfMap(game(),buildRegistry(setupScript));
     for(const data of [publicData,self])expect(JSON.stringify(data)).not.toContain("startingNonTravelerCount");
