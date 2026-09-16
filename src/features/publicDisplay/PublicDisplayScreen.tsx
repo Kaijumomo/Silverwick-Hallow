@@ -3,11 +3,35 @@ import { connectFirebase } from "@/firebase/session";
 import { isFirebaseConfigured } from "@/firebase/config";
 import { friendlyFirebaseError } from "@/firebase/errors";
 import { usePublicLobby } from "@/firebase/publicSync";
+import { CONNECTION_ERROR_MESSAGE } from "@/firebase/snapshots";
+import { authorizePublicDisplay, parseDisplayTokenFromFragment } from "@/firebase/publicDisplayAuth";
 import { ringRadius, seatPosition, tokenSizeForCount } from "@/features/grimoire/layout";
 import type { RoomBackend } from "@/firebase/backend";
 import { PublicSeat } from "./PublicSeat";
 import { PHASE_LABEL, selectActiveFabled, selectActiveLorics } from "./presenters";
 import { RemoteScreenBoundary } from "@/features/remote/RemoteScreenBoundary";
+
+/** Phase 9C.6 (OPUS-002): attempt enrollment (if a fragment token is
+ * present), clean the URL on success, and NEVER let a denied/stale fragment
+ * block the subsequent public subscription attempt — the same anonymous UID
+ * may already hold a valid `displayMembers/{uid}` binding from an earlier,
+ * successful enrollment, while this particular fragment is merely stale or
+ * foreign. Never logs or renders the token itself. */
+async function enrollFromFragment(backend: RoomBackend, code: string, uid: string): Promise<void> {
+  const token = parseDisplayTokenFromFragment(window.location.hash);
+  if (!token) return;
+  try {
+    await authorizePublicDisplay(backend, code, uid, token);
+    const cleaned = new URL(window.location.href);
+    cleaned.hash = "";
+    window.history.replaceState(null, "", `${cleaned.pathname}${cleaned.search}`);
+  } catch {
+    // Denied or malformed: do not leak the token, do not block the caller —
+    // the normal public subscription attempt below still runs.
+    // eslint-disable-next-line no-console
+    console.error("[publicDisplay enroll] denied");
+  }
+}
 
 type Props = { code: string };
 
@@ -21,13 +45,18 @@ function PublicDisplayContent({ code }: Props) {
   const [size, setSize] = useState(800);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  // Firebase connect (anon auth shared via persistence with sibling tabs).
+  // Firebase connect, then (Phase 9C.6, OPUS-002) attempt fragment-token
+  // enrollment BEFORE exposing `backend` to the public subscription below —
+  // so that subscription never races ahead of a required enrollment. The
+  // authorization UID comes ONLY from connectFirebase()'s own return value —
+  // never the URL, fragment, query parameter, or local input.
   useEffect(() => {
     let mounted = true;
     if (!isFirebaseConfigured()) return;
     (async () => {
       try {
-        const { backend: b } = await connectFirebase();
+        const { backend: b, uid } = await connectFirebase();
+        await enrollFromFragment(b, code, uid);
         if (mounted) setBackend(b);
       } catch (e) {
         if (mounted) {
@@ -41,7 +70,7 @@ function PublicDisplayContent({ code }: Props) {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [code]);
 
   // Resize observer for the seating circle container.
   useEffect(() => {
@@ -76,7 +105,18 @@ function PublicDisplayContent({ code }: Props) {
     );
   }
   if (error) {
-    return <div className="public-display public-display-message" role="alert"><h2>Game data unavailable</h2><p>{error}</p></div>;
+    // Phase 9C.6 (OPUS-002): CONNECTION_ERROR_MESSAGE is exactly what a
+    // denied/rotated/expired `/public` read (or a genuine network issue)
+    // surfaces as here — display-specific guidance replaces the old
+    // "open this view from the storyteller's browser tab" advice, which is
+    // obsolete now that a real separate device is authorized by capability,
+    // not by a shared anonymous identity. Other messages (e.g. "this lobby
+    // does not exist or has expired") are already specific and left as-is.
+    // Never exposes raw Firebase diagnostics or capability contents.
+    const message = error === CONNECTION_ERROR_MESSAGE
+      ? "This display is no longer authorized. Open a fresh Public Display link from the Storyteller. You can also check this device's connection."
+      : error;
+    return <div className="public-display public-display-message" role="alert"><h2>Game data unavailable</h2><p>{message}</p></div>;
   }
   if (ended && !publicLobby) {
     return <div className="public-display public-display-message" role="status"><h2>Game ended</h2></div>;
@@ -93,8 +133,8 @@ function PublicDisplayContent({ code }: Props) {
       <div className="public-display public-display-message">
         <h2>Lobby {code} not found</h2>
         <p>
-          This device is not authorized to view this lobby. Open this view from the
-          storyteller's browser tab so the auth session matches.
+          This lobby doesn't exist, has ended, or this device isn't authorized.
+          Ask the Storyteller for a fresh Public Display link.
         </p>
       </div>
     );

@@ -95,9 +95,18 @@ Storyteller-controlled `roster/{uid}` binding, granting private role access.
 - **Role art** — wiki-hosted token images, lazy-loaded with text fallback if 404
 
 **Public Display (projector)**
-- Visit `?display=public&code=XXXX` on a second screen
+- On the Storyteller's own screen, use **Public display ↗** / **Copy display
+  link** in the game header's overflow menu. These build an authorized link
+  — `?display=public&code=XXXX#displayToken=...` — that a genuinely separate
+  device (a projector, TV, or second computer) can open to view the public
+  display. Simply typing `?display=public&code=XXXX` on a second device is
+  **not** sufficient on its own: that URL alone no longer carries the
+  capability a separate device needs (Phase 9C.6, OPUS-002).
+- **Reset display link** revokes every previously issued display link/device
+  immediately and issues a new one — use it if a link was shared too widely.
 - Shows all seated players (with online status), active Fabled, Lorics, and Jinxes
 - Override icon base URL via `VITE_ICON_BASE_URL` env var if self-hosting token art
+- See `src/firebase/PROTOCOL.md` for the full capability lifecycle.
 
 ## Testing
 

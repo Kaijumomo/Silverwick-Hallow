@@ -19,6 +19,8 @@ roster entries are not evidence of valid membership.
 | `outcomes/{uid}` | Durable rejected/revoked result | That UID | Storyteller writer only |
 | `leaveRequests/{uid}` | Seated player's departure request | That UID and ST | Seated UID creates; Storyteller consumes |
 | `presence` / `presence/{uid}` | Presence aggregate and heartbeat | ST parent / own child | ST reads parent; each UID reads/writes only itself |
+| `displayAccess` | Public Display capability lifecycle (Phase 9C.6, OPUS-002) | Storyteller owner only | Fenced Storyteller `SessionWriter` only (same lease/writeGuard pattern as `roster`/`checkpoint`); shape is `{version, sessionId, token}` with a strong (32-byte, base64url) capability token; `sessionId` must equal the current `session/id` |
+| `displayMembers/{uid}` | A display client's own enrollment binding | None required (no read rule at all) | Only the same authenticated UID; only while `session` is v2/active; only when the submitted value exactly equals the current `displayAccess/token` |
 
 The Storyteller now subscribes to the exact `presence` parent authorized by the
 rules (AUD-008). Player reads remain limited to their own child.
@@ -35,6 +37,47 @@ Only the owner writes public/private/ST projections. Player collection reads,
 other UID bindings/requests, parent writes, transactions, and multi-path attacks
 are exercised in the emulator suite. Rules, not client validation or the memory
 backend, establish these permissions.
+
+## Phase 9C.6 (OPUS-002): Public Display capability
+
+Display membership grants `/public` only. It is not player membership. It
+never authorizes private projections, `storyteller`, `checkpoint`, `roster`,
+`joinRequests`, the `presence` parent, `displayAccess`, the `displayMembers`
+collection, or another display's own binding. A UID authorized as a display
+gains exactly one additional read branch on `/public`; every other rule is
+unchanged for it.
+
+`displayAccess` is Storyteller-owned security metadata, not game state — it
+never enters `useStorytellerStore.game`, Zustand persistence, checkpoint
+content, or any projection. Creation and rotation always go through the
+already-live `SessionWriter`, using the same fenced conditions as every other
+Storyteller write (active v2 session, valid unexpired writer lease, matching
+`writeGuard` token, strictly advancing revision). `ensurePublicDisplayAccess`
+is read-first: it reuses a valid current-session capability with zero writes,
+and only commits when the record is absent, malformed, the wrong version, or
+bound to a different session — a session mismatch is treated as rotation
+(a fresh token, never the old one carried over) so a stale `displayMembers`
+value can never reactivate under a later session.
+
+`displayMembers/{uid}` write requires exact `isString()`/existence checks on
+both the submitted value and the sibling `displayAccess` fields — a naive rule
+comparing only `displayMembers/{auth.uid}.val() === displayAccess/token.val()`
+would let two absent (`null`) paths satisfy `null === null` and authorize any
+unrelated authenticated client; the explicit type/existence guards close that
+hole (see rules.spec.ts's "closes the null===null hole" test). There is no
+parent write rule on `displayMembers`, so a batch/parent write is always
+denied regardless of content, and enrollment requires `newData.isString()`,
+so a display client can never delete or overwrite its own or another UID's
+binding through that rule.
+
+Rotating the capability immediately revokes every existing display binding
+without deleting or enumerating them: their stored token no longer equals the
+current `displayAccess/token`, so `/public`'s rule denies them on their very
+next read. Ending the session (`session/state !== "active"`) is the other
+load-bearing revocation condition — `SessionWriter.close()` preserves the
+session id while changing state to `"ended"`, so `sessionId` equality alone
+is never sufficient; every display and enrollment rule also requires
+`session/state === "active"`.
 
 ## What writes go where (verified by `sync.test.ts`)
 

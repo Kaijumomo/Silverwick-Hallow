@@ -24,6 +24,13 @@ import {
   seatPlayer,
 } from "./lobby";
 import { acceptLeaveRequest, rejectLeaveRequest } from "./membershipCommands";
+import { requireActiveSession } from "./lifecycle";
+import {
+  authorizePublicDisplay,
+  ensurePublicDisplayAccess,
+  generatePublicDisplayToken,
+  rotatePublicDisplayAccess,
+} from "./publicDisplayAuth";
 
 let env: RulesTestEnvironment;
 beforeAll(async () => {
@@ -750,5 +757,344 @@ describe("Firebase RTDB membership authorization", () => {
       [path("writeGuard")]: { token: "fixture-writer", revision: 1 },
     }));
     expect((await ref(st, "checkpoint").once("value")).val()).toBe(JSON.stringify({ game: {}, roster: {} }));
+  });
+});
+
+// Phase 9C.6 (OPUS-002): separate-device Public Display authorization.
+// `displayAccess` (Storyteller-owned capability) and `displayMembers/{uid}`
+// (a display's own enrollment) are exercised against the REAL enforced
+// rules.json, using the real production publicDisplayAuth commands and a
+// real SessionWriter wherever a Storyteller write is under test. Direct
+// rule-boundary attacks (unfenced writes, non-advancing revisions, foreign
+// writer tokens, malformed shapes) use explicit raw writes, mirroring the
+// "H2" checkpoint-fencing tests above.
+describe("Phase 9C.6 (OPUS-002): Public Display capability authorization", () => {
+  const code = "DISP2345";
+  const otherCode = "DISP9999";
+  const st = "uid-st-display";
+  const stOther = "uid-st-display-b";
+  const alice = "uid-alice-display";
+  const displayUid = "uid-display-1";
+  const otherDisplayUid = "uid-display-2";
+  const nonMember = "uid-nonmember-display";
+  const sessionId = "test-session";
+  const path = (c: string, suffix: string) => "lobbies/" + c + "/" + suffix;
+  const db = (uid: string) => env.authenticatedContext(uid).database();
+  const ref = (uid: string, suffix: string, c = code) => db(uid).ref(path(c, suffix));
+  const rawBackendFor = (uid: string) => new FirebaseRoomBackend(db(uid) as unknown as Database);
+
+  /** A fresh lobby with NO pre-existing `writer` lease (so a real
+   * SessionWriter can acquire it cleanly) and no pre-existing `writeGuard`
+   * (so a fresh capability write needs no revision to exceed). */
+  async function seedLobby(c: string, owner: string, opts: { state?: "active" | "ended" } = {}) {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.database().ref("lobbies/" + c).set({
+        storytellerUid: owner,
+        session: { version: 2, id: sessionId, state: opts.state ?? "active" },
+        roster: { [alice]: "p-alice" },
+        public: { code: c, scriptId: "tb", phase: "setup", day: 0 },
+        player: { "p-alice": { shownRole: "chef", shownAlignment: "good" } },
+        storyteller: { notes: "secret" },
+        checkpoint: JSON.stringify({ game: {}, roster: {} }),
+        joinRequests: {},
+        presence: {},
+      });
+    });
+  }
+
+  /** A real, started SessionWriter for `owner` against the already-seeded
+   * lobby — the actual production authority path ensurePublicDisplayAccess/
+   * rotatePublicDisplayAccess must be invoked through. */
+  async function realWriter(c: string, owner: string): Promise<SessionWriter> {
+    const raw = rawBackendFor(owner);
+    const session = await requireActiveSession(raw, c);
+    const writer = new SessionWriter(raw, c, session.id);
+    await writer.start();
+    return writer;
+  }
+
+  async function authorizeDisplay(c: string, uid: string, token: string) {
+    await authorizePublicDisplay(rawBackendFor(uid), c, uid, token);
+  }
+
+  /** Out-of-band inspection only (displayMembers has no read rule at all —
+   * see PATH_AUDIT.md) — never used in place of the real enrollment write. */
+  async function peekDisplayMember(c: string, uid: string): Promise<unknown> {
+    // withSecurityRulesDisabled's own type is `Promise<void>` — it does not
+    // propagate the callback's return value — so the read value is captured
+    // via closure instead of `return`ed out of the callback.
+    let value: unknown;
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      value = (await ctx.database().ref(path(c, "displayMembers/" + uid)).once("value")).val();
+    });
+    return value;
+  }
+
+  test("closes the null===null hole: an unrelated authenticated UID and an unauthenticated client are both denied /public when no displayAccess/displayMembers exist", async () => {
+    await seedLobby(code, st);
+    await assertFails(ref(nonMember, "public").once("value"));
+    const guest = env.unauthenticatedContext().database();
+    await assertFails(guest.ref(path(code, "public")).once("value"));
+  });
+
+  test("Storyteller cannot write displayAccess directly, unfenced", async () => {
+    await seedLobby(code, st);
+    const token = generatePublicDisplayToken();
+    await assertFails(ref(st, "displayAccess").set({ version: 1, sessionId, token }));
+    expect((await ref(st, "displayAccess").once("value")).exists()).toBe(false);
+  });
+
+  test("a correctly fenced Storyteller write — the real ensurePublicDisplayAccess through a real SessionWriter — succeeds with the exact expected shape", async () => {
+    await seedLobby(code, st);
+    const writer = await realWriter(code, st);
+    try {
+      const token = await ensurePublicDisplayAccess(writer, code, sessionId);
+      expect((await ref(st, "displayAccess").once("value")).val()).toEqual({ version: 1, sessionId, token });
+    } finally { await writer.dispose(); }
+  });
+
+  test("a wrong/non-advancing writeGuard revision is denied", async () => {
+    await seedLobby(code, st);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.database().ref(path(code, "writer")).set({ token: "fixture-writer", expiresAt: Date.now() + 30_000 });
+      await ctx.database().ref(path(code, "writeGuard")).set({ token: "fixture-writer", revision: 3 });
+    });
+    const token = generatePublicDisplayToken();
+    // Same revision as current (3): not strictly greater.
+    await assertFails(db(st).ref().update({
+      [path(code, "displayAccess")]: { version: 1, sessionId, token },
+      [path(code, "writeGuard")]: { token: "fixture-writer", revision: 3 },
+    }));
+    // A LOWER revision is denied too.
+    await assertFails(db(st).ref().update({
+      [path(code, "displayAccess")]: { version: 1, sessionId, token },
+      [path(code, "writeGuard")]: { token: "fixture-writer", revision: 2 },
+    }));
+    expect((await ref(st, "displayAccess").once("value")).exists()).toBe(false);
+  });
+
+  test("a foreign writer token is denied even with a strictly advancing revision", async () => {
+    await seedLobby(code, st);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.database().ref(path(code, "writer")).set({ token: "real-writer-token", expiresAt: Date.now() + 30_000 });
+      await ctx.database().ref(path(code, "writeGuard")).set({ token: "real-writer-token", revision: 1 });
+    });
+    const token = generatePublicDisplayToken();
+    await assertFails(db(st).ref().update({
+      [path(code, "displayAccess")]: { version: 1, sessionId, token },
+      [path(code, "writeGuard")]: { token: "forged-token", revision: 2 },
+    }));
+    expect((await ref(st, "displayAccess").once("value")).exists()).toBe(false);
+  });
+
+  test("a malformed displayAccess shape/token is denied even when properly fenced", async () => {
+    await seedLobby(code, st);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.database().ref(path(code, "writer")).set({ token: "real-writer-token", expiresAt: Date.now() + 30_000 });
+    });
+    let rev = 1;
+    const fenced = (displayAccess: unknown) => db(st).ref().update({
+      [path(code, "displayAccess")]: displayAccess,
+      [path(code, "writeGuard")]: { token: "real-writer-token", revision: rev++ },
+    });
+    await assertFails(fenced({ version: 2, sessionId, token: generatePublicDisplayToken() })); // wrong version
+    await assertFails(fenced({ version: 1, sessionId: "not-the-session", token: generatePublicDisplayToken() })); // wrong session
+    await assertFails(fenced({ version: 1, sessionId: "", token: generatePublicDisplayToken() })); // empty session id
+    await assertFails(fenced({ version: 1, sessionId, token: "too-short" })); // malformed token length
+    await assertFails(fenced({ version: 1, sessionId, token: "+".repeat(43) })); // malformed token alphabet
+    await assertFails(fenced({ version: 1, sessionId, token: generatePublicDisplayToken(), extra: "x" })); // unknown child
+    await assertFails(fenced({ sessionId, token: generatePublicDisplayToken() })); // missing version
+    expect((await ref(st, "displayAccess").once("value")).exists()).toBe(false);
+  });
+
+  test("a valid display capability lets the connecting UID create only its own displayMembers binding", async () => {
+    await seedLobby(code, st);
+    const writer = await realWriter(code, st);
+    try {
+      const token = await ensurePublicDisplayAccess(writer, code, sessionId);
+      await authorizeDisplay(code, displayUid, token);
+      expect(await peekDisplayMember(code, displayUid)).toBe(token);
+    } finally { await writer.dispose(); }
+  });
+
+  test("an invalid token format is denied enrollment", async () => {
+    await seedLobby(code, st);
+    const writer = await realWriter(code, st);
+    try {
+      await ensurePublicDisplayAccess(writer, code, sessionId);
+      await assertFails(ref(displayUid, "displayMembers/" + displayUid).set("not-a-valid-token"));
+      await assertFails(ref(displayUid, "displayMembers/" + displayUid).set("a".repeat(42)));
+      expect(await peekDisplayMember(code, displayUid)).toBeNull();
+    } finally { await writer.dispose(); }
+  });
+
+  test("a stale/old token is denied after rotation", async () => {
+    await seedLobby(code, st);
+    const writer = await realWriter(code, st);
+    try {
+      const oldToken = await ensurePublicDisplayAccess(writer, code, sessionId);
+      await rotatePublicDisplayAccess(writer, code, sessionId);
+      await assertFails(ref(displayUid, "displayMembers/" + displayUid).set(oldToken));
+    } finally { await writer.dispose(); }
+  });
+
+  test("a UID cannot enroll another UID's binding", async () => {
+    await seedLobby(code, st);
+    const writer = await realWriter(code, st);
+    try {
+      const token = await ensurePublicDisplayAccess(writer, code, sessionId);
+      await assertFails(ref(displayUid, "displayMembers/" + otherDisplayUid).set(token));
+      expect(await peekDisplayMember(code, otherDisplayUid)).toBeNull();
+    } finally { await writer.dispose(); }
+  });
+
+  test("a parent/batch write to the entire displayMembers collection is denied", async () => {
+    await seedLobby(code, st);
+    const writer = await realWriter(code, st);
+    try {
+      const token = await ensurePublicDisplayAccess(writer, code, sessionId);
+      await assertFails(ref(displayUid, "displayMembers").set({ [displayUid]: token }));
+      expect(await peekDisplayMember(code, displayUid)).toBeNull();
+    } finally { await writer.dispose(); }
+  });
+
+  test("a delete/null write through the enrollment rule is denied — isString() blocks it", async () => {
+    await seedLobby(code, st);
+    const writer = await realWriter(code, st);
+    try {
+      const token = await ensurePublicDisplayAccess(writer, code, sessionId);
+      await authorizeDisplay(code, displayUid, token);
+      await assertFails(ref(displayUid, "displayMembers/" + displayUid).remove());
+      await assertFails(ref(displayUid, "displayMembers/" + displayUid).set(null));
+      expect(await peekDisplayMember(code, displayUid)).toBe(token);
+    } finally { await writer.dispose(); }
+  });
+
+  test("a capability from lobby A does not authorize enrollment in lobby B", async () => {
+    await seedLobby(code, st);
+    await seedLobby(otherCode, stOther);
+    const writerA = await realWriter(code, st);
+    try {
+      const tokenA = await ensurePublicDisplayAccess(writerA, code, sessionId);
+      await assertFails(db(displayUid).ref(path(otherCode, "displayMembers/" + displayUid)).set(tokenA));
+      expect(await peekDisplayMember(otherCode, displayUid)).toBeNull();
+    } finally { await writerA.dispose(); }
+  });
+
+  test("an ended session denies new enrollment", async () => {
+    await seedLobby(code, st);
+    const writer = await realWriter(code, st);
+    let token: string;
+    try { token = await ensurePublicDisplayAccess(writer, code, sessionId); }
+    finally { await writer.dispose(); }
+    await env.withSecurityRulesDisabled(async (ctx) => { await ctx.database().ref(path(code, "session/state")).set("ended"); });
+    await assertFails(ref(displayUid, "displayMembers/" + displayUid).set(token));
+    expect(await peekDisplayMember(code, displayUid)).toBeNull();
+  });
+
+  test("an authorized display UID can read /public; an unrelated authenticated UID remains denied", async () => {
+    await seedLobby(code, st);
+    const writer = await realWriter(code, st);
+    try {
+      const token = await ensurePublicDisplayAccess(writer, code, sessionId);
+      await authorizeDisplay(code, displayUid, token);
+      await assertSucceeds(ref(displayUid, "public").once("value"));
+      expect((await ref(displayUid, "public").once("value")).val()).toMatchObject({ code });
+      await assertFails(ref(nonMember, "public").once("value"));
+    } finally { await writer.dispose(); }
+  });
+
+  test("an authorized display UID remains denied from every other private/security path, including another display's own binding", async () => {
+    await seedLobby(code, st);
+    const writer = await realWriter(code, st);
+    try {
+      const token = await ensurePublicDisplayAccess(writer, code, sessionId);
+      await authorizeDisplay(code, displayUid, token);
+      await authorizeDisplay(code, otherDisplayUid, token);
+      await assertFails(ref(displayUid, "player/p-alice").once("value"));
+      await assertFails(ref(displayUid, "player").once("value"));
+      await assertFails(ref(displayUid, "storyteller").once("value"));
+      await assertFails(ref(displayUid, "checkpoint").once("value"));
+      await assertFails(ref(displayUid, "roster").once("value"));
+      await assertFails(ref(displayUid, "joinRequests").once("value"));
+      await assertFails(ref(displayUid, "presence").once("value"));
+      await assertFails(ref(displayUid, "displayAccess").once("value"));
+      await assertFails(ref(displayUid, "displayMembers").once("value"));
+      await assertFails(ref(displayUid, "displayMembers/" + otherDisplayUid).once("value"));
+    } finally { await writer.dispose(); }
+  });
+
+  test("display authorization cannot write the public projection, private player data, Storyteller data, or another security path", async () => {
+    await seedLobby(code, st);
+    const writer = await realWriter(code, st);
+    try {
+      const token = await ensurePublicDisplayAccess(writer, code, sessionId);
+      await authorizeDisplay(code, displayUid, token);
+      await assertFails(ref(displayUid, "public/day").set(99));
+      await assertFails(ref(displayUid, "player/p-alice").set({ shownRole: "imp" }));
+      await assertFails(ref(displayUid, "storyteller/notes").set("attack"));
+      await assertFails(ref(displayUid, "displayAccess").set({ version: 1, sessionId, token: generatePublicDisplayToken() }));
+      await assertFails(ref(displayUid, "displayMembers/" + otherDisplayUid).set(token));
+      await assertFails(ref(displayUid, "roster/" + displayUid).set("p-hacked"));
+    } finally { await writer.dispose(); }
+  });
+
+  test("token rotation immediately revokes the old display's /public access, without deleting the stale binding", async () => {
+    await seedLobby(code, st);
+    const writer = await realWriter(code, st);
+    try {
+      const oldToken = await ensurePublicDisplayAccess(writer, code, sessionId);
+      await authorizeDisplay(code, displayUid, oldToken);
+      await assertSucceeds(ref(displayUid, "public").once("value"));
+
+      await rotatePublicDisplayAccess(writer, code, sessionId);
+
+      await assertFails(ref(displayUid, "public").once("value"));
+      expect(await peekDisplayMember(code, displayUid)).toBe(oldToken);
+    } finally { await writer.dispose(); }
+  });
+
+  test("ending the session denies display /public access and denies new enrollment", async () => {
+    await seedLobby(code, st);
+    const writer = await realWriter(code, st);
+    let token: string;
+    try {
+      token = await ensurePublicDisplayAccess(writer, code, sessionId);
+      await authorizeDisplay(code, displayUid, token);
+      await assertSucceeds(ref(displayUid, "public").once("value"));
+    } finally { await writer.dispose(); }
+
+    await env.withSecurityRulesDisabled(async (ctx) => { await ctx.database().ref(path(code, "session/state")).set("ended"); });
+
+    await assertFails(ref(displayUid, "public").once("value"));
+    await assertFails(ref(otherDisplayUid, "displayMembers/" + otherDisplayUid).set(token));
+  });
+
+  test("a multipath update combining a legal self-enrollment with an illegal write is rejected atomically", async () => {
+    await seedLobby(code, st);
+    const writer = await realWriter(code, st);
+    try {
+      const token = await ensurePublicDisplayAccess(writer, code, sessionId);
+      await assertFails(db(displayUid).ref("lobbies/" + code).update({
+        ["displayMembers/" + displayUid]: token,
+        ["public/day"]: 42,
+      }));
+      expect(await peekDisplayMember(code, displayUid)).toBeNull();
+      expect((await ref(st, "public/day").once("value")).val()).not.toBe(42);
+    } finally { await writer.dispose(); }
+  });
+
+  test("a multipath/batch attempt to enroll multiple UIDs at once is rejected atomically", async () => {
+    await seedLobby(code, st);
+    const writer = await realWriter(code, st);
+    try {
+      const token = await ensurePublicDisplayAccess(writer, code, sessionId);
+      await assertFails(db(displayUid).ref("lobbies/" + code).update({
+        ["displayMembers/" + displayUid]: token,
+        ["displayMembers/" + otherDisplayUid]: token,
+      }));
+      expect(await peekDisplayMember(code, displayUid)).toBeNull();
+      expect(await peekDisplayMember(code, otherDisplayUid)).toBeNull();
+    } finally { await writer.dispose(); }
   });
 });

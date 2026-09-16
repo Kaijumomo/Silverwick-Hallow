@@ -31,7 +31,7 @@ import { writeProjections } from "./sync";
 import { createLobby, readRosterBindings, revokePlayerMembership, seatPlayer } from "./lobby";
 import { joinLobby, leaveLobby, startPlayerHandshake } from "./playerSync";
 import { acceptLeaveRequest, rejectLeaveRequest } from "./membershipCommands";
-import { playerPath } from "./paths";
+import { playerPath, publicPath } from "./paths";
 import { reportRuntimeError, resolveReconnectConflict, startStorytellerSession, useSessionRuntime } from "./storytellerSync";
 import { lifecycleMessage, requireActiveSession } from "./lifecycle";
 import { friendlyFirebaseError } from "./errors";
@@ -39,6 +39,9 @@ import { useStorytellerStore } from "@/stores/storytellerStore";
 import { usePlayerStore } from "@/stores/playerStore";
 import { buildRegistry } from "@/data/roleRegistry";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
+import { subscribeToPublicLobby } from "./publicSync";
+import { authorizePublicDisplay, ensurePublicDisplayAccess, rotatePublicDisplayAccess } from "./publicDisplayAuth";
+import type { PublicLobbyRecord } from "@/stores/types";
 
 let env: RulesTestEnvironment;
 beforeAll(async () => {
@@ -1892,5 +1895,119 @@ describe("OPUS-001-CONTRACT-H3: disposal proves lease release against real enfor
       previous = writer;
     }
     disposals.push(() => previous!.dispose());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9C.6 (OPUS-002) — real separate-device Public Display contract.
+// CONTRACT-006 above remains the negative baseline, unchanged: an
+// authenticated non-member with no capability is denied `/public`. These
+// tests prove the POSITIVE fix using real production code throughout: a
+// genuinely separate display UID, authorized ONLY through the real
+// publicDisplayAuth commands and a real SessionWriter, actually receives the
+// real public projection via the real subscribeToPublicLobby listener — and
+// every other authorization boundary (unrelated UIDs, private paths, token
+// rotation, session end) holds against the real enforced rules.json. No
+// MemoryRoomBackend substitute anywhere in this describe block.
+// ---------------------------------------------------------------------------
+describe("Phase 9C.6 (OPUS-002): real separate-device Public Display contract", () => {
+  /** Real lobby + real writer + a real minimal public projection + a real
+   * ensured capability + a real separate display UID enrolled through
+   * authorizePublicDisplay. Every step is the actual production entry point
+   * a live game and a live display would use. */
+  async function establishAuthorizedDisplay(code: string, st: string, displayUid: string) {
+    const stBackend = backendFor(st);
+    await createLobby(stBackend, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(stBackend, code);
+    const writer = new SessionWriter(stBackend, code, session.id);
+    await writer.start();
+    await writer.set(publicPath(code), { code, scriptId: "tb", phase: "setup", day: 0 });
+    const token = await ensurePublicDisplayAccess(writer, code, session.id);
+    const displayBackend = backendFor(displayUid);
+    await authorizePublicDisplay(displayBackend, code, displayUid, token);
+    return { stBackend, writer, session, token, displayBackend };
+  }
+
+  test("CONTRACT-OPUS002-1: a genuinely separate display UID, authorized solely by capability, observes the real public projection through a real live listener", async () => {
+    const code = "PD1AAAAA", st = "pd1-storyteller", displayUid = "pd1-display";
+    const { writer, session, displayBackend } = await establishAuthorizedDisplay(code, st, displayUid);
+    disposals.push(() => writer.dispose());
+
+    const received: (PublicLobbyRecord | null)[] = [];
+    const unsub = subscribeToPublicLobby(displayBackend, code, value => received.push(value));
+    disposals.push(() => unsub());
+    await vi.waitFor(() => {
+      if (!received.length || received.at(-1) === null) throw new Error("expected the real public projection to arrive for the display");
+    }, { timeout: 5000, interval: 50 });
+    expect(received.at(-1)).toMatchObject({ code, scriptId: "tb" });
+
+    // No roster membership, no join request, no Storyteller authority — its
+    // access comes solely from the display capability.
+    expect(await displayBackend.get(`lobbies/${code}/roster/${displayUid}`)).toBeUndefined();
+    expect(await displayBackend.get(`lobbies/${code}/joinRequests/${displayUid}`)).toBeUndefined();
+    const rogueWriter = new SessionWriter(displayBackend, code, session.id);
+    await expect(rogueWriter.start()).rejects.toThrow(/permission[_ ]denied/i);
+    await rogueWriter.dispose().catch(() => {});
+  });
+
+  test("CONTRACT-OPUS002-2: an unrelated authenticated UID with no capability still receives a genuine permission denial from /public", async () => {
+    const code = "PD2AAAAA", st = "pd2-storyteller", displayUid = "pd2-display", stranger = "pd2-stranger";
+    const { writer } = await establishAuthorizedDisplay(code, st, displayUid);
+    disposals.push(() => writer.dispose());
+
+    const strangerBackend = backendFor(stranger);
+    await expect(strangerBackend.get(`lobbies/${code}/public`)).rejects.toThrow(/permission[_ ]denied/i);
+  });
+
+  test("CONTRACT-OPUS002-3: the authorized display UID still receives a genuine permission denial from every Storyteller/private/security path", async () => {
+    const code = "PD3AAAAA", st = "pd3-storyteller", displayUid = "pd3-display";
+    const { writer, displayBackend } = await establishAuthorizedDisplay(code, st, displayUid);
+    disposals.push(() => writer.dispose());
+
+    await expect(displayBackend.get(`lobbies/${code}/storyteller`)).rejects.toThrow(/permission[_ ]denied/i);
+    await expect(displayBackend.get(`lobbies/${code}/checkpoint`)).rejects.toThrow(/permission[_ ]denied/i);
+    await expect(displayBackend.get(`lobbies/${code}/roster`)).rejects.toThrow(/permission[_ ]denied/i);
+    await expect(displayBackend.get(`lobbies/${code}/displayAccess`)).rejects.toThrow(/permission[_ ]denied/i);
+    await expect(displayBackend.set(`lobbies/${code}/public/day`, 99)).rejects.toThrow(/permission[_ ]denied/i);
+    await expect(displayBackend.set(playerPath(code, "p-alice"), { shownRole: "imp" })).rejects.toThrow(/permission[_ ]denied/i);
+  });
+
+  test("CONTRACT-OPUS002-4: token rotation revokes an already-authorized LIVE display subscription with no intervening /public write, and the new token restores access", async () => {
+    const code = "PD4AAAAA", st = "pd4-storyteller", displayUid = "pd4-display";
+    const { writer, session, displayBackend, token: oldToken } = await establishAuthorizedDisplay(code, st, displayUid);
+    disposals.push(() => writer.dispose());
+
+    // A real live listener on the raw client SDK ref (same technique
+    // rules.spec.ts's "revocation cancels an already-authorized live private
+    // subscription" test uses) so the denial is observed directly from the
+    // real Firebase callback, not inferred from a later one-shot read.
+    const record = env.authenticatedContext(displayUid).database().ref(`lobbies/${code}/public`);
+    let ready!: () => void;
+    const firstValue = new Promise<void>((resolve) => { ready = resolve; });
+    const denied = new Promise<Error>((resolve) => { record.on("value", () => ready(), resolve); });
+    let newToken: string;
+    try {
+      await firstValue; // the live subscription has genuinely observed the old-token-authorized data
+      // Rotate via the real SessionWriter — no /public write happens in between.
+      newToken = await rotatePublicDisplayAccess(writer, code, session.id);
+      expect((await denied).message).toMatch(/permission[_ ]denied/i);
+    } finally { record.off(); }
+    expect(newToken!).not.toBe(oldToken);
+
+    // Authorizing with the NEW token restores real access for the same UID.
+    await authorizePublicDisplay(displayBackend, code, displayUid, newToken!);
+    await expect(displayBackend.get(`lobbies/${code}/public`)).resolves.toMatchObject({ code });
+  });
+
+  test("CONTRACT-OPUS002-5: ending the session through the real fenced lifecycle path (writer.close) revokes display /public authorization", async () => {
+    const code = "PD5AAAAA", st = "pd5-storyteller", displayUid = "pd5-display";
+    const { writer, displayBackend } = await establishAuthorizedDisplay(code, st, displayUid);
+    disposals.push(() => writer.dispose());
+
+    await expect(displayBackend.get(`lobbies/${code}/public`)).resolves.toMatchObject({ code });
+
+    await writer.close([]);
+
+    await expect(displayBackend.get(`lobbies/${code}/public`)).rejects.toThrow(/permission[_ ]denied/i);
   });
 });

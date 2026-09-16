@@ -175,3 +175,56 @@ AUD-017 independent alignment/state, and all other night-order, setup,
 custom-script, and visual findings. Existing explicitly configured private
 packets remain supported, but no automatic false-information delivery is
 added.
+
+## Phase 9C.6 (OPUS-002): separate-device Public Display authorization
+
+`?display=public&code=XXXX` used to rely on the projector's anonymous
+Firebase identity happening to match the Storyteller's own — true only in a
+sibling browser context on the same device, never on a genuinely separate
+projector or TV. `displayAccess` (Storyteller-owned capability) and
+`displayMembers/{uid}` (a display's own enrollment) replace that with
+explicit capability authorization, scoped to `/public` only.
+
+**Capability creation.** Once a live lobby, its session id, and the live
+runtime writer are all present, the Storyteller ensures a capability via
+`ensurePublicDisplayAccess`. It is read-first: a valid capability for the
+current session is reused with zero writes; a capability is (re)created only
+when absent, malformed, the wrong version, or bound to a different session.
+The token is 32 cryptographically secure random bytes, encoded as unpadded
+base64url (43 characters); there is no insecure fallback.
+
+**Fragment link.** The Storyteller's "Copy display link" builds
+`?display=public&code=<CODE>#displayToken=<TOKEN>` from the current
+origin/path. The token lives in the URL fragment, never an ordinary query
+parameter, so it is never sent to a server in a request line. The token
+itself is never rendered as visible text.
+
+**Enrollment and UID binding.** A display connects anonymously through the
+same `connectFirebase()` every client uses; its authorization UID comes only
+from that call, never the URL. If a `#displayToken=` fragment is present and
+locally well-formed, the display calls `authorizePublicDisplay`, which writes
+`displayMembers/{uid} = token` — accepted only when it exactly equals the
+current `displayAccess/token` for an active session. On success the fragment
+is stripped from the URL with `history.replaceState`, leaving
+`?display=public&code=<CODE>`; a later refresh of that cleaned URL needs no
+token, since the UID's own binding already exists. A denied or stale
+fragment does not block the normal `/public` subscription attempt — the same
+UID may already hold a valid binding from an earlier successful enrollment.
+
+**Rotation.** "Reset display link" always mints and writes a fresh token,
+unconditionally. Every existing `displayMembers/{uid}` binding is revoked
+immediately (its stored token no longer matches) without being enumerated or
+deleted; a display holding an old link loses `/public` access on its very
+next read, with no further write required.
+
+**Session-end revocation.** `SessionWriter.close()` preserves the session id
+while moving `session/state` to `"ended"` — session-id equality alone is
+never enough. Every display authorization and enrollment rule also requires
+`session/state === "active"`, so ending the game revokes display access the
+same way it revokes everything else.
+
+**Lost anonymous identity.** If the display's anonymous Firebase identity is
+lost (cleared site data, a different browser/profile), its existing
+`displayMembers/{uid}` binding cannot be recovered — a fresh authorized link
+must be reopened from the Storyteller. This is the same anonymous-identity
+tradeoff every other role in this protocol already accepts.

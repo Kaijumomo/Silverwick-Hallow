@@ -16,6 +16,11 @@ export const storytellerPath = (code: string) =>
   `lobbies/${code}/storyteller`;
 export const presencePath = (code: string, uid: string) =>
   `lobbies/${code}/presence/${uid}`;
+// Phase 9C.6 (OPUS-002): Storyteller-owned Public Display capability, and the
+// per-UID binding a display client enrolls with that capability's token.
+export const displayAccessPath = (code: string) => `lobbies/${code}/displayAccess`;
+export const displayMemberPath = (code: string, uid: string) =>
+  `lobbies/${code}/displayMembers/${uid}`;
 // Stored inside public/ so it uses the existing deployed public rule:
 // ST can write, roster members can read. No new Firebase rules needed.
 export const lobbyStatusPath = (code: string) => `lobbies/${code}/public/status`;

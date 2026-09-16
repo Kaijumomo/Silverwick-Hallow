@@ -13,6 +13,7 @@ import { isFirebaseConfigured } from "@/firebase/config";
 import { createLobby, formatCode } from "@/firebase/lobby";
 import { acceptLeaveRequest, rejectLeaveRequest, revokePlayerAndCommit } from "@/firebase/membershipCommands";
 import { closeMultiplayerSession, useSessionRuntime } from "@/firebase/storytellerSync";
+import { ensurePublicDisplayAccess, rotatePublicDisplayAccess, buildPublicDisplayLink } from "@/firebase/publicDisplayAuth";
 import { FirebaseConfigDialog } from "@/features/firebase/FirebaseConfigDialog";
 import { friendlyFirebaseError, type FriendlyError } from "@/firebase/errors";
 import { requireActiveSession, lifecycleMessage } from "@/firebase/lifecycle";
@@ -57,6 +58,12 @@ export function GameScreen() {
   const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const [phaseError, setPhaseError] = useState<string | null>(null);
+  // Phase 9C.6 (OPUS-002): the current Public Display capability token, held
+  // only in this component's local/runtime state — never in
+  // useStorytellerStore.game, persistence, checkpoints, or any projection.
+  const [displayToken, setDisplayToken] = useState<string | null>(null);
+  const [displayLinkError, setDisplayLinkError] = useState<string | null>(null);
+  const [displayLinkBusy, setDisplayLinkBusy] = useState(false);
   const onlineCount = Object.values(onlineMap).filter(Boolean).length;
   const closeOverflow = () => setOverflowMenuOpen(false);
 
@@ -148,6 +155,64 @@ export function GameScreen() {
   useEffect(() => {
     if (game?.phase === "setup") setSetupPanelOpen(true);
   }, [game?.phase]);
+
+  // Phase 9C.6 (OPUS-002): ensure a Public Display capability exists once a
+  // live lobby, its session id, and the LIVE runtime writer are all present.
+  // `backend` here is useSessionRuntime's own runtime backend — set only
+  // after finishLive() completes, and cleared to null on stop/close/
+  // conflict/incoherent — never a writer obtained any other way (LOAD-
+  // BEARING: see PROTOCOL.md). ensurePublicDisplayAccess is read-first and a
+  // genuine no-op in steady state, so this effect re-running across an
+  // ordinary reconnect (a fresh `backend` instance, same session) commits
+  // nothing and never manufactures a reconnect conflict for another
+  // Storyteller device. While the runtime writer is unavailable, no
+  // displayAccess operation is attempted and the token is cleared so the
+  // link controls disable themselves until a live writer is re-established.
+  useEffect(() => {
+    if (!lobby || !lobby.sessionId || !backend) {
+      setDisplayToken(null);
+      return;
+    }
+    let cancelled = false;
+    ensurePublicDisplayAccess(backend, lobby.code, lobby.sessionId)
+      .then(token => { if (!cancelled) setDisplayToken(token); })
+      .catch(e => {
+        if (cancelled) return;
+        const friendly = friendlyFirebaseError(e, "st");
+        setDisplayLinkError(`${friendly.title}: ${friendly.message}`);
+      });
+    return () => { cancelled = true; };
+  }, [lobby?.code, lobby?.sessionId, backend]);
+
+  const displayLink = lobby && displayToken ? buildPublicDisplayLink(window.location, lobby.code, displayToken) : null;
+
+  const copyDisplayLink = async () => {
+    if (!displayLink) return;
+    try {
+      await navigator.clipboard.writeText(displayLink);
+      setCopyToast("Copied display link");
+    } catch {
+      setCopyToast("Copy failed — select and copy manually");
+    }
+    window.setTimeout(() => setCopyToast(null), 1500);
+  };
+
+  const resetDisplayLink = async () => {
+    if (!lobby || !lobby.sessionId || !backend || displayLinkBusy) return;
+    setDisplayLinkBusy(true);
+    setDisplayLinkError(null);
+    try {
+      const token = await rotatePublicDisplayAccess(backend, lobby.code, lobby.sessionId);
+      setDisplayToken(token);
+      setCopyToast("Display link reset — old links no longer work");
+      window.setTimeout(() => setCopyToast(null), 1500);
+    } catch (e) {
+      const friendly = friendlyFirebaseError(e, "st");
+      setDisplayLinkError(`${friendly.title}: ${friendly.message}`);
+    } finally {
+      setDisplayLinkBusy(false);
+    }
+  };
 
   const goLive = async () => {
     if (goingLive) return;
@@ -311,17 +376,37 @@ export function GameScreen() {
           {lobby && (
             <button
               className="btn btn-sm"
+              disabled={!displayLink}
               onClick={() => {
                 closeOverflow();
-                window.open(
-                  `?display=public&code=${encodeURIComponent(lobby.code)}`,
-                  "_blank",
-                  "noopener"
-                );
+                // Synchronous with the click (no await here) once the
+                // capability has already been ensured by the effect above —
+                // an async open here would trip popup blockers.
+                if (displayLink) window.open(displayLink, "_blank", "noopener");
               }}
               title="Open the public projector view in a new tab"
             >
               Public display ↗
+            </button>
+          )}
+          {lobby && (
+            <button
+              className="btn btn-sm"
+              disabled={!displayLink}
+              onClick={() => { closeOverflow(); void copyDisplayLink(); }}
+              title="Copy a link that authorizes a separate device or projector to view the public display"
+            >
+              Copy display link
+            </button>
+          )}
+          {lobby && (
+            <button
+              className="btn btn-sm"
+              disabled={!backend || displayLinkBusy}
+              onClick={() => { closeOverflow(); void resetDisplayLink(); }}
+              title="Revoke the current display link and issue a new one"
+            >
+              Reset display link
             </button>
           )}
           <button
@@ -470,6 +555,17 @@ export function GameScreen() {
           <button
             className="btn btn-sm"
             onClick={() => setGoLiveError(null)}
+          >
+            dismiss
+          </button>
+        </div>
+      )}
+      {displayLinkError && (
+        <div className="error-list lobby-error" role="alert">
+          <p>{displayLinkError}</p>
+          <button
+            className="btn btn-sm"
+            onClick={() => setDisplayLinkError(null)}
           >
             dismiss
           </button>
