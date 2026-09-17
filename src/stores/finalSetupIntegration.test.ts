@@ -312,7 +312,7 @@ describe("FINAL POPULATION CLOSURE -- required reproductions", () => {
         id, name: "Overflow " + i, seat: current.seatOrder.length + i, joinedAt: Date.now(),
         actualRole: "thief", shownRole: null, shownAlignment: null, behaviorMode: "normal",
         publicDisplayRole: null, alive: true, ghostVote: true, abilityUsed: false, statuses: {},
-        reminders: [], stNotes: "", isTraveler: true, actualAlignment: "good",
+        reminders: [], effects: [], stNotes: "", isTraveler: true, actualAlignment: "good",
       };
     }
     store.setState({ game: { ...current, players: { ...current.players, ...extraPlayers },
@@ -722,7 +722,7 @@ describe("FINAL SEAT & TRAVELLER RESERVATION CLOSURE -- required reproductions",
       store.setState({ game: { ...current, plannedPlayerCount: 16,
         players: { ...current.players, [id]: { id, name: "Overflow", seat: current.seatOrder.length, joinedAt: Date.now(),
           actualRole: "imp", shownRole: "imp", shownAlignment: null, behaviorMode: "normal", publicDisplayRole: null,
-          alive: true, ghostVote: true, abilityUsed: false, statuses: {}, reminders: [], stNotes: "", isTraveler: false, isEmpty: false } },
+          alive: true, ghostVote: true, abilityUsed: false, statuses: {}, reminders: [], effects: [], stNotes: "", isTraveler: false, isEmpty: false } },
         seatOrder: [...current.seatOrder, id] } });
       expect(population().targetNonTravelerCount).toBe(16);
       expect(state().revealRoles().ok).toBe(false);
@@ -740,7 +740,7 @@ describe("FINAL SEAT & TRAVELLER RESERVATION CLOSURE -- required reproductions",
         extraIds.push(id);
         extraPlayers[id] = { id, name: "Overflow " + i, seat: current.seatOrder.length + i, joinedAt: Date.now(),
           actualRole: "thief", shownRole: null, shownAlignment: null, behaviorMode: "normal", publicDisplayRole: null,
-          alive: true, ghostVote: true, abilityUsed: false, statuses: {}, reminders: [], stNotes: "", isTraveler: true, actualAlignment: "good" };
+          alive: true, ghostVote: true, abilityUsed: false, statuses: {}, reminders: [], effects: [], stNotes: "", isTraveler: true, actualAlignment: "good" };
       }
       store.setState({ game: { ...current, players: { ...current.players, ...extraPlayers }, seatOrder: [...current.seatOrder, ...extraIds] } });
       expect(population().totalPhysicalSeatCount).toBe(21);

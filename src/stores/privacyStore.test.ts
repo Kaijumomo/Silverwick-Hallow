@@ -31,12 +31,12 @@ describe("Storyteller privacy presentation state", () => {
     usePrivacyStore.getState().setEnabled(true);
 
     storyteller.getState().assignRole(id, "chef");
-    storyteller.getState().setReminders(id, ["Updated while hidden"]);
+    storyteller.getState().setReminders(id, [{ id: "r1", label: "Updated while hidden", lifetime: { kind: "manual" } }]);
     expect(usePrivacyStore.getState().enabled).toBe(true);
 
     usePrivacyStore.getState().setEnabled(false);
     expect(storyteller.getState().game!.players[id]!.actualRole).toBe("chef");
-    expect(storyteller.getState().game!.players[id]!.reminders).toEqual(["Updated while hidden"]);
+    expect(storyteller.getState().game!.players[id]!.reminders).toEqual([{ id: "r1", label: "Updated while hidden", lifetime: { kind: "manual" } }]);
 
     usePrivacyStore.getState().setEnabled(true);
     storyteller.getState().newGame("tb");

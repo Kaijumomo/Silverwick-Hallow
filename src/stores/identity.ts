@@ -41,14 +41,22 @@ export function isInitialRevealComplete(
   return !!game.setupRolesRevealed || game.day > 0;
 }
 
-/** Dealing explicitly establishes ordinary perception; concealed roles wait. */
+/**
+ * Dealing explicitly establishes ordinary perception; concealed roles wait.
+ * Phase 9D.1: actual alignment is established here too, from the dealt
+ * role's canonical alignment -- independent of what (if anything) is
+ * shown. A concealed role's true alignment is still its own, even though
+ * shownAlignment stays null until the Storyteller configures perception.
+ */
 export function dealtIdentity(role: RoleId, registry: RoleRegistry): Pick<STPlayerRecord,
-  "actualRole" | "shownRole" | "shownAlignment" | "behaviorMode"> {
+  "actualRole" | "shownRole" | "shownAlignment" | "behaviorMode" | "actualAlignment"> {
   const mode = concealedIdentities.get(role);
+  const alignment = registry.alignmentOf(role);
   return {
     actualRole: role,
     shownRole: mode ? null : role,
-    shownAlignment: mode ? null : registry.alignmentOf(role),
+    shownAlignment: mode ? null : alignment,
     behaviorMode: mode ?? "normal",
+    actualAlignment: alignment,
   };
 }

@@ -74,6 +74,61 @@ export type PrivatePacket = {
 
 export type Statuses = Record<string, boolean>;
 
+export type GamePhase = "setup" | "night" | "day";
+
+/** A point in the game timeline, coarse enough for effect/reminder
+ * provenance -- never wall-clock. Omitted on a record whose real moment is
+ * not known (e.g. a migrated legacy record); never invented. */
+export type GameMoment = {
+  phase: GamePhase;
+  day: number;
+};
+
+/** How long an effect or reminder is intended to remain, in vocabulary
+ * only. Phase 9D.1 stores this intent; no phase yet executes automatic
+ * expiry from it. */
+export type EffectLifetime =
+  | { kind: "manual" }
+  | { kind: "untilDawn" }
+  | { kind: "throughFollowingDay" }
+  | { kind: "untilNextNight" }
+  | { kind: "nights"; count: number }
+  | { kind: "days"; count: number };
+
+export type EffectId = string;
+
+/** A single active effect on a player -- Drunk/Poisoned/Protected today,
+ * any future ability-created effect later. `type` is a free-form semantic
+ * label, not a closed enum: a manual Storyteller effect and a later
+ * ability-sourced effect of the same `type` (e.g. two "poisoned" entries,
+ * one manual and one from a Poisoner) must be able to coexist as distinct
+ * records. Target is implicit -- an EffectRecord always lives on its
+ * target player's own `effects` array. */
+export type EffectRecord = {
+  id: EffectId;
+  type: string;
+  sourceCharacter?: RoleId;
+  sourcePlayer?: PlayerId;
+  appliedAt?: GameMoment;
+  lifetime: EffectLifetime;
+  note?: string;
+};
+
+export type ReminderId = string;
+
+/** A single structured reminder token on a player (e.g. "Red Herring",
+ * "Chosen", "Protected"). Target is implicit -- always the player whose
+ * `reminders` array holds it. */
+export type ReminderRecord = {
+  id: ReminderId;
+  label: string;
+  sourceCharacter?: RoleId;
+  sourcePlayer?: PlayerId;
+  createdAt?: GameMoment;
+  lifetime: EffectLifetime;
+  note?: string;
+};
+
 export type GrimoireMode = "ring" | "freeRoam";
 export type TokenPosition = { x: number; y: number };
 
@@ -124,11 +179,23 @@ export type STPlayerRecord = {
   ghostVote: boolean;
   abilityUsed: boolean;
   statuses: Statuses;
-  reminders: string[];
+  reminders: ReminderRecord[];
   stNotes: string;
   isTraveler: boolean;
-  /** Current Storyteller truth; never derived from perception. Traveler-only in 9B. */
+  /** Current Storyteller truth for this player's alignment; never derived
+   * from perception. Universal (Phase 9D.1): every player -- not only
+   * Travelers -- may have one. Absent means unresolved; never invented for
+   * a Traveler, and never overwritten by a later gameplay character change
+   * (see freshAssignment vs assignRole in storytellerStore.ts). Use
+   * actualAlignmentOf() (src/stores/effects.ts) for the explicit
+   * Good/Evil/unresolved tri-state view. */
   actualAlignment?: Alignment;
+  /** Structured active effects (Drunk, Poisoned, Protected, and any future
+   * ability-created effect). Storyteller-private -- never projected to
+   * public/self views. Replaces bare `statuses` booleans as the source of
+   * truth; `statuses` is left in place only for legacy wire compatibility
+   * and is no longer written by any command. */
+  effects: EffectRecord[];
   /** Missing means legacy/unknown, not completed. No inferred arrival history. */
   travelerArrival?: { demonInfoComplete: boolean; firstNightComplete: boolean; completedAtNight?: number; arrivalCheckComplete?: boolean };
   exiled?: boolean;

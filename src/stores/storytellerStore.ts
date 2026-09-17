@@ -4,8 +4,9 @@ import { BUILTIN_SCRIPTS, BUILTIN_SCRIPT_IDS } from "@/data/scripts";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
 import { StorytellerStateSchema } from "./schemas";
-import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
+import { buildRegistry, deriveAlignment, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
+import { currentGameMoment, manualEffectId } from "./effects";
 import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 import { invalidatePrivatePacket, pruneInapplicablePrivateInfo } from "./privatePackets";
 import { usePrivacyStore } from "./privacyStore";
@@ -20,11 +21,15 @@ import type { SetupCommandResult } from "@/features/setup/setupReadiness";
 import type {
   Alignment,
   BehaviorMode,
+  EffectId,
+  EffectRecord,
   GrimoireMode,
   GuardStamp,
   NightStepRecord,
   NightStepStatus,
   PlayerId,
+  ReminderId,
+  ReminderRecord,
   RoleId,
   Script,
   STPlayerRecord,
@@ -39,7 +44,7 @@ const UNDO_LIMIT = 20;
  * `merge` (Phase 9C.2B.2) passes to migrateStoreState when Zustand's own
  * persist middleware skips calling `migrate` outright, which it does
  * whenever the persisted version already equals this one. */
-const STORE_VERSION = 13;
+const STORE_VERSION = 14;
 
 let _migrationResetFlag = false;
 /** Returns true (once) when migrate() discarded incompatible persisted state. */
@@ -67,6 +72,7 @@ const blankPlayer = (id: PlayerId, name: string, seat: number, isEmpty = false):
   abilityUsed: false,
   statuses: {},
   reminders: [],
+  effects: [],
   stNotes: "",
   isTraveler: false,
   isEmpty,
@@ -235,6 +241,10 @@ export type StorytellerStore = {
    * touches any other player's role. */
   setIsTraveler: (id: PlayerId, isTraveler: boolean) => SetupCommandResult;
   setTravelerAlignment: (id: PlayerId, alignment: Alignment) => void;
+  /** Phase 9D.1: the single safe generic command for intentionally
+   * changing any player's current actual alignment (ordinary or
+   * Traveler). Never inferred, never called automatically. */
+  setActualAlignment: (id: PlayerId, alignment: Alignment) => void;
   prepareTravelerDemon: (id: PlayerId) => void;
   completeTravelerInformation: (id: PlayerId) => void;
   completeTravelerArrivalCheck: (id: PlayerId) => void;
@@ -246,7 +256,16 @@ export type StorytellerStore = {
   setGhostVote: (id: PlayerId, ghostVote: boolean) => void;
   setAbilityUsed: (id: PlayerId, used: boolean) => void;
   setStatus: (id: PlayerId, status: string, on: boolean) => void;
-  setReminders: (id: PlayerId, reminders: string[]) => void;
+  /** Phase 9D.1: centralized structured-effect commands. `addEffect`
+   * upserts by id (a fresh id is allocated when none is given) and
+   * returns the id actually used, or null if the player doesn't exist. */
+  addEffect: (id: PlayerId, effect: Partial<Pick<EffectRecord, "id">> & Omit<EffectRecord, "id">) => EffectId | null;
+  removeEffect: (id: PlayerId, effectId: EffectId) => void;
+  setReminders: (id: PlayerId, reminders: ReminderRecord[]) => void;
+  /** Phase 9D.1: centralized structured-reminder commands, backing the
+   * existing per-token Storyteller reminder workflow. */
+  addReminder: (id: PlayerId, reminder: Partial<Pick<ReminderRecord, "id">> & Omit<ReminderRecord, "id">) => ReminderId | null;
+  removeReminder: (id: PlayerId, reminderId: ReminderId) => void;
   setNotes: (id: PlayerId, notes: string) => void;
 
   setPhase: (phase: StorytellerLobbyRecord["phase"]) => SetupCommandResult;
@@ -490,6 +509,66 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
         if (e.plannedTravelerCount === undefined) e.plannedTravelerCount = 0;
         return e;
       });
+    }
+  }
+  // v14 (Phase 9D.1) introduces the structured live-state foundation:
+  // explicit actualAlignment for ordinary players (previously Traveler-
+  // only), structured effects replacing bare `statuses` booleans, and
+  // structured reminder records replacing plain strings. Never invent
+  // provenance for legacy data: an ordinary player's alignment is derived
+  // from their currently assigned canonical role only when that role is
+  // still resolvable in this script -- otherwise it is left unresolved
+  // (absent), exactly like an unresolved Traveler alignment already is.
+  // Existing Traveler alignment, once explicitly chosen, is preserved
+  // verbatim and never touched here. Idempotent: a legacy statuses.<type>
+  // boolean becomes its own deterministic manual effect and is then
+  // cleared from `statuses`, so re-running this block (e.g. against a
+  // fresh copy of the same pre-migration snapshot) never duplicates it; a
+  // legacy reminder string array is only converted while every entry is
+  // still a plain string, so an already-migrated array is left alone.
+  if (fromVersion < 14) {
+    const customScripts = (s as { customScripts?: Record<string, Script> }).customScripts ?? {};
+    const registryFor = (scriptId: string | undefined): RoleRegistry => {
+      const id = scriptId ?? "";
+      const script = BUILTIN_SCRIPTS[id] ?? customScripts[id] ?? { id, name: id, characters: [] };
+      return buildRegistry(script);
+    };
+    for (const entry of [s.game, ...(s.undoStack ?? [])]) {
+      const e = entry as { scriptId?: string; players?: Record<string, STPlayerRecord> } | undefined;
+      const players = e?.players;
+      if (!players) continue;
+      const registry = registryFor(e?.scriptId);
+      for (const p of Object.values(players)) {
+        // 1. Actual alignment: derive for an ordinary player with an
+        // assigned, still-resolvable role. Never invent one for a
+        // Traveler, and never overwrite an alignment already present.
+        if (p.actualAlignment === undefined && !p.isTraveler && p.actualRole) {
+          const role = registry.get(p.actualRole);
+          if (role) p.actualAlignment = deriveAlignment(role);
+        }
+        // 2. Effects: convert each active legacy status boolean into its
+        // own deterministic manual effect, then clear the boolean so
+        // `statuses` is never read as truth again.
+        if (!Array.isArray(p.effects)) p.effects = [];
+        for (const type of ["drunk", "poisoned", "protected"]) {
+          if (p.statuses?.[type]) {
+            const id = `manual:${type}`;
+            if (!p.effects.some((eff) => eff.id === id)) {
+              p.effects.push({ id, type, lifetime: { kind: "manual" } });
+            }
+            delete p.statuses[type];
+          }
+        }
+        // 3. Reminders: a plain string array (every entry still a string)
+        // becomes manual/legacy records with no invented source or moment.
+        if (Array.isArray(p.reminders) && p.reminders.every((r) => typeof r === "string")) {
+          p.reminders = (p.reminders as unknown as string[]).map((label) => ({
+            id: `legacy-${newId()}`,
+            label,
+            lifetime: { kind: "manual" as const },
+          }));
+        }
+      }
     }
   }
   const check = StorytellerStateSchema.safeParse(state);
@@ -1426,6 +1505,20 @@ export const useStorytellerStore = create<StorytellerStore>()(
         set({ undoStack: pushUndo(game, undoStack), game: { ...game, players: { ...game.players, [id]: next } } });
       },
 
+      setActualAlignment: (id, alignment) => {
+        const { game, undoStack } = get();
+        const p = game?.players[id];
+        if (!game || !p || p.actualAlignment === alignment) return;
+        // A Traveler's self projection mirrors actualAlignment directly
+        // (see projectIdentity) -- changing it invalidates any already-
+        // published packet exactly like setTravelerAlignment does. An
+        // ordinary player's actualAlignment never reaches a projection, so
+        // no invalidation is needed there.
+        const patched = { ...p, actualAlignment: alignment };
+        const next = p.isTraveler ? invalidatePrivatePacket(patched) : patched;
+        set({ undoStack: pushUndo(game, undoStack), game: { ...game, players: { ...game.players, [id]: next } } });
+      },
+
       prepareTravelerDemon: (id) => {
         const { game, undoStack } = get();
         const p = game?.players[id];
@@ -1514,17 +1607,51 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
+      // Phase 9D.1: the legacy Drunk/Poisoned/Protected toggle no longer
+      // writes the bare `statuses` bag. It manages exactly its own
+      // deterministic manual effect (manualEffectId(status)) -- never a
+      // differently-sourced effect of the same type, so a future
+      // ability-created effect (e.g. a Poisoner's "poisoned") can coexist
+      // with a manual Storyteller toggle of the same type.
       setStatus: (id, status, on) => {
         const { game, undoStack } = get();
         if (!game) return;
         const player = game.players[id];
         if (!player) return;
-        const statuses = { ...player.statuses };
-        if (on) statuses[status] = true;
-        else delete statuses[status];
+        const effectId = manualEffectId(status);
+        const others = player.effects.filter((e) => e.id !== effectId);
+        const effects = on
+          ? [...others, { id: effectId, type: status, lifetime: { kind: "manual" as const }, appliedAt: currentGameMoment(game) }]
+          : others;
         set({
           undoStack: pushUndo(game, undoStack),
-          game: patchPlayer(game, id, { statuses }),
+          game: patchPlayer(game, id, { effects }),
+        });
+      },
+
+      addEffect: (id, effect) => {
+        const { game, undoStack } = get();
+        if (!game) return null;
+        const player = game.players[id];
+        if (!player) return null;
+        const effectId = effect.id ?? newId();
+        const record: EffectRecord = { ...effect, id: effectId };
+        const others = player.effects.filter((e) => e.id !== effectId);
+        set({
+          undoStack: pushUndo(game, undoStack),
+          game: patchPlayer(game, id, { effects: [...others, record] }),
+        });
+        return effectId;
+      },
+
+      removeEffect: (id, effectId) => {
+        const { game, undoStack } = get();
+        if (!game) return;
+        const player = game.players[id];
+        if (!player || !player.effects.some((e) => e.id === effectId)) return;
+        set({
+          undoStack: pushUndo(game, undoStack),
+          game: patchPlayer(game, id, { effects: player.effects.filter((e) => e.id !== effectId) }),
         });
       },
 
@@ -1534,6 +1661,31 @@ export const useStorytellerStore = create<StorytellerStore>()(
         set({
           undoStack: pushUndo(game, undoStack),
           game: patchPlayer(game, id, { reminders: [...reminders] }),
+        });
+      },
+
+      addReminder: (id, reminder) => {
+        const { game, undoStack } = get();
+        if (!game) return null;
+        const player = game.players[id];
+        if (!player) return null;
+        const reminderId = reminder.id ?? newId();
+        const record: ReminderRecord = { ...reminder, id: reminderId };
+        set({
+          undoStack: pushUndo(game, undoStack),
+          game: patchPlayer(game, id, { reminders: [...player.reminders, record] }),
+        });
+        return reminderId;
+      },
+
+      removeReminder: (id, reminderId) => {
+        const { game, undoStack } = get();
+        if (!game) return;
+        const player = game.players[id];
+        if (!player || !player.reminders.some((r) => r.id === reminderId)) return;
+        set({
+          undoStack: pushUndo(game, undoStack),
+          game: patchPlayer(game, id, { reminders: player.reminders.filter((r) => r.id !== reminderId) }),
         });
       },
 

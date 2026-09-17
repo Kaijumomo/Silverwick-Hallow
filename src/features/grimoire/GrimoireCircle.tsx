@@ -11,6 +11,7 @@ import { arrivalsAreTravelers, publicTravelerRole } from "@/stores/travelers";
 import { isInitialRevealComplete } from "@/stores/identity";
 import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
 import { initialRevealReadiness } from "@/features/setup/revealReadiness";
+import { hasEffect } from "@/stores/effects";
 
 export function buildRoleDisplayMap(script: Script | undefined): Map<string, RoleDef> {
   const map = new Map((script?.characters ?? []).map((c) => [c.id, c]));
@@ -158,7 +159,7 @@ function Token({
             <span className="token-presence offline" title="Offline" aria-label="Offline" />
           )}
         </div>
-        {!privacyMode && STATUS_KINDS.filter((k) => player.statuses[k]).map((k) => (
+        {!privacyMode && STATUS_KINDS.filter((k) => hasEffect(player, k)).map((k) => (
           <span key={k} className={`status-chip status-chip-${k}`} title={k}>
             {STATUS_ICON[k]}
           </span>
@@ -185,8 +186,8 @@ function Token({
       )}
       {!privacyMode && player.reminders.length > 0 && (
         <div className="token-reminders">
-          {player.reminders.slice(0, 4).map((r, i) => (
-            <span key={i} className="reminder-pip">{r}</span>
+          {player.reminders.slice(0, 4).map((r) => (
+            <span key={r.id} className="reminder-pip">{r.label}</span>
           ))}
         </div>
       )}

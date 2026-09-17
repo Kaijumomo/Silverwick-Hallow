@@ -13,6 +13,7 @@ import { evilInformationPolicy } from "@/features/nightOrder/nightRules";
 import { buildRegistry } from "@/data/roleRegistry";
 import { useModalBehavior } from "@/components/Modal";
 import { usePrivacyStore } from "@/stores/privacyStore";
+import { currentGameMoment, hasEffect } from "@/stores/effects";
 import type {
   Alignment,
   BehaviorMode,
@@ -185,7 +186,8 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   const setGhostVote = useStorytellerStore((s) => s.setGhostVote);
   const setAbilityUsed = useStorytellerStore((s) => s.setAbilityUsed);
   const setStatus = useStorytellerStore((s) => s.setStatus);
-  const setReminders = useStorytellerStore((s) => s.setReminders);
+  const addReminderCommand = useStorytellerStore((s) => s.addReminder);
+  const removeReminderCommand = useStorytellerStore((s) => s.removeReminder);
   const setNotes = useStorytellerStore((s) => s.setNotes);
   const privacyMode = usePrivacyStore((s) => s.enabled);
 
@@ -272,14 +274,11 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   const addReminder = (text: string) => {
     const t = text.trim();
     if (!t) return;
-    setReminders(player.id, [...player.reminders, t]);
+    addReminderCommand(player.id, { label: t, lifetime: { kind: "manual" }, createdAt: currentGameMoment(game) });
     setReminderDraft("");
   };
-  const removeReminder = (idx: number) => {
-    setReminders(
-      player.id,
-      player.reminders.filter((_, i) => i !== idx)
-    );
+  const removeReminder = (reminderId: string) => {
+    removeReminderCommand(player.id, reminderId);
   };
 
   const runMembershipAction = async (action: () => Promise<void> | void) => {
@@ -395,8 +394,8 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
                   key={s}
                   className="toggle-pill"
                   data-kind={s}
-                  aria-pressed={!!player.statuses[s]}
-                  onClick={() => setStatus(player.id, s, !player.statuses[s])}
+                  aria-pressed={hasEffect(player, s)}
+                  onClick={() => setStatus(player.id, s, !hasEffect(player, s))}
                 >
                   {s}
                 </button>
@@ -616,10 +615,10 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
           <section className="drawer-section">
             <h3 className="drawer-section-title">Reminders</h3>
             <div className="reminder-list">
-              {player.reminders.map((r, i) => (
-                <span key={`${r}-${i}`} className="reminder-tag">
-                  {r}
-                  <button onClick={() => removeReminder(i)} aria-label={`Remove ${r}`}>
+              {player.reminders.map((r) => (
+                <span key={r.id} className="reminder-tag">
+                  {r.label}
+                  <button onClick={() => removeReminder(r.id)} aria-label={`Remove ${r.label}`}>
                     ×
                   </button>
                 </span>

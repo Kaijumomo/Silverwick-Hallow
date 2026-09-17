@@ -71,6 +71,42 @@ export const PrivateInfoSchema = z.object({
 
 export const StatusesSchema = z.record(z.string().min(1), z.boolean());
 
+export const GamePhaseSchema = z.enum(["setup", "night", "day"]);
+
+export const GameMomentSchema = z.object({
+  phase: GamePhaseSchema,
+  day: z.number().int().nonnegative(),
+});
+
+export const EffectLifetimeSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("manual") }),
+  z.object({ kind: z.literal("untilDawn") }),
+  z.object({ kind: z.literal("throughFollowingDay") }),
+  z.object({ kind: z.literal("untilNextNight") }),
+  z.object({ kind: z.literal("nights"), count: z.number().int().positive() }),
+  z.object({ kind: z.literal("days"), count: z.number().int().positive() }),
+]);
+
+export const EffectRecordSchema = z.object({
+  id: z.string().min(1),
+  type: z.string().min(1),
+  sourceCharacter: z.string().min(1).optional(),
+  sourcePlayer: z.string().min(1).optional(),
+  appliedAt: GameMomentSchema.optional(),
+  lifetime: EffectLifetimeSchema,
+  note: z.string().optional(),
+});
+
+export const ReminderRecordSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  sourceCharacter: z.string().min(1).optional(),
+  sourcePlayer: z.string().min(1).optional(),
+  createdAt: GameMomentSchema.optional(),
+  lifetime: EffectLifetimeSchema,
+  note: z.string().optional(),
+});
+
 export const PlayerSelfRecordSchema = z.object({
   shownRole: z.string().min(1),
   shownAlignment: AlignmentSchema.optional(),
@@ -103,10 +139,11 @@ export const STPlayerRecordSchema = z.object({
   ghostVote: z.boolean(),
   abilityUsed: z.boolean(),
   statuses: StatusesSchema,
-  reminders: z.array(z.string()),
+  reminders: z.array(ReminderRecordSchema),
   stNotes: z.string(),
   isTraveler: z.boolean(),
   actualAlignment: AlignmentSchema.optional(),
+  effects: z.array(EffectRecordSchema),
   travelerArrival: z.object({
     demonInfoComplete: z.boolean(), firstNightComplete: z.boolean(),
     completedAtNight: z.number().int().positive().optional(),

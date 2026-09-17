@@ -4,6 +4,7 @@ import { canonicalOrder, canonicalRoles, isCanonicalRole, roleAuthority } from "
 import { wakeIdentity } from "@/stores/wakeIdentity";
 import { evilInformationPolicy, type NightContext } from "./nightRules";
 import { publicTravelerRole, travelerNeedsFirstNight } from "@/stores/travelers";
+import { hasEffect } from "@/stores/effects";
 
 export type NightStep =
   | {
@@ -186,7 +187,7 @@ export function computeNightOrder(
     }
     if (!canonical) customOrders.set(order, roleId);
     if (DEATH_CHECKS.has(roleId) || !player.alive) advisory += " Check the ability's death/event condition tonight; historical triggers are not tracked.";
-    if (player.statuses.poisoned || player.statuses.drunk || player.behaviorMode === "poisoned")
+    if (hasEffect(player, "poisoned") || hasEffect(player, "drunk") || player.behaviorMode === "poisoned")
       advisory += " Impaired: simulate the procedure as appropriate; do not apply a functioning ability or assume truthful information.";
     if (COMPLEX_ABILITIES.has(player.actualRole))
       advisory += " Storyteller check required: gained/custom abilities need manual procedures; wake identity does not model them.";

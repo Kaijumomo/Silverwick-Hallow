@@ -116,7 +116,10 @@ it("privacy mode keeps the player drawer safe and restores it when disabled", ()
   fireEvent.click(screen.getByRole("button", { name: "Drunk outsider" }));
   const perception = within(screen.getByText("Behavior & deception").closest("section")!);
   fireEvent.click(perception.getByRole("button", { name: "Empath townsfolk" }));
-  store.getState().setReminders(current().id, ["Poisoned", "Secret note"]);
+  store.getState().setReminders(current().id, [
+    { id: "r1", label: "Poisoned", lifetime: { kind: "manual" } },
+    { id: "r2", label: "Secret note", lifetime: { kind: "manual" } },
+  ]);
 
   act(() => usePrivacyStore.getState().setEnabled(true));
   expect(screen.getByText("Storyteller details are hidden while Privacy Mode is on.")).toBeInTheDocument();

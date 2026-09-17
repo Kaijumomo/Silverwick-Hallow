@@ -3,6 +3,7 @@ import { writeProjections } from "./sync";
 import { MemoryRoomBackend } from "./memoryBackend";
 import { buildRegistry } from "@/data/roleRegistry";
 import { tbScript, makePublishedSTPlayer } from "@/test/fixtures";
+import { StorytellerGamePersistedSchema } from "@/stores/schemas";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
 // `public/` is the town view: NO role data of any kind, ever.
@@ -18,6 +19,8 @@ const FORBIDDEN_ON_PUBLIC = [
   "reminders",
   "bluffs",
   "fakeMinions",
+  "actualAlignment",
+  "effects",
 ] as const;
 
 // `player/{id}/` is one player's self-view: shownRole/shownAlignment/bluffs
@@ -31,6 +34,8 @@ const FORBIDDEN_ON_PLAYER = [
   "abilityUsed",
   "statuses",
   "reminders",
+  "actualAlignment",
+  "effects",
 ] as const;
 
 const registry = buildRegistry(tbScript);
@@ -61,8 +66,10 @@ function makeLobby(): StorytellerLobbyRecord {
         shownRole: "imp",
         privateInfo: { bluffs: ["chef", "washerwoman", "saint"] },
         stNotes: "Imp; bluffs assigned night 1",
-        reminders: ["killed Bob"],
+        reminders: [{ id: "r1", label: "killed Bob", lifetime: { kind: "manual" } }],
         statuses: { protected: true },
+        actualAlignment: "evil",
+        effects: [{ id: "manual:protected", type: "protected", lifetime: { kind: "manual" } }],
       }),
       p2: makePublishedSTPlayer({
         id: "p2",
@@ -464,5 +471,45 @@ describe("writeProjections — Phase 9C.4 setup barrier atomicity", () => {
 
     expect(await backend.get("lobbies/SETP/player/p1")).toEqual({ shownRole: "chef", shownAlignment: "good" });
     expect(await backend.get("lobbies/SETP/player/p2")).toEqual({ shownRole: "washerwoman", shownAlignment: "good" });
+  });
+});
+
+describe("Phase 9D.1: live-state persistence/recovery round trip", () => {
+  it("actualAlignment, effects, and reminders survive the checkpoint round trip with no projection/privacy regression", async () => {
+    const backend = new MemoryRoomBackend();
+    const lobby = makeLobby();
+    lobby.players.p1 = {
+      ...lobby.players.p1!,
+      actualAlignment: "evil",
+      effects: [
+        { id: "manual:protected", type: "protected", lifetime: { kind: "manual" } },
+        { id: "poisoner-1", type: "poisoned", sourceCharacter: "poisoner", sourcePlayer: "p2", lifetime: { kind: "untilDawn" } },
+      ],
+      reminders: [
+        { id: "r1", label: "Killed Bob", sourceCharacter: "imp", createdAt: { phase: "night", day: 1 }, lifetime: { kind: "manual" } },
+      ],
+    };
+
+    await writeProjections({ backend, code: "ABCD", stState: lobby, registry, online: {} });
+
+    // The checkpoint is the authoritative game snapshot used for
+    // reconnect/restore -- it must carry the richer live state whole,
+    // exactly as the existing checkpoint mechanism already does for every
+    // other STPlayerRecord field.
+    const rawCheckpoint = (await backend.get("lobbies/ABCD/checkpoint")) as string;
+    const decoded = JSON.parse(rawCheckpoint) as { game: unknown };
+    const parsed = StorytellerGamePersistedSchema.parse(decoded.game);
+    const restoredP1 = parsed.players.p1!;
+    expect(restoredP1.actualAlignment).toBe("evil");
+    expect(restoredP1.effects).toEqual(lobby.players.p1.effects);
+    expect(restoredP1.reminders).toEqual(lobby.players.p1.reminders);
+
+    // No projection/privacy regression: none of it reached public or self.
+    const pub = JSON.stringify(await backend.get("lobbies/ABCD/public"));
+    const self = JSON.stringify(await backend.get("lobbies/ABCD/player/p1"));
+    for (const leak of ["actualAlignment", "effects", "reminders", "Killed Bob", "poisoner-1"]) {
+      expect(pub).not.toContain(leak);
+      expect(self).not.toContain(leak);
+    }
   });
 });

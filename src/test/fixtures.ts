@@ -79,6 +79,7 @@ export function makeSTPlayer(over: Partial<STPlayerRecord> = {}): STPlayerRecord
     abilityUsed: false,
     statuses: {},
     reminders: [],
+    effects: [],
     stNotes: "",
     isTraveler: false,
     ...over,

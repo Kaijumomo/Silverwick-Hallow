@@ -24,6 +24,8 @@ const PRIVATE_FIELDS = [
   "reminders",
   "stNotes",
   "abilityUsed",
+  "actualAlignment",
+  "effects",
 ] as const;
 
 describe("projectToSelf — Drunk", () => {
@@ -141,10 +143,12 @@ describe("projectToPublic", () => {
       shownAlignment: null,
       behaviorMode: "fake_demon_behavior",
       privateInfo: { bluffs: ["chef"], fakeMinions: ["p2"] },
-      reminders: ["secret"],
+      reminders: [{ id: "r1", label: "secret", lifetime: { kind: "manual" } }],
       stNotes: "do not leak",
       statuses: { drunk: true },
       abilityUsed: true,
+      actualAlignment: "evil",
+      effects: [{ id: "manual:drunk", type: "drunk", lifetime: { kind: "manual" } }],
     });
     const pub = projectToPublic(p, true);
     const json = JSON.stringify(pub);
@@ -404,9 +408,11 @@ describe("Privacy regression matrix — all behavior modes", () => {
         shownAlignment: row.shownAlignment,
         behaviorMode: row.behaviorMode,
         stNotes: "secret-st-note",
-        reminders: ["a-reminder"],
+        reminders: [{ id: "r1", label: "a-reminder", lifetime: { kind: "manual" } }],
         statuses: { drunk: true },
         privateInfo: { bluffs: ["saint"] },
+        actualAlignment: "good",
+        effects: [{ id: "manual:drunk", type: "drunk", lifetime: { kind: "manual" } }],
       });
       const pub = JSON.stringify(projectToPublic(p, false));
       // Role data must not appear.
@@ -635,11 +641,15 @@ describe("buildRegistry — traveler coverage", () => {
       isTraveler: true,
       stNotes: "traveler note",
       statuses: { protected: true },
+      actualAlignment: "evil",
+      effects: [{ id: "manual:protected", type: "protected", lifetime: { kind: "manual" } }],
     });
     const pub = JSON.stringify(projectToPublic(p, true));
     expect(pub).not.toContain("actualRole");
     expect(pub).not.toContain("stNotes");
     expect(pub).not.toContain("statuses");
     expect(pub).not.toContain("traveler note");
+    expect(pub).not.toContain("actualAlignment");
+    expect(pub).not.toContain("effects");
   });
 });

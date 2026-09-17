@@ -26,6 +26,8 @@ const FORBIDDEN_KEYS = [
   "stNotes",
   "statuses",
   "reminders",
+  "actualAlignment",
+  "effects",
 ] as const;
 
 describe("selectActiveFabled", () => {

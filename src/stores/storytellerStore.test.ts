@@ -470,7 +470,7 @@ describe("migrateStoreState", () => {
     const state = {
       game: minimalPersistedGame({
         phase: "night", day: 3,
-        players: { a: { id: "a", name: "Alice", seat: 0, joinedAt: 1, actualRole: "chef", shownRole: null, shownAlignment: null, behaviorMode: "normal", publicDisplayRole: null, alive: true, ghostVote: true, abilityUsed: false, statuses: {}, reminders: [], stNotes: "", isTraveler: false } },
+        players: { a: { id: "a", name: "Alice", seat: 0, joinedAt: 1, actualRole: "chef", shownRole: null, shownAlignment: null, behaviorMode: "normal", publicDisplayRole: null, alive: true, ghostVote: true, abilityUsed: false, statuses: {}, reminders: [], effects: [], stNotes: "", isTraveler: false } },
         seatOrder: ["a"],
       }),
       undoStack: [],
@@ -498,6 +498,98 @@ describe("migrateStoreState", () => {
     expect(result).toBe(state);
     expect(result.localSeq).toBe(7);
     expect(result.sync).toEqual(state.sync);
+  });
+
+  // -------------------------------------------------------------------------
+  // Phase 9D.1: v13 -> v14 structured live-state migration
+  // -------------------------------------------------------------------------
+  const legacyPlayer = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    id: "a", name: "Alice", seat: 0, joinedAt: 1, actualRole: "chef",
+    shownRole: null, shownAlignment: null, behaviorMode: "normal", publicDisplayRole: null,
+    alive: true, ghostVote: true, abilityUsed: false,
+    statuses: {}, reminders: [], stNotes: "", isTraveler: false,
+    ...over,
+  });
+  type MigratedPlayer = { actualAlignment?: string; effects?: { id: string; type: string }[]; reminders?: unknown[]; statuses?: Record<string, boolean> };
+  const migratedPlayer = (state: unknown, id = "a"): MigratedPlayer =>
+    (migrateStoreState(state, 13) as { game: { players: Record<string, MigratedPlayer> } }).game.players[id]!;
+
+  it("v13->v14: an ordinary player with an assigned, resolvable role gets its canonical actual alignment", () => {
+    const state = { game: minimalPersistedGame({ players: { a: legacyPlayer({ actualRole: "chef" }) } }), undoStack: [] };
+    expect(migratedPlayer(state).actualAlignment).toBe("good");
+    expect(takeMigrationResetFlag()).toBe(false);
+  });
+
+  it("v13->v14: an evil-typed ordinary role also derives correctly", () => {
+    const state = { game: minimalPersistedGame({ players: { a: legacyPlayer({ actualRole: "imp" }) } }), undoStack: [] };
+    expect(migratedPlayer(state).actualAlignment).toBe("evil");
+  });
+
+  it("v13->v14: an ordinary player with no assigned role is left unresolved (absent), never invented", () => {
+    const state = { game: minimalPersistedGame({ players: { a: legacyPlayer({ actualRole: "" }) } }), undoStack: [] };
+    expect(migratedPlayer(state).actualAlignment).toBeUndefined();
+  });
+
+  it("v13->v14: an existing Traveler's explicit actual alignment is preserved verbatim", () => {
+    const state = { game: minimalPersistedGame({
+      players: { a: legacyPlayer({ isTraveler: true, actualRole: "thief", actualAlignment: "evil" }) },
+    }), undoStack: [] };
+    expect(migratedPlayer(state).actualAlignment).toBe("evil");
+  });
+
+  it("v13->v14: a Traveler with no actual alignment yet chosen is never invented one from their character", () => {
+    const state = { game: minimalPersistedGame({
+      players: { a: legacyPlayer({ isTraveler: true, actualRole: "thief" }) },
+    }), undoStack: [] };
+    expect(migratedPlayer(state).actualAlignment).toBeUndefined();
+  });
+
+  it.each(["drunk", "poisoned", "protected"] as const)(
+    "v13->v14: an active legacy %s boolean becomes its own deterministic manual effect, and clears the boolean",
+    (kind) => {
+      const state = { game: minimalPersistedGame({
+        players: { a: legacyPlayer({ statuses: { [kind]: true } }) },
+      }), undoStack: [] };
+      const p = migratedPlayer(state);
+      expect(p.effects).toEqual([{ id: `manual:${kind}`, type: kind, lifetime: { kind: "manual" } }]);
+      expect(p.statuses).toEqual({});
+    }
+  );
+
+  it("v13->v14: existing reminder strings become structured manual/legacy records without losing their text", () => {
+    const state = { game: minimalPersistedGame({
+      players: { a: legacyPlayer({ reminders: ["Poisoned", "Secret note"] }) },
+    }), undoStack: [] };
+    const reminders = migratedPlayer(state).reminders as { id: string; label: string; lifetime: unknown }[];
+    expect(reminders.map((r) => r.label)).toEqual(["Poisoned", "Secret note"]);
+    for (const r of reminders) {
+      expect(r.id).toBeTruthy();
+      expect(r.lifetime).toEqual({ kind: "manual" });
+    }
+    // No invented provenance: no sourceCharacter/sourcePlayer/createdAt.
+    expect(reminders[0]).not.toHaveProperty("sourceCharacter");
+    expect(reminders[0]).not.toHaveProperty("sourcePlayer");
+    expect(reminders[0]).not.toHaveProperty("createdAt");
+  });
+
+  it("v13->v14: an empty/no-effect legacy player migrates cleanly to empty effects and preserved empty reminders", () => {
+    const state = { game: minimalPersistedGame({ players: { a: legacyPlayer() } }), undoStack: [] };
+    const p = migratedPlayer(state);
+    expect(p.effects).toEqual([]);
+    expect(p.reminders).toEqual([]);
+    expect(takeMigrationResetFlag()).toBe(false);
+  });
+
+  it("v13->v14: migration is deterministic and idempotent when re-run against already-migrated data", () => {
+    const state = { game: minimalPersistedGame({
+      players: { a: legacyPlayer({ actualRole: "chef", statuses: { poisoned: true }, reminders: ["Poisoned"] }) },
+    }), undoStack: [] };
+    const once = migrateStoreState(state, 13) as { game: { players: Record<string, MigratedPlayer> } };
+    const firstPlayer = structuredClone(once.game.players.a);
+    // Re-run the same migration block against the now-migrated data.
+    const twice = migrateStoreState(once, 13) as { game: { players: Record<string, MigratedPlayer> } };
+    expect(twice.game.players.a).toEqual(firstPlayer);
+    expect(twice.game.players.a!.effects).toHaveLength(1);
   });
 });
 
