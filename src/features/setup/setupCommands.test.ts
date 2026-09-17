@@ -290,9 +290,18 @@ describe("population and persisted history", () => {
       if(kind==="membership"){state().unseatPlayer(game().seatOrder[0]!);state().addToPendingQueue("uid","Joined");state().assignPendingToSeat("uid",game().seatOrder[0]!);}
       expect(game().plannedPlayerCount).toBe(expected);
     });
-  it("explicit target action is required and has no seat side effects", () => {
-    prepare();const seats=[...game().seatOrder];state().setPlannedPlayerCount(6);
-    expect(game().plannedPlayerCount).toBe(6);expect(game().seatOrder).toEqual(seats);
+  // FINAL SEAT & TRAVELLER RESERVATION CLOSURE, Section 1: once starting
+  // seat structure exists, setPlannedPlayerCount is refused entirely --
+  // superseding this test's own former "explicit target action" premise,
+  // which is exactly the standalone-numeric-edit bypass now closed. New
+  // Game is the sole initial planner; afterward only Add Seat/Remove
+  // Seat/Add Traveller (always in lockstep with physical seats) may change
+  // the plan.
+  it("setPlannedPlayerCount is refused once starting seat structure exists, and never has seat side effects either way", () => {
+    prepare();const seats=[...game().seatOrder];const before=state();
+    state().setPlannedPlayerCount(6);
+    expect(state()).toBe(before); // no mutation at all
+    expect(game().plannedPlayerCount).toBe(5);expect(game().seatOrder).toEqual(seats);
   });
   it("presence/reconnect does not alter setup population", () => {
     prepare();const before=selectSetupContext(game(),setupScript).population;

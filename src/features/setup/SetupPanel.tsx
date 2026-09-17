@@ -33,7 +33,6 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
   const [error, setError] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const primary = useRef<HTMLButtonElement>(null);
-  const countInput = useRef<HTMLInputElement>(null);
   const details = useRef<HTMLDivElement>(null);
   const wasEditing = useRef(false);
   const context = useMemo(() => selectSetupContext(game, script), [game, script]);
@@ -54,8 +53,11 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
   const run = () => {
     setError(null);
     if (editing) { setEditing(false); return; }
-    if (view.next === "count") { countInput.current?.focus(); return; }
-    if (view.next === "seats") { onClose(); return; }
+    // FINAL SEAT & TRAVELLER RESERVATION CLOSURE, Section 1: an
+    // unconfigured plan is resolved the same way as needing more seats --
+    // through the Grimoire's Add Seat/Add Traveller, never a standalone
+    // numeric edit here.
+    if (view.next === "count" || view.next === "seats") { onClose(); return; }
     if (view.next === "roles") { setEditing(true); return; }
     if (view.next === "review") { openReview(); return; }
     if (view.next === "reveal") {
@@ -77,7 +79,7 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
     else setError(result.message ?? "Could not apply bag changes.");
   };
   const actionLabel = editing ? "Done choosing" : {
-    count: "Choose player count", seats: "Go to seating", roles: "Choose roles", review: "Review setup",
+    count: "Go to seating", seats: "Go to seating", roles: "Choose roles", review: "Review setup",
     deal: "Deal roles", reveal: "Reveal Roles", begin: "Begin Night 1",
   }[view.next];
   const primaryDisabled = view.next === "reveal" && !view.revealReadiness?.ready;
@@ -85,8 +87,11 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
   const body = <div className={`setup-panel-body setup-refined${editing ? " setup-editing" : ""}`}>
     <div className="setup-overview">
       <div className="setup-player-heading">
-        <label><input ref={countInput} type="number" min="1" step="1" aria-label="Players" value={game.plannedPlayerCount || ""}
-          onChange={e => { store.setPlannedPlayerCount(Number(e.target.value)); setError(null); }} /><span>Planned</span></label>
+        {/* FINAL SEAT & TRAVELLER RESERVATION CLOSURE, Section 1: display
+            only -- plannedPlayerCount changes only through Add Seat/Remove
+            Seat/Add Traveller in the Grimoire, always in lockstep with
+            physical seats, never a standalone edit here. */}
+        <label><input type="number" readOnly aria-label="Players" value={game.plannedPlayerCount || ""} /><span>Planned</span></label>
         <span className="setup-seated-count">Seated: {p.occupiedNonTravelerCount}</span>
         {p.occupiedTravelerCount > 0 && <span className="setup-travelers">+ {p.occupiedTravelerCount} Traveler{p.occupiedTravelerCount === 1 ? "" : "s"}</span>}
       </div>

@@ -36,7 +36,7 @@ describe("normalized setup population", () => {
     g.players.t=makeSTPlayer({id:"t",seat:6,isTraveler:true,actualRole:"thief"});
     g.seatOrder.push("e","t");
     const a=analyze(g);
-    expect(a.population).toEqual({targetNonTravelerCount:7,occupiedNonTravelerCount:5,occupiedTravelerCount:1,emptyPlannedSeatCount:1,totalPhysicalSeatCount:7});
+    expect(a.population).toEqual({targetNonTravelerCount:7,occupiedNonTravelerCount:5,occupiedTravelerCount:1,emptyPlannedSeatCount:1,totalPhysicalSeatCount:7,outstandingTravelerReservationCount:0});
     expect(a.assigned.actual).toEqual(SETUP_COUNTS[5]);
     expect(a.readiness.begin.ok).toBe(false);
     expect(a.findings.find(f=>f.code==="planning-empty")?.severity).toBe("info");

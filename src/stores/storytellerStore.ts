@@ -96,6 +96,19 @@ const clone = <T,>(v: T): T =>
     ? structuredClone(v)
     : JSON.parse(JSON.stringify(v));
 
+/**
+ * FINAL SEAT & TRAVELLER RESERVATION CLOSURE, Section 2: every command that
+ * creates new starting capacity before Reveal must refuse atomically -- no
+ * seat, no player, no plan increment -- once EITHER the plan or physical
+ * seats are already at the supported cap. Checking only plannedPlayerCount
+ * left a bypass whenever the two had already diverged (e.g. legacy/
+ * adversarial state, or a plan reduced independently of physical seats);
+ * checking both closes it regardless of how they diverged.
+ */
+const atCapacity = (game: StorytellerLobbyRecord): boolean =>
+  !isInitialRevealComplete(game) &&
+  (game.plannedPlayerCount >= MAX_TOTAL_PLAYERS || game.seatOrder.length >= MAX_TOTAL_PLAYERS);
+
 export type AddScriptResult = { ok: true } | { ok: false; error: string };
 
 export type LobbyConnection = {
@@ -775,6 +788,14 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // even when this is called directly, not only through the UI's own
         // stepper/table limits.
         if (count > MAX_TOTAL_PLAYERS) return;
+        // FINAL SEAT & TRAVELLER RESERVATION CLOSURE, Section 1: once the
+        // starting seat structure exists, plannedPlayerCount is never
+        // independently edited -- New Game is the sole initial planner;
+        // afterward only Add Seat/Remove Seat/Add Traveller (always in
+        // lockstep with physical seats) may change it. Refusing here closes
+        // the bypass at the store boundary too, not only by removing the
+        // Setup panel's numeric input.
+        if (game.seatOrder.length > 0) return;
         set({ undoStack: pushUndo(game, undoStack), game: { ...game, plannedPlayerCount: count } });
       },
 
@@ -916,11 +937,12 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!game) return;
         const trimmed = name.trim();
         if (!trimmed) return;
-        // FINAL POPULATION CLOSURE, Section 2: refuse atomically -- before
-        // any mutation -- once the starting plan is already at capacity.
-        // Never clamp the plan while still creating seat/player 21; state
-        // must remain completely unchanged on refusal.
-        if (!isInitialRevealComplete(game) && game.plannedPlayerCount >= MAX_TOTAL_PLAYERS) return;
+        // FINAL POPULATION CLOSURE / RESERVATION CLOSURE, Section 2: refuse
+        // atomically -- before any mutation -- once either the plan or
+        // physical seats are already at capacity. Never clamp the plan
+        // while still creating seat/player 21; state must remain
+        // completely unchanged on refusal.
+        if (atCapacity(game)) return;
         const id = newId();
         const seat = game.seatOrder.length;
         const player = arrivalPlayer(blankPlayer(id, trimmed, seat), game);
@@ -978,22 +1000,39 @@ export const useStorytellerStore = create<StorytellerStore>()(
       addEmptySeat: () => {
         const { game } = get();
         if (!game) return;
-        // FINAL POPULATION CLOSURE, Sections 2 & 7: this represents
-        // deliberate new starting capacity before Reveal, so it grows the
-        // plan exactly like addPlayer -- refused atomically at the cap,
-        // never clamped while still creating the seat. Filling this seat
-        // later (addPlayerToSeat/assignPendingToSeat) never grows the plan
-        // again; it is already accounted for here.
-        if (!isInitialRevealComplete(game) && game.plannedPlayerCount >= MAX_TOTAL_PLAYERS) return;
+        // FINAL POPULATION CLOSURE / RESERVATION CLOSURE, Sections 2 & 7:
+        // this represents deliberate new starting capacity before Reveal, so
+        // it grows the plan exactly like addPlayer -- refused atomically
+        // once either the plan or physical seats are at capacity, never
+        // clamped while still creating the seat. Filling this seat later
+        // (addPlayerToSeat/assignPendingToSeat) never grows the plan again;
+        // it is already accounted for here.
+        if (atCapacity(game)) return;
         const id = newId();
         const seat = game.seatOrder.length;
-        const planPatch = isInitialRevealComplete(game) ? {} : { plannedPlayerCount: game.plannedPlayerCount + 1 };
+        const revealed = isInitialRevealComplete(game);
+        // FINAL SEAT & TRAVELLER RESERVATION CLOSURE, Section 3: before
+        // Reveal, once the ordinary target is already at its own cap (15), a
+        // new generic seat cannot be an ordinary reservation -- the new
+        // participant becomes planned Traveller capacity instead, exactly
+        // like Add Traveller, so the ordinary target itself never silently
+        // exceeds 15. The seat stays isTraveler: false, marked only
+        // plannedTravelerSeat -- actual Traveller identity occurs once a
+        // real player occupies it.
+        const target = revealed ? null : selectSetupContext(game).population.targetNonTravelerCount;
+        const atOrdinaryCap = target !== null && target >= MAX_PLAYERS;
+        const planPatch = revealed ? {} : atOrdinaryCap
+          ? { plannedPlayerCount: game.plannedPlayerCount + 1, plannedTravelerCount: game.plannedTravelerCount + 1 }
+          : { plannedPlayerCount: game.plannedPlayerCount + 1 };
+        const newPlayer = atOrdinaryCap
+          ? { ...blankPlayer(id, "", seat, true), plannedTravelerSeat: true }
+          : arrivalPlayer(blankPlayer(id, "", seat, true), game);
         set({
           undoStack: pushUndo(game, get().undoStack),
           game: {
             ...game,
             ...planPatch,
-            players: { ...game.players, [id]: arrivalPlayer(blankPlayer(id, "", seat, true), game) },
+            players: { ...game.players, [id]: newPlayer },
             seatOrder: [...game.seatOrder, id],
           },
         });
@@ -1002,8 +1041,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
       addTravelerSeat: () => {
         const { game } = get();
         if (!game) return;
-        // FINAL POPULATION CLOSURE, Section 2: refuse atomically at the cap.
-        if (!isInitialRevealComplete(game) && game.plannedPlayerCount >= MAX_TOTAL_PLAYERS) return;
+        // FINAL POPULATION CLOSURE / RESERVATION CLOSURE, Section 2: refuse
+        // atomically once either the plan or physical seats are at capacity.
+        if (atCapacity(game)) return;
         const id = newId();
         const seat = game.seatOrder.length;
         // Phase 9 Setup finalization (FINAL SETUP INTEGRATION REVISION,
@@ -1094,6 +1134,15 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const { game, selectedPlayerId } = get();
         const existing = game?.players[id];
         if (!game || !existing || existing.isEmpty) return false;
+        // FINAL SEAT & TRAVELLER RESERVATION CLOSURE, Section 4: unseating
+        // changes occupancy only, never the seat's reservation type. An
+        // occupied Traveler returns to an empty Traveller reservation
+        // (plannedTravelerSeat: true), not a generic ordinary-neutral blank
+        // seat -- otherwise refilling it would silently lose the Traveller
+        // designation. Plan counts (plannedPlayerCount/plannedTravelerCount)
+        // never change here; only reservation type does.
+        const blank = blankPlayer(id, "", existing.seat, true);
+        const restored = existing.isTraveler ? { ...blank, plannedTravelerSeat: true } : blank;
         set({
           // Membership-affecting changes deliberately do not enter the generic
           // undo stack; clearing older snapshots prevents undo from restoring
@@ -1103,7 +1152,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
             ...game,
             players: {
               ...game.players,
-              [id]: blankPlayer(id, "", existing.seat, true),
+              [id]: restored,
             },
           },
           selectedPlayerId: selectedPlayerId === id ? null : selectedPlayerId,
@@ -1329,8 +1378,17 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // represents a genuinely new intended Traveler -- never derived by
         // snapping to current occupancy. The reverse direction simply
         // relinquishes one intended Traveler slot from the plan.
+        // FINAL SEAT & TRAVELLER RESERVATION CLOSURE, Section 5: Traveller
+        // capacity already spoken for is occupied Travelers PLUS empty
+        // seats still holding an outstanding Traveller reservation
+        // (plannedTravelerSeat) -- counting occupied Travelers alone would
+        // let a manual designation silently "steal" a reservation meant for
+        // a different, still-unfilled seat instead of growing the plan for
+        // itself, undercounting total planned Travellers once the
+        // reservation is later filled too.
+        const allocatedTravelerCapacity = occupiedTravelers + population.outstandingTravelerReservationCount;
         const nextPlannedTravelerCount = isTraveler
-          ? (occupiedTravelers < game.plannedTravelerCount ? game.plannedTravelerCount : game.plannedTravelerCount + 1)
+          ? (allocatedTravelerCapacity < game.plannedTravelerCount ? game.plannedTravelerCount : game.plannedTravelerCount + 1)
           : Math.max(0, game.plannedTravelerCount - 1);
         const next: STPlayerRecord = {
           ...existing,

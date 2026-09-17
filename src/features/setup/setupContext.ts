@@ -17,6 +17,14 @@ export type SetupPopulation = {
   occupiedTravelerCount: number;
   emptyPlannedSeatCount: number;
   totalPhysicalSeatCount: number;
+  /** Empty seats already reserving planned Traveller capacity
+   * (plannedTravelerSeat), not yet occupied by any player (FINAL SEAT &
+   * TRAVELLER RESERVATION CLOSURE, Section 5). Together with
+   * occupiedTravelerCount this is the Traveller capacity already spoken
+   * for out of plannedTravelerCount -- a new ordinary->Traveller
+   * designation must not grow the plan while any of this capacity remains
+   * unallocated. */
+  outstandingTravelerReservationCount: number;
 };
 export type SetupContext = {
   game: StorytellerLobbyRecord;
@@ -68,6 +76,7 @@ export function selectSetupContext(game: StorytellerLobbyRecord, script?: Script
       // meant to depend on, breaking Traveler Deal independence.
       emptyPlannedSeatCount: seated.filter(p => p.isEmpty && !p.isTraveler && !p.plannedTravelerSeat).length,
       totalPhysicalSeatCount: game.seatOrder.length,
+      outstandingTravelerReservationCount: seated.filter(p => p.isEmpty && p.plannedTravelerSeat).length,
     },
     occupied, ordinary, travelers,
     pool: [...(game.rolePool ?? [])],

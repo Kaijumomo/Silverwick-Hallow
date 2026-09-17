@@ -65,13 +65,19 @@ describe("Phase 9C storyteller setup", () => {
   });
   it("unconfigured setup never reports a false ready/no-issues state", () => {
     store.getState().newGame(setupScript.id);render(<Panel/>);
-    expect(screen.getByText("Choose the number of players")).toBeVisible();
+    expect(screen.getByText("Add seats in the grimoire to plan the roster")).toBeVisible();
     expect(screen.queryByText(/No issues|Ready to deal|Setup ready/)).toBeNull();
   });
-  it("changing count never allocates seats", () => {
-    render(<Panel/>);fireEvent.change(screen.getByLabelText("Players"),{target:{value:"6"}});
-    expect(store.getState().game!.plannedPlayerCount).toBe(6);expect(store.getState().game!.seatOrder).toHaveLength(5);
-    expect(screen.getByText("Seat 1 more player")).toBeVisible();
+  // FINAL SEAT & TRAVELLER RESERVATION CLOSURE, Section 1: superseding this
+  // test's own former "changing count never allocates seats" premise --
+  // the Players field is now read-only; plannedPlayerCount changes only
+  // through Add Seat/Remove Seat/Add Traveller in the Grimoire, always in
+  // lockstep with physical seats.
+  it("the Players field is read-only and cannot independently change plannedPlayerCount", () => {
+    render(<Panel/>);
+    expect(screen.getByLabelText("Players")).toHaveAttribute("readonly");
+    fireEvent.change(screen.getByLabelText("Players"),{target:{value:"6"}});
+    expect(store.getState().game!.plannedPlayerCount).toBe(5);expect(store.getState().game!.seatOrder).toHaveLength(5);
   });
   it.each(Object.keys(SETUP_COUNTS).map(Number))("displays canonical composition for %i players", count=>{
     prepare(standardRoles(count));render(<Panel/>);

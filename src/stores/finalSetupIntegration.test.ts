@@ -443,3 +443,308 @@ describe("Section 7: normal Traveler alignment delivery is automatic and never s
     expect(game().players[id]!.shownAlignment).toBeNull();
   });
 });
+
+// FINAL SEAT & TRAVELLER RESERVATION CLOSURE -- required adversarial
+// reproductions for the Canonical Seat Model: every starting seat before
+// Reveal is one of {ordinary reservation, Traveller reservation, occupied
+// ordinary, occupied Traveller}, and filling/unseating toggles occupancy
+// only within a reservation type while add/remove seat is the only thing
+// that changes the plan.
+describe("FINAL SEAT & TRAVELLER RESERVATION CLOSURE -- required reproductions", () => {
+  describe("Section 2: physical-capacity bypass -- refused atomically even when the plan was independently reduced", () => {
+    function fillToCapacity() {
+      newPlan(20, 0);
+      for (let i = 0; i < 20; i++) state().addPlayerToSeat("Player " + i);
+    }
+    // Adversarial/legacy state: 20 physical seats already exist, but the
+    // plan was somehow reduced to 19 independently of them (the exact
+    // divergence Section 2 exists to close, regardless of how it arose).
+    function divergePlanBelowPhysical() {
+      store.setState({ game: { ...game(), plannedPlayerCount: 19 } });
+    }
+    it("addEmptySeat refuses -- no seat, no plan increment, no partial mutation", () => {
+      fillToCapacity();
+      divergePlanBelowPhysical();
+      const before = state();
+      state().addEmptySeat();
+      expect(state()).toBe(before);
+      expect(game().seatOrder).toHaveLength(20);
+      expect(game().plannedPlayerCount).toBe(19);
+    });
+    it("addPlayer refuses under the same bypass attempt", () => {
+      fillToCapacity();
+      divergePlanBelowPhysical();
+      const before = state();
+      state().addPlayer("Overflow");
+      expect(state()).toBe(before);
+      expect(game().seatOrder).toHaveLength(20);
+    });
+    it("addTravelerSeat refuses under the same bypass attempt", () => {
+      fillToCapacity();
+      divergePlanBelowPhysical();
+      const before = state();
+      state().addTravelerSeat();
+      expect(state()).toBe(before);
+      expect(game().seatOrder).toHaveLength(20);
+    });
+  });
+
+  describe("Section 1: the Setup Players field cannot independently change plannedPlayerCount", () => {
+    it("setPlannedPlayerCount is refused once starting seat structure exists, so no path produces a plan/physical mismatch through it", () => {
+      newPlan(5, 0);
+      const before = state();
+      state().setPlannedPlayerCount(19);
+      expect(state()).toBe(before);
+      expect(game().plannedPlayerCount).toBe(5);
+      expect(game().seatOrder).toHaveLength(5);
+    });
+  });
+
+  describe("Section 3: a new generic seat's reservation type follows the ordinary target", () => {
+    it("below the ordinary cap: 10/0/10 + New Seat -> 11/0/11 ordinary reservation", () => {
+      newPlan(10, 0);
+      state().addEmptySeat();
+      expect(game().plannedPlayerCount).toBe(11);
+      expect(game().plannedTravelerCount).toBe(0);
+      expect(population().targetNonTravelerCount).toBe(11);
+      const newSeatId = game().seatOrder.at(-1)!;
+      expect(game().players[newSeatId]!.isTraveler).toBe(false);
+      expect(game().players[newSeatId]!.plannedTravelerSeat).toBeUndefined();
+    });
+
+    it("at the ordinary cap: 15/0/15 + New Seat -> 16/1/15 Traveller reservation; filling it yields 15 ordinary + 1 Traveller, plan stays 16/1", () => {
+      newPlan(15, 0);
+      state().addEmptySeat();
+      expect(game().plannedPlayerCount).toBe(16);
+      expect(game().plannedTravelerCount).toBe(1);
+      expect(population().targetNonTravelerCount).toBe(15);
+      const newSeatId = game().seatOrder.at(-1)!;
+      expect(game().players[newSeatId]!.isTraveler).toBe(false);
+      expect(game().players[newSeatId]!.plannedTravelerSeat).toBe(true);
+      state().addToPendingQueue("uid-fill", "Filled Traveler");
+      expect(state().assignPendingToSeat("uid-fill", newSeatId)).toBe(true);
+      expect(game().players[newSeatId]!.isTraveler).toBe(true);
+      expect(game().players[newSeatId]!.plannedTravelerSeat).toBeUndefined();
+      expect(game().plannedPlayerCount).toBe(16);
+      expect(game().plannedTravelerCount).toBe(1);
+      expect(population().occupiedTravelerCount).toBe(1);
+      expect(population().targetNonTravelerCount).toBe(15);
+    });
+  });
+
+  describe("Section 4: unseating restores the seat's reservation type, never converts it", () => {
+    it("11 total / 1 Traveller: unseat -> still 11/1, empty seat is a Traveller reservation; refill reproduces a Traveller; removing it then restores 10/0", () => {
+      newPlan(10, 0);
+      for (let i = 0; i < 10; i++) state().addPlayerToSeat("Player " + i);
+      state().addTravelerSeat();
+      const reservedId = game().seatOrder.at(-1)!;
+      state().addToPendingQueue("uid-t", "Traveling Sam");
+      expect(state().assignPendingToSeat("uid-t", reservedId)).toBe(true);
+      expect(game().players[reservedId]!.isTraveler).toBe(true);
+      expect(game().plannedPlayerCount).toBe(11);
+      expect(game().plannedTravelerCount).toBe(1);
+
+      expect(state().unseatPlayer(reservedId)).toBe(true);
+      expect(game().plannedPlayerCount).toBe(11);
+      expect(game().plannedTravelerCount).toBe(1);
+      expect(game().players[reservedId]!.isEmpty).toBe(true);
+      expect(game().players[reservedId]!.isTraveler).toBe(false);
+      expect(game().players[reservedId]!.plannedTravelerSeat).toBe(true);
+
+      state().addToPendingQueue("uid-t2", "Traveling Sam Again");
+      expect(state().assignPendingToSeat("uid-t2", reservedId)).toBe(true);
+      expect(game().players[reservedId]!.isTraveler).toBe(true);
+      expect(game().plannedPlayerCount).toBe(11);
+      expect(game().plannedTravelerCount).toBe(1);
+
+      expect(state().unseatPlayer(reservedId)).toBe(true);
+      state().removePlayer(reservedId);
+      expect(game().plannedPlayerCount).toBe(10);
+      expect(game().plannedTravelerCount).toBe(0);
+    });
+
+    it("ordinary unseat restores a plain ordinary reservation, never a Traveller one", () => {
+      newPlan(10, 0);
+      for (let i = 0; i < 10; i++) state().addPlayerToSeat("Player " + i);
+      const id = game().seatOrder[0]!;
+      expect(state().unseatPlayer(id)).toBe(true);
+      expect(game().plannedPlayerCount).toBe(10);
+      expect(game().players[id]!.isTraveler).toBe(false);
+      expect(game().players[id]!.plannedTravelerSeat).toBeUndefined();
+    });
+  });
+
+  describe("Section 5: Traveller capacity allocation counts outstanding reservations, never just occupied Travellers", () => {
+    it("10 ordinary -> Add Traveller (11/1, one reservation) -> convert Bob ordinary->Traveller -> 11/2, 9 ordinary target, reservation stays outstanding; filling it lands at 11/2, 2 occupied Travellers -- no undercount", () => {
+      newPlan(10, 0);
+      for (let i = 0; i < 10; i++) state().addPlayerToSeat("Player " + i);
+      state().addTravelerSeat();
+      const reservedId = game().seatOrder.at(-1)!;
+      expect(game().plannedPlayerCount).toBe(11);
+      expect(game().plannedTravelerCount).toBe(1);
+      expect(population().outstandingTravelerReservationCount).toBe(1);
+
+      const bobId = game().seatOrder[0]!;
+      expect(state().setIsTraveler(bobId, true).ok).toBe(true);
+      expect(game().plannedPlayerCount).toBe(11);
+      expect(game().plannedTravelerCount).toBe(2);
+      expect(population().targetNonTravelerCount).toBe(9);
+      expect(game().players[bobId]!.isTraveler).toBe(true);
+      expect(game().players[reservedId]!.isEmpty).toBe(true);
+      expect(game().players[reservedId]!.plannedTravelerSeat).toBe(true);
+
+      state().addToPendingQueue("uid-fill2", "Second Traveler");
+      expect(state().assignPendingToSeat("uid-fill2", reservedId)).toBe(true);
+      expect(population().occupiedTravelerCount).toBe(2);
+      expect(population().occupiedNonTravelerCount).toBe(9);
+      expect(game().plannedPlayerCount).toBe(11);
+      expect(game().plannedTravelerCount).toBe(2);
+    });
+  });
+
+  describe("Section 6: reservation removal never double-decrements", () => {
+    it("removing an empty ordinary reservation: total -1, Travellers unchanged", () => {
+      newPlan(10, 0);
+      state().addEmptySeat();
+      const id = game().seatOrder.at(-1)!;
+      state().removePlayer(id);
+      expect(game().plannedPlayerCount).toBe(10);
+      expect(game().plannedTravelerCount).toBe(0);
+    });
+
+    it("removing an empty Traveller reservation: total -1, Travellers -1", () => {
+      newPlan(10, 0);
+      state().addTravelerSeat();
+      const id = game().seatOrder.at(-1)!;
+      state().removePlayer(id);
+      expect(game().plannedPlayerCount).toBe(10);
+      expect(game().plannedTravelerCount).toBe(0);
+    });
+
+    it("removing an occupied ordinary player: total -1, Travellers unchanged", () => {
+      newPlan(10, 0);
+      for (let i = 0; i < 10; i++) state().addPlayerToSeat("Player " + i);
+      const id = game().seatOrder[0]!;
+      state().removePlayer(id);
+      expect(game().plannedPlayerCount).toBe(9);
+      expect(game().plannedTravelerCount).toBe(0);
+    });
+
+    it("removing an occupied Traveller: total -1, Travellers -1, never double-decremented", () => {
+      newPlan(10, 0);
+      for (let i = 0; i < 10; i++) state().addPlayerToSeat("Player " + i);
+      state().addTravelerSeat();
+      const reservedId = game().seatOrder.at(-1)!;
+      state().addToPendingQueue("uid-r", "Occupied Traveler");
+      expect(state().assignPendingToSeat("uid-r", reservedId)).toBe(true);
+      expect(game().players[reservedId]!.isTraveler).toBe(true);
+      state().removePlayer(reservedId);
+      expect(game().plannedPlayerCount).toBe(10);
+      expect(game().plannedTravelerCount).toBe(0);
+    });
+  });
+
+  describe("Section 7: filling any reservation is plan-neutral, for both reservation types and both seat-first/queue-first paths", () => {
+    it("seat-first (addPlayerToSeat): filling an ordinary reservation never changes plannedPlayerCount", () => {
+      newPlan(10, 0);
+      const before = game().plannedPlayerCount;
+      state().addPlayerToSeat("First Ordinary");
+      expect(game().plannedPlayerCount).toBe(before);
+    });
+
+    it("seat-first (addPlayerToSeat): filling a Traveller reservation never changes the plan and clears plannedTravelerSeat", () => {
+      newPlan(9, 0);
+      for (let i = 0; i < 9; i++) state().addPlayerToSeat("Player " + i);
+      state().addTravelerSeat();
+      const reservedId = game().seatOrder.at(-1)!;
+      const beforeTotal = game().plannedPlayerCount, beforeTravelers = game().plannedTravelerCount;
+      state().addPlayerToSeat("Traveling Filled");
+      expect(game().plannedPlayerCount).toBe(beforeTotal);
+      expect(game().plannedTravelerCount).toBe(beforeTravelers);
+      expect(game().players[reservedId]!.isTraveler).toBe(true);
+      expect(game().players[reservedId]!.plannedTravelerSeat).toBeUndefined();
+    });
+
+    it("queue-first (assignPendingToSeat): filling an ordinary reservation never changes plannedPlayerCount", () => {
+      newPlan(5, 0);
+      const id = game().seatOrder[0]!;
+      const before = game().plannedPlayerCount;
+      state().addToPendingQueue("uid-q1", "Queued Ordinary");
+      expect(state().assignPendingToSeat("uid-q1", id)).toBe(true);
+      expect(game().plannedPlayerCount).toBe(before);
+      expect(game().players[id]!.isTraveler).toBe(false);
+    });
+
+    it("queue-first (assignPendingToSeat): filling a Traveller reservation never changes the plan and clears plannedTravelerSeat", () => {
+      newPlan(9, 0);
+      for (let i = 0; i < 9; i++) state().addPlayerToSeat("Player " + i);
+      state().addTravelerSeat();
+      const reservedId = game().seatOrder.at(-1)!;
+      const beforeTotal = game().plannedPlayerCount, beforeTravelers = game().plannedTravelerCount;
+      state().addToPendingQueue("uid-q2", "Queued Traveler");
+      expect(state().assignPendingToSeat("uid-q2", reservedId)).toBe(true);
+      expect(game().plannedPlayerCount).toBe(beforeTotal);
+      expect(game().plannedTravelerCount).toBe(beforeTravelers);
+      expect(game().players[reservedId]!.isTraveler).toBe(true);
+      expect(game().players[reservedId]!.plannedTravelerSeat).toBeUndefined();
+    });
+
+    it("unseating an ordinary player never changes plannedPlayerCount", () => {
+      newPlan(6, 0);
+      for (let i = 0; i < 6; i++) state().addPlayerToSeat("Player " + i);
+      const id = game().seatOrder[0]!;
+      const before = game().plannedPlayerCount;
+      expect(state().unseatPlayer(id)).toBe(true);
+      expect(game().plannedPlayerCount).toBe(before);
+    });
+
+    it("unseating a Traveller never changes plannedPlayerCount or plannedTravelerCount", () => {
+      newPlan(6, 0);
+      for (let i = 0; i < 6; i++) state().addPlayerToSeat("Player " + i);
+      const id = game().seatOrder[0]!;
+      expect(state().setIsTraveler(id, true).ok).toBe(true);
+      const beforeTotal = game().plannedPlayerCount, beforeTravelers = game().plannedTravelerCount;
+      expect(state().unseatPlayer(id)).toBe(true);
+      expect(game().plannedPlayerCount).toBe(beforeTotal);
+      expect(game().plannedTravelerCount).toBe(beforeTravelers);
+    });
+  });
+
+  describe("Section 8: hard population guards remain defense-in-depth against Sections 1-7's own mutation paths", () => {
+    it("Reveal still refuses an adversarially-created 16th occupied ordinary seat (past the 15-ordinary ceiling)", () => {
+      newPlan(15, 0);
+      for (let i = 0; i < 15; i++) state().addPlayerToSeat("Player " + i);
+      state().setRolePool(standardRoles(15));
+      expect(state().dealRolePool().ok).toBe(true);
+      game().seatOrder.forEach(id => state().showAssignedRole(id));
+      const current = game();
+      const id = "extra-ordinary";
+      store.setState({ game: { ...current, plannedPlayerCount: 16,
+        players: { ...current.players, [id]: { id, name: "Overflow", seat: current.seatOrder.length, joinedAt: Date.now(),
+          actualRole: "imp", shownRole: "imp", shownAlignment: null, behaviorMode: "normal", publicDisplayRole: null,
+          alive: true, ghostVote: true, abilityUsed: false, statuses: {}, reminders: [], stNotes: "", isTraveler: false, isEmpty: false } },
+        seatOrder: [...current.seatOrder, id] } });
+      expect(population().targetNonTravelerCount).toBe(16);
+      expect(state().revealRoles().ok).toBe(false);
+    });
+
+    it("Begin Night 1 still refuses when physical seats exceed the 20 cap, unaffected by Sections 1-7's own mutation-path changes", () => {
+      newPlan(15, 0);
+      for (let i = 0; i < 15; i++) state().addPlayerToSeat("Player " + i);
+      readyToReveal(15);
+      const current = game();
+      const extraPlayers: typeof current.players = {};
+      const extraIds: string[] = [];
+      for (let i = 0; i < 6; i++) {
+        const id = `overflow-${i}`;
+        extraIds.push(id);
+        extraPlayers[id] = { id, name: "Overflow " + i, seat: current.seatOrder.length + i, joinedAt: Date.now(),
+          actualRole: "thief", shownRole: null, shownAlignment: null, behaviorMode: "normal", publicDisplayRole: null,
+          alive: true, ghostVote: true, abilityUsed: false, statuses: {}, reminders: [], stNotes: "", isTraveler: true, actualAlignment: "good" };
+      }
+      store.setState({ game: { ...current, players: { ...current.players, ...extraPlayers }, seatOrder: [...current.seatOrder, ...extraIds] } });
+      expect(population().totalPhysicalSeatCount).toBe(21);
+      expect(state().beginNightOne().ok).toBe(false);
+    });
+  });
+});

@@ -20,7 +20,13 @@ export function setupPresentation(game: StorytellerLobbyRecord, analysis: SetupA
   let next: "count" | "seats" | "roles" | "review" | "deal" | "reveal" | "begin";
   let message: string;
   let revealReadiness: RevealReadiness | undefined;
-  if (target === null) { next = "count"; message = "Choose the number of players"; }
+  // FINAL SEAT & TRAVELLER RESERVATION CLOSURE, Section 1: plannedPlayerCount
+  // is never set by typing a number here -- New Game is the sole initial
+  // planner, and afterward only Add Seat/Remove Seat/Add Traveller (in the
+  // Grimoire) may change it, always in lockstep with physical seats. An
+  // unconfigured (0) plan is guided to that same seating step, never to a
+  // standalone numeric edit.
+  if (target === null) { next = "count"; message = "Add seats in the grimoire to plan the roster"; }
   else if (p.occupiedNonTravelerCount < target) {
     next = "seats"; message = `Seat ${plural(target - p.occupiedNonTravelerCount, "more player")}`;
   } else if (p.occupiedNonTravelerCount > target) {
