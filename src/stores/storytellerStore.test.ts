@@ -562,14 +562,58 @@ describe("migrateStoreState", () => {
     }), undoStack: [] };
     const reminders = migratedPlayer(state).reminders as { id: string; label: string; lifetime: unknown }[];
     expect(reminders.map((r) => r.label)).toEqual(["Poisoned", "Secret note"]);
+    // Deterministic, per-player stable ids (not a random allocation) --
+    // never invented, never reshuffled.
+    expect(reminders.map((r) => r.id)).toEqual(["legacy-a-0", "legacy-a-1"]);
     for (const r of reminders) {
-      expect(r.id).toBeTruthy();
       expect(r.lifetime).toEqual({ kind: "manual" });
     }
     // No invented provenance: no sourceCharacter/sourcePlayer/createdAt.
     expect(reminders[0]).not.toHaveProperty("sourceCharacter");
     expect(reminders[0]).not.toHaveProperty("sourcePlayer");
     expect(reminders[0]).not.toHaveProperty("createdAt");
+  });
+
+  it("v13->v14: duplicate legacy reminder labels are preserved in order, each with its own distinct deterministic id", () => {
+    const state = { game: minimalPersistedGame({
+      players: { a: legacyPlayer({ reminders: ["Poisoned", "Poisoned", "Poisoned"] }) },
+    }), undoStack: [] };
+    const reminders = migratedPlayer(state).reminders as { id: string; label: string }[];
+    expect(reminders.map((r) => r.label)).toEqual(["Poisoned", "Poisoned", "Poisoned"]);
+    expect(reminders.map((r) => r.id)).toEqual(["legacy-a-0", "legacy-a-1", "legacy-a-2"]);
+    expect(new Set(reminders.map((r) => r.id)).size).toBe(3);
+  });
+
+  it("v13->v14: two independent clones of the same v13 state migrate to deeply identical v14 state, including reminders", () => {
+    const buildLegacyState = () => ({
+      game: minimalPersistedGame({
+        players: {
+          a: legacyPlayer({
+            actualRole: "chef",
+            statuses: { poisoned: true, drunk: true },
+            reminders: ["Poisoned", "Poisoned", "Red Herring"],
+          }),
+          b: legacyPlayer({
+            id: "b", actualRole: "imp", statuses: { protected: true }, reminders: ["Chosen"],
+          }),
+        },
+      }),
+      undoStack: [],
+    });
+    // Two structurally identical but independently allocated copies -- no
+    // shared object identity, exactly like two separate localStorage reads
+    // of the same persisted blob would produce.
+    const clone1 = JSON.parse(JSON.stringify(buildLegacyState()));
+    const clone2 = JSON.parse(JSON.stringify(buildLegacyState()));
+    const migrated1 = migrateStoreState(clone1, 13);
+    const migrated2 = migrateStoreState(clone2, 13);
+    expect(migrated1).toEqual(migrated2);
+    const players1 = (migrated1 as { game: { players: Record<string, MigratedPlayer> } }).game.players;
+    expect(players1.a!.reminders).toEqual([
+      { id: "legacy-a-0", label: "Poisoned", lifetime: { kind: "manual" } },
+      { id: "legacy-a-1", label: "Poisoned", lifetime: { kind: "manual" } },
+      { id: "legacy-a-2", label: "Red Herring", lifetime: { kind: "manual" } },
+    ]);
   });
 
   it("v13->v14: an empty/no-effect legacy player migrates cleanly to empty effects and preserved empty reminders", () => {
@@ -582,7 +626,10 @@ describe("migrateStoreState", () => {
 
   it("v13->v14: migration is deterministic and idempotent when re-run against already-migrated data", () => {
     const state = { game: minimalPersistedGame({
-      players: { a: legacyPlayer({ actualRole: "chef", statuses: { poisoned: true }, reminders: ["Poisoned"] }) },
+      players: { a: legacyPlayer({
+        actualRole: "chef", statuses: { poisoned: true },
+        reminders: ["Poisoned", "Poisoned", "Red Herring"],
+      }) },
     }), undoStack: [] };
     const once = migrateStoreState(state, 13) as { game: { players: Record<string, MigratedPlayer> } };
     const firstPlayer = structuredClone(once.game.players.a);
@@ -590,6 +637,7 @@ describe("migrateStoreState", () => {
     const twice = migrateStoreState(once, 13) as { game: { players: Record<string, MigratedPlayer> } };
     expect(twice.game.players.a).toEqual(firstPlayer);
     expect(twice.game.players.a!.effects).toHaveLength(1);
+    expect(twice.game.players.a!.reminders).toHaveLength(3);
   });
 });
 

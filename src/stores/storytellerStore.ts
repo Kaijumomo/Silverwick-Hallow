@@ -561,9 +561,15 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
         }
         // 3. Reminders: a plain string array (every entry still a string)
         // becomes manual/legacy records with no invented source or moment.
+        // The id is derived deterministically from the player id and array
+        // position -- never randomly generated -- so two independent
+        // migrations of the same legacy snapshot always produce identical
+        // ids, and duplicate labels/order are preserved rather than
+        // collapsed. Runtime addReminder() is unaffected: it still
+        // allocates a fresh random id for a newly created reminder.
         if (Array.isArray(p.reminders) && p.reminders.every((r) => typeof r === "string")) {
-          p.reminders = (p.reminders as unknown as string[]).map((label) => ({
-            id: `legacy-${newId()}`,
+          p.reminders = (p.reminders as unknown as string[]).map((label, index) => ({
+            id: `legacy-${p.id}-${index}`,
             label,
             lifetime: { kind: "manual" as const },
           }));
