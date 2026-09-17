@@ -57,9 +57,13 @@ describe("normalized setup population", () => {
     const a=analyze(setupGame(standardRoles(5),{plannedPlayerCount:0}));
     expect(a.population.targetNonTravelerCount).toBeNull();expect(a.readiness.begin.ok).toBe(false);
   });
-  it("small unusual games warn but remain operable", () => {
-    const a=analyze(setupGame(["imp"]));expect(a.readiness.begin.ok).toBe(true);
-    expect(a.findings.find(f=>f.code==="unsupported-population")?.severity).toBe("warning");
+  // FINAL POPULATION CLOSURE, Section 10: unsupported ordinary population
+  // (outside 5-15) must actually block Begin, not merely warn -- superseding
+  // this test's own former "remain operable" name/expectation.
+  it("small unusual games are blocked, not merely warned about", () => {
+    const a=analyze(setupGame(["imp"]));
+    expect(a.findings.find(f=>f.code==="unsupported-population")).toMatchObject({ severity: "blocker", actions: ["begin"] });
+    expect(a.readiness.begin.ok).toBe(false);
   });
 });
 

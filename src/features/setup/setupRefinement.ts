@@ -2,6 +2,7 @@ import { isInitialRevealComplete } from "@/stores/identity";
 import { isPostDeal, type SetupContext } from "./setupContext";
 import { sameCounts } from "./setupPolicies";
 import type { SetupAnalysis } from "./setupAnalyzer";
+import { MIN_PLAYERS, MAX_PLAYERS } from "@/data/setupCounts";
 import type { PlayerId, RoleId, StorytellerLobbyRecord } from "@/stores/types";
 
 export type RefinementGateResult = { ok: true } | { ok: false; message: string };
@@ -43,6 +44,15 @@ export function currentDealtBag(context: SetupContext): RoleId[] {
 export function assignedBagIsCoherent(context: SetupContext, analysis: SetupAnalysis): boolean {
   if (context.ordinary.some((p) => !p.actualRole)) return false;
   if (analysis.findings.some((f) => f.source === "assigned" && f.severity === "blocker")) return false;
+  // FINAL POPULATION CLOSURE, Section 10: an unsupported ordinary target
+  // (outside 5-15) is never coherent, even when no specific candidate
+  // mismatch is computable for it -- compositionCandidates simply returns
+  // no candidates outside the supported table, which would otherwise let
+  // this check silently pass through as "no known mismatch." A corrupted
+  // or adversarial population must never fall back to looking like an
+  // acceptable manual setup.
+  const target = context.population.targetNonTravelerCount;
+  if (target !== null && (target < MIN_PLAYERS || target > MAX_PLAYERS)) return false;
   const { candidates, actual } = analysis.assigned;
   if (candidates && !candidates.some((c) => sameCounts(c, actual))) return false;
   return true;

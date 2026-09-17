@@ -180,6 +180,7 @@ const STPlayerRecordPersistedSchema = STPlayerRecordSchema.extend({
   actualRole: z.string(),
   name: z.string(),
   isEmpty: z.boolean().optional(),
+  plannedTravelerSeat: z.boolean().optional(),
 });
 
 export const StorytellerGamePersistedSchema = StorytellerLobbyRecordSchema.extend({

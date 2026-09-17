@@ -267,16 +267,16 @@ describe("population and persisted history", () => {
     expect(Object.hasOwn(legacy,"setupRolesDealt")).toBe(false);
     expect(Object.hasOwn(legacy,"setupRolesRevealed")).toBe(false);
   });
-  // FINAL SETUP INTEGRATION REVISION, Section 3: filling/emptying an
-  // already-planned seat, or a reservation that stays behind (unseat, an
-  // unused empty seat added then removed), never rewrites the plan -- but a
-  // deliberate new participant (no empty seat to receive them) or an actual
-  // participant's removal genuinely does, precisely because the physical
-  // population and the starting plan must never be allowed to silently
-  // diverge (superseding this test's own former "never rewrites" name for
-  // those two cases).
+  // FINAL SETUP INTEGRATION REVISION, Section 3 / FINAL POPULATION CLOSURE,
+  // Section 1: filling an already-planned seat, or a reservation that stays
+  // behind (unseat), never rewrites the plan -- but a deliberate new
+  // participant or an added/removed seat (empty or occupied) genuinely
+  // does, precisely because the physical population and the starting plan
+  // must never be allowed to silently diverge (superseding this test's own
+  // former "never rewrites" name for those cases). "remove-empty" adds then
+  // removes the exact same seat, netting to zero change.
   it.each([
-    ["add", 6], ["fill", 5], ["empty", 5], ["remove-empty", 5], ["remove-player", 4],
+    ["add", 6], ["fill", 5], ["empty", 6], ["remove-empty", 5], ["remove-player", 4],
     ["unseat", 5], ["traveler", 6], ["queue", 5], ["membership", 5],
   ] as const)("%s ends at the correct planned total", (kind, expected) => {
       prepare();

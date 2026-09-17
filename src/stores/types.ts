@@ -139,6 +139,16 @@ export type STPlayerRecord = {
   packetEpoch?: string;
   /** True for pre-allocated seats that haven't been assigned to a player yet. */
   isEmpty?: boolean;
+  /** Storyteller/setup planning metadata only, set exclusively on an empty
+   * seat (isEmpty: true): this reservation represents unfulfilled planned
+   * Traveler capacity, distinct from isTraveler (which represents an actual
+   * Traveler player). Never public, never player identity. Consumed and
+   * cleared the moment a real player occupies the seat -- see
+   * arrivalPlayer() in storytellerStore.ts, which designates that occupant
+   * a Traveler to fulfill the reservation, never double-counted against
+   * plannedTravelerCount (Phase 9 Setup finalization, FINAL POPULATION
+   * CLOSURE, Section 3). */
+  plannedTravelerSeat?: boolean;
 };
 
 export type NightStepStatus = "pending" | "done" | "skipped";

@@ -61,7 +61,12 @@ export function selectSetupContext(game: StorytellerLobbyRecord, script?: Script
         : null,
       occupiedNonTravelerCount: ordinary.length,
       occupiedTravelerCount: travelers.length,
-      emptyPlannedSeatCount: seated.filter(p => p.isEmpty && !p.isTraveler).length,
+      // FINAL POPULATION CLOSURE, Section 3/5: an empty seat reserving
+      // planned Traveler capacity (plannedTravelerSeat) is never an "unused
+      // ordinary seat" -- counting it here would spuriously block Deal
+      // (empty-seats has no action scope) over a reservation Deal was never
+      // meant to depend on, breaking Traveler Deal independence.
+      emptyPlannedSeatCount: seated.filter(p => p.isEmpty && !p.isTraveler && !p.plannedTravelerSeat).length,
       totalPhysicalSeatCount: game.seatOrder.length,
     },
     occupied, ordinary, travelers,

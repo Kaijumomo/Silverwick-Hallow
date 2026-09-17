@@ -3,6 +3,7 @@ import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
 import { activeJinxesFor } from "@/data/jinxes";
 import type { BagCounts } from "@/data/setupCounts";
+import { MIN_PLAYERS, MAX_PLAYERS, MAX_TOTAL_PLAYERS } from "@/data/setupCounts";
 import type { RoleDef } from "@/stores/types";
 import type { SetupContext, SetupFinding, SetupSource, SetupAction } from "./setupContext";
 import { compositionCandidates, emptyCounts, formatCounts, hasCountPolicy, isBagType, sameCounts } from "./setupPolicies";
@@ -219,8 +220,19 @@ export function analyzeSetup(context: SetupContext): SetupAnalysis {
   const assignedAnalysis = composition(assigned, "assigned");
   if (pool.length && assigned.length) add("pool-and-assigned", "warning",
     "Both a role pool and actual assignments exist. Dealing will replace the current ordinary assignments.");
-  if (population.targetNonTravelerCount !== null && (population.targetNonTravelerCount < 5 || population.targetNonTravelerCount > 15))
-    add("unsupported-population", "warning", "Standard composition guidance covers 5–15 ordinary players. Review this population manually.");
+  // FINAL POPULATION CLOSURE, Section 10: unsupported ordinary population
+  // must actually block, not merely warn -- otherwise it could reach Begin
+  // Night 1 (or, via assignedBagIsCoherent's own mirrored check, Reveal)
+  // as if it were a valid manual setup. Scoped to begin: Deal itself only
+  // needs a pool matching the current recipient count (pool-recipients,
+  // below), never this composition-guidance bound.
+  if (population.targetNonTravelerCount !== null && (population.targetNonTravelerCount < MIN_PLAYERS || population.targetNonTravelerCount > MAX_PLAYERS))
+    add("unsupported-population", "blocker", `Standard composition guidance covers ${MIN_PLAYERS}–${MAX_PLAYERS} ordinary players; this setup cannot begin at ${population.targetNonTravelerCount}.`, "shared", ["begin"]);
+  // Section 11: hard total-capacity bound, independent of the ordinary
+  // target -- even malformed/legacy/adversarial state must not reach Begin
+  // Night 1 as valid.
+  if (game.plannedPlayerCount > MAX_TOTAL_PLAYERS || population.totalPhysicalSeatCount > MAX_TOTAL_PLAYERS)
+    add("population-cap-exceeded", "blocker", `Starting capacity cannot exceed ${MAX_TOTAL_PLAYERS} participants.`, "shared", ["begin"]);
   if (population.emptyPlannedSeatCount) add("planning-empty", "info",
     `${population.emptyPlannedSeatCount} ordinary seats are reserved and still empty. Planning can continue.`);
   findings.push(...readinessFindings(context));

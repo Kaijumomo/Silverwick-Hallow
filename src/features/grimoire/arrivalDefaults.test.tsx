@@ -68,6 +68,9 @@ it("once Reveal completes, a new arrival defaults Traveler even while still nomi
 
 it.each(["day", "night"] as const)("all generic %s arrival commands enforce Traveler without UI flags", phase => {
   // A pre-existing, preassigned empty seat must not donate an ordinary role.
+  // Created while still pre-Reveal, so it deliberately grows the plan
+  // (FINAL POPULATION CLOSURE, Section 7) -- the later addEmptySeat below
+  // happens after phase/day advance and does not grow it again.
   state().addEmptySeat(); const empty = game().seatOrder.at(-1)!;
   state().assignRole(empty, "washerwoman"); state().showAssignedRole(empty);
   store.setState({ game: { ...game(), phase, day: 4 } });
@@ -81,7 +84,7 @@ it.each(["day", "night"] as const)("all generic %s arrival commands enforce Trav
   const context = selectSetupContext(game());
   expect(context.assigned).toEqual(before);
   expect(context.population).toMatchObject({ occupiedNonTravelerCount: 5, occupiedTravelerCount: 4, totalPhysicalSeatCount: 9 });
-  expect(game()).toMatchObject({ phase, day: 4, plannedPlayerCount: 5 });
+  expect(game()).toMatchObject({ phase, day: 4, plannedPlayerCount: 6 });
   for (const p of context.travelers) {
     expect(p).toMatchObject({ actualRole: "", shownRole: null, shownAlignment: null,
       travelerArrival: { demonInfoComplete: false, firstNightComplete: false } });
@@ -91,6 +94,9 @@ it.each(["day", "night"] as const)("all generic %s arrival commands enforce Trav
 });
 
 it.each(["setup", "day", "night"] as const)("approved filling of an old empty seat during %s uses the command default", phase => {
+  // Created while still pre-Reveal (before the phase/day advance below), so
+  // it deliberately grows the plan (FINAL POPULATION CLOSURE, Section 7)
+  // for all three phase variants.
   state().addEmptySeat(); const id = game().seatOrder.at(-1)!;
   state().addToPendingQueue("uid", "Visitor");
   // A real "day"/"night" phase always implies day >= 1 (beginNightOne sets
@@ -103,7 +109,7 @@ it.each(["setup", "day", "night"] as const)("approved filling of an old empty se
   }
   fireEvent.click(screen.getByRole("button", { name: "Assign" }));
   expect(game().players[id]!.isTraveler).toBe(phase !== "setup");
-  expect(game().plannedPlayerCount).toBe(5);
+  expect(game().plannedPlayerCount).toBe(6);
 });
 
 it("an open setup seating popup cannot undo the active-game default", () => {

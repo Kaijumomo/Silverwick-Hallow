@@ -19,11 +19,15 @@ function Night() {
   return <NightOrderPanel game={game} script={troubleBrewing} onClose={() => {}} />;
 }
 function setup() {
-  store.getState().newGame("tb", { plannedRoles: ["empath"] });
-  store.getState().addPlayer("Alice");
-  store.getState().setPlannedPlayerCount(1);
+  // A supported 5-ordinary population -- FINAL POPULATION CLOSURE, Section
+  // 10 now hard-blocks Reveal/Begin for an unsupported (e.g. 1-player)
+  // population, so this test needs a real one.
+  store.getState().newGame("tb", { plannedRoles: ["empath", "chef", "fortuneteller", "poisoner", "imp"] });
+  for (const name of ["Alice", "Bob", "Carol", "Dave", "Eve"]) store.getState().addPlayer(name);
+  store.getState().setPlannedPlayerCount(5);
   // Initial ordinary distribution is always the randomized deal.
   expect(store.getState().dealRolePool().ok).toBe(true);
+  for (const id of store.getState().game!.seatOrder) store.getState().showAssignedRole(id);
   expect(store.getState().revealRoles().ok).toBe(true);
   expect(store.getState().advancePhase().ok).toBe(true);
 }

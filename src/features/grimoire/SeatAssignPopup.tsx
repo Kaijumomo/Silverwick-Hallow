@@ -29,33 +29,37 @@ type Props = {
   code: string;
   onClose: () => void;
   onRemoveSeat?: () => void;
-  /** Default the "Arriving as a Traveler" checkbox on for this specific
-   * target seat -- used by the "Add Traveler" workflow, whose seat is
-   * deliberately ordinary-neutral at creation (Phase 9 Setup finalization,
-   * Section 3.E): the seat record itself never signals the intended
-   * designation, so this is a UI-only hint instead. */
-  defaultTraveler?: boolean;
 };
 
-export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClose, onRemoveSeat, defaultTraveler = false }: Props) {
+export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClose, onRemoveSeat }: Props) {
   const pendingPlayers = useStorytellerStore((s) => s.game?.pendingPlayers ?? {});
   const activeArrival = useStorytellerStore((s) => arrivalsAreTravelers(s.game ?? NO_GAME));
   const queueTargetSeatId = useStorytellerStore((s) => seatPlayerId ?? firstEmptySeatId(s.game));
+  // Set once "Add Traveler" reserved this exact seat (Phase 9 Setup
+  // finalization, FINAL POPULATION CLOSURE Section 3): the store's own
+  // arrivalPlayer() already guarantees occupying it becomes a Traveler, so
+  // this is display-only here -- never re-derived after assignment (that
+  // was Section 5's timing bug) and never itself the thing that decides.
+  const reservedTraveler = useStorytellerStore((s) => !!(queueTargetSeatId && s.game?.players[queueTargetSeatId]?.plannedTravelerSeat));
   const assignPendingToSeat = useStorytellerStore((s) => s.assignPendingToSeat);
   const removePendingPlayer = useStorytellerStore((s) => s.removePendingPlayer);
   const [busyUid, setBusyUid] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [traveler, setTraveler] = useState(() => defaultTraveler || !!(queueTargetSeatId && useStorytellerStore.getState().game?.players[queueTargetSeatId]?.isTraveler));
+  const [traveler, setTraveler] = useState(false);
   // Queue mode's target seat shifts to the next empty seat after each
   // assignment -- keep the manual default in sync with whichever seat is
-  // next, rather than carrying over a stale checkbox value.
-  useEffect(() => {
-    setTraveler(defaultTraveler || !!(queueTargetSeatId && useStorytellerStore.getState().game?.players[queueTargetSeatId]?.isTraveler));
-  }, [queueTargetSeatId, defaultTraveler]);
+  // next, rather than carrying over a stale checkbox value. A seat that is
+  // already guaranteed to become a Traveler (arrival cap or reservation)
+  // shows fixed text instead of a checkbox, so there is nothing to default.
+  useEffect(() => { setTraveler(false); }, [queueTargetSeatId]);
 
   const entries = Object.entries(pendingPlayers);
   const queueMode = seatPlayerId === undefined;
   const noSeatAvailable = queueMode && !queueTargetSeatId;
+  // Fixed ("will arrive as a Traveler") vs a free Storyteller choice --
+  // never both at once, and the reservation is exactly as authoritative as
+  // the arrival-cap policy, never a lesser hint.
+  const guaranteedTraveler = activeArrival || reservedTraveler;
 
   const handleAssign = async (uid: string) => {
     if (busyUid) return;
@@ -65,6 +69,17 @@ export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClo
     // empty seat.
     const targetSeatId = seatPlayerId ?? firstEmptySeatId(useStorytellerStore.getState().game);
     if (!targetSeatId) { setError("No empty seats available."); return; }
+    // FINAL POPULATION CLOSURE, Section 5: capture the Storyteller's
+    // explicit choice BEFORE seating -- the store's own fill command
+    // (arrivalPlayer, via assignPendingToSeat) already and atomically
+    // handles the arrival-cap/reservation cases using state as it stood
+    // before this seat was touched. This only ever needs to apply an
+    // explicit manual choice the store had no way to know about, and must
+    // never be re-derived from post-fill occupancy (that was the bug: an
+    // assignment that itself pushed ordinary occupancy to the cap could
+    // make a later arrivalsAreTravelers() recheck spuriously suppress the
+    // very choice just made).
+    const requestedTraveler = traveler;
     setBusyUid(uid);
     try {
       if (code && !backend) throw new Error("Connection unavailable. Reconnect before assigning a seat.");
@@ -85,9 +100,8 @@ export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClo
         return;
       }
       const store = useStorytellerStore.getState();
-      // Re-read after the Firebase-first command: play may have begun while
-      // assignment was pending. Never undo the command's Traveler default.
-      if (!arrivalsAreTravelers(store.game ?? NO_GAME)) store.setIsTraveler(targetSeatId, traveler);
+      const seated = store.game?.players[targetSeatId];
+      if (requestedTraveler && seated && !seated.isEmpty && !seated.isTraveler) store.setIsTraveler(targetSeatId, true);
       if (useStorytellerStore.getState().game?.players[targetSeatId]?.isTraveler) {
         store.selectPlayer(targetSeatId);
       }
@@ -113,7 +127,7 @@ export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClo
   return (
     <Modal title={queueMode ? "Waiting queue" : `Assign player to seat ${seatNumber}`} onClose={onClose} className="seat-assign-popup">
         {noSeatAvailable && <p className="seat-assign-empty">No empty seats available. Add a seat first.</p>}
-        {!noSeatAvailable && (activeArrival ? <p>Arriving as a Traveler</p> : <label className="drawer-row"><input type="checkbox" checked={traveler} disabled={busyUid !== null}
+        {!noSeatAvailable && (guaranteedTraveler ? <p>Arriving as a Traveler{reservedTraveler && !activeArrival ? " (reserved)" : ""}</p> : <label className="drawer-row"><input type="checkbox" checked={traveler} disabled={busyUid !== null}
           onChange={e => setTraveler(e.target.checked)} />Arriving as a Traveler</label>)}
 
         {entries.length === 0 ? (

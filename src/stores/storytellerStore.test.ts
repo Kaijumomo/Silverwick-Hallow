@@ -335,12 +335,16 @@ describe("setFabled", () => {
   });
 
   it("game.fabled persists after advancing phase from setup to night", () => {
-    useStorytellerStore.getState().newGame("tb", { plannedRoles: ["chef"] });
+    // A supported 5-ordinary population -- FINAL POPULATION CLOSURE, Section
+    // 10 now hard-blocks Reveal/Begin for an unsupported (e.g. 1-player)
+    // population, so this fabled-persistence test needs a real one.
+    useStorytellerStore.getState().newGame("tb", { plannedRoles: ["chef", "empath", "fortuneteller", "poisoner", "imp"] });
     useStorytellerStore.getState().setFabled(["djinn", "doomsayer"]);
-    useStorytellerStore.getState().addPlayer("Alice");
-    useStorytellerStore.getState().setPlannedPlayerCount(1);
+    for (const name of ["Alice", "Bob", "Carol", "Dave", "Eve"]) useStorytellerStore.getState().addPlayer(name);
+    useStorytellerStore.getState().setPlannedPlayerCount(5);
     // Initial ordinary distribution is always the randomized deal.
     expect(useStorytellerStore.getState().dealRolePool().ok).toBe(true);
+    for (const id of useStorytellerStore.getState().game!.seatOrder) useStorytellerStore.getState().showAssignedRole(id);
     expect(useStorytellerStore.getState().revealRoles().ok).toBe(true);
     expect(useStorytellerStore.getState().advancePhase().ok).toBe(true);
     const game = useStorytellerStore.getState().game!;
