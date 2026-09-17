@@ -7,6 +7,7 @@ import { StorytellerStateSchema } from "./schemas";
 import { buildRegistry, deriveAlignment, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { currentGameMoment, manualEffectId } from "./effects";
+import { diffFields, provenanceOf, recordIfLive, sameSnapshot } from "./history";
 import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 import { invalidatePrivatePacket, pruneInapplicablePrivateInfo } from "./privatePackets";
 import { usePrivacyStore } from "./privacyStore";
@@ -44,7 +45,7 @@ const UNDO_LIMIT = 20;
  * `merge` (Phase 9C.2B.2) passes to migrateStoreState when Zustand's own
  * persist middleware skips calling `migrate` outright, which it does
  * whenever the persisted version already equals this one. */
-const STORE_VERSION = 14;
+const STORE_VERSION = 15;
 
 let _migrationResetFlag = false;
 /** Returns true (once) when migrate() discarded incompatible persisted state. */
@@ -577,6 +578,19 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
       }
     }
   }
+  // v15 (Phase 9D.2) introduces game-level `history`: structured,
+  // Storyteller-private bookkeeping of meaningful live-game mutations. A
+  // prior snapshot proves nothing about when its current values changed or
+  // why -- only that they are presently true -- so no event is ever
+  // fabricated for existing state. Every legacy game (and every undo
+  // snapshot) simply starts with an empty history collection.
+  if (fromVersion < 15) {
+    for (const entry of [s.game, ...(s.undoStack ?? [])]) {
+      if (!entry || typeof entry !== "object") continue;
+      const e = entry as Record<string, unknown>;
+      if (!Array.isArray(e.history)) e.history = [];
+    }
+  }
   const check = StorytellerStateSchema.safeParse(state);
   if (!check.success) {
     // eslint-disable-next-line no-console
@@ -681,6 +695,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           plannedPlayerCount: count,
           plannedTravelerCount: travelerCount,
           pendingPlayers: {},
+          history: [],
         };
         usePrivacyStore.getState().reset();
         set({ game, lobby: null, pendingKnocks: [], view: "game", undoStack: [], selectedPlayerId: null });
@@ -1314,13 +1329,17 @@ export const useStorytellerStore = create<StorytellerStore>()(
           } : {}),
         };
         delete next.privateInfo;
+        const updatedGame = {
+          ...game,
+          ...(existing.isTraveler ? { nightProgress: resetTravelerNightProgress(game, id) } : {}),
+          players: { ...game.players, [id]: invalidatePrivatePacket(next) },
+        };
         set({
           undoStack: pushUndo(game, undoStack),
-          game: {
-            ...game,
-            ...(existing.isTraveler ? { nightProgress: resetTravelerNightProgress(game, id) } : {}),
-            players: { ...game.players, [id]: invalidatePrivatePacket(next) },
-          },
+          game: recordIfLive(game, updatedGame, () => ({
+            category: "identity", playerId: id,
+            change: { kind: "value", from: { actualRole: existing.actualRole }, to: { actualRole: roleId } },
+          })),
         });
       },
 
@@ -1508,7 +1527,14 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const next = invalidatePrivatePacket({ ...p, actualAlignment: alignment,
           travelerArrival: { ...(p.travelerArrival ?? newTravelerArrival()), demonInfoComplete: false } });
         delete next.privateInfo;
-        set({ undoStack: pushUndo(game, undoStack), game: { ...game, players: { ...game.players, [id]: next } } });
+        const updatedGame = { ...game, players: { ...game.players, [id]: next } };
+        set({
+          undoStack: pushUndo(game, undoStack),
+          game: recordIfLive(game, updatedGame, () => ({
+            category: "alignment", playerId: id,
+            change: { kind: "value", from: { actualAlignment: p.actualAlignment }, to: { actualAlignment: alignment } },
+          })),
+        });
       },
 
       setActualAlignment: (id, alignment) => {
@@ -1522,7 +1548,14 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // no invalidation is needed there.
         const patched = { ...p, actualAlignment: alignment };
         const next = p.isTraveler ? invalidatePrivatePacket(patched) : patched;
-        set({ undoStack: pushUndo(game, undoStack), game: { ...game, players: { ...game.players, [id]: next } } });
+        const updatedGame = { ...game, players: { ...game.players, [id]: next } };
+        set({
+          undoStack: pushUndo(game, undoStack),
+          game: recordIfLive(game, updatedGame, () => ({
+            category: "alignment", playerId: id,
+            change: { kind: "value", from: { actualAlignment: p.actualAlignment }, to: { actualAlignment: alignment } },
+          })),
+        });
       },
 
       prepareTravelerDemon: (id) => {
@@ -1548,7 +1581,17 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const { game, undoStack } = get();
         const p = game?.players[id];
         if (!game || !p?.isTraveler || !p.alive || p.exiled) return;
-        set({ undoStack: pushUndo(game, undoStack), game: patchPlayer(game, id, { exiled: true, alive: false }) });
+        const updatedGame = patchPlayer(game, id, { exiled: true, alive: false });
+        set({
+          undoStack: pushUndo(game, undoStack),
+          // Exile is never collapsed into generic death (Phase 9D.1):
+          // the presence of `exiled` in the change, not a separate
+          // category, is what distinguishes it from an ordinary kill.
+          game: recordIfLive(game, updatedGame, () => ({
+            category: "life", playerId: id,
+            change: { kind: "value", from: { alive: true, exiled: false }, to: { alive: false, exiled: true } },
+          })),
+        });
       },
 
       completeTravelerArrivalCheck: (id) => {
@@ -1589,18 +1632,35 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const patch: Partial<STPlayerRecord> = { alive };
         if (alive && player.exiled) patch.exiled = false;
         if (alive && !player.alive) patch.ghostVote = true;
+        const updatedGame = patchPlayer(game, id, patch);
+        const touched = Object.keys(patch) as (keyof STPlayerRecord & string)[];
         set({
           undoStack: pushUndo(game, undoStack),
-          game: patchPlayer(game, id, patch),
+          // One semantic action (a kill/revival) may touch several fields
+          // at once (alive, ghostVote, exiled) -- diffFields collapses
+          // them into exactly one record covering only what genuinely
+          // changed, never one record per field and never a record when
+          // nothing did (e.g. reviving an already-alive player).
+          game: recordIfLive(game, updatedGame, () => {
+            const diff = diffFields(player, updatedGame.players[id]!, touched);
+            return diff && { category: "life", playerId: id, change: { kind: "value", ...diff } };
+          }),
         });
       },
 
       setGhostVote: (id, ghostVote) => {
         const { game, undoStack } = get();
         if (!game) return;
+        const player = game.players[id];
+        if (!player) return;
+        const updatedGame = patchPlayer(game, id, { ghostVote });
         set({
           undoStack: pushUndo(game, undoStack),
-          game: patchPlayer(game, id, { ghostVote }),
+          game: recordIfLive(game, updatedGame, () =>
+            player.ghostVote === ghostVote ? null : {
+              category: "life", playerId: id,
+              change: { kind: "value", from: { ghostVote: player.ghostVote }, to: { ghostVote } },
+            }),
         });
       },
 
@@ -1625,13 +1685,25 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const player = game.players[id];
         if (!player) return;
         const effectId = manualEffectId(status);
+        const existing = player.effects.find((e) => e.id === effectId);
         const others = player.effects.filter((e) => e.id !== effectId);
-        const effects = on
-          ? [...others, { id: effectId, type: status, lifetime: { kind: "manual" as const }, appliedAt: currentGameMoment(game) }]
-          : others;
+        const newEffect: EffectRecord | null = on
+          ? { id: effectId, type: status, lifetime: { kind: "manual" as const }, appliedAt: currentGameMoment(game) }
+          : null;
+        const effects = on ? [...others, newEffect!] : others;
+        const updatedGame = patchPlayer(game, id, { effects });
         set({
           undoStack: pushUndo(game, undoStack),
-          game: patchPlayer(game, id, { effects }),
+          game: recordIfLive(game, updatedGame, () => {
+            if (on) {
+              // Re-toggling an already-active manual effect to the same
+              // shape is idempotent -- it must not create a duplicate record.
+              if (existing && sameSnapshot(existing, newEffect)) return null;
+              return { category: "effect", playerId: id, change: { kind: "added", item: newEffect! } };
+            }
+            if (!existing) return null; // nothing was actually removed
+            return { category: "effect", playerId: id, change: { kind: "removed", item: existing } };
+          }),
         });
       },
 
@@ -1642,10 +1714,17 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!player) return null;
         const effectId = effect.id ?? newId();
         const record: EffectRecord = { ...effect, id: effectId };
+        const existing = player.effects.find((e) => e.id === effectId);
         const others = player.effects.filter((e) => e.id !== effectId);
+        const updatedGame = patchPlayer(game, id, { effects: [...others, record] });
         set({
           undoStack: pushUndo(game, undoStack),
-          game: patchPlayer(game, id, { effects: [...others, record] }),
+          game: recordIfLive(game, updatedGame, () =>
+            existing && sameSnapshot(existing, record) ? null : {
+              category: "effect", playerId: id,
+              change: { kind: "added", item: record },
+              provenance: provenanceOf(record),
+            }),
         });
         return effectId;
       },
@@ -1654,10 +1733,16 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const { game, undoStack } = get();
         if (!game) return;
         const player = game.players[id];
-        if (!player || !player.effects.some((e) => e.id === effectId)) return;
+        const existing = player?.effects.find((e) => e.id === effectId);
+        if (!player || !existing) return;
+        const updatedGame = patchPlayer(game, id, { effects: player.effects.filter((e) => e.id !== effectId) });
         set({
           undoStack: pushUndo(game, undoStack),
-          game: patchPlayer(game, id, { effects: player.effects.filter((e) => e.id !== effectId) }),
+          game: recordIfLive(game, updatedGame, () => ({
+            category: "effect", playerId: id,
+            change: { kind: "removed", item: existing },
+            provenance: provenanceOf(existing),
+          })),
         });
       },
 
@@ -1677,9 +1762,18 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!player) return null;
         const reminderId = reminder.id ?? newId();
         const record: ReminderRecord = { ...reminder, id: reminderId };
+        const existing = player.reminders.find((r) => r.id === reminderId);
+        const updatedGame = patchPlayer(game, id, {
+          reminders: [...player.reminders.filter((r) => r.id !== reminderId), record],
+        });
         set({
           undoStack: pushUndo(game, undoStack),
-          game: patchPlayer(game, id, { reminders: [...player.reminders, record] }),
+          game: recordIfLive(game, updatedGame, () =>
+            existing && sameSnapshot(existing, record) ? null : {
+              category: "reminder", playerId: id,
+              change: { kind: "added", item: record },
+              provenance: provenanceOf(record),
+            }),
         });
         return reminderId;
       },
@@ -1688,10 +1782,16 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const { game, undoStack } = get();
         if (!game) return;
         const player = game.players[id];
-        if (!player || !player.reminders.some((r) => r.id === reminderId)) return;
+        const existing = player?.reminders.find((r) => r.id === reminderId);
+        if (!player || !existing) return;
+        const updatedGame = patchPlayer(game, id, { reminders: player.reminders.filter((r) => r.id !== reminderId) });
         set({
           undoStack: pushUndo(game, undoStack),
-          game: patchPlayer(game, id, { reminders: player.reminders.filter((r) => r.id !== reminderId) }),
+          game: recordIfLive(game, updatedGame, () => ({
+            category: "reminder", playerId: id,
+            change: { kind: "removed", item: existing },
+            provenance: provenanceOf(existing),
+          })),
         });
       },
 

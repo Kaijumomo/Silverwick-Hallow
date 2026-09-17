@@ -107,6 +107,31 @@ export const ReminderRecordSchema = z.object({
   note: z.string().optional(),
 });
 
+export const HistoryCategorySchema = z.enum(["identity", "alignment", "life", "effect", "reminder"]);
+
+export const ProvenanceSchema = z.object({
+  sourcePlayer: z.string().min(1).optional(),
+  sourceCharacter: z.string().min(1).optional(),
+  reason: z.string().optional(),
+  note: z.string().optional(),
+});
+
+export const HistoryChangeSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("value"), from: z.record(z.string(), z.unknown()), to: z.record(z.string(), z.unknown()) }),
+  z.object({ kind: z.literal("added"), item: z.record(z.string(), z.unknown()) }),
+  z.object({ kind: z.literal("removed"), item: z.record(z.string(), z.unknown()) }),
+]);
+
+export const HistoryRecordSchema = z.object({
+  id: z.string().min(1),
+  category: HistoryCategorySchema,
+  playerId: z.string().min(1),
+  moment: GameMomentSchema.optional(),
+  change: HistoryChangeSchema,
+  provenance: ProvenanceSchema.optional(),
+  note: z.string().optional(),
+});
+
 export const PlayerSelfRecordSchema = z.object({
   shownRole: z.string().min(1),
   shownAlignment: AlignmentSchema.optional(),
@@ -194,6 +219,7 @@ export const StorytellerLobbyRecordSchema = z.object({
   setupRolesRevealed: z.boolean().optional(),
   startingNonTravelerCount: z.number().int().positive().optional(),
   pendingPlayers: z.record(z.string(), z.string()).default({}),
+  history: z.array(HistoryRecordSchema).default([]),
 });
 
 export const PublicLobbyRecordSchema = z.object({

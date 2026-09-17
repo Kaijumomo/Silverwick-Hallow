@@ -54,6 +54,7 @@ function makeLobby(): StorytellerLobbyRecord {
     seatOrder: ["p1", "p2", "p3"],
     nightProgress: {},
     rolePool: [],
+    history: [],
     plannedPlayerCount: 0,
     plannedTravelerCount: 0,
     pendingPlayers: {},
@@ -395,7 +396,7 @@ describe("writeProjections — Phase 9C.4 setup barrier atomicity", () => {
     return {
       code: "SETP", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
       bluffs: [], fabled: [], lorics: [], notes: "", setupRolesRevealed: revealed,
-      seatOrder: ["p1", "p2", "t1"], nightProgress: {}, rolePool: [],
+      seatOrder: ["p1", "p2", "t1"], nightProgress: {}, rolePool: [], history: [],
       plannedPlayerCount: 2, plannedTravelerCount: 0, pendingPlayers: {},
       players: {
         p1: makePublishedSTPlayer({ id: "p1", seat: 0, actualRole: "chef", shownRole: "chef" }),
@@ -508,6 +509,51 @@ describe("Phase 9D.1: live-state persistence/recovery round trip", () => {
     const pub = JSON.stringify(await backend.get("lobbies/ABCD/public"));
     const self = JSON.stringify(await backend.get("lobbies/ABCD/player/p1"));
     for (const leak of ["actualAlignment", "effects", "reminders", "Killed Bob", "poisoner-1"]) {
+      expect(pub).not.toContain(leak);
+      expect(self).not.toContain(leak);
+    }
+  });
+});
+
+describe("Phase 9D.2: live-game history persistence/recovery round trip", () => {
+  it("multiple history categories survive the checkpoint round trip together, with no projection/privacy regression", async () => {
+    const backend = new MemoryRoomBackend();
+    const lobby = makeLobby();
+    lobby.history = [
+      {
+        id: "h1", category: "identity", playerId: "p1", moment: { phase: "night", day: 1 },
+        change: { kind: "value", from: { actualRole: "chef" }, to: { actualRole: "imp" } },
+      },
+      {
+        id: "h2", category: "alignment", playerId: "p1", moment: { phase: "night", day: 1 },
+        change: { kind: "value", from: { actualAlignment: "good" }, to: { actualAlignment: "evil" } },
+      },
+      {
+        id: "h3", category: "life", playerId: "p2", moment: { phase: "day", day: 1 },
+        change: { kind: "value", from: { alive: true }, to: { alive: false } },
+      },
+      {
+        id: "h4", category: "effect", playerId: "p1", moment: { phase: "night", day: 1 },
+        change: { kind: "added", item: { id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" } } },
+        provenance: { sourceCharacter: "poisoner" },
+      },
+      {
+        id: "h5", category: "reminder", playerId: "p1", moment: { phase: "night", day: 1 },
+        change: { kind: "removed", item: { id: "r1", label: "Old note", lifetime: { kind: "manual" } } },
+      },
+    ];
+
+    await writeProjections({ backend, code: "ABCD", stState: lobby, registry, online: {} });
+
+    const rawCheckpoint = (await backend.get("lobbies/ABCD/checkpoint")) as string;
+    const decoded = JSON.parse(rawCheckpoint) as { game: unknown };
+    const parsed = StorytellerGamePersistedSchema.parse(decoded.game);
+    expect(parsed.history).toEqual(lobby.history);
+
+    // No projection/privacy regression: history never reached public or self.
+    const pub = JSON.stringify(await backend.get("lobbies/ABCD/public"));
+    const self = JSON.stringify(await backend.get("lobbies/ABCD/player/p1"));
+    for (const leak of ["history", "h1", "h2", "h3", "h4", "h5", "Old note"]) {
       expect(pub).not.toContain(leak);
       expect(self).not.toContain(leak);
     }

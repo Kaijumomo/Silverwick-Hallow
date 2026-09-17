@@ -10,7 +10,7 @@ function contextFor(players: StorytellerLobbyRecord["players"]) {
   const game: StorytellerLobbyRecord = {
     code: "", storytellerUid: "local", scriptId: setupScript.id, phase: "setup", day: 0,
     players, seatOrder: ids, plannedPlayerCount: ids.length, plannedTravelerCount: 0, rolePool: [], fabled: [], lorics: [],
-    bluffs: [], notes: "", nightProgress: {}, pendingPlayers: {},
+    bluffs: [], notes: "", nightProgress: {}, pendingPlayers: {}, history: [],
   };
   return selectSetupContext(game, setupScript);
 }

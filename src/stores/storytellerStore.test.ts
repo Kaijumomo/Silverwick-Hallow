@@ -639,6 +639,49 @@ describe("migrateStoreState", () => {
     expect(twice.game.players.a!.effects).toHaveLength(1);
     expect(twice.game.players.a!.reminders).toHaveLength(3);
   });
+
+  // -------------------------------------------------------------------------
+  // Phase 9D.2: v14 -> v15 history migration
+  // -------------------------------------------------------------------------
+  it("v14->v15: a legacy game with no history field receives an empty history collection", () => {
+    const state = { game: minimalPersistedGame({ players: { a: legacyPlayer({ effects: [] }) } }), undoStack: [] };
+    const result = migrateStoreState(state, 14) as { game: { history?: unknown } };
+    expect(result.game.history).toEqual([]);
+    expect(takeMigrationResetFlag()).toBe(false);
+  });
+
+  it("v14->v15: never fabricates history for pre-existing, already-changed live state", () => {
+    const state = { game: minimalPersistedGame({
+      day: 3, phase: "night",
+      players: { a: legacyPlayer({
+        actualRole: "imp", actualAlignment: "evil",
+        effects: [{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" } }],
+        reminders: [{ id: "r1", label: "Killed Bob", lifetime: { kind: "manual" } }],
+      }) },
+    }), undoStack: [] };
+    const result = migrateStoreState(state, 14) as { game: { history?: unknown } };
+    // Current truth is rich, but none of it proves how or when it changed --
+    // migration must not invent a plausible-looking event log to match it.
+    expect(result.game.history).toEqual([]);
+  });
+
+  it("v14->v15: undo-stack snapshots also receive an empty history collection", () => {
+    const state = {
+      game: minimalPersistedGame({ players: { a: legacyPlayer({ effects: [] }) } }),
+      undoStack: [minimalPersistedGame({ players: { a: legacyPlayer({ effects: [] }) } })],
+    };
+    const result = migrateStoreState(state, 14) as { undoStack: { history?: unknown }[] };
+    expect(result.undoStack[0]!.history).toEqual([]);
+  });
+
+  it("v14->v15: migration is deterministic and idempotent when re-run against already-migrated data", () => {
+    const state = { game: minimalPersistedGame({ players: { a: legacyPlayer({ effects: [] }) } }), undoStack: [] };
+    const once = migrateStoreState(state, 14) as { game: { history: unknown[] } };
+    expect(once.game.history).toEqual([]);
+    const twice = migrateStoreState(once, 14) as { game: { history: unknown[] } };
+    expect(twice.game.history).toEqual([]);
+    expect(twice).toEqual(once);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -129,6 +129,63 @@ export type ReminderRecord = {
   note?: string;
 };
 
+export type HistoryId = string;
+
+/** The live-state domains Phase 9D.2 records. Generic recording is
+ * preferred over one-off structures per feature; a new domain-specific
+ * value here is warranted only when its game meaning would otherwise be
+ * misrepresented as a lower-level field change (see "identity" vs
+ * "alignment" vs "life", which share no fields but the same shapes). */
+export type HistoryCategory = "identity" | "alignment" | "life" | "effect" | "reminder";
+
+/**
+ * What changed, generically enough to cover both:
+ *  - a scalar/identity-like truth changing value ("value"), possibly
+ *    across several fields touched by one semantic action; and
+ *  - a structured record (an effect, a reminder) being introduced or
+ *    withdrawn wholesale ("added"/"removed"), snapshotted so the entry
+ *    remains meaningful even after the live item is edited or removed.
+ * `from`/`to`/`item` are plain field-keyed snapshots, not full player
+ * records -- only the fields the responsible mutation actually touched.
+ */
+export type HistoryChange =
+  | { kind: "value"; from: Record<string, unknown>; to: Record<string, unknown> }
+  | { kind: "added"; item: Record<string, unknown> }
+  | { kind: "removed"; item: Record<string, unknown> };
+
+/** Reusable "why/how" for any history record, and later for Phase 10
+ * workflows that produce one. Every field is optional and none is ever
+ * invented -- a manual Storyteller action legitimately has no known
+ * source beyond the Storyteller themself. */
+export type Provenance = {
+  sourcePlayer?: PlayerId;
+  sourceCharacter?: RoleId;
+  reason?: string;
+  note?: string;
+};
+
+/**
+ * A single meaningful live-game mutation record. Storyteller-private;
+ * lives only on the authoritative game snapshot (StorytellerLobbyRecord.
+ * history), so it persists, checkpoints, reconnects, and undoes exactly
+ * like every other piece of current state -- never a second, independent
+ * audit log. Affected entity is always a player today; `playerId` is
+ * deliberately named for the one entity kind this domain currently has,
+ * not because the shape assumes players specifically -- a future
+ * non-player-scoped domain would add its own identifying field alongside
+ * `playerId`, not replace this type.
+ */
+export type HistoryRecord = {
+  id: HistoryId;
+  category: HistoryCategory;
+  playerId: PlayerId;
+  /** Absent only when the moment genuinely isn't known -- never invented. */
+  moment?: GameMoment;
+  change: HistoryChange;
+  provenance?: Provenance;
+  note?: string;
+};
+
 export type GrimoireMode = "ring" | "freeRoam";
 export type TokenPosition = { x: number; y: number };
 
@@ -261,6 +318,14 @@ export type StorytellerLobbyRecord = {
   startingNonTravelerCount?: number;
   /** Players who have knocked but not yet been assigned to a seat. uid → requested name. */
   pendingPlayers: Record<string, string>;
+  /** Phase 9D.2: structured, Storyteller-private bookkeeping of meaningful
+   * live-game mutations -- explanatory record, never authoritative truth.
+   * Only Night/Day mutations ever append here (see isLiveGamePhase in
+   * ./history.ts); Setup construction, corrections, and identity
+   * preparation never do. Current state alone remains gameplay truth: a
+   * missing or stale history entry never changes it, and nothing is ever
+   * reconstructed from this array. */
+  history: HistoryRecord[];
 };
 
 /** Delivered identity at player/{id}; an absent record means unrevealed. */

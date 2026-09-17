@@ -5,7 +5,7 @@ import type { StorytellerLobbyRecord } from "@/stores/types";
 const baseGame = (over: Partial<StorytellerLobbyRecord> = {}): StorytellerLobbyRecord => ({
   code: "", storytellerUid: "local", scriptId: "tb", phase: "setup", day: 0,
   players: {}, seatOrder: [], rolePool: [], plannedPlayerCount: 5, plannedTravelerCount: 0,
-  fabled: [], lorics: [], bluffs: [], notes: "", nightProgress: {}, pendingPlayers: {},
+  fabled: [], lorics: [], bluffs: [], notes: "", nightProgress: {}, pendingPlayers: {}, history: [],
   ...over,
 });
 

@@ -556,7 +556,7 @@ describe("Firebase RTDB membership authorization", () => {
     const writer = new SessionWriter(raw, code, metadata.id);
     const game: StorytellerLobbyRecord = {
       code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
-      notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {},
+      notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {}, history: [],
       rolePool: [], plannedPlayerCount: 1, plannedTravelerCount: 0, pendingPlayers: {}, seatOrder: ["p-alice"],
       // This test isolates identity delivery through the real writer/rules,
       // not Setup deal/reveal gating (covered elsewhere) -- record the
@@ -600,7 +600,7 @@ describe("Firebase RTDB membership authorization", () => {
     const writer = new SessionWriter(raw, code, metadata.id);
     const game: StorytellerLobbyRecord = {
       code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
-      notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {},
+      notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {}, history: [],
       rolePool: [], plannedPlayerCount: 2, plannedTravelerCount: 0, pendingPlayers: {}, seatOrder: ["p-alice", "p-bob"],
       // This test isolates the completeness barrier, not Setup deal/reveal
       // gating -- record the initial reveal directly.
