@@ -267,8 +267,18 @@ describe("population and persisted history", () => {
     expect(Object.hasOwn(legacy,"setupRolesDealt")).toBe(false);
     expect(Object.hasOwn(legacy,"setupRolesRevealed")).toBe(false);
   });
-  it.each(["add","fill","empty","remove-empty","remove-player","unseat","traveler","queue","membership"] as const)(
-    "%s never silently rewrites the target", kind => {
+  // FINAL SETUP INTEGRATION REVISION, Section 3: filling/emptying an
+  // already-planned seat, or a reservation that stays behind (unseat, an
+  // unused empty seat added then removed), never rewrites the plan -- but a
+  // deliberate new participant (no empty seat to receive them) or an actual
+  // participant's removal genuinely does, precisely because the physical
+  // population and the starting plan must never be allowed to silently
+  // diverge (superseding this test's own former "never rewrites" name for
+  // those two cases).
+  it.each([
+    ["add", 6], ["fill", 5], ["empty", 5], ["remove-empty", 5], ["remove-player", 4],
+    ["unseat", 5], ["traveler", 6], ["queue", 5], ["membership", 5],
+  ] as const)("%s ends at the correct planned total", (kind, expected) => {
       prepare();
       if(kind==="add")state().addPlayer("Extra");
       if(kind==="empty"||kind==="remove-empty") {state().addEmptySeat();if(kind==="remove-empty")state().removePlayer(game().seatOrder.at(-1)!);}
@@ -278,7 +288,7 @@ describe("population and persisted history", () => {
       if(kind==="traveler") {state().addPlayer("Traveler");state().setIsTraveler(game().seatOrder.at(-1)!,true);}
       if(kind==="queue")state().addToPendingQueue("uid","Waiting");
       if(kind==="membership"){state().unseatPlayer(game().seatOrder[0]!);state().addToPendingQueue("uid","Joined");state().assignPendingToSeat("uid",game().seatOrder[0]!);}
-      expect(game().plannedPlayerCount).toBe(5);
+      expect(game().plannedPlayerCount).toBe(expected);
     });
   it("explicit target action is required and has no seat side effects", () => {
     prepare();const seats=[...game().seatOrder];state().setPlannedPlayerCount(6);

@@ -22,7 +22,7 @@ export function StorytellerSession() {
     return () => { active = false; };
   }, [lobby?.code, retry]);
   useStorytellerSync(backend);
-  useApplyTravelerChoices(backend, lobby?.code);
+  useApplyTravelerChoices(lobby?.code);
   return lobby && error ? <div className="error-list lobby-error" role="alert">
     <strong>Lobby connection</strong><p>{error}</p>
     <button className="btn btn-sm" onClick={retryStorytellerSession}>Reconnect / reclaim expired writer</button>
@@ -48,14 +48,29 @@ export function StorytellerSession() {
  * stands; the stale request is simply cleared, never overwritten back to
  * the player's pick. A choice only ever applies to a Traveler who does not
  * yet have a character.
+ *
+ * Authority (FINAL SETUP INTEGRATION REVISION, Section 1): the request node
+ * lives under the same Storyteller-authoritative collection as every other
+ * membership write, and the Firebase rules require the current fenced
+ * writer's guard to clear it -- writing through StorytellerSession's own raw
+ * connection (available as soon as it connects, before writer authority is
+ * ever claimed) can locally apply a character while failing with
+ * permission_denied clearing the request. This reads the same
+ * useSessionRuntime().backend every other membership command
+ * (seatPlayerAndCommit, revokePlayerAndCommit, ...) already uses -- never a
+ * second write path -- and simply does not process anything until that
+ * fenced writer is actually available; a request left pending while
+ * disconnected/reconnecting is retried automatically once it appears, from
+ * this same effect re-running on its next value.
  */
-export function useApplyTravelerChoices(backend: RoomBackend | null, code: string | undefined) {
+export function useApplyTravelerChoices(code: string | undefined) {
   const travelerChoices = useSessionRuntime(s => s.travelerChoices);
+  const writer = useSessionRuntime(s => s.backend);
   useEffect(() => {
-    if (!backend || !code) return;
+    if (!writer || !code) return;
     for (const [uid, { playerId, roleId }] of Object.entries(travelerChoices)) {
       if (!playerId) continue; // unresolved for now; retried once the roster resolves it
-      void applyTravelerChoice(backend, code, uid, roleId, (id, role) => {
+      applyTravelerChoice(writer, code, uid, roleId, (id, role) => {
         const p = useStorytellerStore.getState().game?.players[id];
         // Re-check eligibility against the freshly-resolved player: only an
         // unassigned Traveler seat ever adopts the pending choice. A seat
@@ -63,7 +78,7 @@ export function useApplyTravelerChoices(backend: RoomBackend | null, code: strin
         // this exact choice already applied -- keeps it; the request is
         // stale/superseded and is cleared without changing the role.
         if (p?.isTraveler && !p.actualRole) useStorytellerStore.getState().assignRole(id, role);
-      });
+      }).catch(error => reportRuntimeError("traveler-choice", lifecycleMessage(error)));
     }
-  }, [backend, code, travelerChoices]);
+  }, [writer, code, travelerChoices]);
 }

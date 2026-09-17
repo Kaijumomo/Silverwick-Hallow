@@ -7,6 +7,7 @@ import type { RoleDef } from "@/stores/types";
 import type { SetupContext, SetupFinding, SetupSource, SetupAction } from "./setupContext";
 import { compositionCandidates, emptyCounts, formatCounts, hasCountPolicy, isBagType, sameCounts } from "./setupPolicies";
 import { readinessFindings, setupReadiness } from "./setupReadiness";
+import { travelerHasUnresolvedArrival } from "@/stores/travelers";
 
 export type CompositionAnalysis = {
   actual: BagCounts;
@@ -93,6 +94,15 @@ export function analyzeSetup(context: SetupContext): SetupAnalysis {
     // finalization B3).
     if (p.isTraveler && !p.actualAlignment) add("traveler-alignment:" + p.id, "blocker",
       `${p.name}: choose actual Traveler alignment in their arrival controls before beginning Night 1.`, "shared", ["begin"], p.id);
+    // Phase 9 Setup finalization (FINAL SETUP INTEGRATION REVISION, Section
+    // 6): a starting Traveler's required arrival/public-starting-information
+    // check (e.g. Gnome) or evil-Traveler Demon information must resolve
+    // before Night 1 begins -- scoped to "begin" only, since Deal never
+    // depends on Traveler arrival state. The Traveler's own first-night
+    // wake/procedure is deliberately excluded: that happens during Night 1,
+    // never a prerequisite for entering it.
+    if (travelerHasUnresolvedArrival(p)) add("traveler-arrival:" + p.id, "blocker",
+      `${p.name}: resolve this Traveler's required arrival information before beginning Night 1.`, "shared", ["begin"], p.id);
   }
 
   // Ordinary perception (Phase 9C.4 / OPUS-004): concealed identity (Drunk,

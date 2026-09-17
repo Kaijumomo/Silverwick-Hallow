@@ -420,11 +420,15 @@ describe("Privacy regression matrix — all behavior modes", () => {
     });
   }
 
-  it("evil traveler (explicit shownAlignment=evil) projects correctly", () => {
+  it("evil traveler (actualAlignment=evil) projects correctly", () => {
+    // FINAL SETUP INTEGRATION REVISION, Section 7: normal Traveler alignment
+    // delivery is automatic from actualAlignment -- a shownAlignment mirror
+    // is never consulted here (and never set by any current, normal
+    // workflow), so it could only ever go stale.
     const p = makePublishedSTPlayer({
       actualRole: "thief",
       shownRole: "thief",
-      shownAlignment: "evil", // Explicit perception; not actual alignment.
+      actualAlignment: "evil",
       behaviorMode: "normal",
       isTraveler: true,
     });
@@ -546,16 +550,17 @@ describe("projectLobbyToSelfMap — Phase 9C.4 setup privacy barrier", () => {
     expect(selves.t1).toEqual({ shownRole: "thief" });
   });
 
-  it("E2 (Phase 9 Setup finalization B4): a Traveler's configured alignment survives self-projection privately, never through the ordinary barrier or public view, while the barrier still withholds an incomplete ordinary set", () => {
+  it("E2 (FINAL SETUP INTEGRATION REVISION, Section 7): a Traveler's current actual alignment survives self-projection privately, never through the ordinary barrier or public view, while the barrier still withholds an incomplete ordinary set, and a stale shownAlignment mirror never overrides it", () => {
     const traveler = { ...validTraveler("t1", 1), actualAlignment: "evil" as const, shownAlignment: "good" as const };
     const lobby = setupLobby({ p1: incompleteOrdinary("p1", 0), t1: traveler });
     const selves = projectLobbyToSelfMap(lobby, registry);
     // Ordinary barrier is still fully armed: p1 is incomplete, so no
     // ordinary self record publishes at all.
     expect(selves.p1).toBeUndefined();
-    // The Traveler's own self record carries only the shown alignment --
-    // never the private actual alignment.
-    expect(selves.t1).toEqual({ shownRole: "thief", shownAlignment: "good" });
+    // The Traveler's own self record reflects the current actual alignment
+    // -- the stale shownAlignment mirror ("good", left over from before a
+    // later actual-alignment change) never overrides it.
+    expect(selves.t1).toEqual({ shownRole: "thief", shownAlignment: "evil" });
     // Public view never receives alignment in any form, for the Traveler
     // or anyone else.
     const pub = JSON.stringify(projectToPublic(lobby.players.t1!, true));

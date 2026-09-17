@@ -34,12 +34,11 @@ it("offers compact public character and distinct actual alignment choices", () =
   expect(screen.getByText("Ready for play")).toBeInTheDocument();
   expect(screen.queryByText("Behavior & deception")).toBeNull();
   const p = store.getState().game!.players[id]!;
-  // Phase 9 Setup finalization B4 (revision): the actual alignment already
-  // reaches the Traveler's own self view privately, with no separate "show
-  // alignment" step required.
+  // Phase 9 Setup finalization (FINAL SETUP INTEGRATION REVISION, Section
+  // 7): the actual alignment reaches the Traveler's own self view privately
+  // and automatically -- there is no separate "show alignment" workflow.
   expect(projectToSelf(p, buildRegistry(troubleBrewing))).toEqual({ shownRole: "scapegoat", shownAlignment: "good" });
-  fireEvent.click(screen.getByRole("button", { name: "Show alignment to Traveler" }));
-  expect(store.getState().game!.players[id]!.shownAlignment).toBe("good");
+  expect(screen.queryByRole("button", { name: "Show alignment to Traveler" })).toBeNull();
 });
 it("evil arrival offers a private candidate and explicit delivery controls", () => {
   store.getState().assignRole(id, "thief"); store.getState().addPlayer("Demon player");

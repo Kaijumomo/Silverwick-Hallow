@@ -33,10 +33,8 @@ export function TravelerArrival({ playerId, compact = false }: { playerId: strin
           {alignment === "good" ? "Good" : "Evil"}
         </button>)}
       </div>
-      <p className="behavior-help">Character is public. Tell alignment privately in person, or explicitly show it below.</p>
+      <p className="behavior-help">Character is public. Actual alignment reaches this Traveler's own private view automatically.</p>
       {role && p.shownRole !== role.id && <button className="btn btn-sm" onClick={() => state.showAssignedRole(playerId)}>Show public character in player view</button>}
-      {role && p.actualAlignment && p.shownAlignment !== p.actualAlignment && <button className="btn btn-sm"
-        onClick={() => state.setShownAlignment(playerId, p.actualAlignment!)}>Show alignment to Traveler</button>}
     </>}
     {guidance.length ? guidance.map(message => <p className="behavior-help" key={message}>{message}</p>) : <p role="status">Ready for play</p>}
     {p.alive && !p.exiled && travelerNeedsArrivalCheck(p) && !p.travelerArrival?.arrivalCheckComplete && <>

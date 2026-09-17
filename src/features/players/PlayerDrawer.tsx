@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
 import { deriveAlignment } from "@/data/roleRegistry";
 import { TRAVELERS } from "@/data/travelers";
-import { needsShownIdentity, shownRoleFilter } from "@/stores/identity";
+import { isInitialRevealComplete, needsShownIdentity, shownRoleFilter } from "@/stores/identity";
 import { canRefineSetup } from "@/features/setup/setupRefinement";
 import { PlayerInformation, commitExtraTextDraft } from "./PlayerInformation";
 import { TravelerArrival } from "./TravelerArrival";
@@ -306,6 +306,16 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   // Role pool for the main "Actual role" picker.
   const rolePool = player.isTraveler ? TRAVELERS : script.characters;
 
+  // Phase 9 Setup finalization (FINAL SETUP INTEGRATION REVISION, Section
+  // 2): Reveal is a hard starting-setup commitment boundary. Between a
+  // completed initial Reveal and Night 1 actually beginning, the committed
+  // starting ordinary roster (Traveler status, and each ordinary player's
+  // actual role) is read-only here -- never falling back to the generic
+  // assignRole() the way it would for a legitimate in-game change once
+  // Night/Day has begun. Traveler character assignment is deliberately
+  // unaffected: Travelers are never part of the committed ordinary roster.
+  const committedReadOnly = game.phase === "setup" && isInitialRevealComplete(game);
+
   return (
     <DrawerShell title="Player editor" onClose={close}>
         <div className="drawer-header">
@@ -396,24 +406,28 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
 
           <section className="drawer-section">
             <h3 className="drawer-section-title">Travel status</h3>
-            <div className="drawer-row">
-              <button
-                className="toggle-pill"
-                aria-pressed={player.isTraveler}
-                onClick={() => {
-                  setTravelerStatusError(null);
-                  const result = setIsTraveler(player.id, !player.isTraveler);
-                  if (!result.ok) setTravelerStatusError(result.message ?? "Could not change Traveler status.");
-                }}
-              >
-                {player.isTraveler ? "Traveler" : "Not a traveler"}
-              </button>
-              {player.isTraveler && (
-                <span className="behavior-help">
-                  Role picker shows travelers only.
-                </span>
-              )}
-            </div>
+            {committedReadOnly ? (
+              <p className="behavior-help">Roles are revealed; Traveler status is locked in until this game ends or a new one starts.</p>
+            ) : (
+              <div className="drawer-row">
+                <button
+                  className="toggle-pill"
+                  aria-pressed={player.isTraveler}
+                  onClick={() => {
+                    setTravelerStatusError(null);
+                    const result = setIsTraveler(player.id, !player.isTraveler);
+                    if (!result.ok) setTravelerStatusError(result.message ?? "Could not change Traveler status.");
+                  }}
+                >
+                  {player.isTraveler ? "Traveler" : "Not a traveler"}
+                </button>
+                {player.isTraveler && (
+                  <span className="behavior-help">
+                    Role picker shows travelers only.
+                  </span>
+                )}
+              </div>
+            )}
             {travelerStatusError && <p role="alert" className="field-error">{travelerStatusError}</p>}
           </section>
 
@@ -433,63 +447,67 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
             ) : (
               <p className="behavior-help">No role assigned yet.</p>
             )}
-            <RolePickerGrid
-              roles={rolePool}
-              selectedRoleId={player.actualRole || null}
-              onPick={(id) => {
-                setRefinementError(null);
-                if (refinementAvailable) {
-                  const result = replaceSetupRole(player.id, id);
-                  if (!result.ok) setRefinementError(result.message);
-                } else {
-                  assignRole(player.id, id);
-                }
-              }}
-            />
-            <p className="behavior-help">
-              {refinementAvailable
-                ? "Setup refinement: changing the actual role resets this player's shown identity for the new assignment."
-                : "Assigning an actual role keeps the player's shown identity unchanged."}
-            </p>
-            {displayRole && !needsShownIdentity(player.actualRole) && (
-              <button className="btn btn-sm" onClick={() => showAssignedRole(player.id)}>
-                Show assigned role
-              </button>
-            )}
-            {displayRole && (
-              <div className="drawer-row">
-                <button
-                  className="btn btn-sm btn-danger"
-                  onClick={() => assignRole(player.id, "")}
-                >
-                  Clear role
-                </button>
-              </div>
-            )}
-            {refinementAvailable && otherOrdinaryPlayers.length > 0 && (
-              <div className="drawer-row">
-                <label htmlFor="setup-swap-with">Swap role with…</label>
-                <select
-                  id="setup-swap-with"
-                  className="select"
-                  value=""
-                  onChange={(e) => {
-                    const targetId = e.target.value;
-                    if (!targetId) return;
-                    setRefinementError(null);
-                    const result = swapSetupRoles(player.id, targetId);
+            {committedReadOnly ? (
+              <p className="behavior-help">Roles are revealed; the starting ordinary assignment is locked until Night 1 begins.</p>
+            ) : <>
+              <RolePickerGrid
+                roles={rolePool}
+                selectedRoleId={player.actualRole || null}
+                onPick={(id) => {
+                  setRefinementError(null);
+                  if (refinementAvailable) {
+                    const result = replaceSetupRole(player.id, id);
                     if (!result.ok) setRefinementError(result.message);
-                    e.target.value = "";
-                  }}
-                >
-                  <option value="">Choose a player</option>
-                  {otherOrdinaryPlayers.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-            {refinementError && <p role="alert" className="field-error">{refinementError}</p>}
+                  } else {
+                    assignRole(player.id, id);
+                  }
+                }}
+              />
+              <p className="behavior-help">
+                {refinementAvailable
+                  ? "Setup refinement: changing the actual role resets this player's shown identity for the new assignment."
+                  : "Assigning an actual role keeps the player's shown identity unchanged."}
+              </p>
+              {displayRole && !needsShownIdentity(player.actualRole) && (
+                <button className="btn btn-sm" onClick={() => showAssignedRole(player.id)}>
+                  Show assigned role
+                </button>
+              )}
+              {displayRole && (
+                <div className="drawer-row">
+                  <button
+                    className="btn btn-sm btn-danger"
+                    onClick={() => assignRole(player.id, "")}
+                  >
+                    Clear role
+                  </button>
+                </div>
+              )}
+              {refinementAvailable && otherOrdinaryPlayers.length > 0 && (
+                <div className="drawer-row">
+                  <label htmlFor="setup-swap-with">Swap role with…</label>
+                  <select
+                    id="setup-swap-with"
+                    className="select"
+                    value=""
+                    onChange={(e) => {
+                      const targetId = e.target.value;
+                      if (!targetId) return;
+                      setRefinementError(null);
+                      const result = swapSetupRoles(player.id, targetId);
+                      if (!result.ok) setRefinementError(result.message);
+                      e.target.value = "";
+                    }}
+                  >
+                    <option value="">Choose a player</option>
+                    {otherOrdinaryPlayers.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {refinementError && <p role="alert" className="field-error">{refinementError}</p>}
+            </>}
           </section>}
 
           {displayRole && !player.isTraveler && (

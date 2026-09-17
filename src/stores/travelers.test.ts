@@ -64,7 +64,14 @@ describe("Phase 9B Traveler identity and population", () => {
     store.setState({ game: { ...game(), phase, day: phase === "setup" ? 0 : 4 } }); traveler("");
     const context = selectSetupContext(game(), setupScript);
     expect(context.population).toMatchObject({ targetNonTravelerCount: 5, occupiedNonTravelerCount: 5, occupiedTravelerCount: 1, totalPhysicalSeatCount: 6 });
-    expect(game().phase).toBe(phase); expect(game().plannedPlayerCount).toBe(5);
+    expect(game().phase).toBe(phase);
+    // FINAL SETUP INTEGRATION REVISION, Section 3.D: pre-Reveal, this
+    // arrival helper's addPlayer() is a deliberate new participant (no
+    // empty seat to receive them), so it genuinely grows the plan; the
+    // ordinary target is unaffected either way (the very next line), since
+    // the immediate Traveler designation fulfills/absorbs that same growth.
+    // Post-Reveal (day/night), the plan is already committed and frozen.
+    expect(game().plannedPlayerCount).toBe(phase === "setup" ? 6 : 5);
     expect(travelerGuidance(p())).toEqual(["Choose a Traveler character.", "Choose actual alignment privately."]);
     // Phase 9 Setup finalization B4: unconfigured Traveler alignment now
     // blocks Night 1 (never Deal) -- see setupAnalyzer.ts.

@@ -29,6 +29,10 @@ export function readinessFindings(context: SetupContext): SetupFinding[] {
   // fresh, un-dealt Setup.
   else if (!isInitialRevealComplete(game)) block("not-revealed", "Reveal roles before beginning Night 1.", ["begin"]);
   if (ordinary.some(p => !p.actualRole)) block("missing-assignments", "Assign an actual role to every ordinary player before beginning Night 1.", ["begin"]);
-  if (travelers.some(p => !p.actualRole)) block("missing-traveler-role", "Assign an actual Traveler role before beginning Night 1.");
+  // Phase 9 Setup finalization (FINAL SETUP INTEGRATION REVISION, Section
+  // 5): ordinary Deal and Traveler setup are parallel workflows -- a
+  // Traveler missing their character must never block dealing the ordinary
+  // bag, only beginning Night 1.
+  if (travelers.some(p => !p.actualRole)) block("missing-traveler-role", "Assign an actual Traveler role before beginning Night 1.", ["begin"]);
   return out;
 }

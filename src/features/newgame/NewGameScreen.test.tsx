@@ -134,6 +134,21 @@ describe("A2. Traveller-aware population UI (Phase 9 Setup finalization B4)", ()
     expect(morePlayers()).toBeDisabled();
   });
 
+  it("FINAL SETUP INTEGRATION REVISION Section 4: the composition table obeys the same 20-total cap as the stepper -- 15 Travellers, clicking the 15-ordinary row never creates 30", () => {
+    const { container } = render(<NewGameScreen />);
+    for (let i = 0; i < 15; i++) fireEvent.click(morePlayers()); // 5 -> 20 total, 0 Travellers
+    for (let i = 0; i < 15; i++) fireEvent.click(moreTravelers()); // -> 20 total / 15 Travellers / 5 ordinary
+    expect(ordinaryLine()).toHaveTextContent("Ordinary: 5");
+    // Click the 15-ordinary row: naive total = 15 ordinary + 15 Travellers =
+    // 30. The selected ordinary count must be preserved and the Traveller
+    // count reduced to the largest legal value instead -- total must remain
+    // capped at 20 (15 ordinary / 5 Travellers here), never 30.
+    fireEvent.click(screen.getByRole("row", { name: /^15 / }));
+    expect(ordinaryLine()).toHaveTextContent("Ordinary: 15");
+    expect(container.querySelector(".ng-stepper-value")).toHaveTextContent("20 players");
+    expect(screen.getByRole("row", { name: /^15 / })).toHaveAttribute("aria-selected", "true");
+  });
+
   it("passes the intended Traveller count into game creation, distinct from total planned seats", async () => {
     render(<NewGameScreen />);
     fireEvent.click(screen.getByRole("row", { name: /^10 / }));

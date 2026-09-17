@@ -53,7 +53,16 @@ export function NewGameScreen() {
   };
 
   const handleOrdinarySelect = (nextOrdinary: number) => {
-    handleTotalChange(nextOrdinary + travelerCount);
+    // Phase 9 Setup finalization (FINAL SETUP INTEGRATION REVISION, Section
+    // 4): the composition table must obey the same 20-total cap as the
+    // stepper. Selecting an ordinary count never changes the ordinary count
+    // itself -- if adding the current Travelers to it would exceed the cap,
+    // the Traveler count reduces to the largest legal value instead (e.g.
+    // 15 Travelers + click "15 ordinary" -> 15 ordinary + 5 Travelers = 20,
+    // never 30).
+    const cappedTotal = Math.min(nextOrdinary + travelerCount, MAX_TOTAL_PLAYERS);
+    setTotalCount(cappedTotal);
+    setTravelerCount(Math.max(0, cappedTotal - nextOrdinary));
   };
 
   const allScripts: Record<string, Script> = useMemo(

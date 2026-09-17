@@ -29,9 +29,15 @@ type Props = {
   code: string;
   onClose: () => void;
   onRemoveSeat?: () => void;
+  /** Default the "Arriving as a Traveler" checkbox on for this specific
+   * target seat -- used by the "Add Traveler" workflow, whose seat is
+   * deliberately ordinary-neutral at creation (Phase 9 Setup finalization,
+   * Section 3.E): the seat record itself never signals the intended
+   * designation, so this is a UI-only hint instead. */
+  defaultTraveler?: boolean;
 };
 
-export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClose, onRemoveSeat }: Props) {
+export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClose, onRemoveSeat, defaultTraveler = false }: Props) {
   const pendingPlayers = useStorytellerStore((s) => s.game?.pendingPlayers ?? {});
   const activeArrival = useStorytellerStore((s) => arrivalsAreTravelers(s.game ?? NO_GAME));
   const queueTargetSeatId = useStorytellerStore((s) => seatPlayerId ?? firstEmptySeatId(s.game));
@@ -39,13 +45,13 @@ export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClo
   const removePendingPlayer = useStorytellerStore((s) => s.removePendingPlayer);
   const [busyUid, setBusyUid] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [traveler, setTraveler] = useState(() => !!(queueTargetSeatId && useStorytellerStore.getState().game?.players[queueTargetSeatId]?.isTraveler));
+  const [traveler, setTraveler] = useState(() => defaultTraveler || !!(queueTargetSeatId && useStorytellerStore.getState().game?.players[queueTargetSeatId]?.isTraveler));
   // Queue mode's target seat shifts to the next empty seat after each
   // assignment -- keep the manual default in sync with whichever seat is
   // next, rather than carrying over a stale checkbox value.
   useEffect(() => {
-    setTraveler(!!(queueTargetSeatId && useStorytellerStore.getState().game?.players[queueTargetSeatId]?.isTraveler));
-  }, [queueTargetSeatId]);
+    setTraveler(defaultTraveler || !!(queueTargetSeatId && useStorytellerStore.getState().game?.players[queueTargetSeatId]?.isTraveler));
+  }, [queueTargetSeatId, defaultTraveler]);
 
   const entries = Object.entries(pendingPlayers);
   const queueMode = seatPlayerId === undefined;

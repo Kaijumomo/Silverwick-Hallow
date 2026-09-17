@@ -23,7 +23,11 @@ it.each(["addPlayer", "addPlayerToSeat"] as const)("setup %s keeps ordinary setu
   state()[command]("New player");
   const p = game().players[game().seatOrder.at(-1)!]!;
   expect(p.isTraveler).toBe(false); expect(p.travelerArrival).toBeUndefined();
-  expect(game().plannedPlayerCount).toBe(5);
+  // FINAL SETUP INTEGRATION REVISION, Section 3.D: setupGame's fixture
+  // leaves no empty planned seat, so this is a deliberate new participant
+  // before Reveal -- the plan genuinely grows rather than silently
+  // diverging from physical occupancy.
+  expect(game().plannedPlayerCount).toBe(6);
   expect(selectSetupContext(game()).population.occupiedNonTravelerCount).toBe(6);
 });
 

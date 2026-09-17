@@ -492,6 +492,29 @@ describe("Firebase RTDB membership authorization", () => {
     expect((await ref(st, "travelerChoices/" + alice).once("value")).exists()).toBe(false);
   });
 
+  // FINAL SETUP INTEGRATION REVISION, Section 1: production Traveler-choice
+  // processing must route through the same fenced writer authority every
+  // other membership command uses. Before this revision,
+  // StorytellerSession.tsx applied choices through its own raw connection --
+  // authenticated as the Storyteller, but carrying none of the
+  // writer/writeGuard fencing this collection's own ".write" rule requires
+  // (only the child `$uid` rule lets the player write their own entry; only
+  // the fenced writer rule at the parent lets the Storyteller clear it).
+  // This proves that exact bug against real rules: the local side still
+  // applies the choice (matching the described "locally applies a character
+  // while failing to clear the request" symptom), but the remote clear is
+  // rejected, never silently dropped.
+  test("clearing a Traveler choice without the fenced writer's guard is rejected against real rules", async () => {
+    await seed();
+    await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
+    const raw = new FirebaseRoomBackend(db(st) as unknown as Database);
+    let applied: string | null = null;
+    await expect(applyTravelerChoice(raw, code, alice, "thief", (playerId) => { applied = playerId; }))
+      .rejects.toThrow();
+    expect(applied).toBe("p-alice");
+    expect((await ref(st, "travelerChoices/" + alice).once("value")).val()).toBe("thief");
+  });
+
   test("a player may resubmit a different choice before the Storyteller applies it", async () => {
     await seed();
     await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));

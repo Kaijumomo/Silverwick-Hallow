@@ -20,6 +20,20 @@ export function travelerNeedsFirstNight(p: STPlayerRecord) {
 // Gnome has canonical starting information but no night-sheet position.
 export const travelerNeedsArrivalCheck = (p: STPlayerRecord) => publicTravelerRole(p)?.id === "gnome";
 
+/**
+ * Arrival prerequisites that must resolve before Night 1 begins -- distinct
+ * from a Traveler's first-night wake/procedure, which is Night 1 content
+ * itself, never a precondition for entering it (Phase 9 Setup finalization,
+ * FINAL SETUP INTEGRATION REVISION, Section 6). Reuses the exact lifecycle
+ * state travelerGuidance already surfaces, never a re-derived rule.
+ */
+export function travelerHasUnresolvedArrival(p: STPlayerRecord): boolean {
+  if (!p.isTraveler || p.isEmpty || p.exiled || !p.alive) return false;
+  if (travelerNeedsArrivalCheck(p) && !p.travelerArrival?.arrivalCheckComplete) return true;
+  if (p.actualAlignment === "evil" && !p.travelerArrival?.demonInfoComplete) return true;
+  return false;
+}
+
 export function travelerGuidance(p: STPlayerRecord): string[] {
   if (!p.isTraveler || p.isEmpty) return [];
   if (p.exiled) return ["Exiled — remains seated and keeps their player view."];

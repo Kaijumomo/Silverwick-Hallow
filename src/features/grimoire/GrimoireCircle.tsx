@@ -268,6 +268,12 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
   const [drag, setDrag] = useState<DragState | null>(null);
   const [ghostPos, setGhostPos] = useState<{ x: number; y: number } | null>(null);
   const [assigningSeatId, setAssigningSeatId] = useState<PlayerId | null>(null);
+  // Phase 9 Setup finalization (FINAL SETUP INTEGRATION REVISION, Section
+  // 3.E): the seat created for "Add Traveler" is deliberately ordinary-
+  // neutral (never pre-flagged isTraveler) so this UI-only hint is what
+  // defaults the assignment popup's checkbox, rather than the seat record
+  // itself signaling an intended designation that hasn't happened yet.
+  const [assigningAsTraveler, setAssigningAsTraveler] = useState(false);
 
   useEffect(() => {
     if (!stageRef.current) return;
@@ -359,9 +365,14 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
   const handleAddTraveler = () => {
     const store = useStorytellerStore.getState();
     if (code) {
-      store.addEmptySeat();
+      // Section 3.E: add planned Traveler capacity and an ordinary-neutral
+      // empty seat -- never pre-flag the empty seat itself isTraveler.
+      // Actual designation happens through setIsTraveler once a real player
+      // occupies it (fulfilling this exact planned slot), via the seat
+      // assignment popup's own Traveler checkbox, defaulted on here.
+      store.addTravelerSeat();
       const id = useStorytellerStore.getState().game?.seatOrder.at(-1);
-      if (id) { store.setIsTraveler(id, true); setAssigningSeatId(id); }
+      if (id) { setAssigningAsTraveler(true); setAssigningSeatId(id); }
       return;
     }
     const name = window.prompt("Traveler name?");
@@ -492,7 +503,7 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
                   size={tokenSize}
                   x={pos.x}
                   y={pos.y}
-                  onClick={() => setAssigningSeatId(id)}
+                  onClick={() => { setAssigningAsTraveler(false); setAssigningSeatId(id); }}
                 />
               );
             }
@@ -559,10 +570,12 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
             seatNumber={seat.seat + 1}
             backend={backend}
             code={code}
-            onClose={() => setAssigningSeatId(null)}
+            defaultTraveler={assigningAsTraveler}
+            onClose={() => { setAssigningSeatId(null); setAssigningAsTraveler(false); }}
             onRemoveSeat={() => {
               removePlayer(assigningSeatId);
               setAssigningSeatId(null);
+              setAssigningAsTraveler(false);
             }}
           />
         );

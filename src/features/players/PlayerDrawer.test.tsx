@@ -381,6 +381,44 @@ describe("Pre-Reveal Setup refinement (Phase 9 Setup finalization B3)", () => {
     expect(screen.queryByText(/^Setup refinement:/)).toBeNull();
   });
 
+  it("FINAL SETUP INTEGRATION REVISION Section 2: between Reveal and Night 1, the ordinary role picker is read-only -- never a fallback to assignRole()", () => {
+    const g = dealtGame();
+    store.getState().revealRoles();
+    const target = g.seatOrder[0]!;
+    const before = store.getState().game!.players[target]!.actualRole;
+    render(<DrawerFor id={target} />);
+
+    const actualRoleSection = screen.getByText("Actual role (ST private)").closest("section")!;
+    expect(within(actualRoleSection).getByText(/locked until Night 1 begins/)).toBeInTheDocument();
+    expect(within(actualRoleSection).queryByRole("button", { name: "Drunk outsider" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Clear role" })).toBeNull();
+    expect(store.getState().game!.players[target]!.actualRole).toBe(before);
+  });
+
+  it("FINAL SETUP INTEGRATION REVISION Section 2: Traveler status is locked and hidden once roles are revealed", () => {
+    const g = dealtGame();
+    store.getState().revealRoles();
+    render(<DrawerFor id={g.seatOrder[0]!} />);
+
+    expect(screen.getByText(/Traveler status is locked in/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Not a traveler" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Traveler" })).toBeNull();
+  });
+
+  it("FINAL SETUP INTEGRATION REVISION Section 2: the generic role picker and Traveler toggle return once gameplay begins", () => {
+    const g = dealtGame();
+    store.getState().revealRoles();
+    store.setState({ game: { ...store.getState().game!, phase: "night", day: 1 } });
+    const target = g.seatOrder[0]!;
+    render(<DrawerFor id={target} />);
+
+    expect(screen.queryByText(/locked until Night 1 begins/)).toBeNull();
+    const actualRoleSection = screen.getByText("Actual role (ST private)").closest("section")!;
+    fireEvent.click(within(actualRoleSection).getByRole("button", { name: "Drunk outsider" }));
+    expect(store.getState().game!.players[target]!.actualRole).toBe("drunk");
+    expect(screen.queryByRole("button", { name: "Not a traveler" })).not.toBeNull();
+  });
+
   it("outside the refinement window, the actual-role picker keeps the generic assignRole() behavior", () => {
     render(<Drawer />); // fresh, non-dealt game from the outer beforeEach
     expect(screen.queryByLabelText("Swap role with…")).toBeNull();
