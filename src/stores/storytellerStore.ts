@@ -7,7 +7,7 @@ import { StorytellerStateSchema } from "./schemas";
 import { buildRegistry, deriveAlignment, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { currentGameMoment, manualEffectId } from "./effects";
-import { diffFields, provenanceOf, recordIfLive, sameSnapshot } from "./history";
+import { diffFields, type MutationContext, provenanceOf, recordIfLive, sameSnapshot } from "./history";
 import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 import { invalidatePrivatePacket, pruneInapplicablePrivateInfo } from "./privatePackets";
 import { usePrivacyStore } from "./privacyStore";
@@ -223,7 +223,10 @@ export type StorytellerStore = {
   setSeatOrder: (order: PlayerId[]) => void;
   movePlayer: (id: PlayerId, direction: "left" | "right") => void;
 
-  assignRole: (id: PlayerId, roleId: RoleId | "") => void;
+  /** Phase 9D.2 closure: an optional Mutation Context lets a caller supply
+   * Provenance for the History Record this produces during Live Play,
+   * through this exact same command -- never a second call. */
+  assignRole: (id: PlayerId, roleId: RoleId | "", context?: MutationContext) => void;
   showAssignedRole: (id: PlayerId) => void;
   setShownRole: (id: PlayerId, roleId: RoleId | null) => void;
   setShownAlignment: (id: PlayerId, alignment: Alignment | null) => void;
@@ -241,11 +244,13 @@ export type StorytellerStore = {
    * action is ever required. Never restarts the game or lobby, and never
    * touches any other player's role. */
   setIsTraveler: (id: PlayerId, isTraveler: boolean) => SetupCommandResult;
-  setTravelerAlignment: (id: PlayerId, alignment: Alignment) => void;
+  /** Optional Mutation Context (Phase 9D.2 closure) -- see assignRole. */
+  setTravelerAlignment: (id: PlayerId, alignment: Alignment, context?: MutationContext) => void;
   /** Phase 9D.1: the single safe generic command for intentionally
    * changing any player's current actual alignment (ordinary or
-   * Traveler). Never inferred, never called automatically. */
-  setActualAlignment: (id: PlayerId, alignment: Alignment) => void;
+   * Traveler). Never inferred, never called automatically. Optional
+   * Mutation Context (Phase 9D.2 closure) -- see assignRole. */
+  setActualAlignment: (id: PlayerId, alignment: Alignment, context?: MutationContext) => void;
   prepareTravelerDemon: (id: PlayerId) => void;
   completeTravelerInformation: (id: PlayerId) => void;
   completeTravelerArrivalCheck: (id: PlayerId) => void;
@@ -253,8 +258,9 @@ export type StorytellerStore = {
   setFabled: (fabled: RoleId[]) => void;
   setLorics: (lorics: RoleId[]) => void;
 
-  setAlive: (id: PlayerId, alive: boolean) => void;
-  setGhostVote: (id: PlayerId, ghostVote: boolean) => void;
+  /** Optional Mutation Context (Phase 9D.2 closure) -- see assignRole. */
+  setAlive: (id: PlayerId, alive: boolean, context?: MutationContext) => void;
+  setGhostVote: (id: PlayerId, ghostVote: boolean, context?: MutationContext) => void;
   setAbilityUsed: (id: PlayerId, used: boolean) => void;
   setStatus: (id: PlayerId, status: string, on: boolean) => void;
   /** Phase 9D.1: centralized structured-effect commands. `addEffect`
@@ -1305,7 +1311,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
-      assignRole: (id, roleId) => {
+      assignRole: (id, roleId, context) => {
         const { game, undoStack } = get();
         if (!game) return;
         const existing = game.players[id];
@@ -1339,6 +1345,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           game: recordIfLive(game, updatedGame, () => ({
             category: "identity", playerId: id,
             change: { kind: "value", from: { actualRole: existing.actualRole }, to: { actualRole: roleId } },
+            ...(context?.provenance ? { provenance: context.provenance } : {}),
           })),
         });
       },
@@ -1520,7 +1527,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         return { ok: true };
       },
 
-      setTravelerAlignment: (id, alignment) => {
+      setTravelerAlignment: (id, alignment, context) => {
         const { game, undoStack } = get();
         const p = game?.players[id];
         if (!game || !p?.isTraveler || p.actualAlignment === alignment) return;
@@ -1533,11 +1540,12 @@ export const useStorytellerStore = create<StorytellerStore>()(
           game: recordIfLive(game, updatedGame, () => ({
             category: "alignment", playerId: id,
             change: { kind: "value", from: { actualAlignment: p.actualAlignment }, to: { actualAlignment: alignment } },
+            ...(context?.provenance ? { provenance: context.provenance } : {}),
           })),
         });
       },
 
-      setActualAlignment: (id, alignment) => {
+      setActualAlignment: (id, alignment, context) => {
         const { game, undoStack } = get();
         const p = game?.players[id];
         if (!game || !p || p.actualAlignment === alignment) return;
@@ -1554,6 +1562,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           game: recordIfLive(game, updatedGame, () => ({
             category: "alignment", playerId: id,
             change: { kind: "value", from: { actualAlignment: p.actualAlignment }, to: { actualAlignment: alignment } },
+            ...(context?.provenance ? { provenance: context.provenance } : {}),
           })),
         });
       },
@@ -1624,7 +1633,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
-      setAlive: (id, alive) => {
+      setAlive: (id, alive, context) => {
         const { game, undoStack } = get();
         if (!game) return;
         const player = game.players[id];
@@ -1643,12 +1652,15 @@ export const useStorytellerStore = create<StorytellerStore>()(
           // nothing did (e.g. reviving an already-alive player).
           game: recordIfLive(game, updatedGame, () => {
             const diff = diffFields(player, updatedGame.players[id]!, touched);
-            return diff && { category: "life", playerId: id, change: { kind: "value", ...diff } };
+            return diff && {
+              category: "life", playerId: id, change: { kind: "value", ...diff },
+              ...(context?.provenance ? { provenance: context.provenance } : {}),
+            };
           }),
         });
       },
 
-      setGhostVote: (id, ghostVote) => {
+      setGhostVote: (id, ghostVote, context) => {
         const { game, undoStack } = get();
         if (!game) return;
         const player = game.players[id];
@@ -1660,6 +1672,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
             player.ghostVote === ghostVote ? null : {
               category: "life", playerId: id,
               change: { kind: "value", from: { ghostVote: player.ghostVote }, to: { ghostVote } },
+              ...(context?.provenance ? { provenance: context.provenance } : {}),
             }),
         });
       },

@@ -14,6 +14,19 @@ const historyId = (): HistoryId =>
   globalThis.crypto?.randomUUID?.() ?? `h-${Math.random().toString(36).slice(2, 10)}`;
 
 /**
+ * The narrowest reusable optional structure an Authoritative Mutation
+ * Command can accept alongside its normal arguments, so a caller may
+ * supply Provenance through the exact same command that changes Current
+ * State -- never a second, separate call. Every field is optional; when a
+ * command receives no Mutation Context (or one with no `provenance`), it
+ * must not invent any. Deliberately narrow today (Provenance is the only
+ * thing a Mutation Context carries) -- this is not a general options bag.
+ */
+export type MutationContext = {
+  provenance?: Provenance;
+};
+
+/**
  * The single live/Setup boundary for Phase 9D.2 history. Setup
  * construction (an initial deal, a pre-Reveal refinement, identity
  * preparation) is never gameplay and must never populate history; once

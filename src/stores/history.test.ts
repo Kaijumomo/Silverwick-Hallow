@@ -383,3 +383,123 @@ describe("Phase 9D.2: extensibility", () => {
     expect(diffFields(before, before, ["a", "b", "c"])).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 9D.2 closure: standardized Mutation Context -> Provenance flow.
+// Every Authoritative Mutation Command below is called directly -- never
+// recordIfLive itself -- so this proves the real command surface, not just
+// the underlying mechanism (already proven generic above).
+// ---------------------------------------------------------------------------
+describe("Phase 9D.2 closure: Mutation Context carries Provenance through the authoritative command itself", () => {
+  it("assignRole (Actual Role): supplied Mutation Context changes Current State and produces exactly one History Record with that Provenance", () => {
+    dealtGame();
+    goLive();
+    const id = game().seatOrder[0]!;
+    const before = game().players[id]!.actualRole;
+    const target = before === "imp" ? "chef" : "imp";
+    const provenance = { sourceCharacter: "philosopher", reason: "gained a new role" };
+    state().assignRole(id, target, { provenance });
+    expect(game().players[id]!.actualRole).toBe(target);
+    expect(history()).toHaveLength(1);
+    expect(history()[0]).toMatchObject({
+      category: "identity", playerId: id,
+      change: { kind: "value", from: { actualRole: before }, to: { actualRole: target } },
+      provenance,
+    });
+  });
+
+  it("setActualAlignment (Actual Alignment): supplied Mutation Context changes Current State and produces exactly one History Record with that Provenance", () => {
+    dealtGame();
+    goLive();
+    const id = game().seatOrder[0]!;
+    const before = game().players[id]!.actualAlignment;
+    const target = before === "evil" ? "good" : "evil";
+    const provenance = { sourceCharacter: "philosopher", reason: "became evil" };
+    state().setActualAlignment(id, target, { provenance });
+    expect(game().players[id]!.actualAlignment).toBe(target);
+    expect(history()).toHaveLength(1);
+    expect(history()[0]).toMatchObject({
+      category: "alignment", playerId: id,
+      change: { kind: "value", from: { actualAlignment: before }, to: { actualAlignment: target } },
+      provenance,
+    });
+  });
+
+  it("setAlive (Life State): supplied Mutation Context changes Current State and produces exactly one History Record with that Provenance", () => {
+    dealtGame();
+    goLive();
+    const id = game().seatOrder[0]!;
+    const provenance = { sourceCharacter: "imp", reason: "demon attack" };
+    state().setAlive(id, false, { provenance });
+    expect(game().players[id]!.alive).toBe(false);
+    expect(history()).toHaveLength(1);
+    expect(history()[0]).toMatchObject({
+      category: "life", playerId: id,
+      change: { kind: "value", from: { alive: true }, to: { alive: false } },
+      provenance,
+    });
+  });
+
+  it("setGhostVote and setTravelerAlignment also carry supplied Provenance through the same Mutation Context", () => {
+    dealtGame();
+    goLive();
+    const id = game().seatOrder[0]!;
+    state().setGhostVote(id, false, { provenance: { reason: "spent ghost vote" } });
+    expect(history()[0]).toMatchObject({ category: "life", provenance: { reason: "spent ghost vote" } });
+
+    newPlan(6);
+    for (let i = 0; i < 6; i++) state().addPlayerToSeat("Player " + i);
+    const travelerId = game().seatOrder[0]!;
+    state().setIsTraveler(travelerId, true); // convert before dealing, so the ordinary bag matches the remaining 5 seats
+    state().setRolePool(standardRoles(5));
+    expect(state().dealRolePool().ok).toBe(true);
+    state().assignRole(travelerId, "thief");
+    state().setTravelerAlignment(travelerId, "good"); // required before Night 1 can begin; still Setup, no history
+    goLive();
+    state().setTravelerAlignment(travelerId, "evil", { provenance: { reason: "Storyteller selection" } });
+    expect(history().at(-1)).toMatchObject({
+      category: "alignment", playerId: travelerId, provenance: { reason: "Storyteller selection" },
+    });
+  });
+
+  it("the same command with no Mutation Context produces a History Record with no invented Provenance", () => {
+    dealtGame();
+    goLive();
+    const id = game().seatOrder[0]!;
+    const before = game().players[id]!.actualRole;
+    const target = before === "imp" ? "chef" : "imp";
+    state().assignRole(id, target); // no context argument at all
+    expect(history()).toHaveLength(1);
+    expect(history()[0]!.provenance).toBeUndefined();
+
+    state().setAlive(id, false); // no context argument at all
+    expect(history()[1]!.provenance).toBeUndefined();
+  });
+
+  it("a no-op Mutation with a supplied Mutation Context still creates no History Record, and does not needlessly touch Current State", () => {
+    dealtGame();
+    goLive();
+    const id = game().seatOrder[0]!;
+    const currentRole = game().players[id]!.actualRole;
+    const currentAlignment = game().players[id]!.actualAlignment!;
+    const provenance = { reason: "attempted but nothing actually changed" };
+
+    state().assignRole(id, currentRole, { provenance }); // old value -> same value
+    state().setActualAlignment(id, currentAlignment, { provenance });
+    state().setGhostVote(id, game().players[id]!.ghostVote, { provenance });
+
+    expect(history()).toEqual([]);
+    expect(game().players[id]!.actualRole).toBe(currentRole);
+    expect(game().players[id]!.actualAlignment).toBe(currentAlignment);
+  });
+
+  it("Setup boundary remains unchanged: a Mutation Context supplied during Setup still produces no History Record", () => {
+    dealtGame(); // still Setup phase -- no goLive()
+    const id = game().seatOrder[0]!;
+    const provenance = { reason: "a Setup-time correction" };
+    expect(state().replaceSetupRole(id, "imp").ok).toBe(true);
+    state().setAlive(id, false, { provenance });
+    state().setActualAlignment(id, "evil", { provenance });
+    expect(history()).toEqual([]);
+  });
+});
