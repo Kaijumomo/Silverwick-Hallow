@@ -8,7 +8,12 @@ import { buildRegistry, deriveAlignment, type RoleRegistry } from "@/data/roleRe
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { currentGameMoment, manualEffectId } from "./effects";
 import { diffFields, type MutationContext, provenanceOf, recordIfLive, sameSnapshot } from "./history";
-import { informationDeliveryId, validateInformationValues } from "./informationDelivery";
+import {
+  informationDeliveryId,
+  validateInformationTiming,
+  validateInformationValues,
+  validateRequirementsCoherent,
+} from "./informationDelivery";
 import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 import { invalidatePrivatePacket, pruneInapplicablePrivateInfo } from "./privatePackets";
 import { usePrivacyStore } from "./privacyStore";
@@ -1688,22 +1693,23 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const patch: Partial<STPlayerRecord> = { alive };
         if (alive && player.exiled) patch.exiled = false;
         if (alive && !player.alive) patch.ghostVote = true;
-        const updatedGame = patchPlayer(game, id, patch);
         const touched = Object.keys(patch) as (keyof STPlayerRecord & string)[];
+        // One semantic action (a kill/revival) may touch several fields at
+        // once (alive, ghostVote, exiled) -- diffFields collapses them into
+        // exactly one record covering only what genuinely changed. Computed
+        // up front (Phase 9D.4 Section 9), not only inside the Live-Play
+        // History gate: a true no-op (e.g. reviving an already-alive,
+        // never-exiled player) must skip Current State replacement and
+        // Undo bookkeeping too, in Setup as much as in Live Play.
+        const diff = diffFields(player, { ...player, ...patch }, touched);
+        if (!diff) return;
+        const updatedGame = patchPlayer(game, id, patch);
         set({
           undoStack: pushUndo(game, undoStack),
-          // One semantic action (a kill/revival) may touch several fields
-          // at once (alive, ghostVote, exiled) -- diffFields collapses
-          // them into exactly one record covering only what genuinely
-          // changed, never one record per field and never a record when
-          // nothing did (e.g. reviving an already-alive player).
-          game: recordIfLive(game, updatedGame, () => {
-            const diff = diffFields(player, updatedGame.players[id]!, touched);
-            return diff && {
-              category: "life", playerId: id, change: { kind: "value", ...diff },
-              ...(context?.provenance ? { provenance: context.provenance } : {}),
-            };
-          }),
+          game: recordIfLive(game, updatedGame, () => ({
+            category: "life", playerId: id, change: { kind: "value", ...diff },
+            ...(context?.provenance ? { provenance: context.provenance } : {}),
+          })),
         });
       },
 
@@ -1712,15 +1718,15 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!game) return;
         const player = game.players[id];
         if (!player) return;
+        if (player.ghostVote === ghostVote) return; // true no-op
         const updatedGame = patchPlayer(game, id, { ghostVote });
         set({
           undoStack: pushUndo(game, undoStack),
-          game: recordIfLive(game, updatedGame, () =>
-            player.ghostVote === ghostVote ? null : {
-              category: "life", playerId: id,
-              change: { kind: "value", from: { ghostVote: player.ghostVote }, to: { ghostVote } },
-              ...(context?.provenance ? { provenance: context.provenance } : {}),
-            }),
+          game: recordIfLive(game, updatedGame, () => ({
+            category: "life", playerId: id,
+            change: { kind: "value", from: { ghostVote: player.ghostVote }, to: { ghostVote } },
+            ...(context?.provenance ? { provenance: context.provenance } : {}),
+          })),
         });
       },
 
@@ -1746,24 +1752,23 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!player) return;
         const effectId = manualEffectId(status);
         const existing = player.effects.find((e) => e.id === effectId);
-        const others = player.effects.filter((e) => e.id !== effectId);
         const newEffect: EffectRecord | null = on
           ? { id: effectId, type: status, lifetime: { kind: "manual" as const }, appliedAt: currentGameMoment(game) }
           : null;
+        // A true no-op (re-toggling an already-active manual effect to the
+        // identical shape, or toggling off something not currently active)
+        // skips Current State replacement and Undo bookkeeping entirely
+        // (Phase 9D.4 Section 9) -- not only the History record.
+        if (on && existing && sameSnapshot(existing, newEffect)) return;
+        if (!on && !existing) return;
+        const others = player.effects.filter((e) => e.id !== effectId);
         const effects = on ? [...others, newEffect!] : others;
         const updatedGame = patchPlayer(game, id, { effects });
         set({
           undoStack: pushUndo(game, undoStack),
-          game: recordIfLive(game, updatedGame, () => {
-            if (on) {
-              // Re-toggling an already-active manual effect to the same
-              // shape is idempotent -- it must not create a duplicate record.
-              if (existing && sameSnapshot(existing, newEffect)) return null;
-              return { category: "effect", playerId: id, change: { kind: "added", item: newEffect! } };
-            }
-            if (!existing) return null; // nothing was actually removed
-            return { category: "effect", playerId: id, change: { kind: "removed", item: existing } };
-          }),
+          game: recordIfLive(game, updatedGame, () => on
+            ? { category: "effect", playerId: id, change: { kind: "added", item: newEffect! } }
+            : { category: "effect", playerId: id, change: { kind: "removed", item: existing! } }),
         });
       },
 
@@ -1775,16 +1780,17 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const effectId = effect.id ?? newId();
         const record: EffectRecord = { ...effect, id: effectId };
         const existing = player.effects.find((e) => e.id === effectId);
+        // True no-op: an identical effect already exists under this id.
+        if (existing && sameSnapshot(existing, record)) return effectId;
         const others = player.effects.filter((e) => e.id !== effectId);
         const updatedGame = patchPlayer(game, id, { effects: [...others, record] });
         set({
           undoStack: pushUndo(game, undoStack),
-          game: recordIfLive(game, updatedGame, () =>
-            existing && sameSnapshot(existing, record) ? null : {
-              category: "effect", playerId: id,
-              change: { kind: "added", item: record },
-              provenance: provenanceOf(record),
-            }),
+          game: recordIfLive(game, updatedGame, () => ({
+            category: "effect", playerId: id,
+            change: { kind: "added", item: record },
+            provenance: provenanceOf(record),
+          })),
         });
         return effectId;
       },
@@ -1823,17 +1829,18 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const reminderId = reminder.id ?? newId();
         const record: ReminderRecord = { ...reminder, id: reminderId };
         const existing = player.reminders.find((r) => r.id === reminderId);
+        // True no-op: an identical reminder already exists under this id.
+        if (existing && sameSnapshot(existing, record)) return reminderId;
         const updatedGame = patchPlayer(game, id, {
           reminders: [...player.reminders.filter((r) => r.id !== reminderId), record],
         });
         set({
           undoStack: pushUndo(game, undoStack),
-          game: recordIfLive(game, updatedGame, () =>
-            existing && sameSnapshot(existing, record) ? null : {
-              category: "reminder", playerId: id,
-              change: { kind: "added", item: record },
-              provenance: provenanceOf(record),
-            }),
+          game: recordIfLive(game, updatedGame, () => ({
+            category: "reminder", playerId: id,
+            change: { kind: "added", item: record },
+            provenance: provenanceOf(record),
+          })),
         });
         return reminderId;
       },
@@ -1858,19 +1865,39 @@ export const useStorytellerStore = create<StorytellerStore>()(
       recordInformationDelivery: (recipientPlayerId, informationActionId, values, context) => {
         const { game, undoStack } = get();
         if (!game) return { ok: false, message: "No game is open." };
+        // 1-2. Recipient exists and has an Actual Role.
         const player = game.players[recipientPlayerId];
         if (!player) return { ok: false, message: "This player is not seated." };
         if (!player.actualRole) return { ok: false, message: "This player has no Actual Role yet." };
         const script = selectScriptById(get(), game.scriptId);
         if (!script) return { ok: false, message: "Unknown script." };
         const registry = buildRegistry(script);
-        const action = registry
+        // 3. Information Action belongs to that Role. A malformed Role
+        // definition with two Actions sharing one id must fail safely
+        // rather than silently using whichever Array.find() finds first.
+        const matchingActions = registry
           .informationActionsOf(player.actualRole)
-          .find((a) => a.id === informationActionId);
-        if (!action) {
+          .filter((a) => a.id === informationActionId);
+        if (matchingActions.length === 0) {
           return { ok: false, message: `"${player.actualRole}" has no Information Action "${informationActionId}".` };
         }
-        const validation = validateInformationValues(action.requirements, values);
+        if (matchingActions.length > 1) {
+          return { ok: false, message: `Malformed Role Information: duplicate Information Action id "${informationActionId}".` };
+        }
+        const action = matchingActions[0]!;
+        // 4. Timing valid where timing is known.
+        const timingCheck = validateInformationTiming(action.timing, game);
+        if (!timingCheck.ok) return timingCheck;
+        // 5. Information Requirements are themselves coherent.
+        const coherence = validateRequirementsCoherent(action.requirements);
+        if (!coherence.ok) return coherence;
+        // 6-8. Information Values are structurally valid, and any Player/
+        // Role references resolve in the current authoritative snapshot /
+        // active Role registry.
+        const validation = validateInformationValues(action.requirements, values, {
+          playerIds: { has: (id) => id in game.players },
+          roleIds: { has: (id) => !!registry.get(id) },
+        });
         if (!validation.ok) return validation;
 
         const record = {

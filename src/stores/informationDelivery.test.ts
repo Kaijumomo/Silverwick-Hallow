@@ -198,19 +198,19 @@ describe("Phase 9D.3: structural validation", () => {
 describe("Phase 9D.3: Information Delivery Record", () => {
   it("a successful command creates exactly one record with Recipient, Actual Role snapshot, Action, values, and Game Moment", () => {
     freshGame();
-    const id = seatAs(0, "chef");
+    const id = seatAs(0, "undertaker");
     atNight(3);
-    const result = state().recordInformationDelivery(id, "chef-first-night", [
-      { requirementId: "pairs", kind: "number", value: 1 },
+    const result = state().recordInformationDelivery(id, "undertaker-other-night", [
+      { requirementId: "role", kind: "role", roleId: "chef" },
     ]);
     expect(result.ok).toBe(true);
     expect(deliveries()).toHaveLength(1);
     const record = deliveries()[0]!;
     expect(record).toMatchObject({
       recipientPlayerId: id,
-      actualRole: "chef",
-      informationActionId: "chef-first-night",
-      values: [{ requirementId: "pairs", kind: "number", value: 1 }],
+      actualRole: "undertaker",
+      informationActionId: "undertaker-other-night",
+      values: [{ requirementId: "role", kind: "role", roleId: "chef" }],
       moment: { phase: "night", day: 3 },
     });
     expect(result.ok && result.id).toBe(record.id);
