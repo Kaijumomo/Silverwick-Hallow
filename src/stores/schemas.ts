@@ -21,6 +21,37 @@ export const BehaviorModeSchema = z.enum([
   "custom",
 ]);
 
+export const InformationTimingSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("firstNight") }),
+  z.object({ kind: z.literal("otherNight") }),
+  z.object({ kind: z.literal("triggered") }),
+  z.object({ kind: z.literal("manual") }),
+]);
+
+export const InformationRequirementKindSchema = z.enum([
+  "number", "player", "role", "alignment", "boolean", "text",
+]);
+
+export const InformationCardinalitySchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("exactly"), count: z.number().int().positive() }),
+  z.object({ kind: z.literal("atLeast"), count: z.number().int().positive() }),
+  z.object({ kind: z.literal("optional") }),
+]);
+
+export const InformationRequirementSchema = z.object({
+  id: z.string().min(1),
+  kind: InformationRequirementKindSchema,
+  cardinality: InformationCardinalitySchema.optional(),
+  label: z.string().optional(),
+});
+
+export const InformationActionSchema = z.object({
+  id: z.string().min(1),
+  timing: InformationTimingSchema,
+  requirements: z.array(InformationRequirementSchema),
+  instruction: z.string().optional(),
+});
+
 export const RoleDefSchema = z
   .object({
     id: z.string().min(1),
@@ -49,6 +80,7 @@ export const RoleDefSchema = z
     jinxes: z
       .array(z.object({ id: z.string().min(1), reason: z.string() }))
       .optional(),
+    informationActions: z.array(InformationActionSchema).optional(),
   })
   .passthrough();
 
@@ -128,6 +160,26 @@ export const HistoryRecordSchema = z.object({
   playerId: z.string().min(1),
   moment: GameMomentSchema.optional(),
   change: HistoryChangeSchema,
+  provenance: ProvenanceSchema.optional(),
+  note: z.string().optional(),
+});
+
+export const InformationValueSchema = z.discriminatedUnion("kind", [
+  z.object({ requirementId: z.string().min(1), kind: z.literal("number"), value: z.number() }),
+  z.object({ requirementId: z.string().min(1), kind: z.literal("player"), playerIds: z.array(z.string().min(1)) }),
+  z.object({ requirementId: z.string().min(1), kind: z.literal("role"), roleId: z.string().min(1) }),
+  z.object({ requirementId: z.string().min(1), kind: z.literal("alignment"), alignment: AlignmentSchema }),
+  z.object({ requirementId: z.string().min(1), kind: z.literal("boolean"), value: z.boolean() }),
+  z.object({ requirementId: z.string().min(1), kind: z.literal("text"), value: z.string() }),
+]);
+
+export const InformationDeliveryRecordSchema = z.object({
+  id: z.string().min(1),
+  recipientPlayerId: z.string().min(1),
+  actualRole: z.string().min(1),
+  informationActionId: z.string().min(1),
+  moment: GameMomentSchema.optional(),
+  values: z.array(InformationValueSchema),
   provenance: ProvenanceSchema.optional(),
   note: z.string().optional(),
 });
@@ -220,6 +272,7 @@ export const StorytellerLobbyRecordSchema = z.object({
   startingNonTravelerCount: z.number().int().positive().optional(),
   pendingPlayers: z.record(z.string(), z.string()).default({}),
   history: z.array(HistoryRecordSchema).default([]),
+  informationDeliveries: z.array(InformationDeliveryRecordSchema).default([]),
 });
 
 export const PublicLobbyRecordSchema = z.object({

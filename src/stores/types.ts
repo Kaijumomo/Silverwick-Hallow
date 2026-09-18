@@ -18,6 +18,62 @@ export type BehaviorMode =
   | "poisoned"
   | "custom";
 
+export type InformationActionId = string;
+
+/**
+ * When, in BOTC play, an Information Action can occur. Reuses the same
+ * night concepts RoleDef already carries (firstNight/otherNight) rather
+ * than inventing a parallel timing model -- "triggered" and "manual" cover
+ * the two shapes a fixed night cadence cannot: an Action that only occurs
+ * on some condition (Ravenkeeper dying at night), and one the Storyteller
+ * resolves at will with no fixed cadence at all. Phase 9D.3 does not model
+ * the trigger CONDITION itself, only that one exists.
+ */
+export type InformationTiming =
+  | { kind: "firstNight" }
+  | { kind: "otherNight" }
+  | { kind: "triggered" }
+  | { kind: "manual" };
+
+export type InformationRequirementKind = "number" | "player" | "role" | "alignment" | "boolean" | "text";
+
+/** How many values a single Information Requirement expects. Omitted on a
+ * requirement means exactly one -- the common case for every kind except
+ * "player", where BOTC Roles frequently name two. */
+export type InformationCardinality =
+  | { kind: "exactly"; count: number }
+  | { kind: "atLeast"; count: number }
+  | { kind: "optional" };
+
+/** One piece of structured information an Information Action expects the
+ * Storyteller to record -- never the answer itself, only its shape. */
+export type InformationRequirement = {
+  /** Stable within its Information Action. */
+  id: string;
+  kind: InformationRequirementKind;
+  cardinality?: InformationCardinality;
+  /** Optional human-readable description of what this value represents
+   * (e.g. "the two players shown", "the character learned"). */
+  label?: string;
+};
+
+/**
+ * A BOTC Role ability interaction where information is communicated to a
+ * Recipient. Identifies which Role ability produced a later Information
+ * Delivery Record and what structure the Storyteller is expected to
+ * record for it -- never the answer, and never how to compute one.
+ */
+export type InformationAction = {
+  /** Stable within its Role. */
+  id: InformationActionId;
+  timing: InformationTiming;
+  requirements: InformationRequirement[];
+  /** Optional descriptive prompt for the Storyteller, distinct from
+   * RoleDef's own firstNightPrompt/otherNightPrompt (which describe the
+   * whole night-order wake), scoped to this specific Action. */
+  instruction?: string;
+};
+
 export type RoleDef = {
   provenance?: {
     status: "official" | "official-experimental" | "homebrew" | "unverified";
@@ -45,6 +101,13 @@ export type RoleDef = {
   reminders?: string[];
   remindersGlobal?: string[];
   jinxes?: { id: RoleId; reason: string }[];
+  /** Phase 9D.3: this Role's structured Information Actions, when known.
+   * Absent means "not yet structured" -- never inferred from `ability`
+   * prose. Overrides the centralized canonical definitions in
+   * src/data/informationActions.ts for this exact Role id (see
+   * RoleRegistry.informationActionsOf), so a custom/homebrew script can
+   * define its own. */
+  informationActions?: InformationAction[];
   [extra: string]: unknown;
 };
 
@@ -182,6 +245,46 @@ export type HistoryRecord = {
   /** Absent only when the moment genuinely isn't known -- never invented. */
   moment?: GameMoment;
   change: HistoryChange;
+  provenance?: Provenance;
+  note?: string;
+};
+
+/**
+ * One piece of structured information the Storyteller actually recorded,
+ * matching one Information Requirement by `requirementId`. Never computed
+ * by Silverwick -- always exactly what the Storyteller entered. `player`
+ * always carries an array (even for a single-Player requirement) so
+ * cardinality is uniform to validate regardless of count.
+ */
+export type InformationValue =
+  | { requirementId: string; kind: "number"; value: number }
+  | { requirementId: string; kind: "player"; playerIds: PlayerId[] }
+  | { requirementId: string; kind: "role"; roleId: RoleId }
+  | { requirementId: string; kind: "alignment"; alignment: Alignment }
+  | { requirementId: string; kind: "boolean"; value: boolean }
+  | { requirementId: string; kind: "text"; value: string };
+
+export type InformationDeliveryId = string;
+
+/**
+ * Storyteller-private record of information actually communicated to a
+ * Recipient through one of their Actual Role's Information Actions. This
+ * is bookkeeping about a communication event, not a History Record (see
+ * src/stores/history.ts) -- recording one never itself mutates Current
+ * State. `actualRole` is a snapshot: if the Recipient's Actual Role later
+ * changes, this record keeps identifying the Role that actually produced
+ * the information, never the Recipient's current one.
+ */
+export type InformationDeliveryRecord = {
+  id: InformationDeliveryId;
+  recipientPlayerId: PlayerId;
+  /** Snapshot of the Recipient's Actual Role at the moment of delivery --
+   * never re-derived from their Current State. */
+  actualRole: RoleId;
+  informationActionId: InformationActionId;
+  /** Absent only when the moment genuinely isn't known -- never invented. */
+  moment?: GameMoment;
+  values: InformationValue[];
   provenance?: Provenance;
   note?: string;
 };
@@ -326,6 +429,13 @@ export type StorytellerLobbyRecord = {
    * missing or stale history entry never changes it, and nothing is ever
    * reconstructed from this array. */
   history: HistoryRecord[];
+  /** Phase 9D.3: Storyteller-private bookkeeping of information actually
+   * communicated through a Role's Information Actions. Distinct from
+   * `history` -- recording an Information Delivery is not itself a
+   * Mutation to Current State (see src/stores/informationDelivery.ts).
+   * Never used to reconstruct Actual Role, Actual Alignment, Effects,
+   * Reminders, or Life State; Current State alone remains authoritative. */
+  informationDeliveries: InformationDeliveryRecord[];
 };
 
 /** Delivered identity at player/{id}; an absent record means unrevealed. */

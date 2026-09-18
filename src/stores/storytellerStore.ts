@@ -8,6 +8,7 @@ import { buildRegistry, deriveAlignment, type RoleRegistry } from "@/data/roleRe
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { currentGameMoment, manualEffectId } from "./effects";
 import { diffFields, type MutationContext, provenanceOf, recordIfLive, sameSnapshot } from "./history";
+import { informationDeliveryId, validateInformationValues } from "./informationDelivery";
 import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 import { invalidatePrivatePacket, pruneInapplicablePrivateInfo } from "./privatePackets";
 import { usePrivacyStore } from "./privacyStore";
@@ -26,6 +27,9 @@ import type {
   EffectRecord,
   GrimoireMode,
   GuardStamp,
+  InformationActionId,
+  InformationDeliveryId,
+  InformationValue,
   NightStepRecord,
   NightStepStatus,
   PlayerId,
@@ -45,7 +49,7 @@ const UNDO_LIMIT = 20;
  * `merge` (Phase 9C.2B.2) passes to migrateStoreState when Zustand's own
  * persist middleware skips calling `migrate` outright, which it does
  * whenever the persisted version already equals this one. */
-const STORE_VERSION = 15;
+const STORE_VERSION = 16;
 
 let _migrationResetFlag = false;
 /** Returns true (once) when migrate() discarded incompatible persisted state. */
@@ -117,6 +121,15 @@ const atCapacity = (game: StorytellerLobbyRecord): boolean =>
   (game.plannedPlayerCount >= MAX_TOTAL_PLAYERS || game.seatOrder.length >= MAX_TOTAL_PLAYERS);
 
 export type AddScriptResult = { ok: true } | { ok: false; error: string };
+
+/** Phase 9D.3: result of the Authoritative Information command. Mirrors
+ * the codebase's existing {ok:true}|{ok:false,message} command-result
+ * shape (e.g. SetupCommandResult) rather than a bare id/null, since
+ * structural validation has several distinct rejection reasons a caller
+ * should be able to surface. */
+export type RecordInformationDeliveryResult =
+  | { ok: true; id: InformationDeliveryId }
+  | { ok: false; message: string };
 
 export type LobbyConnection = {
   code: string;
@@ -273,6 +286,25 @@ export type StorytellerStore = {
    * existing per-token Storyteller reminder workflow. */
   addReminder: (id: PlayerId, reminder: Partial<Pick<ReminderRecord, "id">> & Omit<ReminderRecord, "id">) => ReminderId | null;
   removeReminder: (id: PlayerId, reminderId: ReminderId) => void;
+  /** Phase 9D.3: the single Authoritative Information command. Resolves
+   * the Recipient's Actual Role and its Information Actions from Role
+   * data (never a Role-id branch), structurally validates the supplied
+   * Information Values against that Action's Information Requirements,
+   * and -- only if valid -- creates exactly one Information Delivery
+   * Record snapshotting the Actual Role, Game Moment, and values.
+   * Structurally valid Storyteller-provided information is always stored
+   * as given; this never recalculates or rejects it based on Current
+   * State. */
+  recordInformationDelivery: (
+    recipientPlayerId: PlayerId,
+    informationActionId: InformationActionId,
+    values: InformationValue[],
+    context?: MutationContext
+  ) => RecordInformationDeliveryResult;
+  /** Phase 9D.3: removes exactly one Information Delivery Record. A
+   * correction is remove-then-recordInformationDelivery again; this never
+   * touches unrelated Current State. */
+  removeInformationDelivery: (deliveryId: InformationDeliveryId) => void;
   setNotes: (id: PlayerId, notes: string) => void;
 
   setPhase: (phase: StorytellerLobbyRecord["phase"]) => SetupCommandResult;
@@ -597,6 +629,20 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
       if (!Array.isArray(e.history)) e.history = [];
     }
   }
+  // v16 (Phase 9D.3) introduces game-level `informationDeliveries`:
+  // Storyteller-private bookkeeping of information actually communicated
+  // through a Role's Information Actions. Existing state -- Role
+  // assignments, night progress, notes, previous private packets -- never
+  // proves what the Storyteller actually told anyone, so no delivery is
+  // ever fabricated for it. Every legacy game (and every undo snapshot)
+  // simply starts with an empty collection.
+  if (fromVersion < 16) {
+    for (const entry of [s.game, ...(s.undoStack ?? [])]) {
+      if (!entry || typeof entry !== "object") continue;
+      const e = entry as Record<string, unknown>;
+      if (!Array.isArray(e.informationDeliveries)) e.informationDeliveries = [];
+    }
+  }
   const check = StorytellerStateSchema.safeParse(state);
   if (!check.success) {
     // eslint-disable-next-line no-console
@@ -702,6 +748,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           plannedTravelerCount: travelerCount,
           pendingPlayers: {},
           history: [],
+          informationDeliveries: [],
         };
         usePrivacyStore.getState().reset();
         set({ game, lobby: null, pendingKnocks: [], view: "game", undoStack: [], selectedPlayerId: null });
@@ -1805,6 +1852,53 @@ export const useStorytellerStore = create<StorytellerStore>()(
             change: { kind: "removed", item: existing },
             provenance: provenanceOf(existing),
           })),
+        });
+      },
+
+      recordInformationDelivery: (recipientPlayerId, informationActionId, values, context) => {
+        const { game, undoStack } = get();
+        if (!game) return { ok: false, message: "No game is open." };
+        const player = game.players[recipientPlayerId];
+        if (!player) return { ok: false, message: "This player is not seated." };
+        if (!player.actualRole) return { ok: false, message: "This player has no Actual Role yet." };
+        const script = selectScriptById(get(), game.scriptId);
+        if (!script) return { ok: false, message: "Unknown script." };
+        const registry = buildRegistry(script);
+        const action = registry
+          .informationActionsOf(player.actualRole)
+          .find((a) => a.id === informationActionId);
+        if (!action) {
+          return { ok: false, message: `"${player.actualRole}" has no Information Action "${informationActionId}".` };
+        }
+        const validation = validateInformationValues(action.requirements, values);
+        if (!validation.ok) return validation;
+
+        const record = {
+          id: informationDeliveryId(),
+          recipientPlayerId,
+          actualRole: player.actualRole,
+          informationActionId,
+          moment: currentGameMoment(game),
+          values,
+          ...(context?.provenance ? { provenance: context.provenance } : {}),
+        };
+        set({
+          undoStack: pushUndo(game, undoStack),
+          game: { ...game, informationDeliveries: [...game.informationDeliveries, record] },
+        });
+        return { ok: true, id: record.id };
+      },
+
+      removeInformationDelivery: (deliveryId) => {
+        const { game, undoStack } = get();
+        if (!game) return;
+        if (!game.informationDeliveries.some((d) => d.id === deliveryId)) return;
+        set({
+          undoStack: pushUndo(game, undoStack),
+          game: {
+            ...game,
+            informationDeliveries: game.informationDeliveries.filter((d) => d.id !== deliveryId),
+          },
         });
       },
 

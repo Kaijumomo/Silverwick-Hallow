@@ -54,7 +54,7 @@ function makeLobby(): StorytellerLobbyRecord {
     seatOrder: ["p1", "p2", "p3"],
     nightProgress: {},
     rolePool: [],
-    history: [],
+    history: [], informationDeliveries: [],
     plannedPlayerCount: 0,
     plannedTravelerCount: 0,
     pendingPlayers: {},
@@ -396,7 +396,7 @@ describe("writeProjections — Phase 9C.4 setup barrier atomicity", () => {
     return {
       code: "SETP", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
       bluffs: [], fabled: [], lorics: [], notes: "", setupRolesRevealed: revealed,
-      seatOrder: ["p1", "p2", "t1"], nightProgress: {}, rolePool: [], history: [],
+      seatOrder: ["p1", "p2", "t1"], nightProgress: {}, rolePool: [], history: [], informationDeliveries: [],
       plannedPlayerCount: 2, plannedTravelerCount: 0, pendingPlayers: {},
       players: {
         p1: makePublishedSTPlayer({ id: "p1", seat: 0, actualRole: "chef", shownRole: "chef" }),
@@ -554,6 +554,56 @@ describe("Phase 9D.2: live-game history persistence/recovery round trip", () => 
     const pub = JSON.stringify(await backend.get("lobbies/ABCD/public"));
     const self = JSON.stringify(await backend.get("lobbies/ABCD/player/p1"));
     for (const leak of ["history", "h1", "h2", "h3", "h4", "h5", "Old note"]) {
+      expect(pub).not.toContain(leak);
+      expect(self).not.toContain(leak);
+    }
+  });
+});
+
+describe("Phase 9D.3: Information Delivery persistence/recovery round trip", () => {
+  it("Information Delivery Records for different Information Requirement shapes survive the checkpoint round trip together, with no projection/privacy regression", async () => {
+    const backend = new MemoryRoomBackend();
+    const lobby = makeLobby();
+    lobby.informationDeliveries = [
+      {
+        // Number only (Chef).
+        id: "d1", recipientPlayerId: "p1", actualRole: "chef", informationActionId: "chef-first-night",
+        moment: { phase: "night", day: 1 },
+        values: [{ requirementId: "pairs", kind: "number", value: 1 }],
+      },
+      {
+        // Players + Role (Washerwoman).
+        id: "d2", recipientPlayerId: "p2", actualRole: "washerwoman", informationActionId: "washerwoman-first-night",
+        moment: { phase: "night", day: 1 },
+        values: [
+          { requirementId: "players", kind: "player", playerIds: ["p1", "p3"] },
+          { requirementId: "role", kind: "role", roleId: "chef" },
+        ],
+        provenance: { reason: "manually confirmed" },
+        note: "double-checked with the player",
+      },
+      {
+        // Players + Boolean (Fortune Teller).
+        id: "d3", recipientPlayerId: "p3", actualRole: "fortuneteller", informationActionId: "fortuneteller-first-night",
+        moment: { phase: "night", day: 1 },
+        values: [
+          { requirementId: "players", kind: "player", playerIds: ["p1", "p2"] },
+          { requirementId: "isDemon", kind: "boolean", value: false },
+        ],
+      },
+    ];
+
+    await writeProjections({ backend, code: "ABCD", stState: lobby, registry, online: {} });
+
+    const rawCheckpoint = (await backend.get("lobbies/ABCD/checkpoint")) as string;
+    const decoded = JSON.parse(rawCheckpoint) as { game: unknown };
+    const parsed = StorytellerGamePersistedSchema.parse(decoded.game);
+    expect(parsed.informationDeliveries).toEqual(lobby.informationDeliveries);
+
+    // No projection/privacy regression: never reached public or self.
+    const pub = JSON.stringify(await backend.get("lobbies/ABCD/public"));
+    const self = JSON.stringify(await backend.get("lobbies/ABCD/player/p1"));
+    for (const leak of ["informationDeliveries", "d1", "d2", "d3", "double-checked", "manually confirmed"]) {
       expect(pub).not.toContain(leak);
       expect(self).not.toContain(leak);
     }

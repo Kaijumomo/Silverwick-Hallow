@@ -235,7 +235,7 @@ describe("population and persisted history", () => {
     prepare(true);state().dealRolePool();
     expect(game().setupRolesRevealed).toBe(false);
     const saved=localStorage.getItem("new-blood-st")!;
-    expect(JSON.parse(saved).version).toBe(15);
+    expect(JSON.parse(saved).version).toBe(16);
     store.setState({game:null});localStorage.setItem("new-blood-st",saved);await store.persist.rehydrate();
     expect(game()).toMatchObject({phase:"setup",day:0,setupRolesDealt:true,setupRolesRevealed:false});
     expect(StorytellerGamePersistedSchema.parse(JSON.parse(JSON.stringify(game()))).setupRolesDealt).toBe(true);
@@ -350,7 +350,7 @@ describe("population and persisted history", () => {
   it("current local persistence and checkpoint schema preserve starting count", async () => {
     dealt();state().beginNightOne();
     const saved=localStorage.getItem("new-blood-st")!;
-    expect(JSON.parse(saved).version).toBe(15);
+    expect(JSON.parse(saved).version).toBe(16);
     store.setState({game:null});localStorage.setItem("new-blood-st",saved);
     await store.persist.rehydrate();expect(game().startingNonTravelerCount).toBe(5);
     const checkpoint=JSON.parse(JSON.stringify({game:game(),roster:{}}));

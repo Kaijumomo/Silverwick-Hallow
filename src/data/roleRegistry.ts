@@ -1,10 +1,18 @@
-import type { Alignment, RoleDef, RoleId, Script } from "@/stores/types";
+import type { Alignment, InformationAction, RoleDef, RoleId, Script } from "@/stores/types";
 import { TRAVELERS } from "@/data/travelers";
 import { LORICS } from "@/data/lorics";
+import { INFORMATION_ACTIONS } from "@/data/informationActions";
 
 export type RoleRegistry = {
   get: (id: RoleId) => RoleDef | undefined;
   alignmentOf: (id: RoleId) => Alignment;
+  /** Phase 9D.3: a Role's structured Information Actions, resolved from
+   * Role data alone -- never a production-code Role-id branch. A Role's
+   * own `informationActions` (set directly on its RoleDef, e.g. by a
+   * custom/homebrew script) takes precedence; the centralized canonical
+   * map is the fallback for Roles that don't define their own. An unknown
+   * Role id or a Role with none defined yet both return []. */
+  informationActionsOf: (id: RoleId) => InformationAction[];
 };
 
 export function deriveAlignment(role: RoleDef): Alignment {
@@ -38,5 +46,6 @@ export function buildRegistry(script: Script): RoleRegistry {
       }
       return deriveAlignment(r);
     },
+    informationActionsOf: (id) => map.get(id)?.informationActions ?? INFORMATION_ACTIONS[id] ?? [],
   };
 }
