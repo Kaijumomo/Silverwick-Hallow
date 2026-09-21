@@ -32,6 +32,8 @@ import {
   rotatePublicDisplayAccess,
 } from "./publicDisplayAuth";
 import { buildRichPhase9Game } from "@/test/phase9RichState";
+import { startStorytellerSession } from "./storytellerSync";
+import { SnapshotValidationError } from "./snapshots";
 
 let env: RulesTestEnvironment;
 beforeAll(async () => {
@@ -1407,6 +1409,77 @@ describe("Phase 9R.1 Finding B5: Firebase-safe optional serialization for a rich
     // projection share the same `stState` input for.
     const rawStoryteller = await ref(st, "storyteller").once("value");
     expect(rawStoryteller.val()).toBeTruthy();
+
+    await writer.dispose();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9R.1 Astra remediation (Finding A4) Proof — Firebase compatibility
+// gate before checkpoint adoption, proven against the REAL Firebase RTDB
+// emulator. Two things this proves that a pure unit test of
+// isFirebaseSafeValue alone cannot: (1) that an illegal key character
+// really is rejected by the real SDK/backend, not merely by our own
+// (possibly wrong) understanding of Firebase's constraints; and (2) that
+// gated recovery (readCheckpoint via startStorytellerSession) refuses such
+// a checkpoint BEFORE it is ever adopted as Current State, against the
+// real emulator -- never a speculative write just to find out.
+// ---------------------------------------------------------------------------
+describe("Phase 9R.1 Finding A4: Firebase compatibility gate against the real RTDB emulator", () => {
+  const code = "A4PROOF1";
+  const st = "uid-storyteller-a4";
+  const path = (suffix: string) => "lobbies/" + code + "/" + suffix;
+  const db = (uid: string) => env.authenticatedContext(uid).database();
+  const ref = (uid: string, suffix: string) => db(uid).ref(path(suffix));
+
+  test("the real Firebase RTDB SDK genuinely rejects a write whose object contains an illegal key character -- confirming this is a real SDK constraint, not an invented one", async () => {
+    await env.withSecurityRulesDisabled(async () => {
+      // The client SDK validates key legality synchronously, before any
+      // network call -- it throws directly rather than returning a
+      // rejected promise, so this asserts on the synchronous call itself.
+      expect(() => ref(st, "scratch").set({ statuses: { "bad.key": true } })).toThrow(/invalid key|bad\.key/);
+    });
+  });
+
+  test("a checkpoint containing a Firebase-illegal nested key (statuses[\"bad.key\"]) is refused by gated recovery BEFORE adoption, against the real emulator -- Current State stays null, never reaching a real projection attempt", async () => {
+    useStorytellerStore.setState({
+      game: null, lobby: null, undoStack: [], selectedPlayerId: null,
+      localSeq: 0, sync: null, customScripts: {},
+    });
+    const rawBackend = new FirebaseRoomBackend(db(st) as unknown as Database);
+    await createLobby(rawBackend, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(rawBackend, code);
+
+    // A structurally current-valid (schema-valid v16) game, seeded
+    // directly bypassing security rules -- exactly the shape a corrupted
+    // or adversarially-crafted checkpoint write would leave behind.
+    // Security rules do not (and are not expected to) enforce Firebase
+    // key legality on the *content* of an opaque checkpoint string.
+    const illegalGame = {
+      code, storytellerUid: st, scriptId: "tb", phase: "night", day: 1, notes: "",
+      players: {
+        a: {
+          id: "a", name: "Alice", seat: 0, joinedAt: 1, actualRole: "chef",
+          shownRole: null, shownAlignment: null, behaviorMode: "normal", publicDisplayRole: null,
+          alive: true, ghostVote: true, abilityUsed: false,
+          statuses: { "bad.key": true }, reminders: [], stNotes: "", isTraveler: false, effects: [],
+        },
+      },
+      seatOrder: ["a"], nightProgress: {}, fabled: [], bluffs: [], lorics: [], rolePool: [],
+      plannedPlayerCount: 1, plannedTravelerCount: 0, pendingPlayers: {},
+      history: [], informationDeliveries: [],
+    };
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.database().ref(path("checkpoint")).set(JSON.stringify({ game: illegalGame, roster: {} }));
+    });
+
+    const lobby = { code, uid: st, sessionId: session.id, status: "live" as const };
+    useStorytellerStore.getState().setLobby(lobby);
+    const writer = new SessionWriter(rawBackend, code, session.id);
+
+    await expect(startStorytellerSession(rawBackend, lobby, writer)).rejects.toThrow(SnapshotValidationError);
+    // Never adopted as Current State.
+    expect(useStorytellerStore.getState().game).toBeNull();
 
     await writer.dispose();
   });

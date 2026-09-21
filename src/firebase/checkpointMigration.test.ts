@@ -269,3 +269,300 @@ describe("Phase 9R.1 Finding B1: remote checkpoint migration", () => {
     expect(useStorytellerStore.getState().game).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 9R.1 Astra remediation (Finding A2): remote custom/homebrew
+// alignment must never be invented from the RECOVERING device's own
+// unrelated current customScripts -- a remote checkpoint carries no
+// durable script data of its own (see readCheckpoint's own doc comment),
+// so a script id that happens to collide with a locally-redefined
+// homebrew Role (same id, different type/alignment) must never let
+// migration derive an Actual Alignment the checkpoint itself never
+// proved. See MigrationScriptEvidence (gameMigration.ts).
+// ---------------------------------------------------------------------------
+describe("Phase 9R.1 Finding A2: remote custom/homebrew alignment must not be invented from unrelated local customScripts", () => {
+  const conflictingHomebrew = (scriptId: string) => ({
+    id: scriptId, name: "Conflicting Local Homebrew",
+    characters: [{ id: "doctor-esque", name: "Doctor-esque", type: "demon" as const, ability: "Kills." }],
+  });
+
+  it("a v13 remote checkpoint for a custom script recovers with Actual Alignment left UNRESOLVED when the recovering device's local customScripts define the SAME script/Role id with a CONFLICTING type", async () => {
+    const b = new MemoryRoomBackend();
+    const homebrewScriptId = "hb-conflict-1";
+    // The checkpoint's original game used this homebrew script id -- the
+    // checkpoint itself carries no script/Role data, only the scriptId
+    // string and each player's actualRole id.
+    const v13Game = baseLegacyGame({
+      scriptId: homebrewScriptId,
+      players: { a: v13Player({ actualRole: "doctor-esque", statuses: {}, reminders: [] }) },
+    });
+    await seedLegacyCheckpoint(b, v13Game);
+
+    // The RECOVERING device's current local customScripts happen to
+    // define the SAME script id and SAME Role id as a Demon (evil) -- an
+    // entirely different, conflicting definition from whatever actually
+    // produced this checkpoint. This unrelated local evidence must never
+    // be consulted for remote recovery.
+    useStorytellerStore.setState({ customScripts: { [homebrewScriptId]: conflictingHomebrew(homebrewScriptId) } });
+
+    const { lobby, session } = await freshLobby(b);
+    const writer = new SessionWriter(b, code, session.id);
+    const recovered = await startStorytellerSession(b, lobby, writer);
+    disposals.push(async () => { recovered.stop(); await writer.dispose(); });
+
+    expect(recovered.outcome).toBe("live");
+    // Never fabricated from the recovering device's own unrelated local
+    // definition -- unresolved is the only safe outcome.
+    expect(useStorytellerStore.getState().game!.players.a!.actualAlignment).toBeUndefined();
+  });
+
+  it("ordinary canonical built-in alignment is still correctly derived during remote recovery -- only built-in scripts remain objectively identifiable evidence", async () => {
+    const b = new MemoryRoomBackend();
+    const v13Game = baseLegacyGame(); // scriptId "tb", actualRole "chef" -- a real built-in
+    await seedLegacyCheckpoint(b, v13Game);
+    const { lobby, session } = await freshLobby(b);
+    const writer = new SessionWriter(b, code, session.id);
+    const recovered = await startStorytellerSession(b, lobby, writer);
+    disposals.push(async () => { recovered.stop(); await writer.dispose(); });
+
+    expect(recovered.outcome).toBe("live");
+    expect(useStorytellerStore.getState().game!.players.a!.actualAlignment).toBe("good");
+  });
+
+  it("an already-explicit legacy Actual Alignment is preserved verbatim during remote recovery, even when local customScripts conflict", async () => {
+    const b = new MemoryRoomBackend();
+    const homebrewScriptId = "hb-conflict-2";
+    const v13Game = baseLegacyGame({
+      scriptId: homebrewScriptId,
+      players: {
+        a: v13Player({
+          actualRole: "doctor-esque", statuses: {}, reminders: [],
+          actualAlignment: "good", // already explicitly recorded by the original checkpoint
+        }),
+      },
+    });
+    await seedLegacyCheckpoint(b, v13Game);
+    useStorytellerStore.setState({ customScripts: { [homebrewScriptId]: conflictingHomebrew(homebrewScriptId) } });
+
+    const { lobby, session } = await freshLobby(b);
+    const writer = new SessionWriter(b, code, session.id);
+    const recovered = await startStorytellerSession(b, lobby, writer);
+    disposals.push(async () => { recovered.stop(); await writer.dispose(); });
+
+    expect(recovered.outcome).toBe("live");
+    // Preserved verbatim, never re-derived from anything.
+    expect(useStorytellerStore.getState().game!.players.a!.actualAlignment).toBe("good");
+  });
+
+  it("Traveler rules remain unchanged during remote recovery: an unresolved Traveler alignment is never invented, even from a conflicting local homebrew definition", async () => {
+    const b = new MemoryRoomBackend();
+    const homebrewScriptId = "hb-conflict-3";
+    const v13Game = baseLegacyGame({
+      scriptId: homebrewScriptId,
+      players: { a: v13Player({ actualRole: "doctor-esque", isTraveler: true, statuses: {}, reminders: [] }) },
+    });
+    await seedLegacyCheckpoint(b, v13Game);
+    useStorytellerStore.setState({ customScripts: { [homebrewScriptId]: conflictingHomebrew(homebrewScriptId) } });
+
+    const { lobby, session } = await freshLobby(b);
+    const writer = new SessionWriter(b, code, session.id);
+    const recovered = await startStorytellerSession(b, lobby, writer);
+    disposals.push(async () => { recovered.stop(); await writer.dispose(); });
+
+    expect(recovered.outcome).toBe("live");
+    expect(useStorytellerStore.getState().game!.players.a!.actualAlignment).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9R.1 Astra remediation (Finding A3): migration transforms a VALID
+// legacy representation -- it does not repair arbitrary malformed data. A
+// genuinely absent field may be initialized as the schema intends; a field
+// that is PRESENT but malformed must be left untouched so the checkpoint
+// fails the final schema-validation gate, never silently concealed behind
+// a validly-shaped default.
+// ---------------------------------------------------------------------------
+describe("Phase 9R.1 Finding A3: migration does not sanitize malformed legacy data into valid-looking state", () => {
+  it("legacy statuses.poisoned: true migrates into an active manual Effect (positive control)", async () => {
+    const b = new MemoryRoomBackend();
+    const v13Game = baseLegacyGame({ players: { a: v13Player({ statuses: { poisoned: true }, reminders: [] }) } });
+    await seedLegacyCheckpoint(b, v13Game);
+    const { lobby, session } = await freshLobby(b);
+    const writer = new SessionWriter(b, code, session.id);
+    const recovered = await startStorytellerSession(b, lobby, writer);
+    disposals.push(async () => { recovered.stop(); await writer.dispose(); });
+
+    expect(recovered.outcome).toBe("live");
+    expect(useStorytellerStore.getState().game!.players.a!.effects)
+      .toEqual([{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" } }]);
+  });
+
+  it("legacy statuses.poisoned: false does NOT become an active Effect", async () => {
+    const b = new MemoryRoomBackend();
+    const v13Game = baseLegacyGame({ players: { a: v13Player({ statuses: { poisoned: false }, reminders: [] }) } });
+    await seedLegacyCheckpoint(b, v13Game);
+    const { lobby, session } = await freshLobby(b);
+    const writer = new SessionWriter(b, code, session.id);
+    const recovered = await startStorytellerSession(b, lobby, writer);
+    disposals.push(async () => { recovered.stop(); await writer.dispose(); });
+
+    expect(recovered.outcome).toBe("live");
+    expect(useStorytellerStore.getState().game!.players.a!.effects).toEqual([]);
+  });
+
+  it('legacy statuses.poisoned: "false" -- a truthy STRING, not the boolean false -- is REJECTED, never migrated as an active Effect, and the whole malformed checkpoint fails safely rather than silently passing', async () => {
+    const b = new MemoryRoomBackend();
+    const v13Game = baseLegacyGame({ players: { a: v13Player({ statuses: { poisoned: "false" }, reminders: [] }) } });
+    await seedLegacyCheckpoint(b, v13Game);
+    const { lobby, session } = await freshLobby(b);
+    const writer = new SessionWriter(b, code, session.id);
+    disposals.push(() => writer.dispose());
+
+    await expect(startStorytellerSession(b, lobby, writer)).rejects.toThrow(SnapshotValidationError);
+    expect(useStorytellerStore.getState().game).toBeNull();
+  });
+
+  it("a malformed but PRESENT `effects` field is never silently replaced with an empty array -- the checkpoint fails safely", async () => {
+    const b = new MemoryRoomBackend();
+    // Still detected as v13 (effects is not a real array), so migration's
+    // v13->v14 block runs and reaches this exact malformed field.
+    const v13Game = baseLegacyGame({
+      players: { a: v13Player({ effects: "corrupted-not-an-array", statuses: {}, reminders: [] }) },
+    });
+    await seedLegacyCheckpoint(b, v13Game);
+    const { lobby, session } = await freshLobby(b);
+    const writer = new SessionWriter(b, code, session.id);
+    disposals.push(() => writer.dispose());
+
+    await expect(startStorytellerSession(b, lobby, writer)).rejects.toThrow(SnapshotValidationError);
+    expect(useStorytellerStore.getState().game).toBeNull();
+  });
+
+  it("a malformed but PRESENT `history` field is never silently replaced with an empty array -- the checkpoint fails safely", async () => {
+    const b = new MemoryRoomBackend();
+    // A real `effects` array makes this detected as v14 (the v13 block is
+    // skipped entirely), isolating the history-defaulting path.
+    const v14Game = baseLegacyGame({
+      players: { a: v13Player({ statuses: {}, reminders: [], effects: [] }) },
+      history: "corrupted-not-an-array",
+    });
+    await seedLegacyCheckpoint(b, v14Game);
+    const { lobby, session } = await freshLobby(b);
+    const writer = new SessionWriter(b, code, session.id);
+    disposals.push(() => writer.dispose());
+
+    await expect(startStorytellerSession(b, lobby, writer)).rejects.toThrow(SnapshotValidationError);
+    expect(useStorytellerStore.getState().game).toBeNull();
+  });
+
+  it("a malformed but PRESENT `informationDeliveries` field is never silently replaced with an empty array -- the checkpoint fails safely", async () => {
+    const b = new MemoryRoomBackend();
+    const v15Game = baseLegacyGame({
+      players: { a: v13Player({ statuses: {}, reminders: [], effects: [] }) },
+      history: [],
+      informationDeliveries: "corrupted-not-an-array",
+    });
+    await seedLegacyCheckpoint(b, v15Game);
+    const { lobby, session } = await freshLobby(b);
+    const writer = new SessionWriter(b, code, session.id);
+    disposals.push(() => writer.dispose());
+
+    await expect(startStorytellerSession(b, lobby, writer)).rejects.toThrow(SnapshotValidationError);
+    expect(useStorytellerStore.getState().game).toBeNull();
+  });
+
+  it("a malformed player shape (a string, not an object) fails safely through the ordinary invalid-checkpoint outcome -- never an uncaught migration exception", async () => {
+    const b = new MemoryRoomBackend();
+    const v13Game = baseLegacyGame({ players: { a: "not-a-player-object" } });
+    await seedLegacyCheckpoint(b, v13Game);
+    const { lobby, session } = await freshLobby(b);
+    const writer = new SessionWriter(b, code, session.id);
+    disposals.push(() => writer.dispose());
+
+    await expect(startStorytellerSession(b, lobby, writer)).rejects.toThrow(SnapshotValidationError);
+    expect(useStorytellerStore.getState().game).toBeNull();
+  });
+
+  it("a null player value also fails safely, never crashing migration with an uncaught exception", async () => {
+    const b = new MemoryRoomBackend();
+    const v13Game = baseLegacyGame({ players: { a: null } });
+    await seedLegacyCheckpoint(b, v13Game);
+    const { lobby, session } = await freshLobby(b);
+    const writer = new SessionWriter(b, code, session.id);
+    disposals.push(() => writer.dispose());
+
+    await expect(startStorytellerSession(b, lobby, writer)).rejects.toThrow(SnapshotValidationError);
+    expect(useStorytellerStore.getState().game).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9R.1 Astra remediation (Finding A4): a checkpoint can be valid JSON
+// and pass the current Zod game schema while still containing an object
+// property name Firebase RTDB cannot store. Adopting such a checkpoint as
+// Current State would only surface the problem later, at the next real
+// Firebase projection. See firebaseKeySafety.test.ts for pure isFirebaseSafeValue
+// coverage and rules.spec.ts's "Finding A4" describe block for the real
+// Firebase RTDB emulator proof (SDK-level rejection + gated recovery
+// refusing it before adoption, both against the real emulator).
+// ---------------------------------------------------------------------------
+describe("Phase 9R.1 Finding A4: Firebase compatibility gate before checkpoint adoption", () => {
+  it('a structurally current-valid (schema-valid v16) checkpoint containing a Firebase-illegal nested key (statuses["bad.key"]) is rejected BEFORE restore -- Current State/Undo/localSeq unchanged, and no projection/flush is ever attempted', async () => {
+    const b = new MemoryRoomBackend();
+    const v16Game = baseLegacyGame({
+      phase: "night", day: 1,
+      players: { a: v13Player({ statuses: { "bad.key": true }, reminders: [], effects: [] }) },
+      history: [], informationDeliveries: [],
+    });
+    await seedLegacyCheckpoint(b, v16Game);
+    const checkpointBefore = await b.get(`${root}/checkpoint`);
+    const { lobby, session } = await freshLobby(b);
+    const writer = new SessionWriter(b, code, session.id);
+    disposals.push(() => writer.dispose());
+
+    await expect(startStorytellerSession(b, lobby, writer)).rejects.toThrow(SnapshotValidationError);
+    expect(useStorytellerStore.getState().game).toBeNull();
+    expect(useStorytellerStore.getState().undoStack).toEqual([]);
+    expect(useStorytellerStore.getState().localSeq).toBe(0);
+    // No projection/flush was ever attempted against the invalid state --
+    // the checkpoint the (rejected) recovery read is exactly what was
+    // seeded, byte for byte.
+    expect(await b.get(`${root}/checkpoint`)).toEqual(checkpointBefore);
+  });
+
+  it("a Firebase-illegal key at a deeper nested location (a History record's change.from) is also rejected before restore", async () => {
+    const b = new MemoryRoomBackend();
+    const v16Game = baseLegacyGame({
+      phase: "night", day: 1,
+      players: { a: v13Player({ statuses: {}, reminders: [], effects: [] }) },
+      history: [{
+        id: "h1", category: "life", playerId: "a",
+        change: { kind: "value", from: { "bad#key": true }, to: { alive: false } },
+      }],
+      informationDeliveries: [],
+    });
+    await seedLegacyCheckpoint(b, v16Game);
+    const { lobby, session } = await freshLobby(b);
+    const writer = new SessionWriter(b, code, session.id);
+    disposals.push(() => writer.dispose());
+
+    await expect(startStorytellerSession(b, lobby, writer)).rejects.toThrow(SnapshotValidationError);
+    expect(useStorytellerStore.getState().game).toBeNull();
+  });
+
+  it('a v13 checkpoint whose legacy effect was migrated into an id containing valid punctuation ("manual:poisoned") is NOT rejected by the compatibility gate -- only truly illegal characters reject', async () => {
+    const b = new MemoryRoomBackend();
+    const v13Game = baseLegacyGame({
+      players: { a: v13Player({ statuses: { poisoned: true }, reminders: ["Red Herring"] }) },
+    });
+    await seedLegacyCheckpoint(b, v13Game);
+    const { lobby, session } = await freshLobby(b);
+    const writer = new SessionWriter(b, code, session.id);
+    const recovered = await startStorytellerSession(b, lobby, writer);
+    disposals.push(async () => { recovered.stop(); await writer.dispose(); });
+
+    expect(recovered.outcome).toBe("live");
+    // "manual:poisoned" (a colon) is valid punctuation Firebase allows.
+    expect(useStorytellerStore.getState().game!.players.a!.effects[0]!.id).toBe("manual:poisoned");
+  });
+});

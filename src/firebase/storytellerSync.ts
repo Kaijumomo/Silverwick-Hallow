@@ -4,6 +4,7 @@ import { z } from "zod";
 import { selectScriptById, useStorytellerStore, type LobbyConnection } from "@/stores/storytellerStore";
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
 import { detectLegacyGameVersion, migrateGameEntry } from "@/stores/gameMigration";
+import { isFirebaseSafeValue } from "./firebaseKeySafety";
 import type { GuardStamp, PlayerId } from "@/stores/types";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import { buildRegistry } from "@/data/roleRegistry";
@@ -755,14 +756,30 @@ let currentConflict: PendingConflict | null = null;
  * through the exact same v13->v16 migration rules local persisted-state
  * recovery already applies (migrateGameEntry) -- never a second,
  * divergent copy of them -- before validating against the current
- * schema. `customScripts` for Role/alignment resolution comes from the
- * current local store: the checkpoint itself carries no script data, so
- * this is the best available evidence (an unresolvable Role still leaves
- * that player's alignment unresolved, never fabricated -- see
- * migrateGameEntry's own doc comment). A shape older than the supported
- * v13 floor, or one that still fails schema validation after migration,
- * fails safely as "invalid" exactly as before -- never a partial/guessed
- * recovery.
+ * schema. A shape older than the supported v13 floor, or one that still
+ * fails schema validation after migration, fails safely as "invalid"
+ * exactly as before -- never a partial/guessed recovery.
+ *
+ * Phase 9R.1 Astra remediation (Finding A2): Role/alignment resolution
+ * during THIS (remote) migration uses "canonical-only" evidence --
+ * built-in scripts only, never the recovering device's own current
+ * customScripts. A remote checkpoint carries no durable script data of
+ * its own; the recovering device's local homebrew scripts are unrelated
+ * evidence that could happen to redefine the same script/Role id
+ * differently than whatever produced this checkpoint, which would let
+ * migration derive an Actual Alignment the checkpoint itself never
+ * proved. See MigrationScriptEvidence's own doc comment (gameMigration.ts).
+ *
+ * Phase 9R.1 Astra remediation (Finding A4): a checkpoint can be valid
+ * JSON and pass the current game schema while still containing an object
+ * property name Firebase RTDB cannot store (e.g. `statuses["bad.key"]` --
+ * the schema's `z.record` only constrains key LENGTH, never which
+ * characters are allowed). Adopting such a checkpoint as Current State
+ * would only surface the problem later, at the next real Firebase
+ * projection, after it is already authoritative. isFirebaseSafeValue
+ * (firebaseKeySafety.ts) is the final gate here, after schema and
+ * lobby-code validation and before this checkpoint is ever reported
+ * "valid" -- never a speculative Firebase write just to find out.
  */
 async function readCheckpoint(
   raw: RoomBackend,
@@ -785,10 +802,15 @@ async function readCheckpoint(
   const gameRecord = rawGame as Record<string, unknown>;
   const legacyVersion = detectLegacyGameVersion(gameRecord);
   if (legacyVersion === null) return { state: { kind: "invalid" }, restored: null };
-  migrateGameEntry(gameRecord, legacyVersion, useStorytellerStore.getState().customScripts);
+  migrateGameEntry(gameRecord, legacyVersion, { kind: "canonical-only" });
 
   const parsed = StorytellerGamePersistedSchema.safeParse(gameRecord);
   if (!parsed.success || parsed.data.code !== lobby.code) return { state: { kind: "invalid" }, restored: null };
+  // Finding A4: the final gate, after schema + lobby-code validation,
+  // before this checkpoint is ever adopted.
+  if (!isFirebaseSafeValue(parsed.data) || !isFirebaseSafeValue(rosterParsed.data)) {
+    return { state: { kind: "invalid" }, restored: null };
+  }
   return { state: { kind: "valid" }, restored: { game: parsed.data, roster: rosterParsed.data } };
 }
 

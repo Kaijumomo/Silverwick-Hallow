@@ -624,6 +624,21 @@ describe("migrateStoreState", () => {
     expect(takeMigrationResetFlag()).toBe(false);
   });
 
+  it("v13->v14: an ordinary player on a CUSTOM/homebrew script derives alignment from THIS state's own persisted customScripts (Phase 9R.1 Finding A2 local-trusted-evidence path -- unaffected by the remote-only canonical-only restriction; see checkpointMigration.test.ts for the remote side of this finding)", () => {
+    const homebrewScriptId = "hb-local-13";
+    const homebrewScript = {
+      id: homebrewScriptId, name: "Local Homebrew",
+      characters: [{ id: "custom-good", name: "Custom Good", type: "townsfolk" as const, ability: "Does good things." }],
+    };
+    const state = {
+      game: minimalPersistedGame({ scriptId: homebrewScriptId, players: { a: legacyPlayer({ actualRole: "custom-good" }) } }),
+      undoStack: [],
+      customScripts: { [homebrewScriptId]: homebrewScript },
+    };
+    const result = migrateStoreState(state, 13) as { game: { players: Record<string, MigratedPlayer> } };
+    expect(result.game.players.a!.actualAlignment).toBe("good");
+  });
+
   it("v13->v14: migration is deterministic and idempotent when re-run against already-migrated data", () => {
     const state = { game: minimalPersistedGame({
       players: { a: legacyPlayer({

@@ -165,7 +165,11 @@ export const HistoryRecordSchema = z.object({
 });
 
 export const InformationValueSchema = z.discriminatedUnion("kind", [
-  z.object({ requirementId: z.string().min(1), kind: z.literal("number"), value: z.number() }),
+  // Phase 9R.1 Astra remediation (Finding A1): `.finite()` rejects NaN and
+  // ±Infinity structurally, at the schema itself -- the canonical
+  // definition every runtime caller (not just TypeScript-checked ones) is
+  // now validated against, rather than a hand-duplicated check elsewhere.
+  z.object({ requirementId: z.string().min(1), kind: z.literal("number"), value: z.number().finite() }),
   z.object({ requirementId: z.string().min(1), kind: z.literal("player"), playerIds: z.array(z.string().min(1)) }),
   z.object({ requirementId: z.string().min(1), kind: z.literal("role"), roleId: z.string().min(1) }),
   z.object({ requirementId: z.string().min(1), kind: z.literal("alignment"), alignment: AlignmentSchema }),

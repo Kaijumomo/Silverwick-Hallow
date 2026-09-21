@@ -3,7 +3,7 @@ import { useStorytellerStore as store } from "./storytellerStore";
 import { buildRegistry } from "@/data/roleRegistry";
 import { setupScript } from "@/test/setupFixtures";
 import { projectLobbyToPublic, projectLobbyToSelfMap, projectToPublic, projectToSelf } from "./projections";
-import { validateInformationValues, validateRequirementsCoherent } from "./informationDelivery";
+import { parseInformationValues, validateInformationValues, validateRequirementsCoherent } from "./informationDelivery";
 import type { InformationAction, InformationValue } from "./types";
 
 // Phase 9D.3: Role Information & Delivery system. Silverwick understands
@@ -493,5 +493,176 @@ describe("Phase 9R.1 Finding B3.3: scalar Information Values cannot satisfy a mu
     expect(validateRequirementsCoherent([
       { id: "a", kind: "text", cardinality: { kind: "atLeast", count: 2 } },
     ]).ok).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9R.1 Astra remediation (Finding A1): complete runtime structural
+// validation of Information Values. TypeScript's InformationValue union
+// constrains authoring, never a runtime caller -- these prove malformed
+// shapes that would previously reach validateInformationValues's semantic
+// checks (or worse, storage) unstructurally-validated are now rejected by
+// parseInformationValues, the canonical schema-driven gate.
+// ---------------------------------------------------------------------------
+
+/** An independent DEEP content snapshot, never reference equality alone --
+ * a captured reference could be fooled by an in-place mutation that never
+ * replaces the object. Every A1 atomicity assertion below compares against
+ * both: the reference (proves no set() call ran at all) and the deep
+ * content clone (proves nothing was mutated in place either). */
+function captureDeepAtomicityBaseline() {
+  return {
+    gameRef: state().game,
+    gameSnapshot: structuredClone(state().game),
+    undoRef: state().undoStack,
+    localSeq: state().localSeq,
+  };
+}
+function expectDeepUnchangedSince(before: ReturnType<typeof captureDeepAtomicityBaseline>) {
+  expect(state().game).toBe(before.gameRef);
+  expect(state().game).toEqual(before.gameSnapshot);
+  expect(state().undoStack).toBe(before.undoRef);
+  expect(state().localSeq).toBe(before.localSeq);
+  expect(deliveries()).toEqual([]);
+}
+
+describe("Phase 9R.1 Finding A1: parseInformationValues -- complete runtime structural validation", () => {
+  it("accepts one well-formed value for every Information kind", () => {
+    expect(parseInformationValues([{ requirementId: "a", kind: "number", value: 3 }]).ok).toBe(true);
+    expect(parseInformationValues([{ requirementId: "a", kind: "player", playerIds: ["p1", "p2"] }]).ok).toBe(true);
+    expect(parseInformationValues([{ requirementId: "a", kind: "role", roleId: "chef" }]).ok).toBe(true);
+    expect(parseInformationValues([{ requirementId: "a", kind: "alignment", alignment: "good" }]).ok).toBe(true);
+    expect(parseInformationValues([{ requirementId: "a", kind: "boolean", value: false }]).ok).toBe(true);
+    expect(parseInformationValues([{ requirementId: "a", kind: "text", value: "" }]).ok).toBe(true);
+  });
+
+  it.each<[string, unknown]>([
+    ["Boolean missing value", { requirementId: "a", kind: "boolean" }],
+    ["Boolean wrong value type", { requirementId: "a", kind: "boolean", value: "yes" }],
+    ["Text missing value", { requirementId: "a", kind: "text" }],
+    ["Text wrong value type", { requirementId: "a", kind: "text", value: 5 }],
+    ["Alignment missing alignment", { requirementId: "a", kind: "alignment" }],
+    ["Alignment invalid alignment value", { requirementId: "a", kind: "alignment", alignment: "neutral" }],
+    ["Player missing playerIds", { requirementId: "a", kind: "player" }],
+    ["Player non-array playerIds", { requirementId: "a", kind: "player", playerIds: "p1" }],
+    ["Player array containing undefined", { requirementId: "a", kind: "player", playerIds: ["p1", undefined] }],
+    ["Player array containing a non-string entry", { requirementId: "a", kind: "player", playerIds: ["p1", 42] }],
+    ["Player array containing an empty-string id", { requirementId: "a", kind: "player", playerIds: [""] }],
+    ["Number missing value", { requirementId: "a", kind: "number" }],
+    ["Number non-number value", { requirementId: "a", kind: "number", value: "5" }],
+    ["Number NaN (existing B3.1 regression)", { requirementId: "a", kind: "number", value: NaN }],
+    ["Number Infinity (existing B3.1 regression)", { requirementId: "a", kind: "number", value: Infinity }],
+    ["Number -Infinity (existing B3.1 regression)", { requirementId: "a", kind: "number", value: -Infinity }],
+    ["Role missing roleId", { requirementId: "a", kind: "role" }],
+    ["Role empty-string roleId", { requirementId: "a", kind: "role", roleId: "" }],
+    ["unknown/unsupported kind", { requirementId: "a", kind: "spooky", value: 1 }],
+    ["missing kind entirely", { requirementId: "a" }],
+    ["missing requirementId", { kind: "number", value: 1 }],
+    ["empty-string requirementId", { requirementId: "", kind: "number", value: 1 }],
+    ["not an object at all", "just a string"],
+    ["null entry", null],
+  ])("rejects: %s", (_label, malformed) => {
+    expect(parseInformationValues([malformed]).ok).toBe(false);
+  });
+
+  it("rejects when the whole `values` argument itself is not an array", () => {
+    expect(parseInformationValues("not-an-array").ok).toBe(false);
+    expect(parseInformationValues(undefined).ok).toBe(false);
+    expect(parseInformationValues(null).ok).toBe(false);
+    expect(parseInformationValues({ requirementId: "a", kind: "number", value: 1 }).ok).toBe(false);
+  });
+
+  it("canonical stored Information: an extra/unsafe property on an otherwise-valid value is stripped from the parsed result, never carried through", () => {
+    const result = parseInformationValues([
+      { requirementId: "a", kind: "boolean", value: true, extraJunk: "should never survive" },
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.values).toEqual([{ requirementId: "a", kind: "boolean", value: true }]);
+    expect(Object.keys(result.values[0]!)).toEqual(["requirementId", "kind", "value"]);
+  });
+});
+
+describe("Phase 9R.1 Finding A1: malformed Information Value payloads are rejected atomically through recordInformationDelivery", () => {
+  it("Boolean missing value is rejected atomically (deep snapshot, not only reference equality)", () => {
+    freshGame();
+    const id = seatAs(0, "fortuneteller");
+    const p2 = game().seatOrder[1]!;
+    const p3 = game().seatOrder[2]!;
+    atNight(1);
+    const before = captureDeepAtomicityBaseline();
+    const result = state().recordInformationDelivery(id, "fortuneteller-first-night", [
+      { requirementId: "players", kind: "player", playerIds: [p2, p3] },
+      { requirementId: "isDemon", kind: "boolean" } as unknown as InformationValue,
+    ]);
+    expect(result.ok).toBe(false);
+    expectDeepUnchangedSince(before);
+  });
+
+  it("Player array containing undefined is rejected atomically", () => {
+    freshGame();
+    const id = seatAs(0, "washerwoman");
+    atNight(1);
+    const before = captureDeepAtomicityBaseline();
+    const result = state().recordInformationDelivery(id, "washerwoman-first-night", [
+      { requirementId: "players", kind: "player", playerIds: [game().seatOrder[1]!, undefined] } as unknown as InformationValue,
+      { requirementId: "role", kind: "role", roleId: "chef" },
+    ]);
+    expect(result.ok).toBe(false);
+    expectDeepUnchangedSince(before);
+  });
+
+  it("Player array containing a non-string entry is rejected atomically", () => {
+    freshGame();
+    const id = seatAs(0, "washerwoman");
+    atNight(1);
+    const before = captureDeepAtomicityBaseline();
+    const result = state().recordInformationDelivery(id, "washerwoman-first-night", [
+      { requirementId: "players", kind: "player", playerIds: [game().seatOrder[1]!, 42] } as unknown as InformationValue,
+      { requirementId: "role", kind: "role", roleId: "chef" },
+    ]);
+    expect(result.ok).toBe(false);
+    expectDeepUnchangedSince(before);
+  });
+
+  it("Number missing value is rejected atomically", () => {
+    freshGame();
+    const id = seatAs(0, "chef");
+    atNight(1);
+    const before = captureDeepAtomicityBaseline();
+    const result = state().recordInformationDelivery(id, "chef-first-night", [
+      { requirementId: "pairs", kind: "number" } as unknown as InformationValue,
+    ]);
+    expect(result.ok).toBe(false);
+    expectDeepUnchangedSince(before);
+  });
+
+  it("valid values for every reachable Information kind are still accepted (never over-rejected by the new gate)", () => {
+    freshGame();
+    const wwId = seatAs(0, "washerwoman");
+    const p2 = game().seatOrder[1]!;
+    const p3 = game().seatOrder[2]!;
+    atNight(1);
+    expect(state().recordInformationDelivery(wwId, "washerwoman-first-night", [
+      { requirementId: "players", kind: "player", playerIds: [p2, p3] },
+      { requirementId: "role", kind: "role", roleId: "chef" },
+    ]).ok).toBe(true);
+    const ftId = seatAs(3, "fortuneteller");
+    expect(state().recordInformationDelivery(ftId, "fortuneteller-first-night", [
+      { requirementId: "players", kind: "player", playerIds: [p2, p3] },
+      { requirementId: "isDemon", kind: "boolean", value: false },
+    ]).ok).toBe(true);
+  });
+
+  it("a successful delivery stores the canonical schema-parsed values -- an extra property supplied on an otherwise-valid value never survives into authoritative state", () => {
+    freshGame();
+    const id = seatAs(0, "chef");
+    atNight(1);
+    const result = state().recordInformationDelivery(id, "chef-first-night", [
+      { requirementId: "pairs", kind: "number", value: 1, sneaky: "extra" } as unknown as InformationValue,
+    ]);
+    expect(result.ok).toBe(true);
+    expect(deliveries()[0]!.values).toEqual([{ requirementId: "pairs", kind: "number", value: 1 }]);
+    expect(Object.keys(deliveries()[0]!.values[0]!)).toEqual(["requirementId", "kind", "value"]);
   });
 });

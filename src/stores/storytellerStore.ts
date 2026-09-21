@@ -11,6 +11,7 @@ import { cloneOwned, diffFields, type MutationContext, provenanceOf, recordIfLiv
 import { migrateGameEntry } from "./gameMigration";
 import {
   informationDeliveryId,
+  parseInformationValues,
   validateInformationTiming,
   validateInformationValues,
   validateRequirementsCoherent,
@@ -579,8 +580,14 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // own doc comment for what each version step does and does not invent.
   if (fromVersion < 16) {
     const customScripts = (s as { customScripts?: Record<string, Script> }).customScripts ?? {};
+    // Phase 9R.1 Astra remediation (Finding A2): local persisted migration
+    // uses "trusted" evidence -- this state's OWN saved customScripts,
+    // genuine evidence of what the game actually used (unlike remote
+    // checkpoint recovery, which never has this and uses "canonical-only"
+    // -- see readCheckpoint in storytellerSync.ts and MigrationScriptEvidence's
+    // own doc comment).
     for (const entry of [s.game, ...(s.undoStack ?? [])]) {
-      migrateGameEntry(entry, fromVersion, customScripts);
+      migrateGameEntry(entry, fromVersion, { kind: "trusted", customScripts });
     }
   }
   const check = StorytellerStateSchema.safeParse(state);
@@ -1847,10 +1854,20 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // 5. Information Requirements are themselves coherent.
         const coherence = validateRequirementsCoherent(action.requirements);
         if (!coherence.ok) return coherence;
-        // 6-8. Information Values are structurally valid, and any Player/
-        // Role references resolve in the current authoritative snapshot /
-        // active Role registry.
-        const validation = validateInformationValues(action.requirements, values, {
+        // 6. Complete runtime structural validation (Phase 9R.1 Astra
+        // remediation, Finding A1): TypeScript's InformationValue union
+        // constrains authoring, never a runtime caller. Parses `values`
+        // against the canonical InformationValueSchema and, from here on,
+        // uses ONLY the schema-parsed (canonical) representation -- never
+        // the raw caller input -- so a structurally malformed or
+        // extra-property-bearing value can never reach reference
+        // validation or storage.
+        const parsedValues = parseInformationValues(values);
+        if (!parsedValues.ok) return parsedValues;
+        // 7-8. Information Values reference real Players/Roles in the
+        // current authoritative snapshot / active Role registry, and
+        // satisfy each Requirement's declared cardinality.
+        const validation = validateInformationValues(action.requirements, parsedValues.values, {
           // Phase 9R.1 (Finding B3.2): an own-property-safe existence check
           // -- `id in game.players` also resolves true for an inherited
           // Object.prototype property name (e.g. "toString"), which is
@@ -1865,16 +1882,17 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // storing it as a literal `undefined` property.
         const moment = currentGameMoment(game);
         // Phase 9R.1 (Finding B4): own a deep-cloned, undefined-stripped
-        // snapshot of the caller's `values` (including nested arrays like
-        // `playerIds`) and `context.provenance` -- neither may keep sharing
-        // references with objects/arrays the caller still owns.
+        // snapshot of the canonical parsed `values` (including nested
+        // arrays like `playerIds`) and `context.provenance` -- neither may
+        // keep sharing references with objects/arrays the caller still
+        // owns.
         const record: InformationDeliveryRecord = cloneOwned({
           id: informationDeliveryId(),
           recipientPlayerId,
           actualRole: player.actualRole,
           informationActionId,
           ...(moment ? { moment } : {}),
-          values,
+          values: parsedValues.values,
           ...(context?.provenance ? { provenance: context.provenance } : {}),
         });
         set({

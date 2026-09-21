@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { InformationValueSchema } from "./schemas";
 import type {
   InformationDeliveryId,
   InformationRequirement,
@@ -85,6 +87,42 @@ export type ReferenceContext = {
   playerIds?: ExistenceLookup<PlayerId>;
   roleIds?: ExistenceLookup<RoleId>;
 };
+
+export type ParsedInformationValues =
+  | { ok: true; values: InformationValue[] }
+  | { ok: false; message: string };
+
+/**
+ * Phase 9R.1 Astra remediation (Finding A1): complete runtime structural
+ * validation of caller-supplied Information Values, against the SAME
+ * InformationValueSchema (schemas.ts) the persisted/checkpoint boundary
+ * already validates against -- the one canonical structural definition,
+ * never a second hand-duplicated copy of the union. TypeScript's
+ * InformationValue union constrains authoring, never runtime callers: a
+ * Boolean value with no `value`, a Player value whose `playerIds` is
+ * missing, not an array, contains `undefined`, or contains an empty
+ * string, a Number value that is missing or not a number, and similar
+ * malformed runtime-only shapes can all reach this command despite never
+ * compiling as valid TypeScript input.
+ *
+ * Returns the SCHEMA-PARSED values, not the raw input, as the canonical
+ * representation every subsequent step -- reference/cardinality
+ * validation (validateInformationValues, unchanged below) and eventual
+ * storage -- must use: zod's object parsing silently strips any property
+ * that is not part of the schema, so a malformed extra or unsafe nested
+ * property on an otherwise-valid value can never survive into
+ * authoritative state (Finding A1, "canonical stored Information").
+ */
+export function parseInformationValues(values: unknown): ParsedInformationValues {
+  const parsed = z.array(InformationValueSchema).safeParse(values);
+  if (parsed.success) return { ok: true, values: parsed.data };
+  const issue = parsed.error.issues[0];
+  const path = issue?.path.join(".") ?? "";
+  return {
+    ok: false,
+    message: `Malformed Information Value${path ? ` at "${path}"` : ""}: ${issue?.message ?? "does not match the expected structure"}.`,
+  };
+}
 
 /**
  * Structural validation only: did the Storyteller supply the type and
