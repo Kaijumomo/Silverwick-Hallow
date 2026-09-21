@@ -14,6 +14,39 @@ const historyId = (): HistoryId =>
   globalThis.crypto?.randomUUID?.() ?? `h-${Math.random().toString(36).slice(2, 10)}`;
 
 /**
+ * Phase 9R.1 (Finding B4/B5): the store's ownership boundary for
+ * structured command input. Deep-clones a plain-data value so nothing
+ * stored afterward still references any part of a caller's own object or
+ * array -- a caller mutating what they passed in after the command
+ * returns must never silently change Current State, History, Provenance,
+ * or Information Delivery. Along the way it also drops every key whose
+ * value is explicitly `undefined` (Finding B5): an absent optional field
+ * must survive as an absent key, never a literal `undefined` one --
+ * Firebase RTDB rejects `undefined` outright, and relying on some OTHER
+ * serialization step (JSON.stringify, a projection scrubber) to
+ * incidentally strip it would leave the authoritative store itself
+ * unsafe to write directly. Real values -- `null`, `0`, `false`, `""` --
+ * are never touched.
+ *
+ * Deliberately scoped to one command's own accepted input -- never used
+ * for whole-game snapshots (see storytellerStore's own `clone`, which
+ * undo/restore already relies on and which has no reason to strip
+ * anything, since state reaching it is already expected to be clean).
+ */
+export function cloneOwned<T>(value: T): T {
+  if (Array.isArray(value)) return value.map((v) => cloneOwned(v)) as unknown as T;
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v === undefined) continue;
+      out[k] = cloneOwned(v);
+    }
+    return out as T;
+  }
+  return value;
+}
+
+/**
  * The narrowest reusable optional structure an Authoritative Mutation
  * Command can accept alongside its normal arguments, so a caller may
  * supply Provenance through the exact same command that changes Current
@@ -64,7 +97,13 @@ export function recordIfLive(
   if (!isLiveGamePhase(game.phase)) return updatedGame;
   const entry = build();
   if (!entry) return updatedGame;
-  const record: HistoryRecord = { id: historyId(), moment: currentGameMoment(game), ...entry };
+  // Phase 9R.1 (Finding B4): `entry` (and especially its `provenance`, an
+  // object the CALLER supplied through this same command's Mutation
+  // Context) is deep-cloned here, once, at the single choke point every
+  // Authoritative Mutation Command already funnels through -- so a caller
+  // mutating their own Provenance/change-item object after the command
+  // returns can never reach back into this stored History Record.
+  const record: HistoryRecord = cloneOwned({ id: historyId(), moment: currentGameMoment(game), ...entry });
   return { ...updatedGame, history: [...updatedGame.history, record] };
 }
 

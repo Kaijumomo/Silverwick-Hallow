@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { z } from "zod";
 import { selectScriptById, useStorytellerStore, type LobbyConnection } from "@/stores/storytellerStore";
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
+import { detectLegacyGameVersion, migrateGameEntry } from "@/stores/gameMigration";
 import type { GuardStamp, PlayerId } from "@/stores/types";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import { buildRegistry } from "@/data/roleRegistry";
@@ -737,6 +738,32 @@ type PendingConflict = {
 };
 let currentConflict: PendingConflict | null = null;
 
+/**
+ * Phase 9R.1 (Finding B1): remote checkpoints never carried an explicit
+ * game schema version (the checkpoint blob is exactly `{ game, roster }`
+ * -- see sync.ts's own writeProjections, the sole checkpoint writer).
+ * Before this fix, a checkpoint's `game` was parsed directly through the
+ * CURRENT StorytellerGamePersistedSchema, so a legitimately older
+ * (v13-v15) checkpoint game -- one local persisted-state recovery would
+ * happily migrate -- was instead rejected outright as "invalid" the
+ * moment the app itself upgraded. That silently broke the recovery
+ * contract: a game that CAN migrate locally could become unrecoverable
+ * remotely.
+ *
+ * The fix structurally infers the legacy version (detectLegacyGameVersion,
+ * gameMigration.ts) from the checkpoint's own game shape, then runs it
+ * through the exact same v13->v16 migration rules local persisted-state
+ * recovery already applies (migrateGameEntry) -- never a second,
+ * divergent copy of them -- before validating against the current
+ * schema. `customScripts` for Role/alignment resolution comes from the
+ * current local store: the checkpoint itself carries no script data, so
+ * this is the best available evidence (an unresolvable Role still leaves
+ * that player's alignment unresolved, never fabricated -- see
+ * migrateGameEntry's own doc comment). A shape older than the supported
+ * v13 floor, or one that still fails schema validation after migration,
+ * fails safely as "invalid" exactly as before -- never a partial/guessed
+ * recovery.
+ */
 async function readCheckpoint(
   raw: RoomBackend,
   lobby: LobbyConnection,
@@ -747,9 +774,22 @@ async function readCheckpoint(
   let json: unknown;
   try { json = JSON.parse(checkpoint); }
   catch { return { state: { kind: "invalid" }, restored: null }; }
-  const parsed = z.object({ game: StorytellerGamePersistedSchema, roster: z.record(z.string().min(1)) }).safeParse(json);
-  if (!parsed.success || parsed.data.game.code !== lobby.code) return { state: { kind: "invalid" }, restored: null };
-  return { state: { kind: "valid" }, restored: parsed.data };
+  if (json === null || typeof json !== "object") return { state: { kind: "invalid" }, restored: null };
+  const { game: rawGame, roster: rawRoster } = json as { game?: unknown; roster?: unknown };
+  if (rawGame === null || typeof rawGame !== "object" || Array.isArray(rawGame)) {
+    return { state: { kind: "invalid" }, restored: null };
+  }
+  const rosterParsed = z.record(z.string().min(1)).safeParse(rawRoster);
+  if (!rosterParsed.success) return { state: { kind: "invalid" }, restored: null };
+
+  const gameRecord = rawGame as Record<string, unknown>;
+  const legacyVersion = detectLegacyGameVersion(gameRecord);
+  if (legacyVersion === null) return { state: { kind: "invalid" }, restored: null };
+  migrateGameEntry(gameRecord, legacyVersion, useStorytellerStore.getState().customScripts);
+
+  const parsed = StorytellerGamePersistedSchema.safeParse(gameRecord);
+  if (!parsed.success || parsed.data.code !== lobby.code) return { state: { kind: "invalid" }, restored: null };
+  return { state: { kind: "valid" }, restored: { game: parsed.data, roster: rosterParsed.data } };
 }
 
 export type ConflictResolutionResult = "applied" | "stale" | "none";

@@ -3,7 +3,7 @@ import { useStorytellerStore as store } from "./storytellerStore";
 import { buildRegistry } from "@/data/roleRegistry";
 import { setupScript } from "@/test/setupFixtures";
 import { projectLobbyToPublic, projectLobbyToSelfMap, projectToPublic, projectToSelf } from "./projections";
-import { validateInformationValues } from "./informationDelivery";
+import { validateInformationValues, validateRequirementsCoherent } from "./informationDelivery";
 import type { InformationAction, InformationValue } from "./types";
 
 // Phase 9D.3: Role Information & Delivery system. Silverwick understands
@@ -371,5 +371,127 @@ describe("Phase 9D.3: a freshly created game starts with no Information Deliveri
   it("newGame initializes an empty collection", () => {
     freshGame();
     expect(deliveries()).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9R.1 (Finding B3): Information validation integrity.
+// ---------------------------------------------------------------------------
+
+/** Snapshots every piece of state a rejected command must leave completely
+ * unchanged, and asserts nothing moved -- by reference, not merely by deep
+ * equality, since that is the strongest possible proof no store mutation
+ * (and therefore no Undo push, no localSeq bump, no cloud dirty marking)
+ * ever ran. */
+function captureAtomicityBaseline() {
+  return { game: state().game, undoStack: state().undoStack, localSeq: state().localSeq };
+}
+function expectUnchangedSince(before: ReturnType<typeof captureAtomicityBaseline>) {
+  expect(state().game).toBe(before.game);
+  expect(state().undoStack).toBe(before.undoStack);
+  expect(state().localSeq).toBe(before.localSeq);
+}
+
+describe("Phase 9R.1 Finding B3.1: non-finite Number Information Values are rejected", () => {
+  it.each([
+    ["NaN", NaN],
+    ["Infinity", Infinity],
+    ["-Infinity", -Infinity],
+  ])("rejects %s atomically, leaving Current State/History/Deliveries/Undo/localSeq untouched", (_label, value) => {
+    freshGame();
+    const id = seatAs(0, "chef");
+    atNight(1);
+    const before = captureAtomicityBaseline();
+    const result = state().recordInformationDelivery(id, "chef-first-night", [
+      { requirementId: "pairs", kind: "number", value },
+    ]);
+    expect(result.ok).toBe(false);
+    expect(deliveries()).toEqual([]);
+    expect(game().history).toEqual([]);
+    expectUnchangedSince(before);
+  });
+
+  it("a valid finite number (including 0 and negative values) is still accepted", () => {
+    freshGame();
+    const id = seatAs(0, "chef");
+    atNight(1);
+    expect(state().recordInformationDelivery(id, "chef-first-night", [
+      { requirementId: "pairs", kind: "number", value: -3 },
+    ]).ok).toBe(true);
+  });
+});
+
+describe("Phase 9R.1 Finding B3.2: Player references must be actual own player records", () => {
+  it('rejects an inherited Object.prototype property name ("toString") as a Player reference, atomically', () => {
+    freshGame();
+    const id = seatAs(0, "washerwoman");
+    atNight(1);
+    const before = captureAtomicityBaseline();
+    const result = state().recordInformationDelivery(id, "washerwoman-first-night", [
+      { requirementId: "players", kind: "player", playerIds: ["toString", game().seatOrder[1]!] },
+      { requirementId: "role", kind: "role", roleId: "chef" },
+    ]);
+    expect(result.ok).toBe(false);
+    expect(deliveries()).toEqual([]);
+    expectUnchangedSince(before);
+  });
+
+  it("a genuine, actually-seated Player id is still accepted (the fix never alters valid references)", () => {
+    freshGame();
+    const id = seatAs(0, "washerwoman");
+    const p2 = game().seatOrder[1]!;
+    const p3 = game().seatOrder[2]!;
+    atNight(1);
+    expect(state().recordInformationDelivery(id, "washerwoman-first-night", [
+      { requirementId: "players", kind: "player", playerIds: [p2, p3] },
+      { requirementId: "role", kind: "role", roleId: "chef" },
+    ]).ok).toBe(true);
+  });
+});
+
+describe("Phase 9R.1 Finding B3.3: scalar Information Values cannot satisfy a multi-value cardinality", () => {
+  it("a malformed custom Role declaring a Number requirement with cardinality exactly:2 fails safely rather than silently accepting one scalar value, atomically", () => {
+    const malformedAction: InformationAction = {
+      id: "malformed-scalar-action", timing: { kind: "manual" },
+      requirements: [{ id: "count", kind: "number", cardinality: { kind: "exactly", count: 2 } }],
+    };
+    const homebrewScript = {
+      ...setupScript,
+      characters: setupScript.characters.map((c) =>
+        c.id === "chef" ? { ...c, informationActions: [malformedAction] } : c
+      ),
+    };
+    store.setState({ customScripts: { [setupScript.id]: setupScript } });
+    state().newGame(setupScript.id, { plannedPlayerCount: 3, plannedTravelerCount: 0 });
+    for (let i = 0; i < 3; i++) state().addPlayerToSeat("Player " + i);
+    // Swap in the homebrew script's Role data for THIS already-created game
+    // (a malformed Role definition, not a malformed player input) without
+    // going through newGame again.
+    store.setState({ customScripts: { [setupScript.id]: homebrewScript } });
+    const id = seatAs(0, "chef");
+    atNight(1);
+    const before = captureAtomicityBaseline();
+
+    const result = state().recordInformationDelivery(id, "malformed-scalar-action", [
+      { requirementId: "count", kind: "number", value: 1 },
+    ]);
+    expect(result.ok).toBe(false);
+    expect(deliveries()).toEqual([]);
+    expectUnchangedSince(before);
+  });
+
+  it("exactly:1 and optional remain coherent for scalar kinds -- and a Player requirement's own multi-value cardinality is untouched by the fix", () => {
+    expect(validateRequirementsCoherent([
+      { id: "a", kind: "number", cardinality: { kind: "exactly", count: 1 } },
+      { id: "b", kind: "text", cardinality: { kind: "optional" } },
+      { id: "c", kind: "boolean" }, // no cardinality at all -- implicitly exactly:1, still coherent
+      { id: "d", kind: "player", cardinality: { kind: "exactly", count: 2 } }, // Player DOES carry an array
+    ])).toEqual({ ok: true });
+  });
+
+  it("a scalar requirement declaring atLeast:2 is rejected the same way as exactly:2", () => {
+    expect(validateRequirementsCoherent([
+      { id: "a", kind: "text", cardinality: { kind: "atLeast", count: 2 } },
+    ]).ok).toBe(false);
   });
 });

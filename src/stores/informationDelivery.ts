@@ -31,6 +31,20 @@ export function validateRequirementsCoherent(requirements: InformationRequiremen
       && !(Number.isInteger(cardinality.count) && cardinality.count > 0)) {
       return { ok: false, message: `Malformed Information Action: invalid cardinality for requirement "${requirement.id}".` };
     }
+    // Phase 9R.1 (Finding B3.3): only a "player" Information Value ever
+    // carries an array (`playerIds`) -- every other kind's InformationValue
+    // shape represents exactly one value, structurally. A requirement of a
+    // non-player kind declaring a cardinality that needs more than one
+    // value (exactly N>1, or atLeast N>1) can therefore never be satisfied
+    // by any value this data model can express -- that is a malformed/
+    // unsupported requirement definition, never something a single scalar
+    // value should be allowed to silently "satisfy".
+    if (cardinality && cardinality.kind !== "optional" && requirement.kind !== "player" && cardinality.count > 1) {
+      return {
+        ok: false,
+        message: `Malformed Information Action: requirement "${requirement.id}" is a scalar kind ("${requirement.kind}") but declares a cardinality of ${cardinality.count}, which no single Information Value can satisfy.`,
+      };
+    }
   }
   return { ok: true };
 }
@@ -102,6 +116,18 @@ export function validateInformationValues(
       return { ok: false, message: `Multiple values supplied for requirement "${value.requirementId}".` };
     }
     seenRequirementIds.add(value.requirementId);
+
+    // Phase 9R.1 (Finding B3.1): a non-finite Number Information Value
+    // (NaN, Infinity, -Infinity) must never enter authoritative state --
+    // JSON conversion silently turns NaN/±Infinity into `null` on the way
+    // to persistence/Firebase, which would then rehydrate as a value the
+    // Storyteller never actually recorded. This is purely a structural
+    // guard, not an invented gameplay range limit: any finite number,
+    // including negative or zero, continues to be accepted exactly as
+    // before.
+    if (value.kind === "number" && !Number.isFinite(value.value)) {
+      return { ok: false, message: `"${value.requirementId}" must be a finite number.` };
+    }
 
     if (value.kind === "player" && refs.playerIds) {
       for (const playerId of value.playerIds) {

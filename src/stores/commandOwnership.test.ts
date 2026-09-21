@@ -1,0 +1,193 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import { useStorytellerStore as store } from "./storytellerStore";
+import { setupScript, standardRoles } from "@/test/setupFixtures";
+import { needsShownIdentity } from "./identity";
+
+// Phase 9R.1 (Finding B4): once an Authoritative Mutation Command accepts
+// structured input, the store must own its own immutable snapshot of it --
+// later mutation of the CALLER's original object/array must never alter
+// Current State, History, Provenance, or Information Delivery. Each test
+// below: (1) calls a command with a mutable object/array the test keeps its
+// own reference to, (2) saves the authoritative result, (3) mutates the
+// ORIGINAL input after the command has already returned, (4) confirms the
+// store is unaffected, and (5) confirms localSeq does not move again purely
+// from that external mutation (no second store command ran).
+
+const game = () => store.getState().game!;
+const state = () => store.getState();
+
+const STORAGE_KEY = "new-blood-st";
+
+beforeEach(() => {
+  store.setState({
+    game: null, lobby: null, undoStack: [], selectedPlayerId: null,
+    localSeq: 0, sync: null, customScripts: { [setupScript.id]: setupScript },
+  });
+  localStorage.clear();
+});
+
+function dealtGame(count = 7) {
+  state().newGame(setupScript.id, { plannedPlayerCount: count, plannedTravelerCount: 0 });
+  for (let i = 0; i < count; i++) state().addPlayerToSeat("Player " + i);
+  state().setRolePool(standardRoles(count));
+  expect(state().dealRolePool().ok).toBe(true);
+}
+
+/** Advances a freshly dealt Setup game into live play. */
+function goLive() {
+  for (const id of game().seatOrder) {
+    const actualRole = game().players[id]!.actualRole;
+    if (!actualRole) continue;
+    if (needsShownIdentity(actualRole)) state().setShownRole(id, "chef");
+    else state().showAssignedRole(id);
+  }
+  expect(state().revealRoles().ok).toBe(true);
+  expect(state().beginNightOne().ok).toBe(true);
+}
+
+describe("Phase 9R.1 Finding B4: Provenance ownership", () => {
+  it("mutating the caller's original Provenance object after setAlive() returns does not alter the stored History Record", () => {
+    dealtGame();
+    goLive();
+    const id = game().seatOrder[0]!;
+
+    const provenance = { reason: "killed by the Demon", note: "original note" };
+    state().setAlive(id, false, { provenance });
+    const localSeqAfterCommand = state().localSeq;
+    const storedRecord = game().history.find((h) => h.playerId === id && h.category === "life")!;
+    expect(storedRecord.provenance).toEqual({ reason: "killed by the Demon", note: "original note" });
+
+    // The caller's own object is mutated AFTER the command has already
+    // returned and stored its snapshot.
+    provenance.reason = "MUTATED AFTER THE FACT";
+    provenance.note = "MUTATED AFTER THE FACT";
+
+    const restoredRecord = game().history.find((h) => h.playerId === id && h.category === "life")!;
+    expect(restoredRecord.provenance).toEqual({ reason: "killed by the Demon", note: "original note" });
+    expect(restoredRecord.provenance).not.toEqual(provenance);
+    // No second store command ran -- localSeq must not have moved again.
+    expect(state().localSeq).toBe(localSeqAfterCommand);
+  });
+
+  it("survives a real localStorage persist/rehydrate cycle unaffected by the caller's later mutation", async () => {
+    dealtGame();
+    goLive();
+    const id = game().seatOrder[0]!;
+    const provenance = { reason: "Storyteller ruling" };
+    state().setGhostVote(id, false, { provenance });
+    provenance.reason = "MUTATED AFTER THE FACT";
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const raw = localStorage.getItem(STORAGE_KEY);
+    expect(raw).toBeTruthy();
+    const beforeGame = game();
+    store.setState({ game: null, lobby: null, undoStack: [], selectedPlayerId: null, localSeq: 0, sync: null });
+    localStorage.setItem(STORAGE_KEY, raw!);
+    await store.persist.rehydrate();
+
+    const record = game().history.find((h) => h.playerId === id && h.category === "life")!;
+    expect(record.provenance).toEqual({ reason: "Storyteller ruling" });
+    expect(game()).toEqual(beforeGame);
+  });
+});
+
+describe("Phase 9R.1 Finding B4: Information Value ownership (including nested Player id arrays)", () => {
+  it("mutating the caller's original values array (and its nested playerIds array) after recordInformationDelivery() returns does not alter the stored record", () => {
+    dealtGame();
+    goLive();
+    const wwId = game().seatOrder.find((id) => game().players[id]!.actualRole === "washerwoman")
+      ?? (state().assignRole(game().seatOrder[0]!, "washerwoman"), game().seatOrder[0]!);
+    const targets = [game().seatOrder[1]!, game().seatOrder[2]!];
+
+    const values = [
+      { requirementId: "players", kind: "player" as const, playerIds: [...targets] },
+      { requirementId: "role", kind: "role" as const, roleId: "chef" },
+    ];
+    const result = state().recordInformationDelivery(wwId, "washerwoman-first-night", values);
+    expect(result.ok).toBe(true);
+    const localSeqAfterCommand = state().localSeq;
+    const storedBefore = game().informationDeliveries[0]!;
+    expect(storedBefore.values).toEqual(values);
+
+    // Mutate the caller's own array AND its nested playerIds array after
+    // the command has already returned.
+    (values[0] as { playerIds: string[] }).playerIds.push("INJECTED-AFTER-THE-FACT");
+    values.push({ requirementId: "extra", kind: "role" as const, roleId: "imp" });
+
+    const storedAfter = game().informationDeliveries[0]!;
+    expect(storedAfter.values).toEqual([
+      { requirementId: "players", kind: "player", playerIds: targets },
+      { requirementId: "role", kind: "role", roleId: "chef" },
+    ]);
+    expect(storedAfter.values).not.toEqual(values);
+    expect(state().localSeq).toBe(localSeqAfterCommand);
+  });
+
+  it("mutating the caller's original Mutation Context provenance after recordInformationDelivery() returns does not alter the stored record", () => {
+    dealtGame();
+    goLive();
+    const id = game().seatOrder[0]!;
+    state().assignRole(id, "chef");
+    const provenance = { note: "confirmed with player" };
+
+    const result = state().recordInformationDelivery(id, "chef-first-night", [
+      { requirementId: "pairs", kind: "number", value: 1 },
+    ], { provenance });
+    expect(result.ok).toBe(true);
+    provenance.note = "MUTATED AFTER THE FACT";
+
+    expect(game().informationDeliveries[0]!.provenance).toEqual({ note: "confirmed with player" });
+  });
+});
+
+describe("Phase 9R.1 Finding B4: Effect lifetime ownership", () => {
+  it("mutating the caller's original effect object (including its nested lifetime object) after addEffect() returns does not alter the stored Effect or its History snapshot", () => {
+    dealtGame();
+    goLive();
+    const id = game().seatOrder[0]!;
+
+    const lifetime = { kind: "nights" as const, count: 2 };
+    const effect = { type: "poisoned", sourceCharacter: "poisoner", lifetime };
+    const effectId = state().addEffect(id, effect);
+    expect(effectId).not.toBeNull();
+    const localSeqAfterCommand = state().localSeq;
+    const storedBefore = game().players[id]!.effects.find((e) => e.id === effectId)!;
+    expect(storedBefore.lifetime).toEqual({ kind: "nights", count: 2 });
+
+    // Mutate the caller's own nested lifetime object (and the top-level
+    // effect object) after the command has already returned.
+    lifetime.count = 999;
+    effect.sourceCharacter = "INJECTED-AFTER-THE-FACT";
+
+    const storedAfter = game().players[id]!.effects.find((e) => e.id === effectId)!;
+    expect(storedAfter.lifetime).toEqual({ kind: "nights", count: 2 });
+    expect(storedAfter.sourceCharacter).toBe("poisoner");
+    const historyItem = game().history.find((h) => h.category === "effect" && h.playerId === id)!;
+    expect(historyItem.change).toMatchObject({ kind: "added", item: { lifetime: { kind: "nights", count: 2 }, sourceCharacter: "poisoner" } });
+    expect(state().localSeq).toBe(localSeqAfterCommand);
+  });
+});
+
+describe("Phase 9R.1 Finding B4: Reminder ownership (addReminder -- the same pattern as addEffect)", () => {
+  it("mutating the caller's original reminder object (including its nested lifetime object) after addReminder() returns does not alter the stored Reminder or its History snapshot", () => {
+    dealtGame();
+    goLive();
+    const id = game().seatOrder[0]!;
+
+    const lifetime = { kind: "days" as const, count: 3 };
+    const reminder = { label: "Red Herring", sourceCharacter: "fortuneteller", lifetime };
+    const reminderId = state().addReminder(id, reminder);
+    expect(reminderId).not.toBeNull();
+    const storedBefore = game().players[id]!.reminders.find((r) => r.id === reminderId)!;
+    expect(storedBefore.lifetime).toEqual({ kind: "days", count: 3 });
+
+    lifetime.count = 999;
+    reminder.label = "INJECTED-AFTER-THE-FACT";
+
+    const storedAfter = game().players[id]!.reminders.find((r) => r.id === reminderId)!;
+    expect(storedAfter.lifetime).toEqual({ kind: "days", count: 3 });
+    expect(storedAfter.label).toBe("Red Herring");
+    const historyItem = game().history.find((h) => h.category === "reminder" && h.playerId === id)!;
+    expect(historyItem.change).toMatchObject({ kind: "added", item: { label: "Red Herring", lifetime: { kind: "days", count: 3 } } });
+  });
+});

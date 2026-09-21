@@ -4,10 +4,11 @@ import { BUILTIN_SCRIPTS, BUILTIN_SCRIPT_IDS } from "@/data/scripts";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
 import { StorytellerStateSchema } from "./schemas";
-import { buildRegistry, deriveAlignment, type RoleRegistry } from "@/data/roleRegistry";
+import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { currentGameMoment, manualEffectId } from "./effects";
-import { diffFields, type MutationContext, provenanceOf, recordIfLive, sameSnapshot } from "./history";
+import { cloneOwned, diffFields, type MutationContext, provenanceOf, recordIfLive, sameSnapshot } from "./history";
+import { migrateGameEntry } from "./gameMigration";
 import {
   informationDeliveryId,
   validateInformationTiming,
@@ -34,6 +35,7 @@ import type {
   GuardStamp,
   InformationActionId,
   InformationDeliveryId,
+  InformationDeliveryRecord,
   InformationValue,
   NightStepRecord,
   NightStepStatus,
@@ -568,97 +570,17 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
       });
     }
   }
-  // v14 (Phase 9D.1) introduces the structured live-state foundation:
-  // explicit actualAlignment for ordinary players (previously Traveler-
-  // only), structured effects replacing bare `statuses` booleans, and
-  // structured reminder records replacing plain strings. Never invent
-  // provenance for legacy data: an ordinary player's alignment is derived
-  // from their currently assigned canonical role only when that role is
-  // still resolvable in this script -- otherwise it is left unresolved
-  // (absent), exactly like an unresolved Traveler alignment already is.
-  // Existing Traveler alignment, once explicitly chosen, is preserved
-  // verbatim and never touched here. Idempotent: a legacy statuses.<type>
-  // boolean becomes its own deterministic manual effect and is then
-  // cleared from `statuses`, so re-running this block (e.g. against a
-  // fresh copy of the same pre-migration snapshot) never duplicates it; a
-  // legacy reminder string array is only converted while every entry is
-  // still a plain string, so an already-migrated array is left alone.
-  if (fromVersion < 14) {
-    const customScripts = (s as { customScripts?: Record<string, Script> }).customScripts ?? {};
-    const registryFor = (scriptId: string | undefined): RoleRegistry => {
-      const id = scriptId ?? "";
-      const script = BUILTIN_SCRIPTS[id] ?? customScripts[id] ?? { id, name: id, characters: [] };
-      return buildRegistry(script);
-    };
-    for (const entry of [s.game, ...(s.undoStack ?? [])]) {
-      const e = entry as { scriptId?: string; players?: Record<string, STPlayerRecord> } | undefined;
-      const players = e?.players;
-      if (!players) continue;
-      const registry = registryFor(e?.scriptId);
-      for (const p of Object.values(players)) {
-        // 1. Actual alignment: derive for an ordinary player with an
-        // assigned, still-resolvable role. Never invent one for a
-        // Traveler, and never overwrite an alignment already present.
-        if (p.actualAlignment === undefined && !p.isTraveler && p.actualRole) {
-          const role = registry.get(p.actualRole);
-          if (role) p.actualAlignment = deriveAlignment(role);
-        }
-        // 2. Effects: convert each active legacy status boolean into its
-        // own deterministic manual effect, then clear the boolean so
-        // `statuses` is never read as truth again.
-        if (!Array.isArray(p.effects)) p.effects = [];
-        for (const type of ["drunk", "poisoned", "protected"]) {
-          if (p.statuses?.[type]) {
-            const id = `manual:${type}`;
-            if (!p.effects.some((eff) => eff.id === id)) {
-              p.effects.push({ id, type, lifetime: { kind: "manual" } });
-            }
-            delete p.statuses[type];
-          }
-        }
-        // 3. Reminders: a plain string array (every entry still a string)
-        // becomes manual/legacy records with no invented source or moment.
-        // The id is derived deterministically from the player id and array
-        // position -- never randomly generated -- so two independent
-        // migrations of the same legacy snapshot always produce identical
-        // ids, and duplicate labels/order are preserved rather than
-        // collapsed. Runtime addReminder() is unaffected: it still
-        // allocates a fresh random id for a newly created reminder.
-        if (Array.isArray(p.reminders) && p.reminders.every((r) => typeof r === "string")) {
-          p.reminders = (p.reminders as unknown as string[]).map((label, index) => ({
-            id: `legacy-${p.id}-${index}`,
-            label,
-            lifetime: { kind: "manual" as const },
-          }));
-        }
-      }
-    }
-  }
-  // v15 (Phase 9D.2) introduces game-level `history`: structured,
-  // Storyteller-private bookkeeping of meaningful live-game mutations. A
-  // prior snapshot proves nothing about when its current values changed or
-  // why -- only that they are presently true -- so no event is ever
-  // fabricated for existing state. Every legacy game (and every undo
-  // snapshot) simply starts with an empty history collection.
-  if (fromVersion < 15) {
-    for (const entry of [s.game, ...(s.undoStack ?? [])]) {
-      if (!entry || typeof entry !== "object") continue;
-      const e = entry as Record<string, unknown>;
-      if (!Array.isArray(e.history)) e.history = [];
-    }
-  }
-  // v16 (Phase 9D.3) introduces game-level `informationDeliveries`:
-  // Storyteller-private bookkeeping of information actually communicated
-  // through a Role's Information Actions. Existing state -- Role
-  // assignments, night progress, notes, previous private packets -- never
-  // proves what the Storyteller actually told anyone, so no delivery is
-  // ever fabricated for it. Every legacy game (and every undo snapshot)
-  // simply starts with an empty collection.
+  // v14 (Phase 9D.1) -> v16 (Phase 9D.3): the structured live-state,
+  // History, and Information Delivery evolution. Phase 9R.1 (Finding B1)
+  // extracted the actual per-entry transformation into migrateGameEntry
+  // (gameMigration.ts) so remote checkpoint recovery (readCheckpoint in
+  // storytellerSync.ts) can apply the exact same rules to a bare remote
+  // game -- never a second, divergent copy of them. See that function's
+  // own doc comment for what each version step does and does not invent.
   if (fromVersion < 16) {
+    const customScripts = (s as { customScripts?: Record<string, Script> }).customScripts ?? {};
     for (const entry of [s.game, ...(s.undoStack ?? [])]) {
-      if (!entry || typeof entry !== "object") continue;
-      const e = entry as Record<string, unknown>;
-      if (!Array.isArray(e.informationDeliveries)) e.informationDeliveries = [];
+      migrateGameEntry(entry, fromVersion, customScripts);
     }
   }
   const check = StorytellerStateSchema.safeParse(state);
@@ -1765,8 +1687,12 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!player) return;
         const effectId = manualEffectId(status);
         const existing = player.effects.find((e) => e.id === effectId);
+        // Phase 9R.1 (Finding B5): currentGameMoment(game) is undefined once
+        // the game has ended -- omit `appliedAt` entirely rather than storing
+        // it as a literal `undefined` property (Firebase RTDB rejects that).
+        const appliedAt = currentGameMoment(game);
         const newEffect: EffectRecord | null = on
-          ? { id: effectId, type: status, lifetime: { kind: "manual" as const }, appliedAt: currentGameMoment(game) }
+          ? { id: effectId, type: status, lifetime: { kind: "manual" as const }, ...(appliedAt ? { appliedAt } : {}) }
           : null;
         // A true no-op (re-toggling an already-active manual effect to the
         // identical shape, or toggling off something not currently active)
@@ -1791,7 +1717,11 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const player = game.players[id];
         if (!player) return null;
         const effectId = effect.id ?? newId();
-        const record: EffectRecord = { ...effect, id: effectId };
+        // Phase 9R.1 (Finding B4/B5): own a deep-cloned, undefined-stripped
+        // snapshot of the caller's input -- a shallow `{ ...effect, id }`
+        // still shares nested objects (lifetime, appliedAt, ...) by
+        // reference with whatever the caller passed in.
+        const record: EffectRecord = cloneOwned({ ...effect, id: effectId });
         const existing = player.effects.find((e) => e.id === effectId);
         // True no-op: an identical effect already exists under this id.
         if (existing && sameSnapshot(existing, record)) return effectId;
@@ -1842,7 +1772,8 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const player = game.players[id];
         if (!player) return null;
         const reminderId = reminder.id ?? newId();
-        const record: ReminderRecord = { ...reminder, id: reminderId };
+        // Phase 9R.1 (Finding B4/B5): see addEffect's identical rationale.
+        const record: ReminderRecord = cloneOwned({ ...reminder, id: reminderId });
         const existing = player.reminders.find((r) => r.id === reminderId);
         // True no-op: an identical reminder already exists under this id.
         if (existing && sameSnapshot(existing, record)) return reminderId;
@@ -1912,20 +1843,32 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // Role references resolve in the current authoritative snapshot /
         // active Role registry.
         const validation = validateInformationValues(action.requirements, values, {
-          playerIds: { has: (id) => id in game.players },
+          // Phase 9R.1 (Finding B3.2): an own-property-safe existence check
+          // -- `id in game.players` also resolves true for an inherited
+          // Object.prototype property name (e.g. "toString"), which is
+          // never an actual seated player.
+          playerIds: { has: (id) => Object.prototype.hasOwnProperty.call(game.players, id) },
           roleIds: { has: (id) => !!registry.get(id) },
         });
         if (!validation.ok) return validation;
 
-        const record = {
+        // Phase 9R.1 (Finding B5): currentGameMoment(game) is undefined
+        // once the game has ended -- omit `moment` entirely rather than
+        // storing it as a literal `undefined` property.
+        const moment = currentGameMoment(game);
+        // Phase 9R.1 (Finding B4): own a deep-cloned, undefined-stripped
+        // snapshot of the caller's `values` (including nested arrays like
+        // `playerIds`) and `context.provenance` -- neither may keep sharing
+        // references with objects/arrays the caller still owns.
+        const record: InformationDeliveryRecord = cloneOwned({
           id: informationDeliveryId(),
           recipientPlayerId,
           actualRole: player.actualRole,
           informationActionId,
-          moment: currentGameMoment(game),
+          ...(moment ? { moment } : {}),
           values,
           ...(context?.provenance ? { provenance: context.provenance } : {}),
-        };
+        });
         set({
           undoStack: pushUndo(game, undoStack),
           game: { ...game, informationDeliveries: [...game.informationDeliveries, record] },

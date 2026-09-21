@@ -1277,3 +1277,121 @@ describe("Phase 9D.5 Proof E: writer replacement / stale-writer protection for a
     await secondWriter.dispose();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 9R.1 (Finding B5) Proof — Firebase-safe optional serialization,
+// proven against the REAL Firebase RTDB emulator (never MemoryRoomBackend,
+// which never exercises the SDK's own undefined-rejection behavior). Builds
+// a rich Phase 9 game through real production commands, then explicitly
+// layers in the EXACT formerly-problematic optional shapes the Phase 9
+// closure audit reproduced -- a Provenance with an explicit `note: undefined`,
+// an Effect with an explicit `sourcePlayer: undefined`, and a
+// triggered/manual Information Delivery recorded after phase === "ended"
+// (where currentGameMoment() intentionally returns undefined) -- and proves
+// the resulting state still passes through the real production
+// writeProjections() chokepoint against real Firebase RTDB without the SDK
+// rejecting it for an undefined value anywhere in the write.
+// ---------------------------------------------------------------------------
+describe("Phase 9R.1 Finding B5: Firebase-safe optional serialization for a rich Phase 9 game (real emulator)", () => {
+  const code = "B5PROOF1";
+  const st = "uid-storyteller-b5";
+  const path = (suffix: string) => "lobbies/" + code + "/" + suffix;
+  const db = (uid: string) => env.authenticatedContext(uid).database();
+  const ref = (uid: string, suffix: string) => db(uid).ref(path(suffix));
+
+  test("a rich game built from explicit-undefined Provenance/Effect input and an ended-phase Information Delivery still writes successfully through the real production writeProjections() chokepoint", async () => {
+    useStorytellerStore.setState({
+      game: null, lobby: null, undoStack: [], selectedPlayerId: null,
+      localSeq: 0, sync: null, customScripts: {},
+    });
+    const handles = buildRichPhase9Game();
+    const store = useStorytellerStore.getState();
+
+    // Exact reproduction #1 (Phase 9 closure audit): a Provenance object
+    // with an explicit `note: undefined` on an already-live mutation.
+    store.setAlive(handles.investigatorId, false, {
+      provenance: { reason: "known", note: undefined },
+    });
+
+    // Exact reproduction #2: an Effect with an explicit `sourcePlayer:
+    // undefined`.
+    store.addEffect(handles.investigatorId, {
+      type: "protected", lifetime: { kind: "manual" }, sourcePlayer: undefined,
+    });
+
+    // Exact reproduction #3: a triggered Information Delivery recorded
+    // after the game has ended, where currentGameMoment() intentionally
+    // returns undefined -- must omit `moment` entirely, never store it as
+    // literal `undefined`.
+    store.assignRole(handles.investigatorId, "ravenkeeper");
+    const endResult = store.setPhase("ended");
+    expect(endResult.ok).toBe(true);
+    const delivery = useStorytellerStore.getState().recordInformationDelivery(
+      handles.investigatorId, "ravenkeeper-triggered",
+      [
+        { requirementId: "chosenPlayer", kind: "player", playerIds: [handles.chefId] },
+        { requirementId: "role", kind: "role", roleId: "chef" },
+      ],
+      { provenance: { reason: "known", note: undefined } }
+    );
+    expect(delivery.ok).toBe(true);
+
+    const richGame = useStorytellerStore.getState().game!;
+    // Confirm the accepted state is already canonical -- no literal
+    // `undefined` value survived into the authoritative object -- BEFORE
+    // it ever reaches the network. Never rely on JSON.stringify() alone
+    // for this: it would coincidentally strip undefined too, masking a
+    // real store-boundary bug (Finding B5's whole point). Check each
+    // formerly-problematic key is genuinely ABSENT, not merely reads as
+    // `undefined` on access.
+    const investigator = richGame.players[handles.investigatorId]!;
+    // investigatorId already carries an EARLIER "life"-category History
+    // record from the rich build's own setGhostVote call (no provenance) --
+    // search from the end so this finds the setAlive record just added
+    // above, not that unrelated earlier one.
+    const lifeRecord = [...richGame.history].reverse().find(h => h.category === "life" && h.playerId === handles.investigatorId)!;
+    expect(Object.keys(lifeRecord.provenance!)).not.toContain("note");
+    const protectedEffect = investigator.effects.find(e => e.type === "protected")!;
+    expect(Object.keys(protectedEffect)).not.toContain("sourcePlayer");
+    const endedDelivery = richGame.informationDeliveries.find(d => d.informationActionId === "ravenkeeper-triggered")!;
+    expect(Object.keys(endedDelivery)).not.toContain("moment");
+    expect(Object.keys(endedDelivery.provenance!)).not.toContain("note");
+
+    const rawBackend = new FirebaseRoomBackend(db(st) as unknown as Database);
+    await createLobby(rawBackend, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(rawBackend, code);
+    const writer = new SessionWriter(rawBackend, code, session.id);
+    await writer.start();
+
+    // The real proof: production writeProjections() against the real RTDB
+    // emulator. Firebase's own SDK rejects a literal `undefined` anywhere
+    // in a write outright -- MemoryRoomBackend would silently accept it
+    // (Finding B5's own contract: this must never substitute for the real
+    // emulator path).
+    await writeProjections({
+      backend: writer, code, stState: { ...richGame, code, storytellerUid: st },
+      registry: buildRegistry(troubleBrewing), online: {}, membership: {},
+    });
+
+    const rawCheckpoint = (await ref(st, "checkpoint").once("value")).val() as string;
+    expect(rawCheckpoint).not.toContain("undefined");
+    const parsed = JSON.parse(rawCheckpoint) as { game: StorytellerLobbyRecord };
+    const parsedLifeRecord = [...parsed.game.history].reverse().find(h => h.category === "life" && h.playerId === handles.investigatorId)!;
+    expect(parsedLifeRecord.provenance).toEqual({ reason: "known" });
+    const parsedEffect = parsed.game.players[handles.investigatorId]!.effects.find(e => e.type === "protected")!;
+    expect(parsedEffect.sourcePlayer).toBeUndefined();
+    expect("sourcePlayer" in parsedEffect).toBe(false);
+    const parsedDelivery = parsed.game.informationDeliveries.find(d => d.informationActionId === "ravenkeeper-triggered")!;
+    expect("moment" in parsedDelivery).toBe(false);
+    expect(parsedDelivery.provenance).toEqual({ reason: "known" });
+
+    // The ST-private raw projection (the OTHER path B5 names as sending the
+    // object directly) also wrote successfully -- confirming the fix holds
+    // for both write targets the checkpoint and the raw storyteller
+    // projection share the same `stState` input for.
+    const rawStoryteller = await ref(st, "storyteller").once("value");
+    expect(rawStoryteller.val()).toBeTruthy();
+
+    await writer.dispose();
+  });
+});
