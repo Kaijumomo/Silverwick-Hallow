@@ -723,6 +723,125 @@ describe("migrateStoreState", () => {
     expect(twice.game.informationDeliveries).toEqual([]);
     expect(twice).toEqual(once);
   });
+
+  // -------------------------------------------------------------------------
+  // Phase 9D.5 Proof G: the full migration chain through v16, in ONE call
+  // per starting version (never a separate call per threshold -- that is
+  // not how the real persist middleware invokes this), covering both
+  // `game` and an `undoStack` entry together so neither is migrated in
+  // isolation from the other. Each fixture is deliberately non-trivial
+  // (real legacy statuses/reminders, or real already-migrated
+  // history/informationDeliveries content) so a cross-field corruption --
+  // migration overwriting legitimate data, duplicating history, or
+  // fabricating a delivery -- would actually show up.
+  // -------------------------------------------------------------------------
+  describe("Phase 9D.5 Proof G: full chain through v16", () => {
+    it("v13->v16: a legacy v13 store (structured live-state, History, and Information Delivery all still to come) migrates completely in one call, for game AND undoStack", () => {
+      const v13Player = legacyPlayer({
+        actualRole: "chef", statuses: { poisoned: true }, reminders: ["Poisoned Reminder"],
+      });
+      const v13Game = minimalPersistedGame({ players: { a: v13Player }, plannedTravelerCount: 0 });
+      const state = { game: v13Game, undoStack: [v13Game] };
+
+      const result = migrateStoreState(state, 13) as {
+        game: { players: Record<string, MigratedPlayer>; history: unknown[]; informationDeliveries: unknown[]; plannedTravelerCount: number };
+        undoStack: { players: Record<string, MigratedPlayer>; history: unknown[]; informationDeliveries: unknown[] }[];
+      };
+      expect(takeMigrationResetFlag()).toBe(false);
+
+      for (const entry of [result.game, result.undoStack[0]!]) {
+        expect(entry.players.a!.actualAlignment).toBe("good"); // v13->v14: derived from the resolvable chef role
+        expect(entry.players.a!.effects).toEqual([{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" } }]);
+        expect(entry.players.a!.reminders).toEqual([{ id: "legacy-a-0", label: "Poisoned Reminder", lifetime: { kind: "manual" } }]);
+        expect(entry.players.a!.statuses).toEqual({}); // the legacy boolean is cleared, never left as stale truth
+        expect(entry.history).toEqual([]); // v13->v15: nothing to fabricate for a game that never tracked it
+        expect(entry.informationDeliveries).toEqual([]); // v13->v16: likewise
+      }
+      expect(result.game.plannedTravelerCount).toBe(0); // already-present v13 field survives untouched
+    });
+
+    it("v14->v16: an already-structured v14 store (real actualAlignment/effects/reminders) migrates only by adding empty History and Information Delivery, for game AND undoStack -- everything else byte-for-byte unchanged", () => {
+      const v14Player = legacyPlayer({
+        actualRole: "chef", actualAlignment: "good",
+        effects: [{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" } }],
+        reminders: [{ id: "legacy-a-0", label: "Poisoned Reminder", lifetime: { kind: "manual" } }],
+      });
+      const v14Game = minimalPersistedGame({ players: { a: v14Player }, plannedTravelerCount: 1 });
+      const state = { game: v14Game, undoStack: [v14Game] };
+
+      const result = migrateStoreState(state, 14) as {
+        game: { players: Record<string, MigratedPlayer>; history: unknown[]; informationDeliveries: unknown[]; plannedTravelerCount: number };
+        undoStack: { players: Record<string, MigratedPlayer>; history: unknown[]; informationDeliveries: unknown[] }[];
+      };
+      expect(takeMigrationResetFlag()).toBe(false);
+
+      for (const entry of [result.game, result.undoStack[0]!]) {
+        // The v14 structured live-state fields pass through completely
+        // untouched -- migration must never re-derive or re-convert data
+        // that is already in its final, current-version shape.
+        expect(entry.players.a!.actualAlignment).toBe("good");
+        expect(entry.players.a!.effects).toEqual([{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" } }]);
+        expect(entry.players.a!.reminders).toEqual([{ id: "legacy-a-0", label: "Poisoned Reminder", lifetime: { kind: "manual" } }]);
+        expect(entry.history).toEqual([]);
+        expect(entry.informationDeliveries).toEqual([]);
+      }
+      expect(result.game.plannedTravelerCount).toBe(1);
+    });
+
+    it("v15->v16: real, pre-existing History content survives completely unchanged -- migration only adds empty Information Delivery, for game AND undoStack", () => {
+      const existingHistoryRecord = {
+        id: "h-existing-1", category: "life", playerId: "a",
+        change: { kind: "value", from: { alive: true }, to: { alive: false } },
+      };
+      const v15Player = legacyPlayer({ actualRole: "chef", actualAlignment: "good", effects: [] });
+      const v15Game = minimalPersistedGame({ players: { a: v15Player }, history: [existingHistoryRecord] });
+      const state = { game: v15Game, undoStack: [v15Game] };
+
+      const result = migrateStoreState(state, 15) as {
+        game: { history: unknown[]; informationDeliveries: unknown[] };
+        undoStack: { history: unknown[]; informationDeliveries: unknown[] }[];
+      };
+      expect(takeMigrationResetFlag()).toBe(false);
+
+      for (const entry of [result.game, result.undoStack[0]!]) {
+        // Not reset to [], not duplicated -- the exact pre-existing record,
+        // unchanged, still the only entry.
+        expect(entry.history).toEqual([existingHistoryRecord]);
+        expect(entry.history).toHaveLength(1);
+        expect(entry.informationDeliveries).toEqual([]);
+      }
+    });
+
+    it("v16->v16: a current, fully-populated state (real History AND Information Delivery content) passes through completely unchanged -- same reference, nothing reset or duplicated", () => {
+      const existingHistoryRecord = {
+        id: "h-existing-1", category: "life", playerId: "a",
+        change: { kind: "value", from: { alive: true }, to: { alive: false } },
+      };
+      const existingDelivery = {
+        id: "d-existing-1", recipientPlayerId: "a", actualRole: "chef", informationActionId: "chef-first-night",
+        moment: { phase: "night", day: 1 },
+        values: [{ requirementId: "pairs", kind: "number", value: 1 }],
+      };
+      const v16Player = legacyPlayer({ actualRole: "chef", actualAlignment: "good", effects: [] });
+      const v16Game = minimalPersistedGame({
+        players: { a: v16Player }, history: [existingHistoryRecord], informationDeliveries: [existingDelivery],
+      });
+      const state = { game: v16Game, undoStack: [v16Game] };
+
+      const result = migrateStoreState(state, 16) as {
+        game: { history: unknown[]; informationDeliveries: unknown[] };
+        undoStack: { history: unknown[]; informationDeliveries: unknown[] }[];
+      };
+      expect(result).toBe(state); // same top-level reference: a genuinely current state is never rebuilt
+      expect(takeMigrationResetFlag()).toBe(false);
+      expect(result.game.history).toEqual([existingHistoryRecord]);
+      expect(result.game.history).toHaveLength(1);
+      expect(result.game.informationDeliveries).toEqual([existingDelivery]);
+      expect(result.game.informationDeliveries).toHaveLength(1);
+      expect(result.undoStack[0]!.history).toEqual([existingHistoryRecord]);
+      expect(result.undoStack[0]!.informationDeliveries).toEqual([existingDelivery]);
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

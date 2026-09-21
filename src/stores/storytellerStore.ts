@@ -384,6 +384,19 @@ export type StorytellerStore = {
   restoreRemoteCheckpoint: (game: StorytellerLobbyRecord, guard: GuardStamp | null) => void;
 };
 
+// Phase 9D.5 fix: an unresolved actualAlignment is `undefined`, never a
+// concrete value -- History must record that absence as an absent key
+// (matching the "absence means unresolved" convention actualAlignment
+// already uses everywhere else), never as an explicit `undefined`-valued
+// property. The two are equivalent under JSON (localStorage, the
+// stringified remote checkpoint), but a literal `undefined` property
+// reaches the Firebase Realtime Database client raw (writeProjections'
+// un-stringified `storyteller` path) and that client rejects it outright,
+// so recording a Traveler's or ordinary player's very first alignment
+// while live-synced would fail this write with no history ever landing.
+const alignmentHistoryValue = (value: Alignment | undefined): Record<string, unknown> =>
+  value === undefined ? {} : { actualAlignment: value };
+
 const pushUndo = (
   game: StorytellerLobbyRecord | null,
   stack: StorytellerLobbyRecord[]
@@ -1591,7 +1604,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           undoStack: pushUndo(game, undoStack),
           game: recordIfLive(game, updatedGame, () => ({
             category: "alignment", playerId: id,
-            change: { kind: "value", from: { actualAlignment: p.actualAlignment }, to: { actualAlignment: alignment } },
+            change: { kind: "value", from: alignmentHistoryValue(p.actualAlignment), to: { actualAlignment: alignment } },
             ...(context?.provenance ? { provenance: context.provenance } : {}),
           })),
         });
@@ -1613,7 +1626,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           undoStack: pushUndo(game, undoStack),
           game: recordIfLive(game, updatedGame, () => ({
             category: "alignment", playerId: id,
-            change: { kind: "value", from: { actualAlignment: p.actualAlignment }, to: { actualAlignment: alignment } },
+            change: { kind: "value", from: alignmentHistoryValue(p.actualAlignment), to: { actualAlignment: alignment } },
             ...(context?.provenance ? { provenance: context.provenance } : {}),
           })),
         });
@@ -1784,12 +1797,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (existing && sameSnapshot(existing, record)) return effectId;
         const others = player.effects.filter((e) => e.id !== effectId);
         const updatedGame = patchPlayer(game, id, { effects: [...others, record] });
+        const provenance = provenanceOf(record);
         set({
           undoStack: pushUndo(game, undoStack),
           game: recordIfLive(game, updatedGame, () => ({
             category: "effect", playerId: id,
             change: { kind: "added", item: record },
-            provenance: provenanceOf(record),
+            ...(provenance ? { provenance } : {}),
           })),
         });
         return effectId;
@@ -1802,12 +1816,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const existing = player?.effects.find((e) => e.id === effectId);
         if (!player || !existing) return;
         const updatedGame = patchPlayer(game, id, { effects: player.effects.filter((e) => e.id !== effectId) });
+        const provenance = provenanceOf(existing);
         set({
           undoStack: pushUndo(game, undoStack),
           game: recordIfLive(game, updatedGame, () => ({
             category: "effect", playerId: id,
             change: { kind: "removed", item: existing },
-            provenance: provenanceOf(existing),
+            ...(provenance ? { provenance } : {}),
           })),
         });
       },
@@ -1834,12 +1849,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const updatedGame = patchPlayer(game, id, {
           reminders: [...player.reminders.filter((r) => r.id !== reminderId), record],
         });
+        const provenance = provenanceOf(record);
         set({
           undoStack: pushUndo(game, undoStack),
           game: recordIfLive(game, updatedGame, () => ({
             category: "reminder", playerId: id,
             change: { kind: "added", item: record },
-            provenance: provenanceOf(record),
+            ...(provenance ? { provenance } : {}),
           })),
         });
         return reminderId;
@@ -1852,12 +1868,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const existing = player?.reminders.find((r) => r.id === reminderId);
         if (!player || !existing) return;
         const updatedGame = patchPlayer(game, id, { reminders: player.reminders.filter((r) => r.id !== reminderId) });
+        const provenance = provenanceOf(existing);
         set({
           undoStack: pushUndo(game, undoStack),
           game: recordIfLive(game, updatedGame, () => ({
             category: "reminder", playerId: id,
             change: { kind: "removed", item: existing },
-            provenance: provenanceOf(existing),
+            ...(provenance ? { provenance } : {}),
           })),
         });
       },

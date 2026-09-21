@@ -31,6 +31,7 @@ import {
   generatePublicDisplayToken,
   rotatePublicDisplayAccess,
 } from "./publicDisplayAuth";
+import { buildRichPhase9Game } from "@/test/phase9RichState";
 
 let env: RulesTestEnvironment;
 beforeAll(async () => {
@@ -1187,5 +1188,92 @@ describe("Phase 9C.6 (OPUS-002): Public Display capability authorization", () =>
       expect(await peekDisplayMember(code, displayUid)).toBeNull();
       expect(await peekDisplayMember(code, otherDisplayUid)).toBeNull();
     } finally { await writer.dispose(); }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9D.5 Proof E — writer replacement / stale-writer protection for a
+// deliberately rich Phase 9 game, against the REAL Firebase RTDB emulator
+// (never MemoryRoomBackend). Reuses the already-approved lease-fencing rule
+// ("a second writer is denied until expiry, then the old token is fenced"
+// above) and the real production writeProjections() chokepoint, to prove
+// the rich game's structured domains -- History with Provenance,
+// Information Delivery, structured Effects/Reminders, Traveler public
+// character/private alignment/exile, and Storyteller-private notes --
+// survive an actual writer-lease replacement enforced by real security
+// rules, and that the stale (superseded) writer's own write is genuinely
+// rejected by those rules rather than merely by client-side bookkeeping.
+// ---------------------------------------------------------------------------
+describe("Phase 9D.5 Proof E: writer replacement / stale-writer protection for a rich Phase 9 game (real emulator)", () => {
+  const code = "RICH2345";
+  const st = "uid-storyteller-rich";
+  const path = (suffix: string) => "lobbies/" + code + "/" + suffix;
+  const db = (uid: string) => env.authenticatedContext(uid).database();
+  const ref = (uid: string, suffix: string) => db(uid).ref(path(suffix));
+
+  test("a rich Phase 9 checkpoint survives real writer-lease replacement intact, and the stale writer's write is fenced by real security rules", async () => {
+    useStorytellerStore.setState({
+      game: null, lobby: null, undoStack: [], selectedPlayerId: null,
+      localSeq: 0, sync: null, customScripts: {},
+    });
+    const handles = buildRichPhase9Game();
+    const richGame = useStorytellerStore.getState().game!;
+
+    const rawBackend = new FirebaseRoomBackend(db(st) as unknown as Database);
+    await createLobby(rawBackend, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(rawBackend, code);
+    const firstWriter = new SessionWriter(rawBackend, code, session.id);
+    await firstWriter.start();
+
+    // Publish the rich game through the real production projection
+    // chokepoint against the real RTDB emulator -- never a hand-written
+    // checkpoint blob.
+    await writeProjections({
+      backend: firstWriter, code, stState: { ...richGame, code, storytellerUid: st },
+      registry: buildRegistry(troubleBrewing), online: {}, membership: {},
+    });
+
+    // A second writer is denied while the first's lease is still valid --
+    // the already-approved lease-fencing rule, now guarding a real rich
+    // checkpoint rather than a placeholder one.
+    const secondWriter = new SessionWriter(rawBackend, code, session.id);
+    await expect(secondWriter.start()).rejects.toThrow(/Another Storyteller/);
+
+    // Force the lease to expire, then let the second writer legitimately
+    // take over -- exactly the existing takeover reproduction above.
+    await env.withSecurityRulesDisabled(async ctx => { await ctx.database().ref(path("writer/expiresAt")).set(0); });
+    await secondWriter.start();
+
+    // The stale (first) writer's own subsequent write is genuinely rejected
+    // by real security rules (its writeGuard revision no longer matches) --
+    // never merely prevented by this process's own bookkeeping.
+    await expect(firstWriter.update({ [path("storyteller/notes")]: "STALE WRITE MUST BE REJECTED" })).rejects.toThrow();
+    expect((await ref(st, "storyteller/notes").once("value")).val()).not.toBe("STALE WRITE MUST BE REJECTED");
+
+    // The rich checkpoint the FIRST writer published before the takeover is
+    // untouched by the rejected stale write, and correctly readable: every
+    // Phase 9 structured domain survives the writer replacement intact and
+    // unmixed.
+    const rawCheckpoint = (await ref(st, "checkpoint").once("value")).val() as string;
+    const parsed = JSON.parse(rawCheckpoint) as { game: StorytellerLobbyRecord };
+    expect(parsed.game.history).toEqual(richGame.history);
+    expect(parsed.game.history.length).toBeGreaterThan(0);
+    expect(parsed.game.informationDeliveries).toEqual(richGame.informationDeliveries);
+    expect(parsed.game.informationDeliveries.length).toBe(2);
+    expect(parsed.game.players[handles.chefId]!.stNotes).toBe("SENTINEL-PRIVATE-CHEF-NOTE");
+    expect(parsed.game.players[handles.travelerId]!.isTraveler).toBe(true);
+    expect(parsed.game.players[handles.travelerId]!.actualAlignment).toBe("evil");
+    expect(parsed.game.players[handles.travelerId]!.exiled).toBe(true);
+    expect(parsed.game.players[handles.chefId]!.effects.some(e => e.type === "poisoned")).toBe(true);
+    expect(parsed.game.players[handles.washerwomanId]!.effects.some(e => e.type === "protected")).toBe(true);
+    expect(parsed.game.players[handles.deadOrdinaryId]!.alive).toBe(false);
+
+    // The new (second) writer can legitimately write further, on top of the
+    // still-intact rich checkpoint.
+    await secondWriter.set(path("storyteller/notes"), "legitimate new writer");
+    expect((await ref(st, "storyteller/notes").once("value")).val()).toBe("legitimate new writer");
+
+    await firstWriter.dispose();
+    await secondWriter.dispose();
   });
 });

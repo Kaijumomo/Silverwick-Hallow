@@ -12,6 +12,7 @@ import type { StorytellerLobbyRecord } from "@/stores/types";
 import { buildRegistry } from "@/data/roleRegistry";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { setupScript, standardRoles } from "@/test/setupFixtures";
+import { buildRichPhase9Game } from "@/test/phase9RichState";
 import { MemoryRoomBackend } from "./memoryBackend";
 import { createLobby, revokePlayerMembership } from "./lobby";
 import { writeProjections } from "./sync";
@@ -49,6 +50,27 @@ async function host(b: MemoryRoomBackend) {
   const manager = await startStorytellerSession(b, ready.lobby, writer);
   disposals.push(async () => { manager.stop(); await writer.dispose(); });
   return { ...ready, writer, manager };
+}
+
+/** Phase 9D.5: the same real-writer/real-backend hosting flow as host()
+ * above, but the local game is the deliberately rich Phase 9 game (Setup,
+ * Deal, Reveal, Night 1, a Traveler, structured Effects/Reminders/History,
+ * Information Delivery, Storyteller-private notes) built entirely through
+ * real production commands, never hand-constructed. setLobby() binds it to
+ * this real lobby/session (setting game.code -- required for both the
+ * flush gate and checkpoint validation to accept it -- and, as always,
+ * clearing the undo stack accumulated while building it; the rich content
+ * itself is untouched). */
+async function hostRich(b: MemoryRoomBackend) {
+  await createLobby(b, "host", { codeGenerator: () => code });
+  const session = await requireActiveSession(b, code);
+  const handles = buildRichPhase9Game();
+  const lobby = { code, uid: "host", sessionId: session.id, status: "live" as const };
+  useStorytellerStore.getState().setLobby(lobby);
+  const writer = writerFor(b, session.id);
+  const manager = await startStorytellerSession(b, lobby, writer);
+  disposals.push(async () => { manager.stop(); await writer.dispose(); });
+  return { handles, session, lobby, writer, manager };
 }
 
 /** Simulate a genuinely separate Storyteller device: a fresh writer with its
@@ -1553,5 +1575,136 @@ describe("Phase 9C.2B.2B revision — RESTORE local-evidence coherence (edit dur
     expect(useStorytellerStore.getState().game!.seatOrder.some(
       id => useStorytellerStore.getState().game!.players[id]!.name === "KEEP_LOCAL roster-window edit")).toBe(true);
     expect(useStorytellerStore.getState().localSeq).toBe(editedSeq);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9D.5 Proofs C & D — Recovery & Phase 9 Integration. These reuse the
+// exact same real SessionWriter/MemoryRoomBackend/startStorytellerSession
+// machinery proven above, substituting the deliberately rich Phase 9 game
+// (src/test/phase9RichState.ts) for the minimal two-seat fixture, to prove
+// the already-approved reconnect paths carry every Phase 9 structured
+// domain -- History with Provenance, Information Delivery, structured
+// Effects/Reminders with lifetime and source, Traveler public
+// character/private alignment/exile, Setup/Deal/Reveal state, night
+// progress, and Storyteller-private notes -- through intact and unmixed,
+// never fabricated or reconstructed from History.
+// ---------------------------------------------------------------------------
+describe("Phase 9D.5 Proof C: same-lineage reconnect integrity for a rich Phase 9 game", () => {
+  it("clean reconnect: the full rich game -- History, Information Delivery, Effects/Reminders, Traveler alignment/exile, private notes -- survives untouched", async () => {
+    const b = new MemoryRoomBackend();
+    const { handles, writer, manager, lobby, session } = await hostRich(b);
+    await waitFor(() => expect(useStorytellerStore.getState().sync?.ackedGameSeq).toBe(useStorytellerStore.getState().localSeq));
+    const gameBefore = useStorytellerStore.getState().game!;
+    manager.stop(); await writer.dispose();
+
+    const replacement = writerFor(b, session.id);
+    const recovered = await startStorytellerSession(b, lobby, replacement);
+    disposals.push(async () => { recovered.stop(); await replacement.dispose(); });
+
+    expect(recovered.outcome).toBe("live");
+    const gameAfter = useStorytellerStore.getState().game!;
+    // Whole-object equality first: a same-lineage clean reconnect must
+    // retain local UNTOUCHED -- catches any field a narrower check would miss.
+    expect(gameAfter).toEqual(gameBefore);
+    expect(gameAfter.history).toEqual(gameBefore.history);
+    expect(gameAfter.history.length).toBeGreaterThan(0);
+    expect(gameAfter.informationDeliveries).toEqual(gameBefore.informationDeliveries);
+    expect(gameAfter.informationDeliveries.length).toBe(2);
+    expect(gameAfter.players[handles.chefId]!.effects).toEqual(gameBefore.players[handles.chefId]!.effects);
+    expect(gameAfter.players[handles.washerwomanId]!.reminders).toEqual(gameBefore.players[handles.washerwomanId]!.reminders);
+    expect(gameAfter.players[handles.chefId]!.stNotes).toBe("SENTINEL-PRIVATE-CHEF-NOTE");
+    expect(gameAfter.players[handles.travelerId]!.isTraveler).toBe(true);
+    expect(gameAfter.players[handles.travelerId]!.actualAlignment).toBe("evil");
+    expect(gameAfter.players[handles.travelerId]!.exiled).toBe(true);
+    expect(gameAfter.players[handles.deadOrdinaryId]!.alive).toBe(false);
+    expect(gameAfter.players[handles.ghostVoteToggledId]!.ghostVote).toBe(false);
+  });
+
+  it("dirty reconnect: an unacknowledged local edit atop the rich game survives reconnect and flushes intact to the remote projection, without disturbing unrelated recorded domains", async () => {
+    const b = new MemoryRoomBackend();
+    const { handles, writer, manager, lobby, session } = await hostRich(b);
+    await waitFor(() => expect(useStorytellerStore.getState().sync?.ackedGameSeq).toBe(useStorytellerStore.getState().localSeq));
+    manager.stop(); await writer.dispose();
+
+    // Made after the writer stopped: never flushed, never acknowledged.
+    useStorytellerStore.getState().addReminder(handles.investigatorId, {
+      label: "Dirty edit reminder", lifetime: { kind: "manual" },
+    });
+    const dirtyGame = useStorytellerStore.getState().game!;
+    expect(useStorytellerStore.getState().localSeq).toBeGreaterThan(useStorytellerStore.getState().sync!.ackedGameSeq);
+
+    const replacement = writerFor(b, session.id);
+    const recovered = await startStorytellerSession(b, lobby, replacement);
+    disposals.push(async () => { recovered.stop(); await replacement.dispose(); });
+
+    expect(recovered.outcome).toBe("live");
+    const gameAfter = useStorytellerStore.getState().game!;
+    expect(gameAfter.players[handles.investigatorId]!.reminders.map(r => r.label)).toEqual(["Dirty edit reminder"]);
+    // Everything the dirty edit did not touch is exactly as it was --
+    // proves the reconnect neither dropped nor cross-mixed unrelated
+    // players'/domains' data while carrying the dirty edit through.
+    expect(gameAfter.players[handles.chefId]!.effects).toEqual(dirtyGame.players[handles.chefId]!.effects);
+    expect(gameAfter.players[handles.washerwomanId]!.effects).toEqual(dirtyGame.players[handles.washerwomanId]!.effects);
+    expect(gameAfter.history).toEqual(dirtyGame.history);
+    expect(gameAfter.informationDeliveries).toEqual(dirtyGame.informationDeliveries);
+    expect(gameAfter.players[handles.travelerId]!.actualAlignment).toBe("evil");
+    expect(gameAfter.players[handles.chefId]!.stNotes).toBe("SENTINEL-PRIVATE-CHEF-NOTE");
+    expect(useStorytellerStore.getState().localSeq).toBe(useStorytellerStore.getState().sync!.ackedGameSeq); // the initial flush caught up
+
+    const remoteGame = await b.get(`${root}/storyteller`) as unknown as StorytellerLobbyRecord;
+    expect(remoteGame.players[handles.investigatorId]!.reminders.map(r => r.label)).toEqual(["Dirty edit reminder"]);
+    expect(remoteGame.history.length).toBe(dirtyGame.history.length);
+    expect(remoteGame.informationDeliveries.length).toBe(2);
+  });
+});
+
+describe("Phase 9D.5 Proof D: remote checkpoint restore integrity for a rich Phase 9 game", () => {
+  it("a clean local device restores a foreign device's further-advanced rich checkpoint with every structured domain intact, and never fabricates an Undo snapshot for it", async () => {
+    const b = new MemoryRoomBackend();
+    const { handles, writer, manager, lobby, session } = await hostRich(b);
+    await waitFor(() => expect(useStorytellerStore.getState().sync?.ackedGameSeq).toBe(useStorytellerStore.getState().localSeq));
+    manager.stop(); await writer.dispose(); // local is clean: no edits since the last acknowledged flush
+
+    // A genuinely different device advances the SAME rich checkpoint
+    // further -- proves RESTORE both preserves everything the rich local
+    // game already carried AND correctly layers in the foreign delta.
+    const foreignGame = await foreignDeviceAdvance(b, session.id, g => ({
+      ...g,
+      day: 2,
+      players: {
+        ...g.players,
+        [handles.chefId]: {
+          ...g.players[handles.chefId]!,
+          stNotes: g.players[handles.chefId]!.stNotes + " -- foreign device addendum",
+        },
+      },
+    }));
+
+    const replacement = writerFor(b, session.id);
+    const recovered = await startStorytellerSession(b, lobby, replacement);
+    disposals.push(async () => { recovered.stop(); await replacement.dispose(); });
+
+    expect(recovered.outcome).toBe("live");
+    const gameAfter = useStorytellerStore.getState().game!;
+    expect(gameAfter).toEqual(foreignGame);
+    expect(gameAfter.day).toBe(2);
+    expect(gameAfter.history).toEqual(foreignGame.history);
+    expect(gameAfter.history.length).toBeGreaterThan(0);
+    expect(gameAfter.informationDeliveries).toEqual(foreignGame.informationDeliveries);
+    expect(gameAfter.informationDeliveries.length).toBe(2);
+    expect(gameAfter.players[handles.chefId]!.stNotes).toBe("SENTINEL-PRIVATE-CHEF-NOTE -- foreign device addendum");
+    expect(gameAfter.players[handles.travelerId]!.isTraveler).toBe(true);
+    expect(gameAfter.players[handles.travelerId]!.actualAlignment).toBe("evil");
+    expect(gameAfter.players[handles.travelerId]!.exiled).toBe(true);
+    expect(gameAfter.players[handles.chefId]!.effects.some(e => e.type === "poisoned")).toBe(true);
+    expect(gameAfter.players[handles.washerwomanId]!.effects.some(e => e.type === "protected")).toBe(true);
+    expect(gameAfter.players[handles.deadOrdinaryId]!.alive).toBe(false);
+    // restoreRemoteCheckpoint always clears the undo stack outright (Phase
+    // 9C semantics, unchanged here): adopting a remote checkpoint must
+    // never leave behind -- or fabricate -- an Undo snapshot that could
+    // later "undo" back into a lineage this device never actually lived
+    // through.
+    expect(useStorytellerStore.getState().undoStack).toEqual([]);
   });
 });
