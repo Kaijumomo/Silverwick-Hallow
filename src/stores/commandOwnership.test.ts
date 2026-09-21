@@ -191,3 +191,50 @@ describe("Phase 9R.1 Finding B4: Reminder ownership (addReminder -- the same pat
     expect(historyItem.change).toMatchObject({ kind: "added", item: { label: "Red Herring", lifetime: { kind: "days", count: 3 } } });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Luna follow-up (residual B4/B5): setReminders() only spread-copied the
+// TOP-LEVEL array (`[...reminders]`) -- each ReminderRecord inside, and its
+// nested `lifetime` object, was still the caller's own reference.
+// ---------------------------------------------------------------------------
+describe("Phase 9R.1 Finding B4 (Luna follow-up): setReminders() Reminder ownership", () => {
+  it("mutating the caller's original Reminder objects (and their nested lifetime objects) after setReminders() returns does not alter authoritative Current State", () => {
+    dealtGame();
+    goLive();
+    const id = game().seatOrder[0]!;
+
+    const lifetimeA = { kind: "nights" as const, count: 2 };
+    const lifetimeB = { kind: "manual" as const };
+    const reminderA = { id: "r-a", label: "Red Herring", sourceCharacter: "fortuneteller", lifetime: lifetimeA };
+    const reminderB = { id: "r-b", label: "Poisoned", lifetime: lifetimeB };
+    const reminders = [reminderA, reminderB];
+
+    state().setReminders(id, reminders);
+    const localSeqAfterCommand = state().localSeq;
+    const expected = [
+      { id: "r-a", label: "Red Herring", sourceCharacter: "fortuneteller", lifetime: { kind: "nights", count: 2 } },
+      { id: "r-b", label: "Poisoned", lifetime: { kind: "manual" } },
+    ];
+    expect(game().players[id]!.reminders).toEqual(expected);
+    // A true independent baseline -- structuredClone, never a shallow
+    // `[...array]` copy, which would still alias each stored Reminder
+    // object to the caller's own (an aliased "before" would silently
+    // corrupt itself alongside the mutation below, masking exactly the
+    // bug this test exists to catch).
+    const storedBefore = structuredClone(game().players[id]!.reminders);
+
+    // Mutate the caller's own array, its elements, and their nested
+    // lifetime objects -- all AFTER the command has already returned.
+    lifetimeA.count = 999;
+    reminderA.label = "INJECTED-AFTER-THE-FACT";
+    reminderB.label = "ALSO-INJECTED";
+    reminders.push({ id: "r-c", label: "INJECTED-EXTRA", lifetime: { kind: "manual" } });
+
+    const storedAfter = game().players[id]!.reminders;
+    expect(storedAfter).toEqual(expected);
+    expect(storedAfter).toEqual(storedBefore);
+    expect(storedAfter).toHaveLength(2);
+    // No second store command ran -- localSeq must not have moved again.
+    expect(state().localSeq).toBe(localSeqAfterCommand);
+  });
+});

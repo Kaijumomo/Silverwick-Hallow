@@ -110,6 +110,34 @@ describe("Phase 9R.1 Finding B5: Reminder never stores an explicit-undefined opt
     expect(stored).toEqual({ id: reminderId, label: "Red Herring", lifetime: { kind: "manual" } });
     expect("sourceCharacter" in stored).toBe(false);
   });
+
+  it("Luna follow-up: setReminders() with explicit-undefined optional fields stores every Reminder with those keys genuinely absent", () => {
+    dealtGame();
+    goLive();
+    const id = game().seatOrder[0]!;
+    state().setReminders(id, [
+      {
+        id: "r-1", label: "Chosen", lifetime: { kind: "manual" },
+        sourcePlayer: undefined, sourceCharacter: undefined, note: undefined,
+      },
+    ]);
+    const stored = game().players[id]!.reminders[0]!;
+    expect(stored).toEqual({ id: "r-1", label: "Chosen", lifetime: { kind: "manual" } });
+    expect("sourcePlayer" in stored).toBe(false);
+    expect("sourceCharacter" in stored).toBe(false);
+    expect("note" in stored).toBe(false);
+  });
+
+  it("Luna follow-up: setReminders() still preserves legitimate falsy-but-real values (empty-string note, zero-count lifetime)", () => {
+    dealtGame();
+    goLive();
+    const id = game().seatOrder[0]!;
+    state().setReminders(id, [
+      { id: "r-2", label: "Marked", lifetime: { kind: "nights", count: 0 }, note: "" },
+    ]);
+    const stored = game().players[id]!.reminders[0]!;
+    expect(stored).toEqual({ id: "r-2", label: "Marked", lifetime: { kind: "nights", count: 0 }, note: "" });
+  });
 });
 
 describe("Phase 9R.1 Finding B5: Information Delivery -- ended-phase moment, and explicit-undefined Provenance", () => {

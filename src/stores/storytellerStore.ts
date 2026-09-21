@@ -1760,9 +1760,17 @@ export const useStorytellerStore = create<StorytellerStore>()(
       setReminders: (id, reminders) => {
         const { game, undoStack } = get();
         if (!game) return;
+        // Phase 9R.1 follow-up (residual B4/B5): `[...reminders]` only
+        // copies the array itself -- each ReminderRecord inside (and its
+        // nested `lifetime` object) was still the caller's own reference.
+        // cloneOwned() deep-clones every element and strips any explicit
+        // `undefined` optional key, matching the same ownership boundary
+        // addEffect/addReminder/recordInformationDelivery already use.
+        // History/Undo/no-op behavior here is deliberately unchanged --
+        // out of scope for this follow-up (reserved for Phase 9R.4).
         set({
           undoStack: pushUndo(game, undoStack),
-          game: patchPlayer(game, id, { reminders: [...reminders] }),
+          game: patchPlayer(game, id, { reminders: cloneOwned(reminders) }),
         });
       },
 

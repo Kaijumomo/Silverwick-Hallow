@@ -1284,11 +1284,13 @@ describe("Phase 9D.5 Proof E: writer replacement / stale-writer protection for a
 // which never exercises the SDK's own undefined-rejection behavior). Builds
 // a rich Phase 9 game through real production commands, then explicitly
 // layers in the EXACT formerly-problematic optional shapes the Phase 9
-// closure audit reproduced -- a Provenance with an explicit `note: undefined`,
-// an Effect with an explicit `sourcePlayer: undefined`, and a
-// triggered/manual Information Delivery recorded after phase === "ended"
-// (where currentGameMoment() intentionally returns undefined) -- and proves
-// the resulting state still passes through the real production
+// closure audit (and Luna's independent 9R.1 follow-up review) reproduced
+// -- a Provenance with an explicit `note: undefined`, an Effect with an
+// explicit `sourcePlayer: undefined`, a triggered/manual Information
+// Delivery recorded after phase === "ended" (where currentGameMoment()
+// intentionally returns undefined), and a Reminder introduced through the
+// bulk setReminders() setter with explicit-undefined optional fields --
+// and proves the resulting state still passes through the real production
 // writeProjections() chokepoint against real Firebase RTDB without the SDK
 // rejecting it for an undefined value anywhere in the write.
 // ---------------------------------------------------------------------------
@@ -1336,6 +1338,13 @@ describe("Phase 9R.1 Finding B5: Firebase-safe optional serialization for a rich
     );
     expect(delivery.ok).toBe(true);
 
+    // Exact reproduction #4 (Luna follow-up, residual B4/B5): a Reminder
+    // introduced through setReminders() -- the bulk setter -- with explicit
+    // `sourcePlayer: undefined`/`note: undefined`.
+    store.setReminders(handles.investigatorId, [
+      { id: "b5-reminder", label: "Marked", lifetime: { kind: "manual" }, sourcePlayer: undefined, note: undefined },
+    ]);
+
     const richGame = useStorytellerStore.getState().game!;
     // Confirm the accepted state is already canonical -- no literal
     // `undefined` value survived into the authoritative object -- BEFORE
@@ -1356,6 +1365,9 @@ describe("Phase 9R.1 Finding B5: Firebase-safe optional serialization for a rich
     const endedDelivery = richGame.informationDeliveries.find(d => d.informationActionId === "ravenkeeper-triggered")!;
     expect(Object.keys(endedDelivery)).not.toContain("moment");
     expect(Object.keys(endedDelivery.provenance!)).not.toContain("note");
+    const setReminder = investigator.reminders.find(r => r.id === "b5-reminder")!;
+    expect(Object.keys(setReminder)).not.toContain("sourcePlayer");
+    expect(Object.keys(setReminder)).not.toContain("note");
 
     const rawBackend = new FirebaseRoomBackend(db(st) as unknown as Database);
     await createLobby(rawBackend, st, { codeGenerator: () => code });
@@ -1384,6 +1396,10 @@ describe("Phase 9R.1 Finding B5: Firebase-safe optional serialization for a rich
     const parsedDelivery = parsed.game.informationDeliveries.find(d => d.informationActionId === "ravenkeeper-triggered")!;
     expect("moment" in parsedDelivery).toBe(false);
     expect(parsedDelivery.provenance).toEqual({ reason: "known" });
+    const parsedReminder = parsed.game.players[handles.investigatorId]!.reminders.find(r => r.id === "b5-reminder")!;
+    expect("sourcePlayer" in parsedReminder).toBe(false);
+    expect("note" in parsedReminder).toBe(false);
+    expect(parsedReminder).toEqual({ id: "b5-reminder", label: "Marked", lifetime: { kind: "manual" } });
 
     // The ST-private raw projection (the OTHER path B5 names as sending the
     // object directly) also wrote successfully -- confirming the fix holds
