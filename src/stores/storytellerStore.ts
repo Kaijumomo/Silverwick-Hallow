@@ -447,11 +447,32 @@ const resetTravelerNightProgress = (game: StorytellerLobbyRecord, id: PlayerId) 
   Object.fromEntries(Object.entries(game.nightProgress).filter(([key]) =>
     !key.startsWith(`${game.day}:travelerArrival:${id}:`) && !key.startsWith(`${game.day}:p:${id}:`)));
 
+/** Phase 9R.1 Astra remediation (Finding M2): `undoStack` is untrusted
+ * persisted-state data -- it may be genuinely absent (`undefined`), a
+ * valid array, or a malformed PRESENT non-array value (e.g. `{}`, a
+ * string, a number). Every migration step below that maps or spreads
+ * `s.undoStack` previously assumed any truthy value was already an array;
+ * `s.undoStack.map(...)` throws "is not a function" and a bare
+ * `[...s.undoStack]` throws "is not iterable" for a malformed non-array
+ * value instead of failing safely (`??` alone only substitutes for
+ * `null`/`undefined`, never for a truthy non-array). A malformed
+ * undoStack must never be silently normalized into `[]` here -- every
+ * site below leaves it completely untouched when this guard fails, so the
+ * final StorytellerStateSchema validation gate (which requires undoStack
+ * to be an array or absent -- schemas.ts's
+ * `z.array(StorytellerGamePersistedSchema).optional()`) rejects it and
+ * triggers the existing reset path below, exactly the established
+ * absent-vs-malformed distinction already applied to remote checkpoint
+ * migration (see gameMigration.ts's own Finding A3 doc comment). */
+function isMigratableUndoStack(value: unknown): value is unknown[] {
+  return Array.isArray(value);
+}
+
 export function migrateStoreState(state: unknown, fromVersion: number): unknown {
-  const s = state as { game?: Record<string, unknown>; undoStack?: unknown[]; lobby?: unknown };
+  const s = state as { game?: Record<string, unknown>; undoStack?: unknown; lobby?: unknown };
   if (fromVersion < 2) {
     if (s.game && !s.game.nightProgress) s.game.nightProgress = {};
-    if (s.undoStack) {
+    if (isMigratableUndoStack(s.undoStack)) {
       s.undoStack = s.undoStack.map((entry) => {
         const e = entry as Record<string, unknown>;
         if (!e.nightProgress) e.nightProgress = {};
@@ -464,7 +485,7 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
       if (!s.game.fabled) s.game.fabled = [];
       if (!s.game.bluffs) s.game.bluffs = [];
     }
-    if (s.undoStack) {
+    if (isMigratableUndoStack(s.undoStack)) {
       s.undoStack = s.undoStack.map((entry) => {
         const e = entry as Record<string, unknown>;
         if (!e.fabled) e.fabled = [];
@@ -475,7 +496,7 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   }
   if (fromVersion < 4) {
     if (s.game && !s.game.lorics) s.game.lorics = [];
-    if (s.undoStack) {
+    if (isMigratableUndoStack(s.undoStack)) {
       s.undoStack = s.undoStack.map((entry) => {
         const e = entry as Record<string, unknown>;
         if (!e.lorics) e.lorics = [];
@@ -488,7 +509,7 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
       if (!s.game.rolePool) s.game.rolePool = [];
       if (s.game.plannedPlayerCount === undefined) s.game.plannedPlayerCount = 0;
     }
-    if (s.undoStack) {
+    if (isMigratableUndoStack(s.undoStack)) {
       s.undoStack = s.undoStack.map((entry) => {
         const e = entry as Record<string, unknown>;
         if (!e.rolePool) e.rolePool = [];
@@ -511,7 +532,7 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
         }
       }
     }
-    if (s.undoStack) {
+    if (isMigratableUndoStack(s.undoStack)) {
       s.undoStack = s.undoStack.map((entry) => {
         const e = entry as Record<string, unknown>;
         if (!e.pendingPlayers) e.pendingPlayers = {};
@@ -538,7 +559,7 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // v11 introduces optional current Traveler facts. Leave legacy alignment,
   // completion and exile unknown. Public character can be recovered from truth.
   if (fromVersion < 11) {
-    for (const entry of [s.game, ...(s.undoStack ?? [])]) {
+    for (const entry of [s.game, ...(isMigratableUndoStack(s.undoStack) ? s.undoStack : [])]) {
       const players = (entry as { players?: Record<string, STPlayerRecord> } | undefined)?.players;
       for (const p of Object.values(players ?? {})) {
         if (p.isTraveler) p.publicDisplayRole = publicTravelerRole(p)?.id ?? null;
@@ -562,7 +583,7 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // plannedPlayerCount's own v5 migration default.
   if (fromVersion < 13) {
     if (s.game && s.game.plannedTravelerCount === undefined) s.game.plannedTravelerCount = 0;
-    if (s.undoStack) {
+    if (isMigratableUndoStack(s.undoStack)) {
       s.undoStack = s.undoStack.map((entry) => {
         if (!entry || typeof entry !== "object") return entry;
         const e = entry as Record<string, unknown>;
@@ -586,7 +607,7 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
     // checkpoint recovery, which never has this and uses "canonical-only"
     // -- see readCheckpoint in storytellerSync.ts and MigrationScriptEvidence's
     // own doc comment).
-    for (const entry of [s.game, ...(s.undoStack ?? [])]) {
+    for (const entry of [s.game, ...(isMigratableUndoStack(s.undoStack) ? s.undoStack : [])]) {
       migrateGameEntry(entry, fromVersion, { kind: "trusted", customScripts });
     }
   }

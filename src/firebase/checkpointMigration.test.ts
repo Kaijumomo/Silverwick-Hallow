@@ -66,6 +66,87 @@ const baseLegacyGame = (overrides: Record<string, unknown> = {}): Record<string,
   ...overrides,
 });
 
+// ---------------------------------------------------------------------------
+// Shared helpers for the Firebase-compatibility-gate finding blocks below
+// (F1/F2/F3) -- hoisted to module scope so each finding's own describe
+// block can reuse the exact same fixture/assertion shape rather than
+// re-declaring it, while still keeping the malformed-data-focused
+// M1/A2/A3/A4/B1 blocks above unaffected.
+// ---------------------------------------------------------------------------
+function v16GameWithHistory(historyEntry: Record<string, unknown>): Record<string, unknown> {
+  return baseLegacyGame({
+    players: { a: v13Player({ statuses: {}, reminders: [], effects: [] }) },
+    history: [historyEntry],
+    informationDeliveries: [],
+  });
+}
+
+function nestedObject(depth: number): unknown {
+  let value: unknown = true;
+  for (let i = 0; i < depth; i++) value = { a: value };
+  return value;
+}
+
+function isProjectionWritePath(path: string): boolean {
+  return (
+    path === `${root}/storyteller` ||
+    path === `${root}/public` ||
+    path === `${root}/checkpoint` ||
+    path.startsWith(`${root}/player/`)
+  );
+}
+
+/**
+ * Seeds a genuinely non-trivial Undo/localSeq baseline (AFTER freshLobby,
+ * since setLobby itself clears undoStack) before an expected-to-be-
+ * rejected recovery attempt, then asserts full atomicity: Current State,
+ * Undo, localSeq, and sync's own acknowledgment bookkeeping all survive
+ * untouched, and -- Phase 9R.1 F1 hardening note -- directly OBSERVES via
+ * the backend's own writeLog that no projection write
+ * (storyteller/public/checkpoint/player) was ever attempted, rather than
+ * merely inferring it from final-state equality. The Undo comparison is
+ * against a REAL deep copy taken before the call (structuredClone), not
+ * the same live array reference or a shallow top-level clone -- so an
+ * in-place mutation of a nested field somewhere inside an Undo entry
+ * would still be caught.
+ *
+ * `sync` itself is deliberately NOT compared for bit-for-bit equality:
+ * startStorytellerSession's ensureSyncScope() call binds a fresh
+ * (code, sessionId) scope unconditionally, on every startup attempt,
+ * success or failure -- this is ordinary bookkeeping wholly unrelated to
+ * checkpoint content. What genuinely proves "no projection was accepted"
+ * is that this newly-bound scope's own acknowledgment fields stay at
+ * their untouched defaults (never advanced by a real write/ack).
+ */
+async function expectRejectedWithoutProjectionAttempt(
+  b: MemoryRoomBackend,
+  { lobby, session }: Awaited<ReturnType<typeof freshLobby>>
+) {
+  const undoBaseline = [baseLegacyGame({ notes: "pre-existing undo entry" }) as unknown as StorytellerLobbyRecord];
+  const undoBaselineDeepCopy = structuredClone(undoBaseline);
+  useStorytellerStore.setState({ game: null, undoStack: undoBaseline, localSeq: 7 });
+  const writer = new SessionWriter(b, code, session.id);
+  disposals.push(() => writer.dispose());
+  const writeLogBefore = b.writeLog.length;
+
+  await expect(startStorytellerSession(b, lobby, writer)).rejects.toThrow(SnapshotValidationError);
+
+  expect(useStorytellerStore.getState().game).toBeNull();
+  expect(useStorytellerStore.getState().undoStack).toEqual(undoBaselineDeepCopy);
+  expect(useStorytellerStore.getState().localSeq).toBe(7);
+  const sync = useStorytellerStore.getState().sync;
+  expect(sync?.ackedGuard).toBeNull();
+  expect(sync?.ackedGameSeq).toBe(0);
+  expect(sync?.lastAttempt).toBeNull();
+  // A lease-claim write to `${root}/writer` (an unrelated, legitimate
+  // prerequisite writer.start() performs before ever attempting to read
+  // the checkpoint) is expected and fine -- only a PROJECTION write
+  // (storyteller/public/checkpoint/player/*) would mean this invalid
+  // checkpoint was partially adopted.
+  const projectionWrites = b.writeLog.slice(writeLogBefore).filter((entry) => isProjectionWritePath(entry.path));
+  expect(projectionWrites).toEqual([]);
+}
+
 describe("Phase 9R.1 Finding B1: remote checkpoint migration", () => {
   it("v13 remote checkpoint recovers into current v16 semantics: alignment derived, statuses -> Effects, reminder strings -> structured records, empty History/InformationDeliveries created", async () => {
     const b = new MemoryRoomBackend();
@@ -706,80 +787,6 @@ describe("Phase 9R.1 Finding M1: migration never throws on malformed data -- rem
 // including right at each boundary, is never over-rejected.
 // ---------------------------------------------------------------------------
 describe("Phase 9R.1 Finding F1: expanded Firebase compatibility gate (control characters, non-finite numbers, depth, path bytes)", () => {
-  function v16GameWithHistory(historyEntry: Record<string, unknown>): Record<string, unknown> {
-    return baseLegacyGame({
-      players: { a: v13Player({ statuses: {}, reminders: [], effects: [] }) },
-      history: [historyEntry],
-      informationDeliveries: [],
-    });
-  }
-
-  function nestedObject(depth: number): unknown {
-    let value: unknown = true;
-    for (let i = 0; i < depth; i++) value = { a: value };
-    return value;
-  }
-
-  function isProjectionWritePath(path: string): boolean {
-    return (
-      path === `${root}/storyteller` ||
-      path === `${root}/public` ||
-      path === `${root}/checkpoint` ||
-      path.startsWith(`${root}/player/`)
-    );
-  }
-
-  /**
-   * Seeds a genuinely non-trivial Undo/localSeq baseline (AFTER freshLobby,
-   * since setLobby itself clears undoStack) before an expected-to-be-
-   * rejected recovery attempt, then asserts full atomicity: Current State,
-   * Undo, localSeq, and sync's own acknowledgment bookkeeping all survive
-   * untouched, and -- Phase 9R.1 F1 hardening note -- directly OBSERVES via
-   * the backend's own writeLog that no projection write
-   * (storyteller/public/checkpoint/player) was ever attempted, rather than
-   * merely inferring it from final-state equality. The Undo comparison is
-   * against a REAL deep copy taken before the call (structuredClone), not
-   * the same live array reference or a shallow top-level clone -- so an
-   * in-place mutation of a nested field somewhere inside an Undo entry
-   * would still be caught.
-   *
-   * `sync` itself is deliberately NOT compared for bit-for-bit equality:
-   * startStorytellerSession's ensureSyncScope() call binds a fresh
-   * (code, sessionId) scope unconditionally, on every startup attempt,
-   * success or failure -- this is ordinary bookkeeping wholly unrelated to
-   * checkpoint content. What genuinely proves "no projection was accepted"
-   * is that this newly-bound scope's own acknowledgment fields stay at
-   * their untouched defaults (never advanced by a real write/ack).
-   */
-  async function expectRejectedWithoutProjectionAttempt(
-    b: MemoryRoomBackend,
-    { lobby, session }: Awaited<ReturnType<typeof freshLobby>>
-  ) {
-    const undoBaseline = [baseLegacyGame({ notes: "pre-existing undo entry" }) as unknown as StorytellerLobbyRecord];
-    const undoBaselineDeepCopy = structuredClone(undoBaseline);
-    useStorytellerStore.setState({ game: null, undoStack: undoBaseline, localSeq: 7 });
-    const writer = new SessionWriter(b, code, session.id);
-    disposals.push(() => writer.dispose());
-    const writeLogBefore = b.writeLog.length;
-
-    await expect(startStorytellerSession(b, lobby, writer)).rejects.toThrow(SnapshotValidationError);
-
-    expect(useStorytellerStore.getState().game).toBeNull();
-    expect(useStorytellerStore.getState().undoStack).toEqual(undoBaselineDeepCopy);
-    expect(useStorytellerStore.getState().localSeq).toBe(7);
-    const sync = useStorytellerStore.getState().sync;
-    expect(sync?.ackedGuard).toBeNull();
-    expect(sync?.ackedGameSeq).toBe(0);
-    expect(sync?.lastAttempt).toBeNull();
-    // A lease-claim write to `${root}/writer` (an unrelated, legitimate
-    // prerequisite writer.start() performs before ever attempting to read
-    // the checkpoint) is expected and fine -- only a PROJECTION write
-    // (storyteller/public/checkpoint/player/*) would mean this invalid
-    // checkpoint was partially adopted.
-    const projectionWrites = b.writeLog.slice(writeLogBefore).filter((entry) => isProjectionWritePath(entry.path));
-    expect(projectionWrites).toEqual([]);
-  }
-
   it("a newline (U+000A) in a status key -- Astra's exact reproduction -- is rejected before adoption, atomically", async () => {
     const b = new MemoryRoomBackend();
     const v16Game = baseLegacyGame({
@@ -904,6 +911,106 @@ describe("Phase 9R.1 Finding F1: expanded Firebase compatibility gate (control c
     const v16Game = v16GameWithHistory({
       id: "h1", category: "life", playerId: "a",
       change: { kind: "value", from: { alive: true, score: -3.5 }, to: { alive: false, score: 0 } },
+    });
+    await seedLegacyCheckpoint(b, v16Game);
+    const { lobby, session } = await freshLobby(b);
+    const writer = new SessionWriter(b, code, session.id);
+    const recovered = await startStorytellerSession(b, lobby, writer);
+    disposals.push(async () => { recovered.stop(); await writer.dispose(); });
+    expect(recovered.outcome).toBe("live");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9R.1 Astra remediation (Finding F2): the Firebase compatibility
+// gate exempted `.value`/`.priority`/`.sv` from the illegal-key-character
+// check, but never enforced the real SDK's OWN structural rule for
+// `.value`: a node asserting "I am a leaf with this value" (`.value`)
+// cannot simultaneously assert "I have real children" (an ordinary child
+// key). See firebaseWriteCompatibility.ts's check() for exactly which
+// combinations this does and does not reject, and
+// firebaseWriteCompatibility.test.ts for the exhaustive pure-unit coverage
+// of every `.value`/`.priority`/`.sv` combination. These tests prove the
+// PRODUCTION WIRING rejects Astra's exact reproduction atomically, before
+// ever adopting it as Current State, and that a genuinely Firebase-valid
+// `.value` form is never over-rejected.
+// ---------------------------------------------------------------------------
+describe("Phase 9R.1 Finding F2: reserved '.value' structure gate before checkpoint adoption", () => {
+  it('Astra\'s exact reproduction: a History change.item containing { ".value": 1, "alive": true } is rejected before adoption, atomically', async () => {
+    const b = new MemoryRoomBackend();
+    const v16Game = v16GameWithHistory({
+      id: "h1", category: "life", playerId: "a",
+      change: { kind: "added", item: { ".value": 1, alive: true } },
+    });
+    await seedLegacyCheckpoint(b, v16Game);
+    await expectRejectedWithoutProjectionAttempt(b, await freshLobby(b));
+  });
+
+  it('a Firebase-VALID ".value" + ".priority" form (a prioritized leaf -- Firebase\'s own JSON export shape) at the same location is NOT rejected -- the gate never over-rejects a legitimate reserved-key combination', async () => {
+    const b = new MemoryRoomBackend();
+    const v16Game = v16GameWithHistory({
+      id: "h1", category: "life", playerId: "a",
+      change: { kind: "added", item: { ".value": 1, ".priority": "x" } },
+    });
+    await seedLegacyCheckpoint(b, v16Game);
+    const { lobby, session } = await freshLobby(b);
+    const writer = new SessionWriter(b, code, session.id);
+    const recovered = await startStorytellerSession(b, lobby, writer);
+    disposals.push(async () => { recovered.stop(); await writer.dispose(); });
+    expect(recovered.outcome).toBe("live");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9R.1 Astra remediation (Finding F3): the Firebase compatibility
+// gate's path-byte-length accounting used TextEncoder (real UTF-8), but
+// the real SDK's own ValidationPath uses @firebase/util's stringLength(),
+// which charges an unmatched UTF-16 lead surrogate 4 bytes regardless of
+// whether a valid trail surrogate actually follows -- a genuine, provable
+// divergence from real UTF-8 for exactly this malformed-Unicode case. See
+// firebaseWriteCompatibility.test.ts for the exhaustive pure-unit boundary
+// coverage. These tests prove the PRODUCTION WIRING, fed the unmatched
+// surrogate through RAW checkpoint JSON text (never a JavaScript-only
+// representation -- the raw text is what a real remote checkpoint read
+// would actually contain), rejects Astra's exact reproduction atomically
+// at the real 768/769-byte boundary, and that one character short of that
+// same boundary is still correctly accepted.
+// ---------------------------------------------------------------------------
+describe("Phase 9R.1 Finding F3: Firebase-exact string-length accounting for unmatched UTF-16 surrogates, seeded via raw checkpoint JSON text", () => {
+  it("Astra's exact reproduction: an unmatched high surrogate (\\uD800) in a History change.item key, seeded through RAW checkpoint JSON text, is counted exactly as Firebase's own SDK counts it (never real UTF-8/TextEncoder) and is rejected before adoption once that pushes the real destination path one byte past the 768-byte limit", async () => {
+    const b = new MemoryRoomBackend();
+    // Matches the exact pure-unit boundary reproduction in
+    // firebaseWriteCompatibility.test.ts: 52 (fixed overhead through
+    // history[0].change.item for this 8-char code) + 717
+    // (firebaseStringLength of 713 'x' chars + one lone high surrogate) = 769.
+    const key = "x".repeat(713) + "\uD800";
+    const v16Game = v16GameWithHistory({
+      id: "h1", category: "life", playerId: "a",
+      change: { kind: "added", item: { [key]: true } },
+    });
+    const rawText = JSON.stringify({ game: v16Game, roster: {} });
+    // Prove the raw JSON text really preserves the unmatched surrogate as
+    // an escaped code unit, and that JSON.parse restores the EXACT same
+    // code unit -- this is seeded through raw checkpoint text, never a
+    // JavaScript-only representation constructed some other way.
+    expect(rawText).toContain("\\ud800");
+    const sanityParsed = JSON.parse(rawText) as {
+      game: { history: [{ change: { item: Record<string, unknown> } }] };
+    };
+    const parsedKey = Object.keys(sanityParsed.game.history[0]!.change.item)[0]!;
+    expect(parsedKey).toBe(key);
+    expect(parsedKey.charCodeAt(parsedKey.length - 1)).toBe(0xd800);
+
+    await b.set(`${root}/checkpoint`, rawText);
+    await expectRejectedWithoutProjectionAttempt(b, await freshLobby(b));
+  });
+
+  it("the SAME real destination, one 'x' character SHORTER (712 instead of 713), lands at EXACTLY 768 bytes under Firebase's own algorithm and is still accepted -- the boundary, not merely 'somewhere over'", async () => {
+    const b = new MemoryRoomBackend();
+    const key = "x".repeat(712) + "\uD800";
+    const v16Game = v16GameWithHistory({
+      id: "h1", category: "life", playerId: "a",
+      change: { kind: "added", item: { [key]: true } },
     });
     await seedLegacyCheckpoint(b, v16Game);
     const { lobby, session } = await freshLobby(b);

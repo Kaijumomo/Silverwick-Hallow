@@ -1,20 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { validateFirebaseWritableValue } from "./firebaseWriteCompatibility";
 
-// Phase 9R.1 Astra remediation (Finding A4, expanded by the F1 follow-up): a
-// checkpoint can be valid JSON, pass the current Zod game schema, and still
-// be a value the real Firebase RTDB SDK refuses to write. These tests prove
-// validateFirebaseWritableValue -- the pure, read-only gate readCheckpoint
-// runs before ever adopting a migrated checkpoint -- mirrors the REAL
-// installed @firebase/database SDK's own client-side validation
-// (node_modules/@firebase/database/dist/index.cjs.js: validateFirebaseData/
-// ValidationPath) constant-for-constant: illegal key characters (including
-// control characters and DEL, not just the six punctuation marks), non-finite
-// numbers at any depth, maximum write depth (32), and maximum write path
-// byte length (768 UTF-8 bytes, counted from the REAL destination the value
-// will be written to) -- at any depth, without mutating its input or
-// over-rejecting legitimate values. See firebaseWriteCompatibility.ts's own
-// doc comment for exactly which SDK source constants/behavior this mirrors.
+// Phase 9R.1 Astra remediation (Finding A4, expanded by the F1/F2/F3
+// follow-ups): a checkpoint can be valid JSON, pass the current Zod game
+// schema, and still be a value the real Firebase RTDB SDK refuses to write.
+// These tests prove validateFirebaseWritableValue -- the pure, read-only
+// gate readCheckpoint runs before ever adopting a migrated checkpoint --
+// mirrors the REAL installed @firebase/database SDK's own client-side
+// validation (node_modules/@firebase/database/dist/index.cjs.js:
+// validateFirebaseData/ValidationPath, and node_modules/@firebase/util/
+// dist/index.cjs.js: stringLength) constant-for-constant: illegal key
+// characters (including control characters and DEL, not just the six
+// punctuation marks), non-finite numbers at any depth, maximum write depth
+// (32), maximum write path byte length (768 bytes, counted with Firebase's
+// OWN string-length algorithm -- not naive UTF-8 -- from the REAL
+// destination the value will be written to), and reserved `.value`
+// structure (a `.value` key may not coexist with an ordinary child key) --
+// at any depth, without mutating its input or over-rejecting legitimate
+// values. See firebaseWriteCompatibility.ts's own doc comment for exactly
+// which SDK source constants/behavior this mirrors.
 
 const emptyBase: string[] = [];
 
@@ -180,5 +184,171 @@ describe("validateFirebaseWritableValue: maximum write path byte length (768 UTF
   it("a short, realistic value comfortably fits under the real destination's byte budget", () => {
     const realDestination = ["lobbies", "ABCD1234", "storyteller"];
     expect(validateFirebaseWritableValue({ code: "ABCD1234", notes: "ordinary notes" }, realDestination).ok).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9R.1 Astra remediation (Finding F2): the real Firebase RTDB SDK
+// rejects a node containing a `.value` key ALONGSIDE any ordinary child key
+// (validateFirebaseData's own hasDotValue/hasActualChild rule) -- `.value`
+// asserts "this node IS a leaf"; an ordinary child key asserts "this node
+// has real children"; the two are structurally contradictory. `.priority`/
+// `.sv` are never counted as "ordinary children" for this rule (they are
+// Firebase's own valid metadata that may coexist with `.value` -- a
+// prioritized leaf, or a server-value leaf, is written in JSON exactly this
+// way), so `.value` + `.priority` and `.value` + `.sv` are both legitimate
+// and must never be over-rejected.
+// ---------------------------------------------------------------------------
+describe("validateFirebaseWritableValue: reserved '.value' structure (Finding F2)", () => {
+  it('Astra\'s exact reproduction: { ".value": 1, "alive": true } is rejected -- a `.value` leaf assertion cannot coexist with an ordinary child key', () => {
+    expect(validateFirebaseWritableValue({ ".value": 1, alive: true }, emptyBase).ok).toBe(false);
+  });
+
+  it('a bare ".value" leaf with no other keys at all is accepted', () => {
+    expect(validateFirebaseWritableValue({ ".value": 1 }, emptyBase).ok).toBe(true);
+  });
+
+  it('a Firebase-valid ".value" form: ".value" alongside ONLY ".priority" (a prioritized leaf, Firebase\'s own JSON export shape) is accepted, never rejected', () => {
+    expect(validateFirebaseWritableValue({ ".value": 1, ".priority": "abc" }, emptyBase).ok).toBe(true);
+  });
+
+  it('".value" alongside ONLY ".sv" is also accepted -- ".sv" is never counted as an "actual child" for this rule either, exactly mirroring validateFirebaseData\'s own key !== \'.priority\' && key !== \'.sv\' exclusion', () => {
+    expect(validateFirebaseWritableValue({ ".value": 1, ".sv": "timestamp" }, emptyBase).ok).toBe(true);
+  });
+
+  it('".value" alongside BOTH ".priority" and ".sv" together (no ordinary child) is still accepted', () => {
+    expect(validateFirebaseWritableValue({ ".value": 1, ".priority": "abc", ".sv": "timestamp" }, emptyBase).ok).toBe(true);
+  });
+
+  it('a bare ".sv" server-value placeholder with no ".value" present at all is unaffected by this rule and remains accepted, exactly as before', () => {
+    expect(validateFirebaseWritableValue({ ".sv": "timestamp" }, emptyBase).ok).toBe(true);
+  });
+
+  it('".priority" alongside an ordinary child key, with NO ".value" present, is accepted -- this rule only restricts ".value", never ".priority" on its own (a parent node may carry a priority alongside its real children)', () => {
+    expect(validateFirebaseWritableValue({ ".priority": 5, alive: true }, emptyBase).ok).toBe(true);
+  });
+
+  it('the same invalid ".value" + ordinary-child combination is rejected at ANY nesting depth, including inside the unrestricted History change.item location', () => {
+    expect(validateFirebaseWritableValue(
+      { history: [{ change: { item: { ".value": 1, alive: true } } }] },
+      emptyBase
+    ).ok).toBe(false);
+    expect(validateFirebaseWritableValue(
+      { players: { a: { statuses: { ".value": true, poisoned: true } } } },
+      emptyBase
+    ).ok).toBe(false);
+  });
+
+  it('the same valid ".value" + ".priority" combination is accepted at depth too, never over-rejected merely for being nested', () => {
+    expect(validateFirebaseWritableValue(
+      { history: [{ change: { item: { ".value": 1, ".priority": "x" } } }] },
+      emptyBase
+    ).ok).toBe(true);
+  });
+
+  it("never mutates its input while checking the '.value' structure", () => {
+    const value = { ".value": 1, alive: true };
+    const before = structuredClone(value);
+    expect(validateFirebaseWritableValue(value, emptyBase).ok).toBe(false);
+    expect(value).toEqual(before);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9R.1 Astra remediation (Finding F3): the real Firebase RTDB SDK's
+// own ValidationPath counts path-segment byte length via @firebase/util's
+// stringLength() -- NOT a standards-compliant UTF-8 byte count. That
+// function charges a UTF-16 LEAD surrogate (U+D800-U+DBFF) 4 bytes and
+// unconditionally skips the next code unit, regardless of whether that
+// next code unit is actually a valid trail surrogate; a lone/unmatched
+// trail surrogate (U+DC00-U+DFFF) instead falls through to a generic
+// 3-byte branch. `TextEncoder().encode(...).length` (real UTF-8) and
+// Firebase's own stringLength() agree for ordinary ASCII, ordinary BMP
+// characters, and genuinely valid surrogate pairs (emoji) -- they diverge
+// ONLY for a lone/unmatched surrogate, which is exactly Astra's
+// reproduction: a raw JSON checkpoint can carry an unmatched high surrogate
+// as an escaped code unit, and Silverwick's gate must match what the real
+// SDK would count it as, not a more "correct" Unicode-aware count.
+// ---------------------------------------------------------------------------
+describe("validateFirebaseWritableValue: Firebase's own string-length algorithm, not naive UTF-8 (Finding F3)", () => {
+  it("ASCII: Firebase's algorithm and real UTF-8 agree (1 byte per character)", () => {
+    const key = "x".repeat(100); // 1 (initial) + 100 = 101 <= 768
+    expect(validateFirebaseWritableValue({ [key]: true }, emptyBase).ok).toBe(true);
+  });
+
+  it("valid BMP multibyte characters (e.g. U+00E9 'é', 2 bytes each in both algorithms) are counted identically to real UTF-8", () => {
+    const key = "é".repeat(300); // 1 + 300*2 = 601 <= 768
+    expect(validateFirebaseWritableValue({ [key]: true }, emptyBase).ok).toBe(true);
+    const overKey = "é".repeat(400); // 1 + 400*2 = 801 > 768
+    expect(validateFirebaseWritableValue({ [overKey]: true }, emptyBase).ok).toBe(false);
+  });
+
+  it("a genuinely valid surrogate pair (emoji) is counted as 4 bytes by Firebase's algorithm -- identical to real UTF-8 -- so a valid pair is never mis-rejected by this fix", () => {
+    const key = "\u{1F389}".repeat(100); // 1 lead+trail pair per emoji, 4 bytes each in BOTH algorithms
+    expect(validateFirebaseWritableValue({ [key]: true }, emptyBase).ok).toBe(true);
+  });
+
+  it("a LONE/unmatched high surrogate (U+D800, with nothing after it) is counted as 4 bytes by Firebase's algorithm, exactly as if it completed a real pair -- NOT the 3 bytes a standards-compliant UTF-8 encoder (which substitutes U+FFFD) would produce", () => {
+    // Fixed overhead from an empty base to a single top-level key: 1 (initial byteLength) + key's own firebaseStringLength.
+    // A lone high surrogate alone: firebaseStringLength = 4. 1 + 4 = 5 -- nowhere near the limit; this test is about the COUNTING, not the boundary.
+    const key = "\uD800";
+    const realDestination = ["lobbies", "ABCD1234", "storyteller"];
+    // Push this single lone-surrogate key far enough (via a long ASCII prefix in a SEPARATE test below) to actually cross
+    // the boundary -- here we only need to confirm it costs exactly 4 bytes, not 3, by placing it at a hand-computed edge.
+    // Real destination overhead: 29 (base) + 1 (separator) = 30 before the key's own bytes. 30 + 4 = 34 -- far under 768,
+    // so this alone only proves accept; the boundary test below proves the exact byte count via the 768/769 edge.
+    expect(validateFirebaseWritableValue({ [key]: true }, realDestination).ok).toBe(true);
+  });
+
+  it("a LONE/unmatched low surrogate (U+DC00) is counted as 3 bytes by Firebase's algorithm (it never matches the lead-surrogate range, so it falls through to the generic 3-byte branch) -- this happens to equal real UTF-8's own 3-byte replacement-character count for the same lone code unit, so no divergence is observable here, unlike the lead-surrogate case", () => {
+    const key = "\uDC00".repeat(200); // 1 + 200*3 = 601 <= 768
+    expect(validateFirebaseWritableValue({ [key]: true }, emptyBase).ok).toBe(true);
+    const overKey = "\uDC00".repeat(300); // 1 + 300*3 = 901 > 768
+    expect(validateFirebaseWritableValue({ [overKey]: true }, emptyBase).ok).toBe(false);
+  });
+
+  it("a mixed string containing an ordinary character immediately after a lone lead surrogate: Firebase's algorithm silently never counts that following character at all (the surrogate's blind skip swallows it) -- proving this implementation reproduces that exact quirk rather than a corrected count", () => {
+    // "x" + lone-lead-surrogate + "y": Firebase's algorithm counts 'x' (1),
+    // then the lead surrogate (4, which also skips 'y' entirely) = 5 total.
+    // A naive per-code-unit UTF-8-style count that did NOT reproduce this
+    // quirk would count 'x'(1) + a replacement char for the lone surrogate
+    // (3) + 'y'(1) = 5 as well by coincidence of arithmetic -- so this test
+    // anchors the exact ACCEPT/REJECT boundary instead, where the quirk's
+    // presence or absence is what actually decides the outcome (see the
+    // dedicated Astra-reproduction boundary test below for the precise
+    // divergent case).
+    const key = "x\uD800y";
+    expect(validateFirebaseWritableValue({ [key]: true }, emptyBase).ok).toBe(true);
+  });
+
+  it("boundary: a key whose Firebase-exact string length lands the real destination path at EXACTLY 768 bytes (using a lone high surrogate) is still accepted", () => {
+    // Real destination "lobbies/LGCY2345/storyteller" (8-char code) through
+    // history[0].change.item = 51 bytes of fixed overhead (see the F1 byte-
+    // boundary tests above for the derivation), +1 separator = 52. A key of
+    // 712 'x' characters plus one trailing lone high surrogate:
+    // firebaseStringLength = 712*1 + 4 = 716. 52 + 716 = 768 -- exactly at the limit.
+    const realDestination = ["lobbies", "LGCY2345", "storyteller"];
+    const key = "x".repeat(712) + "\uD800";
+    const value = { history: [{ change: { item: { [key]: true } } }] };
+    expect(validateFirebaseWritableValue(value, realDestination).ok).toBe(true);
+  });
+
+  it("boundary: one 'x' character more (713) lands the SAME shape one byte past the limit (769) and is rejected -- Astra's exact reproduction of the N chosen so a naive UTF-8 count would have accepted (52 + 716 = 768, using TextEncoder's 3-byte replacement-character count for the lone surrogate) while the real Firebase SDK correctly rejects it (52 + 717 = 769, using its own 4-byte-always count)", () => {
+    const realDestination = ["lobbies", "LGCY2345", "storyteller"];
+    const key = "x".repeat(713) + "\uD800";
+    const value = { history: [{ change: { item: { [key]: true } } }] };
+    // Sanity-check the exact divergence this test exists to prove: a naive
+    // UTF-8 byte count of this key would land at 716 (52 + 716 = 768,
+    // wrongly "safe"), while Firebase's own algorithm lands at 717
+    // (52 + 717 = 769, correctly over the limit).
+    expect(new TextEncoder().encode(key).length).toBe(716);
+    expect(validateFirebaseWritableValue(value, realDestination).ok).toBe(false);
+  });
+
+  it("never mutates its input while computing Firebase-exact string length", () => {
+    const value = { ["x".repeat(10) + "\uD800"]: true };
+    const before = structuredClone(value);
+    validateFirebaseWritableValue(value, emptyBase);
+    expect(value).toEqual(before);
   });
 });

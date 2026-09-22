@@ -715,6 +715,96 @@ describe("migrateStoreState", () => {
   });
 
   // -------------------------------------------------------------------------
+  // Phase 9R.1 Astra remediation (Finding M2): a malformed PRESENT
+  // undoStack container -- not absent, not a valid array -- must never
+  // throw before the normal migration/reset boundary. Every migration step
+  // above that maps or spreads `s.undoStack` assumed any truthy value was
+  // already an array; `{}` is truthy but not iterable/mappable, so
+  // `[s.game, ...(s.undoStack ?? [])]` threw "is not iterable" instead of
+  // failing safely through the ALREADY-established invalid/reset behavior
+  // (takeMigrationResetFlag) -- exactly the same malformed-present-field
+  // distinction Finding M1 already applies to scriptId/player.id/effects.
+  // -------------------------------------------------------------------------
+  it.each([13, 14, 15])(
+    "v%i->v16: a malformed undoStack container ({} -- Astra's exact reproduction) never throws during migration/hydration -- resets safely via the existing CLEAN_STATE path rather than crashing",
+    (fromVersion) => {
+      const state = {
+        game: minimalPersistedGame({ players: { a: legacyPlayer({ actualRole: "chef" }) } }),
+        undoStack: {},
+      };
+      let result: unknown;
+      expect(() => { result = migrateStoreState(state, fromVersion); }).not.toThrow();
+      expect(takeMigrationResetFlag()).toBe(true);
+      // The reset path returns CLEAN_STATE exactly -- the malformed
+      // undoStack is never silently normalized into a valid-looking `[]`
+      // that could pass for real Undo content; the whole persisted blob
+      // (including the game) is discarded, matching every other
+      // malformed-field reset in this file.
+      expect(result).toEqual({ game: null, view: "home", undoStack: [], customScripts: {}, lobby: null });
+    }
+  );
+
+  it('v13->v16: a malformed undoStack container ("bad", a string) never throws -- resets safely rather than crashing', () => {
+    const state = {
+      game: minimalPersistedGame({ players: { a: legacyPlayer({ actualRole: "chef" }) } }),
+      undoStack: "bad",
+    };
+    expect(() => migrateStoreState(state, 13)).not.toThrow();
+    expect(takeMigrationResetFlag()).toBe(true);
+  });
+
+  it("v13->v16: a malformed undoStack container (7, a number) never throws -- resets safely rather than crashing", () => {
+    const state = {
+      game: minimalPersistedGame({ players: { a: legacyPlayer({ actualRole: "chef" }) } }),
+      undoStack: 7,
+    };
+    expect(() => migrateStoreState(state, 13)).not.toThrow();
+    expect(takeMigrationResetFlag()).toBe(true);
+  });
+
+  it("v13->v16: undoStack: null already fails the existing StorytellerStateSchema (undoStack is .optional(), not .nullable()) -- this guard does not change that pre-existing behavior, it only stops a non-null malformed container from throwing first", () => {
+    const state = {
+      game: minimalPersistedGame({ players: { a: legacyPlayer({ actualRole: "chef" }) } }),
+      undoStack: null,
+    };
+    expect(() => migrateStoreState(state, 13)).not.toThrow();
+    expect(takeMigrationResetFlag()).toBe(true);
+  });
+
+  it("v13->v16: a genuinely ABSENT undoStack (the field is simply not present) is unaffected by this guard -- migration proceeds normally, exactly as before", () => {
+    const state = { game: minimalPersistedGame({ players: { a: legacyPlayer({ actualRole: "chef" }) } }) };
+    let result: { game: { players: Record<string, MigratedPlayer> } } | undefined;
+    expect(() => { result = migrateStoreState(state, 13) as typeof result; }).not.toThrow();
+    expect(takeMigrationResetFlag()).toBe(false);
+    expect(result!.game.players.a!.actualAlignment).toBe("good");
+  });
+
+  it("v13->v16: a VALID, non-empty undoStack array still migrates normally -- its entries receive the exact same v13->v16 transformation as the live game, never skipped or discarded by this guard", () => {
+    const undoEntry = minimalPersistedGame({
+      players: { a: legacyPlayer({ actualRole: "imp", statuses: { poisoned: true }, reminders: ["Chosen"] }) },
+    });
+    const state = {
+      game: minimalPersistedGame({ players: { a: legacyPlayer({ actualRole: "chef" }) } }),
+      undoStack: [undoEntry],
+    };
+    const result = migrateStoreState(state, 13) as {
+      game: { players: Record<string, MigratedPlayer> };
+      undoStack: { players: Record<string, MigratedPlayer> }[];
+    };
+    expect(takeMigrationResetFlag()).toBe(false);
+    expect(result.game.players.a!.actualAlignment).toBe("good");
+    // The Undo entry (a DIFFERENT player/role/status/reminder set than the
+    // live game) received its own independent v13->v14 migration: an
+    // actual alignment derived from its own resolvable role, its own
+    // legacy poisoned status converted to a manual Effect, and its own
+    // legacy string Reminder converted to a structured record.
+    const undoPlayer = result.undoStack[0]!.players.a!;
+    expect(undoPlayer.actualAlignment).toBe("evil");
+    expect(undoPlayer.effects).toEqual([{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" } }]);
+    expect(undoPlayer.reminders).toEqual([{ id: "legacy-a-0", label: "Chosen", lifetime: { kind: "manual" } }]);
+  });
+
+  // -------------------------------------------------------------------------
   // Phase 9D.2: v14 -> v15 history migration
   // -------------------------------------------------------------------------
   it("v14->v15: a legacy game with no history field receives an empty history collection", () => {
