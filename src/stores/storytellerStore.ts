@@ -2141,7 +2141,21 @@ export const useStorytellerStore = create<StorytellerStore>()(
   )
 );
 
+/** Own-property-safe lookup (Phase 9R.1 Astra remediation, Finding M1
+ * follow-up): `BUILTIN_SCRIPTS[id] ?? s.customScripts[id]` alone resolves
+ * an inherited Object.prototype member for `id` "__proto__"/"constructor"/
+ * "toString" (e.g. `BUILTIN_SCRIPTS["__proto__"]` returns Object.prototype
+ * itself, which is truthy) instead of correctly finding nothing. `id` is a
+ * schema-validated string -- ANY string, including these -- once it has
+ * passed through remote checkpoint recovery: StorytellerGamePersistedSchema
+ * only requires scriptId to be a non-empty string, never that it names a
+ * real script, so a scriptId of exactly "__proto__" legitimately reaches
+ * this function as authoritative Current State, not merely as malformed
+ * input a caller failed to sanitize. */
+const ownScriptEntry = (scripts: Record<string, Script>, id: string): Script | undefined =>
+  Object.prototype.hasOwnProperty.call(scripts, id) ? scripts[id] : undefined;
+
 export const selectScriptById = (
   s: StorytellerStore,
   id: string
-): Script | undefined => BUILTIN_SCRIPTS[id] ?? s.customScripts[id];
+): Script | undefined => ownScriptEntry(BUILTIN_SCRIPTS, id) ?? ownScriptEntry(s.customScripts, id);

@@ -1418,12 +1418,16 @@ describe("Phase 9R.1 Finding B5: Firebase-safe optional serialization for a rich
 // Phase 9R.1 Astra remediation (Finding A4) Proof — Firebase compatibility
 // gate before checkpoint adoption, proven against the REAL Firebase RTDB
 // emulator. Two things this proves that a pure unit test of
-// isFirebaseSafeValue alone cannot: (1) that an illegal key character
-// really is rejected by the real SDK/backend, not merely by our own
-// (possibly wrong) understanding of Firebase's constraints; and (2) that
-// gated recovery (readCheckpoint via startStorytellerSession) refuses such
-// a checkpoint BEFORE it is ever adopted as Current State, against the
-// real emulator -- never a speculative write just to find out.
+// validateFirebaseWritableValue alone cannot: (1) that an illegal key
+// character really is rejected by the real SDK/backend, not merely by our
+// own (possibly wrong) understanding of Firebase's constraints; and (2)
+// that gated recovery (readCheckpoint via startStorytellerSession) refuses
+// such a checkpoint BEFORE it is ever adopted as Current State, against the
+// real emulator -- never a speculative write just to find out. See the
+// "Finding F1 Proof" describe block further below for the same two proofs
+// extended to control characters/DEL, write depth, and write path byte
+// length (the constraints the original six-punctuation-character check
+// here did not yet cover).
 // ---------------------------------------------------------------------------
 describe("Phase 9R.1 Finding A4: Firebase compatibility gate against the real RTDB emulator", () => {
   const code = "A4PROOF1";
@@ -1481,6 +1485,215 @@ describe("Phase 9R.1 Finding A4: Firebase compatibility gate against the real RT
     // Never adopted as Current State.
     expect(useStorytellerStore.getState().game).toBeNull();
 
+    await writer.dispose();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9R.1 Astra remediation (Finding F1) Proof — the expanded Firebase
+// compatibility gate, proven against the REAL Firebase RTDB emulator. The
+// original Finding A4 gate above only checked six punctuation characters;
+// the real SDK also rejects control characters/DEL in keys, a write past
+// the real 32-level MAX_PATH_DEPTH, and a write path past the real
+// 768-UTF-8-byte MAX_PATH_LENGTH_BYTES (counted from the real destination).
+// These tests prove, against the real emulator: (1) the SDK itself
+// genuinely rejects representative invalid classes from each new
+// constraint (never merely our own understanding of them); (2) gated
+// recovery refuses a checkpoint hitting each before it is ever adopted as
+// Current State or written to the real storyteller projection path; and
+// (3) a genuinely compliant value -- including right at a boundary -- is
+// still accepted and actually projects, so these tests are not only
+// "everything rejects".
+// ---------------------------------------------------------------------------
+describe("Phase 9R.1 Finding F1 Proof: expanded Firebase compatibility gate against the real RTDB emulator", () => {
+  const code = "F1PROOF1";
+  const st = "uid-storyteller-f1";
+  const path = (suffix: string) => "lobbies/" + code + "/" + suffix;
+  const db = (uid: string) => env.authenticatedContext(uid).database();
+  const ref = (uid: string, suffix: string) => db(uid).ref(path(suffix));
+
+  function nestedObject(depth: number): unknown {
+    let value: unknown = true;
+    for (let i = 0; i < depth; i++) value = { a: value };
+    return value;
+  }
+
+  test("the real Firebase RTDB SDK genuinely rejects a write whose object contains a control character (newline) in a key -- Astra's exact reproduction, a constraint the original six-punctuation-character check missed entirely", async () => {
+    await env.withSecurityRulesDisabled(async () => {
+      expect(() => ref(st, "scratch").set({ statuses: { "bad\nkey": true } })).toThrow(/invalid key/);
+    });
+  });
+
+  test("the real Firebase RTDB SDK genuinely rejects a write whose object nests one level past the real 32-level maximum write depth", async () => {
+    await env.withSecurityRulesDisabled(async () => {
+      expect(() => ref(st, "scratch").set(nestedObject(33))).toThrow(/maximum depth/);
+    });
+  });
+
+  test("the real Firebase RTDB SDK genuinely rejects a write whose path exceeds the real 768-UTF-8-byte maximum write path length", async () => {
+    await env.withSecurityRulesDisabled(async () => {
+      const longKey = "x".repeat(800);
+      expect(() => ref(st, "scratch").set({ [longKey]: true })).toThrow(/key path longer than 768 bytes/);
+    });
+  });
+
+  test("the real Firebase RTDB SDK genuinely accepts an ordinary write comfortably within every one of these limits -- successful control write, proving these tests are not only 'everything rejects'", async () => {
+    // Unlike the synchronous-throw SDK tests above (client-side validation
+    // rejects those before any request is ever sent, so security rules
+    // never come into play), this is a REAL network write that must
+    // actually be authorized -- withSecurityRulesDisabled only bypasses
+    // rules for a database handle obtained from ITS OWN callback context
+    // (ctx.database()), never for the outer `ref` helper's pre-existing
+    // handle, so this uses ctx.database() exactly like the gated-recovery
+    // tests' own direct seeding writes do.
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await assertSucceeds(
+        ctx.database().ref(path("scratch")).set({
+          code: "ABCD1234",
+          notes: "ordinary Storyteller-typed content",
+          nested: { a: { b: { c: true } } },
+        })
+      );
+    });
+  });
+
+  test('a checkpoint containing a control-character (newline) key is refused by gated recovery BEFORE adoption, against the real emulator -- Current State stays null, and the real storyteller projection path is never written', async () => {
+    useStorytellerStore.setState({
+      game: null, lobby: null, undoStack: [], selectedPlayerId: null,
+      localSeq: 0, sync: null, customScripts: {},
+    });
+    const rawBackend = new FirebaseRoomBackend(db(st) as unknown as Database);
+    await createLobby(rawBackend, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(rawBackend, code);
+
+    const illegalGame = {
+      code, storytellerUid: st, scriptId: "tb", phase: "night", day: 1, notes: "",
+      players: {
+        a: {
+          id: "a", name: "Alice", seat: 0, joinedAt: 1, actualRole: "chef",
+          shownRole: null, shownAlignment: null, behaviorMode: "normal", publicDisplayRole: null,
+          alive: true, ghostVote: true, abilityUsed: false,
+          statuses: { "bad\nkey": true }, reminders: [], stNotes: "", isTraveler: false, effects: [],
+        },
+      },
+      seatOrder: ["a"], nightProgress: {}, fabled: [], bluffs: [], lorics: [], rolePool: [],
+      plannedPlayerCount: 1, plannedTravelerCount: 0, pendingPlayers: {},
+      history: [], informationDeliveries: [],
+    };
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.database().ref(path("checkpoint")).set(JSON.stringify({ game: illegalGame, roster: {} }));
+    });
+
+    const lobby = { code, uid: st, sessionId: session.id, status: "live" as const };
+    useStorytellerStore.getState().setLobby(lobby);
+    const writer = new SessionWriter(rawBackend, code, session.id);
+
+    await expect(startStorytellerSession(rawBackend, lobby, writer)).rejects.toThrow(SnapshotValidationError);
+    expect(useStorytellerStore.getState().game).toBeNull();
+    // Directly observed against the real emulator, not inferred: the
+    // Storyteller-private projection path was never written -- still
+    // absent, exactly as a lobby that never got past checkpoint recovery
+    // would leave it.
+    const storytellerAfter = await ref(st, "storyteller").once("value");
+    expect(storytellerAfter.exists()).toBe(false);
+
+    await writer.dispose();
+  });
+
+  test("a checkpoint whose real destination write path exceeds the 768-UTF-8-byte limit is refused by gated recovery BEFORE adoption, against the real emulator -- measured from the real lobbies/<code>/storyteller destination, not the checkpoint's own root", async () => {
+    useStorytellerStore.setState({
+      game: null, lobby: null, undoStack: [], selectedPlayerId: null,
+      localSeq: 0, sync: null, customScripts: {},
+    });
+    const rawBackend = new FirebaseRoomBackend(db(st) as unknown as Database);
+    await createLobby(rawBackend, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(rawBackend, code);
+
+    // Same fixed-overhead arithmetic proven exactly in
+    // checkpointMigration.test.ts's Finding F1 byte-limit boundary tests:
+    // "lobbies/F1PROOF1/storyteller" (8-char code, same length as there) +
+    // history[0].change.item = 51 bytes of fixed overhead; a 717-byte key
+    // lands the real write path one byte past the 768-byte limit.
+    const overLimitKey = "x".repeat(717);
+    const illegalGame = {
+      code, storytellerUid: st, scriptId: "tb", phase: "night", day: 1, notes: "",
+      players: {
+        a: {
+          id: "a", name: "Alice", seat: 0, joinedAt: 1, actualRole: "chef",
+          shownRole: null, shownAlignment: null, behaviorMode: "normal", publicDisplayRole: null,
+          alive: true, ghostVote: true, abilityUsed: false,
+          statuses: {}, reminders: [], stNotes: "", isTraveler: false, effects: [],
+        },
+      },
+      seatOrder: ["a"], nightProgress: {}, fabled: [], bluffs: [], lorics: [], rolePool: [],
+      plannedPlayerCount: 1, plannedTravelerCount: 0, pendingPlayers: {},
+      history: [{
+        id: "h1", category: "life", playerId: "a",
+        change: { kind: "added", item: { [overLimitKey]: true } },
+      }],
+      informationDeliveries: [],
+    };
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.database().ref(path("checkpoint")).set(JSON.stringify({ game: illegalGame, roster: {} }));
+    });
+
+    const lobby = { code, uid: st, sessionId: session.id, status: "live" as const };
+    useStorytellerStore.getState().setLobby(lobby);
+    const writer = new SessionWriter(rawBackend, code, session.id);
+
+    await expect(startStorytellerSession(rawBackend, lobby, writer)).rejects.toThrow(SnapshotValidationError);
+    expect(useStorytellerStore.getState().game).toBeNull();
+    const storytellerAfter = await ref(st, "storyteller").once("value");
+    expect(storytellerAfter.exists()).toBe(false);
+
+    await writer.dispose();
+  });
+
+  test("a genuinely valid, boundary-adjacent checkpoint -- ordinary keys, reasonable nesting, comfortably within every limit -- is still accepted by gated recovery and actually projects to the real emulator (successful boundary/control recovery, not just 'everything rejects')", async () => {
+    useStorytellerStore.setState({
+      game: null, lobby: null, undoStack: [], selectedPlayerId: null,
+      localSeq: 0, sync: null, customScripts: {},
+    });
+    const rawBackend = new FirebaseRoomBackend(db(st) as unknown as Database);
+    await createLobby(rawBackend, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(rawBackend, code);
+
+    const compliantGame = {
+      code, storytellerUid: st, scriptId: "tb", phase: "night", day: 1, notes: "ordinary notes",
+      players: {
+        a: {
+          id: "a", name: "Alice", seat: 0, joinedAt: 1, actualRole: "chef",
+          shownRole: null, shownAlignment: null, behaviorMode: "normal", publicDisplayRole: null,
+          alive: true, ghostVote: true, abilityUsed: false,
+          statuses: {}, reminders: [], stNotes: "", isTraveler: false, effects: [],
+        },
+      },
+      seatOrder: ["a"], nightProgress: {}, fabled: [], bluffs: [], lorics: [], rolePool: [],
+      plannedPlayerCount: 1, plannedTravelerCount: 0, pendingPlayers: {},
+      history: [{
+        id: "h1", category: "life", playerId: "a",
+        change: { kind: "value", from: { alive: true, score: -3.5 }, to: { alive: false, score: 0 } },
+      }],
+      informationDeliveries: [],
+    };
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.database().ref(path("checkpoint")).set(JSON.stringify({ game: compliantGame, roster: {} }));
+    });
+
+    const lobby = { code, uid: st, sessionId: session.id, status: "live" as const };
+    useStorytellerStore.getState().setLobby(lobby);
+    const writer = new SessionWriter(rawBackend, code, session.id);
+    const recovered = await startStorytellerSession(rawBackend, lobby, writer);
+
+    expect(recovered.outcome).toBe("live");
+    expect(useStorytellerStore.getState().game).not.toBeNull();
+    // The initial flush actually reached the real emulator and wrote the
+    // real Storyteller-private projection path -- a genuine successful
+    // write, not merely an in-memory acceptance.
+    const storytellerAfter = await ref(st, "storyteller").once("value");
+    expect(storytellerAfter.exists()).toBe(true);
+
+    recovered.stop();
     await writer.dispose();
   });
 });

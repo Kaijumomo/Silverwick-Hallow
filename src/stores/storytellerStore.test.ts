@@ -656,6 +656,65 @@ describe("migrateStoreState", () => {
   });
 
   // -------------------------------------------------------------------------
+  // Phase 9R.1 Astra remediation (Finding M1): migration must never throw on
+  // malformed persisted local state -- it should fail safely through the
+  // ALREADY-established invalid/reset behavior (takeMigrationResetFlag),
+  // never an uncaught runtime exception.
+  // -------------------------------------------------------------------------
+  it("v13->v14: a malformed effects array containing null, alongside an active legacy status, never dereferences null.id -- resets safely rather than throwing", () => {
+    const state = {
+      game: minimalPersistedGame({
+        players: { a: legacyPlayer({ actualRole: "chef", effects: [null], statuses: { poisoned: true } }) },
+      }),
+      undoStack: [],
+    };
+    expect(() => migrateStoreState(state, 13)).not.toThrow();
+    expect(takeMigrationResetFlag()).toBe(true);
+  });
+
+  it("v13->v14: malformed persisted custom-script evidence (an unusable Script candidate under the same scriptId the game references) never crashes migration -- resets safely rather than throwing", () => {
+    const state = {
+      game: minimalPersistedGame({
+        scriptId: "hb-malformed", players: { a: legacyPlayer({ actualRole: "custom-role" }) },
+      }),
+      undoStack: [],
+      // A structurally unusable "Script" -- characters is not even an
+      // array, so buildRegistry's `for (const r of script.characters)`
+      // would throw "is not iterable" if migration assumed this shape
+      // were valid before using it as migration evidence.
+      customScripts: { "hb-malformed": { id: "hb-malformed", name: "Malformed", characters: "not-an-array" } },
+    };
+    expect(() => migrateStoreState(state, 13)).not.toThrow();
+    // This also independently fails ScriptSchema's own
+    // characters: z.array(RoleDefSchema).min(1) requirement, so the
+    // overall state resets regardless of what migration does with it --
+    // the point of this test is strictly the absence of a thrown exception.
+    expect(takeMigrationResetFlag()).toBe(true);
+  });
+
+  it("v13->v14: a malformed player identifier (an object, not a string) alongside legacy string Reminders never throws during deterministic Reminder id interpolation -- resets safely rather than throwing", () => {
+    const state = {
+      game: minimalPersistedGame({
+        players: { a: legacyPlayer({ id: { toString: 0 }, actualRole: "chef", reminders: ["Red Herring"] }) },
+      }),
+      undoStack: [],
+    };
+    expect(() => migrateStoreState(state, 13)).not.toThrow();
+    expect(takeMigrationResetFlag()).toBe(true);
+  });
+
+  it("v13->v14: a scriptId of exactly \"__proto__\" never resolves an inherited Object.prototype member as a Script during local migration either -- alignment stays correctly unresolved, no crash", () => {
+    const state = {
+      game: minimalPersistedGame({ scriptId: "__proto__", players: { a: legacyPlayer({ actualRole: "chef" }) } }),
+      undoStack: [],
+    };
+    let result: { game: { players: Record<string, MigratedPlayer> } } | undefined;
+    expect(() => { result = migrateStoreState(state, 13) as typeof result; }).not.toThrow();
+    expect(takeMigrationResetFlag()).toBe(false);
+    expect(result!.game.players.a!.actualAlignment).toBeUndefined();
+  });
+
+  // -------------------------------------------------------------------------
   // Phase 9D.2: v14 -> v15 history migration
   // -------------------------------------------------------------------------
   it("v14->v15: a legacy game with no history field receives an empty history collection", () => {

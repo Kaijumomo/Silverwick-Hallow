@@ -4,7 +4,7 @@ import { z } from "zod";
 import { selectScriptById, useStorytellerStore, type LobbyConnection } from "@/stores/storytellerStore";
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
 import { detectLegacyGameVersion, migrateGameEntry } from "@/stores/gameMigration";
-import { isFirebaseSafeValue } from "./firebaseKeySafety";
+import { validateFirebaseWritableValue } from "./firebaseWriteCompatibility";
 import type { GuardStamp, PlayerId } from "@/stores/types";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import { buildRegistry } from "@/data/roleRegistry";
@@ -770,16 +770,22 @@ let currentConflict: PendingConflict | null = null;
  * migration derive an Actual Alignment the checkpoint itself never
  * proved. See MigrationScriptEvidence's own doc comment (gameMigration.ts).
  *
- * Phase 9R.1 Astra remediation (Finding A4): a checkpoint can be valid
- * JSON and pass the current game schema while still containing an object
- * property name Firebase RTDB cannot store (e.g. `statuses["bad.key"]` --
- * the schema's `z.record` only constrains key LENGTH, never which
- * characters are allowed). Adopting such a checkpoint as Current State
- * would only surface the problem later, at the next real Firebase
- * projection, after it is already authoritative. isFirebaseSafeValue
- * (firebaseKeySafety.ts) is the final gate here, after schema and
- * lobby-code validation and before this checkpoint is ever reported
- * "valid" -- never a speculative Firebase write just to find out.
+ * Phase 9R.1 Astra remediation (Finding A4, expanded per the F1 follow-up):
+ * a checkpoint can be valid JSON and pass the current game schema while
+ * still being a value the real Firebase RTDB SDK refuses to write -- an
+ * illegal key character (the schema's `z.record` only constrains key
+ * LENGTH, never which characters are allowed), a non-finite number
+ * anywhere reachable through an unrestricted schema location (e.g. a
+ * History change snapshot), nesting deeper than Firebase's own maximum
+ * write depth, or a path longer than Firebase's own maximum write byte
+ * length once the ACTUAL destination path is accounted for. Adopting such
+ * a checkpoint as Current State would only surface the problem later, at
+ * the next real Firebase projection, after it is already authoritative.
+ * validateFirebaseWritableValue (firebaseWriteCompatibility.ts) -- run
+ * against the real destination paths production actually writes this data
+ * to (storytellerPath/rosterPath) -- is the final gate here, after schema
+ * and lobby-code validation and before this checkpoint is ever reported
+ * "valid": never a speculative Firebase write just to find out.
  */
 async function readCheckpoint(
   raw: RoomBackend,
@@ -806,9 +812,15 @@ async function readCheckpoint(
 
   const parsed = StorytellerGamePersistedSchema.safeParse(gameRecord);
   if (!parsed.success || parsed.data.code !== lobby.code) return { state: { kind: "invalid" }, restored: null };
-  // Finding A4: the final gate, after schema + lobby-code validation,
-  // before this checkpoint is ever adopted.
-  if (!isFirebaseSafeValue(parsed.data) || !isFirebaseSafeValue(rosterParsed.data)) {
+  // Finding A4/F1: the final gate, after schema + lobby-code validation,
+  // before this checkpoint is ever adopted -- validated against the REAL
+  // production destination each piece is actually written to (never the
+  // game/roster object's own root), so depth/path-byte-length accounting
+  // matches what the real SDK will actually count on the next projection.
+  if (
+    !validateFirebaseWritableValue(parsed.data, ["lobbies", lobby.code, "storyteller"]).ok ||
+    !validateFirebaseWritableValue(rosterParsed.data, ["lobbies", lobby.code, "roster"]).ok
+  ) {
     return { state: { kind: "invalid" }, restored: null };
   }
   return { state: { kind: "valid" }, restored: { game: parsed.data, roster: rosterParsed.data } };

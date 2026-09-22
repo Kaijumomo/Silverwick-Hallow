@@ -47,11 +47,53 @@ export type MigrationScriptEvidence =
   | { kind: "trusted"; customScripts: Record<string, Script> }
   | { kind: "canonical-only" };
 
-function registryForScript(scriptId: string | undefined, evidence: MigrationScriptEvidence): RoleRegistry {
-  const id = scriptId ?? "";
-  const custom = evidence.kind === "trusted" ? evidence.customScripts[id] : undefined;
-  const script = BUILTIN_SCRIPTS[id] ?? custom ?? { id, name: id, characters: [] };
-  return buildRegistry(script);
+/** Own-property-safe lookup -- `obj[key]` alone resolves an inherited
+ * Object.prototype member (e.g. key "__proto__"/"constructor"/"toString")
+ * instead of correctly finding nothing, and BUILTIN_SCRIPTS/customScripts
+ * are plain object maps keyed by untrusted persisted/checkpoint strings
+ * (Phase 9R.1 Astra remediation, Finding M1). */
+function ownProperty<T>(obj: Record<string, T>, key: string): T | undefined {
+  return Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : undefined;
+}
+
+function hasStringId(value: unknown): value is { id: string } {
+  return value !== null && typeof value === "object" && typeof (value as { id?: unknown }).id === "string";
+}
+
+/** Finding M1: a Script candidate (built-in OR persisted custom) is
+ * untrusted structurally until checked -- buildRegistry() iterates
+ * `.characters` (and `.fabled`, if present) with a bare `for...of` and
+ * dereferences each entry's `.id`; a non-array `.characters` throws
+ * "is not iterable", and a malformed element throws reading `.id`. This
+ * is the minimum shape buildRegistry can safely consume. */
+function isUsableScript(value: unknown): value is Script {
+  if (!value || typeof value !== "object") return false;
+  const { characters, fabled } = value as { characters?: unknown; fabled?: unknown };
+  if (!Array.isArray(characters) || !characters.every(hasStringId)) return false;
+  if (fabled !== undefined && (!Array.isArray(fabled) || !fabled.every(hasStringId))) return false;
+  return true;
+}
+
+/** Finding M1: `scriptId` is untrusted persisted/checkpoint data -- it may
+ * not even be a string (e.g. a hostile `{ toString: 0 }`), and coercing
+ * it via `??` alone (then using it as a property key) can throw
+ * "Cannot convert object to primitive value" during the implicit
+ * ToPrimitive/ToString conversion. Never resolved except by an actual
+ * own-property, structurally-usable Script -- an unresolvable or
+ * malformed one leaves alignment derivation unresolved, exactly like an
+ * unrecognized script id already does; it never crashes migration. */
+function registryForScript(scriptId: unknown, evidence: MigrationScriptEvidence): RoleRegistry {
+  const id = typeof scriptId === "string" ? scriptId : "";
+  const builtin = ownProperty(BUILTIN_SCRIPTS, id);
+  if (isUsableScript(builtin)) return buildRegistry(builtin);
+  if (evidence.kind === "trusted") {
+    // Finding M1 (A2 follow-up): a persisted custom Script object is
+    // itself untrusted data -- never assumed structurally valid before
+    // use. An unusable one simply cannot serve as migration evidence.
+    const custom = ownProperty(evidence.customScripts, id);
+    if (isUsableScript(custom)) return buildRegistry(custom);
+  }
+  return buildRegistry({ id, name: id, characters: [] });
 }
 
 /**
@@ -99,6 +141,77 @@ function registryForScript(scriptId: string | undefined, evidence: MigrationScri
  * through the ordinary invalid-checkpoint outcome, never crash migration
  * with an uncaught runtime exception.
  */
+/**
+ * Migrates exactly one player entry's v13-shaped fields, in place.
+ * Assumes the caller has already confirmed `raw` is a non-null object --
+ * everything past that point is still untrusted persisted/checkpoint
+ * data, so every dereference below is guarded rather than assumed to
+ * match STPlayerRecord's declared shape.
+ */
+function migratePlayerV13ToV14(raw: object, registry: RoleRegistry): void {
+  const p = raw as STPlayerRecord;
+  // 1. Actual alignment: derive for an ordinary player with an assigned,
+  // still-resolvable role. Never invent one for a Traveler, and never
+  // overwrite an alignment already present. registry.get() is a Map
+  // lookup -- safe for any key type, including a malformed p.actualRole.
+  if (p.actualAlignment === undefined && !p.isTraveler && p.actualRole) {
+    const role = registry.get(p.actualRole);
+    if (role) p.actualAlignment = deriveAlignment(role);
+  }
+  // 2. Effects: a genuinely absent `effects` (the v13 shape never had
+  // this field) becomes an empty array -- STPlayerRecordSchema declares
+  // no default for it, so unlike history/informationDeliveries above,
+  // migration itself must supply this one. A PRESENT but malformed
+  // `effects` (Finding A3), OR one whose elements aren't even
+  // object-shaped with a string id (Finding M1 -- `[null]` must never
+  // reach `eff.id`), is left untouched and the status->Effect conversion
+  // below is skipped for it entirely -- the malformed value still fails
+  // final schema validation.
+  if (p.effects === undefined) p.effects = [];
+  if (Array.isArray(p.effects) && p.effects.every(hasStringId)) {
+    for (const type of ["drunk", "poisoned", "protected"]) {
+      // Finding A3: only the LITERAL boolean `true` activates a migrated
+      // legacy status. `p.statuses?.[type]` alone was a JavaScript
+      // truthiness check -- the malformed string "false" (or any other
+      // non-boolean truthy value) is truthy in JS and would have
+      // silently become an active Effect. Literal `false` must not
+      // activate it, and neither may anything else; a non-boolean status
+      // value is simply left in `statuses`, where StatusesSchema's
+      // `z.boolean()` requirement rejects it at final validation instead
+      // of migration inventing an Effect for it.
+      if (p.statuses?.[type] === true) {
+        const id = `manual:${type}`;
+        if (!p.effects.some((eff) => eff.id === id)) {
+          p.effects.push({ id, type, lifetime: { kind: "manual" } });
+        }
+        delete p.statuses[type];
+      }
+    }
+  }
+  // 3. Reminders: a plain string array (every entry still a string)
+  // becomes manual/legacy records with no invented source or moment.
+  // Finding M1: the deterministic id is interpolated from `p.id` via a
+  // template literal, which triggers JS's implicit ToString/ToPrimitive
+  // conversion -- for a hostile object id (e.g. `{ toString: 0 }`) that
+  // throws "Cannot convert object to primitive value" instead of
+  // producing a string. Only ever interpolated once `p.id` is confirmed
+  // to already BE a string; otherwise this step is skipped and
+  // `reminders` is left untouched (STPlayerRecordSchema's own
+  // `id: z.string().min(1)` independently rejects the malformed id at
+  // final validation regardless).
+  if (
+    typeof p.id === "string" &&
+    Array.isArray(p.reminders) &&
+    p.reminders.every((r) => typeof r === "string")
+  ) {
+    p.reminders = (p.reminders as unknown as string[]).map((label, index) => ({
+      id: `legacy-${p.id}-${index}`,
+      label,
+      lifetime: { kind: "manual" as const },
+    }));
+  }
+}
+
 export function migrateGameEntry(
   entry: unknown,
   fromVersion: number,
@@ -106,70 +219,43 @@ export function migrateGameEntry(
 ): void {
   if (!entry || typeof entry !== "object") return;
   const e = entry as {
-    scriptId?: string;
+    scriptId?: unknown;
     players?: Record<string, unknown>;
   };
 
   if (fromVersion < 14) {
     const players = e.players;
-    if (players && typeof players === "object") {
-      const registry = registryForScript(e.scriptId, scriptEvidence);
+    if (players && typeof players === "object" && !Array.isArray(players)) {
+      // Finding M1: resolving the script registry is itself untrusted-data
+      // dependent (scriptId, and for local migration a persisted custom
+      // Script object). registryForScript/isUsableScript already guard
+      // every identified failure mode; this try/catch is a last-resort
+      // backstop so a genuinely unforeseen shape still falls back to an
+      // empty (fully unresolved) registry rather than aborting migration
+      // for every player in this entry.
+      let registry: RoleRegistry;
+      try {
+        registry = registryForScript(e.scriptId, scriptEvidence);
+      } catch {
+        registry = buildRegistry({ id: "", name: "", characters: [] });
+      }
       for (const raw of Object.values(players)) {
         // Finding A3: a malformed player entry (not an object at all) is
         // left completely untouched -- never migrated, never crashed on.
         // players: z.record(z.string(), STPlayerRecordPersistedSchema)
         // rejects it during final schema validation regardless.
         if (!raw || typeof raw !== "object") continue;
-        const p = raw as STPlayerRecord;
-        // 1. Actual alignment: derive for an ordinary player with an
-        // assigned, still-resolvable role. Never invent one for a
-        // Traveler, and never overwrite an alignment already present.
-        if (p.actualAlignment === undefined && !p.isTraveler && p.actualRole) {
-          const role = registry.get(p.actualRole);
-          if (role) p.actualAlignment = deriveAlignment(role);
-        }
-        // 2. Effects: a genuinely absent `effects` (the v13 shape never
-        // had this field) becomes an empty array -- STPlayerRecordSchema
-        // declares no default for it, so unlike history/informationDeliveries
-        // above, migration itself must supply this one. A PRESENT but
-        // malformed `effects` (Finding A3) is left untouched and the
-        // status->Effect conversion below is skipped for it entirely
-        // (rather than risk calling .some()/.push() on non-array data) --
-        // the malformed value still fails final schema validation.
-        if (p.effects === undefined) p.effects = [];
-        if (Array.isArray(p.effects)) {
-          for (const type of ["drunk", "poisoned", "protected"]) {
-            // Finding A3: only the LITERAL boolean `true` activates a
-            // migrated legacy status. `p.statuses?.[type]` alone was a
-            // JavaScript truthiness check -- the malformed string "false"
-            // (or any other non-boolean truthy value) is truthy in JS and
-            // would have silently become an active Effect. Literal `false`
-            // must not activate it, and neither may anything else; a
-            // non-boolean status value is simply left in `statuses`,
-            // where StatusesSchema's `z.boolean()` requirement rejects it
-            // at final validation instead of migration inventing an Effect
-            // for it.
-            if (p.statuses?.[type] === true) {
-              const id = `manual:${type}`;
-              if (!p.effects.some((eff) => eff.id === id)) {
-                p.effects.push({ id, type, lifetime: { kind: "manual" } });
-              }
-              delete p.statuses[type];
-            }
-          }
-        }
-        // 3. Reminders: a plain string array (every entry still a string)
-        // becomes manual/legacy records with no invented source or moment.
-        // Already Finding-A3-safe as originally written: a malformed
-        // (non-array, or mixed-content) `reminders` simply never matches
-        // this condition and is left untouched for final validation to
-        // reject -- it is never reset to a default.
-        if (Array.isArray(p.reminders) && p.reminders.every((r) => typeof r === "string")) {
-          p.reminders = (p.reminders as unknown as string[]).map((label, index) => ({
-            id: `legacy-${p.id}-${index}`,
-            label,
-            lifetime: { kind: "manual" as const },
-          }));
+        try {
+          migratePlayerV13ToV14(raw, registry);
+        } catch {
+          // Finding M1: every identified crash site is guarded inside
+          // migratePlayerV13ToV14 itself; this is a last-resort backstop
+          // against an unforeseen malformed shape. Never let an
+          // exception from ONE malformed player abort migration for the
+          // REST of this entry's players -- that player is simply left
+          // un-migrated, exactly like the shape guards above already
+          // leave a malformed field untouched, and final schema
+          // validation rejects it the same way.
         }
       }
     }
