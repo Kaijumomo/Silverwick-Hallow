@@ -543,3 +543,47 @@ describe("Phase 9R.2: privacy", () => {
     }
   });
 });
+
+describe("Phase 9R.2 (Astra R1): supplied-identity occupancy entry points", () => {
+  it("assignPendingToSeat uses a supplied, never-used ParticipantId -- and refuses (changing nothing) any id this game has already used, current or historical", () => {
+    liveGame();
+    const alice = idOf("Alice");
+    const A = participantIdOf(alice);
+    state().setStatus(alice, "poisoned", true); // A now also lives in History
+    state().unseatPlayer(alice); // A survives only in History
+    state().addToPendingQueue("uid-bob", "Bob");
+    const before = game();
+    // Reusing Alice's historical identity for Bob is refused outright.
+    expect(state().assignPendingToSeat("uid-bob", alice, A)).toBe(false);
+    // ...and so is any current occupant's identity.
+    expect(state().assignPendingToSeat("uid-bob", alice, participantIdOf(idOf("Carol")))).toBe(false);
+    expect(state().assignPendingToSeat("uid-bob", alice, "")).toBe(false);
+    expect(game()).toBe(before);
+    // A fresh id is accepted and becomes Bob's participation identity.
+    expect(state().assignPendingToSeat("uid-bob", alice, "pt-fresh-bob")).toBe(true);
+    expect(game().players[alice]).toMatchObject({ name: "Bob", participantId: "pt-fresh-bob" });
+    expect(game().pendingPlayers["uid-bob"]).toBeUndefined();
+  });
+
+  it("restoreSeatedMember occupies an empty seat with the authoritative identity, and refuses an occupied/nonexistent seat, a blank name, or an identity another occupant holds", () => {
+    liveGame();
+    const alice = idOf("Alice");
+    const carol = idOf("Carol");
+    state().unseatPlayer(alice);
+    state().addToPendingQueue("uid-bob", "Bob");
+    const before = game();
+    expect(state().restoreSeatedMember("uid-bob", carol, "Bob", "pt-bob")).toBe(false); // occupied
+    expect(state().restoreSeatedMember("uid-bob", "toString", "Bob", "pt-bob")).toBe(false); // inherited key, not a seat
+    expect(state().restoreSeatedMember("uid-bob", alice, "   ", "pt-bob")).toBe(false);
+    expect(state().restoreSeatedMember("uid-bob", alice, "Bob", participantIdOf(carol))).toBe(false); // held by Carol
+    expect(game()).toBe(before);
+    state().setStatus(carol, "drunk", true); // an ordinary Undo entry
+    expect(state().restoreSeatedMember("uid-bob", alice, "Bob", "pt-bob")).toBe(true);
+    expect(game().players[alice]).toMatchObject({ name: "Bob", participantId: "pt-bob", isEmpty: false });
+    expect(game().pendingPlayers["uid-bob"]).toBeUndefined(); // no longer waiting
+    expect(state().undoStack).toEqual([]); // a membership boundary, like assignPendingToSeat
+    // One authoritative instance can never be seated twice.
+    state().unseatPlayer(idOf("Dave"));
+    expect(state().restoreSeatedMember("uid-bob", game().seatOrder.find((id) => game().players[id]!.isEmpty)!, "Bob", "pt-bob")).toBe(false);
+  });
+});

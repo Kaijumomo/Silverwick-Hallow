@@ -8,11 +8,12 @@ import {
   lobbyStatusPath,
   playerPath,
   rosterEntryPath,
+  rosterParticipantPath,
   rosterPath,
   storytellerPath,
   storytellerUidPath,
 } from "./paths";
-import type { PlayerId, PlayerSelfRecord } from "@/stores/types";
+import type { ParticipantId, PlayerId, PlayerSelfRecord } from "@/stores/types";
 import { sessionPath, outcomePath, leavePath, LifecycleError } from "./lifecycle";
 import { decodeRosterEntry, decodeJoinRequests, decodeRoster, decodeLobbyStatus, reportSnapshotProblem, SnapshotValidationError, subscribeDecoded, DATA_ERROR_MESSAGE, CONNECTION_ERROR_MESSAGE } from "./snapshots";
 
@@ -99,9 +100,13 @@ export async function cancelJoinRequest(backend: RoomBackend, code: string, uid:
   await backend.set(joinRequestPath(code, uid), null);
 }
 
-/** ST-only membership revocation. Rules deny subsequent private reads. */
+/** ST-only membership revocation. Rules deny subsequent private reads.
+ * Phase 9R.2: the binding's participant record goes with it, atomically. */
 export async function revokeMembership(backend: RoomBackend, code: string, uid: string): Promise<void> {
-  await backend.update({ [rosterEntryPath(code, uid)]: null, [outcomePath(code, uid)]: "revoked", [leavePath(code, uid)]: null });
+  await backend.update({
+    [rosterEntryPath(code, uid)]: null, [rosterParticipantPath(code, uid)]: null,
+    [outcomePath(code, uid)]: "revoked", [leavePath(code, uid)]: null,
+  });
 }
 
 export async function rejectJoinRequest(backend: RoomBackend, code: string, uid: string): Promise<void> {
@@ -111,6 +116,16 @@ export async function rejectJoinRequest(backend: RoomBackend, code: string, uid:
   }
   await backend.update({ [joinRequestPath(code, uid)]: null, [outcomePath(code, uid)]: "rejected" });
 }
+
+/**
+ * Phase 9R.2 (Astra R1): the participation instance a roster binding seats --
+ * the ParticipantId the Storyteller's local occupancy commit will use for
+ * this exact binding, plus the seat-time name. Stored Storyteller-only at
+ * rosterParticipants/{uid}, beside roster/{uid}, so that recovery can PROVE
+ * (by ParticipantId equality, never by UID/name/seat) whether a recovered
+ * game's occupant of that seat is this binding's participant.
+ */
+export type SeatParticipant = { participantId: ParticipantId; name: string };
 
 /**
  * ST-side: atomically write the player's projection AND bind roster/{uid} to
@@ -128,7 +143,8 @@ export async function seatPlayer(
   code: string,
   uid: string,
   playerId: PlayerId,
-  selfRecord: PlayerSelfRecord | null
+  selfRecord: PlayerSelfRecord | null,
+  participant: SeatParticipant | null = null,
 ): Promise<void> {
   const bindings = await readRosterBindings(backend, code);
   const existingForUid = bindings[uid];
@@ -143,6 +159,14 @@ export async function seatPlayer(
   }
   const updates: Record<string, Json> = {
     [rosterEntryPath(code, uid)]: playerId,
+    // Phase 9R.2 (Astra R1): the binding and the record of which
+    // participation instance it seats are written together, in this one
+    // update. A binding created without a participant (legacy callers)
+    // explicitly clears any record, so a stale record can never pair with a
+    // newer binding.
+    [rosterParticipantPath(code, uid)]: participant
+      ? { playerId, participantId: participant.participantId, name: participant.name }
+      : null,
     [joinRequestPath(code, uid)]: null,
     [outcomePath(code, uid)]: null,
   };
@@ -173,6 +197,7 @@ export async function revokePlayerMembership(
   };
   if (uid) {
     updates[rosterEntryPath(code, uid)] = null;
+    updates[rosterParticipantPath(code, uid)] = null;
     updates[outcomePath(code, uid)] = "revoked";
     updates[leavePath(code, uid)] = null;
   }

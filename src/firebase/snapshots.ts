@@ -98,6 +98,14 @@ export function decodeSelfSnapshot(raw: unknown): Snapshot<PlayerSelfRecord> {
 export const decodeRosterEntry = (raw: unknown): Snapshot<string> => raw == null ? WAITING : parse(id, raw);
 export const decodeJoinRequest = (raw: unknown): Snapshot<string> => raw == null ? WAITING : parse(request, raw);
 export const decodeRoster = (raw: unknown): Snapshot<Record<string, string>> => parse(emptyNode(z.record(id, id), {}), raw);
+/** Phase 9R.2 (Astra R1): the Storyteller-only record naming which
+ * participation instance each roster binding seats (see
+ * rosterParticipantPath). `name` is the seat-time name, bounded exactly like
+ * a join request; `.strict()` because the record is exactly these fields. */
+const rosterParticipant = z.object({ playerId: id, participantId: id, name: request }).strict();
+export type RosterParticipantRecord = z.infer<typeof rosterParticipant>;
+export const decodeRosterParticipants = (raw: unknown): Snapshot<Record<string, RosterParticipantRecord>> =>
+  parse(emptyNode(z.record(id, rosterParticipant), {}), raw);
 export const decodeJoinRequests = (raw: unknown): Snapshot<Record<string, string>> => parse(emptyNode(z.record(id, request), {}), raw);
 /** A player's own leaveRequests/{uid}. Strictly `true` or absent — never
  * trusted as authority, only as a hint for handshake reconciliation. */

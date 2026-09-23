@@ -28,9 +28,10 @@ import { goOffline, goOnline, type Database } from "firebase/database";
 import { FirebaseRoomBackend } from "./firebaseBackend";
 import { SessionWriter, LEASE_MS, FENCE_MARGIN_MS } from "./writer";
 import { writeProjections } from "./sync";
-import { createLobby, readRosterBindings, revokePlayerMembership, seatPlayer } from "./lobby";
+import { createLobby, knockOnLobby, readRosterBindings, revokePlayerMembership, seatPlayer } from "./lobby";
 import { joinLobby, leaveLobby, startPlayerHandshake } from "./playerSync";
-import { acceptLeaveRequest, rejectLeaveRequest } from "./membershipCommands";
+import { acceptLeaveRequest, rejectLeaveRequest, revokePlayerAndCommit, seatPlayerAndCommit } from "./membershipCommands";
+import { newParticipantId } from "@/stores/participants";
 import { playerPath, publicPath } from "./paths";
 import { reportRuntimeError, resolveReconnectConflict, startStorytellerSession, useSessionRuntime } from "./storytellerSync";
 import { lifecycleMessage, requireActiveSession } from "./lifecycle";
@@ -1475,6 +1476,109 @@ describe("OPUS-001-CONTRACT-H1-GAP2: valid-authority reconciliation that require
 // the request alone (leaveLobby) never destroys roster/private membership;
 // only an explicit Storyteller decision does.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Phase 9R.2 Astra remediation R1-F: the stale-checkpoint / current-membership
+// collision, reproduced against the real RTDB emulator with enforced rules.
+// Alice (a real UID, seated through the real Storyteller seating sequence)
+// holds seat p1 in the last checkpoint that ever lands; the Storyteller then
+// revokes her and seats Bob at the same reusable PlayerId, but no later
+// projection lands. A fresh Storyteller device recovers. Before the fix,
+// reconciliation kept the checkpoint's Alice at p1 because SOME current UID
+// (Bob's) was bound there -- and republished Alice's shown role to Bob's
+// private seat path. The first assertion below is Bob's own client view.
+// ---------------------------------------------------------------------------
+describe("Phase 9R.2 R1-F: stale checkpoint + current membership, real enforced rules", () => {
+  test("a fresh Storyteller device never recovers the earlier participant as the current occupant, and Bob's client never receives Alice's role", async () => {
+    const code = "RONEFAAA", st = "r1f-storyteller", aliceUid = "r1f-alice", bobUid = "r1f-bob";
+    const store = () => useStorytellerStore.getState();
+    const seatLikeProduction = async (backend: SessionWriter, uid: string, seatId: string) => {
+      const participant = { participantId: newParticipantId(), name: store().game!.pendingPlayers[uid]! };
+      await seatPlayerAndCommit(backend, code, uid, seatId, null,
+        () => store().assignPendingToSeat(uid, seatId, participant.participantId), participant);
+      return participant.participantId;
+    };
+    const checkpointGame = async (backend: FirebaseRoomBackend) =>
+      JSON.parse(await backend.get(`lobbies/${code}/checkpoint`) as string).game as { players: Record<string, { participantId?: string; name: string }>; history: unknown[] };
+
+    // --- Device 1: a live, flushing session; Alice seated for real. ---------
+    const device1 = backendFor(st);
+    await createLobby(device1, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(device1, code);
+    const lobby = { code, uid: st, sessionId: session.id, status: "live" as const };
+    store().newGame("tb", { plannedPlayerCount: 5 });
+    store().setLobby(lobby);
+    const w1 = new SessionWriter(device1, code, session.id);
+    disposals.push(() => w1.dispose());
+    const m1 = await startStorytellerSession(device1, lobby, w1);
+    const p1 = store().game!.seatOrder[0]!;
+    await knockOnLobby(backendFor(aliceUid), code, aliceUid, "Alice");
+    await vi.waitFor(() => expect(store().game!.pendingPlayers[aliceUid]).toBe("Alice"), { timeout: 5000 });
+    const PA = await seatLikeProduction(w1, aliceUid, p1);
+    for (const name of ["Carol", "Dave", "Eve", "Frank"]) store().addPlayerToSeat(name);
+    store().setRolePool(["washerwoman", "librarian", "chef", "poisoner", "imp"]);
+    expect(store().dealRolePool().ok).toBe(true);
+    const holder = Object.values(store().game!.players).find((p) => p.actualRole === "washerwoman")!.id;
+    if (holder !== p1) expect(store().swapSetupRoles(p1, holder).ok).toBe(true);
+    for (const id of store().game!.seatOrder) store().showAssignedRole(id);
+    expect(store().revealRoles().ok).toBe(true);
+    expect(store().beginNightOne().ok).toBe(true);
+    store().setStatus(p1, "poisoned", true); // live History about Alice
+    await vi.waitFor(async () => {
+      const g = await checkpointGame(device1);
+      expect(g.players[p1]!.participantId).toBe(PA);
+      expect(g.history).toHaveLength(1);
+    }, { timeout: 5000 });
+    expect(await device1.get(playerPath(code, p1))).toEqual({ shownRole: "washerwoman", shownAlignment: "good" });
+    const aliceHistory = structuredClone(store().game!.history);
+    m1.stop();
+    await w1.dispose();
+
+    // --- Same Storyteller, no projection lands: revoke Alice, seat Bob. ----
+    const w2 = new SessionWriter(backendFor(st), code, session.id);
+    disposals.push(() => w2.dispose());
+    await w2.start();
+    await revokePlayerAndCommit(w2, code, p1, () => store().unseatPlayer(p1));
+    await knockOnLobby(backendFor(bobUid), code, bobUid, "Bob");
+    store().addToPendingQueue(bobUid, "Bob"); // what the live join-request watcher calls
+    const PB = await seatLikeProduction(w2, bobUid, p1);
+    expect(PB).not.toBe(PA);
+    await w2.dispose();
+    expect((await checkpointGame(device1)).players[p1]!.participantId).toBe(PA); // still the stale checkpoint
+    expect(await readRosterBindings(device1, code)).toEqual({ [bobUid]: p1 });
+
+    // --- A fresh Storyteller device recovers. ------------------------------
+    useStorytellerStore.setState({ game: null, lobby: null, undoStack: [], sync: null, localSeq: 0, selectedPlayerId: null });
+    store().setLobby(lobby);
+    const w3 = new SessionWriter(backendFor(st), code, session.id);
+    disposals.push(() => w3.dispose());
+    const m3 = await startStorytellerSession(backendFor(st), lobby, w3);
+    disposals.push(() => m3.stop());
+    expect(m3.outcome).toBe("live");
+
+    // Bob's own real client, through enforced rules: seated at p1, and it
+    // never receives Alice's shown role.
+    const bobBackend = backendFor(bobUid);
+    usePlayerStore.getState().setSession({ code, uid: bobUid, requestedName: "Bob" });
+    disposals.push(startPlayerHandshake(bobBackend, code, bobUid));
+    await waitForPlayer(s => s.status === "seated" && s.playerId === p1 && s.publicLobby !== null, "Bob seated at p1 with public data");
+    expect(usePlayerStore.getState().self).toBeNull();
+    expect(await bobBackend.get(playerPath(code, p1))).toBeUndefined();
+    expect(usePlayerStore.getState().publicLobby!.players[p1]!.name).toBe("Bob");
+
+    // Storyteller-authoritative state: B is the current occupant with B's
+    // own recorded identity; A's History is intact and still A's.
+    const recovered = store().game!;
+    expect(recovered.players[p1]).toMatchObject({ name: "Bob", participantId: PB, shownRole: null });
+    expect(recovered.history).toEqual(aliceHistory);
+    expect(recovered.history[0]!.participant).toEqual({ kind: "participant", participantId: PA, playerId: p1, nameAtTime: "Alice" });
+
+    // Participant identity stays Storyteller-private under enforced rules.
+    await assertFails(env.authenticatedContext(bobUid).database().ref(`lobbies/${code}/rosterParticipants/${bobUid}`).once("value"));
+    const publicJson = JSON.stringify(await bobBackend.get(publicPath(code)));
+    for (const leak of [PA, PB, "participant", "nameAtTime"]) expect(publicJson).not.toContain(leak);
+  });
+});
+
 describe("OPUS-003-CONTRACT: real player client + enforced rules prove both the reject and accept leave-request flows", () => {
   test("reject flow: a real leave request survives Storyteller rejection and the player's handshake returns to seated with private access intact", async () => {
     const code = "OPC3AAAA", st = "opc3-storyteller", alice = "opc3-alice";

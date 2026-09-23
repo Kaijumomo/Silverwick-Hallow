@@ -5,14 +5,15 @@ import { selectScriptById, useStorytellerStore, type LobbyConnection } from "@/s
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
 import { detectLegacyGameVersion, migrateGameEntry } from "@/stores/gameMigration";
 import { validateFirebaseWritableValue } from "./firebaseWriteCompatibility";
-import type { GuardStamp, PlayerId } from "@/stores/types";
+import type { GuardStamp, ParticipantId, PlayerId } from "@/stores/types";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import { buildRegistry } from "@/data/roleRegistry";
 import { writeProjections } from "./sync";
 import { revokePlayerMembership } from "./lobby";
 import type { RoomBackend } from "./backend";
 import type { OnlineMap } from "@/stores/projections";
-import { decodePresence, decodeRoster, decodeJoinRequests, SnapshotValidationError } from "./snapshots";
+import { decodePresence, decodeRoster, decodeRosterParticipants, decodeJoinRequests, SnapshotValidationError, type RosterParticipantRecord } from "./snapshots";
+import { rosterParticipantsPath } from "./paths";
 import { SessionWriter, FENCE_MARGIN_MS, type AuthorityHandle } from "./writer";
 import { decodeSession, guardSchema, isTransient, leaseSchema, lifecycleMessage, LifecycleError, sessionPath } from "./lifecycle";
 import { TRAVELERS } from "@/data/travelers";
@@ -190,12 +191,53 @@ export function useStorytellerSync(backend: RoomBackend | null) {
  * store actions, so they participate in localSeq/dirty tracking exactly
  * like any other Storyteller mutation. Does not redesign the Phase 9C.3
  * leave workflow.
+ *
+ * Phase 9R.2 (Astra R1): a live binding may only KEEP the reconciled game's
+ * occupant of its seat when that occupant is PROVEN to be the participation
+ * instance the binding seats. Previously any live binding at a seat kept
+ * whatever occupant the (possibly stale) game had there -- so after A left
+ * seat p1 and B was seated at p1, a checkpoint (or a stale local game) still
+ * holding A made A's ParticipantId, name, and shown role B's: History about
+ * A matched the "current" occupant and A's role was republished to B's
+ * private seat path. Proof never comes from a matching PlayerId, UID, name,
+ * or seat -- see ContinuityEvidence. An occupant that is not proven is
+ * unseated in the reconciled game (ending that participation instance;
+ * nothing historical is rewritten), and the seat is rebuilt for the live
+ * binding: with the binding's own authoritative ParticipantId and seat-time
+ * name when its rosterParticipants record exists (restoreSeatedMember),
+ * otherwise through the existing canonical path -- a fresh participation
+ * instance from pendingPlayers (assignPendingToSeat), or revocation.
  */
 type MembershipReconciliationPlan = {
   toUnseat: PlayerId[];
+  toRestoreMember: { uid: string; seatId: PlayerId; participantId: ParticipantId; name: string }[];
   toRecoverPending: { uid: string; seatId: PlayerId }[];
   toRevoke: PlayerId[];
 };
+
+/**
+ * Phase 9R.2 (Astra R1): what may prove that the reconciled game's occupant
+ * of a live-bound seat IS the participation instance that binding seats.
+ *
+ * - "participant-record": ONLY the binding's rosterParticipants record,
+ *   whose participantId must equal the occupant's own ParticipantId. Used
+ *   whenever the reconciled game may predate membership changes made
+ *   elsewhere: RESTORE of a checkpoint, either explicit conflict choice
+ *   (a CONFLICT exists precisely because another writer committed), and a
+ *   KEEP_LOCAL with no checkpoint at all.
+ * - "lineage": the reconciled game is this device's own local game and no
+ *   other writer has committed since this device's last acknowledged commit
+ *   (KEEP_LOCAL baseline_current / lost_ack_recovered). Every binding then
+ *   exists only because this same lineage created or reconciled it together
+ *   with its local occupant, so a binding with no participant record (one
+ *   created before these records existed) is proven by the write lineage
+ *   itself -- a writer-guard fact, never a UID/seat comparison. A record,
+ *   when present, is still checked first and always wins.
+ */
+type ContinuityEvidence = "participant-record" | "lineage";
+
+const hasOwn = (value: object | null | undefined, key: string): boolean =>
+  !!value && Object.prototype.hasOwnProperty.call(value, key);
 
 /** Pure: computes the plan from a single explicit snapshot of the game it
  * will run against. The caller chooses that snapshot — the current local
@@ -205,14 +247,17 @@ type MembershipReconciliationPlan = {
  * mutation) — so this can be computed ahead of a synchronous gate without
  * waiting for that mutation to actually land. No I/O, no store mutation.
  *
- * `toUnseat`'s own ids are always disjoint from `membership`'s value set
- * (that is exactly the condition below that adds one to `toUnseat`), so
- * evaluating both passes against the SAME single snapshot of `game` is
- * safe — the two passes never read or decide based on each other's ids. */
+ * `toUnseat`'s first-pass ids are always disjoint from `membership`'s value
+ * set (that is exactly the condition below that adds one to `toUnseat`);
+ * its second-pass ids are live-bound seats whose occupant is unproven, each
+ * paired with exactly one rebuild action (restore, recover, or revoke) for
+ * that same seat, applied after every unseat. */
 function buildMembershipReconciliation(
   game: StorytellerLobbyRecord | null,
   membership: Record<string, string>,
   priorRoster: Record<string, string> | null,
+  participantRecords: Record<string, RosterParticipantRecord>,
+  evidence: ContinuityEvidence,
 ): MembershipReconciliationPlan {
   const toUnseat: PlayerId[] = [];
   if (priorRoster) {
@@ -224,24 +269,47 @@ function buildMembershipReconciliation(
   // A crash can occur between the remote membership ACK and the next
   // checkpoint/flush. Recover known pending seats, queue unresolvable
   // binds for revocation.
+  const toRestoreMember: MembershipReconciliationPlan["toRestoreMember"] = [];
   const toRecoverPending: { uid: string; seatId: PlayerId }[] = [];
   const toRevoke: PlayerId[] = [];
   for (const [uid, id] of Object.entries(membership)) {
-    const player = game?.players[id];
-    const recoverable = !!(player?.isEmpty && game?.pendingPlayers[uid]);
-    if (recoverable) toRecoverPending.push({ uid, seatId: id });
-    // Mirrors recovery's own effect: a recoverable seat will no longer be
-    // empty once applied, so it never also needs revoking.
-    if (recoverable ? false : (!player || player.isEmpty)) toRevoke.push(id);
+    const player = game && hasOwn(game.players, id) ? game.players[id] : undefined;
+    // The seat itself is absent from the reconciled game: nothing to rebuild
+    // into -- the binding is unresolvable, exactly as before.
+    if (!game || !player) { toRevoke.push(id); continue; }
+    // A record only speaks for the exact seat it was written for.
+    const candidate = hasOwn(participantRecords, uid) ? participantRecords[uid] : undefined;
+    const record = candidate && candidate.playerId === id ? candidate : undefined;
+    if (!player.isEmpty) {
+      const proven = record ? record.participantId === player.participantId : evidence === "lineage";
+      if (proven) continue;
+      toUnseat.push(id);
+    }
+    // The record's instance can never be seated twice: if some OTHER seat
+    // of the reconciled game already holds it, the record cannot be honored.
+    const recordHeldElsewhere = !!record && Object.values(game.players)
+      .some((p) => p.id !== id && !p.isEmpty && p.participantId === record.participantId);
+    if (record && !recordHeldElsewhere) {
+      toRestoreMember.push({ uid, seatId: id, participantId: record.participantId, name: record.name });
+    } else if (hasOwn(game.pendingPlayers, uid)) {
+      toRecoverPending.push({ uid, seatId: id });
+    } else {
+      toRevoke.push(id);
+    }
   }
-  return { toUnseat, toRecoverPending, toRevoke };
+  return { toUnseat, toRestoreMember, toRecoverPending, toRevoke };
 }
 
 /** Synchronous local mutation phase: no awaits, no I/O. Safe to run
  * immediately after a synchronous authority gate with nothing in between
- * (Finding H1 follow-up). */
+ * (Finding H1 follow-up). Every unseat runs before any rebuild, so a stale
+ * occupant always leaves its seat before the live binding's participant
+ * enters it. */
 function applyMembershipReconciliationLocally(plan: MembershipReconciliationPlan) {
   for (const id of plan.toUnseat) useStorytellerStore.getState().unseatPlayer(id);
+  for (const { uid, seatId, participantId, name } of plan.toRestoreMember) {
+    useStorytellerStore.getState().restoreSeatedMember(uid, seatId, name, participantId);
+  }
   for (const { uid, seatId } of plan.toRecoverPending) useStorytellerStore.getState().assignPendingToSeat(uid, seatId);
 }
 
@@ -653,13 +721,26 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   const membership = decodeRoster(await raw.get(`lobbies/${lobby.code}/roster`));
   assertCurrent();
   if (membership.status !== "ready") throw new SnapshotValidationError();
+  // Phase 9R.2 (Astra R1): the Storyteller-only record of which participation
+  // instance each live binding seats -- read under the same held lease as
+  // the roster (no other writer can change either in between).
+  const participantRecords = decodeRosterParticipants(await raw.get(rosterParticipantsPath(lobby.code)));
+  assertCurrent();
+  if (participantRecords.status !== "ready") throw new SnapshotValidationError();
 
   // Pure — no I/O, no store mutation — computed ahead of the gate. For
   // RESTORE this plans against the checkpoint's own (not-yet-applied) game
   // content; for KEEP_LOCAL, the current local game, which nothing between
   // here and the gate below can change.
   const effectiveGame = willRestore ? restored!.game : useStorytellerStore.getState().game;
-  const plan = buildMembershipReconciliation(effectiveGame, membership.data, willRestore ? restored!.roster : null);
+  // Phase 9R.2 (Astra R1): only an automatic KEEP_LOCAL whose remote guard
+  // proves no other writer has committed since this device's last
+  // acknowledged commit may lean on write lineage; everything else needs a
+  // participant record (see ContinuityEvidence).
+  const evidence: ContinuityEvidence = !willRestore && decision.type === "KEEP_LOCAL"
+    && (decision.reason === "baseline_current" || decision.reason === "lost_ack_recovered") ? "lineage" : "participant-record";
+  const plan = buildMembershipReconciliation(
+    effectiveGame, membership.data, willRestore ? restored!.roster : null, participantRecords.data, evidence);
 
   // Final synchronous authority gate (Finding H1, extended to automatic
   // startup by Phase 9C.2B.1): NOTHING awaits between this check and the
@@ -895,6 +976,8 @@ export async function resolveReconnectConflict(choice: "keepLocal" | "useRemote"
   // meaning a single check at entry could not protect a LATER local
   // mutation from applying once authority had already lapsed mid-reconciliation).
   const membershipRaw = await raw.get(`lobbies/${lobby.code}/roster`);
+  // Phase 9R.2 (Astra R1): read with the roster, before the gate below.
+  const participantRecordsRaw = await raw.get(rosterParticipantsPath(lobby.code));
 
   if (writer.isStopped()) return "stale";
 
@@ -906,6 +989,8 @@ export async function resolveReconnectConflict(choice: "keepLocal" | "useRemote"
 
   const membership = decodeRoster(membershipRaw);
   if (membership.status !== "ready") throw new SnapshotValidationError();
+  const participantRecords = decodeRosterParticipants(participantRecordsRaw);
+  if (participantRecords.status !== "ready") throw new SnapshotValidationError();
 
   const inScope = () => {
     const current = useStorytellerStore.getState().lobby;
@@ -919,7 +1004,13 @@ export async function resolveReconnectConflict(choice: "keepLocal" | "useRemote"
   // mutation having already landed); for "keepLocal" it is simply the
   // current local game, which nothing between here and the gate can change.
   const effectiveGame = choice === "useRemote" ? restored!.game : useStorytellerStore.getState().game;
-  const plan = buildMembershipReconciliation(effectiveGame, membership.data, choice === "useRemote" ? restored!.roster : null);
+  // Phase 9R.2 (Astra R1): a CONFLICT exists precisely because another
+  // writer committed after this device's baseline -- whichever side is
+  // chosen may predate membership changes, so only participant records
+  // count as proof (never write lineage).
+  const plan = buildMembershipReconciliation(
+    effectiveGame, membership.data, choice === "useRemote" ? restored!.roster : null,
+    participantRecords.data, "participant-record");
 
   // Synchronous authority gate (Finding H1): NOTHING awaits between this
   // check and the completion of every local mutation below — not

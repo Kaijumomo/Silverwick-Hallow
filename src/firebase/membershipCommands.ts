@@ -4,6 +4,7 @@ import {
   readRosterBindings,
   revokePlayerMembership,
   seatPlayer,
+  type SeatParticipant,
 } from "./lobby";
 import { leavePath, travelerChoicePath } from "./lifecycle";
 
@@ -18,6 +19,12 @@ export class MembershipOperationError extends Error {
  * Seat remotely first, then commit the local queue/seat mutation. If the
  * local seat changed while the network request was in flight, compensate by
  * revoking the just-created binding before surfacing the failure.
+ *
+ * Phase 9R.2 (Astra R1): `participant` is the participation instance this
+ * binding seats -- the caller mints it once and hands the SAME ParticipantId
+ * to its local commit (assignPendingToSeat), so the server-side record and
+ * the local occupant can later be proven to be one instance. Omitted only
+ * by legacy/test callers, which then create a record-less binding.
  */
 export async function seatPlayerAndCommit(
   backend: RoomBackend,
@@ -26,9 +33,10 @@ export async function seatPlayerAndCommit(
   playerId: PlayerId,
   selfRecord: PlayerSelfRecord | null,
   commitLocal: () => boolean,
+  participant: SeatParticipant | null = null,
 ): Promise<void> {
-  if (backend.runExclusive) return backend.runExclusive(inner => seatPlayerAndCommit(inner, code, uid, playerId, selfRecord, commitLocal));
-  await seatPlayer(backend, code, uid, playerId, selfRecord);
+  if (backend.runExclusive) return backend.runExclusive(inner => seatPlayerAndCommit(inner, code, uid, playerId, selfRecord, commitLocal, participant));
+  await seatPlayer(backend, code, uid, playerId, selfRecord, participant);
   if (commitLocal()) return;
 
   try {

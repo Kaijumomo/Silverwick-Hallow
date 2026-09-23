@@ -6,6 +6,12 @@ export const storytellerUidPath = (code: string) =>
 export const rosterPath = (code: string) => `lobbies/${code}/roster`;
 export const rosterEntryPath = (code: string, uid: string) =>
   `lobbies/${code}/roster/${uid}`;
+// Phase 9R.2 (Astra R1): Storyteller-only companion to each roster binding,
+// naming the participation instance that binding seats. Written and deleted
+// only in the same multi-path update as roster/{uid}. Never player-readable.
+export const rosterParticipantsPath = (code: string) => `lobbies/${code}/rosterParticipants`;
+export const rosterParticipantPath = (code: string, uid: string) =>
+  `lobbies/${code}/rosterParticipants/${uid}`;
 export const joinRequestsPath = (code: string) => `lobbies/${code}/joinRequests`;
 export const joinRequestPath = (code: string, uid: string) =>
   `lobbies/${code}/joinRequests/${uid}`;

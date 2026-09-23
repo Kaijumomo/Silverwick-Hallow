@@ -11,6 +11,7 @@ roster entries are not evidence of valid membership.
 | `joinRequests/{uid}` | `knockOnLobby`, `cancelJoinRequest`, `seatPlayer`, player hook | ST or same UID | Own absent request in existing/non-ended lobby, no existing binding; 1–20 characters, no surrounding spaces, tabs or line breaks. Own cancellation or ST deletion |
 | `roster` | `watchRoster` | ST | No parent write |
 | `roster/{uid}` | `seatPlayer`, `revokeMembership`, player hook | ST or same UID | ST only; nonempty string player ID or deletion |
+| `rosterParticipants/{uid}` | `seatPlayer`, `revokeMembership`, `revokePlayerMembership`, `SessionWriter.close`, reconnect reconciliation (Phase 9R.2) | ST only — never the bound UID or any player/display | Fenced Storyteller writer only; exactly `{playerId, participantId, name}` (nonempty strings, name ≤ 20) or deletion |
 | `public` | Projections, player/public hooks | ST, own pending request, or own roster membership | ST only |
 | `player/{playerId}` | Projections, `seatPlayer`, player hook | ST or exact same-lobby UID→playerId binding | ST only |
 | `storyteller` | Projections | ST | ST only |

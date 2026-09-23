@@ -32,6 +32,7 @@ authorization claim.
 | --- | --- |
 | `joinRequests/{uid}` | Canonical 1–20 character name; own UID creates/cancels, Storyteller deletes; own UID and Storyteller read |
 | `roster/{uid}` | Storyteller-only authoritative UID → player ID binding; bound UID and Storyteller read |
+| `rosterParticipants/{uid}` | Storyteller-only `{playerId, participantId, name}`: the participation instance that binding seats (Phase 9R.2). Written and deleted only in the same update as `roster/{uid}`; owner reads, no player ever reads |
 | `outcomes/{uid}` | Storyteller records `rejected` or `revoked`; that UID reads its outcome |
 | `leaveRequests/{uid}` | A seated UID requests departure; that UID creates, Storyteller consumes |
 | `public` | Storyteller projection; active request holders and members may read |
@@ -76,7 +77,20 @@ On takeover, an acknowledged `checkpoint` is the recovery point. The current
 server session and roster are read first. The checkpoint game is restored only
 when the session ID still matches; membership differences are reconciled
 against the current roster, and an unresolvable current binding is revoked
-instead of being trusted. The initial projection is acknowledged before the
+instead of being trusted.
+
+Phase 9R.2: a seat (player ID) is reusable, so a live binding keeps the
+recovered game's occupant of its seat only when that occupant is proven to be
+the participation instance the binding seats: its ParticipantId equals the
+binding's `rosterParticipants/{uid}.participantId`. A matching player ID, UID,
+name, or seat is never proof. An unproven occupant is unseated in the
+recovered game (its History is untouched), and the seat is rebuilt for the
+live binding with the binding's own recorded ParticipantId and seat-time name;
+a binding without a record falls back to the pending queue (a fresh
+participation instance) or revocation. A binding with no record (created
+before records existed) is accepted as proven only for a same-device
+reconnect whose writer guard shows no other writer has committed since this
+device's last acknowledged commit. The initial projection is acknowledged before the
 writer is exposed to UI controls. Thus an older local snapshot cannot overwrite
 newer remote membership or an ended session.
 
@@ -100,7 +114,7 @@ All writer operations are serialized. `close()` first stops new commands,
 cancels old retry backoff, and publishes a guarded `public/status = ended`
 sentinel so new joins stop immediately. It then drains any already-started
 write, reacquires its lease, and performs one final guarded multi-path update
-that marks `session.state = ended` and removes roster, requests, leave requests,
+that marks `session.state = ended` and removes roster, participant records, requests, leave requests,
 private projections, Storyteller state, and checkpoint. It then stops listeners.
 Rules allow no new join after the sentinel or projection after the session is
 ended, and stale revisions cannot revive it.

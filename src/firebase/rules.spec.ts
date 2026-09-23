@@ -806,6 +806,79 @@ describe("Firebase RTDB membership authorization", () => {
     } finally { await writer.dispose(); }
   });
 
+  // Phase 9R.2 (Astra R1): the Storyteller-only record naming which
+  // participation instance each roster binding seats. It must be written and
+  // removed with its binding, never be readable by any player or non-owner
+  // (it carries a ParticipantId), and never be writable outside the fenced
+  // Storyteller writer.
+  describe("Phase 9R.2 R1: rosterParticipants (Storyteller-only binding participant record)", () => {
+    const record = { playerId: "p-bob", participantId: "pt-bob-1", name: "Bob" };
+
+    test("seating with a participant writes the record in the same update as the binding; only the Storyteller can read it", async () => {
+      await seed();
+      await knockOnLobby(backend(bob), code, bob, "Bob");
+      await seatPlayer(backend(st), code, bob, "p-bob", null, { participantId: "pt-bob-1", name: "Bob" });
+      expect((await ref(st, "roster/" + bob).once("value")).val()).toBe("p-bob");
+      expect((await ref(st, "rosterParticipants/" + bob).once("value")).val()).toEqual(record);
+      // The bound player can read its own roster entry, never its record.
+      await assertSucceeds(ref(bob, "roster/" + bob).once("value"));
+      await assertFails(ref(bob, "rosterParticipants/" + bob).once("value"));
+      await assertFails(ref(bob, "rosterParticipants").once("value"));
+      await assertFails(ref(alice, "rosterParticipants/" + bob).once("value"));
+      await assertFails(ref("uid-stranger", "rosterParticipants").once("value"));
+    });
+
+    test("players cannot write any record; an unguarded Storyteller write is denied; malformed records are denied even when guarded", async () => {
+      await seed();
+      await assertFails(ref(bob, "rosterParticipants/" + bob).set(record));
+      await assertFails(ref(alice, "rosterParticipants/" + bob).set(record));
+      await assertFails(ref(st, "rosterParticipants/" + bob).set(record)); // no writeGuard
+      const guarded = backend(st);
+      for (const bad of [
+        { ...record, extra: true },
+        { playerId: "p-bob", name: "Bob" },
+        { ...record, participantId: "" },
+        { ...record, name: "x".repeat(21) },
+        { ...record, playerId: 7 },
+      ]) {
+        await expect(guarded.update({ [path("rosterParticipants/" + bob)]: bad as unknown as Json })).rejects.toThrow(/permission[_ ]denied/i);
+      }
+      await assertSucceeds(db(st).ref().update({ [path("rosterParticipants/" + bob)]: record, [path("writeGuard")]: { token: "fixture-writer", revision: 99 } }));
+    });
+
+    test("revocation removes the record atomically with the binding; a record-less seat clears any stale record", async () => {
+      await seed();
+      await knockOnLobby(backend(bob), code, bob, "Bob");
+      await seatPlayer(backend(st), code, bob, "p-bob", null, { participantId: "pt-bob-1", name: "Bob" });
+      await revokePlayerMembership(backend(st), code, "p-bob");
+      expect((await ref(st, "roster/" + bob).once("value")).exists()).toBe(false);
+      expect((await ref(st, "rosterParticipants/" + bob).once("value")).exists()).toBe(false);
+      expect((await ref(st, "outcomes/" + bob).once("value")).val()).toBe("revoked");
+      // A stale record (e.g. from an older client) never survives a new
+      // record-less binding for the same UID.
+      await env.withSecurityRulesDisabled(async (ctx) => {
+        await ctx.database().ref(path("rosterParticipants/" + alice)).set({ playerId: "p-alice", participantId: "pt-stale", name: "Alice" });
+      });
+      await seatPlayer(backend(st), code, alice, "p-alice", null);
+      expect((await ref(st, "rosterParticipants/" + alice).once("value")).exists()).toBe(false);
+    });
+
+    test("ending the session through writer.close removes every participant record", async () => {
+      await seed();
+      await env.withSecurityRulesDisabled(async (ctx) => {
+        await ctx.database().ref(path("rosterParticipants/" + alice)).set({ playerId: "p-alice", participantId: "pt-alice", name: "Alice" });
+        await ctx.database().ref(path("writer/expiresAt")).set(0);
+      });
+      const raw = new FirebaseRoomBackend(db(st) as unknown as Database);
+      const writer = new SessionWriter(raw, code, "test-session");
+      try {
+        await writer.start();
+        await writer.close(["p-alice"]);
+        expect((await ref(st, "rosterParticipants").once("value")).exists()).toBe(false);
+      } finally { await writer.dispose(); }
+    });
+  });
+
   test("writer fields deny other UIDs, malformed leases, and unguarded owner writes", async () => {
     await seed();
     await assertFails(ref(bob, "writer").set({ token: "attack", expiresAt: Date.now() + 1000 }));

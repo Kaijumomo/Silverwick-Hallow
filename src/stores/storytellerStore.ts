@@ -8,7 +8,7 @@ import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { currentGameMoment, manualEffectId } from "./effects";
 import { cloneOwned, diffFields, durableProvenance, type MutationContext, provenanceOf, recordIfLive, sameSnapshot } from "./history";
-import { newParticipantId, participantRefOf, recordedInformationValues } from "./participants";
+import { newParticipantId, participantIdAppearsIn, participantRefOf, recordedInformationValues } from "./participants";
 import { migrateGameEntry } from "./gameMigration";
 import {
   informationDeliveryId,
@@ -42,6 +42,7 @@ import type {
   InformationValue,
   NightStepRecord,
   NightStepStatus,
+  ParticipantId,
   PlayerId,
   ReminderId,
   ReminderInput,
@@ -122,10 +123,22 @@ const arrivalPlayer = (player: STPlayerRecord, game: StorytellerLobbyRecord): ST
  * planned seat (those carry no participant identity at all). The fresh id
  * is applied AFTER arrivalPlayer(), which may rebuild the record from
  * blankPlayer() when designating a Traveler arrival.
+ *
+ * Phase 9R.2 (Astra R1): `participantId` is supplied only when the identity
+ * of this exact participation instance was already fixed elsewhere -- minted
+ * by the membership seating command so the server's rosterParticipants
+ * record names the same instance (assignPendingToSeat), or read back from
+ * that authoritative record during recovery (restoreSeatedMember). Both
+ * callers validate it first; everyone else gets a freshly minted one.
  */
-const occupySeat = (seat: STPlayerRecord, name: string, game: StorytellerLobbyRecord): STPlayerRecord => ({
+const occupySeat = (
+  seat: STPlayerRecord,
+  name: string,
+  game: StorytellerLobbyRecord,
+  participantId: ParticipantId = newParticipantId(),
+): STPlayerRecord => ({
   ...arrivalPlayer({ ...seat, name, isEmpty: false }, game),
-  participantId: newParticipantId(),
+  participantId,
 });
 
 const clone = <T,>(v: T): T =>
@@ -241,7 +254,21 @@ export type StorytellerStore = {
   seatPlayerFromKnock: (uid: string, name: string) => PlayerId | null;
   bindRosterUid: (uid: string, playerId: PlayerId) => void;
   addToPendingQueue: (uid: string, name: string) => void;
-  assignPendingToSeat: (uid: string, seatPlayerId: PlayerId) => boolean;
+  /** Phase 9R.2 (Astra R1): `participantId`, when given, is the identity the
+   * membership seating command already recorded server-side for this
+   * binding (rosterParticipants/{uid}); it must be a NEW participation
+   * instance -- one this game has never used -- or the command refuses. */
+  assignPendingToSeat: (uid: string, seatPlayerId: PlayerId, participantId?: ParticipantId) => boolean;
+  /** Phase 9R.2 (Astra R1): recovery-only. Occupies an empty seat for a live
+   * membership binding whose authoritative server record
+   * (rosterParticipants/{uid}) names the participation instance it seats,
+   * preserving that exact ParticipantId -- used when the recovered game's
+   * own occupant of the seat is not that instance (a stale checkpoint or
+   * stale local game) or the seat is empty there. Refuses when the seat is
+   * not an existing empty seat, the name is blank, or another current
+   * occupant already holds that ParticipantId. Never consults history,
+   * names, or UIDs to decide identity. */
+  restoreSeatedMember: (uid: string, seatPlayerId: PlayerId, name: string, participantId: ParticipantId) => boolean;
   removePendingPlayer: (uid: string) => void;
 
   addPlayer: (name: string) => void;
@@ -1035,13 +1062,18 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
-      assignPendingToSeat: (uid, seatPlayerId) => {
+      assignPendingToSeat: (uid, seatPlayerId, participantId) => {
         const { game } = get();
         if (!game) return false;
         const name = game.pendingPlayers[uid];
         if (!name) return false;
         const seat = game.players[seatPlayerId];
         if (!seat?.isEmpty) return false;
+        // Phase 9R.2 (Astra R1): a supplied identity must be a brand-new
+        // participation instance -- never one this game has already used
+        // (current or historical). Freshly minted ids always pass.
+        if (participantId !== undefined &&
+          (typeof participantId !== "string" || !participantId || participantIdAppearsIn(game, participantId))) return false;
         const newPending = { ...game.pendingPlayers };
         delete newPending[uid];
         set({
@@ -1052,10 +1084,36 @@ export const useStorytellerStore = create<StorytellerStore>()(
             ...game,
             players: {
               ...game.players,
-              [seatPlayerId]: occupySeat(seat, name, game),
+              [seatPlayerId]: occupySeat(seat, name, game, participantId),
             },
             pendingPlayers: newPending,
           },
+        });
+        return true;
+      },
+
+      restoreSeatedMember: (uid, seatPlayerId, name, participantId) => {
+        const { game, selectedPlayerId } = get();
+        if (!game || !Object.prototype.hasOwnProperty.call(game.players, seatPlayerId)) return false;
+        const seat = game.players[seatPlayerId];
+        if (!seat?.isEmpty) return false;
+        const trimmed = typeof name === "string" ? name.trim().slice(0, 20) : "";
+        if (!trimmed || typeof participantId !== "string" || !participantId) return false;
+        // The authoritative record names ONE live participation instance; it
+        // can never be seated twice.
+        if (Object.values(game.players).some((p) => p.participantId === participantId)) return false;
+        const newPending = { ...game.pendingPlayers };
+        delete newPending[uid];
+        set({
+          // A membership transition, exactly like assignPendingToSeat: older
+          // snapshots must not resurrect a stale seat.
+          undoStack: [],
+          game: {
+            ...game,
+            players: { ...game.players, [seatPlayerId]: occupySeat(seat, trimmed, game, participantId) },
+            pendingPlayers: newPending,
+          },
+          selectedPlayerId: selectedPlayerId === seatPlayerId ? null : selectedPlayerId,
         });
         return true;
       },

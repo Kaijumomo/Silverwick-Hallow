@@ -66,6 +66,21 @@ export function participantRefOf(
   return { kind: "participant", participantId: player.participantId, playerId, nameAtTime: player.name };
 }
 
+/**
+ * Phase 9R.2 (Astra R1): true when `participantId` already appears ANYWHERE
+ * in this authoritative game -- a current occupant or any stored historical
+ * snapshot. A deliberately conservative over-approximation (a quoted-string
+ * search of the whole game rather than a list of known ParticipantRef
+ * locations that could fall out of date): a caller-supplied identity for a
+ * NEW participation instance must never collide with one this game has
+ * already used, since a historical participant identity may never be reused.
+ * Freshly minted ids never collide, so a false positive can only ever refuse
+ * a caller-supplied id -- never admit one.
+ */
+export function participantIdAppearsIn(game: StorytellerLobbyRecord, participantId: ParticipantId): boolean {
+  return JSON.stringify(game).includes(JSON.stringify(participantId));
+}
+
 /** True when `ref` refers to exactly this ParticipantId. A legacy ref never
  * matches any participant -- its original participant is unknowable. */
 export function refersToParticipant(ref: ParticipantRef | undefined, participantId: ParticipantId): boolean {

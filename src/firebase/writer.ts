@@ -325,7 +325,7 @@ export class SessionWriter implements RoomBackend {
       const cleanup: Record<string, Json> = {
         [sessionPath(this.code)]: { version: 2, id: this.sessionId, state: "ended" },
         [`${this.root}/public/status`]: "ended",
-        [`${this.root}/roster`]: null, [`${this.root}/joinRequests`]: null,
+        [`${this.root}/roster`]: null, [`${this.root}/rosterParticipants`]: null, [`${this.root}/joinRequests`]: null,
         [`${this.root}/leaveRequests`]: null, [`${this.root}/player`]: null,
         [`${this.root}/storyteller`]: null, [`${this.root}/checkpoint`]: null,
       };

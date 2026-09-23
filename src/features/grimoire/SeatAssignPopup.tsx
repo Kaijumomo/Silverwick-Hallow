@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { seatPlayerAndCommit } from "@/firebase/membershipCommands";
+import { newParticipantId } from "@/stores/participants";
 import { rejectJoinRequest } from "@/firebase/lobby";
 import { lifecycleMessage } from "@/firebase/lifecycle";
 import type { RoomBackend } from "@/firebase/backend";
@@ -84,6 +85,14 @@ export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClo
     try {
       if (code && !backend) throw new Error("Connection unavailable. Reconnect before assigning a seat.");
       if (backend && code) {
+        // Phase 9R.2 (Astra R1): mint this seating's participation instance
+        // ONCE, so the server's rosterParticipants record and the local
+        // occupant name the same ParticipantId -- recovery can then prove
+        // (or disprove) that a recovered game's occupant of this seat is
+        // this binding's participant.
+        const name = useStorytellerStore.getState().game?.pendingPlayers[uid];
+        if (!name) throw new Error("This player is no longer waiting.");
+        const participant = { participantId: newParticipantId(), name };
         // selfRecord must stay null here: Setup identity publication is
         // governed by the Phase 9C.4 projection barrier (see
         // projectLobbyToSelfMap), not by seating. Production seating must
@@ -94,7 +103,8 @@ export function SeatAssignPopup({ seatPlayerId, seatNumber, backend, code, onClo
           uid,
           targetSeatId,
           null,
-          () => assignPendingToSeat(uid, targetSeatId),
+          () => assignPendingToSeat(uid, targetSeatId, participant.participantId),
+          participant,
         );
       } else if (!assignPendingToSeat(uid, targetSeatId)) {
         return;
