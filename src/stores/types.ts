@@ -1,4 +1,41 @@
+/** Live seat/slot address. A seat may be vacated and later reused by a
+ * different person, so a PlayerId alone never identifies WHO a historical
+ * record was about -- see ParticipantId/ParticipantRef (Phase 9R.2). */
 export type PlayerId = string;
+/**
+ * Phase 9R.2: the immutable identity of ONE continuous participation
+ * instance -- one real person occupying a seat in this game, from the
+ * moment they occupy it until they are unseated or removed. Preserved
+ * across seat movement, rename, Role/alignment changes, death, and every
+ * other ordinary gameplay change; never reused for anyone else, and never
+ * re-derived from name, uid, prior seat, or joinedAt. A person who later
+ * returns is a NEW participation instance with a new ParticipantId. Not a
+ * user account or cross-game identity -- Storyteller-private bookkeeping
+ * only (never projected to public/self views).
+ */
+export type ParticipantId = string;
+/**
+ * Phase 9R.2: a durable, immutable snapshot of the participant a
+ * historical record refers to. Stored wherever a record must keep meaning
+ * "the person this was about" even after that seat is later reused
+ * (History, Provenance, Information Delivery, Effect/Reminder sources).
+ *
+ *  - "participant": the authoritative identity is `participantId`;
+ *    `playerId` is historical seat/slot context only, and `nameAtTime` is
+ *    the name as it stood when the record was made -- never later
+ *    re-derived from Current State (a rename never rewrites history).
+ *  - "legacy": a pre-v17 PlayerId-only reference whose original
+ *    participant cannot be proven. Deliberately carries NO participantId
+ *    or name -- migration must never attach it to whoever currently
+ *    occupies that PlayerId (Phase 9R.2 Section 6/22). Less informative,
+ *    never falsely informative.
+ *
+ * Only ever built by participantRefOf()/legacyParticipantRef()
+ * (src/stores/participants.ts) -- never hand-assembled by a command.
+ */
+export type ParticipantRef =
+  | { kind: "participant"; participantId: ParticipantId; playerId: PlayerId; nameAtTime: string }
+  | { kind: "legacy"; playerId: PlayerId };
 export type RoleId = string;
 export type Alignment = "good" | "evil";
 export type RoleType =
@@ -120,6 +157,12 @@ export type Script = {
   [extra: string]: unknown;
 };
 
+/** Phase 9R.2 audit: these PlayerIds deliberately stay LIVE seat
+ * references, not ParticipantRefs -- this is the Storyteller's current,
+ * unsent draft of what to show a player about who is here NOW, re-validated
+ * against the current roster when previewed/published (see privatePackets).
+ * What was actually delivered is snapshotted separately, with names, in
+ * publishedPacket.payload. */
 export type PrivateInfo = {
   travelerDemon?: PlayerId;
   bluffs?: RoleId[];
@@ -166,31 +209,50 @@ export type EffectId = string;
  * ability-sourced effect of the same `type` (e.g. two "poisoned" entries,
  * one manual and one from a Poisoner) must be able to coexist as distinct
  * records. Target is implicit -- an EffectRecord always lives on its
- * target player's own `effects` array. */
+ * target player's own `effects` array.
+ *
+ * Phase 9R.2: `sourceParticipant` means "the participant who originally
+ * caused this Effect" (a Poisoner Alice poisoning Carol) -- a historical
+ * fact that must survive Alice leaving and Bob later occupying her seat,
+ * so it is a durable ParticipantRef, never a reusable PlayerId. Callers
+ * still name the source by live PlayerId (EffectInput.sourcePlayer);
+ * addEffect converts it through participantRefOf() before storage. */
 export type EffectRecord = {
   id: EffectId;
   type: string;
   sourceCharacter?: RoleId;
-  sourcePlayer?: PlayerId;
+  sourceParticipant?: ParticipantRef;
   appliedAt?: GameMoment;
   lifetime: EffectLifetime;
   note?: string;
 };
 
+/** Phase 9R.2: addEffect's caller-facing input. The Storyteller selects a
+ * CURRENT player as the source, so the source is a live PlayerId here and
+ * only becomes a durable ParticipantRef once the command accepts it. A
+ * caller can never supply a pre-built `sourceParticipant` snapshot. */
+export type EffectInput = Partial<Pick<EffectRecord, "id">> &
+  Omit<EffectRecord, "id" | "sourceParticipant"> & { sourcePlayer?: PlayerId };
+
 export type ReminderId = string;
 
 /** A single structured reminder token on a player (e.g. "Red Herring",
  * "Chosen", "Protected"). Target is implicit -- always the player whose
- * `reminders` array holds it. */
+ * `reminders` array holds it. `sourceParticipant` follows the same
+ * durable-source rule as EffectRecord's (Phase 9R.2). */
 export type ReminderRecord = {
   id: ReminderId;
   label: string;
   sourceCharacter?: RoleId;
-  sourcePlayer?: PlayerId;
+  sourceParticipant?: ParticipantRef;
   createdAt?: GameMoment;
   lifetime: EffectLifetime;
   note?: string;
 };
+
+/** Phase 9R.2: addReminder's caller-facing input -- see EffectInput. */
+export type ReminderInput = Partial<Pick<ReminderRecord, "id">> &
+  Omit<ReminderRecord, "id" | "sourceParticipant"> & { sourcePlayer?: PlayerId };
 
 export type HistoryId = string;
 
@@ -219,8 +281,26 @@ export type HistoryChange =
 /** Reusable "why/how" for any history record, and later for Phase 10
  * workflows that produce one. Every field is optional and none is ever
  * invented -- a manual Storyteller action legitimately has no known
- * source beyond the Storyteller themself. */
+ * source beyond the Storyteller themself.
+ *
+ * Phase 9R.2: this is the STORED form. `sourceParticipant` is the durable
+ * participant responsible for the historical action -- never resolved
+ * again from the current roster after storage. Callers supply Provenance
+ * through ProvenanceInput (a live PlayerId), converted centrally before
+ * any History/Information storage (see durableProvenance in
+ * src/stores/participants.ts). */
 export type Provenance = {
+  sourceParticipant?: ParticipantRef;
+  sourceCharacter?: RoleId;
+  reason?: string;
+  note?: string;
+};
+
+/** Phase 9R.2: the caller-facing (Mutation Context) form of Provenance.
+ * The Storyteller names a CURRENT player as the source, so `sourcePlayer`
+ * is a live PlayerId here; it becomes Provenance.sourceParticipant only
+ * once the command accepts it. */
+export type ProvenanceInput = {
   sourcePlayer?: PlayerId;
   sourceCharacter?: RoleId;
   reason?: string;
@@ -232,16 +312,20 @@ export type Provenance = {
  * lives only on the authoritative game snapshot (StorytellerLobbyRecord.
  * history), so it persists, checkpoints, reconnects, and undoes exactly
  * like every other piece of current state -- never a second, independent
- * audit log. Affected entity is always a player today; `playerId` is
- * deliberately named for the one entity kind this domain currently has,
- * not because the shape assumes players specifically -- a future
+ * audit log. Affected entity is always a player today; a future
  * non-player-scoped domain would add its own identifying field alongside
- * `playerId`, not replace this type.
+ * `participant`, not replace this type.
+ *
+ * Phase 9R.2: `participant` is the durable snapshot of WHO experienced the
+ * mutation (previously a bare, reusable `playerId`). It keeps identifying
+ * that person after they are unseated, their seat is refilled, they move,
+ * or they are renamed. `participant.playerId` is historical seat context
+ * only.
  */
 export type HistoryRecord = {
   id: HistoryId;
   category: HistoryCategory;
-  playerId: PlayerId;
+  participant: ParticipantRef;
   /** Absent only when the moment genuinely isn't known -- never invented. */
   moment?: GameMoment;
   change: HistoryChange;
@@ -255,6 +339,11 @@ export type HistoryRecord = {
  * by Silverwick -- always exactly what the Storyteller entered. `player`
  * always carries an array (even for a single-Player requirement) so
  * cardinality is uniform to validate regardless of count.
+ *
+ * Phase 9R.2: this is the COMMAND INPUT form -- the Storyteller selects
+ * CURRENT players, so `playerIds` are live seat addresses, validated
+ * against the current roster. Once a delivery is accepted, it is stored
+ * as RecordedInformationValue instead, never as reusable PlayerIds.
  */
 export type InformationValue =
   | { requirementId: string; kind: "number"; value: number }
@@ -263,6 +352,14 @@ export type InformationValue =
   | { requirementId: string; kind: "alignment"; alignment: Alignment }
   | { requirementId: string; kind: "boolean"; value: boolean }
   | { requirementId: string; kind: "text"; value: string };
+
+/** Phase 9R.2: the STORED form of one Information Value. Identical to
+ * InformationValue except Player-valued Information, which is stored as
+ * immutable ParticipantRefs -- "the players shown were Alice and Carol",
+ * never "whoever now sits in seats P2 and P3". */
+export type RecordedInformationValue =
+  | Exclude<InformationValue, { kind: "player" }>
+  | { requirementId: string; kind: "player"; participants: ParticipantRef[] };
 
 export type InformationDeliveryId = string;
 
@@ -274,17 +371,22 @@ export type InformationDeliveryId = string;
  * State. `actualRole` is a snapshot: if the Recipient's Actual Role later
  * changes, this record keeps identifying the Role that actually produced
  * the information, never the Recipient's current one.
+ *
+ * Phase 9R.2: `recipient` is likewise a snapshot of WHO received it
+ * (previously a bare, reusable `recipientPlayerId`) -- renaming, leaving,
+ * changing Role, or the seat being refilled by someone else never changes
+ * the meaning of a delivery.
  */
 export type InformationDeliveryRecord = {
   id: InformationDeliveryId;
-  recipientPlayerId: PlayerId;
+  recipient: ParticipantRef;
   /** Snapshot of the Recipient's Actual Role at the moment of delivery --
    * never re-derived from their Current State. */
   actualRole: RoleId;
   informationActionId: InformationActionId;
   /** Absent only when the moment genuinely isn't known -- never invented. */
   moment?: GameMoment;
-  values: InformationValue[];
+  values: RecordedInformationValue[];
   provenance?: Provenance;
   note?: string;
 };
@@ -366,6 +468,13 @@ export type STPlayerRecord = {
   packetEpoch?: string;
   /** True for pre-allocated seats that haven't been assigned to a player yet. */
   isEmpty?: boolean;
+  /** Phase 9R.2: the current occupant's participation-instance identity
+   * (see ParticipantId). Present exactly when the seat is occupied
+   * (`!isEmpty`); an empty seat never carries one. Generated fresh only by
+   * occupySeat() (storytellerStore.ts) when a real person enters a seat,
+   * cleared by unseatPlayer(), and never changed by any other command.
+   * Storyteller-private -- never projected. */
+  participantId?: ParticipantId;
   /** Storyteller/setup planning metadata only, set exclusively on an empty
    * seat (isEmpty: true): this reservation represents unfulfilled planned
    * Traveler capacity, distinct from isTraveler (which represents an actual
@@ -438,7 +547,11 @@ export type StorytellerLobbyRecord = {
   informationDeliveries: InformationDeliveryRecord[];
 };
 
-/** Delivered identity at player/{id}; an absent record means unrevealed. */
+/** Delivered identity at player/{id}; an absent record means unrevealed.
+ * Phase 9R.2 audit: a player-facing projection, never Storyteller
+ * bookkeeping -- `demon`/`minions` already snapshot name+seat at
+ * publication time and are invalidated on identity resets, and participant
+ * identity is deliberately never exposed here (Section 20). */
 export type PlayerSelfRecord = {
   shownRole: RoleId;
   /** Travelers have no default alignment. Only an explicit shown choice is sent. */

@@ -15,6 +15,7 @@ import { useStorytellerStore } from "@/stores/storytellerStore";
 import { previewPrivatePacket } from "@/stores/privatePackets";
 import { publishPrivatePacket } from "./privatePacketCommands";
 import type { StorytellerLobbyRecord } from "@/stores/types";
+import { refersToParticipant } from "@/stores/participants";
 import {
   cancelJoinRequest,
   createLobby,
@@ -1343,9 +1344,10 @@ describe("Phase 9R.1 Finding B5: Firebase-safe optional serialization for a rich
 
     // Exact reproduction #4 (Luna follow-up, residual B4/B5): a Reminder
     // introduced through setReminders() -- the bulk setter -- with explicit
-    // `sourcePlayer: undefined`/`note: undefined`.
+    // `sourceParticipant: undefined`/`note: undefined` (Phase 9R.2: the
+    // stored source field formerly named `sourcePlayer`).
     store.setReminders(handles.investigatorId, [
-      { id: "b5-reminder", label: "Marked", lifetime: { kind: "manual" }, sourcePlayer: undefined, note: undefined },
+      { id: "b5-reminder", label: "Marked", lifetime: { kind: "manual" }, sourceParticipant: undefined, note: undefined },
     ]);
 
     const richGame = useStorytellerStore.getState().game!;
@@ -1361,15 +1363,18 @@ describe("Phase 9R.1 Finding B5: Firebase-safe optional serialization for a rich
     // record from the rich build's own setGhostVote call (no provenance) --
     // search from the end so this finds the setAlive record just added
     // above, not that unrelated earlier one.
-    const lifeRecord = [...richGame.history].reverse().find(h => h.category === "life" && h.playerId === handles.investigatorId)!;
+    const investigatorParticipantId = investigator.participantId!;
+    const lifeRecord = [...richGame.history].reverse().find(h => h.category === "life" && refersToParticipant(h.participant, investigatorParticipantId))!;
     expect(Object.keys(lifeRecord.provenance!)).not.toContain("note");
     const protectedEffect = investigator.effects.find(e => e.type === "protected")!;
     expect(Object.keys(protectedEffect)).not.toContain("sourcePlayer");
+    expect(Object.keys(protectedEffect)).not.toContain("sourceParticipant");
     const endedDelivery = richGame.informationDeliveries.find(d => d.informationActionId === "ravenkeeper-triggered")!;
     expect(Object.keys(endedDelivery)).not.toContain("moment");
     expect(Object.keys(endedDelivery.provenance!)).not.toContain("note");
     const setReminder = investigator.reminders.find(r => r.id === "b5-reminder")!;
     expect(Object.keys(setReminder)).not.toContain("sourcePlayer");
+    expect(Object.keys(setReminder)).not.toContain("sourceParticipant");
     expect(Object.keys(setReminder)).not.toContain("note");
 
     const rawBackend = new FirebaseRoomBackend(db(st) as unknown as Database);
@@ -1391,16 +1396,18 @@ describe("Phase 9R.1 Finding B5: Firebase-safe optional serialization for a rich
     const rawCheckpoint = (await ref(st, "checkpoint").once("value")).val() as string;
     expect(rawCheckpoint).not.toContain("undefined");
     const parsed = JSON.parse(rawCheckpoint) as { game: StorytellerLobbyRecord };
-    const parsedLifeRecord = [...parsed.game.history].reverse().find(h => h.category === "life" && h.playerId === handles.investigatorId)!;
+    const parsedLifeRecord = [...parsed.game.history].reverse().find(h => h.category === "life" && refersToParticipant(h.participant, investigatorParticipantId))!;
     expect(parsedLifeRecord.provenance).toEqual({ reason: "known" });
     const parsedEffect = parsed.game.players[handles.investigatorId]!.effects.find(e => e.type === "protected")!;
-    expect(parsedEffect.sourcePlayer).toBeUndefined();
+    expect(parsedEffect.sourceParticipant).toBeUndefined();
     expect("sourcePlayer" in parsedEffect).toBe(false);
+    expect("sourceParticipant" in parsedEffect).toBe(false);
     const parsedDelivery = parsed.game.informationDeliveries.find(d => d.informationActionId === "ravenkeeper-triggered")!;
     expect("moment" in parsedDelivery).toBe(false);
     expect(parsedDelivery.provenance).toEqual({ reason: "known" });
     const parsedReminder = parsed.game.players[handles.investigatorId]!.reminders.find(r => r.id === "b5-reminder")!;
     expect("sourcePlayer" in parsedReminder).toBe(false);
+    expect("sourceParticipant" in parsedReminder).toBe(false);
     expect("note" in parsedReminder).toBe(false);
     expect(parsedReminder).toEqual({ id: "b5-reminder", label: "Marked", lifetime: { kind: "manual" } });
 

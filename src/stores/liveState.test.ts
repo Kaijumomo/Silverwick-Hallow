@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { useStorytellerStore as store } from "./storytellerStore";
+import { participantRefOf } from "./participants";
 import { buildRegistry } from "@/data/roleRegistry";
 import { setupScript, standardRoles } from "@/test/setupFixtures";
 import { projectToPublic, projectToSelf } from "./projections";
@@ -186,7 +187,11 @@ describe("Phase 9D.1: structured reminder tokens", () => {
     });
     expect(reminderId).not.toBeNull();
     const record = game().players[id]!.reminders.find((r) => r.id === reminderId);
-    expect(record).toMatchObject({ label: "Red Herring", sourceCharacter: "fortuneteller", sourcePlayer: source });
+    // Phase 9R.2: the live source PlayerId is stored as the durable snapshot
+    // of whoever occupied that seat when the reminder was created.
+    expect(record).toMatchObject({ label: "Red Herring", sourceCharacter: "fortuneteller", sourceParticipant: participantRefOf(game(), source) });
+    expect(record!.sourceParticipant).toMatchObject({ kind: "participant", playerId: source, nameAtTime: game().players[source]!.name });
+    expect(record).not.toHaveProperty("sourcePlayer");
   });
 
   it("removeReminder removes exactly the named reminder", () => {

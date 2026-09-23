@@ -4,6 +4,7 @@ import { MemoryRoomBackend } from "./memoryBackend";
 import { buildRegistry } from "@/data/roleRegistry";
 import { tbScript, makePublishedSTPlayer } from "@/test/fixtures";
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
+import { participantRefOf } from "@/stores/participants";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
 // `public/` is the town view: NO role data of any kind, ever.
@@ -484,7 +485,7 @@ describe("Phase 9D.1: live-state persistence/recovery round trip", () => {
       actualAlignment: "evil",
       effects: [
         { id: "manual:protected", type: "protected", lifetime: { kind: "manual" } },
-        { id: "poisoner-1", type: "poisoned", sourceCharacter: "poisoner", sourcePlayer: "p2", lifetime: { kind: "untilDawn" } },
+        { id: "poisoner-1", type: "poisoned", sourceCharacter: "poisoner", sourceParticipant: participantRefOf(lobby, "p2")!, lifetime: { kind: "untilDawn" } },
       ],
       reminders: [
         { id: "r1", label: "Killed Bob", sourceCharacter: "imp", createdAt: { phase: "night", day: 1 }, lifetime: { kind: "manual" } },
@@ -508,7 +509,7 @@ describe("Phase 9D.1: live-state persistence/recovery round trip", () => {
     // No projection/privacy regression: none of it reached public or self.
     const pub = JSON.stringify(await backend.get("lobbies/ABCD/public"));
     const self = JSON.stringify(await backend.get("lobbies/ABCD/player/p1"));
-    for (const leak of ["actualAlignment", "effects", "reminders", "Killed Bob", "poisoner-1"]) {
+    for (const leak of ["actualAlignment", "effects", "reminders", "Killed Bob", "poisoner-1", "sourceParticipant", "participantId", "fixture-participant"]) {
       expect(pub).not.toContain(leak);
       expect(self).not.toContain(leak);
     }
@@ -519,26 +520,28 @@ describe("Phase 9D.2: live-game history persistence/recovery round trip", () => 
   it("multiple history categories survive the checkpoint round trip together, with no projection/privacy regression", async () => {
     const backend = new MemoryRoomBackend();
     const lobby = makeLobby();
+    // Phase 9R.2: each record's durable participant snapshot.
+    const p = (id: string) => participantRefOf(lobby, id)!;
     lobby.history = [
       {
-        id: "h1", category: "identity", playerId: "p1", moment: { phase: "night", day: 1 },
+        id: "h1", category: "identity", participant: p("p1"), moment: { phase: "night", day: 1 },
         change: { kind: "value", from: { actualRole: "chef" }, to: { actualRole: "imp" } },
       },
       {
-        id: "h2", category: "alignment", playerId: "p1", moment: { phase: "night", day: 1 },
+        id: "h2", category: "alignment", participant: p("p1"), moment: { phase: "night", day: 1 },
         change: { kind: "value", from: { actualAlignment: "good" }, to: { actualAlignment: "evil" } },
       },
       {
-        id: "h3", category: "life", playerId: "p2", moment: { phase: "day", day: 1 },
+        id: "h3", category: "life", participant: p("p2"), moment: { phase: "day", day: 1 },
         change: { kind: "value", from: { alive: true }, to: { alive: false } },
       },
       {
-        id: "h4", category: "effect", playerId: "p1", moment: { phase: "night", day: 1 },
+        id: "h4", category: "effect", participant: p("p1"), moment: { phase: "night", day: 1 },
         change: { kind: "added", item: { id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" } } },
         provenance: { sourceCharacter: "poisoner" },
       },
       {
-        id: "h5", category: "reminder", playerId: "p1", moment: { phase: "night", day: 1 },
+        id: "h5", category: "reminder", participant: p("p1"), moment: { phase: "night", day: 1 },
         change: { kind: "removed", item: { id: "r1", label: "Old note", lifetime: { kind: "manual" } } },
       },
     ];
@@ -553,7 +556,7 @@ describe("Phase 9D.2: live-game history persistence/recovery round trip", () => 
     // No projection/privacy regression: history never reached public or self.
     const pub = JSON.stringify(await backend.get("lobbies/ABCD/public"));
     const self = JSON.stringify(await backend.get("lobbies/ABCD/player/p1"));
-    for (const leak of ["history", "h1", "h2", "h3", "h4", "h5", "Old note"]) {
+    for (const leak of ["history", "h1", "h2", "h3", "h4", "h5", "Old note", "participant", "fixture-participant"]) {
       expect(pub).not.toContain(leak);
       expect(self).not.toContain(leak);
     }
@@ -564,19 +567,22 @@ describe("Phase 9D.3: Information Delivery persistence/recovery round trip", () 
   it("Information Delivery Records for different Information Requirement shapes survive the checkpoint round trip together, with no projection/privacy regression", async () => {
     const backend = new MemoryRoomBackend();
     const lobby = makeLobby();
+    // Phase 9R.2: recipients and Player-valued Information are durable
+    // participant snapshots, never reusable PlayerIds.
+    const p = (id: string) => participantRefOf(lobby, id)!;
     lobby.informationDeliveries = [
       {
         // Number only (Chef).
-        id: "d1", recipientPlayerId: "p1", actualRole: "chef", informationActionId: "chef-first-night",
+        id: "d1", recipient: p("p1"), actualRole: "chef", informationActionId: "chef-first-night",
         moment: { phase: "night", day: 1 },
         values: [{ requirementId: "pairs", kind: "number", value: 1 }],
       },
       {
         // Players + Role (Washerwoman).
-        id: "d2", recipientPlayerId: "p2", actualRole: "washerwoman", informationActionId: "washerwoman-first-night",
+        id: "d2", recipient: p("p2"), actualRole: "washerwoman", informationActionId: "washerwoman-first-night",
         moment: { phase: "night", day: 1 },
         values: [
-          { requirementId: "players", kind: "player", playerIds: ["p1", "p3"] },
+          { requirementId: "players", kind: "player", participants: [p("p1"), p("p3")] },
           { requirementId: "role", kind: "role", roleId: "chef" },
         ],
         provenance: { reason: "manually confirmed" },
@@ -584,10 +590,10 @@ describe("Phase 9D.3: Information Delivery persistence/recovery round trip", () 
       },
       {
         // Players + Boolean (Fortune Teller).
-        id: "d3", recipientPlayerId: "p3", actualRole: "fortuneteller", informationActionId: "fortuneteller-first-night",
+        id: "d3", recipient: p("p3"), actualRole: "fortuneteller", informationActionId: "fortuneteller-first-night",
         moment: { phase: "night", day: 1 },
         values: [
-          { requirementId: "players", kind: "player", playerIds: ["p1", "p2"] },
+          { requirementId: "players", kind: "player", participants: [p("p1"), p("p2")] },
           { requirementId: "isDemon", kind: "boolean", value: false },
         ],
       },
@@ -603,7 +609,7 @@ describe("Phase 9D.3: Information Delivery persistence/recovery round trip", () 
     // No projection/privacy regression: never reached public or self.
     const pub = JSON.stringify(await backend.get("lobbies/ABCD/public"));
     const self = JSON.stringify(await backend.get("lobbies/ABCD/player/p1"));
-    for (const leak of ["informationDeliveries", "d1", "d2", "d3", "double-checked", "manually confirmed"]) {
+    for (const leak of ["informationDeliveries", "d1", "d2", "d3", "double-checked", "manually confirmed", "participant", "recipient", "fixture-participant"]) {
       expect(pub).not.toContain(leak);
       expect(self).not.toContain(leak);
     }

@@ -119,11 +119,39 @@ export const EffectLifetimeSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("days"), count: z.number().int().positive() }),
 ]);
 
+/**
+ * Phase 9R.2: a durable historical participant snapshot (see
+ * ParticipantRef in types.ts). Both variants are `.strict()`: a snapshot is
+ * exactly its declared fields -- in particular a "legacy" ref can never
+ * smuggle a participantId/nameAtTime that migration deliberately refused to
+ * invent.
+ */
+export const ParticipantRefSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("participant"),
+    participantId: z.string().min(1),
+    playerId: z.string().min(1),
+    nameAtTime: z.string(),
+  }).strict(),
+  z.object({ kind: z.literal("legacy"), playerId: z.string().min(1) }).strict(),
+]);
+
+/**
+ * Phase 9R.2: a pre-v17 PlayerId-only historical field that v16 -> v17
+ * migration (gameMigration.ts) always converts to a ParticipantRef. Present
+ * in a v17-shaped record, it means migration never ran on that record, so it
+ * is REJECTED rather than silently stripped by zod's default unknown-key
+ * handling -- the same absent-vs-malformed rule Phase 9R.1 Finding A3
+ * applies everywhere else.
+ */
+const RetiredPlayerIdField = z.never().optional();
+
 export const EffectRecordSchema = z.object({
   id: z.string().min(1),
   type: z.string().min(1),
   sourceCharacter: z.string().min(1).optional(),
-  sourcePlayer: z.string().min(1).optional(),
+  sourceParticipant: ParticipantRefSchema.optional(),
+  sourcePlayer: RetiredPlayerIdField,
   appliedAt: GameMomentSchema.optional(),
   lifetime: EffectLifetimeSchema,
   note: z.string().optional(),
@@ -133,7 +161,8 @@ export const ReminderRecordSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
   sourceCharacter: z.string().min(1).optional(),
-  sourcePlayer: z.string().min(1).optional(),
+  sourceParticipant: ParticipantRefSchema.optional(),
+  sourcePlayer: RetiredPlayerIdField,
   createdAt: GameMomentSchema.optional(),
   lifetime: EffectLifetimeSchema,
   note: z.string().optional(),
@@ -142,7 +171,8 @@ export const ReminderRecordSchema = z.object({
 export const HistoryCategorySchema = z.enum(["identity", "alignment", "life", "effect", "reminder"]);
 
 export const ProvenanceSchema = z.object({
-  sourcePlayer: z.string().min(1).optional(),
+  sourceParticipant: ParticipantRefSchema.optional(),
+  sourcePlayer: RetiredPlayerIdField,
   sourceCharacter: z.string().min(1).optional(),
   reason: z.string().optional(),
   note: z.string().optional(),
@@ -157,33 +187,64 @@ export const HistoryChangeSchema = z.discriminatedUnion("kind", [
 export const HistoryRecordSchema = z.object({
   id: z.string().min(1),
   category: HistoryCategorySchema,
-  playerId: z.string().min(1),
+  participant: ParticipantRefSchema,
+  playerId: RetiredPlayerIdField,
   moment: GameMomentSchema.optional(),
   change: HistoryChangeSchema,
   provenance: ProvenanceSchema.optional(),
   note: z.string().optional(),
 });
 
+// The non-Player Information Value variants are shared verbatim by the
+// command-input (InformationValueSchema) and stored
+// (RecordedInformationValueSchema) forms -- one definition, never two
+// hand-duplicated copies.
+// Phase 9R.1 Astra remediation (Finding A1): `.finite()` rejects NaN and
+// ±Infinity structurally, at the schema itself -- the canonical
+// definition every runtime caller (not just TypeScript-checked ones) is
+// now validated against, rather than a hand-duplicated check elsewhere.
+const NumberInformationValueSchema = z.object({ requirementId: z.string().min(1), kind: z.literal("number"), value: z.number().finite() });
+const RoleInformationValueSchema = z.object({ requirementId: z.string().min(1), kind: z.literal("role"), roleId: z.string().min(1) });
+const AlignmentInformationValueSchema = z.object({ requirementId: z.string().min(1), kind: z.literal("alignment"), alignment: AlignmentSchema });
+const BooleanInformationValueSchema = z.object({ requirementId: z.string().min(1), kind: z.literal("boolean"), value: z.boolean() });
+const TextInformationValueSchema = z.object({ requirementId: z.string().min(1), kind: z.literal("text"), value: z.string() });
+
+/** Command INPUT form: Player-valued Information names live PlayerIds. */
 export const InformationValueSchema = z.discriminatedUnion("kind", [
-  // Phase 9R.1 Astra remediation (Finding A1): `.finite()` rejects NaN and
-  // ±Infinity structurally, at the schema itself -- the canonical
-  // definition every runtime caller (not just TypeScript-checked ones) is
-  // now validated against, rather than a hand-duplicated check elsewhere.
-  z.object({ requirementId: z.string().min(1), kind: z.literal("number"), value: z.number().finite() }),
+  NumberInformationValueSchema,
   z.object({ requirementId: z.string().min(1), kind: z.literal("player"), playerIds: z.array(z.string().min(1)) }),
-  z.object({ requirementId: z.string().min(1), kind: z.literal("role"), roleId: z.string().min(1) }),
-  z.object({ requirementId: z.string().min(1), kind: z.literal("alignment"), alignment: AlignmentSchema }),
-  z.object({ requirementId: z.string().min(1), kind: z.literal("boolean"), value: z.boolean() }),
-  z.object({ requirementId: z.string().min(1), kind: z.literal("text"), value: z.string() }),
+  RoleInformationValueSchema,
+  AlignmentInformationValueSchema,
+  BooleanInformationValueSchema,
+  TextInformationValueSchema,
+]);
+
+/** Phase 9R.2: the STORED form of an Information Value (see
+ * RecordedInformationValue in types.ts) -- identical to the input form
+ * except Player-valued Information, stored as ParticipantRefs rather than
+ * reusable PlayerIds. */
+export const RecordedInformationValueSchema = z.discriminatedUnion("kind", [
+  NumberInformationValueSchema,
+  z.object({
+    requirementId: z.string().min(1),
+    kind: z.literal("player"),
+    participants: z.array(ParticipantRefSchema),
+    playerIds: RetiredPlayerIdField,
+  }),
+  RoleInformationValueSchema,
+  AlignmentInformationValueSchema,
+  BooleanInformationValueSchema,
+  TextInformationValueSchema,
 ]);
 
 export const InformationDeliveryRecordSchema = z.object({
   id: z.string().min(1),
-  recipientPlayerId: z.string().min(1),
+  recipient: ParticipantRefSchema,
+  recipientPlayerId: RetiredPlayerIdField,
   actualRole: z.string().min(1),
   informationActionId: z.string().min(1),
   moment: GameMomentSchema.optional(),
-  values: z.array(InformationValueSchema),
+  values: z.array(RecordedInformationValueSchema),
   provenance: ProvenanceSchema.optional(),
   note: z.string().optional(),
 });
@@ -234,6 +295,7 @@ export const STPlayerRecordSchema = z.object({
   privateInfo: PrivateInfoSchema.optional(),
   publishedPacket: PrivatePacketSchema.optional(),
   packetEpoch: z.string().optional(),
+  participantId: z.string().min(1).optional(),
 });
 
 export const PlayerPublicRecordSchema = z.object({
@@ -296,11 +358,25 @@ export const PublicLobbyRecordSchema = z.object({
 // actualRole may be "" for un-assigned / traveler players.
 // name may be "" for pre-allocated empty seats.
 // code may be "" for offline (no-Firebase) games.
+//
+// Phase 9R.2: every persisted/checkpointed seat must also satisfy the
+// participant-identity invariant -- an occupied seat (`isEmpty` not true)
+// carries its participation-instance ParticipantId, and an empty seat never
+// carries one. v16 -> v17 migration establishes this for legacy data
+// (gameMigration.ts); anything still violating it afterward is rejected,
+// never repaired by inventing or reassigning an identity here.
 const STPlayerRecordPersistedSchema = STPlayerRecordSchema.extend({
   actualRole: z.string(),
   name: z.string(),
   isEmpty: z.boolean().optional(),
   plannedTravelerSeat: z.boolean().optional(),
+}).superRefine((player, ctx) => {
+  if (player.isEmpty === true && player.participantId !== undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "an empty seat must not carry a participant identity", path: ["participantId"] });
+  }
+  if (player.isEmpty !== true && player.participantId === undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "an occupied seat must carry a participant identity", path: ["participantId"] });
+  }
 });
 
 export const StorytellerGamePersistedSchema = StorytellerLobbyRecordSchema.extend({

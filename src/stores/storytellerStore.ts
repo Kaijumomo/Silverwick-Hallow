@@ -7,7 +7,8 @@ import { StorytellerStateSchema } from "./schemas";
 import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { currentGameMoment, manualEffectId } from "./effects";
-import { cloneOwned, diffFields, type MutationContext, provenanceOf, recordIfLive, sameSnapshot } from "./history";
+import { cloneOwned, diffFields, durableProvenance, type MutationContext, provenanceOf, recordIfLive, sameSnapshot } from "./history";
+import { newParticipantId, participantRefOf, recordedInformationValues } from "./participants";
 import { migrateGameEntry } from "./gameMigration";
 import {
   informationDeliveryId,
@@ -31,6 +32,7 @@ import type {
   Alignment,
   BehaviorMode,
   EffectId,
+  EffectInput,
   EffectRecord,
   GrimoireMode,
   GuardStamp,
@@ -42,6 +44,7 @@ import type {
   NightStepStatus,
   PlayerId,
   ReminderId,
+  ReminderInput,
   ReminderRecord,
   RoleId,
   Script,
@@ -57,7 +60,7 @@ const UNDO_LIMIT = 20;
  * `merge` (Phase 9C.2B.2) passes to migrateStoreState when Zustand's own
  * persist middleware skips calling `migrate` outright, which it does
  * whenever the persisted version already equals this one. */
-const STORE_VERSION = 16;
+const STORE_VERSION = 17;
 
 let _migrationResetFlag = false;
 /** Returns true (once) when migrate() discarded incompatible persisted state. */
@@ -109,6 +112,21 @@ const arrivalPlayer = (player: STPlayerRecord, game: StorytellerLobbyRecord): ST
   (arrivalsAreTravelers(game) || player.plannedTravelerSeat) && !player.isTraveler
     ? { ...blankPlayer(player.id, player.name, player.seat, player.isEmpty), isTraveler: true, travelerArrival: newTravelerArrival() }
     : player;
+
+/**
+ * Phase 9R.2: the single occupancy-entry point -- a real person entering
+ * an empty (or brand-new) seat. Every path that seats someone
+ * (addPlayer, addPlayerToSeat, assignPendingToSeat) goes through here, so
+ * each one always gets a FRESH ParticipantId: the seat/PlayerId may be
+ * reused, a participation identity never is. Never used for an empty
+ * planned seat (those carry no participant identity at all). The fresh id
+ * is applied AFTER arrivalPlayer(), which may rebuild the record from
+ * blankPlayer() when designating a Traveler arrival.
+ */
+const occupySeat = (seat: STPlayerRecord, name: string, game: StorytellerLobbyRecord): STPlayerRecord => ({
+  ...arrivalPlayer({ ...seat, name, isEmpty: false }, game),
+  participantId: newParticipantId(),
+});
 
 const clone = <T,>(v: T): T =>
   typeof structuredClone === "function"
@@ -286,13 +304,22 @@ export type StorytellerStore = {
   setStatus: (id: PlayerId, status: string, on: boolean) => void;
   /** Phase 9D.1: centralized structured-effect commands. `addEffect`
    * upserts by id (a fresh id is allocated when none is given) and
-   * returns the id actually used, or null if the player doesn't exist. */
-  addEffect: (id: PlayerId, effect: Partial<Pick<EffectRecord, "id">> & Omit<EffectRecord, "id">) => EffectId | null;
+   * returns the id actually used, or null if the player doesn't exist.
+   * Phase 9R.2: a live `sourcePlayer` is stored as a durable
+   * `sourceParticipant` snapshot; null is also returned (nothing changes)
+   * when it names no current participant. */
+  addEffect: (id: PlayerId, effect: EffectInput) => EffectId | null;
   removeEffect: (id: PlayerId, effectId: EffectId) => void;
+  /** Wholesale replacement of a player's stored Reminder records (e.g. a
+   * reorder or edit of existing ones). Phase 9R.2: it can only carry
+   * forward a `sourceParticipant` snapshot this player's reminders already
+   * hold -- never introduce a new one; a newly sourced Reminder goes
+   * through addReminder, which snapshots its source centrally. */
   setReminders: (id: PlayerId, reminders: ReminderRecord[]) => void;
   /** Phase 9D.1: centralized structured-reminder commands, backing the
-   * existing per-token Storyteller reminder workflow. */
-  addReminder: (id: PlayerId, reminder: Partial<Pick<ReminderRecord, "id">> & Omit<ReminderRecord, "id">) => ReminderId | null;
+   * existing per-token Storyteller reminder workflow. Phase 9R.2: same
+   * durable-source rule as addEffect. */
+  addReminder: (id: PlayerId, reminder: ReminderInput) => ReminderId | null;
   removeReminder: (id: PlayerId, reminderId: ReminderId) => void;
   /** Phase 9D.3: the single Authoritative Information command. Resolves
    * the Recipient's Actual Role and its Information Actions from Role
@@ -399,6 +426,27 @@ export type StorytellerStore = {
 // while live-synced would fail this write with no history ever landing.
 const alignmentHistoryValue = (value: Alignment | undefined): Record<string, unknown> =>
   value === undefined ? {} : { actualAlignment: value };
+
+/**
+ * Phase 9R.2: converts an owned Effect/Reminder input's live `sourcePlayer`
+ * into the durable `sourceParticipant` snapshot of whoever occupies that
+ * seat right now (participantRefOf). Returns null -- the command must then
+ * refuse atomically -- when the named source is not a current participant
+ * (nonexistent PlayerId, empty seat): the Storyteller explicitly named a
+ * source, so silently dropping it or storing an unknowable one would both
+ * misrepresent what happened. Any `sourceParticipant` present on the input
+ * at runtime is discarded; a caller can never supply its own snapshot.
+ */
+const sourcedRecord = <T extends EffectRecord | ReminderRecord>(
+  game: StorytellerLobbyRecord,
+  input: Omit<T, "sourceParticipant"> & { sourcePlayer?: PlayerId; sourceParticipant?: unknown }
+): T | null => {
+  const { sourcePlayer, sourceParticipant: _smuggled, ...rest } = input;
+  if (sourcePlayer === undefined) return rest as unknown as T;
+  const sourceParticipant = participantRefOf(game, sourcePlayer);
+  if (!sourceParticipant) return null;
+  return { ...rest, sourceParticipant } as unknown as T;
+};
 
 const pushUndo = (
   game: StorytellerLobbyRecord | null,
@@ -599,7 +647,13 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // storytellerSync.ts) can apply the exact same rules to a bare remote
   // game -- never a second, divergent copy of them. See that function's
   // own doc comment for what each version step does and does not invent.
-  if (fromVersion < 16) {
+  //
+  // v17 (Phase 9R.2): historical participant identity -- the same shared
+  // per-entry migration, applied identically to Current State and every
+  // Undo snapshot (deterministic legacy-current ParticipantIds, never
+  // random; every v16 historical PlayerId reference becomes an unresolved
+  // legacy ParticipantRef, never the current occupant's identity).
+  if (fromVersion < 17) {
     const customScripts = (s as { customScripts?: Record<string, Script> }).customScripts ?? {};
     // Phase 9R.1 Astra remediation (Finding A2): local persisted migration
     // uses "trusted" evidence -- this state's OWN saved customScripts,
@@ -998,7 +1052,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
             ...game,
             players: {
               ...game.players,
-              [seatPlayerId]: arrivalPlayer({ ...seat, name, isEmpty: false }, game),
+              [seatPlayerId]: occupySeat(seat, name, game),
             },
             pendingPlayers: newPending,
           },
@@ -1066,7 +1120,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (atCapacity(game)) return;
         const id = newId();
         const seat = game.seatOrder.length;
-        const player = arrivalPlayer(blankPlayer(id, trimmed, seat), game);
+        const player = occupySeat(blankPlayer(id, "", seat, true), trimmed, game);
         // Phase 9 Setup finalization (FINAL SETUP INTEGRATION REVISION,
         // Section 3.D; FINAL POPULATION CLOSURE, Section 6): addPlayer
         // always creates a brand-new seat rather than filling an existing
@@ -1112,7 +1166,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
             ...game,
             players: {
               ...game.players,
-              [emptyId]: arrivalPlayer({ ...seat, name: trimmed.slice(0, 20), isEmpty: false }, game),
+              [emptyId]: occupySeat(seat, trimmed.slice(0, 20), game),
             },
           },
         });
@@ -1202,6 +1256,12 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const seatOrder = game.seatOrder.filter((p) => p !== id);
         // re-seat the remaining players to keep seats contiguous 0..n-1,
         // and scrub any fakeMinion reference to the removed player.
+        // Phase 9R.2: removal ends the removed person's participation
+        // instance along with the seat. History, Provenance, Information
+        // Delivery, and Effect/Reminder source snapshots that name them are
+        // deliberately left untouched -- they are durable ParticipantRefs,
+        // not pointers into this roster (fakeMinions, by contrast, is a
+        // live "who is here now" draft and is scrubbed).
         const renumbered: typeof players = {};
         seatOrder.forEach((pid, idx) => {
           const p = players[pid];
@@ -1262,6 +1322,12 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // seat -- otherwise refilling it would silently lose the Traveller
         // designation. Plan counts (plannedPlayerCount/plannedTravelerCount)
         // never change here; only reservation type does.
+        //
+        // Phase 9R.2: this ENDS the departing person's participation
+        // instance. The seat/PlayerId survives; the rebuilt blank seat
+        // deliberately carries no `participantId`, so whoever fills it
+        // next gets a fresh one (occupySeat). Historical ParticipantRefs
+        // already stored elsewhere keep naming the departed person.
         const blank = blankPlayer(id, "", existing.seat, true);
         const restored = existing.isTraveler ? { ...blank, plannedTravelerSeat: true } : blank;
         set({
@@ -1355,14 +1421,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
           ...(existing.isTraveler ? { nightProgress: resetTravelerNightProgress(game, id) } : {}),
           players: { ...game.players, [id]: invalidatePrivatePacket(next) },
         };
-        set({
-          undoStack: pushUndo(game, undoStack),
-          game: recordIfLive(game, updatedGame, () => ({
-            category: "identity", playerId: id,
-            change: { kind: "value", from: { actualRole: existing.actualRole }, to: { actualRole: roleId } },
-            ...(context?.provenance ? { provenance: context.provenance } : {}),
-          })),
-        });
+        const recorded = recordIfLive(game, updatedGame, () => ({
+          category: "identity", playerId: id,
+          change: { kind: "value", from: { actualRole: existing.actualRole }, to: { actualRole: roleId } },
+          context,
+        }));
+        if (!recorded) return;
+        set({ undoStack: pushUndo(game, undoStack), game: recorded });
       },
 
       showAssignedRole: (id) => {
@@ -1550,14 +1615,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
           travelerArrival: { ...(p.travelerArrival ?? newTravelerArrival()), demonInfoComplete: false } });
         delete next.privateInfo;
         const updatedGame = { ...game, players: { ...game.players, [id]: next } };
-        set({
-          undoStack: pushUndo(game, undoStack),
-          game: recordIfLive(game, updatedGame, () => ({
-            category: "alignment", playerId: id,
-            change: { kind: "value", from: alignmentHistoryValue(p.actualAlignment), to: { actualAlignment: alignment } },
-            ...(context?.provenance ? { provenance: context.provenance } : {}),
-          })),
-        });
+        const recorded = recordIfLive(game, updatedGame, () => ({
+          category: "alignment", playerId: id,
+          change: { kind: "value", from: alignmentHistoryValue(p.actualAlignment), to: { actualAlignment: alignment } },
+          context,
+        }));
+        if (!recorded) return;
+        set({ undoStack: pushUndo(game, undoStack), game: recorded });
       },
 
       setActualAlignment: (id, alignment, context) => {
@@ -1572,14 +1636,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const patched = { ...p, actualAlignment: alignment };
         const next = p.isTraveler ? invalidatePrivatePacket(patched) : patched;
         const updatedGame = { ...game, players: { ...game.players, [id]: next } };
-        set({
-          undoStack: pushUndo(game, undoStack),
-          game: recordIfLive(game, updatedGame, () => ({
-            category: "alignment", playerId: id,
-            change: { kind: "value", from: alignmentHistoryValue(p.actualAlignment), to: { actualAlignment: alignment } },
-            ...(context?.provenance ? { provenance: context.provenance } : {}),
-          })),
-        });
+        const recorded = recordIfLive(game, updatedGame, () => ({
+          category: "alignment", playerId: id,
+          change: { kind: "value", from: alignmentHistoryValue(p.actualAlignment), to: { actualAlignment: alignment } },
+          context,
+        }));
+        if (!recorded) return;
+        set({ undoStack: pushUndo(game, undoStack), game: recorded });
       },
 
       prepareTravelerDemon: (id) => {
@@ -1606,16 +1669,15 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const p = game?.players[id];
         if (!game || !p?.isTraveler || !p.alive || p.exiled) return;
         const updatedGame = patchPlayer(game, id, { exiled: true, alive: false });
-        set({
-          undoStack: pushUndo(game, undoStack),
-          // Exile is never collapsed into generic death (Phase 9D.1):
-          // the presence of `exiled` in the change, not a separate
-          // category, is what distinguishes it from an ordinary kill.
-          game: recordIfLive(game, updatedGame, () => ({
-            category: "life", playerId: id,
-            change: { kind: "value", from: { alive: true, exiled: false }, to: { alive: false, exiled: true } },
-          })),
-        });
+        // Exile is never collapsed into generic death (Phase 9D.1):
+        // the presence of `exiled` in the change, not a separate
+        // category, is what distinguishes it from an ordinary kill.
+        const recorded = recordIfLive(game, updatedGame, () => ({
+          category: "life", playerId: id,
+          change: { kind: "value", from: { alive: true, exiled: false }, to: { alive: false, exiled: true } },
+        }));
+        if (!recorded) return;
+        set({ undoStack: pushUndo(game, undoStack), game: recorded });
       },
 
       completeTravelerArrivalCheck: (id) => {
@@ -1667,13 +1729,11 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const diff = diffFields(player, { ...player, ...patch }, touched);
         if (!diff) return;
         const updatedGame = patchPlayer(game, id, patch);
-        set({
-          undoStack: pushUndo(game, undoStack),
-          game: recordIfLive(game, updatedGame, () => ({
-            category: "life", playerId: id, change: { kind: "value", ...diff },
-            ...(context?.provenance ? { provenance: context.provenance } : {}),
-          })),
-        });
+        const recorded = recordIfLive(game, updatedGame, () => ({
+          category: "life", playerId: id, change: { kind: "value", ...diff }, context,
+        }));
+        if (!recorded) return;
+        set({ undoStack: pushUndo(game, undoStack), game: recorded });
       },
 
       setGhostVote: (id, ghostVote, context) => {
@@ -1683,14 +1743,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!player) return;
         if (player.ghostVote === ghostVote) return; // true no-op
         const updatedGame = patchPlayer(game, id, { ghostVote });
-        set({
-          undoStack: pushUndo(game, undoStack),
-          game: recordIfLive(game, updatedGame, () => ({
-            category: "life", playerId: id,
-            change: { kind: "value", from: { ghostVote: player.ghostVote }, to: { ghostVote } },
-            ...(context?.provenance ? { provenance: context.provenance } : {}),
-          })),
-        });
+        const recorded = recordIfLive(game, updatedGame, () => ({
+          category: "life", playerId: id,
+          change: { kind: "value", from: { ghostVote: player.ghostVote }, to: { ghostVote } },
+          context,
+        }));
+        if (!recorded) return;
+        set({ undoStack: pushUndo(game, undoStack), game: recorded });
       },
 
       setAbilityUsed: (id, abilityUsed) => {
@@ -1731,12 +1790,11 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const others = player.effects.filter((e) => e.id !== effectId);
         const effects = on ? [...others, newEffect!] : others;
         const updatedGame = patchPlayer(game, id, { effects });
-        set({
-          undoStack: pushUndo(game, undoStack),
-          game: recordIfLive(game, updatedGame, () => on
-            ? { category: "effect", playerId: id, change: { kind: "added", item: newEffect! } }
-            : { category: "effect", playerId: id, change: { kind: "removed", item: existing! } }),
-        });
+        const recorded = recordIfLive(game, updatedGame, () => on
+          ? { category: "effect", playerId: id, change: { kind: "added", item: newEffect! } }
+          : { category: "effect", playerId: id, change: { kind: "removed", item: existing! } });
+        if (!recorded) return;
+        set({ undoStack: pushUndo(game, undoStack), game: recorded });
       },
 
       addEffect: (id, effect) => {
@@ -1749,21 +1807,21 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // snapshot of the caller's input -- a shallow `{ ...effect, id }`
         // still shares nested objects (lifetime, appliedAt, ...) by
         // reference with whatever the caller passed in.
-        const record: EffectRecord = cloneOwned({ ...effect, id: effectId });
+        const record = sourcedRecord<EffectRecord>(game, cloneOwned({ ...effect, id: effectId }));
+        if (!record) return null;
         const existing = player.effects.find((e) => e.id === effectId);
         // True no-op: an identical effect already exists under this id.
         if (existing && sameSnapshot(existing, record)) return effectId;
         const others = player.effects.filter((e) => e.id !== effectId);
         const updatedGame = patchPlayer(game, id, { effects: [...others, record] });
         const provenance = provenanceOf(record);
-        set({
-          undoStack: pushUndo(game, undoStack),
-          game: recordIfLive(game, updatedGame, () => ({
-            category: "effect", playerId: id,
-            change: { kind: "added", item: record },
-            ...(provenance ? { provenance } : {}),
-          })),
-        });
+        const recorded = recordIfLive(game, updatedGame, () => ({
+          category: "effect", playerId: id,
+          change: { kind: "added", item: record },
+          ...(provenance ? { provenance } : {}),
+        }));
+        if (!recorded) return null;
+        set({ undoStack: pushUndo(game, undoStack), game: recorded });
         return effectId;
       },
 
@@ -1775,14 +1833,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!player || !existing) return;
         const updatedGame = patchPlayer(game, id, { effects: player.effects.filter((e) => e.id !== effectId) });
         const provenance = provenanceOf(existing);
-        set({
-          undoStack: pushUndo(game, undoStack),
-          game: recordIfLive(game, updatedGame, () => ({
-            category: "effect", playerId: id,
-            change: { kind: "removed", item: existing },
-            ...(provenance ? { provenance } : {}),
-          })),
-        });
+        const recorded = recordIfLive(game, updatedGame, () => ({
+          category: "effect", playerId: id,
+          change: { kind: "removed", item: existing },
+          ...(provenance ? { provenance } : {}),
+        }));
+        if (!recorded) return;
+        set({ undoStack: pushUndo(game, undoStack), game: recorded });
       },
 
       setReminders: (id, reminders) => {
@@ -1796,9 +1853,20 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // addEffect/addReminder/recordInformationDelivery already use.
         // History/Undo/no-op behavior here is deliberately unchanged --
         // out of scope for this follow-up (reserved for Phase 9R.4).
+        const owned = cloneOwned(reminders);
+        // Phase 9R.2: a wholesale replacement may carry forward a durable
+        // `sourceParticipant` snapshot this player's reminders already
+        // hold, but never introduce a new/hand-built one -- that would let
+        // this bulk setter fabricate historical identity outside
+        // participantRefOf(). A newly sourced Reminder goes through
+        // addReminder instead.
+        const held = game.players[id]?.reminders.map((r) => r.sourceParticipant).filter((ref) => ref !== undefined) ?? [];
+        const introducesSource = owned.some((r) =>
+          r.sourceParticipant !== undefined && !held.some((ref) => sameSnapshot(ref, r.sourceParticipant)));
+        if (introducesSource) return;
         set({
           undoStack: pushUndo(game, undoStack),
-          game: patchPlayer(game, id, { reminders: cloneOwned(reminders) }),
+          game: patchPlayer(game, id, { reminders: owned }),
         });
       },
 
@@ -1809,7 +1877,8 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!player) return null;
         const reminderId = reminder.id ?? newId();
         // Phase 9R.1 (Finding B4/B5): see addEffect's identical rationale.
-        const record: ReminderRecord = cloneOwned({ ...reminder, id: reminderId });
+        const record = sourcedRecord<ReminderRecord>(game, cloneOwned({ ...reminder, id: reminderId }));
+        if (!record) return null;
         const existing = player.reminders.find((r) => r.id === reminderId);
         // True no-op: an identical reminder already exists under this id.
         if (existing && sameSnapshot(existing, record)) return reminderId;
@@ -1817,14 +1886,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
           reminders: [...player.reminders.filter((r) => r.id !== reminderId), record],
         });
         const provenance = provenanceOf(record);
-        set({
-          undoStack: pushUndo(game, undoStack),
-          game: recordIfLive(game, updatedGame, () => ({
-            category: "reminder", playerId: id,
-            change: { kind: "added", item: record },
-            ...(provenance ? { provenance } : {}),
-          })),
-        });
+        const recorded = recordIfLive(game, updatedGame, () => ({
+          category: "reminder", playerId: id,
+          change: { kind: "added", item: record },
+          ...(provenance ? { provenance } : {}),
+        }));
+        if (!recorded) return null;
+        set({ undoStack: pushUndo(game, undoStack), game: recorded });
         return reminderId;
       },
 
@@ -1836,22 +1904,25 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!player || !existing) return;
         const updatedGame = patchPlayer(game, id, { reminders: player.reminders.filter((r) => r.id !== reminderId) });
         const provenance = provenanceOf(existing);
-        set({
-          undoStack: pushUndo(game, undoStack),
-          game: recordIfLive(game, updatedGame, () => ({
-            category: "reminder", playerId: id,
-            change: { kind: "removed", item: existing },
-            ...(provenance ? { provenance } : {}),
-          })),
-        });
+        const recorded = recordIfLive(game, updatedGame, () => ({
+          category: "reminder", playerId: id,
+          change: { kind: "removed", item: existing },
+          ...(provenance ? { provenance } : {}),
+        }));
+        if (!recorded) return;
+        set({ undoStack: pushUndo(game, undoStack), game: recorded });
       },
 
       recordInformationDelivery: (recipientPlayerId, informationActionId, values, context) => {
         const { game, undoStack } = get();
         if (!game) return { ok: false, message: "No game is open." };
-        // 1-2. Recipient exists and has an Actual Role.
-        const player = game.players[recipientPlayerId];
-        if (!player) return { ok: false, message: "This player is not seated." };
+        // 1-2. Recipient is a current participant (Phase 9R.2: an occupied
+        // seat with a participant identity -- never an empty seat or a
+        // nonexistent/inherited id) and has an Actual Role. The recipient
+        // is snapshotted HERE, at acceptance -- never resolved again later.
+        const recipient = participantRefOf(game, recipientPlayerId);
+        const player = recipient ? game.players[recipientPlayerId] : undefined;
+        if (!recipient || !player) return { ok: false, message: "This player is not seated." };
         if (!player.actualRole) return { ok: false, message: "This player has no Actual Role yet." };
         const script = selectScriptById(get(), game.scriptId);
         if (!script) return { ok: false, message: "Unknown script." };
@@ -1892,29 +1963,41 @@ export const useStorytellerStore = create<StorytellerStore>()(
           // Phase 9R.1 (Finding B3.2): an own-property-safe existence check
           // -- `id in game.players` also resolves true for an inherited
           // Object.prototype property name (e.g. "toString"), which is
-          // never an actual seated player.
-          playerIds: { has: (id) => Object.prototype.hasOwnProperty.call(game.players, id) },
+          // never an actual seated player. Phase 9R.2: participantRefOf()
+          // keeps that own-property check and additionally requires a
+          // current participant -- an empty seat names nobody, so it can
+          // never be snapshotted as Player-valued Information.
+          playerIds: { has: (id) => participantRefOf(game, id) !== null },
           roleIds: { has: (id) => !!registry.get(id) },
         });
         if (!validation.ok) return validation;
+        // 9. Phase 9R.2: Player-valued Information is stored as immutable
+        // ParticipantRefs of whoever those players are RIGHT NOW (the input
+        // stays live PlayerIds, since the Storyteller is selecting current
+        // players), and Provenance's live source likewise becomes a
+        // durable snapshot -- neither is ever re-resolved from the roster.
+        const recordedValues = recordedInformationValues(game, parsedValues.values);
+        if (!recordedValues) return { ok: false, message: "A referenced Player is not seated." };
+        const provenance = durableProvenance(game, context?.provenance);
+        if (provenance === null) return { ok: false, message: "The Provenance source Player is not seated." };
 
         // Phase 9R.1 (Finding B5): currentGameMoment(game) is undefined
         // once the game has ended -- omit `moment` entirely rather than
         // storing it as a literal `undefined` property.
         const moment = currentGameMoment(game);
         // Phase 9R.1 (Finding B4): own a deep-cloned, undefined-stripped
-        // snapshot of the canonical parsed `values` (including nested
-        // arrays like `playerIds`) and `context.provenance` -- neither may
-        // keep sharing references with objects/arrays the caller still
-        // owns.
+        // snapshot of the recorded `values` (including nested arrays like
+        // `participants`), the recipient snapshot, and the Provenance --
+        // none may keep sharing references with objects/arrays the caller
+        // still owns.
         const record: InformationDeliveryRecord = cloneOwned({
           id: informationDeliveryId(),
-          recipientPlayerId,
+          recipient,
           actualRole: player.actualRole,
           informationActionId,
           ...(moment ? { moment } : {}),
-          values: parsedValues.values,
-          ...(context?.provenance ? { provenance: context.provenance } : {}),
+          values: recordedValues,
+          ...(provenance ? { provenance } : {}),
         });
         set({
           undoStack: pushUndo(game, undoStack),

@@ -4,6 +4,8 @@ import { buildRichPhase9Game } from "@/test/phase9RichState";
 import { buildRegistry } from "@/data/roleRegistry";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { projectLobbyToPublic, projectLobbyToSelfMap, projectToSelf } from "./projections";
+import { participantRefOf, refersToParticipant } from "./participants";
+import type { ParticipantRef, StorytellerLobbyRecord } from "./types";
 
 // Phase 9D.5: Recovery & Phase 9 Integration. These are PROOFS, not new
 // feature tests -- each drives one deliberately rich, realistic game
@@ -17,6 +19,12 @@ import { projectLobbyToPublic, projectLobbyToSelfMap, projectToSelf } from "./pr
 // Storyteller-private notes -- survives intact and unmixed.
 
 const STORAGE_KEY = "new-blood-st";
+
+/** Phase 9R.2: `ref` names the participant CURRENTLY occupying seat `id`
+ * in `game` (by ParticipantId -- never merely the reusable seat id). */
+const refersTo = (game: StorytellerLobbyRecord, ref: ParticipantRef | undefined, id: string) =>
+  refersToParticipant(ref, game.players[id]!.participantId!);
+const refOf = (game: StorytellerLobbyRecord, id: string) => participantRefOf(game, id)!;
 
 const resetStore = () =>
   useStorytellerStore.setState({
@@ -42,7 +50,7 @@ describe("Phase 9D.5 Proof A: local persistence round-trip", () => {
     const raw = localStorage.getItem(STORAGE_KEY);
     expect(raw).toBeTruthy();
     const parsed = JSON.parse(raw!);
-    expect(parsed.version).toBe(16);
+    expect(parsed.version).toBe(17);
 
     // Simulate a fresh load: wipe in-memory state entirely. Zustand's
     // persist middleware wraps setState to also write-through on every
@@ -91,7 +99,7 @@ describe("Phase 9D.5 Proof A: local persistence round-trip", () => {
     expect(afterGame.players[handles.travelerId]!.actualAlignment).toBe("evil");
     expect(afterGame.players[handles.travelerId]!.exiled).toBe(true);
     expect(afterGame.players[handles.travelerId]!.alive).toBe(false); // exile also flips life state, but is its own History category, not a generic kill
-    expect(afterGame.history.some((h) => h.playerId === handles.travelerId && h.category === "life" &&
+    expect(afterGame.history.some((h) => refersTo(afterGame, h.participant, handles.travelerId) && h.category === "life" &&
       "to" in h.change && (h.change.to as { exiled?: boolean }).exiled === true)).toBe(true);
 
     // Ordinary Life state and Ghost Vote.
@@ -329,7 +337,7 @@ describe("Phase 9D.5 Proof H: full integrated BOTC lifecycle", () => {
     expect(store().game!.history).toHaveLength(2);
     store().addEffect(investigatorId, { type: "poisoned", sourceCharacter: "poisoner", sourcePlayer: impId, lifetime: { kind: "untilDawn" } });
     expect(store().game!.history).toHaveLength(3);
-    expect(store().game!.history[2]!.provenance).toEqual({ sourceCharacter: "poisoner", sourcePlayer: impId });
+    expect(store().game!.history[2]!.provenance).toEqual({ sourceCharacter: "poisoner", sourceParticipant: refOf(store().game!, impId) });
     store().addReminder(investigatorId, { label: "Poisoned", sourceCharacter: "poisoner", lifetime: { kind: "manual" } });
     // addReminder/addEffect only record History when the game is live (they
     // already are here) -- exactly one record per real command, never more.
@@ -347,7 +355,7 @@ describe("Phase 9D.5 Proof H: full integrated BOTC lifecycle", () => {
     ]);
     expect(delivery.ok).toBe(true);
     expect(store().game!.informationDeliveries).toHaveLength(1);
-    expect(store().game!.informationDeliveries[0]!.recipientPlayerId).toBe(washerwomanId);
+    expect(store().game!.informationDeliveries[0]!.recipient).toEqual(refOf(store().game!, washerwomanId));
     expect(store().game!.informationDeliveries[0]!.actualRole).toBe("washerwoman"); // captured Actual Role at delivery time
     // Information Delivery is its own record type -- never a History entry.
     expect(store().game!.history).toHaveLength(4);
@@ -376,8 +384,8 @@ describe("Phase 9D.5: anti-fabrication and cross-player mixing checks", () => {
 
     const check = (game: NonNullable<ReturnType<typeof useStorytellerStore.getState>["game"]>, label: string) => {
       // --- Information Delivery: exact per-recipient attribution ----------
-      const chefDelivery = game.informationDeliveries.find((d) => d.recipientPlayerId === handles.chefId);
-      const wwDelivery = game.informationDeliveries.find((d) => d.recipientPlayerId === handles.washerwomanId);
+      const chefDelivery = game.informationDeliveries.find((d) => refersTo(game, d.recipient, handles.chefId));
+      const wwDelivery = game.informationDeliveries.find((d) => refersTo(game, d.recipient, handles.washerwomanId));
       expect(chefDelivery, label).toBeDefined();
       expect(wwDelivery, label).toBeDefined();
       expect(chefDelivery!.actualRole, label).toBe("chef");
@@ -386,21 +394,23 @@ describe("Phase 9D.5: anti-fabrication and cross-player mixing checks", () => {
       expect(wwDelivery!.actualRole, label).toBe("washerwoman");
       expect(wwDelivery!.informationActionId, label).toBe("washerwoman-first-night");
       expect(wwDelivery!.values, label).toEqual([
-        { requirementId: "players", kind: "player", playerIds: [handles.investigatorId, handles.librarianId] },
+        { requirementId: "players", kind: "player", participants: [refOf(game, handles.investigatorId), refOf(game, handles.librarianId)] },
         { requirementId: "role", kind: "role", roleId: "librarian" },
       ]);
+      expect(chefDelivery!.recipient, label).toEqual(refOf(game, handles.chefId));
+      expect(wwDelivery!.recipient, label).toEqual(refOf(game, handles.washerwomanId));
       // Neither delivery's recipient/role bled into the other's record.
       expect(chefDelivery!.id, label).not.toBe(wwDelivery!.id);
       expect(game.informationDeliveries, label).toHaveLength(2); // exactly the two recorded -- none fabricated
 
       // --- Provenance survives by name, not just via bulk equality --------
-      const alignmentRecord = game.history.find((h) => h.category === "alignment" && h.playerId === handles.travelerId);
+      const alignmentRecord = game.history.find((h) => h.category === "alignment" && refersTo(game, h.participant, handles.travelerId));
       expect(alignmentRecord?.provenance, label).toEqual({ reason: "Storyteller selection", sourceCharacter: "thief" });
       const washerwomanReminder = game.players[handles.washerwomanId]!.reminders.find((r) => r.label === "Red Herring");
       expect(washerwomanReminder?.sourceCharacter, label).toBe("fortuneteller");
       const washerwomanEffect = game.players[handles.washerwomanId]!.effects.find((e) => e.type === "protected");
       expect(washerwomanEffect?.sourceCharacter, label).toBe("monk");
-      expect(washerwomanEffect?.sourcePlayer, label).toBe(handles.chefId);
+      expect(washerwomanEffect?.sourceParticipant, label).toEqual(refOf(game, handles.chefId));
 
       // --- Global cross-player mixing check: exactly the Effects/Reminders
       // that were added exist, attributed to exactly the players they were

@@ -5,6 +5,7 @@ import { buildRegistry } from "@/data/roleRegistry";
 import { needsShownIdentity } from "./identity";
 import { projectLobbyToPublic, projectLobbyToSelfMap, projectToPublic, projectToSelf } from "./projections";
 import { diffFields, provenanceOf, recordIfLive } from "./history";
+import { participantRefOf } from "./participants";
 
 // Phase 9D.2: generic live-game history/provenance. Current state remains
 // authoritative -- history is explanatory bookkeeping only. Each `it` below
@@ -16,6 +17,13 @@ const registry = buildRegistry(setupScript);
 const game = () => store.getState().game!;
 const state = () => store.getState();
 const history = () => game().history;
+/** Phase 9R.2: the durable participant snapshot a History Record about the
+ * CURRENT occupant of `id` must carry (participantId + seat + name now). */
+const participantOf = (id: string) => {
+  const ref = participantRefOf(game(), id);
+  expect(ref).not.toBeNull();
+  return ref!;
+};
 
 beforeEach(() => store.setState({
   game: null, lobby: null, undoStack: [], customScripts: { [setupScript.id]: setupScript },
@@ -56,7 +64,8 @@ describe("Phase 9D.2: generic scalar/state mutation", () => {
     expect(history()).toHaveLength(1);
     const entry = history()[0]!;
     expect(entry.category).toBe("identity");
-    expect(entry.playerId).toBe(id);
+    expect(entry.participant).toEqual(participantOf(id));
+    expect(entry.participant).toMatchObject({ kind: "participant", playerId: id });
     expect(entry.change).toEqual({ kind: "value", from: { actualRole: before }, to: { actualRole: target } });
     expect(entry.moment).toEqual({ phase: "night", day: 1 });
   });
@@ -70,7 +79,7 @@ describe("Phase 9D.2: generic scalar/state mutation", () => {
     state().setActualAlignment(id, next);
     expect(history()).toHaveLength(1);
     expect(history()[0]).toMatchObject({
-      category: "alignment", playerId: id,
+      category: "alignment", participant: participantOf(id),
       change: { kind: "value", from: { actualAlignment: before }, to: { actualAlignment: next } },
     });
   });
@@ -95,7 +104,7 @@ describe("Phase 9D.2: structured record mutation (generic across semantic types)
     state().setStatus(id, "poisoned", true);
     expect(history()).toHaveLength(1);
     expect(history()[0]).toMatchObject({
-      category: "effect", playerId: id,
+      category: "effect", participant: participantOf(id),
       change: { kind: "added", item: { id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" } } },
     });
   });
@@ -108,7 +117,7 @@ describe("Phase 9D.2: structured record mutation (generic across semantic types)
     state().setStatus(id, "protected", false);
     expect(history()).toHaveLength(2);
     expect(history()[1]).toMatchObject({
-      category: "effect", playerId: id,
+      category: "effect", participant: participantOf(id),
       change: { kind: "removed", item: { id: "manual:protected", type: "protected" } },
     });
   });
@@ -120,13 +129,13 @@ describe("Phase 9D.2: structured record mutation (generic across semantic types)
     const reminderId = state().addReminder(id, { label: "Red Herring", lifetime: { kind: "manual" } })!;
     expect(history()).toHaveLength(1);
     expect(history()[0]).toMatchObject({
-      category: "reminder", playerId: id,
+      category: "reminder", participant: participantOf(id),
       change: { kind: "added", item: { id: reminderId, label: "Red Herring" } },
     });
     state().removeReminder(id, reminderId);
     expect(history()).toHaveLength(2);
     expect(history()[1]).toMatchObject({
-      category: "reminder", playerId: id,
+      category: "reminder", participant: participantOf(id),
       change: { kind: "removed", item: { id: reminderId, label: "Red Herring" } },
     });
   });
@@ -160,7 +169,7 @@ describe("Phase 9D.2: provenance", () => {
     state().addEffect(id, {
       type: "poisoned", sourceCharacter: "poisoner", sourcePlayer: source, lifetime: { kind: "untilDawn" },
     });
-    expect(history()[0]!.provenance).toEqual({ sourceCharacter: "poisoner", sourcePlayer: source });
+    expect(history()[0]!.provenance).toEqual({ sourceCharacter: "poisoner", sourceParticipant: participantOf(source) });
   });
 
   it("leaves provenance absent -- never invented -- when nothing is known", () => {
@@ -367,10 +376,11 @@ describe("Phase 9D.2: extensibility", () => {
       change: { kind: "added", item: hypotheticalItem },
       provenance: provenanceOf(hypotheticalItem),
     }));
+    expect(updated).not.toBeNull();
     store.setState({ game: updated });
     expect(history()).toHaveLength(1);
     expect(history()[0]).toMatchObject({
-      category: "effect", playerId: id,
+      category: "effect", participant: participantOf(id),
       change: { kind: "added", item: hypotheticalItem },
       provenance: { sourceCharacter: "witch", note: "a made-up future ability" },
     });
@@ -402,7 +412,7 @@ describe("Phase 9D.2 closure: Mutation Context carries Provenance through the au
     expect(game().players[id]!.actualRole).toBe(target);
     expect(history()).toHaveLength(1);
     expect(history()[0]).toMatchObject({
-      category: "identity", playerId: id,
+      category: "identity", participant: participantOf(id),
       change: { kind: "value", from: { actualRole: before }, to: { actualRole: target } },
       provenance,
     });
@@ -419,7 +429,7 @@ describe("Phase 9D.2 closure: Mutation Context carries Provenance through the au
     expect(game().players[id]!.actualAlignment).toBe(target);
     expect(history()).toHaveLength(1);
     expect(history()[0]).toMatchObject({
-      category: "alignment", playerId: id,
+      category: "alignment", participant: participantOf(id),
       change: { kind: "value", from: { actualAlignment: before }, to: { actualAlignment: target } },
       provenance,
     });
@@ -434,7 +444,7 @@ describe("Phase 9D.2 closure: Mutation Context carries Provenance through the au
     expect(game().players[id]!.alive).toBe(false);
     expect(history()).toHaveLength(1);
     expect(history()[0]).toMatchObject({
-      category: "life", playerId: id,
+      category: "life", participant: participantOf(id),
       change: { kind: "value", from: { alive: true }, to: { alive: false } },
       provenance,
     });
@@ -458,7 +468,7 @@ describe("Phase 9D.2 closure: Mutation Context carries Provenance through the au
     goLive();
     state().setTravelerAlignment(travelerId, "evil", { provenance: { reason: "Storyteller selection" } });
     expect(history().at(-1)).toMatchObject({
-      category: "alignment", playerId: travelerId, provenance: { reason: "Storyteller selection" },
+      category: "alignment", participant: participantOf(travelerId), provenance: { reason: "Storyteller selection" },
     });
   });
 

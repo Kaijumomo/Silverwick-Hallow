@@ -200,7 +200,7 @@ describe("Phase 9B persistence", () => {
     store.getState().completeTravelerInformation("t"); store.getState().exileTraveler("t");
     const expected = JSON.parse(JSON.stringify(p()));
     const saved = localStorage.getItem("new-blood-st")!;
-    expect(JSON.parse(saved).version).toBe(16);
+    expect(JSON.parse(saved).version).toBe(17);
     store.setState({ game: null }); localStorage.setItem("new-blood-st", saved);
     await store.persist.rehydrate(); expect(p()).toEqual(expected);
   });

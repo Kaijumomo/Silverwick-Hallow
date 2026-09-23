@@ -1395,11 +1395,15 @@ describe("OPUS-001-CONTRACT-H1-GAP2: valid-authority reconciliation that require
     // describes. The checkpoint's OWN embedded roster is left empty so
     // toUnseat stays empty — this isolates the toRevoke branch from the
     // toUnseat/toRecoverPending branches OPUS-001-CONTRACT-H1-FOLLOWUP
-    // already covers.
+    // already covers. Phase 9R.2: a genuinely unoccupied seat carries no
+    // participant identity (unseatPlayer clears it; the v17 checkpoint
+    // schema rejects an empty seat that still holds one), so the fixture
+    // drops `participantId` exactly as a real vacated seat would.
+    const { participantId: _vacated, ...vacatedSeat } = useStorytellerStore.getState().game!.players[seatId]!;
     const foreignGame = {
       ...useStorytellerStore.getState().game!, day: 5,
       players: { ...useStorytellerStore.getState().game!.players,
-        [seatId]: { ...useStorytellerStore.getState().game!.players[seatId]!, isEmpty: true } },
+        [seatId]: { ...vacatedSeat, isEmpty: true } },
     };
     await writeProjections({
       backend: writerB, code, stState: foreignGame,

@@ -63,7 +63,17 @@ export function makePlayer(
   return makeSTPlayer({ id, name: id, seat, actualRole: roleId, ...over });
 }
 
+/** Phase 9R.2: an occupied fixture seat carries a participant identity (the
+ * v17 invariant every real occupancy path establishes via occupySeat); an
+ * empty one (`isEmpty: true`) never does unless a test explicitly supplies
+ * one to exercise invariant rejection. Deterministic per fixture id. */
 export function makeSTPlayer(over: Partial<STPlayerRecord> = {}): STPlayerRecord {
+  const player = makeBareSTPlayer(over);
+  if (!player.isEmpty && !("participantId" in over)) player.participantId = `fixture-participant-${player.id}`;
+  return player;
+}
+
+function makeBareSTPlayer(over: Partial<STPlayerRecord>): STPlayerRecord {
   return {
     id: "p1",
     name: "Alice",

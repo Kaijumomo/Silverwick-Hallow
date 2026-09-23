@@ -4,6 +4,7 @@ import { buildRegistry } from "@/data/roleRegistry";
 import { setupScript } from "@/test/setupFixtures";
 import { projectLobbyToPublic, projectLobbyToSelfMap, projectToPublic, projectToSelf } from "./projections";
 import { parseInformationValues, validateInformationValues, validateRequirementsCoherent } from "./informationDelivery";
+import { participantRefOf } from "./participants";
 import type { InformationAction, InformationValue } from "./types";
 
 // Phase 9D.3: Role Information & Delivery system. Silverwick understands
@@ -207,7 +208,7 @@ describe("Phase 9D.3: Information Delivery Record", () => {
     expect(deliveries()).toHaveLength(1);
     const record = deliveries()[0]!;
     expect(record).toMatchObject({
-      recipientPlayerId: id,
+      recipient: participantRefOf(game(), id),
       actualRole: "undertaker",
       informationActionId: "undertaker-other-night",
       values: [{ requirementId: "role", kind: "role", roleId: "chef" }],

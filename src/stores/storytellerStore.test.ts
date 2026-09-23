@@ -952,14 +952,19 @@ describe("migrateStoreState", () => {
       expect(result.game.plannedTravelerCount).toBe(1);
     });
 
-    it("v15->v16: real, pre-existing History content survives completely unchanged -- migration only adds empty Information Delivery, for game AND undoStack", () => {
+    it("v15->v17: real, pre-existing History content survives -- only its PlayerId-only participant reference becomes an unresolved legacy ref -- and migration only adds empty Information Delivery, for game AND undoStack", () => {
       const existingHistoryRecord = {
         id: "h-existing-1", category: "life", playerId: "a",
         change: { kind: "value", from: { alive: true }, to: { alive: false } },
       };
+      // Phase 9R.2: migration mutates in place, so the expectation is built
+      // from an independent deep copy -- never compared against the very
+      // object migration itself rewrote.
+      const { playerId: _legacyPlayerId, ...recordBody } = structuredClone(existingHistoryRecord);
+      const expectedRecord = { ...recordBody, participant: { kind: "legacy", playerId: "a" } };
       const v15Player = legacyPlayer({ actualRole: "chef", actualAlignment: "good", effects: [] });
       const v15Game = minimalPersistedGame({ players: { a: v15Player }, history: [existingHistoryRecord] });
-      const state = { game: v15Game, undoStack: [v15Game] };
+      const state = { game: v15Game, undoStack: [structuredClone(v15Game)] };
 
       const result = migrateStoreState(state, 15) as {
         game: { history: unknown[]; informationDeliveries: unknown[] };
@@ -968,15 +973,15 @@ describe("migrateStoreState", () => {
       expect(takeMigrationResetFlag()).toBe(false);
 
       for (const entry of [result.game, result.undoStack[0]!]) {
-        // Not reset to [], not duplicated -- the exact pre-existing record,
-        // unchanged, still the only entry.
-        expect(entry.history).toEqual([existingHistoryRecord]);
+        // Not reset to [], not duplicated -- the pre-existing record, its
+        // id/category/change/moment unchanged, still the only entry.
+        expect(entry.history).toEqual([expectedRecord]);
         expect(entry.history).toHaveLength(1);
         expect(entry.informationDeliveries).toEqual([]);
       }
     });
 
-    it("v16->v16: a current, fully-populated state (real History AND Information Delivery content) passes through completely unchanged -- same reference, nothing reset or duplicated", () => {
+    it("v16->v17: History/Information Delivery PlayerId references become unresolved legacy refs -- never the current occupant's new identity -- identically for game AND undoStack", () => {
       const existingHistoryRecord = {
         id: "h-existing-1", category: "life", playerId: "a",
         change: { kind: "value", from: { alive: true }, to: { alive: false } },
@@ -990,20 +995,63 @@ describe("migrateStoreState", () => {
       const v16Game = minimalPersistedGame({
         players: { a: v16Player }, history: [existingHistoryRecord], informationDeliveries: [existingDelivery],
       });
-      const state = { game: v16Game, undoStack: [v16Game] };
+      const state = { game: v16Game, undoStack: [structuredClone(v16Game)] };
 
       const result = migrateStoreState(state, 16) as {
-        game: { history: unknown[]; informationDeliveries: unknown[] };
+        game: { players: Record<string, { participantId?: string }>; history: unknown[]; informationDeliveries: unknown[] };
+        undoStack: { players: Record<string, { participantId?: string }>; history: unknown[]; informationDeliveries: unknown[] }[];
+      };
+      expect(takeMigrationResetFlag()).toBe(false);
+      for (const entry of [result.game, result.undoStack[0]!]) {
+        // The CURRENT occupant gets a deterministic identity for their
+        // current participation instance...
+        expect(entry.players.a!.participantId).toBe("legacy-current:a");
+        // ...but no historical record is attached to it.
+        expect(entry.history).toEqual([{
+          id: "h-existing-1", category: "life", participant: { kind: "legacy", playerId: "a" },
+          change: { kind: "value", from: { alive: true }, to: { alive: false } },
+        }]);
+        expect(entry.informationDeliveries).toEqual([{
+          id: "d-existing-1", recipient: { kind: "legacy", playerId: "a" }, actualRole: "chef",
+          informationActionId: "chef-first-night", moment: { phase: "night", day: 1 },
+          values: [{ requirementId: "pairs", kind: "number", value: 1 }],
+        }]);
+        expect(JSON.stringify(entry.history)).not.toContain("legacy-current");
+        expect(JSON.stringify(entry.informationDeliveries)).not.toContain("legacy-current");
+      }
+    });
+
+    it("v17->v17: a current, fully-populated state (real History AND Information Delivery content) passes through completely unchanged -- same reference, nothing reset or duplicated", () => {
+      const participant = { kind: "participant", participantId: "pt-alice", playerId: "a", nameAtTime: "Alice" };
+      const existingHistoryRecord = {
+        id: "h-existing-1", category: "life", participant,
+        change: { kind: "value", from: { alive: true }, to: { alive: false } },
+      };
+      const existingDelivery = {
+        id: "d-existing-1", recipient: participant, actualRole: "chef", informationActionId: "chef-first-night",
+        moment: { phase: "night", day: 1 },
+        values: [{ requirementId: "pairs", kind: "number", value: 1 }],
+      };
+      const v17Player = legacyPlayer({ actualRole: "chef", actualAlignment: "good", effects: [], participantId: "pt-alice" });
+      const v17Game = minimalPersistedGame({
+        players: { a: v17Player }, history: [existingHistoryRecord], informationDeliveries: [existingDelivery],
+      });
+      const state = { game: v17Game, undoStack: [v17Game] };
+      const snapshot = structuredClone(state);
+
+      const result = migrateStoreState(state, 17) as {
+        game: { players: Record<string, { participantId?: string }>; history: unknown[]; informationDeliveries: unknown[] };
         undoStack: { history: unknown[]; informationDeliveries: unknown[] }[];
       };
       expect(result).toBe(state); // same top-level reference: a genuinely current state is never rebuilt
       expect(takeMigrationResetFlag()).toBe(false);
-      expect(result.game.history).toEqual([existingHistoryRecord]);
+      expect(result.game.players.a!.participantId).toBe("pt-alice"); // never regenerated
+      expect(result.game.history).toEqual(snapshot.game.history);
       expect(result.game.history).toHaveLength(1);
-      expect(result.game.informationDeliveries).toEqual([existingDelivery]);
+      expect(result.game.informationDeliveries).toEqual(snapshot.game.informationDeliveries);
       expect(result.game.informationDeliveries).toHaveLength(1);
-      expect(result.undoStack[0]!.history).toEqual([existingHistoryRecord]);
-      expect(result.undoStack[0]!.informationDeliveries).toEqual([existingDelivery]);
+      expect(result.undoStack[0]!.history).toEqual(snapshot.game.history);
+      expect(result.undoStack[0]!.informationDeliveries).toEqual(snapshot.game.informationDeliveries);
     });
   });
 });

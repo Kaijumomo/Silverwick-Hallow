@@ -1,4 +1,5 @@
 import { currentGameMoment } from "./effects";
+import { participantRefOf } from "./participants";
 import type {
   EffectRecord,
   HistoryCategory,
@@ -6,6 +7,7 @@ import type {
   HistoryRecord,
   PlayerId,
   Provenance,
+  ProvenanceInput,
   ReminderRecord,
   StorytellerLobbyRecord,
 } from "./types";
@@ -56,8 +58,39 @@ export function cloneOwned<T>(value: T): T {
  * thing a Mutation Context carries) -- this is not a general options bag.
  */
 export type MutationContext = {
-  provenance?: Provenance;
+  /** Phase 9R.2: caller-facing form -- names its source by live PlayerId.
+   * Converted to durable Provenance by durableProvenance() before storage;
+   * never stored as given. */
+  provenance?: ProvenanceInput;
 };
+
+/**
+ * Phase 9R.2: converts caller-supplied Provenance into its durable, owned
+ * stored form. A live `sourcePlayer` becomes `sourceParticipant`, a
+ * snapshot of whoever occupies that seat RIGHT NOW (participantRefOf) --
+ * never resolved again later. Returns:
+ *  - undefined when no Provenance was supplied (none is ever invented);
+ *  - null when `sourcePlayer` names no current participant (nonexistent
+ *    PlayerId, empty seat, malformed id) -- the caller must refuse the
+ *    whole command rather than store a Provenance whose source is
+ *    unknowable or silently drop what the Storyteller supplied;
+ *  - otherwise the durable Provenance, deep-cloned and undefined-stripped
+ *    (Phase 9R.1 Finding B4/B5 ownership boundary).
+ */
+export function durableProvenance(
+  game: Pick<StorytellerLobbyRecord, "players">,
+  input: ProvenanceInput | undefined
+): Provenance | undefined | null {
+  if (!input) return undefined;
+  // A caller can never hand in a pre-built snapshot: any
+  // `sourceParticipant` smuggled in at runtime is discarded.
+  const { sourcePlayer, sourceParticipant: _smuggled, ...rest } =
+    cloneOwned(input) as ProvenanceInput & { sourceParticipant?: unknown };
+  if (sourcePlayer === undefined) return rest;
+  const sourceParticipant = participantRefOf(game, sourcePlayer);
+  if (!sourceParticipant) return null;
+  return { ...rest, sourceParticipant };
+}
 
 /**
  * The single live/Setup boundary for Phase 9D.2 history. Setup
@@ -73,9 +106,18 @@ export function isLiveGamePhase(phase: StorytellerLobbyRecord["phase"]): boolean
 
 type NewHistoryRecord = {
   category: HistoryCategory;
+  /** Live seat address of the affected player. recordIfLive converts it to
+   * the durable `participant` snapshot -- a command never builds one. */
   playerId: PlayerId;
   change: HistoryRecord["change"];
+  /** Already-durable Provenance -- e.g. mirrored from a stored Effect/
+   * Reminder's own `sourceParticipant` (provenanceOf), which must keep
+   * naming whoever originally caused it, never be re-resolved. */
   provenance?: Provenance;
+  /** Caller-supplied Mutation Context whose live Provenance recordIfLive
+   * converts via durableProvenance(). Takes precedence over `provenance`
+   * (no command supplies both). */
+  context?: MutationContext;
   note?: string;
 };
 
@@ -88,22 +130,53 @@ type NewHistoryRecord = {
  * change happened" (an idempotent re-add, a no-op toggle) -- in either
  * case `updatedGame` passes through completely unchanged, so history is
  * never fabricated for something that didn't actually happen.
+ *
+ * Phase 9R.2: this is also the single place a History Record's
+ * participant identity is captured. `entry.playerId` (a live seat address)
+ * is snapshotted into `participant` via participantRefOf() against `game`
+ * -- the state the command was issued against, i.e. whoever occupied that
+ * seat when the mutation happened -- and any Mutation Context Provenance
+ * is converted via durableProvenance(). Returns NULL when the record
+ * cannot be made truthfully: the affected seat has no current participant
+ * (an empty seat or nonexistent PlayerId during Live Play), or the
+ * supplied Provenance names a source that is not a current participant.
+ * A caller receiving null must refuse the whole command atomically -- a
+ * Live Play mutation is never applied without its History, and History is
+ * never recorded against a fabricated or unknowable person. Setup/ended
+ * games still pass `updatedGame` straight through (no History is ever
+ * recorded there, so there is nothing to resolve).
  */
 export function recordIfLive(
   game: StorytellerLobbyRecord,
   updatedGame: StorytellerLobbyRecord,
   build: () => NewHistoryRecord | null
-): StorytellerLobbyRecord {
+): StorytellerLobbyRecord | null {
   if (!isLiveGamePhase(game.phase)) return updatedGame;
   const entry = build();
   if (!entry) return updatedGame;
-  // Phase 9R.1 (Finding B4): `entry` (and especially its `provenance`, an
-  // object the CALLER supplied through this same command's Mutation
-  // Context) is deep-cloned here, once, at the single choke point every
-  // Authoritative Mutation Command already funnels through -- so a caller
-  // mutating their own Provenance/change-item object after the command
-  // returns can never reach back into this stored History Record.
-  const record: HistoryRecord = cloneOwned({ id: historyId(), moment: currentGameMoment(game), ...entry });
+  const participant = participantRefOf(game, entry.playerId);
+  if (!participant) return null;
+  let provenance = entry.provenance;
+  if (entry.context?.provenance) {
+    const resolved = durableProvenance(game, entry.context.provenance);
+    if (resolved === null) return null;
+    provenance = resolved;
+  }
+  const { playerId: _live, context: _context, provenance: _given, ...rest } = entry;
+  // Phase 9R.1 (Finding B4): the record (and especially its `provenance`,
+  // an object the CALLER supplied through this same command's Mutation
+  // Context, and `participant`, which must be an owned snapshot) is
+  // deep-cloned here, once, at the single choke point every Authoritative
+  // Mutation Command already funnels through -- so a caller mutating their
+  // own Provenance/change-item object after the command returns can never
+  // reach back into this stored History Record.
+  const record: HistoryRecord = cloneOwned({
+    id: historyId(),
+    moment: currentGameMoment(game),
+    ...rest,
+    participant,
+    ...(provenance ? { provenance } : {}),
+  });
   return { ...updatedGame, history: [...updatedGame.history, record] };
 }
 
@@ -144,14 +217,18 @@ export function diffFields<T extends Record<string, unknown>>(
 /** Derives Provenance from a structured effect/reminder's own optional
  * source fields -- never invents one when nothing is known, and mirrors
  * whatever the live item itself already carries rather than duplicating
- * a second, independently-maintained source of truth. */
+ * a second, independently-maintained source of truth. Phase 9R.2: the
+ * item's `sourceParticipant` is already a durable snapshot (captured when
+ * the item was created), so it is carried over as-is -- removing an Effect
+ * Alice caused still records Alice as its source even after Bob has since
+ * taken her seat. recordIfLive deep-clones it into the History Record. */
 export function provenanceOf(
-  item: Pick<EffectRecord | ReminderRecord, "sourceCharacter" | "sourcePlayer" | "note">
+  item: Pick<EffectRecord | ReminderRecord, "sourceCharacter" | "sourceParticipant" | "note">
 ): Provenance | undefined {
-  if (!item.sourceCharacter && !item.sourcePlayer && !item.note) return undefined;
+  if (!item.sourceCharacter && !item.sourceParticipant && !item.note) return undefined;
   return {
     ...(item.sourceCharacter ? { sourceCharacter: item.sourceCharacter } : {}),
-    ...(item.sourcePlayer ? { sourcePlayer: item.sourcePlayer } : {}),
+    ...(item.sourceParticipant ? { sourceParticipant: item.sourceParticipant } : {}),
     ...(item.note ? { note: item.note } : {}),
   };
 }

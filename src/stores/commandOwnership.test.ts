@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { useStorytellerStore as store } from "./storytellerStore";
 import { setupScript, standardRoles } from "@/test/setupFixtures";
 import { needsShownIdentity } from "./identity";
+import { participantRefOf, refersToParticipant } from "./participants";
+import type { HistoryRecord } from "./types";
 
 // Phase 9R.1 (Finding B4): once an Authoritative Mutation Command accepts
 // structured input, the store must own its own immutable snapshot of it --
@@ -15,6 +17,11 @@ import { needsShownIdentity } from "./identity";
 
 const game = () => store.getState().game!;
 const state = () => store.getState();
+/** Phase 9R.2: a History Record is "about" the participant CURRENTLY in seat
+ * `id` when its durable participant snapshot carries that participant's
+ * own ParticipantId (not merely the same, reusable seat id). */
+const isAbout = (h: HistoryRecord, id: string) =>
+  refersToParticipant(h.participant, game().players[id]!.participantId!);
 
 const STORAGE_KEY = "new-blood-st";
 
@@ -54,7 +61,7 @@ describe("Phase 9R.1 Finding B4: Provenance ownership", () => {
     const provenance = { reason: "killed by the Demon", note: "original note" };
     state().setAlive(id, false, { provenance });
     const localSeqAfterCommand = state().localSeq;
-    const storedRecord = game().history.find((h) => h.playerId === id && h.category === "life")!;
+    const storedRecord = game().history.find((h) => isAbout(h, id) && h.category === "life")!;
     expect(storedRecord.provenance).toEqual({ reason: "killed by the Demon", note: "original note" });
 
     // The caller's own object is mutated AFTER the command has already
@@ -62,7 +69,7 @@ describe("Phase 9R.1 Finding B4: Provenance ownership", () => {
     provenance.reason = "MUTATED AFTER THE FACT";
     provenance.note = "MUTATED AFTER THE FACT";
 
-    const restoredRecord = game().history.find((h) => h.playerId === id && h.category === "life")!;
+    const restoredRecord = game().history.find((h) => isAbout(h, id) && h.category === "life")!;
     expect(restoredRecord.provenance).toEqual({ reason: "killed by the Demon", note: "original note" });
     expect(restoredRecord.provenance).not.toEqual(provenance);
     // No second store command ran -- localSeq must not have moved again.
@@ -85,7 +92,7 @@ describe("Phase 9R.1 Finding B4: Provenance ownership", () => {
     localStorage.setItem(STORAGE_KEY, raw!);
     await store.persist.rehydrate();
 
-    const record = game().history.find((h) => h.playerId === id && h.category === "life")!;
+    const record = game().history.find((h) => isAbout(h, id) && h.category === "life")!;
     expect(record.provenance).toEqual({ reason: "Storyteller ruling" });
     expect(game()).toEqual(beforeGame);
   });
@@ -107,7 +114,13 @@ describe("Phase 9R.1 Finding B4: Information Value ownership (including nested P
     expect(result.ok).toBe(true);
     const localSeqAfterCommand = state().localSeq;
     const storedBefore = game().informationDeliveries[0]!;
-    expect(storedBefore.values).toEqual(values);
+    // Phase 9R.2: the accepted live playerIds are stored as the durable
+    // participant snapshots of exactly those players.
+    const expectedStored = [
+      { requirementId: "players", kind: "player", participants: targets.map((t) => participantRefOf(game(), t)!) },
+      { requirementId: "role", kind: "role", roleId: "chef" },
+    ];
+    expect(storedBefore.values).toEqual(expectedStored);
 
     // Mutate the caller's own array AND its nested playerIds array after
     // the command has already returned.
@@ -115,11 +128,9 @@ describe("Phase 9R.1 Finding B4: Information Value ownership (including nested P
     values.push({ requirementId: "extra", kind: "role" as const, roleId: "imp" });
 
     const storedAfter = game().informationDeliveries[0]!;
-    expect(storedAfter.values).toEqual([
-      { requirementId: "players", kind: "player", playerIds: targets },
-      { requirementId: "role", kind: "role", roleId: "chef" },
-    ]);
-    expect(storedAfter.values).not.toEqual(values);
+    expect(storedAfter.values).toEqual(expectedStored);
+    expect(JSON.stringify(storedAfter)).not.toContain("INJECTED-AFTER-THE-FACT");
+    expect(storedAfter.values).toHaveLength(2);
     expect(state().localSeq).toBe(localSeqAfterCommand);
   });
 
@@ -162,7 +173,7 @@ describe("Phase 9R.1 Finding B4: Effect lifetime ownership", () => {
     const storedAfter = game().players[id]!.effects.find((e) => e.id === effectId)!;
     expect(storedAfter.lifetime).toEqual({ kind: "nights", count: 2 });
     expect(storedAfter.sourceCharacter).toBe("poisoner");
-    const historyItem = game().history.find((h) => h.category === "effect" && h.playerId === id)!;
+    const historyItem = game().history.find((h) => h.category === "effect" && isAbout(h, id))!;
     expect(historyItem.change).toMatchObject({ kind: "added", item: { lifetime: { kind: "nights", count: 2 }, sourceCharacter: "poisoner" } });
     expect(state().localSeq).toBe(localSeqAfterCommand);
   });
@@ -187,7 +198,7 @@ describe("Phase 9R.1 Finding B4: Reminder ownership (addReminder -- the same pat
     const storedAfter = game().players[id]!.reminders.find((r) => r.id === reminderId)!;
     expect(storedAfter.lifetime).toEqual({ kind: "days", count: 3 });
     expect(storedAfter.label).toBe("Red Herring");
-    const historyItem = game().history.find((h) => h.category === "reminder" && h.playerId === id)!;
+    const historyItem = game().history.find((h) => h.category === "reminder" && isAbout(h, id))!;
     expect(historyItem.change).toMatchObject({ kind: "added", item: { label: "Red Herring", lifetime: { kind: "days", count: 3 } } });
   });
 });

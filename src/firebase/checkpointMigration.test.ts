@@ -19,6 +19,7 @@ import { SessionWriter } from "./writer";
 import { startStorytellerSession, useSessionRuntime } from "./storytellerSync";
 import { SnapshotValidationError } from "./snapshots";
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
+import { detectLegacyGameVersion, migrateGameEntry } from "@/stores/gameMigration";
 import { validateFirebaseWritableValue } from "./firebaseWriteCompatibility";
 
 const code = "LGCY2345";
@@ -237,7 +238,7 @@ describe("Phase 9R.1 Finding B1: remote checkpoint migration", () => {
     expect(useStorytellerStore.getState().undoStack).toEqual([]);
   });
 
-  it("v15 remote checkpoint (History already present) recovers into current v16 semantics, preserving existing History and adding only empty Information Delivery", async () => {
+  it("v15 remote checkpoint (History already present) recovers into current v17 semantics, preserving existing History (its PlayerId-only reference becoming an unresolved legacy ref) and adding only empty Information Delivery", async () => {
     const b = new MemoryRoomBackend();
     const existingHistoryRecord = {
       id: "h1", category: "life", playerId: "a",
@@ -258,12 +259,18 @@ describe("Phase 9R.1 Finding B1: remote checkpoint migration", () => {
 
     expect(recovered.outcome).toBe("live");
     const game = useStorytellerStore.getState().game!;
-    expect(game.history).toEqual([existingHistoryRecord]); // real History content survives completely unchanged
+    // Real History content survives -- id, category, moment-less change all
+    // unchanged -- with only its PlayerId-only participant reference made
+    // explicitly unresolved (Phase 9R.2): never attached to the current
+    // occupant of seat "a".
+    const { playerId: _legacy, ...recordBody } = existingHistoryRecord;
+    expect(game.history).toEqual([{ ...recordBody, participant: { kind: "legacy", playerId: "a" } }]);
+    expect(game.players.a!.participantId).toBe("legacy-current:a");
     expect(game.informationDeliveries).toEqual([]); // added, never fabricated
     expect(useStorytellerStore.getState().undoStack).toEqual([]);
   });
 
-  it("v16 remote checkpoint (already current) recovers with no semantic mutation", async () => {
+  it("v16 remote checkpoint recovers into v17 semantics: the recipient becomes an unresolved legacy ref -- never the current occupant -- and nothing else changes", async () => {
     const b = new MemoryRoomBackend();
     const existingDelivery = {
       id: "d1", recipientPlayerId: "a", actualRole: "chef", informationActionId: "chef-first-night",
@@ -283,9 +290,42 @@ describe("Phase 9R.1 Finding B1: remote checkpoint migration", () => {
 
     expect(recovered.outcome).toBe("live");
     const game = useStorytellerStore.getState().game!;
-    expect(game.informationDeliveries).toEqual([existingDelivery]);
+    const { recipientPlayerId: _legacy, ...deliveryBody } = existingDelivery;
+    expect(game.informationDeliveries).toEqual([{ ...deliveryBody, recipient: { kind: "legacy", playerId: "a" } }]);
+    expect(game.players.a!.participantId).toBe("legacy-current:a");
+    expect(JSON.stringify(game.informationDeliveries)).not.toContain("legacy-current");
     expect(game.players.a!.actualAlignment).toBe("good");
     expect(useStorytellerStore.getState().undoStack).toEqual([]);
+  });
+
+  it("v17 remote checkpoint (already current) recovers with no semantic mutation -- participant identities are never regenerated", async () => {
+    const b = new MemoryRoomBackend();
+    const alice = { kind: "participant", participantId: "pt-alice-original", playerId: "a", nameAtTime: "Alice" };
+    const existingDelivery = {
+      id: "d1", recipient: alice, actualRole: "chef", informationActionId: "chef-first-night",
+      values: [{ requirementId: "pairs", kind: "number", value: 1 }],
+    };
+    const existingHistory = {
+      id: "h1", category: "life", participant: alice,
+      change: { kind: "value", from: { alive: true }, to: { alive: false } },
+    };
+    const v17Game = baseLegacyGame({
+      phase: "night", day: 1,
+      players: { a: v13Player({ statuses: {}, reminders: [], actualAlignment: "good", effects: [], participantId: "pt-alice-original" }) },
+      history: [existingHistory],
+      informationDeliveries: [existingDelivery],
+    });
+    await seedLegacyCheckpoint(b, v17Game);
+    const { lobby, session } = await freshLobby(b);
+    const writer = new SessionWriter(b, code, session.id);
+    const recovered = await startStorytellerSession(b, lobby, writer);
+    disposals.push(async () => { recovered.stop(); await writer.dispose(); });
+
+    expect(recovered.outcome).toBe("live");
+    const game = useStorytellerStore.getState().game!;
+    expect(game.players.a!.participantId).toBe("pt-alice-original");
+    expect(game.history).toEqual([existingHistory]);
+    expect(game.informationDeliveries).toEqual([existingDelivery]);
   });
 
   // A malformed/unsupported checkpoint with NO evidenced local claim at
@@ -1056,8 +1096,12 @@ describe("Phase 9R.1 residual F2: nested '.priority' validation before checkpoin
 
     // 1. JSON parse succeeds.
     const json = JSON.parse(rawText) as { game: unknown };
-    // 2. The current (v16) schema accepts it -- History items are unrestricted.
-    const schema = StorytellerGamePersistedSchema.safeParse(json.game);
+    // 2. Once put through the exact production migration step readCheckpoint
+    // applies (v16 -> v17, Phase 9R.2), the current schema accepts it --
+    // History items are unrestricted.
+    const migrated = json.game as Record<string, unknown>;
+    migrateGameEntry(migrated, detectLegacyGameVersion(migrated)!, { kind: "canonical-only" });
+    const schema = StorytellerGamePersistedSchema.safeParse(migrated);
     expect(schema.success).toBe(true);
     expect(schema.data!.history[0]!.change).toEqual({ kind: "added", item: { ".priority": true, child: true } });
     // 3. The Firebase compatibility gate rejects it at the real destination.

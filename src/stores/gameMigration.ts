@@ -1,5 +1,6 @@
 import { BUILTIN_SCRIPTS } from "@/data/scripts";
 import { buildRegistry, deriveAlignment, type RoleRegistry } from "@/data/roleRegistry";
+import { legacyCurrentParticipantId, legacyParticipantRef } from "./participants";
 import type { STPlayerRecord, Script } from "./types";
 
 /**
@@ -8,13 +9,13 @@ import type { STPlayerRecord, Script } from "./types";
  * storytellerStore.ts, applied to `game` and every `undoStack` entry) and
  * remote checkpoint recovery (readCheckpoint in storytellerSync.ts,
  * applied to the checkpoint's own embedded `game`). Extracted here so the
- * v13->v14->v15->v16 structured-state evolution is expressed exactly once
+ * v13->v14->v15->v16->v17 structured-state evolution is expressed exactly once
  * -- never two divergent copies of the same rules -- while each caller
  * keeps deciding for itself what "the state to migrate" even is (the
  * whole persisted Zustand blob vs. a bare remote game/roster pair).
  *
  * Deliberately narrow: this only ever mutates ONE game-shaped object, and
- * only ever performs the exact v13/v14/v15/v16 transitions Phase 9
+ * only ever performs the exact v13/v14/v15/v16/v17 transitions Phase 9
  * intentionally supports. It never touches store-level concerns (lobby,
  * sync/localSeq, customScripts storage, undo-stack membership) -- those
  * remain migrateStoreState's own responsibility, and remote checkpoints
@@ -97,10 +98,10 @@ function registryForScript(scriptId: unknown, evidence: MigrationScriptEvidence)
 }
 
 /**
- * Migrates one game-shaped entry from `fromVersion` up through v16,
+ * Migrates one game-shaped entry from `fromVersion` up through v17,
  * in place, mirroring migrateStoreState's own mutate-then-validate style
  * (the caller is responsible for the final schema validation gate). A
- * no-op for `fromVersion >= 16` or a non-object entry.
+ * no-op for `fromVersion >= 17` or a non-object entry.
  *
  * v13 -> v14 (Phase 9D.1): ordinary Actual Alignment is derived only from
  * an assigned, currently-resolvable Role -- never invented, never
@@ -140,6 +141,10 @@ function registryForScript(scriptId: unknown, evidence: MigrationScriptEvidence)
  * of its fields -- a malformed player must make the checkpoint fail
  * through the ordinary invalid-checkpoint outcome, never crash migration
  * with an uncaught runtime exception.
+ *
+ * v16 -> v17 (Phase 9R.2): historical participant identity. See
+ * migrateEntryV16ToV17 below for exactly what is converted and -- more
+ * importantly -- what is deliberately NOT inferred.
  */
 /**
  * Migrates exactly one player entry's v13-shaped fields, in place.
@@ -212,6 +217,114 @@ function migratePlayerV13ToV14(raw: object, registry: RoleRegistry): void {
   }
 }
 
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
+const isNonEmptyString = (value: unknown): value is string => typeof value === "string" && value.length > 0;
+
+/** Converts one record's legacy `sourcePlayer: PlayerId` (Effect, Reminder,
+ * Provenance, or a History snapshot of an Effect/Reminder) into an
+ * unresolved legacy `sourceParticipant`. A malformed/absent value is left
+ * untouched for final schema validation to judge (Finding A3). */
+function migrateLegacySource(record: Record<string, unknown>): void {
+  if (!isNonEmptyString(record.sourcePlayer) || record.sourceParticipant !== undefined) return;
+  record.sourceParticipant = legacyParticipantRef(record.sourcePlayer);
+  delete record.sourcePlayer;
+}
+
+function forEachObject(value: unknown, visit: (record: Record<string, unknown>) => void): void {
+  if (!Array.isArray(value)) return;
+  for (const item of value) {
+    if (!isObject(item)) continue;
+    try {
+      visit(item);
+    } catch {
+      // Finding M1-style last-resort backstop: one malformed record is
+      // left un-migrated (and so fails final schema validation) rather
+      // than aborting migration of every other record.
+    }
+  }
+}
+
+/**
+ * v16 -> v17 (Phase 9R.2): historical participant identity, in place.
+ *
+ * 1. Current occupied players: each seat that is occupied RIGHT NOW (not
+ *    `isEmpty`) and has no participant identity yet receives the
+ *    deterministic legacyCurrentParticipantId(playerId) -- never a random
+ *    UUID, so Current State, every Undo snapshot, and a remote checkpoint
+ *    of the same lineage all migrate identically. Empty seats never
+ *    receive one.
+ *
+ * 2. Historical references: every v16 PlayerId-only historical reference
+ *    -- History `playerId`, Provenance `sourcePlayer`, Information
+ *    Delivery `recipientPlayerId`, Player-valued Information `playerIds`,
+ *    Effect/Reminder `sourcePlayer`, and the `sourcePlayer` inside a
+ *    History snapshot of an added/removed Effect/Reminder -- becomes an
+ *    explicitly UNRESOLVED legacy ParticipantRef ({ kind: "legacy",
+ *    playerId }). HARD INVARIANT (Section 6/22): none is ever attached to
+ *    the current occupant's identity from step 1 merely because the
+ *    PlayerId matches -- a v16 record cannot prove it was about the person
+ *    who sits there now, and that exact inference is the defect Phase
+ *    9R.2 exists to eliminate. No participantId, nameAtTime, or
+ *    current-player attribution is ever invented.
+ *
+ * Idempotent: every step only fires when the v17 field is still absent and
+ * the legacy field is still present, so a re-run is a no-op. A malformed
+ * legacy value (e.g. a non-string `playerId`) is left untouched so the
+ * final schema gate rejects it (Finding A3) -- including the
+ * "retired field" guards in schemas.ts, which refuse any legacy field that
+ * survives into a v17 record rather than silently stripping it.
+ */
+function migrateEntryV16ToV17(e: Record<string, unknown>): void {
+  if (isObject(e.players)) {
+    for (const raw of Object.values(e.players)) {
+      if (!isObject(raw)) continue;
+      try {
+        if (raw.isEmpty !== true && raw.participantId === undefined && isNonEmptyString(raw.id)) {
+          raw.participantId = legacyCurrentParticipantId(raw.id);
+        }
+        forEachObject(raw.effects, migrateLegacySource);
+        forEachObject(raw.reminders, migrateLegacySource);
+      } catch {
+        // Finding M1-style backstop -- see forEachObject.
+      }
+    }
+  }
+
+  forEachObject(e.history, (record) => {
+    if (isNonEmptyString(record.playerId) && record.participant === undefined) {
+      record.participant = legacyParticipantRef(record.playerId);
+      delete record.playerId;
+    }
+    if (isObject(record.provenance)) migrateLegacySource(record.provenance);
+    const change = record.change;
+    if (
+      (record.category === "effect" || record.category === "reminder") &&
+      isObject(change) && (change.kind === "added" || change.kind === "removed") && isObject(change.item)
+    ) {
+      migrateLegacySource(change.item);
+    }
+  });
+
+  forEachObject(e.informationDeliveries, (delivery) => {
+    if (isNonEmptyString(delivery.recipientPlayerId) && delivery.recipient === undefined) {
+      delivery.recipient = legacyParticipantRef(delivery.recipientPlayerId);
+      delete delivery.recipientPlayerId;
+    }
+    if (isObject(delivery.provenance)) migrateLegacySource(delivery.provenance);
+    forEachObject(delivery.values, (value) => {
+      if (
+        value.kind === "player" && value.participants === undefined &&
+        Array.isArray(value.playerIds) && value.playerIds.every(isNonEmptyString)
+      ) {
+        value.participants = (value.playerIds as string[]).map(legacyParticipantRef);
+        delete value.playerIds;
+      }
+    });
+  });
+}
+
 export function migrateGameEntry(
   entry: unknown,
   fromVersion: number,
@@ -260,11 +373,13 @@ export function migrateGameEntry(
       }
     }
   }
+
+  if (fromVersion < 17) migrateEntryV16ToV17(e as Record<string, unknown>);
 }
 
 /**
- * Phase 9R.1 (Finding B1): structurally infers which of the legacy game
- * shapes `migrateGameEntry` supports (v13-v16) a remote checkpoint's raw
+ * Phase 9R.1 (Finding B1): structurally infers which of the game
+ * shapes `migrateGameEntry` supports (v13-v17) a remote checkpoint's raw
  * `game` blob represents. Remote checkpoints never carried an explicit
  * schema version (see readCheckpoint in storytellerSync.ts) -- but v14,
  * v15, and v16 each introduced a field the live app's own runtime type
@@ -283,8 +398,20 @@ export function migrateGameEntry(
  * remote-recovery floor (pre-v13, i.e. missing plannedTravelerCount too)
  * -- the caller must fail that checkpoint safely rather than guess a
  * version and risk silently mis-migrating it.
+ *
+ * Phase 9R.2: v17 is recognized by any of its own required markers -- an
+ * occupied player carrying `participantId`, a History record carrying
+ * `participant`, or an Information Delivery carrying `recipient` -- and is
+ * never migrated again, so recovery can never regenerate or reassign an
+ * already-current v17 participant identity. A v17 game with none of these
+ * (every seat empty, no records) is indistinguishable from v16, but
+ * v16 -> v17 migration of such a game is a no-op, so the ambiguity is
+ * harmless. A checkpoint mixing v17 markers with leftover v16 fields is
+ * treated as v17 and therefore fails the final schema gate instead of
+ * being partially "repaired".
  */
 export function detectLegacyGameVersion(game: Record<string, unknown>): number | null {
+  if (hasV17Marker(game)) return 17;
   if (Array.isArray(game.informationDeliveries)) return 16;
   if (Array.isArray(game.history)) return 15;
   const players =
@@ -297,4 +424,11 @@ export function detectLegacyGameVersion(game: Record<string, unknown>): number |
   if (hasStructuredEffects) return 14;
   if (typeof game.plannedTravelerCount === "number") return 13;
   return null;
+}
+
+function hasV17Marker(game: Record<string, unknown>): boolean {
+  const players = isObject(game.players) ? Object.values(game.players) : [];
+  if (players.some((p) => isObject(p) && p.participantId !== undefined)) return true;
+  const has = (list: unknown, key: string) => Array.isArray(list) && list.some((r) => isObject(r) && r[key] !== undefined);
+  return has(game.history, "participant") || has(game.informationDeliveries, "recipient");
 }

@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { useStorytellerStore as store } from "./storytellerStore";
 import { setupScript, standardRoles } from "@/test/setupFixtures";
 import { needsShownIdentity } from "./identity";
+import { refersToParticipant } from "./participants";
+import type { HistoryRecord } from "./types";
 
 // Phase 9R.1 (Finding B5): any state an authoritative Phase 9 command
 // accepts must already be safe for Zustand/localStorage, JSON checkpoint
@@ -19,6 +21,9 @@ import { needsShownIdentity } from "./identity";
 const game = () => store.getState().game!;
 const state = () => store.getState();
 const STORAGE_KEY = "new-blood-st";
+/** Phase 9R.2: the record's durable participant is the CURRENT occupant of `id`. */
+const isAbout = (h: HistoryRecord, id: string) =>
+  refersToParticipant(h.participant, game().players[id]!.participantId!);
 
 beforeEach(() => {
   store.setState({
@@ -52,7 +57,7 @@ describe("Phase 9R.1 Finding B5: Provenance never stores an explicit-undefined o
     goLive();
     const id = game().seatOrder[0]!;
     state().setAlive(id, false, { provenance: { reason: "known", note: undefined } });
-    const record = game().history.find((h) => h.category === "life" && h.playerId === id)!;
+    const record = game().history.find((h) => h.category === "life" && isAbout(h, id))!;
     expect(record.provenance).toEqual({ reason: "known" });
     expect("note" in record.provenance!).toBe(false);
     expect(Object.keys(record.provenance!)).toEqual(["reason"]);
@@ -77,9 +82,10 @@ describe("Phase 9R.1 Finding B5: Provenance never stores an explicit-undefined o
     localStorage.setItem(STORAGE_KEY, raw);
     await store.persist.rehydrate();
 
-    const record = game().history.find((h) => h.category === "life" && h.playerId === id)!;
+    const record = game().history.find((h) => h.category === "life" && isAbout(h, id))!;
     expect(record.provenance).toEqual({ reason: "known" });
     expect("sourcePlayer" in record.provenance!).toBe(false);
+    expect("sourceParticipant" in record.provenance!).toBe(false);
     expect("sourceCharacter" in record.provenance!).toBe(false);
   });
 });
@@ -95,6 +101,7 @@ describe("Phase 9R.1 Finding B5: Effect never stores an explicit-undefined optio
     const stored = game().players[id]!.effects.find((e) => e.id === effectId)!;
     expect(stored).toEqual({ id: effectId, type: "protected", lifetime: { kind: "manual" } });
     expect("sourcePlayer" in stored).toBe(false);
+    expect("sourceParticipant" in stored).toBe(false);
   });
 });
 
@@ -118,11 +125,12 @@ describe("Phase 9R.1 Finding B5: Reminder never stores an explicit-undefined opt
     state().setReminders(id, [
       {
         id: "r-1", label: "Chosen", lifetime: { kind: "manual" },
-        sourcePlayer: undefined, sourceCharacter: undefined, note: undefined,
+        sourceParticipant: undefined, sourceCharacter: undefined, note: undefined,
       },
     ]);
     const stored = game().players[id]!.reminders[0]!;
     expect(stored).toEqual({ id: "r-1", label: "Chosen", lifetime: { kind: "manual" } });
+    expect("sourceParticipant" in stored).toBe(false);
     expect("sourcePlayer" in stored).toBe(false);
     expect("sourceCharacter" in stored).toBe(false);
     expect("note" in stored).toBe(false);
