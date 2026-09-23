@@ -182,14 +182,97 @@ describe("Phase 9R.4 (B8 remediation): inherited names inside a caller-supplied 
     expect(player(imp()).privateInfo).toBeUndefined();
   });
 
-  it.each(INHERITED)("setSeatOrder containing %j never mints a player record for it (seat-order structure itself is out of scope)", (id) => {
+  // Phase 9R.4 (B8 remediation #2): originally asserted only that no player
+  // record was minted; setSeatOrder now accepts exact permutations only, so
+  // the same call is fully inert.
+  it.each(INHERITED)("setSeatOrder containing %j is completely inert and never mints a player record for it", (id) => {
     setupFixture();
+    const before = baseline();
     state().setSeatOrder([id, ...game().seatOrder]);
-    expect(own(id)).toBe(false);
+    expectInert(before, id);
     expect(Object.keys(game().players)).toHaveLength(7);
-    expectPrototypesPristine();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 9R.4 (B8 remediation #2): setSeatOrder() only REORDERS. Its input
+// must be an exact permutation of the current authoritative seat ids; any
+// other order is rejected before renumbering, Undo, or set().
+// ---------------------------------------------------------------------------
+const seats = () => Object.fromEntries(Object.entries(game().players).map(([id, p]) => [id, p.seat]));
+
+describe.each([["Setup", setupFixture], ["Live Play", liveFixture]] as const)(
+  "Phase 9R.4 (B8 remediation #2): setSeatOrder accepts only an exact permutation of the current seats -- %s",
+  (_phase, fixture) => {
+    const replaceLast = (o: PlayerId[], id: string) => [...o.slice(0, -1), id];
+    const INVALID: [string, (o: PlayerId[]) => PlayerId[], string][] = [
+      ...INHERITED.flatMap((id): [string, (o: PlayerId[]) => PlayerId[], string][] => [
+        [`inherited ${JSON.stringify(id)} appended (extra slot)`, (o) => [...o, id], id],
+        [`inherited ${JSON.stringify(id)} replacing a seat (same length)`, (o) => replaceLast(o, id), id],
+      ]),
+      ['unknown "missing-player" appended (extra slot)', (o) => [...o, "missing-player"], "missing-player"],
+      ['unknown "missing-player" replacing a seat (same length)', (o) => replaceLast(o, "missing-player"), "missing-player"],
+      ["a duplicate existing id replacing another (duplicate + omission, same length)", (o) => [o[0]!, o[1]!, o[1]!, ...o.slice(3)], "missing-player"],
+      ["a duplicate existing id appended (extra slot)", (o) => [...o, o[0]!], "missing-player"],
+      ["one existing id omitted", (o) => o.slice(0, -1), "missing-player"],
+      ["an empty order", () => [], "missing-player"],
+    ];
+
+    it.each(INVALID)("%s is completely inert", (_label, build, probe) => {
+      fixture();
+      const order = [...game().seatOrder];
+      const seatsBefore = seats();
+      const before = baseline();
+      expect(before.undoStack.length).toBe(1);
+      state().setSeatOrder(build(order));
+      expectInert(before, probe);
+      expect(game().seatOrder).toBe(before.game.seatOrder);
+      expect(game().seatOrder).toEqual(order);
+      expect(seats()).toEqual(seatsBefore);
+    });
+
+    it("an own player record that is not currently seated can never be ordered into a seat (seat creation belongs to other commands)", () => {
+      fixture();
+      const stray = { ...player(game().seatOrder[1]!), id: "stray", seat: 99 };
+      store.setState({ game: { ...game(), players: { ...game().players, stray } } }); // malformed fixture: record without a seat
+      const order = [...game().seatOrder];
+      const before = baseline();
+      state().setSeatOrder(replaceLast(order, "stray"));
+      expectInert(before, "missing-player");
+      expect(game().seatOrder).toEqual(order);
+    });
+
+    it("contrast: a real reorder (the Grimoire ring-drag shape) mutates exactly once and renumbers every seat", () => {
+      fixture();
+      const order = [...game().seatOrder];
+      const moved = order.splice(1, 1)[0]!;
+      order.splice(4, 0, moved);
+      const before = baseline();
+      state().setSeatOrder(order);
+      expectOneMutation(before);
+      expect(game().seatOrder).toEqual(order);
+      order.forEach((id, idx) => expect(player(id).seat).toBe(idx));
+    });
+
+    it("contrast: the exact current order with correct seat numbers is a true no-op", () => {
+      fixture();
+      const before = baseline();
+      state().setSeatOrder([...game().seatOrder]);
+      expectInert(before, "missing-player");
+    });
+
+    it("contrast: the exact current order with a corrupted seat number is still a real repair", () => {
+      fixture();
+      const id = game().seatOrder[2]!;
+      store.setState({ game: { ...game(), players: { ...game().players, [id]: { ...player(id), seat: 4 } } } });
+      const before = baseline();
+      state().setSeatOrder([...game().seatOrder]);
+      expectOneMutation(before);
+      expect(player(id).seat).toBe(2);
+      game().seatOrder.forEach((pid, idx) => expect(player(pid).seat).toBe(idx));
+    });
+  },
+);
 
 // ---------------------------------------------------------------------------
 // 2. The required representatives: inherited ids inert, then IMMEDIATELY a

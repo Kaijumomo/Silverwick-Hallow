@@ -540,6 +540,26 @@ const samePlayerApartFromEpoch = (existing: STPlayerRecord, next: STPlayerRecord
 const ownPlayer = (game: Pick<StorytellerLobbyRecord, "players">, id: PlayerId): STPlayerRecord | undefined =>
   Object.prototype.hasOwnProperty.call(game.players, id) ? game.players[id] : undefined;
 
+/**
+ * Phase 9R.4 (B8 remediation #2): setSeatOrder() only REORDERS -- seat
+ * creation and removal belong to addPlayer/addEmptySeat/addTravelerSeat/
+ * removePlayer -- so its input must be an exact permutation of the current
+ * authoritative seat ids: the same length, no duplicate, and every id an
+ * own player record (ownPlayer) that is already seated. Membership in the
+ * current seatOrder is checked explicitly, not inferred from length plus
+ * existence, so an own record that is not seated can never be ordered in.
+ */
+const isSeatPermutation = (game: StorytellerLobbyRecord, order: readonly PlayerId[]): boolean => {
+  if (!Array.isArray(order) || order.length !== game.seatOrder.length) return false;
+  const seated = new Set(game.seatOrder);
+  const seen = new Set<PlayerId>();
+  for (const id of order) {
+    if (seen.has(id) || !seated.has(id) || !ownPlayer(game, id)) return false;
+    seen.add(id);
+  }
+  return true;
+};
+
 const patchPlayer = (
   game: StorytellerLobbyRecord,
   id: PlayerId,
@@ -1519,9 +1539,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
       setSeatOrder: (order) => {
         const { game, undoStack } = get();
         if (!game) return;
+        // Phase 9R.4 (B8 remediation #2): anything but an exact permutation
+        // of the current seats (unknown or inherited ids, duplicates,
+        // omissions, extra slots) is an invalid request -- rejected before
+        // renumbering, Undo, or set().
+        if (!isSeatPermutation(game, order)) return;
         // Phase 9R.4 (B8): resubmitting the current order, with every seat
-        // already numbered to match it, changes nothing. (Structural
-        // validation of malformed orders is deliberately not part of this.)
+        // already numbered to match it, changes nothing.
         if (sameList(order, game.seatOrder) &&
           order.every((pid, idx) => { const p = ownPlayer(game, pid); return !p || p.seat === idx; })) return;
         const renumbered = { ...game.players };
