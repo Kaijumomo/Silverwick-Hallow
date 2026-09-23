@@ -154,10 +154,29 @@ const clone = <T,>(v: T): T =>
  * left a bypass whenever the two had already diverged (e.g. legacy/
  * adversarial state, or a plan reduced independently of physical seats);
  * checking both closes it regardless of how they diverged.
+ *
+ * Phase 9R.3 (B7): that check used to apply ONLY before Reveal, so the
+ * total cap disappeared the moment Reveal committed. Physical-seat capacity
+ * is now enforced in every lifecycle state; the plan remains an additional
+ * guard only before Reveal, because afterward it is a frozen historical
+ * record -- a revealed plan of 20 whose live table later dropped to 19 must
+ * still accept one legitimate replacement back to 20.
  */
 const atCapacity = (game: StorytellerLobbyRecord): boolean =>
-  !isInitialRevealComplete(game) &&
-  (game.plannedPlayerCount >= MAX_TOTAL_PLAYERS || game.seatOrder.length >= MAX_TOTAL_PLAYERS);
+  game.seatOrder.length >= MAX_TOTAL_PLAYERS ||
+  (!isInitialRevealComplete(game) && game.plannedPlayerCount >= MAX_TOTAL_PLAYERS);
+
+/**
+ * Phase 9R.3 (B7): occupying an EXISTING empty seat can never admit live
+ * participant 21. Under the physical-capacity invariant above an empty seat
+ * implies fewer than 20 occupants, so this only ever refuses malformed/
+ * legacy/adversarial state carrying extra physical seats. Counted with the
+ * Setup population model -- never a second definition of player count.
+ */
+const atOccupancyCapacity = (game: StorytellerLobbyRecord): boolean => {
+  const { occupiedNonTravelerCount, occupiedTravelerCount } = selectSetupContext(game).population;
+  return occupiedNonTravelerCount + occupiedTravelerCount >= MAX_TOTAL_PLAYERS;
+};
 
 export type AddScriptResult = { ok: true } | { ok: false; error: string };
 
@@ -1004,6 +1023,11 @@ export const useStorytellerStore = create<StorytellerStore>()(
       setRolePool: (roles) => {
         const { game, undoStack } = get();
         if (!game || game.phase !== "setup") return;
+        // Phase 9R.3 (B6): Reveal completes without leaving phase "setup",
+        // so the phase check alone let this reopen a committed Setup --
+        // wiping the Reveal evidence below. The pool is Setup
+        // administration only; later role changes go through assignRole().
+        if (isInitialRevealComplete(game)) return;
         set({ undoStack: pushUndo(game, undoStack), game: { ...game, rolePool: [...roles],
           // Reopening the pool leaves preparation, so any prior deal/reveal
           // evidence for it is no longer meaningful either.
@@ -1069,6 +1093,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!name) return false;
         const seat = game.players[seatPlayerId];
         if (!seat?.isEmpty) return false;
+        // Phase 9R.3 (B7): refused before any mutation, so the membership
+        // seating command (seatPlayerAndCommit) sees false and revokes the
+        // remote binding it just wrote.
+        if (atOccupancyCapacity(game)) return false;
         // Phase 9R.2 (Astra R1): a supplied identity must be a brand-new
         // participation instance -- never one this game has already used
         // (current or historical). Freshly minted ids always pass.
@@ -1218,6 +1246,8 @@ export const useStorytellerStore = create<StorytellerStore>()(
         }
         const seat = game.players[emptyId];
         if (!seat) return;
+        // Phase 9R.3 (B7): see atOccupancyCapacity.
+        if (atOccupancyCapacity(game)) return;
         set({
           undoStack: pushUndo(game, get().undoStack),
           game: {

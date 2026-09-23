@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { useStorytellerStore as store } from "./storytellerStore";
 import { selectSetupContext } from "@/features/setup/setupContext";
 import { analyzeSetup } from "@/features/setup/setupAnalyzer";
-import { needsShownIdentity } from "./identity";
+import { isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { MAX_TOTAL_PLAYERS } from "@/data/setupCounts";
 import { setupScript, standardRoles } from "@/test/setupFixtures";
 
@@ -745,6 +745,205 @@ describe("FINAL SEAT & TRAVELLER RESERVATION CLOSURE -- required reproductions",
       store.setState({ game: { ...current, players: { ...current.players, ...extraPlayers }, seatOrder: [...current.seatOrder, ...extraIds] } });
       expect(population().totalPhysicalSeatCount).toBe(21);
       expect(state().beginNightOne().ok).toBe(false);
+    });
+  });
+});
+
+// PHASE 9R.3 -- Setup & Population command boundaries. B6: setRolePool()
+// can never reopen a committed Setup. B7: no normal authoritative
+// population command can create live participant/seat 21, in any lifecycle
+// state, while the frozen post-Reveal plan never blocks a legitimate
+// replacement back to 20.
+describe("Phase 9R.3", () => {
+  function revealedTable(count: number) {
+    newPlan(count);
+    for (let i = 0; i < count; i++) state().addPlayerToSeat("Player " + i);
+    readyToReveal(count);
+    expect(game().phase).toBe("setup"); // Reveal commits without leaving Setup
+  }
+  const occupied = () => population().occupiedNonTravelerCount + population().occupiedTravelerCount;
+  const roles = () => Object.fromEntries(game().seatOrder.map(id => [id, game().players[id]!.actualRole]));
+
+  describe("B6: setRolePool lifecycle boundary", () => {
+    it("A. pre-Deal: setRolePool still changes the pool normally", () => {
+      newPlan(5);
+      for (let i = 0; i < 5; i++) state().addPlayerToSeat("Player " + i);
+      const undoDepth = state().undoStack.length;
+      state().setRolePool(standardRoles(5));
+      expect(game().rolePool).toEqual(standardRoles(5));
+      expect(state().undoStack).toHaveLength(undoDepth + 1);
+    });
+
+    it("B. post-Deal, pre-Reveal: setRolePool still reopens the Deal (resets Deal evidence) and never converts it into a Reveal", () => {
+      newPlan(5);
+      for (let i = 0; i < 5; i++) state().addPlayerToSeat("Player " + i);
+      state().setRolePool(standardRoles(5));
+      expect(state().dealRolePool().ok).toBe(true);
+      expect(game().setupRolesDealt).toBe(true);
+      state().setRolePool(standardRoles(5));
+      expect(game().rolePool).toEqual(standardRoles(5));
+      expect(game().setupRolesDealt).toBe(false);
+      expect(game().setupRolesRevealed).toBe(false);
+      expect(isInitialRevealComplete(game())).toBe(false);
+    });
+
+    it("C. immediately after Reveal (still phase setup): setRolePool is refused atomically -- no state, Undo, or local-sequence change", () => {
+      revealedTable(5);
+      const before = state();
+      const beforeGame = game();
+      const beforeRoles = roles();
+      for (const pool of [standardRoles(5), []]) {
+        state().setRolePool(pool);
+        expect(state()).toBe(before);
+        expect(game()).toBe(beforeGame);
+        expect(game().rolePool).toEqual(beforeGame.rolePool);
+        expect(game().setupRolesDealt).toBe(true);
+        expect(game().setupRolesRevealed).toBe(true);
+        expect(roles()).toEqual(beforeRoles);
+        expect(game().phase).toBe("setup");
+        expect(game().day).toBe(0);
+        expect(state().undoStack).toBe(before.undoStack);
+        expect(state().localSeq).toBe(before.localSeq);
+      }
+    });
+
+    it("D. contrast: in the same post-Reveal window assignRole still changes a player's actual Role and Reveal stays committed", () => {
+      revealedTable(5);
+      const id = game().seatOrder.find(pid => game().players[pid]!.actualRole === "washerwoman")!;
+      const seq = state().localSeq;
+      state().assignRole(id, "ravenkeeper");
+      expect(game().players[id]!.actualRole).toBe("ravenkeeper");
+      expect(game().setupRolesRevealed).toBe(true);
+      expect(isInitialRevealComplete(game())).toBe(true);
+      expect(state().localSeq).toBe(seq + 1);
+    });
+  });
+
+  describe("B7: the 20-participant total holds after Reveal", () => {
+    // Revealed 15-ordinary table grown by legitimate late arrivals to 20.
+    function fullRevealedTable() {
+      revealedTable(15);
+      for (let i = 0; i < 5; i++) state().addPlayer("Late " + i);
+    }
+
+    function revealedPlanOf20() {
+      newPlan(20, 5);
+      for (let i = 0; i < 20; i++) state().addPlayerToSeat("Player " + i);
+      readyToReveal(15);
+    }
+
+    it("A. participant/seat 20 remains legal after Reveal; late arrivals default to Travelers and never grow the frozen plan", () => {
+      fullRevealedTable();
+      expect(game().seatOrder).toHaveLength(MAX_TOTAL_PLAYERS);
+      expect(occupied()).toBe(MAX_TOTAL_PLAYERS);
+      expect(population().occupiedNonTravelerCount).toBe(15);
+      expect(population().occupiedTravelerCount).toBe(5);
+      game().seatOrder.slice(15).forEach(id => expect(game().players[id]!.isTraveler).toBe(true));
+      expect(game().plannedPlayerCount).toBe(15);
+      expect(game().plannedTravelerCount).toBe(0);
+    });
+
+    it("B. addPlayer cannot create participant 21 -- no PlayerId, seat, plan change, Undo entry, or sequence bump", () => {
+      fullRevealedTable();
+      const before = state();
+      const ids = Object.keys(game().players);
+      state().addPlayer("Twenty-first");
+      expect(state()).toBe(before);
+      expect(Object.keys(game().players)).toEqual(ids);
+      expect(game().seatOrder).toHaveLength(MAX_TOTAL_PLAYERS);
+      expect(game().plannedPlayerCount).toBe(15);
+      expect(state().localSeq).toBe(before.localSeq);
+    });
+
+    it("C. addEmptySeat cannot create a 21st seat", () => {
+      fullRevealedTable();
+      const before = state();
+      state().addEmptySeat();
+      expect(state()).toBe(before);
+      expect(game().seatOrder).toHaveLength(MAX_TOTAL_PLAYERS);
+    });
+
+    it("D. addTravelerSeat cannot create a 21st seat", () => {
+      fullRevealedTable();
+      const before = state();
+      state().addTravelerSeat();
+      expect(state()).toBe(before);
+      expect(game().seatOrder).toHaveLength(MAX_TOTAL_PLAYERS);
+    });
+
+    it("E. addPlayerToSeat fills a legal empty seat to reach participant 20, and its new-seat fallback cannot produce 21", () => {
+      revealedTable(15);
+      for (let i = 0; i < 4; i++) state().addPlayer("Late " + i);
+      state().addEmptySeat(); // 20th physical seat, 19 occupied
+      expect(game().seatOrder).toHaveLength(MAX_TOTAL_PLAYERS);
+      state().addPlayerToSeat("Twentieth");
+      expect(occupied()).toBe(MAX_TOTAL_PLAYERS);
+      const twentieth = game().seatOrder.find(id => game().players[id]!.name === "Twentieth")!;
+      expect(game().players[twentieth]!.isTraveler).toBe(true);
+      const before = state();
+      state().addPlayerToSeat("Twenty-first"); // no empty seat -> addPlayer fallback
+      expect(state()).toBe(before);
+      expect(game().seatOrder).toHaveLength(MAX_TOTAL_PLAYERS);
+    });
+
+    it("E. adversarial: an out-of-range extra empty seat cannot turn 20 occupied participants into 21 (seat-first or queue-first)", () => {
+      fullRevealedTable();
+      const current = game();
+      const extra = "extra-empty";
+      store.setState({ game: { ...current,
+        players: { ...current.players, [extra]: { ...current.players[current.seatOrder[0]!]!, id: extra, name: "", seat: 20,
+          isEmpty: true, isTraveler: false, actualRole: "", participantId: undefined } },
+        seatOrder: [...current.seatOrder, extra],
+        pendingPlayers: { "uid-late": "Waiting" } } });
+      expect(population().totalPhysicalSeatCount).toBe(21);
+      const before = state();
+      state().addPlayerToSeat("Twenty-first");
+      expect(state()).toBe(before);
+      expect(state().assignPendingToSeat("uid-late", extra)).toBe(false);
+      expect(state()).toBe(before);
+      expect(game().pendingPlayers).toEqual({ "uid-late": "Waiting" });
+      expect(occupied()).toBe(MAX_TOTAL_PLAYERS);
+    });
+
+    it("G. historical plan 20 / live table 19: one legitimate replacement back to 20 is accepted, the next addition to 21 is refused", () => {
+      // A genuine 20-participant plan (15 ordinary + 5 Travellers), fully
+      // seated and revealed -- the committed plan is 20.
+      revealedPlanOf20();
+      expect(game().plannedPlayerCount).toBe(MAX_TOTAL_PLAYERS);
+      expect(occupied()).toBe(MAX_TOTAL_PLAYERS);
+      // A participant leaves after Reveal: the historical plan stays 20.
+      expect(state().removePlayer(game().seatOrder.at(-1)!)).toBe(true);
+      expect(game().seatOrder).toHaveLength(19);
+      expect(game().plannedPlayerCount).toBe(MAX_TOTAL_PLAYERS);
+      state().addPlayer("Replacement");
+      expect(game().seatOrder).toHaveLength(MAX_TOTAL_PLAYERS);
+      expect(occupied()).toBe(MAX_TOTAL_PLAYERS);
+      expect(game().plannedPlayerCount).toBe(MAX_TOTAL_PLAYERS); // still frozen
+      const before = state();
+      state().addPlayer("Twenty-first");
+      state().addEmptySeat();
+      state().addTravelerSeat();
+      expect(state()).toBe(before);
+    });
+
+    it("G. the same replacement also works through a fresh empty seat (addEmptySeat -> addPlayerToSeat)", () => {
+      revealedPlanOf20();
+      state().removePlayer(game().seatOrder.at(-1)!);
+      state().addEmptySeat();
+      expect(game().seatOrder).toHaveLength(MAX_TOTAL_PLAYERS);
+      state().addPlayerToSeat("Replacement");
+      expect(occupied()).toBe(MAX_TOTAL_PLAYERS);
+    });
+
+    it("pre-Reveal plan guard is preserved: a plan already at 20 still refuses new starting capacity even with fewer physical seats", () => {
+      newPlan(19);
+      store.setState({ game: { ...game(), plannedPlayerCount: 20 } });
+      expect(game().seatOrder).toHaveLength(19);
+      const before = state();
+      state().addPlayer("New");
+      state().addEmptySeat();
+      state().addTravelerSeat();
+      expect(state()).toBe(before);
     });
   });
 });

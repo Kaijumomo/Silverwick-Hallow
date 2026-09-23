@@ -4,7 +4,11 @@ import { useStorytellerStore } from "@/stores/storytellerStore";
 import { usePlayerStore } from "@/stores/playerStore";
 import { MemoryRoomBackend } from "./memoryBackend";
 import type { Json } from "./backend";
-import { joinRequestPath, playerPath, rosterEntryPath } from "./paths";
+import { joinRequestPath, playerPath, rosterEntryPath, rosterParticipantPath } from "./paths";
+import { selectSetupContext } from "@/features/setup/setupContext";
+import { needsShownIdentity } from "@/stores/identity";
+import { newParticipantId } from "@/stores/participants";
+import { setupScript, standardRoles } from "@/test/setupFixtures";
 import { leavePath, travelerChoicePath } from "./lifecycle";
 import {
   revokePlayerMembership,
@@ -472,5 +476,101 @@ describe("membership commands", () => {
     // the exact same generic assignRole() command, unrestricted.
     useStorytellerStore.getState().assignRole(playerId, "scapegoat");
     expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("scapegoat");
+  });
+});
+
+// Phase 9R.3 (B7): the waiting-player seating path composes the real
+// production pieces -- seatPlayerAndCommit (Firebase first) then
+// assignPendingToSeat (local commit). Participant 20 is legal; a capacity-
+// rejected seating must return false locally so the EXISTING compensation
+// revokes the remote membership it just wrote, leaving nothing behind.
+describe("Phase 9R.3: waiting-player seating respects the 20-participant total", () => {
+  beforeEach(() => {
+    resetStores();
+    useStorytellerStore.setState({ customScripts: { [setupScript.id]: setupScript } });
+  });
+
+  const st = () => useStorytellerStore.getState();
+  const occupiedCount = () => {
+    const p = selectSetupContext(st().game!).population;
+    return p.occupiedNonTravelerCount + p.occupiedTravelerCount;
+  };
+
+  function seatViaMembership(backend: MemoryRoomBackend, uid: string, seatId: string) {
+    const name = st().game!.pendingPlayers[uid]!;
+    const participant = { participantId: newParticipantId(), name };
+    return {
+      participant,
+      run: seatPlayerAndCommit(backend, "ROOM", uid, seatId, null,
+        () => st().assignPendingToSeat(uid, seatId, participant.participantId), participant),
+    };
+  }
+
+  // 15 ordinary seated and revealed, 4 late Travellers, then one post-Reveal
+  // empty seat for the waiting player: 20 seats, 19 occupied.
+  function revealedTableWithOneOpenSeat() {
+    st().newGame(setupScript.id, { plannedPlayerCount: 15 });
+    for (let i = 0; i < 15; i++) st().addPlayerToSeat("Player " + i);
+    st().setRolePool(standardRoles(15));
+    expect(st().dealRolePool().ok).toBe(true);
+    st().game!.seatOrder.forEach(id => {
+      if (needsShownIdentity(st().game!.players[id]!.actualRole)) st().setShownRole(id, "chef");
+      else st().showAssignedRole(id);
+    });
+    expect(st().revealRoles().ok).toBe(true);
+    for (let i = 0; i < 4; i++) st().addPlayer("Late " + i);
+    st().addEmptySeat();
+    expect(st().game!.seatOrder).toHaveLength(20);
+    expect(occupiedCount()).toBe(19);
+    return st().game!.seatOrder.find(id => st().game!.players[id]!.isEmpty)!;
+  }
+
+  it("the pending-player path legally seats participant 20 after Reveal, with a matching remote membership", async () => {
+    const backend = new MemoryRoomBackend();
+    const seatId = revealedTableWithOneOpenSeat();
+    st().addToPendingQueue("uid-20", "Twenty");
+    const { participant, run } = seatViaMembership(backend, "uid-20", seatId);
+    await run;
+    expect(occupiedCount()).toBe(20);
+    expect(st().game!.players[seatId]!.participantId).toBe(participant.participantId);
+    expect(st().game!.players[seatId]!.isTraveler).toBe(true); // post-Reveal arrival
+    expect(st().game!.pendingPlayers).toEqual({});
+    expect(await backend.get(rosterEntryPath("ROOM", "uid-20"))).toBe(seatId);
+    expect(await backend.get(rosterParticipantPath("ROOM", "uid-20")))
+      .toEqual({ playerId: seatId, participantId: participant.participantId, name: "Twenty" });
+  });
+
+  it("a capacity-rejected seating (participant 21) reports failure and leaves no local or remote partial membership", async () => {
+    const backend = new MemoryRoomBackend();
+    const seatId = revealedTableWithOneOpenSeat();
+    st().addToPendingQueue("uid-20", "Twenty");
+    await seatViaMembership(backend, "uid-20", seatId).run;
+    expect(occupiedCount()).toBe(20);
+
+    // Malformed/legacy state: an extra (21st) physical seat, empty.
+    const current = st().game!;
+    const extra = "extra-empty";
+    useStorytellerStore.setState({ game: { ...current,
+      players: { ...current.players, [extra]: { ...current.players[seatId]!, id: extra, name: "", seat: 20,
+        isEmpty: true, isTraveler: false, actualRole: "", participantId: undefined } },
+      seatOrder: [...current.seatOrder, extra] } });
+    st().addToPendingQueue("uid-21", "Overflow");
+    const before = st().game!;
+
+    await expect(seatViaMembership(backend, "uid-21", extra).run).rejects.toThrow(/rolled back/);
+
+    // Local: nothing committed; the waiting player is still waiting.
+    expect(st().game).toBe(before);
+    expect(st().game!.players[extra]!.isEmpty).toBe(true);
+    expect(st().game!.pendingPlayers).toEqual({ "uid-21": "Overflow" });
+    expect(occupiedCount()).toBe(20);
+    // Remote: the binding, its participant record, and any private
+    // projection for the rejected seat are gone.
+    expect(await backend.get(rosterEntryPath("ROOM", "uid-21"))).toBeUndefined();
+    expect(await backend.get(rosterParticipantPath("ROOM", "uid-21"))).toBeUndefined();
+    expect(await backend.get(playerPath("ROOM", extra))).toBeUndefined();
+    // Participant 20's membership is untouched by the compensation.
+    expect(await backend.get(rosterEntryPath("ROOM", "uid-20"))).toBe(seatId);
+    expect(await backend.get(rosterParticipantPath("ROOM", "uid-20"))).toBeTruthy();
   });
 });
