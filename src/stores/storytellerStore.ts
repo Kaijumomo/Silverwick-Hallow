@@ -356,15 +356,12 @@ export type StorytellerStore = {
    * when it names no current participant. */
   addEffect: (id: PlayerId, effect: EffectInput) => EffectId | null;
   removeEffect: (id: PlayerId, effectId: EffectId) => void;
-  /** Wholesale replacement of a player's stored Reminder records (e.g. a
-   * reorder or edit of existing ones). Phase 9R.2: it can only carry
-   * forward a `sourceParticipant` snapshot this player's reminders already
-   * hold -- never introduce a new one; a newly sourced Reminder goes
-   * through addReminder, which snapshots its source centrally. */
-  setReminders: (id: PlayerId, reminders: ReminderRecord[]) => void;
   /** Phase 9D.1: centralized structured-reminder commands, backing the
    * existing per-token Storyteller reminder workflow. Phase 9R.2: same
-   * durable-source rule as addEffect. */
+   * durable-source rule as addEffect. Phase 9R.4 (B9): the ONLY Reminder
+   * mutation paths -- the legacy bulk setReminders() replacement, which
+   * bypassed per-Reminder Live History, had no production caller and was
+   * removed. */
   addReminder: (id: PlayerId, reminder: ReminderInput) => ReminderId | null;
   removeReminder: (id: PlayerId, reminderId: ReminderId) => void;
   /** Phase 9D.3: the single Authoritative Information command. Resolves
@@ -503,6 +500,31 @@ const pushUndo = (
   if (next.length > UNDO_LIMIT) next.shift();
   return next;
 };
+
+/**
+ * Phase 9R.4 (B8): a command that would leave authoritative state unchanged
+ * must return before pushUndo()/set() -- the central wrapper bumps localSeq
+ * for any new game reference, so the decision belongs to the command. These
+ * two helpers are deliberately narrow (one stored list, one player record),
+ * never a whole-game comparison.
+ *
+ * Order-sensitive equality for a stored id list: every list compared with
+ * it (seatOrder, fabled, lorics, rolePool) stores its order as given.
+ */
+const sameList = <T,>(a: readonly T[], b: readonly T[] | undefined): boolean =>
+  !!b && a.length === b.length && a.every((v, i) => v === b[i]);
+
+/**
+ * True when `next` -- a command's COMPLETE intended result for one player,
+ * dependent resets included -- equals `existing` apart from the packetEpoch
+ * that invalidatePrivatePacket() always mints. That nonce only marks that
+ * something else about the perception changed; minting it when nothing
+ * else did would be manufactured invalidation. Any other difference (a
+ * cleared override, deleted privateInfo, a withdrawn publishedPacket, a
+ * reset travelerArrival) is a real mutation.
+ */
+const samePlayerApartFromEpoch = (existing: STPlayerRecord, next: STPlayerRecord): boolean =>
+  sameSnapshot({ ...next, packetEpoch: existing.packetEpoch }, existing);
 
 const patchPlayer = (
   game: StorytellerLobbyRecord,
@@ -885,6 +907,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const readiness = initialRevealReadiness(context);
         if (!readiness.ready) return { ok: false,
           message: `${readiness.readyCount}/${readiness.totalCount} roles ready to reveal.` };
+        // Phase 9R.4 (B8): re-revealing an already-revealed Setup would
+        // commit an identical game. Every refusal above is unchanged.
+        if (game.setupRolesRevealed === true) return { ok: true };
         set({ undoStack: pushUndo(game, undoStack), game: { ...game, setupRolesRevealed: true } });
         return { ok: true };
       },
@@ -910,6 +935,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
         context.ordinary.forEach((p, idx) => {
           newPlayers[p.id] = freshAssignment(newPlayers[p.id]!, bag[idx]!, registry);
         });
+        // Phase 9R.4 (B8): a draw that hands every player back exactly the
+        // fresh assignment they already hold changes nothing.
+        if (context.ordinary.every((p) => samePlayerApartFromEpoch(game.players[p.id]!, newPlayers[p.id]!)))
+          return { ok: true };
         set({ undoStack: pushUndo(game, undoStack), game: { ...game, players: newPlayers } });
         return { ok: true };
       },
@@ -929,6 +958,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const registry = buildRegistry(script ?? { id: game.scriptId, name: game.scriptId, characters: [] });
         const newA = freshAssignment(a, b.actualRole, registry);
         const newB = freshAssignment(b, a.actualRole, registry);
+        // Phase 9R.4 (B8): swapping two equal roles between players already
+        // in their fresh assignment changes nothing. A swap that resets
+        // either player's deceptive configuration is still a mutation.
+        if (samePlayerApartFromEpoch(a, newA) && samePlayerApartFromEpoch(b, newB)) return { ok: true };
         set({
           undoStack: pushUndo(game, undoStack),
           game: { ...game, players: { ...game.players, [playerIdA]: newA, [playerIdB]: newB } },
@@ -950,6 +983,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
           return { ok: false, message: "Choose a valid ordinary character for this script." };
         const registry = buildRegistry(script!);
         const next = freshAssignment(player, roleId, registry);
+        // Phase 9R.4 (B8): the whole freshAssignment() result decides, not
+        // the role alone -- overriding with the current role still resets
+        // any deceptive configuration, and only skips when there is none.
+        if (samePlayerApartFromEpoch(player, next)) return { ok: true };
         set({ undoStack: pushUndo(game, undoStack), game: { ...game, players: { ...game.players, [playerId]: next } } });
         return { ok: true };
       },
@@ -966,6 +1003,11 @@ export const useStorytellerStore = create<StorytellerStore>()(
           message: `Choose exactly one role per occupied ordinary player (${stagedRoleIds.length}/${ordinary.length}).` };
         const matched = matchBagToAssignments(ordinary.map(p => ({ playerId: p.id, role: p.actualRole })), stagedRoleIds);
         if (!matched) return { ok: false, message: "Setup changed. Review the bag and try again." };
+        // Phase 9R.4 (B8): a staged bag whose every occurrence survives
+        // reassigns nobody. A `changed` seat always receives a different
+        // role (matchBagToAssignments keeps every surviving occurrence), so
+        // this is exactly "the result equals Current State".
+        if (!matched.some((m) => m.changed)) return { ok: true };
         const registry = context.registry!;
         const newPlayers = { ...game.players };
         for (const { playerId, role, changed } of matched) {
@@ -1017,6 +1059,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // the bypass at the store boundary too, not only by removing the
         // Setup panel's numeric input.
         if (game.seatOrder.length > 0) return;
+        if (count === game.plannedPlayerCount) return; // Phase 9R.4 (B8): true no-op
         set({ undoStack: pushUndo(game, undoStack), game: { ...game, plannedPlayerCount: count } });
       },
 
@@ -1028,6 +1071,12 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // wiping the Reveal evidence below. The pool is Setup
         // administration only; later role changes go through assignRole().
         if (isInitialRevealComplete(game)) return;
+        // Phase 9R.4 (B8): the pool alone is not the whole result -- a
+        // non-empty pool also clears Deal/Reveal evidence. Only when the
+        // pool is unchanged AND there is no evidence left to clear is this
+        // a true no-op.
+        if (sameList(roles, game.rolePool) &&
+          (!roles.length || (game.setupRolesDealt === false && game.setupRolesRevealed === false))) return;
         set({ undoStack: pushUndo(game, undoStack), game: { ...game, rolePool: [...roles],
           // Reopening the pool leaves preparation, so any prior deal/reveal
           // evidence for it is no longer meaningful either.
@@ -1148,7 +1197,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       removePendingPlayer: (uid) => {
         const { game } = get();
-        if (!game) return;
+        // Phase 9R.4 (B8): removing a uid that is not queued changes nothing
+        // -- it must not replace the game or advance localSeq.
+        if (!game || !Object.prototype.hasOwnProperty.call(game.pendingPlayers, uid)) return;
         const newPending = { ...game.pendingPlayers };
         delete newPending[uid];
         set({ game: { ...game, pendingPlayers: newPending } });
@@ -1440,6 +1491,11 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!game) return;
         const trimmed = name.trim().slice(0, 20);
         if (!trimmed) return;
+        // Phase 9R.4 (B8): an unknown player (patchPlayer would return the
+        // same game while Undo still grew) or the already-stored normalized
+        // name is a true no-op.
+        const existing = game.players[id];
+        if (!existing || existing.name === trimmed) return;
         set({
           undoStack: pushUndo(game, undoStack),
           game: patchPlayer(game, id, { name: trimmed }),
@@ -1449,6 +1505,11 @@ export const useStorytellerStore = create<StorytellerStore>()(
       setSeatOrder: (order) => {
         const { game, undoStack } = get();
         if (!game) return;
+        // Phase 9R.4 (B8): resubmitting the current order, with every seat
+        // already numbered to match it, changes nothing. (Structural
+        // validation of malformed orders is deliberately not part of this.)
+        if (sameList(order, game.seatOrder) &&
+          order.every((pid, idx) => { const p = game.players[pid]; return !p || p.seat === idx; })) return;
         const renumbered = { ...game.players };
         order.forEach((pid, idx) => {
           const p = renumbered[pid];
@@ -1534,27 +1595,47 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // the previous identity. Null alignment derives only from shownRole.
         const next = { ...existing, shownRole: roleId, shownAlignment: null };
         delete next.privateInfo;
+        const invalidated = invalidatePrivatePacket(next);
+        // Phase 9R.4 (B8): re-selecting the current shown role is still a
+        // mutation whenever it clears an alignment override, private info,
+        // or a published packet; it is a no-op only when the complete
+        // result is identical.
+        if (samePlayerApartFromEpoch(existing, invalidated)) return;
         set({
           undoStack: pushUndo(game, undoStack),
-          game: { ...game, players: { ...game.players, [id]: invalidatePrivatePacket(next) } },
+          game: { ...game, players: { ...game.players, [id]: invalidated } },
         });
       },
 
       setShownAlignment: (id, alignment) => {
         const { game, undoStack } = get();
         if (!game) return;
+        const existing = game.players[id];
+        // Phase 9R.4 (B8): an unknown player used to push Undo onto an
+        // unchanged game. The already-current alignment is not an identity
+        // change, so it must not manufacture packet invalidation either.
+        if (!existing || existing.shownAlignment === alignment) return;
         set({
           undoStack: pushUndo(game, undoStack),
-          game: game.players[id] ? { ...game, players: { ...game.players, [id]: invalidatePrivatePacket({ ...game.players[id]!, shownAlignment: alignment }) } } : game,
+          game: { ...game, players: { ...game.players, [id]: invalidatePrivatePacket({ ...existing, shownAlignment: alignment }) } },
         });
       },
 
       setBehaviorMode: (id, mode) => {
         const { game, undoStack } = get();
         if (!game) return;
+        const existing = game.players[id];
+        // Phase 9R.4 (B8): an unknown player used to push Undo onto an
+        // unchanged game.
+        if (!existing) return;
+        const next = invalidatePrivatePacket(pruneInapplicablePrivateInfo({ ...existing, behaviorMode: mode }, buildRegistry(selectScriptById(get(), game.scriptId) ?? { id: game.scriptId, name: game.scriptId, characters: [] })));
+        // The current mode can still prune stale inapplicable private info
+        // (or withdraw a published packet); only an identical complete
+        // result is a no-op.
+        if (samePlayerApartFromEpoch(existing, next)) return;
         set({
           undoStack: pushUndo(game, undoStack),
-          game: game.players[id] ? { ...game, players: { ...game.players, [id]: invalidatePrivatePacket(pruneInapplicablePrivateInfo({ ...game.players[id]!, behaviorMode: mode }, buildRegistry(selectScriptById(get(), game.scriptId) ?? { id: game.scriptId, name: game.scriptId, characters: [] }))) } } : game,
+          game: { ...game, players: { ...game.players, [id]: next } },
         });
       },
 
@@ -1576,6 +1657,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
         } else {
           next.privateInfo = { ...(next.privateInfo ?? {}), bluffs: cleaned };
         }
+        // Phase 9R.4 (B8): compare the canonicalized stored result, never
+        // the raw input. Order stays significant, exactly as stored.
+        if (sameSnapshot(next.privateInfo, player.privateInfo)) return;
         set({
           undoStack: pushUndo(game, undoStack),
           game: {
@@ -1605,6 +1689,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
             fakeMinions: valid,
           };
         }
+        // Phase 9R.4 (B8): see setBluffs -- filtered/deduped input that
+        // canonicalizes to the stored selection is a true no-op.
+        if (sameSnapshot(next.privateInfo, player.privateInfo)) return;
         set({
           undoStack: pushUndo(game, undoStack),
           game: {
@@ -1618,6 +1705,11 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const { game, undoStack } = get();
         const player = game?.players[id];
         if (!game || !player) return;
+        // Phase 9R.4 (B8): compare the normalized stored extraText (blank ->
+        // absent, 4000-character truncation). An absent privateInfo and an
+        // empty one read identically everywhere (commitExtraTextDraft
+        // already treats them as clean), so clearing absent text is inert.
+        if ((text.trim() ? text.slice(0, 4000) : undefined) === player.privateInfo?.extraText) return;
         const privateInfo = { ...player.privateInfo };
         if (text.trim()) privateInfo.extraText = text.slice(0, 4000);
         else delete privateInfo.extraText;
@@ -1740,14 +1832,17 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!game || !p || !script) return;
         const result = travelerDemonInformation(p, game, buildRegistry(script));
         if (!result.demon) return;
-        set({ undoStack: pushUndo(game, undoStack), game: patchPlayer(game, id,
-          { privateInfo: { travelerDemon: result.demon.id } }) });
+        const privateInfo = { travelerDemon: result.demon.id };
+        // Phase 9R.4 (B8): the same prepared Demon is already stored.
+        if (sameSnapshot(p.privateInfo, privateInfo)) return;
+        set({ undoStack: pushUndo(game, undoStack), game: patchPlayer(game, id, { privateInfo }) });
       },
 
       completeTravelerInformation: (id) => {
         const { game, undoStack } = get();
         const p = game?.players[id];
         if (!game || !p || !publicTravelerRole(p) || p.actualAlignment !== "evil" || !p.alive || p.exiled) return;
+        if (p.travelerArrival?.demonInfoComplete === true) return; // Phase 9R.4 (B8): already complete
         set({ undoStack: pushUndo(game, undoStack), game: patchPlayer(game, id,
           { travelerArrival: { ...(p.travelerArrival ?? newTravelerArrival()), demonInfoComplete: true } }) });
       },
@@ -1772,6 +1867,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const { game, undoStack } = get();
         const p = game?.players[id];
         if (!game || !p || !travelerNeedsArrivalCheck(p) || !p.actualAlignment || !p.alive || p.exiled) return;
+        if (p.travelerArrival?.arrivalCheckComplete === true) return; // Phase 9R.4 (B8): already complete
         set({ undoStack: pushUndo(game, undoStack), game: patchPlayer(game, id,
           { travelerArrival: { ...(p.travelerArrival ?? newTravelerArrival()), arrivalCheckComplete: true } }) });
       },
@@ -1781,6 +1877,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!game) return;
         const validIds = new Set(FABLED.map((f) => f.id));
         const deduped = [...new Set(fabled.filter((id) => validIds.has(id)))];
+        if (sameList(deduped, game.fabled)) return; // Phase 9R.4 (B8): same normalized collection
         set({
           undoStack: pushUndo(game, undoStack),
           game: { ...game, fabled: deduped },
@@ -1792,6 +1889,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!game) return;
         const validIds = new Set(LORICS.map((l) => l.id));
         const deduped = [...new Set(lorics.filter((id) => validIds.has(id)))];
+        if (sameList(deduped, game.lorics)) return; // Phase 9R.4 (B8): same normalized collection
         set({
           undoStack: pushUndo(game, undoStack),
           game: { ...game, lorics: deduped },
@@ -1843,6 +1941,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
       setAbilityUsed: (id, abilityUsed) => {
         const { game, undoStack } = get();
         if (!game) return;
+        // Phase 9R.4 (B8): unknown player or already-current value.
+        const existing = game.players[id];
+        if (!existing || existing.abilityUsed === abilityUsed) return;
         set({
           undoStack: pushUndo(game, undoStack),
           game: patchPlayer(game, id, { abilityUsed }),
@@ -1928,34 +2029,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
         }));
         if (!recorded) return;
         set({ undoStack: pushUndo(game, undoStack), game: recorded });
-      },
-
-      setReminders: (id, reminders) => {
-        const { game, undoStack } = get();
-        if (!game) return;
-        // Phase 9R.1 follow-up (residual B4/B5): `[...reminders]` only
-        // copies the array itself -- each ReminderRecord inside (and its
-        // nested `lifetime` object) was still the caller's own reference.
-        // cloneOwned() deep-clones every element and strips any explicit
-        // `undefined` optional key, matching the same ownership boundary
-        // addEffect/addReminder/recordInformationDelivery already use.
-        // History/Undo/no-op behavior here is deliberately unchanged --
-        // out of scope for this follow-up (reserved for Phase 9R.4).
-        const owned = cloneOwned(reminders);
-        // Phase 9R.2: a wholesale replacement may carry forward a durable
-        // `sourceParticipant` snapshot this player's reminders already
-        // hold, but never introduce a new/hand-built one -- that would let
-        // this bulk setter fabricate historical identity outside
-        // participantRefOf(). A newly sourced Reminder goes through
-        // addReminder instead.
-        const held = game.players[id]?.reminders.map((r) => r.sourceParticipant).filter((ref) => ref !== undefined) ?? [];
-        const introducesSource = owned.some((r) =>
-          r.sourceParticipant !== undefined && !held.some((ref) => sameSnapshot(ref, r.sourceParticipant)));
-        if (introducesSource) return;
-        set({
-          undoStack: pushUndo(game, undoStack),
-          game: patchPlayer(game, id, { reminders: owned }),
-        });
       },
 
       addReminder: (id, reminder) => {
@@ -2110,6 +2183,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
       setNotes: (id, notes) => {
         const { game, undoStack } = get();
         if (!game) return;
+        // Phase 9R.4 (B8): unknown player or already-current notes.
+        const existing = game.players[id];
+        if (!existing || existing.stNotes === notes) return;
         set({
           undoStack: pushUndo(game, undoStack),
           game: patchPlayer(game, id, { stNotes: notes }),
@@ -2124,6 +2200,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (game.phase === "setup" && (phase === "night" || phase === "day")) {
           return get().beginNightOne();
         }
+        // Phase 9R.4 (B8): the requested phase already holds. The ended-game
+        // restriction above still applies first.
+        if (game.phase === phase) return { ok: true };
         set({
           undoStack: pushUndo(game, undoStack),
           game: { ...game, phase },
@@ -2135,6 +2214,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const { game, undoStack } = get();
         if (!game) return { ok: false, message: "No game is open." };
         if (game.phase === "setup") return get().beginNightOne();
+        // Phase 9R.4 (B8): an ended game has no next phase -- this used to
+        // commit an identical game. Same refusal setPhase already gives.
+        if (game.phase === "ended")
+          return { ok: false, message: "This game has ended. Create a new setup to play again." };
         let { phase, day } = game;
         if (phase === "night") {
           phase = "day";
@@ -2162,8 +2245,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
           const arrival = { ...(traveler.travelerArrival ?? newTravelerArrival()), firstNightComplete: status === "done" };
           if (status === "done") arrival.completedAtNight = day;
           else delete arrival.completedAtNight;
-          players = { ...players, [traveler.id]: { ...traveler, travelerArrival: arrival } };
+          if (!sameSnapshot(arrival, traveler.travelerArrival))
+            players = { ...players, [traveler.id]: { ...traveler, travelerArrival: arrival } };
         }
+        // Phase 9R.4 (B8): the step's stored status already matches and no
+        // Traveler arrival changes. An absent key is never "already
+        // current": storing it is real (it is how a custom step exists).
+        if (np[key]?.status === status && players === game.players) return;
         set({
           undoStack: pushUndo(game, undoStack),
           game: {
@@ -2180,6 +2268,11 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const key = `${day}:${stepKey}`;
         const np = game.nightProgress ?? {};
         const existing: NightStepRecord = np[key] ?? { status: "pending", notes: "" };
+        // Phase 9R.4 (B8): already-stored notes are a true no-op (no Undo
+        // here either way, but a new game still advanced localSeq). An
+        // absent key is a real write -- "Add custom night step" creates its
+        // step exactly this way, with empty notes.
+        if (np[key]?.notes === notes) return;
         // No undo push — avoid polluting undo stack with every keystroke.
         set({
           game: {
@@ -2194,9 +2287,14 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!game) return;
         const prefix = `${day}:`;
         const next: Record<string, NightStepRecord> = {};
+        let clearsSteps = false;
         for (const [k, v] of Object.entries(game.nightProgress ?? {})) {
           if (!k.startsWith(prefix)) next[k] = v;
+          else clearsSteps = true;
         }
+        // Phase 9R.4 (B8): nothing recorded for this night -- no step and no
+        // Traveler first night completed on it -- leaves nothing to clear.
+        if (!clearsSteps && !Object.values(game.players).some((p) => p.travelerArrival?.completedAtNight === day)) return;
         const players = Object.fromEntries(Object.entries(game.players).map(([id, p]) => {
           if (p.travelerArrival?.completedAtNight !== day) return [id, p];
           const arrival = { ...p.travelerArrival, firstNightComplete: false };

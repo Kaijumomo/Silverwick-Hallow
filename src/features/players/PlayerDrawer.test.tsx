@@ -116,10 +116,8 @@ it("privacy mode keeps the player drawer safe and restores it when disabled", ()
   fireEvent.click(screen.getByRole("button", { name: "Drunk outsider" }));
   const perception = within(screen.getByText("Behavior & deception").closest("section")!);
   fireEvent.click(perception.getByRole("button", { name: "Empath townsfolk" }));
-  store.getState().setReminders(current().id, [
-    { id: "r1", label: "Poisoned", lifetime: { kind: "manual" } },
-    { id: "r2", label: "Secret note", lifetime: { kind: "manual" } },
-  ]);
+  store.getState().addReminder(current().id, { id: "r1", label: "Poisoned", lifetime: { kind: "manual" } });
+  store.getState().addReminder(current().id, { id: "r2", label: "Secret note", lifetime: { kind: "manual" } });
 
   act(() => usePrivacyStore.getState().setEnabled(true));
   expect(screen.getByText("Storyteller details are hidden while Privacy Mode is on.")).toBeInTheDocument();
@@ -134,6 +132,28 @@ it("privacy mode keeps the player drawer safe and restores it when disabled", ()
   act(() => usePrivacyStore.getState().setEnabled(false));
   expect(screen.getByText("Actual role (ST private)")).toBeInTheDocument();
   expect(screen.getAllByText("Drunk").length).toBeGreaterThan(0);
+});
+
+it("Phase 9R.4 (B9): the drawer's Reminder controls go through addReminder/removeReminder -- no Live History in Setup, structured History in Live Play", () => {
+  render(<Drawer />);
+  const input = screen.getByPlaceholderText("Add reminder…");
+  const history = () => store.getState().game!.history;
+
+  fireEvent.change(input, { target: { value: "Setup mark" } });
+  fireEvent.click(screen.getByRole("button", { name: "add" }));
+  expect(current().reminders).toMatchObject([{ label: "Setup mark", lifetime: { kind: "manual" } }]);
+  fireEvent.click(screen.getByRole("button", { name: "Remove Setup mark" }));
+  expect(current().reminders).toEqual([]);
+  expect(history()).toEqual([]);
+
+  act(() => store.setState({ game: { ...store.getState().game!, phase: "night", day: 1 } }));
+  fireEvent.change(input, { target: { value: "Live mark" } });
+  fireEvent.click(screen.getByRole("button", { name: "add" }));
+  expect(history().at(-1)).toMatchObject({ category: "reminder", change: { kind: "added", item: { label: "Live mark" } } });
+  fireEvent.click(screen.getByRole("button", { name: "Remove Live mark" }));
+  expect(current().reminders).toEqual([]);
+  expect(history().at(-1)).toMatchObject({ category: "reminder", change: { kind: "removed", item: { label: "Live mark" } } });
+  expect(history()).toHaveLength(2);
 });
 
 it("Lunatic bluff picker allows an in-play good character", () => {

@@ -118,31 +118,34 @@ describe("Phase 9R.1 Finding B5: Reminder never stores an explicit-undefined opt
     expect("sourceCharacter" in stored).toBe(false);
   });
 
-  it("Luna follow-up: setReminders() with explicit-undefined optional fields stores every Reminder with those keys genuinely absent", () => {
+  // Phase 9R.4 (B9): these two Luna follow-up proofs originally targeted the
+  // bulk setReminders() setter, now removed. They are retargeted at
+  // addReminder() -- the only remaining Reminder path -- with EVERY optional
+  // field it accepts set explicitly undefined (including a smuggled
+  // sourceParticipant), not only the single field the test above covers.
+  it("Luna follow-up: addReminder() with every optional field explicitly undefined stores the Reminder with those keys genuinely absent", () => {
     dealtGame();
     goLive();
     const id = game().seatOrder[0]!;
-    state().setReminders(id, [
-      {
-        id: "r-1", label: "Chosen", lifetime: { kind: "manual" },
-        sourceParticipant: undefined, sourceCharacter: undefined, note: undefined,
-      },
-    ]);
+    state().addReminder(id, {
+      id: "r-1", label: "Chosen", lifetime: { kind: "manual" },
+      sourcePlayer: undefined, sourceCharacter: undefined, note: undefined, createdAt: undefined,
+      ...({ sourceParticipant: undefined } as object),
+    });
     const stored = game().players[id]!.reminders[0]!;
     expect(stored).toEqual({ id: "r-1", label: "Chosen", lifetime: { kind: "manual" } });
     expect("sourceParticipant" in stored).toBe(false);
     expect("sourcePlayer" in stored).toBe(false);
     expect("sourceCharacter" in stored).toBe(false);
     expect("note" in stored).toBe(false);
+    expect("createdAt" in stored).toBe(false);
   });
 
-  it("Luna follow-up: setReminders() still preserves legitimate falsy-but-real values (empty-string note, zero-count lifetime)", () => {
+  it("Luna follow-up: addReminder() still preserves legitimate falsy-but-real values (empty-string note, zero-count lifetime)", () => {
     dealtGame();
     goLive();
     const id = game().seatOrder[0]!;
-    state().setReminders(id, [
-      { id: "r-2", label: "Marked", lifetime: { kind: "nights", count: 0 }, note: "" },
-    ]);
+    state().addReminder(id, { id: "r-2", label: "Marked", lifetime: { kind: "nights", count: 0 }, note: "" });
     const stored = game().players[id]!.reminders[0]!;
     expect(stored).toEqual({ id: "r-2", label: "Marked", lifetime: { kind: "nights", count: 0 }, note: "" });
   });

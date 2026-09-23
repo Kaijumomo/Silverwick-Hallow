@@ -204,12 +204,13 @@ describe("Phase 9R.1 Finding B4: Reminder ownership (addReminder -- the same pat
 });
 
 // ---------------------------------------------------------------------------
-// Luna follow-up (residual B4/B5): setReminders() only spread-copied the
-// TOP-LEVEL array (`[...reminders]`) -- each ReminderRecord inside, and its
-// nested `lifetime` object, was still the caller's own reference.
+// Luna follow-up (residual B4/B5) originally proved this for the bulk
+// setReminders() setter, which only spread-copied the TOP-LEVEL array.
+// Phase 9R.4 (B9) removed that setter; the same several-Reminders ownership
+// property is now proven through addReminder(), the only remaining path.
 // ---------------------------------------------------------------------------
-describe("Phase 9R.1 Finding B4 (Luna follow-up): setReminders() Reminder ownership", () => {
-  it("mutating the caller's original Reminder objects (and their nested lifetime objects) after setReminders() returns does not alter authoritative Current State", () => {
+describe("Phase 9R.1 Finding B4 (Luna follow-up): several Reminders' ownership (Phase 9R.4: via addReminder)", () => {
+  it("mutating the caller's original Reminder objects (and their nested lifetime objects) after each addReminder() returns does not alter authoritative Current State", () => {
     dealtGame();
     goLive();
     const id = game().seatOrder[0]!;
@@ -220,7 +221,7 @@ describe("Phase 9R.1 Finding B4 (Luna follow-up): setReminders() Reminder owners
     const reminderB = { id: "r-b", label: "Poisoned", lifetime: lifetimeB };
     const reminders = [reminderA, reminderB];
 
-    state().setReminders(id, reminders);
+    for (const reminder of reminders) expect(state().addReminder(id, reminder)).toBe(reminder.id);
     const localSeqAfterCommand = state().localSeq;
     const expected = [
       { id: "r-a", label: "Red Herring", sourceCharacter: "fortuneteller", lifetime: { kind: "nights", count: 2 } },

@@ -327,20 +327,21 @@ describe("Phase 9R.2: Effect/Reminder source references (Poisoner Alice poisons 
     expect(JSON.stringify(game())).not.toContain("pt-forged");
   });
 
-  it("setReminders can carry forward a reminder's existing source snapshot, but never introduce a new one", () => {
+  // Phase 9R.4 (B9): this originally proved the bulk setReminders() setter
+  // could carry forward, but never forge, a source snapshot. That setter is
+  // removed; the durable-source guarantee now rests solely on addReminder.
+  it("a Reminder's source snapshot is minted only centrally -- addReminder strips a smuggled snapshot, and no bulk setReminders() path remains to carry or forge one", () => {
     liveGame();
     const alice = idOf("Alice");
     const carol = idOf("Carol");
+    expect("setReminders" in state()).toBe(false);
     state().addReminder(carol, { id: "r1", label: "Townsfolk", sourcePlayer: alice, lifetime: { kind: "manual" } });
-    const existing = game().players[carol]!.reminders;
-    // Reordering/editing labels while keeping the held snapshot is fine.
-    state().setReminders(carol, [{ ...existing[0]!, label: "Townsfolk (edited)" }]);
-    expect(game().players[carol]!.reminders[0]!.sourceParticipant).toEqual(existing[0]!.sourceParticipant);
-    // A new/hand-built snapshot is refused outright (nothing changes).
-    const before = game();
-    state().setReminders(carol, [{ id: "r2", label: "Forged", lifetime: { kind: "manual" },
-      sourceParticipant: { kind: "participant", participantId: "pt-forged", playerId: carol, nameAtTime: "Mallory" } }]);
-    expect(game()).toBe(before);
+    expect(game().players[carol]!.reminders[0]!.sourceParticipant).toEqual(aliceSnapshot(alice, participantIdOf(alice)));
+    const forged = { kind: "participant", participantId: "pt-forged", playerId: carol, nameAtTime: "Mallory" };
+    const forgedId = state().addReminder(carol, { id: "r2", label: "Forged", lifetime: { kind: "manual" },
+      ...({ sourceParticipant: forged } as object) } as never)!;
+    expect(game().players[carol]!.reminders.find((r) => r.id === forgedId)).not.toHaveProperty("sourceParticipant");
+    expect(JSON.stringify(game())).not.toContain("pt-forged");
   });
 });
 

@@ -1365,8 +1365,9 @@ describe("Phase 9D.5 Proof E: writer replacement / stale-writer protection for a
 // -- a Provenance with an explicit `note: undefined`, an Effect with an
 // explicit `sourcePlayer: undefined`, a triggered/manual Information
 // Delivery recorded after phase === "ended" (where currentGameMoment()
-// intentionally returns undefined), and a Reminder introduced through the
-// bulk setReminders() setter with explicit-undefined optional fields --
+// intentionally returns undefined), and a Reminder with explicit-undefined
+// optional fields (originally through the bulk setReminders() setter;
+// Phase 9R.4 (B9) removed it, so through addReminder(), the only path) --
 // and proves the resulting state still passes through the real production
 // writeProjections() chokepoint against real Firebase RTDB without the SDK
 // rejecting it for an undefined value anywhere in the write.
@@ -1416,12 +1417,15 @@ describe("Phase 9R.1 Finding B5: Firebase-safe optional serialization for a rich
     expect(delivery.ok).toBe(true);
 
     // Exact reproduction #4 (Luna follow-up, residual B4/B5): a Reminder
-    // introduced through setReminders() -- the bulk setter -- with explicit
-    // `sourceParticipant: undefined`/`note: undefined` (Phase 9R.2: the
-    // stored source field formerly named `sourcePlayer`).
-    store.setReminders(handles.investigatorId, [
-      { id: "b5-reminder", label: "Marked", lifetime: { kind: "manual" }, sourceParticipant: undefined, note: undefined },
-    ]);
+    // with explicit `sourceParticipant: undefined`/`note: undefined` (Phase
+    // 9R.2: the stored source field formerly named `sourcePlayer`). Phase
+    // 9R.4 (B9): the bulk setReminders() setter this first targeted is
+    // removed; addReminder() is now the only Reminder path, so the same
+    // explicit-undefined shape (plus `sourcePlayer: undefined`) goes there.
+    useStorytellerStore.getState().addReminder(handles.investigatorId, {
+      id: "b5-reminder", label: "Marked", lifetime: { kind: "manual" },
+      sourcePlayer: undefined, note: undefined, ...({ sourceParticipant: undefined } as object),
+    });
 
     const richGame = useStorytellerStore.getState().game!;
     // Confirm the accepted state is already canonical -- no literal

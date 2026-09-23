@@ -31,7 +31,7 @@ describe("Storyteller privacy presentation state", () => {
     usePrivacyStore.getState().setEnabled(true);
 
     storyteller.getState().assignRole(id, "chef");
-    storyteller.getState().setReminders(id, [{ id: "r1", label: "Updated while hidden", lifetime: { kind: "manual" } }]);
+    storyteller.getState().addReminder(id, { id: "r1", label: "Updated while hidden", lifetime: { kind: "manual" } });
     expect(usePrivacyStore.getState().enabled).toBe(true);
 
     usePrivacyStore.getState().setEnabled(false);
