@@ -374,7 +374,14 @@ export function migrateGameEntry(
     }
   }
 
-  if (fromVersion < 17) migrateEntryV16ToV17(e as Record<string, unknown>);
+  // Phase 9R.2 (Astra R2): an entry already carrying ANY v17-only identity
+  // evidence is current-version data, never a v16 input -- it is left
+  // untouched so the final schema gate judges it as v17 (and rejects it if it
+  // also carries retired v16 fields), instead of this conversion silently
+  // "repairing" malformed current-version state into a valid-looking one.
+  if (fromVersion < 17 && !hasV17IdentityEvidence(e as Record<string, unknown>)) {
+    migrateEntryV16ToV17(e as Record<string, unknown>);
+  }
 }
 
 /**
@@ -399,19 +406,20 @@ export function migrateGameEntry(
  * -- the caller must fail that checkpoint safely rather than guess a
  * version and risk silently mis-migrating it.
  *
- * Phase 9R.2: v17 is recognized by any of its own required markers -- an
- * occupied player carrying `participantId`, a History record carrying
- * `participant`, or an Information Delivery carrying `recipient` -- and is
- * never migrated again, so recovery can never regenerate or reassign an
- * already-current v17 participant identity. A v17 game with none of these
- * (every seat empty, no records) is indistinguishable from v16, but
- * v16 -> v17 migration of such a game is a no-op, so the ambiguity is
- * harmless. A checkpoint mixing v17 markers with leftover v16 fields is
- * treated as v17 and therefore fails the final schema gate instead of
- * being partially "repaired".
+ * Phase 9R.2: v17 is recognized by ANY v17-only identity evidence at any
+ * of its authoritative persisted locations (see hasV17IdentityEvidence) and
+ * is never migrated again, so recovery can never regenerate or reassign an
+ * already-current v17 participant identity -- nor "repair" malformed
+ * current-version data by running v16 -> v17 conversion over it. A v17 game
+ * with no such evidence at all (every seat empty, no identity-bearing
+ * record anywhere) is indistinguishable from v16, but v16 -> v17 migration
+ * of such a game is a true no-op, so that ambiguity is harmless. A
+ * checkpoint mixing v17 evidence with leftover v16 fields is treated as v17
+ * and therefore fails the final schema gate instead of being partially
+ * "repaired".
  */
 export function detectLegacyGameVersion(game: Record<string, unknown>): number | null {
-  if (hasV17Marker(game)) return 17;
+  if (hasV17IdentityEvidence(game)) return 17;
   if (Array.isArray(game.informationDeliveries)) return 16;
   if (Array.isArray(game.history)) return 15;
   const players =
@@ -426,9 +434,52 @@ export function detectLegacyGameVersion(game: Record<string, unknown>): number |
   return null;
 }
 
-function hasV17Marker(game: Record<string, unknown>): boolean {
+const hasOwnKey = (value: unknown, key: string): boolean =>
+  isObject(value) && Object.prototype.hasOwnProperty.call(value, key);
+const someEntry = (list: unknown, test: (entry: unknown) => boolean): boolean =>
+  Array.isArray(list) && list.some(test);
+
+/**
+ * Phase 9R.2 (Astra R2): true when a game-shaped entry carries ANY
+ * v17-only participant-identity key at ANY of its authoritative persisted
+ * locations -- traced from the v17 schema (schemas.ts), which introduced
+ * exactly these and nothing else:
+ *
+ *  - players[*].participantId                                (seat occupant)
+ *  - players[*].effects[*].sourceParticipant                 (EffectRecord)
+ *  - players[*].reminders[*].sourceParticipant               (ReminderRecord)
+ *  - history[*].participant                                  (HistoryRecord)
+ *  - history[*].provenance.sourceParticipant                 (Provenance)
+ *  - history[*].change.item.sourceParticipant, for an added/removed
+ *    snapshot in the "effect"/"reminder" categories -- the one History
+ *    snapshot location with a defined identity contract (HistoryRecordSchema)
+ *  - informationDeliveries[*].recipient                      (recipient)
+ *  - informationDeliveries[*].provenance.sourceParticipant   (Provenance)
+ *  - informationDeliveries[*].values[*].participants         (Player-valued)
+ *
+ * PRESENCE, not validity, is what counts: a malformed value at one of these
+ * keys is still v17 evidence (a v16 writer never produced any of them), so a
+ * broken v17 marker can never make a game look like v16 and hand it to a
+ * repairing migration -- the v17 schema rejects it instead. Deliberately
+ * NOT a recursive search for key names: generic payloads (a History value
+ * change's from/to, a snapshot in any other category, free text) are never
+ * treated as identity evidence merely because they happen to contain such a
+ * key. Malformed containers are simply skipped here; the schema judges them.
+ */
+export function hasV17IdentityEvidence(game: Record<string, unknown>): boolean {
+  const sourced = (record: unknown) => hasOwnKey(record, "sourceParticipant");
+  const provenanceSourced = (record: unknown) => isObject(record) && sourced(record.provenance);
   const players = isObject(game.players) ? Object.values(game.players) : [];
-  if (players.some((p) => isObject(p) && p.participantId !== undefined)) return true;
-  const has = (list: unknown, key: string) => Array.isArray(list) && list.some((r) => isObject(r) && r[key] !== undefined);
-  return has(game.history, "participant") || has(game.informationDeliveries, "recipient");
+  if (players.some((p) => isObject(p) && (
+    hasOwnKey(p, "participantId") || someEntry(p.effects, sourced) || someEntry(p.reminders, sourced)
+  ))) return true;
+  if (someEntry(game.history, (h) => isObject(h) && (
+    hasOwnKey(h, "participant") || provenanceSourced(h) ||
+    ((h.category === "effect" || h.category === "reminder") && isObject(h.change) &&
+      (h.change.kind === "added" || h.change.kind === "removed") && sourced(h.change.item))
+  ))) return true;
+  return someEntry(game.informationDeliveries, (d) => isObject(d) && (
+    hasOwnKey(d, "recipient") || provenanceSourced(d) ||
+    someEntry(d.values, (v) => hasOwnKey(v, "participants"))
+  ));
 }

@@ -1571,6 +1571,63 @@ describe("Phase 9R.1 Finding A4: Firebase compatibility gate against the real RT
 });
 
 // ---------------------------------------------------------------------------
+// Phase 9R.2 Astra remediation R2-H: a checkpoint whose ONLY v17 evidence is
+// an Effect/Reminder sourceParticipant (every seat empty, no ParticipantId,
+// no History participant, no delivery) plus a malformed retired v16 History
+// field. Before the fix, readCheckpoint classified it as v16, v16 -> v17
+// migration converted the retired field into a valid-looking legacy ref, the
+// v17 schema accepted the "repaired" state, and recovery republished it.
+// Against the real emulator and rules it must be refused before adoption,
+// with nothing projected.
+// ---------------------------------------------------------------------------
+describe("Phase 9R.2 R2-H: malformed current-version identity state is never repaired and republished (real emulator)", () => {
+  const code = "RTWOHAAA";
+  const st = "uid-storyteller-r2h";
+  const path = (suffix: string) => "lobbies/" + code + "/" + suffix;
+  const db = (uid: string) => env.authenticatedContext(uid).database();
+
+  test.each(["effect", "reminder"] as const)("%s-source evidence + retired History: gated recovery rejects it, Current State stays null, nothing is written", async (kind) => {
+    useStorytellerStore.setState({
+      game: null, lobby: null, undoStack: [], selectedPlayerId: null,
+      localSeq: 0, sync: null, customScripts: {},
+    });
+    const store = () => useStorytellerStore.getState();
+    // Real Setup commands: an Effect/Reminder sourced by Alice sits on an
+    // empty seat, then Alice is unseated -- every seat is empty afterwards.
+    store().newGame("tb", { plannedPlayerCount: 3 });
+    store().addPlayerToSeat("Alice");
+    const [alice, carrier] = store().game!.seatOrder as [string, string];
+    if (kind === "effect") store().addEffect(carrier, { type: "marked", sourcePlayer: alice, lifetime: { kind: "manual" } });
+    else store().addReminder(carrier, { label: "Chosen", sourcePlayer: alice, lifetime: { kind: "manual" } });
+    store().unseatPlayer(alice);
+    const game = JSON.parse(JSON.stringify({ ...store().game!, code, storytellerUid: st }));
+    game.history = [{ id: "h-retired", category: "life", playerId: alice, change: { kind: "value", from: { alive: true }, to: { alive: false } } }];
+    useStorytellerStore.setState({ game: null });
+
+    const rawBackend = new FirebaseRoomBackend(db(st) as unknown as Database);
+    await createLobby(rawBackend, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(rawBackend, code);
+    const seeded = JSON.stringify({ game, roster: {} });
+    await env.withSecurityRulesDisabled(async (ctx) => { await ctx.database().ref(path("checkpoint")).set(seeded); });
+
+    const lobby = { code, uid: st, sessionId: session.id, status: "live" as const };
+    store().setLobby(lobby);
+    const writer = new SessionWriter(rawBackend, code, session.id);
+    try {
+      await expect(startStorytellerSession(rawBackend, lobby, writer)).rejects.toThrow(SnapshotValidationError);
+      expect(store().game).toBeNull();
+      await env.withSecurityRulesDisabled(async (ctx) => {
+        const lobbyNode = (await ctx.database().ref("lobbies/" + code).once("value")).val();
+        expect(lobbyNode.checkpoint).toBe(seeded); // never rewritten
+        expect(lobbyNode.storyteller).toBeUndefined(); // never projected
+        expect(lobbyNode.player).toBeUndefined();
+        expect(lobbyNode.public).toBeUndefined();
+      });
+    } finally { await writer.dispose(); }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Phase 9R.1 Astra remediation (Finding F1) Proof — the expanded Firebase
 // compatibility gate, proven against the REAL Firebase RTDB emulator. The
 // original Finding A4 gate above only checked six punctuation characters;
