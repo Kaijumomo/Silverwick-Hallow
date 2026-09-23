@@ -526,12 +526,26 @@ const sameList = <T,>(a: readonly T[], b: readonly T[] | undefined): boolean =>
 const samePlayerApartFromEpoch = (existing: STPlayerRecord, next: STPlayerRecord): boolean =>
   sameSnapshot({ ...next, packetEpoch: existing.packetEpoch }, existing);
 
+/**
+ * Phase 9R.4 (B8 remediation): the one way a command resolves a
+ * caller-supplied PlayerId to a player. `game.players` is a plain object,
+ * so an indexed `game.players[id]` also "finds" inherited Object.prototype
+ * members -- "toString"/"constructor" resolve to functions and "__proto__"
+ * to Object.prototype itself, all truthy -- and a later
+ * `{ ...game.players, [id]: ... }` would mint a bogus own record for them.
+ * A PlayerId names a player only when it is an OWN property, the same rule
+ * participantRefOf() already applies. Commands resolve through this before
+ * computing anything, pushing Undo, or calling set().
+ */
+const ownPlayer = (game: Pick<StorytellerLobbyRecord, "players">, id: PlayerId): STPlayerRecord | undefined =>
+  Object.prototype.hasOwnProperty.call(game.players, id) ? game.players[id] : undefined;
+
 const patchPlayer = (
   game: StorytellerLobbyRecord,
   id: PlayerId,
   patch: Partial<STPlayerRecord>
 ): StorytellerLobbyRecord => {
-  const existing = game.players[id];
+  const existing = ownPlayer(game, id);
   if (!existing) return game;
   return {
     ...game,
@@ -949,8 +963,8 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const gate = canRefineSetup(game);
         if (!gate.ok) return gate;
         if (playerIdA === playerIdB) return { ok: false, message: "Choose two different players." };
-        const a = game.players[playerIdA];
-        const b = game.players[playerIdB];
+        const a = ownPlayer(game, playerIdA);
+        const b = ownPlayer(game, playerIdB);
         if (!a || !b || a.isEmpty || b.isEmpty) return { ok: false, message: "Both players must be seated." };
         if (a.isTraveler || b.isTraveler) return { ok: false, message: "Travelers cannot use Setup Swap." };
         if (!a.actualRole || !b.actualRole) return { ok: false, message: "Both players must have an actual role." };
@@ -974,7 +988,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!game) return { ok: false, message: "No game is open." };
         const gate = canRefineSetup(game);
         if (!gate.ok) return gate;
-        const player = game.players[playerId];
+        const player = ownPlayer(game, playerId);
         if (!player || player.isEmpty) return { ok: false, message: "This player is not seated." };
         if (player.isTraveler) return { ok: false, message: "Travelers cannot use the Setup role override." };
         const script = selectScriptById(get(), game.scriptId);
@@ -1140,7 +1154,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!game) return false;
         const name = game.pendingPlayers[uid];
         if (!name) return false;
-        const seat = game.players[seatPlayerId];
+        const seat = ownPlayer(game, seatPlayerId);
         if (!seat?.isEmpty) return false;
         // Phase 9R.3 (B7): refused before any mutation, so the membership
         // seating command (seatPlayerAndCommit) sees false and revokes the
@@ -1388,7 +1402,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       removePlayer: (id) => {
         const { game, selectedPlayerId } = get();
-        const existing = game?.players[id];
+        const existing = game ? ownPlayer(game, id) : undefined;
         if (!game || !existing) return false;
         const players = { ...game.players };
         delete players[id];
@@ -1403,7 +1417,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // live "who is here now" draft and is scrubbed).
         const renumbered: typeof players = {};
         seatOrder.forEach((pid, idx) => {
-          const p = players[pid];
+          const p = ownPlayer({ players }, pid);
           if (!p) return;
           let next = { ...p, seat: idx };
           if (next.privateInfo?.fakeMinions?.includes(id)) {
@@ -1452,7 +1466,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       unseatPlayer: (id) => {
         const { game, selectedPlayerId } = get();
-        const existing = game?.players[id];
+        const existing = game ? ownPlayer(game, id) : undefined;
         if (!game || !existing || existing.isEmpty) return false;
         // FINAL SEAT & TRAVELLER RESERVATION CLOSURE, Section 4: unseating
         // changes occupancy only, never the seat's reservation type. An
@@ -1494,7 +1508,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // Phase 9R.4 (B8): an unknown player (patchPlayer would return the
         // same game while Undo still grew) or the already-stored normalized
         // name is a true no-op.
-        const existing = game.players[id];
+        const existing = ownPlayer(game, id);
         if (!existing || existing.name === trimmed) return;
         set({
           undoStack: pushUndo(game, undoStack),
@@ -1509,10 +1523,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // already numbered to match it, changes nothing. (Structural
         // validation of malformed orders is deliberately not part of this.)
         if (sameList(order, game.seatOrder) &&
-          order.every((pid, idx) => { const p = game.players[pid]; return !p || p.seat === idx; })) return;
+          order.every((pid, idx) => { const p = ownPlayer(game, pid); return !p || p.seat === idx; })) return;
         const renumbered = { ...game.players };
         order.forEach((pid, idx) => {
-          const p = renumbered[pid];
+          const p = ownPlayer({ players: renumbered }, pid);
           if (p) renumbered[pid] = { ...p, seat: idx };
         });
         set({
@@ -1532,7 +1546,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         [order[i], order[j]] = [order[j]!, order[i]!];
         const renumbered = { ...game.players };
         order.forEach((pid, idx) => {
-          const p = renumbered[pid];
+          const p = ownPlayer({ players: renumbered }, pid);
           if (p) renumbered[pid] = { ...p, seat: idx };
         });
         set({
@@ -1544,7 +1558,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
       assignRole: (id, roleId, context) => {
         const { game, undoStack } = get();
         if (!game) return;
-        const existing = game.players[id];
+        const existing = ownPlayer(game, id);
         if (!existing) return;
         if (existing.isTraveler && roleId && !getTraveler(roleId)) return;
         if (!existing.isTraveler && getTraveler(roleId)) return;
@@ -1581,7 +1595,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       showAssignedRole: (id) => {
         const { game } = get();
-        const player = game?.players[id];
+        const player = game ? ownPlayer(game, id) : undefined;
         if (!player?.actualRole || needsShownIdentity(player.actualRole)) return;
         get().setShownRole(id, player.actualRole);
       },
@@ -1589,7 +1603,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
       setShownRole: (id, roleId) => {
         const { game, undoStack } = get();
         if (!game) return;
-        const existing = game.players[id];
+        const existing = ownPlayer(game, id);
         if (!existing) return;
         // A new perception cannot inherit alignment overrides or packets from
         // the previous identity. Null alignment derives only from shownRole.
@@ -1610,7 +1624,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
       setShownAlignment: (id, alignment) => {
         const { game, undoStack } = get();
         if (!game) return;
-        const existing = game.players[id];
+        const existing = ownPlayer(game, id);
         // Phase 9R.4 (B8): an unknown player used to push Undo onto an
         // unchanged game. The already-current alignment is not an identity
         // change, so it must not manufacture packet invalidation either.
@@ -1624,7 +1638,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
       setBehaviorMode: (id, mode) => {
         const { game, undoStack } = get();
         if (!game) return;
-        const existing = game.players[id];
+        const existing = ownPlayer(game, id);
         // Phase 9R.4 (B8): an unknown player used to push Undo onto an
         // unchanged game.
         if (!existing) return;
@@ -1642,7 +1656,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
       setBluffs: (id, bluffs) => {
         const { game, undoStack } = get();
         if (!game) return;
-        const player = game.players[id];
+        const player = ownPlayer(game, id);
         if (!player) return;
         const next = { ...player };
         const cleaned = bluffs.filter((b) => !!b).slice(0, 3);
@@ -1672,9 +1686,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
       setFakeMinions: (id, playerIds) => {
         const { game, undoStack } = get();
         if (!game) return;
-        const player = game.players[id];
+        const player = ownPlayer(game, id);
         if (!player) return;
-        const valid = [...new Set(playerIds.filter((pid) => !!game.players[pid] && !game.players[pid]?.isEmpty && pid !== id))];
+        const valid = [...new Set(playerIds.filter((pid) => { const q = ownPlayer(game, pid); return !!q && !q.isEmpty && pid !== id; }))];
         const next = { ...player };
         if (valid.length === 0) {
           if (next.privateInfo) {
@@ -1703,7 +1717,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       setPrivateText: (id, text) => {
         const { game, undoStack } = get();
-        const player = game?.players[id];
+        const player = game ? ownPlayer(game, id) : undefined;
         if (!game || !player) return;
         // Phase 9R.4 (B8): compare the normalized stored extraText (blank ->
         // absent, 4000-character truncation). An absent privateInfo and an
@@ -1722,7 +1736,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
       setIsTraveler: (id, isTraveler) => {
         const { game, undoStack } = get();
         if (!game) return { ok: false, message: "No game is open." };
-        const existing = game.players[id];
+        const existing = ownPlayer(game, id);
         if (!existing) return { ok: false, message: "This player is not seated." };
         if (existing.isTraveler === isTraveler) return { ok: true };
         // Phase 9 Setup finalization (FINAL SETUP INTEGRATION REVISION,
@@ -1789,7 +1803,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       setTravelerAlignment: (id, alignment, context) => {
         const { game, undoStack } = get();
-        const p = game?.players[id];
+        const p = game ? ownPlayer(game, id) : undefined;
         if (!game || !p?.isTraveler || p.actualAlignment === alignment) return;
         const next = invalidatePrivatePacket({ ...p, actualAlignment: alignment,
           travelerArrival: { ...(p.travelerArrival ?? newTravelerArrival()), demonInfoComplete: false } });
@@ -1806,7 +1820,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       setActualAlignment: (id, alignment, context) => {
         const { game, undoStack } = get();
-        const p = game?.players[id];
+        const p = game ? ownPlayer(game, id) : undefined;
         if (!game || !p || p.actualAlignment === alignment) return;
         // A Traveler's self projection mirrors actualAlignment directly
         // (see projectIdentity) -- changing it invalidates any already-
@@ -1827,7 +1841,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       prepareTravelerDemon: (id) => {
         const { game, undoStack } = get();
-        const p = game?.players[id];
+        const p = game ? ownPlayer(game, id) : undefined;
         const script = game && selectScriptById(get(), game.scriptId);
         if (!game || !p || !script) return;
         const result = travelerDemonInformation(p, game, buildRegistry(script));
@@ -1840,7 +1854,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       completeTravelerInformation: (id) => {
         const { game, undoStack } = get();
-        const p = game?.players[id];
+        const p = game ? ownPlayer(game, id) : undefined;
         if (!game || !p || !publicTravelerRole(p) || p.actualAlignment !== "evil" || !p.alive || p.exiled) return;
         if (p.travelerArrival?.demonInfoComplete === true) return; // Phase 9R.4 (B8): already complete
         set({ undoStack: pushUndo(game, undoStack), game: patchPlayer(game, id,
@@ -1849,7 +1863,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       exileTraveler: (id) => {
         const { game, undoStack } = get();
-        const p = game?.players[id];
+        const p = game ? ownPlayer(game, id) : undefined;
         if (!game || !p?.isTraveler || !p.alive || p.exiled) return;
         const updatedGame = patchPlayer(game, id, { exiled: true, alive: false });
         // Exile is never collapsed into generic death (Phase 9D.1):
@@ -1865,7 +1879,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       completeTravelerArrivalCheck: (id) => {
         const { game, undoStack } = get();
-        const p = game?.players[id];
+        const p = game ? ownPlayer(game, id) : undefined;
         if (!game || !p || !travelerNeedsArrivalCheck(p) || !p.actualAlignment || !p.alive || p.exiled) return;
         if (p.travelerArrival?.arrivalCheckComplete === true) return; // Phase 9R.4 (B8): already complete
         set({ undoStack: pushUndo(game, undoStack), game: patchPlayer(game, id,
@@ -1899,7 +1913,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
       setAlive: (id, alive, context) => {
         const { game, undoStack } = get();
         if (!game) return;
-        const player = game.players[id];
+        const player = ownPlayer(game, id);
         if (!player) return;
         const patch: Partial<STPlayerRecord> = { alive };
         if (alive && player.exiled) patch.exiled = false;
@@ -1925,7 +1939,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
       setGhostVote: (id, ghostVote, context) => {
         const { game, undoStack } = get();
         if (!game) return;
-        const player = game.players[id];
+        const player = ownPlayer(game, id);
         if (!player) return;
         if (player.ghostVote === ghostVote) return; // true no-op
         const updatedGame = patchPlayer(game, id, { ghostVote });
@@ -1942,7 +1956,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const { game, undoStack } = get();
         if (!game) return;
         // Phase 9R.4 (B8): unknown player or already-current value.
-        const existing = game.players[id];
+        const existing = ownPlayer(game, id);
         if (!existing || existing.abilityUsed === abilityUsed) return;
         set({
           undoStack: pushUndo(game, undoStack),
@@ -1959,7 +1973,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
       setStatus: (id, status, on) => {
         const { game, undoStack } = get();
         if (!game) return;
-        const player = game.players[id];
+        const player = ownPlayer(game, id);
         if (!player) return;
         const effectId = manualEffectId(status);
         const existing = player.effects.find((e) => e.id === effectId);
@@ -1989,7 +2003,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
       addEffect: (id, effect) => {
         const { game, undoStack } = get();
         if (!game) return null;
-        const player = game.players[id];
+        const player = ownPlayer(game, id);
         if (!player) return null;
         const effectId = effect.id ?? newId();
         // Phase 9R.1 (Finding B4/B5): own a deep-cloned, undefined-stripped
@@ -2017,7 +2031,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
       removeEffect: (id, effectId) => {
         const { game, undoStack } = get();
         if (!game) return;
-        const player = game.players[id];
+        const player = ownPlayer(game, id);
         const existing = player?.effects.find((e) => e.id === effectId);
         if (!player || !existing) return;
         const updatedGame = patchPlayer(game, id, { effects: player.effects.filter((e) => e.id !== effectId) });
@@ -2034,7 +2048,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
       addReminder: (id, reminder) => {
         const { game, undoStack } = get();
         if (!game) return null;
-        const player = game.players[id];
+        const player = ownPlayer(game, id);
         if (!player) return null;
         const reminderId = reminder.id ?? newId();
         // Phase 9R.1 (Finding B4/B5): see addEffect's identical rationale.
@@ -2060,7 +2074,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
       removeReminder: (id, reminderId) => {
         const { game, undoStack } = get();
         if (!game) return;
-        const player = game.players[id];
+        const player = ownPlayer(game, id);
         const existing = player?.reminders.find((r) => r.id === reminderId);
         if (!player || !existing) return;
         const updatedGame = patchPlayer(game, id, { reminders: player.reminders.filter((r) => r.id !== reminderId) });
@@ -2184,7 +2198,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const { game, undoStack } = get();
         if (!game) return;
         // Phase 9R.4 (B8): unknown player or already-current notes.
-        const existing = game.players[id];
+        const existing = ownPlayer(game, id);
         if (!existing || existing.stNotes === notes) return;
         set({
           undoStack: pushUndo(game, undoStack),
