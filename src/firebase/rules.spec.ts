@@ -3,7 +3,7 @@ import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestE
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
-import type { Database } from "firebase/database";
+import { ref as modularRef, update as modularUpdate, type Database } from "firebase/database";
 import { FirebaseRoomBackend } from "./firebaseBackend";
 import type { Json } from "./backend";
 import { SessionWriter } from "./writer";
@@ -34,6 +34,7 @@ import {
 import { buildRichPhase9Game } from "@/test/phase9RichState";
 import { startStorytellerSession } from "./storytellerSync";
 import { SnapshotValidationError } from "./snapshots";
+import { validateFirebaseWritableValue } from "./firebaseWriteCompatibility";
 
 let env: RulesTestEnvironment;
 beforeAll(async () => {
@@ -1884,6 +1885,184 @@ describe("Phase 9R.1 Finding F3 Proof: Firebase-exact string-length accounting a
     const storytellerAfter = await ref(st, "storyteller").once("value");
     expect(storytellerAfter.exists()).toBe(false);
 
+    await writer.dispose();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9R.1 residual F2 Proof — nested ".priority" validation, proven
+// against the REAL installed SDK and the REAL RTDB emulator. Synchronous
+// SDK rejections are asserted on the bare modular update() call (the same
+// update(ref(db), { "<destination>": value }) shape FirebaseRoomBackend
+// uses): they throw before any request exists, so the emulator never sees
+// them. Acceptances are proven with a genuine network round trip that the
+// emulator acknowledges and reads back.
+// ---------------------------------------------------------------------------
+describe("Phase 9R.1 residual F2 Proof: nested '.priority' validation against the real SDK and RTDB emulator", () => {
+  const code = "PRIOPRF1";
+  const st = "uid-storyteller-prio";
+  const path = (suffix: string) => "lobbies/" + code + "/" + suffix;
+  const db = (uid: string) => env.authenticatedContext(uid).database();
+  const ref = (uid: string, suffix: string) => db(uid).ref(path(suffix));
+  const destination = ["lobbies", code, "storyteller"];
+
+  /** Records every write the recovery pipeline attempts, before it reaches Firebase. */
+  class ObservedBackend extends FirebaseRoomBackend {
+    readonly writePaths: string[] = [];
+    async set(target: string, value: Json) { this.writePaths.push(target); return super.set(target, value); }
+    async update(updates: Record<string, Json>) { this.writePaths.push(...Object.keys(updates)); return super.update(updates); }
+    async setIfAbsent(target: string, value: Json) { this.writePaths.push(target); return super.setIfAbsent(target, value); }
+    async transaction(target: string, change: (current: unknown) => Json | undefined) { this.writePaths.push(target); return super.transaction(target, change); }
+  }
+
+  const gameWithHistoryItem = (item: Record<string, unknown>) => ({
+    code, storytellerUid: st, scriptId: "tb", phase: "night", day: 1, notes: "",
+    players: {
+      a: {
+        id: "a", name: "Alice", seat: 0, joinedAt: 1, actualRole: "chef",
+        shownRole: null, shownAlignment: null, behaviorMode: "normal", publicDisplayRole: null,
+        alive: true, ghostVote: true, abilityUsed: false,
+        statuses: {}, reminders: [], stNotes: "", isTraveler: false, effects: [],
+      },
+    },
+    seatOrder: ["a"], nightProgress: {}, fabled: [], bluffs: [], lorics: [], rolePool: [],
+    plannedPlayerCount: 1, plannedTravelerCount: 0, pendingPlayers: {},
+    history: [{ id: "h", category: "life", playerId: "a", change: { kind: "added", item } }],
+    informationDeliveries: [],
+  });
+
+  test('A/B: the real SDK SYNCHRONOUSLY rejects Astra\'s nested { ".priority": true, "child": true } (Invalid priority type found: boolean) -- and Silverwick\'s validator rejects the same structure', async () => {
+    const value = gameWithHistoryItem({ ".priority": true, child: true });
+    const database = db(st) as unknown as Database;
+    // Synchronous: update() throws before returning a promise at all.
+    expect(() => modularUpdate(modularRef(database), { [path("storyteller")]: value })).toThrow(/Invalid priority type found: boolean/);
+    // The production backend surfaces that same SDK throw as its rejection.
+    await expect(new FirebaseRoomBackend(database).update({ [path("storyteller")]: value as unknown as Json }))
+      .rejects.toThrow(/Invalid priority type found: boolean/);
+    expect(validateFirebaseWritableValue(value, destination).ok).toBe(false);
+    // Nothing was written: the throw happened before any request existed.
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      expect((await ctx.database().ref(path("storyteller")).once("value")).exists()).toBe(false);
+    });
+  });
+
+  test.each<[string, unknown, unknown]>([
+    ["C: numeric priority 1", 1, 1],
+    ["C: numeric priority -2.5", -2.5, -2.5],
+    ['D: string priority "abc"', "abc", "abc"],
+    ['D: empty string priority ""', "", ""],
+  ])("%s -- validator accepts, SDK accepts, and the emulator acknowledges the round trip with the priority intact", async (_label, priority, expectedStored) => {
+    const item = { ".priority": priority, child: true };
+    expect(validateFirebaseWritableValue(gameWithHistoryItem(item), destination).ok).toBe(true);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const database = ctx.database() as unknown as Database;
+      await assertSucceeds(modularUpdate(modularRef(database), { [path("scratch")]: { item } }));
+      const stored = (await ctx.database().ref(path("scratch/item")).once("value")).exportVal() as Record<string, unknown>;
+      expect(stored).toEqual({ ".priority": expectedStored, child: true });
+    });
+  });
+
+  test.each<[string, unknown]>([
+    ['E: { ".sv": "timestamp" }', { ".sv": "timestamp" }],
+    ['E: { ".sv": { increment: 1 } }', { ".sv": { increment: 1 } }],
+  ])("server-value priority %s -- validator accepts, SDK accepts, and the emulator resolves it to a numeric priority", async (_label, priority) => {
+    const item = { ".priority": priority, child: true };
+    expect(validateFirebaseWritableValue(gameWithHistoryItem(item), destination).ok).toBe(true);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const database = ctx.database() as unknown as Database;
+      await assertSucceeds(modularUpdate(modularRef(database), { [path("scratch")]: { item } }));
+      const stored = (await ctx.database().ref(path("scratch/item")).once("value")).exportVal() as Record<string, unknown>;
+      expect(stored.child).toBe(true);
+      expect(typeof stored[".priority"]).toBe("number");
+    });
+  });
+
+  test.each<[string, unknown, RegExp]>([
+    ["boolean false", false, /Invalid priority type found: boolean/],
+    ["an ordinary object {}", {}, /Invalid priority type found: object/],
+    ["an array []", [], /Invalid priority type found: object/],
+    ['an unsupported server value { ".sv": "bogus" }', { ".sv": "bogus" }, /Unexpected server value: bogus/],
+    ['a server value carrying its own priority { ".sv": "timestamp", ".priority": 1 }', { ".sv": "timestamp", ".priority": 1 }, /Priority nodes can't have a priority of their own/],
+  ])("E: invalid priority %s -- the real SDK synchronously rejects it, and so does the validator", (_label, priority, sdkMessage) => {
+    const value = gameWithHistoryItem({ ".priority": priority, child: true });
+    const database = db(st) as unknown as Database;
+    expect(() => modularUpdate(modularRef(database), { [path("storyteller")]: value })).toThrow(sdkMessage);
+    expect(validateFirebaseWritableValue(value, destination).ok).toBe(false);
+  });
+
+  test("gated recovery refuses Astra's exact nested-priority checkpoint BEFORE adoption, against the real emulator -- restoreRemoteCheckpoint() never runs and no projection write is ever attempted", async () => {
+    useStorytellerStore.setState({
+      game: null, lobby: null, undoStack: [], selectedPlayerId: null,
+      localSeq: 0, sync: null, customScripts: {},
+    });
+    const rawBackend = new ObservedBackend(db(st) as unknown as Database);
+    await createLobby(rawBackend, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(rawBackend, code);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.database().ref(path("checkpoint")).set(
+        JSON.stringify({ game: gameWithHistoryItem({ ".priority": true, child: true }), roster: {} })
+      );
+    });
+
+    const lobby = { code, uid: st, sessionId: session.id, status: "live" as const };
+    useStorytellerStore.getState().setLobby(lobby);
+    const undoBaseline = [structuredClone(gameWithHistoryItem({})) as unknown as StorytellerLobbyRecord];
+    const undoSnapshot = structuredClone(undoBaseline);
+    useStorytellerStore.setState({ undoStack: undoBaseline, localSeq: 5 });
+    const originalRestore = useStorytellerStore.getState().restoreRemoteCheckpoint;
+    let restoreCalls = 0;
+    useStorytellerStore.setState({ restoreRemoteCheckpoint: (game, guard) => { restoreCalls++; originalRestore(game, guard); } });
+    const writer = new SessionWriter(rawBackend, code, session.id);
+    const writesBefore = rawBackend.writePaths.length;
+
+    try {
+      await expect(startStorytellerSession(rawBackend, lobby, writer)).rejects.toThrow(SnapshotValidationError);
+      expect(restoreCalls).toBe(0);
+      expect(useStorytellerStore.getState().game).toBeNull();
+      expect(useStorytellerStore.getState().undoStack).toEqual(undoSnapshot);
+      expect(useStorytellerStore.getState().localSeq).toBe(5);
+      const sync = useStorytellerStore.getState().sync;
+      expect(sync?.ackedGameSeq).toBe(0);
+      expect(sync?.lastAttempt).toBeNull();
+      const projectionWrites = rawBackend.writePaths.slice(writesBefore).filter((target) =>
+        target === path("storyteller") || target === path("public") || target === path("checkpoint") || target.startsWith(path("player/"))
+      );
+      expect(projectionWrites).toEqual([]);
+      const storytellerAfter = await ref(st, "storyteller").once("value");
+      expect(storytellerAfter.exists()).toBe(false);
+    } finally {
+      useStorytellerStore.setState({ restoreRemoteCheckpoint: originalRestore });
+      await writer.dispose();
+    }
+  });
+
+  test('control: a checkpoint whose history[].change.item carries a VALID nested { ".priority": 1, "child": true } is adopted and actually projects through the real Firebase path -- the gate never rejects merely because ".priority" exists', async () => {
+    useStorytellerStore.setState({
+      game: null, lobby: null, undoStack: [], selectedPlayerId: null,
+      localSeq: 0, sync: null, customScripts: {},
+    });
+    const rawBackend = new FirebaseRoomBackend(db(st) as unknown as Database);
+    await createLobby(rawBackend, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(rawBackend, code);
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.database().ref(path("checkpoint")).set(
+        JSON.stringify({ game: gameWithHistoryItem({ ".priority": 1, child: true }), roster: {} })
+      );
+    });
+
+    const lobby = { code, uid: st, sessionId: session.id, status: "live" as const };
+    useStorytellerStore.getState().setLobby(lobby);
+    const writer = new SessionWriter(rawBackend, code, session.id);
+    const recovered = await startStorytellerSession(rawBackend, lobby, writer);
+
+    expect(recovered.outcome).toBe("live");
+    expect(useStorytellerStore.getState().game!.history[0]!.change).toEqual({ kind: "added", item: { ".priority": 1, child: true } });
+    // The real Storyteller-private projection reached the emulator, with the
+    // nested priority stored as genuine Firebase priority metadata.
+    const item = await ref(st, "storyteller/history/0/change/item").once("value");
+    expect(item.exportVal()).toEqual({ ".priority": 1, child: true });
+
+    recovered.stop();
     await writer.dispose();
   });
 });

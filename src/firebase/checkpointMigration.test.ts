@@ -18,6 +18,8 @@ import { requireActiveSession } from "./lifecycle";
 import { SessionWriter } from "./writer";
 import { startStorytellerSession, useSessionRuntime } from "./storytellerSync";
 import { SnapshotValidationError } from "./snapshots";
+import { StorytellerGamePersistedSchema } from "@/stores/schemas";
+import { validateFirebaseWritableValue } from "./firebaseWriteCompatibility";
 
 const code = "LGCY2345";
 const root = `lobbies/${code}`;
@@ -1018,5 +1020,92 @@ describe("Phase 9R.1 Finding F3: Firebase-exact string-length accounting for unm
     const recovered = await startStorytellerSession(b, lobby, writer);
     disposals.push(async () => { recovered.stop(); await writer.dispose(); });
     expect(recovered.outcome).toBe("live");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9R.1 residual F2 (nested `.priority`): a `.priority` nested anywhere
+// in the game passed validateFirebaseData-level checks, but the SDK's next
+// synchronous layer (nodeFromJSON inside update()) asserts its type --
+// Astra's reproduction was adopted, cleared Undo, and only then failed to
+// project with "Invalid priority type found: boolean". See
+// firebaseWriteCompatibility.sdk.test.ts for the pure validator compared
+// against the installed SDK, and rules.spec.ts's "residual F2" block for
+// the real emulator proofs. These tests prove the PRODUCTION WIRING rejects
+// it before restoreRemoteCheckpoint() ever runs.
+// ---------------------------------------------------------------------------
+describe("Phase 9R.1 residual F2: nested '.priority' validation before checkpoint adoption", () => {
+  /** Observes the one adoption entry point directly, rather than inferring
+   * "never adopted" from Current State alone. */
+  function observeRestoreRemoteCheckpoint(): { calls: number } {
+    const original = useStorytellerStore.getState().restoreRemoteCheckpoint;
+    const observed = { calls: 0 };
+    useStorytellerStore.setState({
+      restoreRemoteCheckpoint: (game, guard) => { observed.calls++; original(game, guard); },
+    });
+    disposals.push(() => { useStorytellerStore.setState({ restoreRemoteCheckpoint: original }); });
+    return observed;
+  }
+
+  const historyWithItem = (item: Record<string, unknown>) =>
+    v16GameWithHistory({ id: "h", category: "life", playerId: "a", change: { kind: "added", item } });
+
+  it('Astra\'s exact reproduction: { ".priority": true, "child": true } in history[].change.item parses and passes the current schema, but the Firebase compatibility gate rejects it -- restoreRemoteCheckpoint() is never called and nothing is projected', async () => {
+    const b = new MemoryRoomBackend();
+    const rawText = JSON.stringify({ game: historyWithItem({ ".priority": true, child: true }), roster: {} });
+
+    // 1. JSON parse succeeds.
+    const json = JSON.parse(rawText) as { game: unknown };
+    // 2. The current (v16) schema accepts it -- History items are unrestricted.
+    const schema = StorytellerGamePersistedSchema.safeParse(json.game);
+    expect(schema.success).toBe(true);
+    expect(schema.data!.history[0]!.change).toEqual({ kind: "added", item: { ".priority": true, child: true } });
+    // 3. The Firebase compatibility gate rejects it at the real destination.
+    expect(validateFirebaseWritableValue(schema.data, ["lobbies", code, "storyteller"]).ok).toBe(false);
+
+    await b.set(`${root}/checkpoint`, rawText);
+    const restore = observeRestoreRemoteCheckpoint();
+    await expectRejectedWithoutProjectionAttempt(b, await freshLobby(b));
+    expect(restore.calls).toBe(0);
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ['".priority": false', { ".priority": false, child: true }],
+    ['".priority": {} (an ordinary object)', { ".priority": {}, child: true }],
+    ['".priority": [] (an array)', { ".priority": [], child: true }],
+    ['".priority": { ".sv": "bogus" } (an unsupported server value)', { ".priority": { ".sv": "bogus" }, child: true }],
+    ['a nested { ".sv": "bogus" } data leaf', { child: { ".sv": "bogus" } }],
+    ['an own "hasOwnProperty" key', JSON.parse('{"hasOwnProperty":true}') as Record<string, unknown>],
+  ])("another value the installed SDK synchronously rejects (%s) in history[].change.item is also rejected before adoption, atomically", async (_label, item) => {
+    const b = new MemoryRoomBackend();
+    await seedLegacyCheckpoint(b, historyWithItem(item));
+    const restore = observeRestoreRemoteCheckpoint();
+    await expectRejectedWithoutProjectionAttempt(b, await freshLobby(b));
+    expect(restore.calls).toBe(0);
+  });
+
+  it.each<[string, unknown]>([
+    ["a numeric priority (1)", 1],
+    ['a string priority ("abc")', "abc"],
+    ['a server-value priority ({ ".sv": "timestamp" })', { ".sv": "timestamp" }],
+  ])("control: %s nested in history[].change.item is accepted, adopted, and projected -- the gate never rejects merely because '.priority' exists", async (_label, priority) => {
+    const b = new MemoryRoomBackend();
+    const item = { ".priority": priority, child: true };
+    expect(validateFirebaseWritableValue(historyWithItem(item), ["lobbies", code, "storyteller"]).ok).toBe(true);
+    await seedLegacyCheckpoint(b, historyWithItem(item));
+    const { lobby, session } = await freshLobby(b);
+    const restore = observeRestoreRemoteCheckpoint();
+    const writer = new SessionWriter(b, code, session.id);
+    const writeLogBefore = b.writeLog.length;
+    const recovered = await startStorytellerSession(b, lobby, writer);
+    disposals.push(async () => { recovered.stop(); await writer.dispose(); });
+
+    expect(recovered.outcome).toBe("live");
+    expect(restore.calls).toBe(1);
+    expect(useStorytellerStore.getState().game!.history[0]!.change).toEqual({ kind: "added", item });
+    const storytellerWrites = b.writeLog.slice(writeLogBefore).filter((entry) => entry.path === `${root}/storyteller`);
+    expect(storytellerWrites.length).toBeGreaterThan(0);
+    const projected = storytellerWrites.at(-1)!.value as { history: { change: unknown }[] };
+    expect(projected.history[0]!.change).toEqual({ kind: "added", item });
   });
 });

@@ -37,10 +37,20 @@
  *    own doc comment for exactly which combinations this does and does not
  *    reject, mirroring validateFirebaseData's own `hasDotValue`/
  *    `hasActualChild` logic exactly (including that `.value`/`.priority`/
- *    `.sv` are individually never key-character-validated, and that
- *    `.priority`'s VALUE is never type-checked here -- see that same doc
- *    comment for why that specific check is genuinely unreachable through
- *    Silverwick's own write path).
+ *    `.sv` are individually never key-character-validated).
+ *  - an own key literally named `hasOwnProperty`: validateFirebaseData
+ *    iterates every object with the SDK's own `each()` helper, which calls
+ *    `obj.hasOwnProperty(key)` as a METHOD -- an own `hasOwnProperty` data
+ *    key shadows it and the SDK throws a TypeError synchronously.
+ *  - nested `.priority` values and `.sv` server values (Phase 9R.1
+ *    residual F2): validateFirebaseData is not the only synchronous layer.
+ *    repoUpdate then builds every update value into the SDK's node
+ *    representation (nodeFromJSON, which asserts each `.priority` it meets
+ *    at ANY depth is null/string/number/{.sv} and validatePriorityNode on
+ *    the result) and resolves server values (resolveDeferredValue, which
+ *    asserts every reachable `.sv` is "timestamp" or {increment: number}),
+ *    all before update() returns. See checkNodeConstruction()'s own doc
+ *    comment for the exact rules.
  *
  * Deliberately not replicated: the 10 MiB single-string-leaf size limit
  * (MAX_LEAF_SIZE_) -- unreachable for any string this codebase's schema
@@ -118,6 +128,14 @@ function isValidFirebaseKey(key: string): boolean {
   return key.length > 0 && !ILLEGAL_KEY_CHARACTERS.test(key);
 }
 
+function hasOwn(value: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
 type PathState = { byteLength: number; depth: number };
 
 /** Mirrors ValidationPath's constructor: the required '/' separators
@@ -157,22 +175,12 @@ function pushSegment(path: PathState, segment: string): PathState {
  * valid representation of a prioritized leaf / a server-value leaf and is
  * never rejected by this rule.
  *
- * `.priority`'s own VALUE is deliberately never type-checked against
- * Firebase's isValidPriority (string/number/null/{.sv}) here: the real SDK
- * only runs that specific check inside validateFirebaseMergeDataArg, for a
- * merge-update key that ends in literal ".priority" (i.e. the SDK's own
- * `update(ref, values)` treats a TOP-LEVEL key like "a/b/.priority" as a
- * distinct write target and priority-type-checks THAT value) -- never for
- * a `.priority` key found while recursing into an ordinary nested value
- * via validateFirebaseData (which is exactly how Silverwick's own writes
- * reach every `.priority` occurrence this gate could ever see: `rtdbUpdate`
- * in firebaseBackend.ts always passes full destination paths like
- * "lobbies/<code>/storyteller" as the update's own top-level keys, with the
- * entire game object nested underneath as ONE of those keys' values, never
- * as a key of its own ending in ".priority"). Adding that check here would
- * therefore reject values the real SDK genuinely accepts through
- * Silverwick's actual write shape -- exactly the "invented, stricter rule"
- * this module's own contract forbids.
+ * `.priority`'s own VALUE is not type-checked HERE because
+ * validateFirebaseData itself never checks it (only
+ * validateFirebaseMergeDataArg's top-level "…/.priority" update keys are
+ * isValidPriority-checked, and Silverwick never writes one). That does NOT
+ * make nested priorities unchecked: the SDK's next synchronous layer,
+ * nodeFromJSON, does check them -- see checkNodeConstruction() below.
  */
 function check(value: unknown, path: PathState): string | null {
   // Mirrors validationPathCheckValid, called immediately once a segment
@@ -188,6 +196,11 @@ function check(value: unknown, path: PathState): string | null {
     return `contains ${String(value)}, which Firebase RTDB cannot store.`;
   }
   if (value !== null && typeof value === "object") {
+    // Mirrors the SDK's each() (`for (key in obj) if (obj.hasOwnProperty(key))`):
+    // an own "hasOwnProperty" key shadows the method and throws a TypeError.
+    if (hasOwn(value, "hasOwnProperty")) {
+      return `contains a key named "hasOwnProperty", which the Firebase SDK cannot iterate.`;
+    }
     const entries: [string, unknown][] = Array.isArray(value)
       ? value.map((v, i) => [String(i), v])
       : Object.entries(value as Record<string, unknown>);
@@ -213,6 +226,139 @@ function check(value: unknown, path: PathState): string | null {
 }
 
 /**
+ * Phase 9R.1 residual F2: mirrors the synchronous node-construction layer
+ * the SDK's update() runs AFTER validateFirebaseData succeeds -- repoUpdate
+ * calls `resolveDeferredValueTree(…, nodeFromJSON(value), …)` for every
+ * update value (node_modules/@firebase/database/dist/index.cjs.js; the
+ * esm/node/standalone builds are identical apart from import aliasing).
+ * Any assertion there throws out of update() before a write is queued, so
+ * a checkpoint tripping one would be adopted and then fail to project --
+ * exactly Astra's nested `{ ".priority": true, "child": true }`
+ * reproduction ("Invalid priority type found: boolean").
+ *
+ * Simulated (never stricter than the SDK):
+ *  - nodeFromJSON: every object node visited takes its OWN `.priority`
+ *    (never inherited), which must be null, a string, a number, or an
+ *    object with an own `.sv` key -- checked even if the node ends up
+ *    empty. A non-null `.value` then replaces the node's content; a
+ *    non-object or `.sv` object becomes a leaf, otherwise ordinary (non-
+ *    ".") children are built recursively and empty ones dropped.
+ *  - validatePriorityNode (LeafNode/ChildrenNode constructors): the node
+ *    built from that priority must be empty or a string/number/{.sv}
+ *    leaf that has no priority of its own. A priority on a node that ends
+ *    up EMPTY is discarded without this check (the SDK never builds a
+ *    ChildrenNode for it), except on the array branch, which always builds
+ *    the priority node first.
+ *  - resolveDeferredValue: on the resulting tree only (discarded priorities
+ *    are never resolved), each node's priority value and each leaf's value
+ *    that is an object must be `{ ".sv": "timestamp" }` or
+ *    `{ ".sv": { increment: <number>, … } }` -- resolveDeferredLeafValue /
+ *    resolveScalarDeferredValue / resolveComplexDeferredValue. Their verdict
+ *    never depends on existing data (DeferredValueProvider.node() is never
+ *    null with includeHiddenWrites).
+ */
+type SimulatedNode =
+  | { kind: "empty" }
+  | { kind: "leaf"; value: unknown; priority: SimulatedNode }
+  | { kind: "children"; children: SimulatedNode[]; priority: SimulatedNode };
+
+const EMPTY_NODE: SimulatedNode = { kind: "empty" };
+
+class FirebaseNodeRejection extends Error {}
+
+function isValidPriorityType(priority: unknown): boolean {
+  return (
+    priority === null ||
+    typeof priority === "string" ||
+    typeof priority === "number" ||
+    (isObject(priority) && hasOwn(priority, ".sv"))
+  );
+}
+
+/** Mirrors validatePriorityNode, run by the LeafNode/ChildrenNode constructors. */
+function validatedPriorityNode(priorityNode: SimulatedNode): SimulatedNode {
+  if (priorityNode.kind === "children") {
+    throw new FirebaseNodeRejection(`contains a ".priority" that is not a leaf value.`);
+  }
+  if (priorityNode.kind === "leaf") {
+    const value = priorityNode.value;
+    if (!(typeof value === "string" || typeof value === "number" || (isObject(value) && hasOwn(value, ".sv")))) {
+      throw new FirebaseNodeRejection(`contains a ".priority" whose value is not a string or number.`);
+    }
+    if (priorityNode.priority.kind !== "empty") {
+      throw new FirebaseNodeRejection(`contains a ".priority" that has a priority of its own.`);
+    }
+  }
+  return priorityNode;
+}
+
+/** Mirrors nodeFromJSON(json, priority). */
+function simulateNodeFromJSON(json: unknown, priority: unknown = null): SimulatedNode {
+  if (json === null) return EMPTY_NODE;
+  if (isObject(json) && hasOwn(json, ".priority")) priority = json[".priority"];
+  if (!isValidPriorityType(priority)) {
+    throw new FirebaseNodeRejection(`contains a ".priority" of invalid type (${typeof priority}); Firebase priorities must be a string, number, server value, or null.`);
+  }
+  if (isObject(json) && hasOwn(json, ".value") && json[".value"] !== null) json = json[".value"];
+  if (!isObject(json) || hasOwn(json, ".sv")) {
+    return { kind: "leaf", value: json, priority: validatedPriorityNode(simulateNodeFromJSON(priority)) };
+  }
+  const children: SimulatedNode[] = [];
+  for (const [key, child] of Object.entries(json)) {
+    if (key.startsWith(".")) continue; // metadata keys are never children
+    const childNode = simulateNodeFromJSON(child);
+    if (childNode.kind !== "empty") children.push(childNode);
+  }
+  if (Array.isArray(json)) {
+    // Array branch: `node.updatePriority(nodeFromJSON(priority))` builds the
+    // priority node unconditionally; updatePriority on an empty node then
+    // returns it unchanged without validating.
+    const priorityNode = simulateNodeFromJSON(priority);
+    if (children.length === 0) return EMPTY_NODE;
+    return { kind: "children", children, priority: validatedPriorityNode(priorityNode) };
+  }
+  if (children.length === 0) return EMPTY_NODE;
+  return { kind: "children", children, priority: validatedPriorityNode(simulateNodeFromJSON(priority)) };
+}
+
+/** Mirrors resolveDeferredLeafValue and the scalar/complex resolvers it calls. */
+function resolveDeferredLeafValue(value: unknown): void {
+  if (!value || typeof value !== "object") return;
+  if (!hasOwn(value, ".sv")) {
+    throw new FirebaseNodeRejection(`contains unexpected leaf or priority contents.`);
+  }
+  const op = (value as Record<string, unknown>)[".sv"];
+  if (typeof op === "string") {
+    if (op === "timestamp") return;
+  } else if (isObject(op)) {
+    if (hasOwn(op, "increment") && typeof op.increment === "number") return;
+  }
+  // Includes `.sv: null`: resolveComplexDeferredValue's null.hasOwnProperty TypeError.
+  throw new FirebaseNodeRejection(`contains a ".sv" server value Firebase does not support.`);
+}
+
+/** Mirrors resolveDeferredValue over the tree nodeFromJSON actually built. */
+function resolveDeferredValues(node: SimulatedNode): void {
+  if (node.kind === "empty") return; // EMPTY_NODE: null priority, no value, no children
+  resolveDeferredLeafValue(node.priority.kind === "leaf" ? node.priority.value : null);
+  if (node.kind === "leaf") {
+    resolveDeferredLeafValue(node.value);
+  } else {
+    node.children.forEach(resolveDeferredValues);
+  }
+}
+
+function checkNodeConstruction(value: unknown): string | null {
+  try {
+    resolveDeferredValues(simulateNodeFromJSON(value));
+    return null;
+  } catch (error) {
+    if (error instanceof FirebaseNodeRejection) return error.message;
+    throw error;
+  }
+}
+
+/**
  * Would the real Firebase RTDB SDK accept `value` written to the real
  * destination `basePathSegments` names? `basePathSegments` is the
  * production write path's own segments (e.g. `["lobbies", code,
@@ -225,6 +371,7 @@ export function validateFirebaseWritableValue(
   value: unknown,
   basePathSegments: readonly string[]
 ): FirebaseWriteValidationResult {
-  const message = check(value, initialPathState(basePathSegments));
+  // Same order as update(): validateFirebaseData first, then node construction.
+  const message = check(value, initialPathState(basePathSegments)) ?? checkNodeConstruction(value);
   return message ? { ok: false, message } : { ok: true };
 }
