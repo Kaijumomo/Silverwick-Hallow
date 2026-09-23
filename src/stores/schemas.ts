@@ -184,6 +184,22 @@ export const HistoryChangeSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("removed"), item: z.record(z.string(), z.unknown()) }),
 ]);
 
+/**
+ * Phase 9R.2 (Luna remediation): the participant-source identity contract an
+ * Effect/Reminder snapshot stored inside History must obey -- exactly the
+ * live EffectRecord/ReminderRecord's own source rules, picked from the
+ * canonical schemas rather than hand-duplicated: a retired `sourcePlayer`
+ * is rejected, and a present `sourceParticipant` must be a valid
+ * ParticipantRef. Deliberately ONLY the identity fields: HistoryChange's
+ * `item` stays a generic snapshot otherwise (Section 11 -- no tightening of
+ * unrelated snapshot fields), and `z.object`'s default unknown-key handling
+ * means every other key is simply not judged here.
+ */
+const HISTORY_SNAPSHOT_SOURCE_CONTRACT: Partial<Record<z.infer<typeof HistoryCategorySchema>, z.ZodTypeAny>> = {
+  effect: EffectRecordSchema.pick({ sourceParticipant: true, sourcePlayer: true }),
+  reminder: ReminderRecordSchema.pick({ sourceParticipant: true, sourcePlayer: true }),
+};
+
 export const HistoryRecordSchema = z.object({
   id: z.string().min(1),
   category: HistoryCategorySchema,
@@ -193,6 +209,23 @@ export const HistoryRecordSchema = z.object({
   change: HistoryChangeSchema,
   provenance: ProvenanceSchema.optional(),
   note: z.string().optional(),
+}).superRefine((record, ctx) => {
+  // An already-v17 record is never migrated again (detectLegacyGameVersion /
+  // STORE_VERSION), so a stale v16-shaped source nested inside an
+  // added/removed Effect/Reminder snapshot must fail validation here rather
+  // than survive -- never silently stripped or converted.
+  if (record.change.kind === "value") return;
+  const contract = HISTORY_SNAPSHOT_SOURCE_CONTRACT[record.category];
+  if (!contract) return;
+  const checked = contract.safeParse(record.change.item);
+  if (checked.success) return;
+  for (const issue of checked.error.issues) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `${record.category} History snapshot: ${issue.message}`,
+      path: ["change", "item", ...issue.path],
+    });
+  }
 });
 
 // The non-Player Information Value variants are shared verbatim by the
