@@ -77,6 +77,7 @@
         "membershipRevocations": {
           ".read": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid",
           ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('writer/expiresAt').val() > now && newData.parent().child('writeGuard/token').val() === root.child('lobbies').child($code).child('writer/token').val() && (!root.child('lobbies').child($code).child('writeGuard').exists() || newData.parent().child('writeGuard/revision').val() > root.child('lobbies').child($code).child('writeGuard/revision').val())",
+          ".validate": "!newData.exists() || newData.hasChildren()",
           "$uid": {
             ".validate": "newData.hasChildren(['playerId','participantId','action'])",
             "playerId": {

@@ -953,6 +953,51 @@ describe("Firebase RTDB membership authorization", () => {
       expect((await ref(st, "rosterParticipants/" + alice + "/participantId").once("value")).val()).toBe("pt-alice-2");
     });
 
+    // Luna 9R.6 correction: the collection root itself must be a map (or
+    // absent). Child $uid validators never run for a write that replaces the
+    // whole root with a scalar, so without a root .validate a fenced writer
+    // could store e.g. "malformed" there -- which decodeMembershipRevocations
+    // then (correctly) rejects, blocking reconnect.
+    test.each([
+      ["a string", "malformed"],
+      ["an empty string", ""],
+      ["a number", 42],
+      ["zero", 0],
+      ["boolean true", true],
+      ["boolean false", false],
+    ])("a validly fenced Storyteller write cannot replace the collection root with %s", async (_label, scalar) => {
+      await seed();
+      await assertSucceeds(db(st).ref().update({ [path("membershipRevocations/" + alice)]: receipt, [path("writeGuard")]: { token: "fixture-writer", revision: 10 } }));
+      // Same session, active lease, matching writer token, strictly advancing
+      // revision -- only the root's shape is wrong.
+      await assertFails(db(st).ref().update({ [path("membershipRevocations")]: scalar as Json, [path("writeGuard")]: { token: "fixture-writer", revision: 11 } }));
+      expect((await ref(st, "membershipRevocations").once("value")).val()).toEqual({ [alice]: receipt });
+      expect((await ref(st, "writeGuard/revision").once("value")).val()).toBe(10);
+      // The same fenced write path still accepts the very next valid write.
+      await assertSucceeds(db(st).ref().update({ [path("membershipRevocations/" + bob)]: { ...receipt, playerId: "p-bob", participantId: "pt-bob-1" }, [path("writeGuard")]: { token: "fixture-writer", revision: 11 } }));
+    });
+
+    test("a validly fenced Storyteller write may set the root to a normal receipt map, and may delete it", async () => {
+      await seed();
+      const map = {
+        [alice]: receipt,
+        [bob]: { playerId: "p-bob", participantId: "pt-bob-1", action: "remove" },
+      };
+      await assertSucceeds(db(st).ref().update({ [path("membershipRevocations")]: map, [path("writeGuard")]: { token: "fixture-writer", revision: 10 } }));
+      expect((await ref(st, "membershipRevocations").once("value")).val()).toEqual(map);
+      // Child validation still applies inside a whole-root write.
+      await assertFails(db(st).ref().update({ [path("membershipRevocations")]: { [alice]: { ...receipt, extra: true } }, [path("writeGuard")]: { token: "fixture-writer", revision: 11 } }));
+      await assertFails(db(st).ref().update({ [path("membershipRevocations")]: { [alice]: "revoked" }, [path("writeGuard")]: { token: "fixture-writer", revision: 11 } }));
+      expect((await ref(st, "membershipRevocations").once("value")).val()).toEqual(map);
+      // Cleanup: deleting the whole collection through the fenced path.
+      await assertSucceeds(db(st).ref().update({ [path("membershipRevocations")]: null, [path("writeGuard")]: { token: "fixture-writer", revision: 11 } }));
+      expect((await ref(st, "membershipRevocations").once("value")).exists()).toBe(false);
+      // Deletion remains fenced: an unguarded delete is denied.
+      await assertSucceeds(db(st).ref().update({ [path("membershipRevocations")]: map, [path("writeGuard")]: { token: "fixture-writer", revision: 12 } }));
+      await assertFails(ref(st, "membershipRevocations").remove());
+      expect((await ref(st, "membershipRevocations").once("value")).val()).toEqual(map);
+    });
+
     test("ending the session through writer.close removes every receipt", async () => {
       await seed();
       await env.withSecurityRulesDisabled(async (ctx) => {
