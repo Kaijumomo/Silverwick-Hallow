@@ -1562,6 +1562,11 @@ export const useStorytellerStore = create<StorytellerStore>()(
       movePlayer: (id, direction) => {
         const { game, undoStack } = get();
         if (!game) return;
+        // Phase 9R.4 (Astra A): the target must be a real own player before
+        // seatOrder is consulted -- a recovered seatOrder may carry a string
+        // with no player record behind it, and moving it would reorder
+        // authoritative seats for nobody.
+        if (!ownPlayer(game, id)) return;
         const order = [...game.seatOrder];
         const i = order.indexOf(id);
         if (i < 0) return;

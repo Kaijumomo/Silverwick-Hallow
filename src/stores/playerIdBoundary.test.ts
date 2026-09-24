@@ -195,6 +195,71 @@ describe("Phase 9R.4 (B8 remediation): inherited names inside a caller-supplied 
 });
 
 // ---------------------------------------------------------------------------
+// Phase 9R.4 (Astra A): movePlayer() must prove its target is a real own
+// player BEFORE consulting seatOrder. A recovered seatOrder can already
+// carry a string with no player record behind it (repairing that is a
+// separate, out-of-scope recovery package); moving such a string must be
+// inert rather than reordering authoritative seats.
+// ---------------------------------------------------------------------------
+describe.each([["Setup", setupFixture], ["Live Play", liveFixture]] as const)(
+  "Phase 9R.4 (Astra A): movePlayer ignores a seatOrder entry with no own player record -- %s",
+  (_phase, fixture) => {
+    /** Malformed recovered state: `bad` sits at index 3 of seatOrder, with
+     * real neighbours on both sides, but has no own player record. */
+    function malformed(bad: string) {
+      fixture();
+      const order = [...game().seatOrder];
+      order.splice(3, 0, bad);
+      store.setState({ game: { ...game(), seatOrder: order } });
+      expect(own(bad)).toBe(false);
+    }
+
+    it.each(["missing-player", ...INHERITED])("movePlayer(%j, left/right) is completely inert", (bad) => {
+      malformed(bad);
+      const order = [...game().seatOrder];
+      const seatsBefore = seats();
+      const before = baseline();
+      state().movePlayer(bad, "left");
+      state().movePlayer(bad, "right");
+      expectInert(before, bad);
+      expect(game().seatOrder).toEqual(order);
+      expect(seats()).toEqual(seatsBefore);
+    });
+
+    it("contrast: moving a genuine player in that same malformed order still mutates exactly once", () => {
+      malformed("missing-player");
+      const [a, b] = game().seatOrder;
+      const before = baseline();
+      state().movePlayer(a!, "right");
+      expectOneMutation(before);
+      expect(game().seatOrder.slice(0, 2)).toEqual([b, a]);
+      game().seatOrder.forEach((id, idx) => { if (own(id)) expect(player(id).seat).toBe(idx); });
+    });
+
+    it("contrast: a genuine move in a well-formed order swaps neighbours and renumbers every seat", () => {
+      fixture();
+      const order = [...game().seatOrder];
+      const before = baseline();
+      state().movePlayer(order[4]!, "left");
+      expectOneMutation(before);
+      [order[3], order[4]] = [order[4]!, order[3]!];
+      expect(game().seatOrder).toEqual(order);
+      order.forEach((id, idx) => expect(player(id).seat).toBe(idx));
+    });
+
+    it("a real own player that is not in seatOrder stays inert (existing behavior)", () => {
+      fixture();
+      const stray = { ...player(game().seatOrder[1]!), id: "stray", seat: 99 };
+      store.setState({ game: { ...game(), players: { ...game().players, stray } } });
+      const before = baseline();
+      state().movePlayer("stray", "left");
+      state().movePlayer("stray", "right");
+      expectInert(before, "missing-player");
+    });
+  },
+);
+
+// ---------------------------------------------------------------------------
 // Phase 9R.4 (B8 remediation #2): setSeatOrder() only REORDERS. Its input
 // must be an exact permutation of the current authoritative seat ids; any
 // other order is rejected before renumbering, Undo, or set().

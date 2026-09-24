@@ -180,11 +180,36 @@ export function recordIfLive(
   return { ...updatedGame, history: [...updatedGame.history, record] };
 }
 
-/** Structured-equality check for the small, plain-JSON item snapshots
- * history stores (an effect, a reminder). Good enough for these shapes;
- * mirrors the codebase's existing JSON-based clone fallback. */
+/** Structured-equality check for the small, plain-JSON snapshots commands
+ * compare to detect a true no-op (an effect, a reminder, private info, a
+ * Traveler arrival, one player record).
+ *
+ * Phase 9R.4 (Astra B): semantic, not textual. Comparing JSON.stringify()
+ * output made the same record with its properties inserted in a different
+ * order read as a change -- a needless Undo entry, localSeq step and
+ * duplicate History event. Now:
+ *  - primitives compare by value;
+ *  - arrays compare position by position (order stays significant);
+ *  - objects compare their OWN enumerable keys regardless of insertion
+ *    order, recursively; inherited members are never inspected;
+ *  - an `undefined`-valued property counts as absent, exactly as it did
+ *    under JSON -- the persisted "absent means unresolved" convention that
+ *    callers rely on (e.g. `{ ...next, packetEpoch: existing.packetEpoch }`
+ *    when `existing` has no packetEpoch). */
 export function sameSnapshot(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((item, i) => sameSnapshot(item, b[i]));
+  }
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const present = (o: Record<string, unknown>) => Object.keys(o).filter((key) => o[key] !== undefined);
+  const leftKeys = present(left);
+  if (leftKeys.length !== present(right).length) return false;
+  return leftKeys.every((key) =>
+    Object.prototype.hasOwnProperty.call(right, key) && sameSnapshot(left[key], right[key]));
 }
 
 /**
