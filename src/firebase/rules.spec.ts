@@ -448,7 +448,7 @@ describe("Firebase RTDB membership authorization", () => {
     await seed();
     await assertSucceeds(ref(alice, "leaveRequests/" + alice).set(true));
 
-    await acceptLeaveRequest(backend(st), code, alice, () => true);
+    await acceptLeaveRequest(backend(st), code, alice, () => ({ action: "unseat", occupant: () => null, commit: () => true }));
 
     expect((await ref(st, "roster/" + alice).once("value")).exists()).toBe(false);
     expect((await ref(st, "leaveRequests/" + alice).once("value")).exists()).toBe(false);
@@ -875,6 +875,96 @@ describe("Firebase RTDB membership authorization", () => {
         await writer.start();
         await writer.close(["p-alice"]);
         expect((await ref(st, "rosterParticipants").once("value")).exists()).toBe(false);
+      } finally { await writer.dispose(); }
+    });
+  });
+
+  describe("Phase 9R.6: membershipRevocations (Storyteller-only revocation receipt)", () => {
+    const receipt = { playerId: "p-alice", participantId: "pt-alice-1", action: "unseat" };
+    const display = "uid-display";
+    const displayToken = "D".repeat(43);
+    const aliceCompletion = (action: "unseat" | "remove", occupant: string | null) =>
+      ({ action, occupant: () => occupant, commit: () => true });
+    async function seedWithDisplay() {
+      await seed();
+      await env.withSecurityRulesDisabled(async (ctx) => {
+        await ctx.database().ref(path("displayAccess")).set({ version: 1, sessionId: "test-session", token: displayToken });
+        await ctx.database().ref(path("displayMembers/" + display)).set(displayToken);
+        await ctx.database().ref(path("rosterParticipants/" + alice)).set({ playerId: "p-alice", participantId: "pt-alice-1", name: "Alice" });
+      });
+    }
+
+    test("the revocation writes the receipt in the same guarded update; only the Storyteller can read it", async () => {
+      await seedWithDisplay();
+      await assertSucceeds(ref(display, "public").once("value")); // the display is genuinely authorized
+      expect(await revokePlayerMembership(backend(st), code, "p-alice", aliceCompletion("unseat", "pt-alice-1"))).toEqual({ uid: alice });
+      expect((await ref(st, "roster/" + alice).once("value")).exists()).toBe(false);
+      expect((await ref(st, "rosterParticipants/" + alice).once("value")).exists()).toBe(false);
+      expect((await ref(st, "player/p-alice").once("value")).exists()).toBe(false);
+      expect((await ref(st, "outcomes/" + alice).once("value")).val()).toBe("revoked");
+      expect((await ref(st, "membershipRevocations/" + alice).once("value")).val()).toEqual(receipt);
+      // The player-facing outcome contract is unchanged.
+      await assertSucceeds(ref(alice, "outcomes/" + alice).once("value"));
+      for (const reader of [alice, bob, display, "uid-stranger"]) {
+        await assertFails(ref(reader, "membershipRevocations/" + alice).once("value"));
+        await assertFails(ref(reader, "membershipRevocations").once("value"));
+      }
+    });
+
+    test("a remove records action 'remove'; a legacy record-less binding records the local occupant", async () => {
+      await seedWithDisplay();
+      await env.withSecurityRulesDisabled(async (ctx) => { await ctx.database().ref(path("rosterParticipants/" + alice)).remove(); });
+      await revokePlayerMembership(backend(st), code, "p-alice", aliceCompletion("remove", "pt-local-occupant"));
+      expect((await ref(st, "membershipRevocations/" + alice).once("value")).val())
+        .toEqual({ playerId: "p-alice", participantId: "pt-local-occupant", action: "remove" });
+    });
+
+    test("players and displays cannot write receipts; an unguarded or stale-revision Storyteller write is denied; malformed receipts are denied even when guarded", async () => {
+      await seedWithDisplay();
+      for (const writer of [alice, bob, display]) await assertFails(ref(writer, "membershipRevocations/" + alice).set(receipt));
+      await assertFails(ref(st, "membershipRevocations/" + alice).set(receipt)); // no writeGuard
+      await assertFails(db(st).ref().update({ [path("membershipRevocations/" + alice)]: receipt, [path("writeGuard")]: { token: "fixture-writer", revision: 0 } }));
+      await assertFails(db(st).ref().update({ [path("membershipRevocations/" + alice)]: receipt, [path("writeGuard")]: { token: "foreign-writer", revision: 50 } }));
+      const guarded = backend(st);
+      for (const bad of [
+        { ...receipt, extra: true },
+        { ...receipt, role: "imp" },
+        { playerId: "p-alice", participantId: "pt-alice-1" },
+        { ...receipt, action: "kick" },
+        { ...receipt, action: "" },
+        { ...receipt, participantId: "" },
+        { ...receipt, playerId: "" },
+        { ...receipt, playerId: 7 },
+        "revoked",
+      ]) {
+        await expect(guarded.update({ [path("membershipRevocations/" + alice)]: bad as unknown as Json })).rejects.toThrow(/permission[_ ]denied/i);
+      }
+      await assertSucceeds(db(st).ref().update({ [path("membershipRevocations/" + alice)]: receipt, [path("writeGuard")]: { token: "fixture-writer", revision: 99 } }));
+    });
+
+    test("a contradicted revocation writes nothing; seating the UID again retires its receipt atomically", async () => {
+      await seedWithDisplay();
+      await expect(revokePlayerMembership(backend(st), code, "p-alice", aliceCompletion("unseat", "pt-someone-else"))).rejects.toThrow(/participant/);
+      expect((await ref(st, "roster/" + alice).once("value")).val()).toBe("p-alice");
+      expect((await ref(st, "membershipRevocations/" + alice).once("value")).exists()).toBe(false);
+      await revokePlayerMembership(backend(st), code, "p-alice", aliceCompletion("unseat", "pt-alice-1"));
+      await seatPlayer(backend(st), code, alice, "p-alice", null, { participantId: "pt-alice-2", name: "Alice" });
+      expect((await ref(st, "membershipRevocations/" + alice).once("value")).exists()).toBe(false);
+      expect((await ref(st, "rosterParticipants/" + alice + "/participantId").once("value")).val()).toBe("pt-alice-2");
+    });
+
+    test("ending the session through writer.close removes every receipt", async () => {
+      await seed();
+      await env.withSecurityRulesDisabled(async (ctx) => {
+        await ctx.database().ref(path("membershipRevocations/" + alice)).set(receipt);
+        await ctx.database().ref(path("writer/expiresAt")).set(0);
+      });
+      const raw = new FirebaseRoomBackend(db(st) as unknown as Database);
+      const writer = new SessionWriter(raw, code, "test-session");
+      try {
+        await writer.start();
+        await writer.close(["p-alice"]);
+        expect((await ref(st, "membershipRevocations").once("value")).exists()).toBe(false);
       } finally { await writer.dispose(); }
     });
   });

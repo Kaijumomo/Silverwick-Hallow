@@ -14,7 +14,7 @@ import {
   revokePlayerMembership,
   seatPlayer,
 } from "./lobby";
-import { acceptLeaveRequest, applyTravelerChoice, rejectLeaveRequest, revokePlayerAndCommit, seatPlayerAndCommit } from "./membershipCommands";
+import { acceptLeaveRequest, applyTravelerChoice, rejectLeaveRequest, revokePlayerAndCommit, seatPlayerAndCommit, storytellerOccupancyCompletion } from "./membershipCommands";
 import { usePlayerSync } from "./playerSync";
 
 class FailingUpdateBackend extends MemoryRoomBackend {
@@ -110,9 +110,7 @@ describe("membership commands", () => {
     );
     await backend.set(playerPath("ROOM", playerId), { shownRole: "chef", shownAlignment: "good" });
 
-    await revokePlayerAndCommit(backend, "ROOM", playerId, () =>
-      useStorytellerStore.getState().unseatPlayer(playerId),
-    );
+    await revokePlayerAndCommit(backend, "ROOM", playerId, storytellerOccupancyCompletion("unseat", playerId));
 
     expect(await backend.get(rosterEntryPath("ROOM", uid))).toBeUndefined();
     expect(await backend.get(playerPath("ROOM", playerId))).toBeUndefined();
@@ -127,9 +125,7 @@ describe("membership commands", () => {
     );
     await backend.set(playerPath("ROOM", playerId), { shownRole: "chef", shownAlignment: "good" });
 
-    await revokePlayerAndCommit(backend, "ROOM", playerId, () =>
-      useStorytellerStore.getState().removePlayer(playerId),
-    );
+    await revokePlayerAndCommit(backend, "ROOM", playerId, storytellerOccupancyCompletion("remove", playerId));
     await expect(revokePlayerMembership(backend, "ROOM", playerId)).resolves.toEqual({ uid: null });
 
     expect(await backend.get(rosterEntryPath("ROOM", uid))).toBeUndefined();
@@ -150,14 +146,10 @@ describe("membership commands", () => {
       },
     });
 
-    await expect(revokePlayerAndCommit(backend, "ROOM", playerId, () =>
-      useStorytellerStore.getState().unseatPlayer(playerId),
-    )).rejects.toThrow("offline");
+    await expect(revokePlayerAndCommit(backend, "ROOM", playerId, storytellerOccupancyCompletion("unseat", playerId))).rejects.toThrow("offline");
     expect(useStorytellerStore.getState().game!.players[playerId]!.isEmpty).toBe(false);
 
-    await expect(revokePlayerAndCommit(backend, "ROOM", playerId, () =>
-      useStorytellerStore.getState().removePlayer(playerId),
-    )).rejects.toThrow("offline");
+    await expect(revokePlayerAndCommit(backend, "ROOM", playerId, storytellerOccupancyCompletion("remove", playerId))).rejects.toThrow("offline");
     expect(useStorytellerStore.getState().game!.players[playerId]).toBeDefined();
   });
 
@@ -213,7 +205,7 @@ describe("membership commands", () => {
     await backend.set(playerPath("ROOM", playerId), { shownRole: "chef", shownAlignment: "good" });
     await backend.set(leavePath("ROOM", uid), true);
 
-    await acceptLeaveRequest(backend, "ROOM", uid, (pid) => useStorytellerStore.getState().unseatPlayer(pid));
+    await acceptLeaveRequest(backend, "ROOM", uid, (pid) => storytellerOccupancyCompletion("unseat", pid));
 
     expect(await backend.get(rosterEntryPath("ROOM", uid))).toBeUndefined();
     expect(await backend.get(playerPath("ROOM", playerId))).toBeUndefined();
@@ -241,7 +233,7 @@ describe("membership commands", () => {
     // whatever a caller might otherwise have assumed (firstSeat).
     await backend.set(rosterEntryPath("ROOM", uid), secondSeat);
 
-    await acceptLeaveRequest(backend, "ROOM", uid, (pid) => useStorytellerStore.getState().unseatPlayer(pid));
+    await acceptLeaveRequest(backend, "ROOM", uid, (pid) => storytellerOccupancyCompletion("unseat", pid));
 
     // The CURRENT (re-resolved) binding was revoked/unseated...
     expect(await backend.get(rosterEntryPath("ROOM", uid))).toBeUndefined();
@@ -257,7 +249,7 @@ describe("membership commands", () => {
     await backend.set(leavePath("ROOM", "uid-ghost"), true);
     let commitLocalCalled = false;
 
-    await acceptLeaveRequest(backend, "ROOM", "uid-ghost", () => { commitLocalCalled = true; return true; });
+    await acceptLeaveRequest(backend, "ROOM", "uid-ghost", (pid) => { commitLocalCalled = true; return storytellerOccupancyCompletion("unseat", pid); });
 
     expect(commitLocalCalled).toBe(false);
     expect(await backend.get(leavePath("ROOM", "uid-ghost"))).toBeUndefined();
@@ -273,7 +265,7 @@ describe("membership commands", () => {
       useStorytellerStore.getState().assignPendingToSeat(uid, playerId),
     );
     await backend.set(leavePath("ROOM", uid), true);
-    const commitLocal = (pid: string) => useStorytellerStore.getState().unseatPlayer(pid);
+    const commitLocal = (pid: string) => storytellerOccupancyCompletion("unseat", pid);
 
     await acceptLeaveRequest(backend, "ROOM", uid, commitLocal);
     expect(useStorytellerStore.getState().game!.players[playerId]!.isEmpty).toBe(true);
@@ -296,7 +288,7 @@ describe("membership commands", () => {
     });
 
     await expect(
-      acceptLeaveRequest(backend, "ROOM", uid, (pid) => useStorytellerStore.getState().unseatPlayer(pid)),
+      acceptLeaveRequest(backend, "ROOM", uid, (pid) => storytellerOccupancyCompletion("unseat", pid)),
     ).rejects.toThrow("offline");
     expect(useStorytellerStore.getState().game!.players[playerId]!.isEmpty).toBe(false);
   });

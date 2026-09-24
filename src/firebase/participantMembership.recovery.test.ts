@@ -27,7 +27,7 @@ import { createLobby, knockOnLobby, revokePlayerMembership, seatPlayer } from ".
 import { requireActiveSession } from "./lifecycle";
 import { SessionWriter } from "./writer";
 import { resolveReconnectConflict, startStorytellerSession, useSessionRuntime } from "./storytellerSync";
-import { revokePlayerAndCommit, seatPlayerAndCommit } from "./membershipCommands";
+import { revokePlayerAndCommit, seatPlayerAndCommit, storytellerOccupancyCompletion } from "./membershipCommands";
 import { startPlayerHandshake } from "./playerSync";
 import { writeProjections } from "./sync";
 import { buildRegistry } from "@/data/roleRegistry";
@@ -177,7 +177,7 @@ describe("R1-A: single reuse -- A leaves p1, B is seated at p1, the recoverable 
     const { p1, PA, carol, aliceHistory, aliceDelivery } = await device1WithAlice(b, sessionId, lobby);
 
     const w2 = await unflushedWriter(b, sessionId);
-    await revokePlayerAndCommit(w2, code, p1, () => store().unseatPlayer(p1));
+    await revokePlayerAndCommit(w2, code, p1, storytellerOccupancyCompletion("unseat", p1));
     await knock(b, "uid-bob", "Bob", false);
     const PB = await seatLikeProduction(w2, "uid-bob", p1);
     expect(PB).not.toBe(PA);
@@ -234,10 +234,10 @@ describe("R1-B: multiple generations on one PlayerId, checkpoint lagging an earl
     const { lobby, sessionId } = await openLobby(b);
     const { p1, PA, aliceHistory } = await device1WithAlice(b, sessionId, lobby);
     const w2 = await unflushedWriter(b, sessionId);
-    await revokePlayerAndCommit(w2, code, p1, () => store().unseatPlayer(p1));
+    await revokePlayerAndCommit(w2, code, p1, storytellerOccupancyCompletion("unseat", p1));
     await knock(b, "uid-bob", "Bob", false);
     const PB = await seatLikeProduction(w2, "uid-bob", p1);
-    await revokePlayerAndCommit(w2, code, p1, () => store().unseatPlayer(p1));
+    await revokePlayerAndCommit(w2, code, p1, storytellerOccupancyCompletion("unseat", p1));
     await knock(b, "uid-cara", "Cara", false);
     const PC = await seatLikeProduction(w2, "uid-cara", p1);
     await w2.dispose();
@@ -256,7 +256,7 @@ describe("R1-B: multiple generations on one PlayerId, checkpoint lagging an earl
     // Device 1b: a live session that DOES flush B's generation.
     const w2 = new SessionWriter(b, code, sessionId);
     const m2 = await startStorytellerSession(b, lobby, w2);
-    await revokePlayerAndCommit(w2, code, p1, () => store().unseatPlayer(p1));
+    await revokePlayerAndCommit(w2, code, p1, storytellerOccupancyCompletion("unseat", p1));
     await knock(b, "uid-bob", "Bob", true);
     const PB = await seatLikeProduction(w2, "uid-bob", p1);
     store().setStatus(p1, "drunk", true); // History about B
@@ -264,7 +264,7 @@ describe("R1-B: multiple generations on one PlayerId, checkpoint lagging an earl
     const bRecord = structuredClone(game().history.at(-1)!);
     m2.stop(); await w2.dispose();
     const w3 = await unflushedWriter(b, sessionId);
-    await revokePlayerAndCommit(w3, code, p1, () => store().unseatPlayer(p1));
+    await revokePlayerAndCommit(w3, code, p1, storytellerOccupancyCompletion("unseat", p1));
     await knock(b, "uid-cara", "Cara", false);
     const PC = await seatLikeProduction(w3, "uid-cara", p1);
     await w3.dispose();
@@ -294,9 +294,9 @@ describe("R1-C: several reused seats, interleaved -- no cross-binding", () => {
     m1.stop(); await w1.dispose();
 
     const w2 = await unflushedWriter(b, sessionId);
-    await revokePlayerAndCommit(w2, code, p1, () => store().unseatPlayer(p1));
+    await revokePlayerAndCommit(w2, code, p1, storytellerOccupancyCompletion("unseat", p1));
     await knock(b, "uid-bea", "Bea", false);
-    await revokePlayerAndCommit(w2, code, p2, () => store().unseatPlayer(p2));
+    await revokePlayerAndCommit(w2, code, p2, storytellerOccupancyCompletion("unseat", p2));
     const PBea = await seatLikeProduction(w2, "uid-bea", p2);
     await knock(b, "uid-yann", "Yann", false);
     const PYann = await seatLikeProduction(w2, "uid-yann", p1);
@@ -345,7 +345,7 @@ describe("R1-D: a later participant with the SAME display name", () => {
     const { lobby, sessionId } = await openLobby(b);
     const { p1, PA, aliceHistory } = await device1WithAlice(b, sessionId, lobby);
     const w2 = await unflushedWriter(b, sessionId);
-    await revokePlayerAndCommit(w2, code, p1, () => store().unseatPlayer(p1));
+    await revokePlayerAndCommit(w2, code, p1, storytellerOccupancyCompletion("unseat", p1));
     await knock(b, "uid-alice-2", "Alice", false);
     const PA2 = await seatLikeProduction(w2, "uid-alice-2", p1);
     await w2.dispose();
@@ -370,7 +370,7 @@ describe("R1-E: the SAME external UID seated again for a later participation ins
     const { lobby, sessionId } = await openLobby(b);
     const { p1, PA, aliceHistory } = await device1WithAlice(b, sessionId, lobby);
     const w2 = await unflushedWriter(b, sessionId);
-    await revokePlayerAndCommit(w2, code, p1, () => store().unseatPlayer(p1));
+    await revokePlayerAndCommit(w2, code, p1, storytellerOccupancyCompletion("unseat", p1));
     await knock(b, "uid-alice", "Alice", false);
     const PA2 = await seatLikeProduction(w2, "uid-alice", p1);
     expect(PA2).not.toBe(PA);

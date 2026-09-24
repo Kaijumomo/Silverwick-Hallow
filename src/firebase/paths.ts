@@ -12,6 +12,13 @@ export const rosterEntryPath = (code: string, uid: string) =>
 export const rosterParticipantsPath = (code: string) => `lobbies/${code}/rosterParticipants`;
 export const rosterParticipantPath = (code: string, uid: string) =>
   `lobbies/${code}/rosterParticipants/${uid}`;
+// Phase 9R.6: Storyteller-only durable receipt of a committed membership
+// revocation that still owes a local occupancy completion (unseat/remove),
+// naming the exact participation instance revoked. Written only in the same
+// multi-path update as the revocation itself. Never player-readable.
+export const membershipRevocationsPath = (code: string) => `lobbies/${code}/membershipRevocations`;
+export const membershipRevocationPath = (code: string, uid: string) =>
+  `lobbies/${code}/membershipRevocations/${uid}`;
 export const joinRequestsPath = (code: string) => `lobbies/${code}/joinRequests`;
 export const joinRequestPath = (code: string, uid: string) =>
   `lobbies/${code}/joinRequests/${uid}`;

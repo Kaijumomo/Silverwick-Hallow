@@ -12,6 +12,7 @@ roster entries are not evidence of valid membership.
 | `roster` | `watchRoster` | ST | No parent write |
 | `roster/{uid}` | `seatPlayer`, `revokeMembership`, player hook | ST or same UID | ST only; nonempty string player ID or deletion |
 | `rosterParticipants/{uid}` | `seatPlayer`, `revokeMembership`, `revokePlayerMembership`, `SessionWriter.close`, reconnect reconciliation (Phase 9R.2) | ST only — never the bound UID or any player/display | Fenced Storyteller writer only; exactly `{playerId, participantId, name}` (nonempty strings, name ≤ 20) or deletion |
+| `membershipRevocations/{uid}` | `revokePlayerMembership` (with a local completion: `revokePlayerAndCommit`, `acceptLeaveRequest`), cleared by `seatPlayer` and `SessionWriter.close`; read by reconnect reconciliation (Phase 9R.6) | ST only — never the revoked UID or any player/display | Fenced Storyteller writer only; exactly `{playerId, participantId, action}` (nonempty strings; action `unseat` or `remove`) or deletion |
 | `public` | Projections, player/public hooks | ST, own pending request, or own roster membership | ST only |
 | `player/{playerId}` | Projections, `seatPlayer`, player hook | ST or exact same-lobby UID→playerId binding | ST only |
 | `storyteller` | Projections | ST | ST only |

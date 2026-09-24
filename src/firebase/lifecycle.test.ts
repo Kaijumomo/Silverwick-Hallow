@@ -8,7 +8,7 @@ import { SessionWriter } from "./writer";
 import { applyJoinIntent, joinLobby, leaveLobby, startPlayerHandshake } from "./playerSync";
 import { reportRuntimeError, startStorytellerSession, useSessionRuntime, useStorytellerSync } from "./storytellerSync";
 import { lifecycleMessage, requireActiveSession, retryTransient, sessionPath } from "./lifecycle";
-import { acceptLeaveRequest, rejectLeaveRequest, revokePlayerAndCommit, seatPlayerAndCommit } from "./membershipCommands";
+import { acceptLeaveRequest, rejectLeaveRequest, revokePlayerAndCommit, seatPlayerAndCommit, storytellerOccupancyCompletion } from "./membershipCommands";
 
 const code = "BCDF2345";
 const root = `lobbies/${code}`;
@@ -106,7 +106,7 @@ describe("multiplayer lifecycle", () => {
     expect(await b.get(`${root}/player/${id}`)).toBeUndefined();
     store.getState().setShownRole(id, shown!);
     await waitFor(() => expect(usePlayerStore.getState().self?.shownRole).toBe(shown));
-    await revokePlayerAndCommit(replacement, code, id, () => store.getState().unseatPlayer(id));
+    await revokePlayerAndCommit(replacement, code, id, storytellerOccupancyCompletion("unseat", id));
     expect(await b.get(`${root}/player/${id}`)).toBeUndefined();
     await waitFor(() => expect(usePlayerStore.getState().self).toBeNull());
   });
@@ -540,7 +540,7 @@ describe("multiplayer lifecycle", () => {
     expect(await b.get(`${root}/roster/alice`)).toBe(id);
     expect(useStorytellerStore.getState().game!.players[id]!.isEmpty).toBe(false);
 
-    await acceptLeaveRequest(writer, code, "alice", playerId => useStorytellerStore.getState().unseatPlayer(playerId));
+    await acceptLeaveRequest(writer, code, "alice", (playerId) => storytellerOccupancyCompletion("unseat", playerId));
     await waitFor(() => expect(usePlayerStore.getState().status).toBe("revoked"));
     expect(await b.get(`${root}/roster/alice`)).toBeUndefined();
     expect(await b.get(`${root}/player/${id}`)).toBeUndefined();
@@ -608,7 +608,7 @@ describe("multiplayer lifecycle", () => {
     await joinLobby(b, code, "alice", "Alice");
     const id = await seat(writer);
     useStorytellerStore.getState().setAlive(id, false);
-    await revokePlayerAndCommit(writer, code, id, () => useStorytellerStore.getState().removePlayer(id));
+    await revokePlayerAndCommit(writer, code, id, storytellerOccupancyCompletion("remove", id));
     useStorytellerStore.getState().undo();
     expect(useStorytellerStore.getState().game!.players[id]).toBeUndefined();
     player(b);

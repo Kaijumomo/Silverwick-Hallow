@@ -13,7 +13,7 @@ import { buildRegistry } from "@/data/roleRegistry";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { publishPrivatePacket } from "./privatePacketCommands";
 import { usePacketDeliveryState } from "./packetDeliveryState";
-import { revokePlayerAndCommit } from "./membershipCommands";
+import { revokePlayerAndCommit, storytellerOccupancyCompletion } from "./membershipCommands";
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
 
 const code = "BCDF2345", root = `lobbies/${code}`;
@@ -144,7 +144,7 @@ describe("Phase 9B membership and private delivery", () => {
   });
   it("true departure revokes access and cannot silently restore old membership", async () => {
     const { b, id, writer, review } = await setup(); await publishPrivatePacket(id, review(), writer);
-    await revokePlayerAndCommit(writer, code, id, () => store.getState().removePlayer(id));
+    await revokePlayerAndCommit(writer, code, id, storytellerOccupancyCompletion("remove", id));
     expect(await b.get(`${root}/roster/alice`)).toBeUndefined();
     expect(await b.get(`${root}/player/${id}`)).toBeUndefined();
     usePlayerStore.getState().setSession({ code, uid: "alice", requestedName: "Traveler" });

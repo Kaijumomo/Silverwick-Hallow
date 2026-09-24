@@ -6,6 +6,7 @@ import {
   joinRequestPath,
   joinRequestsPath,
   lobbyStatusPath,
+  membershipRevocationPath,
   playerPath,
   rosterEntryPath,
   rosterParticipantPath,
@@ -15,7 +16,7 @@ import {
 } from "./paths";
 import type { ParticipantId, PlayerId, PlayerSelfRecord } from "@/stores/types";
 import { sessionPath, outcomePath, leavePath, LifecycleError } from "./lifecycle";
-import { decodeRosterEntry, decodeJoinRequests, decodeRoster, decodeLobbyStatus, reportSnapshotProblem, SnapshotValidationError, subscribeDecoded, DATA_ERROR_MESSAGE, CONNECTION_ERROR_MESSAGE } from "./snapshots";
+import { decodeRosterEntry, decodeRosterParticipant, decodeJoinRequests, decodeRoster, decodeLobbyStatus, reportSnapshotProblem, SnapshotValidationError, subscribeDecoded, DATA_ERROR_MESSAGE, CONNECTION_ERROR_MESSAGE } from "./snapshots";
 
 // Confusable-glyph-free alphabet (no 0/O, 1/I/L). 30 chars, ~656bn 8-char codes.
 const ALPHABET = "BCDFGHJKLMNPQRSTVWXYZ23456789";
@@ -169,6 +170,11 @@ export async function seatPlayer(
       : null,
     [joinRequestPath(code, uid)]: null,
     [outcomePath(code, uid)]: null,
+    // Phase 9R.6: seating this UID into a new participation instance
+    // retires any receipt of an earlier revocation of it, in this same
+    // update. (A stale receipt is inert anyway -- it only ever matches its
+    // own ParticipantId, and this seat gets a fresh one.)
+    [membershipRevocationPath(code, uid)]: null,
   };
   // An unrevealed seat must not retain an earlier occupant's projection.
   updates[playerPath(code, playerId)] = selfRecord as unknown as Json;
@@ -176,15 +182,46 @@ export async function seatPlayer(
 }
 
 /**
+ * Phase 9R.6: the local occupancy completion a Storyteller revocation owes.
+ * "unseat" keeps the seat/PlayerId as an empty seat (unseatPlayer); "remove"
+ * deletes the seat itself (removePlayer). Explicit, never inferred.
+ */
+export type RevocationAction = "unseat" | "remove";
+
+/**
+ * Phase 9R.6: what revokePlayerMembership needs to record a durable
+ * revocation receipt. `occupant` reads the ParticipantId currently occupying
+ * the seat in the Storyteller's local Current State (null when the seat is
+ * empty or absent); it is called synchronously immediately before the
+ * server commit, after every read, so it names exactly the participation
+ * instance the caller's local completion will end.
+ */
+export type RevocationCompletion = { action: RevocationAction; occupant: () => ParticipantId | null };
+
+/**
  * Revoke the UID bound to a local player seat and delete its private
  * projection in one Storyteller-authorized multi-path update. Repeating the
  * operation is safe: an already-absent binding still clears the stale private
  * path, if any.
+ *
+ * Phase 9R.6: when the caller owes a local occupancy completion
+ * (`completion`), the SAME update also writes membershipRevocations/{uid} =
+ * {playerId, participantId, action} -- durable proof, for a reconnect that
+ * finds the local completion never landed, of exactly which participation
+ * instance was revoked and how its seat must be completed. The
+ * ParticipantId comes from the binding's rosterParticipants record when one
+ * exists (it must name this seat, and must agree with the local occupant --
+ * a contradiction refuses the whole revocation before anything is written);
+ * for a legacy record-less binding, from the local occupant this very
+ * writer lineage is publishing to that binding. With neither, there is no
+ * participation instance to complete and no receipt is written. Never a
+ * name, UID, seat, or regenerated id.
  */
 export async function revokePlayerMembership(
   backend: RoomBackend,
   code: string,
   playerId: PlayerId,
+  completion: RevocationCompletion | null = null,
 ): Promise<{ uid: string | null }> {
   const bindings = await readRosterBindings(backend, code);
   const matches = Object.entries(bindings).filter(([, boundPlayerId]) => boundPlayerId === playerId);
@@ -200,6 +237,28 @@ export async function revokePlayerMembership(
     updates[rosterParticipantPath(code, uid)] = null;
     updates[outcomePath(code, uid)] = "revoked";
     updates[leavePath(code, uid)] = null;
+    if (completion) {
+      const record = decodeRosterParticipant(await backend.get(rosterParticipantPath(code, uid)));
+      if (record.status === "invalid") {
+        reportSnapshotProblem("roster participant", record.issues);
+        throw new SnapshotValidationError();
+      }
+      // Read last, synchronously, with no await before the commit below.
+      const occupant = completion.occupant();
+      let participantId: ParticipantId | null = occupant;
+      if (record.status === "ready") {
+        if (record.data.playerId !== playerId) {
+          throw new MembershipConflictError("This seat's membership record names a different seat. Reconnect before changing it.");
+        }
+        if (occupant !== null && occupant !== record.data.participantId) {
+          throw new MembershipConflictError("This seat's occupant is not the participant its membership record names. Reconnect before changing it.");
+        }
+        participantId = record.data.participantId;
+      }
+      if (participantId) {
+        updates[membershipRevocationPath(code, uid)] = { playerId, participantId, action: completion.action };
+      }
+    }
   }
   await backend.update(updates);
   return { uid };

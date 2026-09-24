@@ -326,6 +326,9 @@ export class SessionWriter implements RoomBackend {
         [sessionPath(this.code)]: { version: 2, id: this.sessionId, state: "ended" },
         [`${this.root}/public/status`]: "ended",
         [`${this.root}/roster`]: null, [`${this.root}/rosterParticipants`]: null, [`${this.root}/joinRequests`]: null,
+        // Phase 9R.6: an ended session can never be recovered, so its
+        // revocation receipts have nothing left to complete.
+        [`${this.root}/membershipRevocations`]: null,
         [`${this.root}/leaveRequests`]: null, [`${this.root}/player`]: null,
         [`${this.root}/storyteller`]: null, [`${this.root}/checkpoint`]: null,
       };

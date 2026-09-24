@@ -12,7 +12,7 @@ import { LORICS } from "@/data/lorics";
 import { connectFirebase } from "@/firebase/session";
 import { isFirebaseConfigured } from "@/firebase/config";
 import { createLobby, formatCode } from "@/firebase/lobby";
-import { acceptLeaveRequest, rejectLeaveRequest, revokePlayerAndCommit } from "@/firebase/membershipCommands";
+import { acceptLeaveRequest, rejectLeaveRequest, revokePlayerAndCommit, storytellerOccupancyCompletion, type OccupancyCompletion } from "@/firebase/membershipCommands";
 import { closeMultiplayerSession, useSessionRuntime } from "@/firebase/storytellerSync";
 import { ensurePublicDisplayAccess, rotatePublicDisplayAccess, buildPublicDisplayLink } from "@/firebase/publicDisplayAuth";
 import { FirebaseConfigDialog } from "@/features/firebase/FirebaseConfigDialog";
@@ -86,27 +86,29 @@ export function GameScreen() {
     window.setTimeout(() => setCopyToast(null), 1500);
   };
 
-  const revokeAndCommitPlayer = async (playerId: string, commitLocal: () => boolean) => {
+  const revokeAndCommitPlayer = async (playerId: string, completion: OccupancyCompletion) => {
     if (!lobby) {
-      commitLocal();
+      completion.commit();
       return;
     }
     if (!backend) {
       throw new Error("Firebase is reconnecting. The player was not changed locally.");
     }
     try {
-      await revokePlayerAndCommit(backend, lobby.code, playerId, commitLocal);
+      await revokePlayerAndCommit(backend, lobby.code, playerId, completion);
     } catch (e) {
       const friendly = friendlyFirebaseError(e, "st");
       throw new Error(`${friendly.title}: ${friendly.message}`);
     }
   };
 
+  // Phase 9R.6: the intended local completion is declared explicitly and
+  // recorded durably with the revocation, so recovery can finish exactly it.
   const removeSelectedPlayer = (playerId: string) =>
-    revokeAndCommitPlayer(playerId, () => useStorytellerStore.getState().removePlayer(playerId));
+    revokeAndCommitPlayer(playerId, storytellerOccupancyCompletion("remove", playerId));
 
   const unseatSelectedPlayer = (playerId: string) =>
-    revokeAndCommitPlayer(playerId, () => useStorytellerStore.getState().unseatPlayer(playerId));
+    revokeAndCommitPlayer(playerId, storytellerOccupancyCompletion("unseat", playerId));
 
   // Phase 9C.3 (OPUS-003): pending-departure surface. A stale error for a
   // uid whose request has since resolved (accepted, rejected, or otherwise
@@ -131,7 +133,7 @@ export function GameScreen() {
     setLeaveBusy(uid, true);
     setLeaveErrors(prev => { const { [uid]: _omit, ...rest } = prev; return rest; });
     try {
-      await acceptLeaveRequest(backend, lobby.code, uid, playerId => useStorytellerStore.getState().unseatPlayer(playerId));
+      await acceptLeaveRequest(backend, lobby.code, uid, playerId => storytellerOccupancyCompletion("unseat", playerId));
     } catch (e) {
       const friendly = friendlyFirebaseError(e, "st");
       setLeaveErrors(prev => ({ ...prev, [uid]: `${friendly.title}: ${friendly.message}` }));

@@ -1,9 +1,11 @@
-import type { PlayerSelfRecord, PlayerId, RoleId } from "@/stores/types";
+import type { ParticipantId, PlayerSelfRecord, PlayerId, RoleId } from "@/stores/types";
+import { useStorytellerStore } from "@/stores/storytellerStore";
 import type { RoomBackend } from "./backend";
 import {
   readRosterBindings,
   revokePlayerMembership,
   seatPlayer,
+  type RevocationAction,
   type SeatParticipant,
 } from "./lobby";
 import { leavePath, travelerChoicePath } from "./lifecycle";
@@ -51,18 +53,55 @@ export async function seatPlayerAndCommit(
   );
 }
 
-/** Revoke remote membership first, then apply the local removal/unseat. */
+/**
+ * Phase 9R.6: a Firebase-first revocation's local occupancy completion,
+ * with the Storyteller's intent made structural rather than inferred from
+ * whichever callback happens to run. `action` is recorded durably in the
+ * same server commit as the revocation (membershipRevocations/{uid}), so a
+ * reconnect that finds `commit` never ran completes exactly this action for
+ * exactly the participation instance `occupant` named -- never degrading a
+ * remove to an unseat, and never acting on a later occupant of the seat.
+ */
+export type OccupancyCompletion = {
+  action: RevocationAction;
+  /** The seat's current local occupant (null when empty/absent), read inside
+   * the writer's exclusive section immediately before the server commit. */
+  occupant: () => ParticipantId | null;
+  /** Applies `action` locally. Idempotent: false means another local event
+   * already reached the desired removed/unseated state. */
+  commit: () => boolean;
+};
+
+/** The production completion: `action` applied to the Storyteller store's
+ * own seat `playerId` through the existing unseatPlayer()/removePlayer()
+ * commands -- never a second local mutation path. */
+export function storytellerOccupancyCompletion(action: RevocationAction, playerId: PlayerId): OccupancyCompletion {
+  return {
+    action,
+    occupant: () => {
+      const game = useStorytellerStore.getState().game;
+      const seat = game && Object.prototype.hasOwnProperty.call(game.players, playerId) ? game.players[playerId] : undefined;
+      return seat && !seat.isEmpty && seat.participantId ? seat.participantId : null;
+    },
+    commit: () => action === "remove"
+      ? useStorytellerStore.getState().removePlayer(playerId)
+      : useStorytellerStore.getState().unseatPlayer(playerId),
+  };
+}
+
+/** Revoke remote membership first, then apply the local removal/unseat.
+ * Phase 9R.6: the revocation commit carries the durable receipt of
+ * `completion` (see revokePlayerMembership); a refused or failed server
+ * revocation never reaches `completion.commit`. */
 export async function revokePlayerAndCommit(
   backend: RoomBackend,
   code: string,
   playerId: PlayerId,
-  commitLocal: () => boolean,
+  completion: OccupancyCompletion,
 ): Promise<void> {
-  if (backend.runExclusive) return backend.runExclusive(inner => revokePlayerAndCommit(inner, code, playerId, commitLocal));
-  await revokePlayerMembership(backend, code, playerId);
-  // Both local mutations are idempotent: false means another local event
-  // already reached the desired removed/unseated state.
-  commitLocal();
+  if (backend.runExclusive) return backend.runExclusive(inner => revokePlayerAndCommit(inner, code, playerId, completion));
+  await revokePlayerMembership(backend, code, playerId, completion);
+  completion.commit();
 }
 
 /**
@@ -78,21 +117,29 @@ export async function revokePlayerAndCommit(
  * seat, never removed. When the uid no longer has a binding (it left, or
  * the request is otherwise stale), this is pure cleanup: only the leave
  * request is cleared, and no unrelated local seat is touched.
+ *
+ * Phase 9R.6: `completionFor` receives the freshly-resolved playerId. An
+ * accepted departure is always an unseat -- a completion declaring any
+ * other action is refused before anything is written.
  */
 export async function acceptLeaveRequest(
   backend: RoomBackend,
   code: string,
   uid: string,
-  commitLocal: (playerId: PlayerId) => boolean,
+  completionFor: (playerId: PlayerId) => OccupancyCompletion,
 ): Promise<void> {
-  if (backend.runExclusive) return backend.runExclusive(inner => acceptLeaveRequest(inner, code, uid, commitLocal));
+  if (backend.runExclusive) return backend.runExclusive(inner => acceptLeaveRequest(inner, code, uid, completionFor));
   const bindings = await readRosterBindings(backend, code);
   const playerId = bindings[uid];
   if (!playerId) {
     await backend.set(leavePath(code, uid), null);
     return;
   }
-  await revokePlayerAndCommit(backend, code, playerId, () => commitLocal(playerId));
+  const completion = completionFor(playerId);
+  if (completion.action !== "unseat") {
+    throw new MembershipOperationError("An accepted leave request only unseats the player; the seat itself is kept.");
+  }
+  await revokePlayerAndCommit(backend, code, playerId, completion);
 }
 
 /**

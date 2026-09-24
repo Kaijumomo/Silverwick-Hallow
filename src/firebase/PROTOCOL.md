@@ -33,6 +33,7 @@ authorization claim.
 | `joinRequests/{uid}` | Canonical 1–20 character name; own UID creates/cancels, Storyteller deletes; own UID and Storyteller read |
 | `roster/{uid}` | Storyteller-only authoritative UID → player ID binding; bound UID and Storyteller read |
 | `rosterParticipants/{uid}` | Storyteller-only `{playerId, participantId, name}`: the participation instance that binding seats (Phase 9R.2). Written and deleted only in the same update as `roster/{uid}`; owner reads, no player ever reads |
+| `membershipRevocations/{uid}` | Storyteller-only `{playerId, participantId, action: "unseat" \| "remove"}`: receipt of a committed Storyteller revocation that owes a local occupancy completion (Phase 9R.6). Written only in the same update as the revocation; cleared when that UID is seated again and at session close; owner reads, no player or display ever reads |
 | `outcomes/{uid}` | Storyteller records `rejected` or `revoked`; that UID reads its outcome |
 | `leaveRequests/{uid}` | A seated UID requests departure; that UID creates, Storyteller consumes |
 | `public` | Storyteller projection; active request holders and members may read |
@@ -90,7 +91,18 @@ a binding without a record falls back to the pending queue (a fresh
 participation instance) or revocation. A binding with no record (created
 before records existed) is accepted as proven only for a same-device
 reconnect whose writer guard shows no other writer has committed since this
-device's last acknowledged commit. The initial projection is acknowledged before the
+device's last acknowledged commit.
+
+Phase 9R.6: an explicit Storyteller unseat/remove (including an accepted
+leave request, always an unseat) writes `membershipRevocations/{uid}` in the
+same guarded update that revokes the binding, naming the exact ParticipantId
+revoked (from the binding's `rosterParticipants` record, or for a record-less
+binding the local occupant this writer lineage publishes to it) and the
+Storyteller's intended local completion. Reconnect -- automatic or explicit,
+KEEP_LOCAL or RESTORE -- completes that action before the initial flush, but
+only on a seat whose current occupant carries exactly that ParticipantId; a
+missing roster binding alone never unseats a locally typed player, and a
+later participant at the same player ID is never touched. The initial projection is acknowledged before the
 writer is exposed to UI controls. Thus an older local snapshot cannot overwrite
 newer remote membership or an ended session.
 

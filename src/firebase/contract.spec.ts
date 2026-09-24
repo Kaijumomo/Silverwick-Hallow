@@ -30,9 +30,10 @@ import { SessionWriter, LEASE_MS, FENCE_MARGIN_MS } from "./writer";
 import { writeProjections } from "./sync";
 import { createLobby, knockOnLobby, readRosterBindings, revokePlayerMembership, seatPlayer } from "./lobby";
 import { joinLobby, leaveLobby, startPlayerHandshake } from "./playerSync";
-import { acceptLeaveRequest, rejectLeaveRequest, revokePlayerAndCommit, seatPlayerAndCommit } from "./membershipCommands";
+import { acceptLeaveRequest, rejectLeaveRequest, revokePlayerAndCommit, seatPlayerAndCommit, storytellerOccupancyCompletion, type OccupancyCompletion } from "./membershipCommands";
 import { newParticipantId } from "@/stores/participants";
-import { playerPath, publicPath } from "./paths";
+import { membershipRevocationPath, playerPath, publicPath } from "./paths";
+import { decideReconnect } from "./reconnectDecision";
 import { reportRuntimeError, resolveReconnectConflict, startStorytellerSession, useSessionRuntime } from "./storytellerSync";
 import { lifecycleMessage, requireActiveSession } from "./lifecycle";
 import { friendlyFirebaseError } from "./errors";
@@ -1537,7 +1538,7 @@ describe("Phase 9R.2 R1-F: stale checkpoint + current membership, real enforced 
     const w2 = new SessionWriter(backendFor(st), code, session.id);
     disposals.push(() => w2.dispose());
     await w2.start();
-    await revokePlayerAndCommit(w2, code, p1, () => store().unseatPlayer(p1));
+    await revokePlayerAndCommit(w2, code, p1, storytellerOccupancyCompletion("unseat", p1));
     await knockOnLobby(backendFor(bobUid), code, bobUid, "Bob");
     store().addToPendingQueue(bobUid, "Bob"); // what the live join-request watcher calls
     const PB = await seatLikeProduction(w2, bobUid, p1);
@@ -1577,6 +1578,193 @@ describe("Phase 9R.2 R1-F: stale checkpoint + current membership, real enforced 
     const publicJson = JSON.stringify(await bobBackend.get(publicPath(code)));
     for (const leak of [PA, PB, "participant", "nameAtTime"]) expect(publicJson).not.toContain(leak);
   });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 9R.6 (Astra P1): an interrupted membership revocation must never be
+// resurrected by a KEEP_LOCAL reconnect -- proven with the production client
+// against emulator-enforced rules.json. The Storyteller's Firebase-first
+// unseat commits (with its Storyteller-only receipt, in the same guarded
+// update), then the process dies before the local unseatPlayer() lands; the
+// exact persisted image (the store's own persist partialization, round-
+// tripped through JSON) still holds Alice. Reconnect must complete her
+// departure before its initial flush, and a later fresh device must agree.
+// withSecurityRulesDisabled is used only to seed lease availability.
+// ---------------------------------------------------------------------------
+describe("Phase 9R.6 P1: interrupted revocation recovery, real client + enforced rules", () => {
+  const store = () => useStorytellerStore.getState();
+  class ProcessDied extends Error {}
+  const interrupted = (completion: OccupancyCompletion): OccupancyCompletion => ({
+    ...completion,
+    commit: () => { throw new ProcessDied("process died before the local completion"); },
+  });
+  type Game = { players: Record<string, { isEmpty: boolean; participantId?: string; name: string }>; seatOrder: string[]; history: unknown[] };
+
+  /** A live Storyteller device with Alice legitimately seated through the
+   * production seating path, four locally typed (never bound) players, a
+   * dealt/revealed Night 1 with History about Alice, Alice's real client
+   * holding her published packet, and a real authorized Public Display. */
+  async function liveGameWithAlice(code: string, st: string, alice: string, display: string) {
+    const stBackend = backendFor(st);
+    await createLobby(stBackend, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(stBackend, code);
+    const lobby = { code, uid: st, sessionId: session.id, status: "live" as const };
+    store().newGame("tb", { plannedPlayerCount: 5 });
+    store().setLobby(lobby);
+    const writer = new SessionWriter(stBackend, code, session.id);
+    disposals.push(() => writer.dispose());
+    const manager = await startStorytellerSession(stBackend, lobby, writer);
+    disposals.push(() => manager.stop());
+    const p1 = store().game!.seatOrder[0]!;
+    await knockOnLobby(backendFor(alice), code, alice, "Alice");
+    await vi.waitFor(() => expect(store().game!.pendingPlayers[alice]).toBe("Alice"), { timeout: 5000 });
+    const participant = { participantId: newParticipantId(), name: "Alice" };
+    await seatPlayerAndCommit(writer, code, alice, p1, null,
+      () => store().assignPendingToSeat(alice, p1, participant.participantId), participant);
+    const PA = participant.participantId;
+    for (const name of ["Carol", "Dave", "Eve", "Frank"]) store().addPlayerToSeat(name);
+    store().setRolePool(["washerwoman", "librarian", "chef", "poisoner", "imp"]);
+    expect(store().dealRolePool().ok).toBe(true);
+    const holder = Object.values(store().game!.players).find((p) => p.actualRole === "washerwoman")!.id;
+    if (holder !== p1) expect(store().swapSetupRoles(p1, holder).ok).toBe(true);
+    for (const id of store().game!.seatOrder) store().showAssignedRole(id);
+    expect(store().revealRoles().ok).toBe(true);
+    expect(store().beginNightOne().ok).toBe(true);
+    store().setStatus(p1, "poisoned", true);
+    const token = await ensurePublicDisplayAccess(writer, code, session.id);
+    const displayBackend = backendFor(display);
+    await authorizePublicDisplay(displayBackend, code, display, token);
+    await vi.waitFor(async () => {
+      const g = JSON.parse(await stBackend.get(`lobbies/${code}/checkpoint`) as string).game as Game;
+      expect(g.players[p1]!.participantId).toBe(PA);
+      expect(g.history).toHaveLength(1);
+      expect(store().localSeq).toBe(store().sync!.ackedGameSeq);
+    }, { timeout: 8000, interval: 100 });
+    const aliceBackend = backendFor(alice);
+    usePlayerStore.getState().setSession({ code, uid: alice, requestedName: "Alice" });
+    disposals.push(startPlayerHandshake(aliceBackend, code, alice));
+    await waitForPlayer(s => s.status === "seated" && s.playerId === p1 && s.self?.shownRole === "washerwoman", "Alice seated with her packet");
+    const unbound = Object.fromEntries(store().game!.seatOrder.slice(1).map((id) => [id, structuredClone(store().game!.players[id]!)]));
+    return { stBackend, session, lobby, writer, manager, p1, PA, unbound, displayBackend, history: structuredClone(store().game!.history) };
+  }
+
+  /** The crashed tab reopening: exactly the fields the store persists (its
+   * persist partialization; this node environment has no localStorage, so
+   * the image is round-tripped through JSON here -- the jsdom suite
+   * revocationRecovery.test.ts covers the real localStorage reload). */
+  function reloadPersistedImage() {
+    const { game, view, undoStack, customScripts, lobby, grimoireMode, tokenPositions, localSeq, sync } = store();
+    const image = JSON.stringify({ game, view, undoStack, customScripts, lobby, grimoireMode, tokenPositions, localSeq, sync });
+    useStorytellerStore.setState({ game: null, lobby: null, undoStack: [], sync: null, localSeq: 0, selectedPlayerId: null });
+    useStorytellerStore.setState(JSON.parse(image));
+  }
+
+  async function reconnectCapturingInitialFlush(code: string, st: string, lobby: { code: string; uid: string; sessionId: string; status: "live" }) {
+    await forceLeaseExpiry(code);
+    const backend = backendFor(st);
+    const original = backend.update.bind(backend);
+    const flushes: Record<string, unknown>[] = [];
+    backend.update = async updates => {
+      if (`lobbies/${code}/checkpoint` in updates) flushes.push(structuredClone(updates));
+      return original(updates);
+    };
+    const writer = new SessionWriter(backend, code, lobby.sessionId);
+    disposals.push(() => writer.dispose());
+    const manager = await startStorytellerSession(backend, lobby, writer);
+    disposals.push(() => manager.stop());
+    backend.update = original;
+    expect(manager.outcome).toBe("live");
+    return { initialFlush: flushes[0]!, stop: async () => { manager.stop(); await writer.dispose(); } };
+  }
+
+  async function expectRecoveredWithoutResurrection(code: string, st: string, alice: string, display: string,
+    live: Awaited<ReturnType<typeof liveGameWithAlice>>, expectedDecision: object) {
+    const { p1, PA } = live;
+    // The receipt: Storyteller-readable; the revoked player, the Public
+    // Display, and an unrelated authenticated client are all denied.
+    expect(await live.stBackend.get(membershipRevocationPath(code, alice))).toEqual({ playerId: p1, participantId: PA, action: "unseat" });
+    await assertFails(env.authenticatedContext(alice).database().ref(membershipRevocationPath(code, alice)).once("value"));
+    await assertFails(env.authenticatedContext(alice).database().ref(`lobbies/${code}/membershipRevocations`).once("value"));
+    await assertFails(env.authenticatedContext(display).database().ref(membershipRevocationPath(code, alice)).once("value"));
+    await assertFails(env.authenticatedContext("p1r6-stranger").database().ref(`lobbies/${code}/membershipRevocations`).once("value"));
+    // Alice's real client terminates as revoked, exactly as before.
+    await waitForPlayer(s => s.status === "revoked" && s.self === null, "Alice terminated as revoked");
+    expect(await live.stBackend.get(`lobbies/${code}/outcomes/${alice}`)).toBe("revoked");
+
+    reloadPersistedImage();
+    expect(store().game!.players[p1]).toMatchObject({ name: "Alice", participantId: PA, isEmpty: false });
+    expect(decideReconnect({
+      localGameInScope: true, localSeq: store().localSeq, sync: store().sync,
+      scope: { code, sessionId: live.session.id }, checkpoint: { kind: "valid" },
+      remoteGuard: await live.stBackend.get(`lobbies/${code}/writeGuard`) as never,
+    })).toMatchObject(expectedDecision);
+
+    const reconnected = await reconnectCapturingInitialFlush(code, st, live.lobby);
+    const flushed = JSON.parse(reconnected.initialFlush[`lobbies/${code}/checkpoint`] as string) as { game: Game; roster: Record<string, string> };
+    expect(flushed.game.players[p1]!.isEmpty).toBe(true);
+    expect(flushed.roster).toEqual({});
+    expect(`lobbies/${code}/player/${p1}` in reconnected.initialFlush).toBe(false);
+    expect(JSON.stringify(reconnected.initialFlush[`lobbies/${code}/public`])).not.toContain("Alice");
+    // Server truth under enforced rules after the initial checkpoint.
+    const checkpoint = JSON.parse(await live.stBackend.get(`lobbies/${code}/checkpoint`) as string) as { game: Game };
+    expect(checkpoint.game.players[p1]!.isEmpty).toBe(true);
+    expect(Object.values(checkpoint.game.players).some((p) => p.participantId === PA)).toBe(false);
+    expect(await live.stBackend.get(playerPath(code, p1))).toBeUndefined();
+    const pub = await live.displayBackend.get(publicPath(code)) as PublicLobbyRecord;
+    expect(pub.players[p1]).toBeUndefined();
+    expect(JSON.stringify(pub)).not.toContain("Alice");
+    expect(store().game!.players[p1]!.isEmpty).toBe(true);
+    for (const [id, record] of Object.entries(live.unbound)) expect(store().game!.players[id]).toEqual(record);
+    expect(store().game!.history).toEqual(live.history);
+    await reconnected.stop();
+
+    // A fresh device recovers from that checkpoint: Alice stays departed.
+    useStorytellerStore.setState({ game: null, lobby: null, undoStack: [], sync: null, localSeq: 0, selectedPlayerId: null });
+    store().setLobby(live.lobby);
+    const fresh = await reconnectCapturingInitialFlush(code, st, live.lobby);
+    expect(store().game!.players[p1]!.isEmpty).toBe(true);
+    expect(Object.values(store().game!.players).some((p) => p.participantId === PA)).toBe(false);
+    for (const [id, record] of Object.entries(live.unbound)) expect(store().game!.players[id]).toEqual(record);
+    await fresh.stop();
+  }
+
+  test("acknowledged revocation interrupted before the local unseat: KEEP_LOCAL completes it before the initial checkpoint", async () => {
+    const code = "RSIXAAAA", st = "r6a-storyteller", alice = "r6a-alice", display = "r6a-display";
+    const live = await liveGameWithAlice(code, st, alice, display);
+    await expect(revokePlayerAndCommit(live.writer, code, live.p1, interrupted(storytellerOccupancyCompletion("unseat", live.p1))))
+      .rejects.toThrow(ProcessDied);
+    live.manager.stop();
+    await live.writer.dispose();
+    expect(store().sync!.ackedGuard).toEqual(await live.stBackend.get(`lobbies/${code}/writeGuard`));
+    await expectRecoveredWithoutResurrection(code, st, alice, display, live, { type: "KEEP_LOCAL", reason: "baseline_current" });
+  }, 60000);
+
+  test("lost acknowledgement of the revocation commit: lost-ack KEEP_LOCAL still completes the unseat -- no resurrection", async () => {
+    const code = "RSIXBAAA", st = "r6b-storyteller", alice = "r6b-alice", display = "r6b-display";
+    const live = await liveGameWithAlice(code, st, alice, display);
+    const original = live.stBackend.update.bind(live.stBackend);
+    let release: () => void = () => {};
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    let intercepted = false;
+    live.stBackend.update = async updates => {
+      if (intercepted || !(membershipRevocationPath(code, alice) in updates)) return original(updates);
+      intercepted = true;
+      const result = await original(updates); // genuinely lands on the real server
+      await gate;
+      return result;
+    };
+    const ackedBefore = store().sync!.ackedGuard;
+    const revoking = revokePlayerAndCommit(live.writer, code, live.p1, interrupted(storytellerOccupancyCompletion("unseat", live.p1)));
+    await vi.waitFor(() => { if (!intercepted) throw new Error("expected the real revocation to be in flight"); }, { timeout: 5000, interval: 50 });
+    live.manager.stop(); // the process dies before onAck
+    release();
+    await revoking.catch(() => {});
+    live.stBackend.update = original;
+    await live.writer.dispose();
+    expect(store().sync!.ackedGuard).toEqual(ackedBefore);
+    expect(store().sync!.lastAttempt).toEqual(await live.stBackend.get(`lobbies/${code}/writeGuard`));
+    await expectRecoveredWithoutResurrection(code, st, alice, display, live, { type: "KEEP_LOCAL", reason: "lost_ack_recovered" });
+  }, 60000);
 });
 
 describe("OPUS-003-CONTRACT: real player client + enforced rules prove both the reject and accept leave-request flows", () => {
@@ -1631,7 +1819,7 @@ describe("OPUS-003-CONTRACT: real player client + enforced rules prove both the 
 
     // Explicit Storyteller acceptance re-resolves the current uid->playerId
     // binding and runs the existing Firebase-first revocation path.
-    await acceptLeaveRequest(writer, code, alice, playerId => useStorytellerStore.getState().unseatPlayer(playerId));
+    await acceptLeaveRequest(writer, code, alice, (playerId) => storytellerOccupancyCompletion("unseat", playerId));
 
     expect(await stBackend.get(`lobbies/${code}/roster/${alice}`)).toBeUndefined();
     expect(await stBackend.get(`lobbies/${code}/player/${id}`)).toBeUndefined();

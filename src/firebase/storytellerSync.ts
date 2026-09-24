@@ -12,8 +12,9 @@ import { writeProjections } from "./sync";
 import { revokePlayerMembership } from "./lobby";
 import type { RoomBackend } from "./backend";
 import type { OnlineMap } from "@/stores/projections";
-import { decodePresence, decodeRoster, decodeRosterParticipants, decodeJoinRequests, SnapshotValidationError, type RosterParticipantRecord } from "./snapshots";
-import { rosterParticipantsPath } from "./paths";
+import { decodeMembershipRevocations, decodePresence, decodeRoster, decodeRosterParticipants, decodeJoinRequests, SnapshotValidationError, type MembershipRevocationRecord, type RosterParticipantRecord } from "./snapshots";
+import { membershipRevocationsPath, rosterParticipantsPath } from "./paths";
+import type { RevocationAction } from "./lobby";
 import { SessionWriter, FENCE_MARGIN_MS, type AuthorityHandle } from "./writer";
 import { decodeSession, guardSchema, isTransient, leaseSchema, lifecycleMessage, LifecycleError, sessionPath } from "./lifecycle";
 import { TRAVELERS } from "@/data/travelers";
@@ -207,9 +208,23 @@ export function useStorytellerSync(backend: RoomBackend | null) {
  * name when its rosterParticipants record exists (restoreSeatedMember),
  * otherwise through the existing canonical path -- a fresh participation
  * instance from pendingPlayers (assignPendingToSeat), or revocation.
+ *
+ * Phase 9R.6: `revocations` -- the Storyteller-only receipts written in the
+ * same server commit as each explicit Storyteller revocation
+ * (membershipRevocations/{uid}) -- close the gap `priorRoster` cannot: a
+ * revocation that committed while its local unseat/remove never landed.
+ * Roster absence alone proves nothing (legitimately unbound local players
+ * have no binding either), and KEEP_LOCAL has no prior roster at all; a
+ * receipt is positive proof that one exact participation instance was
+ * revoked. It acts ONLY on a seat whose current occupant carries exactly
+ * the receipt's ParticipantId, applying exactly the receipt's own action --
+ * never on a later occupant of the same PlayerId, and never by UID, name,
+ * or seat.
  */
 type MembershipReconciliationPlan = {
   toUnseat: PlayerId[];
+  /** Phase 9R.6: seats whose revoked occupant's command was a removal. */
+  toRemove: PlayerId[];
   toRestoreMember: { uid: string; seatId: PlayerId; participantId: ParticipantId; name: string }[];
   toRecoverPending: { uid: string; seatId: PlayerId }[];
   toRevoke: PlayerId[];
@@ -247,23 +262,49 @@ const hasOwn = (value: object | null | undefined, key: string): boolean =>
  * mutation) — so this can be computed ahead of a synchronous gate without
  * waiting for that mutation to actually land. No I/O, no store mutation.
  *
- * `toUnseat`'s first-pass ids are always disjoint from `membership`'s value
- * set (that is exactly the condition below that adds one to `toUnseat`);
- * its second-pass ids are live-bound seats whose occupant is unproven, each
- * paired with exactly one rebuild action (restore, recover, or revoke) for
- * that same seat, applied after every unseat. */
+ * Phase 9R.6 precedence, deterministic and per seat: a receipt whose
+ * ParticipantId matches the seat's occupant decides that seat first (a
+ * "remove" receipt beats an "unseat" one for the same instance); the
+ * prior-roster inference never adds a second operation to a seat a receipt
+ * already decided (so a remove never degrades to an unseat, and no unseat
+ * is scheduled twice); and the live-binding pass never keeps a
+ * receipt-completed occupant, never unseats it again, and never restores a
+ * revoked ParticipantId. A live binding on a seat a receipt removes is
+ * unresolvable (no seat to rebuild into) and is revoked, exactly like any
+ * other binding whose seat is absent.
+ *
+ * `toUnseat`'s receipt/first-pass ids are always disjoint from
+ * `membership`'s value set, except a receipt-completed seat that a live
+ * binding also names; its second-pass ids are live-bound seats whose
+ * occupant is unproven. Every live-bound seat that is emptied is paired
+ * with exactly one rebuild action (restore, recover, or revoke), applied
+ * after every unseat/removal. `toRemove` is disjoint from `toUnseat`. */
 function buildMembershipReconciliation(
   game: StorytellerLobbyRecord | null,
   membership: Record<string, string>,
   priorRoster: Record<string, string> | null,
   participantRecords: Record<string, RosterParticipantRecord>,
+  revocations: Record<string, MembershipRevocationRecord>,
   evidence: ContinuityEvidence,
 ): MembershipReconciliationPlan {
-  const toUnseat: PlayerId[] = [];
+  // Phase 9R.6: committed revocations whose local completion is still owed.
+  // Exact ParticipantId equality against the seat's CURRENT occupant is the
+  // only match -- an absent seat, an empty seat, or a different (later)
+  // participant at the same PlayerId is left untouched.
+  const completed = new Map<PlayerId, RevocationAction>();
+  const revokedParticipants = new Set<ParticipantId>();
+  for (const receipt of Object.values(revocations)) {
+    revokedParticipants.add(receipt.participantId);
+    const occupant = game && hasOwn(game.players, receipt.playerId) ? game.players[receipt.playerId] : undefined;
+    if (!occupant || occupant.isEmpty || occupant.participantId !== receipt.participantId) continue;
+    if (completed.get(receipt.playerId) !== "remove") completed.set(receipt.playerId, receipt.action);
+  }
+  const toUnseat: PlayerId[] = [...completed].filter(([, action]) => action === "unseat").map(([id]) => id);
+  const toRemove: PlayerId[] = [...completed].filter(([, action]) => action === "remove").map(([id]) => id);
   if (priorRoster) {
     const currentSeats = new Set(Object.values(membership));
     for (const [uid, id] of Object.entries(priorRoster)) {
-      if (membership[uid] !== id && !currentSeats.has(id)) toUnseat.push(id);
+      if (membership[uid] !== id && !currentSeats.has(id) && !completed.has(id) && !toUnseat.includes(id)) toUnseat.push(id);
     }
   }
   // A crash can occur between the remote membership ACK and the next
@@ -274,22 +315,27 @@ function buildMembershipReconciliation(
   const toRevoke: PlayerId[] = [];
   for (const [uid, id] of Object.entries(membership)) {
     const player = game && hasOwn(game.players, id) ? game.players[id] : undefined;
-    // The seat itself is absent from the reconciled game: nothing to rebuild
-    // into -- the binding is unresolvable, exactly as before.
-    if (!game || !player) { toRevoke.push(id); continue; }
+    // The seat itself is absent from the reconciled game -- or a receipt is
+    // removing it: nothing to rebuild into -- the binding is unresolvable,
+    // exactly as before.
+    if (!game || !player || completed.get(id) === "remove") { toRevoke.push(id); continue; }
     // A record only speaks for the exact seat it was written for.
     const candidate = hasOwn(participantRecords, uid) ? participantRecords[uid] : undefined;
     const record = candidate && candidate.playerId === id ? candidate : undefined;
-    if (!player.isEmpty) {
+    // Phase 9R.6: a receipt-completed occupant is already leaving (it is in
+    // toUnseat) -- never kept for this binding, never unseated twice.
+    if (!player.isEmpty && !completed.has(id)) {
       const proven = record ? record.participantId === player.participantId : evidence === "lineage";
       if (proven) continue;
       toUnseat.push(id);
     }
     // The record's instance can never be seated twice: if some OTHER seat
     // of the reconciled game already holds it, the record cannot be honored.
+    // Phase 9R.6: nor can a participation instance whose revocation
+    // committed -- a later seating always mints a fresh ParticipantId.
     const recordHeldElsewhere = !!record && Object.values(game.players)
       .some((p) => p.id !== id && !p.isEmpty && p.participantId === record.participantId);
-    if (record && !recordHeldElsewhere) {
+    if (record && !recordHeldElsewhere && !revokedParticipants.has(record.participantId)) {
       toRestoreMember.push({ uid, seatId: id, participantId: record.participantId, name: record.name });
     } else if (hasOwn(game.pendingPlayers, uid)) {
       toRecoverPending.push({ uid, seatId: id });
@@ -297,16 +343,20 @@ function buildMembershipReconciliation(
       toRevoke.push(id);
     }
   }
-  return { toUnseat, toRestoreMember, toRecoverPending, toRevoke };
+  return { toUnseat, toRemove, toRestoreMember, toRecoverPending, toRevoke };
 }
 
 /** Synchronous local mutation phase: no awaits, no I/O. Safe to run
  * immediately after a synchronous authority gate with nothing in between
  * (Finding H1 follow-up). Every unseat runs before any rebuild, so a stale
  * occupant always leaves its seat before the live binding's participant
- * enters it. */
+ * enters it. Phase 9R.6: a receipt's removal runs through the existing
+ * removePlayer() command (plan counts, contiguous geometry, unrelated
+ * players and historical ParticipantRefs exactly as the original command);
+ * no rebuild ever targets a removed seat. */
 function applyMembershipReconciliationLocally(plan: MembershipReconciliationPlan) {
   for (const id of plan.toUnseat) useStorytellerStore.getState().unseatPlayer(id);
+  for (const id of plan.toRemove) useStorytellerStore.getState().removePlayer(id);
   for (const { uid, seatId, participantId, name } of plan.toRestoreMember) {
     useStorytellerStore.getState().restoreSeatedMember(uid, seatId, name, participantId);
   }
@@ -727,6 +777,12 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   const participantRecords = decodeRosterParticipants(await raw.get(rosterParticipantsPath(lobby.code)));
   assertCurrent();
   if (participantRecords.status !== "ready") throw new SnapshotValidationError();
+  // Phase 9R.6: committed-revocation receipts, read under the same held
+  // lease, before the final gate -- a KEEP_LOCAL game whose local
+  // unseat/remove never landed completes it here, before the initial flush.
+  const revocations = decodeMembershipRevocations(await raw.get(membershipRevocationsPath(lobby.code)));
+  assertCurrent();
+  if (revocations.status !== "ready") throw new SnapshotValidationError();
 
   // Pure — no I/O, no store mutation — computed ahead of the gate. For
   // RESTORE this plans against the checkpoint's own (not-yet-applied) game
@@ -740,7 +796,7 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   const evidence: ContinuityEvidence = !willRestore && decision.type === "KEEP_LOCAL"
     && (decision.reason === "baseline_current" || decision.reason === "lost_ack_recovered") ? "lineage" : "participant-record";
   const plan = buildMembershipReconciliation(
-    effectiveGame, membership.data, willRestore ? restored!.roster : null, participantRecords.data, evidence);
+    effectiveGame, membership.data, willRestore ? restored!.roster : null, participantRecords.data, revocations.data, evidence);
 
   // Final synchronous authority gate (Finding H1, extended to automatic
   // startup by Phase 9C.2B.1): NOTHING awaits between this check and the
@@ -978,6 +1034,8 @@ export async function resolveReconnectConflict(choice: "keepLocal" | "useRemote"
   const membershipRaw = await raw.get(`lobbies/${lobby.code}/roster`);
   // Phase 9R.2 (Astra R1): read with the roster, before the gate below.
   const participantRecordsRaw = await raw.get(rosterParticipantsPath(lobby.code));
+  // Phase 9R.6: committed-revocation receipts, likewise before the gate.
+  const revocationsRaw = await raw.get(membershipRevocationsPath(lobby.code));
 
   if (writer.isStopped()) return "stale";
 
@@ -991,6 +1049,8 @@ export async function resolveReconnectConflict(choice: "keepLocal" | "useRemote"
   if (membership.status !== "ready") throw new SnapshotValidationError();
   const participantRecords = decodeRosterParticipants(participantRecordsRaw);
   if (participantRecords.status !== "ready") throw new SnapshotValidationError();
+  const revocations = decodeMembershipRevocations(revocationsRaw);
+  if (revocations.status !== "ready") throw new SnapshotValidationError();
 
   const inScope = () => {
     const current = useStorytellerStore.getState().lobby;
@@ -1010,7 +1070,7 @@ export async function resolveReconnectConflict(choice: "keepLocal" | "useRemote"
   // count as proof (never write lineage).
   const plan = buildMembershipReconciliation(
     effectiveGame, membership.data, choice === "useRemote" ? restored!.roster : null,
-    participantRecords.data, "participant-record");
+    participantRecords.data, revocations.data, "participant-record");
 
   // Synchronous authority gate (Finding H1): NOTHING awaits between this
   // check and the completion of every local mutation below — not

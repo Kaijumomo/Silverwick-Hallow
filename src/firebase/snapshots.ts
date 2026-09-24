@@ -106,6 +106,18 @@ const rosterParticipant = z.object({ playerId: id, participantId: id, name: requ
 export type RosterParticipantRecord = z.infer<typeof rosterParticipant>;
 export const decodeRosterParticipants = (raw: unknown): Snapshot<Record<string, RosterParticipantRecord>> =>
   parse(emptyNode(z.record(id, rosterParticipant), {}), raw);
+/** One binding's record (rosterParticipants/{uid}); absent is "waiting". */
+export const decodeRosterParticipant = (raw: unknown): Snapshot<RosterParticipantRecord> =>
+  raw == null ? WAITING : parse(rosterParticipant, raw);
+/** Phase 9R.6: the Storyteller-only receipt of a committed membership
+ * revocation (see membershipRevocationPath) -- which exact participation
+ * instance was revoked from which seat, and the local occupancy completion
+ * the Storyteller's command owed. `.strict()`: exactly these fields, no
+ * Role/alignment/private data. */
+const membershipRevocation = z.object({ playerId: id, participantId: id, action: z.enum(["unseat", "remove"]) }).strict();
+export type MembershipRevocationRecord = z.infer<typeof membershipRevocation>;
+export const decodeMembershipRevocations = (raw: unknown): Snapshot<Record<string, MembershipRevocationRecord>> =>
+  parse(emptyNode(z.record(id, membershipRevocation), {}), raw);
 export const decodeJoinRequests = (raw: unknown): Snapshot<Record<string, string>> => parse(emptyNode(z.record(id, request), {}), raw);
 /** A player's own leaveRequests/{uid}. Strictly `true` or absent — never
  * trusted as authority, only as a hint for handshake reconciliation. */

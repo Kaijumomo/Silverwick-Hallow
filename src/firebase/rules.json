@@ -74,6 +74,25 @@
             }
           }
         },
+        "membershipRevocations": {
+          ".read": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid",
+          ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('writer/expiresAt').val() > now && newData.parent().child('writeGuard/token').val() === root.child('lobbies').child($code).child('writer/token').val() && (!root.child('lobbies').child($code).child('writeGuard').exists() || newData.parent().child('writeGuard/revision').val() > root.child('lobbies').child($code).child('writeGuard/revision').val())",
+          "$uid": {
+            ".validate": "newData.hasChildren(['playerId','participantId','action'])",
+            "playerId": {
+              ".validate": "newData.isString() && newData.val().length > 0"
+            },
+            "participantId": {
+              ".validate": "newData.isString() && newData.val().length > 0"
+            },
+            "action": {
+              ".validate": "newData.val() === 'unseat' || newData.val() === 'remove'"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
         "outcomes": {
           ".read": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid",
           ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('writer/expiresAt').val() > now && newData.parent().child('writeGuard/token').val() === root.child('lobbies').child($code).child('writer/token').val() && (!root.child('lobbies').child($code).child('writeGuard').exists() || newData.parent().child('writeGuard/revision').val() > root.child('lobbies').child($code).child('writeGuard/revision').val())",

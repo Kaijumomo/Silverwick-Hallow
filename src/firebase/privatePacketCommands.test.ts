@@ -13,7 +13,7 @@ import { buildRegistry } from "@/data/roleRegistry";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { publishPrivatePacket } from "./privatePacketCommands";
 import { packetKey, usePacketDeliveryState } from "./packetDeliveryState";
-import { revokePlayerAndCommit } from "./membershipCommands";
+import { revokePlayerAndCommit, storytellerOccupancyCompletion } from "./membershipCommands";
 
 const code = "BCDF2345";
 const root = `lobbies/${code}`;
@@ -154,7 +154,7 @@ describe("explicit publication through the session writer", () => {
     expect(p().privateInfo!.extraText).toBe("Unpublished second packet");
     expect(await b.get(`${root}/player/${id}`)).toEqual(published.payload);
     expect(usePacketDeliveryState.getState().receipts[packetKey(code, id)]).toBe(published.id);
-    await revokePlayerAndCommit(replacement, code, id, () => store.getState().unseatPlayer(id));
+    await revokePlayerAndCommit(replacement, code, id, storytellerOccupancyCompletion("unseat", id));
     await waitFor(() => expect(usePlayerStore.getState().self).toBeNull());
     expect(await b.get(`${root}/player/${id}`)).toBeUndefined();
     expect(p().publishedPacket).toBeUndefined();
