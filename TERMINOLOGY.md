@@ -33,10 +33,17 @@ pushes no Undo entry.
 
 A Storyteller-owned store command (`useStorytellerStore`, in
 `src/stores/storytellerStore.ts`) through which authoritative game state
-changes: `assignRole`, `setActualAlignment`, `setAlive`, `addEffect`,
-`addReminder`, and so on. During Live Play, each command appends its own
-History through `recordIfLive()`. A command either applies completely, with
-its History, or not at all.
+changes.
+
+- Some commands are **History-eligible**. During Live Play they append their
+  own History through `recordIfLive()`. Examples: `assignRole`,
+  `setActualAlignment`, `setAlive`, `addEffect`, `addReminder`.
+- Other commands change Current State without producing a History Record. An
+  example is a phase transition through `setPhase` (it still pushes Undo).
+
+For a History-eligible command, the Current State mutation and its History are
+applied together or not at all. Either way, History remains explanatory
+bookkeeping; Current State stays the authority (§2).
 
 ## 5. Mutation Context
 

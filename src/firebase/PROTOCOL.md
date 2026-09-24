@@ -111,14 +111,18 @@ views, Storyteller state, and a checkpoint containing the game and the
 authoritative roster snapshot in one writer-guarded update. Membership commands
 are the only intentional lifecycle exceptions.
 
-The checkpoint game carries no schema version. Recovery infers which supported
-legacy shape (v13–v17) it has from the game's own fields, then runs it through
-the same migration as local persisted state (`migrateGameEntry` in
+The checkpoint game carries no explicit schema version. Recovery infers the
+newest supported legacy shape (v13–v17) the game itself evidences, then runs it
+through the same migration as local persisted state (`migrateGameEntry` in
 `src/stores/gameMigration.ts`) before validating it against the current schema.
-A v17-or-newer checkpoint is treated as v17. Its only remaining step is the
-store-v18 rename of the History category `"identity"` to `"role"`. That step is
-idempotent, so an already-v18 checkpoint comes through unchanged, and no
-checkpoint version field was added for it.
+A checkpoint carrying v17 participant-identity evidence is detected as v17. A
+markerless modern game may conservatively be detected as an earlier supported
+version, such as v16. An example is a valid empty game with no participant
+identity, History, or Information Delivery. For an already-current markerless
+shape, those intermediate migration steps are no-ops. The shared migration then
+still reaches the idempotent store-v18 step that renames the History category
+`"identity"` to `"role"`. So both legacy v17 and already-v18 checkpoints recover
+correctly without a checkpoint version field.
 
 ## Presence
 

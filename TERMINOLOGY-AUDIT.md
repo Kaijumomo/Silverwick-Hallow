@@ -156,10 +156,24 @@ gate, which concerns different fields.
 ### 4.3 Where it applies
 - Local store: `migrateStoreState` runs the shared per-entry migration for
   `fromVersion < 18` on `game` and every `undoStack` entry.
-- Remote checkpoint: `readCheckpoint` → `detectLegacyGameVersion` (reports 17
-  for v17-or-newer) → `migrateGameEntry(game, 17)` → schema. For a v17
-  checkpoint the step renames `"identity"`; for a v18 checkpoint it does
-  nothing.
+- Remote checkpoint: `readCheckpoint` → `detectLegacyGameVersion` →
+  `migrateGameEntry(game, detected)` → schema. Remote checkpoints carry no
+  explicit game-schema version, so recovery infers the newest supported
+  legacy shape the game itself evidences:
+  - A checkpoint carrying v17 participant-identity evidence is detected as
+    v17.
+  - A markerless modern game may conservatively be detected as an earlier
+    supported version, such as v16. An example is a valid empty game with no
+    participant identity, History, or Information Delivery evidence. This is
+    harmless: for an already-current shape, the intermediate steps are
+    no-ops because their legacy fields are absent.
+  - In every case the detected version is below 18, so the shared migration
+    still reaches the idempotent v17 → v18 step. A v17 checkpoint's
+    `"identity"` becomes `"role"`, and an already-canonical v18 checkpoint is
+    unchanged.
+
+  No checkpoint version field is needed. This matches the markerless-game
+  explanation in `detectLegacyGameVersion`'s doc comment (`gameMigration.ts`).
 
 ### 4.4 Current-version strictness
 Zustand's `merge` passes every rehydrated store through
