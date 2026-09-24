@@ -412,12 +412,80 @@ const STPlayerRecordPersistedSchema = STPlayerRecordSchema.extend({
   }
 });
 
-export const StorytellerGamePersistedSchema = StorytellerLobbyRecordSchema.extend({
+const hasOwn = (record: object, key: string): boolean => Object.prototype.hasOwnProperty.call(record, key);
+const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
+/**
+ * Phase 9R.5: a recovered game may only become authoritative when its
+ * seat-bearing player records and seatOrder describe ONE coherent roster/seat
+ * geometry. Each check was previously applied (if at all) to `players` and
+ * `seatOrder` separately, so a save/checkpoint omitting a legitimate player
+ * from seatOrder hydrated fine -- and removePlayer() later deleted that
+ * unseated record as collateral. Enforced here, the one canonical persisted-
+ * game validator, it covers local hydration (Current State and every Undo
+ * snapshot, via StorytellerStateSchema) and remote checkpoint recovery
+ * (readCheckpoint, after migration) alike:
+ *
+ *  1. every seatOrder entry is unique;
+ *  2. every seatOrder id is an OWN property of players -- an inherited
+ *     Object.prototype member ("toString", "constructor", ...) never counts;
+ *  3. every own players key appears in seatOrder (exactly once, by 1);
+ *  4. players[key].id === key;
+ *  5. players[seatOrder[i]].seat === i.
+ *
+ * Read-only: a violation is reported, never repaired -- no sorting,
+ * de-duplication, appending, id regeneration or renumbering, and no identity
+ * or geometry is ever inferred from name, uid, seat number or History.
+ */
+function checkSeatGeometry(
+  game: { players: Record<string, { id: string; seat: number }>; seatOrder: string[] },
+  ctx: z.RefinementCtx,
+): void {
+  const seatIndexOf = new Map<string, number>();
+  game.seatOrder.forEach((id, index) => {
+    const first = seatIndexOf.get(id);
+    if (first !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `seatOrder[${index}] duplicates seatOrder[${first}] (${JSON.stringify(id)})`, path: ["seatOrder", index] });
+      return;
+    }
+    seatIndexOf.set(id, index);
+    if (!hasOwn(game.players, id)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `seatOrder[${index}] (${JSON.stringify(id)}) names no own player record`, path: ["seatOrder", index] });
+      return;
+    }
+    const seat = game.players[id]!.seat;
+    if (seat !== index) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `player seat ${seat} disagrees with its seatOrder index ${index}`, path: ["players", id, "seat"] });
+    }
+  });
+  for (const [key, player] of Object.entries(game.players)) {
+    if (player.id !== key) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `player id ${JSON.stringify(player.id)} disagrees with its players key`, path: ["players", key, "id"] });
+    }
+    if (!seatIndexOf.has(key)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "player record is missing from seatOrder", path: ["players", key] });
+    }
+  }
+}
+
+export const StorytellerGamePersistedSchema = z.preprocess((raw, ctx) => {
+  // Phase 9R.5: zod's record parsing silently DROPS an own "__proto__" key
+  // (it cannot be assigned as an ordinary property of the output), so the
+  // geometry check below -- which only sees parsed output -- could never
+  // notice such a record was discarded. A player record under that key is
+  // rejected here, against the raw candidate, rather than silently lost.
+  // Never mutates or normalizes the candidate.
+  if (isPlainRecord(raw) && isPlainRecord(raw.players) && hasOwn(raw.players, "__proto__")) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'a "__proto__" players key can never be a player record', path: ["players", "__proto__"] });
+  }
+  return raw;
+}, StorytellerLobbyRecordSchema.extend({
   code: z.string(),
   storytellerUid: z.string(),
   players: z.record(z.string(), STPlayerRecordPersistedSchema),
   pendingPlayers: z.record(z.string(), z.string()).default({}),
-});
+}).superRefine(checkSeatGeometry));
 
 export const GuardStampSchema = z.object({
   token: z.string().min(1),

@@ -1424,8 +1424,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const { game, selectedPlayerId } = get();
         const existing = game ? ownPlayer(game, id) : undefined;
         if (!game || !existing) return false;
-        const players = { ...game.players };
-        delete players[id];
         const seatOrder = game.seatOrder.filter((p) => p !== id);
         // re-seat the remaining players to keep seats contiguous 0..n-1,
         // and scrub any fakeMinion reference to the removed player.
@@ -1435,23 +1433,36 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // deliberately left untouched -- they are durable ParticipantRefs,
         // not pointers into this roster (fakeMinions, by contrast, is a
         // live "who is here now" draft and is scrubbed).
-        const renumbered: typeof players = {};
+        //
+        // Phase 9R.5: this deletes exactly `id` and nothing else. The
+        // surviving map starts from every OWN record, not from seatOrder
+        // alone -- rebuilding it solely by walking seatOrder silently
+        // deleted any own record a malformed order had already omitted.
+        // Seated survivors are renumbered (in seat order, as before); an
+        // unseated one is carried over with its geometry untouched, never
+        // guessed -- keeping such state from becoming authoritative is the
+        // persisted-game validator's job (schemas.ts checkSeatGeometry).
+        const survivors = new Map<PlayerId, STPlayerRecord>();
         seatOrder.forEach((pid, idx) => {
-          const p = ownPlayer({ players }, pid);
-          if (!p) return;
-          let next = { ...p, seat: idx };
-          if (next.privateInfo?.fakeMinions?.includes(id)) {
-            const filtered = next.privateInfo.fakeMinions.filter(
-              (mid) => mid !== id
-            );
-            const pi = { ...next.privateInfo };
-            if (filtered.length > 0) pi.fakeMinions = filtered;
-            else delete pi.fakeMinions;
-            if (Object.keys(pi).length > 0) next.privateInfo = pi;
-            else delete next.privateInfo;
-          }
-          renumbered[pid] = next;
+          const p = ownPlayer(game, pid);
+          if (p) survivors.set(pid, { ...p, seat: idx });
         });
+        for (const [pid, p] of Object.entries(game.players)) {
+          if (pid !== id && !survivors.has(pid)) survivors.set(pid, p);
+        }
+        const renumbered = Object.fromEntries([...survivors].map(([pid, p]): [PlayerId, STPlayerRecord] => {
+          if (!p.privateInfo?.fakeMinions?.includes(id)) return [pid, p];
+          const next = { ...p };
+          const filtered = p.privateInfo.fakeMinions.filter(
+            (mid) => mid !== id
+          );
+          const pi = { ...p.privateInfo };
+          if (filtered.length > 0) pi.fakeMinions = filtered;
+          else delete pi.fakeMinions;
+          if (Object.keys(pi).length > 0) next.privateInfo = pi;
+          else delete next.privateInfo;
+          return [pid, next];
+        }));
         // Phase 9 Setup finalization (FINAL POPULATION CLOSURE, Section 8):
         // removing a seat before Reveal always removes one unit of starting
         // capacity -- symmetric with addEmptySeat/addTravelerSeat/addPlayer

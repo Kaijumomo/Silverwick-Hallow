@@ -357,6 +357,10 @@ describe("setFabled", () => {
 // E1: migrateStoreState — schema roundtrip tests
 // ---------------------------------------------------------------------------
 
+// Phase 9R.5: a persisted game's players and seatOrder must describe one
+// coherent seat geometry (schemas.ts checkSeatGeometry), so a fixture that
+// supplies players without an explicit seatOrder seats them in key order --
+// the order every supported writer appends them in.
 const minimalPersistedGame = (
   overrides: Record<string, unknown> = {}
 ): Record<string, unknown> => ({
@@ -367,7 +371,7 @@ const minimalPersistedGame = (
   day: 0,
   notes: "",
   players: {},
-  seatOrder: [],
+  seatOrder: Object.keys((overrides.players as Record<string, unknown> | undefined) ?? {}),
   nightProgress: {},
   fabled: [],
   bluffs: [],
@@ -594,7 +598,7 @@ describe("migrateStoreState", () => {
             reminders: ["Poisoned", "Poisoned", "Red Herring"],
           }),
           b: legacyPlayer({
-            id: "b", actualRole: "imp", statuses: { protected: true }, reminders: ["Chosen"],
+            id: "b", seat: 1, actualRole: "imp", statuses: { protected: true }, reminders: ["Chosen"],
           }),
         },
       }),

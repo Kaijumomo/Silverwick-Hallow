@@ -51,7 +51,11 @@ export function isPostDeal(game: StorytellerLobbyRecord): boolean {
 
 /** No presence, roster, shown identity, or geometry enters population selection. */
 export function selectSetupContext(game: StorytellerLobbyRecord, script?: Script): SetupContext {
-  const seated = [...new Set(game.seatOrder)].flatMap(id => game.players[id] ? [game.players[id]!] : []);
+  // Phase 9R.5: only an OWN players record is a participant -- an indexed
+  // lookup alone also "finds" inherited Object.prototype members
+  // ("toString", "constructor", "__proto__"), all truthy.
+  const seated = [...new Set(game.seatOrder)].flatMap(id =>
+    Object.prototype.hasOwnProperty.call(game.players, id) && game.players[id] ? [game.players[id]!] : []);
   const occupied = seated.filter(p => !p.isEmpty);
   const ordinary = occupied.filter(p => !p.isTraveler);
   const travelers = occupied.filter(p => p.isTraveler);
