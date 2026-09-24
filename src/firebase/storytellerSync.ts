@@ -893,9 +893,12 @@ let currentConflict: PendingConflict | null = null;
  * through the exact same migration rules (now v13->v18) local
  * persisted-state recovery already applies (migrateGameEntry) -- never a
  * second, divergent copy of them -- before validating against the current
- * schema. A v17-or-newer checkpoint is detected as v17 and receives only
- * the idempotent v17 -> v18 History category step ("identity" -> "role"),
- * so no checkpoint version field is needed for it (see
+ * schema. A checkpoint carrying v17 participant-identity evidence is
+ * detected as v17; a markerless modern checkpoint may conservatively
+ * detect as an earlier supported version, whose intervening migrations are
+ * no-ops for an already-current shape. Recovery still reaches the
+ * idempotent v17 -> v18 History category step ("identity" -> "role"), so
+ * no checkpoint version field is needed for it (see
  * detectLegacyGameVersion). A shape older than the supported v13 floor, or
  * one that still fails schema validation after migration, fails safely as
  * "invalid" exactly as before -- never a partial/guessed recovery.

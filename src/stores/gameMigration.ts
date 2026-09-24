@@ -460,12 +460,15 @@ export function migrateGameEntry(
  * Terminology audit (v18): deliberately never returns 18. v18 changed only
  * one History category value ("identity" -> "role"), which leaves no
  * structural marker to detect, and this work package adds no checkpoint
- * version field. A v17-or-newer checkpoint is reported as 17 and the caller
- * runs migrateGameEntry(game, 17), whose only effect is the idempotent
- * v17 -> v18 History category step: a v17 checkpoint's "identity" becomes
- * "role", and an already-v18 checkpoint is left unchanged. So a remote
- * checkpoint -- unlike a local store explicitly labeled v18 -- may still
- * carry the legacy "identity" name and recover.
+ * version field. A checkpoint carrying v17 participant-identity evidence
+ * is reported as 17. A markerless modern checkpoint may conservatively be
+ * reported as an earlier supported version (see above); for an
+ * already-current markerless shape those intervening steps are no-ops.
+ * Either way the reported version is below 18, so migrateGameEntry still
+ * reaches the idempotent v17 -> v18 History category step: a legacy
+ * "identity" becomes "role", and an already-canonical "role" is left
+ * unchanged. So a remote checkpoint -- unlike a local store explicitly
+ * labeled v18 -- may still carry the legacy "identity" name and recover.
  */
 export function detectLegacyGameVersion(game: Record<string, unknown>): number | null {
   if (hasV17IdentityEvidence(game)) return 17;
