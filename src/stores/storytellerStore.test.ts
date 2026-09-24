@@ -818,7 +818,7 @@ describe("migrateStoreState", () => {
     expect(takeMigrationResetFlag()).toBe(false);
   });
 
-  it("v14->v15: never fabricates history for pre-existing, already-changed live state", () => {
+  it("v14->v15: never fabricates history for pre-existing, already-changed Current State", () => {
     const state = { game: minimalPersistedGame({
       day: 3, phase: "night",
       players: { a: legacyPlayer({
@@ -1025,7 +1025,7 @@ describe("migrateStoreState", () => {
       }
     });
 
-    it("v17->v17: a current, fully-populated state (real History AND Information Delivery content) passes through completely unchanged -- same reference, nothing reset or duplicated", () => {
+    it("v17->v18: a fully-populated v17 state with no legacy \"identity\" History category (real History AND Information Delivery content) passes through completely unchanged -- same reference, nothing reset or duplicated", () => {
       const participant = { kind: "participant", participantId: "pt-alice", playerId: "a", nameAtTime: "Alice" };
       const existingHistoryRecord = {
         id: "h-existing-1", category: "life", participant,

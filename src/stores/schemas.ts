@@ -168,7 +168,9 @@ export const ReminderRecordSchema = z.object({
   note: z.string().optional(),
 });
 
-export const HistoryCategorySchema = z.enum(["identity", "alignment", "life", "effect", "reminder"]);
+// v18: canonical names only. The v17 "identity" category is renamed to "role"
+// by migration (gameMigration.ts) and is never accepted here.
+export const HistoryCategorySchema = z.enum(["role", "alignment", "life", "effect", "reminder"]);
 
 export const ProvenanceSchema = z.object({
   sourceParticipant: ParticipantRefSchema.optional(),
@@ -210,10 +212,11 @@ export const HistoryRecordSchema = z.object({
   provenance: ProvenanceSchema.optional(),
   note: z.string().optional(),
 }).superRefine((record, ctx) => {
-  // An already-v17 record is never migrated again (detectLegacyGameVersion /
-  // STORE_VERSION), so a stale v16-shaped source nested inside an
-  // added/removed Effect/Reminder snapshot must fail validation here rather
-  // than survive -- never silently stripped or converted.
+  // An already-v17 record never goes through v16 -> v17 migration again
+  // (detectLegacyGameVersion / STORE_VERSION), so a stale v16-shaped source
+  // nested inside an added/removed Effect/Reminder snapshot must fail
+  // validation here rather than survive -- never silently stripped or
+  // converted.
   if (record.change.kind === "value") return;
   const contract = HISTORY_SNAPSHOT_SOURCE_CONTRACT[record.category];
   if (!contract) return;

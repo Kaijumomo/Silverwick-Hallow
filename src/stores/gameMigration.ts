@@ -9,18 +9,19 @@ import type { STPlayerRecord, Script } from "./types";
  * storytellerStore.ts, applied to `game` and every `undoStack` entry) and
  * remote checkpoint recovery (readCheckpoint in storytellerSync.ts,
  * applied to the checkpoint's own embedded `game`). Extracted here so the
- * v13->v14->v15->v16->v17 structured-state evolution is expressed exactly once
- * -- never two divergent copies of the same rules -- while each caller
- * keeps deciding for itself what "the state to migrate" even is (the
- * whole persisted Zustand blob vs. a bare remote game/roster pair).
+ * v13->v14->v15->v16->v17->v18 structured-state evolution is expressed
+ * exactly once -- never two divergent copies of the same rules -- while
+ * each caller keeps deciding for itself what "the state to migrate" even
+ * is (the whole persisted Zustand blob vs. a bare remote game/roster pair).
  *
  * Deliberately narrow: this only ever mutates ONE game-shaped object, and
- * only ever performs the exact v13/v14/v15/v16/v17 transitions Phase 9
- * intentionally supports. It never touches store-level concerns (lobby,
- * sync/localSeq, customScripts storage, undo-stack membership) -- those
- * remain migrateStoreState's own responsibility, and remote checkpoints
- * never carried them to begin with (see readCheckpoint's own doc comment
- * for why the checkpoint shape stays { game, roster } only).
+ * only ever performs the exact v13/v14/v15/v16/v17/v18 transitions Phase 9
+ * and the terminology audit intentionally support. It never touches
+ * store-level concerns (lobby, sync/localSeq, customScripts storage,
+ * undo-stack membership) -- those remain migrateStoreState's own
+ * responsibility, and remote checkpoints never carried them to begin with
+ * (see readCheckpoint's own doc comment for why the checkpoint shape stays
+ * { game, roster } only).
  */
 /**
  * Phase 9R.1 Astra remediation (Finding A2): explicit, reviewable evidence
@@ -98,10 +99,10 @@ function registryForScript(scriptId: unknown, evidence: MigrationScriptEvidence)
 }
 
 /**
- * Migrates one game-shaped entry from `fromVersion` up through v17,
+ * Migrates one game-shaped entry from `fromVersion` up through v18,
  * in place, mirroring migrateStoreState's own mutate-then-validate style
  * (the caller is responsible for the final schema validation gate). A
- * no-op for `fromVersion >= 17` or a non-object entry.
+ * no-op for `fromVersion >= 18` or a non-object entry.
  *
  * v13 -> v14 (Phase 9D.1): ordinary Actual Alignment is derived only from
  * an assigned, currently-resolvable Role -- never invented, never
@@ -145,6 +146,9 @@ function registryForScript(scriptId: unknown, evidence: MigrationScriptEvidence)
  * v16 -> v17 (Phase 9R.2): historical participant identity. See
  * migrateEntryV16ToV17 below for exactly what is converted and -- more
  * importantly -- what is deliberately NOT inferred.
+ *
+ * v17 -> v18 (terminology audit): the History category for an Actual Role
+ * change is renamed from "identity" to "role". See migrateEntryV17ToV18.
  */
 /**
  * Migrates exactly one player entry's v13-shaped fields, in place.
@@ -325,6 +329,34 @@ function migrateEntryV16ToV17(e: Record<string, unknown>): void {
   });
 }
 
+/** The v17 persisted name of the History category v18 calls "role". */
+const LEGACY_ROLE_HISTORY_CATEGORY = "identity";
+
+/**
+ * v17 -> v18 (terminology audit): History category canonicalization, in
+ * place. A History Record whose `category` is exactly "identity" becomes
+ * "role" -- the record describes a change to an Actual Role, which is not
+ * participant identity or perception.
+ *
+ * Nothing else changes: record ids, order, `participant` (ParticipantRef),
+ * `moment`, `change`, `provenance`, and `note` keep their values, and
+ * reassigning an existing key keeps its position, so the serialized record
+ * differs only in that one value. Every other category -- and any
+ * unrecognized one -- is left exactly as found for the final schema gate
+ * to judge. No History Record is added or removed; Current State and
+ * Information Delivery are not touched.
+ *
+ * Idempotent: "role" is never rewritten, so a second pass is a no-op. That
+ * is what lets remote checkpoint recovery, which cannot tell v17 from v18
+ * (see detectLegacyGameVersion), run this step on every v17-or-newer
+ * checkpoint safely.
+ */
+function migrateEntryV17ToV18(e: Record<string, unknown>): void {
+  forEachObject(e.history, (record) => {
+    if (record.category === LEGACY_ROLE_HISTORY_CATEGORY) record.category = "role";
+  });
+}
+
 export function migrateGameEntry(
   entry: unknown,
   fromVersion: number,
@@ -382,6 +414,13 @@ export function migrateGameEntry(
   if (fromVersion < 17 && !hasV17IdentityEvidence(e as Record<string, unknown>)) {
     migrateEntryV16ToV17(e as Record<string, unknown>);
   }
+
+  // Terminology audit: runs for every pre-v18 entry, independent of the v17
+  // identity-evidence gate above -- it touches only the History category
+  // value, which that gate does not consider.
+  if (fromVersion < 18) {
+    migrateEntryV17ToV18(e as Record<string, unknown>);
+  }
 }
 
 /**
@@ -417,6 +456,16 @@ export function migrateGameEntry(
  * checkpoint mixing v17 evidence with leftover v16 fields is treated as v17
  * and therefore fails the final schema gate instead of being partially
  * "repaired".
+ *
+ * Terminology audit (v18): deliberately never returns 18. v18 changed only
+ * one History category value ("identity" -> "role"), which leaves no
+ * structural marker to detect, and this work package adds no checkpoint
+ * version field. A v17-or-newer checkpoint is reported as 17 and the caller
+ * runs migrateGameEntry(game, 17), whose only effect is the idempotent
+ * v17 -> v18 History category step: a v17 checkpoint's "identity" becomes
+ * "role", and an already-v18 checkpoint is left unchanged. So a remote
+ * checkpoint -- unlike a local store explicitly labeled v18 -- may still
+ * carry the legacy "identity" name and recover.
  */
 export function detectLegacyGameVersion(game: Record<string, unknown>): number | null {
   if (hasV17IdentityEvidence(game)) return 17;

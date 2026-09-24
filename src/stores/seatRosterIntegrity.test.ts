@@ -208,15 +208,15 @@ describe("Phase 9R.5 A: StorytellerGamePersistedSchema enforces one coherent ros
 });
 
 // ---------------------------------------------------------------------------
-// B. Local current-version (v17) recovery
+// B. Local current-version (v18) recovery
 // ---------------------------------------------------------------------------
-describe("Phase 9R.5 B: a malformed CURRENT-version (v17) local save never hydrates as authoritative", () => {
-  /** Persist the real store state, return the raw v17 localStorage blob. */
+describe("Phase 9R.5 B: a malformed CURRENT-version (v18) local save never hydrates as authoritative", () => {
+  /** Persist the real store state, return the raw v18 localStorage blob. */
   async function persistedBlob(): Promise<{ state: Record<string, unknown>; version: number }> {
     await new Promise((resolve) => setTimeout(resolve, 0));
     const raw = localStorage.getItem(STORAGE_KEY)!;
     const blob = JSON.parse(raw) as { state: Record<string, unknown>; version: number };
-    expect(blob.version).toBe(17); // already current: Zustand's own migrate() is skipped
+    expect(blob.version).toBe(18); // already current: Zustand's own migrate() is skipped
     return blob;
   }
 
@@ -226,7 +226,7 @@ describe("Phase 9R.5 B: a malformed CURRENT-version (v17) local save never hydra
     await store.persist.rehydrate();
   }
 
-  it("control: an unmodified seven-player v17 save round-trips unchanged", async () => {
+  it("control: an unmodified seven-player v18 save round-trips unchanged", async () => {
     sevenPlayerGame();
     const expected = clone(game());
     const blob = await persistedBlob();
@@ -259,7 +259,7 @@ describe("Phase 9R.5 B: a malformed CURRENT-version (v17) local save never hydra
     ["a duplicate seat id", (g) => { g.seatOrder[6] = g.seatOrder[0]!; }],
     ["a key / player.id mismatch", (g) => { g.players[g.seatOrder[2]!]!.id = "someone-else"; }],
     ["a stored seat / index mismatch", (g) => { g.players[g.seatOrder[2]!]!.seat = 5; }],
-  ])("a v17 save with %s is likewise rejected through the reset contract", async (_label, corrupt) => {
+  ])("a v18 save with %s is likewise rejected through the reset contract", async (_label, corrupt) => {
     sevenPlayerGame();
     const blob = await persistedBlob();
     corrupt(blob.state.game as StorytellerLobbyRecord);

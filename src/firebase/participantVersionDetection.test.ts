@@ -102,7 +102,7 @@ describe("R2-C: malformed current-version History alongside that evidence", () =
     expect(entry).toEqual(game);
     expect(StorytellerGamePersistedSchema.safeParse(entry).success).toBe(false);
     // Local persisted state, whether tagged current or (contradictorily) v16.
-    migrateStoreState({ game: structuredClone(game), undoStack: [] }, 17);
+    migrateStoreState({ game: structuredClone(game), undoStack: [] }, 18);
     expect(takeMigrationResetFlag()).toBe(true);
     migrateStoreState({ game: structuredClone(game), undoStack: [] }, 16);
     expect(takeMigrationResetFlag()).toBe(true);

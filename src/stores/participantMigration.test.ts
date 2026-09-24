@@ -160,7 +160,7 @@ describe("Phase 9R.2 migration F: deterministic and idempotent", () => {
     const once = migrateLocal(persisted({ game: v16Game(), undoStack: [] }));
     const snapshot = structuredClone(once);
     expect(migrateLocal(once, 16)).toEqual(snapshot); // re-run from the v16 threshold again
-    expect(migrateLocal(once, 17)).toEqual(snapshot); // current-version rehydrate path (persist `merge`)
+    expect(migrateLocal(once, 18)).toEqual(snapshot); // current-version rehydrate path (persist `merge`)
     const entry = structuredClone(snapshot.game);
     migrateGameEntry(entry, 16, { kind: "canonical-only" });
     expect(entry).toEqual(snapshot.game);

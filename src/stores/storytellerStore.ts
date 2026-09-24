@@ -61,7 +61,7 @@ const UNDO_LIMIT = 20;
  * `merge` (Phase 9C.2B.2) passes to migrateStoreState when Zustand's own
  * persist middleware skips calling `migrate` outright, which it does
  * whenever the persisted version already equals this one. */
-const STORE_VERSION = 17;
+const STORE_VERSION = 18;
 
 let _migrationResetFlag = false;
 /** Returns true (once) when migrate() discarded incompatible persisted state. */
@@ -742,20 +742,29 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
       });
     }
   }
-  // v14 (Phase 9D.1) -> v16 (Phase 9D.3): the structured live-state,
-  // History, and Information Delivery evolution. Phase 9R.1 (Finding B1)
-  // extracted the actual per-entry transformation into migrateGameEntry
-  // (gameMigration.ts) so remote checkpoint recovery (readCheckpoint in
-  // storytellerSync.ts) can apply the exact same rules to a bare remote
-  // game -- never a second, divergent copy of them. See that function's
-  // own doc comment for what each version step does and does not invent.
+  // v14 (Phase 9D.1) -> v16 (Phase 9D.3): the structured Current State
+  // (Actual Alignment, Effects, Reminders), History, and Information
+  // Delivery evolution. Phase 9R.1 (Finding B1) extracted the actual
+  // per-entry transformation into migrateGameEntry (gameMigration.ts) so
+  // remote checkpoint recovery (readCheckpoint in storytellerSync.ts) can
+  // apply the exact same rules to a bare remote game -- never a second,
+  // divergent copy of them. See that function's own doc comment for what
+  // each version step does and does not invent.
   //
   // v17 (Phase 9R.2): historical participant identity -- the same shared
   // per-entry migration, applied identically to Current State and every
   // Undo snapshot (deterministic legacy-current ParticipantIds, never
   // random; every v16 historical PlayerId reference becomes an unresolved
   // legacy ParticipantRef, never the current occupant's identity).
-  if (fromVersion < 17) {
+  //
+  // v18 (terminology audit): the History category for an Actual Role change
+  // is renamed from "identity" to "role" -- the same shared per-entry
+  // migration, so Current State and every Undo snapshot canonicalize
+  // identically. Only that one category value changes. A store already
+  // labeled v18 never reaches this block (fromVersion is not < 18), so a
+  // stale "identity" in it fails the schema gate below and resets rather
+  // than being treated as v17 data.
+  if (fromVersion < 18) {
     const customScripts = (s as { customScripts?: Record<string, Script> }).customScripts ?? {};
     // Phase 9R.1 Astra remediation (Finding A2): local persisted migration
     // uses "trusted" evidence -- this state's OWN saved customScripts,
@@ -1625,7 +1634,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           players: { ...game.players, [id]: invalidatePrivatePacket(next) },
         };
         const recorded = recordIfLive(game, updatedGame, () => ({
-          category: "identity", playerId: id,
+          category: "role", playerId: id,
           change: { kind: "value", from: { actualRole: existing.actualRole }, to: { actualRole: roleId } },
           context,
         }));

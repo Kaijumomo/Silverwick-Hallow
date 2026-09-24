@@ -89,7 +89,7 @@ describe("Section 5: every production-generated Effect/Reminder History snapshot
     // Validation only judges -- it never rewrites a snapshot.
     expect(parsed.data!.history).toEqual(g.history);
     // And through the real persisted-state path (current version, no migration).
-    migrateStoreState({ game: structuredClone(g), undoStack: [structuredClone(g)] }, 17);
+    migrateStoreState({ game: structuredClone(g), undoStack: [structuredClone(g)] }, 18);
     expect(takeMigrationResetFlag()).toBe(false);
   });
 });

@@ -452,7 +452,7 @@ describe("Phase 9R.2: Traveler lifecycle", () => {
     state().addReminder(alice, { label: "Negative vote", sourceCharacter: "thief", sourcePlayer: T, lifetime: { kind: "manual" } });
     state().exileTraveler(T);
     const tessHistory = game().history.filter((h) => h.participant.playerId === T);
-    expect(tessHistory.map((h) => h.category)).toEqual(["identity", "alignment", "life"]);
+    expect(tessHistory.map((h) => h.category)).toEqual(["role", "alignment", "life"]);
 
     // Traveler leaves; the seat keeps its Traveler reservation, same PlayerId.
     expect(state().unseatPlayer(T)).toBe(true);
@@ -512,7 +512,7 @@ describe("Phase 9R.2: local persistence / rehydrate", () => {
     state().setStatus(alice, "drunk", true);
     await new Promise((resolve) => setTimeout(resolve, 0));
     const raw = localStorage.getItem(STORAGE_KEY)!;
-    expect(JSON.parse(raw).version).toBe(17);
+    expect(JSON.parse(raw).version).toBe(18);
     const beforeGame = structuredClone(game());
     const beforeUndo = structuredClone(state().undoStack);
 

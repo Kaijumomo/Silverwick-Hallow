@@ -495,7 +495,7 @@ describe("Phase 9D.1: live-state persistence/recovery round trip", () => {
     await writeProjections({ backend, code: "ABCD", stState: lobby, registry, online: {} });
 
     // The checkpoint is the authoritative game snapshot used for
-    // reconnect/restore -- it must carry the richer live state whole,
+    // reconnect/restore -- it must carry the richer Current State whole,
     // exactly as the existing checkpoint mechanism already does for every
     // other STPlayerRecord field.
     const rawCheckpoint = (await backend.get("lobbies/ABCD/checkpoint")) as string;
@@ -524,7 +524,7 @@ describe("Phase 9D.2: live-game history persistence/recovery round trip", () => 
     const p = (id: string) => participantRefOf(lobby, id)!;
     lobby.history = [
       {
-        id: "h1", category: "identity", participant: p("p1"), moment: { phase: "night", day: 1 },
+        id: "h1", category: "role", participant: p("p1"), moment: { phase: "night", day: 1 },
         change: { kind: "value", from: { actualRole: "chef" }, to: { actualRole: "imp" } },
       },
       {

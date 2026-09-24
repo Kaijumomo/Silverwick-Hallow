@@ -6,7 +6,7 @@ import type { PlayerId } from "@/stores/types";
  * driven entirely through real Authoritative Mutation/Setup/Information
  * commands, never hand-constructed -- exercising Setup composition, a
  * randomized Deal, pre-Reveal refinement, explicit Reveal, Night 1, live
- * Current State mutations (identity/alignment/life/effects/reminders),
+ * Current State mutations (role/alignment/life/effects/reminders),
  * History with Provenance, Information Delivery, a Traveler (public
  * character + private alignment + exile), night progress, and
  * Storyteller-private notes.
@@ -81,7 +81,7 @@ export function buildRichPhase9Game(): RichGameHandles {
   if (!store().game!.players[travelerId]!.isTraveler) {
     throw new Error("rich game: late arrival did not default to Traveler");
   }
-  store().assignRole(travelerId, "thief"); // public character -- Identity History
+  store().assignRole(travelerId, "thief"); // public character -- Role History
   store().setTravelerAlignment(travelerId, "evil", {
     provenance: { reason: "Storyteller selection", sourceCharacter: "thief" },
   }); // private alignment -- Alignment History with Provenance

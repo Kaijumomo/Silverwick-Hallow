@@ -10,7 +10,7 @@ import { participantRefOf } from "./participants";
 // Phase 9D.2: generic live-game history/provenance. Current state remains
 // authoritative -- history is explanatory bookkeeping only. Each `it` below
 // names the exact architectural requirement it proves; several deliberately
-// use more than one domain (identity/alignment/life/effect/reminder) to
+// use more than one domain (role/alignment/life/effect/reminder) to
 // demonstrate the mechanism is generic, not hard-coded to one example.
 
 const registry = buildRegistry(setupScript);
@@ -54,7 +54,7 @@ function goLive() {
 }
 
 describe("Phase 9D.2: generic scalar/state mutation", () => {
-  it("an eligible live mutation (identity) creates exactly one record with correct player, previous/resulting state, and moment", () => {
+  it("an eligible live mutation (role) creates exactly one record with correct player, previous/resulting state, and moment", () => {
     dealtGame();
     goLive();
     const id = game().seatOrder[0]!;
@@ -63,7 +63,7 @@ describe("Phase 9D.2: generic scalar/state mutation", () => {
     state().assignRole(id, target);
     expect(history()).toHaveLength(1);
     const entry = history()[0]!;
-    expect(entry.category).toBe("identity");
+    expect(entry.category).toBe("role");
     expect(entry.participant).toEqual(participantOf(id));
     expect(entry.participant).toMatchObject({ kind: "participant", playerId: id });
     expect(entry.change).toEqual({ kind: "value", from: { actualRole: before }, to: { actualRole: target } });
@@ -184,11 +184,11 @@ describe("Phase 9D.2: provenance", () => {
 });
 
 describe("Phase 9D.2: Setup boundary", () => {
-  it("Setup mutations across multiple domains (identity, effect, reminder) never populate history", () => {
-    dealtGame(); // the initial deal itself -- identity domain, Setup phase
+  it("Setup mutations across multiple domains (role, effect, reminder) never populate history", () => {
+    dealtGame(); // the initial deal itself -- role domain, Setup phase
     expect(history()).toEqual([]);
     const id = game().seatOrder[0]!;
-    expect(state().replaceSetupRole(id, "imp").ok).toBe(true); // Setup refinement -- identity domain
+    expect(state().replaceSetupRole(id, "imp").ok).toBe(true); // Setup refinement -- role domain
     state().setStatus(id, "poisoned", true); // effect domain, still Setup
     state().addReminder(id, { label: "Note", lifetime: { kind: "manual" } }); // reminder domain, still Setup
     state().setAlive(id, false); // life domain, still Setup
@@ -412,7 +412,7 @@ describe("Phase 9D.2 closure: Mutation Context carries Provenance through the au
     expect(game().players[id]!.actualRole).toBe(target);
     expect(history()).toHaveLength(1);
     expect(history()[0]).toMatchObject({
-      category: "identity", participant: participantOf(id),
+      category: "role", participant: participantOf(id),
       change: { kind: "value", from: { actualRole: before }, to: { actualRole: target } },
       provenance,
     });

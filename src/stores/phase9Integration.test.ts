@@ -50,7 +50,7 @@ describe("Phase 9D.5 Proof A: local persistence round-trip", () => {
     const raw = localStorage.getItem(STORAGE_KEY);
     expect(raw).toBeTruthy();
     const parsed = JSON.parse(raw!);
-    expect(parsed.version).toBe(17);
+    expect(parsed.version).toBe(18);
 
     // Simulate a fresh load: wipe in-memory state entirely. Zustand's
     // persist middleware wraps setState to also write-through on every

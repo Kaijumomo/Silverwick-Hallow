@@ -256,17 +256,24 @@ export type ReminderInput = Partial<Pick<ReminderRecord, "id">> &
 
 export type HistoryId = string;
 
-/** The live-state domains Phase 9D.2 records. Generic recording is
+/** The Current State domains Phase 9D.2 records. Generic recording is
  * preferred over one-off structures per feature; a new domain-specific
  * value here is warranted only when its game meaning would otherwise be
- * misrepresented as a lower-level field change (see "identity" vs
- * "alignment" vs "life", which share no fields but the same shapes). */
-export type HistoryCategory = "identity" | "alignment" | "life" | "effect" | "reminder";
+ * misrepresented as a lower-level field change (see "role" vs
+ * "alignment" vs "life", which share no fields but the same shapes).
+ *
+ * "role" is a change to a player's Actual Role -- deliberately not a
+ * generic "identity" category: participant identity (ParticipantRef) and
+ * Actual/Shown perception are different concepts (see TERMINOLOGY.md).
+ * v17 persisted this value as "identity"; the v17 -> v18 migration
+ * (gameMigration.ts) renames it, and the v18 schema rejects the old name. */
+export type HistoryCategory = "role" | "alignment" | "life" | "effect" | "reminder";
 
 /**
  * What changed, generically enough to cover both:
- *  - a scalar/identity-like truth changing value ("value"), possibly
- *    across several fields touched by one semantic action; and
+ *  - a scalar truth (an Actual Role, an Actual Alignment, Life State)
+ *    changing value ("value"), possibly across several fields touched by
+ *    one semantic action; and
  *  - a structured record (an effect, a reminder) being introduced or
  *    withdrawn wholesale ("added"/"removed"), snapshotted so the entry
  *    remains meaningful even after the live item is edited or removed.

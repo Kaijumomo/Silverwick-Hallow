@@ -111,6 +111,15 @@ views, Storyteller state, and a checkpoint containing the game and the
 authoritative roster snapshot in one writer-guarded update. Membership commands
 are the only intentional lifecycle exceptions.
 
+The checkpoint game carries no schema version. Recovery infers which supported
+legacy shape (v13–v17) it has from the game's own fields, then runs it through
+the same migration as local persisted state (`migrateGameEntry` in
+`src/stores/gameMigration.ts`) before validating it against the current schema.
+A v17-or-newer checkpoint is treated as v17. Its only remaining step is the
+store-v18 rename of the History category `"identity"` to `"role"`. That step is
+idempotent, so an already-v18 checkpoint comes through unchanged, and no
+checkpoint version field was added for it.
+
 ## Presence
 
 The Storyteller subscribes to `presence` at the exact parent path authorized by
