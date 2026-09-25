@@ -100,7 +100,7 @@ describe("Phase 9D.5 Proof A: local persistence round-trip", () => {
     expect(afterGame.players[handles.travelerId]!.exiled).toBe(true);
     expect(afterGame.players[handles.travelerId]!.alive).toBe(false); // exile also flips life state, but is its own History category, not a generic kill
     expect(afterGame.history.some((h) => refersTo(afterGame, h.participant, handles.travelerId) && h.category === "life" &&
-      h.lifeEvent?.added?.kind === "exile" && h.lifeEvent.added.outcome === "died" &&
+      h.lifeEvent?.operations.some((o) => o.kind === "added" && o.event.kind === "exile" && o.event.outcome === "died") === true &&
       !!h.change && "to" in h.change && (h.change.to as { exiled?: boolean }).exiled === true)).toBe(true);
 
     // Ordinary Life state and Ghost Vote.

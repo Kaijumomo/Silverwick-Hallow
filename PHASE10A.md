@@ -8,7 +8,7 @@ Status: implemented, awaiting Luna verification. Store schema **v19**.
 |---|---|---|
 | Current life truth | `STPlayerRecord.alive / ghostVote / exiled / abilityUsed` | Unchanged fields; `exiled` = the *current* death was a Traveler exile. "Not exiled" is stored as an absent key. |
 | Recent life events | `game.lifeEventWindow` (`LifeEventWindow`) | Authoritative, temporary, Storyteller-private. Current + immediately previous phase only. |
-| Explanation | `game.history` (`"life"` records) | Mirrors the state diff and/or the event added/removed, plus `correction: true`. Never queried by mechanics. |
+| Explanation | `game.history` (`"life"` records) | One record per affected participant per resolution: the state diff and/or `lifeEvent.operations` (ordered `{ kind: "added" \| "removed", event }`), plus `correction: true`. Never queried by mechanics. |
 
 Life Events: `death` (Night or Day, no outcome), `execution` (Day, outcome
 `died | survived | alreadyDead`), `exile` (Day, Traveler, outcome
@@ -53,6 +53,21 @@ Day is refused with no change, and `beginNightOne` is refused outside Setup
 (setup readiness), so canonicalization can never rerun over live play. Undo of
 the initial start, adopting a genuine Setup checkpoint and New Game still
 produce Setup legitimately.
+
+## Ordered same-participant events (Astra A2, 10A-ASTRA-004)
+
+One atomic resolution may give one participant several ordered Life Events
+(e.g. Al-Hadikhia: a dead player chooses to live, then all three die — the
+same participant is resurrected and then dies). Each intent is judged against
+the evolving working state (a second death of an already-dead player is
+refused, rolling back the whole transaction); there is no
+one-event-per-participant cap. The participant's single History record keeps
+every operation in transaction order in `lifeEvent.operations`, even when the
+final alive value equals the initial one. This revises the unreleased v19
+mirror in place (no v20): `lifeEvent` stays the v19 evidence key, and the
+superseded `{ added, removed }` shape, an empty operation list, or a malformed
+operation fails the v19 schema. `resolutionId` is correlation metadata only —
+not an idempotency key and not guaranteed unique.
 
 ## Monotonic live time, bound confirmations, private dialogs (Astra A1)
 

@@ -24,6 +24,11 @@ const game = () => store.getState().game!;
 const state = () => store.getState();
 const player = (id: PlayerId) => game().players[id]!;
 const events = () => game().lifeEventWindow.events;
+/** The single event a History Record added (test helper over the ordered
+ * Life Event operations). */
+const addedIn = (h: { lifeEvent?: { operations: { kind: string; event: import("@/stores/types").LifeEvent }[] } }) =>
+  h.lifeEvent?.operations.find((o) => o.kind === "added")?.event;
+
 const NIGHT1 = { phase: "night", day: 1 } as const;
 const DAY1 = { phase: "day", day: 1 } as const;
 const NIGHT2 = { phase: "night", day: 2 } as const;
@@ -87,7 +92,7 @@ describe("Phase 10A: basic death", () => {
     expect(record).toMatchObject({
       category: "life", participant: ref, moment: NIGHT1, provenance: { reason: "demon" },
       change: { kind: "value", from: { alive: true }, to: { alive: false } },
-      lifeEvent: { added: events()[0] },
+      lifeEvent: { operations: [{ kind: "added", event: events()[0] }] },
     });
     expect(record.correction).toBeUndefined();
     expect(StorytellerGamePersistedSchema.safeParse(JSON.parse(JSON.stringify(game()))).success).toBe(true);
@@ -208,7 +213,7 @@ describe("Phase 10A: exile", () => {
     expect(events().at(-1)).toMatchObject({ kind: "exile", outcome: "survived" });
     const record = game().history.at(-1)!;
     expect(record.change).toBeUndefined();
-    expect(record.lifeEvent?.added).toMatchObject({ kind: "exile", outcome: "survived" });
+    expect(addedIn(record)).toMatchObject({ kind: "exile", outcome: "survived" });
     // Several exiles on one Day are allowed.
     expect(state().recordExile(traveler, "survived").ok).toBe(true);
     expect(exilesAt(game(), DAY1)).toMatchObject({ status: "known", events: [{ outcome: "survived" }, { outcome: "survived" }] });
@@ -260,7 +265,7 @@ describe("Phase 10A: execution", () => {
     expect(player(ids[0]!)).toEqual(before.game.players[ids[0]!]);
     const record = game().history.at(-1)!;
     expect(record.change).toBeUndefined();
-    expect(record.lifeEvent?.added).toMatchObject({ kind: "execution", outcome: "survived" });
+    expect(addedIn(record)).toMatchObject({ kind: "execution", outcome: "survived" });
     expect(deathsAt(game(), DAY1)).toEqual({ status: "known", events: [] });
   });
 
@@ -446,7 +451,7 @@ describe("Phase 10A: future ability-engine seam (multi-intent transactions)", ()
     expectOneCommit(before);
     const records = game().history.slice(historyBefore);
     expect(records.map((h) => h.participant.playerId)).toEqual([ids[0], ids[1]]);
-    expect(records.every((h) => h.lifeEvent?.added?.resolutionId === "night-2-demon")).toBe(true);
+    expect(records.every((h) => addedIn(h)?.resolutionId === "night-2-demon")).toBe(true);
     state().undo();
     expect(game()).toEqual(before.game);
   });
@@ -461,16 +466,20 @@ describe("Phase 10A: future ability-engine seam (multi-intent transactions)", ()
     expect(player(ids[0]!).alive).toBe(true);
   });
 
-  it("one semantic action = one event per subject: a second event for the same subject is refused", () => {
+  it("one semantic action = one event, but one resolution may give a subject several ordered events (10A-ASTRA-004)", () => {
     const { ids } = liveGame();
     toDay();
-    const before = snap();
     const result = state().resolveLife({ intents: [
       { kind: "execution", playerId: ids[0]!, outcome: "survived" },
       { kind: "death", playerId: ids[0]! },
     ] });
-    expect(result.ok).toBe(false);
-    expectUnchanged(before);
+    expect(result.ok).toBe(true);
+    // Each intent is exactly one event (never execution + a separate death
+    // for one killing execution); the two intents keep their order.
+    expect(events().map((e) => e.kind)).toEqual(["execution", "death"]);
+    const record = game().history.at(-1)!;
+    expect(record.lifeEvent?.operations.map((o) => `${o.kind}:${o.event.kind}`)).toEqual(["added:execution", "added:death"]);
+    expect(player(ids[0]!).alive).toBe(false);
   });
 
   it("gameplay and correction intents never mix", () => {
@@ -517,9 +526,9 @@ describe("Phase 10A: corrections", () => {
     expect(events()).toEqual([]);
     expect(player(ids[0]!)).toMatchObject({ alive: true, ghostVote: true });
     const record = game().history.at(-1)!;
-    expect(record).toMatchObject({ category: "life", correction: true, lifeEvent: { removed: event },
+    expect(record).toMatchObject({ category: "life", correction: true, lifeEvent: { operations: [{ kind: "removed", event }] },
       change: { from: { alive: false }, to: { alive: true } } });
-    expect(record.lifeEvent?.added).toBeUndefined();
+    expect(addedIn(record)).toBeUndefined();
     state().undo();
     expect(game()).toEqual(before.game);
   });
@@ -541,7 +550,9 @@ describe("Phase 10A: corrections", () => {
     expect(replacement.id).not.toBe(event.id);
     expect(replacement).toMatchObject({ kind: "execution", outcome: "survived", moment: DAY1, subject: event.subject });
     expect(player(ids[0]!).alive).toBe(true);
-    expect(game().history.at(-1)).toMatchObject({ correction: true, lifeEvent: { removed: event, added: replacement } });
+    // Ordered operations: the retraction, then the replacement.
+    expect(game().history.at(-1)).toMatchObject({ correction: true,
+      lifeEvent: { operations: [{ kind: "removed", event }, { kind: "added", event: replacement }] } });
     // Accepted events are never edited in place: the original object is untouched.
     expect(event).toMatchObject({ outcome: "died" });
   });

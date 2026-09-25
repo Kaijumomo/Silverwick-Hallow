@@ -239,7 +239,7 @@ describe("Phase 9D.2: semantic action deduplication", () => {
     expect(entry.change).toEqual({
       kind: "value", from: { alive: true, exiled: false }, to: { alive: false, exiled: true },
     });
-    expect(entry.lifeEvent?.added).toMatchObject({ kind: "exile", outcome: "died", moment: { phase: "day", day: 1 } });
+    expect(entry.lifeEvent?.operations).toMatchObject([{ kind: "added", event: { kind: "exile", outcome: "died", moment: { phase: "day", day: 1 } } }]);
   });
 });
 

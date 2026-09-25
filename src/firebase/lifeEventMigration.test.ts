@@ -150,7 +150,7 @@ describe("Phase 10A migration: already-current (v19) data", () => {
     expect(detectLegacyGameVersion(v19Game())).toBe(19);
     expect(detectLegacyGameVersion(v18Game("night", 2))).toBe(17);
     const historyOnly = v18Game("night", 2);
-    (historyOnly.history as Raw[]).push({ id: "h3", category: "life", participant: alice, lifeEvent: { added: deathEvent() } });
+    (historyOnly.history as Raw[]).push({ id: "h3", category: "life", participant: alice, lifeEvent: { operations: [{ kind: "added", event: deathEvent() }] } });
     expect(hasV19LifeEvidence(historyOnly)).toBe(true);
     expect(detectLegacyGameVersion(historyOnly)).toBe(19);
   });
@@ -172,7 +172,27 @@ describe("Phase 10A migration: malformed v19 evidence never falls back into v18 
     ["an empty resolutionId", (g) => { (g.lifeEventWindow as Raw).events = [deathEvent({ resolutionId: "" })]; }],
     ["a History mirror with no window", (g) => {
       delete g.lifeEventWindow;
+      (g.history as Raw[]).push({ id: "h3", category: "life", participant: alice, lifeEvent: { operations: [{ kind: "added", event: deathEvent() }] } });
+    }],
+    ["a History mirror in the superseded { added } shape", (g) => {
       (g.history as Raw[]).push({ id: "h3", category: "life", participant: alice, lifeEvent: { added: deathEvent() } });
+    }],
+    ["a History mirror with no operations", (g) => {
+      (g.history as Raw[]).push({ id: "h3", category: "life", participant: alice, lifeEvent: { operations: [] } });
+    }],
+    ["a History mirror operation of an unknown kind", (g) => {
+      (g.history as Raw[]).push({ id: "h3", category: "life", participant: alice, lifeEvent: { operations: [{ kind: "edited", event: deathEvent() }] } });
+    }],
+    ["a History mirror operation without its event", (g) => {
+      (g.history as Raw[]).push({ id: "h3", category: "life", participant: alice, lifeEvent: { operations: [{ kind: "added" }] } });
+    }],
+    ["a History mirror operation carrying a malformed event", (g) => {
+      (g.history as Raw[]).push({ id: "h3", category: "life", participant: alice, lifeEvent: { operations: [{ kind: "added", event: deathEvent({ outcome: "died" }) }] } });
+    }],
+    ["a History mirror on a non-life record", (g) => {
+      (g.history as Raw[]).push({ id: "h3", category: "role", participant: alice,
+        change: { kind: "value", from: { actualRole: "chef" }, to: { actualRole: "imp" } },
+        lifeEvent: { operations: [{ kind: "added", event: deathEvent() }] } });
     }],
     ["a life History record with neither change nor Life Event", (g) => {
       (g.history as Raw[]).push({ id: "h3", category: "life", participant: alice, correction: true });

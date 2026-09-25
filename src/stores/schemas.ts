@@ -236,12 +236,16 @@ export const LifeEventWindowSchema = z.object({
   });
 });
 
-/** Phase 10A: the Life Event snapshot(s) a "life" History Record mirrors. */
+/** Phase 10A: the ordered Life Event operations a "life" History Record
+ * mirrors (10A-ASTRA-004). An array, never a set: order is transaction
+ * order; at least one operation. */
+const HistoryLifeEventOperationSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("added"), event: LifeEventSchema }).strict(),
+  z.object({ kind: z.literal("removed"), event: LifeEventSchema }).strict(),
+]);
 const HistoryLifeEventSchema = z.object({
-  added: LifeEventSchema.optional(),
-  removed: LifeEventSchema.optional(),
-}).strict().refine((value) => value.added !== undefined || value.removed !== undefined,
-  { message: "a History Life Event mirror names an added or removed event" });
+  operations: z.array(HistoryLifeEventOperationSchema).min(1),
+}).strict();
 
 export const HistoryChangeSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("value"), from: z.record(z.string(), z.unknown()), to: z.record(z.string(), z.unknown()) }),

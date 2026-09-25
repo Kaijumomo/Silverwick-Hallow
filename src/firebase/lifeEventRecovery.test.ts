@@ -42,14 +42,14 @@ afterEach(async () => {
  * guarantees by committing all three together. */
 function expectCoherent(game: StorytellerLobbyRecord) {
   for (const event of game.lifeEventWindow.events) {
-    const mirrors = game.history.filter((h) => h.lifeEvent?.added?.id === event.id);
+    const mirrors = game.history.filter((h) => h.lifeEvent?.operations.some((o) => o.kind === "added" && o.event.id === event.id));
     expect(mirrors, event.id).toHaveLength(1);
-    expect(mirrors[0]!.lifeEvent!.added).toEqual(event);
+    expect(mirrors[0]!.lifeEvent!.operations.find((o) => o.event.id === event.id)).toEqual({ kind: "added", event });
     const subject = game.players[event.subject.playerId];
     if (isDeathEvent(event) && subject?.participantId === event.subject.participantId) {
       const laterFix = game.history.some((h) => h.participant.kind === "participant" &&
         h.participant.participantId === event.subject.participantId && game.history.indexOf(h) > game.history.indexOf(mirrors[0]!) &&
-        (h.correction || h.lifeEvent?.added?.kind === "resurrection"));
+        (h.correction || !!h.lifeEvent?.operations.some((o) => o.kind === "added" && o.event.kind === "resurrection")));
       if (!laterFix) expect(subject.alive, event.id).toBe(false);
     }
   }

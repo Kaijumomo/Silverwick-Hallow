@@ -125,7 +125,9 @@ History category.
   `execution`, `exile` or `resurrection`, about a durable ParticipantRef, at a
   Game Moment. Executions and exiles carry an `outcome`; one semantic action is
   one event (an execution that kills is `execution`/`died`, never an execution
-  plus a death). Immutable; ids are never reused.
+  plus a death). Immutable; ids are never reused. One resolution may give a
+  participant several ordered events (e.g. a resurrection then a death); the
+  participant's History record lists them in order in `lifeEvent.operations`.
 - **Life Event Window** (`game.lifeEventWindow`): authoritative temporary
   gameplay state holding the events of the current and immediately previous
   phase. Not History, and never rebuilt from History. Every phase change

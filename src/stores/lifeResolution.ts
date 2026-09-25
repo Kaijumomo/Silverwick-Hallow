@@ -6,6 +6,7 @@ import type {
   DayGameMoment,
   ExecutionOutcome,
   ExileOutcome,
+  HistoryLifeEventOperation,
   HistoryRecord,
   LifeEvent,
   LifeEventId,
@@ -118,7 +119,10 @@ export type LifeTransaction = {
   intents: readonly LifeIntent[];
   /** Provenance for every event and History Record this produces. */
   context?: MutationContext;
-  /** Correlates the events one resolution produces (future ability engine). */
+  /** Correlates the events one resolution produces (future ability engine).
+   * Correlation METADATA only: it is not an idempotency key and is not
+   * guaranteed globally unique -- future mechanics must not assume either
+   * unless a later contract explicitly upgrades this invariant. */
   resolutionId?: string;
 };
 
@@ -260,8 +264,9 @@ type Touched = {
   playerId?: PlayerId;
   before?: LifeFields;
   after?: LifeFields;
-  added?: LifeEvent;
-  removed?: LifeEvent;
+  /** Every Life Event Window operation for this participant, in
+   * transaction order (10A-ASTRA-004: never limited to one per player). */
+  operations: HistoryLifeEventOperation[];
 };
 
 const refuse = (message: string): LifeRefusal => ({ ok: false, code: "refused", message });
@@ -318,7 +323,7 @@ export function planLifeTransaction(
   const touch = (participant: CurrentParticipantRef, player?: STPlayerRecord): Touched => {
     let entry = touched.get(participant.participantId);
     if (!entry) {
-      entry = { participant };
+      entry = { participant, operations: [] };
       touched.set(participant.participantId, entry);
     }
     if (player && !entry.playerId) {
@@ -332,17 +337,20 @@ export function planLifeTransaction(
     working.set(player.id, next);
     touch(participant, player).after = next;
   };
+  // 10A-ASTRA-004: one participant may receive several ordered events in
+  // one atomic resolution (e.g. resurrection then death). Legality comes
+  // from each intent's check against the EVOLVING working state (a second
+  // death of an already-dead player is refused there), never from a
+  // one-event-per-player cap.
+  const addedEventIds: LifeEventId[] = [];
   const addEvent = (event: LifeEvent): LifeRefusal | null => {
-    const entry = touch(event.subject);
-    if (entry.added) return refuse("One resolution records at most one Life Event per player.");
-    entry.added = event;
+    touch(event.subject).operations.push({ kind: "added", event });
     events.push(event);
+    addedEventIds.push(event.id);
     return null;
   };
   const removeEvent = (event: LifeEvent): LifeRefusal | null => {
-    const entry = touch(event.subject);
-    if (entry.removed) return refuse("One correction retracts at most one Life Event per player.");
-    entry.removed = event;
+    touch(event.subject).operations.push({ kind: "removed", event });
     events = events.filter((e) => e.id !== event.id);
     return null;
   };
@@ -547,17 +555,14 @@ export function planLifeTransaction(
   for (const entry of touched.values()) {
     const diff = entry.before && entry.after ? lifeDiff(entry.before, entry.after) : null;
     if (diff && entry.playerId) playerPatches[entry.playerId] = { ...entry.after! };
-    if (!diff && !entry.added && !entry.removed) continue;
+    if (!diff && entry.operations.length === 0) continue;
     history.push(cloneOwned({
       id: ids.historyId(),
       category: "life" as const,
       participant: entry.participant,
       moment: { ...current },
       ...(diff ? { change: { kind: "value" as const, ...diff } } : {}),
-      ...(entry.added || entry.removed ? { lifeEvent: {
-        ...(entry.removed ? { removed: entry.removed } : {}),
-        ...(entry.added ? { added: entry.added } : {}),
-      } } : {}),
+      ...(entry.operations.length ? { lifeEvent: { operations: entry.operations } } : {}),
       ...(correction ? { correction: true as const } : {}),
       ...(provenance ? { provenance } : {}),
     }));
@@ -571,11 +576,13 @@ export function planLifeTransaction(
       playerPatches,
       // The window object is replaced only when an event was added or
       // removed; a vote-token change or status correction leaves it as is.
-      lifeEventWindow: [...touched.values()].some((entry) => entry.added || entry.removed)
+      lifeEventWindow: [...touched.values()].some((entry) => entry.operations.length > 0)
         ? { coverageFrom: game.lifeEventWindow.coverageFrom, events }
         : game.lifeEventWindow,
       history,
-      addedEventIds: [...touched.values()].flatMap((entry) => entry.added ? [entry.added.id] : []),
+      // Transaction order; an event added then removed again within the same
+      // correction is not reported as added.
+      addedEventIds: addedEventIds.filter((id) => events.some((e) => e.id === id)),
     },
   };
 }

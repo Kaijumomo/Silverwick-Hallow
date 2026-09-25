@@ -406,20 +406,28 @@ type HistoryRecordCommon = {
   note?: string;
 };
 
-/** Phase 10A: the Life Event Window change a "life" History Record mirrors
- * -- a snapshot of the event added and/or removed for this participant, so
- * the record stays meaningful after the event itself expires from the
- * window. At least one of the two is present. */
+/** Phase 10A: one Life Event Window operation, with an immutable snapshot
+ * of the event added or removed. */
+export type HistoryLifeEventOperation =
+  | { kind: "added"; event: LifeEvent }
+  | { kind: "removed"; event: LifeEvent };
+
+/** Phase 10A: the Life Event Window changes a "life" History Record mirrors
+ * for its participant, in TRANSACTION ORDER, so the record stays meaningful
+ * after the events expire from the window. One atomic resolution may give
+ * one participant several ordered events (10A-ASTRA-004: e.g. a
+ * resurrection and then a death in the same resolution) -- both are kept,
+ * even when the final alive value equals the initial one. At least one
+ * operation is present. */
 export type HistoryLifeEvent = {
-  added?: LifeEvent;
-  removed?: LifeEvent;
+  operations: HistoryLifeEventOperation[];
 };
 
 /**
  * Phase 10A: a "life" record carries meaningful content -- a Current State
  * diff (`change`), a mirrored Life Event (`lifeEvent`), or both. An
  * execution the executee survives changes no life field, yet its record
- * still explains what happened through `lifeEvent.added`; there is no
+ * still explains what happened through its `lifeEvent` operations; there is no
  * empty-diff record. `correction: true` marks a Storyteller correction
  * (retract/amend/late record/status correction) as opposed to a gameplay
  * event. Every other category keeps its required `change` and never carries
