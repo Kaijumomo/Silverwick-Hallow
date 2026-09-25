@@ -479,12 +479,15 @@ export function GameScreen() {
             className="btn btn-gold"
             onClick={() => {
               closeOverflow();
-              // Phase 10A: Day -> Night passes through the dusk review.
-              if (game.phase === "day") { setDuskReviewOpen(true); return; }
+              // Phase 10A: Day -> Night passes through the dusk review, a
+              // private Storyteller dialog -- unavailable under Privacy Mode
+              // (10A-ASTRA-003); turn Privacy Mode off, then review.
+              if (game.phase === "day") { if (!privacyMode) setDuskReviewOpen(true); return; }
               const result = advancePhase();
               setPhaseError(result.ok ? null : "Setup changed. Open Setup to review what needs attention.");
             }}
-            disabled={game.phase === "ended"}
+            disabled={game.phase === "ended" || (game.phase === "day" && privacyMode)}
+            title={game.phase === "day" && privacyMode ? "Turn off Privacy Mode to review the Day before continuing to Night" : undefined}
           >
             {advanceLabel}
           </button>}
@@ -595,7 +598,11 @@ export function GameScreen() {
         />
       )}
 
-      {dayResolutionOpen && !privacyMode && game.phase === "day" && (
+      {/* 10A-ASTRA-003: the Life Event dialogs mount whenever their open
+          state is set -- under Privacy Mode each renders nothing and closes
+          itself (usePrivateDialog), so no stale open state can survive to
+          reveal private content when Privacy Mode ends. */}
+      {dayResolutionOpen && game.phase === "day" && (
         <DayResolutionPanel onClose={() => setDayResolutionOpen(false)} />
       )}
       {duskReviewOpen && game.phase === "day" && (
@@ -609,7 +616,7 @@ export function GameScreen() {
           }}
         />
       )}
-      {lifeEventsOpen && !privacyMode && (game.phase === "night" || game.phase === "day") && (
+      {lifeEventsOpen && (game.phase === "night" || game.phase === "day") && (
         <LifeEventsPanel onClose={() => setLifeEventsOpen(false)} />
       )}
 

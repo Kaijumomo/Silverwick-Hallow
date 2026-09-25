@@ -82,9 +82,14 @@ not an idempotency key and not guaranteed unique.
   participation instance at exactly that moment, or the transaction is refused
   as `stale` (a PlayerId, name or UID match is never enough). The UI also drops
   a pending confirmation when the participant, moment or Privacy Mode changes.
-- Privacy Mode (10A-ASTRA-003): Day resolution and Life events render nothing
-  (and their entry points are hidden) under Privacy Mode; the dusk review shows
-  only a public-safe notice; turning Privacy Mode on closes all three.
+- Privacy Mode (10A-ASTRA-003): Day resolution, the dusk review and Life
+  events are private Storyteller dialogs. Under Privacy Mode each renders
+  nothing and closes itself (`usePrivateDialog`: `onClose` from an effect, and
+  a latch so it stays suppressed for that mount even if the caller ignores the
+  close), so disabling Privacy Mode never reveals stale private content — the
+  Storyteller must explicitly reopen it. Their entry points are hidden or
+  disabled (Day → Night waits for Privacy Mode to end), and GameScreen also
+  closes all three when Privacy Mode turns on.
 
 ## Window, coverage and rollover
 

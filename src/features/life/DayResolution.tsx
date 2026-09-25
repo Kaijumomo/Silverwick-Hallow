@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { useStorytellerStore } from "@/stores/storytellerStore";
-import { usePrivacyStore } from "@/stores/privacyStore";
+import { usePrivateDialog } from "./usePrivateDialog";
 import { currentLiveMoment, executionsAt, exilesAt, type LifeEventQueryResult } from "@/stores/lifeEvents";
 import type { LifeEvent, LiveGameMoment, StorytellerLobbyRecord, STPlayerRecord } from "@/stores/types";
 import { useLifeRunner, executionOptions } from "./LifeControls";
@@ -43,9 +43,9 @@ const UNKNOWN_DAY = "Life Events for this Day were not fully recorded (this game
 export function DayResolutionPanel({ onClose }: { onClose: () => void }) {
   const game = useStorytellerStore((s) => s.game);
   // 10A-ASTRA-003: Life Event snapshots (names at the time, outcomes) are
-  // Storyteller-private; under Privacy Mode nothing of this panel is
-  // rendered, and turning Privacy Mode on unmounts it immediately.
-  const privacyMode = usePrivacyStore((s) => s.enabled);
+  // Storyteller-private; under Privacy Mode this panel closes itself and
+  // renders nothing, and it never reappears when Privacy Mode ends.
+  const suppressed = usePrivateDialog(onClose);
   const store = useStorytellerStore.getState;
   const [executee, setExecutee] = useState("");
   const [exilee, setExilee] = useState("");
@@ -53,7 +53,7 @@ export function DayResolutionPanel({ onClose }: { onClose: () => void }) {
   const participantAt = (id: string) => (id && game?.players[id]?.participantId) || "";
   const { attempt, confirmation, errorNode, clear } = useLifeRunner(
     `${participantAt(executee)}|${participantAt(exilee)}|${moment?.phase ?? ""}|${moment?.day ?? ""}`);
-  if (privacyMode || !game || !moment || moment.phase !== "day") return null;
+  if (suppressed || !game || !moment || moment.phase !== "day") return null;
   const players = seatedPlayers(game);
   const ordinary = players.filter((p) => !p.isTraveler);
   const travelers = players.filter((p) => p.isTraveler);
@@ -136,22 +136,12 @@ export function DuskReview({ onClose, onRecord, onContinue }: {
   onClose: () => void; onRecord: () => void; onContinue: () => void;
 }) {
   const game = useStorytellerStore((s) => s.game);
-  const privacyMode = usePrivacyStore((s) => s.enabled);
+  // 10A-ASTRA-003: the review is private Storyteller UI -- under Privacy
+  // Mode it closes itself and never lingers mounted to turn private again.
+  const suppressed = usePrivateDialog(onClose);
   const [confirmedNone, setConfirmedNone] = useState(false);
   const moment: LiveGameMoment | null = game ? currentLiveMoment(game) : null;
-  if (!game || !moment || moment.phase !== "day") return null;
-  // 10A-ASTRA-003: under Privacy Mode no Life Event snapshot is rendered at
-  // all -- only a public-safe notice (the review itself needs private data).
-  if (privacyMode) return (
-    <Modal title={`Day ${moment.day} resolution`} onClose={onClose} className="dusk-review">
-      <div className="dialog-body">
-        <p className="behavior-help">Turn off Privacy Mode to review today&apos;s executions and exiles before continuing to Night {moment.day + 1}.</p>
-        <div className="drawer-row dialog-actions">
-          <button className="btn btn-sm" onClick={onClose}>Close</button>
-        </div>
-      </div>
-    </Modal>
-  );
+  if (suppressed || !game || !moment || moment.phase !== "day") return null;
   const executions = executionsAt(game, moment);
   const exiles = exilesAt(game, moment);
   const noExecutionRecorded = executions.status === "known" && executions.events.length === 0;

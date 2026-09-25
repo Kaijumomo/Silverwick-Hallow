@@ -69,14 +69,17 @@ describe("10A-ASTRA-003: event-bearing dialogs opened under Privacy Mode render 
     control.unmount();
 
     usePrivacyStore.setState({ enabled: true });
+    const closes = [vi.fn(), vi.fn(), vi.fn()];
     render(<>
-      <DayResolutionPanel onClose={() => {}} />
-      <LifeEventsPanel onClose={() => {}} />
-      <DuskReview onClose={() => {}} onRecord={() => {}} onContinue={() => {}} />
+      <DayResolutionPanel onClose={closes[0]!} />
+      <LifeEventsPanel onClose={closes[1]!} />
+      <DuskReview onClose={closes[2]!} onRecord={() => {}} onContinue={() => {}} />
     </>);
     expectNoPrivateEventData();
-    // Dusk shows only a public-safe notice, with no way to continue unseen.
-    expect(screen.getByText(/Turn off Privacy Mode to review/)).toBeInTheDocument();
+    // Final remediation: each closes itself -- no dormant "safe" dialog stays
+    // mounted, and there is no way to continue unseen.
+    for (const close of closes) expect(close).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByRole("button", { name: /Continue to Night/ })).toBeNull();
   });
 
@@ -86,8 +89,11 @@ describe("10A-ASTRA-003: event-bearing dialogs opened under Privacy Mode render 
     render(<GameScreen />);
     expect(screen.queryByRole("button", { name: "Day resolution" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Life events" })).toBeNull();
+    // The dusk review is private: Day -> Night waits for Privacy Mode to end.
+    expect(screen.getByRole("button", { name: "→ Night" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "→ Night" }));
     expectNoPrivateEventData();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
 
