@@ -451,6 +451,8 @@ export type StorytellerStore = {
   removeInformationDelivery: (deliveryId: InformationDeliveryId) => void;
   setNotes: (id: PlayerId, notes: string) => void;
 
+  /** Setup -> Night/Day delegates to beginNightOne(); Night/Day -> Setup is
+   * refused (Phase 10A: Setup is pre-game only); leaving "ended" is refused. */
   setPhase: (phase: StorytellerLobbyRecord["phase"]) => SetupCommandResult;
   advancePhase: () => SetupCommandResult;
 
@@ -2353,6 +2355,15 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (game.phase === "setup" && (phase === "night" || phase === "day")) {
           return get().beginNightOne();
         }
+        // Phase 10A (10A-LUNA-RV-001): Setup is pre-game only. Once a game is
+        // in Live Play (Night/Day) the phase API never moves it back to
+        // Setup -- otherwise beginNightOne() would treat a running game as a
+        // fresh start and re-apply starting-life canonicalization over
+        // legitimate deaths, exiles and spent votes. Refused before any
+        // mutation. (Undo of the initial start and adopting a genuine Setup
+        // checkpoint restore whole snapshots and are unaffected.)
+        if (phase === "setup" && (game.phase === "night" || game.phase === "day"))
+          return { ok: false, message: "Setup is only available before live play begins." };
         // Phase 9R.4 (B8): the requested phase already holds. The ended-game
         // restriction above still applies first.
         if (game.phase === phase) return { ok: true };

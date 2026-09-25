@@ -48,6 +48,12 @@ starting again canonicalizes again. `undo` and `restoreRemoteCheckpoint`
 replace the whole game with an existing snapshot, so no Setup field crosses
 into Live Play through them; later Night ↔ Day changes never touch life state.
 
+Setup is pre-game only (10A-LUNA-RV-001): `setPhase("setup")` from Night or
+Day is refused with no change, and `beginNightOne` is refused outside Setup
+(setup readiness), so canonicalization can never rerun over live play. Undo of
+the initial start, adopting a genuine Setup checkpoint and New Game still
+produce Setup legitimately.
+
 ## Window, coverage and rollover
 
 - Every phase change (`advancePhase`, `setPhase`, `beginNightOne`) prunes the

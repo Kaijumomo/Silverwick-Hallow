@@ -312,19 +312,30 @@ describe("population and persisted history", () => {
     dealt();state().beginNightOne();state().removePlayer(game().seatOrder[0]!);state().advancePhase();
     expect(game().startingNonTravelerCount).toBe(5);expect(game().plannedPlayerCount).toBe(5);
   });
-  it("starting count survives revisiting setup", () => {
-    dealt();state().beginNightOne();state().setPhase("setup");
-    state().removePlayer(game().seatOrder[0]!);state().setPlannedPlayerCount(4);state().beginNightOne();
+  it("starting count survives an attempted return to setup", () => {
+    // Phase 10A (10A-LUNA-RV-001): a live game can no longer be moved back
+    // to Setup, so it cannot be "restarted" either; the count stays frozen.
+    dealt();state().beginNightOne();
+    expect(state().setPhase("setup")).toEqual({ ok: false, message: "Setup is only available before live play begins." });
+    state().removePlayer(game().seatOrder[0]!);state().setPlannedPlayerCount(4);state().advancePhase();
+    expect(game().phase).toBe("day");
     expect(game().startingNonTravelerCount).toBe(5);
   });
   // Proof F: a genuinely running/legacy game (day > 0, no setupRolesDealt
   // marker at all) returning to Setup must remain usable — day > 0 is trusted
   // evidence an initial deal already happened, without inventing one.
   it("legacy running history stays unknown even after returning to setup", () => {
-    const legacy = setupGame(standardRoles(5),{phase:"day",day:3});
+    // Phase 10A (10A-LUNA-RV-001): the phase API no longer moves a live game
+    // back to Setup, so the legacy "returned to Setup" state (Setup, day > 0,
+    // no deal marker) is seeded directly -- as a legacy save/checkpoint may
+    // still carry it -- and must remain usable.
+    const running = setupGame(standardRoles(5),{phase:"day",day:3});
+    store.setState({game:running});
+    expect(state().setPhase("setup").ok).toBe(false);
+    expect(game().phase).toBe("day");
+    const legacy = setupGame(standardRoles(5),{phase:"setup",day:3});
     expect(Object.hasOwn(legacy, "setupRolesDealt")).toBe(false);
     store.setState({game:legacy});
-    state().setPhase("setup");
     expect(analyzeSetup(selectSetupContext(game(), setupScript)).readiness.begin.ok).toBe(true);
     expect(state().beginNightOne().ok).toBe(true);
     expect(game().phase).toBe("night");

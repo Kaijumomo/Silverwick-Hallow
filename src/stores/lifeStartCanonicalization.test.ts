@@ -195,16 +195,13 @@ describe("10A-LUNA-001: every Setup -> Live path shares the boundary", () => {
     expect(state().undoStack.at(-1)).toEqual(preStart);
   });
 
-  it("Undo from Setup back to a live snapshot restores that snapshot whole -- no Setup life field crosses", () => {
+  it("a live game cannot be moved back to Setup, so canonicalization can never rerun over live play", () => {
     const ids = revealedSetup();
     expect(state().beginNightOne().ok).toBe(true);
-    expect(state().recordDeath(ids[0]!).ok).toBe(true); // a legitimate live death
-    const live = structuredClone(game());
-    expect(state().setPhase("setup").ok).toBe(true);
-    withPlayer(ids[1]!, STALE); // stale Setup-era life state (not via any command)
-    state().undo();
-    expect(game()).toEqual(live);
-    expectCanonicalAlive(player(ids[1]!));
+    expect(state().recordDeath(ids[0]!).ok).toBe(true);
+    expect(state().setPhase("setup").ok).toBe(false);
+    expect(state().beginNightOne().ok).toBe(false); // not in Setup: no restart
+    expect(game().phase).toBe("night");
     expect(player(ids[0]!).alive).toBe(false);
   });
 
@@ -240,5 +237,136 @@ describe("10A-LUNA-001: later phase changes never reset live life state", () => 
     expect(state().setPhase("night").ok).toBe(true); // Day -> Night via setPhase
     expect(player(ids[0]!)).toMatchObject({ alive: false, ghostVote: false });
     expect(player(traveler)).toMatchObject({ alive: false, exiled: true });
+  });
+});
+
+describe("10A-LUNA-RV-001: Live Play never returns to Setup through the phase API", () => {
+  const REFUSAL = { ok: false, message: "Setup is only available before live play begins." };
+  /** Every piece of store state a refused command must leave untouched. */
+  const everything = () => {
+    const s = state();
+    return { game: s.game, undoStack: s.undoStack, localSeq: s.localSeq, sync: s.sync,
+      history: s.game?.history, window: s.game?.lifeEventWindow, json: JSON.stringify(s.game) };
+  };
+  function expectInert(before: ReturnType<typeof everything>) {
+    const after = everything();
+    expect(after.game).toBe(before.game);
+    expect(after.undoStack).toBe(before.undoStack);
+    expect(after.localSeq).toBe(before.localSeq);
+    expect(after.sync).toBe(before.sync);
+    expect(after.history).toBe(before.history);
+    expect(after.window).toBe(before.window);
+    expect(after.json).toBe(before.json);
+  }
+  function liveNight(): { ids: PlayerId[]; traveler: PlayerId } {
+    const ids = revealedSetup();
+    expect(state().beginNightOne().ok).toBe(true);
+    state().addPlayerToSeat("Tess");
+    const traveler = game().seatOrder.at(-1)!;
+    state().assignRole(traveler, "thief");
+    state().ensureSyncScope("RVSYNC01", "session-rv");
+    return { ids, traveler };
+  }
+
+  it("Night -> Setup is refused and changes nothing", () => {
+    liveNight();
+    const before = everything();
+    expect(state().setPhase("setup")).toEqual(REFUSAL);
+    expect(game().phase).toBe("night");
+    expectInert(before);
+  });
+
+  it("Day -> Setup is refused and changes nothing", () => {
+    liveNight();
+    expect(state().advancePhase().ok).toBe(true);
+    const before = everything();
+    expect(state().setPhase("setup")).toEqual(REFUSAL);
+    expect(game().phase).toBe("day");
+    expectInert(before);
+  });
+
+  it("beginNightOne() on a live game is refused and changes nothing (no restart, no canonicalization)", () => {
+    const { ids } = liveNight();
+    state().recordDeath(ids[0]!);
+    for (const advance of [false, true]) {
+      if (advance) state().advancePhase();
+      const before = everything();
+      expect(state().beginNightOne().ok).toBe(false);
+      expectInert(before);
+    }
+    expect(player(ids[0]!).alive).toBe(false);
+  });
+
+  it("a legitimate death survives the attempted regression and later phase changes", () => {
+    const { ids } = liveNight();
+    expect(state().recordDeath(ids[0]!).ok).toBe(true);
+    expect(state().setPhase("setup").ok).toBe(false);
+    expect(player(ids[0]!)).toMatchObject({ alive: false, ghostVote: true });
+    state().advancePhase(); state().advancePhase(); state().advancePhase(); // Day 1, Night 2, Day 2
+    expect(game()).toMatchObject({ phase: "day", day: 2 });
+    expect(player(ids[0]!)).toMatchObject({ alive: false, ghostVote: true });
+  });
+
+  it("a legitimate exile survives the attempted regression and later phase changes", () => {
+    const { traveler } = liveNight();
+    state().advancePhase();
+    expect(state().recordExile(traveler, "died").ok).toBe(true);
+    expect(state().setPhase("setup").ok).toBe(false);
+    state().advancePhase(); state().advancePhase();
+    expect(player(traveler)).toMatchObject({ alive: false, ghostVote: true, exiled: true });
+  });
+
+  it("a spent ghost vote survives the attempted regression and later phase changes", () => {
+    const { ids } = liveNight();
+    state().recordDeath(ids[1]!);
+    expect(state().spendGhostVote(ids[1]!).ok).toBe(true);
+    expect(state().setPhase("setup").ok).toBe(false);
+    state().advancePhase(); state().advancePhase();
+    expect(player(ids[1]!)).toMatchObject({ alive: false, ghostVote: false });
+  });
+
+  it("Undo of the initial start still restores the exact pre-start Setup, and restarting canonicalizes again", () => {
+    const ids = revealedSetup();
+    withPlayer(ids[0]!, STALE);
+    const preStart = structuredClone(game());
+    expect(state().beginNightOne().ok).toBe(true);
+    expectCanonicalAlive(player(ids[0]!));
+    state().undo();
+    expect(game()).toEqual(preStart);
+    expect(state().beginNightOne().ok).toBe(true);
+    expectCanonicalAlive(player(ids[0]!));
+  });
+
+  it("an adopted genuine Setup checkpoint stays Setup and starts through beginNightOne() with canonicalization", () => {
+    const ids = revealedSetup();
+    withPlayer(ids[1]!, STALE);
+    state().restoreRemoteCheckpoint(structuredClone(game()), null);
+    expect(game().phase).toBe("setup");
+    expect(state().setPhase("night").ok).toBe(true); // routes through beginNightOne()
+    expect(game()).toMatchObject({ phase: "night", day: 1 });
+    expectCanonicalAlive(player(ids[1]!));
+    expect(game().history).toEqual([]);
+  });
+
+  it("setPhase(\"setup\") while already in Setup remains a successful true no-op", () => {
+    revealedSetup();
+    const before = everything();
+    expect(state().setPhase("setup")).toEqual({ ok: true });
+    expectInert(before);
+  });
+
+  it("the ended-game lifecycle is unchanged: leaving 'ended' (including to Setup) is refused with no change", () => {
+    liveNight();
+    expect(state().setPhase("ended").ok).toBe(true);
+    const before = everything();
+    expect(state().setPhase("setup")).toEqual({ ok: false, message: "This game has ended. Create a new setup to play again." });
+    expect(state().setPhase("night").ok).toBe(false);
+    expectInert(before);
+  });
+
+  it("New Game still starts a fresh Setup", () => {
+    liveNight();
+    state().newGame(setupScript.id, { plannedPlayerCount: 5 });
+    expect(game()).toMatchObject({ phase: "setup", day: 0 });
   });
 });
