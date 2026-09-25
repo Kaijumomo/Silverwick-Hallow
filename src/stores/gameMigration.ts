@@ -1,6 +1,7 @@
 import { BUILTIN_SCRIPTS } from "@/data/scripts";
 import { buildRegistry, deriveAlignment, type RoleRegistry } from "@/data/roleRegistry";
 import { legacyCurrentParticipantId, legacyParticipantRef } from "./participants";
+import { migratedLifeEventCoverage } from "./lifeEvents";
 import type { STPlayerRecord, Script } from "./types";
 
 /**
@@ -99,10 +100,10 @@ function registryForScript(scriptId: unknown, evidence: MigrationScriptEvidence)
 }
 
 /**
- * Migrates one game-shaped entry from `fromVersion` up through v18,
+ * Migrates one game-shaped entry from `fromVersion` up through v19,
  * in place, mirroring migrateStoreState's own mutate-then-validate style
  * (the caller is responsible for the final schema validation gate). A
- * no-op for `fromVersion >= 18` or a non-object entry.
+ * no-op for `fromVersion >= 19` or a non-object entry.
  *
  * v13 -> v14 (Phase 9D.1): ordinary Actual Alignment is derived only from
  * an assigned, currently-resolvable Role -- never invented, never
@@ -149,6 +150,8 @@ function registryForScript(scriptId: unknown, evidence: MigrationScriptEvidence)
  *
  * v17 -> v18 (terminology audit): the History category for an Actual Role
  * change is renamed from "identity" to "role". See migrateEntryV17ToV18.
+ *
+ * v18 -> v19 (Phase 10A): the Life Event Window. See migrateEntryV18ToV19.
  */
 /**
  * Migrates exactly one player entry's v13-shaped fields, in place.
@@ -357,6 +360,31 @@ function migrateEntryV17ToV18(e: Record<string, unknown>): void {
   });
 }
 
+/**
+ * v18 -> v19 (Phase 10A): the Life Event Window, in place.
+ *
+ * A genuinely absent `lifeEventWindow` is added with NO events -- Life
+ * Events are never backfilled from v18 History, which is explanatory
+ * bookkeeping only -- and with honest coverage: the phase this entry is in
+ * (and the one before it) was not observed under the v19 event model, so
+ * coverage begins at the NEXT phase (migratedLifeEventCoverage). Each entry
+ * (Current State, every Undo snapshot, a remote checkpoint's game) derives
+ * coverage from its OWN phase/day, deterministically: no id, clock or
+ * randomness is involved, so re-running is idempotent and independent
+ * migrations of the same lineage agree.
+ *
+ * Nothing else changes: Current State, History, Information Delivery,
+ * participant identity, Effects/Reminders and Provenance are untouched.
+ * An unusable phase/day leaves the window absent for the final schema gate
+ * to reject (Finding A3: migration never repairs malformed data).
+ */
+function migrateEntryV18ToV19(e: Record<string, unknown>): void {
+  if (e.lifeEventWindow !== undefined) return;
+  const coverageFrom = migratedLifeEventCoverage(e.phase, e.day);
+  if (!coverageFrom) return;
+  e.lifeEventWindow = { coverageFrom, events: [] };
+}
+
 export function migrateGameEntry(
   entry: unknown,
   fromVersion: number,
@@ -421,6 +449,14 @@ export function migrateGameEntry(
   if (fromVersion < 18) {
     migrateEntryV17ToV18(e as Record<string, unknown>);
   }
+
+  // Phase 10A: the same current-version-evidence rule Phase 9R.2 applies to
+  // identity. An entry already carrying ANY v19 Life Event evidence is v19
+  // data -- malformed or not -- and is left for the v19 schema to judge,
+  // never "repaired" into a fresh window as if it were v18.
+  if (fromVersion < 19 && !hasV19LifeEvidence(e as Record<string, unknown>)) {
+    migrateEntryV18ToV19(e as Record<string, unknown>);
+  }
 }
 
 /**
@@ -469,8 +505,16 @@ export function migrateGameEntry(
  * "identity" becomes "role", and an already-canonical "role" is left
  * unchanged. So a remote checkpoint -- unlike a local store explicitly
  * labeled v18 -- may still carry the legacy "identity" name and recover.
+ *
+ * Phase 10A (v19): unlike v18, v19 DOES leave a structural marker -- the
+ * required `lifeEventWindow` (and a life History record's `lifeEvent`/
+ * `correction`). Any such evidence reports 19, so migration never runs over
+ * current-version data: a malformed v19 window fails the v19 schema rather
+ * than being mistaken for v18 and replaced. A checkpoint with no v19
+ * evidence is v18 or older, and migration adds its window (v18 -> v19).
  */
 export function detectLegacyGameVersion(game: Record<string, unknown>): number | null {
+  if (hasV19LifeEvidence(game)) return 19;
   if (hasV17IdentityEvidence(game)) return 17;
   if (Array.isArray(game.informationDeliveries)) return 16;
   if (Array.isArray(game.history)) return 15;
@@ -534,4 +578,24 @@ export function hasV17IdentityEvidence(game: Record<string, unknown>): boolean {
     hasOwnKey(d, "recipient") || provenanceSourced(d) ||
     someEntry(d.values, (v) => hasOwnKey(v, "participants"))
   ));
+}
+
+/**
+ * Phase 10A: true when a game-shaped entry carries ANY v19-only Life Event
+ * key at any of its authoritative persisted locations -- the v19 schema
+ * introduced exactly these:
+ *
+ *  - lifeEventWindow                       (the game's own window)
+ *  - history[*].lifeEvent                  (a life record's event mirror)
+ *  - history[*].correction                 (a life correction marker)
+ *
+ * PRESENCE, not validity, is what counts (the Phase 9R.2 principle): a v18
+ * writer never produced any of them, so a present-but-malformed window can
+ * never make a checkpoint or persisted game look like v18 and be silently
+ * replaced with a fresh, empty-looking window by migration. It fails the
+ * v19 schema instead. Genuine v18 data carries none and still migrates.
+ */
+export function hasV19LifeEvidence(game: Record<string, unknown>): boolean {
+  if (hasOwnKey(game, "lifeEventWindow")) return true;
+  return someEntry(game.history, (h) => hasOwnKey(h, "lifeEvent") || hasOwnKey(h, "correction"));
 }

@@ -50,7 +50,7 @@ describe("Phase 9D.5 Proof A: local persistence round-trip", () => {
     const raw = localStorage.getItem(STORAGE_KEY);
     expect(raw).toBeTruthy();
     const parsed = JSON.parse(raw!);
-    expect(parsed.version).toBe(18);
+    expect(parsed.version).toBe(19);
 
     // Simulate a fresh load: wipe in-memory state entirely. Zustand's
     // persist middleware wraps setState to also write-through on every
@@ -100,7 +100,8 @@ describe("Phase 9D.5 Proof A: local persistence round-trip", () => {
     expect(afterGame.players[handles.travelerId]!.exiled).toBe(true);
     expect(afterGame.players[handles.travelerId]!.alive).toBe(false); // exile also flips life state, but is its own History category, not a generic kill
     expect(afterGame.history.some((h) => refersTo(afterGame, h.participant, handles.travelerId) && h.category === "life" &&
-      "to" in h.change && (h.change.to as { exiled?: boolean }).exiled === true)).toBe(true);
+      h.lifeEvent?.added?.kind === "exile" && h.lifeEvent.added.outcome === "died" &&
+      !!h.change && "to" in h.change && (h.change.to as { exiled?: boolean }).exiled === true)).toBe(true);
 
     // Ordinary Life state and Ghost Vote.
     expect(afterGame.players[handles.deadOrdinaryId]!.alive).toBe(false);
@@ -110,8 +111,14 @@ describe("Phase 9D.5 Proof A: local persistence round-trip", () => {
     expect(afterGame.players[handles.chefId]!.stNotes).toBe("SENTINEL-PRIVATE-CHEF-NOTE");
     expect(afterGame.players[handles.washerwomanId]!.stNotes).toBe("");
 
-    // Setup/Deal/Reveal and night-progress state survives too.
-    expect(afterGame.phase).toBe("night");
+    // Phase 10A: the Life Event Window survives exactly -- the Night 1
+    // death and the Day 1 execution/exile, in acceptance order.
+    expect(afterGame.lifeEventWindow).toEqual(beforeGame.lifeEventWindow);
+    expect(afterGame.lifeEventWindow.events.map((e) => e.kind)).toEqual(["death", "execution", "exile"]);
+
+    // Setup/Deal/Reveal and night-progress state survives too. (Phase 10A:
+    // the rich game ends on Day 1, after its Day's execution and exile.)
+    expect(afterGame.phase).toBe("day");
     expect(afterGame.day).toBe(1);
     expect(afterGame.nightProgress?.["1:demonInfo"]?.status).toBe("done");
     expect(afterGame.nightProgress?.["1:demonInfo"]?.notes).toBe("Demon informed per script.");
@@ -183,7 +190,9 @@ describe("Phase 9D.5 Proof B: Undo integrity across combined Phase 9 features", 
     const handles = buildRichPhase9Game();
     const original = structuredClone(useStorytellerStore.getState().game!);
 
-    useStorytellerStore.getState().setGhostVote(handles.chefId, false);
+    // Phase 10A: a living player has no ghost vote to spend -- the first
+    // mutation is a Night/Day death through the semantic life command.
+    expect(useStorytellerStore.getState().recordDeath(handles.chefId).ok).toBe(true);
     const intermediate = structuredClone(useStorytellerStore.getState().game!);
     expect(intermediate).not.toEqual(original);
 

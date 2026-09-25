@@ -19,6 +19,8 @@ import { FirebaseConfigDialog } from "@/features/firebase/FirebaseConfigDialog";
 import { friendlyFirebaseError, type FriendlyError } from "@/firebase/errors";
 import { requireActiveSession, lifecycleMessage } from "@/firebase/lifecycle";
 import { usePrivacyStore } from "@/stores/privacyStore";
+import { DayResolutionPanel, DuskReview } from "@/features/life/DayResolution";
+import { LifeEventsPanel } from "@/features/life/LifeEventsPanel";
 import { useMediaQuery } from "@/components/useMediaQuery";
 import type { RoleId } from "@/stores/types";
 
@@ -66,6 +68,11 @@ export function GameScreen() {
   const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const [phaseError, setPhaseError] = useState<string | null>(null);
+  // Phase 10A: Day Resolution, the dusk safety check, and the bounded
+  // recent Life Events (corrections) panel.
+  const [dayResolutionOpen, setDayResolutionOpen] = useState(false);
+  const [duskReviewOpen, setDuskReviewOpen] = useState(false);
+  const [lifeEventsOpen, setLifeEventsOpen] = useState(false);
   // Phase 9C.6 (OPUS-002): the current Public Display capability token, held
   // only in this component's local/runtime state — never in
   // useStorytellerStore.game, persistence, checkpoints, or any projection.
@@ -448,10 +455,24 @@ export function GameScreen() {
           >
             ↶ Undo
           </button>
+          {game.phase === "day" && (
+            <button className="btn btn-sm" onClick={() => { closeOverflow(); setDayResolutionOpen(true); }}
+              title="Record the Day's execution or a Traveler exile as it happens">
+              Day resolution
+            </button>
+          )}
+          {(game.phase === "night" || game.phase === "day") && !privacyMode && (
+            <button className="btn btn-sm" onClick={() => { closeOverflow(); setLifeEventsOpen(true); }}
+              title="Review and correct recent deaths, executions, exiles and resurrections">
+              Life events
+            </button>
+          )}
           {game.phase !== "setup" && <button
             className="btn btn-gold"
             onClick={() => {
               closeOverflow();
+              // Phase 10A: Day -> Night passes through the dusk review.
+              if (game.phase === "day") { setDuskReviewOpen(true); return; }
               const result = advancePhase();
               setPhaseError(result.ok ? null : "Setup changed. Open Setup to review what needs attention.");
             }}
@@ -564,6 +585,24 @@ export function GameScreen() {
           code={lobby?.code ?? ""}
           onClose={() => setQueuePopupOpen(false)}
         />
+      )}
+
+      {dayResolutionOpen && game.phase === "day" && (
+        <DayResolutionPanel onClose={() => setDayResolutionOpen(false)} />
+      )}
+      {duskReviewOpen && game.phase === "day" && (
+        <DuskReview
+          onClose={() => setDuskReviewOpen(false)}
+          onRecord={() => { setDuskReviewOpen(false); setDayResolutionOpen(true); }}
+          onContinue={() => {
+            setDuskReviewOpen(false);
+            const result = advancePhase();
+            setPhaseError(result.ok ? null : "Setup changed. Open Setup to review what needs attention.");
+          }}
+        />
+      )}
+      {lifeEventsOpen && !privacyMode && (game.phase === "night" || game.phase === "day") && (
+        <LifeEventsPanel onClose={() => setLifeEventsOpen(false)} />
       )}
 
       {selected && (

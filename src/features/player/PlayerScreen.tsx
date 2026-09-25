@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { lifeAccessibleLabel, publicLifeStateOf } from "@/stores/lifeState";
+import { LifeStateText } from "@/features/life/LifeMarks";
 import { PrivateInformation } from "./PrivateInformation";
 import { usePlayerStore } from "@/stores/playerStore";
 import { connectFirebase } from "@/firebase/session";
@@ -678,7 +680,7 @@ function TownView({
           return (
             <li
               key={id}
-              className={`town-row ${p.alive ? "" : "dead"} ${isYou ? "you" : ""}`}
+              className={`town-row ${p.alive ? "" : "dead"} life-${publicLifeStateOf(p)} ${isYou ? "you" : ""}`}
             >
               <button
                 type="button"
@@ -686,7 +688,7 @@ function TownView({
                 onClick={() => {
                   if (!isYou) setNoteTarget(id);
                 }}
-                aria-label={`${p.name} — tap to add notes`}
+                aria-label={`${lifeAccessibleLabel(p.name, p.seat + 1, publicLifeStateOf(p))} — tap to add notes`}
               >
                 <span className="label town-row-seat">seat {p.seat + 1}</span>
                 <span className="town-name">
@@ -700,7 +702,9 @@ function TownView({
                     title={p.online ? "Online" : "Offline"}
                     aria-label={p.online ? "Online" : "Offline"}
                   />
-                  <span className="label">{p.alive ? "alive" : "dead"}</span>
+                  {/* Phase 10A: the shared public life grammar -- dead,
+                      vote available/used, exiled -- always in text. */}
+                  <LifeStateText state={publicLifeStateOf(p)} className="label" />
                 </span>
               </button>
               {note && (note.roles.length > 0 || note.confidence) && (

@@ -81,7 +81,10 @@ describe("Phase 9R.1 Finding B4: Provenance ownership", () => {
     goLive();
     const id = game().seatOrder[0]!;
     const provenance = { reason: "Storyteller ruling" };
-    state().setGhostVote(id, false, { provenance });
+    // Phase 10A: a living player has no ghost vote to spend; a death carries
+    // the same caller-supplied Provenance through the life boundary (into
+    // both the History Record and the Life Event).
+    expect(state().recordDeath(id, { provenance }).ok).toBe(true);
     provenance.reason = "MUTATED AFTER THE FACT";
 
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -94,6 +97,7 @@ describe("Phase 9R.1 Finding B4: Provenance ownership", () => {
 
     const record = game().history.find((h) => isAbout(h, id) && h.category === "life")!;
     expect(record.provenance).toEqual({ reason: "Storyteller ruling" });
+    expect(game().lifeEventWindow.events[0]!.provenance).toEqual({ reason: "Storyteller ruling" });
     expect(game()).toEqual(beforeGame);
   });
 });

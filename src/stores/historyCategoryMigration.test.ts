@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { migrateStoreState, takeMigrationResetFlag, useStorytellerStore as store } from "./storytellerStore";
 import { detectLegacyGameVersion, migrateGameEntry } from "./gameMigration";
+import { migratedLifeEventCoverage } from "./lifeEvents";
 import { HistoryCategorySchema, HistoryRecordSchema, StorytellerGamePersistedSchema } from "./schemas";
 import { needsShownIdentity } from "./identity";
 import { participantRefOf } from "./participants";
@@ -22,10 +23,19 @@ type Raw = Record<string, unknown>;
 type RawHistory = { category: string } & Raw;
 
 /** Deep copy of a game-shaped entry with every "role" History category
- * renamed to the v17 name "identity" -- exactly what a v17 writer stored. */
+ * renamed to the v17 name "identity" -- exactly what a v17 writer stored.
+ * Phase 10A: a v17 writer also never stored anything v19-only -- no Life
+ * Event Window, and no life History mirror of a Life Event (a life record
+ * then always carried a Current State change). */
 function asV17<T>(entry: T): T {
-  const copy = structuredClone(entry) as unknown as { history: RawHistory[] };
-  for (const record of copy.history) if (record.category === "role") record.category = "identity";
+  const copy = structuredClone(entry) as unknown as { history: RawHistory[]; lifeEventWindow?: unknown };
+  delete copy.lifeEventWindow;
+  copy.history = copy.history.filter((record) => record.change !== undefined);
+  for (const record of copy.history) {
+    delete record.lifeEvent;
+    delete record.correction;
+    if (record.category === "role") record.category = "identity";
+  }
   return copy as unknown as T;
 }
 
@@ -191,6 +201,15 @@ function expectedV18(entry: Raw): Raw {
   return copy as unknown as Raw;
 }
 
+/** Phase 10A: what full local migration (to v19) produces from a v17 entry
+ * -- the v18 expectation plus an empty Life Event Window whose coverage
+ * starts at the phase AFTER the entry's own (never backfilled). */
+function expectedCurrent(entry: Raw): Raw {
+  const copy = expectedV18(entry);
+  copy.lifeEventWindow = { coverageFrom: migratedLifeEventCoverage(copy.phase, copy.day), events: [] };
+  return copy;
+}
+
 describe("B. local v17 -> v18 migration of Current State", () => {
   it("\"identity\" becomes \"role\"; every other History field and all of Current State are unchanged", () => {
     const game17 = v17Game();
@@ -202,13 +221,17 @@ describe("B. local v17 -> v18 migration of Current State", () => {
     // Whole-entry equality: ids, order, ParticipantRefs, moments (and their
     // absence), change snapshots, Provenance, notes, players, and
     // Information Delivery are exactly as they were.
-    expect(result.game).toEqual(expected);
+    expect(result.game).toEqual(expectedCurrent(game17));
+    const { lifeEventWindow: _window, ...withoutWindow } = result.game;
+    expect(withoutWindow).toEqual(expected);
     // Byte-level: the serialized records differ only in the renamed value.
     expect(JSON.stringify((result.game as { history: unknown }).history))
       .toBe(JSON.stringify(v17History()).replaceAll("\"category\":\"identity\"", "\"category\":\"role\""));
-    const { history: _h, ...currentState } = result.game;
+    const { history: _h, lifeEventWindow: _w, ...currentState } = result.game;
     const { history: _h17, ...currentState17 } = v17Game();
     expect(currentState).toEqual(currentState17);
+    // Phase 10A: a Night 2 entry is covered from Day 2 -- no event invented.
+    expect(result.game.lifeEventWindow).toEqual({ coverageFrom: { phase: "day", day: 2 }, events: [] });
   });
 
   it("H. a reused seat never pulls historical identity: Alice's records and the legacy seat reference stay as they were, never Bob's", () => {
@@ -250,8 +273,8 @@ describe("C. local v17 -> v18 migration of every Undo snapshot", () => {
     const result = migrateStoreState(state17, 17) as { game: Raw; undoStack: Raw[] };
 
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(result.undoStack[0]).toEqual(expectedV18(older));
-    expect(result.undoStack[1]).toEqual(expectedV18(v17Game()));
+    expect(result.undoStack[0]).toEqual(expectedCurrent(older));
+    expect(result.undoStack[1]).toEqual(expectedCurrent(v17Game()));
     expect(result.undoStack[1]).toEqual(result.game);
     for (const entry of [result.game, ...result.undoStack]) expect(categoriesOf(entry)).not.toContain("identity");
   });
@@ -263,7 +286,7 @@ describe("C. local v17 -> v18 migration of every Undo snapshot", () => {
     expect(before.undoStack.some((entry) => categoriesOf(entry).includes("role"))).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 0));
     const current = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as { state: Raw; version: number };
-    expect(current.version).toBe(18);
+    expect(current.version).toBe(19);
 
     const v17Blob = {
       version: 17,
@@ -275,8 +298,13 @@ describe("C. local v17 -> v18 migration of every Undo snapshot", () => {
     await store.persist.rehydrate();
 
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(state().game).toEqual(before.game);
-    expect(state().undoStack).toEqual(before.undoStack);
+    // Phase 10A: the v17 blob never held a Life Event Window, so each entry
+    // gains an empty one with honest coverage -- never events backfilled
+    // from its History. Everything else is exactly what the app holds.
+    const fromV17 = (entry: unknown) => expectedCurrent(asV17(entry) as unknown as Raw);
+    expect(state().game).toEqual(fromV17(before.game));
+    expect(state().undoStack).toEqual(before.undoStack.map(fromV17));
+    expect(state().game!.lifeEventWindow.events).toEqual([]);
     expect(state().localSeq).toBe(before.localSeq);
     expect(state().sync).toEqual(before.sync);
   });
@@ -309,16 +337,24 @@ describe("D. a store labeled v18 that still carries \"identity\" is malformed, n
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 17, state: { game: v17Game(), undoStack: [] } }));
     await store.persist.rehydrate();
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(state().game).toEqual(expectedV18(v17Game()));
+    expect(state().game).toEqual(expectedCurrent(v17Game()));
   });
 
-  it("a canonical v18 store passes through unchanged (same reference)", () => {
-    const current = { game: expectedV18(v17Game()), undoStack: [expectedV18(v17Game())] };
+  it("a canonical current (v19) store passes through unchanged (same reference)", () => {
+    const current = { game: expectedCurrent(v17Game()), undoStack: [expectedCurrent(v17Game())] };
     const snapshot = structuredClone(current);
-    const result = migrateStoreState(current, 18);
+    const result = migrateStoreState(current, 19);
     expect(takeMigrationResetFlag()).toBe(false);
     expect(result).toBe(current);
     expect(result).toEqual(snapshot);
+  });
+
+  it("Phase 10A: a canonical v18 store gains exactly its Life Event Window and nothing else", () => {
+    const v18 = { game: expectedV18(v17Game()), undoStack: [expectedV18(v17Game())] };
+    const result = migrateStoreState(v18, 18) as { game: Raw; undoStack: Raw[] };
+    expect(takeMigrationResetFlag()).toBe(false);
+    expect(result.game).toEqual(expectedCurrent(v17Game()));
+    expect(result.undoStack).toEqual([expectedCurrent(v17Game())]);
   });
 });
 
@@ -361,7 +397,10 @@ describe("migrateGameEntry v17 -> v18 step", () => {
     const entry = expectedV18(v17Game());
     const before = JSON.stringify(entry);
     migrateGameEntry(entry, 17, { kind: "canonical-only" });
-    expect(JSON.stringify(entry)).toBe(before);
+    // Phase 10A: the only addition on the way to v19 is the Life Event Window.
+    const { lifeEventWindow, ...rest } = entry;
+    expect(JSON.stringify(rest)).toBe(before);
+    expect(lifeEventWindow).toEqual({ coverageFrom: { phase: "day", day: 2 }, events: [] });
     expect(StorytellerGamePersistedSchema.safeParse(entry).success).toBe(true);
   });
 
@@ -374,10 +413,17 @@ describe("migrateGameEntry v17 -> v18 step", () => {
     expect(JSON.stringify(entry)).toBe(once);
   });
 
-  it("does nothing for fromVersion 18", () => {
+  it("does nothing for fromVersion 19 (current)", () => {
+    const entry = v17Game();
+    migrateGameEntry(entry, 19, { kind: "canonical-only" });
+    expect(entry).toEqual(v17Game());
+  });
+
+  it("fromVersion 18 skips the category rename (only the v19 window is added)", () => {
     const entry = v17Game();
     migrateGameEntry(entry, 18, { kind: "canonical-only" });
-    expect(entry).toEqual(v17Game());
+    expect(categoriesOf(entry)).toEqual(categoriesOf(v17Game()));
+    expect(entry.lifeEventWindow).toEqual({ coverageFrom: { phase: "day", day: 2 }, events: [] });
   });
 
   it("skips malformed History entries and never adds, removes, or reorders records", () => {

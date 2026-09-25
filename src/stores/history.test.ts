@@ -228,15 +228,18 @@ describe("Phase 9D.2: semantic action deduplication", () => {
     const id = game().seatOrder.at(-1)!;
     expect(game().players[id]!.isTraveler).toBe(true);
     state().assignRole(id, "thief");
-    state().exileTraveler(id);
+    // Phase 10A: exile is Day-only and is its own Life Event kind.
+    expect(state().advancePhase().ok).toBe(true);
+    expect(state().recordExile(id, "died").ok).toBe(true);
     const lifeEntries = history().filter((h) => h.category === "life");
     expect(lifeEntries).toHaveLength(1);
     const entry = lifeEntries[0]!;
-    // The presence of `exiled` in the change payload is what distinguishes
-    // this from a plain kill (which never mentions `exiled`).
+    // The presence of `exiled` in the change payload -- and the exile Life
+    // Event it mirrors -- distinguishes this from a plain kill.
     expect(entry.change).toEqual({
       kind: "value", from: { alive: true, exiled: false }, to: { alive: false, exiled: true },
     });
+    expect(entry.lifeEvent?.added).toMatchObject({ kind: "exile", outcome: "died", moment: { phase: "day", day: 1 } });
   });
 });
 
@@ -257,7 +260,7 @@ describe("Phase 9D.2: centralized command behavior", () => {
     const rid = state().addReminder(id, { label: "Chosen", lifetime: { kind: "manual" } })!;
     state().removeReminder(id, rid);
     expect(history()).toHaveLength(2);
-    expect(history().map((h) => h.change.kind)).toEqual(["added", "removed"]);
+    expect(history().map((h) => h.change!.kind)).toEqual(["added", "removed"]);
   });
 });
 
@@ -454,8 +457,11 @@ describe("Phase 9D.2 closure: Mutation Context carries Provenance through the au
     dealtGame();
     goLive();
     const id = game().seatOrder[0]!;
+    // Phase 10A: only a dead player has a ghost vote to spend.
+    state().setAlive(id, false);
     state().setGhostVote(id, false, { provenance: { reason: "spent ghost vote" } });
-    expect(history()[0]).toMatchObject({ category: "life", provenance: { reason: "spent ghost vote" } });
+    expect(history()[1]).toMatchObject({ category: "life", provenance: { reason: "spent ghost vote" },
+      change: { kind: "value", from: { ghostVote: true }, to: { ghostVote: false } } });
 
     newPlan(6);
     for (let i = 0; i < 6; i++) state().addPlayerToSeat("Player " + i);

@@ -124,6 +124,16 @@ still reaches the idempotent store-v18 step that renames the History category
 `"identity"` to `"role"`. So both legacy v17 and already-v18 checkpoints recover
 correctly without a checkpoint version field.
 
+Store v19 (Phase 10A) adds a structural marker: the required
+`lifeEventWindow` (and a life History record's `lifeEvent`/`correction`). Any
+such key is current-version evidence, so a checkpoint carrying it is detected
+as v19 and never migrated -- a malformed window fails validation rather than
+being mistaken for v18 and replaced. A checkpoint without it is v18 or older;
+migration adds an empty window whose coverage starts at the phase after the
+checkpoint's own, and never reconstructs Life Events from History. The window
+is Storyteller-private: it travels only in the `storyteller` projection and the
+owner-only checkpoint, never in `public` or `player` views.
+
 ## Presence
 
 The Storyteller subscribes to `presence` at the exact parent path authorized by

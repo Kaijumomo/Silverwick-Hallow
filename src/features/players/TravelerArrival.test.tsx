@@ -73,7 +73,10 @@ it("Night Assistant resolves late personal procedure once without global first-n
   expect(store.getState().game!.day).toBe(4);
 });
 it("records exile without the departure confirmation or membership removal", () => {
-  render(<Drawer />); fireEvent.click(screen.getByRole("button", { name: "Exile Traveler" }));
+  // Phase 10A: exile is a Day-only semantic Life command with an explicit outcome.
+  store.setState({ game: { ...store.getState().game!, phase: "day", day: 1 } });
+  render(<Drawer />); fireEvent.click(screen.getByRole("button", { name: "Exiled — died" }));
   const p = store.getState().game!.players[id]!; expect(p).toMatchObject({ alive: false, exiled: true });
+  expect(store.getState().game!.lifeEventWindow.events).toMatchObject([{ kind: "exile", outcome: "died" }]);
   expect(screen.getByRole("button", { name: "Traveler leaves game" })).toBeInTheDocument();
 });

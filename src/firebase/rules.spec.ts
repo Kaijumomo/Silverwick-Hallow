@@ -15,6 +15,7 @@ import { useStorytellerStore } from "@/stores/storytellerStore";
 import { previewPrivatePacket } from "@/stores/privatePackets";
 import { publishPrivatePacket } from "./privatePacketCommands";
 import type { StorytellerLobbyRecord } from "@/stores/types";
+import { StorytellerGamePersistedSchema } from "@/stores/schemas";
 import { refersToParticipant } from "@/stores/participants";
 import {
   cancelJoinRequest,
@@ -561,7 +562,7 @@ describe("Firebase RTDB membership authorization", () => {
     const writer = new SessionWriter(raw, code, metadata.id);
     const game: StorytellerLobbyRecord = {
       code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
-      notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {}, history: [], informationDeliveries: [],
+      notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {}, history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       rolePool: [], plannedPlayerCount: 1, plannedTravelerCount: 0, pendingPlayers: {}, seatOrder: ["p-alice"],
       // This test isolates identity delivery through the real writer/rules,
       // not Setup deal/reveal gating (covered elsewhere) -- record the
@@ -605,7 +606,7 @@ describe("Firebase RTDB membership authorization", () => {
     const writer = new SessionWriter(raw, code, metadata.id);
     const game: StorytellerLobbyRecord = {
       code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
-      notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {}, history: [], informationDeliveries: [],
+      notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {}, history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       rolePool: [], plannedPlayerCount: 2, plannedTravelerCount: 0, pendingPlayers: {}, seatOrder: ["p-alice", "p-bob"],
       // This test isolates the completeness barrier, not Setup deal/reveal
       // gating -- record the initial reveal directly.
@@ -1479,6 +1480,23 @@ describe("Phase 9D.5 Proof E: writer replacement / stale-writer protection for a
     expect(parsed.game.players[handles.chefId]!.effects.some(e => e.type === "poisoned")).toBe(true);
     expect(parsed.game.players[handles.washerwomanId]!.effects.some(e => e.type === "protected")).toBe(true);
     expect(parsed.game.players[handles.deadOrdinaryId]!.alive).toBe(false);
+    // Phase 10A: the Life Event Window (Night 1 death, Day 1 execution and
+    // exile) travels in the owner-only checkpoint, exactly, and survives the
+    // fenced stale write.
+    expect(parsed.game.lifeEventWindow).toEqual(richGame.lifeEventWindow);
+    expect(parsed.game.lifeEventWindow.events.map((e) => e.kind)).toEqual(["death", "execution", "exile"]);
+    expect(StorytellerGamePersistedSchema.safeParse(parsed.game).success).toBe(true);
+    // The Storyteller-private RTDB projection holds it too (owner-readable
+    // only), while the public projection carries only public life fields.
+    expect((await ref(st, "storyteller/lifeEventWindow/events/0/kind").once("value")).val()).toBe("death");
+    const publicTraveler = (await ref(st, `public/players/${handles.travelerId}`).once("value")).val();
+    expect(publicTraveler).toMatchObject({ alive: false, ghostVote: true, exiled: true });
+    const publicTree = JSON.stringify((await ref(st, "public").once("value")).val());
+    expect(publicTree).not.toContain("lifeEventWindow");
+    expect(publicTree).not.toContain("participant");
+    expect(publicTree).not.toContain("killed by the Demon");
+    // No other authenticated user can read the Storyteller-private window at all.
+    await assertFails(db("uid-not-the-storyteller").ref(path("storyteller/lifeEventWindow")).once("value"));
 
     // The new (second) writer can legitimately write further, on top of the
     // still-intact rich checkpoint.
@@ -1760,6 +1778,80 @@ describe("Phase 9R.2 R2-H: malformed current-version identity state is never rep
         expect(lobbyNode.checkpoint).toBe(seeded); // never rewritten
         expect(lobbyNode.storyteller).toBeUndefined(); // never projected
         expect(lobbyNode.player).toBeUndefined();
+        expect(lobbyNode.public).toBeUndefined();
+      });
+    } finally { await writer.dispose(); }
+  });
+});
+
+describe("Phase 10A: Life Event Window checkpoints through the real writer and enforced rules (real emulator)", () => {
+  const code = "LIFEEMU2";
+  const st = "uid-storyteller-10a";
+  const path = (suffix: string) => "lobbies/" + code + "/" + suffix;
+  const db = (uid: string) => env.authenticatedContext(uid).database();
+
+  /** A dealt, revealed live game built through real commands, as JSON. */
+  function liveGameJson(): Record<string, unknown> {
+    useStorytellerStore.setState({
+      game: null, lobby: null, undoStack: [], selectedPlayerId: null, localSeq: 0, sync: null, customScripts: {},
+    });
+    const store = () => useStorytellerStore.getState();
+    store().newGame("tb", { plannedPlayerCount: 5 });
+    ["Ann", "Ben", "Cal", "Dee", "Eli"].forEach((name) => store().addPlayerToSeat(name));
+    store().setRolePool(["washerwoman", "librarian", "chef", "poisoner", "imp"]);
+    expect(store().dealRolePool().ok).toBe(true);
+    for (const id of store().game!.seatOrder) store().showAssignedRole(id);
+    expect(store().revealRoles().ok).toBe(true);
+    expect(store().beginNightOne().ok).toBe(true);
+    expect(store().recordDeath(store().game!.seatOrder[0]!).ok).toBe(true);
+    expect(store().advancePhase().ok).toBe(true);
+    const game = JSON.parse(JSON.stringify({ ...store().game!, code, storytellerUid: st }));
+    useStorytellerStore.setState({ game: null, undoStack: [] });
+    return game;
+  }
+
+  async function seedAndStart(game: Record<string, unknown>) {
+    const rawBackend = new FirebaseRoomBackend(db(st) as unknown as Database);
+    await createLobby(rawBackend, st, { codeGenerator: () => code });
+    const session = await requireActiveSession(rawBackend, code);
+    const seeded = JSON.stringify({ game, roster: {} });
+    await env.withSecurityRulesDisabled(async (ctx) => { await ctx.database().ref(path("checkpoint")).set(seeded); });
+    const lobby = { code, uid: st, sessionId: session.id, status: "live" as const };
+    useStorytellerStore.getState().setLobby(lobby);
+    const writer = new SessionWriter(rawBackend, code, session.id);
+    return { writer, seeded, start: () => startStorytellerSession(rawBackend, lobby, writer) };
+  }
+
+  test("a genuine v18 (windowless, versionless) checkpoint recovers with honest coverage and projects it through the rules", async () => {
+    const game = liveGameJson();
+    delete game.lifeEventWindow;
+    game.history = (game.history as Record<string, unknown>[])
+      .filter((h) => h.change !== undefined)
+      .map(({ lifeEvent: _event, correction: _correction, ...rest }) => rest); // what a v18 app wrote
+    const { writer, start } = await seedAndStart(game);
+    try {
+      const recovered = await start();
+      expect(recovered.outcome).toBe("live");
+      const window = useStorytellerStore.getState().game!.lifeEventWindow;
+      expect(window).toEqual({ coverageFrom: { phase: "night", day: 2 }, events: [] }); // Day 1 -> Night 2; never backfilled
+      const projected = (await db(st).ref(path("storyteller/lifeEventWindow/coverageFrom")).once("value")).val();
+      expect(projected).toEqual({ phase: "night", day: 2 });
+      recovered.stop();
+    } finally { await writer.dispose(); }
+  });
+
+  test("a malformed v19 window is never repaired into a fresh one and never republished", async () => {
+    const game = liveGameJson();
+    const window = game.lifeEventWindow as { events: Record<string, unknown>[] };
+    window.events[0] = { ...window.events[0]!, outcome: "died" }; // a death never carries an outcome
+    const { writer, seeded, start } = await seedAndStart(game);
+    try {
+      await expect(start()).rejects.toThrow(SnapshotValidationError);
+      expect(useStorytellerStore.getState().game).toBeNull();
+      await env.withSecurityRulesDisabled(async (ctx) => {
+        const lobbyNode = (await ctx.database().ref("lobbies/" + code).once("value")).val();
+        expect(lobbyNode.checkpoint).toBe(seeded);
+        expect(lobbyNode.storyteller).toBeUndefined();
         expect(lobbyNode.public).toBeUndefined();
       });
     } finally { await writer.dispose(); }

@@ -363,8 +363,21 @@ describe("Phase 9R.4 (B8 remediation): representative families -- inherited ids 
   it("1. renamePlayer", () => inertThenValid(setupFixture, (id) => state().renamePlayer(id, "Mallory"), first, {},
     (id) => expect(player(id).name).toBe("Mallory")));
 
-  it("2. setAlive -- kill in Setup; kill and revive with Live History", () => {
-    inertThenValid(setupFixture, (id) => state().setAlive(id, false), first, {}, (id) => expect(player(id).alive).toBe(false));
+  it("2. setAlive -- refused in Setup; kill and revive with Live History", () => {
+    // Phase 10A: Setup-time life changes are refused for inherited AND valid
+    // ids alike -- life state never becomes hidden Setup state.
+    setupFixture();
+    for (const id of INHERITED) {
+      const before = baseline();
+      state().setAlive(id, false);
+      expectInert(before, id);
+    }
+    const setupBefore = baseline();
+    state().setAlive(first(), false);
+    expect(state().game).toBe(setupBefore.game);
+    expect(state().undoStack).toBe(setupBefore.undoStack);
+    expect(state().localSeq).toBe(setupBefore.localSeq);
+    expect(player(first()).alive).toBe(true);
     inertThenValid(liveFixture, (id) => state().setAlive(id, false), first, { history: 1 }, (id) => {
       expect(player(id).alive).toBe(false);
       expect(game().history.at(-1)).toMatchObject({ category: "life", change: { from: { alive: true }, to: { alive: false } } });

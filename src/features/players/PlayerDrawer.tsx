@@ -14,6 +14,9 @@ import { buildRegistry } from "@/data/roleRegistry";
 import { useModalBehavior } from "@/components/Modal";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { currentGameMoment, hasEffect } from "@/stores/effects";
+import { lifeStatusOf } from "@/stores/lifeState";
+import { LifeControls } from "@/features/life/LifeControls";
+import { LifeStateText } from "@/features/life/LifeMarks";
 import type {
   Alignment,
   BehaviorMode,
@@ -155,7 +158,9 @@ function PrivacySafeContents({ player, onClose }: { player: STPlayerRecord; onCl
         {publicTravelerRole(player) && <p>Traveler: {publicTravelerRole(player)!.name}</p>}
         <div className="drawer-row">
           <span className="label">seat {player.seat + 1}</span>
-          <span className="label">{player.alive ? "Alive" : "Dead"}</span>
+          {/* Phase 10A: life, vote token and exile are public table
+              information -- Privacy Mode never hides them. */}
+          <LifeStateText state={lifeStatusOf(player).state} className="label" />
         </div>
         <p className="behavior-help">Storyteller details are hidden while Privacy Mode is on.</p>
       </section>
@@ -182,8 +187,6 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   const setBluffs = useStorytellerStore((s) => s.setBluffs);
   const setFakeMinions = useStorytellerStore((s) => s.setFakeMinions);
   const setIsTraveler = useStorytellerStore((s) => s.setIsTraveler);
-  const setAlive = useStorytellerStore((s) => s.setAlive);
-  const setGhostVote = useStorytellerStore((s) => s.setGhostVote);
   const setAbilityUsed = useStorytellerStore((s) => s.setAbilityUsed);
   const setStatus = useStorytellerStore((s) => s.setStatus);
   const addReminderCommand = useStorytellerStore((s) => s.addReminder);
@@ -359,27 +362,14 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
             </div>
           </section>
 
+          {/* Phase 10A: life changes are semantic commands (death, execution,
+              exile, resurrection, vote token, correction) -- never a bare
+              alive/dead toggle. */}
+          <LifeControls player={player} />
+
           <section className="drawer-section">
             <h3 className="drawer-section-title">State</h3>
             <div className="drawer-row">
-              <button
-                className="toggle-pill"
-                aria-pressed={player.alive}
-                onClick={() => setAlive(player.id, !player.alive)}
-              >
-                {player.alive ? "Alive" : "Dead"}
-              </button>
-              {player.isTraveler && <button className="btn btn-sm" disabled={!player.alive || !!player.exiled}
-                onClick={() => useStorytellerStore.getState().exileTraveler(player.id)}>{player.exiled ? "Exiled" : "Exile Traveler"}</button>}
-              {!player.alive && (
-                <button
-                  className="toggle-pill"
-                  aria-pressed={player.ghostVote}
-                  onClick={() => setGhostVote(player.id, !player.ghostVote)}
-                >
-                  Ghost vote {player.ghostVote ? "available" : "used"}
-                </button>
-              )}
               <button
                 className="toggle-pill"
                 aria-pressed={player.abilityUsed}

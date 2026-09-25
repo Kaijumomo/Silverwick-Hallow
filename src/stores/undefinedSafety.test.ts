@@ -67,7 +67,8 @@ describe("Phase 9R.1 Finding B5: Provenance never stores an explicit-undefined o
     dealtGame();
     goLive();
     const id = game().seatOrder[0]!;
-    state().setGhostVote(id, false, { provenance: { reason: "known", sourcePlayer: undefined, sourceCharacter: undefined } });
+    // Phase 10A: a death (a living player has no ghost vote to spend).
+    state().recordDeath(id, { provenance: { reason: "known", sourcePlayer: undefined, sourceCharacter: undefined } });
     await new Promise((resolve) => setTimeout(resolve, 0));
     const raw = localStorage.getItem(STORAGE_KEY)!;
     expect(raw).toBeTruthy();

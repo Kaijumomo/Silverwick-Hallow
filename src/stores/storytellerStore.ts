@@ -7,9 +7,19 @@ import { StorytellerStateSchema } from "./schemas";
 import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { currentGameMoment, manualEffectId } from "./effects";
-import { cloneOwned, diffFields, durableProvenance, type MutationContext, provenanceOf, recordIfLive, sameSnapshot } from "./history";
+import { cloneOwned, durableProvenance, type MutationContext, provenanceOf, recordIfLive, sameSnapshot } from "./history";
 import { newParticipantId, participantIdAppearsIn, participantRefOf, recordedInformationValues } from "./participants";
 import { migrateGameEntry } from "./gameMigration";
+import { freshLifeEventWindow, pruneLifeEventWindow } from "./lifeEvents";
+import {
+  applyLifePlan,
+  planLifeTransaction,
+  type LifeEventSpec,
+  type LifeIntent,
+  type LifeRefusal,
+  type LifeStatusTarget,
+  type LifeTransaction,
+} from "./lifeResolution";
 import {
   informationDeliveryId,
   parseInformationValues,
@@ -34,12 +44,15 @@ import type {
   EffectId,
   EffectInput,
   EffectRecord,
+  ExecutionOutcome,
+  ExileOutcome,
   GrimoireMode,
   GuardStamp,
   InformationActionId,
   InformationDeliveryId,
   InformationDeliveryRecord,
   InformationValue,
+  LifeEventId,
   NightStepRecord,
   NightStepStatus,
   ParticipantId,
@@ -61,7 +74,7 @@ const UNDO_LIMIT = 20;
  * `merge` (Phase 9C.2B.2) passes to migrateStoreState when Zustand's own
  * persist middleware skips calling `migrate` outright, which it does
  * whenever the persisted version already equals this one. */
-const STORE_VERSION = 18;
+const STORE_VERSION = 19;
 
 let _migrationResetFlag = false;
 /** Returns true (once) when migrate() discarded incompatible persisted state. */
@@ -188,6 +201,14 @@ export type AddScriptResult = { ok: true } | { ok: false; error: string };
 export type RecordInformationDeliveryResult =
   | { ok: true; id: InformationDeliveryId }
   | { ok: false; message: string };
+
+/** Phase 10A: result of every Life command. `changed: false` is a true
+ * no-op (nothing committed); a refusal changes nothing either. A
+ * `needsConfirmation` refusal names the exceptional case the caller may
+ * explicitly confirm and resubmit (see ExecutionIntent). */
+export type LifeCommandResult =
+  | { ok: true; changed: boolean; eventIds: LifeEventId[] }
+  | LifeRefusal;
 
 export type LobbyConnection = {
   code: string;
@@ -339,12 +360,56 @@ export type StorytellerStore = {
   prepareTravelerDemon: (id: PlayerId) => void;
   completeTravelerInformation: (id: PlayerId) => void;
   completeTravelerArrivalCheck: (id: PlayerId) => void;
+  /** @deprecated Phase 10A compatibility adapter -- exactly
+   * recordExile(id, "died"). New callers use recordExile. */
   exileTraveler: (id: PlayerId) => void;
   setFabled: (fabled: RoleId[]) => void;
   setLorics: (lorics: RoleId[]) => void;
 
-  /** Optional Mutation Context (Phase 9D.2 closure) -- see assignRole. */
+  // --- Phase 10A: Life State ------------------------------------------------
+  /** THE authoritative life writer. Plans one atomic LifeTransaction
+   * (lifeResolution.ts) -- one or more already-resolved life intents,
+   * optionally correlated by `resolutionId` -- and commits an accepted plan
+   * as exactly one game replacement: Current State patch, Life Event Window
+   * update and one History mirror per affected participant, one Undo entry,
+   * one localSeq step. A refusal or true no-op changes nothing. Every other
+   * Life command below is a one-intent wrapper around this; a future
+   * ability engine submits its resolved intents here too. */
+  resolveLife: (transaction: LifeTransaction) => LifeCommandResult;
+  /** A death not represented by an execution/exile. Night or Day. */
+  recordDeath: (id: PlayerId, context?: MutationContext) => LifeCommandResult;
+  /** The actual executee's execution (Day only). Extra executions and a
+   * Traveler executee need explicit confirmation flags. */
+  recordExecution: (
+    id: PlayerId,
+    outcome: ExecutionOutcome,
+    options?: { confirmAdditionalExecution?: boolean; confirmTravelerExecutee?: boolean },
+    context?: MutationContext,
+  ) => LifeCommandResult;
+  /** A Traveler exile (Day only); may be survived. */
+  recordExile: (id: PlayerId, outcome: ExileOutcome, context?: MutationContext) => LifeCommandResult;
+  /** A true resurrection (not a correction): alive, vote held, exile
+   * cleared, ability restored. */
+  resurrect: (id: PlayerId, context?: MutationContext) => LifeCommandResult;
+  spendGhostVote: (id: PlayerId, context?: MutationContext) => LifeCommandResult;
+  restoreGhostVote: (id: PlayerId, context?: MutationContext) => LifeCommandResult;
+  /** Status-only correction -- no Life Event, never restores an ability. */
+  correctLifeStatus: (id: PlayerId, target: LifeStatusTarget, context?: MutationContext) => LifeCommandResult;
+  /** Corrections of an event still in the Life Event Window. `repair`
+   * status corrections are committed atomically in the same transaction --
+   * Current State is never repaired implicitly. */
+  retractLifeEvent: (eventId: LifeEventId, repair?: RepairTarget[], context?: MutationContext) => LifeCommandResult;
+  amendLifeEvent: (eventId: LifeEventId, replacement: LifeEventSpec, repair?: RepairTarget[], context?: MutationContext) => LifeCommandResult;
+  /** Records a forgotten event at the immediately previous phase. */
+  lateRecordLifeEvent: (event: LifeEventSpec & { playerId: PlayerId }, repair?: RepairTarget[], context?: MutationContext) => LifeCommandResult;
+  /** @deprecated Phase 10A compatibility adapter for untouched callers:
+   * `false` is recordDeath; `true` is a status-only correction to alive
+   * (never a resurrection). Refused outside Night/Day like every life
+   * command. New code uses the semantic commands above. */
   setAlive: (id: PlayerId, alive: boolean, context?: MutationContext) => void;
+  /** @deprecated Phase 10A compatibility adapter: `false` is
+   * spendGhostVote, `true` is restoreGhostVote -- both legal only while
+   * dead. */
   setGhostVote: (id: PlayerId, ghostVote: boolean, context?: MutationContext) => void;
   setAbilityUsed: (id: PlayerId, used: boolean) => void;
   setStatus: (id: PlayerId, status: string, on: boolean) => void;
@@ -490,6 +555,12 @@ const sourcedRecord = <T extends EffectRecord | ReminderRecord>(
   if (!sourceParticipant) return null;
   return { ...rest, sourceParticipant } as unknown as T;
 };
+
+/** A status-only repair committed alongside an event correction. */
+export type RepairTarget = { playerId: PlayerId; target: LifeStatusTarget };
+
+const repairIntents = (repair: RepairTarget[] | undefined): LifeIntent[] =>
+  (repair ?? []).map(({ playerId, target }) => ({ kind: "correctStatus", playerId, target }));
 
 const pushUndo = (
   game: StorytellerLobbyRecord | null,
@@ -764,7 +835,15 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // labeled v18 never reaches this block (fromVersion is not < 18), so a
   // stale "identity" in it fails the schema gate below and resets rather
   // than being treated as v17 data.
-  if (fromVersion < 18) {
+  //
+  // v19 (Phase 10A): the Life Event Window -- the same shared per-entry
+  // migration adds it to Current State and to every Undo snapshot, each with
+  // coverage from ITS OWN phase (never backfilled from History). A store
+  // already labeled v19 never reaches this block, so a v19 game missing or
+  // carrying a malformed window fails the schema gate below and resets
+  // rather than being treated as v18 data. Within this block, any entry that
+  // already carries v19 evidence is likewise left for the gate to judge.
+  if (fromVersion < 19) {
     const customScripts = (s as { customScripts?: Record<string, Script> }).customScripts ?? {};
     // Phase 9R.1 Astra remediation (Finding A2): local persisted migration
     // uses "trusted" evidence -- this state's OWN saved customScripts,
@@ -882,6 +961,8 @@ export const useStorytellerStore = create<StorytellerStore>()(
           pendingPlayers: {},
           history: [],
           informationDeliveries: [],
+          // Phase 10A: a fresh game observes every Life Event from Night 1.
+          lifeEventWindow: freshLifeEventWindow(),
         };
         usePrivacyStore.getState().reset();
         set({ game, lobby: null, pendingKnocks: [], view: "game", undoStack: [], selectedPlayerId: null });
@@ -1080,6 +1161,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         set({
           undoStack: pushUndo(game, undoStack),
           game: { ...game, phase: "night", day: 1,
+            lifeEventWindow: pruneLifeEventWindow(game.lifeEventWindow, "night", 1),
             ...(game.startingNonTravelerCount === undefined && game.day === 0
               ? { startingNonTravelerCount: context.population.occupiedNonTravelerCount } : {}) },
         });
@@ -1910,21 +1992,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
           { travelerArrival: { ...(p.travelerArrival ?? newTravelerArrival()), demonInfoComplete: true } }) });
       },
 
-      exileTraveler: (id) => {
-        const { game, undoStack } = get();
-        const p = game ? ownPlayer(game, id) : undefined;
-        if (!game || !p?.isTraveler || !p.alive || p.exiled) return;
-        const updatedGame = patchPlayer(game, id, { exiled: true, alive: false });
-        // Exile is never collapsed into generic death (Phase 9D.1):
-        // the presence of `exiled` in the change, not a separate
-        // category, is what distinguishes it from an ordinary kill.
-        const recorded = recordIfLive(game, updatedGame, () => ({
-          category: "life", playerId: id,
-          change: { kind: "value", from: { alive: true, exiled: false }, to: { alive: false, exiled: true } },
-        }));
-        if (!recorded) return;
-        set({ undoStack: pushUndo(game, undoStack), game: recorded });
-      },
+      // Phase 10A: exile is its own Life Event kind (never collapsed into a
+      // generic death) recorded through the life-resolution boundary.
+      exileTraveler: (id) => { get().recordExile(id, "died"); },
 
       completeTravelerArrivalCheck: (id) => {
         const { game, undoStack } = get();
@@ -1959,46 +2029,59 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
-      setAlive: (id, alive, context) => {
+      resolveLife: (transaction) => {
         const { game, undoStack } = get();
-        if (!game) return;
-        const player = ownPlayer(game, id);
-        if (!player) return;
-        const patch: Partial<STPlayerRecord> = { alive };
-        if (alive && player.exiled) patch.exiled = false;
-        if (alive && !player.alive) patch.ghostVote = true;
-        const touched = Object.keys(patch) as (keyof STPlayerRecord & string)[];
-        // One semantic action (a kill/revival) may touch several fields at
-        // once (alive, ghostVote, exiled) -- diffFields collapses them into
-        // exactly one record covering only what genuinely changed. Computed
-        // up front (Phase 9D.4 Section 9), not only inside the Live-Play
-        // History gate: a true no-op (e.g. reviving an already-alive,
-        // never-exiled player) must skip Current State replacement and
-        // Undo bookkeeping too, in Setup as much as in Live Play.
-        const diff = diffFields(player, { ...player, ...patch }, touched);
-        if (!diff) return;
-        const updatedGame = patchPlayer(game, id, patch);
-        const recorded = recordIfLive(game, updatedGame, () => ({
-          category: "life", playerId: id, change: { kind: "value", ...diff }, context,
-        }));
-        if (!recorded) return;
-        set({ undoStack: pushUndo(game, undoStack), game: recorded });
+        if (!game) return { ok: false, code: "refused", message: "No game is open." };
+        // guard -> plan (pure) -> one commit. The planner validates every
+        // intent against Current State and returns a refusal, a true no-op,
+        // or the complete Current State + Life Event Window + History plan.
+        const result = planLifeTransaction(game, transaction);
+        if (!result.ok) return result;
+        if (!result.changed) return { ok: true, changed: false, eventIds: [] };
+        set({ undoStack: pushUndo(game, undoStack), game: applyLifePlan(game, result.plan) });
+        return { ok: true, changed: true, eventIds: result.plan.addedEventIds };
+      },
+
+      recordDeath: (id, context) =>
+        get().resolveLife({ intents: [{ kind: "death", playerId: id }], context }),
+
+      recordExecution: (id, outcome, options, context) =>
+        get().resolveLife({ intents: [{ kind: "execution", playerId: id, outcome,
+          ...(options?.confirmAdditionalExecution ? { confirmAdditionalExecution: true } : {}),
+          ...(options?.confirmTravelerExecutee ? { confirmTravelerExecutee: true } : {}) }], context }),
+
+      recordExile: (id, outcome, context) =>
+        get().resolveLife({ intents: [{ kind: "exile", playerId: id, outcome }], context }),
+
+      resurrect: (id, context) =>
+        get().resolveLife({ intents: [{ kind: "resurrection", playerId: id }], context }),
+
+      spendGhostVote: (id, context) =>
+        get().resolveLife({ intents: [{ kind: "spendGhostVote", playerId: id }], context }),
+
+      restoreGhostVote: (id, context) =>
+        get().resolveLife({ intents: [{ kind: "restoreGhostVote", playerId: id }], context }),
+
+      correctLifeStatus: (id, target, context) =>
+        get().resolveLife({ intents: [{ kind: "correctStatus", playerId: id, target }], context }),
+
+      retractLifeEvent: (eventId, repair, context) =>
+        get().resolveLife({ intents: [{ kind: "retractEvent", eventId }, ...repairIntents(repair)], context }),
+
+      amendLifeEvent: (eventId, replacement, repair, context) =>
+        get().resolveLife({ intents: [{ kind: "amendEvent", eventId, replacement }, ...repairIntents(repair)], context }),
+
+      lateRecordLifeEvent: (event, repair, context) =>
+        get().resolveLife({ intents: [{ kind: "lateRecord", event }, ...repairIntents(repair)], context }),
+
+      setAlive: (id, alive, context) => {
+        if (alive) get().correctLifeStatus(id, { alive: true }, context);
+        else get().recordDeath(id, context);
       },
 
       setGhostVote: (id, ghostVote, context) => {
-        const { game, undoStack } = get();
-        if (!game) return;
-        const player = ownPlayer(game, id);
-        if (!player) return;
-        if (player.ghostVote === ghostVote) return; // true no-op
-        const updatedGame = patchPlayer(game, id, { ghostVote });
-        const recorded = recordIfLive(game, updatedGame, () => ({
-          category: "life", playerId: id,
-          change: { kind: "value", from: { ghostVote: player.ghostVote }, to: { ghostVote } },
-          context,
-        }));
-        if (!recorded) return;
-        set({ undoStack: pushUndo(game, undoStack), game: recorded });
+        if (ghostVote) get().restoreGhostVote(id, context);
+        else get().spendGhostVote(id, context);
       },
 
       setAbilityUsed: (id, abilityUsed) => {
@@ -2266,9 +2349,11 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // Phase 9R.4 (B8): the requested phase already holds. The ended-game
         // restriction above still applies first.
         if (game.phase === phase) return { ok: true };
+        // Phase 10A: rollover is part of the same commit and Undo step. An
+        // ended game keeps (freezes) its window.
         set({
           undoStack: pushUndo(game, undoStack),
-          game: { ...game, phase },
+          game: { ...game, phase, lifeEventWindow: pruneLifeEventWindow(game.lifeEventWindow, phase, game.day) },
         });
         return { ok: true };
       },
@@ -2288,9 +2373,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
           phase = "night";
           day = day + 1;
         }
+        // Phase 10A Section 7: the Life Event Window rolls over atomically
+        // with the phase change -- the same game replacement and the same
+        // Undo snapshot, so undoing the advance restores every pruned event.
+        // Expiry is not a Mutation of its own: no History is written for it.
         set({
           undoStack: pushUndo(game, undoStack),
-          game: { ...game, phase, day },
+          game: { ...game, phase, day, lifeEventWindow: pruneLifeEventWindow(game.lifeEventWindow, phase, day) },
         });
         return { ok: true };
       },

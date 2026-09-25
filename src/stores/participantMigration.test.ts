@@ -231,7 +231,11 @@ describe("Phase 9R.2 migration: the v17 invariants are enforced, never repaired"
 describe("Phase 9R.2 migration: remote-checkpoint version detection", () => {
   it("a v17 game is recognized by its own markers and is never migrated again; a v16 game is recognized as v16", () => {
     expect(detectLegacyGameVersion(persisted(v16Game()))).toBe(16);
-    const v17 = migrateLocal(persisted({ game: v16Game(), undoStack: [] })).game as unknown as Record<string, unknown>;
+    const current = migrateLocal(persisted({ game: v16Game(), undoStack: [] })).game as unknown as Record<string, unknown>;
+    // Phase 10A: migration now reaches v19, whose Life Event Window is itself
+    // current-version evidence; without it the same game is v17-evidenced.
+    expect(detectLegacyGameVersion(persisted(current))).toBe(19);
+    const { lifeEventWindow: _window, ...v17 } = current;
     expect(detectLegacyGameVersion(persisted(v17))).toBe(17);
     // Any single marker suffices.
     expect(detectLegacyGameVersion({ ...persisted(v16Game()), history: [{ participant: legacy("a") }] })).toBe(17);

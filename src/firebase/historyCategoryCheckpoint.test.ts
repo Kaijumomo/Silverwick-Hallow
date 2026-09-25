@@ -122,6 +122,9 @@ describe("E. a supported remote checkpoint carrying legacy \"identity\" History"
     expect(game.players).toEqual(seeded.players);
     expect(game.seatOrder).toEqual(seeded.seatOrder);
     expect(game.informationDeliveries).toEqual(seeded.informationDeliveries);
+    // Phase 10A: the recovered Night 2 checkpoint gains an empty Life Event
+    // Window covered from Day 2 -- never events backfilled from History.
+    expect(game.lifeEventWindow).toEqual({ coverageFrom: { phase: "day", day: 2 }, events: [] });
   });
 
   it("a v16 checkpoint (PlayerId-only History) runs both steps: an unresolved legacy ref, and \"role\"", async () => {
@@ -140,13 +143,27 @@ describe("E. a supported remote checkpoint carrying legacy \"identity\" History"
     buildRichPhase9Game();
     const current = { ...structuredClone(useStorytellerStore.getState().game!), code };
     expect(current.history.map((h) => h.category)).toContain("role");
-    const v17 = structuredClone(current) as unknown as { history: RawHistory[] };
-    for (const record of v17.history) if (record.category === "role") record.category = "identity";
+    // A v17 writer stored nothing v19-only: no Life Event Window and no life
+    // History mirror of a Life Event (Phase 10A).
+    const v17 = structuredClone(current) as unknown as { history: RawHistory[]; lifeEventWindow?: unknown };
+    delete v17.lifeEventWindow;
+    v17.history = v17.history.filter((record) => record.change !== undefined);
+    for (const record of v17.history) {
+      delete record.lifeEvent;
+      delete record.correction;
+      if (record.category === "role") record.category = "identity";
+    }
     useStorytellerStore.setState({ game: null, undoStack: [], localSeq: 0, sync: null });
 
     const { recovered } = await recoverFrom(v17 as unknown as Raw);
     expect(recovered.outcome).toBe("live");
-    expect(useStorytellerStore.getState().game).toEqual(current);
+    // Exactly the current game's v17-expressible content, with an empty
+    // window covered from the phase after the checkpoint's own (Day 1 ->
+    // Night 2).
+    const expected = structuredClone(v17) as unknown as { history: RawHistory[] } & Raw;
+    for (const record of expected.history) if (record.category === "identity") record.category = "role";
+    expected.lifeEventWindow = { coverageFrom: { phase: "night", day: 2 }, events: [] };
+    expect(useStorytellerStore.getState().game).toEqual(expected);
   });
 
   it("an already-canonical checkpoint is left unchanged (the step is idempotent)", async () => {
@@ -174,7 +191,8 @@ describe("G. remote: unknown categories are not the legacy alias", () => {
 describe("F. new checkpoints serialize \"role\"", () => {
   it("writeProjections checkpoints a Role History Record as \"role\" and never manufactures \"identity\"", async () => {
     const backend = new MemoryRoomBackend();
-    const game = canonical(v17CheckpointGame()) as unknown as StorytellerLobbyRecord;
+    const game = { ...canonical(v17CheckpointGame()),
+      lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] } } as unknown as StorytellerLobbyRecord;
     await writeProjections({ backend, code, stState: game, registry: buildRegistry(troubleBrewing), online: {} });
     const raw = (await backend.get(`${root}/checkpoint`)) as string;
     expect(raw).toContain("\"category\":\"role\"");

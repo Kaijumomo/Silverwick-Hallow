@@ -131,6 +131,7 @@ describe("Phase 9R.2: identity is preserved across ordinary change", () => {
     const T = participantIdOf(tess);
     state().assignRole(tess, "thief");
     state().setTravelerAlignment(tess, "evil");
+    expect(state().advancePhase().ok).toBe(true); // Phase 10A: exile is Day-only
     state().exileTraveler(tess);
     expect(game().players[tess]!.exiled).toBe(true);
     expect(participantIdOf(tess)).toBe(T);
@@ -201,7 +202,7 @@ describe("Phase 9R.2 core regression: Alice leaves, Bob fills her seat -- histor
 
     // 3. Live Play records involving Alice.
     state().setStatus(P, "poisoned", true); // History targeting Alice
-    state().setGhostVote(P, false); // History targeting Alice (another category)
+    state().setAlive(P, false); // History targeting Alice (another category) -- and a Phase 10A death Life Event about her
     expect(state().recordInformationDelivery(P, "washerwoman-first-night", [ // Delivery TO Alice
       { requirementId: "players", kind: "player", playerIds: [carol, dave] },
       { requirementId: "role", kind: "role", roleId: "chef" },
@@ -245,6 +246,11 @@ describe("Phase 9R.2 core regression: Alice leaves, Bob fills her seat -- histor
     const allHistorical = JSON.stringify({ history, deliveries, carol: game().players[carol], dave: game().players[dave] });
     expect(allHistorical).not.toContain(B);
     expect(allHistorical).not.toContain("Bob");
+    // Phase 10A: Alice's death Life Event keeps naming Alice (A), never the
+    // new occupant of the same PlayerId.
+    const aliceDeath = game().lifeEventWindow.events.find((e) => e.subject.playerId === P)!;
+    expect(aliceDeath).toMatchObject({ kind: "death", subject: alice });
+    expect(JSON.stringify(game().lifeEventWindow)).not.toContain(B);
 
     // New records involving Bob use B.
     state().setStatus(P, "drunk", true);
@@ -400,7 +406,9 @@ describe("Phase 9R.2: History / Provenance / Information refusal and atomicity",
     state().newGame(setupScript.id, { plannedPlayerCount: 5, plannedTravelerCount: 0 });
     const empty = game().seatOrder[0]!;
     state().setAlive(empty, false, { provenance: { sourcePlayer: "nobody" } });
-    expect(game().players[empty]!.alive).toBe(false);
+    // Phase 10A: life changes are refused in Setup and on an empty planned
+    // seat -- nothing becomes hidden state a later occupant would inherit.
+    expect(game().players[empty]!.alive).toBe(true);
     expect(game().history).toEqual([]);
   });
 });
@@ -450,6 +458,7 @@ describe("Phase 9R.2: Traveler lifecycle", () => {
     state().assignRole(T, "thief");
     state().setTravelerAlignment(T, "evil", { provenance: { sourcePlayer: T, reason: "Storyteller selection" } });
     state().addReminder(alice, { label: "Negative vote", sourceCharacter: "thief", sourcePlayer: T, lifetime: { kind: "manual" } });
+    expect(state().advancePhase().ok).toBe(true); // Phase 10A: exile is Day-only
     state().exileTraveler(T);
     const tessHistory = game().history.filter((h) => h.participant.playerId === T);
     expect(tessHistory.map((h) => h.category)).toEqual(["role", "alignment", "life"]);
@@ -512,7 +521,7 @@ describe("Phase 9R.2: local persistence / rehydrate", () => {
     state().setStatus(alice, "drunk", true);
     await new Promise((resolve) => setTimeout(resolve, 0));
     const raw = localStorage.getItem(STORAGE_KEY)!;
-    expect(JSON.parse(raw).version).toBe(18);
+    expect(JSON.parse(raw).version).toBe(19);
     const beforeGame = structuredClone(game());
     const beforeUndo = structuredClone(state().undoStack);
 

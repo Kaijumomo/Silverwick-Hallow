@@ -12,6 +12,8 @@ import { isInitialRevealComplete } from "@/stores/identity";
 import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
 import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 import { hasEffect } from "@/stores/effects";
+import { lifeAccessibleLabel, lifeStatusOf } from "@/stores/lifeState";
+import { LifeShroud, LifeStateText, VoteToken } from "@/features/life/LifeMarks";
 
 export function buildRoleDisplayMap(script: Script | undefined): Map<string, RoleDef> {
   const map = new Map((script?.characters ?? []).map((c) => [c.id, c]));
@@ -82,10 +84,16 @@ function Token({
   );
   const isDragSource = draggedId === player.id;
   const isDragTarget = draggedId !== null && draggedId !== player.id;
+  // Phase 10A: the one derived life state (lifeState.ts). Life, the vote
+  // token and exile are public table information, so Privacy Mode never
+  // hides them; "Needs check" is Storyteller-only and hidden there.
+  const life = lifeStatusOf(player);
+  const needsCheck = !privacyMode && life.anomalies.length > 0;
 
   const classes = [
     "token",
     !player.alive ? "dead" : "",
+    `life-${life.state}`,
     hasDeception ? "deception" : "",
     selected ? "selected" : "",
     isDragSource ? "dragging" : "",
@@ -130,6 +138,7 @@ function Token({
       style={{ left: `calc(50% + ${x}px)`, top: `calc(50% + ${y}px)` }}
       onClick={isGhost ? undefined : onClick}
       role="button"
+      aria-label={lifeAccessibleLabel(player.name, player.seat + 1, life.state, needsCheck)}
       tabIndex={isGhost ? -1 : 0}
       onKeyDown={(e) => {
         if (!isGhost && (e.key === "Enter" || e.key === " ")) {
@@ -158,7 +167,9 @@ function Token({
           {online === false && (
             <span className="token-presence offline" title="Offline" aria-label="Offline" />
           )}
+          <LifeShroud state={life.state} />
         </div>
+        <VoteToken state={life.state} />
         {!privacyMode && STATUS_KINDS.filter((k) => hasEffect(player, k)).map((k) => (
           <span key={k} className={`status-chip status-chip-${k}`} title={k}>
             {STATUS_ICON[k]}
@@ -179,11 +190,8 @@ function Token({
       {mode === "ring" && (
         <div className="token-seat-num">seat {player.seat + 1}</div>
       )}
-      {!privacyMode && !player.alive && (
-        <div className="token-ghost">
-          {player.ghostVote ? "ghost vote" : "voted"}
-        </div>
-      )}
+      {!player.alive && <LifeStateText state={life.state} className="token-ghost" />}
+      {needsCheck && <div className="token-needs-check">Needs check</div>}
       {!privacyMode && player.reminders.length > 0 && (
         <div className="token-reminders">
           {player.reminders.slice(0, 4).map((r) => (

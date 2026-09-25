@@ -45,6 +45,20 @@ beforeEach(() => {
 afterEach(async () => { for (const dispose of disposals.splice(0).reverse()) await dispose(); });
 
 const persisted = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
+/** Phase 10A: these fixtures are built through current commands but stand
+ * for v16/v17/v18-era data, which never carried the v19 Life Event Window
+ * (whose presence alone is v19 evidence). Strip it to get the legacy shape. */
+const legacyShaped = (game: Game): Game => { delete (game as Record<string, unknown>).lifeEventWindow; return game; };
+const withoutLifeWindow = (game: Game): Game => {
+  const { lifeEventWindow: _window, ...rest } = game;
+  return rest as Game;
+};
+/** A legacy-shaped game after the full migration chain, for validity checks. */
+const migratedCopy = (game: Game, from: number): Game => {
+  const copy = structuredClone(game);
+  migrateGameEntry(copy, from, { kind: "canonical-only" });
+  return copy;
+};
 
 /** Every seat empty, no ParticipantId, no History, no delivery -- but one
  * Effect (or Reminder) whose v17 sourceParticipant names a player who has
@@ -59,19 +73,19 @@ function allEmptyWithSource(kind: "effect" | "reminder"): Game {
     expect(store().addReminder(carrier, { label: "Chosen", sourcePlayer: alice, lifetime: { kind: "manual" } })).not.toBeNull();
   }
   expect(store().unseatPlayer(alice)).toBe(true);
-  const game = persisted({ ...store().game!, code, storytellerUid: "host" }) as Game;
+  const game = legacyShaped(persisted({ ...store().game!, code, storytellerUid: "host" }) as Game);
   // Genuinely none of the pre-remediation markers:
   expect(Object.values(game.players).every((p) => p.isEmpty && !("participantId" in p))).toBe(true);
   expect(game.history).toEqual([]);
   expect(game.informationDeliveries).toEqual([]);
-  expect(StorytellerGamePersistedSchema.safeParse(game).success).toBe(true);
+  expect(StorytellerGamePersistedSchema.safeParse(migratedCopy(game, 17)).success).toBe(true);
   return game;
 }
 
 /** A truly markerless all-empty game (no v17 evidence anywhere). */
 function markerless(): Game {
   store().newGame("tb", { plannedPlayerCount: 3 });
-  return persisted({ ...store().game!, code, storytellerUid: "host" }) as Game;
+  return legacyShaped(persisted({ ...store().game!, code, storytellerUid: "host" }) as Game);
 }
 
 /** A retired, v16-shaped History record: exactly what a repairing v16 -> v17
@@ -99,7 +113,9 @@ describe("R2-C: malformed current-version History alongside that evidence", () =
     // the v16 -> v17 step refuses to touch an entry carrying v17 evidence.
     const entry = structuredClone(game);
     migrateGameEntry(entry, 16, { kind: "canonical-only" });
-    expect(entry).toEqual(game);
+    // Phase 10A: only the v18 -> v19 step (a fresh, empty Life Event
+    // Window) is added; the identity data is untouched.
+    expect(withoutLifeWindow(entry)).toEqual(game);
     expect(StorytellerGamePersistedSchema.safeParse(entry).success).toBe(false);
     // Local persisted state, whether tagged current or (contradictorily) v16.
     migrateStoreState({ game: structuredClone(game), undoStack: [] }, 18);
@@ -155,7 +171,9 @@ describe("R2-D: malformed v17 markers are still v17 evidence (presence, not vali
     expect(StorytellerGamePersistedSchema.safeParse(game).success).toBe(false);
     const entry = structuredClone(game);
     migrateGameEntry(entry, 16, { kind: "canonical-only" });
-    expect(entry).toEqual(game);
+    // Phase 10A: only the v18 -> v19 step (a fresh, empty Life Event
+    // Window) is added; the identity data is untouched.
+    expect(withoutLifeWindow(entry)).toEqual(game);
   });
 
   it("generic payloads are never scanned for key names: a 'sourceParticipant' inside a life-category snapshot or a value change is not v17 evidence", () => {
@@ -189,7 +207,11 @@ describe("R2-E / R2-F: genuine v16 and truly markerless games still migrate exac
     const before = JSON.stringify(game);
     expect(detectLegacyGameVersion(game)).toBe(16);
     migrateGameEntry(game, 16, { kind: "canonical-only" });
-    expect(JSON.stringify(game)).toBe(before);
+    // Every identity/category step is a byte-identical no-op; the only
+    // addition is Phase 10A's Life Event Window (Setup -> covered from
+    // Night 1, no events).
+    expect(game.lifeEventWindow).toEqual({ coverageFrom: { phase: "night", day: 1 }, events: [] });
+    expect(JSON.stringify(withoutLifeWindow(game))).toBe(before);
     expect(StorytellerGamePersistedSchema.safeParse(game).success).toBe(true);
   });
 });

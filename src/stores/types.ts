@@ -190,6 +190,74 @@ export type GameMoment = {
   day: number;
 };
 
+/** Phase 10A: a Game Moment inside Live Play -- Night or Day, day >= 1.
+ * Life Events only ever happen here; Setup and an ended game have none. */
+export type LiveGameMoment = { phase: "night" | "day"; day: number };
+/** Phase 10A: a Day moment. Executions and exiles are Day-only. */
+export type DayGameMoment = { phase: "day"; day: number };
+
+export type LifeEventId = string;
+export type LifeEventKind = "death" | "execution" | "exile" | "resurrection";
+/** How an execution resolved for its actual executee. An execution is not
+ * a death: a player can survive one, and a dead player can be executed. */
+export type ExecutionOutcome = "died" | "survived" | "alreadyDead";
+/** How a Traveler exile resolved. Exile is never assumed to kill. */
+export type ExileOutcome = "died" | "survived";
+
+/** A durable ParticipantRef that names a real participation instance (never
+ * a pre-v17 "legacy" ref). Every Life Event is recorded against one, since
+ * Life Events only exist from v19 onward. */
+export type CurrentParticipantRef = Extract<ParticipantRef, { kind: "participant" }>;
+
+type LifeEventCommon = {
+  /** Never reused, and never edited in place (Phase 10A Section 8). */
+  id: LifeEventId;
+  /** WHO the event happened to -- the actual executee/exilee, never
+   * re-derived from whoever currently occupies `subject.playerId`. */
+  subject: CurrentParticipantRef;
+  /** Correlates several Life Events produced by ONE resolution (e.g. a
+   * future multi-target ability). Absent for a single manual action. */
+  resolutionId?: string;
+  provenance?: Provenance;
+};
+
+/**
+ * Phase 10A: one recent, mechanically relevant life/death event. Authoritative
+ * temporary gameplay state held in `lifeEventWindow` -- NOT History. One
+ * semantic action produces exactly one event per subject: an execution that
+ * kills is `{ kind: "execution", outcome: "died" }`, never an execution plus
+ * a separate death. A generic "did X die?" query therefore counts
+ * `kind === "death"` OR `outcome === "died"` (see src/stores/lifeEvents.ts).
+ *
+ * Structurally, `outcome` is required for execution/exile and forbidden for
+ * death/resurrection, and execution/exile moments are Day moments.
+ */
+export type LifeEvent =
+  | (LifeEventCommon & { kind: "death"; moment: LiveGameMoment })
+  | (LifeEventCommon & { kind: "resurrection"; moment: LiveGameMoment })
+  | (LifeEventCommon & { kind: "execution"; moment: DayGameMoment; outcome: ExecutionOutcome })
+  | (LifeEventCommon & { kind: "exile"; moment: DayGameMoment; outcome: ExileOutcome });
+
+/**
+ * Phase 10A: the Storyteller-private Life Event Window. Retains only Life
+ * Events whose moment is the current phase or the immediately previous one;
+ * every phase change prunes the rest (atomically, inside the same Undo step).
+ * Never reconstructed from History, and never used to reconstruct Current
+ * State.
+ *
+ * `coverageFrom` is the earliest Game Moment from which the ABSENCE of a
+ * matching event may be read as "none occurred". Before it -- or outside the
+ * retained phases -- absence is unknown, never "none". A fresh game covers
+ * from Night 1; a game migrated from v18 mid-game starts coverage at the
+ * NEXT phase (see migratedLifeEventCoverage in lifeEvents.ts), which can
+ * legitimately be later than the current phase.
+ */
+export type LifeEventWindow = {
+  coverageFrom: LiveGameMoment;
+  /** In acceptance order. */
+  events: LifeEvent[];
+};
+
 /** How long an effect or reminder is intended to remain, in vocabulary
  * only. Phase 9D.1 stores this intent; no phase yet executes automatic
  * expiry from it. */
@@ -329,15 +397,41 @@ export type ProvenanceInput = {
  * or they are renamed. `participant.playerId` is historical seat context
  * only.
  */
-export type HistoryRecord = {
+type HistoryRecordCommon = {
   id: HistoryId;
-  category: HistoryCategory;
   participant: ParticipantRef;
   /** Absent only when the moment genuinely isn't known -- never invented. */
   moment?: GameMoment;
-  change: HistoryChange;
   provenance?: Provenance;
   note?: string;
+};
+
+/** Phase 10A: the Life Event Window change a "life" History Record mirrors
+ * -- a snapshot of the event added and/or removed for this participant, so
+ * the record stays meaningful after the event itself expires from the
+ * window. At least one of the two is present. */
+export type HistoryLifeEvent = {
+  added?: LifeEvent;
+  removed?: LifeEvent;
+};
+
+/**
+ * Phase 10A: a "life" record carries meaningful content -- a Current State
+ * diff (`change`), a mirrored Life Event (`lifeEvent`), or both. An
+ * execution the executee survives changes no life field, yet its record
+ * still explains what happened through `lifeEvent.added`; there is no
+ * empty-diff record. `correction: true` marks a Storyteller correction
+ * (retract/amend/late record/status correction) as opposed to a gameplay
+ * event. Every other category keeps its required `change` and never carries
+ * `lifeEvent`/`correction`. Those per-category rules are enforced by
+ * HistoryRecordSchema (schemas.ts) -- the one validator every persisted and
+ * recovered game passes -- and by the commands that build records.
+ */
+export type HistoryRecord = HistoryRecordCommon & {
+  category: HistoryCategory;
+  change?: HistoryChange;
+  lifeEvent?: HistoryLifeEvent;
+  correction?: true;
 };
 
 /**
@@ -467,6 +561,11 @@ export type STPlayerRecord = {
   effects: EffectRecord[];
   /** Missing means legacy/unknown, not completed. No inferred arrival history. */
   travelerArrival?: { demonInfoComplete: boolean; firstNightComplete: boolean; completedAtNight?: number; arrivalCheckComplete?: boolean };
+  /** Phase 10A: true exactly when this player's CURRENT death resulted from
+   * a Traveler exile. Only a dead Traveler may carry it; an exile the
+   * Traveler survives never sets it; resurrection or a status correction
+   * clears it (stored as an absent key). It is never the evidence that an
+   * exile happened -- that is the exile Life Event (and its History). */
   exiled?: boolean;
   privateInfo?: PrivateInfo;
   /** Draft edits never imply delivery. The last sent snapshot is ST-only. */
@@ -552,6 +651,12 @@ export type StorytellerLobbyRecord = {
    * Never used to reconstruct Actual Role, Actual Alignment, Effects,
    * Reminders, or Life State; Current State alone remains authoritative. */
   informationDeliveries: InformationDeliveryRecord[];
+  /** Phase 10A (store v19): Storyteller-private, authoritative temporary
+   * gameplay state -- recent Life Events of the current and immediately
+   * previous phase, plus the coverage bound that says when their absence is
+   * meaningful. Not History (see LifeEventWindow). Required from v19;
+   * migration adds it with honest coverage and never backfills events. */
+  lifeEventWindow: LifeEventWindow;
 };
 
 /** Delivered identity at player/{id}; an absent record means unrevealed.
@@ -580,6 +685,10 @@ export type PlayerPublicRecord = {
   joinedAt: number;
   isTraveler: boolean;
   publicDisplayRole?: RoleId;
+  /** Phase 10A: present (true) only while this player's CURRENT death
+   * resulted from a Traveler exile -- public table information, derived by
+   * publicLifeOf() (src/stores/lifeState.ts). Absent otherwise. */
+  exiled?: true;
 };
 
 export type PublicLobbyRecord = {

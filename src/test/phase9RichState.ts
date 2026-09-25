@@ -9,7 +9,9 @@ import type { PlayerId } from "@/stores/types";
  * Current State mutations (role/alignment/life/effects/reminders),
  * History with Provenance, Information Delivery, a Traveler (public
  * character + private alignment + exile), night progress, and
- * Storyteller-private notes.
+ * Storyteller-private notes. Phase 10A: it ends on Day 1 with a Life Event
+ * Window holding the Night 1 death and the Day 1 execution (survived) and
+ * exile (died), and the dead player's spent vote.
  *
  * Deliberately does NOT depend on which physical seat gets which role --
  * `tb`'s randomized deal decides that -- every downstream step resolves
@@ -27,6 +29,10 @@ export type RichGameHandles = {
   deadOrdinaryId: PlayerId;
   ghostVoteToggledId: PlayerId;
 };
+
+function lifeOk(result: { ok: boolean; message?: string }, label: string): void {
+  if (!result.ok) throw new Error(`rich game: ${label} failed -- ${result.message ?? ""}`);
+}
 
 function byActualRole(roleId: string): PlayerId {
   const game = useStorytellerStore.getState().game!;
@@ -85,13 +91,10 @@ export function buildRichPhase9Game(): RichGameHandles {
   store().setTravelerAlignment(travelerId, "evil", {
     provenance: { reason: "Storyteller selection", sourceCharacter: "thief" },
   }); // private alignment -- Alignment History with Provenance
-  store().exileTraveler(travelerId); // flips alive/exiled together; its own "life" History entry, distinct from a generic kill
 
-  // --- Ordinary Life State: alive/dead + ghost vote --------------------
+  // --- Ordinary Life State: a Night death (Phase 10A Life Event) --------
   const deadOrdinaryId = librarianId;
-  store().setAlive(deadOrdinaryId, false, { provenance: { reason: "killed by the Demon" } });
-  const ghostVoteToggledId = investigatorId;
-  store().setGhostVote(ghostVoteToggledId, false);
+  lifeOk(store().recordDeath(deadOrdinaryId, { provenance: { reason: "killed by the Demon" } }), "recordDeath");
 
   // --- Structured Effects: manual + ability-sourced, with lifetime -----
   store().setStatus(chefId, "poisoned", true); // manual
@@ -120,6 +123,19 @@ export function buildRichPhase9Game(): RichGameHandles {
 
   // --- Storyteller-private notes ----------------------------------------
   store().setNotes(chefId, "SENTINEL-PRIVATE-CHEF-NOTE");
+
+  // --- Phase 10A: Day 1 -- the Night's Life Events stay queryable, and the
+  // Day's execution/exile are recorded when they happen. ----------------
+  const advance = store().advancePhase();
+  if (!advance.ok) throw new Error("rich game: advance to Day 1 failed -- " + advance.message);
+  // An execution the executee survives: a Life Event with no life-field diff.
+  lifeOk(store().recordExecution(investigatorId, "survived"), "recordExecution");
+  // Exile flips alive/exiled together; its own exile Life Event, distinct
+  // from a generic kill.
+  lifeOk(store().recordExile(travelerId, "died"), "recordExile");
+  // The dead player spends their vote token.
+  const ghostVoteToggledId = deadOrdinaryId;
+  lifeOk(store().spendGhostVote(ghostVoteToggledId), "spendGhostVote");
 
   // --- Phase 9C sync/reconnect watermark state (representative) --------
   const sessionId = "session-" + code;

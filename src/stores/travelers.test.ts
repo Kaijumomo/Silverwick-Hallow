@@ -137,8 +137,16 @@ describe("Phase 9B personal first night", () => {
     expect(night().find(s => s.stepKey.startsWith("travelerArrival:t"))?.advisory).toMatch(/timing check/);
   });
   it.each(["death", "exile"])("%s suppresses arrival but preserves the player", action => {
-    traveler("apprentice"); store.setState({ game: { ...game(), phase: "night", day: 4 } });
-    if (action === "death") store.getState().setAlive("t", false); else store.getState().exileTraveler("t");
+    traveler("apprentice");
+    // Phase 10A: exile is a Day-only Life Event; a death may happen at Night.
+    if (action === "death") {
+      store.setState({ game: { ...game(), phase: "night", day: 4 } });
+      expect(store.getState().recordDeath("t").ok).toBe(true);
+    } else {
+      store.setState({ game: { ...game(), phase: "day", day: 3 } });
+      expect(store.getState().recordExile("t", "died").ok).toBe(true);
+      store.setState({ game: { ...game(), phase: "night", day: 4 } });
+    }
     expect(p()).toBeDefined(); expect(p().alive).toBe(false);
     expect(!!p().exiled).toBe(action === "exile");
     expect(night().some(s => s.stepKey.includes("t:apprentice"))).toBe(false);
@@ -197,15 +205,21 @@ describe("Phase 9B permitted Demon information", () => {
 describe("Phase 9B persistence", () => {
   it("rehydrates current Traveler truth, completion and exile from local persistence", async () => {
     traveler(); store.getState().setTravelerAlignment("t", "evil");
-    store.getState().completeTravelerInformation("t"); store.getState().exileTraveler("t");
+    store.getState().completeTravelerInformation("t");
+    // Phase 10A: exile is recorded during the Day.
+    store.setState({ game: { ...game(), phase: "day", day: 1 } });
+    expect(store.getState().recordExile("t", "died").ok).toBe(true);
     const expected = JSON.parse(JSON.stringify(p()));
+    expect(expected).toMatchObject({ alive: false, exiled: true });
     const saved = localStorage.getItem("new-blood-st")!;
-    expect(JSON.parse(saved).version).toBe(18);
+    expect(JSON.parse(saved).version).toBe(19);
     store.setState({ game: null }); localStorage.setItem("new-blood-st", saved);
     await store.persist.rehydrate(); expect(p()).toEqual(expected);
   });
   it("round trips current fields and owner checkpoint without undefined values", () => {
-    traveler(); store.getState().setTravelerAlignment("t", "evil"); store.getState().exileTraveler("t");
+    traveler(); store.getState().setTravelerAlignment("t", "evil");
+    store.setState({ game: { ...game(), phase: "day", day: 1 } });
+    expect(store.getState().recordExile("t", "died").ok).toBe(true);
     const decoded = StorytellerGamePersistedSchema.parse(JSON.parse(JSON.stringify(game())));
     expect(decoded.players.t).toEqual(p());
     const verify = (value: unknown): void => { expect(value).not.toBeUndefined(); if (value && typeof value === "object") Object.values(value).forEach(verify); };

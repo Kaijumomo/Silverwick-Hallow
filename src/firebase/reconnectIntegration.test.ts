@@ -946,7 +946,12 @@ describe("Phase 9C.2A.2A remediation — H1 follow-up: membership reconciliation
       day: 9,
       players: {
         ...structuredClone(baseGame.players),
-        [vanishSeatId]: { ...baseGame.players[vanishSeatId]!, name: "Ghost (checkpoint-only)", isEmpty: false },
+        // Phase 10A: an occupied seat always carries its participation
+        // identity (occupySeat). This v19 checkpoint is current-version data
+        // and is never "repaired" by identity migration, so the fabricated
+        // occupant carries the same deterministic id that repair produced.
+        [vanishSeatId]: { ...baseGame.players[vanishSeatId]!, name: "Ghost (checkpoint-only)", isEmpty: false,
+          participantId: `legacy-current:${vanishSeatId}` },
         [recoverSeatId]: { ...baseGame.players[recoverSeatId]!, isEmpty: true },
       },
       pendingPlayers: { [bobUid]: "Bob" },
@@ -1157,7 +1162,12 @@ describe("Phase 9C.2B.1 remediation — automatic startup authority fence", () =
       day: 9,
       players: {
         ...structuredClone(baseGame.players),
-        [vanishSeatId]: { ...baseGame.players[vanishSeatId]!, name: "Ghost (checkpoint-only)", isEmpty: false },
+        // Phase 10A: an occupied seat always carries its participation
+        // identity (occupySeat). This v19 checkpoint is current-version data
+        // and is never "repaired" by identity migration, so the fabricated
+        // occupant carries the same deterministic id that repair produced.
+        [vanishSeatId]: { ...baseGame.players[vanishSeatId]!, name: "Ghost (checkpoint-only)", isEmpty: false,
+          participantId: `legacy-current:${vanishSeatId}` },
       },
     };
     await writeProjections({
@@ -1223,7 +1233,12 @@ describe("Phase 9C.2B.1 remediation — automatic startup authority fence", () =
       day: 9,
       players: {
         ...structuredClone(baseGame.players),
-        [vanishSeatId]: { ...baseGame.players[vanishSeatId]!, name: "Ghost (checkpoint-only)", isEmpty: false },
+        // Phase 10A: an occupied seat always carries its participation
+        // identity (occupySeat). This v19 checkpoint is current-version data
+        // and is never "repaired" by identity migration, so the fabricated
+        // occupant carries the same deterministic id that repair produced.
+        [vanishSeatId]: { ...baseGame.players[vanishSeatId]!, name: "Ghost (checkpoint-only)", isEmpty: false,
+          participantId: `legacy-current:${vanishSeatId}` },
       },
     };
     await writeProjections({
@@ -1619,6 +1634,9 @@ describe("Phase 9D.5 Proof C: same-lineage reconnect integrity for a rich Phase 
     expect(gameAfter.players[handles.travelerId]!.exiled).toBe(true);
     expect(gameAfter.players[handles.deadOrdinaryId]!.alive).toBe(false);
     expect(gameAfter.players[handles.ghostVoteToggledId]!.ghostVote).toBe(false);
+    // Phase 10A: the Life Event Window reconnects untouched, in order.
+    expect(gameAfter.lifeEventWindow).toEqual(gameBefore.lifeEventWindow);
+    expect(gameAfter.lifeEventWindow.events.map((e) => e.kind)).toEqual(["death", "execution", "exile"]);
   });
 
   it("dirty reconnect: an unacknowledged local edit atop the rich game survives reconnect and flushes intact to the remote projection, without disturbing unrelated recorded domains", async () => {
@@ -1689,6 +1707,9 @@ describe("Phase 9D.5 Proof D: remote checkpoint restore integrity for a rich Pha
     const gameAfter = useStorytellerStore.getState().game!;
     expect(gameAfter).toEqual(foreignGame);
     expect(gameAfter.day).toBe(2);
+    // Phase 10A: the restored window is the checkpoint's, exactly.
+    expect(gameAfter.lifeEventWindow).toEqual(foreignGame.lifeEventWindow);
+    expect(gameAfter.lifeEventWindow.events).toHaveLength(3);
     expect(gameAfter.history).toEqual(foreignGame.history);
     expect(gameAfter.history.length).toBeGreaterThan(0);
     expect(gameAfter.informationDeliveries).toEqual(foreignGame.informationDeliveries);

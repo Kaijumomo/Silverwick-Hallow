@@ -495,7 +495,7 @@ describe("R1 recovery matrix: an unchanged, production-seated member keeps ONE p
     const reload = async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
       const raw = localStorage.getItem(STORAGE_KEY)!;
-      expect(JSON.parse(raw).version).toBe(18);
+      expect(JSON.parse(raw).version).toBe(19);
       resetStore();
       localStorage.setItem(STORAGE_KEY, raw);
       await useStorytellerStore.persist.rehydrate();

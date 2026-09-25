@@ -180,6 +180,69 @@ export const ProvenanceSchema = z.object({
   note: z.string().optional(),
 });
 
+/**
+ * Phase 10A: Life Event structure (store v19). Structural only -- ids,
+ * ParticipantRef shape, Game Moment shape, kind, the outcome each kind
+ * requires or forbids, the Day-only rule for execution/exile, optional
+ * resolutionId and Provenance. Every variant is `.strict()`: an unknown key
+ * (including a stray `outcome` on a death) is rejected, never stripped.
+ *
+ * Deliberately NOT judged here (Section 14): whether the subject is still
+ * seated, whether the event is stale for the current phase, or whether
+ * Current State agrees with it. Those are recoverable conditions that
+ * command/query logic and the Storyteller's "Needs check" surface handle --
+ * never a reason to reset local state or reject a checkpoint.
+ */
+export const LiveGameMomentSchema = z.object({
+  phase: z.enum(["night", "day"]),
+  day: z.number().int().positive(),
+}).strict();
+const DayGameMomentSchema = z.object({ phase: z.literal("day"), day: z.number().int().positive() }).strict();
+const CurrentParticipantRefSchema = ParticipantRefSchema.options[0];
+const lifeEventCommon = {
+  id: z.string().min(1),
+  subject: CurrentParticipantRefSchema,
+  resolutionId: z.string().min(1).optional(),
+  provenance: ProvenanceSchema.optional(),
+};
+export const LifeEventSchema = z.discriminatedUnion("kind", [
+  z.object({ ...lifeEventCommon, kind: z.literal("death"), moment: LiveGameMomentSchema }).strict(),
+  z.object({ ...lifeEventCommon, kind: z.literal("resurrection"), moment: LiveGameMomentSchema }).strict(),
+  z.object({ ...lifeEventCommon, kind: z.literal("execution"), moment: DayGameMomentSchema,
+    outcome: z.enum(["died", "survived", "alreadyDead"]) }).strict(),
+  z.object({ ...lifeEventCommon, kind: z.literal("exile"), moment: DayGameMomentSchema,
+    outcome: z.enum(["died", "survived"]) }).strict(),
+]);
+
+/** Phase 10A: the Life Event Window. Event ids are unique within it (ids
+ * are never reused); nothing else about the events' mutual consistency is
+ * judged structurally.
+ *
+ * `events` defaults to [] exactly like `history`/`informationDeliveries`:
+ * the Firebase RTDB `storyteller` projection drops an empty array, so an
+ * RTDB-shaped copy of a game with no recent events legitimately arrives
+ * without the key. Only an ABSENT list defaults -- a present malformed one
+ * is still rejected -- and the window object itself stays required. */
+export const LifeEventWindowSchema = z.object({
+  coverageFrom: LiveGameMomentSchema,
+  events: z.array(LifeEventSchema).default([]),
+}).strict().superRefine((window, ctx) => {
+  const seen = new Set<string>();
+  window.events.forEach((event, index) => {
+    if (seen.has(event.id)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "duplicate Life Event id", path: ["events", index, "id"] });
+    }
+    seen.add(event.id);
+  });
+});
+
+/** Phase 10A: the Life Event snapshot(s) a "life" History Record mirrors. */
+const HistoryLifeEventSchema = z.object({
+  added: LifeEventSchema.optional(),
+  removed: LifeEventSchema.optional(),
+}).strict().refine((value) => value.added !== undefined || value.removed !== undefined,
+  { message: "a History Life Event mirror names an added or removed event" });
+
 export const HistoryChangeSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("value"), from: z.record(z.string(), z.unknown()), to: z.record(z.string(), z.unknown()) }),
   z.object({ kind: z.literal("added"), item: z.record(z.string(), z.unknown()) }),
@@ -208,16 +271,32 @@ export const HistoryRecordSchema = z.object({
   participant: ParticipantRefSchema,
   playerId: RetiredPlayerIdField,
   moment: GameMomentSchema.optional(),
-  change: HistoryChangeSchema,
+  change: HistoryChangeSchema.optional(),
   provenance: ProvenanceSchema.optional(),
   note: z.string().optional(),
+  lifeEvent: HistoryLifeEventSchema.optional(),
+  correction: z.literal(true).optional(),
 }).superRefine((record, ctx) => {
+  // Phase 10A: meaningful content. Every non-life record keeps its required
+  // Current State `change` and never carries Life Event fields; a life
+  // record carries a change, a mirrored Life Event, or both -- never
+  // neither (no empty-diff record).
+  if (record.category !== "life") {
+    if (record.change === undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a History Record must carry a change", path: ["change"] });
+    }
+    if (record.lifeEvent !== undefined || record.correction !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only a life History Record mirrors Life Events or corrections", path: ["lifeEvent"] });
+    }
+  } else if (record.change === undefined && record.lifeEvent === undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a life History Record must carry a change or a Life Event", path: ["change"] });
+  }
   // An already-v17 record never goes through v16 -> v17 migration again
   // (detectLegacyGameVersion / STORE_VERSION), so a stale v16-shaped source
   // nested inside an added/removed Effect/Reminder snapshot must fail
   // validation here rather than survive -- never silently stripped or
   // converted.
-  if (record.change.kind === "value") return;
+  if (!record.change || record.change.kind === "value") return;
   const contract = HISTORY_SNAPSHOT_SOURCE_CONTRACT[record.category];
   if (!contract) return;
   const checked = contract.safeParse(record.change.item);
@@ -344,6 +423,7 @@ export const PlayerPublicRecordSchema = z.object({
   joinedAt: z.number().int().nonnegative(),
   isTraveler: z.boolean(),
   publicDisplayRole: z.string().min(1).optional(),
+  exiled: z.literal(true).optional(),
 });
 
 export const NightStepStatusSchema = z.enum(["pending", "done", "skipped"]);
@@ -375,6 +455,10 @@ export const StorytellerLobbyRecordSchema = z.object({
   pendingPlayers: z.record(z.string(), z.string()).default({}),
   history: z.array(HistoryRecordSchema).default([]),
   informationDeliveries: z.array(InformationDeliveryRecordSchema).default([]),
+  // Phase 10A (v19): required, with NO default -- a v19 game missing it is
+  // incomplete current-version data and fails here; genuine v18 data gets it
+  // from migration (gameMigration.ts), never from this schema.
+  lifeEventWindow: LifeEventWindowSchema,
 });
 
 export const PublicLobbyRecordSchema = z.object({

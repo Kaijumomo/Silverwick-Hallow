@@ -2,6 +2,7 @@ import type { RoleRegistry } from "@/data/roleRegistry";
 import { PlayerSelfRecordSchema } from "./schemas";
 import { isInitialRevealComplete } from "./identity";
 import { publicTravelerRole } from "./travelers";
+import { publicLifeOf } from "./lifeState";
 import type {
   PlayerId,
   PlayerPublicRecord,
@@ -47,12 +48,17 @@ export function projectToPublic(
   p: STPlayerRecord,
   online: boolean
 ): PlayerPublicRecord {
+  // Phase 10A: public life goes through the one public-life seam
+  // (lifeState.ts) -- dead/alive, vote token and exile-death are public
+  // table information; Life Events, ParticipantIds and anomalies never are.
+  const life = publicLifeOf(p);
   const out: PlayerPublicRecord = {
     id: p.id,
     name: p.name,
     seat: p.seat,
-    alive: p.alive,
-    ghostVote: p.ghostVote,
+    alive: life.alive,
+    ghostVote: life.ghostVote,
+    ...(life.exiled ? { exiled: true as const } : {}),
     online,
     joinedAt: p.joinedAt,
     isTraveler: p.isTraveler,

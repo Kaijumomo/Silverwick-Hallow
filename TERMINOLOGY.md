@@ -37,7 +37,8 @@ changes.
 
 - Some commands are **History-eligible**. During Live Play they append their
   own History through `recordIfLive()`. Examples: `assignRole`,
-  `setActualAlignment`, `setAlive`, `addEffect`, `addReminder`.
+  `setActualAlignment`, `addEffect`, `addReminder`, and every Life command
+  (`resolveLife` and its wrappers, see §12).
 - Other commands change Current State without producing a History Record. An
   example is a phase transition through `setPhase` (it still pushes Undo).
 
@@ -103,9 +104,41 @@ Never infer historical continuity from a PlayerId, seat, name or UID.
 
 ## 12. Life State
 
-A player's life/death situation: `alive`, `ghostVote`, and for Travelers
-`exiled`. Covers death, exile and restoration. Life State changes use the
-`"life"` History category.
+A player's life/death situation in Current State: `alive`, `ghostVote` (the
+dead-player vote token), and `exiled` (true only while a Traveler's *current*
+death resulted from an exile). Interpreted in one place, `lifeStatusOf()` /
+`publicLifeOf()` in `src/stores/lifeState.ts`. Life State is public table
+information; Privacy Mode never hides it. Suspicious legacy combinations are
+flagged **Needs check** (Storyteller-only), never rejected.
+
+Life State changes only through the **life-resolution boundary**
+(`planLifeTransaction` in `src/stores/lifeResolution.ts`, committed by the
+store's `resolveLife`): a **Life Intent** (death, execution, exile,
+resurrection, spend/restore ghost vote, or a correction) is planned against
+Current State and committed together with its Life Event Window change and
+History, or refused with nothing changed. Life changes use the `"life"`
+History category.
+
+## 12a. Life Event and Life Event Window
+
+- **Life Event** (`LifeEvent`): one recent, mechanically relevant `death`,
+  `execution`, `exile` or `resurrection`, about a durable ParticipantRef, at a
+  Game Moment. Executions and exiles carry an `outcome`; one semantic action is
+  one event (an execution that kills is `execution`/`died`, never an execution
+  plus a death). Immutable; ids are never reused.
+- **Life Event Window** (`game.lifeEventWindow`): authoritative temporary
+  gameplay state holding the events of the current and immediately previous
+  phase. Not History, and never rebuilt from History. Every phase change
+  prunes it inside the same commit and Undo step.
+- **Coverage** (`coverageFrom`): the earliest moment from which the absence of
+  an event means "none occurred". Queries (`src/stores/lifeEvents.ts`) answer
+  `unknown` -- never "none" -- before it, for expired phases, and for the
+  future.
+- **Correction**: retract, amend (retract + a replacement with a new id), late
+  record (the previous phase), or a status-only correction. Marked
+  `correction: true` in History. A correction never implies a resurrection or
+  death and never restores an ability; Current State is repaired only by an
+  explicit status target in the same transaction.
 
 ## 13. Effect
 

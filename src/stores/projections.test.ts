@@ -229,7 +229,7 @@ describe("Lobby-level projections", () => {
       seatOrder: ["p1", "p2", "p3"],
       nightProgress: {},
       rolePool: [],
-      history: [], informationDeliveries: [],
+      history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       plannedPlayerCount: 0,
       plannedTravelerCount: 0,
       pendingPlayers: {},
@@ -478,7 +478,7 @@ describe("projectLobbyToSelfMap — Phase 9C.4 setup privacy barrier", () => {
     return {
       code: "SETUP01", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
       bluffs: [], fabled: [], lorics: [], notes: "ST-only",
-      seatOrder: Object.keys(players), nightProgress: {}, rolePool: [], history: [], informationDeliveries: [],
+      seatOrder: Object.keys(players), nightProgress: {}, rolePool: [], history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       plannedPlayerCount: Object.keys(players).length, plannedTravelerCount: 0, pendingPlayers: {}, players, ...over,
     };
   }

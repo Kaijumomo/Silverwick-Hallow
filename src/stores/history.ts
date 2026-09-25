@@ -12,7 +12,9 @@ import type {
   StorytellerLobbyRecord,
 } from "./types";
 
-const historyId = (): HistoryId =>
+/** A fresh History Record id. Exported for the Phase 10A life-resolution
+ * planner (lifeResolution.ts), which builds its own life records. */
+export const historyId = (): HistoryId =>
   globalThis.crypto?.randomUUID?.() ?? `h-${Math.random().toString(36).slice(2, 10)}`;
 
 /**

@@ -55,7 +55,7 @@ function makeLobby(): StorytellerLobbyRecord {
     seatOrder: ["p1", "p2", "p3"],
     nightProgress: {},
     rolePool: [],
-    history: [], informationDeliveries: [],
+    history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
     plannedPlayerCount: 0,
     plannedTravelerCount: 0,
     pendingPlayers: {},
@@ -397,7 +397,7 @@ describe("writeProjections — Phase 9C.4 setup barrier atomicity", () => {
     return {
       code: "SETP", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
       bluffs: [], fabled: [], lorics: [], notes: "", setupRolesRevealed: revealed,
-      seatOrder: ["p1", "p2", "t1"], nightProgress: {}, rolePool: [], history: [], informationDeliveries: [],
+      seatOrder: ["p1", "p2", "t1"], nightProgress: {}, rolePool: [], history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       plannedPlayerCount: 2, plannedTravelerCount: 0, pendingPlayers: {},
       players: {
         p1: makePublishedSTPlayer({ id: "p1", seat: 0, actualRole: "chef", shownRole: "chef" }),
