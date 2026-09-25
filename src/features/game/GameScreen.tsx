@@ -14,10 +14,11 @@ import { isFirebaseConfigured } from "@/firebase/config";
 import { createLobby, formatCode } from "@/firebase/lobby";
 import { acceptLeaveRequest, rejectLeaveRequest, revokePlayerAndCommit, storytellerOccupancyCompletion, type OccupancyCompletion } from "@/firebase/membershipCommands";
 import { closeMultiplayerSession, useSessionRuntime } from "@/firebase/storytellerSync";
+import { ConnectionStatus } from "@/firebase/StorytellerSession";
 import { ensurePublicDisplayAccess, rotatePublicDisplayAccess, buildPublicDisplayLink } from "@/firebase/publicDisplayAuth";
 import { FirebaseConfigDialog } from "@/features/firebase/FirebaseConfigDialog";
 import { friendlyFirebaseError, type FriendlyError } from "@/firebase/errors";
-import { requireActiveSession, lifecycleMessage } from "@/firebase/lifecycle";
+import { requireActiveSession } from "@/firebase/lifecycle";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { DayResolutionPanel, DuskReview } from "@/features/life/DayResolution";
 import { LifeEventsPanel } from "@/features/life/LifeEventsPanel";
@@ -50,7 +51,7 @@ export function GameScreen() {
   const [almanacOpen, setAlmanacOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
   const [goLiveError, setGoLiveError] = useState<FriendlyError | null>(null);
-  const { backend, online: onlineMap, pending: pendingOnlineCount, presence, leaveRequests } = useSessionRuntime();
+  const { backend, online: onlineMap, pending: pendingOnlineCount, presence, leaveRequests, status: sessionStatus } = useSessionRuntime();
   const [leaveInFlight, setLeaveInFlight] = useState<Set<string>>(new Set());
   const [leaveErrors, setLeaveErrors] = useState<Record<string, string>>({});
   const [ending, setEnding] = useState(false);
@@ -349,7 +350,9 @@ export function GameScreen() {
             </span>
           )}
           {lobby && !backend && (
-            <span className="phase-pill" style={{ opacity: 0.6 }}>Connecting…</span>
+            <span className="phase-pill" style={{ opacity: 0.6 }} role="status">
+              {sessionStatus === "reconnecting" ? "Reconnecting…" : sessionStatus === "connecting" || sessionStatus === "idle" ? "Connecting…" : "Not live"}
+            </span>
           )}
           {lobby && backend && (
             <span className="lobby-pill" title="Players join with this code">
@@ -498,8 +501,12 @@ export function GameScreen() {
               closeOverflow();
               if (ending || !window.confirm("End this game and return to home?")) return;
               setEnding(true);
+              // The local game ends only after the multiplayer lobby has
+              // closed authoritatively. A failed close leaves both the lobby
+              // and the game untouched; closeMultiplayerSession records the
+              // failure (and any recovery option) in the connection status.
               try { await closeMultiplayerSession(); endGame(); }
-              catch (error) { setGoLiveError({ title: "Could not end lobby", message: lifecycleMessage(error) }); }
+              catch { /* shown by ConnectionStatus */ }
               finally { setEnding(false); }
             }}
           >
@@ -508,6 +515,24 @@ export function GameScreen() {
         </div>
       </header>
 
+      {lobby && <ConnectionStatus />}
+      {goLiveError && (
+        <div className="connection-status" data-tone="error" role="alert">
+          <strong>{goLiveError.title}</strong>
+          <span className="connection-status-message">{goLiveError.message}</span>
+          <span className="connection-status-actions">
+            <button className="btn btn-sm" onClick={() => setGoLiveError(null)}>dismiss</button>
+          </span>
+        </div>
+      )}
+      {displayLinkError && (
+        <div className="connection-status" data-tone="error" role="alert">
+          <span className="connection-status-message">{displayLinkError}</span>
+          <span className="connection-status-actions">
+            <button className="btn btn-sm" onClick={() => setDisplayLinkError(null)}>dismiss</button>
+          </span>
+        </div>
+      )}
       {phaseError && !privacyMode && <p role="alert">{phaseError}</p>}
       {!privacyMode && (game.fabled.length > 0 || (game.lorics?.length ?? 0) > 0) && (
         <div className="fabled-strip">
@@ -642,29 +667,6 @@ export function GameScreen() {
             goLive();
           }}
         />
-      )}
-      {goLiveError && (
-        <div className="error-list lobby-error" role="alert">
-          <strong>{goLiveError.title}</strong>
-          <p>{goLiveError.message}</p>
-          <button
-            className="btn btn-sm"
-            onClick={() => setGoLiveError(null)}
-          >
-            dismiss
-          </button>
-        </div>
-      )}
-      {displayLinkError && (
-        <div className="error-list lobby-error" role="alert">
-          <p>{displayLinkError}</p>
-          <button
-            className="btn btn-sm"
-            onClick={() => setDisplayLinkError(null)}
-          >
-            dismiss
-          </button>
-        </div>
       )}
       {copyToast && (
         <div className="toast" role="status">

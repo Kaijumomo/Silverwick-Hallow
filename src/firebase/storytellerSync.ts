@@ -16,10 +16,23 @@ import { decodeMembershipRevocations, decodePresence, decodeRoster, decodeRoster
 import { membershipRevocationsPath, rosterParticipantsPath } from "./paths";
 import type { RevocationAction } from "./lobby";
 import { SessionWriter, FENCE_MARGIN_MS, type AuthorityHandle } from "./writer";
-import { decodeSession, guardSchema, isTransient, leaseSchema, lifecycleMessage, LifecycleError, sessionPath } from "./lifecycle";
+import { classifyStorytellerError, decodeSession, guardSchema, isTransient, leaseSchema, LifecycleError, sessionPath, type SessionFailure } from "./lifecycle";
 import { TRAVELERS } from "@/data/travelers";
 import { connectFirebase } from "./session";
 import { decideReconnect, type CheckpointState, type ReconnectIncoherentReason } from "./reconnectDecision";
+
+/** Storyteller multiplayer connection status, derived fresh at runtime and
+ * never persisted.
+ * - "idle": no lobby;
+ * - "connecting" / "reconnecting": writer startup in progress, for a scope
+ *   that has never / has previously reached live;
+ * - "live": the initial acknowledged flush succeeded and the runtime writer is
+ *   exposed (the ONLY state in which `backend` is non-null);
+ * - "blocked": startup reached a reconnect CONFLICT/INCOHERENT outcome;
+ * - "stopped": a writer that had gone live has stopped (lease lost, session
+ *   ended, terminal write failure);
+ * - "failed": startup never reached live. */
+export type SessionStatus = "idle" | "connecting" | "reconnecting" | "live" | "blocked" | "stopped" | "failed";
 
 /** Runtime (never persisted) reconnect status. Section 12 (Phase 9C.2A):
  * persisted status is never trusted as reconnect-decision evidence — every
@@ -60,30 +73,163 @@ type Runtime = {
    * re-resolves the uid->playerId binding fresh (see applyTravelerChoice)
    * rather than trusting this map. */
   travelerChoices: Record<string, { playerId: string | null; roleId: string }>;
+  status: SessionStatus;
+  /** The classified cause of the current non-live status (or of the latest
+   * reported runtime failure); null while nothing has failed. */
+  failure: SessionFailure | null;
+  /** An authoritative close/end attempt for the current lobby failed. */
+  closeFailed: boolean;
+  /** Scope key (see scopeKey) of a lobby that never reached live, whose
+   * authoritative close could not complete, and which may therefore be left
+   * locally only (leaveMultiplayerOffline). Null when Leave is not offered. */
+  leaveOffer: string | null;
 };
-export const useSessionRuntime = create<Runtime>(() => ({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, retry: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {} }));
+export const useSessionRuntime = create<Runtime>(() => ({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, retry: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {}, status: "idle", failure: null, closeFailed: false, leaveOffer: null }));
 export const retryStorytellerSession = () => useSessionRuntime.setState(s => ({ retry: s.retry + 1 }));
 /** Central ownership for `useSessionRuntime.error`: each source may set or
  * clear only its own entry; the derived field is recomputed from the rest. */
 export function reportRuntimeError(source: string, message: string | null) {
   const errors = { ...useSessionRuntime.getState().errors };
   if (message != null) errors[source] = message; else delete errors[source];
-  const values = Object.values(errors).filter((value): value is string => !!value);
+  // Distinct messages only: one failure reported by two sources (e.g. the
+  // denied initial flush and the startup it aborts) reads once.
+  const values = [...new Set(Object.values(errors).filter((value): value is string => !!value))];
   useSessionRuntime.setState({ errors, error: values.length ? values.join(" ") : null });
 }
 let closeCurrent: (() => Promise<void>) | null = null;
 
+type LobbyScope = { code: string; sessionId?: string };
+export const scopeKey = (lobby: LobbyScope) => `${lobby.code}|${lobby.sessionId ?? ""}`;
+const sameScope = (a: LobbyScope | null | undefined, b: LobbyScope) => !!a && scopeKey(a) === scopeKey(b);
+/** Scopes whose runtime writer reached live in this page. */
+const liveScopes = new Set<string>();
+/** Writers that reached live: their later denied writes classify as "live"
+ * (a lapsed/replaced lease) rather than startup authorization failures. */
+const liveWriters = new WeakSet<SessionWriter>();
+/** Whether this lobby scope ever reached live: in this page, or -- durable
+ * across reloads -- through an accepted server guard for exactly this scope
+ * (only an acknowledged commit or an accepted restore records one). */
+function scopeReachedLive(lobby: LobbyScope): boolean {
+  if (liveScopes.has(scopeKey(lobby))) return true;
+  const sync = useStorytellerStore.getState().sync;
+  return !!sync && sync.code === lobby.code && sync.sessionId === (lobby.sessionId ?? "") && sync.ackedGuard != null;
+}
+export function initialConnectionStatus(lobby: LobbyScope): "connecting" | "reconnecting" {
+  return scopeReachedLive(lobby) ? "reconnecting" : "connecting";
+}
+function warnFailure(failure: SessionFailure) {
+  // Developer-facing only: the operation/path attribution never reaches UI
+  // text; production builds render only `failure.message`.
+  // eslint-disable-next-line no-console
+  console.warn("[multiplayer]", failure.category, failure.diagnostic);
+}
+function noteFailure(error: unknown, phase: "startup" | "live", access?: "read" | "write"): SessionFailure {
+  const failure = classifyStorytellerError(error, phase, access);
+  warnFailure(failure);
+  useSessionRuntime.setState({ failure });
+  return failure;
+}
+
+/** A startup that never reached live, kept only so End Game can still close
+ * its lobby authoritatively (see closeFailedStart). Cleared by the owning
+ * effect's cleanup (retry, lobby change, unmount). */
+type FailedStart = { backend: RoomBackend; lobby: LobbyConnection; writer: SessionWriter };
+let failedStart: FailedStart | null = null;
+
+/** Authoritative close for a lobby whose runtime writer never went live:
+ * the SAME fenced SessionWriter.close() a live session uses -- never a direct
+ * write. The failed startup writer first releases its own lease (idempotent
+ * with the disposal barrier's later dispose), then a fresh writer acquires the
+ * lease through the normal transaction (a foreign valid lease still wins:
+ * conflict) and closes. */
+async function closeFailedStart(pending: FailedStart) {
+  const { backend, lobby, writer } = pending;
+  await writer.dispose().catch(() => {});
+  const closer = new SessionWriter(backend, lobby.code, lobby.sessionId ?? "");
+  try {
+    await closer.start();
+    await closer.close(useStorytellerStore.getState().game?.seatOrder ?? []);
+  } finally {
+    await closer.dispose().catch(() => {});
+  }
+  if (failedStart === pending) failedStart = null;
+  if (sameScope(useStorytellerStore.getState().lobby, lobby)) useStorytellerStore.getState().setLobby(null);
+}
+
+/** Proof that this still-active session never reached live anywhere, so
+ * leaving it locally abandons nothing that was published. Going live requires
+ * the initial acknowledged flush, which writes `checkpoint` in the same atomic
+ * update as the first projections; a close deletes `checkpoint` only in the
+ * same atomic update that ends the session. So an absent checkpoint on an
+ * active session means no Storyteller ever went live on it -- regardless of
+ * any close sentinel an earlier failed close attempt wrote. When the server
+ * is unreachable, only this device's own durable evidence of never having
+ * attempted a commit for this scope counts. */
+async function sessionNeverReachedLive(lobby: LobbyConnection, backend: RoomBackend | null) {
+  if (backend) {
+    try { return (await backend.get(`lobbies/${lobby.code}/checkpoint`)) == null; }
+    catch { /* unreachable: fall back to local evidence */ }
+  }
+  const sync = useStorytellerStore.getState().sync;
+  const scoped = sync && sync.code === lobby.code && sync.sessionId === (lobby.sessionId ?? "") ? sync : null;
+  return !scoped || (scoped.ackedGuard == null && scoped.lastAttempt == null);
+}
+
+/**
+ * End the current multiplayer lobby authoritatively. Resolves only once the
+ * server session is ended (or was already ended/missing) and the local lobby
+ * association is cleared; the caller may then complete local game changes.
+ * Rejects -- leaving the local lobby and game untouched -- whenever the
+ * authoritative close did not complete.
+ *
+ * - Live runtime writer: its own fenced close (unchanged).
+ * - Startup never reached live: a fresh fenced writer closes it
+ *   (closeFailedStart). If that cannot complete either, and the lobby never
+ *   reached live, Leave (local-only) is offered.
+ */
 export async function closeMultiplayerSession() {
   const lobby = useStorytellerStore.getState().lobby;
   if (!lobby) return;
-  const { backend } = await connectFirebase();
-  const session = decodeSession(await backend.get(sessionPath(lobby.code)));
-  if (!session || session.state === "ended") {
-    useStorytellerStore.getState().setLobby(null);
-    return;
+  const pending = failedStart && sameScope(failedStart.lobby, lobby) ? failedStart : null;
+  let backend: RoomBackend | null = null;
+  try {
+    ({ backend } = await connectFirebase());
+    const session = decodeSession(await backend.get(sessionPath(lobby.code)));
+    if (!session || session.state === "ended") {
+      useStorytellerStore.getState().setLobby(null);
+      return;
+    }
+    if (closeCurrent) { await closeCurrent(); return; }
+    if (!pending) throw new LifecycleError("conflict", "Reconnect to the lobby before ending it or starting another game.");
+    await closeFailedStart(pending);
+  } catch (error) {
+    const failure = noteFailure(error, scopeReachedLive(lobby) ? "live" : "startup");
+    // Leave is never offered for a lobby that reached live (anywhere this
+    // device knows of) or while startup is still in progress: those require
+    // an authoritative close.
+    const offer = useSessionRuntime.getState().status === "failed" && !scopeReachedLive(lobby)
+      && await sessionNeverReachedLive(lobby, backend);
+    if (sameScope(useStorytellerStore.getState().lobby, lobby)) {
+      reportRuntimeError("close", `The lobby could not be ended. ${failure.message}`);
+      useSessionRuntime.setState({ closeFailed: true, leaveOffer: offer && !scopeReachedLive(lobby) ? scopeKey(lobby) : null });
+    }
+    throw error;
   }
-  if (!closeCurrent) throw new LifecycleError("conflict", "Reconnect to the lobby before ending it or starting another game.");
-  await closeCurrent();
+}
+
+/** Local-only escape for a lobby whose startup never reached live and whose
+ * authoritative close could not complete: clears only this device's lobby
+ * association. Deletes nothing on the server, never ends the local game (it
+ * stays available offline), and refuses -- returning false -- unless Leave is
+ * currently offered for exactly this lobby and the lobby still has never
+ * reached live. */
+export function leaveMultiplayerOffline(): boolean {
+  const lobby = useStorytellerStore.getState().lobby;
+  const runtime = useSessionRuntime.getState();
+  if (!lobby || runtime.leaveOffer !== scopeKey(lobby) || runtime.status !== "failed" || scopeReachedLive(lobby)) return false;
+  if (failedStart && sameScope(failedStart.lobby, lobby)) failedStart = null;
+  useStorytellerStore.getState().setLobby(null);
+  return true;
 }
 
 /** Session lifetime, independent of the currently visible Storyteller screen. */
@@ -110,8 +256,24 @@ export function useStorytellerSync(backend: RoomBackend | null) {
     let cancelled = false;
     let stop: (() => void) | undefined;
     const writer = new SessionWriter(backend, lobby.code, lobby.sessionId ?? "", error =>
-      reportRuntimeError("write", error ? lifecycleMessage(error) : null));
-    useSessionRuntime.setState({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {} });
+      reportRuntimeError("write", error ? noteFailure(error, liveWriters.has(writer) ? "live" : "startup").message : null));
+    useSessionRuntime.setState({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {}, status: initialConnectionStatus(lobby), failure: null, closeFailed: false, leaveOffer: null });
+    // Resume hardening: a backgrounded tab's throttled timers can skip lease
+    // renewals. When the tab resumes (or the network returns) and this live
+    // writer's own bookkeeping can no longer prove its lease, revalidate
+    // through the existing reconnect seam -- full lease reacquisition and
+    // reconnect decision -- before the next write discovers the lapse.
+    // Read-only detection: commits and fencing are unchanged.
+    const onResume = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      if (useSessionRuntime.getState().backend !== writer || !writer.leaseMayHaveLapsed()) return;
+      retryStorytellerSession();
+    };
+    if (typeof window !== "undefined") {
+      document.addEventListener("visibilitychange", onResume);
+      window.addEventListener("pageshow", onResume);
+      window.addEventListener("online", onResume);
+    }
     const previousDisposal = disposalBarrier.current;
     const started = previousDisposal.then(() => {
       if (cancelled) return undefined;
@@ -126,14 +288,36 @@ export function useStorytellerSync(backend: RoomBackend | null) {
         // outcome — it is deliberately not touched here.
         stop = session.stop;
         closeCurrent = session.close;
+        if (session.outcome !== "live") {
+          const reason = useSessionRuntime.getState().reconnect;
+          const failure: SessionFailure = reason.status === "conflict"
+            ? { category: "data", message: "This device and the lobby both have changes the other has not seen. The reconnect conflict must be resolved before the lobby can go live.", diagnostic: "reconnect CONFLICT" }
+            : { category: "data", message: "The lobby's saved state cannot be safely reconciled with this device's game.", diagnostic: `reconnect INCOHERENT${reason.status === "incoherent" ? ` (${reason.reason})` : ""}` };
+          warnFailure(failure);
+          useSessionRuntime.setState({ status: "blocked", failure });
+        }
       });
     }).catch(error => {
       writer.stop();
-      if (!cancelled) { reportRuntimeError("session", lifecycleMessage(error)); useSessionRuntime.setState({ backend: null }); }
+      if (!cancelled) {
+        // Startup never reached live: nothing was exposed as the runtime
+        // backend. Keep the failed startup so End Game can still close the
+        // lobby authoritatively (closeMultiplayerSession).
+        const failure = noteFailure(error, "startup");
+        reportRuntimeError("session", failure.message);
+        failedStart = { backend, lobby, writer };
+        useSessionRuntime.setState({ backend: null, status: "failed" });
+      }
     });
     return () => {
       cancelled = true;
       closeCurrent = null;
+      if (failedStart?.writer === writer) failedStart = null;
+      if (typeof window !== "undefined") {
+        document.removeEventListener("visibilitychange", onResume);
+        window.removeEventListener("pageshow", onResume);
+        window.removeEventListener("online", onResume);
+      }
       writer.stop();
       stop?.();
       // Chained after this writer's own startup attempt (which itself
@@ -146,7 +330,7 @@ export function useStorytellerSync(backend: RoomBackend | null) {
       disposalBarrier.current = started.catch(() => {}).then(() =>
         writer.dispose().catch(error => {
           // Expiry recovers a release which cannot reach Firebase.
-          reportRuntimeError("write", lifecycleMessage(error));
+          reportRuntimeError("write", classifyStorytellerError(error, "startup").message);
         })
       );
       useSessionRuntime.setState({ backend: null, presence: "unknown", online: {}, pending: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {} });
@@ -428,14 +612,16 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   // maintains the runtime view, exactly like leaveRequests above.
   let travelerChoiceUids: Record<string, string> = {};
   const cleanups: (() => void)[] = [];
-  const report = (source: string, error?: unknown) => reportRuntimeError(source, error ? lifecycleMessage(error) : null);
+  const report = (source: string, error?: unknown, access?: "read" | "write") =>
+    reportRuntimeError(source, error ? noteFailure(error, liveWriters.has(writer) ? "live" : "startup", access).message : null);
   function stop() {
     if (stopped) return;
     stopped = true;
     clearTimeout(timer);
     cleanups.splice(0).forEach(off => off());
     writer.stop();
-    useSessionRuntime.setState({ backend: null, presence: "unknown", online: {}, leaveRequests: {}, travelerChoices: {} });
+    useSessionRuntime.setState({ backend: null, presence: "unknown", online: {}, leaveRequests: {}, travelerChoices: {},
+      ...(liveWriters.has(writer) && !closing && useSessionRuntime.getState().status === "live" ? { status: "stopped" as const } : {}) });
   }
   // Wired here — before the checkpoint read/restore/reconcile window below,
   // not after live watchers are installed — so a lease-renewal failure
@@ -529,7 +715,7 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
         }
       }, error => {
         if (stopped) return;
-        report(suffix, error);
+        report(suffix, error, "read");
         if (suffix === "presence") useSessionRuntime.setState({ presence: "error", online: {} });
         if (isTransient(error) && attempts++ < 3) {
           retryTimer = setTimeout(() => { off(); listen(); }, 250 * 2 ** (attempts - 1));
@@ -633,7 +819,9 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
     clearTimeout(timer); timer = undefined;
     try { await flush(true); assertCurrent(); }
     catch (error) { stop(); throw error; }
-    useSessionRuntime.setState({ backend: writer, reconnect: { status: "live" } });
+    liveWriters.add(writer);
+    liveScopes.add(scopeKey(lobby));
+    useSessionRuntime.setState({ backend: writer, reconnect: { status: "live" }, status: "live", failure: null });
     return {
       outcome: "live" as const,
       stop,

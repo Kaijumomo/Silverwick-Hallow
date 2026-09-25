@@ -1358,13 +1358,50 @@
   letter-spacing: 0.16em;
   font-size: 13px;
 }
-.lobby-error {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 80;
-  max-width: 90vw;
+/* Multiplayer connection status: a compact banner in normal document flow
+   (never a fixed overlay), so it can never cover Grimoire controls. */
+.connection-status {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin: 6px 18px 0;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.connection-status[data-tone="info"] {
+  background: rgba(196, 158, 80, 0.08);
+  border: 1px solid rgba(196, 158, 80, 0.35);
+  color: var(--gold-bright);
+}
+.connection-status[data-tone="error"] {
+  background: rgba(232, 100, 100, 0.07);
+  border: 1px solid rgba(232, 100, 100, 0.4);
+  color: #ecb5b5;
+}
+.connection-status strong {
+  color: #f0c0c0;
+}
+.connection-status-message {
+  flex: 1 1 16rem;
+  min-width: 0;
+  word-break: break-word;
+}
+.connection-status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.connection-status-diagnostic {
+  flex-basis: 100%;
+  font-size: 11px;
+  opacity: 0.8;
+}
+.connection-status-diagnostic code {
+  word-break: break-all;
 }
 
 /* ===== Player screen ===== */

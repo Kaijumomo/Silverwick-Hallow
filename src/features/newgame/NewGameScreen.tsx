@@ -7,7 +7,7 @@ import { PlayerCountStepper } from "./PlayerCountStepper";
 import { ImportPanel } from "./ImportPanel";
 import { MIN_PLAYERS, MAX_TOTAL_PLAYERS, minTravelersForTotal, maxTravelersForTotal, clampTravelersForTotal } from "@/data/setupCounts";
 import type { Script } from "@/stores/types";
-import { closeMultiplayerSession } from "@/firebase/storytellerSync";
+import { closeMultiplayerSession, useSessionRuntime } from "@/firebase/storytellerSync";
 import { lifecycleMessage } from "@/firebase/lifecycle";
 
 /**
@@ -87,7 +87,11 @@ export function NewGameScreen() {
     try {
       await closeMultiplayerSession();
       newGame(activeScript.id, { plannedPlayerCount: totalCount, plannedTravelerCount: travelerCount });
-    } catch (error) { setStartError(lifecycleMessage(error)); }
+    } catch (error) {
+      // closeMultiplayerSession recorded the classified close failure (and
+      // any recovery option) in the connection status shown above.
+      setStartError(useSessionRuntime.getState().errors.close ?? lifecycleMessage(error));
+    }
     finally { setStarting(false); }
   };
 

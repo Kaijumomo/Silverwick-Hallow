@@ -11,7 +11,7 @@ export default defineConfig({
   },
   test: {
     // Fast tests intentionally exclude the required emulator-only *.spec suite.
-    include: ["src/**/*.test.{ts,tsx}"],
+    include: ["src/**/*.test.{ts,tsx}", "scripts/**/*.test.mjs"],
     globals: true,
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],

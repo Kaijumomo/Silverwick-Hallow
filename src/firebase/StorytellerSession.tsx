@@ -2,31 +2,113 @@ import { useEffect, useState } from "react";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { connectFirebase } from "./session";
 import type { RoomBackend } from "./backend";
-import { lifecycleMessage } from "./lifecycle";
+import { classifyStorytellerError, lifecycleMessage } from "./lifecycle";
 import { applyTravelerChoice } from "./membershipCommands";
-import { reportRuntimeError, retryStorytellerSession, useSessionRuntime, useStorytellerSync } from "./storytellerSync";
+import { closeMultiplayerSession, initialConnectionStatus, leaveMultiplayerOffline, reportRuntimeError, retryStorytellerSession, scopeKey, useSessionRuntime, useStorytellerSync } from "./storytellerSync";
 
 export function StorytellerSession() {
   const lobby = useStorytellerStore(s => s.lobby);
-  const { error, retry } = useSessionRuntime();
+  const view = useStorytellerStore(s => s.view);
+  const retry = useSessionRuntime(s => s.retry);
   const [backend, setBackend] = useState<RoomBackend | null>(null);
   useEffect(() => {
     let active = true;
     setBackend(null);
-    if (!lobby) return;
+    if (!lobby) {
+      useSessionRuntime.setState({ status: "idle", failure: null, closeFailed: false, leaveOffer: null });
+      return;
+    }
+    useSessionRuntime.setState({ status: initialConnectionStatus(lobby) });
     void connectFirebase().then(connection => {
       if (!active) return;
       if (connection.uid !== lobby.uid) throw new Error("Session authorization changed.");
       setBackend(connection.backend);
-    }).catch(error => { if (active) reportRuntimeError("connect", lifecycleMessage(error)); });
+    }).catch(error => {
+      if (!active) return;
+      const failure = classifyStorytellerError(error, "startup");
+      reportRuntimeError("connect", failure.message);
+      useSessionRuntime.setState({ status: "failed", failure });
+    });
     return () => { active = false; };
   }, [lobby?.code, retry]);
   useStorytellerSync(backend);
   useApplyTravelerChoices(lobby?.code);
-  return lobby && error ? <div className="error-list lobby-error" role="alert">
-    <strong>Lobby connection</strong><p>{error}</p>
-    <button className="btn btn-sm" onClick={retryStorytellerSession}>Reconnect / reclaim expired writer</button>
-  </div> : null;
+  // The Grimoire renders its own status in-flow beneath its header.
+  return view === "game" ? null : <ConnectionStatus />;
+}
+
+const DEV = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true;
+
+/**
+ * Compact, in-flow multiplayer connection status for the Storyteller. It
+ * never overlays Grimoire controls: callers place it in normal document flow.
+ * "Connecting…"/"Reconnecting…" are polite status text with no action; a
+ * failure is an alert offering only the action that can actually help:
+ * - live writer stopped or runtime error: Reconnect (the existing retry seam);
+ * - session ended: Leave lobby (closeMultiplayerSession clears an ended lobby);
+ * - startup never reached live: Retry, or End multiplayer (authoritative
+ *   close, keeping the local game);
+ * - that close also failed: Try ending again, plus -- only when offered for a
+ *   lobby that never reached live -- Leave multiplayer, keeping the game
+ *   offline (local only).
+ * Messages are plain language; the Firebase operation/path diagnostic is
+ * shown only in development builds.
+ */
+export function ConnectionStatus() {
+  const lobby = useStorytellerStore(s => s.lobby);
+  const { status, error, errors, failure, closeFailed, leaveOffer } = useSessionRuntime();
+  const [busy, setBusy] = useState(false);
+  if (!lobby || status === "idle") return null;
+  const run = (action: () => Promise<unknown>) => async () => {
+    if (busy) return;
+    setBusy(true);
+    try { await action(); } catch { /* recorded in the runtime status */ } finally { setBusy(false); }
+  };
+  const endMultiplayer = run(closeMultiplayerSession);
+  if ((status === "connecting" || status === "reconnecting") && !error) {
+    return <div className="connection-status" data-tone="info" role="status" aria-live="polite">
+      {status === "connecting" ? "Connecting to the lobby…" : "Reconnecting to the lobby…"}
+    </div>;
+  }
+  if (status === "live" && !error && !closeFailed) return null;
+
+  let title = "Multiplayer problem";
+  let message = error ?? failure?.message ?? "The lobby connection needs attention.";
+  const actions: { label: string; onClick: () => void; danger?: boolean }[] = [];
+  if (closeFailed) {
+    title = "The lobby could not be ended";
+    message = errors.close ?? message;
+    actions.push({ label: "Try ending again", onClick: endMultiplayer });
+    if (leaveOffer === scopeKey(lobby)) actions.push({ label: "Leave multiplayer — keep game offline", onClick: () => { leaveMultiplayerOffline(); }, danger: true });
+  } else if (failure?.category === "ended" && status !== "live") {
+    title = "This lobby has ended";
+    actions.push({ label: "Leave lobby", onClick: endMultiplayer });
+  } else if (status === "failed") {
+    title = "Multiplayer is not live";
+    actions.push({ label: "Retry", onClick: retryStorytellerSession });
+    actions.push({ label: "End multiplayer", onClick: endMultiplayer });
+  } else if (status === "blocked") {
+    title = "Reconnect needs attention";
+    actions.push({ label: "Retry", onClick: retryStorytellerSession });
+  } else if (status === "stopped") {
+    title = "Multiplayer interrupted";
+    actions.push({ label: "Reconnect", onClick: retryStorytellerSession });
+  } else if (status === "live") {
+    actions.push({ label: "Reconnect", onClick: retryStorytellerSession });
+  } else {
+    title = status === "connecting" ? "Connecting to the lobby…" : "Reconnecting to the lobby…";
+  }
+  return <div className="connection-status" data-tone="error" role="alert">
+    <strong>{title}</strong>
+    <span className="connection-status-message">{message}</span>
+    {actions.length > 0 && <span className="connection-status-actions">
+      {actions.map(action => <button key={action.label} type="button" className={`btn btn-sm${action.danger ? " btn-danger" : ""}`} disabled={busy} onClick={action.onClick}>{action.label}</button>)}
+    </span>}
+    {DEV && failure?.diagnostic && <details className="connection-status-diagnostic">
+      <summary>Technical details</summary>
+      <code>{failure.category}: {failure.diagnostic}</code>
+    </details>}
+  </div>;
 }
 
 /**

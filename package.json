@@ -13,6 +13,7 @@
     "test:rules:run": "node scripts/run-rules-tests.mjs",
     "typecheck": "tsc -b --noEmit",
     "rules:deploy": "firebase deploy --only database",
+    "rules:verify": "node scripts/verify-deployed-rules.mjs",
     "emulator": "firebase emulators:start --only database",
     "test:full": "npm run typecheck && npm test && npm run test:rules"
   },

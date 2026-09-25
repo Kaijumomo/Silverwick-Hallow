@@ -8,7 +8,7 @@ import path from "node:path";
 export default defineConfig({
   resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
   test: {
-    include: ["src/firebase/rules.spec.ts", "src/firebase/contract.spec.ts"],
+    include: ["src/firebase/rules.spec.ts", "src/firebase/contract.spec.ts", "src/firebase/goLiveRulesDrift.spec.ts"],
     // Both spec files initialize their own RulesTestEnvironment against the
     // SAME running emulator and clearDatabase() in beforeEach. Running the
     // two files concurrently (Vitest's default) would let one file's

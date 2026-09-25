@@ -59,31 +59,60 @@ export async function ensureAuthUid(auth: Auth): Promise<string> {
   return cachedUid;
 }
 
+/** Durable, developer-facing error attribution: records which Firebase
+ * operation and path a failed request targeted, as a non-enumerable
+ * `firebaseOperation` property on the SDK's own error object. The error's
+ * identity, `message` and `code` are untouched, so every existing
+ * classification (transient retry, permission denial, lease release) behaves
+ * exactly as before. Read back by `firebaseOperationOf` (lifecycle.ts); never
+ * shown to ordinary users. */
+export function attributeFirebaseError(error: unknown, operation: string, path: string): unknown {
+  if (typeof error === "object" && error !== null && !Object.prototype.hasOwnProperty.call(error, "firebaseOperation")) {
+    try {
+      Object.defineProperty(error, "firebaseOperation", { value: `${operation} ${path}`, enumerable: false, configurable: true });
+    } catch { /* a frozen error stays unattributed */ }
+  }
+  return error;
+}
+
+/** Runs `run` synchronously (as the previous `async` methods did) and always
+ * settles as a promise: an SDK call that throws synchronously -- e.g. an
+ * invalid value rejected before any request exists -- becomes a rejection,
+ * exactly like an `async` method body. */
+function attributed<T>(operation: string, path: string, run: () => Promise<T>): Promise<T> {
+  let pending: Promise<T>;
+  try { pending = run(); }
+  catch (error) { return Promise.reject(attributeFirebaseError(error, operation, path)); }
+  return pending.catch(error => { throw attributeFirebaseError(error, operation, path); });
+}
+
 export class FirebaseRoomBackend implements RoomBackend {
   constructor(private db: Database) {}
 
-  async transaction(path: string, change: (current: unknown) => Json | undefined): Promise<boolean> {
-    return (await runTransaction(ref(this.db, path), change, { applyLocally: false })).committed;
+  transaction(path: string, change: (current: unknown) => Json | undefined): Promise<boolean> {
+    return attributed("transaction", path, async () => (await runTransaction(ref(this.db, path), change, { applyLocally: false })).committed);
   }
 
-  async set(path: string, value: Json): Promise<void> {
-    await rtdbSet(ref(this.db, path), value);
+  set(path: string, value: Json): Promise<void> {
+    return attributed("set", path, () => rtdbSet(ref(this.db, path), value));
   }
 
-  async get(path: string): Promise<unknown> {
-    // .info nodes are maintained by the SDK, not server REST reads.
-    if (path.startsWith(".info/")) return new Promise((resolve, reject) => {
-      onValue(ref(this.db, path), snapshot => resolve(snapshot.val()), reject, { onlyOnce: true });
+  get(path: string): Promise<unknown> {
+    return attributed("get", path, async () => {
+      // .info nodes are maintained by the SDK, not server REST reads.
+      if (path.startsWith(".info/")) return new Promise((resolve, reject) => {
+        onValue(ref(this.db, path), snapshot => resolve(snapshot.val()), reject, { onlyOnce: true });
+      });
+      const snap = await rtdbGet(ref(this.db, path));
+      if (!snap.exists()) return undefined;
+      return snap.val();
     });
-    const snap = await rtdbGet(ref(this.db, path));
-    if (!snap.exists()) return undefined;
-    return snap.val();
   }
 
-  async update(updates: Record<string, Json>): Promise<void> {
+  update(updates: Record<string, Json>): Promise<void> {
     // Firebase update() takes a flat map of paths → values relative to the
     // database root, which is exactly the shape we already produce.
-    await rtdbUpdate(ref(this.db), updates as Record<string, unknown>);
+    return attributed("update", Object.keys(updates).join(", "), () => rtdbUpdate(ref(this.db), updates as Record<string, unknown>));
   }
 
   async setIfAbsent(
@@ -91,11 +120,11 @@ export class FirebaseRoomBackend implements RoomBackend {
     value: Json
   ): Promise<{ committed: true } | { committed: false; existing: Json }> {
     let existingValue: Json | undefined;
-    const result = await runTransaction(ref(this.db, path), (current) => {
+    const result = await attributed("setIfAbsent", path, () => runTransaction(ref(this.db, path), (current) => {
       if (current === null) return value;
       existingValue = current as Json;
       return; // abort — leave existing value
-    });
+    }));
     if (result.committed) return { committed: true };
     return {
       committed: false,
@@ -107,7 +136,7 @@ export class FirebaseRoomBackend implements RoomBackend {
     const r = ref(this.db, path);
     const off = onValue(r, (snap) => {
       cb(snap.exists() ? snap.val() : undefined);
-    }, onError);
+    }, onError && (error => onError(attributeFirebaseError(error, "subscribe", path))));
     return off;
   }
 

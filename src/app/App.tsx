@@ -64,7 +64,7 @@ export function App() {
     <div className="app">
       <StorytellerSession />
       {migrationResetBanner && (
-        <div className="error-list lobby-error" role="alert" style={{ position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 9999, maxWidth: 480 }}>
+        <div className="error-list" role="alert" style={{ position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 9999, maxWidth: 480 }}>
           <strong>Save data reset</strong>
           <p>Your saved game was incompatible with this version and was cleared.</p>
           <button className="btn btn-sm" onClick={() => setMigrationResetBanner(false)}>dismiss</button>

@@ -248,6 +248,16 @@ export class SessionWriter implements RoomBackend {
     const now = Date.now() + this.offset;
     return now + marginMs < this.leaseExpiresAt;
   }
+  /** Read-only resume check: true when this writer has stopped, or its own
+   * lease bookkeeping (the expiry it last successfully wrote) can no longer
+   * prove the lease is still held with `marginMs` of headroom — e.g. after a
+   * backgrounded tab's throttled timers skipped renewals. No I/O and no
+   * effect on commits or fencing: callers use it only to route through the
+   * existing reconnect seam before the next write discovers the lapse. */
+  leaseMayHaveLapsed(marginMs = FENCE_MARGIN_MS): boolean {
+    if (this.stopped) return true;
+    return Date.now() + this.offset + marginMs >= this.leaseExpiresAt;
+  }
   /** Releases this writer's lease with a fenced, single direct write rather
    * than a transaction (Finding H3): a transaction's updater can be invoked
    * against a locally-cached, possibly-stale `null` view of `/writer` and

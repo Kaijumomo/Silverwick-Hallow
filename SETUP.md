@@ -57,6 +57,31 @@ must run this any time you change `rules.json`.** The default rules expire
 after 30 days and become deny-all — that's the cause of most early
 `permission_denied` errors.
 
+### Verify the deployed rules
+
+The app itself redeploys automatically, but rules only change when someone
+runs `npm run rules:deploy`. If the deployed rules are older than the app, the
+Storyteller's **Go live** fails immediately ("Firebase refused this device's
+Storyteller access… database rules are probably out of date"). Check for this
+drift at any time — and after every deploy of a client that changed
+`rules.json`:
+
+```
+npx firebase login           # an account with access to the project
+npm run rules:verify -- --project YOUR-PROJECT-ID
+# add --instance YOUR-DB-INSTANCE for a non-default database instance
+```
+
+This is **read-only**: it reads the deployed Realtime Database rules
+(`firebase database:get /.settings/rules`), normalizes them and compares them
+with `src/firebase/rules.json`. It never deploys and never writes data. It
+exits 0 only when an actual comparison found the rules identical; it lists
+each differing rule path and exits non-zero on any difference, and fails
+clearly (without claiming a result) when the project is missing, the Firebase
+login is unavailable, or the rules cannot be read. If it reports a
+difference, deploy with `npx firebase use YOUR-PROJECT-ID && npm run
+rules:deploy`, then run it again.
+
 ## 6. Run the dev server
 
 ```

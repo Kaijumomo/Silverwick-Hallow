@@ -154,6 +154,25 @@ private projections, Storyteller state, and checkpoint. It then stops listeners.
 Rules allow no new join after the sentinel or projection after the session is
 ended, and stale revisions cannot revive it.
 
+Startup is not live until the initial acknowledged flush: only then is the
+runtime writer exposed (`status: "live"`). A startup that fails first
+(`status: "failed"`) keeps its lobby association and reports a classified,
+plain-language failure (network, writer-authority conflict, ended session,
+rules/authorization, expired writer, data); the Firebase operation and path
+are kept as a development-only diagnostic. End Game for such a lobby closes it
+through a fresh fenced `SessionWriter` (lease acquisition, then the same
+`close()`), never a direct write, and ends the local game only after that
+succeeds. If it cannot, and the lobby never reached live (no checkpoint on the
+server, no accepted guard for that scope locally), the Storyteller may leave
+it locally — the lobby association is cleared, the local game stays offline,
+and nothing is deleted on the server. A lobby that reached live always needs
+an authoritative close. On resume (`visibilitychange`, `pageshow`, `online`)
+a live writer whose own lease bookkeeping can no longer prove its lease
+reconnects through the ordinary retry path before its next write. Deployed
+rules older than this protocol deny the startup reads of
+`rosterParticipants`/`membershipRevocations`; `npm run rules:verify` detects
+that drift read-only.
+
 Transient network failures use bounded exponential backoff (250/500/1000 ms,
 four attempts including the initial call). Retry is cancelled when the writer
 or operation is stopped. Authorization, validation, conflict, and terminal
