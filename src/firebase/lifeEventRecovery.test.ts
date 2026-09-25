@@ -89,7 +89,10 @@ describe("Phase 10A recovery: reconnect, remote restore, takeover, stale writer"
     const b = new MemoryRoomBackend();
     const { handles, session, lobby, writer, manager } = await hostRich(b);
     // A further life change after the first flush, also flushed.
-    expect(store().recordExecution(handles.chefId, "died", { confirmAdditionalExecution: true }).ok).toBe(true);
+    const pending = store().recordExecution(handles.chefId, "died");
+    const token = !pending.ok && pending.code === "needsConfirmation" ? pending.confirmation : undefined;
+    expect(token?.kind).toBe("additionalExecution");
+    expect(store().recordExecution(handles.chefId, "died", { confirmations: [token!] }).ok).toBe(true);
     await waitFor(() => expect(store().sync?.ackedGameSeq).toBe(store().localSeq));
     const local = structuredClone(store().game!);
     const checkpoint = JSON.parse((await b.get(`${root}/checkpoint`)) as string);

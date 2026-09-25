@@ -50,13 +50,18 @@ export type ExecutionIntent = {
   kind: "execution";
   playerId: PlayerId;
   outcome: ExecutionOutcome;
-  /** A second (or later) execution on the same Day is legal only when the
-   * caller explicitly confirms it -- Role abilities can cause extra
-   * executions, so there is no hard maximum. */
-  confirmAdditionalExecution?: boolean;
-  /** A Traveler is normally exiled, not executed; an exceptional Traveler
-   * executee must be explicitly confirmed. */
-  confirmTravelerExecutee?: boolean;
+  /** Explicit confirmations of exceptional cases, exactly as the planner
+   * issued them in a `needsConfirmation` refusal. A second (or later)
+   * execution on the same Day, or a Traveler executee, is legal only with
+   * its own confirmation -- Role abilities can cause extra executions, so
+   * there is no hard maximum.
+   *
+   * Phase 10A (10A-ASTRA-002): a confirmation is bound to the participation
+   * instance and Game Moment it was issued for. Presenting one for any other
+   * participant (e.g. a later occupant of the same PlayerId, even with the
+   * same name or UID) or at any other moment refuses the whole transaction
+   * as stale; it never authorizes the new context. */
+  confirmations?: readonly LifeConfirmationToken[];
 };
 /** A Traveler exile, Day only. Never assumed to kill. */
 export type ExileIntent = { kind: "exile"; playerId: PlayerId; outcome: ExileOutcome };
@@ -119,9 +124,21 @@ export type LifeTransaction = {
 
 export type LifeConfirmation = "additionalExecution" | "travelerExecutee";
 
+/** Phase 10A (10A-ASTRA-002): one explicit confirmation, bound to the exact
+ * participation instance and Game Moment the planner evaluated. Issued only
+ * by the planner (needsConfirmation) and re-verified on resubmission. */
+export type LifeConfirmationToken = {
+  kind: LifeConfirmation;
+  participantId: ParticipantId;
+  moment: LiveGameMoment;
+};
+
 export type LifeRefusal =
   | { ok: false; code: "refused"; message: string }
-  | { ok: false; code: "needsConfirmation"; confirmation: LifeConfirmation; message: string };
+  /** A presented confirmation no longer matches the current participant or
+   * Game Moment -- nothing was changed; the caller must re-evaluate. */
+  | { ok: false; code: "stale"; message: string }
+  | { ok: false; code: "needsConfirmation"; confirmation: LifeConfirmationToken; message: string };
 
 /** What an accepted transaction changes -- nothing is applied yet. */
 export type LifePlan = {
@@ -248,6 +265,16 @@ type Touched = {
 };
 
 const refuse = (message: string): LifeRefusal => ({ ok: false, code: "refused", message });
+
+/** A structurally valid confirmation token issued for exactly this
+ * participation instance at exactly this Game Moment. */
+function isBoundTo(token: unknown, participantId: ParticipantId, moment: LiveGameMoment): boolean {
+  if (!token || typeof token !== "object") return false;
+  const t = token as Partial<LifeConfirmationToken>;
+  return (t.kind === "additionalExecution" || t.kind === "travelerExecutee") &&
+    t.participantId === participantId &&
+    !!t.moment && typeof t.moment === "object" && sameMoment(t.moment, moment);
+}
 
 /** Own-property player lookup (never an inherited Object.prototype name). */
 const ownPlayer = (game: StorytellerLobbyRecord, id: unknown): STPlayerRecord | undefined =>
@@ -399,13 +426,24 @@ export function planLifeTransaction(
         if (!["died", "survived", "alreadyDead"].includes(intent.outcome)) return refuse("Choose an execution outcome.");
         if (intent.outcome === "alreadyDead" && f.alive) return refuse(`${displayName(s.player)} is alive -- choose Died or Survived.`);
         if (intent.outcome !== "alreadyDead" && !f.alive) return refuse(`${displayName(s.player)} is already dead -- choose Already dead.`);
-        if (s.player.isTraveler && intent.confirmTravelerExecutee !== true) {
-          return { ok: false, code: "needsConfirmation", confirmation: "travelerExecutee",
+        // 10A-ASTRA-002: every presented confirmation must name THIS
+        // participation instance at THIS moment -- a PlayerId, name or UID
+        // match is never enough.
+        const tokens: readonly LifeConfirmationToken[] = Array.isArray(intent.confirmations) ? intent.confirmations : [];
+        if (!tokens.every((t) => isBoundTo(t, s.ref.participantId, current))) {
+          return { ok: false, code: "stale",
+            message: "This confirmation is out of date -- the player or the phase changed. Review and record again." };
+        }
+        const confirmed = (kind: LifeConfirmation) => tokens.some((t) => t.kind === kind);
+        const token = (kind: LifeConfirmation): LifeConfirmationToken =>
+          ({ kind, participantId: s.ref.participantId, moment: { ...current } });
+        if (s.player.isTraveler && !confirmed("travelerExecutee")) {
+          return { ok: false, code: "needsConfirmation", confirmation: token("travelerExecutee"),
             message: `${displayName(s.player)} is a Traveler. Travelers are normally exiled, not executed. Record them as the executee anyway?` };
         }
         const today = events.filter((e) => e.kind === "execution" && sameMoment(e.moment, current));
-        if (today.length > 0 && intent.confirmAdditionalExecution !== true) {
-          return { ok: false, code: "needsConfirmation", confirmation: "additionalExecution",
+        if (today.length > 0 && !confirmed("additionalExecution")) {
+          return { ok: false, code: "needsConfirmation", confirmation: token("additionalExecution"),
             message: `An execution is already recorded for Day ${current.day}. Record an additional execution?` };
         }
         if (intent.outcome === "died") setFields(s.player, s.ref, DEAD(f, false));

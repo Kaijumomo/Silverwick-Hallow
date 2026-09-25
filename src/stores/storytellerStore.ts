@@ -16,6 +16,7 @@ import {
   canonicalizeStartingLife,
   planLifeTransaction,
   type LifeEventSpec,
+  type LifeConfirmationToken,
   type LifeIntent,
   type LifeRefusal,
   type LifeStatusTarget,
@@ -380,11 +381,12 @@ export type StorytellerStore = {
   /** A death not represented by an execution/exile. Night or Day. */
   recordDeath: (id: PlayerId, context?: MutationContext) => LifeCommandResult;
   /** The actual executee's execution (Day only). Extra executions and a
-   * Traveler executee need explicit confirmation flags. */
+   * Traveler executee need the planner's explicit confirmation tokens,
+   * bound to the participant and Game Moment (10A-ASTRA-002). */
   recordExecution: (
     id: PlayerId,
     outcome: ExecutionOutcome,
-    options?: { confirmAdditionalExecution?: boolean; confirmTravelerExecutee?: boolean },
+    options?: { confirmations?: readonly LifeConfirmationToken[] },
     context?: MutationContext,
   ) => LifeCommandResult;
   /** A Traveler exile (Day only); may be survived. */
@@ -451,8 +453,10 @@ export type StorytellerStore = {
   removeInformationDelivery: (deliveryId: InformationDeliveryId) => void;
   setNotes: (id: PlayerId, notes: string) => void;
 
-  /** Setup -> Night/Day delegates to beginNightOne(); Night/Day -> Setup is
-   * refused (Phase 10A: Setup is pre-game only); leaving "ended" is refused. */
+  /** Setup -> Night/Day delegates to beginNightOne(); Night <-> Day
+   * delegates to advancePhase() (live time is monotonic: Night N -> Day N,
+   * Day N -> Night N+1); Night/Day -> Setup is refused (Setup is pre-game
+   * only); leaving "ended" is refused. */
   setPhase: (phase: StorytellerLobbyRecord["phase"]) => SetupCommandResult;
   advancePhase: () => SetupCommandResult;
 
@@ -2056,8 +2060,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       recordExecution: (id, outcome, options, context) =>
         get().resolveLife({ intents: [{ kind: "execution", playerId: id, outcome,
-          ...(options?.confirmAdditionalExecution ? { confirmAdditionalExecution: true } : {}),
-          ...(options?.confirmTravelerExecutee ? { confirmTravelerExecutee: true } : {}) }], context }),
+          ...(options?.confirmations?.length ? { confirmations: options.confirmations } : {}) }], context }),
 
       recordExile: (id, outcome, context) =>
         get().resolveLife({ intents: [{ kind: "exile", playerId: id, outcome }], context }),
@@ -2367,8 +2370,18 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // Phase 9R.4 (B8): the requested phase already holds. The ended-game
         // restriction above still applies first.
         if (game.phase === phase) return { ok: true };
-        // Phase 10A: rollover is part of the same commit and Undo step. An
-        // ended game keeps (freezes) its window.
+        // Phase 10A (10A-ASTRA-001): live time is monotonic. Night <-> Day
+        // through setPhase is exactly the next chronological phase -- the
+        // same transition advancePhase() performs (Night N -> Day N, Day N ->
+        // Night N+1), delegated so the progression, rollover, Undo and
+        // localSeq can never drift apart. Moving to an EARLIER Game Moment
+        // (e.g. Day 1 -> Night 1) would let the Life Event Window prune a
+        // real event while coverage still claimed that phase was known.
+        if ((game.phase === "night" || game.phase === "day") && (phase === "night" || phase === "day"))
+          return get().advancePhase();
+        // What remains is entering "ended" (from Setup or Live Play): the
+        // window is frozen, the rollover is part of the same commit and Undo
+        // step.
         set({
           undoStack: pushUndo(game, undoStack),
           game: { ...game, phase, lifeEventWindow: pruneLifeEventWindow(game.lifeEventWindow, phase, game.day) },

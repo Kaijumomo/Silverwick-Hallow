@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { useStorytellerStore } from "@/stores/storytellerStore";
+import { usePrivacyStore } from "@/stores/privacyStore";
 import { currentLiveMoment, executionsAt, exilesAt, type LifeEventQueryResult } from "@/stores/lifeEvents";
 import type { LifeEvent, LiveGameMoment, StorytellerLobbyRecord, STPlayerRecord } from "@/stores/types";
-import { useLifeRunner, executionFlags } from "./LifeControls";
+import { useLifeRunner, executionOptions } from "./LifeControls";
 import { describeLifeEvent } from "./lifeEventText";
 
 const seatedPlayers = (game: StorytellerLobbyRecord): STPlayerRecord[] =>
@@ -41,12 +42,18 @@ const UNKNOWN_DAY = "Life Events for this Day were not fully recorded (this game
  */
 export function DayResolutionPanel({ onClose }: { onClose: () => void }) {
   const game = useStorytellerStore((s) => s.game);
+  // 10A-ASTRA-003: Life Event snapshots (names at the time, outcomes) are
+  // Storyteller-private; under Privacy Mode nothing of this panel is
+  // rendered, and turning Privacy Mode on unmounts it immediately.
+  const privacyMode = usePrivacyStore((s) => s.enabled);
   const store = useStorytellerStore.getState;
-  const { attempt, confirmation, errorNode, clear } = useLifeRunner();
   const [executee, setExecutee] = useState("");
   const [exilee, setExilee] = useState("");
   const moment = game ? currentLiveMoment(game) : null;
-  if (!game || !moment || moment.phase !== "day") return null;
+  const participantAt = (id: string) => (id && game?.players[id]?.participantId) || "";
+  const { attempt, confirmation, errorNode, clear } = useLifeRunner(
+    `${participantAt(executee)}|${participantAt(exilee)}|${moment?.phase ?? ""}|${moment?.day ?? ""}`);
+  if (privacyMode || !game || !moment || moment.phase !== "day") return null;
   const players = seatedPlayers(game);
   const ordinary = players.filter((p) => !p.isTraveler);
   const travelers = players.filter((p) => p.isTraveler);
@@ -56,7 +63,7 @@ export function DayResolutionPanel({ onClose }: { onClose: () => void }) {
 
   const recordExecution = (outcome: "died" | "survived" | "alreadyDead") => {
     if (!chosen) return;
-    if (attempt((c) => store().recordExecution(chosen.id, outcome, executionFlags(c)))) setExecutee("");
+    if (attempt((c) => store().recordExecution(chosen.id, outcome, executionOptions(c)))) setExecutee("");
   };
   const recordExile = (outcome: "died" | "survived") => {
     if (!chosenExilee) return;
@@ -129,9 +136,22 @@ export function DuskReview({ onClose, onRecord, onContinue }: {
   onClose: () => void; onRecord: () => void; onContinue: () => void;
 }) {
   const game = useStorytellerStore((s) => s.game);
+  const privacyMode = usePrivacyStore((s) => s.enabled);
   const [confirmedNone, setConfirmedNone] = useState(false);
   const moment: LiveGameMoment | null = game ? currentLiveMoment(game) : null;
   if (!game || !moment || moment.phase !== "day") return null;
+  // 10A-ASTRA-003: under Privacy Mode no Life Event snapshot is rendered at
+  // all -- only a public-safe notice (the review itself needs private data).
+  if (privacyMode) return (
+    <Modal title={`Day ${moment.day} resolution`} onClose={onClose} className="dusk-review">
+      <div className="dialog-body">
+        <p className="behavior-help">Turn off Privacy Mode to review today&apos;s executions and exiles before continuing to Night {moment.day + 1}.</p>
+        <div className="drawer-row dialog-actions">
+          <button className="btn btn-sm" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </Modal>
+  );
   const executions = executionsAt(game, moment);
   const exiles = exilesAt(game, moment);
   const noExecutionRecorded = executions.status === "known" && executions.events.length === 0;

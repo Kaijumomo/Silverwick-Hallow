@@ -73,6 +73,14 @@ export function GameScreen() {
   const [dayResolutionOpen, setDayResolutionOpen] = useState(false);
   const [duskReviewOpen, setDuskReviewOpen] = useState(false);
   const [lifeEventsOpen, setLifeEventsOpen] = useState(false);
+  // 10A-ASTRA-003: turning Privacy Mode on closes every Life Event-bearing
+  // dialog at once (each also renders nothing private under Privacy Mode).
+  useEffect(() => {
+    if (!privacyMode) return;
+    setDayResolutionOpen(false);
+    setDuskReviewOpen(false);
+    setLifeEventsOpen(false);
+  }, [privacyMode]);
   // Phase 9C.6 (OPUS-002): the current Public Display capability token, held
   // only in this component's local/runtime state — never in
   // useStorytellerStore.game, persistence, checkpoints, or any projection.
@@ -455,7 +463,7 @@ export function GameScreen() {
           >
             ↶ Undo
           </button>
-          {game.phase === "day" && (
+          {game.phase === "day" && !privacyMode && (
             <button className="btn btn-sm" onClick={() => { closeOverflow(); setDayResolutionOpen(true); }}
               title="Record the Day's execution or a Traveler exile as it happens">
               Day resolution
@@ -587,7 +595,7 @@ export function GameScreen() {
         />
       )}
 
-      {dayResolutionOpen && game.phase === "day" && (
+      {dayResolutionOpen && !privacyMode && game.phase === "day" && (
         <DayResolutionPanel onClose={() => setDayResolutionOpen(false)} />
       )}
       {duskReviewOpen && game.phase === "day" && (

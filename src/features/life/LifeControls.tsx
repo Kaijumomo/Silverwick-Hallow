@@ -1,23 +1,32 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStorytellerStore, type LifeCommandResult } from "@/stores/storytellerStore";
 import { LIFE_ANOMALY_LABEL, lifeStatusOf, type LifeState } from "@/stores/lifeState";
-import type { LifeConfirmation } from "@/stores/lifeResolution";
+import type { LifeConfirmationToken } from "@/stores/lifeResolution";
+import { usePrivacyStore } from "@/stores/privacyStore";
 import type { STPlayerRecord } from "@/stores/types";
 import { LifeStateText } from "./LifeMarks";
 import { statusChoicesFor, statusTargetOf, type StatusChoice } from "./lifeEventText";
 
-type Runner = (confirmed: LifeConfirmation[]) => LifeCommandResult;
+type Runner = (confirmed: LifeConfirmationToken[]) => LifeCommandResult;
 
 /**
  * A small helper for any Life command that may need an explicit
  * confirmation (an additional execution, a Traveler executee). The
  * confirmation is shown inline -- touch and keyboard friendly -- and each
  * exceptional case is confirmed separately, never implied by another.
+ *
+ * Phase 10A (10A-ASTRA-002): the planner's confirmation tokens are bound to
+ * the participation instance and Game Moment it evaluated, and the store
+ * refuses a stale one -- that is the authority. As defense in depth, a
+ * pending confirmation is also dropped whenever `contextKey` (the selected
+ * participant / moment) changes or Privacy Mode turns on.
  */
-export function useLifeRunner() {
+export function useLifeRunner(contextKey = "") {
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState<{ message: string; run: Runner; confirmed: LifeConfirmation[] } | null>(null);
-  const attempt = (run: Runner, confirmed: LifeConfirmation[] = []): boolean => {
+  const [pending, setPending] = useState<{ message: string; run: Runner; confirmed: LifeConfirmationToken[] } | null>(null);
+  const privacyMode = usePrivacyStore((s) => s.enabled);
+  useEffect(() => { setPending(null); }, [contextKey, privacyMode]);
+  const attempt = (run: Runner, confirmed: LifeConfirmationToken[] = []): boolean => {
     const result = run(confirmed);
     if (!result.ok && result.code === "needsConfirmation") {
       setError(null);
@@ -46,7 +55,8 @@ export function useLifeRunner() {
 export function LifeControls({ player }: { player: STPlayerRecord }) {
   const game = useStorytellerStore((s) => s.game);
   const store = useStorytellerStore.getState;
-  const { attempt, confirmation, errorNode } = useLifeRunner();
+  const { attempt, confirmation, errorNode } = useLifeRunner(
+    `${player.participantId ?? ""}|${game?.phase ?? ""}|${game?.day ?? ""}`);
   const [correction, setCorrection] = useState<StatusChoice>("keep");
   if (!game) return null;
   const status = lifeStatusOf(player);
@@ -83,15 +93,15 @@ export function LifeControls({ player }: { player: STPlayerRecord }) {
               <button className="btn btn-sm" onClick={() => attempt(() => store().recordDeath(player.id))}>Record death</button>
             )}
             {day && !dead && <>
-              <button className="btn btn-sm" onClick={() => attempt((c) => store().recordExecution(player.id, "died", executionFlags(c)))}>
+              <button className="btn btn-sm" onClick={() => attempt((c) => store().recordExecution(player.id, "died", executionOptions(c)))}>
                 Executed — died
               </button>
-              <button className="btn btn-sm" onClick={() => attempt((c) => store().recordExecution(player.id, "survived", executionFlags(c)))}>
+              <button className="btn btn-sm" onClick={() => attempt((c) => store().recordExecution(player.id, "survived", executionOptions(c)))}>
                 Executed — survived
               </button>
             </>}
             {day && dead && (
-              <button className="btn btn-sm" onClick={() => attempt((c) => store().recordExecution(player.id, "alreadyDead", executionFlags(c)))}>
+              <button className="btn btn-sm" onClick={() => attempt((c) => store().recordExecution(player.id, "alreadyDead", executionOptions(c)))}>
                 Executed — already dead
               </button>
             )}
@@ -132,8 +142,6 @@ export function LifeControls({ player }: { player: STPlayerRecord }) {
   );
 }
 
-/** Execution confirmation flags from the confirmations given so far. */
-export const executionFlags = (confirmed: LifeConfirmation[]) => ({
-  confirmAdditionalExecution: confirmed.includes("additionalExecution"),
-  confirmTravelerExecutee: confirmed.includes("travelerExecutee"),
-});
+/** Execution options carrying the (bound) confirmations given so far. */
+export const executionOptions = (confirmed: LifeConfirmationToken[]) =>
+  (confirmed.length ? { confirmations: confirmed } : {});

@@ -54,6 +54,23 @@ Day is refused with no change, and `beginNightOne` is refused outside Setup
 the initial start, adopting a genuine Setup checkpoint and New Game still
 produce Setup legitimately.
 
+## Monotonic live time, bound confirmations, private dialogs (Astra A1)
+
+- Live time is monotonic (10A-ASTRA-001): `setPhase("night"|"day")` from
+  Night/Day delegates to `advancePhase()` (Night N → Day N, Day N → Night
+  N+1), so no ordinary command reaches an earlier Game Moment and pruning can
+  never make a phase look "known" after its events expired. Only whole-snapshot
+  Undo/recovery restores earlier moments.
+- Confirmations are bound (10A-ASTRA-002): a `needsConfirmation` refusal
+  carries a `LifeConfirmationToken` `{ kind, participantId, moment }`;
+  `ExecutionIntent.confirmations` must present tokens issued for exactly that
+  participation instance at exactly that moment, or the transaction is refused
+  as `stale` (a PlayerId, name or UID match is never enough). The UI also drops
+  a pending confirmation when the participant, moment or Privacy Mode changes.
+- Privacy Mode (10A-ASTRA-003): Day resolution and Life events render nothing
+  (and their entry points are hidden) under Privacy Mode; the dusk review shows
+  only a public-safe notice; turning Privacy Mode on closes all three.
+
 ## Window, coverage and rollover
 
 - Every phase change (`advancePhase`, `setPhase`, `beginNightOne`) prunes the

@@ -274,7 +274,12 @@ describe("Phase 10A: execution", () => {
     expect(state().recordExecution(ids[0]!, "alreadyDead").ok).toBe(true);
     expect(events().at(-1)).toMatchObject({ kind: "execution", outcome: "alreadyDead" });
     before = snap();
-    expect(state().recordExecution(ids[1]!, "alreadyDead", { confirmAdditionalExecution: true }).ok).toBe(false);
+    const additional = state().recordExecution(ids[0]!, "alreadyDead");
+    const token = !additional.ok && additional.code === "needsConfirmation" ? additional.confirmation : undefined;
+    expect(token).toBeDefined();
+    before = snap();
+    // A confirmation never bypasses unrelated validation (ids[1] is alive).
+    expect(state().recordExecution(ids[1]!, "alreadyDead", { confirmations: [token!] }).ok).toBe(false);
     expectUnchanged(before);
   });
 
@@ -289,9 +294,12 @@ describe("Phase 10A: execution", () => {
     const { traveler } = liveGame();
     toDay();
     const before = snap();
-    expect(state().recordExecution(traveler, "died")).toMatchObject({ ok: false, code: "needsConfirmation", confirmation: "travelerExecutee" });
+    const refusal = state().recordExecution(traveler, "died");
+    expect(refusal).toMatchObject({ ok: false, code: "needsConfirmation", confirmation: {
+      kind: "travelerExecutee", participantId: player(traveler).participantId, moment: DAY1 } });
     expectUnchanged(before);
-    expect(state().recordExecution(traveler, "died", { confirmTravelerExecutee: true }).ok).toBe(true);
+    const token = refusal.ok || refusal.code !== "needsConfirmation" ? undefined : refusal.confirmation;
+    expect(state().recordExecution(traveler, "died", { confirmations: [token!] }).ok).toBe(true);
     expect(player(traveler)).toMatchObject({ alive: false, ghostVote: true });
     expect("exiled" in player(traveler)).toBe(false); // executed, not exiled
   });
@@ -301,9 +309,12 @@ describe("Phase 10A: execution", () => {
     toDay();
     state().recordExecution(ids[0]!, "survived");
     const before = snap();
-    expect(state().recordExecution(ids[1]!, "died")).toMatchObject({ ok: false, code: "needsConfirmation", confirmation: "additionalExecution" });
+    const refusal = state().recordExecution(ids[1]!, "died");
+    expect(refusal).toMatchObject({ ok: false, code: "needsConfirmation", confirmation: {
+      kind: "additionalExecution", participantId: player(ids[1]!).participantId, moment: DAY1 } });
     expectUnchanged(before);
-    expect(state().recordExecution(ids[1]!, "died", { confirmAdditionalExecution: true }).ok).toBe(true);
+    const token = refusal.ok || refusal.code !== "needsConfirmation" ? undefined : refusal.confirmation;
+    expect(state().recordExecution(ids[1]!, "died", { confirmations: [token!] }).ok).toBe(true);
     expect(executionsAt(game(), DAY1)).toMatchObject({ status: "known", events: [{ outcome: "survived" }, { outcome: "died" }] });
   });
 });

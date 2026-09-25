@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { useStorytellerStore, type RepairTarget } from "@/stores/storytellerStore";
+import { usePrivacyStore } from "@/stores/privacyStore";
 import { currentLiveMoment, momentLabel, previousLiveMoment, sameMoment } from "@/stores/lifeEvents";
 import type { LifeEventSpec } from "@/stores/lifeResolution";
 import type { LifeState } from "@/stores/lifeState";
@@ -180,9 +181,11 @@ function LateRecordForm({ game, previous }: { game: StorytellerLobbyRecord; prev
  */
 export function LifeEventsPanel({ onClose }: { onClose: () => void }) {
   const game = useStorytellerStore((s) => s.game);
+  // 10A-ASTRA-003: Storyteller-private; never rendered under Privacy Mode.
+  const privacyMode = usePrivacyStore((s) => s.enabled);
   const [open, setOpen] = useState<{ mode: "retract" | "amend"; id: string } | null>(null);
   const current = game ? currentLiveMoment(game) : null;
-  if (!game || !current) return null;
+  if (privacyMode || !game || !current) return null;
   const previous = previousLiveMoment(current);
   const groups = [current, ...(previous ? [previous] : [])].map((moment) => ({
     moment, events: game.lifeEventWindow.events.filter((e) => sameMoment(e.moment, moment)),
