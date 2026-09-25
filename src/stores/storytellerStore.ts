@@ -13,6 +13,7 @@ import { migrateGameEntry } from "./gameMigration";
 import { freshLifeEventWindow, pruneLifeEventWindow } from "./lifeEvents";
 import {
   applyLifePlan,
+  canonicalizeStartingLife,
   planLifeTransaction,
   type LifeEventSpec,
   type LifeIntent,
@@ -1158,9 +1159,15 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // requires, never a new rule.
         if (isInitialRevealComplete(game) && !assignedBagIsCoherent(context, analysis))
           return { ok: false, message: "The starting ordinary composition is no longer valid. Review Setup before beginning Night 1." };
+        // Phase 10A (10A-LUNA-001): the single Setup -> Live Play boundary
+        // (setPhase/advancePhase from Setup delegate here). Occupied
+        // participants enter Night 1 with canonical starting life state in
+        // this SAME commit -- no Life Event, no History, one Undo entry that
+        // holds the exact pre-start Setup snapshot.
         set({
           undoStack: pushUndo(game, undoStack),
           game: { ...game, phase: "night", day: 1,
+            players: canonicalizeStartingLife(game.players),
             lifeEventWindow: pruneLifeEventWindow(game.lifeEventWindow, "night", 1),
             ...(game.startingNonTravelerCount === undefined && game.day === 0
               ? { startingNonTravelerCount: context.population.occupiedNonTravelerCount } : {}) },

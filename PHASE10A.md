@@ -34,6 +34,20 @@ Legacy `setAlive` / `setGhostVote` / `exileTraveler` remain only as
 deprecated adapters over the semantic commands (`setAlive(true)` is a status
 correction, never a resurrection). No production UI uses them.
 
+## Starting life state (10A-LUNA-001)
+
+Setup life fields are never gameplay (Setup life commands are refused). At the
+single Setup → Live Play boundary, `beginNightOne` (which `setPhase` and
+`advancePhase` delegate to from Setup), every occupied participant is set to
+canonical starting life — alive, vote held, not exiled — by
+`canonicalizeStartingLife` in the same commit that starts Night 1. This covers
+stale values a migrated v18 Setup may carry. It records no Life Event, no
+History and no Provenance; empty planned seats and `abilityUsed` are
+untouched. Undo of the start restores the exact pre-start Setup snapshot;
+starting again canonicalizes again. `undo` and `restoreRemoteCheckpoint`
+replace the whole game with an existing snapshot, so no Setup field crosses
+into Live Play through them; later Night ↔ Day changes never touch life state.
+
 ## Window, coverage and rollover
 
 - Every phase change (`advancePhase`, `setPhase`, `beginNightOne`) prunes the

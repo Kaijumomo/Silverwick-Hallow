@@ -184,6 +184,41 @@ export function applyLifeFieldPatch(player: STPlayerRecord, patch: LifeFieldPatc
   return next;
 }
 
+/**
+ * Phase 10A (10A-LUNA-001): canonical starting life state at the ONE
+ * Setup -> Live Play boundary (beginNightOne). Setup is not gameplay, so a
+ * Setup participant's life fields -- including stale pre-v19 values a
+ * migrated v18 Setup may carry (e.g. dead, vote used, exiled) -- are never
+ * authoritative: every OCCUPIED participant enters Night 1 alive, holding
+ * their vote, and not exiled ("not exiled" stored as an absent key; an
+ * explicit `false` is already canonical and left as is).
+ *
+ * This is Setup canonicalization, not a Life Intent: it records no Life
+ * Event, no History and no Provenance, and implies no resurrection or
+ * correction. Empty planned seats are never touched. `abilityUsed` is
+ * deliberately out of scope (it is reset at Deal/assignment, not here).
+ * Pure; returns the SAME map when every participant is already canonical,
+ * and the same record for each canonical participant.
+ */
+export function canonicalizeStartingLife(
+  players: StorytellerLobbyRecord["players"],
+): StorytellerLobbyRecord["players"] {
+  let changed = false;
+  const next: StorytellerLobbyRecord["players"] = {};
+  for (const [id, player] of Object.entries(players)) {
+    const canonical = player.isEmpty || (player.alive && player.ghostVote && player.exiled !== true);
+    if (canonical) {
+      next[id] = player;
+      continue;
+    }
+    changed = true;
+    const fixed: STPlayerRecord = { ...player, alive: true, ghostVote: true };
+    delete fixed.exiled;
+    next[id] = fixed;
+  }
+  return changed ? next : players;
+}
+
 /** Applies an accepted plan: the one Current State + Life Event Window +
  * History replacement the store commits. Pure. */
 export function applyLifePlan(game: StorytellerLobbyRecord, plan: LifePlan): StorytellerLobbyRecord {
