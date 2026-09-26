@@ -1,7 +1,9 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-09-26\
-**State:** Phase 10B implemented on `dev/phase-10b` (store v20); Opus architecture remediation SOL-10B-R1…R9 applied; awaiting targeted Opus re-check. Phase 10B is **not closed**.
+**State:** Phase 10B implemented on `dev/phase-10b` (store v20); Opus architecture remediation SOL-10B-R1…R9 and the final closure patch (SOL-10B-RC1/RC2 + gameplay Apply coherence) applied; awaiting final Opus RC re-check. Phase 10B is **not closed**.
+
+Closure patch: Setup application moment is always `{setup, 0}`; v19 → v20 migration omits a legacy `appliedAt` made impossible by old non-monotonic phases; corrections re-derive expiry only while it was still derived from the old facts (independently rescheduled ends and `unresolved` survive); a gameplay Apply's explicit initial expiry must equal the lifetime-derived one.
 
 Remediation summary: empty seats own no Effects; `expiry` is the sole mechanical duration authority (declared `lifetime` is metadata; Update may change expiry, only correction changes lifetime); corrections re-derive expiry from corrected facts and refuse already-ended results; game-level Effect temporal validity is schema-enforced; suppression is an explicit decision, not derived applicability; resolving a legacy unresolved end is a correction; `manual:` ids are reserved; mutation provenance comes only from Mutation Context; net-zero Effect identities leave no History. Deferred: OPUS-10B-010 (correcting origin to a departed participant).
 
@@ -170,6 +172,6 @@ At the start of any new session, verify the exact branch SHA and read:
 
 ## Immediate next task
 
-Targeted Opus re-check of the SOL-10B-R1…R9 remediation on `dev/phase-10b`
+Final Opus RC re-check of the SOL-10B-R1…R9 remediation and RC closure patch on `dev/phase-10b`
 (verify the exact commit SHA); then Luna mechanical verification and Astra
 adversarial review. Implementation completion is not closure.

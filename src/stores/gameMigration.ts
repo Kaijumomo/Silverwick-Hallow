@@ -2,6 +2,7 @@ import { BUILTIN_SCRIPTS } from "@/data/scripts";
 import { buildRegistry, deriveAlignment, type RoleRegistry } from "@/data/roleRegistry";
 import { legacyCurrentParticipantId, legacyParticipantRef } from "./participants";
 import { migratedLifeEventCoverage } from "./lifeEvents";
+import { GameMomentSchema, isEffectAppliedAtCoherent } from "./schemas";
 import type { STPlayerRecord, Script } from "./types";
 
 /**
@@ -403,6 +404,16 @@ function migrateEntryV18ToV19(e: Record<string, unknown>): void {
  *    and never anything reconstructed from History. It stays recoverable
  *    Storyteller state and surfaces as a concise "Needs check".
  *
+ * SOL-10B-RC1: `appliedAt` was optional historical metadata in v19, and
+ * v19 builds still allowed backward phase movement (e.g. Day 1 -> Night 1,
+ * or Live -> Setup keeping a legacy Setup `day` > 0). A structurally valid
+ * legacy `appliedAt` that is therefore temporally impossible for this entry's
+ * own phase/day under the monotonic v20 rules (isEffectAppliedAtCoherent) is
+ * OMITTED -- never replaced by an invented moment, never used to compute an
+ * expiry, never taken from History; the Effect itself and the entry's
+ * phase/day are kept. A coherent legacy `appliedAt` stays. A malformed one is
+ * left for the schema to reject (Finding A3).
+ *
  * Then the entry is stamped `gameSchemaVersion: 20`. History (including old
  * Effect snapshots in it) is never touched or consulted. Each entry (Current
  * State, every Undo snapshot, a remote checkpoint's game) migrates from its
@@ -423,6 +434,11 @@ function migrateEntryV19ToV20(e: Record<string, unknown>): void {
         if (effect.state === undefined) effect.state = "active";
         if (effect.expiry === undefined) {
           effect.expiry = lifetime.kind === "manual" ? { kind: "none" } : { kind: "unresolved" };
+        }
+        const applied = GameMomentSchema.safeParse(effect.appliedAt);
+        if (applied.success && typeof e.phase === "string" && typeof e.day === "number" && Number.isSafeInteger(e.day) &&
+          !isEffectAppliedAtCoherent({ phase: e.phase, day: e.day }, applied.data)) {
+          delete effect.appliedAt;
         }
       });
     }

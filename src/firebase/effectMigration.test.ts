@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { migrateStoreState, takeMigrationResetFlag, useStorytellerStore } from "@/stores/storytellerStore";
 import { usePlayerStore } from "@/stores/playerStore";
-import { StorytellerGamePersistedSchema } from "@/stores/schemas";
+import { StorytellerGamePersistedSchema, StorytellerStateSchema } from "@/stores/schemas";
 import { detectLegacyGameVersion, hasV20Evidence, migrateGameEntry } from "@/stores/gameMigration";
 import { projectLobbyToPublic, projectLobbyToSelfMap } from "@/stores/projections";
 import { buildRegistry } from "@/data/roleRegistry";
@@ -132,6 +132,82 @@ describe("Phase 10B migration: v19 -> v20", () => {
     expect(game.gameSchemaVersion).toBe(20);
     expect(game.players.b!.effects[1]!.expiry).toEqual({ kind: "unresolved" });
     expect(useStorytellerStore.getState().undoStack[0]!.gameSchemaVersion).toBe(20);
+  });
+});
+
+describe("SOL-10B-RC1: legacy appliedAt made untrustworthy by old non-monotonic phases", () => {
+  const effectsOf = (g: Raw) => (g.players as Record<string, { effects: Raw[] }>).b!.effects;
+
+  it("Opus reproduction: a pre-10A backward move (Day 1 -> Night 1) left appliedAt Day 1 on a Night 1 game -- migration omits it, keeps the Effect", () => {
+    const legacy = v19Game("night", 1);
+    effectsOf(legacy).splice(0, 2, { ...manualV19, appliedAt: { phase: "day", day: 1 } },
+      { ...finiteV19, appliedAt: { phase: "day", day: 1 } });
+    const history = structuredClone(legacy.history);
+    const result = migrateStoreState({ game: structuredClone(legacy), undoStack: [structuredClone(legacy)] }, 19) as { game: Raw; undoStack: Raw[] };
+    expect(takeMigrationResetFlag()).toBe(false);
+    for (const entry of [result.game, result.undoStack[0]!]) {
+      expect(entry).toMatchObject({ phase: "night", day: 1 });
+      const [manual, finite] = effectsOf(entry);
+      expect(manual).toEqual({ id: "manual:drunk", type: "drunk", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } });
+      // Not replaced, not used for expiry: a finite legacy Effect stays unresolved.
+      expect("appliedAt" in finite!).toBe(false);
+      expect(finite!.expiry).toEqual({ kind: "unresolved" });
+      expect(entry.history).toEqual(history);
+    }
+    expect(StorytellerGamePersistedSchema.safeParse(result.game).success).toBe(true);
+  });
+
+  it("a legacy Setup entry (even with day > 0) keeps only a canonical {setup, 0} appliedAt", () => {
+    const legacy = v19Game("setup", 1);
+    effectsOf(legacy).splice(0, 2,
+      { ...manualV19, appliedAt: { phase: "setup", day: 1 } },
+      { ...finiteV19, appliedAt: { phase: "night", day: 1 } },
+      { id: "keep", type: "marked", lifetime: { kind: "manual" }, appliedAt: { phase: "setup", day: 0 } });
+    migrateGameEntry(legacy, 19, { kind: "canonical-only" });
+    const [a, b, c] = effectsOf(legacy);
+    expect("appliedAt" in a!).toBe(false);
+    expect("appliedAt" in b!).toBe(false);
+    expect(c!.appliedAt).toEqual({ phase: "setup", day: 0 });
+    expect(legacy).toMatchObject({ phase: "setup", day: 1 });
+    expect(StorytellerGamePersistedSchema.safeParse(legacy).success).toBe(true);
+  });
+
+  it("a coherent legacy appliedAt stays; an ended legacy snapshot is frozen and untouched; a malformed one is left for the schema", () => {
+    const live = v19Game("day", 2);
+    migrateGameEntry(live, 19, { kind: "canonical-only" });
+    expect(effectsOf(live).map((e) => e.appliedAt)).toEqual([{ phase: "night", day: 1 }, { phase: "night", day: 2 }]);
+    const ended = v19Game("ended", 1);
+    migrateGameEntry(ended, 19, { kind: "canonical-only" });
+    expect(effectsOf(ended).map((e) => e.appliedAt)).toEqual([{ phase: "night", day: 1 }, { phase: "night", day: 2 }]);
+    const malformed = v19Game("night", 1);
+    effectsOf(malformed)[0]!.appliedAt = { phase: "dusk", day: 1 };
+    migrateGameEntry(malformed, 19, { kind: "canonical-only" });
+    expect(effectsOf(malformed)[0]!.appliedAt).toEqual({ phase: "dusk", day: 1 });
+    expect(StorytellerGamePersistedSchema.safeParse(malformed).success).toBe(false);
+  });
+
+  it("a legacy-migrated Setup game with day 1 accepts a quick Effect at {setup, 0} and stays hydratable", async () => {
+    const legacy = v19Game("setup", 1);
+    effectsOf(legacy).splice(0, 2);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 19, state: { game: legacy, undoStack: [] } }));
+    await useStorytellerStore.persist.rehydrate();
+    expect(takeMigrationResetFlag()).toBe(false);
+    const store = useStorytellerStore.getState();
+    expect(store.game).toMatchObject({ phase: "setup", day: 1, gameSchemaVersion: 20 });
+    const bob = store.game!.players.b!;
+    expect(store.setManualEffect({ playerId: "b", participantId: bob.participantId! }, "drunk", true)).toMatchObject({ ok: true, changed: true });
+    const after = useStorytellerStore.getState();
+    expect(after.game!.players.b!.effects[0]!.appliedAt).toEqual({ phase: "setup", day: 0 });
+    const persistedState = { game: after.game, undoStack: after.undoStack, localSeq: after.localSeq, sync: after.sync };
+    expect(StorytellerStateSchema.safeParse(JSON.parse(JSON.stringify(persistedState))).success).toBe(true);
+    // Reload: the saved state hydrates unchanged, never reset.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const saved = localStorage.getItem(STORAGE_KEY)!;
+    useStorytellerStore.setState({ game: null, undoStack: [] });
+    localStorage.setItem(STORAGE_KEY, saved);
+    await useStorytellerStore.persist.rehydrate();
+    expect(takeMigrationResetFlag()).toBe(false);
+    expect(useStorytellerStore.getState().game!.players.b!.effects[0]!.appliedAt).toEqual({ phase: "setup", day: 0 });
   });
 });
 

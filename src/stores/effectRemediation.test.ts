@@ -357,3 +357,95 @@ describe("SOL-10B-R9: no net-zero Effect History within one transaction", () => 
     expect(state().game).toBe(before);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Final architecture closure patch (OPUS-10B-RC-001 / RC-002 + Apply coherence)
+// ---------------------------------------------------------------------------
+describe("SOL-10B-RC1: Setup application moment is always {setup, 0}", () => {
+  it("a Setup game carrying a legacy day > 0 still applies Effects at {setup, 0}, and stays schema-valid", () => {
+    setupGame();
+    store.setState({ game: { ...game(), day: 1 } }); // legacy Setup day, as a pre-10A build could leave it
+    expect(StorytellerGamePersistedSchema.safeParse(persisted(game())).success).toBe(true);
+    expect(state().setManualEffect(bind(idOf("Alice")), "drunk", true).ok).toBe(true);
+    expect(resolve(apply("Bob", { id: "m", type: "marked", lifetime: { kind: "manual" } })).ok).toBe(true);
+    expect(state().addEffect(idOf("Carol"), { type: "marked", lifetime: { kind: "manual" }, appliedAt: { phase: "setup", day: 0 } })).not.toBeNull();
+    for (const name of ["Alice", "Bob", "Carol"]) expect(player(idOf(name)).effects[0]!.appliedAt).toEqual({ phase: "setup", day: 0 });
+    expect(StorytellerGamePersistedSchema.safeParse(persisted(game())).success).toBe(true);
+  });
+});
+
+describe("SOL-10B-RC2: an independently rescheduled expiry survives descriptive correction", () => {
+  const amend = (name: string, effectId: string, amendment: Extract<EffectIntent, { kind: "correctAmend" }>["amendment"]) =>
+    correct({ kind: "correctAmend", target: bind(idOf(name)), effectId, amendment });
+
+  it("independent manual scheduling: correcting appliedAt keeps the rescheduled end", () => {
+    liveGame();
+    expect(state().advancePhase().ok).toBe(true); // Day 1
+    state().setManualEffect(bind(idOf("Dave")), "drunk", true); // applied Day 1, no automatic end
+    expect(resolve({ kind: "update", target: bind(idOf("Dave")), effectId: "manual:drunk", changes: { expiry: { kind: "at", moment: { phase: "night", day: 3 } } } }).ok).toBe(true);
+    expect(amend("Dave", "manual:drunk", { appliedAt: { phase: "night", day: 1 } }).ok).toBe(true);
+    expect(effectOf("Dave", "manual:drunk")).toMatchObject({ appliedAt: { phase: "night", day: 1 }, lifetime: { kind: "manual" },
+      expiry: { kind: "at", moment: { phase: "night", day: 3 } } });
+    expect(effectHistory().at(-1)).toMatchObject({ effectOperation: "update", correction: true });
+  });
+
+  it("independent extension: correcting the lifetime keeps the extended end", () => {
+    liveGame();
+    resolve(apply("Carol", { id: "p", type: "poisoned", lifetime: { kind: "nights", count: 1 } })); // Night 1 -> Day 1
+    expect(resolve({ kind: "update", target: bind(idOf("Carol")), effectId: "p", changes: { expiry: { kind: "at", moment: { phase: "night", day: 5 } } } }).ok).toBe(true);
+    expect(amend("Carol", "p", { lifetime: { kind: "nights", count: 2 } }).ok).toBe(true);
+    expect(effectOf("Carol", "p")).toMatchObject({ lifetime: { kind: "nights", count: 2 }, expiry: { kind: "at", moment: { phase: "night", day: 5 } } });
+  });
+
+  it("a still-derived end is re-derived from the corrected facts", () => {
+    liveGame();
+    resolve(apply("Carol", { id: "p", type: "poisoned", lifetime: { kind: "nights", count: 1 } })); // Night 1 -> Day 1
+    expect(amend("Carol", "p", { lifetime: { kind: "nights", count: 2 } }).ok).toBe(true);
+    expect(effectOf("Carol", "p").expiry).toEqual({ kind: "at", moment: { phase: "day", day: 2 } });
+  });
+
+  it("a still-derived end whose corrected facts would already have ended is refused -- nothing changes", () => {
+    liveGame();
+    resolve(apply("Carol", { id: "p", type: "poisoned", lifetime: { kind: "nights", count: 2 } })); // Night 1 -> Day 2
+    expect(state().advancePhase().ok).toBe(true); // Day 1
+    const before = game();
+    expect(amend("Carol", "p", { lifetime: { kind: "nights", count: 1 } })).toMatchObject({ ok: false, code: "expiryUnresolvable" }); // -> Day 1 = now
+    expect(state().game).toBe(before);
+  });
+
+  it("a legacy unresolved end stays unresolved through descriptive corrections; an explicit future end then becomes authoritative", () => {
+    liveGame();
+    const carol = idOf("Carol");
+    const legacy: EffectRecord = { id: "l", type: "poisoned", lifetime: { kind: "untilDawn" }, state: "active", expiry: { kind: "unresolved" } };
+    store.setState({ game: withEffectsOn(game(), carol, [legacy]) });
+    expect(StorytellerGamePersistedSchema.safeParse(persisted(game())).success).toBe(true);
+    expect(amend("Carol", "l", { lifetime: { kind: "nights", count: 2 } }).ok).toBe(true);
+    expect(amend("Carol", "l", { appliedAt: { phase: "night", day: 1 } }).ok).toBe(true);
+    expect(effectOf("Carol", "l")).toMatchObject({ lifetime: { kind: "nights", count: 2 }, appliedAt: { phase: "night", day: 1 }, expiry: { kind: "unresolved" } });
+    expect(amend("Carol", "l", { expiry: { kind: "at", moment: { phase: "night", day: 2 } } }).ok).toBe(true);
+    expect(effectOf("Carol", "l").expiry).toEqual({ kind: "at", moment: { phase: "night", day: 2 } });
+  });
+});
+
+describe("Sol clarification: a gameplay Apply's initial expiry agrees exactly with its declared lifetime", () => {
+  it("accepts the derived end (or none for manual) and refuses any other explicit end; a correction Apply may record a different authoritative end", () => {
+    liveGame(); // Night 1
+    const ok = (effect: Extract<EffectIntent, { kind: "apply" }>["effect"]) => expect(resolve(apply("Alice", effect)).ok).toBe(true);
+    ok({ type: "marked", lifetime: { kind: "manual" }, expiry: { kind: "none" } });
+    ok({ type: "poisoned", lifetime: { kind: "untilDawn" }, expiry: { kind: "at", moment: { phase: "day", day: 1 } } });
+    ok({ type: "mad", lifetime: { kind: "nights", count: 3 }, expiry: { kind: "at", moment: { phase: "day", day: 3 } } });
+    const before = game();
+    // The Opus probe: untilDawn with an explicit Night 9.
+    expect(resolve(apply("Bob", { type: "poisoned", lifetime: { kind: "untilDawn" }, expiry: { kind: "at", moment: { phase: "night", day: 9 } } }))).toMatchObject({ ok: false, code: "invalid" });
+    expect(resolve(apply("Bob", { type: "mad", lifetime: { kind: "nights", count: 3 }, expiry: { kind: "at", moment: { phase: "day", day: 2 } } }))).toMatchObject({ ok: false, code: "invalid" });
+    expect(resolve(apply("Bob", { type: "poisoned", lifetime: { kind: "untilDawn" }, expiry: { kind: "none" } }))).toMatchObject({ ok: false, code: "expiryUnresolvable" });
+    expect(resolve(apply("Bob", { type: "marked", lifetime: { kind: "manual" }, expiry: { kind: "at", moment: { phase: "day", day: 1 } } }))).toMatchObject({ ok: false, code: "invalid" });
+    expect(state().game).toBe(before);
+    expect(correct({ kind: "correctApply", target: bind(idOf("Bob")), effect: { id: "c", type: "poisoned", lifetime: { kind: "untilDawn" },
+      expiry: { kind: "at", moment: { phase: "night", day: 9 } } } }).ok).toBe(true);
+    expect(effectOf("Bob", "c").expiry).toEqual({ kind: "at", moment: { phase: "night", day: 9 } });
+    // After creation, an ordinary Update is what decouples the end.
+    expect(resolve({ kind: "update", target: bind(idOf("Alice")), effectId: player(idOf("Alice")).effects[1]!.id,
+      changes: { expiry: { kind: "at", moment: { phase: "night", day: 9 } } } }).ok).toBe(true);
+  });
+});

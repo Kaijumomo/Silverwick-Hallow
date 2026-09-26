@@ -10,6 +10,7 @@ import { currentGameMoment, manualEffectId } from "./effects";
 import { cloneOwned, durableProvenance, type MutationContext, provenanceOf, recordIfLive, sameSnapshot } from "./history";
 import {
   applyEffectPlan,
+  effectApplicationMoment,
   planEffectExpiry,
   planEffectTransaction,
   type EffectParticipantBinding,
@@ -2223,7 +2224,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           cloneOwned(effect) as EffectInput & { sourceParticipant?: unknown };
         // A gameplay Apply takes hold NOW; an earlier applied moment is a
         // correction, never silently accepted here.
-        if (appliedAt !== undefined && !sameSnapshot(appliedAt, currentGameMoment(game))) return null;
+        if (appliedAt !== undefined && !sameSnapshot(appliedAt, effectApplicationMoment(game))) return null;
         let source: EffectParticipantBinding | undefined;
         if (sourcePlayer !== undefined) {
           source = currentBinding(game, sourcePlayer) ?? undefined;

@@ -1,7 +1,8 @@
 # Phase 10B — Effect Lifecycle & Visual Effect Indicators
 
-Status: implemented; Opus architecture remediation (SOL-10B-R1…R9) applied,
-awaiting targeted Opus re-check. **Not closed.** Store schema **v20**.
+Status: implemented; Opus architecture remediation (SOL-10B-R1…R9) and the
+final closure patch (SOL-10B-RC1/RC2 + gameplay Apply coherence) applied,
+awaiting final Opus RC re-check. **Not closed.** Store schema **v20**.
 
 UX principle: *mechanically rich underneath, operationally simple for the
 Storyteller.* Routine actions stay `player → Effect → done`.
@@ -29,12 +30,19 @@ collection; there is no global `game.effects[]`.
 `expiry` is the only thing mechanics read for duration. `lifetime` is what was
 declared at application.
 
-- **Apply** derives the initial expiry from the declared lifetime and keeps
-  them coherent: manual → `none`; timed → an exact future `at`. A new Effect
-  never starts `unresolved`.
+- **Gameplay Apply** derives the initial expiry from the declared lifetime and
+  the actual application moment: manual → `none`; timed → the exact derived
+  `at`. A caller-supplied expiry must **equal** that derived value or the Apply
+  is refused (e.g. `untilDawn` + Night 9 is refused). A new Effect never starts
+  `unresolved`. The application moment is the current Night N / Day N, and in
+  Setup always exactly `{setup, 0}` — never derived from a legacy Setup `day`
+  (SOL-10B-RC1).
+- A **correction Apply** records presently-correct state and may supply any
+  valid authoritative expiry.
 - **Update** may set the authoritative expiry to `none` or any strictly future
   `at`, whatever the declared lifetime (extend, shorten, or remove the timer).
-  It never rewrites the declared lifetime.
+  It never rewrites the declared lifetime. Update is what decouples the end
+  from the declared lifetime after creation.
 - **Correction** is the only way to change the declared lifetime (and see R3).
 - After Apply, mechanics never recompute current truth from `lifetime`.
 
@@ -116,14 +124,21 @@ lifecycle field in a spec is refused.
   application, expiry and parameters. Already-current → no-op.
 - **Correction** repairs wrongly recorded Current State now (add a missing
   Effect, remove an erroneous one, amend source/type/lifecycle/parameters);
-  old History is never rewritten. **Temporal coherence (SOL-10B-R3):** when a
-  correction changes the applied moment or the declared lifetime without
-  supplying an expiry, the expiry is re-derived from the corrected facts; if
-  that end is already at/before now the correction is refused
-  (`expiryUnresolvable`) — correct-remove the Effect instead, or supply its
-  current exact end. An explicitly supplied expiry is authoritative (R2) and
-  must still be `none` or strictly future. An old derived end is never kept
-  after the facts it came from are corrected.
+  old History is never rewritten. **Temporal coherence (SOL-10B-R3, RC2):**
+  when a correction changes the applied moment and/or the declared lifetime
+  without supplying an expiry:
+  - if the stored expiry is **still coupled** to the old facts — it equals what
+    the old lifetime and applied moment derive (a pure comparison, never
+    refused for lying in the past) — it is re-derived from the corrected
+    facts; a re-derived end at/before now refuses (`expiryUnresolvable`):
+    correct-remove the Effect instead, or supply its current exact end;
+  - if the expiry was **independently rescheduled** by gameplay (an Update),
+    it is authoritative and survives the descriptive correction unchanged;
+  - an `unresolved` legacy end stays `unresolved` — correcting a legacy
+    declaration never silently resolves the missing exact end.
+
+  An explicitly supplied expiry is authoritative (R2) and must still be `none`
+  or strictly future.
 - **Resolving a legacy `unresolved` end is a correction (SOL-10B-R6)**: it
   repairs incomplete migrated Current State, so it records correction History.
 
@@ -295,6 +310,19 @@ remote checkpoint recovery), `migrateEntryV19ToV20`:
 
 Then the entry is stamped `gameSchemaVersion: 20`. History is untouched.
 Deterministic and idempotent.
+
+**Legacy `appliedAt` (SOL-10B-RC1).** `appliedAt` was optional historical
+metadata in v19, and v19 builds allowed non-monotonic phase moves (e.g. Day 1
+→ Night 1, or Live → Setup keeping a legacy Setup `day` > 0). During v19 → v20
+migration only, a structurally valid legacy `appliedAt` that is temporally
+impossible for that entry's own phase/day under the v20 rules (Setup:
+exactly `{setup, 0}`; Night/Day: not after the current moment; ended: frozen,
+not judged) is **omitted** — never replaced, never used to compute an expiry,
+never taken from History; the Effect and the entry's phase/day are kept, and
+the expiry migration is unchanged (manual → `none`, finite → `unresolved`). A
+coherent legacy `appliedAt` stays; a malformed one is left for the schema to
+reject. The same coherence rule (`isEffectAppliedAtCoherent`) backs the v20
+schema.
 
 Remediation impact (still v20, no version bump — v20 is unreleased and every
 path already validates against the one v20 schema): migrated legacy data must

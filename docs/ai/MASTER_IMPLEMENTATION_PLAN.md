@@ -100,7 +100,7 @@ Operational note: the code hotfix is closed, but production Go Live still depend
 ## Phase 10 roadmap
 
 ### 10B — Effect Lifecycle + Visual Effect Indicators
-**Status:** IMPLEMENTED on `dev/phase-10b`; Opus architecture remediation SOL-10B-R1…R9 applied — awaiting targeted Opus re-check, then Luna verification (not closed). See `PHASE10B.md`.
+**Status:** IMPLEMENTED on `dev/phase-10b`; Opus architecture remediation SOL-10B-R1…R9 and final closure patch (SOL-10B-RC1/RC2, Apply coherence) applied — awaiting final Opus RC re-check, then Luna verification (not closed). See `PHASE10B.md`.
 
 Implemented: store v20 with explicit `gameSchemaVersion` evidence; Effect
 `state` / resolved `expiry` / typed `parameters`; the pure Effect planner

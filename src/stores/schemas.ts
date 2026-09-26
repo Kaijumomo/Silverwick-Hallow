@@ -701,6 +701,25 @@ const ordinalOf = (moment: { phase: string; day: number }): number =>
  *  - Ended: the final snapshot is frozen; no live moment is manufactured and
  *    this rule does not apply.
  */
+/**
+ * Phase 10B (SOL-10B-R4 / RC1): whether an Effect's `appliedAt` is coherent
+ * with a game at `game.phase`/`game.day` under the monotonic v20 timeline --
+ * the one rule both the persisted schema and v19 -> v20 migration use.
+ *
+ *  - Setup: the application moment is always exactly {setup, 0} (never
+ *    derived from a legacy Setup `day`).
+ *  - Night/Day: never after the current moment.
+ *  - Ended (or an unusable phase): not judged here (a frozen snapshot).
+ */
+export function isEffectAppliedAtCoherent(
+  game: { phase: string; day: number },
+  applied: { phase: string; day: number },
+): boolean {
+  if (game.phase === "setup") return applied.phase === "setup" && applied.day === 0;
+  if (game.phase === "night" || game.phase === "day") return ordinalOf(applied) <= ordinalOf(game);
+  return true;
+}
+
 function checkEffectTemporalCoherence(
   game: { phase: string; day: number; players: Record<string, { effects: { expiry: { kind: string; moment?: { phase: string; day: number } }; appliedAt?: { phase: string; day: number } }[] }> },
   ctx: z.RefinementCtx,
@@ -719,12 +738,10 @@ function checkEffectTemporalCoherence(
         }
       }
       const applied = effect.appliedAt;
-      if (!applied) return;
-      if (!live && (applied.phase !== "setup" || applied.day !== 0)) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a Setup Effect is applied at the Setup moment", path: [...path, "appliedAt"] });
-      } else if (live && ordinalOf(applied) > current) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "an Effect cannot have been applied after the current Game Moment", path: [...path, "appliedAt"] });
-      }
+      if (!applied || isEffectAppliedAtCoherent(game, applied)) return;
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [...path, "appliedAt"], message: live
+        ? "an Effect cannot have been applied after the current Game Moment"
+        : "a Setup Effect is applied at the Setup moment" });
     });
   }
 }

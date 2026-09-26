@@ -167,9 +167,11 @@ coexist and are never de-duplicated.
   never recorded; a "Needs check", never guessed, and resolving it is a
   correction).
 - **Declared lifetime** (`lifetime`): the duration declared when the Effect was
-  applied. It sets the initial expiry at Apply and is metadata afterwards; an
-  ordinary Update may change the expiry without rewriting it, and only a
-  correction changes it.
+  applied. A gameplay Apply's initial expiry must equal what it derives; it is
+  metadata afterwards: an ordinary Update may change the expiry without
+  rewriting it, and only a correction changes it (re-deriving the expiry only
+  while that expiry was still derived from the old facts). A Setup Effect's
+  application moment is always `{setup, 0}`.
 - **Effect parameters**: typed structured values (participant refs, roles,
   alignment, number, boolean, text). Mechanics never parse `note`.
 - **Manual Effect**: the Storyteller quick-control Effect `manual:<type>`

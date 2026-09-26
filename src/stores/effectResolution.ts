@@ -270,6 +270,31 @@ export function resolveEffectExpiry(lifetime: EffectLifetime, anchor: GameMoment
   return { kind: "at", moment: momentAtOrdinal(at) };
 }
 
+/**
+ * SOL-10B-RC1: the moment a gameplay Effect takes hold in `game` -- Setup is
+ * always exactly {setup, 0} (never derived from a legacy Setup `day`), Live
+ * Play is the actual current Night N / Day N, and an ended game has none.
+ */
+export function effectApplicationMoment(game: Pick<StorytellerLobbyRecord, "phase" | "day">): GameMoment | undefined {
+  if (game.phase === "setup") return { phase: "setup", day: 0 };
+  if (game.phase === "night" || game.phase === "day") return { phase: game.phase, day: game.day };
+  return undefined;
+}
+
+/**
+ * SOL-10B-RC2: whether an Effect's stored expiry is still the one its own
+ * declared facts (lifetime anchored at its live applied moment) derive. A
+ * pure comparison -- it never refuses because that boundary is now past. An
+ * `unresolved` end, or one that cannot be derived from the facts, is never
+ * "still derived".
+ */
+export function expiryStillDerived(effect: Pick<EffectRecord, "lifetime" | "appliedAt" | "expiry">): boolean {
+  if (effect.expiry.kind === "unresolved") return false;
+  const anchor = effect.appliedAt && effect.appliedAt.phase !== "setup" ? effect.appliedAt : undefined;
+  const derived = resolveEffectExpiry(effect.lifetime, anchor);
+  return derived !== null && sameSnapshot(derived, effect.expiry);
+}
+
 /** True when an Effect's exact boundary is reached on ENTERING `destination`. */
 export function effectExpiresAt(effect: Pick<EffectRecord, "expiry">, destination: LiveGameMoment): boolean {
   return effect.expiry.kind === "at" && momentOrdinal(effect.expiry.moment) <= momentOrdinal(destination);
@@ -394,8 +419,9 @@ export function planEffectTransaction(
   const live = isLiveGamePhase(game.phase);
   const current = currentLiveMoment(game);
   const currentOrdinal = current ? momentOrdinal(current) : 0;
-  // The moment a gameplay Apply takes hold: now. Setup is "setup, day 0".
-  const now: GameMoment = { phase: game.phase as GameMoment["phase"], day: game.day };
+  // The moment a gameplay Apply takes hold: now (SOL-10B-RC1: Setup is
+  // always {setup, 0}, never derived from a legacy Setup `day`).
+  const now: GameMoment = effectApplicationMoment(game) ?? { phase: "setup", day: 0 };
 
   // --- Working state -------------------------------------------------------
   const working = new Map<PlayerId, EffectRecord[]>();
@@ -495,16 +521,18 @@ export function planEffectTransaction(
     return fail("invalid", "Invalid Effect expiry.");
   };
 
-  /** SOL-10B-R2: at gameplay Apply the declared lifetime and the INITIAL
-   * expiry are coherent -- manual starts with none, a timed lifetime starts
-   * with an exact future end. (It may be changed later by an Update.) */
-  const checkInitialExpiry = (input: unknown, lifetime: EffectLifetime): EffectExpiry | Refused => {
+  /** SOL-10B-R2 + Sol clarification: a gameplay Apply's INITIAL expiry is
+   * exactly the one its declared lifetime derives from its application
+   * moment. A caller-supplied expiry must equal it; anything else is refused.
+   * Only a later Update decouples the end from the declared lifetime. */
+  const checkInitialExpiry = (input: unknown, lifetime: EffectLifetime, appliedAt: GameMoment | undefined): EffectExpiry | Refused => {
     const expiry = checkExpiryInput(input);
     if (isRefused(expiry)) return expiry;
-    const manual = lifetime.kind === "manual";
-    if (manual && expiry.kind !== "none") return fail("invalid", "A manual Effect starts with no automatic end -- schedule its end with an update once it is applied.");
-    if (!manual && expiry.kind === "none") return fail("expiryUnresolvable", "A timed Effect starts with an exact end -- use a manual lifetime for an Effect that never ends by itself.");
-    return expiry;
+    const derived = deriveExpiry(lifetime, appliedAt);
+    if (isRefused(derived)) return derived;
+    if (sameSnapshot(expiry, derived)) return derived;
+    if (lifetime.kind !== "manual" && expiry.kind === "none") return fail("expiryUnresolvable", "A timed Effect starts with an exact end -- use a manual lifetime for an Effect that never ends by itself.");
+    return fail("invalid", "A new Effect's end follows its declared lifetime -- apply it, then update its end if it should differ.");
   };
 
   /**
@@ -591,7 +619,7 @@ export function planEffectTransaction(
     // Gameplay Apply: initial expiry coherent with the declared lifetime.
     // Correction Apply: an explicit expiry is authoritative (SOL-10B-R2/R3).
     const expiry = spec.expiry !== undefined
-      ? (correction ? checkExpiryInput(spec.expiry) : checkInitialExpiry(spec.expiry, spec.lifetime))
+      ? (correction ? checkExpiryInput(spec.expiry) : checkInitialExpiry(spec.expiry, spec.lifetime, appliedAt))
       : deriveExpiry(spec.lifetime, appliedAt);
     if (isRefused(expiry)) return expiry;
     const parameters = mergeParameters(undefined, spec.parameters, false);
@@ -777,15 +805,20 @@ export function planEffectTransaction(
           if (!isPlainObject(amendment.lifetime as unknown)) return at(fail("invalid", "Choose how long the Effect lasts."));
           next.lifetime = cloneOwned(amendment.lifetime as EffectLifetime);
         }
-        // SOL-10B-R3: correcting the declared facts an expiry was derived
-        // from (applied moment or lifetime) re-derives it -- an old derived
-        // end is never silently kept. An explicitly supplied expiry is
-        // authoritative instead (R2), still temporally valid.
+        // SOL-10B-R3 / RC2: correcting the declared facts (applied moment or
+        // lifetime) without an explicit expiry re-derives the end ONLY while
+        // that end is still coupled to the old facts -- i.e. it equals what
+        // the old facts derive (compared purely, never refused for lying in
+        // the past). An end independently rescheduled by gameplay is
+        // authoritative (R2) and survives a descriptive correction; an
+        // `unresolved` legacy end stays unresolved. A re-derived end at/before
+        // now is refused (R3). An explicitly supplied expiry is authoritative,
+        // still temporally valid.
         const declaredFactsChanged = !sameSnapshot(next.lifetime, existing.lifetime) || !sameSnapshot(next.appliedAt, existing.appliedAt);
         if (amendment.expiry !== undefined) {
           const expiry = checkExpiryInput(amendment.expiry); if (isRefused(expiry)) return at(expiry);
           next.expiry = expiry;
-        } else if (declaredFactsChanged) {
+        } else if (declaredFactsChanged && expiryStillDerived(existing)) {
           const expiry = deriveExpiry(next.lifetime, next.appliedAt); if (isRefused(expiry)) return at(expiry);
           next.expiry = expiry;
         }
