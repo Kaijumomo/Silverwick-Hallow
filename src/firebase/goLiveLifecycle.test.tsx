@@ -488,6 +488,11 @@ describe("connection status presentation", () => {
     expect(alert).toHaveClass("connection-status");
     expect(alert).not.toHaveClass("lobby-error");
     expect(alert.querySelector(".connection-status-message")?.textContent).not.toMatch(/lobbies\/|PERMISSION_DENIED/);
+    const technical = alert.querySelector(".connection-status-diagnostic");
+    expect(technical).not.toBeNull();
+    expect(technical?.textContent).toContain("rules");
+    expect(technical?.textContent).toContain("code=PERMISSION_DENIED");
+    expect(technical?.textContent).toContain(`operation=get ${root}/membershipRevocations`);
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "End multiplayer" })).toBeInTheDocument();
     // Leave is not offered until an authoritative close has been attempted.
