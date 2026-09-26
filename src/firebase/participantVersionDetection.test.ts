@@ -93,8 +93,21 @@ function allEmptyWithSource(kind: "effect" | "reminder"): Game {
   expect(Object.values(game.players).every((p) => p.isEmpty && !("participantId" in p))).toBe(true);
   expect(game.history).toEqual([]);
   expect(game.informationDeliveries).toEqual([]);
-  expect(StorytellerGamePersistedSchema.safeParse(migratedCopy(game, 17)).success).toBe(true);
+  // Phase 10B (SOL-10B-R1): an empty seat can never own an Effect in v20, so
+  // the Effect variant -- still v17 EVIDENCE by presence -- migrates to an
+  // invalid v20 game (rejected, never repaired). The Reminder variant stays
+  // valid (Reminders are outside 10B).
+  expect(StorytellerGamePersistedSchema.safeParse(migratedCopy(game, 17)).success).toBe(kind === "reminder");
   return game;
+}
+
+/** Phase 10B: a v16 seat that is OCCUPIED -- still markerless, since v16
+ * predates ParticipantIds (migration assigns the deterministic
+ * legacy-current id) -- so an Effect it carries stays valid in v20. */
+function occupyV16(game: Game, playerId: string): void {
+  const seat = game.players[playerId]! as unknown as Record<string, unknown>;
+  seat.isEmpty = false;
+  seat.name = "Carrier";
 }
 
 /** A truly markerless all-empty game (no v17 evidence anywhere). */
@@ -206,8 +219,10 @@ describe("R2-D: malformed v17 markers are still v17 evidence (presence, not vali
 });
 
 describe("R2-E / R2-F: genuine v16 and truly markerless games still migrate exactly as before", () => {
-  it("R2-E: a genuine v16 all-empty game with a raw sourcePlayer (no v17 evidence) is v16, migrates to a legacy ref, and validates", () => {
+  it("R2-E: a genuine v16 game with a raw sourcePlayer (no v17 evidence) is v16, migrates to a legacy ref, and validates", () => {
     const game = markerless();
+    occupyV16(game, game.seatOrder[1]!);
+    expect(hasV17IdentityEvidence(game)).toBe(false);
     game.players[game.seatOrder[1]!]!.effects = [{ id: "x", type: "marked", lifetime: { kind: "manual" }, sourcePlayer: "a" }] as never;
     game.history = [retiredHistoryRecord(game.seatOrder[0]!)] as never;
     expect(detectLegacyGameVersion(game)).toBe(16);
@@ -258,22 +273,30 @@ describe("R2-G: the real remote checkpoint path (readCheckpoint -> detect -> mig
     expect(JSON.parse(await b.get(`${root}/checkpoint`) as string).game.history[0].playerId).toBe(game.seatOrder[0]);
   });
 
-  it("valid all-empty state carrying v17 Effect evidence recovers as v17: its source ref is kept exactly, never re-migrated, nothing fabricated", async () => {
+  it("all-empty state carrying v17 Effect evidence is detected as v17, but an empty seat owning an Effect is invalid v20: rejected, never adopted or repaired (SOL-10B-R1)", async () => {
     const game = allEmptyWithSource("effect");
+    expect(detectLegacyGameVersion(game)).toBe(17);
+    const { b, writeLogBefore, start } = await recoverFrom(game);
+    await expect(start()).rejects.toThrow(SnapshotValidationError);
+    expect(store().game).toBeNull();
+    expect(b.writeLog.slice(writeLogBefore).filter((w) => isProjectionWrite(w.path))).toEqual([]);
+  });
+
+  it("all-empty state carrying v17 Reminder evidence still recovers as v17: its source ref is kept exactly, never re-migrated, nothing fabricated", async () => {
+    const game = allEmptyWithSource("reminder");
     const { start } = await recoverFrom(game);
     const recovered = await start();
     disposals.push(() => recovered.stop());
     expect(recovered.outcome).toBe("live");
     const carrier = game.seatOrder[1]!;
-    // Phase 10B: kept exactly, apart from the v20 lifecycle every legacy
-    // Effect receives (active, no automatic expiry for a manual one).
-    expect(store().game!.players[carrier]!.effects).toEqual(withV20Lifecycle(game).players[carrier]!.effects);
+    expect(store().game!.players[carrier]!.reminders).toEqual(withV20Lifecycle(game).players[carrier]!.reminders);
     expect(Object.values(store().game!.players).every((p) => p.isEmpty && !("participantId" in p))).toBe(true);
   });
 
-  it("genuine v16 all-empty state with a raw sourcePlayer still recovers through the real path, as an unresolved legacy ref", async () => {
+  it("genuine v16 state with a raw sourcePlayer still recovers through the real path, as an unresolved legacy ref", async () => {
     const game = markerless();
     const carrier = game.seatOrder[1]!;
+    occupyV16(game, carrier);
     game.players[carrier]!.effects = [{ id: "x", type: "marked", lifetime: { kind: "manual" }, sourcePlayer: "a" }] as never;
     const { start } = await recoverFrom(game);
     const recovered = await start();

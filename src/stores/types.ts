@@ -274,11 +274,17 @@ export type EffectLifetime =
 
 export type EffectId = string;
 
-/** Phase 10B: whether a causal Effect currently applies. A `suppressed`
- * Effect still exists in Current State (same id, origin, application,
- * expiry and parameters) but does not currently apply; mechanical queries
- * ignore it, inspection/audit queries still return it. It is never deleted
- * and later re-created from History. */
+/** Phase 10B: the Effect's explicit lifecycle state. `suppressed` is an
+ * authoritative lifecycle DECISION that this Effect instance currently does
+ * not apply; it still exists in Current State (same id, origin, application,
+ * expiry and parameters) and is never deleted and later re-created from
+ * History. Mechanical queries ignore it; inspection/audit queries return it.
+ *
+ * SOL-10B-R5: `state` is not a cache of every derived reason an Effect may
+ * fail to operate (its source no longer functioning, other Effects, jinxes,
+ * ability semantics...). A future rules engine (10F) derives applicability
+ * FROM stored state and must never continuously write such conclusions into
+ * `state`. */
 export type EffectState = "active" | "suppressed";
 
 /**
@@ -294,8 +300,13 @@ export type EffectState = "active" | "suppressed";
  *    never recorded. It never expires automatically and surfaces to the
  *    Storyteller as a concise "Needs check"; it is never guessed.
  *
- * Invariant (schema-enforced): a `manual` lifetime has expiry `none`; a
- * finite lifetime has `at` or `unresolved`.
+ * SOL-10B-R2 truth hierarchy: `expiry` is the SOLE mechanical duration
+ * authority. The declared `lifetime` establishes the initial expiry at Apply
+ * (manual -> none; timed -> an exact future `at`) and is thereafter only
+ * metadata; mechanics never recompute current truth from it. An ordinary
+ * Update may set `none` or any strictly future `at` without rewriting the
+ * declared lifetime; only a correction changes the declared lifetime.
+ * Schema-enforced: `unresolved` exists only for a finite declared lifetime.
  */
 export type EffectExpiry =
   | { kind: "none" }
@@ -346,6 +357,8 @@ export type EffectRecord = {
   sourceCharacter?: RoleId;
   sourceParticipant?: ParticipantRef;
   appliedAt?: GameMoment;
+  /** The duration DECLARED when the Effect was applied (metadata; see
+   * EffectExpiry for the authoritative end). */
   lifetime: EffectLifetime;
   note?: string;
   state: EffectState;

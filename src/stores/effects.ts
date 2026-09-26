@@ -50,11 +50,17 @@ type EffectsHolder = Pick<STPlayerRecord, "effects">;
 /** Whether this Effect currently applies (not suppressed). */
 export const isEffectActive = (effect: Pick<EffectRecord, "state">): boolean => effect.state === "active";
 
-/** EFFECTIVE Effect: true when an Effect of `type` currently APPLIES to the
- * player (active, any source). This is the query for current mechanical
- * state (night-order advisories, future rules); suppressed Effects never
- * count. It carries no rules meaning of its own -- in particular a
- * "protected" Effect implies nothing about death. */
+/** True when a STORED Effect of `type` exists on the player in the `active`
+ * (non-suppressed) lifecycle state, from any source. Suppressed Effects never
+ * count.
+ *
+ * SOL-10B-R5: this is NOT "every BOTC interaction has been evaluated and the
+ * Effect is mechanically effective". Whether an active Effect actually
+ * operates (its source still functioning, other Effects, jinxes/modifiers,
+ * ability semantics, Storyteller rulings) is derived applicability that a
+ * future rules engine (10F) computes from stored state -- it is never
+ * cached into `state`. The query carries no rules meaning of its own; in
+ * particular a "protected" Effect implies nothing about death. */
 export function hasEffect(player: EffectsHolder, type: string): boolean {
   return player.effects.some((e) => e.type === type && isEffectActive(e));
 }

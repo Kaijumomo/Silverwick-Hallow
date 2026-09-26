@@ -1687,9 +1687,12 @@ describe("Phase 9D.5 Proof D: remote checkpoint restore integrity for a rich Pha
     // A genuinely different device advances the SAME rich checkpoint
     // further -- proves RESTORE both preserves everything the rich local
     // game already carried AND correctly layers in the foreign delta.
+    // Phase 10B (SOL-10B-R4): the foreign delta no longer jumps `day`
+    // without a phase transition -- that would leave the rich game's Night 2
+    // Effect overdue, invalid v20 state recovery must reject (covered in
+    // effectMigration.test.ts). The adopted foreign delta is the addendum.
     const foreignGame = await foreignDeviceAdvance(b, session.id, g => ({
       ...g,
-      day: 2,
       players: {
         ...g.players,
         [handles.chefId]: {
@@ -1706,7 +1709,7 @@ describe("Phase 9D.5 Proof D: remote checkpoint restore integrity for a rich Pha
     expect(recovered.outcome).toBe("live");
     const gameAfter = useStorytellerStore.getState().game!;
     expect(gameAfter).toEqual(foreignGame);
-    expect(gameAfter.day).toBe(2);
+    expect(gameAfter.day).toBe(foreignGame.day);
     // Phase 10A: the restored window is the checkpoint's, exactly.
     expect(gameAfter.lifeEventWindow).toEqual(foreignGame.lifeEventWindow);
     expect(gameAfter.lifeEventWindow.events).toHaveLength(3);

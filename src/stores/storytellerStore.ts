@@ -153,6 +153,11 @@ const arrivalPlayer = (player: STPlayerRecord, game: StorytellerLobbyRecord): ST
  * record names the same instance (assignPendingToSeat), or read back from
  * that authoritative record during recovery (restoreSeatedMember). Both
  * callers validate it first; everyone else gets a freshly minted one.
+ *
+ * Phase 10B (SOL-10B-R1): a new participation instance always starts with
+ * NO Effects -- Effects belong to a participation instance, never to a seat,
+ * so nothing an empty seat object carries (even malformed or crafted state)
+ * is ever inherited by the person who occupies it.
  */
 const occupySeat = (
   seat: STPlayerRecord,
@@ -162,6 +167,7 @@ const occupySeat = (
 ): STPlayerRecord => ({
   ...arrivalPlayer({ ...seat, name, isEmpty: false }, game),
   participantId,
+  effects: [],
 });
 
 const clone = <T,>(v: T): T =>

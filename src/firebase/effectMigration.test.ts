@@ -141,8 +141,20 @@ describe("Phase 10B: explicit v20 evidence is never 'repaired' by legacy migrati
     ["an Effect missing its state", (g) => { delete ((g.players as Record<string, { effects: Raw[] }>).b!.effects[0]!).state; }],
     ["an Effect missing its expiry", (g) => { delete ((g.players as Record<string, { effects: Raw[] }>).b!.effects[0]!).expiry; }],
     ["an unknown operational state", (g) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[0]!.state = "paused"; }],
-    ["a manual Effect with a timed expiry", (g) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[0]!.expiry = { kind: "at", moment: { phase: "night", day: 3 } }; }],
-    ["a finite Effect with no expiry", (g) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[1]!.expiry = { kind: "none" }; }],
+    // SOL-10B-R2: `unresolved` exists only for a finite declared lifetime.
+    ["an unresolved expiry on a manual lifetime", (g) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[0]!.expiry = { kind: "unresolved" }; }],
+    // SOL-10B-R4: temporal coherence against the game's own moment (Day 2).
+    ["an overdue exact end (at the current moment)", (g) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[1]!.expiry = { kind: "at", moment: { phase: "day", day: 2 } }; }],
+    ["an overdue exact end (in the past)", (g) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[1]!.expiry = { kind: "at", moment: { phase: "night", day: 1 } }; }],
+    ["an applied moment after the current moment", (g) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[0]!.appliedAt = { phase: "night", day: 3 }; }],
+    // SOL-10B-R7: the reserved manual namespace.
+    ["a manual: id whose type does not match", (g) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[0]!.type = "poisoned"; }],
+    ["a manual: Effect with a source participant", (g) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[0]!.sourceParticipant = alice; }],
+    ["a manual: Effect with a source character", (g) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[0]!.sourceCharacter = "poisoner"; }],
+    ["a manual: Effect declaring a timed lifetime", (g) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[0]!.lifetime = { kind: "untilDawn" }; (g.players as Record<string, { effects: Raw[] }>).b!.effects[0]!.expiry = { kind: "unresolved" }; }],
+    // SOL-10B-R1: an empty seat never owns an Effect.
+    ["an empty seat owning an Effect", (g) => { const a = (g.players as Record<string, Raw>).a!; a.isEmpty = true; a.name = ""; delete a.participantId;
+      a.effects = [{ id: "fx-e", type: "marked", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }]; }],
     ["an expiry at Setup", (g) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[1]!.expiry = { kind: "at", moment: { phase: "setup", day: 0 } }; }],
     ["a duplicate Effect id on one participant", (g) => { const e = (g.players as Record<string, { effects: Raw[] }>).b!.effects; e.push(structuredClone(e[0]!)); }],
     ["an unknown key on an Effect", (g) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[0]!.stray = 1; }],
@@ -169,6 +181,33 @@ describe("Phase 10B: explicit v20 evidence is never 'repaired' by legacy migrati
       expect(takeMigrationResetFlag()).toBe(true);
       expect(result.game).toBeNull();
     }
+  });
+
+  it("SOL-10B-R2: once applied, none and a future exact end are valid whatever the declared lifetime", () => {
+    const game = v20();
+    const effects = (game.players as Record<string, { effects: Raw[] }>).b!.effects;
+    effects[0]!.expiry = { kind: "at", moment: { phase: "night", day: 3 } }; // manual declared, end scheduled
+    effects[1]!.expiry = { kind: "none" }; // timed declared, timer removed
+    expect(StorytellerGamePersistedSchema.safeParse(game).success).toBe(true);
+  });
+
+  it("SOL-10B-R4: Setup forbids exact ends and non-Setup applied moments; a valid Setup manual Effect passes; an ended snapshot is frozen", () => {
+    const setup = { ...v20(), phase: "setup", day: 0 } as Raw;
+    const effects = (g: Raw) => (g.players as Record<string, { effects: Raw[] }>).b!.effects;
+    effects(setup).splice(0, 2, { id: "manual:drunk", type: "drunk", lifetime: { kind: "manual" }, appliedAt: { phase: "setup", day: 0 }, state: "active", expiry: { kind: "none" } });
+    expect(StorytellerGamePersistedSchema.safeParse(setup).success).toBe(true);
+    const timed = structuredClone(setup);
+    effects(timed)[0]!.expiry = { kind: "at", moment: { phase: "night", day: 1 } };
+    expect(StorytellerGamePersistedSchema.safeParse(timed).success).toBe(false);
+    const liveApplied = structuredClone(setup);
+    effects(liveApplied)[0]!.appliedAt = { phase: "night", day: 1 };
+    expect(StorytellerGamePersistedSchema.safeParse(liveApplied).success).toBe(false);
+    // The Setup marker legitimately survives into Live Play.
+    expect(StorytellerGamePersistedSchema.safeParse({ ...setup, phase: "night", day: 1 }).success).toBe(true);
+    // An ended game's final snapshot is frozen: no live moment is manufactured.
+    const ended = { ...v20(), phase: "ended", day: 2 } as Raw;
+    effects(ended)[1]!.expiry = { kind: "at", moment: { phase: "night", day: 1 } };
+    expect(StorytellerGamePersistedSchema.safeParse(ended).success).toBe(true);
   });
 
   it("marker-less v20 lifecycle evidence is current-version data missing its marker: rejected, not stamped", () => {
@@ -240,7 +279,9 @@ describe("Phase 10B: remote checkpoint recovery", () => {
 
   it.each([
     ["an Effect missing its lifecycle", (g: Raw) => { delete ((g.players as Record<string, { effects: Raw[] }>).b!.effects[0]!).state; }],
-    ["a finite Effect claiming no expiry", (g: Raw) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[1]!.expiry = { kind: "none" }; }],
+    ["an overdue exact end (SOL-10B-R4)", (g: Raw) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[1]!.expiry = { kind: "at", moment: { phase: "night", day: 1 } }; }],
+    ["an empty seat owning an Effect (SOL-10B-R1)", (g: Raw) => { const a = (g.players as Record<string, Raw>).a!; a.isEmpty = true; a.name = ""; delete a.participantId;
+      a.effects = [{ id: "fx-e", type: "marked", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }]; }],
     ["a wrong version marker", (g: Raw) => { g.gameSchemaVersion = 19; }],
   ])("a malformed v20 checkpoint (%s) is rejected -- never adopted, never repaired", async (_label, corrupt) => {
     const bad = expectedV20(v19Game());

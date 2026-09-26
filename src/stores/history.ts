@@ -248,7 +248,12 @@ export function diffFields<T extends Record<string, unknown>>(
  * item's `sourceParticipant` is already a durable snapshot (captured when
  * the item was created), so it is carried over as-is -- removing an Effect
  * Alice caused still records Alice as its source even after Bob has since
- * taken her seat. recordIfLive deep-clones it into the History Record. */
+ * taken her seat. recordIfLive deep-clones it into the History Record.
+ *
+ * Phase 10B (SOL-10B-R8): used for Reminders only. Effect History never copies
+ * an Effect's origin into mutation provenance -- the origin stays inside the
+ * Effect snapshot, and provenance comes only from Mutation Context (see
+ * effectResolution.ts). */
 export function provenanceOf(
   item: Pick<EffectRecord | ReminderRecord, "sourceCharacter" | "sourceParticipant" | "note">
 ): Provenance | undefined {

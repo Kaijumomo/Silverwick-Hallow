@@ -257,13 +257,13 @@ describe("Phase 10B Update semantics", () => {
     expect("parameters" in player(carol).effects[0]!).toBe(false);
   });
 
-  it("an expiry override must be a future Night/Day and consistent with the lifetime", () => {
+  it("an expiry override must be a strictly future Night/Day (never now/past, never unresolved)", () => {
     const carol = withEffect();
     const b = baseline();
     expect(resolve({ kind: "update", target: bind(carol), effectId: "e", changes: { expiry: { kind: "at", moment: { phase: "night", day: 1 } } } }))
       .toMatchObject({ ok: false, code: "expiryUnresolvable" });
-    expect(resolve({ kind: "update", target: bind(carol), effectId: "e", changes: { expiry: { kind: "none" } } }))
-      .toMatchObject({ ok: false, code: "expiryUnresolvable" });
+    expect(resolve({ kind: "update", target: bind(carol), effectId: "e", changes: { expiry: { kind: "unresolved" } as never } }))
+      .toMatchObject({ ok: false, code: "invalid" });
     expectInert(b);
   });
 });
@@ -645,7 +645,7 @@ describe("Phase 10B deterministic phase expiry", () => {
     expect(effectHistory().at(-1)).toMatchObject({ effectOperation: "expire", moment: { phase: "day", day: 1 } });
   });
 
-  it("no render/query/reconnect/time expiry: queries and planning never remove anything, and a persistence round trip keeps an overdue Effect", () => {
+  it("no render/query/reconnect/time expiry: queries and planning never remove anything -- and an overdue Effect is invalid persisted state (SOL-10B-R4), never concealed by rollover", () => {
     liveGame();
     const g = game();
     // An Effect whose boundary is already behind the current moment (only
@@ -659,7 +659,9 @@ describe("Phase 10B deterministic phase expiry", () => {
     effectAccessibleSummary(player(idOf("Alice")));
     planEffectTransaction(snapshot, { intents: [apply("Bob", { type: "x", lifetime: { kind: "manual" } })] });
     expect(state().game).toBe(snapshot);
-    expect(StorytellerGamePersistedSchema.safeParse(snapshot).success).toBe(true);
+    expect(player(idOf("Alice")).effects).toEqual([overdue]);
+    // Such state can never be authoritative: the persisted schema rejects it.
+    expect(StorytellerGamePersistedSchema.safeParse(snapshot).success).toBe(false);
     // planEffectExpiry is only ever consulted with a destination.
     expect(planEffectExpiry(snapshot, { phase: "day", day: 1 })).not.toBeNull();
   });

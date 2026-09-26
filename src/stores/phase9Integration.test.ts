@@ -346,7 +346,10 @@ describe("Phase 9D.5 Proof H: full integrated BOTC lifecycle", () => {
     expect(store().game!.history).toHaveLength(2);
     store().addEffect(investigatorId, { type: "poisoned", sourceCharacter: "poisoner", sourcePlayer: impId, lifetime: { kind: "untilDawn" } });
     expect(store().game!.history).toHaveLength(3);
-    expect(store().game!.history[2]!.provenance).toEqual({ sourceCharacter: "poisoner", sourceParticipant: refOf(store().game!, impId) });
+    // Phase 10B (SOL-10B-R8): the Effect's ORIGIN lives in the snapshot;
+    // with no Mutation Context the History records no mutation provenance.
+    expect(store().game!.history[2]!.change).toMatchObject({ kind: "added", item: { sourceCharacter: "poisoner", sourceParticipant: refOf(store().game!, impId) } });
+    expect(store().game!.history[2]!.provenance).toBeUndefined();
     store().addReminder(investigatorId, { label: "Poisoned", sourceCharacter: "poisoner", lifetime: { kind: "manual" } });
     // addReminder/addEffect only record History when the game is live (they
     // already are here) -- exactly one record per real command, never more.

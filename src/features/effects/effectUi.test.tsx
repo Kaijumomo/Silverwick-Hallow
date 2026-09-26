@@ -141,17 +141,43 @@ describe("Phase 10B aggregation and progressive disclosure", () => {
       sourceParticipant: { participantId: game().players[idOf("Bob")]!.participantId }, expiry: { kind: "at", moment: { phase: "day", day: 1 } } });
   });
 
-  it("a legacy unresolved lifetime surfaces as a concise Needs check and can be resolved in one tap", () => {
+  it("SOL-10B-R6: an exact end not recorded (legacy) surfaces as Needs check, shows the declared facts, and is resolved as a CORRECTION", () => {
     const carol = idOf("Carol");
     const g = game();
-    store.setState({ game: { ...g, players: { ...g.players, [carol]: { ...g.players[carol]!, effects: [
-      { id: "legacy", type: "poisoned", lifetime: { kind: "untilDawn" }, state: "active", expiry: { kind: "unresolved" } }] } } } });
+    const legacy = { id: "legacy", type: "poisoned", lifetime: { kind: "untilDawn" as const }, appliedAt: { phase: "night" as const, day: 1 },
+      state: "active" as const, expiry: { kind: "unresolved" as const } };
+    store.setState({ game: { ...g, players: { ...g.players, [carol]: { ...g.players[carol]!, effects: [legacy] } } } });
     render(<GameScreen />);
     expect(screen.getByRole("button", { name: /^Carol, seat 3, alive, needs check, Poisoned$/ })).toBeInTheDocument();
     act(() => { state().selectPlayer(carol); });
     fireEvent.click(screen.getByRole("button", { name: /^Poisoned, needs check\. Show details/ }));
+    expect(screen.getByText(/Exact end not recorded/)).toBeInTheDocument();
+    expect(screen.queryByText(/Lifetime unknown/)).toBeNull();
+    // The declared lifetime and applied moment are available to decide with.
+    const details = within(document.querySelector(".effect-instance-details") as HTMLElement);
+    expect(details.getByText("Until dawn")).toBeInTheDocument();
+    expect(details.getByText("Night 1")).toBeInTheDocument();
+    const historyBefore = game().history.length;
     fireEvent.click(screen.getByRole("button", { name: "Ends as Day 1 begins" }));
     expect(game().players[carol]!.effects[0]!.expiry).toEqual({ kind: "at", moment: { phase: "day", day: 1 } });
+    expect(game().players[carol]!.effects[0]!.lifetime).toEqual({ kind: "untilDawn" });
+    expect(game().history).toHaveLength(historyBefore + 1);
+    expect(game().history.at(-1)).toMatchObject({ category: "effect", effectOperation: "update", correction: true,
+      change: { kind: "value", from: { expiry: { kind: "unresolved" } }, to: { expiry: { kind: "at", moment: { phase: "day", day: 1 } } } } });
+  });
+
+  it("SOL-10B-R6: the correction may instead record the Effect as lasting Until removed", () => {
+    const carol = idOf("Carol");
+    const g = game();
+    store.setState({ game: { ...g, players: { ...g.players, [carol]: { ...g.players[carol]!, effects: [
+      { id: "legacy", type: "poisoned", lifetime: { kind: "nights", count: 2 }, state: "active", expiry: { kind: "unresolved" } }] } } } });
+    render(<Drawer name="Carol" />);
+    fireEvent.click(screen.getByRole("button", { name: /^Poisoned, needs check\. Show details/ }));
+    expect(screen.getByText("2 nights")).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole("group", { name: "Correct Poisoned end" })).getByRole("button", { name: "Until removed" }));
+    expect(game().players[carol]!.effects[0]!.expiry).toEqual({ kind: "none" });
+    expect(game().history.at(-1)).toMatchObject({ effectOperation: "update", correction: true });
+    expect(screen.queryByText(/Exact end not recorded/)).toBeNull();
   });
 });
 

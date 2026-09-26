@@ -161,7 +161,7 @@ describe("Phase 9D.2: structured record mutation (generic across semantic types)
 });
 
 describe("Phase 9D.2: provenance", () => {
-  it("retains supplied provenance (via an effect's own source fields)", () => {
+  it("keeps an Effect's origin in its snapshot, and mutation provenance only from Mutation Context (Phase 10B SOL-10B-R8)", () => {
     dealtGame();
     goLive();
     const id = game().seatOrder[0]!;
@@ -169,7 +169,8 @@ describe("Phase 9D.2: provenance", () => {
     state().addEffect(id, {
       type: "poisoned", sourceCharacter: "poisoner", sourcePlayer: source, lifetime: { kind: "untilDawn" },
     });
-    expect(history()[0]!.provenance).toEqual({ sourceCharacter: "poisoner", sourceParticipant: participantOf(source) });
+    expect(history()[0]!.change).toMatchObject({ kind: "added", item: { sourceCharacter: "poisoner", sourceParticipant: participantOf(source) } });
+    expect(history()[0]!.provenance).toBeUndefined();
   });
 
   it("leaves provenance absent -- never invented -- when nothing is known", () => {

@@ -122,7 +122,12 @@ describe("Section 7: valid sourceParticipant controls pass", () => {
     ["effect", "added"], ["effect", "removed"], ["reminder", "added"], ["reminder", "removed"],
   ] as const)("%s %s snapshot with a participant ref or a legacy ref passes", (category, kind) => {
     const base = realV17Game();
-    const index = indexOf(base, category, kind);
+    // Phase 10B (SOL-10B-R7): a Storyteller quick Effect (`manual:` id) can
+    // never carry a source, so the sourced control uses the first record of
+    // this kind about any other Effect.
+    const index = base.history.findIndex((h) => h.category === category && h.change!.kind === kind &&
+      !String((h.change as { item?: { id?: unknown } }).item?.id).startsWith("manual:"));
+    expect(index).toBeGreaterThanOrEqual(0);
     for (const ref of [participant, legacy]) {
       const good = withItemField(base, index, "sourceParticipant", ref);
       const result = StorytellerGamePersistedSchema.safeParse(good);

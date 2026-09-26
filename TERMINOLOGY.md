@@ -155,17 +155,30 @@ coexist and are never de-duplicated.
 - **Effect origin** (`sourceParticipant`, `sourceCharacter`): what originally
   caused the Effect. Distinct from the **mutation provenance** of a later
   lifecycle change, which is recorded on that change's History Record.
-- **Operational state** (`state`): `active` (applies) or `suppressed` (still
-  exists, does not currently apply). Mechanical queries (`hasEffect`) read
-  only active Effects; inspection queries (`hasStoredEffect`,
-  `effectInstances`) also see suppressed ones.
-- **Expiry** (`expiry`): `none`, `at` a Game Moment (removed when live play
-  enters it, inside the phase transition), or `unresolved` (a pre-v20 finite
-  Effect; a "Needs check", never guessed).
+- **Operational state** (`state`): `active` or `suppressed` -- an explicit
+  lifecycle decision that the Effect currently does not apply, never a cache
+  of derived applicability (a future rules engine derives whether an active
+  Effect actually operates). `hasEffect` means "a stored active Effect of this
+  type exists"; inspection queries (`hasStoredEffect`, `effectInstances`) also
+  see suppressed ones.
+- **Expiry** (`expiry`): the sole mechanical duration authority -- `none`,
+  `at` a Game Moment (removed when live play enters it, inside the phase
+  transition), or `unresolved` (a pre-v20 finite Effect whose exact end was
+  never recorded; a "Needs check", never guessed, and resolving it is a
+  correction).
+- **Declared lifetime** (`lifetime`): the duration declared when the Effect was
+  applied. It sets the initial expiry at Apply and is metadata afterwards; an
+  ordinary Update may change the expiry without rewriting it, and only a
+  correction changes it.
 - **Effect parameters**: typed structured values (participant refs, roles,
   alignment, number, boolean, text). Mechanics never parse `note`.
 - **Manual Effect**: the Storyteller quick-control Effect `manual:<type>`
-  (`setManualEffect`); never any other Effect of that type.
+  (`setManualEffect`); never any other Effect of that type. The `manual:` id
+  namespace is reserved: exactly `manual:<type>`, a manual declared lifetime,
+  no source participant or character.
+- Effects belong to a participation instance: **an empty seat never owns an
+  Effect**. If a mechanical condition is authoritative as an Effect, a
+  Reminder may display it but is never a second source of that truth.
 
 Effects change only through the **Effect lifecycle boundary**
 (`planEffectTransaction` in `src/stores/effectResolution.ts`, committed by the

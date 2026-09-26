@@ -132,7 +132,9 @@ export function EffectControls({ player }: { player: STPlayerRecord }) {
 
 type InstanceIntent =
   | { kind: "suppress" | "resume" | "remove" | "correctRemove"; effectId: string }
-  | { kind: "update"; effectId: string; changes: { expiry: { kind: "at"; moment: { phase: "night" | "day"; day: number } } } };
+  /** SOL-10B-R6: resolving a legacy unresolved end is a CORRECTION of
+   * incomplete migrated Current State, never a gameplay update. */
+  | { kind: "correctAmend"; effectId: string; amendment: { expiry: { kind: "none" } | { kind: "at"; moment: { phase: "night" | "day"; day: number } } } };
 
 function roleLabel(roleId: string | undefined, game: StorytellerLobbyRecord): string | undefined {
   if (!roleId) return undefined;
@@ -155,7 +157,20 @@ export function expiryLabel(expiry: EffectExpiry): string {
   switch (expiry.kind) {
     case "none": return "Until removed";
     case "at": return `Ends as ${momentLabel(expiry.moment)} begins`;
-    case "unresolved": return "Lifetime unknown (recorded before timed Effects) -- needs check";
+    case "unresolved": return "Exact end not recorded -- needs check";
+  }
+}
+
+/** The DECLARED duration (metadata: what was declared when the Effect was
+ * applied). The authoritative end is `expiry` -- see expiryLabel. */
+export function declaredLifetimeLabel(lifetime: EffectLifetime): string {
+  switch (lifetime.kind) {
+    case "manual": return "Until removed";
+    case "untilDawn": return "Until dawn";
+    case "throughFollowingDay": return "Through the following day";
+    case "untilNextNight": return "Until next night";
+    case "nights": return `${lifetime.count} night${lifetime.count === 1 ? "" : "s"}`;
+    case "days": return `${lifetime.count} day${lifetime.count === 1 ? "" : "s"}`;
   }
 }
 
@@ -198,7 +213,8 @@ function EffectInstance({ game, effect, onIntent }: {
       <dl className="effect-instance-details">
         {origin && <><dt>Origin</dt><dd>{origin}</dd></>}
         {effect.appliedAt && <><dt>Applied</dt><dd>{momentLabel(effect.appliedAt)}</dd></>}
-        <dt>Lasts</dt><dd>{expiryLabel(effect.expiry)}</dd>
+        <dt>Ends</dt><dd>{expiryLabel(effect.expiry)}</dd>
+        <dt>Declared</dt><dd>{declaredLifetimeLabel(effect.lifetime)}</dd>
         {effect.note && <><dt>Note</dt><dd>{effect.note}</dd></>}
         {effect.parameters && Object.entries(effect.parameters).map(([key, value]) => (
           <div key={key} className="effect-parameter"><dt>{key}</dt><dd>{parameterText(value, game)}</dd></div>
@@ -211,15 +227,19 @@ function EffectInstance({ game, effect, onIntent }: {
         <button type="button" className="btn btn-sm" onClick={() => onIntent({ kind: "remove", effectId: effect.id })}>Remove</button>
         <button type="button" className="btn btn-sm" onClick={() => onIntent({ kind: "correctRemove", effectId: effect.id })}>Recorded in error</button>
       </div>
-      {effectNeedsCheck(effect) && dawn && dusk && (
-        <div className="drawer-row" role="group" aria-label={`Resolve ${definition.label} lifetime`}>
-          <button type="button" className="btn btn-sm"
-            onClick={() => onIntent({ kind: "update", effectId: effect.id, changes: { expiry: { kind: "at", moment: dawn } } })}>
+      {effectNeedsCheck(effect) && (
+        <div className="drawer-row" role="group" aria-label={`Correct ${definition.label} end`}>
+          {dawn && <button type="button" className="btn btn-sm"
+            onClick={() => onIntent({ kind: "correctAmend", effectId: effect.id, amendment: { expiry: { kind: "at", moment: dawn } } })}>
             Ends as {momentLabel(dawn)} begins
-          </button>
-          <button type="button" className="btn btn-sm"
-            onClick={() => onIntent({ kind: "update", effectId: effect.id, changes: { expiry: { kind: "at", moment: dusk } } })}>
+          </button>}
+          {dusk && <button type="button" className="btn btn-sm"
+            onClick={() => onIntent({ kind: "correctAmend", effectId: effect.id, amendment: { expiry: { kind: "at", moment: dusk } } })}>
             Ends as {momentLabel(dusk)} begins
+          </button>}
+          <button type="button" className="btn btn-sm"
+            onClick={() => onIntent({ kind: "correctAmend", effectId: effect.id, amendment: { expiry: { kind: "none" } } })}>
+            Until removed
           </button>
         </div>
       )}

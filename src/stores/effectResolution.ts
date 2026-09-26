@@ -1,8 +1,8 @@
 import { MAX_TOTAL_PLAYERS } from "@/data/setupCounts";
-import { cloneOwned, durableProvenance, historyId, isLiveGamePhase, provenanceOf, sameSnapshot, type MutationContext } from "./history";
+import { cloneOwned, durableProvenance, historyId, isLiveGamePhase, sameSnapshot, type MutationContext } from "./history";
 import { participantRefOf } from "./participants";
 import { currentLiveMoment, momentAtOrdinal, momentOrdinal } from "./lifeEvents";
-import { EFFECT_PARAMETER_KEY, EffectRecordSchema, LiveGameMomentSchema, GameMomentSchema } from "./schemas";
+import { EFFECT_PARAMETER_KEY, EffectRecordSchema, LiveGameMomentSchema, GameMomentSchema, MANUAL_EFFECT_ID_PREFIX } from "./schemas";
 import type {
   CurrentParticipantRef,
   EffectExpiry,
@@ -306,9 +306,13 @@ export function applyEffectPlan(
  *
  * History: one `removed` record per expired Effect, at the DESTINATION Game
  * Moment, `effectOperation: "expire"`, deterministic-expiry provenance, never
- * a correction. (An Effect left on an empty seat -- unreachable through the
- * commands -- is still expired, with no History, since no participant can be
- * named truthfully.) Pure.
+ * a correction. Pure.
+ *
+ * SOL-10B-R1: an empty seat never owns an Effect (persisted-schema
+ * invariant), so every Effect considered here belongs to a seated
+ * participant. Should impossible (never-validated, in-memory) state ever
+ * reach this function, a seat without a participant is LEFT UNTOUCHED -- no
+ * silent removal, no History against an unknowable person, no repair path.
  */
 export function planEffectExpiry(
   game: StorytellerLobbyRecord,
@@ -321,11 +325,11 @@ export function planEffectExpiry(
   for (const playerId of order) {
     const player = ownPlayer(game, playerId);
     if (!player || !Array.isArray(player.effects)) continue;
+    const participant = participantRefOf(game, playerId);
+    if (!participant) continue;
     const expired = player.effects.filter((effect) => effectExpiresAt(effect, destination));
     if (!expired.length) continue;
     effects[playerId] = player.effects.filter((effect) => !effectExpiresAt(effect, destination));
-    const participant = participantRefOf(game, playerId);
-    if (!participant) continue;
     for (const effect of expired) {
       history.push(cloneOwned({
         id: ids.historyId(),
@@ -473,16 +477,15 @@ export function planEffectTransaction(
     return Object.keys(next).length ? next : undefined;
   };
 
-  /** Validates an explicit expiry choice against the lifetime and time. */
-  const checkExpiryInput = (input: unknown, lifetime: EffectLifetime): EffectExpiry | Refused => {
+  /**
+   * SOL-10B-R2: an explicit AUTHORITATIVE expiry -- `none`, or a strictly
+   * future live `at`. Valid whatever the declared lifetime; `unresolved` can
+   * never be chosen (it exists only for migrated legacy Effects).
+   */
+  const checkExpiryInput = (input: unknown): EffectExpiry | Refused => {
     if (!isPlainObject(input)) return fail("invalid", "Invalid Effect expiry.");
-    const manual = isPlainObject(lifetime) && lifetime.kind === "manual";
-    if (input.kind === "none") {
-      if (!manual) return fail("expiryUnresolvable", "A timed Effect needs an expiry -- use a manual lifetime for an Effect that never expires by itself.");
-      return { kind: "none" };
-    }
+    if (input.kind === "none") return { kind: "none" };
     if (input.kind === "at") {
-      if (manual) return fail("invalid", "A manual Effect has no automatic expiry.");
       const moment = LiveGameMomentSchema.safeParse(input.moment);
       if (!moment.success) return fail("invalid", "Choose a Night or Day for the Effect to expire.");
       if (!current) return fail("expiryUnresolvable", "Timed Effects start once live play begins.");
@@ -492,18 +495,35 @@ export function planEffectTransaction(
     return fail("invalid", "Invalid Effect expiry.");
   };
 
-  /** A resolved expiry for `lifetime` anchored at `anchor`, strictly future. */
-  const resolveExpiry = (lifetime: EffectLifetime, anchor: GameMoment | undefined): EffectExpiry | Refused => {
-    const resolved = resolveEffectExpiry(lifetime, anchor && (anchor.phase === "setup") ? undefined : anchor);
+  /** SOL-10B-R2: at gameplay Apply the declared lifetime and the INITIAL
+   * expiry are coherent -- manual starts with none, a timed lifetime starts
+   * with an exact future end. (It may be changed later by an Update.) */
+  const checkInitialExpiry = (input: unknown, lifetime: EffectLifetime): EffectExpiry | Refused => {
+    const expiry = checkExpiryInput(input);
+    if (isRefused(expiry)) return expiry;
+    const manual = lifetime.kind === "manual";
+    if (manual && expiry.kind !== "none") return fail("invalid", "A manual Effect starts with no automatic end -- schedule its end with an update once it is applied.");
+    if (!manual && expiry.kind === "none") return fail("expiryUnresolvable", "A timed Effect starts with an exact end -- use a manual lifetime for an Effect that never ends by itself.");
+    return expiry;
+  };
+
+  /**
+   * Derives the exact expiry from the DECLARED facts: `lifetime` anchored at
+   * the live `appliedAt` it was applied at. Manual -> none. A timed lifetime
+   * with no live applied moment (Setup, or none recorded) cannot be derived.
+   * A derived end at or before now is refused (SOL-10B-R3), never kept.
+   */
+  const deriveExpiry = (lifetime: EffectLifetime, appliedAt: GameMoment | undefined): EffectExpiry | Refused => {
+    const anchor = appliedAt && appliedAt.phase !== "setup" ? appliedAt : undefined;
+    const resolved = resolveEffectExpiry(lifetime, anchor);
     if (!resolved) {
-      if (isPlainObject(lifetime) && lifetime.kind !== "manual" && !current) {
-        return fail("expiryUnresolvable", "Timed Effects start once live play begins -- use a manual Effect during Setup.");
-      }
-      return fail(isPlainObject(lifetime) && ["untilDawn", "untilNextNight", "throughFollowingDay", "nights", "days"].includes(String(lifetime.kind))
-        ? "expiryUnresolvable" : "invalid", "This Effect's lifetime cannot be resolved to an exact expiry.");
+      const timed = isPlainObject(lifetime) && ["untilDawn", "untilNextNight", "throughFollowingDay", "nights", "days"].includes(String(lifetime.kind));
+      if (timed && !current) return fail("expiryUnresolvable", "Timed Effects start once live play begins -- use a manual Effect during Setup.");
+      if (timed && !anchor) return fail("expiryUnresolvable", "The exact end cannot be derived without a Night or Day applied moment -- supply the exact end.");
+      return fail(timed ? "expiryUnresolvable" : "invalid", "This Effect's lifetime cannot be resolved to an exact expiry.");
     }
     if (resolved.kind === "at" && momentOrdinal(resolved.moment) <= currentOrdinal) {
-      return fail("expiryUnresolvable", "That Effect would already have expired.");
+      return fail("expiryUnresolvable", "By these facts the Effect would already have ended -- remove it as recorded in error, or supply its current exact end.");
     }
     return resolved;
   };
@@ -560,8 +580,19 @@ export function planEffectTransaction(
       sourceParticipant = source.ref;
     }
     if (!isPlainObject(spec.lifetime)) return fail("invalid", "Choose how long the Effect lasts.");
-    const anchor = appliedAt && appliedAt.phase !== "setup" ? appliedAt : (current ?? undefined);
-    const expiry = spec.expiry !== undefined ? checkExpiryInput(spec.expiry, spec.lifetime) : resolveExpiry(spec.lifetime, anchor);
+    // SOL-10B-R7: the `manual:` namespace is reserved for the Storyteller's
+    // quick Effect of exactly that type -- `manual:<type>`, a manual declared
+    // lifetime, no source participant or character. An ability-shaped Effect
+    // (sourced, or timed) can never claim it. (Also schema-enforced.)
+    if (id.startsWith(MANUAL_EFFECT_ID_PREFIX) &&
+      (id !== MANUAL_EFFECT_ID_PREFIX + type || spec.lifetime.kind !== "manual" || spec.source !== undefined || spec.sourceCharacter !== undefined)) {
+      return fail("invalid", "Ids beginning \"manual:\" are reserved for the Storyteller's quick Effect of that type.");
+    }
+    // Gameplay Apply: initial expiry coherent with the declared lifetime.
+    // Correction Apply: an explicit expiry is authoritative (SOL-10B-R2/R3).
+    const expiry = spec.expiry !== undefined
+      ? (correction ? checkExpiryInput(spec.expiry) : checkInitialExpiry(spec.expiry, spec.lifetime))
+      : deriveExpiry(spec.lifetime, appliedAt);
     if (isRefused(expiry)) return expiry;
     const parameters = mergeParameters(undefined, spec.parameters, false);
     if (isRefused(parameters)) return parameters;
@@ -579,22 +610,29 @@ export function planEffectTransaction(
     });
   };
 
+  /** SOL-10B-R9: the Effect identity (target participant + EffectId) each
+   * History record explains, parallel to `history`. */
+  const historyIdentity: { playerId: PlayerId; effectId: EffectId }[] = [];
+
   /** Records one lifecycle operation's History (Live Play only). */
   const record = (
-    target: CurrentParticipantRef,
+    target: { player: STPlayerRecord; ref: CurrentParticipantRef },
+    effectId: EffectId,
     operation: EffectHistoryOperation,
     change: HistoryRecord["change"],
-    applied?: EffectRecord,
   ) => {
     if (!live || !current) return;
-    // Mutation provenance: the transaction's own Mutation Context. Only an
-    // Apply -- whose mutation IS the Effect's origin -- falls back to that
-    // origin; a later update/removal never silently inherits it.
-    const mutationProvenance = provenance ?? (operation === "apply" && applied ? provenanceOf(applied) : undefined);
+    // SOL-10B-R8: mutation provenance ("what caused THIS lifecycle
+    // mutation") comes only from the transaction's Mutation Context, for
+    // every operation. The Effect's ORIGIN is already inside the snapshot
+    // (sourceParticipant/sourceCharacter) and is never copied here; with no
+    // Mutation Context, no provenance is stored.
+    const mutationProvenance = provenance;
+    historyIdentity.push({ playerId: target.player.id, effectId });
     history.push(cloneOwned({
       id: ids.historyId(),
       category: "effect" as const,
-      participant: target,
+      participant: target.ref,
       moment: { ...current },
       change,
       effectOperation: operation,
@@ -642,7 +680,7 @@ export function planEffectTransaction(
         }
         setList([...list, built]);
         appliedEffectIds.push(built.id);
-        record(target.ref, "apply", { kind: "added", item: built }, built);
+        record(target, built.id, "apply", { kind: "added", item: built });
         break;
       }
       case "remove":
@@ -652,7 +690,7 @@ export function planEffectTransaction(
         const existing = findExisting(intent.effectId);
         if (!existing) break;
         setList(list.filter((effect) => effect.id !== existing.id));
-        record(target.ref, "remove", { kind: "removed", item: existing });
+        record(target, existing.id, "remove", { kind: "removed", item: existing });
         break;
       }
       case "suppress":
@@ -663,7 +701,7 @@ export function planEffectTransaction(
         if (existing.state === state) break; // already current: no-op
         const next = { ...existing, state };
         setList(list.map((effect) => (effect.id === existing.id ? next : effect)));
-        record(target.ref, intent.kind, { kind: "value", from: existing, to: next });
+        record(target, existing.id, intent.kind, { kind: "value", from: existing, to: next });
         break;
       }
       case "update": {
@@ -680,7 +718,9 @@ export function planEffectTransaction(
         }
         const next: EffectRecord = { ...existing };
         if (changes.expiry !== undefined) {
-          const expiry = checkExpiryInput(changes.expiry, existing.lifetime);
+          // SOL-10B-R2: the authoritative end may be extended, shortened or
+          // removed; the declared lifetime is never rewritten by an Update.
+          const expiry = checkExpiryInput(changes.expiry);
           if (isRefused(expiry)) return at(expiry);
           next.expiry = expiry;
         }
@@ -700,7 +740,7 @@ export function planEffectTransaction(
         if (isRefused(final)) return at(final);
         if (sameSnapshot(existing, final)) break; // nothing changes: no-op
         setList(list.map((effect) => (effect.id === existing.id ? final : effect)));
-        record(target.ref, "update", { kind: "value", from: existing, to: final });
+        record(target, existing.id, "update", { kind: "value", from: existing, to: final });
         break;
       }
       case "correctAmend": {
@@ -733,17 +773,20 @@ export function planEffectTransaction(
           const appliedAt = checkAppliedAt(amendment.appliedAt); if (isRefused(appliedAt)) return at(appliedAt);
           next.appliedAt = appliedAt;
         }
-        const lifetimeChanged = amendment.lifetime !== undefined && !sameSnapshot(amendment.lifetime, existing.lifetime);
         if (amendment.lifetime !== undefined) {
           if (!isPlainObject(amendment.lifetime as unknown)) return at(fail("invalid", "Choose how long the Effect lasts."));
           next.lifetime = cloneOwned(amendment.lifetime as EffectLifetime);
         }
+        // SOL-10B-R3: correcting the declared facts an expiry was derived
+        // from (applied moment or lifetime) re-derives it -- an old derived
+        // end is never silently kept. An explicitly supplied expiry is
+        // authoritative instead (R2), still temporally valid.
+        const declaredFactsChanged = !sameSnapshot(next.lifetime, existing.lifetime) || !sameSnapshot(next.appliedAt, existing.appliedAt);
         if (amendment.expiry !== undefined) {
-          const expiry = checkExpiryInput(amendment.expiry, next.lifetime); if (isRefused(expiry)) return at(expiry);
+          const expiry = checkExpiryInput(amendment.expiry); if (isRefused(expiry)) return at(expiry);
           next.expiry = expiry;
-        } else if (lifetimeChanged) {
-          const anchor = next.appliedAt && next.appliedAt.phase !== "setup" ? next.appliedAt : (current ?? undefined);
-          const expiry = resolveExpiry(next.lifetime, anchor); if (isRefused(expiry)) return at(expiry);
+        } else if (declaredFactsChanged) {
+          const expiry = deriveExpiry(next.lifetime, next.appliedAt); if (isRefused(expiry)) return at(expiry);
           next.expiry = expiry;
         }
         if (amendment.parameters !== undefined) {
@@ -764,7 +807,7 @@ export function planEffectTransaction(
         if (isRefused(final)) return at(final);
         if (sameSnapshot(existing, final)) break;
         setList(list.map((effect) => (effect.id === existing.id ? final : effect)));
-        record(target.ref, "update", { kind: "value", from: existing, to: final });
+        record(target, existing.id, "update", { kind: "value", from: existing, to: final });
         break;
       }
       default:
@@ -781,12 +824,27 @@ export function planEffectTransaction(
   // True no-op: no Current State change and no History (Setup records none,
   // so Current State alone decides there).
   if (Object.keys(effects).length === 0) return { ok: true, changed: false };
+  // SOL-10B-R9: Effect History explains COMMITTED Current State changes; it
+  // is not an Effect event window. An Effect identity whose pre-transaction
+  // and final snapshots are identical (apply X -> remove X, suppress X ->
+  // resume X, ...) changed nothing, so every record this transaction made
+  // for it is dropped -- History never claims X existed in committed state.
+  const snapshotOf = (list: readonly EffectRecord[] | undefined, effectId: EffectId) =>
+    list?.find((effect) => effect.id === effectId);
+  const netZero = (playerId: PlayerId, effectId: EffectId) => sameSnapshot(
+    snapshotOf(ownPlayer(game, playerId)?.effects, effectId),
+    snapshotOf(working.get(playerId), effectId),
+  );
+  const committedHistory = history.filter((_, index) => {
+    const identity = historyIdentity[index]!;
+    return !netZero(identity.playerId, identity.effectId);
+  });
   return {
     ok: true,
     changed: true,
     plan: {
       effects,
-      history,
+      history: committedHistory,
       appliedEffectIds: appliedEffectIds.filter((id) => Object.values(effects).some((list) => list.some((e) => e.id === id))),
     },
   };

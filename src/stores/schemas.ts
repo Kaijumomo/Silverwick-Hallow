@@ -213,20 +213,50 @@ const EffectRecordObject = z.object({
   parameters: EffectParametersSchema.optional(),
 });
 
-/** Lifecycle consistency: a manual lifetime never expires automatically; a
- * finite lifetime always has an exact boundary or an explicitly unresolved
- * legacy one. Never repaired -- a violation fails validation. */
-function checkEffectLifecycle(effect: { lifetime: { kind: string }; expiry: { kind: string } }, ctx: z.RefinementCtx): void {
-  const manual = effect.lifetime.kind === "manual";
-  if (manual && effect.expiry.kind !== "none") {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a manual Effect has no automatic expiry", path: ["expiry"] });
+/** Phase 10B (SOL-10B-R7): Effect ids beginning `manual:` are reserved for
+ * the Storyteller quick-control Effect of exactly that type. */
+export const MANUAL_EFFECT_ID_PREFIX = "manual:";
+
+/**
+ * Record-level Effect validity. Never repaired -- a violation fails
+ * validation.
+ *
+ * SOL-10B-R2 (truth hierarchy): `expiry` is the sole mechanical duration
+ * authority; `lifetime` is the duration DECLARED when the Effect was
+ * applied. Once an Effect exists, `none` and `at` are valid authoritative
+ * expiries whatever the declared lifetime (an ordinary Update may extend,
+ * shorten or end the automatic timer without rewriting what was declared).
+ * The only record-level rule left is: `unresolved` -- migrated incomplete
+ * legacy state -- exists only for a finite (non-manual) declared lifetime.
+ * Initial coherence (manual -> none, finite -> exact `at`) is enforced where
+ * an Effect is applied (the planner), not here.
+ *
+ * SOL-10B-R7 (manual namespace): a `manual:` id must be exactly
+ * `manual:<type>`, declare a manual lifetime, and carry no source
+ * participant or source character. Its authoritative expiry may still be
+ * scheduled later (R2).
+ */
+function checkEffectRecord(
+  effect: { id: string; type: string; lifetime: { kind: string }; expiry: { kind: string }; sourceParticipant?: unknown; sourceCharacter?: unknown },
+  ctx: z.RefinementCtx,
+): void {
+  if (effect.expiry.kind === "unresolved" && effect.lifetime.kind === "manual") {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "an unresolved expiry exists only for a finite legacy lifetime", path: ["expiry"] });
   }
-  if (!manual && effect.expiry.kind === "none") {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a finite Effect needs a resolved (or explicitly unresolved) expiry", path: ["expiry"] });
+  if (effect.id.startsWith(MANUAL_EFFECT_ID_PREFIX)) {
+    if (effect.id !== MANUAL_EFFECT_ID_PREFIX + effect.type) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a manual: Effect id is reserved for the Storyteller quick Effect of exactly its type", path: ["id"] });
+    }
+    if (effect.lifetime.kind !== "manual") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a Storyteller quick Effect declares a manual lifetime", path: ["lifetime"] });
+    }
+    if (effect.sourceParticipant !== undefined || effect.sourceCharacter !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a Storyteller quick Effect has no source", path: ["sourceParticipant"] });
+    }
   }
 }
 
-export const EffectRecordSchema = EffectRecordObject.strict().superRefine(checkEffectLifecycle);
+export const EffectRecordSchema = EffectRecordObject.strict().superRefine(checkEffectRecord);
 
 export const ReminderRecordSchema = z.object({
   id: z.string().min(1),
@@ -644,7 +674,60 @@ const STPlayerRecordPersistedSchema = STPlayerRecordSchema.extend({
   if (player.isEmpty !== true && player.participantId === undefined) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "an occupied seat must carry a participant identity", path: ["participantId"] });
   }
+  // Phase 10B (SOL-10B-R1): an Effect belongs to a participation instance,
+  // so an empty seat never owns one. Rejected, never repaired.
+  if (player.isEmpty === true && player.effects.length > 0) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "an empty seat cannot own Effects", path: ["effects"] });
+  }
 });
+
+/** Timeline ordinal (Setup 0, Night N = 2N-1, Day N = 2N) -- the same
+ * ordering lifeEvents.ts uses, restated here so the schema module stays
+ * dependency-free. */
+const ordinalOf = (moment: { phase: string; day: number }): number =>
+  moment.phase === "night" ? 2 * moment.day - 1 : moment.phase === "day" ? 2 * moment.day : 0;
+
+/**
+ * Phase 10B (SOL-10B-R4): Effect temporal coherence against the game's own
+ * current moment -- enforced here, at the persisted authoritative game
+ * boundary every Current State, Undo snapshot and recovered checkpoint
+ * passes. Never repaired: phase rollover must never be what conceals an
+ * already-invalid overdue Effect.
+ *
+ *  - Night/Day: every `at` expiry is strictly after the current moment; an
+ *    `appliedAt` is never after it (a Setup marker applied at {setup, 0}
+ *    legitimately survives into Live Play).
+ *  - Setup: no `at` expiry at all; a present `appliedAt` is {setup, 0}.
+ *  - Ended: the final snapshot is frozen; no live moment is manufactured and
+ *    this rule does not apply.
+ */
+function checkEffectTemporalCoherence(
+  game: { phase: string; day: number; players: Record<string, { effects: { expiry: { kind: string; moment?: { phase: string; day: number } }; appliedAt?: { phase: string; day: number } }[] }> },
+  ctx: z.RefinementCtx,
+): void {
+  if (game.phase === "ended") return;
+  const live = game.phase === "night" || game.phase === "day";
+  const current = ordinalOf(game);
+  for (const [key, player] of Object.entries(game.players)) {
+    player.effects.forEach((effect, index) => {
+      const path = ["players", key, "effects", index];
+      if (effect.expiry.kind === "at" && effect.expiry.moment) {
+        if (!live) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a Setup Effect has no timed expiry", path: [...path, "expiry"] });
+        } else if (ordinalOf(effect.expiry.moment) <= current) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: "an Effect's expiry must be after the current Game Moment", path: [...path, "expiry"] });
+        }
+      }
+      const applied = effect.appliedAt;
+      if (!applied) return;
+      if (!live && (applied.phase !== "setup" || applied.day !== 0)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a Setup Effect is applied at the Setup moment", path: [...path, "appliedAt"] });
+      } else if (live && ordinalOf(applied) > current) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "an Effect cannot have been applied after the current Game Moment", path: [...path, "appliedAt"] });
+      }
+    });
+  }
+}
 
 const hasOwn = (record: object, key: string): boolean => Object.prototype.hasOwnProperty.call(record, key);
 const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
@@ -719,7 +802,10 @@ export const StorytellerGamePersistedSchema = z.preprocess((raw, ctx) => {
   storytellerUid: z.string(),
   players: z.record(z.string(), STPlayerRecordPersistedSchema),
   pendingPlayers: z.record(z.string(), z.string()).default({}),
-}).superRefine(checkSeatGeometry));
+}).superRefine((game, ctx) => {
+  checkSeatGeometry(game, ctx);
+  checkEffectTemporalCoherence(game, ctx);
+}));
 
 export const GuardStampSchema = z.object({
   token: z.string().min(1),

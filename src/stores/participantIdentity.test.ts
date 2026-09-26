@@ -441,7 +441,12 @@ describe("Phase 9R.2: stored snapshots are owned (Section 23)", () => {
     liveGame();
     const alice = idOf("Alice");
     const carol = idOf("Carol");
-    const effectId = state().addEffect(carol, { type: "poisoned", sourcePlayer: alice, lifetime: { kind: "manual" } })!;
+    // Phase 10B (SOL-10B-R8): History provenance comes only from Mutation
+    // Context, so it is supplied explicitly here.
+    const bound = (id: string) => ({ playerId: id, participantId: game().players[id]!.participantId! });
+    const result = state().resolveEffects({ context: { provenance: { sourcePlayer: alice } },
+      intents: [{ kind: "apply", target: bound(carol), effect: { type: "poisoned", source: bound(alice), lifetime: { kind: "manual" } } }] });
+    const effectId = result.ok ? result.effectIds[0]! : "";
     const effectRef = game().players[carol]!.effects.find((e) => e.id === effectId)!.sourceParticipant!;
     const historyRef = game().history.at(-1)!.provenance!.sourceParticipant!;
     expect(historyRef).toEqual(effectRef);

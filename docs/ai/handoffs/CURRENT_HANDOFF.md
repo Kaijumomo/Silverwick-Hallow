@@ -1,7 +1,9 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-09-26\
-**State:** Phase 10B implemented on `dev/phase-10b` (store v20); awaiting Luna verification. Phase 10B is **not closed**.
+**State:** Phase 10B implemented on `dev/phase-10b` (store v20); Opus architecture remediation SOL-10B-R1…R9 applied; awaiting targeted Opus re-check. Phase 10B is **not closed**.
+
+Remediation summary: empty seats own no Effects; `expiry` is the sole mechanical duration authority (declared `lifetime` is metadata; Update may change expiry, only correction changes lifetime); corrections re-derive expiry from corrected facts and refuse already-ended results; game-level Effect temporal validity is schema-enforced; suppression is an explicit decision, not derived applicability; resolving a legacy unresolved end is a correction; `manual:` ids are reserved; mutation provenance comes only from Mutation Context; net-zero Effect identities leave no History. Deferred: OPUS-10B-010 (correcting origin to a departed participant).
 
 ## Phase 10B implementation status
 
@@ -120,7 +122,7 @@ Operational status: production Firebase rules were **not** deployed by the hotfi
 ## Phase 10 roadmap
 
 - **10A Life Transition Semantics + visual life-state grammar — CLOSED**
-- **10B Effect Lifecycle + visual Effect indicators — IMPLEMENTED, awaiting verification**
+- **10B Effect Lifecycle + visual Effect indicators — IMPLEMENTED + Opus remediation applied, awaiting re-check**
 - 10C Reminder Workflow + visual Reminder tokens
 - 10D Role Transitions
 - 10E Alignment Transitions
@@ -168,6 +170,6 @@ At the start of any new session, verify the exact branch SHA and read:
 
 ## Immediate next task
 
-Luna mechanical verification of the Phase 10B implementation checkpoint on
-`dev/phase-10b` (verify the exact commit SHA), then Astra adversarial review.
-Implementation completion is not closure.
+Targeted Opus re-check of the SOL-10B-R1…R9 remediation on `dev/phase-10b`
+(verify the exact commit SHA); then Luna mechanical verification and Astra
+adversarial review. Implementation completion is not closure.
