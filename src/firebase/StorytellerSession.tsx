@@ -39,6 +39,18 @@ export function StorytellerSession() {
 
 const DEV = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true;
 
+/** Storyteller-visible diagnostic: expose only the failure category, Firebase
+ * error code, and attributed operation/path. The raw SDK error text stays
+ * development-only so production troubleshooting can identify the denied
+ * rule without surfacing arbitrary backend error content. */
+function sanitizedTechnicalDetails(failure: { category: string; diagnostic: string }): string {
+  const parts = failure.diagnostic.split(" | ");
+  const code = parts.find(part => part.startsWith("code="));
+  const operation = parts.find(part => part.startsWith("operation="));
+  const boundedOperation = operation ? operation.slice(0, 600) : undefined;
+  return [failure.category, code, boundedOperation].filter(Boolean).join(" | ");
+}
+
 /**
  * Compact, in-flow multiplayer connection status for the Storyteller. It
  * never overlays Grimoire controls: callers place it in normal document flow.
@@ -51,8 +63,9 @@ const DEV = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV =
  * - that close also failed: Try ending again, plus -- only when offered for a
  *   lobby the server proved never reached live -- Leave multiplayer, keeping
  *   the game offline (local only; re-proven when clicked).
- * Messages are plain language; the Firebase operation/path diagnostic is
- * shown only in development builds.
+ * Messages are plain language. A sanitized category/code/operation diagnostic
+ * is available behind Technical details in every build; raw SDK error text is
+ * appended only in development builds.
  */
 export function ConnectionStatus() {
   const lobby = useStorytellerStore(s => s.lobby);
@@ -98,15 +111,16 @@ export function ConnectionStatus() {
   } else {
     title = status === "connecting" ? "Connecting to the lobby…" : "Reconnecting to the lobby…";
   }
+  const technicalDetails = failure ? sanitizedTechnicalDetails(failure) : null;
   return <div className="connection-status" data-tone="error" role="alert">
     <strong>{title}</strong>
     <span className="connection-status-message">{message}</span>
     {actions.length > 0 && <span className="connection-status-actions">
       {actions.map(action => <button key={action.label} type="button" className={`btn btn-sm${action.danger ? " btn-danger" : ""}`} disabled={busy} onClick={action.onClick}>{action.label}</button>)}
     </span>}
-    {DEV && failure?.diagnostic && <details className="connection-status-diagnostic">
+    {technicalDetails && <details className="connection-status-diagnostic">
       <summary>Technical details</summary>
-      <code>{failure.category}: {failure.diagnostic}</code>
+      <code>{DEV && failure?.diagnostic ? `${technicalDetails} | raw=${failure.diagnostic}` : technicalDetails}</code>
     </details>}
   </div>;
 }
