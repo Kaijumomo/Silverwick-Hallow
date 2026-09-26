@@ -372,6 +372,7 @@ describe("Phase 9D.2: extensibility", () => {
     const hypotheticalItem = {
       id: "future-1", type: "hexed", sourceCharacter: "witch", note: "a made-up future ability",
       lifetime: { kind: "days" as const, count: 2 },
+      state: "active" as const, expiry: { kind: "at" as const, moment: { phase: "night" as const, day: 3 } },
     };
     const updated = recordIfLive(g, { ...g, players: { ...g.players, [id]: { ...before, effects: [...before.effects, hypotheticalItem] } } }, () => ({
       category: "effect",

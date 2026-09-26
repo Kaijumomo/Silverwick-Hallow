@@ -555,7 +555,7 @@ describe("migrateStoreState", () => {
         players: { a: legacyPlayer({ statuses: { [kind]: true } }) },
       }), undoStack: [] };
       const p = migratedPlayer(state);
-      expect(p.effects).toEqual([{ id: `manual:${kind}`, type: kind, lifetime: { kind: "manual" } }]);
+      expect(p.effects).toEqual([{ id: `manual:${kind}`, type: kind, lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }]);
       expect(p.statuses).toEqual({});
     }
   );
@@ -804,7 +804,7 @@ describe("migrateStoreState", () => {
     // legacy string Reminder converted to a structured record.
     const undoPlayer = result.undoStack[0]!.players.a!;
     expect(undoPlayer.actualAlignment).toBe("evil");
-    expect(undoPlayer.effects).toEqual([{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" } }]);
+    expect(undoPlayer.effects).toEqual([{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }]);
     expect(undoPlayer.reminders).toEqual([{ id: "legacy-a-0", label: "Chosen", lifetime: { kind: "manual" } }]);
   });
 
@@ -919,7 +919,7 @@ describe("migrateStoreState", () => {
 
       for (const entry of [result.game, result.undoStack[0]!]) {
         expect(entry.players.a!.actualAlignment).toBe("good"); // v13->v14: derived from the resolvable chef role
-        expect(entry.players.a!.effects).toEqual([{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" } }]);
+        expect(entry.players.a!.effects).toEqual([{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }]);
         expect(entry.players.a!.reminders).toEqual([{ id: "legacy-a-0", label: "Poisoned Reminder", lifetime: { kind: "manual" } }]);
         expect(entry.players.a!.statuses).toEqual({}); // the legacy boolean is cleared, never left as stale truth
         expect(entry.history).toEqual([]); // v13->v15: nothing to fabricate for a game that never tracked it
@@ -944,11 +944,11 @@ describe("migrateStoreState", () => {
       expect(takeMigrationResetFlag()).toBe(false);
 
       for (const entry of [result.game, result.undoStack[0]!]) {
-        // The v14 structured live-state fields pass through completely
-        // untouched -- migration must never re-derive or re-convert data
-        // that is already in its final, current-version shape.
+        // The v14 structured live-state fields are never re-derived or
+        // re-converted. (Phase 10B: the v19 -> v20 step only adds each
+        // Effect's lifecycle -- active, and no expiry for a manual one.)
         expect(entry.players.a!.actualAlignment).toBe("good");
-        expect(entry.players.a!.effects).toEqual([{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" } }]);
+        expect(entry.players.a!.effects).toEqual([{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }]);
         expect(entry.players.a!.reminders).toEqual([{ id: "legacy-a-0", label: "Poisoned Reminder", lifetime: { kind: "manual" } }]);
         expect(entry.history).toEqual([]);
         expect(entry.informationDeliveries).toEqual([]);

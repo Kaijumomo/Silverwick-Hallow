@@ -8,6 +8,15 @@ import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { currentGameMoment, manualEffectId } from "./effects";
 import { cloneOwned, durableProvenance, type MutationContext, provenanceOf, recordIfLive, sameSnapshot } from "./history";
+import {
+  applyEffectPlan,
+  planEffectExpiry,
+  planEffectTransaction,
+  type EffectParticipantBinding,
+  type EffectRefusal,
+  type EffectTransaction,
+} from "./effectResolution";
+import { GAME_SCHEMA_VERSION } from "./schemas";
 import { newParticipantId, participantIdAppearsIn, participantRefOf, recordedInformationValues } from "./participants";
 import { migrateGameEntry } from "./gameMigration";
 import { freshLifeEventWindow, pruneLifeEventWindow } from "./lifeEvents";
@@ -45,7 +54,6 @@ import type {
   BehaviorMode,
   EffectId,
   EffectInput,
-  EffectRecord,
   ExecutionOutcome,
   ExileOutcome,
   GrimoireMode,
@@ -76,7 +84,7 @@ const UNDO_LIMIT = 20;
  * `merge` (Phase 9C.2B.2) passes to migrateStoreState when Zustand's own
  * persist middleware skips calling `migrate` outright, which it does
  * whenever the persisted version already equals this one. */
-const STORE_VERSION = 19;
+const STORE_VERSION = 20;
 
 let _migrationResetFlag = false;
 /** Returns true (once) when migrate() discarded incompatible persisted state. */
@@ -211,6 +219,13 @@ export type RecordInformationDeliveryResult =
 export type LifeCommandResult =
   | { ok: true; changed: boolean; eventIds: LifeEventId[] }
   | LifeRefusal;
+
+/** Phase 10B: result of every Effect command. `changed: false` is a true
+ * no-op (nothing committed); a refusal changes nothing either. `effectIds`
+ * are the Effects the transaction created, in intent order. */
+export type EffectCommandResult =
+  | { ok: true; changed: boolean; effectIds: EffectId[] }
+  | EffectRefusal;
 
 export type LobbyConnection = {
   code: string;
@@ -415,14 +430,33 @@ export type StorytellerStore = {
    * dead. */
   setGhostVote: (id: PlayerId, ghostVote: boolean, context?: MutationContext) => void;
   setAbilityUsed: (id: PlayerId, used: boolean) => void;
+  // --- Phase 10B: Effects -----------------------------------------------------
+  /** THE authoritative Effect writer. Plans one atomic EffectTransaction
+   * (effectResolution.ts) -- one or more ordered, already-resolved Effect
+   * intents, gameplay or correction, optionally correlated by
+   * `resolutionId` -- and commits an accepted plan as exactly one game
+   * replacement: every affected participant's effects[] plus History, one
+   * Undo entry, one localSeq step. A refusal or true no-op changes nothing.
+   * Every other Effect command below wraps this; a future ability engine
+   * submits its resolved intents here too. */
+  resolveEffects: (transaction: EffectTransaction) => EffectCommandResult;
+  /** The Storyteller quick control: turns exactly the deterministic manual
+   * Effect `manual:<type>` of the bound participant on or off -- never any
+   * other Effect of the same type. `on` for a suppressed manual Effect
+   * resumes it. */
+  setManualEffect: (target: EffectParticipantBinding, type: string, on: boolean, context?: MutationContext) => EffectCommandResult;
+  /** @deprecated Phase 10B compatibility adapter: setManualEffect bound to
+   * whoever occupies `id` right now. */
   setStatus: (id: PlayerId, status: string, on: boolean) => void;
-  /** Phase 9D.1: centralized structured-effect commands. `addEffect`
-   * upserts by id (a fresh id is allocated when none is given) and
-   * returns the id actually used, or null if the player doesn't exist.
-   * Phase 9R.2: a live `sourcePlayer` is stored as a durable
-   * `sourceParticipant` snapshot; null is also returned (nothing changes)
-   * when it names no current participant. */
+  /** @deprecated Phase 10B compatibility adapter over the Apply intent
+   * (bound to the current occupant and, for `sourcePlayer`, the current
+   * source occupant). Apply semantics: returns the id when the Effect was
+   * created or an identical one already exists; null when refused --
+   * including different content under an existing id (never an upsert), a
+   * timed lifetime during Setup, or an `appliedAt` other than now. */
   addEffect: (id: PlayerId, effect: EffectInput) => EffectId | null;
+  /** @deprecated Phase 10B compatibility adapter over the Remove intent:
+   * removes exactly that one Effect instance. */
   removeEffect: (id: PlayerId, effectId: EffectId) => void;
   /** Phase 9D.1: centralized structured-reminder commands, backing the
    * existing per-token Storyteller reminder workflow. Phase 9R.2: same
@@ -543,7 +577,7 @@ const alignmentHistoryValue = (value: Alignment | undefined): Record<string, unk
   value === undefined ? {} : { actualAlignment: value };
 
 /**
- * Phase 9R.2: converts an owned Effect/Reminder input's live `sourcePlayer`
+ * Phase 9R.2: converts an owned Reminder input's live `sourcePlayer`
  * into the durable `sourceParticipant` snapshot of whoever occupies that
  * seat right now (participantRefOf). Returns null -- the command must then
  * refuse atomically -- when the named source is not a current participant
@@ -551,8 +585,10 @@ const alignmentHistoryValue = (value: Alignment | undefined): Record<string, unk
  * source, so silently dropping it or storing an unknowable one would both
  * misrepresent what happened. Any `sourceParticipant` present on the input
  * at runtime is discarded; a caller can never supply its own snapshot.
+ * (Phase 10B: Effects no longer use this -- their sources are bound and
+ * resolved by the Effect planner, effectResolution.ts.)
  */
-const sourcedRecord = <T extends EffectRecord | ReminderRecord>(
+const sourcedRecord = <T extends ReminderRecord>(
   game: StorytellerLobbyRecord,
   input: Omit<T, "sourceParticipant"> & { sourcePlayer?: PlayerId; sourceParticipant?: unknown }
 ): T | null => {
@@ -617,6 +653,20 @@ const samePlayerApartFromEpoch = (existing: STPlayerRecord, next: STPlayerRecord
  */
 const ownPlayer = (game: Pick<StorytellerLobbyRecord, "players">, id: PlayerId): STPlayerRecord | undefined =>
   Object.prototype.hasOwnProperty.call(game.players, id) ? game.players[id] : undefined;
+
+/**
+ * Phase 10B: binds a live PlayerId to the participation instance occupying
+ * it RIGHT NOW -- how the compatibility adapters (setStatus/addEffect/
+ * removeEffect) centrally capture the ParticipantId the Effect planner
+ * requires. Null for a nonexistent/inherited id or an empty seat. UI callers
+ * bind the participant they rendered instead, so a seat replaced in between
+ * is refused as stale.
+ */
+const currentBinding = (game: StorytellerLobbyRecord | null, id: PlayerId): EffectParticipantBinding | null => {
+  const player = game && typeof id === "string" ? ownPlayer(game, id) : undefined;
+  if (!player || player.isEmpty || !player.participantId) return null;
+  return { playerId: player.id, participantId: player.participantId };
+};
 
 /**
  * Phase 9R.4 (B8 remediation #2): setSeatOrder() only REORDERS -- seat
@@ -850,7 +900,13 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // carrying a malformed window fails the schema gate below and resets
   // rather than being treated as v18 data. Within this block, any entry that
   // already carries v19 evidence is likewise left for the gate to judge.
-  if (fromVersion < 19) {
+  //
+  // v20 (Phase 10B): the authoritative Effect lifecycle and explicit game
+  // schema version evidence -- the same shared per-entry migration, applied
+  // identically to Current State and every Undo snapshot (never consulting
+  // History). An entry that already carries v20 evidence is left for the
+  // schema gate below to judge, never "repaired".
+  if (fromVersion < 20) {
     const customScripts = (s as { customScripts?: Record<string, Script> }).customScripts ?? {};
     // Phase 9R.1 Astra remediation (Finding A2): local persisted migration
     // uses "trusted" evidence -- this state's OWN saved customScripts,
@@ -950,6 +1006,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           preSeatOrder.push(id);
         }
         const game: StorytellerLobbyRecord = {
+          gameSchemaVersion: GAME_SCHEMA_VERSION,
           code: "",
           storytellerUid: "local",
           scriptId: script.id,
@@ -2108,85 +2165,74 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
-      // Phase 9D.1: the legacy Drunk/Poisoned/Protected toggle no longer
-      // writes the bare `statuses` bag. It manages exactly its own
-      // deterministic manual effect (manualEffectId(status)) -- never a
-      // differently-sourced effect of the same type, so a future
-      // ability-created effect (e.g. a Poisoner's "poisoned") can coexist
-      // with a manual Storyteller toggle of the same type.
-      setStatus: (id, status, on) => {
+      resolveEffects: (transaction) => {
         const { game, undoStack } = get();
-        if (!game) return;
-        const player = ownPlayer(game, id);
-        if (!player) return;
-        const effectId = manualEffectId(status);
-        const existing = player.effects.find((e) => e.id === effectId);
-        // Phase 9R.1 (Finding B5): currentGameMoment(game) is undefined once
-        // the game has ended -- omit `appliedAt` entirely rather than storing
-        // it as a literal `undefined` property (Firebase RTDB rejects that).
-        const appliedAt = currentGameMoment(game);
-        const newEffect: EffectRecord | null = on
-          ? { id: effectId, type: status, lifetime: { kind: "manual" as const }, ...(appliedAt ? { appliedAt } : {}) }
-          : null;
-        // A true no-op (re-toggling an already-active manual effect to the
-        // identical shape, or toggling off something not currently active)
-        // skips Current State replacement and Undo bookkeeping entirely
-        // (Phase 9D.4 Section 9) -- not only the History record.
-        if (on && existing && sameSnapshot(existing, newEffect)) return;
-        if (!on && !existing) return;
-        const others = player.effects.filter((e) => e.id !== effectId);
-        const effects = on ? [...others, newEffect!] : others;
-        const updatedGame = patchPlayer(game, id, { effects });
-        const recorded = recordIfLive(game, updatedGame, () => on
-          ? { category: "effect", playerId: id, change: { kind: "added", item: newEffect! } }
-          : { category: "effect", playerId: id, change: { kind: "removed", item: existing! } });
-        if (!recorded) return;
-        set({ undoStack: pushUndo(game, undoStack), game: recorded });
+        if (!game) return { ok: false, code: "invalid", message: "No game is open." };
+        // guard -> plan (pure) -> one commit. The planner binds every target,
+        // source and participant parameter to the participation instance the
+        // caller observed, validates each intent in order against the
+        // evolving working state, and returns a refusal, a true no-op, or the
+        // complete effects[] + History plan.
+        const result = planEffectTransaction(game, transaction);
+        if (!result.ok) return result;
+        if (!result.changed) return { ok: true, changed: false, effectIds: [] };
+        set({ undoStack: pushUndo(game, undoStack), game: applyEffectPlan(game, result.plan) });
+        return { ok: true, changed: true, effectIds: result.plan.appliedEffectIds };
+      },
+
+      // Phase 9D.1 / 10B: the Drunk/Poisoned/Protected quick control manages
+      // exactly its own deterministic manual Effect (manualEffectId(type)) --
+      // never a differently-sourced Effect of the same type, so an
+      // ability-created "poisoned" coexists with (and never blocks) the
+      // Storyteller's manual toggle.
+      setManualEffect: (target, type, on, context) => {
+        const { game } = get();
+        if (!game) return { ok: false, code: "invalid", message: "No game is open." };
+        const player = ownPlayer(game, target?.playerId);
+        const effectId = manualEffectId(type);
+        const existing = player?.participantId === target?.participantId
+          ? player?.effects.find((e) => e.id === effectId) : undefined;
+        const intent = on
+          ? existing
+            ? { kind: "resume" as const, target, effectId }
+            : { kind: "apply" as const, target, effect: { id: effectId, type, lifetime: { kind: "manual" as const } } }
+          : { kind: "remove" as const, target, effectId };
+        return get().resolveEffects({ intents: [intent], ...(context ? { context } : {}) });
+      },
+
+      setStatus: (id, status, on) => {
+        const target = currentBinding(get().game, id);
+        if (!target) return;
+        get().setManualEffect(target, status, on);
       },
 
       addEffect: (id, effect) => {
-        const { game, undoStack } = get();
+        const { game } = get();
         if (!game) return null;
-        const player = ownPlayer(game, id);
-        if (!player) return null;
-        const effectId = effect.id ?? newId();
+        const target = currentBinding(game, id);
+        if (!target || !effect || typeof effect !== "object") return null;
         // Phase 9R.1 (Finding B4/B5): own a deep-cloned, undefined-stripped
-        // snapshot of the caller's input -- a shallow `{ ...effect, id }`
-        // still shares nested objects (lifetime, appliedAt, ...) by
-        // reference with whatever the caller passed in.
-        const record = sourcedRecord<EffectRecord>(game, cloneOwned({ ...effect, id: effectId }));
-        if (!record) return null;
-        const existing = player.effects.find((e) => e.id === effectId);
-        // True no-op: an identical effect already exists under this id.
-        if (existing && sameSnapshot(existing, record)) return effectId;
-        const others = player.effects.filter((e) => e.id !== effectId);
-        const updatedGame = patchPlayer(game, id, { effects: [...others, record] });
-        const provenance = provenanceOf(record);
-        const recorded = recordIfLive(game, updatedGame, () => ({
-          category: "effect", playerId: id,
-          change: { kind: "added", item: record },
-          ...(provenance ? { provenance } : {}),
-        }));
-        if (!recorded) return null;
-        set({ undoStack: pushUndo(game, undoStack), game: recorded });
-        return effectId;
+        // snapshot of the caller's input before anything reads it.
+        const { id: effectId, sourcePlayer, appliedAt, sourceParticipant: _smuggled, ...rest } =
+          cloneOwned(effect) as EffectInput & { sourceParticipant?: unknown };
+        // A gameplay Apply takes hold NOW; an earlier applied moment is a
+        // correction, never silently accepted here.
+        if (appliedAt !== undefined && !sameSnapshot(appliedAt, currentGameMoment(game))) return null;
+        let source: EffectParticipantBinding | undefined;
+        if (sourcePlayer !== undefined) {
+          source = currentBinding(game, sourcePlayer) ?? undefined;
+          if (!source) return null;
+        }
+        const id_ = effectId ?? newId();
+        const result = get().resolveEffects({ intents: [{ kind: "apply", target,
+          effect: { ...rest, id: id_, ...(source ? { source } : {}) } }] });
+        return result.ok ? id_ : null;
       },
 
       removeEffect: (id, effectId) => {
-        const { game, undoStack } = get();
-        if (!game) return;
-        const player = ownPlayer(game, id);
-        const existing = player?.effects.find((e) => e.id === effectId);
-        if (!player || !existing) return;
-        const updatedGame = patchPlayer(game, id, { effects: player.effects.filter((e) => e.id !== effectId) });
-        const provenance = provenanceOf(existing);
-        const recorded = recordIfLive(game, updatedGame, () => ({
-          category: "effect", playerId: id,
-          change: { kind: "removed", item: existing },
-          ...(provenance ? { provenance } : {}),
-        }));
-        if (!recorded) return;
-        set({ undoStack: pushUndo(game, undoStack), game: recorded });
+        const target = currentBinding(get().game, id);
+        if (!target) return;
+        get().resolveEffects({ intents: [{ kind: "remove", target, effectId }] });
       },
 
       addReminder: (id, reminder) => {
@@ -2407,10 +2453,21 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // Phase 10A Section 7: the Life Event Window rolls over atomically
         // with the phase change -- the same game replacement and the same
         // Undo snapshot, so undoing the advance restores every pruned event.
-        // Expiry is not a Mutation of its own: no History is written for it.
+        // Window expiry is not a Mutation of its own: no History for it.
+        //
+        // Phase 10B Section 30: in that SAME replacement, every Effect whose
+        // exact expiry boundary is the destination moment (or earlier) is
+        // removed, with one "expire" History record each at the DESTINATION
+        // moment. Never a second commit, never an intermediate state; Undo of
+        // the advance restores the expired Effects with everything else.
+        const destination = { phase, day } as { phase: "night" | "day"; day: number };
+        const expired = planEffectExpiry(game, destination);
+        const advanced: StorytellerLobbyRecord = {
+          ...game, phase, day, lifeEventWindow: pruneLifeEventWindow(game.lifeEventWindow, phase, day),
+        };
         set({
           undoStack: pushUndo(game, undoStack),
-          game: { ...game, phase, day, lifeEventWindow: pruneLifeEventWindow(game.lifeEventWindow, phase, day) },
+          game: expired ? applyEffectPlan(advanced, expired) : advanced,
         });
         return { ok: true };
       },

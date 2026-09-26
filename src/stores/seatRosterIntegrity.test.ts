@@ -216,7 +216,7 @@ describe("Phase 9R.5 B: a malformed CURRENT-version (v18) local save never hydra
     await new Promise((resolve) => setTimeout(resolve, 0));
     const raw = localStorage.getItem(STORAGE_KEY)!;
     const blob = JSON.parse(raw) as { state: Record<string, unknown>; version: number };
-    expect(blob.version).toBe(19); // already current: Zustand's own migrate() is skipped
+    expect(blob.version).toBe(20); // already current: Zustand's own migrate() is skipped
     return blob;
   }
 

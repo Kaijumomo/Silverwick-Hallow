@@ -146,7 +146,60 @@ export const ParticipantRefSchema = z.discriminatedUnion("kind", [
  */
 const RetiredPlayerIdField = z.never().optional();
 
-export const EffectRecordSchema = z.object({
+/** Phase 10A: a Game Moment inside Live Play (Night/Day, day >= 1). Also the
+ * Phase 10B Effect expiry boundary. */
+export const LiveGameMomentSchema = z.object({
+  phase: z.enum(["night", "day"]),
+  day: z.number().int().positive(),
+}).strict();
+/** A ParticipantRef naming a real participation instance (never "legacy"). */
+export const CurrentParticipantRefSchema = ParticipantRefSchema.options[0];
+
+/**
+ * Phase 10B (store v20): the authoritative Effect lifecycle.
+ *
+ * `state` and `expiry` are REQUIRED on every current-version Effect -- a v20
+ * Effect missing them is malformed current-version data and is rejected,
+ * never defaulted here (v19 Effects receive them only from migration,
+ * gameMigration.ts). Every lifecycle object is `.strict()`.
+ */
+export const EffectStateSchema = z.enum(["active", "suppressed"]);
+export const EffectExpirySchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("none") }).strict(),
+  z.object({ kind: z.literal("at"), moment: LiveGameMomentSchema }).strict(),
+  z.object({ kind: z.literal("unresolved") }).strict(),
+]);
+
+/** A structured Effect parameter key: short and Firebase-key-safe. */
+export const EFFECT_PARAMETER_KEY = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+export const MAX_EFFECT_PARAMETERS = 16;
+export const MAX_EFFECT_PARAMETER_ITEMS = 20;
+export const MAX_EFFECT_TEXT = 500;
+/** STORED parameter values. Participant values are durable current-kind
+ * ParticipantRefs (never live PlayerIds, never "legacy" refs); lists are
+ * non-empty and bounded. */
+export const EffectParameterValueSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("participant"),
+    participants: z.array(CurrentParticipantRefSchema).min(1).max(MAX_EFFECT_PARAMETER_ITEMS) }).strict(),
+  z.object({ kind: z.literal("role"),
+    roleIds: z.array(z.string().min(1)).min(1).max(MAX_EFFECT_PARAMETER_ITEMS) }).strict(),
+  z.object({ kind: z.literal("alignment"), alignment: AlignmentSchema }).strict(),
+  z.object({ kind: z.literal("number"), value: z.number().finite() }).strict(),
+  z.object({ kind: z.literal("boolean"), value: z.boolean() }).strict(),
+  z.object({ kind: z.literal("text"), value: z.string().max(MAX_EFFECT_TEXT) }).strict(),
+]);
+export const EffectParametersSchema = z.record(z.string().regex(EFFECT_PARAMETER_KEY), EffectParameterValueSchema)
+  .superRefine((params, ctx) => {
+    const count = Object.keys(params).length;
+    if (count === 0 || count > MAX_EFFECT_PARAMETERS) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Effect parameters must hold 1-${MAX_EFFECT_PARAMETERS} entries (omit when none)` });
+    }
+  });
+
+/** The Effect's field shape. `EffectRecordSchema` below adds strictness and
+ * the lifecycle-consistency rule; History snapshot contracts pick from this
+ * object (a refined schema cannot be picked from). */
+const EffectRecordObject = z.object({
   id: z.string().min(1),
   type: z.string().min(1),
   sourceCharacter: z.string().min(1).optional(),
@@ -155,7 +208,25 @@ export const EffectRecordSchema = z.object({
   appliedAt: GameMomentSchema.optional(),
   lifetime: EffectLifetimeSchema,
   note: z.string().optional(),
+  state: EffectStateSchema,
+  expiry: EffectExpirySchema,
+  parameters: EffectParametersSchema.optional(),
 });
+
+/** Lifecycle consistency: a manual lifetime never expires automatically; a
+ * finite lifetime always has an exact boundary or an explicitly unresolved
+ * legacy one. Never repaired -- a violation fails validation. */
+function checkEffectLifecycle(effect: { lifetime: { kind: string }; expiry: { kind: string } }, ctx: z.RefinementCtx): void {
+  const manual = effect.lifetime.kind === "manual";
+  if (manual && effect.expiry.kind !== "none") {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a manual Effect has no automatic expiry", path: ["expiry"] });
+  }
+  if (!manual && effect.expiry.kind === "none") {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a finite Effect needs a resolved (or explicitly unresolved) expiry", path: ["expiry"] });
+  }
+}
+
+export const EffectRecordSchema = EffectRecordObject.strict().superRefine(checkEffectLifecycle);
 
 export const ReminderRecordSchema = z.object({
   id: z.string().min(1),
@@ -193,12 +264,7 @@ export const ProvenanceSchema = z.object({
  * command/query logic and the Storyteller's "Needs check" surface handle --
  * never a reason to reset local state or reject a checkpoint.
  */
-export const LiveGameMomentSchema = z.object({
-  phase: z.enum(["night", "day"]),
-  day: z.number().int().positive(),
-}).strict();
 const DayGameMomentSchema = z.object({ phase: z.literal("day"), day: z.number().int().positive() }).strict();
-const CurrentParticipantRefSchema = ParticipantRefSchema.options[0];
 const lifeEventCommon = {
   id: z.string().min(1),
   subject: CurrentParticipantRefSchema,
@@ -265,8 +331,27 @@ export const HistoryChangeSchema = z.discriminatedUnion("kind", [
  * means every other key is simply not judged here.
  */
 const HISTORY_SNAPSHOT_SOURCE_CONTRACT: Partial<Record<z.infer<typeof HistoryCategorySchema>, z.ZodTypeAny>> = {
-  effect: EffectRecordSchema.pick({ sourceParticipant: true, sourcePlayer: true }),
+  effect: EffectRecordObject.pick({ sourceParticipant: true, sourcePlayer: true }),
   reminder: ReminderRecordSchema.pick({ sourceParticipant: true, sourcePlayer: true }),
+};
+
+export const EffectHistoryOperationSchema = z.enum(["apply", "update", "remove", "suppress", "resume", "expire"]);
+/** Phase 10B: the change shape each Effect lifecycle operation must use. */
+const EFFECT_OPERATION_CHANGE: Record<z.infer<typeof EffectHistoryOperationSchema>, "added" | "removed" | "value"> = {
+  apply: "added",
+  remove: "removed",
+  expire: "removed",
+  update: "value",
+  suppress: "value",
+  resume: "value",
+};
+
+const addSnapshotIssues = (
+  ctx: z.RefinementCtx, prefix: string, path: (string | number)[], issues: z.ZodIssue[],
+) => {
+  for (const issue of issues) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: `${prefix}: ${issue.message}`, path: [...path, ...issue.path] });
+  }
 };
 
 export const HistoryRecordSchema = z.object({
@@ -280,6 +365,8 @@ export const HistoryRecordSchema = z.object({
   note: z.string().optional(),
   lifeEvent: HistoryLifeEventSchema.optional(),
   correction: z.literal(true).optional(),
+  effectOperation: EffectHistoryOperationSchema.optional(),
+  resolutionId: z.string().min(1).max(200).optional(),
 }).superRefine((record, ctx) => {
   // Phase 10A: meaningful content. Every non-life record keeps its required
   // Current State `change` and never carries Life Event fields; a life
@@ -289,28 +376,68 @@ export const HistoryRecordSchema = z.object({
     if (record.change === undefined) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a History Record must carry a change", path: ["change"] });
     }
-    if (record.lifeEvent !== undefined || record.correction !== undefined) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only a life History Record mirrors Life Events or corrections", path: ["lifeEvent"] });
+    if (record.lifeEvent !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only a life History Record mirrors Life Events", path: ["lifeEvent"] });
+    }
+    // Phase 10B: a correction is valid for "life" and "effect" only.
+    if (record.correction !== undefined && record.category !== "effect") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only a life or effect History Record may be a correction", path: ["correction"] });
     }
   } else if (record.change === undefined && record.lifeEvent === undefined) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a life History Record must carry a change or a Life Event", path: ["change"] });
+  }
+  // Phase 10B: Effect lifecycle metadata belongs to "effect" records only.
+  if (record.category !== "effect" && (record.effectOperation !== undefined || record.resolutionId !== undefined)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only an effect History Record carries Effect lifecycle metadata", path: ["effectOperation"] });
+  }
+  if (record.category === "effect") {
+    // A v19 Effect record (no effectOperation) predates corrections, so an
+    // effect correction always names its operation; expiry is gameplay
+    // lifecycle, never a correction; and each operation has exactly one
+    // truthful change shape.
+    if (record.correction !== undefined && record.effectOperation === undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "an effect correction must name its Effect operation", path: ["effectOperation"] });
+    }
+    if (record.resolutionId !== undefined && record.effectOperation === undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a correlated effect record must name its Effect operation", path: ["effectOperation"] });
+    }
+    if (record.effectOperation === "expire" && record.correction !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Effect expiry is never a correction", path: ["correction"] });
+    }
+    if (record.correction !== undefined && (record.effectOperation === "suppress" || record.effectOperation === "resume")) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "an effect correction is an apply, remove or update", path: ["effectOperation"] });
+    }
+    if (record.effectOperation && record.change && record.change.kind !== EFFECT_OPERATION_CHANGE[record.effectOperation]) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `an Effect ${record.effectOperation} is recorded as ${EFFECT_OPERATION_CHANGE[record.effectOperation]}`, path: ["change", "kind"] });
+    }
+  }
+  if (!record.change) return;
+  // Phase 10B: a v20 Effect lifecycle record (one naming its operation)
+  // snapshots COMPLETE current-version Effects -- the added/removed item, or
+  // both value sides -- so a malformed lifecycle, parameter or source
+  // structure can never hide inside History.
+  const snapshots: { value: unknown; path: (string | number)[] }[] = record.change.kind === "value"
+    ? [{ value: record.change.from, path: ["change", "from"] }, { value: record.change.to, path: ["change", "to"] }]
+    : [{ value: record.change.item, path: ["change", "item"] }];
+  if (record.category === "effect" && record.effectOperation !== undefined) {
+    for (const snapshot of snapshots) {
+      const checked = EffectRecordSchema.safeParse(snapshot.value);
+      if (!checked.success) addSnapshotIssues(ctx, "effect History snapshot", snapshot.path, checked.error.issues);
+    }
+    return;
   }
   // An already-v17 record never goes through v16 -> v17 migration again
   // (detectLegacyGameVersion / STORE_VERSION), so a stale v16-shaped source
   // nested inside an added/removed Effect/Reminder snapshot must fail
   // validation here rather than survive -- never silently stripped or
-  // converted.
-  if (!record.change || record.change.kind === "value") return;
+  // converted. Phase 10B: an Effect `value` record's before/after snapshots
+  // obey the same source contract (no v19 command ever wrote one).
+  if (record.change.kind === "value" && record.category !== "effect") return;
   const contract = HISTORY_SNAPSHOT_SOURCE_CONTRACT[record.category];
   if (!contract) return;
-  const checked = contract.safeParse(record.change.item);
-  if (checked.success) return;
-  for (const issue of checked.error.issues) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: `${record.category} History snapshot: ${issue.message}`,
-      path: ["change", "item", ...issue.path],
-    });
+  for (const snapshot of snapshots) {
+    const checked = contract.safeParse(snapshot.value);
+    if (!checked.success) addSnapshotIssues(ctx, `${record.category} History snapshot`, snapshot.path, checked.error.issues);
   }
 });
 
@@ -404,7 +531,15 @@ export const STPlayerRecordSchema = z.object({
   stNotes: z.string(),
   isTraveler: z.boolean(),
   actualAlignment: AlignmentSchema.optional(),
-  effects: z.array(EffectRecordSchema),
+  // Phase 10B: an Effect's identity is (participant, id) -- ids are unique
+  // within one participant's effects[]; never de-duplicated by type/source.
+  effects: z.array(EffectRecordSchema).superRefine((effects, ctx) => {
+    const seen = new Set<string>();
+    effects.forEach((effect, index) => {
+      if (seen.has(effect.id)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "duplicate Effect id", path: [index, "id"] });
+      seen.add(effect.id);
+    });
+  }),
   travelerArrival: z.object({
     demonInfoComplete: z.boolean(), firstNightComplete: z.boolean(),
     completedAtNight: z.number().int().positive().optional(),
@@ -437,7 +572,15 @@ export const NightStepRecordSchema = z.object({
   notes: z.string(),
 });
 
+/** Phase 10B: the current game snapshot schema version (see
+ * StorytellerLobbyRecord.gameSchemaVersion). */
+export const GAME_SCHEMA_VERSION = 20 as const;
+
 export const StorytellerLobbyRecordSchema = z.object({
+  // Phase 10B (v20): required explicit version evidence, NO default -- a
+  // current-version game missing it (or carrying any other value) is
+  // rejected; genuine v19-and-older data receives it only from migration.
+  gameSchemaVersion: z.literal(GAME_SCHEMA_VERSION),
   code: z.string().min(1),
   storytellerUid: z.string().min(1),
   scriptId: z.string().min(1),

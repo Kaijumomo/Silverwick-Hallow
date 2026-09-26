@@ -148,7 +148,7 @@ describe("projectToPublic", () => {
       statuses: { drunk: true },
       abilityUsed: true,
       actualAlignment: "evil",
-      effects: [{ id: "manual:drunk", type: "drunk", lifetime: { kind: "manual" } }],
+      effects: [{ id: "manual:drunk", type: "drunk", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }],
     });
     const pub = projectToPublic(p, true);
     const json = JSON.stringify(pub);
@@ -217,6 +217,7 @@ describe("projectToSelf — Demon bluffs privacy", () => {
 describe("Lobby-level projections", () => {
   function makeLobby(): StorytellerLobbyRecord {
     return {
+      gameSchemaVersion: 20,
       code: "ABCD12",
       storytellerUid: "uid-st",
       scriptId: "tb",
@@ -413,7 +414,7 @@ describe("Privacy regression matrix — all behavior modes", () => {
         statuses: { drunk: true },
         privateInfo: { bluffs: ["saint"] },
         actualAlignment: "good",
-        effects: [{ id: "manual:drunk", type: "drunk", lifetime: { kind: "manual" } }],
+        effects: [{ id: "manual:drunk", type: "drunk", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }],
       });
       const pub = JSON.stringify(projectToPublic(p, false));
       // Role data must not appear.
@@ -476,7 +477,7 @@ describe("Privacy regression matrix — all behavior modes", () => {
 describe("projectLobbyToSelfMap — Phase 9C.4 setup privacy barrier", () => {
   function setupLobby(players: StorytellerLobbyRecord["players"], over: Partial<StorytellerLobbyRecord> = {}): StorytellerLobbyRecord {
     return {
-      code: "SETUP01", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
+      gameSchemaVersion: 20, code: "SETUP01", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
       bluffs: [], fabled: [], lorics: [], notes: "ST-only",
       seatOrder: Object.keys(players), nightProgress: {}, rolePool: [], history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       plannedPlayerCount: Object.keys(players).length, plannedTravelerCount: 0, pendingPlayers: {}, players, ...over,
@@ -643,7 +644,7 @@ describe("buildRegistry — traveler coverage", () => {
       stNotes: "traveler note",
       statuses: { protected: true },
       actualAlignment: "evil",
-      effects: [{ id: "manual:protected", type: "protected", lifetime: { kind: "manual" } }],
+      effects: [{ id: "manual:protected", type: "protected", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }],
     });
     const pub = JSON.stringify(projectToPublic(p, true));
     expect(pub).not.toContain("actualRole");

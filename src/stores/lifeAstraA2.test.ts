@@ -6,6 +6,7 @@ import { deathsAt, resurrectionsAt } from "./lifeEvents";
 import { StorytellerGamePersistedSchema } from "./schemas";
 import { detectLegacyGameVersion } from "./gameMigration";
 import type { HistoryRecord, PlayerId, StorytellerLobbyRecord } from "./types";
+import { asV19 } from "@/test/v20Migration";
 
 // Phase 10A Astra remediation, Package A2 (10A-ASTRA-004): one atomic
 // resolution may give ONE participant several ordered Life Events (e.g. a
@@ -213,7 +214,7 @@ describe("10A-ASTRA-004: the revised v19 History mirror persists, recovers and i
     const before = structuredClone(game());
     await new Promise((resolve) => setTimeout(resolve, 0));
     const raw = localStorage.getItem(STORAGE_KEY)!;
-    expect(JSON.parse(raw).version).toBe(19);
+    expect(JSON.parse(raw).version).toBe(20);
     store.setState({ game: null, undoStack: [], localSeq: 0 });
     localStorage.setItem(STORAGE_KEY, raw);
     await store.persist.rehydrate();
@@ -221,17 +222,19 @@ describe("10A-ASTRA-004: the revised v19 History mirror persists, recovers and i
     expect(game()).toEqual(before);
   });
 
-  it("a current-version store holding it passes unchanged; remote detection reports v19", () => {
+  it("a current-version store holding it passes unchanged; remote detection reports v20 (and v19 for its pre-v20 image)", () => {
     afterResolution();
     const current = JSON.parse(JSON.stringify({ game: game(), undoStack: state().undoStack }));
-    expect(migrateStoreState(current, 19)).toBe(current);
+    expect(migrateStoreState(current, 20)).toBe(current);
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(detectLegacyGameVersion(current.game)).toBe(19);
+    expect(detectLegacyGameVersion(current.game)).toBe(20);
+    expect(detectLegacyGameVersion(asV19(current.game))).toBe(19);
   });
 
   it("the mirror alone (without a window) is v19 evidence and is rejected, never repaired as v18", () => {
     afterResolution();
-    const g = JSON.parse(JSON.stringify(game())) as Partial<StorytellerLobbyRecord> & Record<string, unknown>;
+    // Phase 10B: a v19-era image (no v20 marker) with the window removed.
+    const g = asV19(JSON.parse(JSON.stringify(game()))) as Partial<StorytellerLobbyRecord> & Record<string, unknown>;
     delete g.lifeEventWindow;
     expect(detectLegacyGameVersion(g)).toBe(19);
     migrateStoreState({ game: g, undoStack: [] }, 18);

@@ -39,17 +39,73 @@ export function manualEffectId(type: string): EffectId {
   return `manual:${type}`;
 }
 
-/** True when any current effect of `type` exists on the player, regardless
- * of source -- the single derivation point for status indicators (Drunk/
- * Poisoned/Protected chips, night-order advisories, ...). No expiry logic
- * yet: presence in `effects` is the whole test. */
-export function hasEffect(
-  player: Pick<STPlayerRecord, "effects">,
-  type: string
-): boolean {
+// ---------------------------------------------------------------------------
+// Phase 10B: the centralized Effect query API. Consumers never re-derive
+// these distinctions themselves. All pure; none ever mutates, expires or
+// "cleans up" anything -- expiry happens only inside the phase transition.
+// ---------------------------------------------------------------------------
+
+type EffectsHolder = Pick<STPlayerRecord, "effects">;
+
+/** Whether this Effect currently applies (not suppressed). */
+export const isEffectActive = (effect: Pick<EffectRecord, "state">): boolean => effect.state === "active";
+
+/** EFFECTIVE Effect: true when an Effect of `type` currently APPLIES to the
+ * player (active, any source). This is the query for current mechanical
+ * state (night-order advisories, future rules); suppressed Effects never
+ * count. It carries no rules meaning of its own -- in particular a
+ * "protected" Effect implies nothing about death. */
+export function hasEffect(player: EffectsHolder, type: string): boolean {
+  return player.effects.some((e) => e.type === type && isEffectActive(e));
+}
+
+/** STORED Effect existence: true when an Effect of `type` exists at all,
+ * even suppressed -- for inspection/audit, never for mechanics. */
+export function hasStoredEffect(player: EffectsHolder, type: string): boolean {
   return player.effects.some((e) => e.type === type);
 }
 
+/** Effect instances matching `filter` (every stored instance by default,
+ * suppressed included), in stored order -- for advanced UI and future
+ * rules logic that must reason about individual causal instances. */
+export function effectInstances(player: EffectsHolder, filter: (effect: EffectRecord) => boolean = () => true): EffectRecord[] {
+  return player.effects.filter(filter);
+}
+
+/** The instances that currently apply, optionally of one `type`. */
+export function effectiveEffects(player: EffectsHolder, type?: string): EffectRecord[] {
+  return player.effects.filter((e) => isEffectActive(e) && (type === undefined || e.type === type));
+}
+
+/** MANUAL Effect: the exact Storyteller quick-control Effect
+ * (`manual:<type>`), or undefined. Never an ability-created Effect of the
+ * same type. */
+export function manualEffectOf(player: EffectsHolder, type: string): EffectRecord | undefined {
+  return findEffect(player, manualEffectId(type));
+}
+
+/** The quick control's own state -- never the aggregate of every Effect of
+ * that type (a Poisoner's "poisoned" does not press the manual toggle). */
+export function manualEffectState(player: EffectsHolder, type: string): "absent" | "active" | "suppressed" {
+  const effect = manualEffectOf(player, type);
+  return !effect ? "absent" : effect.state;
+}
+
+/** True when the exact manual Effect of `type` is present AND applying. */
+export function hasManualEffect(player: EffectsHolder, type: string): boolean {
+  return manualEffectState(player, type) === "active";
+}
+
+/** A legacy (pre-v20) finite Effect whose exact expiry was never recorded:
+ * recoverable Storyteller state that needs a check, never corruption. */
+export const effectNeedsCheck = (effect: Pick<EffectRecord, "expiry">): boolean => effect.expiry.kind === "unresolved";
+
+/** The player's Effects that need a Storyteller check (Storyteller-only). */
+export function effectsNeedingCheck(player: EffectsHolder): EffectRecord[] {
+  return player.effects.filter(effectNeedsCheck);
+}
+
+/** One Effect instance by id (identity is participant + id). */
 export function findEffect(
   player: Pick<STPlayerRecord, "effects">,
   id: EffectId

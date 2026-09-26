@@ -69,7 +69,17 @@ function v19Game(): Raw {
   return { ...v18Game("night", 2), lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [deathEvent()] } };
 }
 
-const withoutWindow = (entry: Raw): Raw => { const { lifeEventWindow: _w, ...rest } = entry; return rest; };
+/** Phase 10B: a v19 game is now legacy -- migration also stamps the v20
+ * version evidence (its Effects, none here, would gain their lifecycle). */
+function v20Game(): Raw {
+  return { ...v19Game(), gameSchemaVersion: 20 };
+}
+
+/** Strips exactly what v18 -> v19 -> v20 migration adds. */
+const withoutWindow = (entry: Raw): Raw => {
+  const { lifeEventWindow: _w, gameSchemaVersion: _v, ...rest } = entry;
+  return rest;
+};
 
 describe("Phase 10A migration: coverage table (v18 -> v19)", () => {
   it.each([
@@ -133,17 +143,25 @@ describe("Phase 10A migration: coverage table (v18 -> v19)", () => {
   });
 });
 
-describe("Phase 10A migration: already-current (v19) data", () => {
-  it("passes through unchanged -- event ids and coverage are never regenerated", () => {
+describe("Phase 10A migration: already-v19 data", () => {
+  it("keeps its window exactly -- event ids and coverage are never regenerated; only v20 evidence is added", () => {
     const current = { game: v19Game(), undoStack: [v19Game()] };
-    const snapshot = structuredClone(current);
-    expect(migrateStoreState(current, 19)).toBe(current);
+    const result = migrateStoreState(current, 19) as { game: Raw; undoStack: Raw[] };
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(current).toEqual(snapshot);
-    // Even a caller claiming v18 cannot make migration touch it.
+    expect(result.game).toEqual(v20Game());
+    expect(result.undoStack).toEqual([v20Game()]);
+    // Even a caller claiming v18 cannot make migration touch the window.
     const entry = v19Game();
     migrateGameEntry(entry, 18, { kind: "canonical-only" });
-    expect(entry).toEqual(v19Game());
+    expect(entry).toEqual(v20Game());
+  });
+
+  it("current v20 data passes through unchanged (same reference)", () => {
+    const current = { game: v20Game(), undoStack: [v20Game()] };
+    const snapshot = structuredClone(current);
+    expect(migrateStoreState(current, 20)).toBe(current);
+    expect(takeMigrationResetFlag()).toBe(false);
+    expect(current).toEqual(snapshot);
   });
 
   it("detection: any v19 Life Event evidence reports 19; genuine v18 reports an older version", () => {
@@ -206,7 +224,8 @@ describe("Phase 10A migration: malformed v19 evidence never falls back into v18 
       expect(hasV19LifeEvidence(game)).toBe(true);
       const copy = structuredClone(game);
       migrateGameEntry(copy, 18, { kind: "canonical-only" });
-      expect(copy).toEqual(game); // migration never touches current-version evidence
+      // Migration never touches v19 evidence (Phase 10B only stamps v20).
+      expect(copy).toEqual({ ...game, gameSchemaVersion: 20 });
       const result = migrateStoreState({ game: structuredClone(game), undoStack: [] }, version) as { game: unknown };
       expect(takeMigrationResetFlag()).toBe(true);
       expect(result.game).toBeNull();
@@ -229,7 +248,7 @@ describe("Phase 10A migration: malformed v19 evidence never falls back into v18 
 
 describe("Phase 10A: recoverable anomalies are never schema failures", () => {
   it("stale events, departed subjects and state/event disagreement all validate", () => {
-    const game = v19Game();
+    const game = v20Game();
     (game.lifeEventWindow as Raw).events = [
       deathEvent({ id: "le-old", moment: { phase: "night", day: 1 } }), // older than the retained pair
       deathEvent({ id: "le-gone", subject: { kind: "participant", participantId: "pt-departed", playerId: "zz", nameAtTime: "Zed" } }),
@@ -240,7 +259,7 @@ describe("Phase 10A: recoverable anomalies are never schema failures", () => {
   });
 
   it("an RTDB-shaped window whose empty events list was dropped still validates (events default to [])", () => {
-    const game = v19Game();
+    const game = v20Game();
     delete (game.lifeEventWindow as Raw).events;
     const parsed = StorytellerGamePersistedSchema.safeParse(game);
     expect(parsed.success).toBe(true);

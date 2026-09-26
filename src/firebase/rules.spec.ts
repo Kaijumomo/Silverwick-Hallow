@@ -37,6 +37,7 @@ import { buildRichPhase9Game } from "@/test/phase9RichState";
 import { startStorytellerSession } from "./storytellerSync";
 import { SnapshotValidationError } from "./snapshots";
 import { validateFirebaseWritableValue } from "./firebaseWriteCompatibility";
+import { asV19 } from "@/test/v20Migration";
 
 let env: RulesTestEnvironment;
 beforeAll(async () => {
@@ -561,7 +562,7 @@ describe("Firebase RTDB membership authorization", () => {
     const metadata = (await ref(st, "session").once("value")).val();
     const writer = new SessionWriter(raw, code, metadata.id);
     const game: StorytellerLobbyRecord = {
-      code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
+      gameSchemaVersion: 20, code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
       notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {}, history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       rolePool: [], plannedPlayerCount: 1, plannedTravelerCount: 0, pendingPlayers: {}, seatOrder: ["p-alice"],
       // This test isolates identity delivery through the real writer/rules,
@@ -605,7 +606,7 @@ describe("Firebase RTDB membership authorization", () => {
     const metadata = (await ref(st, "session").once("value")).val();
     const writer = new SessionWriter(raw, code, metadata.id);
     const game: StorytellerLobbyRecord = {
-      code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
+      gameSchemaVersion: 20, code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
       notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {}, history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       rolePool: [], plannedPlayerCount: 2, plannedTravelerCount: 0, pendingPlayers: {}, seatOrder: ["p-alice", "p-bob"],
       // This test isolates the completeness barrier, not Setup deal/reveal
@@ -1823,7 +1824,8 @@ describe("Phase 10A: Life Event Window checkpoints through the real writer and e
   }
 
   test("a genuine v18 (windowless, versionless) checkpoint recovers with honest coverage and projects it through the rules", async () => {
-    const game = liveGameJson();
+    // Phase 10B: a v18 app also wrote nothing v20-only (asV19).
+    const game = asV19(liveGameJson());
     delete game.lifeEventWindow;
     game.history = (game.history as Record<string, unknown>[])
       .filter((h) => h.change !== undefined)

@@ -4,6 +4,7 @@ import { StorytellerGamePersistedSchema } from "./schemas";
 import { detectLegacyGameVersion, migrateGameEntry } from "./gameMigration";
 import { setupScript } from "@/test/setupFixtures";
 import type { HistoryRecord, PlayerId, StorytellerLobbyRecord } from "./types";
+import { asV19 } from "@/test/v20Migration";
 
 // Phase 9R.2 Luna remediation: History snapshot schema closure. An
 // Effect/Reminder snapshot stored inside an added/removed History record
@@ -100,9 +101,9 @@ describe("Section 6: the exact v17 regression -- a retired sourcePlayer inside a
   ] as const)("%s %s snapshot carrying sourcePlayer fails StorytellerGamePersistedSchema", (category, kind) => {
     const base = realV17Game();
     expect(StorytellerGamePersistedSchema.safeParse(base).success).toBe(true); // control: otherwise valid
-    // This is already-current data (Phase 10A: its Life Event Window is v19
-    // evidence): remote recovery would never migrate it.
-    expect(detectLegacyGameVersion(base as unknown as Record<string, unknown>)).toBe(19);
+    // This is already-current data (Phase 10B: its explicit gameSchemaVersion
+    // is v20 evidence): remote recovery would never migrate it.
+    expect(detectLegacyGameVersion(base as unknown as Record<string, unknown>)).toBe(20);
     const index = indexOf(base, category, kind);
     const bad = withItemField(base, index, "sourcePlayer", "a");
 
@@ -167,7 +168,8 @@ describe("Section 9: v16 -> v17 migration still converts legacy History snapshot
   it("a v16 Effect/Reminder History snapshot with sourcePlayer migrates to a legacy sourceParticipant and then validates", () => {
     const v17 = realV17Game();
     // Rebuild an independent v16-shaped copy of the same game.
-    const v16 = structuredClone(v17) as unknown as Record<string, unknown> & { history: Record<string, unknown>[]; players: Record<string, Record<string, unknown>> };
+    // Phase 10B: v16 also predates the v20 Effect lifecycle (asV19).
+    const v16 = asV19(structuredClone(v17)) as unknown as Record<string, unknown> & { history: Record<string, unknown>[]; players: Record<string, Record<string, unknown>> };
     delete v16.informationDeliveries;
     v16.informationDeliveries = [];
     delete v16.lifeEventWindow; // Phase 10A: v16 predates the Life Event Window
@@ -212,8 +214,10 @@ describe("Section 12: an all-empty, markerless v17 game is harmlessly detected a
   it("detected as 16, migration leaves it byte-for-byte identical, and it still passes the v17 schema", () => {
     state().newGame(setupScript.id, { plannedPlayerCount: 5, plannedTravelerCount: 1 });
     const v17: StorytellerLobbyRecord = JSON.parse(JSON.stringify(game()));
-    // Phase 10A: a v17 game predates the Life Event Window.
+    // Phase 10A: a v17 game predates the Life Event Window (and Phase 10B:
+    // the explicit version marker).
     delete (v17 as Partial<StorytellerLobbyRecord>).lifeEventWindow;
+    delete (v17 as Partial<StorytellerLobbyRecord>).gameSchemaVersion;
     // Genuinely markerless: every seat empty, no History, no deliveries.
     expect(Object.values(v17.players).every((p) => p.isEmpty && !("participantId" in p))).toBe(true);
     expect(v17.history).toEqual([]);
@@ -224,8 +228,10 @@ describe("Section 12: an all-empty, markerless v17 game is harmlessly detected a
     const beforeDeep = structuredClone(v17);
     const entry = structuredClone(v17);
     migrateGameEntry(entry, 16, { kind: "canonical-only" });
-    // Every identity/category step is a no-op; only the v19 window is added.
-    const { lifeEventWindow, ...rest } = entry;
+    // Every identity/category step is a no-op; only the v19 window (and the
+    // v20 marker -- there are no Effects) is added.
+    const { lifeEventWindow, gameSchemaVersion, ...rest } = entry;
+    expect(gameSchemaVersion).toBe(20);
     expect(lifeEventWindow).toEqual({ coverageFrom: { phase: "night", day: 1 }, events: [] });
     expect(JSON.stringify(rest)).toBe(before);
     expect(rest).toEqual(beforeDeep);

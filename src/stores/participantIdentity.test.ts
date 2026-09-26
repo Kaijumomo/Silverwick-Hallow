@@ -303,10 +303,14 @@ describe("Phase 9R.2: Effect/Reminder source references (Poisoner Alice poisons 
     const effect = game().players[carol]!.effects.find((e) => e.id === effectId)!;
     expect(effect.sourceParticipant).toEqual(aliceSnapshot(P, A));
     expect(refersToParticipant(effect.sourceParticipant, B)).toBe(false);
-    // Removing it now derives Provenance from the stored snapshot -- Alice,
-    // never re-resolved to Bob through seat P.
+    // Removing it: the removed snapshot still names Alice/Poisoner as the
+    // Effect's ORIGIN -- never re-resolved to Bob through seat P. Phase 10B
+    // (Section 16): the removal's own mutation provenance is independent of
+    // that origin; with no Mutation Context, none is invented.
     state().removeEffect(carol, effectId);
-    expect(game().history.at(-1)!.provenance).toEqual({ sourceCharacter: "poisoner", sourceParticipant: aliceSnapshot(P, A) });
+    const removal = game().history.at(-1)!;
+    expect(removal.change).toMatchObject({ kind: "removed", item: { id: effectId, sourceCharacter: "poisoner", sourceParticipant: aliceSnapshot(P, A) } });
+    expect(removal.provenance).toBeUndefined();
   });
 
   it("a live source that is not a current participant (empty seat, nonexistent id) is refused atomically -- never dropped, never fabricated", () => {
@@ -521,7 +525,7 @@ describe("Phase 9R.2: local persistence / rehydrate", () => {
     state().setStatus(alice, "drunk", true);
     await new Promise((resolve) => setTimeout(resolve, 0));
     const raw = localStorage.getItem(STORAGE_KEY)!;
-    expect(JSON.parse(raw).version).toBe(19);
+    expect(JSON.parse(raw).version).toBe(20);
     const beforeGame = structuredClone(game());
     const beforeUndo = structuredClone(state().undoStack);
 

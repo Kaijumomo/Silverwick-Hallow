@@ -133,11 +133,14 @@ describe("Phase 9D.1: structured active effects", () => {
     dealtGame();
     const id = game().seatOrder[0]!;
     state().setStatus(id, "poisoned", true);
+    // Phase 10B: this game is still in Setup, where a timed lifetime has no
+    // countdown and is refused -- a sourced indefinite Effect exercises the
+    // same coexistence (timed Effects: effectLifecycle.test.ts).
     const sourcedId = state().addEffect(id, {
       type: "poisoned",
       sourceCharacter: "poisoner",
       sourcePlayer: game().seatOrder[1]!,
-      lifetime: { kind: "untilDawn" },
+      lifetime: { kind: "manual" },
     });
     expect(sourcedId).not.toBeNull();
     expect(game().players[id]!.effects).toHaveLength(2);
@@ -148,8 +151,9 @@ describe("Phase 9D.1: structured active effects", () => {
     dealtGame();
     const id = game().seatOrder[0]!;
     state().setStatus(id, "poisoned", true);
+    // Phase 10B: Setup -- see above.
     const sourcedId = state().addEffect(id, {
-      type: "poisoned", sourceCharacter: "poisoner", lifetime: { kind: "untilDawn" },
+      type: "poisoned", sourceCharacter: "poisoner", lifetime: { kind: "manual" },
     })!;
     state().setStatus(id, "poisoned", false);
     const remaining = game().players[id]!.effects;

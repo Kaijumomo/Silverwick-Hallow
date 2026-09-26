@@ -111,33 +111,39 @@ function liveFixture() {
 describe.each([["Setup", setupFixture, 0], ["Live Play", liveFixture, 1]] as const)(
   "Phase 9R.4 (Astra B): re-submitting an identical record with reordered properties is inert -- %s",
   (_phase, fixture, historyPerMutation) => {
-    it("addEffect: same semantic Effect (top-level, nested lifetime and source-snapshot position reordered) is inert; a real value change mutates once", () => {
+    it("addEffect: same semantic Effect (top-level, nested lifetime and source-snapshot position reordered) is inert; different content under the same id is refused (Phase 10B: never an upsert) and a real Update mutates once", () => {
       fixture();
       const [target, source] = game().seatOrder;
       const first = baseline();
       expect(state().addEffect(target!, {
         id: "e1", type: "poisoned", sourceCharacter: "poisoner", sourcePlayer: source!,
-        lifetime: { kind: "nights", count: 2 }, note: "from the Poisoner",
+        lifetime: { kind: "manual" }, note: "from the Poisoner",
       })).toBe("e1");
       expectOneMutation(first, historyPerMutation);
       const stored = player(target!).effects.find((e) => e.id === "e1")!;
 
       const same = baseline();
       expect(state().addEffect(target!, {
-        note: "from the Poisoner", lifetime: { count: 2, kind: "nights" } as EffectRecord["lifetime"],
+        note: "from the Poisoner", lifetime: { kind: "manual" } as EffectRecord["lifetime"],
         sourcePlayer: source!, type: "poisoned", id: "e1", sourceCharacter: "poisoner",
       })).toBe("e1");
       expectInert(same);
       expect(player(target!).effects.find((e) => e.id === "e1")).toBe(stored);
 
-      const changed = baseline();
+      const conflicting = baseline();
       expect(state().addEffect(target!, {
-        note: "from the Poisoner", lifetime: { count: 3, kind: "nights" } as EffectRecord["lifetime"],
+        note: "a different note", lifetime: { kind: "manual" } as EffectRecord["lifetime"],
         sourcePlayer: source!, type: "poisoned", id: "e1", sourceCharacter: "poisoner",
-      })).toBe("e1");
+      })).toBeNull();
+      expectInert(conflicting);
+
+      const changed = baseline();
+      const binding = { playerId: target!, participantId: player(target!).participantId! };
+      expect(state().resolveEffects({ intents: [{ kind: "update", target: binding, effectId: "e1", changes: { note: "a different note" } }] }).ok).toBe(true);
       expectOneMutation(changed, historyPerMutation);
-      expect(player(target!).effects.find((e) => e.id === "e1")!.lifetime).toEqual({ kind: "nights", count: 3 });
-      if (historyPerMutation) expect(game().history.at(-1)).toMatchObject({ category: "effect", change: { kind: "added", item: { id: "e1", lifetime: { count: 3 } } } });
+      expect(player(target!).effects.find((e) => e.id === "e1")!.note).toBe("a different note");
+      if (historyPerMutation) expect(game().history.at(-1)).toMatchObject({ category: "effect", effectOperation: "update",
+        change: { kind: "value", from: { id: "e1", note: "from the Poisoner" }, to: { id: "e1", note: "a different note" } } });
     });
 
     it("addReminder: same semantic Reminder (reordered) is inert with no duplicate History event; a real change mutates once", () => {

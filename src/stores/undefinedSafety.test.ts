@@ -100,7 +100,10 @@ describe("Phase 9R.1 Finding B5: Effect never stores an explicit-undefined optio
       type: "protected", lifetime: { kind: "manual" }, sourcePlayer: undefined,
     });
     const stored = game().players[id]!.effects.find((e) => e.id === effectId)!;
-    expect(stored).toEqual({ id: effectId, type: "protected", lifetime: { kind: "manual" } });
+    // Phase 10B: plus the lifecycle the planner fills in (applied now,
+    // active, no automatic expiry) -- never a literal undefined anywhere.
+    expect(stored).toEqual({ id: effectId, type: "protected", lifetime: { kind: "manual" },
+      appliedAt: { phase: game().phase, day: game().day }, state: "active", expiry: { kind: "none" } });
     expect("sourcePlayer" in stored).toBe(false);
     expect("sourceParticipant" in stored).toBe(false);
   });

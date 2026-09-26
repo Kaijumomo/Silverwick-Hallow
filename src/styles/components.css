@@ -433,6 +433,36 @@
 .status-chip-poisoned { top: 0;   left: 50%;   transform: translate(-50%, -50%); }
 /* 2 o'clock — protected */
 .status-chip-protected{ top: 25%; left: 93.3%; transform: translate(-50%, -50%); }
+/* Phase 10B: multiplicity of one aggregated Effect indicator. */
+.status-chip .effect-count {
+  position: absolute;
+  right: -6px;
+  bottom: -4px;
+  min-width: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--bg, #111);
+  color: var(--text, #eee);
+  border: 1px solid currentColor;
+  font-size: 9px;
+  line-height: 12px;
+  text-align: center;
+}
+.token-effects {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 3px;
+  max-width: 130px;
+  margin-top: 2px;
+}
+.effect-pill {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
 .token-ghost {
   font-size: 10px;
   letter-spacing: 0.2em;
@@ -2935,3 +2965,71 @@ select:focus-visible,
 .dialog-actions { justify-content: flex-end; gap: 8px; margin-top: 8px; }
 .public-seat-disc-frame { position: relative; flex-shrink: 0; }
 .public-seat .life-shroud-label { font-size: clamp(9px, 1.3vmin, 16px); }
+
+/* Phase 10B: Player Drawer Effects -- quick controls, aggregated list,
+   instance details and the advanced form. */
+.toggle-pill[aria-pressed="mixed"] {
+  border-style: dashed;
+  border-color: var(--gold-soft);
+  color: var(--text);
+}
+.effect-groups,
+.effect-instances {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.effect-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+.effect-group-toggle[aria-expanded="true"] { border-color: var(--border-strong); }
+.effect-group-name { font-weight: 600; }
+.effect-family-impairment .effect-group-name,
+.effect-group-name.effect-family-impairment { color: var(--status-poisoned); }
+.effect-group-name.effect-family-protection { color: var(--status-protected); }
+.effect-group-note { font-size: 11px; color: var(--text-dim); }
+.effect-needs-check { color: var(--gold-soft); }
+.effect-instance {
+  border-left: 2px solid var(--border-strong);
+  padding: 4px 0 4px 10px;
+}
+.effect-instance.suppressed { opacity: 0.8; border-left-style: dashed; }
+.effect-instance-title { font-size: 13px; }
+.effect-instance-details {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 4px 0 6px;
+  font-size: 12px;
+}
+.effect-instance-details dt { color: var(--text-dim); }
+.effect-instance-details dd { margin: 0; }
+.effect-parameter { display: contents; }
+.effect-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.effect-add-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--text-dim);
+}

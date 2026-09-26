@@ -258,9 +258,12 @@ export type LifeEventWindow = {
   events: LifeEvent[];
 };
 
-/** How long an effect or reminder is intended to remain, in vocabulary
- * only. Phase 9D.1 stores this intent; no phase yet executes automatic
- * expiry from it. */
+/** How long an effect or reminder is intended to remain, as vocabulary.
+ * For a Reminder this is still intent only. For an Effect (Phase 10B) an
+ * accepted finite lifetime is resolved ONCE, when the Effect is created, into
+ * an exact `EffectExpiry` boundary (see resolveEffectExpiry in
+ * effectResolution.ts); expiry mechanics read that resolved boundary, never
+ * this vocabulary plus `appliedAt`. */
 export type EffectLifetime =
   | { kind: "manual" }
   | { kind: "untilDawn" }
@@ -271,20 +274,72 @@ export type EffectLifetime =
 
 export type EffectId = string;
 
-/** A single active effect on a player -- Drunk/Poisoned/Protected today,
- * any future ability-created effect later. `type` is a free-form semantic
- * label, not a closed enum: a manual Storyteller effect and a later
- * ability-sourced effect of the same `type` (e.g. two "poisoned" entries,
- * one manual and one from a Poisoner) must be able to coexist as distinct
- * records. Target is implicit -- an EffectRecord always lives on its
- * target player's own `effects` array.
+/** Phase 10B: whether a causal Effect currently applies. A `suppressed`
+ * Effect still exists in Current State (same id, origin, application,
+ * expiry and parameters) but does not currently apply; mechanical queries
+ * ignore it, inspection/audit queries still return it. It is never deleted
+ * and later re-created from History. */
+export type EffectState = "active" | "suppressed";
+
+/**
+ * Phase 10B: the authoritative, already-resolved automatic expiry of an
+ * Effect.
  *
- * Phase 9R.2: `sourceParticipant` means "the participant who originally
- * caused this Effect" (a Poisoner Alice poisoning Carol) -- a historical
- * fact that must survive Alice leaving and Bob later occupying her seat,
- * so it is a durable ParticipantRef, never a reusable PlayerId. Callers
- * still name the source by live PlayerId (EffectInput.sourcePlayer);
- * addEffect converts it through participantRefOf() before storage. */
+ *  - `none`: no automatic phase expiry (a manual/indefinite Effect -- the
+ *    Storyteller ends it).
+ *  - `at`: the Effect expires when live play ENTERS exactly this Game Moment
+ *    (or any later one) -- Night N -> Day N or Day N -> Night N+1, inside the
+ *    same atomic phase rollover commit.
+ *  - `unresolved`: a legacy (pre-v20) finite Effect whose exact boundary was
+ *    never recorded. It never expires automatically and surfaces to the
+ *    Storyteller as a concise "Needs check"; it is never guessed.
+ *
+ * Invariant (schema-enforced): a `manual` lifetime has expiry `none`; a
+ * finite lifetime has `at` or `unresolved`.
+ */
+export type EffectExpiry =
+  | { kind: "none" }
+  | { kind: "at"; moment: LiveGameMoment }
+  | { kind: "unresolved" };
+
+/**
+ * Phase 10B: one STORED structured Effect parameter -- typed data future
+ * mechanics can read without ever parsing a free-text `note`. Participant
+ * values are durable ParticipantRefs (built centrally from live, bound
+ * participants when the Effect is accepted), so a later occupant of the same
+ * seat never silently becomes the referenced participant.
+ */
+export type EffectParameterValue =
+  | { kind: "participant"; participants: CurrentParticipantRef[] }
+  | { kind: "role"; roleIds: RoleId[] }
+  | { kind: "alignment"; alignment: Alignment }
+  | { kind: "number"; value: number }
+  | { kind: "boolean"; value: boolean }
+  | { kind: "text"; value: string };
+
+/** Keyed by a short identifier (letters, digits, `_`, `-`; see
+ * EFFECT_PARAMETER_KEY in schemas.ts). Absent when an Effect has none. */
+export type EffectParameters = Record<string, EffectParameterValue>;
+
+/** A single causal Effect on one participant -- Drunk/Poisoned/Protected
+ * today, any future ability-created or homebrew Effect later. `type` is a
+ * free-form semantic label, not a closed enum: a manual Storyteller effect
+ * and a later ability-sourced effect of the same `type` (e.g. two "poisoned"
+ * entries, one manual and one from a Poisoner) coexist as distinct records.
+ * Target is implicit -- an EffectRecord always lives on its target
+ * participant's own `effects` array, and its identity is that participant
+ * plus `id` (unique within that array; not globally).
+ *
+ * `sourceParticipant`/`sourceCharacter` are the Effect's ORIGIN: what
+ * originally caused it (a Poisoner Alice poisoning Carol). Phase 9R.2: the
+ * origin is a durable ParticipantRef that survives Alice leaving and Bob
+ * later occupying her seat; it is never rewritten by an ordinary update. The
+ * provenance of each later lifecycle mutation (update, removal, ...) is
+ * recorded separately, on its History Record.
+ *
+ * Phase 10B (store v20): `state`, `expiry` and optional `parameters` make
+ * the lifecycle authoritative. Every change goes through the Effect planner
+ * (effectResolution.ts). */
 export type EffectRecord = {
   id: EffectId;
   type: string;
@@ -293,14 +348,19 @@ export type EffectRecord = {
   appliedAt?: GameMoment;
   lifetime: EffectLifetime;
   note?: string;
+  state: EffectState;
+  expiry: EffectExpiry;
+  parameters?: EffectParameters;
 };
 
-/** Phase 9R.2: addEffect's caller-facing input. The Storyteller selects a
- * CURRENT player as the source, so the source is a live PlayerId here and
- * only becomes a durable ParticipantRef once the command accepts it. A
- * caller can never supply a pre-built `sourceParticipant` snapshot. */
+/** Phase 9R.2: addEffect's caller-facing input (a compatibility wrapper over
+ * the Phase 10B Apply intent). The Storyteller selects a CURRENT player as
+ * the source, so the source is a live PlayerId here and only becomes a
+ * durable ParticipantRef once the command accepts it. A caller can never
+ * supply a pre-built `sourceParticipant` snapshot, nor the lifecycle fields
+ * the planner resolves itself. */
 export type EffectInput = Partial<Pick<EffectRecord, "id">> &
-  Omit<EffectRecord, "id" | "sourceParticipant"> & { sourcePlayer?: PlayerId };
+  Omit<EffectRecord, "id" | "sourceParticipant" | "state" | "expiry" | "parameters"> & { sourcePlayer?: PlayerId };
 
 export type ReminderId = string;
 
@@ -439,8 +499,28 @@ export type HistoryRecord = HistoryRecordCommon & {
   category: HistoryCategory;
   change?: HistoryChange;
   lifeEvent?: HistoryLifeEvent;
+  /** A Storyteller correction of wrongly recorded Current State, as opposed
+   * to a gameplay mutation. Valid for "life" (Phase 10A) and, from v20,
+   * "effect" records. Old History is never rewritten by a correction. */
   correction?: true;
+  /** Phase 10B (v20), "effect" records only: which Effect lifecycle
+   * operation this record explains -- the one thing the generic `change`
+   * shape cannot tell apart (update vs suppress vs resume are all `value`;
+   * remove vs expire are both `removed`). `expire` is the deterministic
+   * phase-expiry provenance. */
+  effectOperation?: EffectHistoryOperation;
+  /** Phase 10B (v20), "effect" records only: correlation of the records one
+   * Effect transaction produced (e.g. a future ability resolution).
+   * Correlation METADATA only -- not an idempotency key, not authority, not
+   * assumed globally unique. */
+  resolutionId?: string;
 };
+
+/** Phase 10B: the Effect lifecycle operation an "effect" History Record
+ * explains. `apply` = added, `remove`/`expire` = removed, and
+ * `update`/`suppress`/`resume` = value (full before/after Effect snapshots).
+ * A correction reuses apply/remove/update with `correction: true`. */
+export type EffectHistoryOperation = "apply" | "update" | "remove" | "suppress" | "resume" | "expire";
 
 /**
  * One piece of structured information the Storyteller actually recorded,
@@ -609,6 +689,12 @@ export type NightStepRecord = {
 };
 
 export type StorytellerLobbyRecord = {
+  /** Phase 10B: explicit game snapshot schema version evidence. Every
+   * authoritative game snapshot (Current State, each Undo snapshot, the
+   * remote checkpoint's game) carries it from v20 on. A snapshot carrying it
+   * is never run through legacy migration -- malformed current-version data
+   * fails validation instead of being "repaired". */
+  gameSchemaVersion: 20;
   code: string;
   storytellerUid: string;
   scriptId: string;

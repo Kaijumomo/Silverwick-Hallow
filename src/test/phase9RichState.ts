@@ -98,9 +98,13 @@ export function buildRichPhase9Game(): RichGameHandles {
 
   // --- Structured Effects: manual + ability-sourced, with lifetime -----
   store().setStatus(chefId, "poisoned", true); // manual
+  // Phase 10B: finite Effects now expire deterministically at their exact
+  // boundary. This sourced Effect must still exist in the Day 1 snapshot
+  // below, so it lasts through the following Day (expires entering Night 2)
+  // -- an "untilDawn" Effect would, correctly, expire on entering Day 1.
   store().addEffect(washerwomanId, {
     type: "protected", sourceCharacter: "monk", sourcePlayer: chefId,
-    lifetime: { kind: "untilDawn" },
+    lifetime: { kind: "throughFollowingDay" },
   });
 
   // --- Structured Reminders: manual + sourced --------------------------

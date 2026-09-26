@@ -11,7 +11,8 @@ import { arrivalsAreTravelers, publicTravelerRole } from "@/stores/travelers";
 import { isInitialRevealComplete } from "@/stores/identity";
 import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
 import { initialRevealReadiness } from "@/features/setup/revealReadiness";
-import { hasEffect } from "@/stores/effects";
+import { effectsNeedingCheck } from "@/stores/effects";
+import { effectAccessibleSummary, effectIndicatorLabel, effectIndicators, type EffectIndicatorSummary } from "@/stores/effectRegistry";
 import { lifeAccessibleLabel, lifeStatusOf } from "@/stores/lifeState";
 import { LifeShroud, LifeStateText, VoteToken } from "@/features/life/LifeMarks";
 
@@ -21,13 +22,39 @@ export function buildRoleDisplayMap(script: Script | undefined): Map<string, Rol
   return map;
 }
 
-const STATUS_KINDS = ["drunk", "poisoned", "protected"] as const;
+/** Indicators with artwork sit on the token's perimeter (drunk 10 o'clock,
+ * poisoned 12, protected 2); every other indicator is a small labelled pill.
+ * Phase 10B: one indicator per visual key -- aggregated, never one badge per
+ * EffectRecord -- and only for Effects that currently apply. Decorative:
+ * the token's own accessible name carries the same information in words. */
+function EffectChip({ summary }: { summary: EffectIndicatorSummary }) {
+  const { indicator, activeCount } = summary;
+  return (
+    <span
+      className={`status-chip status-chip-${indicator.key}`}
+      data-effect-indicator={indicator.key}
+      title={effectIndicatorLabel(summary)}
+      aria-hidden="true"
+    >
+      <img src={indicator.icon} alt="" width="100%" height="100%" />
+      {activeCount > 1 && <span className="effect-count">×{activeCount}</span>}
+    </span>
+  );
+}
 
-const STATUS_ICON: Record<typeof STATUS_KINDS[number], React.ReactNode> = {
-  drunk:     <img src="/status/drunk.png"     alt="drunk"     width="100%" height="100%" />,
-  poisoned:  <img src="/status/poisoned.png"  alt="poisoned"  width="100%" height="100%" />,
-  protected: <img src="/status/protected.png" alt="protected" width="100%" height="100%" />,
-};
+function EffectPill({ summary }: { summary: EffectIndicatorSummary }) {
+  const { indicator, activeCount } = summary;
+  return (
+    <span
+      className={`effect-pill effect-family-${indicator.family}`}
+      data-effect-indicator={indicator.key}
+      title={effectIndicatorLabel(summary)}
+      aria-hidden="true"
+    >
+      {indicator.label}{activeCount > 1 ? ` ×${activeCount}` : ""}
+    </span>
+  );
+}
 
 const DRAG_MIME = "application/x-new-blood-seat";
 const FREE_ROAM_TOKEN_SIZE = 100;
@@ -88,7 +115,13 @@ function Token({
   // token and exile are public table information, so Privacy Mode never
   // hides them; "Needs check" is Storyteller-only and hidden there.
   const life = lifeStatusOf(player);
-  const needsCheck = !privacyMode && life.anomalies.length > 0;
+  // Phase 10B: Effects are Storyteller-private -- under Privacy Mode no
+  // indicator, count, label or "Needs check" is rendered at all (not merely
+  // hidden with CSS). A legacy Effect with an unresolved lifetime is a
+  // concise Storyteller-only "Needs check".
+  const indicators = privacyMode ? [] : effectIndicators(player);
+  const needsCheck = !privacyMode && (life.anomalies.length > 0 || effectsNeedingCheck(player).length > 0);
+  const effectSummary = privacyMode ? "" : effectAccessibleSummary(player);
 
   const classes = [
     "token",
@@ -138,7 +171,7 @@ function Token({
       style={{ left: `calc(50% + ${x}px)`, top: `calc(50% + ${y}px)` }}
       onClick={isGhost ? undefined : onClick}
       role="button"
-      aria-label={lifeAccessibleLabel(player.name, player.seat + 1, life.state, needsCheck)}
+      aria-label={lifeAccessibleLabel(player.name, player.seat + 1, life.state, needsCheck) + (effectSummary ? `, ${effectSummary}` : "")}
       tabIndex={isGhost ? -1 : 0}
       onKeyDown={(e) => {
         if (!isGhost && (e.key === "Enter" || e.key === " ")) {
@@ -170,10 +203,8 @@ function Token({
           <LifeShroud state={life.state} />
         </div>
         <VoteToken state={life.state} />
-        {!privacyMode && STATUS_KINDS.filter((k) => hasEffect(player, k)).map((k) => (
-          <span key={k} className={`status-chip status-chip-${k}`} title={k}>
-            {STATUS_ICON[k]}
-          </span>
+        {indicators.filter((summary) => summary.indicator.icon).map((summary) => (
+          <EffectChip key={summary.indicator.key} summary={summary} />
         ))}
       </div>
       {privacyMode && !publicRole ? (
@@ -192,6 +223,13 @@ function Token({
       )}
       {!player.alive && <LifeStateText state={life.state} className="token-ghost" />}
       {needsCheck && <div className="token-needs-check">Needs check</div>}
+      {indicators.some((summary) => !summary.indicator.icon) && (
+        <div className="token-effects">
+          {indicators.filter((summary) => !summary.indicator.icon).map((summary) => (
+            <EffectPill key={summary.indicator.key} summary={summary} />
+          ))}
+        </div>
+      )}
       {!privacyMode && player.reminders.length > 0 && (
         <div className="token-reminders">
           {player.reminders.slice(0, 4).map((r) => (

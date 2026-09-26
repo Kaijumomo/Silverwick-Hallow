@@ -24,6 +24,8 @@ import { requireActiveSession } from "./lifecycle";
 import { SessionWriter } from "./writer";
 import { startStorytellerSession, useSessionRuntime } from "./storytellerSync";
 import { SnapshotValidationError } from "./snapshots";
+import { participantRefOf } from "@/stores/participants";
+import { asV19, withV20Lifecycle } from "@/test/v20Migration";
 
 const code = "VDET2345";
 const root = `lobbies/${code}`;
@@ -48,9 +50,15 @@ const persisted = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 /** Phase 10A: these fixtures are built through current commands but stand
  * for v16/v17/v18-era data, which never carried the v19 Life Event Window
  * (whose presence alone is v19 evidence). Strip it to get the legacy shape. */
-const legacyShaped = (game: Game): Game => { delete (game as Record<string, unknown>).lifeEventWindow; return game; };
+// Phase 10B: nor the v20 Effect lifecycle / version marker (asV19).
+const legacyShaped = (game: Game): Game => {
+  const legacy = asV19(game);
+  delete (legacy as Record<string, unknown>).lifeEventWindow;
+  return legacy;
+};
+/** Strips exactly what the v18 -> v19 -> v20 steps add to a legacy entry. */
 const withoutLifeWindow = (game: Game): Game => {
-  const { lifeEventWindow: _window, ...rest } = game;
+  const { lifeEventWindow: _window, ...rest } = asV19(game);
   return rest as Game;
 };
 /** A legacy-shaped game after the full migration chain, for validity checks. */
@@ -67,13 +75,20 @@ function allEmptyWithSource(kind: "effect" | "reminder"): Game {
   store().newGame("tb", { plannedPlayerCount: 3 });
   store().addPlayerToSeat("Alice");
   const [alice, carrier] = store().game!.seatOrder as [string, string];
-  if (kind === "effect") {
-    expect(store().addEffect(carrier, { type: "marked", sourcePlayer: alice, lifetime: { kind: "manual" } })).not.toBeNull();
-  } else {
+  const aliceRef = participantRefOf(store().game!, alice)!;
+  if (kind === "reminder") {
     expect(store().addReminder(carrier, { label: "Chosen", sourcePlayer: alice, lifetime: { kind: "manual" } })).not.toBeNull();
+  } else {
+    // Phase 10B: an Effect belongs to a participation instance, so the
+    // current commands refuse one on an empty seat. A v17-era writer
+    // accepted it; that legacy shape is injected directly below.
+    expect(store().addEffect(carrier, { type: "marked", sourcePlayer: alice, lifetime: { kind: "manual" } })).toBeNull();
   }
   expect(store().unseatPlayer(alice)).toBe(true);
   const game = legacyShaped(persisted({ ...store().game!, code, storytellerUid: "host" }) as Game);
+  if (kind === "effect") {
+    game.players[carrier]!.effects = [{ id: "fx-legacy", type: "marked", sourceParticipant: aliceRef, lifetime: { kind: "manual" } }] as never;
+  }
   // Genuinely none of the pre-remediation markers:
   expect(Object.values(game.players).every((p) => p.isEmpty && !("participantId" in p))).toBe(true);
   expect(game.history).toEqual([]);
@@ -250,7 +265,9 @@ describe("R2-G: the real remote checkpoint path (readCheckpoint -> detect -> mig
     disposals.push(() => recovered.stop());
     expect(recovered.outcome).toBe("live");
     const carrier = game.seatOrder[1]!;
-    expect(store().game!.players[carrier]!.effects).toEqual(game.players[carrier]!.effects);
+    // Phase 10B: kept exactly, apart from the v20 lifecycle every legacy
+    // Effect receives (active, no automatic expiry for a manual one).
+    expect(store().game!.players[carrier]!.effects).toEqual(withV20Lifecycle(game).players[carrier]!.effects);
     expect(Object.values(store().game!.players).every((p) => p.isEmpty && !("participantId" in p))).toBe(true);
   });
 
@@ -263,7 +280,8 @@ describe("R2-G: the real remote checkpoint path (readCheckpoint -> detect -> mig
     disposals.push(() => recovered.stop());
     expect(recovered.outcome).toBe("live");
     expect(store().game!.players[carrier]!.effects).toEqual([
-      { id: "x", type: "marked", lifetime: { kind: "manual" }, sourceParticipant: { kind: "legacy", playerId: "a" } },
+      { id: "x", type: "marked", lifetime: { kind: "manual" }, sourceParticipant: { kind: "legacy", playerId: "a" },
+        state: "active", expiry: { kind: "none" } },
     ]);
   });
 });

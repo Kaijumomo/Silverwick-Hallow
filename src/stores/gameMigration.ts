@@ -152,6 +152,9 @@ function registryForScript(scriptId: unknown, evidence: MigrationScriptEvidence)
  * change is renamed from "identity" to "role". See migrateEntryV17ToV18.
  *
  * v18 -> v19 (Phase 10A): the Life Event Window. See migrateEntryV18ToV19.
+ *
+ * v19 -> v20 (Phase 10B): the authoritative Effect lifecycle and explicit
+ * game schema version evidence. See migrateEntryV19ToV20.
  */
 /**
  * Migrates exactly one player entry's v13-shaped fields, in place.
@@ -194,7 +197,9 @@ function migratePlayerV13ToV14(raw: object, registry: RoleRegistry): void {
       if (p.statuses?.[type] === true) {
         const id = `manual:${type}`;
         if (!p.effects.some((eff) => eff.id === id)) {
-          p.effects.push({ id, type, lifetime: { kind: "manual" } });
+          // A v14-shaped Effect; the v19 -> v20 step below gives it its
+          // lifecycle (active, no expiry) like every other legacy Effect.
+          p.effects.push({ id, type, lifetime: { kind: "manual" } } as unknown as STPlayerRecord["effects"][number]);
         }
         delete p.statuses[type];
       }
@@ -385,6 +390,46 @@ function migrateEntryV18ToV19(e: Record<string, unknown>): void {
   e.lifeEventWindow = { coverageFrom, events: [] };
 }
 
+/**
+ * v19 -> v20 (Phase 10B): the Effect lifecycle, in place.
+ *
+ * v19 Effects existed before expiry was executable, and migration preserves
+ * exactly that truth -- it never guesses:
+ *
+ *  - every Effect becomes `state: "active"` (v19 had no suppression);
+ *  - a manual lifetime gets `expiry: { kind: "none" }`;
+ *  - any other (finite) lifetime gets `expiry: { kind: "unresolved" }` -- NOT
+ *    an expiry inferred from the current phase or `appliedAt`, NOT removal,
+ *    and never anything reconstructed from History. It stays recoverable
+ *    Storyteller state and surfaces as a concise "Needs check".
+ *
+ * Then the entry is stamped `gameSchemaVersion: 20`. History (including old
+ * Effect snapshots in it) is never touched or consulted. Each entry (Current
+ * State, every Undo snapshot, a remote checkpoint's game) migrates from its
+ * own content alone -- deterministic, no ids, clocks or randomness -- so
+ * independent migrations of the same lineage agree and a re-run is a no-op.
+ *
+ * Finding A3 still applies: a present-but-malformed Effect (not an object,
+ * or a lifetime that is not an object with a string kind) is left untouched
+ * for the final schema gate to reject; nothing malformed is repaired.
+ */
+function migrateEntryV19ToV20(e: Record<string, unknown>): void {
+  if (isObject(e.players)) {
+    for (const raw of Object.values(e.players)) {
+      if (!isObject(raw)) continue;
+      forEachObject(raw.effects, (effect) => {
+        const lifetime = effect.lifetime;
+        if (!isObject(lifetime) || typeof lifetime.kind !== "string") return;
+        if (effect.state === undefined) effect.state = "active";
+        if (effect.expiry === undefined) {
+          effect.expiry = lifetime.kind === "manual" ? { kind: "none" } : { kind: "unresolved" };
+        }
+      });
+    }
+  }
+  e.gameSchemaVersion = 20;
+}
+
 export function migrateGameEntry(
   entry: unknown,
   fromVersion: number,
@@ -457,6 +502,15 @@ export function migrateGameEntry(
   if (fromVersion < 19 && !hasV19LifeEvidence(e as Record<string, unknown>)) {
     migrateEntryV18ToV19(e as Record<string, unknown>);
   }
+
+  // Phase 10B: an entry carrying explicit version evidence (any
+  // `gameSchemaVersion` key, whatever its value) or ANY v20 Effect lifecycle
+  // evidence is current-version data -- malformed or not -- and is never run
+  // through legacy migration. The v20 schema judges it (a missing, wrong or
+  // malformed marker, or a malformed lifecycle, fails validation).
+  if (fromVersion < 20 && !hasV20Evidence(e as Record<string, unknown>)) {
+    migrateEntryV19ToV20(e as Record<string, unknown>);
+  }
 }
 
 /**
@@ -512,8 +566,17 @@ export function migrateGameEntry(
  * current-version data: a malformed v19 window fails the v19 schema rather
  * than being mistaken for v18 and replaced. A checkpoint with no v19
  * evidence is v18 or older, and migration adds its window (v18 -> v19).
+ *
+ * Phase 10B (v20): remote checkpoints finally carry EXPLICIT version
+ * evidence -- the game's own `gameSchemaVersion` (written with the game by
+ * writeProjections, no separate checkpoint field or Firebase rule change).
+ * Any explicit marker (or marker-less v20 lifecycle evidence, see
+ * hasV20Evidence) reports 20, so no legacy step ever runs over it; the v20
+ * schema alone judges it. Only marker-less snapshots still go through the
+ * bounded structural detection above.
  */
 export function detectLegacyGameVersion(game: Record<string, unknown>): number | null {
+  if (hasV20Evidence(game)) return 20;
   if (hasV19LifeEvidence(game)) return 19;
   if (hasV17IdentityEvidence(game)) return 17;
   if (Array.isArray(game.informationDeliveries)) return 16;
@@ -598,4 +661,27 @@ export function hasV17IdentityEvidence(game: Record<string, unknown>): boolean {
 export function hasV19LifeEvidence(game: Record<string, unknown>): boolean {
   if (hasOwnKey(game, "lifeEventWindow")) return true;
   return someEntry(game.history, (h) => hasOwnKey(h, "lifeEvent") || hasOwnKey(h, "correction"));
+}
+
+/**
+ * Phase 10B: true when a game-shaped entry carries v20 evidence -- first and
+ * foremost the explicit `gameSchemaVersion` key (PRESENCE, whatever its
+ * value: a marked snapshot is never treated as legacy, so a wrong or
+ * malformed marker fails the v20 schema instead of being overwritten), or any
+ * v20-only Effect lifecycle key a v19 writer never produced:
+ *
+ *  - players[*].effects[*].state / .expiry / .parameters
+ *  - history[*].effectOperation / .resolutionId
+ *
+ * A v20 writer always stamps the marker, so marker-less lifecycle evidence is
+ * malformed current-version data: detected as v20 and rejected by the schema
+ * (the marker is required), never "repaired" by the v19 -> v20 step.
+ */
+export function hasV20Evidence(game: Record<string, unknown>): boolean {
+  if (hasOwnKey(game, "gameSchemaVersion")) return true;
+  const lifecycle = (effect: unknown) =>
+    hasOwnKey(effect, "state") || hasOwnKey(effect, "expiry") || hasOwnKey(effect, "parameters");
+  const players = isObject(game.players) ? Object.values(game.players) : [];
+  if (players.some((p) => isObject(p) && someEntry(p.effects, lifecycle))) return true;
+  return someEntry(game.history, (h) => hasOwnKey(h, "effectOperation") || hasOwnKey(h, "resolutionId"));
 }

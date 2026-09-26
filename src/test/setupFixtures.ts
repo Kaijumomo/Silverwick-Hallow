@@ -42,7 +42,7 @@ export function setupGame(roles = standardRoles(), over: Partial<StorytellerLobb
   const players = roles.map((actualRole, seat) =>
     makeSTPlayer({ id: "p"+seat, name: "Player "+seat, seat, actualRole, ...readyPerception(actualRole) }));
   return {
-    code: "", storytellerUid: "local", scriptId: setupScript.id, phase: "setup", day: 0,
+    gameSchemaVersion: 20, code: "", storytellerUid: "local", scriptId: setupScript.id, phase: "setup", day: 0,
     players: Object.fromEntries(players.map(p => [p.id,p])), seatOrder: players.map(p => p.id),
     plannedPlayerCount: roles.length, plannedTravelerCount: 0, rolePool: [], fabled: [], lorics: [], bluffs: [],
     notes: "", nightProgress: {}, pendingPlayers: {}, history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] }, ...over,

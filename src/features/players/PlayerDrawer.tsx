@@ -13,7 +13,8 @@ import { evilInformationPolicy } from "@/features/nightOrder/nightRules";
 import { buildRegistry } from "@/data/roleRegistry";
 import { useModalBehavior } from "@/components/Modal";
 import { usePrivacyStore } from "@/stores/privacyStore";
-import { currentGameMoment, hasEffect } from "@/stores/effects";
+import { currentGameMoment } from "@/stores/effects";
+import { EffectControls } from "@/features/effects/EffectControls";
 import { lifeStatusOf } from "@/stores/lifeState";
 import { LifeControls } from "@/features/life/LifeControls";
 import { LifeStateText } from "@/features/life/LifeMarks";
@@ -25,7 +26,6 @@ import type {
   STPlayerRecord,
 } from "@/stores/types";
 
-const STATUSES = ["drunk", "poisoned", "protected"] as const;
 const TYPE_ORDER: RoleType[] = [
   "townsfolk",
   "outsider",
@@ -188,7 +188,6 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   const setFakeMinions = useStorytellerStore((s) => s.setFakeMinions);
   const setIsTraveler = useStorytellerStore((s) => s.setIsTraveler);
   const setAbilityUsed = useStorytellerStore((s) => s.setAbilityUsed);
-  const setStatus = useStorytellerStore((s) => s.setStatus);
   const addReminderCommand = useStorytellerStore((s) => s.addReminder);
   const removeReminderCommand = useStorytellerStore((s) => s.removeReminder);
   const setNotes = useStorytellerStore((s) => s.setNotes);
@@ -378,20 +377,13 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
                 Ability used
               </button>
             </div>
-            <div className="drawer-row">
-              {STATUSES.map((s) => (
-                <button
-                  key={s}
-                  className="toggle-pill"
-                  data-kind={s}
-                  aria-pressed={hasEffect(player, s)}
-                  onClick={() => setStatus(player.id, s, !hasEffect(player, s))}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
           </section>
+
+          {/* Phase 10B: Effects -- one-tap manual quick effects, the compact
+              aggregated active list, and the advanced workflow. Keyed by the
+              participation instance so no disclosure state carries over to
+              a different occupant of this seat. */}
+          <EffectControls key={player.participantId ?? player.id} player={player} />
 
           <section className="drawer-section">
             <h3 className="drawer-section-title">Travel status</h3>

@@ -169,7 +169,8 @@ describe("Phase 9R.1 Finding B1: remote checkpoint migration", () => {
     expect(game.players.a!.actualAlignment).toBe("good");
     // Legacy `statuses.poisoned` boolean became its own deterministic
     // manual Effect, and the boolean itself was cleared.
-    expect(game.players.a!.effects).toEqual([{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" } }]);
+    // (Phase 10B: and, on the way to v20, active with no automatic expiry.)
+    expect(game.players.a!.effects).toEqual([{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }]);
     expect(game.players.a!.statuses.poisoned).toBeUndefined();
     // Legacy plain-string reminder became a structured manual/legacy record,
     // preserving its text.
@@ -232,7 +233,7 @@ describe("Phase 9R.1 Finding B1: remote checkpoint migration", () => {
     expect(recovered.outcome).toBe("live");
     const game = useStorytellerStore.getState().game!;
     expect(game.players.a!.actualAlignment).toBe("evil"); // real v14 content, never overwritten
-    expect(game.players.a!.effects).toEqual([{ id: "manual:drunk", type: "drunk", lifetime: { kind: "manual" } }]);
+    expect(game.players.a!.effects).toEqual([{ id: "manual:drunk", type: "drunk", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }]);
     expect(game.history).toEqual([]);
     expect(game.informationDeliveries).toEqual([]);
     expect(useStorytellerStore.getState().undoStack).toEqual([]);
@@ -518,7 +519,7 @@ describe("Phase 9R.1 Finding A3: migration does not sanitize malformed legacy da
 
     expect(recovered.outcome).toBe("live");
     expect(useStorytellerStore.getState().game!.players.a!.effects)
-      .toEqual([{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" } }]);
+      .toEqual([{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }]);
   });
 
   it("legacy statuses.poisoned: false does NOT become an active Effect", async () => {

@@ -43,6 +43,7 @@ const registry = buildRegistry(tbScript);
 
 function makeLobby(): StorytellerLobbyRecord {
   return {
+    gameSchemaVersion: 20,
     code: "ABCD",
     storytellerUid: "uid-st",
     scriptId: "tb",
@@ -71,7 +72,7 @@ function makeLobby(): StorytellerLobbyRecord {
         reminders: [{ id: "r1", label: "killed Bob", lifetime: { kind: "manual" } }],
         statuses: { protected: true },
         actualAlignment: "evil",
-        effects: [{ id: "manual:protected", type: "protected", lifetime: { kind: "manual" } }],
+        effects: [{ id: "manual:protected", type: "protected", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }],
       }),
       p2: makePublishedSTPlayer({
         id: "p2",
@@ -395,7 +396,7 @@ describe("writeProjections — privacy chokepoint", () => {
 describe("writeProjections — Phase 9C.4 setup barrier atomicity", () => {
   function setupLobby(p2ShownRole: string | null, revealed = false): StorytellerLobbyRecord {
     return {
-      code: "SETP", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
+      gameSchemaVersion: 20, code: "SETP", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
       bluffs: [], fabled: [], lorics: [], notes: "", setupRolesRevealed: revealed,
       seatOrder: ["p1", "p2", "t1"], nightProgress: {}, rolePool: [], history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       plannedPlayerCount: 2, plannedTravelerCount: 0, pendingPlayers: {},
@@ -484,8 +485,10 @@ describe("Phase 9D.1: live-state persistence/recovery round trip", () => {
       ...lobby.players.p1!,
       actualAlignment: "evil",
       effects: [
-        { id: "manual:protected", type: "protected", lifetime: { kind: "manual" } },
-        { id: "poisoner-1", type: "poisoned", sourceCharacter: "poisoner", sourceParticipant: participantRefOf(lobby, "p2")!, lifetime: { kind: "untilDawn" } },
+        { id: "manual:protected", type: "protected", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } },
+        { id: "poisoner-1", type: "poisoned", sourceCharacter: "poisoner", sourceParticipant: participantRefOf(lobby, "p2")!, lifetime: { kind: "untilDawn" },
+          appliedAt: { phase: "night", day: 1 }, state: "suppressed", expiry: { kind: "at", moment: { phase: "day", day: 1 } },
+          parameters: { chosen: { kind: "participant", participants: [participantRefOf(lobby, "p2")! as never] } } },
       ],
       reminders: [
         { id: "r1", label: "Killed Bob", sourceCharacter: "imp", createdAt: { phase: "night", day: 1 }, lifetime: { kind: "manual" } },

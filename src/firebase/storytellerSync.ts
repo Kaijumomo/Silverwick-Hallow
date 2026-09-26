@@ -1118,6 +1118,14 @@ let currentConflict: PendingConflict | null = null;
  * one that still fails schema validation after migration, fails safely as
  * "invalid" exactly as before -- never a partial/guessed recovery.
  *
+ * Phase 10B: from v20 the checkpoint's `game` carries its own explicit
+ * `gameSchemaVersion` (written with the game itself -- no checkpoint field,
+ * writer or rule change). detectLegacyGameVersion reports any explicitly
+ * marked (or v20-evidenced) game as 20, so no legacy step ever runs over it;
+ * only markerless legacy checkpoints still use structural detection. Effect
+ * Current State is restored exactly: recovery never expires, recomputes or
+ * reassigns anything.
+ *
  * Phase 9R.1 Astra remediation (Finding A2): Role/alignment resolution
  * during THIS (remote) migration uses "canonical-only" evidence --
  * built-in scripts only, never the recovering device's own current

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { migrateStoreState, takeMigrationResetFlag } from "./storytellerStore";
 import { detectLegacyGameVersion, migrateGameEntry } from "./gameMigration";
 import type { StorytellerLobbyRecord } from "./types";
+import { asV19 } from "@/test/v20Migration";
 
 // Phase 9R.2 Section 21: v16 -> v17 migration. v16 historical records only
 // ever carried a bare, reusable PlayerId. Migration may give the person
@@ -111,8 +112,11 @@ describe("Phase 9R.2 migration C/D/E: historical references become unresolved le
     expect(game.history[2]!.change).toEqual({ kind: "removed", item: {
       id: "old", label: "Chosen", sourceParticipant: legacy("e"), lifetime: { kind: "manual" },
     } });
+    // Phase 10B: a legacy finite Effect is kept active with an explicitly
+    // UNRESOLVED expiry -- never guessed, never removed.
     expect(game.players.c!.effects).toEqual([
-      { id: "x", type: "poisoned", sourceCharacter: "poisoner", sourceParticipant: legacy("a"), lifetime: { kind: "untilDawn" } },
+      { id: "x", type: "poisoned", sourceCharacter: "poisoner", sourceParticipant: legacy("a"), lifetime: { kind: "untilDawn" },
+        state: "active", expiry: { kind: "unresolved" } },
     ]);
     expect(game.players.c!.reminders).toEqual([
       { id: "r", label: "Townsfolk", sourceCharacter: "washerwoman", sourceParticipant: legacy("a"), lifetime: { kind: "manual" } },
@@ -232,10 +236,11 @@ describe("Phase 9R.2 migration: remote-checkpoint version detection", () => {
   it("a v17 game is recognized by its own markers and is never migrated again; a v16 game is recognized as v16", () => {
     expect(detectLegacyGameVersion(persisted(v16Game()))).toBe(16);
     const current = migrateLocal(persisted({ game: v16Game(), undoStack: [] })).game as unknown as Record<string, unknown>;
-    // Phase 10A: migration now reaches v19, whose Life Event Window is itself
-    // current-version evidence; without it the same game is v17-evidenced.
-    expect(detectLegacyGameVersion(persisted(current))).toBe(19);
-    const { lifeEventWindow: _window, ...v17 } = current;
+    // Phase 10B: migration now reaches v20, whose explicit gameSchemaVersion
+    // is current-version evidence; without the v19/v20 additions the same
+    // game is v17-evidenced.
+    expect(detectLegacyGameVersion(persisted(current))).toBe(20);
+    const { lifeEventWindow: _window, ...v17 } = asV19(current);
     expect(detectLegacyGameVersion(persisted(v17))).toBe(17);
     // Any single marker suffices.
     expect(detectLegacyGameVersion({ ...persisted(v16Game()), history: [{ participant: legacy("a") }] })).toBe(17);

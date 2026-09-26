@@ -28,7 +28,10 @@ describe("Storyteller privacy mode", () => {
   it("conceals token identity and effects while preserving the current game", () => {
     const view = render(<GameScreen />);
     expect(screen.getAllByText("Chef").length).toBeGreaterThan(0);
-    expect(screen.getByAltText("poisoned")).toBeInTheDocument();
+    // Phase 10B: the indicator artwork is decorative; the token's own
+    // accessible name states the Effect in words.
+    expect(document.querySelector('[data-effect-indicator="poisoned"]')).not.toBeNull();
+    expect(screen.getByRole("button", { name: /Alice, seat 1, .*Poisoned/ })).toBeInTheDocument();
     expect(screen.getByText("Secret reminder")).toBeInTheDocument();
     const before = structuredClone(storyteller.getState().game);
 
@@ -36,7 +39,8 @@ describe("Storyteller privacy mode", () => {
 
     expect(screen.getByRole("button", { name: "Disable Privacy Mode" })).toHaveTextContent("Privacy Mode On");
     expect(screen.queryByText("Chef")).toBeNull();
-    expect(screen.queryByAltText("poisoned")).toBeNull();
+    expect(document.querySelector("[data-effect-indicator]")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Poisoned/ })).toBeNull();
     expect(screen.queryByText("Secret reminder")).toBeNull();
     expect(screen.getByText("role hidden")).toBeInTheDocument();
     expect(storyteller.getState().game).toEqual(before);
