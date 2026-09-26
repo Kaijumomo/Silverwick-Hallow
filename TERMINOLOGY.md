@@ -37,8 +37,9 @@ changes.
 
 - Some commands are **History-eligible**. During Live Play they append their
   own History through `recordIfLive()`. Examples: `assignRole`,
-  `setActualAlignment`, `addEffect`, `addReminder`, and every Life command
-  (`resolveLife` and its wrappers, see §12).
+  `setActualAlignment`, `addReminder`, every Life command (`resolveLife` and
+  its wrappers, see §12) and every Effect command (`resolveEffects` and its
+  wrappers, see §13).
 - Other commands change Current State without producing a History Record. An
   example is a phase transition through `setPhase` (it still pushes Undo).
 
@@ -144,10 +145,34 @@ History category.
 
 ## 13. Effect
 
-A structured active gameplay effect on a player (`EffectRecord` in
-`player.effects`). Examples are poisoned, drunk and protected, plus effects
-later created by abilities. Several Effects of the same `type` from different
-sources can coexist.
+One currently existing causal condition attached to one participant
+(`EffectRecord` in `player.effects`, the authoritative collection). Examples
+are poisoned, drunk and protected, plus Effects later created by abilities and
+custom/homebrew ones. Identity is the participant plus the Effect `id`; several
+Effects of the same `type` (from different sources, or manual + ability)
+coexist and are never de-duplicated.
+
+- **Effect origin** (`sourceParticipant`, `sourceCharacter`): what originally
+  caused the Effect. Distinct from the **mutation provenance** of a later
+  lifecycle change, which is recorded on that change's History Record.
+- **Operational state** (`state`): `active` (applies) or `suppressed` (still
+  exists, does not currently apply). Mechanical queries (`hasEffect`) read
+  only active Effects; inspection queries (`hasStoredEffect`,
+  `effectInstances`) also see suppressed ones.
+- **Expiry** (`expiry`): `none`, `at` a Game Moment (removed when live play
+  enters it, inside the phase transition), or `unresolved` (a pre-v20 finite
+  Effect; a "Needs check", never guessed).
+- **Effect parameters**: typed structured values (participant refs, roles,
+  alignment, number, boolean, text). Mechanics never parse `note`.
+- **Manual Effect**: the Storyteller quick-control Effect `manual:<type>`
+  (`setManualEffect`); never any other Effect of that type.
+
+Effects change only through the **Effect lifecycle boundary**
+(`planEffectTransaction` in `src/stores/effectResolution.ts`, committed by the
+store's `resolveEffects`): apply, update, remove, suppress, resume and
+corrections, each bound to the participation instance, all-or-nothing, one
+Undo entry. Visual presentation lives in `src/stores/effectRegistry.ts`
+(presentation only — e.g. "Protected" is a visual family, not a rule).
 
 ## 14. Reminder
 
@@ -208,8 +233,9 @@ These are correct as they stand. Do not "fix" them.
   `sourceCharacter` (which holds a Role id).
 - **`statuses`** is a legacy compatibility field. Commands no longer write it,
   and it is not authoritative Effect state; `effects` is. It stays until a
-  separately approved migration removes it. The `setStatus` command and the
-  UI's "status" chips are the manual Effect toggle, and write Effects.
+  separately approved migration removes it. The deprecated `setStatus`
+  command is an adapter over `setManualEffect` (the Drawer's "Quick effects"),
+  and writes Effects.
 - **`NightStepStatus`** is the status of a night-order step, which is
   unrelated to Effects.
 - **Night and Day** are the persisted phases that "Live Play" covers (§8).

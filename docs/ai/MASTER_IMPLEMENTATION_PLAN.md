@@ -1,11 +1,11 @@
 # Silverwick Hollow — Master Implementation Plan
 
 **Status:** Active canonical roadmap  
-**Updated:** 2026-09-25  
+**Updated:** 2026-09-26\
 **Integrated branch:** `main`  
 **Phase 10A closure checkpoint:** `d798266b988e49f904aa8f8658c917fd5b7e7abb`  
 **Pre-10B Firebase lifecycle hotfix checkpoint:** `38b10119544ce2c02590e9bc9c741aab995a91d1`  
-**Schema:** v19  
+**Schema:** v20 on `dev/phase-10b` (v19 on `main`)\
 **Current phase:** Phase 10B — Effect Lifecycle + Visual Effect Indicators
 
 ## Product invariants
@@ -100,7 +100,17 @@ Operational note: the code hotfix is closed, but production Go Live still depend
 ## Phase 10 roadmap
 
 ### 10B — Effect Lifecycle + Visual Effect Indicators
-**Status:** NEXT
+**Status:** IMPLEMENTED on `dev/phase-10b` — awaiting Luna verification (not closed). See `PHASE10B.md`.
+
+Implemented: store v20 with explicit `gameSchemaVersion` evidence; Effect
+`state` / resolved `expiry` / typed `parameters`; the pure Effect planner
+(`effectResolution.ts`) and single `resolveEffects` commit seam with
+participant-bound identity, apply/update/remove/suppress/resume/correction
+semantics and structured refusals; deterministic expiry inside the phase
+transition; v19 → v20 migration (finite legacy Effects → `unresolved`, never
+guessed); centralized queries and presentation registry; aggregated Grimoire
+indicators and Player Drawer quick/active/advanced Effects with Privacy Mode
+suppression.
 
 Goals:
 - operationalize structured Effects already introduced in Phase 9D;

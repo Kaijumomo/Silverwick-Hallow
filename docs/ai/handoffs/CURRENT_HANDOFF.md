@@ -1,7 +1,16 @@
 # Silverwick Hollow — Current Handoff
 
-**Date:** 2026-09-25  
-**State:** Post-Phase-10A + pre-10B Firebase lifecycle hotfix closure; ready to begin Phase 10B architecture work.
+**Date:** 2026-09-26\
+**State:** Phase 10B implemented on `dev/phase-10b` (store v20); awaiting Luna verification. Phase 10B is **not closed**.
+
+## Phase 10B implementation status
+
+See `PHASE10B.md` for the implemented model and semantics. Summary:
+- store v20: explicit `gameSchemaVersion: 20` on every authoritative game snapshot; Effect `state` (active/suppressed), resolved `expiry` (none / at / unresolved) and typed `parameters`;
+- one pure Effect planner (`src/stores/effectResolution.ts`) and one commit seam (`resolveEffects`); `setStatus`/`addEffect`/`removeEffect` are adapters over it; the phase transition commits deterministic expiry in the same replacement;
+- v19 → v20 migration: manual → active + none, finite → active + unresolved ("Needs check"), History never consulted;
+- presentation registry (`src/stores/effectRegistry.ts`), aggregated Grimoire indicators, Drawer quick/active/advanced Effects, Privacy Mode suppression;
+- no Firebase rule, writer or fencing change.
 
 ## Current checkpoint
 
@@ -111,7 +120,7 @@ Operational status: production Firebase rules were **not** deployed by the hotfi
 ## Phase 10 roadmap
 
 - **10A Life Transition Semantics + visual life-state grammar — CLOSED**
-- **10B Effect Lifecycle + visual Effect indicators — NEXT**
+- **10B Effect Lifecycle + visual Effect indicators — IMPLEMENTED, awaiting verification**
 - 10C Reminder Workflow + visual Reminder tokens
 - 10D Role Transitions
 - 10E Alignment Transitions
@@ -159,8 +168,6 @@ At the start of any new session, verify the exact branch SHA and read:
 
 ## Immediate next task
 
-Do not code yet.
-
-First answer:
-
-> What is the smallest correct authoritative Effect lifecycle for Silverwick Hollow that supports manual Storyteller operation now and future rules-aware ability resolution later, while preserving Current State/History separation, ParticipantId durability, phase rollover, Undo/recovery, privacy/projections, source/provenance, stacking/replacement rules and deterministic-vs-judgment boundaries?
+Luna mechanical verification of the Phase 10B implementation checkpoint on
+`dev/phase-10b` (verify the exact commit SHA), then Astra adversarial review.
+Implementation completion is not closure.
