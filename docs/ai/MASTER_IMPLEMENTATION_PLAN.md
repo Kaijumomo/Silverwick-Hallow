@@ -4,6 +4,7 @@
 **Updated:** 2026-09-25  
 **Integrated branch:** `main`  
 **Phase 10A closure checkpoint:** `d798266b988e49f904aa8f8658c917fd5b7e7abb`  
+**Pre-10B Firebase lifecycle hotfix checkpoint:** `38b10119544ce2c02590e9bc9c741aab995a91d1`  
 **Schema:** v19  
 **Current phase:** Phase 10B — Effect Lifecycle + Visual Effect Indicators
 
@@ -61,6 +62,41 @@ Final closure gate:
 - Astra remaining findings: **None**
 - final Astra verdict: **PASS — READY FOR SOL CLOSURE**
 
+## Pre-10B Firebase Go Live Lifecycle Hotfix
+
+**Status:** CLOSED  
+**Checkpoint:** `38b10119544ce2c02590e9bc9c741aab995a91d1`
+
+A focused pre-10B hotfix closed a production-facing multiplayer lifecycle failure without changing schema, Firebase rules, or the core `SessionWriter.commit()` fencing path.
+
+Root cause reproduced in the emulator:
+- deployed RTDB rules older than Phase 9R.6 deny the Storyteller startup read of `membershipRevocations`;
+- rules older than Phase 9R.2 deny `rosterParticipants`;
+- the lobby/session can be created while Storyteller startup fails before the initial acknowledged projection/checkpoint flush;
+- the earlier UI then trapped the Storyteller in a non-live lobby that could not cleanly End Game.
+
+Closed behavior:
+- runtime distinguishes connecting/reconnecting/live/blocked/stopped/failed;
+- the runtime writer is still exposed only after the first acknowledged flush;
+- startup failures are attributed without treating denied reads as empty state;
+- failed-start End Game retries through a fresh fenced `SessionWriter`, never a direct write;
+- local-only **Leave multiplayer — keep game offline** is offered only when authoritative server reads prove the expected session is active with no checkpoint and local accepted-live evidence does not disqualify it;
+- that proof fails closed and is re-checked when Leave is chosen;
+- resume handling routes a possibly-lapsed writer through the existing reconnect seam without modifying the commit path;
+- the old fixed error overlay was replaced with an in-flow connection-status surface;
+- `npm run rules:verify -- --project <ID>` provides a read-only deployed-rules drift check.
+
+Final Luna verification:
+- **2555/2555** normal tests across 102 files;
+- **184/184** Firebase emulator tests across 3 files, 0 skipped;
+- typecheck PASS;
+- build PASS;
+- `git diff --check` PASS;
+- remaining findings: **None**;
+- verdict: **PASS — READY FOR SOL CLOSURE**.
+
+Operational note: the code hotfix is closed, but production Go Live still depends on the deployed Firebase RTDB rules matching `src/firebase/rules.json`. Verify/deploy the current rules before treating the production incident itself as closed.
+
 ## Phase 10 roadmap
 
 ### 10B — Effect Lifecycle + Visual Effect Indicators
@@ -114,7 +150,7 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 - `main` contains integrated closed checkpoints.
 - Each Phase 10 subphase starts from current `main` on a fresh branch.
 - Reviewers verify exact commit identity rather than trusting branch names.
-- Next branch: `dev/phase-10b`.
+- `dev/phase-10b` must be moved/recreated from the post-hotfix integrated `main` before 10B implementation begins.
 
 ## Immediate next action
 
