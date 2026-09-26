@@ -156,23 +156,38 @@ async function closeFailedStart(pending: FailedStart) {
   if (sameScope(useStorytellerStore.getState().lobby, lobby)) useStorytellerStore.getState().setLobby(null);
 }
 
-/** Proof that this still-active session never reached live anywhere, so
- * leaving it locally abandons nothing that was published. Going live requires
- * the initial acknowledged flush, which writes `checkpoint` in the same atomic
- * update as the first projections; a close deletes `checkpoint` only in the
- * same atomic update that ends the session. So an absent checkpoint on an
- * active session means no Storyteller ever went live on it -- regardless of
- * any close sentinel an earlier failed close attempt wrote. When the server
- * is unreachable, only this device's own durable evidence of never having
- * attempted a commit for this scope counts. */
-async function sessionNeverReachedLive(lobby: LobbyConnection, backend: RoomBackend | null) {
-  if (backend) {
-    try { return (await backend.get(`lobbies/${lobby.code}/checkpoint`)) == null; }
-    catch { /* unreachable: fall back to local evidence */ }
+/** Fail-closed proof (HOTFIX-RV-001) that this lobby's session never reached
+ * live on ANY device, so leaving it locally abandons nothing that was
+ * published. Going live requires the initial acknowledged flush, which writes
+ * `checkpoint` in the same atomic update as the first projections; a close
+ * deletes `checkpoint` only in the same atomic update that ends the session.
+ * So an absent checkpoint on the expected, still-active session means no
+ * Storyteller ever went live on it -- regardless of any close sentinel an
+ * earlier failed close attempt wrote.
+ *
+ * Returns true ONLY when authoritative server reads succeed and show exactly
+ * that: the session record decodes, carries this lobby's session id, is
+ * active, and the checkpoint is absent. Anything else -- Firebase
+ * unavailable, a denied or failed read, a malformed/missing/different/ended
+ * session, or any checkpoint value -- withholds Leave. Local evidence can only
+ * disqualify, never substitute: another device can take the same session live
+ * without this device ever recording an acknowledged guard, so this device's
+ * silence proves nothing. A local accepted guard for this scope (the scope
+ * reached live) disqualifies. A local unresolved lastAttempt deliberately
+ * does not: every commit that can land before live is the initial flush,
+ * which writes the checkpoint read here, so the server proof already covers it
+ * (a denied initial flush leaves a lastAttempt yet published nothing). */
+async function provenNeverReachedLive(lobby: LobbyConnection): Promise<boolean> {
+  if (scopeReachedLive(lobby) || !lobby.sessionId) return false;
+  try {
+    const { backend } = await connectFirebase();
+    const session = decodeSession(await backend.get(sessionPath(lobby.code)));
+    if (!session || session.id !== lobby.sessionId || session.state !== "active") return false;
+    const checkpoint = await backend.get(`lobbies/${lobby.code}/checkpoint`);
+    return checkpoint === undefined || checkpoint === null;
+  } catch {
+    return false;
   }
-  const sync = useStorytellerStore.getState().sync;
-  const scoped = sync && sync.code === lobby.code && sync.sessionId === (lobby.sessionId ?? "") ? sync : null;
-  return !scoped || (scoped.ackedGuard == null && scoped.lastAttempt == null);
 }
 
 /**
@@ -184,16 +199,16 @@ async function sessionNeverReachedLive(lobby: LobbyConnection, backend: RoomBack
  *
  * - Live runtime writer: its own fenced close (unchanged).
  * - Startup never reached live: a fresh fenced writer closes it
- *   (closeFailedStart). If that cannot complete either, and the lobby never
- *   reached live, Leave (local-only) is offered.
+ *   (closeFailedStart). If that cannot complete either, Leave (local-only) is
+ *   offered only when the server proves the lobby never reached live
+ *   (provenNeverReachedLive).
  */
 export async function closeMultiplayerSession() {
   const lobby = useStorytellerStore.getState().lobby;
   if (!lobby) return;
   const pending = failedStart && sameScope(failedStart.lobby, lobby) ? failedStart : null;
-  let backend: RoomBackend | null = null;
   try {
-    ({ backend } = await connectFirebase());
+    const { backend } = await connectFirebase();
     const session = decodeSession(await backend.get(sessionPath(lobby.code)));
     if (!session || session.state === "ended") {
       useStorytellerStore.getState().setLobby(null);
@@ -207,8 +222,7 @@ export async function closeMultiplayerSession() {
     // Leave is never offered for a lobby that reached live (anywhere this
     // device knows of) or while startup is still in progress: those require
     // an authoritative close.
-    const offer = useSessionRuntime.getState().status === "failed" && !scopeReachedLive(lobby)
-      && await sessionNeverReachedLive(lobby, backend);
+    const offer = useSessionRuntime.getState().status === "failed" && await provenNeverReachedLive(lobby);
     if (sameScope(useStorytellerStore.getState().lobby, lobby)) {
       reportRuntimeError("close", `The lobby could not be ended. ${failure.message}`);
       useSessionRuntime.setState({ closeFailed: true, leaveOffer: offer && !scopeReachedLive(lobby) ? scopeKey(lobby) : null });
@@ -219,14 +233,27 @@ export async function closeMultiplayerSession() {
 
 /** Local-only escape for a lobby whose startup never reached live and whose
  * authoritative close could not complete: clears only this device's lobby
- * association. Deletes nothing on the server, never ends the local game (it
- * stays available offline), and refuses -- returning false -- unless Leave is
- * currently offered for exactly this lobby and the lobby still has never
- * reached live. */
-export function leaveMultiplayerOffline(): boolean {
+ * association. Deletes nothing on the server and never ends the local game (it
+ * stays available offline). The standing offer is never trusted as proof:
+ * resolves true only if Leave is offered for exactly this lobby AND the
+ * server still proves, at this moment, that it never reached live
+ * (provenNeverReachedLive). Otherwise resolves false, leaves the lobby and
+ * game untouched, and withdraws the offer when the proof failed. */
+export async function leaveMultiplayerOffline(): Promise<boolean> {
   const lobby = useStorytellerStore.getState().lobby;
-  const runtime = useSessionRuntime.getState();
-  if (!lobby || runtime.leaveOffer !== scopeKey(lobby) || runtime.status !== "failed" || scopeReachedLive(lobby)) return false;
+  const offered = () => {
+    const runtime = useSessionRuntime.getState();
+    return !!lobby && sameScope(useStorytellerStore.getState().lobby, lobby)
+      && runtime.leaveOffer === scopeKey(lobby) && runtime.status === "failed";
+  };
+  if (!lobby || !offered()) return false;
+  const proven = await provenNeverReachedLive(lobby);
+  if (!offered()) return false;
+  if (!proven) {
+    reportRuntimeError("close", "Leaving offline needs the server to confirm this lobby never went live, and that could not be confirmed. Try ending the lobby again.");
+    useSessionRuntime.setState({ leaveOffer: null });
+    return false;
+  }
   if (failedStart && sameScope(failedStart.lobby, lobby)) failedStart = null;
   useStorytellerStore.getState().setLobby(null);
   return true;

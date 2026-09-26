@@ -131,7 +131,7 @@ describe("Go Live under deployed rules that predate Phase 9R.6", () => {
     expect(useSessionRuntime.getState().leaveOffer).toBe(scopeKey({ code, sessionId: session.id }));
 
     const game = useStorytellerStore.getState().game;
-    expect(leaveMultiplayerOffline()).toBe(true);
+    expect(await leaveMultiplayerOffline()).toBe(true);
     expect(useStorytellerStore.getState().lobby).toBeNull();
     expect(useStorytellerStore.getState().game).toBe(game);
     expect(endGame).not.toHaveBeenCalled();
@@ -153,6 +153,37 @@ describe("Go Live under deployed rules that predate Phase 9R.6", () => {
     expect((await serverSession())?.state).toBe("active");
     other.stop();
     await other.dispose();
+  });
+});
+
+describe("Go Live under drifted rules where the checkpoint is also unreadable (HOTFIX-RV-001)", () => {
+  /** Pre-9R.6 drift, additionally without the owner's checkpoint read grant:
+   * the server evidence Leave depends on cannot be obtained. */
+  function unreadableCheckpointRules(): string {
+    const rules = JSON.parse(preRevocationRules());
+    delete rules.rules.lobbies.$code.checkpoint[".read"];
+    return JSON.stringify(rules);
+  }
+  beforeAll(async () => { await startEnvironment(unreadableCheckpointRules()); });
+  afterAll(async () => { await env.cleanup(); });
+
+  test("DRIFT-4: another device's published checkpoint that this device cannot read withholds Leave (fail closed)", async () => {
+    await goLive(backend());
+    const { lobby } = useStorytellerStore.getState();
+    expect(useSessionRuntime.getState().status).toBe("failed");
+    // The startup itself was denied at the checkpoint read.
+    expect(useSessionRuntime.getState().failure?.diagnostic).toContain(`get lobbies/${code}/checkpoint`);
+    // Precondition seeding only: another Storyteller device has since taken
+    // this session live, publishing a checkpoint this device cannot read.
+    await env.withSecurityRulesDisabled(async ctx => {
+      await ctx.database().ref(`lobbies/${code}/checkpoint`).set(JSON.stringify({ game: useStorytellerStore.getState().game, roster: {} }));
+    });
+    await act(async () => { await closeMultiplayerSession().catch(() => {}); });
+    expect(useSessionRuntime.getState().closeFailed).toBe(true);
+    expect(useSessionRuntime.getState().leaveOffer).toBeNull();
+    expect(await leaveMultiplayerOffline()).toBe(false);
+    expect(useStorytellerStore.getState().lobby).toEqual(lobby);
+    expect((await serverSession())?.state).toBe("active");
   });
 });
 

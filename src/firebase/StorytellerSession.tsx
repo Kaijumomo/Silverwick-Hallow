@@ -49,8 +49,8 @@ const DEV = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV =
  * - startup never reached live: Retry, or End multiplayer (authoritative
  *   close, keeping the local game);
  * - that close also failed: Try ending again, plus -- only when offered for a
- *   lobby that never reached live -- Leave multiplayer, keeping the game
- *   offline (local only).
+ *   lobby the server proved never reached live -- Leave multiplayer, keeping
+ *   the game offline (local only; re-proven when clicked).
  * Messages are plain language; the Firebase operation/path diagnostic is
  * shown only in development builds.
  */
@@ -79,7 +79,7 @@ export function ConnectionStatus() {
     title = "The lobby could not be ended";
     message = errors.close ?? message;
     actions.push({ label: "Try ending again", onClick: endMultiplayer });
-    if (leaveOffer === scopeKey(lobby)) actions.push({ label: "Leave multiplayer — keep game offline", onClick: () => { leaveMultiplayerOffline(); }, danger: true });
+    if (leaveOffer === scopeKey(lobby)) actions.push({ label: "Leave multiplayer — keep game offline", onClick: run(leaveMultiplayerOffline), danger: true });
   } else if (failure?.category === "ended" && status !== "live") {
     title = "This lobby has ended";
     actions.push({ label: "Leave lobby", onClick: endMultiplayer });

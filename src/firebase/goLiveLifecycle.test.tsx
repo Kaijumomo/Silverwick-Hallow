@@ -71,13 +71,13 @@ function denyUpdate(b: MemoryRoomBackend, suffix: string) {
 
 /** GameScreen.goLive, verbatim: create the lobby, then hand the session to the
  * app-level lifecycle hook, which owns writer startup. */
-async function goLive(b: MemoryRoomBackend, before?: () => void) {
+async function goLive(b: MemoryRoomBackend, before?: (sessionId: string) => void) {
   firebase.backend = b;
   useStorytellerStore.getState().newGame("tb", { plannedPlayerCount: 3 });
   useStorytellerStore.getState().addPlayer("Alice");
   await createLobby(b, "host", { codeGenerator: () => code });
   const session = await requireActiveSession(b, code);
-  before?.();
+  before?.(session.id);
   const lobby = { code, uid: "host", sessionId: session.id, status: "live" as const };
   useStorytellerStore.getState().setLobby(lobby);
   const exposed: unknown[] = [];
@@ -249,7 +249,8 @@ describe("End Game / abandon contract", () => {
     render(<ConnectionStatus />);
     const game = useStorytellerStore.getState().game;
     fireEvent.click(screen.getByRole("button", { name: "Leave multiplayer — keep game offline" }));
-    expect(useStorytellerStore.getState().lobby).toBeNull();
+    // Leave re-proves the server evidence before clearing the lobby.
+    await waitFor(() => expect(useStorytellerStore.getState().lobby).toBeNull());
     expect(useStorytellerStore.getState().game).toBe(game);
     expect(useStorytellerStore.getState().game?.phase).toBe("setup");
     expect(endGame).not.toHaveBeenCalled();
@@ -270,7 +271,7 @@ describe("End Game / abandon contract", () => {
     await act(async () => { await closeMultiplayerSession().catch(() => {}); });
     expect(useSessionRuntime.getState().closeFailed).toBe(true);
     expect(useSessionRuntime.getState().leaveOffer).toBeNull();
-    expect(leaveMultiplayerOffline()).toBe(false);
+    expect(await leaveMultiplayerOffline()).toBe(false);
     expect(useStorytellerStore.getState().lobby?.code).toBe(code);
     render(<ConnectionStatus />);
     expect(screen.queryByRole("button", { name: /Leave multiplayer/ })).toBeNull();
@@ -292,7 +293,7 @@ describe("End Game / abandon contract", () => {
     await act(async () => { await closeMultiplayerSession().catch(() => {}); });
     expect(useSessionRuntime.getState().closeFailed).toBe(true);
     expect(useSessionRuntime.getState().leaveOffer).toBeNull();
-    expect(leaveMultiplayerOffline()).toBe(false);
+    expect(await leaveMultiplayerOffline()).toBe(false);
   });
 
   it("7. writer fencing stays intact: the failed-start close refuses to override another writer's valid lease", async () => {
@@ -333,6 +334,115 @@ describe("End Game / abandon contract", () => {
     await expect(second.start()).rejects.toMatchObject({ kind: "conflict" });
     second.stop();
     expect(await b.get(`${root}/writer`)).toMatchObject({ token: (useSessionRuntime.getState().backend as SessionWriter).token });
+  });
+});
+
+describe("HOTFIX-RV-001: local-only Leave fails closed without authoritative server proof", () => {
+  /** The exact pre-9R.6 drift: startup denied at membershipRevocations, and
+   * the fenced close's final cleanup denied too. */
+  async function failedStartWithFailedClose(b: MemoryRoomBackend, before?: (sessionId: string) => void) {
+    denyRead(b, "membershipRevocations");
+    denyUpdate(b, "membershipRevocations");
+    const started = await goLive(b, before);
+    await settled();
+    expect(useSessionRuntime.getState().status).toBe("failed");
+    return started;
+  }
+  async function attemptEnd() {
+    let rejected: unknown = null;
+    await act(async () => { await closeMultiplayerSession().catch(error => { rejected = error; }); });
+    expect(rejected).not.toBeNull();
+    expect(useSessionRuntime.getState().closeFailed).toBe(true);
+  }
+
+  it("1. checkpoint read denied, no local live evidence: Leave is not offered", async () => {
+    const b = new MemoryRoomBackend();
+    await failedStartWithFailedClose(b);
+    expect(useStorytellerStore.getState().sync?.ackedGuard ?? null).toBeNull();
+    denyRead(b, "checkpoint");
+    await attemptEnd();
+    expect(useSessionRuntime.getState().leaveOffer).toBeNull();
+    expect(await leaveMultiplayerOffline()).toBe(false);
+    expect(useStorytellerStore.getState().lobby?.code).toBe(code);
+    render(<ConnectionStatus />);
+    expect(screen.queryByRole("button", { name: /Leave multiplayer/ })).toBeNull();
+  });
+
+  it("1b. checkpoint read unavailable (network) or Firebase unreachable, no local live evidence: Leave is not offered", async () => {
+    const b = new MemoryRoomBackend();
+    await failedStartWithFailedClose(b);
+    const get = b.get.bind(b);
+    b.get = async path => { if (path === `${root}/checkpoint`) throw new Error("network offline"); return get(path); };
+    await attemptEnd();
+    expect(useSessionRuntime.getState().leaveOffer).toBeNull();
+
+    firebase.backend = null; // connectFirebase itself now fails
+    await attemptEnd();
+    expect(useSessionRuntime.getState().leaveOffer).toBeNull();
+    expect(await leaveMultiplayerOffline()).toBe(false);
+    expect(useStorytellerStore.getState().lobby?.code).toBe(code);
+  });
+
+  it("2. another device published a checkpoint that this device cannot read: Leave is not offered", async () => {
+    const b = new MemoryRoomBackend();
+    await failedStartWithFailedClose(b, () => {
+      // Another Storyteller device took this session live: its checkpoint
+      // exists, and this device recorded no acknowledged guard for it.
+      const game = { ...useStorytellerStore.getState().game!, code };
+      void b.set(`${root}/checkpoint`, JSON.stringify({ game, roster: {} }));
+    });
+    expect(await b.get(`${root}/checkpoint`)).toEqual(expect.any(String));
+    expect(useStorytellerStore.getState().sync?.ackedGuard ?? null).toBeNull();
+    denyRead(b, "checkpoint");
+    await attemptEnd();
+    expect(useSessionRuntime.getState().leaveOffer).toBeNull();
+    expect(await leaveMultiplayerOffline()).toBe(false);
+    expect(useStorytellerStore.getState().lobby?.code).toBe(code);
+  });
+
+  it("3. an authoritative read proving no checkpoint, in the known startup-failure case, keeps Leave offered after the close fails", async () => {
+    const b = new MemoryRoomBackend();
+    const { session } = await failedStartWithFailedClose(b);
+    await attemptEnd();
+    expect(await b.get(`${root}/checkpoint`)).toBeUndefined();
+    expect(useSessionRuntime.getState().leaveOffer).toBe(scopeKey({ code, sessionId: session.id }));
+    const game = useStorytellerStore.getState().game;
+    expect(await leaveMultiplayerOffline()).toBe(true);
+    expect(useStorytellerStore.getState().lobby).toBeNull();
+    expect(useStorytellerStore.getState().game).toBe(game);
+  });
+
+  it("a standing offer is re-proven when chosen: if the proof is now unavailable, Leave refuses and is withdrawn", async () => {
+    const b = new MemoryRoomBackend();
+    const { session } = await failedStartWithFailedClose(b);
+    await attemptEnd();
+    expect(useSessionRuntime.getState().leaveOffer).toBe(scopeKey({ code, sessionId: session.id }));
+    denyRead(b, "checkpoint");
+    expect(await leaveMultiplayerOffline()).toBe(false);
+    expect(useStorytellerStore.getState().lobby?.code).toBe(code);
+    expect(useSessionRuntime.getState().leaveOffer).toBeNull();
+    expect(useSessionRuntime.getState().errors.close).toMatch(/could not be confirmed/);
+  });
+
+  it("a standing offer is re-proven when chosen: a checkpoint published since the offer refuses Leave", async () => {
+    const b = new MemoryRoomBackend();
+    await failedStartWithFailedClose(b);
+    await attemptEnd();
+    expect(useSessionRuntime.getState().leaveOffer).not.toBeNull();
+    await b.set(`${root}/checkpoint`, "published since the offer");
+    expect(await leaveMultiplayerOffline()).toBe(false);
+    expect(useStorytellerStore.getState().lobby?.code).toBe(code);
+  });
+
+  it("local evidence can disqualify: an accepted guard for this scope withholds Leave even with no checkpoint", async () => {
+    const b = new MemoryRoomBackend();
+    await failedStartWithFailedClose(b, sessionId => {
+      useStorytellerStore.setState({ sync: { code, sessionId, ackedGuard: { token: "earlier-writer", revision: 3 }, ackedGameSeq: 0, lastAttempt: null } });
+    });
+    expect(await b.get(`${root}/checkpoint`)).toBeUndefined();
+    await attemptEnd();
+    expect(useSessionRuntime.getState().leaveOffer).toBeNull();
+    expect(await leaveMultiplayerOffline()).toBe(false);
   });
 });
 

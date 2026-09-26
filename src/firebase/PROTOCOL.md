@@ -162,11 +162,14 @@ rules/authorization, expired writer, data); the Firebase operation and path
 are kept as a development-only diagnostic. End Game for such a lobby closes it
 through a fresh fenced `SessionWriter` (lease acquisition, then the same
 `close()`), never a direct write, and ends the local game only after that
-succeeds. If it cannot, and the lobby never reached live (no checkpoint on the
-server, no accepted guard for that scope locally), the Storyteller may leave
-it locally — the lobby association is cleared, the local game stays offline,
-and nothing is deleted on the server. A lobby that reached live always needs
-an authoritative close. On resume (`visibilitychange`, `pageshow`, `online`)
+succeeds. If it cannot, the Storyteller may leave it locally — the lobby
+association is cleared, the local game stays offline, and nothing is deleted
+on the server — but only when an authoritative server read proves the expected
+session is still active with no checkpoint (it never reached live on any
+device), and no accepted guard for that scope exists locally. The proof fails
+closed: an unavailable, denied or malformed read withholds Leave, local
+evidence never substitutes for it, and it is re-proven when Leave is chosen.
+A lobby that reached live always needs an authoritative close. On resume (`visibilitychange`, `pageshow`, `online`)
 a live writer whose own lease bookkeeping can no longer prove its lease
 reconnects through the ordinary retry path before its next write. Deployed
 rules older than this protocol deny the startup reads of
