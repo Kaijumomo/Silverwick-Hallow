@@ -1,7 +1,9 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-09-26\
-**State:** Phase 10B implemented on `dev/phase-10b` (store v20); Opus architecture remediation SOL-10B-R1…R9 and the final closure patch (SOL-10B-RC1/RC2 + gameplay Apply coherence) applied; awaiting final Opus RC re-check. Phase 10B is **not closed**.
+**State:** Phase 10B implemented on `dev/phase-10b` (store v20); Opus architecture remediation SOL-10B-R1…R9 and the final closure patch (SOL-10B-RC1/RC2 + gameplay Apply coherence) applied; Astra findings ASTRA-10B-001…004 remediated, awaiting targeted Astra closure review. Phase 10B is **not closed**.
+
+Astra remediation: Effect Mutation Context is runtime-validated (malformed → `invalid`, nothing stored); v20 evidence blocks every legacy migration step for that entry regardless of the outer envelope version; an `unresolved` end can only be resolved by correction; applied-creation results are tracked per participant + EffectId.
 
 Closure patch: Setup application moment is always `{setup, 0}`; v19 → v20 migration omits a legacy `appliedAt` made impossible by old non-monotonic phases; corrections re-derive expiry only while it was still derived from the old facts (independently rescheduled ends and `unresolved` survive); a gameplay Apply's explicit initial expiry must equal the lifetime-derived one.
 
@@ -172,6 +174,6 @@ At the start of any new session, verify the exact branch SHA and read:
 
 ## Immediate next task
 
-Final Opus RC re-check of the SOL-10B-R1…R9 remediation and RC closure patch on `dev/phase-10b`
-(verify the exact commit SHA); then Luna mechanical verification and Astra
-adversarial review. Implementation completion is not closure.
+Targeted Astra closure review of the ASTRA-10B-001…004 remediation on
+`dev/phase-10b` (verify the exact commit SHA). Implementation completion is
+not closure.

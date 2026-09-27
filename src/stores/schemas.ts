@@ -282,6 +282,24 @@ export const ProvenanceSchema = z.object({
 });
 
 /**
+ * Phase 10B (ASTRA-10B-001): the CALLER-FACING Mutation Context an Effect
+ * transaction accepts -- runtime-untrusted input, validated before anything
+ * is converted or stored. Exactly the supported typed fields; `.strict()` so
+ * an unknown key (including a smuggled durable `sourceParticipant`) is
+ * refused, never stripped; nothing is coerced. The live `sourcePlayer` is
+ * converted to a durable ParticipantRef only after this passes.
+ */
+export const ProvenanceInputSchema = z.object({
+  sourcePlayer: z.string().min(1).optional(),
+  sourceCharacter: z.string().min(1).optional(),
+  reason: z.string().optional(),
+  note: z.string().optional(),
+}).strict();
+export const MutationContextInputSchema = z.object({
+  provenance: ProvenanceInputSchema.optional(),
+}).strict();
+
+/**
  * Phase 10A: Life Event structure (store v19). Structural only -- ids,
  * ParticipantRef shape, Game Moment shape, kind, the outcome each kind
  * requires or forbids, the Day-only rule for execution/exile, optional

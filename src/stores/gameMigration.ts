@@ -457,6 +457,15 @@ export function migrateGameEntry(
     players?: Record<string, unknown>;
   };
 
+  // Phase 10B (ASTRA-10B-002): ANY v20 evidence (an explicit
+  // `gameSchemaVersion` of any value, or any v20 lifecycle key) makes this
+  // entry current-version data, whatever version the OUTER persisted envelope
+  // claims. It receives no legacy step at all -- not v19 -> v20, and not any
+  // earlier repair (a missing v19 window, a v17 category rename, v14
+  // statuses...) -- and is judged by the current schema alone. Applied
+  // independently to Current State and to every Undo entry.
+  if (hasV20Evidence(e as Record<string, unknown>)) return;
+
   if (fromVersion < 14) {
     const players = e.players;
     if (players && typeof players === "object" && !Array.isArray(players)) {
@@ -524,7 +533,8 @@ export function migrateGameEntry(
   // evidence is current-version data -- malformed or not -- and is never run
   // through legacy migration. The v20 schema judges it (a missing, wrong or
   // malformed marker, or a malformed lifecycle, fails validation).
-  if (fromVersion < 20 && !hasV20Evidence(e as Record<string, unknown>)) {
+  // (v20-evidenced entries already returned above.)
+  if (fromVersion < 20) {
     migrateEntryV19ToV20(e as Record<string, unknown>);
   }
 }

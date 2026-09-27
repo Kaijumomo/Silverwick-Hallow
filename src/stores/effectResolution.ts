@@ -2,7 +2,15 @@ import { MAX_TOTAL_PLAYERS } from "@/data/setupCounts";
 import { cloneOwned, durableProvenance, historyId, isLiveGamePhase, sameSnapshot, type MutationContext } from "./history";
 import { participantRefOf } from "./participants";
 import { currentLiveMoment, momentAtOrdinal, momentOrdinal } from "./lifeEvents";
-import { EFFECT_PARAMETER_KEY, EffectRecordSchema, LiveGameMomentSchema, GameMomentSchema, MANUAL_EFFECT_ID_PREFIX } from "./schemas";
+import {
+  EFFECT_PARAMETER_KEY,
+  EffectRecordSchema,
+  GameMomentSchema,
+  LiveGameMomentSchema,
+  MANUAL_EFFECT_ID_PREFIX,
+  MutationContextInputSchema,
+  ProvenanceSchema,
+} from "./schemas";
 import type {
   CurrentParticipantRef,
   EffectExpiry,
@@ -193,7 +201,15 @@ export type EffectPlan = {
   /** One record per changed Effect operation, in intent order (Live Play
    * only -- Setup records no History). */
   history: HistoryRecord[];
-  /** Ids of Effects created by this transaction, in intent order. */
+  /** Ids of Effect CREATIONS that survive in the transaction's final
+   * authoritative state, in intent order (ASTRA-10B-004). Tracked per target
+   * identity (participant + EffectId): a creation is reported only if that
+   * exact target's final collection holds it and the identity genuinely
+   * changed (not net-zero, R9); an apply -> remove -> re-apply reports the
+   * surviving creation once, at its surviving position. Because EffectIds
+   * are participant-local, the same textual id may legitimately appear more
+   * than once (one per participant that received it); ids are never
+   * implied to be globally unique. */
   appliedEffectIds: EffectId[];
 };
 
@@ -413,8 +429,24 @@ export function planEffectTransaction(
   if (resolutionId !== undefined && (typeof resolutionId !== "string" || !resolutionId || resolutionId.length > 200)) {
     return refuse("invalid", "Invalid resolution id.");
   }
-  const provenance = durableProvenance(game, transaction.context?.provenance);
+  // ASTRA-10B-001: the Mutation Context is runtime-untrusted. Validate its
+  // exact caller-facing shape first (malformed -> "invalid", never coerced
+  // or stored), then convert a live sourcePlayer to its durable ref (a seat
+  // with no current participant keeps its "notSeated" refusal), and finally
+  // confirm the stored form meets the stored Provenance contract -- so an
+  // accepted transaction can never produce History the persisted schema
+  // would reject.
+  let contextInput: MutationContext | undefined;
+  if (transaction.context !== undefined) {
+    const parsed = MutationContextInputSchema.safeParse(cloneOwned(transaction.context));
+    if (!parsed.success) return refuse("invalid", "Invalid Mutation Context -- provenance takes only a source player, source character, reason and note.");
+    contextInput = parsed.data;
+  }
+  const provenance = durableProvenance(game, contextInput?.provenance);
   if (provenance === null) return refuse("notSeated", "The Provenance source Player is not seated.");
+  if (provenance !== undefined && !ProvenanceSchema.strict().safeParse(provenance).success) {
+    return refuse("invalid", "Invalid Mutation Context provenance.");
+  }
 
   const live = isLiveGamePhase(game.phase);
   const current = currentLiveMoment(game);
@@ -427,7 +459,8 @@ export function planEffectTransaction(
   const working = new Map<PlayerId, EffectRecord[]>();
   const effectsOf = (player: STPlayerRecord) => working.get(player.id) ?? player.effects;
   const history: HistoryRecord[] = [];
-  const appliedEffectIds: EffectId[] = [];
+  /** ASTRA-10B-004: each successful creation with its target identity. */
+  const creations: { playerId: PlayerId; effectId: EffectId }[] = [];
 
   // Each helper returns a refusal (with no intent index yet) or a value.
   type Refused = { refusal: EffectRefusal };
@@ -707,7 +740,7 @@ export function planEffectTransaction(
           return at(fail("conflict", "An Effect with this id already exists with different details -- update or correct it instead."));
         }
         setList([...list, built]);
-        appliedEffectIds.push(built.id);
+        creations.push({ playerId: target.player.id, effectId: built.id });
         record(target, built.id, "apply", { kind: "added", item: built });
         break;
       }
@@ -743,6 +776,12 @@ export function planEffectTransaction(
               ? "Suppress or resume the Effect to change whether it applies."
               : `An ordinary update cannot change the Effect's ${key} -- use a correction if it was recorded wrongly.`));
           }
+        }
+        // ASTRA-10B-003: an `unresolved` end is incomplete migrated Current
+        // State; resolving it is a correction (correctAmend), never an
+        // ordinary gameplay Update. Other mutable fields may still update.
+        if (changes.expiry !== undefined && existing.expiry.kind === "unresolved") {
+          return at(fail("immutable", "This legacy Effect's exact end was not recorded; resolve it as a correction."));
         }
         const next: EffectRecord = { ...existing };
         if (changes.expiry !== undefined) {
@@ -868,6 +907,15 @@ export function planEffectTransaction(
     snapshotOf(ownPlayer(game, playerId)?.effects, effectId),
     snapshotOf(working.get(playerId), effectId),
   );
+  /** ASTRA-10B-004: creations, checked against THEIR OWN target's final
+   * collection only (never any other participant's), de-duplicated per
+   * identity keeping the last (surviving) creation, in intent order. */
+  const survivingCreations = (): EffectId[] => creations
+    .filter(({ playerId, effectId }, index) =>
+      !creations.some((later, laterIndex) => laterIndex > index && later.playerId === playerId && later.effectId === effectId) &&
+      snapshotOf(working.get(playerId), effectId) !== undefined &&
+      !netZero(playerId, effectId))
+    .map(({ effectId }) => effectId);
   const committedHistory = history.filter((_, index) => {
     const identity = historyIdentity[index]!;
     return !netZero(identity.playerId, identity.effectId);
@@ -878,7 +926,7 @@ export function planEffectTransaction(
     plan: {
       effects,
       history: committedHistory,
-      appliedEffectIds: appliedEffectIds.filter((id) => Object.values(effects).some((list) => list.some((e) => e.id === id))),
+      appliedEffectIds: survivingCreations(),
     },
   };
 }

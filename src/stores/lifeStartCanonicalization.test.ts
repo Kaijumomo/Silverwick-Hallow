@@ -5,6 +5,7 @@ import { needsShownIdentity } from "./identity";
 import { StorytellerGamePersistedSchema } from "./schemas";
 import { canonicalizeStartingLife } from "./lifeResolution";
 import type { PlayerId, STPlayerRecord, StorytellerLobbyRecord } from "./types";
+import { asV19 } from "@/test/v20Migration";
 
 // Phase 10A Luna blocker 10A-LUNA-001: Setup life state is never gameplay.
 // Every occupied participant enters Night 1 with canonical starting life
@@ -58,7 +59,9 @@ describe("10A-LUNA-001: Luna's exact reproduction (migrated v18 Setup)", () => {
     const target = ids[2]!;
     // Persist the Setup exactly as a v18 app would have: no Life Event
     // Window, and the stale life fields on an occupied ordinary participant.
-    const v18Game = JSON.parse(JSON.stringify(game())) as Record<string, unknown> & StorytellerLobbyRecord;
+    // (Phase 10B, ASTRA-10B-002: nor the v20 version marker -- a v18 writer
+    // never stored it, and a marked entry now receives no legacy repair.)
+    const v18Game = asV19(JSON.parse(JSON.stringify(game()))) as Record<string, unknown> & StorytellerLobbyRecord;
     delete (v18Game as Partial<StorytellerLobbyRecord>).lifeEventWindow;
     Object.assign(v18Game.players[target]!, STALE);
     // Clear memory first: persist writes through on every setState.

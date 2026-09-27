@@ -1,8 +1,9 @@
 # Phase 10B — Effect Lifecycle & Visual Effect Indicators
 
-Status: implemented; Opus architecture remediation (SOL-10B-R1…R9) and the
-final closure patch (SOL-10B-RC1/RC2 + gameplay Apply coherence) applied,
-awaiting final Opus RC re-check. **Not closed.** Store schema **v20**.
+Status: implemented; Opus architecture remediation (SOL-10B-R1…R9), the final
+closure patch (SOL-10B-RC1/RC2 + gameplay Apply coherence) and the Astra
+targeted remediation (ASTRA-10B-001…004) applied — remediated, awaiting
+targeted Astra closure review. **Not closed.** Store schema **v20**.
 
 UX principle: *mechanically rich underneath, operationally simple for the
 Storyteller.* Routine actions stay `player → Effect → done`.
@@ -139,8 +140,21 @@ lifecycle field in a spec is refused.
 
   An explicitly supplied expiry is authoritative (R2) and must still be `none`
   or strictly future.
-- **Resolving a legacy `unresolved` end is a correction (SOL-10B-R6)**: it
-  repairs incomplete migrated Current State, so it records correction History.
+- **Resolving a legacy `unresolved` end is a correction (SOL-10B-R6,
+  ASTRA-10B-003)**: it repairs incomplete migrated Current State, so it records
+  correction History. An ordinary Update that supplies an expiry for an
+  `unresolved` Effect is refused (`immutable`: "resolve it as a correction");
+  an ordinary Update may still change its note or parameters.
+
+**Result `effectIds` (ASTRA-10B-004)** are the ids of Effect creations that
+survive in the transaction's final authoritative state, in intent order.
+Creations are tracked internally per target identity (participant + EffectId)
+and checked only against that target's own final collection — never by
+searching every participant for the id. An apply → remove → re-apply on one
+identity reports the surviving creation once (at its surviving position); a
+net-zero identity reports nothing. Because EffectIds are participant-local,
+the same textual id may appear more than once when distinct participants each
+receive it; no global uniqueness is implied.
 
 Structured refusals: `{ ok: false, code, message, intentIndex? }` with codes
 `invalid | phase | notSeated | stale | notFound | conflict | immutable |
@@ -156,6 +170,19 @@ Mutation Context, for apply, update, remove, suppress, resume and corrections
 alike; with no context, no provenance is stored (the origin is never copied
 into it). Expiry keeps its deterministic system provenance
 `{ reason: "expired" }`.
+
+**The Mutation Context is runtime-validated (ASTRA-10B-001).** It is untrusted
+input: before anything is converted or stored, `MutationContextInputSchema`
+(strict) accepts only `{ provenance?: { sourcePlayer?, sourceCharacter?,
+reason?, note? } }` with non-empty string ids and string text. A malformed
+context or provenance — wrong scalar types, arrays, `null`, unknown keys, a
+smuggled durable `sourceParticipant` — refuses the whole transaction as
+`invalid`; nothing is coerced or stored. A valid live `sourcePlayer` is then
+converted to its durable ParticipantRef (a seat with no current participant
+keeps its `notSeated` refusal), and the stored provenance is checked against
+the stored Provenance contract, so an accepted Effect transaction can never
+produce History that the persisted schema, checkpoint validation or local
+hydration would reject.
 
 ### History (category `effect`)
 
@@ -342,6 +369,16 @@ checkpoints carry it with no Firebase rule or writer change. Any
 v20 evidence: detection reports 20 and no legacy step runs, so malformed v20
 data is rejected, never repaired. Markerless snapshots keep the bounded
 structural detection.
+
+**v20 evidence blocks every legacy step for that entry (ASTRA-10B-002).** The
+local store's outer persisted-envelope version can be older than an entry it
+contains. `migrateGameEntry` therefore checks each entry (Current State and
+every Undo snapshot, independently) for v20 evidence before any
+version-specific transformation; an evidenced entry receives no legacy step
+at all — not v19 → v20, and not any earlier repair such as adding a missing
+v19 Life Event Window or renaming a v17 History category — and is judged by
+the current schema alone (so a malformed one resets). Genuine markerless
+legacy entries migrate exactly as before.
 
 ## Future ability-engine seam (10F)
 
