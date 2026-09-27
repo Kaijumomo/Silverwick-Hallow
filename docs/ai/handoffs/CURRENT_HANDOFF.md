@@ -1,20 +1,43 @@
 # Silverwick Hollow — Current Handoff
 
-**Date:** 2026-09-26\
-**State:** Phase 10B implemented on `dev/phase-10b` (store v20); Opus architecture remediation SOL-10B-R1…R9 and the final closure patch (SOL-10B-RC1/RC2 + gameplay Apply coherence) applied; Astra findings ASTRA-10B-001…004 remediated, awaiting targeted Astra closure review. Phase 10B is **not closed**.
+**Date:** 2026-09-27\
+**State:** Phase 10B is **CLOSED** and integrated into `main`. Phase 10C — Reminder Workflow + Visual Reminder Tokens is **NEXT**, on `dev/phase-10c`. 10C has **not** been designed yet.
 
-Astra remediation: Effect Mutation Context is runtime-validated (malformed → `invalid`, nothing stored); v20 evidence blocks every legacy migration step for that entry regardless of the outer envelope version; an `unresolved` end can only be resolved by correction; applied-creation results are tracked per participant + EffectId.
+## Phase 10B — CLOSED
 
-Closure patch: Setup application moment is always `{setup, 0}`; v19 → v20 migration omits a legacy `appliedAt` made impossible by old non-monotonic phases; corrections re-derive expiry only while it was still derived from the old facts (independently rescheduled ends and `unresolved` survive); a gameplay Apply's explicit initial expiry must equal the lifetime-derived one.
+Final reviewed implementation checkpoint (before docs-only closure metadata):
+`3c9e20f4506258bab143b5f20750deb34b290379`
 
-Remediation summary: empty seats own no Effects; `expiry` is the sole mechanical duration authority (declared `lifetime` is metadata; Update may change expiry, only correction changes lifetime); corrections re-derive expiry from corrected facts and refuse already-ended results; game-level Effect temporal validity is schema-enforced; suppression is an explicit decision, not derived applicability; resolving a legacy unresolved end is a correction; `manual:` ids are reserved; mutation provenance comes only from Mutation Context; net-zero Effect identities leave no History. Deferred: OPUS-10B-010 (correcting origin to a departed participant).
+The docs-only closure commit on top of it is the integration checkpoint; `main` was fast-forwarded to it and `dev/phase-10c` was created from that exact `main`. Verify exact SHAs rather than branch names.
 
-## Phase 10B implementation status
+Final verification evidence:
+- typecheck PASS
+- normal tests **2738/2738 across 107 files**
+- Firebase emulator tests **184/184**, 0 skipped
+- production build PASS
+- `git diff --check` PASS
+- Luna verdict: **PASS — READY FOR ASTRA ADVERSARIAL REVIEW**
+- Astra final verdict: **PASS — ASTRA-10B-001..004 CLOSED; READY FOR SOL CLOSURE**
+- Sol verdict: **CLOSED — READY FOR INTEGRATION**
 
-See `PHASE10B.md` for the implemented model and semantics. Summary:
+Remaining Blocker/High/Medium findings: **None.**
+
+Known non-blocking / deferred:
+- LUNA-10B-001 — duplicate Role choices in the advanced Effect Character dropdown — LOW
+- OPUS-10B-010 — correction cannot assign a departed participant as Effect origin
+- Reminder empty-seat inheritance → Phase 10C
+- character-target convention → Phase 10F
+- accepted identical remove/reapply array-order behavior
+- accepted equality-based expiry-coupling ambiguity
+
+### Phase 10B frozen behavior (summary)
+
+See `PHASE10B.md` for the full model and semantics.
 - store v20: explicit `gameSchemaVersion: 20` on every authoritative game snapshot; Effect `state` (active/suppressed), resolved `expiry` (none / at / unresolved) and typed `parameters`;
 - one pure Effect planner (`src/stores/effectResolution.ts`) and one commit seam (`resolveEffects`); `setStatus`/`addEffect`/`removeEffect` are adapters over it; the phase transition commits deterministic expiry in the same replacement;
-- v19 → v20 migration: manual → active + none, finite → active + unresolved ("Needs check"), History never consulted;
+- `expiry` is the sole mechanical duration authority (declared `lifetime` is metadata; Update may change expiry, only correction changes lifetime); corrections re-derive expiry only while still coupled to the old facts;
+- empty seats own no Effects; game-level Effect temporal validity is schema-enforced; suppression is an explicit decision, not derived applicability; `manual:` ids are reserved; mutation provenance comes only from the runtime-validated Mutation Context; net-zero Effect identities leave no History; resolving a legacy `unresolved` end is a correction;
+- v19 → v20 migration: manual → active + none, finite → active + unresolved ("Needs check"), History never consulted; v20 evidence blocks every legacy step per entry;
 - presentation registry (`src/stores/effectRegistry.ts`), aggregated Grimoire indicators, Drawer quick/active/advanced Effects, Privacy Mode suppression;
 - no Firebase rule, writer or fencing change.
 
@@ -126,54 +149,64 @@ Operational status: production Firebase rules were **not** deployed by the hotfi
 ## Phase 10 roadmap
 
 - **10A Life Transition Semantics + visual life-state grammar — CLOSED**
-- **10B Effect Lifecycle + visual Effect indicators — IMPLEMENTED + Opus remediation applied, awaiting re-check**
-- 10C Reminder Workflow + visual Reminder tokens
+- **10B Effect Lifecycle + visual Effect indicators — CLOSED**
+- **10C Reminder Workflow + visual Reminder tokens — NEXT (architecture challenge first)**
 - 10D Role Transitions
 - 10E Alignment Transitions
 - 10F Guided Ability Resolution / Night Actions
 - 10G Advanced Storyteller bookkeeping / final visual integration
 
-## Phase 10B starting intent
+## Standing Phase 10 UX invariant
 
-10B operationalizes the structured Effect model introduced in Phase 9D.
+Phase 10 may increase Silverwick's mechanical intelligence, but routine Storyteller operation must remain fast, visually clear and low-friction. Complexity belongs under the interface; common table actions use progressive disclosure and should not ask the Storyteller for information Silverwick already knows.
 
-Target examples:
-- Poisoned
-- Drunk
-- Protected
-- future generic effects
+This requirement continues through 10C–10G.
 
-10B must define:
-- effect identity/type/source/target/provenance;
-- authoritative Current State ownership;
-- apply/update/remove/correct semantics;
-- lifetime and deterministic expiry semantics;
-- phase rollover;
-- stacking/replacement/conflict rules;
-- Undo/recovery/reconnect;
-- public/self/private projection behavior;
-- Privacy Mode handling;
-- accessible visual grammar;
-- the authoritative seam future ability logic will call.
+## Phase 10C starting intent
 
-Do not implement complete Role ability parsing/evaluation in 10B.
+10C is **not yet designed**. Nothing below is a decision; it is the list of questions the architecture challenge must answer.
+
+Phase 10C must define the smallest correct Reminder primitive/workflow that supports manual Storyteller use now and the future ability engine later.
+
+Known areas to challenge:
+- Reminder identity;
+- target;
+- source / provenance;
+- placement / update / removal;
+- lifetime, where applicable;
+- ParticipantId durability;
+- stacking;
+- correction semantics;
+- Undo / recovery;
+- privacy / projections;
+- accessible visual Reminder tokens;
+- the future ability-engine seam;
+- the relationship between authoritative Effects and Reminders;
+- the already-known empty-seat Reminder inheritance issue (10B made empty seats own no Effects; the analogous Reminder rule was deliberately not changed in 10B).
+
+Frozen principles carried into 10C:
+- If a mechanical condition is authoritative as an Effect, a Reminder may visualize or help bookkeep it but must **never** become a second independent source of that mechanical truth.
+- Routine Storyteller Reminder placement/removal should be fast and visually obvious. Advanced detail should remain progressively disclosed.
+
+Do not implement Role ability evaluation in 10C.
 
 ## Starting branch
 
 Use:
-`dev/phase-10b`
+`dev/phase-10c`
 
-It must point to the current integrated `main` checkpoint **after the Firebase hotfix and this documentation update**. Do not continue from its older pre-hotfix base.
+It was created from the exact integrated `main` carrying the Phase 10B closure commit and has no implementation changes.
 
 At the start of any new session, verify the exact branch SHA and read:
 - `docs/ai/MASTER_IMPLEMENTATION_PLAN.md`
 - `docs/ai/handoffs/CURRENT_HANDOFF.md`
 - `PHASE10A.md`
+- `PHASE10B.md`
 - `TERMINOLOGY.md`
-- existing Effect/Reminder types, schemas, store commands, projections, migrations and tests.
+- existing Reminder types, schemas, store commands, projections, migrations, UI and tests, and the Phase 10B Effect seam they must not duplicate.
 
 ## Immediate next task
 
-Targeted Astra closure review of the ASTRA-10B-001…004 remediation on
-`dev/phase-10b` (verify the exact commit SHA). Implementation completion is
-not closure.
+Perform the **Phase 10C architecture challenge before coding** on
+`dev/phase-10c` (verify the exact commit SHA). No 10C implementation begins
+until the challenge is adjudicated into a Sol implementation contract.

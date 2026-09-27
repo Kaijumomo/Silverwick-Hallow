@@ -1,9 +1,43 @@
 # Phase 10B — Effect Lifecycle & Visual Effect Indicators
 
-Status: implemented; Opus architecture remediation (SOL-10B-R1…R9), the final
-closure patch (SOL-10B-RC1/RC2 + gameplay Apply coherence) and the Astra
-targeted remediation (ASTRA-10B-001…004) applied — remediated, awaiting
-targeted Astra closure review. **Not closed.** Store schema **v20**.
+Status: **CLOSED.** Store schema **v20**.
+
+Final reviewed implementation checkpoint (before docs-only closure metadata):
+`3c9e20f4506258bab143b5f20750deb34b290379`. The docs-only closure commit on
+top of it is the integration checkpoint fast-forwarded into `main`.
+
+## Closure record
+
+Phase 10B — **CLOSED**. Implementation, Opus architecture remediation
+(SOL-10B-R1…R9), the final closure patch (SOL-10B-RC1/RC2 + gameplay Apply
+coherence) and the Astra targeted remediation (ASTRA-10B-001…004) are all
+complete and reviewed.
+
+Final verification evidence at `3c9e20f4506258bab143b5f20750deb34b290379`:
+
+- typecheck PASS
+- normal tests **2738/2738 across 107 files**
+- Firebase emulator tests **184/184**, 0 skipped
+- production build PASS
+- `git diff --check` PASS
+- Luna verdict: **PASS — READY FOR ASTRA ADVERSARIAL REVIEW**
+- Astra final verdict: **PASS — ASTRA-10B-001..004 CLOSED; READY FOR SOL
+  CLOSURE**
+- Sol verdict: **CLOSED — READY FOR INTEGRATION**
+
+Remaining Blocker/High/Medium findings: **None.**
+
+Known non-blocking / deferred items (see also *Deferred findings* below):
+
+- **LUNA-10B-001 (LOW):** duplicate Role choices in the advanced Effect
+  Character dropdown.
+- **OPUS-10B-010:** a correction cannot assign a departed participant as an
+  Effect's origin.
+- **Reminder empty-seat inheritance** → Phase 10C.
+- **Character-target convention** → Phase 10F.
+- **Accepted:** identical remove/reapply array-order behavior.
+- **Accepted:** equality-based expiry-coupling ambiguity (a rescheduled expiry
+  that happens to equal the old derived value is treated as still coupled).
 
 UX principle: *mechanically rich underneath, operationally simple for the
 Storyteller.* Routine actions stay `player → Effect → done`.
@@ -410,6 +444,21 @@ targets/sources, typed parameters, optional `resolutionId`) to
   participant). This is a safe limitation — callers still can never
   manufacture arbitrary ParticipantRefs — and a dedicated correction workflow
   is deferred.
+- **LUNA-10B-001 (LOW):** the advanced *+ Add effect* form's Character
+  dropdown can list the same Role more than once. Cosmetic; no mechanical
+  effect.
+- **Reminder empty-seat inheritance → 10C.** The Effect rule (an empty seat
+  owns no Effects) was not extended to Reminders in 10B.
+- **Character-target convention → 10F** (see *Future conventions*).
+- **Accepted behavior — remove/reapply array order:** removing an Effect and
+  re-applying an identical one appends it to the end of the participant's
+  `effects[]`; within one transaction the identity is net-zero (no History,
+  SOL-10B-R9) even though its array position changed. `effects[]` order is
+  not semantically meaningful.
+- **Accepted behavior — equality-based expiry coupling:** correction treats a
+  stored expiry as "still coupled" purely by equality with the old derived
+  end, so an Update that rescheduled it to exactly that value is
+  indistinguishable from the original derivation.
 
 ## Non-goals (deferred)
 

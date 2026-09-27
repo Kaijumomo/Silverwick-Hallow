@@ -1,12 +1,13 @@
 # Silverwick Hollow — Master Implementation Plan
 
 **Status:** Active canonical roadmap  
-**Updated:** 2026-09-26\
+**Updated:** 2026-09-27\
 **Integrated branch:** `main`  
 **Phase 10A closure checkpoint:** `d798266b988e49f904aa8f8658c917fd5b7e7abb`  
 **Pre-10B Firebase lifecycle hotfix checkpoint:** `38b10119544ce2c02590e9bc9c741aab995a91d1`  
-**Schema:** v20 on `dev/phase-10b` (v19 on `main`)\
-**Current phase:** Phase 10B — Effect Lifecycle + Visual Effect Indicators
+**Phase 10B final reviewed implementation checkpoint:** `3c9e20f4506258bab143b5f20750deb34b290379` (integrated into `main` with the docs-only closure commit on top)\
+**Schema:** v20 (integrated on `main`)\
+**Current phase:** Phase 10C — Reminder Workflow + Visual Reminder Tokens
 
 ## Product invariants
 
@@ -19,6 +20,12 @@
 - Public/private/self projections stay allowlisted.
 - Nominations and ordinary voting remain out of scope.
 - Silverwick should automate deterministic BOTC mechanics while leaving judgment, discretion, ambiguity and optional choices to the Storyteller.
+
+### Standing Phase 10 UX invariant
+
+Phase 10 may increase Silverwick's mechanical intelligence, but routine Storyteller operation must remain fast, visually clear and low-friction. Complexity belongs under the interface; common table actions use progressive disclosure and should not ask the Storyteller for information Silverwick already knows.
+
+This requirement continues through 10C–10G.
 
 ## Completed foundation
 
@@ -100,9 +107,27 @@ Operational note: the code hotfix is closed, but production Go Live still depend
 ## Phase 10 roadmap
 
 ### 10B — Effect Lifecycle + Visual Effect Indicators
-**Status:** IMPLEMENTED on `dev/phase-10b`; Opus remediation SOL-10B-R1…R9, closure patch SOL-10B-RC1/RC2 and Astra findings ASTRA-10B-001…004 remediated — awaiting targeted Astra closure review (not closed). See `PHASE10B.md`.
+**Status:** CLOSED\
+**Final reviewed implementation checkpoint:** `3c9e20f4506258bab143b5f20750deb34b290379`\
+**Integration:** the docs-only closure commit on top of that checkpoint, fast-forwarded into `main`. See `PHASE10B.md`.
 
-Implemented: store v20 with explicit `gameSchemaVersion` evidence; Effect
+Opus remediation SOL-10B-R1…R9, closure patch SOL-10B-RC1/RC2 and Astra findings ASTRA-10B-001…004 were all remediated and closed.
+
+Final closure gate:
+
+- typecheck PASS
+- normal tests **2738/2738 across 107 files**
+- Firebase emulator tests **184/184**, 0 skipped
+- production build PASS
+- `git diff --check` PASS
+- Luna verdict: **PASS — READY FOR ASTRA ADVERSARIAL REVIEW**
+- Astra final verdict: **PASS — ASTRA-10B-001..004 CLOSED; READY FOR SOL CLOSURE**
+- Sol verdict: **CLOSED — READY FOR INTEGRATION**
+- remaining Blocker/High/Medium findings: **None**
+
+Known non-blocking / deferred: LUNA-10B-001 (LOW, duplicate Role choices in the advanced Effect Character dropdown); OPUS-10B-010 (correction cannot assign a departed participant as Effect origin); Reminder empty-seat inheritance → 10C; character-target convention → 10F; accepted identical remove/reapply array-order behavior; accepted equality-based expiry-coupling ambiguity.
+
+Delivered: store v20 with explicit `gameSchemaVersion` evidence; Effect
 `state` / resolved `expiry` / typed `parameters`; the pure Effect planner
 (`effectResolution.ts`) and single `resolveEffects` commit seam with
 participant-bound identity, apply/update/remove/suppress/resume/correction
@@ -125,7 +150,11 @@ Goals:
 10B does **not** implement full Role ability evaluation.
 
 ### 10C — Reminder Workflow + Visual Reminder Tokens
+**Status:** CURRENT — NEXT: architecture challenge before coding (not yet designed).
+
 Structured placement/removal/update, source/target/lifetime, free text where appropriate, accessible token grammar, future-engine seam.
+
+Frozen principle carried in from 10B: if a mechanical condition is authoritative as an Effect, a Reminder may visualize or help bookkeep it but must never become a second independent source of that mechanical truth. Routine Reminder placement/removal must be fast and visually obvious; advanced detail stays progressively disclosed.
 
 ### 10D — Role Transitions
 Actual Role and Shown Role transitions, correction vs gameplay semantics, durable History and replacement workflows.
@@ -160,10 +189,10 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 - `main` contains integrated closed checkpoints.
 - Each Phase 10 subphase starts from current `main` on a fresh branch.
 - Reviewers verify exact commit identity rather than trusting branch names.
-- `dev/phase-10b` must be moved/recreated from the post-hotfix integrated `main` before 10B implementation begins.
+- `dev/phase-10c` is created from the exact integrated `main` carrying the Phase 10B closure.
 
 ## Immediate next action
 
-Do **not** start 10B by adding ad-hoc Poisoned/Drunk/Protected booleans.
+Perform the **Phase 10C architecture challenge before coding** on `dev/phase-10c`.
 
-First audit the existing structured Effect model and define the smallest correct authoritative Effect lifecycle for applying, updating, expiring, removing and correcting Effects, including source/provenance, lifetime semantics, stacking/replacement, phase rollover, privacy/projections, Undo/recovery and the future ability-engine seam.
+Do **not** start 10C by adding ad-hoc reminder markers or by duplicating Effect truth in Reminders. First audit the existing Reminder model and define the smallest correct Reminder primitive/workflow that supports manual Storyteller use now and the future ability engine later (see `docs/ai/handoffs/CURRENT_HANDOFF.md` for the known questions to challenge).
