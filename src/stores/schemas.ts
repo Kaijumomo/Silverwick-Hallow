@@ -258,15 +258,48 @@ function checkEffectRecord(
 
 export const EffectRecordSchema = EffectRecordObject.strict().superRefine(checkEffectRecord);
 
+/**
+ * Phase 10C (store v21): a Reminder's cleanup hint -- presentation metadata
+ * only (see ReminderCleanupCue in types.ts). `at` names an exact live moment;
+ * `unresolved` exists only for migrated legacy finite-lifetime Reminders.
+ * Absent = no cleanup hint. Never temporally judged against the current
+ * moment: a cue at or before now is exactly what "Needs cleanup" means.
+ */
+export const ReminderCleanupCueSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("at"), moment: LiveGameMomentSchema }).strict(),
+  z.object({ kind: z.literal("unresolved") }).strict(),
+]);
+
+/**
+ * Phase 10C (store v21): the non-authoritative Reminder notation record.
+ * `.strict()`: an unknown key -- including the retired v20 `lifetime`, a
+ * retired v16 `sourcePlayer`, or any smuggled mechanical field -- is REJECTED,
+ * never silently stripped. The label has no length rule here, so a long legacy
+ * label migrates exactly; input limits live in the planner. Temporal validity
+ * of `createdAt` is judged at the game boundary (checkReminderTemporalCoherence).
+ */
 export const ReminderRecordSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
   sourceCharacter: z.string().min(1).optional(),
   sourceParticipant: ParticipantRefSchema.optional(),
-  sourcePlayer: RetiredPlayerIdField,
-  createdAt: GameMomentSchema.optional(),
-  lifetime: EffectLifetimeSchema,
+  createdAt: GameMomentSchema.strict().optional(),
+  cleanupCue: ReminderCleanupCueSchema.optional(),
   note: z.string().optional(),
+}).strict();
+
+/**
+ * Phase 10C: the identity contract a LEGACY (pre-v21, no `reminderOperation`)
+ * Reminder History snapshot keeps obeying -- exactly the Phase 9R.2 source
+ * rule it was written under (a retired `sourcePlayer` is rejected, a present
+ * `sourceParticipant` must be a valid ParticipantRef). Every other key --
+ * notably the old `lifetime` -- is deliberately NOT judged: legacy History
+ * describes what the old system recorded and is never made invalid, or
+ * rewritten, because Current State now uses a better Reminder representation.
+ */
+const LegacyReminderSnapshotSourceContract = z.object({
+  sourceParticipant: ParticipantRefSchema.optional(),
+  sourcePlayer: RetiredPlayerIdField,
 });
 
 // v18: canonical names only. The v17 "identity" category is renamed to "role"
@@ -380,7 +413,7 @@ export const HistoryChangeSchema = z.discriminatedUnion("kind", [
  */
 const HISTORY_SNAPSHOT_SOURCE_CONTRACT: Partial<Record<z.infer<typeof HistoryCategorySchema>, z.ZodTypeAny>> = {
   effect: EffectRecordObject.pick({ sourceParticipant: true, sourcePlayer: true }),
-  reminder: ReminderRecordSchema.pick({ sourceParticipant: true, sourcePlayer: true }),
+  reminder: LegacyReminderSnapshotSourceContract,
 };
 
 export const EffectHistoryOperationSchema = z.enum(["apply", "update", "remove", "suppress", "resume", "expire"]);
@@ -392,6 +425,14 @@ const EFFECT_OPERATION_CHANGE: Record<z.infer<typeof EffectHistoryOperationSchem
   update: "value",
   suppress: "value",
   resume: "value",
+};
+
+/** Phase 10C: the change shape each v21 Reminder operation must use. */
+export const ReminderHistoryOperationSchema = z.enum(["place", "amend", "remove"]);
+const REMINDER_OPERATION_CHANGE: Record<z.infer<typeof ReminderHistoryOperationSchema>, "added" | "removed" | "value"> = {
+  place: "added",
+  remove: "removed",
+  amend: "value",
 };
 
 const addSnapshotIssues = (
@@ -415,6 +456,7 @@ export const HistoryRecordSchema = z.object({
   correction: z.literal(true).optional(),
   effectOperation: EffectHistoryOperationSchema.optional(),
   resolutionId: z.string().min(1).max(200).optional(),
+  reminderOperation: ReminderHistoryOperationSchema.optional(),
 }).superRefine((record, ctx) => {
   // Phase 10A: meaningful content. Every non-life record keeps its required
   // Current State `change` and never carries Life Event fields; a life
@@ -427,16 +469,36 @@ export const HistoryRecordSchema = z.object({
     if (record.lifeEvent !== undefined) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only a life History Record mirrors Life Events", path: ["lifeEvent"] });
     }
-    // Phase 10B: a correction is valid for "life" and "effect" only.
-    if (record.correction !== undefined && record.category !== "effect") {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only a life or effect History Record may be a correction", path: ["correction"] });
+    // Phase 10B/10C: a correction is valid for "life", "effect" and
+    // "reminder" only.
+    if (record.correction !== undefined && record.category !== "effect" && record.category !== "reminder") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only a life, effect or reminder History Record may be a correction", path: ["correction"] });
     }
   } else if (record.change === undefined && record.lifeEvent === undefined) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a life History Record must carry a change or a Life Event", path: ["change"] });
   }
-  // Phase 10B: Effect lifecycle metadata belongs to "effect" records only.
-  if (record.category !== "effect" && (record.effectOperation !== undefined || record.resolutionId !== undefined)) {
+  // Phase 10B: Effect lifecycle metadata belongs to "effect" records only;
+  // Phase 10C: Reminder operation metadata to "reminder" records only, and a
+  // resolutionId to either.
+  if (record.category !== "effect" && record.effectOperation !== undefined) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only an effect History Record carries Effect lifecycle metadata", path: ["effectOperation"] });
+  }
+  if (record.category !== "reminder" && record.reminderOperation !== undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only a reminder History Record carries a Reminder operation", path: ["reminderOperation"] });
+  }
+  if (record.resolutionId !== undefined && record.category !== "effect" && record.category !== "reminder") {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only an effect or reminder History Record carries a resolution id", path: ["resolutionId"] });
+  }
+  if (record.category === "reminder") {
+    // Phase 10C: legacy (pre-v21) Reminder History has no operation, never a
+    // correction and never a resolution id -- anything carrying those names
+    // its v21 operation, and each operation has exactly one change shape.
+    if (record.reminderOperation === undefined && (record.correction !== undefined || record.resolutionId !== undefined)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a reminder correction or correlated reminder record must name its Reminder operation", path: ["reminderOperation"] });
+    }
+    if (record.reminderOperation && record.change && record.change.kind !== REMINDER_OPERATION_CHANGE[record.reminderOperation]) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `a Reminder ${record.reminderOperation} is recorded as ${REMINDER_OPERATION_CHANGE[record.reminderOperation]}`, path: ["change", "kind"] });
+    }
   }
   if (record.category === "effect") {
     // A v19 Effect record (no effectOperation) predates corrections, so an
@@ -471,6 +533,17 @@ export const HistoryRecordSchema = z.object({
     for (const snapshot of snapshots) {
       const checked = EffectRecordSchema.safeParse(snapshot.value);
       if (!checked.success) addSnapshotIssues(ctx, "effect History snapshot", snapshot.path, checked.error.issues);
+    }
+    return;
+  }
+  // Phase 10C: a v21 Reminder record (one naming its operation) snapshots
+  // COMPLETE, strict v21 Reminders -- no lifetime, no smuggled key. Legacy
+  // Reminder History (no operation) keeps only its original source contract
+  // below and is never judged against the v21 record shape.
+  if (record.category === "reminder" && record.reminderOperation !== undefined) {
+    for (const snapshot of snapshots) {
+      const checked = ReminderRecordSchema.safeParse(snapshot.value);
+      if (!checked.success) addSnapshotIssues(ctx, "reminder History snapshot", snapshot.path, checked.error.issues);
     }
     return;
   }
@@ -575,7 +648,16 @@ export const STPlayerRecordSchema = z.object({
   ghostVote: z.boolean(),
   abilityUsed: z.boolean(),
   statuses: StatusesSchema,
-  reminders: z.array(ReminderRecordSchema),
+  // Phase 10C: a Reminder's identity is (participant, id) -- ids are unique
+  // within one participant's reminders[]; identical labels are distinct
+  // instances and are never de-duplicated.
+  reminders: z.array(ReminderRecordSchema).superRefine((reminders, ctx) => {
+    const seen = new Set<string>();
+    reminders.forEach((reminder, index) => {
+      if (seen.has(reminder.id)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "duplicate Reminder id", path: [index, "id"] });
+      seen.add(reminder.id);
+    });
+  }),
   stNotes: z.string(),
   isTraveler: z.boolean(),
   actualAlignment: AlignmentSchema.optional(),
@@ -621,13 +703,17 @@ export const NightStepRecordSchema = z.object({
 });
 
 /** Phase 10B: the current game snapshot schema version (see
- * StorytellerLobbyRecord.gameSchemaVersion). */
-export const GAME_SCHEMA_VERSION = 20 as const;
+ * StorytellerLobbyRecord.gameSchemaVersion). Phase 10C: v21. */
+export const GAME_SCHEMA_VERSION = 21 as const;
+/** Phase 10C: the one earlier explicit marker migration still accepts
+ * (v20 -> v21 only; see migrateGameEntry). */
+export const PREVIOUS_GAME_SCHEMA_VERSION = 20 as const;
 
 export const StorytellerLobbyRecordSchema = z.object({
-  // Phase 10B (v20): required explicit version evidence, NO default -- a
-  // current-version game missing it (or carrying any other value) is
-  // rejected; genuine v19-and-older data receives it only from migration.
+  // Phase 10B (v20) / 10C (v21): required explicit version evidence, NO
+  // default -- a current-version game missing it (or carrying any other
+  // value, including a stale 20) is rejected; older data receives it only
+  // from migration.
   gameSchemaVersion: z.literal(GAME_SCHEMA_VERSION),
   code: z.string().min(1),
   storytellerUid: z.string().min(1),
@@ -697,6 +783,12 @@ const STPlayerRecordPersistedSchema = STPlayerRecordSchema.extend({
   if (player.isEmpty === true && player.effects.length > 0) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "an empty seat cannot own Effects", path: ["effects"] });
   }
+  // Phase 10C: a Reminder belongs to exactly one participation instance, so
+  // an empty seat never owns one. Rejected, never repaired (only the v20 ->
+  // v21 migration step drops legacy empty-seat Reminders).
+  if (player.isEmpty === true && player.reminders.length > 0) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "an empty seat cannot own Reminders", path: ["reminders"] });
+  }
 });
 
 /** Timeline ordinal (Setup 0, Night N = 2N-1, Day N = 2N) -- the same
@@ -760,6 +852,28 @@ function checkEffectTemporalCoherence(
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: [...path, "appliedAt"], message: live
         ? "an Effect cannot have been applied after the current Game Moment"
         : "a Setup Effect is applied at the Setup moment" });
+    });
+  }
+}
+
+/**
+ * Phase 10C: Reminder `createdAt` coherence against the game's own current
+ * moment -- the same rule Effect `appliedAt` uses (isEffectAppliedAtCoherent):
+ * a v21 createdAt never lies in the future relative to the snapshot holding
+ * it (Setup: exactly {setup, 0}; Night/Day: not after now; ended: frozen, not
+ * judged). Never repaired: only the v20 -> v21 migration omits an incoherent
+ * LEGACY createdAt. A cleanup cue is deliberately not judged here.
+ */
+function checkReminderTemporalCoherence(
+  game: { phase: string; day: number; players: Record<string, { reminders: { createdAt?: { phase: string; day: number } }[] }> },
+  ctx: z.RefinementCtx,
+): void {
+  for (const [key, player] of Object.entries(game.players)) {
+    player.reminders.forEach((reminder, index) => {
+      if (!reminder.createdAt || isEffectAppliedAtCoherent(game, reminder.createdAt)) return;
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["players", key, "reminders", index, "createdAt"], message: game.phase === "setup"
+        ? "a Setup Reminder is created at the Setup moment"
+        : "a Reminder cannot have been created after the current Game Moment" });
     });
   }
 }
@@ -840,6 +954,7 @@ export const StorytellerGamePersistedSchema = z.preprocess((raw, ctx) => {
 }).superRefine((game, ctx) => {
   checkSeatGeometry(game, ctx);
   checkEffectTemporalCoherence(game, ctx);
+  checkReminderTemporalCoherence(game, ctx);
 }));
 
 export const GuardStampSchema = z.object({

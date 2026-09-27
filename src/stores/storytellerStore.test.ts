@@ -564,13 +564,16 @@ describe("migrateStoreState", () => {
     const state = { game: minimalPersistedGame({
       players: { a: legacyPlayer({ reminders: ["Poisoned", "Secret note"] }) },
     }), undoStack: [] };
-    const reminders = migratedPlayer(state).reminders as { id: string; label: string; lifetime: unknown }[];
+    const reminders = migratedPlayer(state).reminders as { id: string; label: string; lifetime?: unknown; cleanupCue?: unknown }[];
     expect(reminders.map((r) => r.label)).toEqual(["Poisoned", "Secret note"]);
     // Deterministic, per-player stable ids (not a random allocation) --
     // never invented, never reshuffled.
     expect(reminders.map((r) => r.id)).toEqual(["legacy-a-0", "legacy-a-1"]);
+    // Phase 10C: the chain continues to v21, where a manual legacy Reminder
+    // becomes persistent notation -- no lifetime, no cleanup cue.
     for (const r of reminders) {
-      expect(r.lifetime).toEqual({ kind: "manual" });
+      expect(r).not.toHaveProperty("lifetime");
+      expect(r).not.toHaveProperty("cleanupCue");
     }
     // No invented provenance: no sourceCharacter/sourcePlayer/createdAt.
     expect(reminders[0]).not.toHaveProperty("sourceCharacter");
@@ -614,9 +617,9 @@ describe("migrateStoreState", () => {
     expect(migrated1).toEqual(migrated2);
     const players1 = (migrated1 as { game: { players: Record<string, MigratedPlayer> } }).game.players;
     expect(players1.a!.reminders).toEqual([
-      { id: "legacy-a-0", label: "Poisoned", lifetime: { kind: "manual" } },
-      { id: "legacy-a-1", label: "Poisoned", lifetime: { kind: "manual" } },
-      { id: "legacy-a-2", label: "Red Herring", lifetime: { kind: "manual" } },
+      { id: "legacy-a-0", label: "Poisoned" },
+      { id: "legacy-a-1", label: "Poisoned" },
+      { id: "legacy-a-2", label: "Red Herring" },
     ]);
   });
 
@@ -805,7 +808,7 @@ describe("migrateStoreState", () => {
     const undoPlayer = result.undoStack[0]!.players.a!;
     expect(undoPlayer.actualAlignment).toBe("evil");
     expect(undoPlayer.effects).toEqual([{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }]);
-    expect(undoPlayer.reminders).toEqual([{ id: "legacy-a-0", label: "Chosen", lifetime: { kind: "manual" } }]);
+    expect(undoPlayer.reminders).toEqual([{ id: "legacy-a-0", label: "Chosen" }]);
   });
 
   // -------------------------------------------------------------------------
@@ -920,7 +923,7 @@ describe("migrateStoreState", () => {
       for (const entry of [result.game, result.undoStack[0]!]) {
         expect(entry.players.a!.actualAlignment).toBe("good"); // v13->v14: derived from the resolvable chef role
         expect(entry.players.a!.effects).toEqual([{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }]);
-        expect(entry.players.a!.reminders).toEqual([{ id: "legacy-a-0", label: "Poisoned Reminder", lifetime: { kind: "manual" } }]);
+        expect(entry.players.a!.reminders).toEqual([{ id: "legacy-a-0", label: "Poisoned Reminder" }]);
         expect(entry.players.a!.statuses).toEqual({}); // the legacy boolean is cleared, never left as stale truth
         expect(entry.history).toEqual([]); // v13->v15: nothing to fabricate for a game that never tracked it
         expect(entry.informationDeliveries).toEqual([]); // v13->v16: likewise
@@ -946,10 +949,11 @@ describe("migrateStoreState", () => {
       for (const entry of [result.game, result.undoStack[0]!]) {
         // The v14 structured live-state fields are never re-derived or
         // re-converted. (Phase 10B: the v19 -> v20 step only adds each
-        // Effect's lifecycle -- active, and no expiry for a manual one.)
+        // Effect's lifecycle -- active, and no expiry for a manual one.
+        // Phase 10C: v20 -> v21 only drops a manual Reminder's lifetime.)
         expect(entry.players.a!.actualAlignment).toBe("good");
         expect(entry.players.a!.effects).toEqual([{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }]);
-        expect(entry.players.a!.reminders).toEqual([{ id: "legacy-a-0", label: "Poisoned Reminder", lifetime: { kind: "manual" } }]);
+        expect(entry.players.a!.reminders).toEqual([{ id: "legacy-a-0", label: "Poisoned Reminder" }]);
         expect(entry.history).toEqual([]);
         expect(entry.informationDeliveries).toEqual([]);
       }

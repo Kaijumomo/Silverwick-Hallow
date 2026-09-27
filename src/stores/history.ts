@@ -250,10 +250,13 @@ export function diffFields<T extends Record<string, unknown>>(
  * Alice caused still records Alice as its source even after Bob has since
  * taken her seat. recordIfLive deep-clones it into the History Record.
  *
- * Phase 10B (SOL-10B-R8): used for Reminders only. Effect History never copies
- * an Effect's origin into mutation provenance -- the origin stays inside the
- * Effect snapshot, and provenance comes only from Mutation Context (see
- * effectResolution.ts). */
+ * Phase 10B (SOL-10B-R8): Effect History never copies an Effect's origin
+ * into mutation provenance -- the origin stays inside the Effect snapshot,
+ * and provenance comes only from Mutation Context (see effectResolution.ts).
+ * Phase 10C: Reminder History no longer uses it either (reminderResolution.ts
+ * takes mutation provenance only from the Mutation Context). It has no
+ * production caller; pre-v21 Reminder History written with this mirrored
+ * origin is left exactly as recorded. */
 export function provenanceOf(
   item: Pick<EffectRecord | ReminderRecord, "sourceCharacter" | "sourceParticipant" | "note">
 ): Provenance | undefined {

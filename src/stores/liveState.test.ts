@@ -187,7 +187,7 @@ describe("Phase 9D.1: structured reminder tokens", () => {
     const id = game().seatOrder[0]!;
     const source = game().seatOrder[1]!;
     const reminderId = state().addReminder(id, {
-      label: "Red Herring", sourceCharacter: "fortuneteller", sourcePlayer: source, lifetime: { kind: "manual" },
+      label: "Red Herring", sourceCharacter: "fortuneteller", sourcePlayer: source,
     });
     expect(reminderId).not.toBeNull();
     const record = game().players[id]!.reminders.find((r) => r.id === reminderId);
@@ -201,8 +201,8 @@ describe("Phase 9D.1: structured reminder tokens", () => {
   it("removeReminder removes exactly the named reminder", () => {
     dealtGame();
     const id = game().seatOrder[0]!;
-    const a = state().addReminder(id, { label: "Chosen", lifetime: { kind: "manual" } })!;
-    const b = state().addReminder(id, { label: "Protected", lifetime: { kind: "manual" } })!;
+    const a = state().addReminder(id, { label: "Chosen" })!;
+    const b = state().addReminder(id, { label: "Protected" })!;
     state().removeReminder(id, a);
     expect(game().players[id]!.reminders.map((r) => r.id)).toEqual([b]);
   });
@@ -210,8 +210,8 @@ describe("Phase 9D.1: structured reminder tokens", () => {
   it("adding the same label twice is deterministic -- two distinct records, never merged or deduplicated", () => {
     dealtGame();
     const id = game().seatOrder[0]!;
-    const a = state().addReminder(id, { label: "Poisoned", lifetime: { kind: "manual" } })!;
-    const b = state().addReminder(id, { label: "Poisoned", lifetime: { kind: "manual" } })!;
+    const a = state().addReminder(id, { label: "Poisoned" })!;
+    const b = state().addReminder(id, { label: "Poisoned" })!;
     expect(a).not.toBe(b);
     expect(game().players[id]!.reminders).toHaveLength(2);
   });
@@ -220,7 +220,7 @@ describe("Phase 9D.1: structured reminder tokens", () => {
     dealtGame();
     const id = game().seatOrder[0]!;
     state().addReminder(id, {
-      label: "Secret", sourceCharacter: "poisoner", note: "ST-only context", lifetime: { kind: "manual" },
+      label: "Secret", sourceCharacter: "poisoner", note: "ST-only context",
     });
     const pub = JSON.stringify(projectToPublic(game().players[id]!, true));
     const self = JSON.stringify(projectToSelf(game().players[id]!, registry));

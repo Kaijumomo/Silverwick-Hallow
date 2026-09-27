@@ -3,8 +3,6 @@ import type {
   EffectId,
   EffectRecord,
   GameMoment,
-  ReminderId,
-  ReminderRecord,
   STPlayerRecord,
   StorytellerLobbyRecord,
 } from "./types";
@@ -117,11 +115,4 @@ export function findEffect(
   id: EffectId
 ): EffectRecord | undefined {
   return player.effects.find((e) => e.id === id);
-}
-
-export function findReminder(
-  player: Pick<STPlayerRecord, "reminders">,
-  id: ReminderId
-): ReminderRecord | undefined {
-  return player.reminders.find((r) => r.id === id);
 }

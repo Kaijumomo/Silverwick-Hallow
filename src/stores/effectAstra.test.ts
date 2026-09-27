@@ -181,7 +181,10 @@ describe("ASTRA-10B-002: v20 evidence blocks every legacy migration step for tha
 
   it("an outer v17 envelope never renames a stale v17 History category inside a v20 game", () => {
     liveGame();
-    state().setActualAlignment(idOf("Alice"), "evil");
+    // Always a real change (the random Deal may already have made Alice
+    // evil, which would make this a no-op with no History to corrupt).
+    const alice = idOf("Alice");
+    state().setActualAlignment(alice, game().players[alice]!.actualAlignment === "evil" ? "good" : "evil");
     const g = persisted(game()) as unknown as { history: { category: string }[] };
     g.history[g.history.length - 1]!.category = "identity";
     const result = migrateStoreState({ game: g, undoStack: [] }, 17) as { game: unknown };
@@ -210,7 +213,7 @@ describe("ASTRA-10B-002: v20 evidence blocks every legacy migration step for tha
     delete v19.gameSchemaVersion;
     await rehydrateEnvelope(19, v19);
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(state().game!.gameSchemaVersion).toBe(20);
+    expect(state().game!.gameSchemaVersion).toBe(21);
     const v18 = { ...v19 };
     delete v18.lifeEventWindow;
     await rehydrateEnvelope(18, v18);

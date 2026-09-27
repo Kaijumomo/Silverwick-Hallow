@@ -118,8 +118,10 @@ describe("Phase 9R.2 migration C/D/E: historical references become unresolved le
       { id: "x", type: "poisoned", sourceCharacter: "poisoner", sourceParticipant: legacy("a"), lifetime: { kind: "untilDawn" },
         state: "active", expiry: { kind: "unresolved" } },
     ]);
+    // Phase 10C: a legacy manual Reminder keeps its origin exactly and loses
+    // only its lifetime (no cleanup cue) on the way to v21.
     expect(game.players.c!.reminders).toEqual([
-      { id: "r", label: "Townsfolk", sourceCharacter: "washerwoman", sourceParticipant: legacy("a"), lifetime: { kind: "manual" } },
+      { id: "r", label: "Townsfolk", sourceCharacter: "washerwoman", sourceParticipant: legacy("a") },
     ]);
   });
 
@@ -239,7 +241,7 @@ describe("Phase 9R.2 migration: remote-checkpoint version detection", () => {
     // Phase 10B: migration now reaches v20, whose explicit gameSchemaVersion
     // is current-version evidence; without the v19/v20 additions the same
     // game is v17-evidenced.
-    expect(detectLegacyGameVersion(persisted(current))).toBe(20);
+    expect(detectLegacyGameVersion(persisted(current))).toBe(21);
     const { lifeEventWindow: _window, ...v17 } = asV19(current);
     expect(detectLegacyGameVersion(persisted(v17))).toBe(17);
     // Any single marker suffices.

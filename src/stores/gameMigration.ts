@@ -2,7 +2,13 @@ import { BUILTIN_SCRIPTS } from "@/data/scripts";
 import { buildRegistry, deriveAlignment, type RoleRegistry } from "@/data/roleRegistry";
 import { legacyCurrentParticipantId, legacyParticipantRef } from "./participants";
 import { migratedLifeEventCoverage } from "./lifeEvents";
-import { GameMomentSchema, isEffectAppliedAtCoherent } from "./schemas";
+import {
+  EffectLifetimeSchema,
+  GAME_SCHEMA_VERSION,
+  GameMomentSchema,
+  PREVIOUS_GAME_SCHEMA_VERSION,
+  isEffectAppliedAtCoherent,
+} from "./schemas";
 import type { STPlayerRecord, Script } from "./types";
 
 /**
@@ -156,6 +162,10 @@ function registryForScript(scriptId: unknown, evidence: MigrationScriptEvidence)
  *
  * v19 -> v20 (Phase 10B): the authoritative Effect lifecycle and explicit
  * game schema version evidence. See migrateEntryV19ToV20.
+ *
+ * v20 -> v21 (Phase 10C): non-authoritative Reminder notation. See
+ * migrateEntryV20ToV21. Explicit version markers route an entry: see
+ * migrateGameEntry.
  */
 /**
  * Migrates exactly one player entry's v13-shaped fields, in place.
@@ -446,6 +456,66 @@ function migrateEntryV19ToV20(e: Record<string, unknown>): void {
   e.gameSchemaVersion = 20;
 }
 
+/**
+ * v20 -> v21 (Phase 10C): Reminders become non-authoritative notation, in
+ * place, from this entry's OWN content alone -- History is never consulted
+ * or rewritten.
+ *
+ *  - Legacy empty-seat Reminders are DROPPED (Phase 10C Section 10). v20
+ *    permitted that malformed ownership; an empty seat has no ParticipantId,
+ *    so there is no truthful participant to keep them for, and they must
+ *    never be inherited by the next occupant. They are never transferred, no
+ *    owner is invented, nothing is reconstructed from History, and no
+ *    migration History is written. (Once an entry is v21, an empty seat with
+ *    a Reminder is malformed and rejected -- see STPlayerRecordPersistedSchema.)
+ *  - Each occupied participant's Reminder loses its `lifetime`:
+ *      manual lifetime -> no cleanup cue (persistent notation);
+ *      finite lifetime -> `cleanupCue: { kind: "unresolved" }` ("Needs check")
+ *    -- never an exact moment inferred from createdAt, the current phase, the
+ *    label, a source Role or History.
+ *  - A structurally valid legacy `createdAt` that is temporally impossible for
+ *    this entry's own phase/day (the same rule as SOL-10B-RC1) is OMITTED,
+ *    never replaced by a guessed moment.
+ *  - Labels, notes, ids and origin refs (including legacy ParticipantRefs)
+ *    are preserved exactly; a ref is never re-resolved against the roster.
+ *
+ * Fail-closed (Finding A3): a present-but-malformed Reminder (not an object,
+ * or a lifetime missing or not a valid v20 lifetime) is never normalized. It
+ * is left untouched and the entry is NOT stamped v21, so it keeps its v20
+ * marker and the v21 schema (which requires 21) rejects the whole entry --
+ * a missing lifetime can therefore never slip through as a valid
+ * "persistent" v21 Reminder. Otherwise the entry is stamped
+ * `gameSchemaVersion: 21`. Deterministic and idempotent (no ids, clocks or
+ * randomness), applied independently per entry.
+ */
+function migrateEntryV20ToV21(e: Record<string, unknown>): void {
+  let malformed = false;
+  if (isObject(e.players)) {
+    for (const raw of Object.values(e.players)) {
+      if (!isObject(raw) || !Array.isArray(raw.reminders)) continue;
+      if (raw.isEmpty === true) {
+        if (raw.reminders.length > 0) raw.reminders = [];
+        continue;
+      }
+      for (const reminder of raw.reminders) {
+        if (!isObject(reminder) || !EffectLifetimeSchema.safeParse(reminder.lifetime).success) {
+          malformed = true;
+          continue;
+        }
+        const finite = (reminder.lifetime as { kind: string }).kind !== "manual";
+        delete reminder.lifetime;
+        if (finite) reminder.cleanupCue = { kind: "unresolved" };
+        const created = GameMomentSchema.safeParse(reminder.createdAt);
+        if (created.success && typeof e.phase === "string" && typeof e.day === "number" && Number.isSafeInteger(e.day) &&
+          !isEffectAppliedAtCoherent({ phase: e.phase, day: e.day }, created.data)) {
+          delete reminder.createdAt;
+        }
+      }
+    }
+  }
+  if (!malformed) e.gameSchemaVersion = GAME_SCHEMA_VERSION;
+}
+
 export function migrateGameEntry(
   entry: unknown,
   fromVersion: number,
@@ -457,14 +527,26 @@ export function migrateGameEntry(
     players?: Record<string, unknown>;
   };
 
-  // Phase 10B (ASTRA-10B-002): ANY v20 evidence (an explicit
-  // `gameSchemaVersion` of any value, or any v20 lifecycle key) makes this
-  // entry current-version data, whatever version the OUTER persisted envelope
-  // claims. It receives no legacy step at all -- not v19 -> v20, and not any
-  // earlier repair (a missing v19 window, a v17 category rename, v14
-  // statuses...) -- and is judged by the current schema alone. Applied
-  // independently to Current State and to every Undo entry.
-  if (hasV20Evidence(e as Record<string, unknown>)) return;
+  // Phase 10C: an explicit `gameSchemaVersion` marker routes this entry, per
+  // entry, whatever version the OUTER persisted envelope claims:
+  //   20                          -> exactly v20 -> v21, nothing older;
+  //   20 + any v21-only evidence  -> malformed current-version data: no
+  //                                  migration, the v21 schema rejects it;
+  //   21, or any other value      -> no migration at all; the current schema
+  //                                  judges it (a malformed/unsupported
+  //                                  marker is never reinterpreted as legacy).
+  // Applied independently to Current State and to every Undo entry.
+  const record = e as Record<string, unknown>;
+  if (hasOwnKey(record, "gameSchemaVersion")) {
+    if (record.gameSchemaVersion === PREVIOUS_GAME_SCHEMA_VERSION && !hasV21Evidence(record)) migrateEntryV20ToV21(record);
+    return;
+  }
+  // Phase 10B (ASTRA-10B-002) / 10C: marker-less v20 or v21 evidence is
+  // malformed current-version data (every v20+ writer stamps the marker). It
+  // receives no legacy step at all -- not v19 -> v20, and not any earlier
+  // repair (a missing v19 window, a v17 category rename, v14 statuses...) --
+  // and is judged (rejected) by the current schema alone.
+  if (hasV20Evidence(record) || hasV21Evidence(record)) return;
 
   if (fromVersion < 14) {
     const players = e.players;
@@ -534,8 +616,14 @@ export function migrateGameEntry(
   // through legacy migration. The v20 schema judges it (a missing, wrong or
   // malformed marker, or a malformed lifecycle, fails validation).
   // (v20-evidenced entries already returned above.)
+  //
+  // Phase 10C: a genuine marker-less legacy entry continues the chain through
+  // v20 -> v21. Only here -- never for a marker-less entry claimed by a v20+
+  // envelope, which is malformed v20 data (the marker was required) and must
+  // not be stamped into validity.
   if (fromVersion < 20) {
-    migrateEntryV19ToV20(e as Record<string, unknown>);
+    migrateEntryV19ToV20(record);
+    migrateEntryV20ToV21(record);
   }
 }
 
@@ -600,8 +688,22 @@ export function migrateGameEntry(
  * hasV20Evidence) reports 20, so no legacy step ever runs over it; the v20
  * schema alone judges it. Only marker-less snapshots still go through the
  * bounded structural detection above.
+ *
+ * Phase 10C (v21): the marker is decisive. Exactly 20 reports 20 (the entry
+ * receives only v20 -> v21 in migrateGameEntry, unless it also carries v21
+ * evidence, in which case it is rejected unrepaired); 21, or any malformed or
+ * unsupported marker, reports 21 (no migration; the current schema judges
+ * it). Marker-less v21 evidence (hasV21Evidence) likewise reports 21.
  */
 export function detectLegacyGameVersion(game: Record<string, unknown>): number | null {
+  // Phase 10C: the explicit marker is decisive. 20 is the one earlier
+  // version still migrated (v20 -> v21 only); 21 -- and any malformed or
+  // unsupported marker -- is reported as current, so migrateGameEntry runs
+  // no legacy step and the current schema judges (rejects) it.
+  if (hasOwnKey(game, "gameSchemaVersion")) {
+    return game.gameSchemaVersion === PREVIOUS_GAME_SCHEMA_VERSION ? PREVIOUS_GAME_SCHEMA_VERSION : GAME_SCHEMA_VERSION;
+  }
+  if (hasV21Evidence(game)) return GAME_SCHEMA_VERSION;
   if (hasV20Evidence(game)) return 20;
   if (hasV19LifeEvidence(game)) return 19;
   if (hasV17IdentityEvidence(game)) return 17;
@@ -710,4 +812,24 @@ export function hasV20Evidence(game: Record<string, unknown>): boolean {
   const players = isObject(game.players) ? Object.values(game.players) : [];
   if (players.some((p) => isObject(p) && someEntry(p.effects, lifecycle))) return true;
   return someEntry(game.history, (h) => hasOwnKey(h, "effectOperation") || hasOwnKey(h, "resolutionId"));
+}
+
+/**
+ * Phase 10C: true when a game-shaped entry carries ANY v21-only Reminder key
+ * a v20 writer never produced -- PRESENCE, not validity:
+ *
+ *  - players[*].reminders[*].cleanupCue
+ *  - history[*].reminderOperation
+ *  - a "reminder" History Record's `correction` / `resolutionId`
+ *
+ * Under a marker of 20 such evidence means malformed current-version data:
+ * it is never run through the v20 -> v21 repair (migrateGameEntry), and the
+ * v21 schema rejects the entry. Marker-less, it is likewise never treated as
+ * legacy.
+ */
+export function hasV21Evidence(game: Record<string, unknown>): boolean {
+  const players = isObject(game.players) ? Object.values(game.players) : [];
+  if (players.some((p) => isObject(p) && someEntry(p.reminders, (r) => hasOwnKey(r, "cleanupCue")))) return true;
+  return someEntry(game.history, (h) => hasOwnKey(h, "reminderOperation") ||
+    (isObject(h) && h.category === "reminder" && (hasOwnKey(h, "correction") || hasOwnKey(h, "resolutionId"))));
 }

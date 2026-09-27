@@ -492,16 +492,53 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Phase 10C: Reminder NOTATION family -- distinct from Effect indicators
+   (perimeter artwork / solid square pills) by shape and glyph, not colour
+   alone: a dashed, notched tag with a leading pen mark. */
 .reminder-pip {
   font-size: 9px;
-  padding: 1px 5px;
-  border-radius: 999px;
-  background: rgba(196, 158, 80, 0.18);
+  padding: 1px 5px 1px 4px;
+  border-radius: 2px 999px 999px 2px;
+  background: rgba(196, 158, 80, 0.12);
   color: var(--gold-soft);
-  border: 1px solid var(--border);
+  border: 1px dashed var(--gold-soft);
   letter-spacing: 0.04em;
   font-family: var(--font-body);
   white-space: nowrap;
+}
+.reminder-glyph {
+  margin-right: 2px;
+  font-style: normal;
+  opacity: 0.85;
+}
+/* A due cleanup / legacy check: a solid double border plus WORDS
+   ("· cleanup" / "· check") -- never colour only. */
+.reminder-pip-due,
+.reminder-pip-check {
+  border-style: double;
+  border-width: 3px;
+  padding: 0 4px 0 3px;
+}
+.reminder-pip-status {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.reminder-overflow {
+  border-style: dotted;
+  background: transparent;
+  color: var(--text-dim);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ===== Empty seat token ===== */
@@ -773,28 +810,78 @@
 
 .reminder-list {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.reminder-row {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
 }
 .reminder-tag {
   display: inline-flex;
+  align-self: flex-start;
   align-items: center;
   gap: 4px;
-  background: rgba(196, 158, 80, 0.18);
+  background: rgba(196, 158, 80, 0.12);
   color: var(--gold-soft);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 3px 10px;
+  border: 1px dashed var(--gold-soft);
+  border-radius: 3px 999px 999px 3px;
+  padding: 0 4px 0 2px;
   font-size: 12px;
+}
+.reminder-tag.reminder-attention {
+  border-style: double;
+  border-width: 3px;
 }
 .reminder-tag button {
   background: none;
   border: none;
-  color: var(--text-dim);
+  color: inherit;
   cursor: pointer;
-  font-size: 14px;
+  font: inherit;
+  min-height: 44px;
+  padding: 0 8px;
+}
+.reminder-tag .reminder-tag-remove {
+  color: var(--text-dim);
+  font-size: 16px;
   line-height: 1;
+  min-width: 44px;
+}
+.reminder-status {
+  font-weight: 600;
+}
+.reminder-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+  border-left: 2px dashed var(--border);
+}
+.reminder-note-form {
+  display: flex;
+  gap: 6px;
+}
+.reminder-note-form input {
+  flex: 1;
+}
+.reminder-hint {
+  margin: 4px 0 0;
+}
+.reminder-options {
+  border: 0;
   padding: 0;
+  margin: 0;
+}
+.reminder-option-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
 }
 .reminder-add {
   display: flex;

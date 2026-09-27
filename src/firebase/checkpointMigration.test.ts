@@ -174,7 +174,7 @@ describe("Phase 9R.1 Finding B1: remote checkpoint migration", () => {
     expect(game.players.a!.statuses.poisoned).toBeUndefined();
     // Legacy plain-string reminder became a structured manual/legacy record,
     // preserving its text.
-    expect(game.players.a!.reminders).toEqual([{ id: "legacy-a-0", label: "Red Herring", lifetime: { kind: "manual" } }]);
+    expect(game.players.a!.reminders).toEqual([{ id: "legacy-a-0", label: "Red Herring" }]);
     // No History or Information Delivery is ever fabricated for a game that
     // never tracked either -- both simply start empty.
     expect(game.history).toEqual([]);

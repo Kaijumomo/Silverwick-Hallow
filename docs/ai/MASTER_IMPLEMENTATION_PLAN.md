@@ -6,8 +6,8 @@
 **Phase 10A closure checkpoint:** `d798266b988e49f904aa8f8658c917fd5b7e7abb`  
 **Pre-10B Firebase lifecycle hotfix checkpoint:** `38b10119544ce2c02590e9bc9c741aab995a91d1`  
 **Phase 10B final reviewed implementation checkpoint:** `3c9e20f4506258bab143b5f20750deb34b290379` (integrated into `main` with the docs-only closure commit on top)\
-**Schema:** v20 (integrated on `main`)\
-**Current phase:** Phase 10C — Reminder Workflow + Visual Reminder Tokens
+**Schema:** v20 (integrated on `main`); v21 implemented on the Phase 10C branch (not yet integrated)\
+**Current phase:** Phase 10C — Reminder Workflow + Visual Reminder Tokens (implemented; awaiting Luna verification)
 
 ## Product invariants
 
@@ -150,7 +150,9 @@ Goals:
 10B does **not** implement full Role ability evaluation.
 
 ### 10C — Reminder Workflow + Visual Reminder Tokens
-**Status:** CURRENT — NEXT: architecture challenge before coding (not yet designed).
+**Status:** IMPLEMENTED — ready for Luna verification (not closed). Architecture challenge adjudicated into the Sol implementation contract; implemented from `70864ada51f887399d5d3529a450204468fc8d65`. See `PHASE10C.md`.
+
+Delivered (store v21): Reminders are participant-bound, Storyteller-private, non-authoritative notation -- never mechanics input (architecture-guarded); strict v21 record (no lifetime; optional presentation-only `cleanupCue`); pure `planReminderTransaction` / `applyReminderPlan` and the single `resolveReminders` commit seam (place/amend/remove + corrections, ParticipantId-bound, all-or-nothing); empty seats own no Reminders; v20 -> v21 migration (empty-seat Reminders dropped, finite lifetimes -> `unresolved` "Needs check", History never rewritten; legacy Reminder History stays valid); explicit marker-20/21 routing; distinct Grimoire notation grammar with aggregation, explicit overflow and accessible summary; Privacy Mode DOM absence.
 
 Structured placement/removal/update, source/target/lifetime, free text where appropriate, accessible token grammar, future-engine seam.
 
@@ -193,6 +195,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Perform the **Phase 10C architecture challenge before coding** on `dev/phase-10c`.
-
-Do **not** start 10C by adding ad-hoc reminder markers or by duplicating Effect truth in Reminders. First audit the existing Reminder model and define the smallest correct Reminder primitive/workflow that supports manual Storyteller use now and the future ability engine later (see `docs/ai/handoffs/CURRENT_HANDOFF.md` for the known questions to challenge).
+**Luna verification** of the Phase 10C implementation (see `PHASE10C.md` and `docs/ai/handoffs/CURRENT_HANDOFF.md`), then Astra adversarial review. Verify exact commit identity rather than trusting branch names.

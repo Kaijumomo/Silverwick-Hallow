@@ -50,8 +50,8 @@ function realV17Game(): StorytellerLobbyRecord {
   const effectId = state().addEffect(carol, { type: "poisoned", sourceCharacter: "poisoner", sourcePlayer: alice, lifetime: { kind: "untilDawn" } })!;
   state().addEffect(carol, { type: "protected", lifetime: { kind: "manual" } });
   state().removeEffect(carol, effectId);
-  const reminderId = state().addReminder(carol, { label: "Townsfolk", sourceCharacter: "washerwoman", sourcePlayer: alice, lifetime: { kind: "manual" } })!;
-  state().addReminder(carol, { label: "Chosen", lifetime: { kind: "manual" } });
+  const reminderId = state().addReminder(carol, { label: "Townsfolk", sourceCharacter: "washerwoman", sourcePlayer: alice })!;
+  state().addReminder(carol, { label: "Chosen" });
   state().removeReminder(carol, reminderId);
   return JSON.parse(JSON.stringify(game()));
 }
@@ -103,13 +103,17 @@ describe("Section 6: the exact v17 regression -- a retired sourcePlayer inside a
     expect(StorytellerGamePersistedSchema.safeParse(base).success).toBe(true); // control: otherwise valid
     // This is already-current data (Phase 10B: its explicit gameSchemaVersion
     // is v20 evidence): remote recovery would never migrate it.
-    expect(detectLegacyGameVersion(base as unknown as Record<string, unknown>)).toBe(20);
+    expect(detectLegacyGameVersion(base as unknown as Record<string, unknown>)).toBe(21);
     const index = indexOf(base, category, kind);
     const bad = withItemField(base, index, "sourcePlayer", "a");
 
     const result = StorytellerGamePersistedSchema.safeParse(bad);
     expect(result.success).toBe(false);
-    expect(result.error!.issues.map((i) => i.path)).toEqual([["history", index, "change", "item", "sourcePlayer"]]);
+    // Phase 10C: a v21 Reminder snapshot is a STRICT v21 ReminderRecord, so
+    // the retired key is reported as an unrecognized key of the item itself.
+    expect(result.error!.issues.map((i) => i.path)).toEqual([category === "reminder"
+      ? ["history", index, "change", "item"]
+      : ["history", index, "change", "item", "sourcePlayer"]]);
     // The same malformed state is rejected by the real persisted-state
     // gate (reset), never silently stripped into a "valid" state.
     migrateStoreState({ game: bad, undoStack: [] }, 17);
@@ -236,7 +240,7 @@ describe("Section 12: an all-empty, markerless v17 game is harmlessly detected a
     // Every identity/category step is a no-op; only the v19 window (and the
     // v20 marker -- there are no Effects) is added.
     const { lifeEventWindow, gameSchemaVersion, ...rest } = entry;
-    expect(gameSchemaVersion).toBe(20);
+    expect(gameSchemaVersion).toBe(21);
     expect(lifeEventWindow).toEqual({ coverageFrom: { phase: "night", day: 1 }, events: [] });
     expect(JSON.stringify(rest)).toBe(before);
     expect(rest).toEqual(beforeDeep);

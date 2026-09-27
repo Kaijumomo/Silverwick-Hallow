@@ -216,7 +216,7 @@ describe("Phase 9R.5 B: a malformed CURRENT-version (v18) local save never hydra
     await new Promise((resolve) => setTimeout(resolve, 0));
     const raw = localStorage.getItem(STORAGE_KEY)!;
     const blob = JSON.parse(raw) as { state: Record<string, unknown>; version: number };
-    expect(blob.version).toBe(20); // already current: Zustand's own migrate() is skipped
+    expect(blob.version).toBe(21); // already current: Zustand's own migrate() is skipped
     return blob;
   }
 
@@ -361,7 +361,7 @@ describe("Phase 9R.5 E: removePlayer(Y) never deletes an unrelated player X that
     state().setPrivateText(x, "X's private text");
     state().setAlive(x, false);
     expect(state().addEffect(x, { type: "poisoned", lifetime: { kind: "manual" } })).not.toBeNull();
-    expect(state().addReminder(x, { label: "Red Herring", lifetime: { kind: "manual" } })).not.toBeNull();
+    expect(state().addReminder(x, { label: "Red Herring" })).not.toBeNull();
     const xBefore = clone(game().players[x]!);
     expect(xBefore.stNotes).toBe("X's Storyteller notes");
     expect(xBefore.privateInfo).toMatchObject({ bluffs: ["chef", "empath", "monk"], fakeMinions: [a], extraText: "X's private text" });

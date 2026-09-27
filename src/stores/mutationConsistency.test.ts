@@ -758,14 +758,14 @@ describe("Phase 9R.4 (B8): commands already implementing true no-ops keep them",
     dealtGame();
     goLive();
     const id = seat(0);
-    state().addReminder(id, { id: "r1", label: "Mark", lifetime: { kind: "manual" } });
+    state().addReminder(id, { id: "r1", label: "Mark" });
     const before = baseline();
     state().assignRole(id, player(id).actualRole);
     state().setActualAlignment(id, player(id).actualAlignment!);
     state().setAlive(id, true);
     state().setGhostVote(id, true);
     state().setStatus(id, "poisoned", false);
-    expect(state().addReminder(id, { id: "r1", label: "Mark", lifetime: { kind: "manual" } })).toBe("r1");
+    expect(state().addReminder(id, { id: "r1", label: "Mark" })).toBe("r1");
     state().removeReminder(id, "no-such-reminder");
     state().removeEffect(id, "no-such-effect");
     state().removeInformationDelivery("no-such-delivery");
@@ -789,7 +789,7 @@ describe("Phase 9R.4 (B9): addReminder/removeReminder are the only Reminder muta
     goLive();
     const id = seat(0);
     const added = baseline();
-    expect(state().addReminder(id, { id: "r1", label: "Red Herring", sourceCharacter: "fortuneteller", lifetime: { kind: "manual" } })).toBe("r1");
+    expect(state().addReminder(id, { id: "r1", label: "Red Herring", sourceCharacter: "fortuneteller" })).toBe("r1");
     expectOneMutation(added, { history: 1 });
     expect(game().history.at(-1)).toMatchObject({ category: "reminder", change: { kind: "added", item: { id: "r1", label: "Red Herring" } } });
 
@@ -804,7 +804,7 @@ describe("Phase 9R.4 (B9): addReminder/removeReminder are the only Reminder muta
     dealtGame();
     const id = seat(0);
     const added = baseline();
-    state().addReminder(id, { id: "r1", label: "Setup mark", lifetime: { kind: "manual" } });
+    state().addReminder(id, { id: "r1", label: "Setup mark" });
     expectOneMutation(added, { history: 0 });
     expect(player(id).reminders.map((r) => r.id)).toEqual(["r1"]);
 

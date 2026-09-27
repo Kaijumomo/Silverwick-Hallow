@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { useStorytellerStore as store } from "./storytellerStore";
 import { sameSnapshot } from "./history";
 import { setupScript, standardRoles } from "@/test/setupFixtures";
-import type { EffectRecord, HistoryRecord, PlayerId, ReminderRecord, StorytellerLobbyRecord } from "./types";
+import type { EffectRecord, HistoryRecord, PlayerId, StorytellerLobbyRecord } from "./types";
 
 // Phase 9R.4 (Astra B): sameSnapshot() decides true no-ops for the small
 // JSON-shaped records commands compare (Effects, Reminders, private info,
@@ -146,13 +146,16 @@ describe.each([["Setup", setupFixture, 0], ["Live Play", liveFixture, 1]] as con
         change: { kind: "value", from: { id: "e1", note: "from the Poisoner" }, to: { id: "e1", note: "a different note" } } });
     });
 
-    it("addReminder: same semantic Reminder (reordered) is inert with no duplicate History event; a real change mutates once", () => {
+    // Phase 10C: Place never upserts. The reordered identical Reminder is
+    // still inert; different content under the same id is now a refused
+    // conflict (previously an in-place replacement) -- also inert.
+    it("addReminder: same semantic Reminder (reordered) is inert with no duplicate History event; different content under the same id is refused, never upserted", () => {
       fixture();
       const [target, source] = game().seatOrder;
       const first = baseline();
       expect(state().addReminder(target!, {
         id: "r1", label: "Red Herring", sourceCharacter: "fortuneteller", sourcePlayer: source!,
-        lifetime: { kind: "days", count: 1 }, note: "chosen",
+        cleanup: { kind: "nextPhase" }, note: "chosen",
       })).toBe("r1");
       expectOneMutation(first, historyPerMutation);
       const stored = player(target!).reminders.find((r) => r.id === "r1")!;
@@ -161,21 +164,21 @@ describe.each([["Setup", setupFixture, 0], ["Live Play", liveFixture, 1]] as con
 
       const same = baseline();
       expect(state().addReminder(target!, {
-        lifetime: { count: 1, kind: "days" } as ReminderRecord["lifetime"], note: "chosen", sourcePlayer: source!,
+        note: "chosen", cleanup: { kind: "nextPhase" }, sourcePlayer: source!,
         sourceCharacter: "fortuneteller", label: "Red Herring", id: "r1",
       })).toBe("r1");
       expectInert(same);
       expect(player(target!).reminders.find((r) => r.id === "r1")).toBe(stored);
       expect(reminderEvents()).toBe(events);
 
-      const changed = baseline();
+      const conflicting = baseline();
       expect(state().addReminder(target!, {
-        lifetime: { count: 1, kind: "days" } as ReminderRecord["lifetime"], note: "chosen", sourcePlayer: source!,
+        note: "chosen", cleanup: { kind: "nextPhase" }, sourcePlayer: source!,
         sourceCharacter: "fortuneteller", label: "Red Herring (moved)", id: "r1",
-      })).toBe("r1");
-      expectOneMutation(changed, historyPerMutation);
-      expect(player(target!).reminders.find((r) => r.id === "r1")!.label).toBe("Red Herring (moved)");
-      expect(reminderEvents()).toBe(events + historyPerMutation);
+      })).toBeNull();
+      expectInert(conflicting);
+      expect(player(target!).reminders.find((r) => r.id === "r1")).toBe(stored);
+      expect(reminderEvents()).toBe(events);
     });
 
     it("setStatus: an already-active manual effect stored with a different key order is not re-committed", () => {

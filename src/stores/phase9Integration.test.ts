@@ -50,7 +50,7 @@ describe("Phase 9D.5 Proof A: local persistence round-trip", () => {
     const raw = localStorage.getItem(STORAGE_KEY);
     expect(raw).toBeTruthy();
     const parsed = JSON.parse(raw!);
-    expect(parsed.version).toBe(20);
+    expect(parsed.version).toBe(21);
 
     // Simulate a fresh load: wipe in-memory state entirely. Zustand's
     // persist middleware wraps setState to also write-through on every
@@ -197,7 +197,7 @@ describe("Phase 9D.5 Proof B: Undo integrity across combined Phase 9 features", 
     expect(intermediate).not.toEqual(original);
 
     useStorytellerStore.getState().addReminder(handles.investigatorId, {
-      label: "Marked", lifetime: { kind: "manual" },
+      label: "Marked",
     });
     const latest = useStorytellerStore.getState().game!;
     expect(latest.players[handles.investigatorId]!.reminders.map((r) => r.label)).toEqual(["Marked"]);
@@ -350,7 +350,7 @@ describe("Phase 9D.5 Proof H: full integrated BOTC lifecycle", () => {
     // with no Mutation Context the History records no mutation provenance.
     expect(store().game!.history[2]!.change).toMatchObject({ kind: "added", item: { sourceCharacter: "poisoner", sourceParticipant: refOf(store().game!, impId) } });
     expect(store().game!.history[2]!.provenance).toBeUndefined();
-    store().addReminder(investigatorId, { label: "Poisoned", sourceCharacter: "poisoner", lifetime: { kind: "manual" } });
+    store().addReminder(investigatorId, { label: "Poisoned", sourceCharacter: "poisoner" });
     // addReminder/addEffect only record History when the game is live (they
     // already are here) -- exactly one record per real command, never more.
     expect(store().game!.history).toHaveLength(4);

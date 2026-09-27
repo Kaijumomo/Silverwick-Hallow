@@ -149,7 +149,7 @@ const COMMANDS: [string, (id: PlayerId) => unknown][] = [
   ["setStatus", (id) => state().setStatus(id, "poisoned", true)],
   ["addEffect", (id) => expect(state().addEffect(id, { type: "poisoned", lifetime: { kind: "manual" } })).toBeNull()],
   ["removeEffect", (id) => state().removeEffect(id, "manual:poisoned")],
-  ["addReminder", (id) => expect(state().addReminder(id, { label: "Mark", lifetime: { kind: "manual" } })).toBeNull()],
+  ["addReminder", (id) => expect(state().addReminder(id, { label: "Mark" })).toBeNull()],
   ["removeReminder", (id) => state().removeReminder(id, "r1")],
   ["recordInformationDelivery", (id) => expect(state().recordInformationDelivery(id, "chef-first-night", []).ok).toBe(false)],
   ["setNotes", (id) => state().setNotes(id, "notes")],
@@ -416,7 +416,7 @@ describe("Phase 9R.4 (B8 remediation): representative families -- inherited ids 
       first, { history: 1 }, (id) => expect(player(id).effects.map((e) => e.id)).toEqual(["e1"])));
 
   it("8. addReminder -- no Reminder and no History for an inherited id; a real Reminder in Live Play records History", () =>
-    inertThenValid(liveFixture, (id) => { state().addReminder(id, { id: "r1", label: "Mark", lifetime: { kind: "manual" } }); },
+    inertThenValid(liveFixture, (id) => { state().addReminder(id, { id: "r1", label: "Mark" }); },
       first, { history: 1 }, (id) => expect(player(id).reminders.map((r) => r.id)).toEqual(["r1"])));
 
   it("9. Traveler: completeTravelerInformation -- prototype values never pass Traveler checks", () => {

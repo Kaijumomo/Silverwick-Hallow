@@ -70,9 +70,11 @@ function v19Game(): Raw {
 }
 
 /** Phase 10B: a v19 game is now legacy -- migration also stamps the v20
- * version evidence (its Effects, none here, would gain their lifecycle). */
+ * version evidence (its Effects, none here, would gain their lifecycle).
+ * Phase 10C: and continues through v20 -> v21 (no Reminders here, so only the
+ * marker advances to the current 21). */
 function v20Game(): Raw {
-  return { ...v19Game(), gameSchemaVersion: 20 };
+  return { ...v19Game(), gameSchemaVersion: 21 };
 }
 
 /** Strips exactly what v18 -> v19 -> v20 migration adds. */
@@ -144,7 +146,7 @@ describe("Phase 10A migration: coverage table (v18 -> v19)", () => {
 });
 
 describe("Phase 10A migration: already-v19 data", () => {
-  it("keeps its window exactly -- event ids and coverage are never regenerated; only v20 evidence is added", () => {
+  it("keeps its window exactly -- event ids and coverage are never regenerated; only the current version marker is added", () => {
     const current = { game: v19Game(), undoStack: [v19Game()] };
     const result = migrateStoreState(current, 19) as { game: Raw; undoStack: Raw[] };
     expect(takeMigrationResetFlag()).toBe(false);
@@ -156,10 +158,10 @@ describe("Phase 10A migration: already-v19 data", () => {
     expect(entry).toEqual(v20Game());
   });
 
-  it("current v20 data passes through unchanged (same reference)", () => {
+  it("current (v21) data passes through unchanged (same reference)", () => {
     const current = { game: v20Game(), undoStack: [v20Game()] };
     const snapshot = structuredClone(current);
-    expect(migrateStoreState(current, 20)).toBe(current);
+    expect(migrateStoreState(current, 21)).toBe(current);
     expect(takeMigrationResetFlag()).toBe(false);
     expect(current).toEqual(snapshot);
   });
@@ -224,8 +226,9 @@ describe("Phase 10A migration: malformed v19 evidence never falls back into v18 
       expect(hasV19LifeEvidence(game)).toBe(true);
       const copy = structuredClone(game);
       migrateGameEntry(copy, 18, { kind: "canonical-only" });
-      // Migration never touches v19 evidence (Phase 10B only stamps v20).
-      expect(copy).toEqual({ ...game, gameSchemaVersion: 20 });
+      // Migration never touches v19 evidence (Phase 10B/10C only stamp the
+      // current version marker).
+      expect(copy).toEqual({ ...game, gameSchemaVersion: 21 });
       const result = migrateStoreState({ game: structuredClone(game), undoStack: [] }, version) as { game: unknown };
       expect(takeMigrationResetFlag()).toBe(true);
       expect(result.game).toBeNull();

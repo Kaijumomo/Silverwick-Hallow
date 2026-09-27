@@ -7,7 +7,7 @@ import { needsShownIdentity } from "./identity";
 import { participantRefOf } from "./participants";
 import { setupScript, standardRoles } from "@/test/setupFixtures";
 import { buildRichPhase9Game } from "@/test/phase9RichState";
-import { asV19, withV20Lifecycle } from "@/test/v20Migration";
+import { asV19, withCurrentMigration } from "@/test/v20Migration";
 
 // Terminology audit (v17 -> v18): the History category for an Actual Role
 // change is "role", not "identity". These tests cover the production
@@ -212,7 +212,7 @@ function expectedV19(entry: Raw): Raw {
   copy.lifeEventWindow = { coverageFrom: migratedLifeEventCoverage(copy.phase, copy.day), events: [] };
   return copy;
 }
-const expectedCurrent = (entry: Raw): Raw => withV20Lifecycle(expectedV19(entry));
+const expectedCurrent = (entry: Raw): Raw => withCurrentMigration(expectedV19(entry));
 
 describe("B. local v17 -> v18 migration of Current State", () => {
   it("\"identity\" becomes \"role\"; every other History field and all of Current State are unchanged", () => {
@@ -290,7 +290,7 @@ describe("C. local v17 -> v18 migration of every Undo snapshot", () => {
     expect(before.undoStack.some((entry) => categoriesOf(entry).includes("role"))).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 0));
     const current = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as { state: Raw; version: number };
-    expect(current.version).toBe(20);
+    expect(current.version).toBe(21);
 
     const v17Blob = {
       version: 17,
@@ -347,7 +347,7 @@ describe("D. a store labeled v18 that still carries \"identity\" is malformed, n
   it("a canonical current (v20) store passes through unchanged (same reference)", () => {
     const current = { game: expectedCurrent(v17Game()), undoStack: [expectedCurrent(v17Game())] };
     const snapshot = structuredClone(current);
-    const result = migrateStoreState(current, 20);
+    const result = migrateStoreState(current, 21);
     expect(takeMigrationResetFlag()).toBe(false);
     expect(result).toBe(current);
     expect(result).toEqual(snapshot);
@@ -404,7 +404,7 @@ describe("migrateGameEntry v17 -> v18 step", () => {
     // Phase 10A: the only addition on the way to v19 is the Life Event Window
     // (Phase 10B: and, to v20, only the version marker -- no Effects here).
     const { lifeEventWindow, gameSchemaVersion, ...rest } = entry;
-    expect(gameSchemaVersion).toBe(20);
+    expect(gameSchemaVersion).toBe(21);
     expect(JSON.stringify(rest)).toBe(before);
     expect(lifeEventWindow).toEqual({ coverageFrom: { phase: "day", day: 2 }, events: [] });
     expect(StorytellerGamePersistedSchema.safeParse(entry).success).toBe(true);
@@ -428,7 +428,7 @@ describe("migrateGameEntry v17 -> v18 step", () => {
   it("fromVersion 19 runs only the v20 step (version marker + Effect lifecycle)", () => {
     const entry = v17Game();
     migrateGameEntry(entry, 19, { kind: "canonical-only" });
-    expect(entry).toEqual(withV20Lifecycle(v17Game()));
+    expect(entry).toEqual(withCurrentMigration(v17Game()));
   });
 
   it("fromVersion 18 skips the category rename (only the v19 window is added)", () => {

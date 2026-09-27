@@ -7,7 +7,7 @@ import { StorytellerStateSchema } from "./schemas";
 import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { currentGameMoment, manualEffectId } from "./effects";
-import { cloneOwned, durableProvenance, type MutationContext, provenanceOf, recordIfLive, sameSnapshot } from "./history";
+import { cloneOwned, durableProvenance, type MutationContext, recordIfLive, sameSnapshot } from "./history";
 import {
   applyEffectPlan,
   effectApplicationMoment,
@@ -18,6 +18,13 @@ import {
   type EffectTransaction,
 } from "./effectResolution";
 import { GAME_SCHEMA_VERSION } from "./schemas";
+import {
+  applyReminderPlan,
+  newReminderId,
+  planReminderTransaction,
+  type ReminderRefusal,
+  type ReminderTransaction,
+} from "./reminderResolution";
 import { newParticipantId, participantIdAppearsIn, participantRefOf, recordedInformationValues } from "./participants";
 import { migrateGameEntry } from "./gameMigration";
 import { freshLifeEventWindow, pruneLifeEventWindow } from "./lifeEvents";
@@ -70,7 +77,6 @@ import type {
   PlayerId,
   ReminderId,
   ReminderInput,
-  ReminderRecord,
   RoleId,
   Script,
   STPlayerRecord,
@@ -85,7 +91,7 @@ const UNDO_LIMIT = 20;
  * `merge` (Phase 9C.2B.2) passes to migrateStoreState when Zustand's own
  * persist middleware skips calling `migrate` outright, which it does
  * whenever the persisted version already equals this one. */
-const STORE_VERSION = 20;
+const STORE_VERSION = 21;
 
 let _migrationResetFlag = false;
 /** Returns true (once) when migrate() discarded incompatible persisted state. */
@@ -159,6 +165,11 @@ const arrivalPlayer = (player: STPlayerRecord, game: StorytellerLobbyRecord): ST
  * NO Effects -- Effects belong to a participation instance, never to a seat,
  * so nothing an empty seat object carries (even malformed or crafted state)
  * is ever inherited by the person who occupies it.
+ *
+ * Phase 10C: likewise NO Reminders -- a Reminder belongs to exactly one
+ * participation instance, so no notation ever survives a participant
+ * boundary into the next occupant (addPlayer, addPlayerToSeat,
+ * assignPendingToSeat and restoreSeatedMember all come through here).
  */
 const occupySeat = (
   seat: STPlayerRecord,
@@ -169,6 +180,7 @@ const occupySeat = (
   ...arrivalPlayer({ ...seat, name, isEmpty: false }, game),
   participantId,
   effects: [],
+  reminders: [],
 });
 
 const clone = <T,>(v: T): T =>
@@ -233,6 +245,13 @@ export type LifeCommandResult =
 export type EffectCommandResult =
   | { ok: true; changed: boolean; effectIds: EffectId[] }
   | EffectRefusal;
+
+/** Phase 10C: result of every Reminder command. `changed: false` is a true
+ * no-op (nothing committed); a refusal changes nothing either.
+ * `reminderIds` are the Reminders the transaction placed, in intent order. */
+export type ReminderCommandResult =
+  | { ok: true; changed: boolean; reminderIds: ReminderId[] }
+  | ReminderRefusal;
 
 export type LobbyConnection = {
   code: string;
@@ -465,14 +484,25 @@ export type StorytellerStore = {
   /** @deprecated Phase 10B compatibility adapter over the Remove intent:
    * removes exactly that one Effect instance. */
   removeEffect: (id: PlayerId, effectId: EffectId) => void;
-  /** Phase 9D.1: centralized structured-reminder commands, backing the
-   * existing per-token Storyteller reminder workflow. Phase 9R.2: same
-   * durable-source rule as addEffect. Phase 9R.4 (B9): the ONLY Reminder
-   * mutation paths -- the legacy bulk setReminders() replacement, which
-   * bypassed per-Reminder Live History, had no production caller and was
-   * removed. */
+  // --- Phase 10C: Reminders ----------------------------------------------------
+  /** THE Reminder writer. Plans one atomic ReminderTransaction
+   * (reminderResolution.ts) -- ordered place/amend/remove intents, gameplay
+   * or correction, bound to the participation instances the caller observed
+   * -- and commits an accepted plan as exactly one game replacement: every
+   * affected participant's reminders[] plus History, one Undo entry, one
+   * localSeq step. A refusal or true no-op changes nothing. Reminders are
+   * non-authoritative notation: nothing mechanical ever reads them. */
+  resolveReminders: (transaction: ReminderTransaction) => ReminderCommandResult;
+  /** Compatibility adapter over one Place intent, bound to whoever occupies
+   * `id` now (and, for `sourcePlayer`, the current source occupant). Place
+   * semantics: returns the id when placed or when an identical Reminder
+   * already exists under it; null when refused -- including different
+   * content under an existing id (never an upsert), an ended game, or any
+   * smuggled durable field (sourceParticipant, createdAt, cleanupCue...). */
   addReminder: (id: PlayerId, reminder: ReminderInput) => ReminderId | null;
-  removeReminder: (id: PlayerId, reminderId: ReminderId) => void;
+  /** Compatibility adapter over one Remove intent: removes exactly that one
+   * Reminder instance of the current occupant. */
+  removeReminder: (id: PlayerId, reminderId: ReminderId) => ReminderCommandResult;
   /** Phase 9D.3: the single Authoritative Information command. Resolves
    * the Recipient's Actual Role and its Information Actions from Role
    * data (never a Role-id branch), structurally validates the supplied
@@ -582,29 +612,6 @@ export type StorytellerStore = {
 // while live-synced would fail this write with no history ever landing.
 const alignmentHistoryValue = (value: Alignment | undefined): Record<string, unknown> =>
   value === undefined ? {} : { actualAlignment: value };
-
-/**
- * Phase 9R.2: converts an owned Reminder input's live `sourcePlayer`
- * into the durable `sourceParticipant` snapshot of whoever occupies that
- * seat right now (participantRefOf). Returns null -- the command must then
- * refuse atomically -- when the named source is not a current participant
- * (nonexistent PlayerId, empty seat): the Storyteller explicitly named a
- * source, so silently dropping it or storing an unknowable one would both
- * misrepresent what happened. Any `sourceParticipant` present on the input
- * at runtime is discarded; a caller can never supply its own snapshot.
- * (Phase 10B: Effects no longer use this -- their sources are bound and
- * resolved by the Effect planner, effectResolution.ts.)
- */
-const sourcedRecord = <T extends ReminderRecord>(
-  game: StorytellerLobbyRecord,
-  input: Omit<T, "sourceParticipant"> & { sourcePlayer?: PlayerId; sourceParticipant?: unknown }
-): T | null => {
-  const { sourcePlayer, sourceParticipant: _smuggled, ...rest } = input;
-  if (sourcePlayer === undefined) return rest as unknown as T;
-  const sourceParticipant = participantRefOf(game, sourcePlayer);
-  if (!sourceParticipant) return null;
-  return { ...rest, sourceParticipant } as unknown as T;
-};
 
 /** A status-only repair committed alongside an event correction. */
 export type RepairTarget = { playerId: PlayerId; target: LifeStatusTarget };
@@ -913,7 +920,13 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // identically to Current State and every Undo snapshot (never consulting
   // History). An entry that already carries v20 evidence is left for the
   // schema gate below to judge, never "repaired".
-  if (fromVersion < 20) {
+  //
+  // v21 (Phase 10C): non-authoritative Reminder notation -- the same shared
+  // per-entry migration. An entry marked 20 receives exactly v20 -> v21; an
+  // entry marked 21 (or anything else) receives nothing and is judged by the
+  // schema gate below; a marker-less genuine legacy entry runs the whole
+  // chain through v21.
+  if (fromVersion < 21) {
     const customScripts = (s as { customScripts?: Record<string, Script> }).customScripts ?? {};
     // Phase 9R.1 Astra remediation (Finding A2): local persisted migration
     // uses "trusted" evidence -- this state's OWN saved customScripts,
@@ -2242,47 +2255,46 @@ export const useStorytellerStore = create<StorytellerStore>()(
         get().resolveEffects({ intents: [{ kind: "remove", target, effectId }] });
       },
 
-      addReminder: (id, reminder) => {
+      resolveReminders: (transaction) => {
         const { game, undoStack } = get();
+        if (!game) return { ok: false, code: "invalid", message: "No game is open." };
+        // guard -> plan (pure) -> one commit. The planner binds every target
+        // and source to the participation instance the caller observed,
+        // validates each intent in order against the evolving working state,
+        // and returns a refusal, a true no-op, or the complete reminders[] +
+        // History plan.
+        const result = planReminderTransaction(game, transaction);
+        if (!result.ok) return result;
+        if (!result.changed) return { ok: true, changed: false, reminderIds: [] };
+        set({ undoStack: pushUndo(game, undoStack), game: applyReminderPlan(game, result.plan) });
+        return { ok: true, changed: true, reminderIds: result.plan.placedReminderIds };
+      },
+
+      addReminder: (id, reminder) => {
+        const { game } = get();
         if (!game) return null;
-        const player = ownPlayer(game, id);
-        if (!player) return null;
-        const reminderId = reminder.id ?? newId();
-        // Phase 9R.1 (Finding B4/B5): see addEffect's identical rationale.
-        const record = sourcedRecord<ReminderRecord>(game, cloneOwned({ ...reminder, id: reminderId }));
-        if (!record) return null;
-        const existing = player.reminders.find((r) => r.id === reminderId);
-        // True no-op: an identical reminder already exists under this id.
-        if (existing && sameSnapshot(existing, record)) return reminderId;
-        const updatedGame = patchPlayer(game, id, {
-          reminders: [...player.reminders.filter((r) => r.id !== reminderId), record],
-        });
-        const provenance = provenanceOf(record);
-        const recorded = recordIfLive(game, updatedGame, () => ({
-          category: "reminder", playerId: id,
-          change: { kind: "added", item: record },
-          ...(provenance ? { provenance } : {}),
-        }));
-        if (!recorded) return null;
-        set({ undoStack: pushUndo(game, undoStack), game: recorded });
-        return reminderId;
+        const target = currentBinding(game, id);
+        if (!target || !reminder || typeof reminder !== "object" || Array.isArray(reminder)) return null;
+        // Own a deep-cloned, undefined-stripped snapshot of the caller's input
+        // (Phase 9R.1 Finding B4/B5) before anything reads it. Every other key
+        // -- including a smuggled sourceParticipant, createdAt, cleanupCue or
+        // the retired lifetime -- reaches the planner, which refuses it.
+        const { id: reminderId, sourcePlayer, ...rest } = cloneOwned(reminder) as ReminderInput & Record<string, unknown>;
+        let source: EffectParticipantBinding | undefined;
+        if (sourcePlayer !== undefined) {
+          source = currentBinding(game, sourcePlayer) ?? undefined;
+          if (!source) return null;
+        }
+        const id_ = reminderId ?? newReminderId();
+        const result = get().resolveReminders({ intents: [{ kind: "place", target,
+          reminder: { ...rest, id: id_, ...(source ? { source } : {}) } as never }] });
+        return result.ok ? id_ : null;
       },
 
       removeReminder: (id, reminderId) => {
-        const { game, undoStack } = get();
-        if (!game) return;
-        const player = ownPlayer(game, id);
-        const existing = player?.reminders.find((r) => r.id === reminderId);
-        if (!player || !existing) return;
-        const updatedGame = patchPlayer(game, id, { reminders: player.reminders.filter((r) => r.id !== reminderId) });
-        const provenance = provenanceOf(existing);
-        const recorded = recordIfLive(game, updatedGame, () => ({
-          category: "reminder", playerId: id,
-          change: { kind: "removed", item: existing },
-          ...(provenance ? { provenance } : {}),
-        }));
-        if (!recorded) return;
-        set({ undoStack: pushUndo(game, undoStack), game: recorded });
+        const target = currentBinding(get().game, id);
+        if (!target) return { ok: false, code: "notSeated", message: "This player is not seated." };
+        return get().resolveReminders({ intents: [{ kind: "remove", target, reminderId }] });
       },
 
       recordInformationDelivery: (recipientPlayerId, informationActionId, values, context) => {

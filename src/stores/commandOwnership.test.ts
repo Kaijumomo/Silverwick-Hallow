@@ -184,26 +184,31 @@ describe("Phase 9R.1 Finding B4: Effect lifetime ownership", () => {
 });
 
 describe("Phase 9R.1 Finding B4: Reminder ownership (addReminder -- the same pattern as addEffect)", () => {
-  it("mutating the caller's original reminder object (including its nested lifetime object) after addReminder() returns does not alter the stored Reminder or its History snapshot", () => {
+  // Phase 10C: the nested caller-owned object is now the cleanup request
+  // (Reminders no longer carry a lifetime); the stored cue is resolved by the
+  // planner, and nothing the caller keeps can reach it.
+  it("mutating the caller's original reminder object (including its nested cleanup request) after addReminder() returns does not alter the stored Reminder or its History snapshot", () => {
     dealtGame();
     goLive();
     const id = game().seatOrder[0]!;
 
-    const lifetime = { kind: "days" as const, count: 3 };
-    const reminder = { label: "Red Herring", sourceCharacter: "fortuneteller", lifetime };
+    const cleanup = { kind: "nextPhase" as const };
+    const reminder = { label: "Red Herring", sourceCharacter: "fortuneteller", note: "original", cleanup };
     const reminderId = state().addReminder(id, reminder);
     expect(reminderId).not.toBeNull();
     const storedBefore = game().players[id]!.reminders.find((r) => r.id === reminderId)!;
-    expect(storedBefore.lifetime).toEqual({ kind: "days", count: 3 });
+    expect(storedBefore.cleanupCue).toEqual({ kind: "at", moment: { phase: "day", day: 1 } });
 
-    lifetime.count = 999;
+    (cleanup as { kind: string }).kind = "INJECTED";
     reminder.label = "INJECTED-AFTER-THE-FACT";
+    reminder.note = "INJECTED";
 
     const storedAfter = game().players[id]!.reminders.find((r) => r.id === reminderId)!;
-    expect(storedAfter.lifetime).toEqual({ kind: "days", count: 3 });
+    expect(storedAfter.cleanupCue).toEqual({ kind: "at", moment: { phase: "day", day: 1 } });
     expect(storedAfter.label).toBe("Red Herring");
+    expect(storedAfter.note).toBe("original");
     const historyItem = game().history.find((h) => h.category === "reminder" && isAbout(h, id))!;
-    expect(historyItem.change).toMatchObject({ kind: "added", item: { label: "Red Herring", lifetime: { kind: "days", count: 3 } } });
+    expect(historyItem.change).toMatchObject({ kind: "added", item: { label: "Red Herring", note: "original", cleanupCue: { kind: "at", moment: { phase: "day", day: 1 } } } });
   });
 });
 
@@ -214,22 +219,22 @@ describe("Phase 9R.1 Finding B4: Reminder ownership (addReminder -- the same pat
 // property is now proven through addReminder(), the only remaining path.
 // ---------------------------------------------------------------------------
 describe("Phase 9R.1 Finding B4 (Luna follow-up): several Reminders' ownership (Phase 9R.4: via addReminder)", () => {
-  it("mutating the caller's original Reminder objects (and their nested lifetime objects) after each addReminder() returns does not alter authoritative Current State", () => {
+  it("mutating the caller's original Reminder objects (and their nested cleanup requests) after each addReminder() returns does not alter authoritative Current State", () => {
     dealtGame();
     goLive();
     const id = game().seatOrder[0]!;
 
-    const lifetimeA = { kind: "nights" as const, count: 2 };
-    const lifetimeB = { kind: "manual" as const };
-    const reminderA = { id: "r-a", label: "Red Herring", sourceCharacter: "fortuneteller", lifetime: lifetimeA };
-    const reminderB = { id: "r-b", label: "Poisoned", lifetime: lifetimeB };
-    const reminders = [reminderA, reminderB];
+    const cleanupA = { kind: "nextPhase" as const };
+    const reminderA = { id: "r-a", label: "Red Herring", sourceCharacter: "fortuneteller", cleanup: cleanupA };
+    const reminderB = { id: "r-b", label: "Chosen", note: "b" };
+    const reminders: { id: string; label: string; sourceCharacter?: string; note?: string; cleanup?: { kind: "nextPhase" } }[] = [reminderA, reminderB];
 
     for (const reminder of reminders) expect(state().addReminder(id, reminder)).toBe(reminder.id);
     const localSeqAfterCommand = state().localSeq;
+    const now = { phase: "night", day: 1 };
     const expected = [
-      { id: "r-a", label: "Red Herring", sourceCharacter: "fortuneteller", lifetime: { kind: "nights", count: 2 } },
-      { id: "r-b", label: "Poisoned", lifetime: { kind: "manual" } },
+      { id: "r-a", label: "Red Herring", sourceCharacter: "fortuneteller", createdAt: now, cleanupCue: { kind: "at", moment: { phase: "day", day: 1 } } },
+      { id: "r-b", label: "Chosen", createdAt: now, note: "b" },
     ];
     expect(game().players[id]!.reminders).toEqual(expected);
     // A true independent baseline -- structuredClone, never a shallow
@@ -240,11 +245,11 @@ describe("Phase 9R.1 Finding B4 (Luna follow-up): several Reminders' ownership (
     const storedBefore = structuredClone(game().players[id]!.reminders);
 
     // Mutate the caller's own array, its elements, and their nested
-    // lifetime objects -- all AFTER the command has already returned.
-    lifetimeA.count = 999;
+    // cleanup requests -- all AFTER the command has already returned.
+    (cleanupA as { kind: string }).kind = "INJECTED";
     reminderA.label = "INJECTED-AFTER-THE-FACT";
     reminderB.label = "ALSO-INJECTED";
-    reminders.push({ id: "r-c", label: "INJECTED-EXTRA", lifetime: { kind: "manual" } });
+    reminders.push({ id: "r-c", label: "INJECTED-EXTRA" });
 
     const storedAfter = game().players[id]!.reminders;
     expect(storedAfter).toEqual(expected);

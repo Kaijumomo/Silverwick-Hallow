@@ -115,10 +115,10 @@ describe("Phase 9R.1 Finding B5: Reminder never stores an explicit-undefined opt
     goLive();
     const id = game().seatOrder[0]!;
     const reminderId = state().addReminder(id, {
-      label: "Red Herring", lifetime: { kind: "manual" }, sourceCharacter: undefined,
+      label: "Red Herring", sourceCharacter: undefined,
     });
     const stored = game().players[id]!.reminders.find((r) => r.id === reminderId)!;
-    expect(stored).toEqual({ id: reminderId, label: "Red Herring", lifetime: { kind: "manual" } });
+    expect(stored).toEqual({ id: reminderId, label: "Red Herring", createdAt: { phase: "night", day: 1 } });
     expect("sourceCharacter" in stored).toBe(false);
   });
 
@@ -132,26 +132,31 @@ describe("Phase 9R.1 Finding B5: Reminder never stores an explicit-undefined opt
     goLive();
     const id = game().seatOrder[0]!;
     state().addReminder(id, {
-      id: "r-1", label: "Chosen", lifetime: { kind: "manual" },
-      sourcePlayer: undefined, sourceCharacter: undefined, note: undefined, createdAt: undefined,
-      ...({ sourceParticipant: undefined } as object),
+      id: "r-1", label: "Chosen",
+      sourcePlayer: undefined, sourceCharacter: undefined, note: undefined, cleanup: undefined,
+      ...({ sourceParticipant: undefined, createdAt: undefined, cleanupCue: undefined } as object),
     });
     const stored = game().players[id]!.reminders[0]!;
-    expect(stored).toEqual({ id: "r-1", label: "Chosen", lifetime: { kind: "manual" } });
+    // Phase 10C: createdAt is planner-generated (never caller-supplied).
+    expect(stored).toEqual({ id: "r-1", label: "Chosen", createdAt: { phase: "night", day: 1 } });
     expect("sourceParticipant" in stored).toBe(false);
     expect("sourcePlayer" in stored).toBe(false);
     expect("sourceCharacter" in stored).toBe(false);
     expect("note" in stored).toBe(false);
-    expect("createdAt" in stored).toBe(false);
+    expect("cleanupCue" in stored).toBe(false);
   });
 
-  it("Luna follow-up: addReminder() still preserves legitimate falsy-but-real values (empty-string note, zero-count lifetime)", () => {
+  // Phase 10C: Reminders no longer carry a lifetime (a zero-count one was
+  // never a valid v20 lifetime anyway), and a blank note is normalized to
+  // "no note" by the planner. The falsy-but-real value that remains is a
+  // "0" label -- stored exactly.
+  it("Luna follow-up: addReminder() still preserves legitimate falsy-looking values (a \"0\" label) and normalizes a blank note to absent", () => {
     dealtGame();
     goLive();
     const id = game().seatOrder[0]!;
-    state().addReminder(id, { id: "r-2", label: "Marked", lifetime: { kind: "nights", count: 0 }, note: "" });
+    state().addReminder(id, { id: "r-2", label: "0", note: "" });
     const stored = game().players[id]!.reminders[0]!;
-    expect(stored).toEqual({ id: "r-2", label: "Marked", lifetime: { kind: "nights", count: 0 }, note: "" });
+    expect(stored).toEqual({ id: "r-2", label: "0", createdAt: { phase: "night", day: 1 } });
   });
 });
 

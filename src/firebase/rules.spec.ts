@@ -16,7 +16,7 @@ import { previewPrivatePacket } from "@/stores/privatePackets";
 import { publishPrivatePacket } from "./privatePacketCommands";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
-import { refersToParticipant } from "@/stores/participants";
+import { participantRefOf, refersToParticipant } from "@/stores/participants";
 import {
   cancelJoinRequest,
   createLobby,
@@ -562,7 +562,7 @@ describe("Firebase RTDB membership authorization", () => {
     const metadata = (await ref(st, "session").once("value")).val();
     const writer = new SessionWriter(raw, code, metadata.id);
     const game: StorytellerLobbyRecord = {
-      gameSchemaVersion: 20, code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
+      gameSchemaVersion: 21, code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
       notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {}, history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       rolePool: [], plannedPlayerCount: 1, plannedTravelerCount: 0, pendingPlayers: {}, seatOrder: ["p-alice"],
       // This test isolates identity delivery through the real writer/rules,
@@ -606,7 +606,7 @@ describe("Firebase RTDB membership authorization", () => {
     const metadata = (await ref(st, "session").once("value")).val();
     const writer = new SessionWriter(raw, code, metadata.id);
     const game: StorytellerLobbyRecord = {
-      gameSchemaVersion: 20, code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
+      gameSchemaVersion: 21, code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
       notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {}, history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       rolePool: [], plannedPlayerCount: 2, plannedTravelerCount: 0, pendingPlayers: {}, seatOrder: ["p-alice", "p-bob"],
       // This test isolates the completeness barrier, not Setup deal/reveal
@@ -1553,6 +1553,19 @@ describe("Phase 9R.1 Finding B5: Firebase-safe optional serialization for a rich
       type: "protected", lifetime: { kind: "manual" }, sourcePlayer: undefined,
     });
 
+    // Exact reproduction #4 (Luna follow-up, residual B4/B5): a Reminder
+    // with explicit `sourceParticipant: undefined`/`note: undefined` (Phase
+    // 9R.2: the stored source field formerly named `sourcePlayer`). Phase
+    // 9R.4 (B9): the bulk setReminders() setter this first targeted is
+    // removed; addReminder() is now the only Reminder path, so the same
+    // explicit-undefined shape (plus `sourcePlayer: undefined`) goes there.
+    // Phase 10C: placed BEFORE the game ends -- an ended game's Reminders
+    // are frozen, so a post-end placement is (correctly) refused.
+    expect(useStorytellerStore.getState().addReminder(handles.investigatorId, {
+      id: "b5-reminder", label: "Marked",
+      sourcePlayer: undefined, note: undefined, ...({ sourceParticipant: undefined } as object),
+    })).toBe("b5-reminder");
+
     // Exact reproduction #3: a triggered Information Delivery recorded
     // after the game has ended, where currentGameMoment() intentionally
     // returns undefined -- must omit `moment` entirely, never store it as
@@ -1569,17 +1582,6 @@ describe("Phase 9R.1 Finding B5: Firebase-safe optional serialization for a rich
       { provenance: { reason: "known", note: undefined } }
     );
     expect(delivery.ok).toBe(true);
-
-    // Exact reproduction #4 (Luna follow-up, residual B4/B5): a Reminder
-    // with explicit `sourceParticipant: undefined`/`note: undefined` (Phase
-    // 9R.2: the stored source field formerly named `sourcePlayer`). Phase
-    // 9R.4 (B9): the bulk setReminders() setter this first targeted is
-    // removed; addReminder() is now the only Reminder path, so the same
-    // explicit-undefined shape (plus `sourcePlayer: undefined`) goes there.
-    useStorytellerStore.getState().addReminder(handles.investigatorId, {
-      id: "b5-reminder", label: "Marked", lifetime: { kind: "manual" },
-      sourcePlayer: undefined, note: undefined, ...({ sourceParticipant: undefined } as object),
-    });
 
     const richGame = useStorytellerStore.getState().game!;
     // Confirm the accepted state is already canonical -- no literal
@@ -1640,7 +1642,7 @@ describe("Phase 9R.1 Finding B5: Firebase-safe optional serialization for a rich
     expect("sourcePlayer" in parsedReminder).toBe(false);
     expect("sourceParticipant" in parsedReminder).toBe(false);
     expect("note" in parsedReminder).toBe(false);
-    expect(parsedReminder).toEqual({ id: "b5-reminder", label: "Marked", lifetime: { kind: "manual" } });
+    expect(parsedReminder).toEqual({ id: "b5-reminder", label: "Marked", createdAt: { phase: "day", day: 1 } });
 
     // The ST-private raw projection (the OTHER path B5 names as sending the
     // object directly) also wrote successfully -- confirming the fix holds
@@ -1755,10 +1757,15 @@ describe("Phase 9R.2 R2-H: malformed current-version identity state is never rep
     store().newGame("tb", { plannedPlayerCount: 3 });
     store().addPlayerToSeat("Alice");
     const [alice, carrier] = store().game!.seatOrder as [string, string];
+    const aliceRef = participantRefOf(store().game!, alice);
     if (kind === "effect") store().addEffect(carrier, { type: "marked", sourcePlayer: alice, lifetime: { kind: "manual" } });
-    else store().addReminder(carrier, { label: "Chosen", sourcePlayer: alice, lifetime: { kind: "manual" } });
+    // Phase 10C: the Reminder seam refuses an empty-seat target, so the
+    // sourced notation is injected directly (still rejected: retired History,
+    // and a v21 empty seat can never own a Reminder).
+    else expect(store().addReminder(carrier, { label: "Chosen", sourcePlayer: alice })).toBeNull();
     store().unseatPlayer(alice);
     const game = JSON.parse(JSON.stringify({ ...store().game!, code, storytellerUid: st }));
+    if (kind === "reminder") game.players[carrier].reminders = [{ id: "rm-legacy", label: "Chosen", sourceParticipant: aliceRef }];
     game.history = [{ id: "h-retired", category: "life", playerId: alice, change: { kind: "value", from: { alive: true }, to: { alive: false } } }];
     useStorytellerStore.setState({ game: null });
 

@@ -15,6 +15,14 @@ import { effectsNeedingCheck } from "@/stores/effects";
 import { effectAccessibleSummary, effectIndicatorLabel, effectIndicators, type EffectIndicatorSummary } from "@/stores/effectRegistry";
 import { lifeAccessibleLabel, lifeStatusOf } from "@/stores/lifeState";
 import { LifeShroud, LifeStateText, VoteToken } from "@/features/life/LifeMarks";
+import {
+  cleanupStatusText,
+  groupText,
+  reminderAccessibleSummary,
+  reminderTokenGroups,
+  visibleReminderGroups,
+  type ReminderTokenGroup,
+} from "@/features/reminders/reminderPresentation";
 
 export function buildRoleDisplayMap(script: Script | undefined): Map<string, RoleDef> {
   const map = new Map((script?.characters ?? []).map((c) => [c.id, c]));
@@ -52,6 +60,35 @@ function EffectPill({ summary }: { summary: EffectIndicatorSummary }) {
       aria-hidden="true"
     >
       {indicator.label}{activeCount > 1 ? ` ×${activeCount}` : ""}
+    </span>
+  );
+}
+
+/**
+ * Phase 10C: one aggregated Reminder chip -- the NOTATION visual family,
+ * deliberately distinct from Effect indicators by shape and glyph as well as
+ * colour: a dashed, notched tag with a leading pen mark, never the Effect
+ * artwork or pill. A free-text "Poisoned" Reminder therefore never looks like
+ * the authoritative Poisoned Effect. Identical labels aggregate ("Chosen ×2")
+ * for display only. A due cleanup cue or a legacy check is shown in WORDS
+ * ("· cleanup" / "· check"), never by colour alone.
+ *
+ * Presentational: the whole token is already one keyboard/touch control that
+ * opens the Drawer, where each Reminder instance is a real control. Nesting
+ * buttons inside it would be flattened by assistive technology, so the chips
+ * are aria-hidden and the token's accessible name carries the same summary
+ * in words.
+ */
+function ReminderChip({ group }: { group: ReminderTokenGroup }) {
+  const status = group.status === "due" ? "cleanup" : group.status === "check" ? "check" : null;
+  return (
+    <span
+      className={`reminder-pip ${status ? `reminder-pip-${group.status}` : ""}`}
+      data-reminder-label={group.label}
+      title={`${groupText(group)}${cleanupStatusText(group.status) ? ` (${cleanupStatusText(group.status)})` : ""}`}
+      aria-hidden="true"
+    >
+      <span className="reminder-glyph">✎</span>{groupText(group)}{status && <span className="reminder-pip-status"> · {status}</span>}
     </span>
   );
 }
@@ -122,6 +159,14 @@ function Token({
   const indicators = privacyMode ? [] : effectIndicators(player);
   const needsCheck = !privacyMode && (life.anomalies.length > 0 || effectsNeedingCheck(player).length > 0);
   const effectSummary = privacyMode ? "" : effectAccessibleSummary(player);
+  // Phase 10C: Reminders are Storyteller-private notation -- under Privacy
+  // Mode no chip, label, count, overflow, cleanup state or accessible text is
+  // rendered at all (DOM absence, not CSS). Game is read here, not threaded,
+  // because the derived cleanup status depends on the current moment.
+  const game = useStorytellerStore((s) => s.game);
+  const reminderGroups = privacyMode || !game ? [] : reminderTokenGroups(player, game);
+  const { shown: shownReminders, hiddenCount: hiddenReminders } = visibleReminderGroups(reminderGroups);
+  const reminderSummary = privacyMode || !game ? "" : reminderAccessibleSummary(player, game);
 
   const classes = [
     "token",
@@ -171,7 +216,7 @@ function Token({
       style={{ left: `calc(50% + ${x}px)`, top: `calc(50% + ${y}px)` }}
       onClick={isGhost ? undefined : onClick}
       role="button"
-      aria-label={lifeAccessibleLabel(player.name, player.seat + 1, life.state, needsCheck) + (effectSummary ? `, ${effectSummary}` : "")}
+      aria-label={lifeAccessibleLabel(player.name, player.seat + 1, life.state, needsCheck) + (effectSummary ? `, ${effectSummary}` : "") + (reminderSummary ? `, ${reminderSummary}` : "")}
       tabIndex={isGhost ? -1 : 0}
       onKeyDown={(e) => {
         if (!isGhost && (e.key === "Enter" || e.key === " ")) {
@@ -230,11 +275,14 @@ function Token({
           ))}
         </div>
       )}
-      {!privacyMode && player.reminders.length > 0 && (
-        <div className="token-reminders">
-          {player.reminders.slice(0, 4).map((r) => (
-            <span key={r.id} className="reminder-pip">{r.label}</span>
-          ))}
+      {shownReminders.length > 0 && (
+        <div className="token-reminders" data-reminder-count={player.reminders.length}>
+          {shownReminders.map((group) => <ReminderChip key={group.label} group={group} />)}
+          {hiddenReminders > 0 && (
+            <span className="reminder-pip reminder-overflow" aria-hidden="true" title={`${hiddenReminders} more reminder${hiddenReminders === 1 ? "" : "s"}`}>
+              +{hiddenReminders} more
+            </span>
+          )}
         </div>
       )}
     </div>

@@ -126,7 +126,7 @@ describe("Phase 9D.2: structured record mutation (generic across semantic types)
     dealtGame();
     goLive();
     const id = game().seatOrder[0]!;
-    const reminderId = state().addReminder(id, { label: "Red Herring", lifetime: { kind: "manual" } })!;
+    const reminderId = state().addReminder(id, { label: "Red Herring" })!;
     expect(history()).toHaveLength(1);
     expect(history()[0]).toMatchObject({
       category: "reminder", participant: participantOf(id),
@@ -191,7 +191,7 @@ describe("Phase 9D.2: Setup boundary", () => {
     const id = game().seatOrder[0]!;
     expect(state().replaceSetupRole(id, "imp").ok).toBe(true); // Setup refinement -- role domain
     state().setStatus(id, "poisoned", true); // effect domain, still Setup
-    state().addReminder(id, { label: "Note", lifetime: { kind: "manual" } }); // reminder domain, still Setup
+    state().addReminder(id, { label: "Note" }); // reminder domain, still Setup
     state().setAlive(id, false); // life domain, still Setup
     expect(history()).toEqual([]);
   });
@@ -201,7 +201,7 @@ describe("Phase 9D.2: Setup boundary", () => {
     goLive();
     const id = game().seatOrder[0]!;
     state().setStatus(id, "poisoned", true);
-    state().addReminder(id, { label: "Note", lifetime: { kind: "manual" } });
+    state().addReminder(id, { label: "Note" });
     state().setAlive(id, false);
     expect(history().map((h) => h.category)).toEqual(["effect", "reminder", "life"]);
   });
@@ -258,7 +258,7 @@ describe("Phase 9D.2: centralized command behavior", () => {
     dealtGame();
     goLive();
     const id = game().seatOrder[0]!;
-    const rid = state().addReminder(id, { label: "Chosen", lifetime: { kind: "manual" } })!;
+    const rid = state().addReminder(id, { label: "Chosen" })!;
     state().removeReminder(id, rid);
     expect(history()).toHaveLength(2);
     expect(history().map((h) => h.change!.kind)).toEqual(["added", "removed"]);
@@ -342,7 +342,7 @@ describe("Phase 9D.2: privacy", () => {
     goLive();
     const id = game().seatOrder[0]!;
     state().setStatus(id, "poisoned", true);
-    state().addReminder(id, { label: "Secret", note: "ST-only", lifetime: { kind: "manual" } });
+    state().addReminder(id, { label: "Secret", note: "ST-only" });
     state().setActualAlignment(id, "evil");
     expect(history().length).toBeGreaterThan(0);
 

@@ -25,7 +25,7 @@ import { SessionWriter } from "./writer";
 import { startStorytellerSession, useSessionRuntime } from "./storytellerSync";
 import { SnapshotValidationError } from "./snapshots";
 import { participantRefOf } from "@/stores/participants";
-import { asV19, withV20Lifecycle } from "@/test/v20Migration";
+import { asV19, withCurrentMigration } from "@/test/v20Migration";
 
 const code = "VDET2345";
 const root = `lobbies/${code}`;
@@ -76,18 +76,20 @@ function allEmptyWithSource(kind: "effect" | "reminder"): Game {
   store().addPlayerToSeat("Alice");
   const [alice, carrier] = store().game!.seatOrder as [string, string];
   const aliceRef = participantRefOf(store().game!, alice)!;
+  // Phase 10B/10C: Effects and Reminders belong to a participation instance,
+  // so the current commands refuse either on an empty seat. A v17-era writer
+  // accepted them; that legacy shape is injected directly below.
   if (kind === "reminder") {
-    expect(store().addReminder(carrier, { label: "Chosen", sourcePlayer: alice, lifetime: { kind: "manual" } })).not.toBeNull();
+    expect(store().addReminder(carrier, { label: "Chosen", sourcePlayer: alice })).toBeNull();
   } else {
-    // Phase 10B: an Effect belongs to a participation instance, so the
-    // current commands refuse one on an empty seat. A v17-era writer
-    // accepted it; that legacy shape is injected directly below.
     expect(store().addEffect(carrier, { type: "marked", sourcePlayer: alice, lifetime: { kind: "manual" } })).toBeNull();
   }
   expect(store().unseatPlayer(alice)).toBe(true);
   const game = legacyShaped(persisted({ ...store().game!, code, storytellerUid: "host" }) as Game);
   if (kind === "effect") {
     game.players[carrier]!.effects = [{ id: "fx-legacy", type: "marked", sourceParticipant: aliceRef, lifetime: { kind: "manual" } }] as never;
+  } else {
+    game.players[carrier]!.reminders = [{ id: "rm-legacy", label: "Chosen", sourceParticipant: aliceRef, lifetime: { kind: "manual" } }] as never;
   }
   // Genuinely none of the pre-remediation markers:
   expect(Object.values(game.players).every((p) => p.isEmpty && !("participantId" in p))).toBe(true);
@@ -95,8 +97,9 @@ function allEmptyWithSource(kind: "effect" | "reminder"): Game {
   expect(game.informationDeliveries).toEqual([]);
   // Phase 10B (SOL-10B-R1): an empty seat can never own an Effect in v20, so
   // the Effect variant -- still v17 EVIDENCE by presence -- migrates to an
-  // invalid v20 game (rejected, never repaired). The Reminder variant stays
-  // valid (Reminders are outside 10B).
+  // invalid game (rejected, never repaired). Phase 10C: the Reminder variant
+  // stays valid because the v20 -> v21 step DROPS legacy empty-seat
+  // Reminders (non-authoritative notation with no truthful owner).
   expect(StorytellerGamePersistedSchema.safeParse(migratedCopy(game, 17)).success).toBe(kind === "reminder");
   return game;
 }
@@ -142,8 +145,12 @@ describe("R2-C: malformed current-version History alongside that evidence", () =
     const entry = structuredClone(game);
     migrateGameEntry(entry, 16, { kind: "canonical-only" });
     // Phase 10A: only the v18 -> v19 step (a fresh, empty Life Event
-    // Window) is added; the identity data is untouched.
-    expect(withoutLifeWindow(entry)).toEqual(game);
+    // Window) is added; the identity data is untouched. Phase 10C: except
+    // that v20 -> v21 drops the legacy empty-seat Reminder (never repairs
+    // the malformed History that still rejects the entry).
+    const expected = structuredClone(game);
+    if (kind === "reminder") expected.players[game.seatOrder[1]!]!.reminders = [];
+    expect(withoutLifeWindow(entry)).toEqual(expected);
     expect(StorytellerGamePersistedSchema.safeParse(entry).success).toBe(false);
     // Local persisted state, whether tagged current or (contradictorily) v16.
     migrateStoreState({ game: structuredClone(game), undoStack: [] }, 18);
@@ -159,6 +166,9 @@ describe("R2-D: malformed v17 markers are still v17 evidence (presence, not vali
       g.players[g.seatOrder[1]!]!.effects = [{ id: "x", type: "marked", lifetime: { kind: "manual" }, sourceParticipant: "garbage" }] as never;
     }],
     ["Reminder sourceParticipant (a legacy ref smuggling a participantId)", (g) => {
+      // Phase 10C: on an OCCUPIED legacy seat -- empty-seat Reminders are
+      // dropped by v20 -> v21, which would hide what this case proves.
+      occupyV16(g, g.seatOrder[1]!);
       g.players[g.seatOrder[1]!]!.reminders = [{ id: "r", label: "Chosen", lifetime: { kind: "manual" },
         sourceParticipant: { kind: "legacy", playerId: "a", participantId: "invented" } }] as never;
     }],
@@ -282,14 +292,20 @@ describe("R2-G: the real remote checkpoint path (readCheckpoint -> detect -> mig
     expect(b.writeLog.slice(writeLogBefore).filter((w) => isProjectionWrite(w.path))).toEqual([]);
   });
 
-  it("all-empty state carrying v17 Reminder evidence still recovers as v17: its source ref is kept exactly, never re-migrated, nothing fabricated", async () => {
+  // Phase 10C: detection still reports v17 (presence), and the legacy
+  // empty-seat Reminder is DROPPED by v20 -> v21 -- never transferred to an
+  // occupant, never re-attributed, nothing fabricated.
+  it("all-empty state carrying v17 Reminder evidence still recovers as v17; its empty-seat Reminder is dropped by v20 -> v21, never re-migrated or transferred", async () => {
     const game = allEmptyWithSource("reminder");
+    expect(detectLegacyGameVersion(game)).toBe(17);
     const { start } = await recoverFrom(game);
     const recovered = await start();
     disposals.push(() => recovered.stop());
     expect(recovered.outcome).toBe("live");
     const carrier = game.seatOrder[1]!;
-    expect(store().game!.players[carrier]!.reminders).toEqual(withV20Lifecycle(game).players[carrier]!.reminders);
+    expect(store().game!.players[carrier]!.reminders).toEqual([]);
+    expect(withCurrentMigration(game).players[carrier]!.reminders).toEqual([]);
+    expect(JSON.stringify(store().game!.players)).not.toContain("rm-legacy");
     expect(Object.values(store().game!.players).every((p) => p.isEmpty && !("participantId" in p))).toBe(true);
   });
 

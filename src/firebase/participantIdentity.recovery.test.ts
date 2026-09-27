@@ -88,7 +88,7 @@ function aliceThenBob() {
     { requirementId: "players", kind: "player", playerIds: [P, idOf("Dave")] },
     { requirementId: "isDemon", kind: "boolean", value: false },
   ], { provenance: { sourcePlayer: P } }).ok).toBe(true);
-  store().addReminder(idOf("Carol"), { label: "Townsfolk", sourcePlayer: P, lifetime: { kind: "manual" } });
+  store().addReminder(idOf("Carol"), { label: "Townsfolk", sourcePlayer: P });
   store().unseatPlayer(P);
   store().addPlayerToSeat("Bob");
   const B = game().players[P]!.participantId!;

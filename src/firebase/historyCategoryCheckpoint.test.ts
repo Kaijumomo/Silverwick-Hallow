@@ -20,7 +20,7 @@ import { SessionWriter } from "./writer";
 import { writeProjections } from "./sync";
 import { startStorytellerSession, useSessionRuntime } from "./storytellerSync";
 import { SnapshotValidationError } from "./snapshots";
-import { asV19, withV20Lifecycle } from "@/test/v20Migration";
+import { asV19, withCurrentMigration } from "@/test/v20Migration";
 
 const code = "TERM2345";
 const root = `lobbies/${code}`;
@@ -165,7 +165,7 @@ describe("E. a supported remote checkpoint carrying legacy \"identity\" History"
     const expected = structuredClone(v17) as unknown as { history: RawHistory[] } & Raw;
     for (const record of expected.history) if (record.category === "identity") record.category = "role";
     expected.lifeEventWindow = { coverageFrom: { phase: "night", day: 2 }, events: [] };
-    expect(useStorytellerStore.getState().game).toEqual(withV20Lifecycle(expected));
+    expect(useStorytellerStore.getState().game).toEqual(withCurrentMigration(expected));
   });
 
   it("an already-canonical checkpoint is left unchanged (the step is idempotent)", async () => {
@@ -193,7 +193,7 @@ describe("G. remote: unknown categories are not the legacy alias", () => {
 describe("F. new checkpoints serialize \"role\"", () => {
   it("writeProjections checkpoints a Role History Record as \"role\" and never manufactures \"identity\"", async () => {
     const backend = new MemoryRoomBackend();
-    const game = withV20Lifecycle({ ...canonical(v17CheckpointGame()),
+    const game = withCurrentMigration({ ...canonical(v17CheckpointGame()),
       lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] } }) as unknown as StorytellerLobbyRecord;
     await writeProjections({ backend, code, stState: game, registry: buildRegistry(troubleBrewing), online: {} });
     const raw = (await backend.get(`${root}/checkpoint`)) as string;

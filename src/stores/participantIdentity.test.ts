@@ -212,7 +212,7 @@ describe("Phase 9R.2 core regression: Alice leaves, Bob fills her seat -- histor
       { requirementId: "isDemon", kind: "boolean", value: false },
     ]).ok).toBe(true);
     state().setAlive(dave, false, { provenance: { sourcePlayer: P, reason: "caused by Alice" } }); // Provenance from Alice (Mutation Context)
-    state().addReminder(carol, { label: "Townsfolk", sourceCharacter: "washerwoman", sourcePlayer: P, lifetime: { kind: "manual" } }); // Reminder sourced by Alice
+    state().addReminder(carol, { label: "Townsfolk", sourceCharacter: "washerwoman", sourcePlayer: P }); // Reminder sourced by Alice
     state().addEffect(dave, { type: "marked", sourcePlayer: P, lifetime: { kind: "manual" } }); // Effect sourced by Alice
     const historyBefore = game().history.length;
     const deliveriesBefore = game().informationDeliveries.length;
@@ -269,7 +269,7 @@ describe("Phase 9R.2 core regression: Alice leaves, Bob fills her seat -- histor
     const alice = idOf("Alice");
     const A = participantIdOf(alice);
     state().setStatus(alice, "poisoned", true);
-    state().addReminder(idOf("Carol"), { label: "Wrong", sourcePlayer: alice, lifetime: { kind: "manual" } });
+    state().addReminder(idOf("Carol"), { label: "Wrong", sourcePlayer: alice });
     expect(state().removePlayer(alice)).toBe(true);
     expect(game().players[alice]).toBeUndefined();
     expect(game().history[0]!.participant).toEqual(aliceSnapshot(alice, A));
@@ -321,7 +321,7 @@ describe("Phase 9R.2: Effect/Reminder source references (Poisoner Alice poisons 
     const before = game();
     const seq = state().localSeq;
     expect(state().addEffect(carol, { type: "poisoned", sourcePlayer: alice, lifetime: { kind: "manual" } })).toBeNull();
-    expect(state().addReminder(carol, { label: "Wrong", sourcePlayer: "nobody", lifetime: { kind: "manual" } })).toBeNull();
+    expect(state().addReminder(carol, { label: "Wrong", sourcePlayer: "nobody" })).toBeNull();
     expect(game()).toBe(before);
     expect(state().localSeq).toBe(seq);
   });
@@ -340,17 +340,22 @@ describe("Phase 9R.2: Effect/Reminder source references (Poisoner Alice poisons 
   // Phase 9R.4 (B9): this originally proved the bulk setReminders() setter
   // could carry forward, but never forge, a source snapshot. That setter is
   // removed; the durable-source guarantee now rests solely on addReminder.
-  it("a Reminder's source snapshot is minted only centrally -- addReminder strips a smuggled snapshot, and no bulk setReminders() path remains to carry or forge one", () => {
+  // Phase 10C: a smuggled durable snapshot is now REFUSED (strict caller
+  // input), no longer silently stripped -- either way it is never stored.
+  it("a Reminder's source snapshot is minted only centrally -- addReminder refuses a smuggled snapshot, and no bulk setReminders() path remains to carry or forge one", () => {
     liveGame();
     const alice = idOf("Alice");
     const carol = idOf("Carol");
     expect("setReminders" in state()).toBe(false);
-    state().addReminder(carol, { id: "r1", label: "Townsfolk", sourcePlayer: alice, lifetime: { kind: "manual" } });
+    state().addReminder(carol, { id: "r1", label: "Townsfolk", sourcePlayer: alice });
     expect(game().players[carol]!.reminders[0]!.sourceParticipant).toEqual(aliceSnapshot(alice, participantIdOf(alice)));
     const forged = { kind: "participant", participantId: "pt-forged", playerId: carol, nameAtTime: "Mallory" };
-    const forgedId = state().addReminder(carol, { id: "r2", label: "Forged", lifetime: { kind: "manual" },
-      ...({ sourceParticipant: forged } as object) } as never)!;
-    expect(game().players[carol]!.reminders.find((r) => r.id === forgedId)).not.toHaveProperty("sourceParticipant");
+    const before = game();
+    const forgedId = state().addReminder(carol, { id: "r2", label: "Forged",
+      ...({ sourceParticipant: forged } as object) } as never);
+    expect(forgedId).toBeNull();
+    expect(game()).toBe(before);
+    expect(game().players[carol]!.reminders.find((r) => r.id === "r2")).toBeUndefined();
     expect(JSON.stringify(game())).not.toContain("pt-forged");
   });
 });
@@ -466,7 +471,7 @@ describe("Phase 9R.2: Traveler lifecycle", () => {
     const tessSnapshot: ParticipantRef = { kind: "participant", participantId: tess, playerId: T, nameAtTime: "Tess" };
     state().assignRole(T, "thief");
     state().setTravelerAlignment(T, "evil", { provenance: { sourcePlayer: T, reason: "Storyteller selection" } });
-    state().addReminder(alice, { label: "Negative vote", sourceCharacter: "thief", sourcePlayer: T, lifetime: { kind: "manual" } });
+    state().addReminder(alice, { label: "Negative vote", sourceCharacter: "thief", sourcePlayer: T });
     expect(state().advancePhase().ok).toBe(true); // Phase 10A: exile is Day-only
     state().exileTraveler(T);
     const tessHistory = game().history.filter((h) => h.participant.playerId === T);
@@ -530,7 +535,7 @@ describe("Phase 9R.2: local persistence / rehydrate", () => {
     state().setStatus(alice, "drunk", true);
     await new Promise((resolve) => setTimeout(resolve, 0));
     const raw = localStorage.getItem(STORAGE_KEY)!;
-    expect(JSON.parse(raw).version).toBe(20);
+    expect(JSON.parse(raw).version).toBe(21);
     const beforeGame = structuredClone(game());
     const beforeUndo = structuredClone(state().undoStack);
 

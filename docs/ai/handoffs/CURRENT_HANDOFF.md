@@ -1,7 +1,20 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-09-27\
-**State:** Phase 10B is **CLOSED** and integrated into `main`. Phase 10C — Reminder Workflow + Visual Reminder Tokens is **NEXT**, on `dev/phase-10c`. 10C has **not** been designed yet.
+**State:** Phase 10B is **CLOSED** and integrated into `main`. Phase 10C — Reminder Workflow + Visual Reminder Tokens is **IMPLEMENTED — ready for Luna verification** (not closed). See `PHASE10C.md`.
+
+## Phase 10C — implemented, awaiting verification
+
+Implemented from `70864ada51f887399d5d3529a450204468fc8d65` per the Sol implementation contract (after the Claude Chat / Opus architecture challenge). Store v21.
+
+- Reminders are participant-bound, Storyteller-private, non-authoritative notation; nothing mechanical reads `player.reminders` (guarded by `src/stores/reminderArchitecture.test.ts`).
+- Strict v21 `ReminderRecord` (no lifetime; optional presentation-only `cleanupCue`); empty seats own no Reminders; duplicate ids and future `createdAt` rejected.
+- One pure planner (`src/stores/reminderResolution.ts`) + one commit seam (`resolveReminders`); `addReminder`/`removeReminder` are thin adapters.
+- v20 -> v21 migration: empty-seat Reminders dropped, finite lifetimes -> `unresolved` ("Needs check"), incoherent legacy `createdAt` omitted, History never rewritten; legacy Reminder History stays valid.
+- Grimoire notation grammar (distinct from Effects, aggregation, `+N more`, words not colour, accessible summary); Drawer fast path + progressive disclosure; Privacy Mode DOM absence.
+- No Firebase rule / writer / fencing change.
+
+Next: Luna verification -> Astra adversarial review -> Sol adjudication -> closure verification -> Sol closure -> integration into `main`.
 
 ## Phase 10B — CLOSED
 
@@ -150,7 +163,7 @@ Operational status: production Firebase rules were **not** deployed by the hotfi
 
 - **10A Life Transition Semantics + visual life-state grammar — CLOSED**
 - **10B Effect Lifecycle + visual Effect indicators — CLOSED**
-- **10C Reminder Workflow + visual Reminder tokens — NEXT (architecture challenge first)**
+- **10C Reminder Workflow + visual Reminder tokens — IMPLEMENTED, awaiting Luna verification**
 - 10D Role Transitions
 - 10E Alignment Transitions
 - 10F Guided Ability Resolution / Night Actions
@@ -162,9 +175,9 @@ Phase 10 may increase Silverwick's mechanical intelligence, but routine Storytel
 
 This requirement continues through 10C–10G.
 
-## Phase 10C starting intent
+## Phase 10C starting intent (historical -- answered by the Sol contract; see `PHASE10C.md`)
 
-10C is **not yet designed**. Nothing below is a decision; it is the list of questions the architecture challenge must answer.
+The list of questions the architecture challenge answered.
 
 Phase 10C must define the smallest correct Reminder primitive/workflow that supports manual Storyteller use now and the future ability engine later.
 
@@ -207,6 +220,5 @@ At the start of any new session, verify the exact branch SHA and read:
 
 ## Immediate next task
 
-Perform the **Phase 10C architecture challenge before coding** on
-`dev/phase-10c` (verify the exact commit SHA). No 10C implementation begins
-until the challenge is adjudicated into a Sol implementation contract.
+**Luna verification** of the Phase 10C implementation. Verify the exact
+implementation commit SHA (not branch names) and read `PHASE10C.md`.

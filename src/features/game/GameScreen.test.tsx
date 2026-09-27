@@ -16,7 +16,7 @@ beforeEach(() => {
   const id = storyteller.getState().game!.seatOrder[0]!;
   storyteller.getState().assignRole(id, "chef");
   storyteller.getState().setStatus(id, "poisoned", true);
-  storyteller.getState().addReminder(id, { id: "r1", label: "Secret reminder", lifetime: { kind: "manual" } });
+  storyteller.getState().addReminder(id, { id: "r1", label: "Secret reminder" });
 });
 
 afterEach(() => {
@@ -51,7 +51,7 @@ describe("Storyteller privacy mode", () => {
 
     const seat = storyteller.getState().game!.seatOrder[0]!;
     storyteller.getState().removeReminder(seat, "r1");
-    storyteller.getState().addReminder(seat, { id: "r2", label: "Updated while hidden", lifetime: { kind: "manual" } });
+    storyteller.getState().addReminder(seat, { id: "r2", label: "Updated while hidden" });
     expect(screen.queryByText("Updated while hidden")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Disable Privacy Mode" }));
     expect(screen.getByText("Updated while hidden")).toBeInTheDocument();

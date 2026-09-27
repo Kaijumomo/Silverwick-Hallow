@@ -108,9 +108,9 @@ export function buildRichPhase9Game(): RichGameHandles {
   });
 
   // --- Structured Reminders: manual + sourced --------------------------
-  store().addReminder(chefId, { label: "Poisoned", lifetime: { kind: "manual" } });
+  store().addReminder(chefId, { label: "Poisoned" });
   store().addReminder(washerwomanId, {
-    label: "Red Herring", sourceCharacter: "fortuneteller", lifetime: { kind: "manual" },
+    label: "Red Herring", sourceCharacter: "fortuneteller",
   });
 
   // --- Information Delivery: two materially different requirement

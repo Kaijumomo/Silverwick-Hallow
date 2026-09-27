@@ -143,7 +143,7 @@ describe("projectToPublic", () => {
       shownAlignment: null,
       behaviorMode: "fake_demon_behavior",
       privateInfo: { bluffs: ["chef"], fakeMinions: ["p2"] },
-      reminders: [{ id: "r1", label: "secret", lifetime: { kind: "manual" } }],
+      reminders: [{ id: "r1", label: "secret" }],
       stNotes: "do not leak",
       statuses: { drunk: true },
       abilityUsed: true,
@@ -217,7 +217,7 @@ describe("projectToSelf — Demon bluffs privacy", () => {
 describe("Lobby-level projections", () => {
   function makeLobby(): StorytellerLobbyRecord {
     return {
-      gameSchemaVersion: 20,
+      gameSchemaVersion: 21,
       code: "ABCD12",
       storytellerUid: "uid-st",
       scriptId: "tb",
@@ -410,7 +410,7 @@ describe("Privacy regression matrix — all behavior modes", () => {
         shownAlignment: row.shownAlignment,
         behaviorMode: row.behaviorMode,
         stNotes: "secret-st-note",
-        reminders: [{ id: "r1", label: "a-reminder", lifetime: { kind: "manual" } }],
+        reminders: [{ id: "r1", label: "a-reminder" }],
         statuses: { drunk: true },
         privateInfo: { bluffs: ["saint"] },
         actualAlignment: "good",
@@ -477,7 +477,7 @@ describe("Privacy regression matrix — all behavior modes", () => {
 describe("projectLobbyToSelfMap — Phase 9C.4 setup privacy barrier", () => {
   function setupLobby(players: StorytellerLobbyRecord["players"], over: Partial<StorytellerLobbyRecord> = {}): StorytellerLobbyRecord {
     return {
-      gameSchemaVersion: 20, code: "SETUP01", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
+      gameSchemaVersion: 21, code: "SETUP01", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
       bluffs: [], fabled: [], lorics: [], notes: "ST-only",
       seatOrder: Object.keys(players), nightProgress: {}, rolePool: [], history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       plannedPlayerCount: Object.keys(players).length, plannedTravelerCount: 0, pendingPlayers: {}, players, ...over,

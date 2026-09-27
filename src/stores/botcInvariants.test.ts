@@ -376,8 +376,8 @@ describe("Phase 9D.4: existing Authoritative Mutation Command regression", () =>
     freshGame();
     const id = seatAs(0, "chef");
     atNight(1);
-    const a = state().addReminder(id, { label: "Poisoned", lifetime: { kind: "manual" } });
-    const b = state().addReminder(id, { label: "Poisoned", lifetime: { kind: "manual" } }); // distinct label, distinct auto id -- still two records
+    const a = state().addReminder(id, { label: "Poisoned" });
+    const b = state().addReminder(id, { label: "Poisoned" }); // distinct label, distinct auto id -- still two records
     expect(a).not.toBe(b);
     expect(game().players[id]!.reminders).toHaveLength(2);
   });

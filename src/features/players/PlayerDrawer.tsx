@@ -13,8 +13,8 @@ import { evilInformationPolicy } from "@/features/nightOrder/nightRules";
 import { buildRegistry } from "@/data/roleRegistry";
 import { useModalBehavior } from "@/components/Modal";
 import { usePrivacyStore } from "@/stores/privacyStore";
-import { currentGameMoment } from "@/stores/effects";
 import { EffectControls } from "@/features/effects/EffectControls";
+import { ReminderControls } from "@/features/reminders/ReminderControls";
 import { lifeStatusOf } from "@/stores/lifeState";
 import { LifeControls } from "@/features/life/LifeControls";
 import { LifeStateText } from "@/features/life/LifeMarks";
@@ -34,17 +34,6 @@ const TYPE_ORDER: RoleType[] = [
   "traveler",
   "fabled",
   "loric",
-];
-
-const REMINDER_PRESETS = [
-  "Used",
-  "Drunk",
-  "Poisoned",
-  "Protected",
-  "Mad",
-  "Knows",
-  "Did not act",
-  "Dies tonight",
 ];
 
 const BEHAVIOR_MODES: { value: BehaviorMode; label: string; help: string }[] = [
@@ -188,13 +177,10 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   const setFakeMinions = useStorytellerStore((s) => s.setFakeMinions);
   const setIsTraveler = useStorytellerStore((s) => s.setIsTraveler);
   const setAbilityUsed = useStorytellerStore((s) => s.setAbilityUsed);
-  const addReminderCommand = useStorytellerStore((s) => s.addReminder);
-  const removeReminderCommand = useStorytellerStore((s) => s.removeReminder);
   const setNotes = useStorytellerStore((s) => s.setNotes);
   const privacyMode = usePrivacyStore((s) => s.enabled);
 
   const [nameDraft, setNameDraft] = useState(player.name);
-  const [reminderDraft, setReminderDraft] = useState("");
   const [refinementError, setRefinementError] = useState<string | null>(null);
   const [travelerStatusError, setTravelerStatusError] = useState<string | null>(null);
   const [membershipBusy, setMembershipBusy] = useState(false);
@@ -271,16 +257,6 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
     } else {
       setNameDraft(player.name);
     }
-  };
-
-  const addReminder = (text: string) => {
-    const t = text.trim();
-    if (!t) return;
-    addReminderCommand(player.id, { label: t, lifetime: { kind: "manual" }, createdAt: currentGameMoment(game) });
-    setReminderDraft("");
-  };
-  const removeReminder = (reminderId: string) => {
-    removeReminderCommand(player.id, reminderId);
   };
 
   const runMembershipAction = async (action: () => Promise<void> | void) => {
@@ -594,51 +570,10 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
             />
           )}
 
-          <section className="drawer-section">
-            <h3 className="drawer-section-title">Reminders</h3>
-            <div className="reminder-list">
-              {player.reminders.map((r) => (
-                <span key={r.id} className="reminder-tag">
-                  {r.label}
-                  <button onClick={() => removeReminder(r.id)} aria-label={`Remove ${r.label}`}>
-                    ×
-                  </button>
-                </span>
-              ))}
-              {player.reminders.length === 0 && (
-                <span className="behavior-help">none</span>
-              )}
-            </div>
-            <div className="reminder-add">
-              <input
-                className="input"
-                placeholder="Add reminder…"
-                value={reminderDraft}
-                onChange={(e) => setReminderDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") addReminder(reminderDraft);
-                }}
-              />
-              <button
-                className="btn btn-sm"
-                onClick={() => addReminder(reminderDraft)}
-                disabled={!reminderDraft.trim()}
-              >
-                add
-              </button>
-            </div>
-            <div className="reminder-presets">
-              {REMINDER_PRESETS.map((p) => (
-                <button
-                  key={p}
-                  className="reminder-preset"
-                  onClick={() => addReminder(p)}
-                >
-                  + {p}
-                </button>
-              ))}
-            </div>
-          </section>
+          {/* Phase 10C: Reminders -- non-authoritative notation. Keyed by the
+              participation instance so no draft or disclosure state carries
+              over to a different occupant of this seat. */}
+          <ReminderControls key={`reminders:${player.participantId ?? player.id}`} player={player} />
 
           <section className="drawer-section">
             <h3 className="drawer-section-title">ST notes</h3>

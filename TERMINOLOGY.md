@@ -37,9 +37,9 @@ changes.
 
 - Some commands are **History-eligible**. During Live Play they append their
   own History through `recordIfLive()`. Examples: `assignRole`,
-  `setActualAlignment`, `addReminder`, every Life command (`resolveLife` and
-  its wrappers, see §12) and every Effect command (`resolveEffects` and its
-  wrappers, see §13).
+  `setActualAlignment`, every Life command (`resolveLife` and its wrappers,
+  see §12), every Effect command (`resolveEffects` and its wrappers, see §13)
+  and every Reminder command (`resolveReminders` and its wrappers, see §14).
 - Other commands change Current State without producing a History Record. An
   example is a phase transition through `setPhase` (it still pushes Undo).
 
@@ -191,8 +191,36 @@ Undo entry. Visual presentation lives in `src/stores/effectRegistry.ts`
 
 ## 14. Reminder
 
-A structured Storyteller bookkeeping token on a player (`ReminderRecord` in
-`player.reminders`).
+Participant-bound, Storyteller-private, **non-authoritative notation** for
+human bookkeeping (`ReminderRecord` in `player.reminders`, store v21):
+"Chosen", "Knows", "Did not act"... A Reminder is **never a source of
+mechanical truth**: no mechanic, rule query, planner or future ability
+evaluator answers a rules question from `player.reminders`, and `label` /
+`note` are never parsed. Future ability logic (10F) may *write* Reminders
+through the seam; it never *reads* them to decide rules. A free-text
+"Poisoned" Reminder is inert notation -- the real condition is an Effect.
+
+- **Identity**: the target participant plus the Reminder `id` (unique within
+  that participant's `reminders[]`). Identical labels are distinct instances.
+  An empty seat never owns a Reminder; every new participation instance
+  starts with none.
+- **Reminder origin** (`sourceParticipant`, `sourceCharacter`): what the
+  notation came from. Never mutation provenance.
+- **Created moment** (`createdAt`): planner-generated historical metadata
+  (Setup = `{setup, 0}`); absent only on some migrated legacy Reminders.
+- **Cleanup cue** (`cleanupCue`): a Storyteller-facing hint only -- `at` an
+  exact live moment (resolved once from "at the next phase"), or `unresolved`
+  (a legacy finite lifetime whose end was never recorded: "Needs check").
+  Absent = persistent notation. "Needs cleanup" is **derived** at render time
+  from the current moment; a cue never removes or changes anything.
+  Reminders never expire.
+
+Reminders change only through the **Reminder boundary**
+(`planReminderTransaction` in `src/stores/reminderResolution.ts`, committed by
+the store's `resolveReminders`): place, amend, remove and their corrections,
+each bound to the participation instance, all-or-nothing, one Undo entry.
+Presentation (aggregation, overflow, cleanup wording) lives in
+`src/features/reminders/reminderPresentation.ts`.
 
 ## 15. Information Action
 
