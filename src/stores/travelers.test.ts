@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { useStorytellerStore as store, migrateStoreState } from "./storytellerStore";
+import { useStorytellerStore as store, migrateStoreState, takeMigrationResetFlag } from "./storytellerStore";
 import { buildRegistry } from "@/data/roleRegistry";
 import { TRAVELERS } from "@/data/travelers";
 import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
@@ -227,8 +227,19 @@ describe("Phase 9B persistence", () => {
   });
   it("v10 migration repairs public character only; unknown historical facts remain absent in undo too", () => {
     traveler("apprentice"); delete p().travelerArrival; p().publicDisplayRole = null;
-    const raw = JSON.parse(JSON.stringify({ game: game(), undoStack: [game()] }));
-    const migrated = migrateStoreState(raw, 10) as typeof raw;
+    // ASTRA-10C-003: a genuinely v10-SHAPED game (not a marked current one,
+    // which no old envelope step may touch): none of the fields/evidence v13+
+    // introduced -- no version marker, Life Event Window, History,
+    // Information Delivery, planned Traveler count, ParticipantIds or Effects.
+    const asV10 = () => {
+      const g = JSON.parse(JSON.stringify(game())) as Record<string, unknown> & { players: Record<string, Record<string, unknown>> };
+      for (const key of ["gameSchemaVersion", "lifeEventWindow", "history", "informationDeliveries", "plannedTravelerCount"]) delete g[key];
+      for (const player of Object.values(g.players)) { delete player.participantId; delete player.effects; }
+      return g;
+    };
+    const raw = { game: asV10(), undoStack: [asV10()] };
+    const migrated = migrateStoreState(raw, 10) as typeof raw & { game: { players: Record<string, Record<string, unknown>> } };
+    expect(takeMigrationResetFlag()).toBe(false);
     for (const g of [migrated.game, migrated.undoStack[0]]) {
       expect(g.players.t.publicDisplayRole).toBe("apprentice");
       for (const key of ["actualAlignment", "travelerArrival", "exiled"]) expect(g.players.t).not.toHaveProperty(key);

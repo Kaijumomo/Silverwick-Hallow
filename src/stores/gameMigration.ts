@@ -829,6 +829,8 @@ export function hasV20Evidence(game: Record<string, unknown>): boolean {
  *  - players[*].reminders[*].cleanupCue
  *  - history[*].reminderOperation
  *  - a "reminder" History Record's `correction` / `resolutionId`
+ *  - a `cleanupCue` inside a "reminder" History snapshot (ASTRA-10C-002):
+ *    `change.item` for added/removed, `change.from` / `change.to` for value
  *
  * Under a marker of 20 such evidence means malformed current-version data:
  * it is never run through the v20 -> v21 repair (migrateGameEntry), and the
@@ -838,6 +840,9 @@ export function hasV20Evidence(game: Record<string, unknown>): boolean {
 export function hasV21Evidence(game: Record<string, unknown>): boolean {
   const players = isObject(game.players) ? Object.values(game.players) : [];
   if (players.some((p) => isObject(p) && someEntry(p.reminders, (r) => hasOwnKey(r, "cleanupCue")))) return true;
+  const snapshotCue = (change: unknown) => isObject(change) &&
+    [change.item, change.from, change.to].some((snapshot) => hasOwnKey(snapshot, "cleanupCue"));
   return someEntry(game.history, (h) => hasOwnKey(h, "reminderOperation") ||
-    (isObject(h) && h.category === "reminder" && (hasOwnKey(h, "correction") || hasOwnKey(h, "resolutionId"))));
+    (isObject(h) && h.category === "reminder" &&
+      (hasOwnKey(h, "correction") || hasOwnKey(h, "resolutionId") || snapshotCue(h.change))));
 }

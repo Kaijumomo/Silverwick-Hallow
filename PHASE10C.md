@@ -1,6 +1,6 @@
 # Phase 10C — Reminder Workflow & Visual Reminder Tokens
 
-Status: **IMPLEMENTED — ready for Luna verification.** Not closed.
+Status: **IMPLEMENTED — Astra remediation complete, awaiting targeted verification.** Not closed.
 Store schema **v21** (`GAME_SCHEMA_VERSION = 21`, `STORE_VERSION = 21`).
 
 Starting checkpoint: `70864ada51f887399d5d3529a450204468fc8d65` (main =
@@ -32,6 +32,43 @@ REVISE; both findings were accepted by Sol and are remediated. Status is still
   strict schema (not an undefined-stripped copy); `addReminder` applies the
   same rule to its input. An unknown key is refused even when its value is
   `undefined`; a known optional field given as `undefined` keeps its meaning.
+
+## Astra remediation (ASTRA-10C-001 … 004)
+
+Astra adversarial review of `7ddc3fb9f566f429a5c5a6e0f4d0b8bbbabb5ae4`
+returned REVISE; Sol accepted all four findings.
+
+- **ASTRA-10C-001 (HIGH) — unique current ParticipantIds.**
+  `StorytellerGamePersistedSchema` (the boundary every Current State, Undo
+  snapshot and recovered checkpoint passes) now enforces that every occupied
+  seat's ParticipantId is unique within the snapshot
+  (`checkCurrentParticipantIdentityUniqueness`). Empty seats and historical
+  ParticipantRefs are outside the set, so repeated/departed historical refs
+  stay valid. Duplicates are rejected, never repaired; Life/Effect/Reminder
+  planners are unchanged and keep assuming a valid game.
+- **ASTRA-10C-002 (MEDIUM) — legacy Reminder History.** An operation-less
+  Reminder record may only be `added`/`removed` (a `value` one is rejected,
+  never read as an amend), and an operation-less snapshot carrying a
+  `cleanupCue` is rejected as a hybrid. `hasV21Evidence` now treats a
+  `cleanupCue` inside any Reminder History snapshot (`item`, `from`, `to`) as
+  v21 evidence, so marker-20 or marker-less hybrids are never migrated.
+  Genuine legacy add/remove History (lifetime snapshots, mirrored origin
+  provenance) is still accepted and never rewritten.
+- **ASTRA-10C-003 (MEDIUM) — per-entry routing before old store steps.**
+  `migrateStoreState` classifies Current State and each Undo entry
+  independently, from its untouched content, with `detectLegacyGameVersion`
+  (`null` → the envelope's version) before any old step. A game-content step
+  targeting version N runs on an entry only if both the envelope and that
+  entry are older than N; the entry then migrates from its own routed version
+  (the same answer checkpoint recovery reaches). Marker-21 entries receive no
+  legacy repair; marker-20 entries receive only v20 → v21; genuine legacy
+  saves migrate as before. Envelope metadata (localSeq/sync) is still
+  migrated by the envelope version; the pre-v8 lobby step, which would drop
+  Undo and rewrite the game, fails closed if any entry is itself v8 or newer.
+- **ASTRA-10C-004 (LOW) — sparse intent arrays.** Every index
+  `0 <= i < length` must be an own element holding a known intent object
+  before any intent is dereferenced; a hole is a structured `invalid` refusal
+  with its `intentIndex`, never an exception.
 
 ## The rule
 

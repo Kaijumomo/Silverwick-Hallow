@@ -27,7 +27,7 @@ import {
   type ReminderTransaction,
 } from "./reminderResolution";
 import { newParticipantId, participantIdAppearsIn, participantRefOf, recordedInformationValues } from "./participants";
-import { migrateGameEntry } from "./gameMigration";
+import { detectLegacyGameVersion, migrateGameEntry } from "./gameMigration";
 import { freshLifeEventWindow, pruneLifeEventWindow } from "./lifeEvents";
 import {
   applyLifePlan,
@@ -767,52 +767,68 @@ function isMigratableUndoStack(value: unknown): value is unknown[] {
 
 export function migrateStoreState(state: unknown, fromVersion: number): unknown {
   const s = state as { game?: Record<string, unknown>; undoStack?: unknown; lobby?: unknown };
+  // Phase 10C (ASTRA-10C-003): per-entry routing BEFORE any old step. A
+  // game-shaped entry's OWN version/evidence -- not the outer persisted
+  // envelope's -- decides which game-content migrations may touch it. Each
+  // entry (Current State and every Undo snapshot, independently) is
+  // classified once, from its untouched content, by the one canonical
+  // detector (detectLegacyGameVersion: explicit marker first, then v21/v20/
+  // v19/v17 evidence, then bounded structure). A game-content step targeting
+  // version N runs on an entry only when BOTH the envelope and the entry
+  // itself are older than N, so an old envelope can never "repair" a marked
+  // current game (e.g. default a malformed `fabled: null`) or delete its
+  // evidence (e.g. `startingNonTravelerCount`) before the entry's own marker
+  // is honoured. A shape too old to detect keeps the envelope's version, so
+  // genuine legacy saves migrate exactly as before. Envelope-only metadata
+  // (lobby, localSeq/sync) is still migrated by the envelope version.
+  const undoEntries: unknown[] = isMigratableUndoStack(s.undoStack) ? s.undoStack : [];
+  const entryVersion = new Map<object, number>();
+  for (const entry of [s.game, ...undoEntries]) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const detected = detectLegacyGameVersion(entry as Record<string, unknown>);
+    entryVersion.set(entry, detected === null ? fromVersion : Math.max(fromVersion, detected));
+  }
+  const olderThan = (entry: unknown, version: number): entry is Record<string, unknown> =>
+    !!entry && typeof entry === "object" && (entryVersion.get(entry) ?? Number.POSITIVE_INFINITY) < version;
+  /** The game entry, when it is itself older than `version`. */
+  const gameOlderThan = (version: number) => (olderThan(s.game, version) ? s.game : undefined);
+  /** Every Undo entry that is itself older than `version`. */
+  const undoOlderThan = (version: number) => undoEntries.filter((entry) => olderThan(entry, version)) as Record<string, unknown>[];
+
   if (fromVersion < 2) {
-    if (s.game && !s.game.nightProgress) s.game.nightProgress = {};
-    if (isMigratableUndoStack(s.undoStack)) {
-      s.undoStack = s.undoStack.map((entry) => {
-        const e = entry as Record<string, unknown>;
-        if (!e.nightProgress) e.nightProgress = {};
-        return e;
-      });
+    const game = gameOlderThan(2);
+    if (game && !game.nightProgress) game.nightProgress = {};
+    for (const e of undoOlderThan(2)) {
+      if (!e.nightProgress) e.nightProgress = {};
     }
   }
   if (fromVersion < 3) {
-    if (s.game) {
-      if (!s.game.fabled) s.game.fabled = [];
-      if (!s.game.bluffs) s.game.bluffs = [];
+    const game = gameOlderThan(3);
+    if (game) {
+      if (!game.fabled) game.fabled = [];
+      if (!game.bluffs) game.bluffs = [];
     }
-    if (isMigratableUndoStack(s.undoStack)) {
-      s.undoStack = s.undoStack.map((entry) => {
-        const e = entry as Record<string, unknown>;
-        if (!e.fabled) e.fabled = [];
-        if (!e.bluffs) e.bluffs = [];
-        return e;
-      });
+    for (const e of undoOlderThan(3)) {
+      if (!e.fabled) e.fabled = [];
+      if (!e.bluffs) e.bluffs = [];
     }
   }
   if (fromVersion < 4) {
-    if (s.game && !s.game.lorics) s.game.lorics = [];
-    if (isMigratableUndoStack(s.undoStack)) {
-      s.undoStack = s.undoStack.map((entry) => {
-        const e = entry as Record<string, unknown>;
-        if (!e.lorics) e.lorics = [];
-        return e;
-      });
+    const game = gameOlderThan(4);
+    if (game && !game.lorics) game.lorics = [];
+    for (const e of undoOlderThan(4)) {
+      if (!e.lorics) e.lorics = [];
     }
   }
   if (fromVersion < 5) {
-    if (s.game) {
-      if (!s.game.rolePool) s.game.rolePool = [];
-      if (s.game.plannedPlayerCount === undefined) s.game.plannedPlayerCount = 0;
+    const game = gameOlderThan(5);
+    if (game) {
+      if (!game.rolePool) game.rolePool = [];
+      if (game.plannedPlayerCount === undefined) game.plannedPlayerCount = 0;
     }
-    if (isMigratableUndoStack(s.undoStack)) {
-      s.undoStack = s.undoStack.map((entry) => {
-        const e = entry as Record<string, unknown>;
-        if (!e.rolePool) e.rolePool = [];
-        if (e.plannedPlayerCount === undefined) e.plannedPlayerCount = 0;
-        return e;
-      });
+    for (const e of undoOlderThan(5)) {
+      if (!e.rolePool) e.rolePool = [];
+      if (e.plannedPlayerCount === undefined) e.plannedPlayerCount = 0;
     }
   }
   // v6: grimoireMode and tokenPositions added — both are top-level optional
@@ -820,25 +836,33 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // states pass validation and receive undefined → initial state provides "ring"/{}.
 
   if (fromVersion < 7) {
-    if (s.game) {
-      if (!s.game.pendingPlayers) s.game.pendingPlayers = {};
-      const players = s.game.players as Record<string, Record<string, unknown>> | undefined;
+    const game = gameOlderThan(7);
+    if (game) {
+      if (!game.pendingPlayers) game.pendingPlayers = {};
+      const players = game.players as Record<string, Record<string, unknown>> | undefined;
       if (players) {
         for (const p of Object.values(players)) {
           if (p.isEmpty === undefined) p.isEmpty = false;
         }
       }
     }
-    if (isMigratableUndoStack(s.undoStack)) {
-      s.undoStack = s.undoStack.map((entry) => {
-        const e = entry as Record<string, unknown>;
-        if (!e.pendingPlayers) e.pendingPlayers = {};
-        return e;
-      });
+    for (const e of undoOlderThan(7)) {
+      if (!e.pendingPlayers) e.pendingPlayers = {};
     }
   }
 
   if (fromVersion < 8 && s?.lobby) {
+    // Envelope (lobby) + game content (Undo dropped, game code/uid reset).
+    // ASTRA-10C-003: this step cannot run without altering or discarding
+    // game entries, so if any entry is itself v8 or newer the envelope is an
+    // impossible hybrid -- fail closed rather than rewrite current state.
+    const entries = [s.game, ...undoEntries].filter((entry) => !!entry && typeof entry === "object");
+    if (entries.some((entry) => !olderThan(entry, 8))) {
+      // eslint-disable-next-line no-console
+      console.warn("[migrate] a pre-v8 envelope holds a newer game entry; resetting rather than rewriting it");
+      _migrationResetFlag = true;
+      return CLEAN_STATE;
+    }
     s.lobby = null;
     s.undoStack = [];
     if (s.game) { s.game.code = ""; s.game.storytellerUid = "local"; }
@@ -846,17 +870,14 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // v10 adds an optional starting population. Earlier snapshots cannot prove
   // this history; never derive it from their current attendance or roles.
   if (fromVersion < 10) {
-    if (s.game) delete s.game.startingNonTravelerCount;
-    if (Array.isArray(s.undoStack)) {
-      for (const entry of s.undoStack) {
-        if (entry && typeof entry === "object") delete (entry as Record<string, unknown>).startingNonTravelerCount;
-      }
+    for (const entry of [gameOlderThan(10), ...undoOlderThan(10)]) {
+      if (entry) delete entry.startingNonTravelerCount;
     }
   }
   // v11 introduces optional current Traveler facts. Leave legacy alignment,
   // completion and exile unknown. Public character can be recovered from truth.
   if (fromVersion < 11) {
-    for (const entry of [s.game, ...(isMigratableUndoStack(s.undoStack) ? s.undoStack : [])]) {
+    for (const entry of [gameOlderThan(11), ...undoOlderThan(11)]) {
       const players = (entry as { players?: Record<string, STPlayerRecord> } | undefined)?.players;
       for (const p of Object.values(players ?? {})) {
         if (p.isTraveler) p.publicDisplayRole = publicTravelerRole(p)?.id ?? null;
@@ -868,7 +889,7 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // safely at 0 and leave sync null. Never invent acknowledgement evidence
   // from a legacy game's prior content, timestamps, or size — a valid
   // remote checkpoint outranks unevidenced legacy local state (see
-  // reconnectDecision's "no sync metadata" rule).
+  // reconnectDecision's "no sync metadata" rule). Envelope-only.
   if (fromVersion < 12) {
     const withSync = s as { localSeq?: number; sync?: unknown };
     withSync.localSeq = 0;
@@ -879,14 +900,8 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // planned any Travelers explicitly -- default to 0, mirroring
   // plannedPlayerCount's own v5 migration default.
   if (fromVersion < 13) {
-    if (s.game && s.game.plannedTravelerCount === undefined) s.game.plannedTravelerCount = 0;
-    if (isMigratableUndoStack(s.undoStack)) {
-      s.undoStack = s.undoStack.map((entry) => {
-        if (!entry || typeof entry !== "object") return entry;
-        const e = entry as Record<string, unknown>;
-        if (e.plannedTravelerCount === undefined) e.plannedTravelerCount = 0;
-        return e;
-      });
+    for (const entry of [gameOlderThan(13), ...undoOlderThan(13)]) {
+      if (entry && entry.plannedTravelerCount === undefined) entry.plannedTravelerCount = 0;
     }
   }
   // v14 (Phase 9D.1) -> v16 (Phase 9D.3): the structured Current State
@@ -939,8 +954,11 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
     // checkpoint recovery, which never has this and uses "canonical-only"
     // -- see readCheckpoint in storytellerSync.ts and MigrationScriptEvidence's
     // own doc comment).
+    // ASTRA-10C-003: each entry migrates from its OWN routed version (see
+    // above) -- the same answer checkpoint recovery reaches directly.
     for (const entry of [s.game, ...(isMigratableUndoStack(s.undoStack) ? s.undoStack : [])]) {
-      migrateGameEntry(entry, fromVersion, { kind: "trusted", customScripts });
+      const version = entry && typeof entry === "object" ? entryVersion.get(entry) ?? fromVersion : fromVersion;
+      migrateGameEntry(entry, version, { kind: "trusted", customScripts });
     }
   }
   const check = StorytellerStateSchema.safeParse(state);

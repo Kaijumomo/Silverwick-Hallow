@@ -519,6 +519,14 @@ export const HistoryRecordSchema = z.object({
     if (record.reminderOperation && record.change && record.change.kind !== REMINDER_OPERATION_CHANGE[record.reminderOperation]) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: `a Reminder ${record.reminderOperation} is recorded as ${REMINDER_OPERATION_CHANGE[record.reminderOperation]}`, path: ["change", "kind"] });
     }
+    // ASTRA-10C-002: pre-v21 Reminder mutation only ever added or removed a
+    // Reminder, so a genuine legacy (operation-less) Reminder record is
+    // `added` or `removed` -- never `value`. Such a record is an impossible
+    // hybrid (it would otherwise bypass every snapshot contract), never
+    // reinterpreted as a v21 amend.
+    if (record.reminderOperation === undefined && record.change?.kind === "value") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a legacy Reminder History Record is an addition or a removal (a Reminder amend names its operation)", path: ["change", "kind"] });
+    }
   }
   if (record.category === "effect") {
     // A v19 Effect record (no effectOperation) predates corrections, so an
@@ -574,6 +582,15 @@ export const HistoryRecordSchema = z.object({
   // converted. Phase 10B: an Effect `value` record's before/after snapshots
   // obey the same source contract (no v19 command ever wrote one).
   if (record.change.kind === "value" && record.category !== "effect") return;
+  // ASTRA-10C-002: a v21-only cleanup cue inside an operation-less Reminder
+  // snapshot is a modern/legacy hybrid, never genuine legacy History.
+  if (record.category === "reminder") {
+    for (const snapshot of snapshots) {
+      if (isPlainRecord(snapshot.value) && hasOwn(snapshot.value, "cleanupCue")) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a legacy Reminder History snapshot cannot carry a v21 cleanup cue", path: [...snapshot.path, "cleanupCue"] });
+      }
+    }
+  }
   const contract = HISTORY_SNAPSHOT_SOURCE_CONTRACT[record.category];
   if (!contract) return;
   for (const snapshot of snapshots) {
@@ -898,6 +915,39 @@ function checkReminderTemporalCoherence(
   }
 }
 
+/**
+ * Phase 10C (ASTRA-10C-001): every OCCUPIED participant in Current State has
+ * a ParticipantId that is unique within this game snapshot. Two current
+ * player records sharing one participation-instance identity make every
+ * ParticipantId-keyed rule ambiguous (Reminder/Effect identity, Life
+ * grouping, source "still present?", future cross-planner composition), so
+ * such a snapshot is invalid -- enforced here, at the one persisted-game
+ * boundary every Current State, Undo snapshot and recovered checkpoint
+ * passes. Never repaired: no id is regenerated, no occupant chosen, nothing
+ * merged or inferred from PlayerId/name/UID.
+ *
+ * Only live roster records count. Empty seats carry no ParticipantId, and
+ * historical ParticipantRefs (History, Provenance, Information Delivery,
+ * Effect/Reminder origins, Life Events) legitimately repeat a current or
+ * departed participant's id -- they are never part of this set.
+ */
+function checkCurrentParticipantIdentityUniqueness(
+  game: { players: Record<string, { isEmpty?: boolean; participantId?: string }> },
+  ctx: z.RefinementCtx,
+): void {
+  const holder = new Map<string, string>();
+  for (const [key, player] of Object.entries(game.players)) {
+    if (player.isEmpty === true || typeof player.participantId !== "string") continue;
+    const first = holder.get(player.participantId);
+    if (first !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["players", key, "participantId"],
+        message: `occupied seats ${JSON.stringify(first)} and ${JSON.stringify(key)} carry the same current ParticipantId` });
+      continue;
+    }
+    holder.set(player.participantId, key);
+  }
+}
+
 const hasOwn = (record: object, key: string): boolean => Object.prototype.hasOwnProperty.call(record, key);
 const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -973,6 +1023,7 @@ export const StorytellerGamePersistedSchema = z.preprocess((raw, ctx) => {
   pendingPlayers: z.record(z.string(), z.string()).default({}),
 }).superRefine((game, ctx) => {
   checkSeatGeometry(game, ctx);
+  checkCurrentParticipantIdentityUniqueness(game, ctx);
   checkEffectTemporalCoherence(game, ctx);
   checkReminderTemporalCoherence(game, ctx);
 }));

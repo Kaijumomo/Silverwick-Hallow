@@ -320,9 +320,16 @@ export function planReminderTransaction(
   const intents: readonly ReminderIntent[] = Array.isArray(transaction.intents) ? transaction.intents : [];
   if (intents.length === 0) return refuse("tooMany", "Nothing to record.");
   if (intents.length > MAX_REMINDER_INTENTS) return refuse("tooMany", `At most ${MAX_REMINDER_INTENTS} Reminder changes can be recorded at once.`);
-  if (intents.some((intent) => !isPlainObject(intent) || !Object.prototype.hasOwnProperty.call(INTENT_KEYS, String(intent.kind)))) {
-    const index = intents.findIndex((intent) => !isPlainObject(intent) || !Object.prototype.hasOwnProperty.call(INTENT_KEYS, String(intent.kind)));
-    return refuse("invalid", "Invalid Reminder change.", index);
+  // ASTRA-10C-004: validated index by index -- array helpers such as
+  // `.some()` skip the holes of a sparse array -- so every position
+  // 0 <= i < length must be an OWN element holding a known intent object
+  // before any intent is dereferenced. A hole is invalid input, refused with
+  // its index, never an exception.
+  for (let index = 0; index < intents.length; index++) {
+    const intent: unknown = Object.prototype.hasOwnProperty.call(intents, index) ? intents[index] : undefined;
+    if (!isPlainObject(intent) || !Object.prototype.hasOwnProperty.call(INTENT_KEYS, String(intent.kind))) {
+      return refuse("invalid", "Invalid Reminder change.", index);
+    }
   }
   const correction = isCorrectionIntent(intents[0]!);
   if (intents.some((intent) => isCorrectionIntent(intent) !== correction)) {
