@@ -270,9 +270,17 @@ without writing a field. `src/stores/roleArchitecture.test.ts` guards this.
    before Night 1) is allowed as an ordinary Role change, per "transition FROM
    `""` is allowed when assigning an unassigned Traveler" -- otherwise a late
    Traveler could not choose a character in that window.
-2. A same-Role correction with `travelerArrivalPolicy: "restart"` is a no-op
-   (nothing recorded is wrong); `restart` applies when the correction actually
-   changes the Role or status.
+2. A same-Role Traveler correction is NOT automatically a no-op:
+   `travelerArrivalPolicy: "preserve"` (the default) with no other change is a
+   true no-op, while `"restart"` explicitly reinitializes `travelerArrival` and
+   clears only that Traveler's current-night arrival/role night steps -- one
+   atomic commit, one Undo, one localSeq. The Actual Role, ParticipantId, Actual
+   Alignment, `abilityUsed`, perception, draft/packet, Life, Effects and
+   Reminders are untouched, and no Role History value record is written (the
+   Actual Role did not change). If the arrival is already initial and there is
+   no step to clear, the restart is net-zero and therefore a true no-op; an
+   unassigned Traveler (no Role yet), an ordinary participant and a gameplay
+   `changeActualRole` (which rejects the policy) are unaffected.
 3. A Traveler's alignment perception fields are stored as given (their own
    projection always reflects the Actual Alignment); their Shown Role must be
    their own character.

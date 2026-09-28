@@ -413,6 +413,8 @@ export function planRoleTransaction(
   const invalidated = new Set<PlayerId>();
   /** Participants whose Traveler night-progress is cleared. */
   const clearProgress = new Set<PlayerId>();
+  /** Travelers whose arrival is explicitly restarted WITHOUT a Role change. */
+  const restarted = new Set<PlayerId>();
   /** At most ONE Actual Role intent per ParticipantId. */
   const actualClaimed = new Set<ParticipantId>();
   /** The last intent index that touched each participant (for refusals). */
@@ -497,8 +499,22 @@ export function planRoleTransaction(
           return at(fail("phase", "Roles are revealed. Correct the starting assignment instead, or begin Night 1."));
         }
       }
-      // True no-op: same Actual Role under the same status.
-      if (destination === w.actualRole && toTraveler === w.isTraveler) continue;
+      if (destination === w.actualRole && toTraveler === w.isTraveler) {
+        // Same Actual Role under the same status. An explicit Traveler arrival
+        // `restart` is still a real correction of the arrival WORKFLOW: it
+        // reinitializes travelerArrival and clears only this Traveler's
+        // arrival/role night steps. It changes nothing about the Role itself
+        // (no packet withdrawal, no epoch, no Role History value record,
+        // abilityUsed / alignment / perception untouched). Otherwise -- or when
+        // the arrival is already initial with no step to clear -- it is a TRUE
+        // no-op (the finalizer drops it as net-zero).
+        if (isCorrection && policy === "restart" && w.isTraveler && destination !== "") {
+          working.set(original.id, { ...w, travelerArrival: newTravelerArrival() });
+          clearProgress.add(original.id);
+          restarted.add(original.id);
+        }
+        continue;
+      }
 
       const next: STPlayerRecord = { ...w, actualRole: destination, isTraveler: toTraveler };
       // A real change invalidates what was prepared for the old Role.
@@ -607,18 +623,19 @@ export function planRoleTransaction(
     }
     players[playerId] = patch;
   }
-  // True no-op: no Current State change and no History.
-  if (Object.keys(players).length === 0) return { ok: true, changed: false };
-
   const nightProgressRemove: string[] = [];
   for (const playerId of clearProgress) {
-    if (!finalOf.has(playerId)) continue;
+    if (!finalOf.has(playerId) && !restarted.has(playerId)) continue;
     for (const key of Object.keys(game.nightProgress)) {
       if (key.startsWith(`${game.day}:travelerArrival:${playerId}:`) || key.startsWith(`${game.day}:p:${playerId}:`)) {
         if (!nightProgressRemove.includes(key)) nightProgressRemove.push(key);
       }
     }
   }
+
+  // True no-op: no Current State change (no patch, no step to clear) and no
+  // History.
+  if (Object.keys(players).length === 0 && nightProgressRemove.length === 0) return { ok: true, changed: false };
 
   // History explains COMMITTED Actual Role mutations only (Live Play);
   // perception and Setup record none.

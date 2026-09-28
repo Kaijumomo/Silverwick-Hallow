@@ -836,6 +836,171 @@ describe("ordinary <-> Traveler transitions (live play)", () => {
     expect(Object.keys(game().nightProgress)).toEqual(["1:demonInfo"]); // only this Traveler's arrival/role steps
   });
 
+  describe("same-Role Traveler correction (frozen: `restart` is an explicit arrival reinitialization, not a no-op)", () => {
+    const arrival = { demonInfoComplete: true, firstNightComplete: true, completedAtNight: 1 };
+    /** A Night-1 Traveler (Thief) mid-arrival, with progress of their own, of
+     * another participant and a global step, plus Effect/Reminder/Life state. */
+    function seededTraveler() {
+      const zed = liveGameWithTraveler("thief");
+      const other = holder("empath");
+      const bind = (pid: PlayerId) => ({ playerId: pid, participantId: player(pid).participantId! });
+      expect(state().resolveEffects({ intents: [{ kind: "apply", target: bind(zed), effect: { type: "poisoned", lifetime: { kind: "manual" } } }] } as never))
+        .toMatchObject({ ok: true, changed: true });
+      expect(state().resolveReminders({ intents: [{ kind: "place", target: bind(zed), reminder: { label: "Chosen" } }] } as never))
+        .toMatchObject({ ok: true, changed: true });
+      const step = { status: "done" as const, notes: "" };
+      store.setState({ game: { ...game(), phase: "night", day: 1,
+        nightProgress: { [`1:travelerArrival:${zed}:thief`]: step, [`1:p:${zed}:thief`]: step,
+          [`1:travelerArrival:${other}:x`]: step, [`1:p:${other}:empath`]: step, "1:demonInfo": step, [`0:p:${zed}:thief`]: step },
+        players: { ...game().players, [zed]: { ...player(zed), abilityUsed: true, actualAlignment: "evil", travelerArrival: { ...arrival },
+          privateInfo: { extraText: "draft" }, packetEpoch: "epoch-keep" } } } });
+      store.setState({ undoStack: [] });
+      return { zed, other };
+    }
+
+    it("1. same Traveler Role + correction + preserve (explicit or default) is a TRUE no-op: arrival and progress unchanged, no Undo/localSeq/History", () => {
+      const { zed } = seededTraveler();
+      const b = baseline();
+      expect(resolve([correctRoleIntent(player(zed), "thief")])).toEqual({ ok: true, changed: false });
+      expect(resolve([correctRoleIntent(player(zed), "thief", "preserve")])).toEqual({ ok: true, changed: false });
+      expect(state().correctRole(zed, "thief")).toEqual({ ok: true, changed: false });
+      expect(state().correctRole(zed, "thief", { travelerArrivalPolicy: "preserve" })).toEqual({ ok: true, changed: false });
+      expectInert(b);
+      expect(player(zed).travelerArrival).toEqual(arrival);
+      expect(Object.keys(game().nightProgress)).toHaveLength(6);
+      expect(game().history).toBe(b.game.history);
+    });
+
+    it("2. same Traveler Role + correction + restart is an accepted atomic mutation: arrival restarted, only this Traveler's arrival/role steps cleared, everything else preserved, one Undo/localSeq, no Role History value record", () => {
+      const { zed, other } = seededTraveler();
+      const b = baseline();
+      const before = player(zed);
+      expect(resolve([correctRoleIntent(player(zed), "thief", "restart")])).toEqual({ ok: true, changed: true });
+      expectOneCommit(b);
+      const after = player(zed);
+      // Identity and Role unchanged.
+      expect(after).toMatchObject({ actualRole: "thief", isTraveler: true, participantId: before.participantId, actualAlignment: "evil",
+        shownRole: "thief", publicDisplayRole: "thief", shownAlignment: before.shownAlignment, behaviorMode: before.behaviorMode });
+      // abilityUsed preserved; arrival explicitly reinitialized.
+      expect(after.abilityUsed).toBe(true);
+      expect(after.travelerArrival).toEqual({ demonInfoComplete: false, firstNightComplete: false });
+      // The Role did not change: no draft/packet invalidation, no new epoch.
+      expect(after.privateInfo).toEqual({ extraText: "draft" });
+      expect(after.packetEpoch).toBe("epoch-keep");
+      // Life, Effects and Reminders untouched.
+      expect(after.alive).toBe(before.alive);
+      expect(after.ghostVote).toBe(before.ghostVote);
+      expect(after.effects).toEqual(before.effects);
+      expect(after.reminders).toEqual(before.reminders);
+      expect(after.effects?.length).toBeGreaterThan(0);
+      expect(after.reminders?.length).toBeGreaterThan(0);
+      // Only this Traveler's current-night arrival/role steps are cleared.
+      expect(Object.keys(game().nightProgress).sort()).toEqual(
+        [`1:travelerArrival:${other}:x`, `1:p:${other}:empath`, "1:demonInfo", `0:p:${zed}:thief`].sort());
+      // Every other participant is the very same record.
+      for (const id of game().seatOrder) if (id !== zed) expect(game().players[id]).toBe(b.game.players[id]);
+      // No Role History value record is fabricated (the Actual Role did not change).
+      expect(game().history).toBe(b.game.history);
+      expect(roleHistory()).toHaveLength(1); // only Zed's earlier Thief assignment
+    });
+
+    it("2b. the plan itself is a minimal partial patch: only travelerArrival, no History, no Actual Role change, no epoch minted", () => {
+      const { zed } = seededTraveler();
+      const ids = counterIds();
+      const result = planRoleTransaction(game(), { intents: [correctRoleIntent(player(zed), "thief", "restart")] },
+        { script: setupScript, ids });
+      expect(result).toMatchObject({ ok: true, changed: true });
+      if (!result.ok || !result.changed) return;
+      expect(result.plan.players).toEqual({ [zed]: { set: { travelerArrival: { demonInfoComplete: false, firstNightComplete: false } }, remove: [] } });
+      expect(result.plan.history).toEqual([]);
+      expect(result.plan.actualRoleChanges).toEqual([]);
+      expect(result.plan.nightProgressRemove.sort()).toEqual([`1:p:${zed}:thief`, `1:travelerArrival:${zed}:thief`].sort());
+      expect(ids.packetEpoch()).toBe("epoch-1"); // never drawn by the plan
+    });
+
+    it("restart with an arrival that is already initial and no step to clear is net-zero: a TRUE no-op", () => {
+      const zed = liveGameWithTraveler("thief");
+      const b = baseline();
+      expect(player(zed).travelerArrival).toEqual({ demonInfoComplete: false, firstNightComplete: false });
+      expect(resolve([correctRoleIntent(player(zed), "thief", "restart")])).toEqual({ ok: true, changed: false });
+      expectInert(b);
+    });
+
+    it("restart with an initial arrival but stale night steps still clears exactly those steps (one commit)", () => {
+      const zed = liveGameWithTraveler("thief");
+      const step = { status: "done" as const, notes: "" };
+      store.setState({ game: { ...game(), phase: "night", day: 1, nightProgress: { [`1:p:${zed}:thief`]: step, "1:demonInfo": step } } });
+      const b = baseline();
+      expect(resolve([correctRoleIntent(player(zed), "thief", "restart")])).toEqual({ ok: true, changed: true });
+      expectOneCommit(b);
+      expect(Object.keys(game().nightProgress)).toEqual(["1:demonInfo"]);
+      expect(game().players).toEqual(b.game.players);
+    });
+
+    it("restart applies only to a real Traveler character: an unassigned Traveler, an ordinary participant and a gameplay change ignore/refuse it", () => {
+      const unassigned = liveGameWithTraveler("");
+      const b = baseline();
+      expect(resolve([correctRoleIntent(player(unassigned), "", "restart")])).toEqual({ ok: true, changed: false });
+      expectInert(b);
+      const id = chef();
+      const c = baseline();
+      expect(state().correctRole(id, "chef", { travelerArrivalPolicy: "restart" })).toEqual({ ok: true, changed: false });
+      expectInert(c);
+      const change = changeRoleIntent(player(id), "chef");
+      expect(plan(game(), [{ ...change, travelerArrivalPolicy: "restart" }])).toMatchObject({ ok: false, code: "invalid" });
+    });
+
+    it("3. a stale expected Role, Traveler status or ParticipantId refuses BEFORE the restart is applied -- nothing changes", () => {
+      const { zed } = seededTraveler();
+      const b = baseline();
+      const restart = correctRoleIntent(player(zed), "thief", "restart");
+      expect(resolve([{ ...restart, expectedActualRole: "gunslinger" }])).toMatchObject({ ok: false, code: "stale" });
+      expect(resolve([{ ...restart, expectedIsTraveler: false }])).toMatchObject({ ok: false, code: "stale" });
+      expect(resolve([{ ...restart, target: { playerId: zed, participantId: "someone-else" } }])).toMatchObject({ ok: false, code: "stale" });
+      expectInert(b);
+      expect(player(zed).travelerArrival).toEqual(arrival);
+      expect(Object.keys(game().nightProgress)).toHaveLength(6);
+      // The observed truth moving between render and submit is stale too.
+      const observed = correctRoleIntent(player(zed), "thief", "restart");
+      expect(state().assignRole(zed, "gunslinger")).toMatchObject({ ok: true, changed: true });
+      const c = baseline();
+      expect(resolve([observed])).toMatchObject({ ok: false, code: "stale" });
+      expectInert(c);
+    });
+
+    it("4. Undo restores the exact pre-restart Traveler arrival and progress (one step), without reconstructing anything from History", () => {
+      const { zed } = seededTraveler();
+      const snapshot = structuredClone(game());
+      const b = baseline();
+      expect(state().correctRole(zed, "thief", { travelerArrivalPolicy: "restart" })).toEqual({ ok: true, changed: true });
+      expectOneCommit(b);
+      expect(player(zed).travelerArrival).toEqual({ demonInfoComplete: false, firstNightComplete: false });
+      state().undo();
+      expect(game()).toEqual(snapshot);
+      expect(player(zed).travelerArrival).toEqual(arrival);
+      expect(Object.keys(game().nightProgress)).toHaveLength(6);
+      expect(state().undoStack).toHaveLength(0);
+    });
+
+    it("a restart shares one atomic commit with an accompanying perception on another participant (all-or-nothing, one Undo)", () => {
+      const { zed } = seededTraveler();
+      const id = chef();
+      const b = baseline();
+      const intents = [correctRoleIntent(player(zed), "thief", "restart"),
+        setPerceptionIntent(player(id), { shownRole: "librarian", shownAlignment: null })];
+      expect(resolve(intents)).toEqual({ ok: true, changed: true });
+      expectOneCommit(b);
+      expect(player(zed).travelerArrival).toEqual({ demonInfoComplete: false, firstNightComplete: false });
+      expect(player(id).shownRole).toBe("librarian");
+      expect(game().history).toBe(b.game.history); // perception + restart record nothing
+      // A refusal anywhere rolls the restart back with it.
+      const c = baseline();
+      const bad = [correctRoleIntent(player(zed), "thief", "restart"), setPerceptionIntent(player(id), { shownRole: "thief", shownAlignment: null })];
+      expect(resolve(bad)).toMatchObject({ ok: false });
+      expectInert(c);
+    });
+  });
+
   it("the arrival policy is never derived from packet invalidation: a published Demon packet's withdrawal leaves demonInfoComplete alone", () => {
     const zed = liveGameWithTraveler("thief");
     store.setState({ game: { ...game(), players: { ...game().players, [zed]: { ...player(zed), actualAlignment: "evil",
