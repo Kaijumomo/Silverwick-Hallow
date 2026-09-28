@@ -10,10 +10,12 @@ import { migrateStoreState, useStorytellerStore as store } from "./storytellerSt
 import { StorytellerGamePersistedSchema } from "./schemas";
 import { decodeSelfSnapshot } from "@/firebase/snapshots";
 
-const registry = buildRegistry({ ...troubleBrewing, characters: [...troubleBrewing.characters, roles.marionette!, roles.lunatic!] });
-beforeEach(() => store.setState({ game: null, lobby: null, undoStack: [] }));
+const scriptWithDeceivers = { ...troubleBrewing, id: "tbx", characters: [...troubleBrewing.characters, roles.marionette!, roles.lunatic!] };
+const registry = buildRegistry(scriptWithDeceivers);
+// Phase 10D: an ordinary Role must resolve on the game's own script.
+beforeEach(() => store.setState({ game: null, lobby: null, undoStack: [], customScripts: { tbx: scriptWithDeceivers } }));
 function configured() {
-  store.getState().newGame("tb");
+  store.getState().newGame("tbx");
   store.getState().addPlayer("Alice");
   store.getState().addPlayer("Bob");
   const [id, other] = store.getState().game!.seatOrder as [string, string];

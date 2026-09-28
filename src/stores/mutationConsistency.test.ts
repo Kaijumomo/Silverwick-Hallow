@@ -418,41 +418,45 @@ describe("Phase 9R.4 (B8): setPrivateText compares the normalized stored text", 
 // 6. Commands whose same input can still be a real dependent-state mutation
 // ---------------------------------------------------------------------------
 describe("Phase 9R.4 (B8): identity/perception commands compare their COMPLETE intended result", () => {
-  it("setShownRole(current role) is inert only when nothing would be reset; clearing an alignment override, private info, or a published packet is still a mutation", () => {
+  it("Phase 10D: setShownRole(current role) is ALWAYS a true no-op -- it never clears an alignment override, a draft or a published packet; a different role is one real mutation", () => {
     dealtGame();
     const id = holderOf("chef");
-    // Deal stores an explicit shownAlignment; re-showing resets it to the
-    // derived null -- a real change the first time, inert the second.
-    const reset = baseline();
+    // Deal stores an explicit shownAlignment; re-selecting the same role keeps
+    // the perception exactly as it is.
+    const same = baseline();
     state().setShownRole(id, "chef");
-    expectOneMutation(reset);
-    expect(player(id).shownAlignment).toBeNull();
-    const clean = baseline();
-    state().setShownRole(id, "chef");
-    expectInert(clean);
+    expectInert(same);
+    expect(player(id).shownAlignment).toBe("good");
 
     state().setShownAlignment(id, "evil");
     const override = baseline();
     state().setShownRole(id, "chef");
-    expectOneMutation(override);
-    expect(player(id).shownAlignment).toBeNull();
+    expectInert(override);
+    expect(player(id).shownAlignment).toBe("evil");
 
     state().setPrivateText(id, "stale information");
     const info = baseline();
     state().setShownRole(id, "chef");
-    expectOneMutation(info);
-    expect(player(id).privateInfo).toBeUndefined();
+    expectInert(info);
+    expect(player(id).privateInfo).toEqual({ extraText: "stale information" });
 
-    patch(id, { publishedPacket: { id: "sent", payload: { shownRole: "chef", shownAlignment: "good" } } });
+    patch(id, { publishedPacket: { id: "sent", payload: { shownRole: "chef", shownAlignment: "evil" } } });
+    const epoch = player(id).packetEpoch;
     const packet = baseline();
     state().setShownRole(id, "chef");
-    expectOneMutation(packet);
-    expect(player(id).publishedPacket).toBeUndefined();
+    expectInert(packet);
+    expect(player(id).publishedPacket).toBeDefined();
+    expect(player(id).packetEpoch).toBe(epoch);
 
+    // A DIFFERENT role is one real mutation: alignment derives, the draft is
+    // cleared and the packet withdrawn.
     const contrast = baseline();
     state().setShownRole(id, "empath");
     expectOneMutation(contrast);
     expect(player(id).shownRole).toBe("empath");
+    expect(player(id).shownAlignment).toBeNull();
+    expect(player(id).privateInfo).toBeUndefined();
+    expect(player(id).publishedPacket).toBeUndefined();
   });
 
   it("setShownAlignment(current alignment) is inert and manufactures no packet invalidation; a real change still invalidates", () => {
@@ -474,19 +478,19 @@ describe("Phase 9R.4 (B8): identity/perception commands compare their COMPLETE i
     expect(player(id).publishedPacket).toBeUndefined();
   });
 
-  it("setBehaviorMode(current mode) is inert only when pruning removes nothing; stale inapplicable private info makes it a real mutation", () => {
+  it("Phase 10D: setBehaviorMode(current mode) is a true no-op even with stale inapplicable private info; a real mode change is one mutation", () => {
     dealtGame();
     const id = holderOf("chef");
     const before = baseline();
     state().setBehaviorMode(id, "normal");
     expectInert(before);
 
-    // A normal Chef can never hold bluffs: re-applying the same mode prunes them.
+    // Re-applying the same mode is not a mutation: nothing is pruned.
     patch(id, { privateInfo: { bluffs: ["empath"] } });
     const stale = baseline();
     state().setBehaviorMode(id, "normal");
-    expectOneMutation(stale);
-    expect(player(id).privateInfo).toBeUndefined();
+    expectInert(stale);
+    expect(player(id).privateInfo).toEqual({ bluffs: ["empath"] });
 
     const contrast = baseline();
     state().setBehaviorMode(id, "fake_demon_behavior");

@@ -15,7 +15,7 @@ import {
   storytellerUidPath,
 } from "./paths";
 import type { ParticipantId, PlayerId, PlayerSelfRecord } from "@/stores/types";
-import { sessionPath, outcomePath, leavePath, LifecycleError } from "./lifecycle";
+import { sessionPath, outcomePath, leavePath, travelerChoicePath, LifecycleError } from "./lifecycle";
 import { decodeRosterEntry, decodeRosterParticipant, decodeJoinRequests, decodeRoster, decodeLobbyStatus, reportSnapshotProblem, SnapshotValidationError, subscribeDecoded, DATA_ERROR_MESSAGE, CONNECTION_ERROR_MESSAGE } from "./snapshots";
 
 // Confusable-glyph-free alphabet (no 0/O, 1/I/L). 30 chars, ~656bn 8-char codes.
@@ -107,6 +107,9 @@ export async function revokeMembership(backend: RoomBackend, code: string, uid: 
   await backend.update({
     [rosterEntryPath(code, uid)]: null, [rosterParticipantPath(code, uid)]: null,
     [outcomePath(code, uid)]: "revoked", [leavePath(code, uid)]: null,
+    // Phase 10D: a pending Traveler character choice belongs to the
+    // participation being revoked -- cleared in the same fenced update.
+    [travelerChoicePath(code, uid)]: null,
   });
 }
 
@@ -175,6 +178,10 @@ export async function seatPlayer(
     // update. (A stale receipt is inert anyway -- it only ever matches its
     // own ParticipantId, and this seat gets a fresh one.)
     [membershipRevocationPath(code, uid)]: null,
+    // Phase 10D: a Traveler character choice left by an EARLIER participation
+    // of this uid must never carry into the one being seated now -- cleared in
+    // the same fenced update that creates the new binding.
+    [travelerChoicePath(code, uid)]: null,
   };
   // An unrevealed seat must not retain an earlier occupant's projection.
   updates[playerPath(code, playerId)] = selfRecord as unknown as Json;
@@ -237,6 +244,10 @@ export async function revokePlayerMembership(
     updates[rosterParticipantPath(code, uid)] = null;
     updates[outcomePath(code, uid)] = "revoked";
     updates[leavePath(code, uid)] = null;
+    // Phase 10D: the revoked participation's pending Traveler character
+    // choice goes with it, in this same fenced multi-path update -- a choice
+    // an earlier participation left can never apply to a replacement.
+    updates[travelerChoicePath(code, uid)] = null;
     if (completion) {
       const record = decodeRosterParticipant(await backend.get(rosterParticipantPath(code, uid)));
       if (record.status === "invalid") {

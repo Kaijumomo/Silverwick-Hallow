@@ -25,7 +25,7 @@ import {
   revokePlayerMembership,
   seatPlayer,
 } from "./lobby";
-import { acceptLeaveRequest, applyTravelerChoice, rejectLeaveRequest } from "./membershipCommands";
+import { acceptLeaveRequest, applyTravelerChoice, commitTravelerChoiceLocally, rejectLeaveRequest } from "./membershipCommands";
 import { requireActiveSession } from "./lifecycle";
 import {
   authorizePublicDisplay,
@@ -490,12 +490,15 @@ describe("Firebase RTDB membership authorization", () => {
 
   test("Storyteller applies a Traveler choice through the fenced writer path and clears the request", async () => {
     await seed();
+    // Phase 10D: the participation is named by the authoritative
+    // rosterParticipants record, written with the binding in production.
+    await seatPlayer(backend(st), code, alice, "p-alice", null, { participantId: "pt-alice-1", name: "Alice" });
     await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
 
-    let applied: string | null = null;
-    await applyTravelerChoice(backend(st), code, alice, "thief", (playerId) => { applied = playerId; });
+    let applied: { playerId: string; participantId: string } | null = null;
+    await applyTravelerChoice(backend(st), code, alice, "thief", (binding) => { applied = binding; });
 
-    expect(applied).toBe("p-alice");
+    expect(applied).toEqual({ playerId: "p-alice", participantId: "pt-alice-1" });
     expect((await ref(st, "travelerChoices/" + alice).once("value")).exists()).toBe(false);
   });
 
@@ -513,10 +516,11 @@ describe("Firebase RTDB membership authorization", () => {
   // rejected, never silently dropped.
   test("clearing a Traveler choice without the fenced writer's guard is rejected against real rules", async () => {
     await seed();
+    await seatPlayer(backend(st), code, alice, "p-alice", null, { participantId: "pt-alice-1", name: "Alice" });
     await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
     const raw = new FirebaseRoomBackend(db(st) as unknown as Database);
     let applied: string | null = null;
-    await expect(applyTravelerChoice(raw, code, alice, "thief", (playerId) => { applied = playerId; }))
+    await expect(applyTravelerChoice(raw, code, alice, "thief", (binding) => { applied = binding.playerId; }))
       .rejects.toThrow();
     expect(applied).toBe("p-alice");
     expect((await ref(st, "travelerChoices/" + alice).once("value")).val()).toBe("thief");
@@ -527,6 +531,77 @@ describe("Firebase RTDB membership authorization", () => {
     await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
     await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("scapegoat"));
     expect((await ref(st, "travelerChoices/" + alice).once("value")).val()).toBe("scapegoat");
+  });
+
+  // Phase 10D (AC-10D-22/23): a Traveler choice belongs to ONE participation.
+  // Proven against REAL rules: revocation and seating clear the request inside
+  // the same fenced multi-path update, and the Storyteller applies a request
+  // only to the participation the authoritative roster record names -- the
+  // player-written request itself carries no ParticipantId.
+  test("revoking a membership clears the uid's pending Traveler choice in the SAME fenced update", async () => {
+    await seed();
+    await seatPlayer(backend(st), code, alice, "p-alice", null, { participantId: "pt-alice-1", name: "Alice" });
+    await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
+    await revokePlayerMembership(backend(st), code, "p-alice");
+    expect((await ref(st, "travelerChoices/" + alice).once("value")).exists()).toBe(false);
+    expect((await ref(st, "roster/" + alice).once("value")).exists()).toBe(false);
+    // The revoked uid can no longer submit a choice (no roster binding).
+    await assertFails(ref(alice, "travelerChoices/" + alice).set("gunslinger"));
+    // Legacy whole-uid revocation clears it too.
+    await seatPlayer(backend(st), code, alice, "p-alice", null, { participantId: "pt-alice-2", name: "Alice" });
+    await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
+    await revokeMembership(backend(st), code, alice);
+    expect((await ref(st, "travelerChoices/" + alice).once("value")).exists()).toBe(false);
+  });
+
+  test("re-seating a uid clears an earlier participation's stale Traveler choice in the seating update itself", async () => {
+    await seed();
+    await seatPlayer(backend(st), code, alice, "p-alice", null, { participantId: "pt-alice-1", name: "Alice" });
+    await revokePlayerMembership(backend(st), code, "p-alice");
+    // A stale request that somehow survives the revocation (a client/rules
+    // predating this fix): seating the uid again must retire it atomically.
+    await env.withSecurityRulesDisabled(async ctx => { await ctx.database().ref(path("travelerChoices/" + alice)).set("thief"); });
+    expect((await ref(st, "travelerChoices/" + alice).once("value")).val()).toBe("thief");
+    await seatPlayer(backend(st), code, alice, "p-alice", null, { participantId: "pt-alice-2", name: "Alice" });
+    expect((await ref(st, "travelerChoices/" + alice).once("value")).exists()).toBe(false);
+    expect((await ref(st, "rosterParticipants/" + alice).once("value")).val())
+      .toEqual({ playerId: "p-alice", participantId: "pt-alice-2", name: "Alice" });
+  });
+
+  test("a stale Traveler choice never applies to a replacement participation; the new participation's own choice applies bound to ITS ParticipantId", async () => {
+    const store = useStorytellerStore;
+    store.setState({ game: null, lobby: null, undoStack: [] });
+    try {
+      await seed();
+      store.getState().newGame("tb", { plannedPlayerCount: 1 });
+      store.getState().addPlayerToSeat("Alice");
+      for (let i = 0; i < 5; i++) store.getState().addPlayer("Extra " + i);
+      const seat = store.getState().game!.seatOrder[0]!;
+      expect(store.getState().setIsTraveler(seat, true).ok).toBe(true);
+      const occupant = store.getState().game!.players[seat]!.participantId!;
+      // The uid is bound to the seat, but the AUTHORITATIVE record names an
+      // EARLIER participation (pt-alice-1); the local occupant is a later one.
+      await env.withSecurityRulesDisabled(async ctx => {
+        const lobby = ctx.database().ref("lobbies/" + code);
+        await lobby.child("roster/" + alice).set(seat);
+        await lobby.child("rosterParticipants/" + alice).set({ playerId: seat, participantId: "pt-alice-1", name: "Alice" });
+      });
+      await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
+      await applyTravelerChoice(backend(st), code, alice, "thief", commitTravelerChoiceLocally);
+      expect(store.getState().game!.players[seat]!.actualRole).toBe(""); // never applied
+      expect((await ref(st, "travelerChoices/" + alice).once("value")).exists()).toBe(false); // cleared, not replayed
+
+      // The replacement participation's own record and its own request apply.
+      await env.withSecurityRulesDisabled(async ctx => {
+        await ctx.database().ref("lobbies/" + code + "/rosterParticipants/" + alice)
+          .set({ playerId: seat, participantId: occupant, name: "Alice" });
+      });
+      await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("gunslinger"));
+      await applyTravelerChoice(backend(st), code, alice, "gunslinger", commitTravelerChoiceLocally);
+      expect(store.getState().game!.players[seat]!.actualRole).toBe("gunslinger");
+      expect(store.getState().game!.players[seat]!.participantId).toBe(occupant);
+      expect((await ref(st, "travelerChoices/" + alice).once("value")).exists()).toBe(false);
+    } finally { store.setState({ game: null, lobby: null, undoStack: [] }); }
   });
 
   test("a second writer is denied until expiry, then the old token is fenced", async () => {
@@ -562,7 +637,7 @@ describe("Firebase RTDB membership authorization", () => {
     const metadata = (await ref(st, "session").once("value")).val();
     const writer = new SessionWriter(raw, code, metadata.id);
     const game: StorytellerLobbyRecord = {
-      gameSchemaVersion: 21, code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
+      gameSchemaVersion: 22, code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
       notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {}, history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       rolePool: [], plannedPlayerCount: 1, plannedTravelerCount: 0, pendingPlayers: {}, seatOrder: ["p-alice"],
       // This test isolates identity delivery through the real writer/rules,
@@ -606,7 +681,7 @@ describe("Firebase RTDB membership authorization", () => {
     const metadata = (await ref(st, "session").once("value")).val();
     const writer = new SessionWriter(raw, code, metadata.id);
     const game: StorytellerLobbyRecord = {
-      gameSchemaVersion: 21, code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
+      gameSchemaVersion: 22, code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
       notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {}, history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       rolePool: [], plannedPlayerCount: 2, plannedTravelerCount: 0, pendingPlayers: {}, seatOrder: ["p-alice", "p-bob"],
       // This test isolates the completeness barrier, not Setup deal/reveal
@@ -691,7 +766,9 @@ describe("Firebase RTDB membership authorization", () => {
     await createLobby(raw, st, { codeGenerator: () => code });
     const metadata = (await ref(st, "session").once("value")).val();
     const writer = new SessionWriter(raw, code, metadata.id);
-    store.getState().newGame("tb");
+    // Phase 10D: an ordinary Role must resolve on the game's own script.
+    store.setState({ customScripts: { audit: { ...tbScript, id: "audit" } } });
+    store.getState().newGame("audit");
     store.getState().addPlayer("Alice");
     store.getState().addPlayer("Bob");
     const [id, other] = store.getState().game!.seatOrder as [string, string];

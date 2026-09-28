@@ -54,7 +54,12 @@ describe("one setup command gate", () => {
     expect(state()).toBe(before);
   });
   it.each(actions)("%s blocks missing identities with no partial mutation", (_name,run) => {
-    dealt();state().assignRole(game().seatOrder[0]!,"");
+    // Phase 10D: a Role can no longer be cleared through the mutation seam, so
+    // the missing identity is a legacy Role-empty ordinary seat (still
+    // readable and diagnosable), planted directly.
+    dealt();
+    const firstId = game().seatOrder[0]!;
+    store.setState({ game: { ...game(), players: { ...game().players, [firstId]: { ...game().players[firstId]!, actualRole: "" } } } });
     const before=state();expect(run().ok).toBe(false);expect(state()).toBe(before);
   });
   it.each(actions)("%s cannot skip an undealt pool", (_name,run) => {
@@ -188,7 +193,9 @@ describe("Phase 9C.4 (OPUS-004) — concealed-perception readiness gate", () => 
     const travelerId = game().seatOrder.at(-1)!;
     state().setIsTraveler(travelerId, true);
     state().assignRole(travelerId, "thief");
-    state().setShownRole(travelerId, null); // simulate unconfigured Traveler perception
+    // Simulate unconfigured Traveler perception (a legacy/unsynced state: the
+    // Role seam always keeps a Traveler's shown character with their own).
+    store.setState({ game: { ...game(), players: { ...game().players, [travelerId]: { ...game().players[travelerId]!, shownRole: null } } } });
     state().setTravelerAlignment(travelerId, "good"); // isolates this test to perception, not B4's alignment gate
     const findings = analyzeSetup(selectSetupContext(game(), setupScript)).findings;
     expect(findings.find(f => f.code === "missing-perception:traveler")).toMatchObject({ severity: "check" });
@@ -235,7 +242,7 @@ describe("population and persisted history", () => {
     prepare(true);state().dealRolePool();
     expect(game().setupRolesRevealed).toBe(false);
     const saved=localStorage.getItem("new-blood-st")!;
-    expect(JSON.parse(saved).version).toBe(21);
+    expect(JSON.parse(saved).version).toBe(22);
     store.setState({game:null});localStorage.setItem("new-blood-st",saved);await store.persist.rehydrate();
     expect(game()).toMatchObject({phase:"setup",day:0,setupRolesDealt:true,setupRolesRevealed:false});
     expect(StorytellerGamePersistedSchema.parse(JSON.parse(JSON.stringify(game()))).setupRolesDealt).toBe(true);
@@ -361,7 +368,7 @@ describe("population and persisted history", () => {
   it("current local persistence and checkpoint schema preserve starting count", async () => {
     dealt();state().beginNightOne();
     const saved=localStorage.getItem("new-blood-st")!;
-    expect(JSON.parse(saved).version).toBe(21);
+    expect(JSON.parse(saved).version).toBe(22);
     store.setState({game:null});localStorage.setItem("new-blood-st",saved);
     await store.persist.rehydrate();expect(game().startingNonTravelerCount).toBe(5);
     const checkpoint=JSON.parse(JSON.stringify({game:game(),roster:{}}));

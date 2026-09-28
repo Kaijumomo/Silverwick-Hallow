@@ -6,6 +6,7 @@ import {
   GAME_SCHEMA_VERSION,
   GameMomentSchema,
   LegacyV20ReminderRecordSchema,
+  MIGRATABLE_GAME_SCHEMA_VERSIONS,
   PREVIOUS_GAME_SCHEMA_VERSION,
   isEffectAppliedAtCoherent,
 } from "./schemas";
@@ -166,6 +167,9 @@ function registryForScript(scriptId: unknown, evidence: MigrationScriptEvidence)
  * v20 -> v21 (Phase 10C): non-authoritative Reminder notation. See
  * migrateEntryV20ToV21. Explicit version markers route an entry: see
  * migrateGameEntry.
+ *
+ * v21 -> v22 (Phase 10D): authoritative Role transitions. A stamp only -- see
+ * migrateEntryV21ToV22.
  */
 /**
  * Migrates exactly one player entry's v13-shaped fields, in place.
@@ -521,7 +525,26 @@ function migrateEntryV20ToV21(e: Record<string, unknown>): void {
       }
     }
   }
-  e.gameSchemaVersion = GAME_SCHEMA_VERSION;
+  e.gameSchemaVersion = 21;
+}
+
+/**
+ * v21 -> v22 (Phase 10D): authoritative Role transitions, in place. A STAMP
+ * ONLY. v22 adds no stored field to Current State and reshapes no History:
+ * the new Role History (`correction`, `resolutionId`, strict `{ actualRole }`
+ * snapshots) is written only by the new Role seam going forward, and legacy
+ * Role History stays exactly as recorded. There is no Role inference, no
+ * History rewrite, no perception repair and no reconstruction of Current
+ * State from History; a legacy ordinary Role-empty seat stays exactly as it
+ * is (readable and diagnosable, never given an invented Role).
+ *
+ * Idempotent and applied independently per entry (Current State, every Undo
+ * snapshot, a remote checkpoint's game). The caller has already established
+ * that the entry carries marker 21 and no v22-only evidence -- an entry with
+ * such evidence is malformed current-version data and never reaches this step.
+ */
+function migrateEntryV21ToV22(e: Record<string, unknown>): void {
+  e.gameSchemaVersion = 22;
 }
 
 export function migrateGameEntry(
@@ -535,26 +558,46 @@ export function migrateGameEntry(
     players?: Record<string, unknown>;
   };
 
-  // Phase 10C: an explicit `gameSchemaVersion` marker routes this entry, per
-  // entry, whatever version the OUTER persisted envelope claims:
-  //   20                          -> exactly v20 -> v21, nothing older;
-  //   20 + any v21-only evidence  -> malformed current-version data: no
-  //                                  migration, the v21 schema rejects it;
-  //   21, or any other value      -> no migration at all; the current schema
+  // Phase 10C/10D: an explicit `gameSchemaVersion` marker routes this entry,
+  // per entry, whatever version the OUTER persisted envelope claims:
+  //   20                          -> v20 -> v21, then v21 -> v22;
+  //   21                          -> v21 -> v22 (a stamp);
+  //   20 / 21 + newer evidence    -> malformed current-version data: no
+  //                                  migration, the v22 schema rejects it
+  //                                  (an older marker never repairs newer
+  //                                  evidence into validity);
+  //   22, or any other value      -> no migration at all; the current schema
   //                                  judges it (a malformed/unsupported
   //                                  marker is never reinterpreted as legacy).
-  // Applied independently to Current State and to every Undo entry.
+  // Applied independently to Current State, every Undo entry and a remote
+  // checkpoint's game (all call this one function).
+  // A step also requires that the caller's own version (`fromVersion`: the
+  // envelope's for local migration, the marker's for remote recovery) is older
+  // than the step's target (ASTRA-10C-003): an entry is never migrated
+  // "below" an envelope that already claims the target version.
   const record = e as Record<string, unknown>;
   if (hasOwnKey(record, "gameSchemaVersion")) {
-    if (record.gameSchemaVersion === PREVIOUS_GAME_SCHEMA_VERSION && !hasV21Evidence(record)) migrateEntryV20ToV21(record);
+    if (record.gameSchemaVersion === 20 && fromVersion < 21 && !hasV21Evidence(record) && !hasV22Evidence(record)) {
+      migrateEntryV20ToV21(record);
+    }
+    // v21 -> v22 only for an entry that IS marker 21 now: one the v20 -> v21
+    // step completed (it leaves a malformed entry untouched and unstamped --
+    // never stamped into validity by a later step), or one already marked 21.
+    if (record.gameSchemaVersion === PREVIOUS_GAME_SCHEMA_VERSION && fromVersion < 22 && !hasV22Evidence(record)) {
+      migrateEntryV21ToV22(record);
+    }
     return;
   }
-  // Phase 10B (ASTRA-10B-002) / 10C: marker-less v20 or v21 evidence is
-  // malformed current-version data (every v20+ writer stamps the marker). It
-  // receives no legacy step at all -- not v19 -> v20, and not any earlier
-  // repair (a missing v19 window, a v17 category rename, v14 statuses...) --
-  // and is judged (rejected) by the current schema alone.
-  if (hasV20Evidence(record) || hasV21Evidence(record)) return;
+  // Phase 10B (ASTRA-10B-002) / 10C / 10D: marker-less v20, v21 or v22
+  // evidence is malformed current-version data (every v20+ writer stamps the
+  // marker). It receives no legacy step at all -- not v19 -> v20, and not any
+  // earlier repair (a missing v19 window, a v17 category rename, v14
+  // statuses...) -- and is judged (rejected) by the current schema alone.
+  // v22 evidence is checked FIRST and explicitly: a Role correction carries
+  // the generic `correction` key (v19 Life evidence) and a Role resolutionId
+  // the generic `resolutionId` key (v20 evidence), so an older heuristic
+  // could otherwise claim it and stamp it into validity.
+  if (hasV22Evidence(record) || hasV20Evidence(record) || hasV21Evidence(record)) return;
 
   if (fromVersion < 14) {
     const players = e.players;
@@ -632,6 +675,7 @@ export function migrateGameEntry(
   if (fromVersion < 20) {
     migrateEntryV19ToV20(record);
     migrateEntryV20ToV21(record);
+    if (record.gameSchemaVersion === 21) migrateEntryV21ToV22(record);
   }
 }
 
@@ -704,14 +748,18 @@ export function migrateGameEntry(
  * it). Marker-less v21 evidence (hasV21Evidence) likewise reports 21.
  */
 export function detectLegacyGameVersion(game: Record<string, unknown>): number | null {
-  // Phase 10C: the explicit marker is decisive. 20 is the one earlier
-  // version still migrated (v20 -> v21 only); 21 -- and any malformed or
-  // unsupported marker -- is reported as current, so migrateGameEntry runs
-  // no legacy step and the current schema judges (rejects) it.
+  // Phase 10C/10D: the explicit marker is decisive. 20 and 21 are the earlier
+  // versions still migrated; 22 -- and any malformed or unsupported marker --
+  // is reported as current, so migrateGameEntry runs no legacy step and the
+  // current schema judges (rejects) it.
   if (hasOwnKey(game, "gameSchemaVersion")) {
-    return game.gameSchemaVersion === PREVIOUS_GAME_SCHEMA_VERSION ? PREVIOUS_GAME_SCHEMA_VERSION : GAME_SCHEMA_VERSION;
+    const marker = game.gameSchemaVersion;
+    return MIGRATABLE_GAME_SCHEMA_VERSIONS.find((version) => version === marker) ?? GAME_SCHEMA_VERSION;
   }
-  if (hasV21Evidence(game)) return GAME_SCHEMA_VERSION;
+  // v22 evidence first: it must never be claimed by an older heuristic
+  // (a Role correction's `correction` key is also v19 Life evidence, and a
+  // Role `resolutionId` is also v20 evidence).
+  if (hasV22Evidence(game) || hasV21Evidence(game)) return GAME_SCHEMA_VERSION;
   if (hasV20Evidence(game)) return 20;
   if (hasV19LifeEvidence(game)) return 19;
   if (hasV17IdentityEvidence(game)) return 17;
@@ -845,4 +893,25 @@ export function hasV21Evidence(game: Record<string, unknown>): boolean {
   return someEntry(game.history, (h) => hasOwnKey(h, "reminderOperation") ||
     (isObject(h) && h.category === "reminder" &&
       (hasOwnKey(h, "correction") || hasOwnKey(h, "resolutionId") || snapshotCue(h.change))));
+}
+
+/**
+ * Phase 10D: true when a game-shaped entry carries ANY v22-only evidence --
+ * PRESENCE, not validity. Phase 10D added no stored field to Current State, so
+ * the narrow, reliable evidence is on Role History, which a v21 writer never
+ * annotated:
+ *
+ *  - a "role" History Record's `correction`     (a Role correction)
+ *  - a "role" History Record's `resolutionId`   (a correlated Role resolution)
+ *
+ * Under an older marker (20/21) such evidence means malformed current-version
+ * data: it is never migrated, repaired or stamped, and the v22 schema rejects
+ * the entry. Marker-less, it is likewise never treated as legacy. The check is
+ * deliberately category-scoped: `correction` on a life/effect/reminder record
+ * and `resolutionId` on an effect/reminder record are older, legitimate
+ * evidence handled by their own detectors.
+ */
+export function hasV22Evidence(game: Record<string, unknown>): boolean {
+  return someEntry(game.history, (h) => isObject(h) && h.category === "role" &&
+    (hasOwnKey(h, "correction") || hasOwnKey(h, "resolutionId")));
 }

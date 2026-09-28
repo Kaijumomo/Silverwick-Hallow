@@ -7,7 +7,7 @@ import { requireActiveSession } from "./lifecycle";
 import { SessionWriter } from "./writer";
 import { useSessionRuntime } from "./storytellerSync";
 import { useApplyTravelerChoices } from "./StorytellerSession";
-import { rosterEntryPath } from "./paths";
+import { rosterEntryPath, rosterParticipantPath } from "./paths";
 import { travelerChoicePath } from "./lifecycle";
 
 // Phase 9 Setup finalization B4: the player-side Traveler character choice
@@ -33,6 +33,16 @@ function resetStores() {
 beforeEach(resetStores);
 afterEach(() => { cleanup(); resetStores(); });
 
+// Phase 10D: the choice is applied to the participation the AUTHORITATIVE
+// roster record names (rosterParticipants/{uid}, written with the binding in
+// production), and only when the local occupant is that participant.
+async function bindRoster(b: MemoryRoomBackend, playerId: string, participantId?: string) {
+  await b.set(rosterEntryPath(code, "uid-alice"), playerId);
+  await b.set(rosterParticipantPath(code, "uid-alice"), {
+    playerId, participantId: participantId ?? useStorytellerStore.getState().game!.players[playerId]!.participantId!, name: "Alice",
+  });
+}
+
 // Mirrors firebase/travelers.test.ts's own setup: a real fenced SessionWriter
 // over a MemoryRoomBackend, claimed the same way production code claims one.
 async function withWriter() {
@@ -51,14 +61,14 @@ describe("useApplyTravelerChoices", () => {
     for (let i = 0; i < n; i++) useStorytellerStore.getState().addPlayer("Extra " + i);
   }
 
-  it("applies an observed choice via assignRole and clears the request, through the fenced writer authority", async () => {
+  it("applies an observed choice through the Role seam and clears the request, through the fenced writer authority", async () => {
     const { b, writer } = await withWriter();
     useStorytellerStore.getState().newGame("tb", { plannedPlayerCount: 1 });
     const playerId = useStorytellerStore.getState().game!.seatOrder[0]!;
     useStorytellerStore.getState().addPlayerToSeat("Alice");
     seedExtraOrdinary(5);
     expect(useStorytellerStore.getState().setIsTraveler(playerId, true).ok).toBe(true);
-    await b.set(rosterEntryPath(code, "uid-alice"), playerId);
+    await bindRoster(b, playerId);
     useSessionRuntime.setState({ backend: writer, travelerChoices: { "uid-alice": { playerId, roleId: "thief" } } });
 
     renderHook(() => useApplyTravelerChoices(code));
@@ -72,7 +82,7 @@ describe("useApplyTravelerChoices", () => {
     useStorytellerStore.getState().newGame("tb", { plannedPlayerCount: 1 });
     const playerId = useStorytellerStore.getState().game!.seatOrder[0]!;
     useStorytellerStore.getState().addPlayerToSeat("Alice"); // ordinary, never marked Traveler
-    await b.set(rosterEntryPath(code, "uid-alice"), playerId);
+    await bindRoster(b, playerId);
     useSessionRuntime.setState({ backend: writer, travelerChoices: { "uid-alice": { playerId, roleId: "thief" } } });
 
     renderHook(() => useApplyTravelerChoices(code));
@@ -90,7 +100,7 @@ describe("useApplyTravelerChoices", () => {
     expect(useStorytellerStore.getState().setIsTraveler(playerId, true).ok).toBe(true);
     // Storyteller assigns Gunslinger before the pending Thief request is processed.
     useStorytellerStore.getState().assignRole(playerId, "gunslinger");
-    await b.set(rosterEntryPath(code, "uid-alice"), playerId);
+    await bindRoster(b, playerId);
     useSessionRuntime.setState({ backend: writer, travelerChoices: { "uid-alice": { playerId, roleId: "thief" } } });
 
     renderHook(() => useApplyTravelerChoices(code));
@@ -98,6 +108,25 @@ describe("useApplyTravelerChoices", () => {
     await waitFor(async () => expect(await b.get(travelerChoicePath(code, "uid-alice"))).toBeUndefined());
     // Gunslinger remains -- the stale Thief request never overwrote it.
     expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("gunslinger");
+  });
+
+  it("Phase 10D: a request whose roster record names a different participation than the local occupant is cleared, never applied", async () => {
+    const { b, writer } = await withWriter();
+    useStorytellerStore.getState().newGame("tb", { plannedPlayerCount: 1 });
+    const playerId = useStorytellerStore.getState().game!.seatOrder[0]!;
+    useStorytellerStore.getState().addPlayerToSeat("Alice");
+    seedExtraOrdinary(5);
+    expect(useStorytellerStore.getState().setIsTraveler(playerId, true).ok).toBe(true);
+    await bindRoster(b, playerId, "pt-an-earlier-participation");
+    useSessionRuntime.setState({ backend: writer, travelerChoices: { "uid-alice": { playerId, roleId: "thief" } } });
+
+    renderHook(() => useApplyTravelerChoices(code));
+
+    await waitFor(async () => expect(await b.get(travelerChoicePath(code, "uid-alice"))).toBeUndefined());
+    expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("");
+    // One replay would have applied it; give any straggler a turn.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("");
   });
 
   it("skips unresolved requests without throwing", () => {
@@ -127,7 +156,7 @@ describe("useApplyTravelerChoices", () => {
     seedExtraOrdinary(5);
     expect(useStorytellerStore.getState().setIsTraveler(playerId, true).ok).toBe(true);
     const b = new MemoryRoomBackend();
-    await b.set(rosterEntryPath(code, "uid-alice"), playerId);
+    await bindRoster(b, playerId);
     // A minimal fenced-shaped backend whose remote write fails (e.g. a
     // network error deep inside an otherwise-valid, still-fenced writer) --
     // this must be caught and reported, never an unhandled rejection, and

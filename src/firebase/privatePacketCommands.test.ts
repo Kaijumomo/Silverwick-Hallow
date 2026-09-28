@@ -11,6 +11,7 @@ import { startPlayerHandshake } from "./playerSync";
 import { previewPrivatePacket } from "@/stores/privatePackets";
 import { buildRegistry } from "@/data/roleRegistry";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
+import { roles } from "@/test/fixtures";
 import { publishPrivatePacket } from "./privatePacketCommands";
 import { packetKey, usePacketDeliveryState } from "./packetDeliveryState";
 import { revokePlayerAndCommit, storytellerOccupancyCompletion } from "./membershipCommands";
@@ -18,6 +19,10 @@ import { revokePlayerAndCommit, storytellerOccupancyCompletion } from "./members
 const code = "BCDF2345";
 const root = `lobbies/${code}`;
 const disposals: (() => void | Promise<void>)[] = [];
+// Phase 10D: an ordinary Role (Actual or Shown) must resolve on the game's own
+// script, so these deceptive-perception scenarios play on Trouble Brewing plus
+// the Marionette and Lunatic fixtures.
+const scriptWithDeceivers = { ...troubleBrewing, id: "tbx", characters: [...troubleBrewing.characters, roles.marionette!, roles.lunatic!] };
 beforeEach(() => {
   store.setState({ game: null, lobby: null, undoStack: [], sync: null, localSeq: 0 });
   usePlayerStore.getState().reset();
@@ -30,7 +35,8 @@ async function setup(managed = false) {
   const b = new MemoryRoomBackend();
   await createLobby(b, "host", { codeGenerator: () => code });
   const session = await requireActiveSession(b, code);
-  store.getState().newGame("tb");
+  store.setState({ customScripts: { tbx: scriptWithDeceivers } });
+  store.getState().newGame("tbx");
   store.getState().addPlayer("Alice");
   store.getState().addPlayer("Bob");
   const [id, other] = store.getState().game!.seatOrder as [string, string];

@@ -12,9 +12,9 @@ import { JINXES, jinxBetween } from "./jinxes";
 
 const shipped = [...Object.values(BUILTIN_SCRIPTS).flatMap(s => s.characters), ...EXPERIMENTAL_CHARACTERS, ...TRAVELERS, ...FABLED, ...LORICS];
 describe("canonical publisher asset adapter", () => {
-  it("all 172 existing bundled records are verified and runtime valid, without changing roster membership", () => {
-    expect(shipped).toHaveLength(172);
-    expect(new Set(shipped.map(r => r.id)).size).toBe(172);
+  it("all 173 existing bundled records are verified and runtime valid, without changing roster membership", () => {
+    expect(shipped).toHaveLength(173);
+    expect(new Set(shipped.map(r => r.id)).size).toBe(173);
     for (const r of shipped) {
       expect(RoleDefSchema.safeParse(r).success, r.id).toBe(true);
       expect(isCanonicalRole(r), r.id).toBe(true);

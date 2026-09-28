@@ -3,7 +3,7 @@ import { useStorytellerStore } from "@/stores/storytellerStore";
 import { connectFirebase } from "./session";
 import type { RoomBackend } from "./backend";
 import { classifyStorytellerError, lifecycleMessage } from "./lifecycle";
-import { applyTravelerChoice } from "./membershipCommands";
+import { applyTravelerChoice, commitTravelerChoiceLocally } from "./membershipCommands";
 import { closeMultiplayerSession, initialConnectionStatus, leaveMultiplayerOffline, reportRuntimeError, retryStorytellerSession, scopeKey, useSessionRuntime, useStorytellerSync } from "./storytellerSync";
 
 export function StorytellerSession() {
@@ -130,10 +130,14 @@ export function ConnectionStatus() {
  * once selected, the choice is public immediately -- it does not wait for
  * the Storyteller to click anything, matching "player chooses Traveller
  * character" with no separate approval step. This applies each observed
- * choice through the exact same assignRole() command the Storyteller's own
- * manual Traveler override uses (never a second mutation path), and the
+ * choice through the Role seam (resolveRoles) the Storyteller's own manual
+ * Traveler override uses (never a second mutation path), and the
  * Storyteller's override remains fully available afterward: applying a
- * choice is just another assignRole() call, not a lock. Independent of
+ * choice is just another Role change, not a lock. Phase 10D: it is bound to
+ * the participation instance the authoritative roster record names
+ * (ParticipantId stays Storyteller-private -- the player-written request
+ * carries only a character), so a request from an earlier participation can
+ * never apply to a replacement. Independent of
  * which screen is visible, matching useStorytellerSync's own scope.
  *
  * Precedence (Phase 9 Setup finalization B4 revision): a current
@@ -166,15 +170,8 @@ export function useApplyTravelerChoices(code: string | undefined) {
     if (!writer || !code) return;
     for (const [uid, { playerId, roleId }] of Object.entries(travelerChoices)) {
       if (!playerId) continue; // unresolved for now; retried once the roster resolves it
-      applyTravelerChoice(writer, code, uid, roleId, (id, role) => {
-        const p = useStorytellerStore.getState().game?.players[id];
-        // Re-check eligibility against the freshly-resolved player: only an
-        // unassigned Traveler seat ever adopts the pending choice. A seat
-        // that already carries a character -- a Storyteller override, or
-        // this exact choice already applied -- keeps it; the request is
-        // stale/superseded and is cleared without changing the role.
-        if (p?.isTraveler && !p.actualRole) useStorytellerStore.getState().assignRole(id, role);
-      }).catch(error => reportRuntimeError("traveler-choice", lifecycleMessage(error)));
+      applyTravelerChoice(writer, code, uid, roleId, commitTravelerChoiceLocally)
+        .catch(error => reportRuntimeError("traveler-choice", lifecycleMessage(error)));
     }
   }, [writer, code, travelerChoices]);
 }

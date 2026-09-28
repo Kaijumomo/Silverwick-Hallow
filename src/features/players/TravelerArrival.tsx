@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { buildRegistry } from "@/data/roleRegistry";
+import { isInitialRevealComplete } from "@/stores/identity";
 import { TRAVELERS } from "@/data/travelers";
 import { selectScriptById, useStorytellerStore } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
@@ -8,6 +10,7 @@ import { PlayerInformation } from "./PlayerInformation";
 export function TravelerArrival({ playerId, compact = false }: { playerId: string; compact?: boolean }) {
   const state = useStorytellerStore();
   const hidden = usePrivacyStore(s => s.enabled);
+  const [roleError, setRoleError] = useState<string | null>(null);
   const game = state.game;
   const p = game?.players[playerId];
   const script = game && selectScriptById(state, game.scriptId);
@@ -21,11 +24,21 @@ export function TravelerArrival({ playerId, compact = false }: { playerId: strin
     <h3 className="drawer-section-title">{compact ? `${p.name} · Traveler` : "Traveler arrival"}</h3>
     {compact ? <button className="btn btn-sm" onClick={() => state.selectPlayer(playerId)}>Edit Traveler</button> : <>
       <label className="information-input">Public character
-        <select className="select" value={role?.id ?? ""} onChange={e => state.assignRole(playerId, e.target.value)}>
-          <option value="">Choose Traveler</option>
+        <select className="select" value={role?.id ?? ""} onChange={e => {
+          if (!e.target.value) return;
+          // Phase 10D: through the Role seam. Between the initial Reveal and
+          // Night 1 the committed starting assignment can only be CORRECTED;
+          // assigning a Traveler's first character (or any later change) is an
+          // ordinary Role change.
+          const committedSetup = game.phase === "setup" && isInitialRevealComplete(game) && !!p.actualRole;
+          const result = committedSetup ? state.correctRole(playerId, e.target.value) : state.assignRole(playerId, e.target.value);
+          setRoleError(result.ok ? null : result.message);
+        }}>
+          <option value="" disabled>Choose Traveler</option>
           {TRAVELERS.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
       </label>
+      {roleError && <p role="alert" className="field-error">{roleError}</p>}
       <div className="drawer-row" role="group" aria-label="Actual Traveler alignment (Storyteller private)">
         <span>Actual alignment</span>
         {(["good", "evil"] as const).map(alignment => <button key={alignment} className="toggle-pill"

@@ -20,8 +20,9 @@ Three separate things. Never merge them, and never derive one from another.
 | **Information Delivery** | Storyteller-private record of information actually communicated to a player. Recording one is not a Mutation of Current State. | `game.informationDeliveries` (`src/stores/informationDelivery.ts`) |
 
 A **History Record** has a `category`: `"role"`, `"alignment"`, `"life"`,
-`"effect"` or `"reminder"`. `"role"` means a change to an Actual Role. (Store
-v17 called it `"identity"`; the v18 migration renames it.)
+`"effect"` or `"reminder"`. `"role"` means a change to an Actual Role -- only
+ever an Actual Role (perception changes are not History). (Store v17 called it
+`"identity"`; the v18 migration renames it.)
 
 ## 3. Mutation
 
@@ -36,8 +37,9 @@ A Storyteller-owned store command (`useStorytellerStore`, in
 changes.
 
 - Some commands are **History-eligible**. During Live Play they append their
-  own History through `recordIfLive()`. Examples: `assignRole`,
-  `setActualAlignment`, every Life command (`resolveLife` and its wrappers,
+  own History through `recordIfLive()` (or, for the seams below, through their
+  planner). Examples: `setActualAlignment`, every Role command (`resolveRoles`
+  and its wrappers, see §9a), every Life command (`resolveLife` and its wrappers,
   see §12), every Effect command (`resolveEffects` and its wrappers, see §13)
   and every Reminder command (`resolveReminders` and its wrappers, see §14).
 - Other commands change Current State without producing a History Record. An
@@ -84,7 +86,42 @@ Play" is only a name covering `"night"` and `"day"`; it is never stored.
   means unrevealed.
 
 Truth never automatically becomes perception. Changing an Actual Role
-preserves the Shown Role (except where a command explicitly says otherwise).
+preserves the Shown Role (except where a command explicitly says otherwise --
+see §9a for the Traveler exception and the explicit perception intent).
+
+## 9a. Role seam, Role Intent, Role Correction, Perception
+
+Actual Role, Traveler status and explicit perception change only through the
+**Role boundary** (`planRoleTransaction` / `applyRolePlan` in
+`src/stores/roleResolution.ts`, committed by the store's `resolveRoles`, store
+v22): a **Role Intent** is planned against Current State and committed as one
+game replacement (one Undo entry, one localSeq step) or refused with nothing
+changed. Character ability evaluation is not part of it.
+
+- **Role Intent** -- `changeActualRole`, `correctActualRole` or
+  `setPerception`, each bound to the participation instance (ParticipantId) and
+  to the state the caller observed; a moved binding or observed value is
+  `stale`. At most one Actual Role intent per ParticipantId per transaction.
+- **Role Change** (gameplay) -- a real character transition: resets
+  `abilityUsed`, preserves Actual Alignment, life state, Effects and Reminders,
+  clears the private draft and withdraws the published packet.
+- **Role Correction** -- repairs a wrongly recorded Actual Role / Traveler
+  status; preserves `abilityUsed`; its Live Play History carries
+  `correction: true`. A Traveler arrival correction is `preserve` (default) or
+  an explicit `restart`.
+- **Perception** (`setPerception`) -- Shown Role, Shown Alignment and optional
+  behavior mode as one explicit bundle. `shownAlignment: null` derives from the
+  Shown Role only. An identical bundle is a true no-op. A non-Traveler never
+  ends with a Traveler, Fabled or Loric Shown Role; a Traveler's Shown Role is
+  their own public character.
+- **Role type policy** -- an ordinary participant's Actual/Shown Role is a
+  townsfolk/outsider/minion/demon character of the current script; a Traveler's
+  character comes from the canonical Traveler catalogue.
+- **Role plan** -- partial-field patches only (never a whole player record), so
+  it composes with Life/Effect/Reminder plans on a working snapshot.
+
+Setup construction (Deal, Shuffle, Swap, Manual Override, Edit Bag, Traveler
+designation) stays Setup-specific and never becomes a live Role transition.
 
 ## 10. Actual Alignment vs Shown Alignment
 

@@ -463,6 +463,10 @@ const addSnapshotIssues = (
   }
 };
 
+/** Phase 10D (v22): the strict `from` / `to` snapshot of an Actual Role
+ * History change -- only the Actual Role, never perception. */
+const RoleHistorySnapshotSchema = z.object({ actualRole: z.string() }).strict();
+
 export const HistoryRecordSchema = z.object({
   id: z.string().min(1),
   category: HistoryCategorySchema,
@@ -489,10 +493,10 @@ export const HistoryRecordSchema = z.object({
     if (record.lifeEvent !== undefined) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only a life History Record mirrors Life Events", path: ["lifeEvent"] });
     }
-    // Phase 10B/10C: a correction is valid for "life", "effect" and
-    // "reminder" only.
-    if (record.correction !== undefined && record.category !== "effect" && record.category !== "reminder") {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only a life, effect or reminder History Record may be a correction", path: ["correction"] });
+    // Phase 10B/10C/10D: a correction is valid for "life", "effect",
+    // "reminder" and (v22) "role" only.
+    if (record.correction !== undefined && record.category !== "effect" && record.category !== "reminder" && record.category !== "role") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only a life, effect, reminder or role History Record may be a correction", path: ["correction"] });
     }
   } else if (record.change === undefined && record.lifeEvent === undefined) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a life History Record must carry a change or a Life Event", path: ["change"] });
@@ -506,8 +510,20 @@ export const HistoryRecordSchema = z.object({
   if (record.category !== "reminder" && record.reminderOperation !== undefined) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only a reminder History Record carries a Reminder operation", path: ["reminderOperation"] });
   }
-  if (record.resolutionId !== undefined && record.category !== "effect" && record.category !== "reminder") {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only an effect or reminder History Record carries a resolution id", path: ["resolutionId"] });
+  if (record.resolutionId !== undefined && record.category !== "effect" && record.category !== "reminder" && record.category !== "role") {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only an effect, reminder or role History Record carries a resolution id", path: ["resolutionId"] });
+  }
+  if (record.category === "role" && (record.correction !== undefined || record.resolutionId !== undefined)) {
+    // Phase 10D (v22): a role record carrying v22-only metadata is a
+    // NEW-shape Actual Role change: exactly `{ actualRole }` on each side.
+    // (Legacy role History has neither key and keeps its original, looser
+    // contract -- it is never rewritten into this shape.)
+    const change = record.change;
+    const strictSides = change?.kind === "value" &&
+      RoleHistorySnapshotSchema.safeParse(change.from).success && RoleHistorySnapshotSchema.safeParse(change.to).success;
+    if (!strictSides) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a role correction or correlated role record is a value change of exactly { actualRole }", path: ["change"] });
+    }
   }
   if (record.category === "reminder") {
     // Phase 10C: legacy (pre-v21) Reminder History has no operation, never a
@@ -740,11 +756,15 @@ export const NightStepRecordSchema = z.object({
 });
 
 /** Phase 10B: the current game snapshot schema version (see
- * StorytellerLobbyRecord.gameSchemaVersion). Phase 10C: v21. */
-export const GAME_SCHEMA_VERSION = 21 as const;
-/** Phase 10C: the one earlier explicit marker migration still accepts
- * (v20 -> v21 only; see migrateGameEntry). */
-export const PREVIOUS_GAME_SCHEMA_VERSION = 20 as const;
+ * StorytellerLobbyRecord.gameSchemaVersion). Phase 10C: v21. Phase 10D: v22. */
+export const GAME_SCHEMA_VERSION = 22 as const;
+/** Phase 10D: the explicit markers migration still accepts, routed PER ENTRY
+ * (see migrateGameEntry): 20 receives v20 -> v21 -> v22, 21 receives v21 ->
+ * v22 (a stamp), 22 is current and receives nothing. Any other marker is
+ * never reinterpreted as legacy -- the current schema rejects it. */
+export const MIGRATABLE_GAME_SCHEMA_VERSIONS = [20, 21] as const;
+/** The immediately previous explicit marker (v21 -> v22). */
+export const PREVIOUS_GAME_SCHEMA_VERSION = 21 as const;
 
 export const StorytellerLobbyRecordSchema = z.object({
   // Phase 10B (v20) / 10C (v21): required explicit version evidence, NO

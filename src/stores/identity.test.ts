@@ -14,7 +14,10 @@ const cases = [
 ] as const;
 beforeEach(() => store.setState({ game: null, lobby: null, undoStack: [] }));
 function seated() {
-  store.getState().newGame("tb");
+  // Phase 10D: an ordinary Role (Actual or Shown) must resolve on the game's
+  // own script, so the perception fixtures play on a script that carries them.
+  store.setState({ customScripts: { audit: { ...tbScript, id: "audit" } } });
+  store.getState().newGame("audit");
   store.getState().addPlayer("Alice");
   const id = store.getState().game!.seatOrder[0]!;
   return { id, current: () => store.getState().game!.players[id]! };
@@ -125,7 +128,7 @@ describe("AUD-004 identity boundary", () => {
     expect(projectToSelf(current(), registry)).toBeNull();
   });
 
-  it.each(["clear", "traveler"] as const)("%s resets identity and private packets", action => {
+  it("Setup Traveler designation resets identity and private packets", () => {
     const { id, current } = seated();
     store.getState().assignRole(id, "imp");
     store.getState().showAssignedRole(id);
@@ -133,13 +136,26 @@ describe("AUD-004 identity boundary", () => {
     // Phase 9 Setup finalization B4 revision: setIsTraveler refuses ordinary
     // -> Traveler once occupied ordinary would drop below 5 -- seed enough
     // extra ordinary players first (unrelated to this test's actual focus).
-    if (action === "traveler") for (let i = 0; i < 5; i++) store.getState().addPlayer("Extra " + i);
-    if (action === "clear") store.getState().assignRole(id, "");
-    else expect(store.getState().setIsTraveler(id, true).ok).toBe(true);
+    for (let i = 0; i < 5; i++) store.getState().addPlayer("Extra " + i);
+    expect(store.getState().setIsTraveler(id, true).ok).toBe(true);
     expect(current().shownRole).toBeNull();
     expect(current().shownAlignment).toBeNull();
     expect(current().privateInfo).toBeUndefined();
     expect(projectToSelf(current(), registry)).toBeNull();
+  });
+
+  it("Phase 10D: an ordinary Role can no longer be cleared -- 'Clear role' is refused and changes nothing", () => {
+    const { id, current } = seated();
+    store.getState().assignRole(id, "imp");
+    store.getState().showAssignedRole(id);
+    store.getState().setBluffs(id, ["saint"]);
+    const before = current();
+    const result = store.getState().assignRole(id, "");
+    expect(result.ok).toBe(false);
+    expect(current()).toBe(before);
+    expect(current().actualRole).toBe("imp");
+    expect(current().shownRole).toBe("imp");
+    expect(current().privateInfo).toEqual({ bluffs: ["saint"] });
   });
 
   it("serialized checkpoints preserve shown identity without initializing missing perception", () => {

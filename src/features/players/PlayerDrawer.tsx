@@ -5,6 +5,9 @@ import { TRAVELERS } from "@/data/travelers";
 import { isInitialRevealComplete, needsShownIdentity, shownRoleFilter } from "@/stores/identity";
 import { canRefineSetup } from "@/features/setup/setupRefinement";
 import { PlayerInformation, commitExtraTextDraft } from "./PlayerInformation";
+import { changeRoleIntent, correctRoleIntent, ordinaryRoleChoices, setPerceptionIntent } from "@/stores/roleResolution";
+import type { RoleIntent } from "@/stores/roleResolution";
+import { identityNeedsCheck } from "@/stores/projections";
 import { TravelerArrival } from "./TravelerArrival";
 import { publicTravelerRole } from "@/stores/travelers";
 import { getPrivateInfoApplicability } from "@/stores/privatePackets";
@@ -166,13 +169,9 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   const renamePlayer = useStorytellerStore((s) => s.renamePlayer);
   const removePlayer = useStorytellerStore((s) => s.removePlayer);
   const movePlayer = useStorytellerStore((s) => s.movePlayer);
-  const assignRole = useStorytellerStore((s) => s.assignRole);
+  const resolveRoles = useStorytellerStore((s) => s.resolveRoles);
   const replaceSetupRole = useStorytellerStore((s) => s.replaceSetupRole);
   const swapSetupRoles = useStorytellerStore((s) => s.swapSetupRoles);
-  const showAssignedRole = useStorytellerStore((s) => s.showAssignedRole);
-  const setShownRole = useStorytellerStore((s) => s.setShownRole);
-  const setShownAlignment = useStorytellerStore((s) => s.setShownAlignment);
-  const setBehaviorMode = useStorytellerStore((s) => s.setBehaviorMode);
   const setBluffs = useStorytellerStore((s) => s.setBluffs);
   const setFakeMinions = useStorytellerStore((s) => s.setFakeMinions);
   const setIsTraveler = useStorytellerStore((s) => s.setIsTraveler);
@@ -182,6 +181,15 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
 
   const [nameDraft, setNameDraft] = useState(player.name);
   const [refinementError, setRefinementError] = useState<string | null>(null);
+  const [roleError, setRoleError] = useState<string | null>(null);
+  const [perceptionError, setPerceptionError] = useState<string | null>(null);
+  // Optional, per change: also show the player the new character in the same
+  // atomic resolution (never assumed -- a concealed character needs the
+  // Storyteller's own choice of what is shown).
+  const [alsoShowNewRole, setAlsoShowNewRole] = useState(false);
+  // The advanced correction disclosure renders its picker only while open, so
+  // a closed disclosure adds no controls to the drawer.
+  const [correctionOpen, setCorrectionOpen] = useState(false);
   const [travelerStatusError, setTravelerStatusError] = useState<string | null>(null);
   const [membershipBusy, setMembershipBusy] = useState(false);
   const [membershipError, setMembershipError] = useState<string | null>(null);
@@ -199,6 +207,16 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   );
   const registry = useMemo(() => script ? buildRegistry(script) : null, [script]);
   const applicability = registry ? getPrivateInfoApplicability(player, registry) : null;
+  // Phase 10D: every Role/perception change goes through the one Role seam,
+  // bound to the participation instance and observed state this drawer
+  // RENDERED (never re-read at click time), so a seat that changed in between
+  // is refused as stale rather than overwritten. A refusal's message (which
+  // never names a character) is shown inline.
+  const runRoles = (intents: RoleIntent[], report: (message: string | null) => void = setRoleError) => {
+    const result = resolveRoles({ intents });
+    report(result.ok ? null : result.message);
+    return result.ok;
+  };
   // Pre-Reveal Setup administration window: while it applies, the actual-role
   // picker routes through the Setup-specific override (fresh identity reset)
   // instead of the generic assignRole() (which deliberately preserves shown
@@ -280,8 +298,11 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
     return ref ? deriveAlignment(ref) : "—";
   })();
 
-  // Role pool for the main "Actual role" picker.
-  const rolePool = player.isTraveler ? TRAVELERS : script.characters;
+  // Role pool for the main "Actual role" picker: only what the Role seam will
+  // accept -- an ordinary participant's Townsfolk/Outsider/Minion/Demon of this
+  // script, or a Traveler's canonical characters. Never Fabled or Loric.
+  const rolePool = player.isTraveler ? TRAVELERS : ordinaryRoleChoices(script);
+  const perceptionNeedsCheck = !!registry && identityNeedsCheck(player, registry);
 
   // Phase 9 Setup finalization (FINAL SETUP INTEGRATION REVISION, Section
   // 2): Reveal is a hard starting-setup commitment boundary. Between a
@@ -405,40 +426,47 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
               <p className="behavior-help">No role assigned yet.</p>
             )}
             {committedReadOnly ? (
-              <p className="behavior-help">Roles are revealed; the starting ordinary assignment is locked until Night 1 begins.</p>
+              <p className="behavior-help">Roles are revealed; the starting ordinary assignment is locked until Night 1 begins. Use a correction to repair it.</p>
             ) : <>
               <RolePickerGrid
                 roles={rolePool}
                 selectedRoleId={player.actualRole || null}
                 onPick={(id) => {
                   setRefinementError(null);
+                  setRoleError(null);
                   if (refinementAvailable) {
                     const result = replaceSetupRole(player.id, id);
                     if (!result.ok) setRefinementError(result.message);
                   } else {
-                    assignRole(player.id, id);
+                    runRoles([
+                      changeRoleIntent(player, id),
+                      ...(alsoShowNewRole && !needsShownIdentity(id)
+                        ? [setPerceptionIntent(player, { shownRole: id, shownAlignment: null })] : []),
+                    ]);
                   }
                 }}
               />
               <p className="behavior-help">
                 {refinementAvailable
                   ? "Setup refinement: changing the actual role resets this player's shown identity for the new assignment."
-                  : "Assigning an actual role keeps the player's shown identity unchanged."}
+                  : "Changing the actual role keeps the player's shown identity unchanged unless you also show the new role."}
               </p>
+              {!refinementAvailable && (
+                <label className="drawer-row">
+                  <input type="checkbox" checked={alsoShowNewRole} onChange={(e) => setAlsoShowNewRole(e.target.checked)} />
+                  <span>Also show the player the new role</span>
+                </label>
+              )}
               {displayRole && !needsShownIdentity(player.actualRole) && (
-                <button className="btn btn-sm" onClick={() => showAssignedRole(player.id)}>
+                <button className="btn btn-sm" onClick={() => {
+                  setRoleError(null);
+                  runRoles([setPerceptionIntent(player, {
+                    shownRole: player.actualRole,
+                    shownAlignment: player.shownRole === player.actualRole ? player.shownAlignment : null,
+                  })]);
+                }}>
                   Show assigned role
                 </button>
-              )}
-              {displayRole && (
-                <div className="drawer-row">
-                  <button
-                    className="btn btn-sm btn-danger"
-                    onClick={() => assignRole(player.id, "")}
-                  >
-                    Clear role
-                  </button>
-                </div>
               )}
               {refinementAvailable && otherOrdinaryPlayers.length > 0 && (
                 <div className="drawer-row">
@@ -465,6 +493,24 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
               )}
               {refinementError && <p role="alert" className="field-error">{refinementError}</p>}
             </>}
+            {/* Advanced, progressively disclosed: a CORRECTION repairs a
+                wrongly recorded Role. It is not a gameplay character change:
+                the ability-used marker stays as it is and History marks it. */}
+            {(game.phase !== "setup" || committedReadOnly) && (
+              <details className="drawer-advanced" open={correctionOpen}
+                onToggle={(e) => setCorrectionOpen((e.currentTarget as HTMLDetailsElement).open)}>
+                <summary>Correct the recorded role…</summary>
+                {correctionOpen && <>
+                  <RolePickerGrid
+                    roles={rolePool}
+                    selectedRoleId={player.actualRole || null}
+                    onPick={(id) => { setRoleError(null); runRoles([correctRoleIntent(player, id)]); }}
+                  />
+                  <p className="behavior-help">Use this when the recorded role was wrong. It is not a character change: ability used stays, and History shows a correction.</p>
+                </>}
+              </details>
+            )}
+            {roleError && <p role="alert" className="field-error">{roleError}</p>}
           </section>}
 
           {displayRole && !player.isTraveler && (
@@ -478,9 +524,12 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
                   id="behavior-mode"
                   className="select"
                   value={player.behaviorMode}
-                  onChange={(e) =>
-                    setBehaviorMode(player.id, e.target.value as BehaviorMode)
-                  }
+                  onChange={(e) => {
+                    runRoles([setPerceptionIntent(player, {
+                      shownRole: player.shownRole, shownAlignment: player.shownAlignment,
+                      behaviorMode: e.target.value as BehaviorMode,
+                    })], setPerceptionError);
+                  }}
                 >
                   {BEHAVIOR_MODES.map((m) => (
                     <option key={m.value} value={m.value}>
@@ -505,16 +554,25 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
                 {shownRoleDef && (
                   <button
                     className="btn btn-sm btn-danger"
-                    onClick={() => setShownRole(player.id, null)}
+                    onClick={() => {
+                      runRoles([setPerceptionIntent(player, { shownRole: null, shownAlignment: null })], setPerceptionError);
+                    }}
                   >
                     clear
                   </button>
                 )}
               </div>
               <RolePickerGrid
-                roles={rolePool}
+                roles={ordinaryRoleChoices(script)}
                 selectedRoleId={player.shownRole}
-                onPick={(id) => setShownRole(player.id, id)}
+                onPick={(id) => {
+                  // Re-selecting the identical shown role changes nothing; a
+                  // different one derives its alignment unless chosen below.
+                  runRoles([setPerceptionIntent(player, {
+                    shownRole: id,
+                    shownAlignment: id === player.shownRole ? player.shownAlignment : null,
+                  })], setPerceptionError);
+                }}
                 filter={shownRoleFilter(player.behaviorMode)}
               />
               <p className="behavior-help">Choosing a shown role sends that identity when connected. Clearing it returns the player to waiting. Previously delivered information cannot be unseen.</p>
@@ -524,25 +582,37 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
                 <button
                   className="toggle-pill"
                   aria-pressed={player.shownAlignment === null}
-                  onClick={() => setShownAlignment(player.id, null)}
+                  onClick={() => {
+                    runRoles([setPerceptionIntent(player, { shownRole: player.shownRole, shownAlignment: null })], setPerceptionError);
+                  }}
                 >
                   auto ({effectiveAlignment})
                 </button>
                 <button
                   className="toggle-pill"
                   aria-pressed={player.shownAlignment === "good"}
-                  onClick={() => setShownAlignment(player.id, "good")}
+                  onClick={() => {
+                    runRoles([setPerceptionIntent(player, { shownRole: player.shownRole, shownAlignment: "good" })], setPerceptionError);
+                  }}
                 >
                   good
                 </button>
                 <button
                   className="toggle-pill"
                   aria-pressed={player.shownAlignment === "evil"}
-                  onClick={() => setShownAlignment(player.id, "evil")}
+                  onClick={() => {
+                    runRoles([setPerceptionIntent(player, { shownRole: player.shownRole, shownAlignment: "evil" })], setPerceptionError);
+                  }}
                 >
                   evil
                 </button>
               </div>
+              {perceptionNeedsCheck && (
+                <p role="alert" className="field-error">
+                  <strong>Needs check:</strong> the shown character cannot be sent to this player. Choose what they are shown.
+                </p>
+              )}
+              {perceptionError && <p role="alert" className="field-error">{perceptionError}</p>}
             </section>
           )}
 

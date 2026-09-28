@@ -57,7 +57,11 @@ describe("Phase 9B Traveler identity and population", () => {
   it("changes and clears public Traveler identity coherently", () => {
     traveler(); store.getState().assignRole("t", "bureaucrat");
     expect(projectToPublic(p(), true).publicDisplayRole).toBe("bureaucrat");
-    store.getState().assignRole("t", ""); expect(projectToPublic(p(), true)).not.toHaveProperty("publicDisplayRole");
+    // Phase 10D: a gameplay change never blanks a Role; reopening a Traveler's
+    // character as unassigned is an explicit correction.
+    expect(store.getState().assignRole("t", "").ok).toBe(false);
+    expect(store.getState().correctRole("t", "").ok).toBe(true);
+    expect(projectToPublic(p(), true)).not.toHaveProperty("publicDisplayRole");
     store.getState().setIsTraveler("t", false); expect(p()).not.toHaveProperty("actualAlignment");
   });
   it.each(["setup", "day", "night"] as const)("arrival during %s preserves target, physical seating and phase", phase => {
@@ -192,13 +196,17 @@ describe("Phase 9B permitted Demon information", () => {
     expect(p().privateInfo).toBeUndefined(); expect(p().publishedPacket).toBeUndefined();
     expect(projectToSelf(p(), registry)).not.toHaveProperty("demon");
   });
-  it("showing alignment after Demon delivery reopens targeted delivery when the packet is withdrawn", () => {
+  it("Phase 10D: a real perception change withdraws the published packet but never silently reopens Traveler arrival", () => {
     traveler(); store.getState().setTravelerAlignment("t", "evil"); store.getState().prepareTravelerDemon("t");
     p().publishedPacket = { id: "sent", payload: previewPrivatePacket(p(), game(), registry).payload };
-    store.getState().completeTravelerInformation("t"); store.getState().setShownAlignment("t", "evil");
-    expect(p().travelerArrival!.demonInfoComplete).toBe(false);
+    store.getState().completeTravelerInformation("t");
+    expect(store.getState().setShownAlignment("t", "evil")).toEqual({ ok: true, changed: true });
+    // The packet is withdrawn, but packet invalidation cannot smuggle an
+    // arrival-state reset: the Storyteller's recorded completion stands.
+    expect(p().publishedPacket).toBeUndefined();
+    expect(p().travelerArrival!.demonInfoComplete).toBe(true);
+    // The prepared draft is intact and can be previewed again on demand.
     expect(previewPrivatePacket(p(), game(), registry).payload.demon).toBeDefined();
-    expect(travelerGuidance(p()).join(" ")).toMatch(/Demon information/);
   });
 });
 
@@ -212,7 +220,7 @@ describe("Phase 9B persistence", () => {
     const expected = JSON.parse(JSON.stringify(p()));
     expect(expected).toMatchObject({ alive: false, exiled: true });
     const saved = localStorage.getItem("new-blood-st")!;
-    expect(JSON.parse(saved).version).toBe(21);
+    expect(JSON.parse(saved).version).toBe(22);
     store.setState({ game: null }); localStorage.setItem("new-blood-st", saved);
     await store.persist.rehydrate(); expect(p()).toEqual(expected);
   });

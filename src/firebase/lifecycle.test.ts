@@ -9,26 +9,29 @@ import { applyJoinIntent, joinLobby, leaveLobby, startPlayerHandshake } from "./
 import { reportRuntimeError, startStorytellerSession, useSessionRuntime, useStorytellerSync } from "./storytellerSync";
 import { lifecycleMessage, requireActiveSession, retryTransient, sessionPath } from "./lifecycle";
 import { acceptLeaveRequest, rejectLeaveRequest, revokePlayerAndCommit, seatPlayerAndCommit, storytellerOccupancyCompletion } from "./membershipCommands";
+import { tbScript } from "@/test/fixtures";
 
 const code = "BCDF2345";
 const root = `lobbies/${code}`;
 const disposals: (() => void | Promise<void>)[] = [];
 beforeEach(() => {
-  useStorytellerStore.setState({ game: null, lobby: null, undoStack: [], sync: null, localSeq: 0 });
+  // Phase 10D: an ordinary Role must resolve on the game's own script; the
+  // perception scenarios below use a script that carries every fixture Role.
+  useStorytellerStore.setState({ game: null, lobby: null, undoStack: [], sync: null, localSeq: 0, customScripts: { audit: { ...tbScript, id: "audit" } } });
   usePlayerStore.getState().reset();
   useSessionRuntime.setState({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0 });
 });
 afterEach(async () => { cleanup(); for (const dispose of disposals.splice(0).reverse()) await dispose(); vi.useRealTimers(); });
-async function setup(b = new MemoryRoomBackend()) {
+async function setup(b = new MemoryRoomBackend(), scriptId = "tb") {
   await createLobby(b, "host", { codeGenerator: () => code });
   const session = await requireActiveSession(b, code);
-  useStorytellerStore.getState().newGame("tb", { plannedPlayerCount: 2 });
+  useStorytellerStore.getState().newGame(scriptId, { plannedPlayerCount: 2 });
   const lobby = { code, uid: "host", sessionId: session.id, status: "live" as const };
   useStorytellerStore.getState().setLobby(lobby);
   return { b, session, lobby };
 }
-async function host(b = new MemoryRoomBackend()) {
-  const ready = await setup(b);
+async function host(b = new MemoryRoomBackend(), scriptId = "tb") {
+  const ready = await setup(b, scriptId);
   const writer = new SessionWriter(b, code, ready.session.id);
   const manager = await startStorytellerSession(b, ready.lobby, writer);
   disposals.push(async () => { manager.stop(); await writer.dispose(); });
@@ -48,7 +51,7 @@ describe("multiplayer lifecycle", () => {
     ["marionette", "washerwoman", "good"],
     ["lunatic", "imp", "evil"],
   ])("AUD-004: %s perception survives retry, navigation, player refresh and host recovery", async (actual, shown, alignment) => {
-    const { b, writer, manager, lobby, session } = await host();
+    const { b, writer, manager, lobby, session } = await host(new MemoryRoomBackend(), "audit");
     await joinLobby(b, code, "alice", "Alice");
     const off = player(b);
     const id = await seat(writer);

@@ -68,12 +68,13 @@ describe("Section 2: Reveal is a hard starting-setup commitment boundary", () =>
 
   it("Begin Night 1 refuses when the committed ordinary composition is mutated invalid after Reveal (defense-in-depth)", () => {
     readyToRevealPlan(5);
-    // A future accidental UI escape: mutate the Demon away post-Reveal via
-    // the generic assignRole() (only legitimate once gameplay has begun --
-    // simulated directly here to prove the guard exists independent of when
-    // the mutation happened).
+    // Phase 10D: after Reveal a gameplay Role change is refused, but a
+    // Role CORRECTION of the committed starting assignment is allowed -- and
+    // may leave the composition invalid. Mutate the Demon away that way to
+    // prove the Night 1 guard exists independent of how the mutation happened.
     const impId = game().seatOrder.find(id => game().players[id]!.actualRole === "imp")!;
-    state().assignRole(impId, "chef");
+    expect(state().assignRole(impId, "chef")).toMatchObject({ ok: false, code: "phase" });
+    expect(state().correctRole(impId, "chef")).toEqual({ ok: true, changed: true });
     expect(state().beginNightOne().ok).toBe(false);
   });
 
@@ -807,11 +808,15 @@ describe("Phase 9R.3", () => {
       }
     });
 
-    it("D. contrast: in the same post-Reveal window assignRole still changes a player's actual Role and Reveal stays committed", () => {
+    it("D. contrast (Phase 10D): in the same post-Reveal window a gameplay assignRole is refused, while a Role correction changes the actual Role and Reveal stays committed", () => {
       revealedTable(5);
       const id = game().seatOrder.find(pid => game().players[pid]!.actualRole === "washerwoman")!;
       const seq = state().localSeq;
-      state().assignRole(id, "ravenkeeper");
+      const refused = state().assignRole(id, "ravenkeeper");
+      expect(refused).toMatchObject({ ok: false, code: "phase" });
+      expect(game().players[id]!.actualRole).toBe("washerwoman");
+      expect(state().localSeq).toBe(seq);
+      state().correctRole(id, "ravenkeeper");
       expect(game().players[id]!.actualRole).toBe("ravenkeeper");
       expect(game().setupRolesRevealed).toBe(true);
       expect(isInitialRevealComplete(game())).toBe(true);

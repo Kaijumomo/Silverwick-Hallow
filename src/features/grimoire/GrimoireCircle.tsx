@@ -12,6 +12,8 @@ import { isInitialRevealComplete } from "@/stores/identity";
 import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
 import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 import { effectsNeedingCheck } from "@/stores/effects";
+import { identityNeedsCheck } from "@/stores/projections";
+import { buildRegistry } from "@/data/roleRegistry";
 import { effectAccessibleSummary, effectIndicatorLabel, effectIndicators, type EffectIndicatorSummary } from "@/stores/effectRegistry";
 import { lifeAccessibleLabel, lifeStatusOf } from "@/stores/lifeState";
 import { LifeShroud, LifeStateText, VoteToken } from "@/features/life/LifeMarks";
@@ -157,16 +159,22 @@ function Token({
   // hidden with CSS). A legacy Effect with an unresolved lifetime is a
   // concise Storyteller-only "Needs check".
   const indicators = privacyMode ? [] : effectIndicators(player);
-  const needsCheck = !privacyMode && (life.anomalies.length > 0 || effectsNeedingCheck(player).length > 0);
+  const needsCheckBase = !privacyMode && (life.anomalies.length > 0 || effectsNeedingCheck(player).length > 0);
   const effectSummary = privacyMode ? "" : effectAccessibleSummary(player);
   // Phase 10C: Reminders are Storyteller-private notation -- under Privacy
   // Mode no chip, label, count, overflow, cleanup state or accessible text is
   // rendered at all (DOM absence, not CSS). Game is read here, not threaded,
   // because the derived cleanup status depends on the current moment.
   const game = useStorytellerStore((s) => s.game);
+  // Phase 10D: a Shown Role that cannot be projected safely is a
+  // Storyteller-private "Needs check" (never shown under Privacy Mode).
+  const script = useStorytellerStore((s) => (game ? selectScriptById(s, game.scriptId) : undefined));
+  const perceptionCheck = !privacyMode && !!script && identityNeedsCheck(player, buildRegistry(script));
   const reminderGroups = privacyMode || !game ? [] : reminderTokenGroups(player, game);
   const { shown: shownReminders, hiddenCount: hiddenReminders } = visibleReminderGroups(reminderGroups);
   const reminderSummary = privacyMode || !game ? "" : reminderAccessibleSummary(player, game);
+
+  const needsCheck = needsCheckBase || perceptionCheck;
 
   const classes = [
     "token",

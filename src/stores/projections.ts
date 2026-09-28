@@ -1,9 +1,10 @@
-import type { RoleRegistry } from "@/data/roleRegistry";
+import { deriveAlignment, type RoleRegistry } from "@/data/roleRegistry";
 import { PlayerSelfRecordSchema } from "./schemas";
 import { isInitialRevealComplete } from "./identity";
 import { publicTravelerRole } from "./travelers";
 import { publicLifeOf } from "./lifeState";
 import type {
+  Alignment,
   PlayerId,
   PlayerPublicRecord,
   PlayerSelfRecord,
@@ -12,15 +13,52 @@ import type {
   StorytellerLobbyRecord,
 } from "./types";
 
+/**
+ * Phase 10D: whether a participant's explicit perception can be projected
+ * safely. `ok`: nothing to check (or a usable identity); `unsafe`: a Shown Role
+ * is set but cannot be projected -- it does not resolve on this script/registry,
+ * is a Fabled or Loric, or is a Traveler character on a participant who is not
+ * a Traveler. An unsafe perception fails CLOSED per participant: it yields no
+ * self identity (never a fallback to the Actual Role or Alignment) and never
+ * throws, so one bad record cannot block the table's checkpoint or anyone
+ * else's public/self projection. It is a Storyteller-private "Needs check"
+ * (see identityNeedsCheck).
+ */
+type IdentityState =
+  | { kind: "none" }
+  | { kind: "unsafe" }
+  | { kind: "traveler"; shownRole: string }
+  | { kind: "ordinary"; shownRole: string; derived: Alignment };
+
+function identityState(p: STPlayerRecord, registry: RoleRegistry): IdentityState {
+  // No identity, alignment, or private packet is delivered until perception
+  // has been established explicitly. Never consult actualRole here.
+  if (p.isEmpty || !p.shownRole) return { kind: "none" };
+  const role = registry.get(p.shownRole);
+  if (!role) return { kind: "unsafe" };
+  if (role.type === "fabled" || role.type === "loric") return { kind: "unsafe" };
+  if (role.type === "traveler") {
+    // A Traveler character is a public character of a TRAVELER only. Shown
+    // to anyone else it would carry that participant's Actual Alignment
+    // through the Traveler branch below -- never delivered.
+    return p.isTraveler ? { kind: "traveler", shownRole: p.shownRole } : { kind: "unsafe" };
+  }
+  return { kind: "ordinary", shownRole: p.shownRole, derived: deriveAlignment(role) };
+}
+
+/** Storyteller-private: true when a Shown Role is set but unsafe to project
+ * ("Needs check"). Never rendered for players. */
+export function identityNeedsCheck(p: STPlayerRecord, registry: RoleRegistry): boolean {
+  return identityState(p, registry).kind === "unsafe";
+}
+
 export function projectIdentity(
   p: STPlayerRecord,
   registry: RoleRegistry
 ): PlayerSelfRecord | null {
-  // No identity, alignment, or private packet is delivered until perception
-  // has been established explicitly. Never consult actualRole here.
-  if (p.isEmpty || !p.shownRole) return null;
-  const shownRole = p.shownRole;
-  if (registry.get(shownRole)?.type === "traveler") {
+  const state = identityState(p, registry);
+  if (state.kind === "none" || state.kind === "unsafe") return null;
+  if (state.kind === "traveler") {
     // Phase 9 Setup finalization (FINAL SETUP INTEGRATION REVISION, Section
     // 7): normal Traveler alignment delivery is automatic and always
     // reflects the current actual alignment -- never a shownAlignment
@@ -29,10 +67,9 @@ export function projectIdentity(
     // needs a false perceived alignment belongs in its own explicit
     // mechanic, not this fallback.
     const alignment = p.actualAlignment;
-    return alignment ? { shownRole, shownAlignment: alignment } : { shownRole };
+    return alignment ? { shownRole: state.shownRole, shownAlignment: alignment } : { shownRole: state.shownRole };
   }
-  const shownAlignment = p.shownAlignment ?? registry.alignmentOf(shownRole);
-  return { shownRole, shownAlignment };
+  return { shownRole: state.shownRole, shownAlignment: p.shownAlignment ?? state.derived };
 }
 
 export function projectToSelf(p: STPlayerRecord, registry: RoleRegistry): PlayerSelfRecord | null {
@@ -41,7 +78,9 @@ export function projectToSelf(p: STPlayerRecord, registry: RoleRegistry): Player
   const packet = p.publishedPacket?.payload;
   if (!packet || packet.shownRole !== identity.shownRole || packet.shownAlignment !== identity.shownAlignment) return identity;
   // Reuse the same allowlist as preview. Neither drafts nor ST metadata cross.
-  return PlayerSelfRecordSchema.parse(packet);
+  // A malformed published packet falls back to the plain identity, never a throw.
+  const allowed = PlayerSelfRecordSchema.safeParse(packet);
+  return allowed.success ? allowed.data : identity;
 }
 
 export function projectToPublic(

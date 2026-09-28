@@ -766,11 +766,12 @@ export type NightStepRecord = {
 export type StorytellerLobbyRecord = {
   /** Phase 10B: explicit game snapshot schema version evidence. Every
    * authoritative game snapshot (Current State, each Undo snapshot, the
-   * remote checkpoint's game) carries it from v20 on. Phase 10C: the current
-   * version is 21; a snapshot marked 20 receives only the v20 -> v21 step,
-   * any other marker receives no migration at all -- malformed
-   * current-version data fails validation instead of being "repaired". */
-  gameSchemaVersion: 21;
+   * remote checkpoint's game) carries it from v20 on. Phase 10D: the current
+   * version is 22; a snapshot marked 20 receives v20 -> v21 -> v22, one marked
+   * 21 receives v21 -> v22 (a stamp), any other marker receives no migration
+   * at all -- malformed current-version data (including a marker older than
+   * the evidence it carries) fails validation instead of being "repaired". */
+  gameSchemaVersion: 22;
   code: string;
   storytellerUid: string;
   scriptId: string;

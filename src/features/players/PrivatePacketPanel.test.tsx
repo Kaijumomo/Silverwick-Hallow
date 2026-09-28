@@ -14,17 +14,22 @@ import { usePacketDeliveryState } from "@/firebase/packetDeliveryState";
 import { NightOrderPanel } from "@/features/nightOrder/NightOrderPanel";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { usePrivacyStore } from "@/stores/privacyStore";
+import { roles } from "@/test/fixtures";
 
+// Phase 10D: an ordinary Role must resolve on the game's own script, so the
+// deceptive-perception scenarios play on Trouble Brewing plus the Marionette
+// and Lunatic fixtures.
+const scriptWithDeceivers = { ...troubleBrewing, id: "tbx", characters: [...troubleBrewing.characters, roles.marionette!, roles.lunatic!] };
 beforeEach(() => {
   vi.mocked(publishPrivatePacket).mockReset();
   usePrivacyStore.setState({ enabled: false });
-  store.setState({ game: null, lobby: null, undoStack: [] });
+  store.setState({ game: null, lobby: null, undoStack: [], customScripts: { tbx: scriptWithDeceivers } });
   useSessionRuntime.setState({ backend: null });
   usePacketDeliveryState.setState({ receipts: {}, queued: {} });
 });
 afterEach(cleanup);
 function player(actual = "lunatic", shown = "imp") {
-  store.getState().newGame("tb");
+  store.getState().newGame("tbx");
   store.getState().addPlayer("Alice");
   store.getState().addPlayer("Bob");
   const [id, other] = store.getState().game!.seatOrder as [string, string];

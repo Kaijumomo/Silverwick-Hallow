@@ -19,6 +19,17 @@ import {
 } from "./effectResolution";
 import { GAME_SCHEMA_VERSION } from "./schemas";
 import {
+  applyRolePlan,
+  changeRoleIntent,
+  correctRoleIntent,
+  defaultRoleIds,
+  planRoleTransaction,
+  setPerceptionIntent,
+  type RoleRefusal,
+  type RoleTransaction,
+  type TravelerArrivalPolicy,
+} from "./roleResolution";
+import {
   applyReminderPlan,
   newReminderId,
   planReminderTransaction,
@@ -48,7 +59,7 @@ import {
   validateRequirementsCoherent,
 } from "./informationDelivery";
 import { initialRevealReadiness } from "@/features/setup/revealReadiness";
-import { invalidatePrivatePacket, pruneInapplicablePrivateInfo } from "./privatePackets";
+import { invalidatePrivatePacket } from "./privatePackets";
 import { usePrivacyStore } from "./privacyStore";
 import { analyzeSetup } from "@/features/setup/setupAnalyzer";
 import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
@@ -92,7 +103,7 @@ const UNDO_LIMIT = 20;
  * `merge` (Phase 9C.2B.2) passes to migrateStoreState when Zustand's own
  * persist middleware skips calling `migrate` outright, which it does
  * whenever the persisted version already equals this one. */
-const STORE_VERSION = 21;
+const STORE_VERSION = 22;
 
 let _migrationResetFlag = false;
 /** Returns true (once) when migrate() discarded incompatible persisted state. */
@@ -254,6 +265,13 @@ export type ReminderCommandResult =
   | { ok: true; changed: boolean; reminderIds: ReminderId[] }
   | ReminderRefusal;
 
+/** Phase 10D: result of every Role/perception command. `changed: false` is a
+ * true no-op (nothing committed, no Undo, no localSeq step); a refusal changes
+ * nothing either. */
+export type RoleCommandResult =
+  | { ok: true; changed: boolean }
+  | RoleRefusal;
+
 export type LobbyConnection = {
   code: string;
   uid: string;
@@ -373,14 +391,43 @@ export type StorytellerStore = {
   setSeatOrder: (order: PlayerId[]) => void;
   movePlayer: (id: PlayerId, direction: "left" | "right") => void;
 
-  /** Phase 9D.2 closure: an optional Mutation Context lets a caller supply
-   * Provenance for the History Record this produces during Live Play,
-   * through this exact same command -- never a second call. */
-  assignRole: (id: PlayerId, roleId: RoleId | "", context?: MutationContext) => void;
-  showAssignedRole: (id: PlayerId) => void;
-  setShownRole: (id: PlayerId, roleId: RoleId | null) => void;
-  setShownAlignment: (id: PlayerId, alignment: Alignment | null) => void;
-  setBehaviorMode: (id: PlayerId, mode: BehaviorMode) => void;
+  // --- Phase 10D: Roles and perception ----------------------------------------
+  /** THE authoritative Role/perception writer. Plans one atomic
+   * RoleTransaction (roleResolution.ts) -- ordered, participant-bound Actual
+   * Role changes/corrections and explicit perception changes -- and commits an
+   * accepted plan as exactly one game replacement: partial-field patches of
+   * every affected participant plus Role History, one Undo entry, one
+   * localSeq step. A refusal or true no-op changes nothing. Every Role and
+   * perception command below wraps this; a future ability engine submits its
+   * resolved intents here too. Setup construction (Deal/Shuffle/Swap/Manual
+   * Override/Edit Bag, Traveler designation) stays Setup-specific. */
+  resolveRoles: (transaction: RoleTransaction) => RoleCommandResult;
+  /** Compatibility adapter over one gameplay Actual Role change, bound to
+   * whoever occupies `id` right now. Never changes ordinary-vs-Traveler status
+   * (the seam does; this adapter keeps its long-standing meaning) and never
+   * clears a Role: an empty destination is refused. Optional Mutation Context
+   * supplies Provenance for the Role History Record during Live Play. */
+  assignRole: (id: PlayerId, roleId: RoleId, context?: MutationContext) => RoleCommandResult;
+  /** Compatibility adapter over one Actual Role CORRECTION (see
+   * CorrectActualRoleIntent): abilityUsed is preserved; Live Play History
+   * carries `correction: true`. */
+  correctRole: (id: PlayerId, roleId: RoleId, options?: { travelerArrivalPolicy?: TravelerArrivalPolicy }, context?: MutationContext) => RoleCommandResult;
+  /** Compatibility adapter over one explicit perception change bound to
+   * whoever occupies `id` now: shows the Actual Role (a no-op for a Role that
+   * needs an explicit shown identity, e.g. a concealed one). */
+  showAssignedRole: (id: PlayerId) => RoleCommandResult;
+  /** Perception adapters: each is one setPerception bundle. Re-selecting the
+   * identical bundle is a true no-op -- nothing cleared, withdrawn or
+   * recorded. A different Shown Role derives its alignment (null) unless the
+   * role is unchanged. */
+  setShownRole: (id: PlayerId, roleId: RoleId | null) => RoleCommandResult;
+  setShownAlignment: (id: PlayerId, alignment: Alignment | null) => RoleCommandResult;
+  setBehaviorMode: (id: PlayerId, mode: BehaviorMode) => RoleCommandResult;
+  setPerception: (
+    id: PlayerId,
+    perception: { shownRole: RoleId | null; shownAlignment: Alignment | null; behaviorMode?: BehaviorMode },
+    context?: MutationContext,
+  ) => RoleCommandResult;
   setBluffs: (id: PlayerId, bluffs: RoleId[]) => void;
   setFakeMinions: (id: PlayerId, playerIds: PlayerId[]) => void;
   setPrivateText: (id: PlayerId, text: string) => void;
@@ -687,6 +734,15 @@ const currentBinding = (game: StorytellerLobbyRecord | null, id: PlayerId): Effe
   return { playerId: player.id, participantId: player.participantId };
 };
 
+/** Phase 10D: the occupied player record at `id` right now (own property,
+ * seated, with a participation identity) -- what the compatibility adapters
+ * bind to. Undefined for a nonexistent/inherited id or an empty seat. */
+const currentOccupant = (game: StorytellerLobbyRecord | null, id: PlayerId): STPlayerRecord | undefined => {
+  const player = game && typeof id === "string" ? ownPlayer(game, id) : undefined;
+  return player && !player.isEmpty && player.participantId ? player : undefined;
+};
+const notSeatedRefusal = (): RoleRefusal => ({ ok: false, code: "notSeated", message: "This player is not seated." });
+
 /**
  * Phase 9R.4 (B8 remediation #2): setSeatOrder() only REORDERS -- seat
  * creation and removal belong to addPlayer/addEmptySeat/addTravelerSeat/
@@ -942,11 +998,17 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // schema gate below to judge, never "repaired".
   //
   // v21 (Phase 10C): non-authoritative Reminder notation -- the same shared
-  // per-entry migration. An entry marked 20 receives exactly v20 -> v21; an
-  // entry marked 21 (or anything else) receives nothing and is judged by the
-  // schema gate below; a marker-less genuine legacy entry runs the whole
-  // chain through v21.
-  if (fromVersion < 21) {
+  // per-entry migration. An entry marked 20 receives v20 -> v21.
+  //
+  // v22 (Phase 10D): authoritative Role transitions -- the same shared
+  // per-entry migration, a stamp on top of v21. Routing is per entry (Current
+  // State and every Undo snapshot independently, exactly like remote
+  // checkpoint recovery): marker 20 -> v20 -> v21 -> v22; marker 21 -> v21 ->
+  // v22; marker 22 -> nothing; an older marker carrying newer evidence, a
+  // marker-less entry carrying v20+ evidence, or any malformed marker receives
+  // nothing and is rejected by the schema gate below. A marker-less genuine
+  // legacy entry runs the whole chain through v22.
+  if (fromVersion < 22) {
     const customScripts = (s as { customScripts?: Record<string, Script> }).customScripts ?? {};
     // Phase 9R.1 Astra remediation (Finding A2): local persisted migration
     // uses "trusted" evidence -- this state's OWN saved customScripts,
@@ -1799,102 +1861,76 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
-      assignRole: (id, roleId, context) => {
+      resolveRoles: (transaction) => {
         const { game, undoStack } = get();
-        if (!game) return;
-        const existing = ownPlayer(game, id);
-        if (!existing) return;
-        if (existing.isTraveler && roleId && !getTraveler(roleId)) return;
-        if (!existing.isTraveler && getTraveler(roleId)) return;
-        if (existing.actualRole === roleId) return;
-        // Ordinary truth changes preserve perception. Traveler assignment
-        // explicitly publishes only its public character, never its alignment.
-        // Role-specific private packets must be configured again.
-        const next: STPlayerRecord = {
-          ...existing,
-          actualRole: roleId,
-          ...(roleId ? {} : { shownRole: null, shownAlignment: null, behaviorMode: "normal" as const }),
-          abilityUsed: false,
-          ...(existing.isTraveler ? {
-            publicDisplayRole: roleId || null,
-            shownRole: roleId || null,
-            shownAlignment: null,
-            travelerArrival: newTravelerArrival(),
-          } : {}),
-        };
-        delete next.privateInfo;
-        const updatedGame = {
-          ...game,
-          ...(existing.isTraveler ? { nightProgress: resetTravelerNightProgress(game, id) } : {}),
-          players: { ...game.players, [id]: invalidatePrivatePacket(next) },
-        };
-        const recorded = recordIfLive(game, updatedGame, () => ({
-          category: "role", playerId: id,
-          change: { kind: "value", from: { actualRole: existing.actualRole }, to: { actualRole: roleId } },
-          context,
-        }));
-        if (!recorded) return;
-        set({ undoStack: pushUndo(game, undoStack), game: recorded });
+        if (!game) return { ok: false, code: "invalid", message: "No game is open." };
+        // guard -> plan (pure) -> one commit. The planner binds every target
+        // to the participation instance and the observed state the caller
+        // saw, validates each intent in order against the evolving working
+        // state, and returns a refusal, a true no-op, or the partial-field
+        // Role plan (patches + History).
+        const result = planRoleTransaction(game, transaction, { script: selectScriptById(get(), game.scriptId), ids: defaultRoleIds });
+        if (!result.ok) return result;
+        if (!result.changed) return { ok: true, changed: false };
+        set({ undoStack: pushUndo(game, undoStack), game: applyRolePlan(game, result.plan) });
+        return { ok: true, changed: true };
+      },
+
+      assignRole: (id, roleId, context) => {
+        const player = currentOccupant(get().game, id);
+        if (!player) return notSeatedRefusal();
+        // Compatibility meaning: this adapter never flips ordinary-vs-Traveler
+        // status (an ordinary player is not given a Traveler character here,
+        // nor a Traveler an ordinary one).
+        if (typeof roleId === "string" && roleId && !!getTraveler(roleId) !== player.isTraveler) {
+          return { ok: false, code: "role", message: "That character does not fit this player's Traveler status." };
+        }
+        return get().resolveRoles({ intents: [changeRoleIntent(player, roleId)], ...(context ? { context } : {}) });
+      },
+
+      correctRole: (id, roleId, options, context) => {
+        const player = currentOccupant(get().game, id);
+        if (!player) return notSeatedRefusal();
+        if (typeof roleId === "string" && roleId && !!getTraveler(roleId) !== player.isTraveler) {
+          return { ok: false, code: "role", message: "That character does not fit this player's Traveler status." };
+        }
+        return get().resolveRoles({ intents: [correctRoleIntent(player, roleId, options?.travelerArrivalPolicy)],
+          ...(context ? { context } : {}) });
       },
 
       showAssignedRole: (id) => {
-        const { game } = get();
-        const player = game ? ownPlayer(game, id) : undefined;
-        if (!player?.actualRole || needsShownIdentity(player.actualRole)) return;
-        get().setShownRole(id, player.actualRole);
+        const player = currentOccupant(get().game, id);
+        if (!player?.actualRole || needsShownIdentity(player.actualRole)) return { ok: true, changed: false };
+        return get().setShownRole(id, player.actualRole);
       },
 
       setShownRole: (id, roleId) => {
-        const { game, undoStack } = get();
-        if (!game) return;
-        const existing = ownPlayer(game, id);
-        if (!existing) return;
-        // A new perception cannot inherit alignment overrides or packets from
-        // the previous identity. Null alignment derives only from shownRole.
-        const next = { ...existing, shownRole: roleId, shownAlignment: null };
-        delete next.privateInfo;
-        const invalidated = invalidatePrivatePacket(next);
-        // Phase 9R.4 (B8): re-selecting the current shown role is still a
-        // mutation whenever it clears an alignment override, private info,
-        // or a published packet; it is a no-op only when the complete
-        // result is identical.
-        if (samePlayerApartFromEpoch(existing, invalidated)) return;
-        set({
-          undoStack: pushUndo(game, undoStack),
-          game: { ...game, players: { ...game.players, [id]: invalidated } },
+        const player = currentOccupant(get().game, id);
+        if (!player) return notSeatedRefusal();
+        // A different Shown Role derives its alignment (null); the very same
+        // Shown Role keeps the alignment as it is (never a silent clear).
+        return get().setPerception(id, {
+          shownRole: roleId,
+          shownAlignment: roleId !== null && roleId === player.shownRole ? player.shownAlignment : null,
         });
       },
 
       setShownAlignment: (id, alignment) => {
-        const { game, undoStack } = get();
-        if (!game) return;
-        const existing = ownPlayer(game, id);
-        // Phase 9R.4 (B8): an unknown player used to push Undo onto an
-        // unchanged game. The already-current alignment is not an identity
-        // change, so it must not manufacture packet invalidation either.
-        if (!existing || existing.shownAlignment === alignment) return;
-        set({
-          undoStack: pushUndo(game, undoStack),
-          game: { ...game, players: { ...game.players, [id]: invalidatePrivatePacket({ ...existing, shownAlignment: alignment }) } },
-        });
+        const player = currentOccupant(get().game, id);
+        if (!player) return notSeatedRefusal();
+        return get().setPerception(id, { shownRole: player.shownRole, shownAlignment: alignment });
       },
 
       setBehaviorMode: (id, mode) => {
-        const { game, undoStack } = get();
-        if (!game) return;
-        const existing = ownPlayer(game, id);
-        // Phase 9R.4 (B8): an unknown player used to push Undo onto an
-        // unchanged game.
-        if (!existing) return;
-        const next = invalidatePrivatePacket(pruneInapplicablePrivateInfo({ ...existing, behaviorMode: mode }, buildRegistry(selectScriptById(get(), game.scriptId) ?? { id: game.scriptId, name: game.scriptId, characters: [] })));
-        // The current mode can still prune stale inapplicable private info
-        // (or withdraw a published packet); only an identical complete
-        // result is a no-op.
-        if (samePlayerApartFromEpoch(existing, next)) return;
-        set({
-          undoStack: pushUndo(game, undoStack),
-          game: { ...game, players: { ...game.players, [id]: next } },
-        });
+        const player = currentOccupant(get().game, id);
+        if (!player) return notSeatedRefusal();
+        return get().setPerception(id, { shownRole: player.shownRole, shownAlignment: player.shownAlignment, behaviorMode: mode });
+      },
+
+      setPerception: (id, perception, context) => {
+        const player = currentOccupant(get().game, id);
+        if (!player) return notSeatedRefusal();
+        return get().resolveRoles({ intents: [setPerceptionIntent(player, perception)], ...(context ? { context } : {}) });
       },
 
       setBluffs: (id, bluffs) => {

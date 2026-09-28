@@ -20,7 +20,7 @@ import { startStorytellerSession, useSessionRuntime } from "./storytellerSync";
 import { SnapshotValidationError } from "./snapshots";
 import { writeProjections } from "./sync";
 import type { StorytellerLobbyRecord } from "@/stores/types";
-import { withV21Reminders } from "@/test/v20Migration";
+import { withV21Reminders, withV22Roles } from "@/test/v20Migration";
 
 const code = "EFFX2345";
 const root = `lobbies/${code}`;
@@ -86,9 +86,9 @@ function expectedV20(entry: Raw): Raw {
   return copy;
 }
 
-/** Phase 10C: a genuine v19 entry continues through v20 -> v21 (no Reminders
- * here, so only the marker advances). */
-const expectedCurrent = (entry: Raw): Raw => withV21Reminders(expectedV20(entry));
+/** Phase 10C/10D: a genuine v19 entry continues through v20 -> v21 (no
+ * Reminders here, so only the marker advances) and v21 -> v22 (a stamp). */
+const expectedCurrent = (entry: Raw): Raw => withV22Roles(withV21Reminders(expectedV20(entry)));
 
 describe("Phase 10B migration: v19 -> v20", () => {
   it("manual Effects become active + no expiry; finite Effects become active + UNRESOLVED -- never guessed, never removed, never from History", () => {
@@ -119,7 +119,7 @@ describe("Phase 10B migration: v19 -> v20", () => {
     expect(a.undoStack[1]).toEqual(a.game);
     expect((a.undoStack[0]!.players as Record<string, { effects: Raw[] }>).b!.effects).toEqual([{ ...finiteV19, state: "active", expiry: { kind: "unresolved" } }]);
     const snapshot = structuredClone(a);
-    expect(migrateStoreState(a, 21)).toBe(a);
+    expect(migrateStoreState(a, 22)).toBe(a);
     expect(a).toEqual(snapshot);
     const entry = v19Game();
     migrateGameEntry(entry, 19, { kind: "canonical-only" });
@@ -129,14 +129,14 @@ describe("Phase 10B migration: v19 -> v20", () => {
     expect(entry).toEqual(once);
   });
 
-  it("a genuine v19 localStorage blob rehydrates as current (v21) with an unresolved legacy Effect surfaced (not corruption)", async () => {
+  it("a genuine v19 localStorage blob rehydrates as current (v22) with an unresolved legacy Effect surfaced (not corruption)", async () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 19, state: { game: v19Game(), undoStack: [v19Game("night", 2)] } }));
     await useStorytellerStore.persist.rehydrate();
     expect(takeMigrationResetFlag()).toBe(false);
     const game = useStorytellerStore.getState().game!;
-    expect(game.gameSchemaVersion).toBe(21);
+    expect(game.gameSchemaVersion).toBe(22);
     expect(game.players.b!.effects[1]!.expiry).toEqual({ kind: "unresolved" });
-    expect(useStorytellerStore.getState().undoStack[0]!.gameSchemaVersion).toBe(21);
+    expect(useStorytellerStore.getState().undoStack[0]!.gameSchemaVersion).toBe(22);
   });
 });
 
@@ -198,7 +198,7 @@ describe("SOL-10B-RC1: legacy appliedAt made untrustworthy by old non-monotonic 
     await useStorytellerStore.persist.rehydrate();
     expect(takeMigrationResetFlag()).toBe(false);
     const store = useStorytellerStore.getState();
-    expect(store.game).toMatchObject({ phase: "setup", day: 1, gameSchemaVersion: 21 });
+    expect(store.game).toMatchObject({ phase: "setup", day: 1, gameSchemaVersion: 22 });
     const bob = store.game!.players.b!;
     expect(store.setManualEffect({ playerId: "b", participantId: bob.participantId! }, "drunk", true)).toMatchObject({ ok: true, changed: true });
     const after = useStorytellerStore.getState();
@@ -216,11 +216,11 @@ describe("SOL-10B-RC1: legacy appliedAt made untrustworthy by old non-monotonic 
   });
 });
 
-// Phase 10C: the current version is v21. The same malformations are proven
-// against a CURRENT (marker 21) game -- never touched by any migration -- and
-// against a marker-20 game, which receives exactly the v20 -> v21 step (no
-// Reminders here, so only its marker advances) and nothing that could repair
-// the malformed Effect.
+// Phase 10D: the current version is v22. The same malformations are proven
+// against a CURRENT (marker 22) game -- never touched by any migration --
+// against a marker-21 game (v21 -> v22, a stamp only) and against a marker-20
+// game, which receives exactly v20 -> v21 -> v22 (no Reminders here, so only
+// its marker advances) and nothing that could repair the malformed Effect.
 describe("Phase 10B/10C: explicit current-version evidence is never 'repaired' by legacy migration", () => {
   const v20 = () => expectedCurrent(v19Game());
   const malformed: [string, (g: Raw) => void][] = [
@@ -247,26 +247,26 @@ describe("Phase 10B/10C: explicit current-version evidence is never 'repaired' b
     ["a retired sourcePlayer on an Effect", (g) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[0]!.sourcePlayer = "a"; }],
     ["a legacy ParticipantRef inside a parameter", (g) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[0]!.parameters = { chosen: { kind: "participant", participants: [{ kind: "legacy", playerId: "a" }] } }; }],
     ["an empty parameter map", (g) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[0]!.parameters = {}; }],
-    ["a wrong version marker", (g) => { g.gameSchemaVersion = 22; }],
+    ["a wrong version marker", (g) => { g.gameSchemaVersion = 23; }],
     ["a string version marker", (g) => { g.gameSchemaVersion = "21"; }],
     ["an effect correction without its operation", (g) => { (g.history as Raw[]).push({ id: "h9", category: "effect", participant: alice, correction: true, change: { kind: "added", item: manualV19 } }); }],
     ["a v20 update snapshot with a malformed lifecycle", (g) => { (g.history as Raw[]).push({ id: "h9", category: "effect", participant: alice, effectOperation: "update",
       change: { kind: "value", from: { ...manualV19, state: "active", expiry: { kind: "none" } }, to: { ...manualV19, state: "active" } } }); }],
   ];
 
-  it.each(malformed)("%s: rejected locally (reset) whether labelled v21, v20 or v19 -- migration never repairs it", (label, corrupt) => {
+  it.each(malformed)("%s: rejected locally (reset) whether labelled v22, v21, v20 or v19 -- migration never repairs it", (label, corrupt) => {
     const markerCase = label.includes("version marker");
-    for (const marker of markerCase ? [undefined] : [21, 20]) {
-      for (const version of [21, 20, 19]) {
+    for (const marker of markerCase ? [undefined] : [22, 21, 20]) {
+      for (const version of [22, 21, 20, 19]) {
         const game = v20();
         if (marker !== undefined) game.gameSchemaVersion = marker;
         corrupt(game);
         expect(hasV20Evidence(game)).toBe(true);
-        expect(detectLegacyGameVersion(game)).toBe(marker === 20 ? 20 : 21);
+        expect(detectLegacyGameVersion(game)).toBe(marker === 20 || marker === 21 ? marker : 22);
         const copy = structuredClone(game);
         migrateGameEntry(copy, 13, { kind: "canonical-only" });
-        // Marker 20: exactly the v20 -> v21 step (the marker); otherwise nothing.
-        expect(copy).toEqual(marker === 20 ? { ...game, gameSchemaVersion: 21 } : game);
+        // Marker 20/21: exactly the version steps (the marker); otherwise nothing.
+        expect(copy).toEqual(marker === 20 || marker === 21 ? { ...game, gameSchemaVersion: 22 } : game);
         const result = migrateStoreState({ game: structuredClone(game), undoStack: [] }, version) as { game: unknown };
         expect(takeMigrationResetFlag()).toBe(true);
         expect(result.game).toBeNull();

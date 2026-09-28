@@ -61,8 +61,9 @@ export async function leaveLobby(backend: RoomBackend) {
  * finalization B4). Mirrors leaveLobby's shape: a self-scoped Firebase
  * write, never a direct mutation of authoritative Storyteller state. The
  * Storyteller's live client observes this and applies it through the
- * existing assignRole() command -- see applyTravelerChoice in
- * membershipCommands.ts. Restricted client-side to the supported Traveler
+ * Role seam (resolveRoles), bound to the participation the authoritative roster
+ * record names -- the request itself carries no ParticipantId; see
+ * applyTravelerChoice in membershipCommands.ts. Restricted client-side to the supported Traveler
  * catalogue as defense in depth; Firebase rules enforce the same
  * restriction server-side.
  */

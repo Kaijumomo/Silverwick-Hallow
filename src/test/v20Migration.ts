@@ -58,10 +58,40 @@ export function withV21Reminders<T>(entry: T): T {
   return copy as unknown as T;
 }
 
-/** A legacy (pre-v20) entry's expected CURRENT result: the v19 -> v20 step
- * followed by the v20 -> v21 step. */
+/**
+ * Phase 10D test helper: exactly what the v21 -> v22 migration step does to
+ * one v21 game-shaped entry (see migrateEntryV21ToV22 in
+ * src/stores/gameMigration.ts): a STAMP ONLY -- `gameSchemaVersion: 22`. No
+ * Role is inferred, no History is rewritten, no perception is repaired.
+ * Returns a deep copy.
+ */
+export function withV22Roles<T>(entry: T): T {
+  const copy = structuredClone(entry) as unknown as Record<string, unknown>;
+  copy.gameSchemaVersion = 22;
+  return copy as unknown as T;
+}
+
+/** A legacy (pre-v20) entry's expected CURRENT result: the v19 -> v20 step,
+ * then v20 -> v21, then v21 -> v22. */
 export function withCurrentMigration<T>(entry: T): T {
-  return withV21Reminders(withV20Lifecycle(entry));
+  return withV22Roles(withV21Reminders(withV20Lifecycle(entry)));
+}
+
+/**
+ * Phase 10D: the inverse used to build a v21 fixture from a current game --
+ * what a v21 writer stored: no Role correction and no correlated Role record
+ * (v22-only History metadata), marker 21. Every other v22 datum is
+ * indistinguishable from v21 by design (v22 is a stamp).
+ */
+export function asV21<T>(entry: T): T {
+  const copy = structuredClone(entry) as unknown as Record<string, unknown>;
+  const history = copy.history as Record<string, unknown>[] | undefined;
+  if (history) {
+    copy.history = history.filter((record) =>
+      !(record.category === "role" && (record.correction !== undefined || record.resolutionId !== undefined)));
+  }
+  copy.gameSchemaVersion = 21;
+  return copy as unknown as T;
 }
 
 /**
@@ -72,7 +102,7 @@ export function withCurrentMigration<T>(entry: T): T {
  * add/remove, each snapshot carrying its lifetime); marker 20.
  */
 export function asV20<T>(entry: T): T {
-  const copy = structuredClone(entry) as unknown as Record<string, unknown>;
+  const copy = structuredClone(asV21(entry)) as unknown as Record<string, unknown>;
   const players = copy.players as Record<string, { reminders?: Record<string, unknown>[] }> | undefined;
   for (const player of Object.values(players ?? {})) {
     for (const reminder of player.reminders ?? []) {

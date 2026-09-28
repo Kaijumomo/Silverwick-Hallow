@@ -9,6 +9,8 @@ import {
   type SeatParticipant,
 } from "./lobby";
 import { leavePath, travelerChoicePath } from "./lifecycle";
+import { rosterParticipantPath } from "./paths";
+import { decodeRosterParticipant } from "./snapshots";
 
 export class MembershipOperationError extends Error {
   constructor(message: string) {
@@ -153,33 +155,70 @@ export async function rejectLeaveRequest(backend: RoomBackend, code: string, uid
   await backend.set(leavePath(code, uid), null);
 }
 
+/** The participation instance a Traveler choice is applied to: the roster
+ * binding's playerId plus the ParticipantId the AUTHORITATIVE
+ * rosterParticipants record names for it. */
+export type TravelerChoiceBinding = { playerId: PlayerId; participantId: ParticipantId };
+
+/**
+ * The production local commit of a Traveler choice (Phase 10D): the choice is
+ * applied through the Role seam, BOUND to the participation instance the
+ * authoritative roster record named (`binding.participantId`) and to the
+ * observed unassigned Traveler state (expected blank Role, expected Traveler
+ * status). Nothing is applied -- and the request is simply cleared by the
+ * caller -- when the local occupant is not that participant, is not a Traveler,
+ * or already has a character (a Storyteller override, or this exact choice
+ * already applied); the seam itself also refuses such a request as stale.
+ * Never a second mutation path.
+ */
+export function commitTravelerChoiceLocally(binding: TravelerChoiceBinding, roleId: RoleId): void {
+  const store = useStorytellerStore.getState();
+  const game = store.game;
+  const player = game && Object.prototype.hasOwnProperty.call(game.players, binding.playerId) ? game.players[binding.playerId] : undefined;
+  if (!player?.isTraveler || player.actualRole || player.participantId !== binding.participantId) return;
+  store.resolveRoles({ intents: [{
+    kind: "changeActualRole", target: binding, expectedActualRole: "", expectedIsTraveler: true, actualRole: roleId,
+  }] });
+}
+
 /**
  * Applies a player's self-chosen Traveler character (Phase 9 Setup
- * finalization B4, revised). The requesting uid's playerId is re-resolved
- * from the CURRENT live roster -- a playerId observed earlier by the
- * calling watcher is never trusted, mirroring acceptLeaveRequest.
- * `commitLocal` receives this freshly-resolved id and decides whether to
- * apply it. Precedence: a current Storyteller-assigned Traveler character
- * always wins over an older pending player choice -- the caller applies the
- * choice only when the seat is still a Traveler with NO character assigned
- * yet; once any character is assigned (by this exact choice, a Storyteller
- * override, or a status change), the request is stale/superseded and this
- * function still clears it without commitLocal changing the role. This is
- * the exact same assignRole() command the Storyteller's own manual Traveler
- * override uses, never a second mutation path. Always clears the request
- * node afterward, whether or not a binding was found (stale requests are
- * pure cleanup) -- the player may resubmit if the seat's binding recovers.
+ * finalization B4, revised; Phase 10D participation binding). The requesting
+ * uid's playerId is re-resolved from the CURRENT live roster, and -- Phase 10D
+ * -- so is the participation instance: the ParticipantId is read from the
+ * authoritative `rosterParticipants/{uid}` record (Storyteller-only, written
+ * with the binding in the same fenced update), never from the player-written
+ * request (which carries only a character id) and never inferred from a seat,
+ * name or UID. `commitLocal` receives that {playerId, participantId} binding
+ * and must apply the choice through the Role seam bound to it (expecting a
+ * blank Role); a request whose binding has no such record, or whose record
+ * names a different seat, is stale and is cleared WITHOUT being applied.
+ * Precedence: a current Storyteller-assigned Traveler character always wins
+ * over an older pending player choice -- the caller applies the choice only
+ * when the seat is still a Traveler with NO character assigned yet. Always
+ * clears the request node afterward, whether or not a binding was found
+ * (stale requests are pure cleanup, never replayed) -- the player may
+ * resubmit for their current participation.
+ *
+ * Revocation and re-seating additionally clear `travelerChoices/{uid}` in
+ * their own fenced multi-path update (see lobby.ts), so an earlier
+ * participation's request cannot even survive to be observed here.
  */
 export async function applyTravelerChoice(
   backend: RoomBackend,
   code: string,
   uid: string,
   roleId: RoleId,
-  commitLocal: (playerId: PlayerId, roleId: RoleId) => void,
+  commitLocal: (binding: TravelerChoiceBinding, roleId: RoleId) => void,
 ): Promise<void> {
   if (backend.runExclusive) return backend.runExclusive(inner => applyTravelerChoice(inner, code, uid, roleId, commitLocal));
   const bindings = await readRosterBindings(backend, code);
   const playerId = bindings[uid];
-  if (playerId) commitLocal(playerId, roleId);
+  if (playerId) {
+    const record = decodeRosterParticipant(await backend.get(rosterParticipantPath(code, uid)));
+    if (record.status === "ready" && record.data.playerId === playerId) {
+      commitLocal({ playerId, participantId: record.data.participantId }, roleId);
+    }
+  }
   await backend.set(travelerChoicePath(code, uid), null);
 }
