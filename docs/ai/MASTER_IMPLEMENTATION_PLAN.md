@@ -1,13 +1,14 @@
 # Silverwick Hollow — Master Implementation Plan
 
 **Status:** Active canonical roadmap  
-**Updated:** 2026-09-27\
+**Updated:** 2026-09-28\
 **Integrated branch:** `main`  
 **Phase 10A closure checkpoint:** `d798266b988e49f904aa8f8658c917fd5b7e7abb`  
 **Pre-10B Firebase lifecycle hotfix checkpoint:** `38b10119544ce2c02590e9bc9c741aab995a91d1`  
 **Phase 10B final reviewed implementation checkpoint:** `3c9e20f4506258bab143b5f20750deb34b290379` (integrated into `main` with the docs-only closure commit on top)\
-**Schema:** v20 (integrated on `main`); v21 implemented on the Phase 10C branch (not yet integrated)\
-**Current phase:** Phase 10C — Reminder Workflow + Visual Reminder Tokens (implemented; awaiting Luna verification)
+**Phase 10C final reviewed implementation checkpoint:** `ca808fa18e97d758750aad63ceacc2bea3d8f627` (integrated into `main` with the docs-only closure commit on top)\
+**Schema:** v21 (integrated on `main`)\
+**Current phase:** Phase 10D — Role Transitions (NEXT: architecture challenge before coding)
 
 ## Product invariants
 
@@ -150,7 +151,27 @@ Goals:
 10B does **not** implement full Role ability evaluation.
 
 ### 10C — Reminder Workflow + Visual Reminder Tokens
-**Status:** IMPLEMENTED — ready for Luna verification (not closed). Architecture challenge adjudicated into the Sol implementation contract; implemented from `70864ada51f887399d5d3529a450204468fc8d65`. See `PHASE10C.md`.
+**Status:** CLOSED\
+**Final reviewed implementation checkpoint:** `ca808fa18e97d758750aad63ceacc2bea3d8f627`\
+**Integration:** the docs-only closure commit on top of that checkpoint, fast-forwarded into `main`. See `PHASE10C.md`.
+
+Lineage: implementation `94c93390c8cf4bea915b1319fc2910cac81b5ed7` → Luna remediation LUNA-10C-001/002 `7ddc3fb9f566f429a5c5a6e0f4d0b8bbbabb5ae4` → Astra remediation ASTRA-10C-001…004 `ca808fa18e97d758750aad63ceacc2bea3d8f627`.
+
+Final closure gate:
+
+- typecheck PASS
+- normal tests **2923/2923 across 112 files**
+- Firebase emulator tests **184/184**, 0 skipped
+- production build PASS
+- `git diff --check` PASS
+- Luna final verdict: **PASS — ASTRA-10C-001..004 MECHANICALLY CLOSED; READY FOR ASTRA TARGETED CLOSURE REVIEW**
+- Astra final verdict: **PASS — ASTRA-10C-001..004 CLOSED; READY FOR SOL CLOSURE**
+- Sol verdict: **CLOSED — READY FOR INTEGRATION**
+- remaining Blocker/High/Medium findings: **None**
+
+Known non-blocking / deferred: ASTRA-10C-005 (LOW, the Reminder planner should require `intent.kind` to be an own string property before discriminator lookup; malformed runtime input can otherwise throw or inherit `kind`); canonical per-character Reminder token disposition → 10F; departed-origin correction limitation (as OPUS-10B-010).
+
+Frozen: Reminders are participant-bound, Storyteller-private, non-authoritative notation; mechanics never read Reminders as truth; current occupied ParticipantIds are globally unique; empty seats own no Reminders; origin and mutation provenance stay separate; cleanup cues are presentation-only with no automatic expiry; legacy History is preserved, never rewritten; the pure Reminder planner/apply seam remains available for 10F composition.
 
 Delivered (store v21): Reminders are participant-bound, Storyteller-private, non-authoritative notation -- never mechanics input (architecture-guarded); strict v21 record (no lifetime; optional presentation-only `cleanupCue`); pure `planReminderTransaction` / `applyReminderPlan` and the single `resolveReminders` commit seam (place/amend/remove + corrections, ParticipantId-bound, all-or-nothing); empty seats own no Reminders; v20 -> v21 migration (empty-seat Reminders dropped, finite lifetimes -> `unresolved` "Needs check", History never rewritten; legacy Reminder History stays valid); explicit marker-20/21 routing; distinct Grimoire notation grammar with aggregation, explicit overflow and accessible summary; Privacy Mode DOM absence.
 
@@ -159,6 +180,8 @@ Structured placement/removal/update, source/target/lifetime, free text where app
 Frozen principle carried in from 10B: if a mechanical condition is authoritative as an Effect, a Reminder may visualize or help bookkeep it but must never become a second independent source of that mechanical truth. Routine Reminder placement/removal must be fast and visually obvious; advanced detail stays progressively disclosed.
 
 ### 10D — Role Transitions
+**Status:** NEXT — architecture challenge before coding (not yet designed). Branch `dev/phase-10d`, created from the exact integrated `main` carrying the Phase 10C closure.
+
 Actual Role and Shown Role transitions, correction vs gameplay semantics, durable History and replacement workflows.
 
 ### 10E — Alignment Transitions
@@ -191,8 +214,9 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 - `main` contains integrated closed checkpoints.
 - Each Phase 10 subphase starts from current `main` on a fresh branch.
 - Reviewers verify exact commit identity rather than trusting branch names.
-- `dev/phase-10c` is created from the exact integrated `main` carrying the Phase 10B closure.
+- `dev/phase-10c` was created from the exact integrated `main` carrying the Phase 10B closure.
+- `dev/phase-10d` is created from the exact integrated `main` carrying the Phase 10C closure.
 
 ## Immediate next action
 
-**Luna verification** of the Phase 10C implementation (see `PHASE10C.md` and `docs/ai/handoffs/CURRENT_HANDOFF.md`), then Astra adversarial review. Verify exact commit identity rather than trusting branch names.
+Perform the **Phase 10D architecture challenge** (Role Transitions) on `dev/phase-10d`. Do **not** begin implementation until the challenge is adjudicated into a Sol implementation contract. Verify exact commit identity rather than trusting branch names.

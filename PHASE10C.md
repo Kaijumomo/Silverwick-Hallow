@@ -1,21 +1,65 @@
 # Phase 10C — Reminder Workflow & Visual Reminder Tokens
 
-Status: **IMPLEMENTED — Astra remediation complete, awaiting targeted verification.** Not closed.
-Store schema **v21** (`GAME_SCHEMA_VERSION = 21`, `STORE_VERSION = 21`).
+Status: **CLOSED.** Store schema **v21** (`GAME_SCHEMA_VERSION = 21`,
+`STORE_VERSION = 21`).
+
+Final reviewed implementation checkpoint (before docs-only closure metadata):
+`ca808fa18e97d758750aad63ceacc2bea3d8f627`. The docs-only closure commit on
+top of it is the integration checkpoint fast-forwarded into `main`.
 
 Starting checkpoint: `70864ada51f887399d5d3529a450204468fc8d65` (main =
 dev/phase-10b = dev/phase-10c at implementation start; reviewed 10B parent
 `3c9e20f4506258bab143b5f20750deb34b290379`).
 
-Closure still requires: Luna verification → Astra adversarial review → Sol
-adjudication / remediation → closure verification → Sol closure →
-integration into `main`.
+## Closure record
+
+Phase 10C — **CLOSED**. Implementation (`94c93390c8cf4bea915b1319fc2910cac81b5ed7`),
+Luna remediation LUNA-10C-001/002 (`7ddc3fb9f566f429a5c5a6e0f4d0b8bbbabb5ae4`)
+and Astra remediation ASTRA-10C-001…004
+(`ca808fa18e97d758750aad63ceacc2bea3d8f627`) are complete and reviewed.
+
+Final verification evidence at `ca808fa18e97d758750aad63ceacc2bea3d8f627`:
+
+- typecheck PASS
+- normal tests **2923/2923 across 112 files**
+- Firebase emulator tests **184/184**, 0 skipped
+- production build PASS
+- `git diff --check` PASS
+- Luna final verdict: **PASS — ASTRA-10C-001..004 MECHANICALLY CLOSED; READY
+  FOR ASTRA TARGETED CLOSURE REVIEW**
+- Astra final verdict: **PASS — ASTRA-10C-001..004 CLOSED; READY FOR SOL
+  CLOSURE**
+- Sol verdict: **CLOSED — READY FOR INTEGRATION**
+
+Remaining Blocker/High/Medium findings: **None.**
+
+Known non-blocking / deferred:
+
+- **ASTRA-10C-005 (LOW):** the Reminder planner should require `intent.kind`
+  to be an OWN string property before the discriminator lookup; malformed
+  runtime input can otherwise throw or inherit `kind`.
+- Canonical per-character Reminder tokens / `(roleId, label)` disposition
+  table → 10F; correcting an origin to a departed participant (same safe
+  limitation as OPUS-10B-010).
+
+### Frozen Phase 10C architecture
+
+- Reminders are participant-bound, Storyteller-private, non-authoritative
+  notation.
+- Mechanics never read Reminders as truth (architecture-guarded).
+- Current occupied ParticipantIds are globally unique within a game snapshot.
+- Empty seats own no Reminders.
+- Origin and mutation provenance remain separate.
+- Cleanup cues are presentation-only; there is no automatic expiry.
+- Legacy History is preserved rather than rewritten.
+- The pure Reminder planner/apply seam (`planReminderTransaction` /
+  `applyReminderPlan`) remains available for future 10F composition.
 
 ## Luna remediation (LUNA-10C-001 / LUNA-10C-002)
 
 Luna verification of `94c93390c8cf4bea915b1319fc2910cac81b5ed7` returned
-REVISE; both findings were accepted by Sol and are remediated. Status is still
-**IMPLEMENTED — awaiting Luna re-verification**.
+REVISE; both findings were accepted by Sol and remediated in
+`7ddc3fb9f566f429a5c5a6e0f4d0b8bbbabb5ae4`.
 
 - **LUNA-10C-001 (MEDIUM) — fail-closed empty-seat migration.** v20 -> v21
   now runs an entry-level preflight over every Reminder on every seat
@@ -36,7 +80,8 @@ REVISE; both findings were accepted by Sol and are remediated. Status is still
 ## Astra remediation (ASTRA-10C-001 … 004)
 
 Astra adversarial review of `7ddc3fb9f566f429a5c5a6e0f4d0b8bbbabb5ae4`
-returned REVISE; Sol accepted all four findings.
+returned REVISE; Sol accepted all four findings, remediated in
+`ca808fa18e97d758750aad63ceacc2bea3d8f627`.
 
 - **ASTRA-10C-001 (HIGH) — unique current ParticipantIds.**
   `StorytellerGamePersistedSchema` (the boundary every Current State, Undo

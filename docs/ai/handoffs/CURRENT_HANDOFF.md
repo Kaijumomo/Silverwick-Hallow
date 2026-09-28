@@ -1,20 +1,48 @@
 # Silverwick Hollow — Current Handoff
 
-**Date:** 2026-09-27\
-**State:** Phase 10B is **CLOSED** and integrated into `main`. Phase 10C — Reminder Workflow + Visual Reminder Tokens is **IMPLEMENTED — ready for Luna verification** (not closed). See `PHASE10C.md`.
+**Date:** 2026-09-28\
+**State:** Phase 10C is **CLOSED** and integrated into `main`. Phase 10D — Role Transitions is **NEXT**, on `dev/phase-10d`. 10D has **not** been designed yet.
 
-## Phase 10C — implemented, awaiting verification
+## Phase 10C — CLOSED
 
-Implemented from `70864ada51f887399d5d3529a450204468fc8d65` per the Sol implementation contract (after the Claude Chat / Opus architecture challenge). Store v21.
+Final reviewed implementation checkpoint (before docs-only closure metadata):
+`ca808fa18e97d758750aad63ceacc2bea3d8f627`
 
-- Reminders are participant-bound, Storyteller-private, non-authoritative notation; nothing mechanical reads `player.reminders` (guarded by `src/stores/reminderArchitecture.test.ts`).
-- Strict v21 `ReminderRecord` (no lifetime; optional presentation-only `cleanupCue`); empty seats own no Reminders; duplicate ids and future `createdAt` rejected.
-- One pure planner (`src/stores/reminderResolution.ts`) + one commit seam (`resolveReminders`); `addReminder`/`removeReminder` are thin adapters.
-- v20 -> v21 migration: empty-seat Reminders dropped, finite lifetimes -> `unresolved` ("Needs check"), incoherent legacy `createdAt` omitted, History never rewritten; legacy Reminder History stays valid.
-- Grimoire notation grammar (distinct from Effects, aggregation, `+N more`, words not colour, accessible summary); Drawer fast path + progressive disclosure; Privacy Mode DOM absence.
-- No Firebase rule / writer / fencing change.
+The docs-only closure commit on top of it is the integration checkpoint; `main` was fast-forwarded to it and `dev/phase-10d` was created from that exact `main`. Verify exact SHAs rather than branch names.
 
-Next: Luna verification -> Astra adversarial review -> Sol adjudication -> closure verification -> Sol closure -> integration into `main`.
+Lineage on top of `70864ada51f887399d5d3529a450204468fc8d65`: implementation `94c93390c8cf4bea915b1319fc2910cac81b5ed7` → Luna remediation LUNA-10C-001/002 `7ddc3fb9f566f429a5c5a6e0f4d0b8bbbabb5ae4` → Astra remediation ASTRA-10C-001…004 `ca808fa18e97d758750aad63ceacc2bea3d8f627` → docs-only closure.
+
+Schema / store version: **v21**.
+
+Final verification evidence:
+- typecheck PASS
+- normal tests **2923/2923 across 112 files**
+- Firebase emulator tests **184/184**, 0 skipped
+- production build PASS
+- `git diff --check` PASS
+- Luna final verdict: **PASS — ASTRA-10C-001..004 MECHANICALLY CLOSED; READY FOR ASTRA TARGETED CLOSURE REVIEW**
+- Astra final verdict: **PASS — ASTRA-10C-001..004 CLOSED; READY FOR SOL CLOSURE**
+- Sol verdict: **CLOSED — READY FOR INTEGRATION**
+
+Remaining Blocker/High/Medium findings: **None.**
+
+Known non-blocking / deferred:
+- ASTRA-10C-005 — LOW — the Reminder planner should require `intent.kind` to be an own string property before discriminator lookup; malformed runtime input can otherwise throw or inherit `kind`.
+- canonical per-character Reminder token disposition → Phase 10F
+- departed-origin correction limitation (same as OPUS-10B-010)
+
+### Phase 10C frozen behavior (summary)
+
+See `PHASE10C.md` for the full model and semantics.
+- Reminders are participant-bound, Storyteller-private, non-authoritative notation; mechanics never read Reminders as truth (guarded by `src/stores/reminderArchitecture.test.ts`).
+- Current occupied ParticipantIds are globally unique within a game snapshot (enforced by `StorytellerGamePersistedSchema`).
+- Empty seats own no Reminders; every new participation instance starts with none.
+- Origin (`sourceParticipant`/`sourceCharacter`) and mutation provenance (Mutation Context only) remain separate.
+- Cleanup cues are presentation-only; Reminders never expire automatically.
+- Legacy History is preserved rather than rewritten; legacy Reminder History is add/remove only.
+- One pure planner/apply seam (`planReminderTransaction` / `applyReminderPlan`, `src/stores/reminderResolution.ts`) and one commit seam (`resolveReminders`) remain available for future 10F composition.
+- Store v21 migration: explicit marker 20/21 routing; each game entry's own version routes old store migrations; malformed data is never repaired.
+- No Firebase rule, writer or fencing change.
 
 ## Phase 10B — CLOSED
 
@@ -163,8 +191,8 @@ Operational status: production Firebase rules were **not** deployed by the hotfi
 
 - **10A Life Transition Semantics + visual life-state grammar — CLOSED**
 - **10B Effect Lifecycle + visual Effect indicators — CLOSED**
-- **10C Reminder Workflow + visual Reminder tokens — IMPLEMENTED, awaiting Luna verification**
-- 10D Role Transitions
+- **10C Reminder Workflow + visual Reminder tokens — CLOSED**
+- **10D Role Transitions — NEXT (architecture challenge first)**
 - 10E Alignment Transitions
 - 10F Guided Ability Resolution / Night Actions
 - 10G Advanced Storyteller bookkeeping / final visual integration
@@ -175,50 +203,29 @@ Phase 10 may increase Silverwick's mechanical intelligence, but routine Storytel
 
 This requirement continues through 10C–10G.
 
-## Phase 10C starting intent (historical -- answered by the Sol contract; see `PHASE10C.md`)
+## Phase 10D starting intent
 
-The list of questions the architecture challenge answered.
+10D is **not yet designed**. Nothing below is a decision; it is the roadmap scope the architecture challenge must examine: Actual Role and Shown Role transitions, correction vs gameplay semantics, durable History and replacement workflows -- consistent with the frozen 10A Life, 10B Effect and 10C Reminder seams, ParticipantId identity and the Actual/Shown distinction.
 
-Phase 10C must define the smallest correct Reminder primitive/workflow that supports manual Storyteller use now and the future ability engine later.
-
-Known areas to challenge:
-- Reminder identity;
-- target;
-- source / provenance;
-- placement / update / removal;
-- lifetime, where applicable;
-- ParticipantId durability;
-- stacking;
-- correction semantics;
-- Undo / recovery;
-- privacy / projections;
-- accessible visual Reminder tokens;
-- the future ability-engine seam;
-- the relationship between authoritative Effects and Reminders;
-- the already-known empty-seat Reminder inheritance issue (10B made empty seats own no Effects; the analogous Reminder rule was deliberately not changed in 10B).
-
-Frozen principles carried into 10C:
-- If a mechanical condition is authoritative as an Effect, a Reminder may visualize or help bookkeep it but must **never** become a second independent source of that mechanical truth.
-- Routine Storyteller Reminder placement/removal should be fast and visually obvious. Advanced detail should remain progressively disclosed.
-
-Do not implement Role ability evaluation in 10C.
+Do not implement Role ability evaluation in 10D.
 
 ## Starting branch
 
 Use:
-`dev/phase-10c`
+`dev/phase-10d`
 
-It was created from the exact integrated `main` carrying the Phase 10B closure commit and has no implementation changes.
+It was created from the exact integrated `main` carrying the Phase 10C closure commit and has no implementation changes.
 
 At the start of any new session, verify the exact branch SHA and read:
 - `docs/ai/MASTER_IMPLEMENTATION_PLAN.md`
 - `docs/ai/handoffs/CURRENT_HANDOFF.md`
 - `PHASE10A.md`
 - `PHASE10B.md`
+- `PHASE10C.md`
 - `TERMINOLOGY.md`
-- existing Reminder types, schemas, store commands, projections, migrations, UI and tests, and the Phase 10B Effect seam they must not duplicate.
 
 ## Immediate next task
 
-**Luna verification** of the Phase 10C implementation. Verify the exact
-implementation commit SHA (not branch names) and read `PHASE10C.md`.
+Perform the **Phase 10D architecture challenge before coding** on
+`dev/phase-10d` (verify the exact commit SHA). No 10D implementation begins
+until the challenge is adjudicated into a Sol implementation contract.
