@@ -11,6 +11,28 @@ Closure still requires: Luna verification → Astra adversarial review → Sol
 adjudication / remediation → closure verification → Sol closure →
 integration into `main`.
 
+## Luna remediation (LUNA-10C-001 / LUNA-10C-002)
+
+Luna verification of `94c93390c8cf4bea915b1319fc2910cac81b5ed7` returned
+REVISE; both findings were accepted by Sol and are remediated. Status is still
+**IMPLEMENTED — awaiting Luna re-verification**.
+
+- **LUNA-10C-001 (MEDIUM) — fail-closed empty-seat migration.** v20 -> v21
+  now runs an entry-level preflight over every Reminder on every seat
+  (empty seats included) against the exact v20 Reminder contract
+  (`LegacyV20ReminderRecordSchema`, a verbatim copy of the v20 schema). Any
+  malformed Reminder leaves the whole entry untouched and unstamped (rejected
+  by the v21 schema) -- nothing is dropped, transformed or half-migrated.
+  Only when every Reminder is valid v20 data are orphans dropped, occupied
+  Reminders transformed and the entry stamped 21.
+- **LUNA-10C-002 (LOW) — strict keys by presence.** One rule
+  (`unknownOwnKey`) for every caller-facing Reminder object: transaction,
+  intent, participant bindings, Place spec, Amend changes, correction
+  amendment and cleanup request; the raw Mutation Context is parsed by the
+  strict schema (not an undefined-stripped copy); `addReminder` applies the
+  same rule to its input. An unknown key is refused even when its value is
+  `undefined`; a known optional field given as `undefined` keeps its meaning.
+
 ## The rule
 
 > Silverwick knows that a Reminder is something the Storyteller wants to
@@ -70,7 +92,7 @@ ReminderIntent[] → planReminderTransaction(game, tx, ids?)   (pure)
 
 `src/stores/reminderResolution.ts`. The planner binds every target/source to
 `{ playerId, participantId }` (stale → refused, never applied to a
-replacement occupant), validates caller input strictly (unknown / smuggled
+replacement occupant), validates caller input strictly -- unknown keys refused by presence, even when undefined (unknown / smuggled
 `sourceParticipant`, `createdAt`, `cleanupCue`, `lifetime`, exact cue
 moments, extra binding keys, malformed Mutation Context → `invalid`), builds
 durable refs, fills `createdAt` and resolves cues, plans History, and is
@@ -135,7 +157,7 @@ consults or rewrites History; deterministic and idempotent.
 | Reminders on an **empty seat** | **dropped** (no owner invented, nothing transferred, no History) |
 | temporally impossible legacy `createdAt` | omitted (never replaced) |
 | labels, notes, ids, origin refs | preserved exactly (legacy refs never re-resolved) |
-| malformed Reminder / lifetime | left untouched and the entry is **not stamped** 21 → rejected |
+| any malformed Reminder on any seat (orphans included) | the whole entry is left untouched and **not stamped** 21 → rejected |
 
 ### Version evidence
 

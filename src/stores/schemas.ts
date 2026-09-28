@@ -289,6 +289,26 @@ export const ReminderRecordSchema = z.object({
 }).strict();
 
 /**
+ * Phase 10C (LUNA-10C-001): EXACTLY what v20 accepted as a Reminder -- the
+ * v20 ReminderRecordSchema, preserved verbatim for the v20 -> v21 migration
+ * preflight only. Pre-v21 semantics, not a tightened v21 reading: `lifetime`
+ * is REQUIRED (a valid v20 lifetime), a retired v16 `sourcePlayer` is
+ * forbidden, and -- as in v20 -- unrecognized keys are not judged here (the
+ * v20 gate stripped them); an occupied seat's Reminder must still pass the
+ * strict v21 schema after migration. Never used to validate current data.
+ */
+export const LegacyV20ReminderRecordSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  sourceCharacter: z.string().min(1).optional(),
+  sourceParticipant: ParticipantRefSchema.optional(),
+  sourcePlayer: RetiredPlayerIdField,
+  createdAt: GameMomentSchema.optional(),
+  lifetime: EffectLifetimeSchema,
+  note: z.string().optional(),
+});
+
+/**
  * Phase 10C: the identity contract a LEGACY (pre-v21, no `reminderOperation`)
  * Reminder History snapshot keeps obeying -- exactly the Phase 9R.2 source
  * rule it was written under (a retired `sourcePlayer` is rejected, a present

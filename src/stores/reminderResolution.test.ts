@@ -646,3 +646,86 @@ describe("Phase 10C v21 Reminder History contract", () => {
       change: { kind: "added", item: { ...legacyItem, sourcePlayer: "a" } } }).success).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// LUNA-10C-002: every caller-facing Reminder object refuses an unknown key by
+// PRESENCE -- an undefined value never smuggles it through, and it is never
+// stripped. Known optional fields given as undefined keep their meaning.
+// ---------------------------------------------------------------------------
+describe("LUNA-10C-002: unknown keys are refused by presence, undefined values included", () => {
+  const u = (key = "mystery") => ({ [key]: undefined }) as Record<string, undefined>;
+  function expectRefusedInert(run: () => unknown) {
+    const b = baseline();
+    const history = structuredClone(game().history);
+    expect(run()).toMatchObject({ ok: false, code: "invalid" });
+    expectInert(b);
+    expect(game().history).toEqual(history);
+  }
+
+  it("transaction object", () => {
+    liveGame();
+    expectRefusedInert(() => state().resolveReminders({ intents: [{ kind: "place", target: bind(idOf("Carol")), reminder: { label: "X" } }], ...u() } as never));
+  });
+
+  it("individual intent", () => {
+    liveGame();
+    expectRefusedInert(() => resolve([{ kind: "place", target: bind(idOf("Carol")), reminder: { label: "X" }, ...u() } as never]));
+  });
+
+  it("Place spec (Luna's reproducer) and correction Place spec", () => {
+    liveGame();
+    expectRefusedInert(() => place("Carol", { label: "X", ...u() }));
+    expectRefusedInert(() => resolve([{ kind: "correctPlace", target: bind(idOf("Carol")), reminder: { label: "X", ...u("createdAt") } } as never]));
+  });
+
+  it("target and source participant bindings", () => {
+    liveGame();
+    expectRefusedInert(() => resolve([{ kind: "place", target: { ...bind(idOf("Carol")), ...u() }, reminder: { label: "X" } } as never]));
+    expectRefusedInert(() => place("Carol", { label: "X", source: { ...bind(idOf("Alice")), ...u("nameAtTime") } }));
+  });
+
+  it("cleanup request", () => {
+    liveGame();
+    expectRefusedInert(() => place("Carol", { label: "X", cleanup: { kind: "nextPhase", ...u() } }));
+  });
+
+  it("ordinary Amend changes, correction amendment, and the cleanup request inside them", () => {
+    liveGame();
+    place("Carol", { id: "r1", label: "Chosen" });
+    const target = bind(idOf("Carol"));
+    expectRefusedInert(() => resolve([{ kind: "amend", target, reminderId: "r1", changes: { note: "x", ...u() } } as never]));
+    expectRefusedInert(() => resolve([{ kind: "amend", target, reminderId: "r1", changes: { cleanup: { kind: "nextPhase", ...u() } } } as never]));
+    expectRefusedInert(() => resolve([{ kind: "correctAmend", target, reminderId: "r1", amendment: { label: "Fixed", ...u() } } as never]));
+    expectRefusedInert(() => resolve([{ kind: "correctRemove", target, reminderId: "r1", ...u() } as never]));
+  });
+
+  it("Mutation Context and its provenance", () => {
+    liveGame();
+    const intents = [{ kind: "place" as const, target: bind(idOf("Carol")), reminder: { label: "X" } }];
+    expectRefusedInert(() => resolve(intents, { context: { provenance: { reason: "r" }, ...u() } }));
+    expectRefusedInert(() => resolve(intents, { context: { provenance: { reason: "r", ...u("sourceParticipant") } } }));
+  });
+
+  it("an unknown undefined key refuses even inside an otherwise-valid multi-intent transaction (all-or-nothing)", () => {
+    liveGame();
+    expectRefusedInert(() => resolve([
+      { kind: "place", target: bind(idOf("Carol")), reminder: { label: "Fine" } },
+      { kind: "place", target: bind(idOf("Dave")), reminder: { label: "Bad", ...u() } } as never,
+    ]));
+    expect(player(idOf("Carol")).reminders).toEqual([]);
+  });
+
+  it("control: KNOWN optional fields present with undefined keep their semantics and are accepted", () => {
+    liveGame();
+    const result = state().resolveReminders({
+      intents: [{ kind: "place", target: bind(idOf("Carol")), reminder: { id: "r1", label: "X", note: undefined, source: undefined, sourceCharacter: undefined, cleanup: undefined } }],
+      context: undefined, resolutionId: undefined,
+    });
+    expect(result).toMatchObject({ ok: true, changed: true });
+    expect(player(idOf("Carol")).reminders[0]).toEqual({ id: "r1", label: "X", createdAt: { phase: "night", day: 1 } });
+    expect(resolve([{ kind: "amend", target: bind(idOf("Carol")), reminderId: "r1", changes: { note: "n", cleanup: undefined } }]))
+      .toMatchObject({ ok: true, changed: true });
+    expect(resolve([{ kind: "place", target: bind(idOf("Carol")), reminder: { label: "Y" } }],
+      { context: { provenance: { reason: "r", note: undefined } } })).toMatchObject({ ok: true, changed: true });
+  });
+});

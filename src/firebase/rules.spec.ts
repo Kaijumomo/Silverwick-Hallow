@@ -1560,10 +1560,13 @@ describe("Phase 9R.1 Finding B5: Firebase-safe optional serialization for a rich
     // removed; addReminder() is now the only Reminder path, so the same
     // explicit-undefined shape (plus `sourcePlayer: undefined`) goes there.
     // Phase 10C: placed BEFORE the game ends -- an ended game's Reminders
-    // are frozen, so a post-end placement is (correctly) refused.
+    // are frozen, so a post-end placement is (correctly) refused. Only the
+    // KNOWN optional input fields are explicitly undefined: LUNA-10C-002
+    // refuses an unsupported key such as `sourceParticipant` by presence,
+    // even when its value is undefined.
     expect(useStorytellerStore.getState().addReminder(handles.investigatorId, {
       id: "b5-reminder", label: "Marked",
-      sourcePlayer: undefined, note: undefined, ...({ sourceParticipant: undefined } as object),
+      sourcePlayer: undefined, sourceCharacter: undefined, note: undefined, cleanup: undefined,
     })).toBe("b5-reminder");
 
     // Exact reproduction #3: a triggered Information Delivery recorded

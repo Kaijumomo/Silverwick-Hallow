@@ -370,3 +370,128 @@ describe("Phase 10C: remote checkpoint recovery", () => {
     expect(useStorytellerStore.getState().game).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// LUNA-10C-001: v20 -> v21 is fail-closed for EVERY Reminder, empty seats
+// included. Valid v20 orphans are dropped; a malformed Reminder anywhere
+// blocks the whole step (nothing transformed, nothing dropped, not stamped),
+// so the v21 schema rejects the entry. Proven through the one shared seam on
+// local Current State, an Undo entry and a recovered checkpoint.
+// ---------------------------------------------------------------------------
+describe("LUNA-10C-001: valid empty-seat orphans are dropped; malformed Reminders are never laundered", () => {
+  const withOrphans = (orphans: unknown[], game = v20Game()): Raw => {
+    (game.players as Record<string, Raw>).e!.reminders = orphans;
+    return game;
+  };
+  const expectDroppedAndMigrated = (entry: Raw, original: Raw) => {
+    const seat = (entry.players as Record<string, Raw>).e!;
+    expect(seat.reminders).toEqual([]);
+    expect(seat.isEmpty).toBe(true);
+    expect("participantId" in seat).toBe(false);
+    expect(entry.gameSchemaVersion).toBe(21);
+    expect(entry.history).toEqual(original.history); // no migration History
+    expect(StorytellerGamePersistedSchema.safeParse(entry).success).toBe(true);
+  };
+
+  it("A: a valid manual-lifetime orphan is dropped; the empty seat stays empty with no ParticipantId; no History", () => {
+    const original = withOrphans([{ id: "o1", label: "Orphan", lifetime: { kind: "manual" } }]);
+    const entry = structuredClone(original);
+    migrateGameEntry(entry, 20, { kind: "canonical-only" });
+    expectDroppedAndMigrated(entry, original);
+    expect(entry).toEqual(expectedV21(original));
+  });
+
+  it("B: a valid finite-lifetime orphan is dropped -- no unresolved cue survives because there is no owner", () => {
+    const original = withOrphans([{ id: "o1", label: "Orphan", lifetime: { kind: "untilDawn" }, sourceParticipant: departed,
+      sourceCharacter: "imp", createdAt: { phase: "night", day: 2 }, note: "n" }]);
+    const entry = structuredClone(original);
+    migrateGameEntry(entry, 20, { kind: "canonical-only" });
+    expectDroppedAndMigrated(entry, original);
+    expect(JSON.stringify(entry.players)).not.toContain("Orphan");
+  });
+
+  it("validation follows the ACTUAL v20 contract: an orphan valid under v20 (an extra key v20 merely stripped) is dropped, not rejected", () => {
+    const original = withOrphans([{ id: "o1", label: "Orphan", lifetime: { kind: "manual" }, legacyExtra: 1 }]);
+    const entry = structuredClone(original);
+    migrateGameEntry(entry, 20, { kind: "canonical-only" });
+    expectDroppedAndMigrated(entry, original);
+  });
+
+  const MALFORMED_ORPHANS: [string, unknown][] = [
+    ["an invalid lifetime (Luna's reproducer)", { id: "o1", label: "Orphan", lifetime: { kind: "forever" } }],
+    ["a missing lifetime", { id: "o1", label: "Orphan" }],
+    ["a zero-count lifetime", { id: "o1", label: "Orphan", lifetime: { kind: "nights", count: 0 } }],
+    ["a non-object Reminder", "stray"],
+    ["a null Reminder", null],
+    ["a missing label", { id: "o1", lifetime: { kind: "manual" } }],
+    ["an empty id", { id: "", label: "Orphan", lifetime: { kind: "manual" } }],
+    ["a malformed durable source ref", { id: "o1", label: "Orphan", lifetime: { kind: "manual" },
+      sourceParticipant: { kind: "legacy", playerId: "z", participantId: "invented" } }],
+    ["a retired sourcePlayer", { id: "o1", label: "Orphan", lifetime: { kind: "manual" }, sourcePlayer: "a" }],
+    ["a malformed createdAt", { id: "o1", label: "Orphan", lifetime: { kind: "manual" }, createdAt: { phase: "dusk", day: 1 } }],
+  ];
+
+  it.each(MALFORMED_ORPHANS)("C/D: a malformed orphan (%s) blocks the whole step: entry untouched, not stamped, rejected", (_label, orphan) => {
+    const original = withOrphans([orphan]);
+    const entry = structuredClone(original);
+    migrateGameEntry(entry, 20, { kind: "canonical-only" });
+    // Nothing dropped, nothing transformed (not even the valid occupied-seat
+    // Reminders), never stamped v21.
+    expect(entry).toEqual(original);
+    expect(entry.gameSchemaVersion).toBe(20);
+    expect(StorytellerGamePersistedSchema.safeParse(entry).success).toBe(false);
+  });
+
+  it("E: mixed records -- valid Reminders plus one malformed one -- produce no partial migration and no valid state", () => {
+    // Valid occupied + valid orphan + one malformed orphan.
+    const a = withOrphans([{ id: "ok", label: "Fine", lifetime: { kind: "manual" } }, { id: "bad", label: "Bad", lifetime: { kind: "forever" } }]);
+    const aEntry = structuredClone(a);
+    migrateGameEntry(aEntry, 20, { kind: "canonical-only" });
+    expect(aEntry).toEqual(a);
+    // Malformed OCCUPIED Reminder + valid orphan: the orphan is not dropped either.
+    const b = withOrphans([{ id: "o1", label: "Orphan", lifetime: { kind: "manual" } }]);
+    remindersOf(b, "b").push({ id: "bad", label: "Bad", lifetime: { kind: "forever" } });
+    const bEntry = structuredClone(b);
+    migrateGameEntry(bEntry, 20, { kind: "canonical-only" });
+    expect(bEntry).toEqual(b);
+    for (const entry of [aEntry, bEntry]) expect(StorytellerGamePersistedSchema.safeParse(entry).success).toBe(false);
+    expect(remindersOf(bEntry, "b")[0]!.lifetime).toEqual({ kind: "manual" }); // not half-migrated
+  });
+
+  it("F: current v21 data is never dropped or repaired -- an empty seat owning a Reminder is rejected", () => {
+    const game = expectedV21(v20Game());
+    remindersOf(game, "e").push({ id: "x", label: "Ghost" });
+    const entry = structuredClone(game);
+    migrateGameEntry(entry, 13, { kind: "canonical-only" });
+    expect(entry).toEqual(game);
+    expect(StorytellerGamePersistedSchema.safeParse(entry).success).toBe(false);
+  });
+
+  it("G (local Current State and Undo entry): a valid orphan migrates away; a malformed orphan anywhere resets the whole store", () => {
+    const good = migrateStoreState({ game: v20Game(), undoStack: [v20Game("night", 2)] }, 20) as { game: Raw; undoStack: Raw[] };
+    expect(takeMigrationResetFlag()).toBe(false);
+    for (const entry of [good.game, good.undoStack[0]!]) expect(remindersOf(entry, "e")).toEqual([]);
+    const malformed = () => withOrphans([{ id: "o1", label: "Orphan", lifetime: { kind: "forever" } }]);
+    const currentBad = migrateStoreState({ game: malformed(), undoStack: [] }, 20) as { game: unknown };
+    expect(takeMigrationResetFlag()).toBe(true);
+    expect(currentBad.game).toBeNull();
+    const undoBad = migrateStoreState({ game: v20Game(), undoStack: [malformed()] }, 20) as { game: unknown };
+    expect(takeMigrationResetFlag()).toBe(true);
+    expect(undoBad.game).toBeNull();
+  });
+
+  it("G (recovered checkpoint): a malformed orphan is rejected and never adopted; a valid orphan recovers dropped", async () => {
+    const bad = withOrphans([{ id: "o1", label: "Orphan", lifetime: { kind: "forever" } }]);
+    const { start } = await recoverFrom(bad);
+    await expect(start()).rejects.toThrow(SnapshotValidationError);
+    expect(useStorytellerStore.getState().game).toBeNull();
+    for (const dispose of disposals.splice(0).reverse()) await dispose();
+    useStorytellerStore.setState({ game: null, lobby: null, undoStack: [], localSeq: 0, sync: null });
+    const valid = await recoverFrom(withOrphans([{ id: "o1", label: "Orphan", lifetime: { kind: "untilDawn" } }]));
+    const recovered = await valid.start();
+    disposals.push(() => recovered.stop());
+    expect(recovered.outcome).toBe("live");
+    expect(useStorytellerStore.getState().game!.players.e!.reminders).toEqual([]);
+    expect(useStorytellerStore.getState().game!.gameSchemaVersion).toBe(21);
+  });
+});

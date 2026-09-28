@@ -131,11 +131,13 @@ describe("Phase 9R.1 Finding B5: Reminder never stores an explicit-undefined opt
     dealtGame();
     goLive();
     const id = game().seatOrder[0]!;
-    state().addReminder(id, {
+    // LUNA-10C-002: every KNOWN optional input field explicitly undefined is
+    // simply "not supplied"; an UNKNOWN key is refused by presence even when
+    // undefined (see the next test), so it is not part of this shape.
+    expect(state().addReminder(id, {
       id: "r-1", label: "Chosen",
       sourcePlayer: undefined, sourceCharacter: undefined, note: undefined, cleanup: undefined,
-      ...({ sourceParticipant: undefined, createdAt: undefined, cleanupCue: undefined } as object),
-    });
+    })).toBe("r-1");
     const stored = game().players[id]!.reminders[0]!;
     // Phase 10C: createdAt is planner-generated (never caller-supplied).
     expect(stored).toEqual({ id: "r-1", label: "Chosen", createdAt: { phase: "night", day: 1 } });
@@ -144,6 +146,22 @@ describe("Phase 9R.1 Finding B5: Reminder never stores an explicit-undefined opt
     expect("sourceCharacter" in stored).toBe(false);
     expect("note" in stored).toBe(false);
     expect("cleanupCue" in stored).toBe(false);
+  });
+
+  it("LUNA-10C-002: addReminder() refuses an unknown key present with an undefined value -- never silently stripped", () => {
+    dealtGame();
+    goLive();
+    const id = game().seatOrder[0]!;
+    for (const key of ["sourceParticipant", "createdAt", "cleanupCue", "lifetime", "mystery"]) {
+      const before = game();
+      const seq = state().localSeq;
+      const undo = state().undoStack.length;
+      expect(state().addReminder(id, { label: "Chosen", ...({ [key]: undefined } as object) })).toBeNull();
+      expect(game()).toBe(before);
+      expect(state().localSeq).toBe(seq);
+      expect(state().undoStack).toHaveLength(undo);
+    }
+    expect(game().players[id]!.reminders).toEqual([]);
   });
 
   // Phase 10C: Reminders no longer carry a lifetime (a zero-count one was

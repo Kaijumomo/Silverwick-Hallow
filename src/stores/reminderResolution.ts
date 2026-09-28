@@ -279,6 +279,21 @@ const INTENT_KEYS: Record<ReminderIntent["kind"], Set<string>> = {
   correctRemove: new Set(["kind", "target", "reminderId"]),
 };
 const TRANSACTION_KEYS = new Set(["intents", "context", "resolutionId"]);
+const BINDING_KEYS = new Set(["playerId", "participantId"]);
+const CLEANUP_REQUEST_KEYS = new Set(["kind"]);
+
+/**
+ * LUNA-10C-002: the ONE strictness rule for every caller-facing Reminder
+ * object (transaction, intent, participant binding, Place spec, Amend
+ * changes, correction amendment, cleanup request). An unsupported key is
+ * refused because it is PRESENT as an own property -- whatever its value,
+ * `undefined` included; it is never silently stripped. A known optional
+ * field present with `undefined` is handled by that field's own semantics
+ * (normally "not supplied").
+ */
+export function unknownOwnKey(value: Record<string, unknown>, allowed: ReadonlySet<string>): string | undefined {
+  return Object.keys(value).find((key) => !allowed.has(key));
+}
 
 /**
  * Plans one atomic Reminder transaction against `game`. Pure: reads `game`
@@ -300,11 +315,8 @@ export function planReminderTransaction(
   // the game ends (with or without History).
   if (game.phase === "ended") return refuse("phase", "This game has ended; its Reminders are frozen.");
   if (!isPlainObject(transaction)) return refuse("invalid", "Invalid Reminder transaction.");
-  for (const key of Object.keys(transaction)) {
-    if ((transaction as Record<string, unknown>)[key] !== undefined && !TRANSACTION_KEYS.has(key)) {
-      return refuse("invalid", `Unknown Reminder transaction field "${key}".`);
-    }
-  }
+  const unknownTransactionKey = unknownOwnKey(transaction as unknown as Record<string, unknown>, TRANSACTION_KEYS);
+  if (unknownTransactionKey !== undefined) return refuse("invalid", `Unknown Reminder transaction field "${unknownTransactionKey}".`);
   const intents: readonly ReminderIntent[] = Array.isArray(transaction.intents) ? transaction.intents : [];
   if (intents.length === 0) return refuse("tooMany", "Nothing to record.");
   if (intents.length > MAX_REMINDER_INTENTS) return refuse("tooMany", `At most ${MAX_REMINDER_INTENTS} Reminder changes can be recorded at once.`);
@@ -323,10 +335,13 @@ export function planReminderTransaction(
   // The Mutation Context is runtime-untrusted (ASTRA-10B-001 pattern):
   // validate its exact caller-facing shape first (malformed -> "invalid",
   // never coerced or stored), convert a live sourcePlayer to its durable ref,
-  // then confirm the stored form meets the stored Provenance contract.
+  // then confirm the stored form meets the stored Provenance contract. The
+  // RAW context is parsed (never an undefined-stripped copy), so the strict
+  // schema refuses an unknown key by presence (LUNA-10C-002); the parsed
+  // result is a new object, and durableProvenance owns/strips it before use.
   let contextInput: MutationContext | undefined;
   if (transaction.context !== undefined) {
-    const parsed = MutationContextInputSchema.safeParse(cloneOwned(transaction.context));
+    const parsed = MutationContextInputSchema.safeParse(transaction.context);
     if (!parsed.success) return refuse("invalid", "Invalid Mutation Context -- provenance takes only a source player, source character, reason and note.");
     contextInput = parsed.data;
   }
@@ -356,10 +371,8 @@ export function planReminderTransaction(
   /** Resolves a bound CURRENT participant (target or source). */
   const bind = (binding: unknown, what: string): { player: STPlayerRecord; ref: CurrentParticipantRef } | Refused => {
     if (!isPlainObject(binding)) return fail("invalid", `Choose the ${what}.`);
-    for (const key of Object.keys(binding)) {
-      if (binding[key] !== undefined && key !== "playerId" && key !== "participantId") {
-        return fail("invalid", `The ${what} is named only by a bound current participant.`);
-      }
+    if (unknownOwnKey(binding, BINDING_KEYS) !== undefined) {
+      return fail("invalid", `The ${what} is named only by a bound current participant.`);
     }
     const expected = binding.participantId;
     if (typeof binding.playerId !== "string" || !binding.playerId) return fail("invalid", `Choose the ${what}.`);
@@ -396,7 +409,7 @@ export function planReminderTransaction(
   };
   /** Resolves the one caller cleanup request into the exact stored cue. */
   const resolveCleanup = (request: unknown): ReminderCleanupCue | Refused => {
-    if (!isPlainObject(request) || request.kind !== "nextPhase" || Object.keys(request).some((key) => key !== "kind" && request[key] !== undefined)) {
+    if (!isPlainObject(request) || request.kind !== "nextPhase" || unknownOwnKey(request, CLEANUP_REQUEST_KEYS) !== undefined) {
       return fail("invalid", "A cleanup reminder can only be set for the next phase.");
     }
     const moment = nextPhaseCleanupMoment(game);
@@ -410,13 +423,11 @@ export function planReminderTransaction(
     if (!checked.success) return fail("invalid", `Invalid Reminder: ${checked.error.issues[0]?.message ?? "malformed"}.`);
     return owned;
   };
-  const unknownKey = (value: Record<string, unknown>, allowed: Set<string>): string | undefined =>
-    Object.keys(value).find((key) => value[key] !== undefined && !allowed.has(key));
 
   /** Builds a new Reminder from a spec (Place / correction Place). */
   const buildReminder = (rawSpec: unknown): ReminderRecord | Refused => {
     if (!isPlainObject(rawSpec)) return fail("invalid", "Describe the Reminder to place.");
-    const unknown = unknownKey(rawSpec, SPEC_KEYS);
+    const unknown = unknownOwnKey(rawSpec, SPEC_KEYS);
     if (unknown !== undefined) {
       return fail("invalid", unknown === "sourceParticipant" || unknown === "sourcePlayer"
         ? "Name the Reminder's source as a bound current participant."
@@ -486,7 +497,7 @@ export function planReminderTransaction(
   for (let index = 0; index < intents.length; index++) {
     const intent = intents[index]!;
     const at = (refused: Refused): ReminderRefusal => ({ ...refused.refusal, intentIndex: index });
-    const extra = unknownKey(intent as unknown as Record<string, unknown>, INTENT_KEYS[intent.kind]);
+    const extra = unknownOwnKey(intent as unknown as Record<string, unknown>, INTENT_KEYS[intent.kind]);
     if (extra !== undefined) return at(fail("invalid", `Unknown Reminder change field "${extra}".`));
     const target = bind(intent.target, "target player");
     if (isRefused(target)) return at(target);
@@ -530,7 +541,7 @@ export function planReminderTransaction(
         if (!existing) return at(fail("notFound", "That Reminder is no longer on this player."));
         const changes = intent.changes;
         if (!isPlainObject(changes)) return at(fail("invalid", "Describe the Reminder change."));
-        const disallowed = unknownKey(changes, AMEND_KEYS);
+        const disallowed = unknownOwnKey(changes, AMEND_KEYS);
         if (disallowed !== undefined) {
           return at(IMMUTABLE_KEYS.has(disallowed)
             ? fail("immutable", `An ordinary change cannot rewrite the Reminder's ${disallowed} -- correct it if it was recorded wrongly.`)
@@ -564,7 +575,7 @@ export function planReminderTransaction(
         if (!existing) return at(fail("notFound", "That Reminder is no longer on this player."));
         const amendment = intent.amendment;
         if (!isPlainObject(amendment)) return at(fail("invalid", "Describe the correction."));
-        const disallowed = unknownKey(amendment, CORRECTION_KEYS);
+        const disallowed = unknownOwnKey(amendment, CORRECTION_KEYS);
         if (disallowed !== undefined) {
           return at(disallowed === "id" || disallowed === "createdAt"
             ? fail("immutable", `A Reminder's ${disallowed} cannot be corrected -- remove it and place the right Reminder.`)

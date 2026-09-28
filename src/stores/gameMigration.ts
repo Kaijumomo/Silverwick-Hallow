@@ -3,9 +3,9 @@ import { buildRegistry, deriveAlignment, type RoleRegistry } from "@/data/roleRe
 import { legacyCurrentParticipantId, legacyParticipantRef } from "./participants";
 import { migratedLifeEventCoverage } from "./lifeEvents";
 import {
-  EffectLifetimeSchema,
   GAME_SCHEMA_VERSION,
   GameMomentSchema,
+  LegacyV20ReminderRecordSchema,
   PREVIOUS_GAME_SCHEMA_VERSION,
   isEffectAppliedAtCoherent,
 } from "./schemas";
@@ -461,7 +461,8 @@ function migrateEntryV19ToV20(e: Record<string, unknown>): void {
  * place, from this entry's OWN content alone -- History is never consulted
  * or rewritten.
  *
- *  - Legacy empty-seat Reminders are DROPPED (Phase 10C Section 10). v20
+ *  - Structurally valid legacy empty-seat Reminders are DROPPED (Phase 10C
+ *    Section 10; a malformed one blocks the whole step -- see below). v20
  *    permitted that malformed ownership; an empty seat has no ParticipantId,
  *    so there is no truthful participant to keep them for, and they must
  *    never be inherited by the next occupant. They are never transferred, no
@@ -479,41 +480,48 @@ function migrateEntryV19ToV20(e: Record<string, unknown>): void {
  *  - Labels, notes, ids and origin refs (including legacy ParticipantRefs)
  *    are preserved exactly; a ref is never re-resolved against the roster.
  *
- * Fail-closed (Finding A3): a present-but-malformed Reminder (not an object,
- * or a lifetime missing or not a valid v20 lifetime) is never normalized. It
- * is left untouched and the entry is NOT stamped v21, so it keeps its v20
- * marker and the v21 schema (which requires 21) rejects the whole entry --
- * a missing lifetime can therefore never slip through as a valid
- * "persistent" v21 Reminder. Otherwise the entry is stamped
- * `gameSchemaVersion: 21`. Deterministic and idempotent (no ids, clocks or
- * randomness), applied independently per entry.
+ * Fail-closed (Finding A3, LUNA-10C-001): an entry-level PREFLIGHT first
+ * checks every Reminder on EVERY seat -- empty seats included -- against the
+ * exact v20 Reminder contract (LegacyV20ReminderRecordSchema: a v20 lifetime
+ * is required, a retired `sourcePlayer` forbidden, source refs/createdAt must
+ * be well-formed). If ANY Reminder is malformed (or not an object), the entry
+ * is left completely untouched: nothing is transformed, nothing is dropped,
+ * and it is NOT stamped v21, so it keeps its v20 marker and the v21 schema
+ * (which requires 21) rejects the whole entry. Malformed evidence -- even on
+ * an empty seat -- can therefore never be deleted and laundered into a valid
+ * v21 entry, and no half-migrated entry is ever produced. Only when every
+ * Reminder is valid v20 data are occupied-seat Reminders transformed, valid
+ * orphans dropped, and the entry stamped `gameSchemaVersion: 21`.
+ * Deterministic and idempotent (no ids, clocks or randomness), applied
+ * independently per entry.
  */
 function migrateEntryV20ToV21(e: Record<string, unknown>): void {
-  let malformed = false;
-  if (isObject(e.players)) {
-    for (const raw of Object.values(e.players)) {
-      if (!isObject(raw) || !Array.isArray(raw.reminders)) continue;
-      if (raw.isEmpty === true) {
-        if (raw.reminders.length > 0) raw.reminders = [];
-        continue;
-      }
-      for (const reminder of raw.reminders) {
-        if (!isObject(reminder) || !EffectLifetimeSchema.safeParse(reminder.lifetime).success) {
-          malformed = true;
-          continue;
-        }
-        const finite = (reminder.lifetime as { kind: string }).kind !== "manual";
-        delete reminder.lifetime;
-        if (finite) reminder.cleanupCue = { kind: "unresolved" };
-        const created = GameMomentSchema.safeParse(reminder.createdAt);
-        if (created.success && typeof e.phase === "string" && typeof e.day === "number" && Number.isSafeInteger(e.day) &&
-          !isEffectAppliedAtCoherent({ phase: e.phase, day: e.day }, created.data)) {
-          delete reminder.createdAt;
-        }
+  const seats = isObject(e.players) ? Object.values(e.players).filter(isObject) : [];
+  // 1. Preflight: every Reminder anywhere must be structurally valid v20
+  // data. (A non-array `reminders` is left for the v21 schema to reject.)
+  const malformed = seats.some((seat) => Array.isArray(seat.reminders) &&
+    seat.reminders.some((reminder) => !LegacyV20ReminderRecordSchema.safeParse(reminder).success));
+  if (malformed) return;
+  // 2. Transform: valid empty-seat orphans are dropped; occupied-seat
+  // Reminders lose their lifetime.
+  for (const seat of seats) {
+    if (!Array.isArray(seat.reminders)) continue;
+    if (seat.isEmpty === true) {
+      if (seat.reminders.length > 0) seat.reminders = [];
+      continue;
+    }
+    for (const reminder of seat.reminders as Record<string, unknown>[]) {
+      const finite = (reminder.lifetime as { kind: string }).kind !== "manual";
+      delete reminder.lifetime;
+      if (finite) reminder.cleanupCue = { kind: "unresolved" };
+      const created = GameMomentSchema.safeParse(reminder.createdAt);
+      if (created.success && typeof e.phase === "string" && typeof e.day === "number" && Number.isSafeInteger(e.day) &&
+        !isEffectAppliedAtCoherent({ phase: e.phase, day: e.day }, created.data)) {
+        delete reminder.createdAt;
       }
     }
   }
-  if (!malformed) e.gameSchemaVersion = GAME_SCHEMA_VERSION;
+  e.gameSchemaVersion = GAME_SCHEMA_VERSION;
 }
 
 export function migrateGameEntry(

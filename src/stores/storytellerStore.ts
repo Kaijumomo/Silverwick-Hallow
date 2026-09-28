@@ -22,6 +22,7 @@ import {
   applyReminderPlan,
   newReminderId,
   planReminderTransaction,
+  unknownOwnKey,
   type ReminderRefusal,
   type ReminderTransaction,
 } from "./reminderResolution";
@@ -612,6 +613,10 @@ export type StorytellerStore = {
 // while live-synced would fail this write with no history ever landing.
 const alignmentHistoryValue = (value: Alignment | undefined): Record<string, unknown> =>
   value === undefined ? {} : { actualAlignment: value };
+
+/** Phase 10C: the fields addReminder's caller-facing input may carry
+ * (ReminderInput). Anything else is refused by key presence. */
+const REMINDER_INPUT_KEYS: ReadonlySet<string> = new Set(["id", "label", "sourcePlayer", "sourceCharacter", "note", "cleanup"]);
 
 /** A status-only repair committed alongside an event correction. */
 export type RepairTarget = { playerId: PlayerId; target: LifeStatusTarget };
@@ -2275,10 +2280,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!game) return null;
         const target = currentBinding(game, id);
         if (!target || !reminder || typeof reminder !== "object" || Array.isArray(reminder)) return null;
-        // Own a deep-cloned, undefined-stripped snapshot of the caller's input
-        // (Phase 9R.1 Finding B4/B5) before anything reads it. Every other key
-        // -- including a smuggled sourceParticipant, createdAt, cleanupCue or
-        // the retired lifetime -- reaches the planner, which refuses it.
+        // LUNA-10C-002: the same key-presence rule as the planner -- an
+        // unsupported key (a smuggled sourceParticipant, createdAt, cleanupCue,
+        // the retired lifetime...) refuses the command even when its value is
+        // `undefined`; it is never stripped away. Only then own a deep-cloned,
+        // undefined-stripped snapshot (Phase 9R.1 Finding B4/B5), so a KNOWN
+        // optional field given as `undefined` is simply "not supplied".
+        if (unknownOwnKey(reminder as unknown as Record<string, unknown>, REMINDER_INPUT_KEYS) !== undefined) return null;
         const { id: reminderId, sourcePlayer, ...rest } = cloneOwned(reminder) as ReminderInput & Record<string, unknown>;
         let source: EffectParticipantBinding | undefined;
         if (sourcePlayer !== undefined) {
