@@ -1,5 +1,5 @@
 import { MAX_TOTAL_PLAYERS } from "@/data/setupCounts";
-import { buildRegistry } from "@/data/roleRegistry";
+import { ORDINARY_ROLE_TYPES, buildRegistry, isOrdinaryRoleType } from "@/data/roleRegistry";
 import { getTraveler } from "@/data/travelers";
 import { cloneOwned, durableProvenance, historyId, isLiveGamePhase, sameSnapshot, type MutationContext } from "./history";
 import { isInitialRevealComplete } from "./identity";
@@ -16,7 +16,6 @@ import type {
   PlayerId,
   RoleDef,
   RoleId,
-  RoleType,
   Script,
   STPlayerRecord,
   StorytellerLobbyRecord,
@@ -63,10 +62,9 @@ import type {
 // Role classification (by authoritative Role TYPE, not "exists somewhere")
 // ---------------------------------------------------------------------------
 
-/** The only types an ORDINARY participant's Actual or Shown Role may have. */
-export const ORDINARY_ROLE_TYPES: readonly RoleType[] = ["townsfolk", "outsider", "minion", "demon"];
-export const isOrdinaryRoleType = (type: unknown): boolean =>
-  typeof type === "string" && (ORDINARY_ROLE_TYPES as readonly string[]).includes(type);
+/** The only types an ORDINARY participant's Actual or Shown Role may have --
+ * ONE definition, shared with the registry's Role ownership (ASTRA-10D-004). */
+export { ORDINARY_ROLE_TYPES, isOrdinaryRoleType };
 
 /** Own-property script character lookup (never an inherited name). */
 function scriptCharacter(script: Script | null | undefined, id: string): RoleDef | undefined {
@@ -408,8 +406,11 @@ export function planRoleTransaction(
   /** The evolving working copy of each touched participant (never `game`'s). */
   const working = new Map<PlayerId, STPlayerRecord>();
   const workingOf = (player: STPlayerRecord): STPlayerRecord => working.get(player.id) ?? player;
-  /** Participants whose perception assumptions really changed (packet
-   * invalidation is minted once, at the end, only if a net change remains). */
+  /** Participants whose Actual Role / Traveler status really changed: what was
+   * prepared for the old Role is invalid (draft cleared, packet withdrawn, one
+   * epoch minted at the end). Perception-derived invalidation is NOT tracked
+   * per intent -- it is derived once, at the end, from the ORIGINAL versus the
+   * FINAL perception (ASTRA-10D-002). */
   const invalidated = new Set<PlayerId>();
   /** Participants whose Traveler night-progress is cleared. */
   const clearProgress = new Set<PlayerId>();
@@ -580,13 +581,11 @@ export function planRoleTransaction(
     const nextMode = changingMode ? p.behaviorMode! : w.behaviorMode;
     // Identical bundle: a TRUE no-op (nothing cleared, withdrawn or recorded).
     if (p.shownRole === w.shownRole && p.shownAlignment === w.shownAlignment && nextMode === w.behaviorMode) continue;
-
-    let next: STPlayerRecord = { ...w, shownRole: p.shownRole, shownAlignment: p.shownAlignment, behaviorMode: nextMode };
-    delete next.publishedPacket;
-    if (p.shownRole !== w.shownRole) delete next.privateInfo;
-    else next = pruneInapplicablePrivateInfo(next, registry);
-    invalidated.add(original.id);
-    working.set(original.id, next);
+    // Only the perception itself moves here. What a perception change
+    // invalidates (draft, published packet, epoch) is decided once, at the end,
+    // from the ORIGINAL versus the FINAL perception: an intermediate perception
+    // a later intent reverts invalidates nothing.
+    working.set(original.id, { ...w, shownRole: p.shownRole, shownAlignment: p.shownAlignment, behaviorMode: nextMode });
   }
 
   // --- Final perception check ------------------------------------------------
@@ -604,13 +603,32 @@ export function planRoleTransaction(
   // --- Finalize --------------------------------------------------------------
   const players: Record<PlayerId, RolePlayerPatch> = {};
   const finalOf = new Map<PlayerId, STPlayerRecord>();
-  for (const [playerId, w] of working) {
+  for (const [playerId, planned] of working) {
     const original = ownPlayer(game, playerId)!;
+    let w = planned;
+    // Perception invalidation is a function of the ORIGINAL versus the FINAL
+    // semantic perception only (ASTRA-10D-002): a round trip (Chef -> Librarian
+    // -> Chef) deletes, prunes, withdraws and mints nothing. A real change is
+    // applied exactly once, against the final record: the published packet is
+    // withdrawn; a changed Shown Role clears the draft, otherwise only what the
+    // final perception makes inapplicable is pruned. A real Actual Role /
+    // Traveler-status change already invalidated everything for the old Role
+    // (see the change branch) whatever the perception does.
+    const perceptionChanged = original.shownRole !== w.shownRole || original.shownAlignment !== w.shownAlignment ||
+      original.behaviorMode !== w.behaviorMode;
+    if (perceptionChanged && !invalidated.has(playerId)) {
+      w = { ...w };
+      delete w.publishedPacket;
+      if (original.shownRole !== w.shownRole) delete w.privateInfo;
+      else w = pruneInapplicablePrivateInfo(w, registry);
+    }
     const differs = ROLE_PLAN_FIELDS.some((field) => field !== "packetEpoch" && !sameSnapshot(original[field], w[field]));
     if (!differs) continue; // net-zero for this participant: nothing to patch
-    // The packet epoch is minted only for a participant whose perception
-    // assumptions really changed AND still differs from the start.
-    const final: STPlayerRecord = invalidated.has(playerId) ? { ...w, packetEpoch: ids.packetEpoch() } : w;
+    // The packet epoch is minted once, only for a participant whose Role or
+    // perception assumptions differ at the END -- never for an intermediate
+    // state, and never merely because another field (e.g. an explicit Traveler
+    // arrival restart) changed.
+    const final: STPlayerRecord = invalidated.has(playerId) || perceptionChanged ? { ...w, packetEpoch: ids.packetEpoch() } : w;
     finalOf.set(playerId, final);
     const patch: RolePlayerPatch = { set: {}, remove: [] };
     for (const field of ROLE_PLAN_FIELDS as readonly RolePlanField[]) {

@@ -9,6 +9,9 @@ import { useSessionRuntime } from "./storytellerSync";
 import { useApplyTravelerChoices } from "./StorytellerSession";
 import { rosterEntryPath, rosterParticipantPath } from "./paths";
 import { travelerChoicePath } from "./lifecycle";
+import { revokePlayerMembership, seatPlayer } from "./lobby";
+import type { RoomBackend } from "./backend";
+import { newParticipantId } from "@/stores/participants";
 
 // Phase 9 Setup finalization B4: the player-side Traveler character choice
 // is applied automatically, with no Storyteller click, through the exact
@@ -43,6 +46,9 @@ async function bindRoster(b: MemoryRoomBackend, playerId: string, participantId?
   });
 }
 
+/** The player's own request node, as the player writes it in production. */
+const request = (b: MemoryRoomBackend, roleId: string) => b.set(travelerChoicePath(code, "uid-alice"), roleId);
+
 // Mirrors firebase/travelers.test.ts's own setup: a real fenced SessionWriter
 // over a MemoryRoomBackend, claimed the same way production code claims one.
 async function withWriter() {
@@ -69,6 +75,7 @@ describe("useApplyTravelerChoices", () => {
     seedExtraOrdinary(5);
     expect(useStorytellerStore.getState().setIsTraveler(playerId, true).ok).toBe(true);
     await bindRoster(b, playerId);
+    await request(b, "thief");
     useSessionRuntime.setState({ backend: writer, travelerChoices: { "uid-alice": { playerId, roleId: "thief" } } });
 
     renderHook(() => useApplyTravelerChoices(code));
@@ -83,6 +90,7 @@ describe("useApplyTravelerChoices", () => {
     const playerId = useStorytellerStore.getState().game!.seatOrder[0]!;
     useStorytellerStore.getState().addPlayerToSeat("Alice"); // ordinary, never marked Traveler
     await bindRoster(b, playerId);
+    await request(b, "thief");
     useSessionRuntime.setState({ backend: writer, travelerChoices: { "uid-alice": { playerId, roleId: "thief" } } });
 
     renderHook(() => useApplyTravelerChoices(code));
@@ -101,6 +109,7 @@ describe("useApplyTravelerChoices", () => {
     // Storyteller assigns Gunslinger before the pending Thief request is processed.
     useStorytellerStore.getState().assignRole(playerId, "gunslinger");
     await bindRoster(b, playerId);
+    await request(b, "thief");
     useSessionRuntime.setState({ backend: writer, travelerChoices: { "uid-alice": { playerId, roleId: "thief" } } });
 
     renderHook(() => useApplyTravelerChoices(code));
@@ -110,7 +119,7 @@ describe("useApplyTravelerChoices", () => {
     expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("gunslinger");
   });
 
-  it("Phase 10D: a request whose roster record names a different participation than the local occupant is cleared, never applied", async () => {
+  it("Phase 10D: a request whose roster record names a different participation than the local occupant is never applied -- nor consumed by that occupant's callback", async () => {
     const { b, writer } = await withWriter();
     useStorytellerStore.getState().newGame("tb", { plannedPlayerCount: 1 });
     const playerId = useStorytellerStore.getState().game!.seatOrder[0]!;
@@ -118,12 +127,15 @@ describe("useApplyTravelerChoices", () => {
     seedExtraOrdinary(5);
     expect(useStorytellerStore.getState().setIsTraveler(playerId, true).ok).toBe(true);
     await bindRoster(b, playerId, "pt-an-earlier-participation");
+    await request(b, "thief");
     useSessionRuntime.setState({ backend: writer, travelerChoices: { "uid-alice": { playerId, roleId: "thief" } } });
 
     renderHook(() => useApplyTravelerChoices(code));
 
-    await waitFor(async () => expect(await b.get(travelerChoicePath(code, "uid-alice"))).toBeUndefined());
+    await writer.runExclusive(async () => {}); // the observed callback ran before this
     expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("");
+    // ASTRA-10D-001: attributed to another participation -- not consumed.
+    expect(await b.get(travelerChoicePath(code, "uid-alice"))).toBe("thief");
     // One replay would have applied it; give any straggler a turn.
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("");
@@ -157,6 +169,7 @@ describe("useApplyTravelerChoices", () => {
     expect(useStorytellerStore.getState().setIsTraveler(playerId, true).ok).toBe(true);
     const b = new MemoryRoomBackend();
     await bindRoster(b, playerId);
+    await request(b, "thief");
     // A minimal fenced-shaped backend whose remote write fails (e.g. a
     // network error deep inside an otherwise-valid, still-fenced writer) --
     // this must be caught and reported, never an unhandled rejection, and
@@ -178,5 +191,64 @@ describe("useApplyTravelerChoices", () => {
     // The local side still committed -- the failure is on the remote clear,
     // not a reason to desync from it.
     expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("thief");
+  });
+
+  // ASTRA-10D-001: the production wiring binds each request to the
+  // participation holding the seat WHEN IT IS OBSERVED. A writer whose
+  // exclusive queue is held stands in for the observed callback waiting behind
+  // the Storyteller's own earlier-queued membership work.
+  function heldWriter(b: MemoryRoomBackend) {
+    const queued: (() => Promise<unknown>)[] = [];
+    const writer = { runExclusive: <T,>(op: (inner: RoomBackend) => Promise<T>) =>
+      new Promise<T>((resolve, reject) => { queued.push(() => op(b).then(resolve, reject)); }) };
+    return { writer: writer as unknown as SessionWriter, queued };
+  }
+
+  it("ASTRA-10D-001 CHOICE1 (production wiring): a callback observed for A that runs after A is revoked and the same uid re-seated as B never touches B", async () => {
+    const b = new MemoryRoomBackend();
+    useStorytellerStore.getState().newGame("tb", { plannedPlayerCount: 1 });
+    const playerId = useStorytellerStore.getState().game!.seatOrder[0]!;
+    useStorytellerStore.getState().addPlayerToSeat("Alice");
+    seedExtraOrdinary(5);
+    expect(useStorytellerStore.getState().setIsTraveler(playerId, true).ok).toBe(true);
+    const a = useStorytellerStore.getState().game!.players[playerId]!.participantId!;
+    await bindRoster(b, playerId);
+    await request(b, "thief");
+    const { writer, queued } = heldWriter(b);
+    useSessionRuntime.setState({ backend: writer, travelerChoices: { "uid-alice": { playerId, roleId: "thief" } } });
+
+    renderHook(() => useApplyTravelerChoices(code));
+    await waitFor(() => expect(queued).toHaveLength(1)); // observed (bound to A) and queued
+
+    // Before it runs: A is revoked, the same uid is seated again as B (a new
+    // ParticipantId, same seat), and B asks for the IDENTICAL character.
+    await revokePlayerMembership(b, code, playerId);
+    expect(useStorytellerStore.getState().unseatPlayer(playerId)).toBe(true);
+    const bPid = newParticipantId();
+    useStorytellerStore.getState().addToPendingQueue("uid-alice", "Alice");
+    await seatPlayer(b, code, "uid-alice", playerId, null, { participantId: bPid, name: "Alice" });
+    expect(useStorytellerStore.getState().assignPendingToSeat("uid-alice", playerId, bPid)).toBe(true);
+    expect(useStorytellerStore.getState().game!.players[playerId]).toMatchObject({ participantId: bPid, isTraveler: true, actualRole: "" });
+    await request(b, "thief");
+    const before = useStorytellerStore.getState().game;
+
+    await queued[0]!();
+
+    expect(a).not.toBe(bPid);
+    expect(useStorytellerStore.getState().game).toBe(before); // B untouched
+    expect(await b.get(travelerChoicePath(code, "uid-alice"))).toBe("thief"); // B's own request, not consumed
+  });
+
+  it("ASTRA-10D-001: nothing is queued for a request observed while its seat holds no participation", async () => {
+    const b = new MemoryRoomBackend();
+    useStorytellerStore.getState().newGame("tb", { plannedPlayerCount: 1 });
+    const playerId = useStorytellerStore.getState().game!.seatOrder[0]!; // an empty planned seat
+    await request(b, "thief");
+    const { writer, queued } = heldWriter(b);
+    useSessionRuntime.setState({ backend: writer, travelerChoices: { "uid-alice": { playerId, roleId: "thief" } } });
+    renderHook(() => useApplyTravelerChoices(code));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(queued).toHaveLength(0);
+    expect(await b.get(travelerChoicePath(code, "uid-alice"))).toBe("thief");
   });
 });

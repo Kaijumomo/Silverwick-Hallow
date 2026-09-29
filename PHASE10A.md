@@ -6,14 +6,15 @@ Status: implemented, awaiting Luna verification. Store schema **v19**.
 
 | Concern | Where | Notes |
 |---|---|---|
-| Current life truth | `STPlayerRecord.alive / ghostVote / exiled / abilityUsed` | Unchanged fields; `exiled` = the *current* death was a Traveler exile. "Not exiled" is stored as an absent key. |
+| Current life truth | `STPlayerRecord.alive / ghostVote / exiled / abilityUsed` | Unchanged fields; `exiled` = the *current* death was an exile (death-scoped, not current-Role-scoped -- see the Phase 10D compatibility amendment below). "Not exiled" is stored as an absent key. |
 | Recent life events | `game.lifeEventWindow` (`LifeEventWindow`) | Authoritative, temporary, Storyteller-private. Current + immediately previous phase only. |
 | Explanation | `game.history` (`"life"` records) | One record per affected participant per resolution: the state diff and/or `lifeEvent.operations` (ordered `{ kind: "added" \| "removed", event }`), plus `correction: true`. Never queried by mechanics. |
 
 Life Events: `death` (Night or Day, no outcome), `execution` (Day, outcome
-`died | survived | alreadyDead`), `exile` (Day, Traveler, outcome
-`died | survived`), `resurrection` (no outcome). One semantic action = one
-event per subject. Generic death = `kind === "death"` or `outcome === "died"`.
+`died | survived | alreadyDead`), `exile` (Day, outcome `died | survived`; a
+gameplay exile needs a current Traveler), `resurrection` (no outcome). One
+semantic action = one event per subject. Generic death = `kind === "death"` or
+`outcome === "died"`.
 
 ## The mutation seam
 
@@ -156,6 +157,40 @@ correction never does.
 - Public display and player town list use the same public grammar
   (`publicLifeOf`); a dead Traveler stays visibly dead over Role art, and
   exile-death is public (`PlayerPublicRecord.exiled`).
+
+## Phase 10D compatibility amendment: exile-death is death-scoped (ASTRA-10D-C01 / C02)
+
+Recorded by the Phase 10D remediation under Sol's amended contract; the rest of
+this document remains the Phase 10A implementation record.
+
+- `exiled` means the participant's CURRENT death was caused by an exile. It is
+  Life Current State, independent of the participant's current Role or
+  Traveler status; the Life invariant is `exiled => dead` (not "exiled =>
+  currently a Traveler").
+- Gameplay exile is unchanged: the `exile` intent still requires Day, a
+  current seated Traveler, and an alive participant.
+- The exile-death persists across every Role and ordinary <-> Traveler
+  transition (the Role seam never reads or writes `alive`, `ghostVote` or
+  `exiled`) and ends only when that death ends (resurrection clears it, as
+  before) or an explicit Life correction repairs it.
+- `lifeStatusOf` / `publicLifeOf` read only the Life fields: a dead participant
+  with `exiled: true` is Exiled -- vote available / vote used -- for the
+  Storyteller and publicly, whatever their character. The `exiledNonTraveler`
+  anomaly is retired; `aliveButExiled`, `aliveWithoutVote` and the empty-seat
+  anomaly are unchanged.
+- Status correction (`correctStatus`) may set dead, the ghost vote and
+  `exiled: true` whatever the current Role (the current Role cannot prove what
+  caused the current death). A living target with an explicit exiled or ghost
+  vote state, and malformed targets, are still refused. A status correction
+  still creates no Life Event.
+- Correction-recorded exile events (amend, late record) keep the Day-only,
+  outcome and ParticipantRef rules but never require the subject to be a
+  Traveler NOW; Role History is not consulted and no Role-at-event field is
+  added.
+- UI: the explicit, progressively disclosed status correction offers the
+  Exiled states, and the late-record form offers exile subjects, whatever the
+  current Role; the gameplay exile actions stay Traveler-only.
+- No new persisted field and no schema/store version change (v22).
 
 ## Deferred (Phase 10B+)
 

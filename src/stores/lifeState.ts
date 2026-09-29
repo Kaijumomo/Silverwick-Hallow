@@ -9,6 +9,12 @@ import type { PlayerPublicRecord, STPlayerRecord } from "./types";
  * Life State is public table information: who is dead, who still holds
  * their vote token, and whether a death was an exile. Privacy Mode never
  * hides it. Anomalies ("Needs check") are Storyteller-only.
+ *
+ * Phase 10D (ASTRA-10D-C01): interpretation reads ONLY the Life fields.
+ * `exiled` means the participant's CURRENT death was caused by an exile -- Life
+ * Current State, independent of their current Role or Traveler status (only a
+ * Traveler can undergo a gameplay exile, but a later Role change never touches
+ * the exile-death it caused). The one Life invariant is `exiled => dead`.
  */
 
 /** The visual life grammar's five public states. */
@@ -25,7 +31,6 @@ export type LifeState =
 export type LifeAnomaly =
   | "aliveButExiled"
   | "aliveWithoutVote"
-  | "exiledNonTraveler"
   | "emptySeatLifeState";
 
 export type LifeStatus = {
@@ -34,7 +39,7 @@ export type LifeStatus = {
   anomalies: LifeAnomaly[];
 };
 
-type LifeFields = Pick<STPlayerRecord, "alive" | "ghostVote" | "exiled" | "isTraveler" | "isEmpty">;
+type LifeFields = Pick<STPlayerRecord, "alive" | "ghostVote" | "exiled" | "isEmpty">;
 
 /** Storyteller derivation: display state plus anomalies. */
 export function lifeStatusOf(player: LifeFields): LifeStatus {
@@ -47,12 +52,9 @@ export function lifeStatusOf(player: LifeFields): LifeStatus {
   if (player.alive) {
     if (exiled) anomalies.push("aliveButExiled");
     if (!player.ghostVote) anomalies.push("aliveWithoutVote");
-    if (exiled && !player.isTraveler) anomalies.push("exiledNonTraveler");
     return { state: "alive", anomalies };
   }
-  if (exiled && !player.isTraveler) anomalies.push("exiledNonTraveler");
-  const exileDeath = exiled && player.isTraveler;
-  const state: LifeState = exileDeath
+  const state: LifeState = exiled
     ? (player.ghostVote ? "exiledVote" : "exiledVoteUsed")
     : (player.ghostVote ? "deadVote" : "deadVoteUsed");
   return { state, anomalies };
@@ -60,7 +62,8 @@ export function lifeStatusOf(player: LifeFields): LifeStatus {
 
 /** The public-safe life representation (Phase 10A Section 22). Anomalies are
  * normalized away rather than exposed: a living player publicly holds their
- * vote, and only a Traveler's exile-death is published as an exile.
+ * vote. A dead participant whose death was an exile is published as Exiled
+ * whatever their current Role (Phase 10D, ASTRA-10D-C01).
  *
  * Future public-registration mechanics (e.g. a Zombuul that registers as
  * dead while alive) belong to the future ability engine and would be applied
@@ -113,7 +116,6 @@ export function voteTokenLabel(state: LifeState): string | null {
 export const LIFE_ANOMALY_LABEL: Record<LifeAnomaly, string> = {
   aliveButExiled: "Alive but marked exiled",
   aliveWithoutVote: "Alive without a vote token",
-  exiledNonTraveler: "Exile recorded on a non-Traveler",
   emptySeatLifeState: "Empty seat carries a life state",
 };
 

@@ -74,6 +74,7 @@ const ALLOWED_MODULES: Record<string, string> = {
   "firebase/snapshots.ts": "wire decoders for projection records",
   "firebase/membershipCommands.ts": "builds a Role-seam INTENT for a Traveler choice",
   "features/players/PlayerDrawer.tsx": "builds Role-seam INTENTS from the rendered record",
+  "features/players/TravelerArrival.tsx": "builds Role-seam INTENTS from the rendered Traveler record (ASTRA-10D-003)",
 };
 
 /** Store units (top-level helpers / commands) that may write these fields. */

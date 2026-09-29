@@ -42,17 +42,18 @@ export function eventStateNote(game: StorytellerLobbyRecord, event: LifeEvent): 
 
 export type StatusChoice = "keep" | LifeState;
 
-/** Status choices for a correction. Exile-death only for a Traveler. */
-export function statusChoicesFor(player: Pick<STPlayerRecord, "isTraveler">): { value: StatusChoice; label: string }[] {
+/** Status choices for an explicit correction. The Exiled states are offered
+ * whatever the participant's CURRENT Role (Phase 10D, ASTRA-10D-C01): a
+ * correction repairs what caused the current death, which a later Role change
+ * never alters. (Gameplay exile itself stays Traveler-only.) */
+export function statusChoicesFor(): { value: StatusChoice; label: string }[] {
   return [
     { value: "keep", label: "Leave status as it is" },
     { value: "alive", label: "Alive" },
     { value: "deadVote", label: "Dead — vote available" },
     { value: "deadVoteUsed", label: "Dead — vote used" },
-    ...(player.isTraveler ? [
-      { value: "exiledVote" as const, label: "Exiled — vote available" },
-      { value: "exiledVoteUsed" as const, label: "Exiled — vote used" },
-    ] : []),
+    { value: "exiledVote", label: "Exiled — vote available" },
+    { value: "exiledVoteUsed", label: "Exiled — vote used" },
   ];
 }
 

@@ -46,7 +46,7 @@ function StatusRepair({ id, label, player, value, onChange }: {
     <div className="drawer-row">
       <label className="label" htmlFor={id}>{label}</label>
       <select id={id} value={value} onChange={(e) => onChange(e.target.value as StatusChoice)}>
-        {statusChoicesFor(player).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        {statusChoicesFor().map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     </div>
   );
@@ -141,7 +141,10 @@ function LateRecordForm({ game, previous }: { game: StorytellerLobbyRecord; prev
   const [who, setWho] = useState("");
   const [repair, setRepair] = useState<StatusChoice>("keep");
   const player = who ? game.players[who] : undefined;
-  const players = seated(game).filter((p) => kind !== "exile" || p.isTraveler);
+  // Phase 10D (ASTRA-10D-C02): a late-recorded exile is a correction of what
+  // happened at that past Day -- any current participant may be its subject;
+  // their CURRENT Role is no evidence of their Role then.
+  const players = seated(game);
   return (
     <details className="life-correction">
       <summary>Late record for {momentLabel(previous)}…</summary>

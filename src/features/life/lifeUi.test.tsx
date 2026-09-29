@@ -124,13 +124,15 @@ describe("Phase 10A: drawer life controls", () => {
     expect(player(ids[0]!).alive).toBe(true);
   });
 
-  it("status correction is explicit and offers exile-death only for a Traveler", () => {
+  it("status correction is explicit and offers the Exiled states whatever the participant's current Role (ASTRA-10D-C01)", () => {
     const { ids } = everyState();
     const carol = ids[2]!;
+    expect(player(carol).isTraveler).toBe(false);
     render(<Drawer id={carol} />);
     expect(screen.getByText(/Alive without a vote token/)).toBeInTheDocument();
     const select = screen.getByLabelText("Correct to");
-    expect(within(select).queryByText(/Exiled/)).toBeNull();
+    expect(within(select).getByText("Exiled — vote available")).toBeInTheDocument();
+    expect(within(select).getByText("Exiled — vote used")).toBeInTheDocument();
     fireEvent.change(select, { target: { value: "alive" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply correction" }));
     expect(player(carol).ghostVote).toBe(true);
@@ -238,6 +240,74 @@ describe("Phase 10A: Life events corrections panel", () => {
     expect(screen.getByText("Day 1")).toBeInTheDocument();
     expect(screen.queryByText("Night 1")).toBeNull();
     expect(screen.queryByText(/Alice — died/)).toBeNull();
+  });
+});
+
+// Phase 10D (ASTRA-10D-C01 / C02): exile-death is death-scoped. The explicit,
+// progressively disclosed correction workflows offer the Exiled states and
+// correction-recorded exile events for any participant; gameplay exile stays
+// Traveler-only.
+describe("Phase 10D: exile-death is independent of the current Role (correction UI)", () => {
+  function Drawer({ id }: { id: PlayerId }) { const p = store((s) => s.game!.players[id]!); return <PlayerDrawer player={p} />; }
+  const lifeSection = () => within(screen.getByRole("region", { name: "Life" }));
+
+  it("an ORDINARY participant who is already exile-dead (a former Traveler) shows Exiled and can keep/select Exiled in the status correction", () => {
+    const { traveler } = liveGame();
+    state().advancePhase(); // Day 1
+    expect(state().recordExile(traveler, "died")).toMatchObject({ ok: true });
+    const t = player(traveler);
+    expect(state().resolveRoles({ intents: [
+      { kind: "changeActualRole", target: { playerId: traveler, participantId: t.participantId! }, expectedActualRole: "thief", expectedIsTraveler: true, actualRole: "chef" },
+      { kind: "setPerception", target: { playerId: traveler, participantId: t.participantId! }, expectedShownRole: t.shownRole,
+        expectedShownAlignment: t.shownAlignment, shownRole: "chef", shownAlignment: null },
+    ] })).toMatchObject({ ok: true, changed: true });
+    expect(player(traveler)).toMatchObject({ isTraveler: false, alive: false, exiled: true });
+    render(<Drawer id={traveler} />);
+    expect(lifeSection().getByText("Exiled · vote available")).toBeInTheDocument();
+    expect(lifeSection().queryByText(/Needs check/)).toBeNull();
+    const select = lifeSection().getByLabelText("Correct to");
+    fireEvent.change(select, { target: { value: "exiledVoteUsed" } });
+    fireEvent.click(lifeSection().getByRole("button", { name: "Apply correction" }));
+    expect(player(traveler)).toMatchObject({ isTraveler: false, alive: false, ghostVote: false, exiled: true });
+    expect(lifeSection().getByText("Exiled · vote used")).toBeInTheDocument();
+  });
+
+  it("an ORDINARY participant's wrongly missing exile-death is repaired through the explicit correction -- no Life Event; gameplay exile stays Traveler-only", () => {
+    const { ids } = liveGame();
+    state().advancePhase(); // Day 1
+    const bob = ids[1]!;
+    expect(state().recordDeath(bob)).toMatchObject({ ok: true });
+    const events = game().lifeEventWindow.events.length;
+    render(<Drawer id={bob} />);
+    // Gameplay exile is not offered to an ordinary participant.
+    expect(lifeSection().queryByRole("button", { name: /Exiled —/ })).toBeNull();
+    // The correction is progressively disclosed and explicit.
+    expect(lifeSection().getByText("Correct status…").closest("details")).not.toHaveAttribute("open");
+    fireEvent.change(lifeSection().getByLabelText("Correct to"), { target: { value: "exiledVote" } });
+    fireEvent.click(lifeSection().getByRole("button", { name: "Apply correction" }));
+    expect(player(bob)).toMatchObject({ isTraveler: false, alive: false, ghostVote: true, exiled: true });
+    expect(lifeSection().getByText("Exiled · vote available")).toBeInTheDocument();
+    expect(game().lifeEventWindow.events).toHaveLength(events);
+    expect(game().history.at(-1)).toMatchObject({ category: "life", correction: true });
+  });
+
+  it("a late-recorded exile may name a currently ordinary participant (C02)", () => {
+    const { ids } = liveGame();
+    state().advancePhase(); // Day 1
+    state().advancePhase(); // Night 2: Day 1 is the previous phase
+    const carol = ids[2]!;
+    expect(player(carol).isTraveler).toBe(false);
+    render(<LifeEventsPanel onClose={() => {}} />);
+    fireEvent.click(screen.getByText("Late record for Day 1…"));
+    fireEvent.change(screen.getByLabelText("Event"), { target: { value: "exile" } });
+    const who = screen.getByLabelText("Player");
+    expect(within(who).getByRole("option", { name: new RegExp(`^${player(carol).name} `) })).toBeInTheDocument();
+    fireEvent.change(who, { target: { value: carol } });
+    fireEvent.change(screen.getByLabelText("Also set status"), { target: { value: "exiledVote" } });
+    fireEvent.click(screen.getByRole("button", { name: "Record for Day 1" }));
+    expect(game().lifeEventWindow.events.at(-1)).toMatchObject({ kind: "exile", outcome: "died",
+      moment: { phase: "day", day: 1 }, subject: { playerId: carol } });
+    expect(player(carol)).toMatchObject({ alive: false, exiled: true, isTraveler: false });
   });
 });
 

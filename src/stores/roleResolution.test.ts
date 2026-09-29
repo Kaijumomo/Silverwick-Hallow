@@ -29,6 +29,11 @@ import { applyLifePlan, planLifeTransaction } from "./lifeResolution";
 import { applyReminderPlan, planReminderTransaction } from "./reminderResolution";
 import { HistoryRecordSchema, StorytellerGamePersistedSchema } from "./schemas";
 import { participantRefOf } from "./participants";
+import { identityNeedsCheck, projectToSelf } from "./projections";
+import { getPrivateInfoApplicability, offersNightInformation } from "./privatePackets";
+import { buildRegistry } from "@/data/roleRegistry";
+import { isCanonicalRole } from "@/data/canonical";
+import { parseClocktowerScript } from "@/data/customScript";
 import type { PlayerId, Script, StorytellerLobbyRecord, STPlayerRecord } from "./types";
 
 const state = () => store.getState();
@@ -749,6 +754,326 @@ describe("explicit perception", () => {
     expect(player(id).shownAlignment).toBe("evil");
     expect(state().setShownRole(id, "librarian")).toMatchObject({ ok: true, changed: true });
     expect(player(id)).toMatchObject({ shownRole: "librarian", shownAlignment: null });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ASTRA-10D-004: ONE Role ownership resolution. A custom ordinary Role the Role
+// boundary admits resolves to that same owned definition in classification,
+// picker, registry, projection and private-information resolution -- a
+// canonical Loric (or Fabled) reusing the id never silently replaces it.
+// Canonical Traveler precedence is unchanged.
+// ---------------------------------------------------------------------------
+describe("ASTRA-10D-004: a custom ordinary Role reusing a canonical Loric id keeps ONE owned definition", () => {
+  const imported = () => {
+    const parsed = parseClocktowerScript(["chef", "imp",
+      { id: "bigwig", name: "Bigwig (homebrew)", team: "townsfolk", ability: "Each night, you learn a homebrew fact." }]);
+    expect(parsed.ok).toBe(true);
+    return parsed.ok ? parsed.script : (null as never);
+  };
+  /** The setup fixture's characters (every canonical Role) other than `ids`,
+   * so each homebrew entry below is its script's ONLY definition of that id. */
+  const canonicalExcept = (...ids: string[]) => setupScript.characters.filter((r) => !ids.includes(r.id));
+  /** The setup fixture with the imported homebrew Townsfolk "bigwig". */
+  function homeScript(): Script {
+    const custom = imported().characters.find((r) => r.id === "bigwig")!;
+    return { ...setupScript, id: "home-bigwig", name: "Home", characters: [...canonicalExcept("bigwig"), custom] };
+  }
+  function liveOn(script: Script) {
+    store.setState({ customScripts: { [script.id]: script } });
+    state().newGame(script.id, { plannedPlayerCount: 7, plannedTravelerCount: 0 });
+    for (const name of ["Alice", "Bob", "Carol", "Dave", "Eve", "Frank", "Grace"]) state().addPlayerToSeat(name);
+    state().setRolePool(standardRoles(7));
+    expect(state().dealRolePool().ok).toBe(true);
+    for (const id of game().seatOrder) state().showAssignedRole(id);
+    expect(state().revealRoles().ok).toBe(true);
+    expect(state().beginNightOne().ok).toBe(true);
+    store.setState({ undoStack: [] });
+  }
+
+  it("the importer accepts the homebrew Townsfolk `bigwig` as a homebrew ordinary character", () => {
+    const custom = imported().characters.find((r) => r.id === "bigwig")!;
+    expect(custom).toMatchObject({ id: "bigwig", type: "townsfolk", name: "Bigwig (homebrew)", provenance: { status: "homebrew" } });
+    expect(isCanonicalRole(custom)).toBe(false);
+  });
+
+  it("classification, picker and registry resolve the SAME owned custom definition (never the canonical Loric)", () => {
+    const script = homeScript();
+    const custom = script.characters.find((r) => r.id === "bigwig")!;
+    const cls = classifyRole(script, "bigwig");
+    expect(cls).toEqual({ kind: "ordinary", role: custom });
+    expect(ordinaryRoleChoices(script)).toContain(custom);
+    const registry = buildRegistry(script);
+    expect(registry.get("bigwig")).toBe(custom);
+    expect(registry.get("bigwig")!.type).toBe("townsfolk");
+    expect(registry.alignmentOf("bigwig")).toBe("good");
+    // No Loric (or other canonical) behavior is inherited merely from the id.
+    expect(registry.get("bigwig")).not.toBe(LORICS.find((l) => l.id === "bigwig"));
+    expect(registry.informationActionsOf("bigwig")).toEqual([]);
+  });
+
+  it("Actual Role and Shown Role are accepted; self projection delivers it as an ordinary Townsfolk; private information resolves the custom ability", () => {
+    const script = homeScript();
+    liveOn(script);
+    const id = holder("chef");
+    expect(resolve([changeRoleIntent(player(id), "bigwig")])).toMatchObject({ ok: true, changed: true });
+    expect(resolve([setPerceptionIntent(player(id), { shownRole: "bigwig", shownAlignment: null })])).toMatchObject({ ok: true, changed: true });
+    expect(player(id)).toMatchObject({ actualRole: "bigwig", shownRole: "bigwig", shownAlignment: null });
+    const registry = buildRegistry(script);
+    expect(identityNeedsCheck(player(id), registry)).toBe(false);
+    expect(projectToSelf(player(id), registry)).toEqual({ shownRole: "bigwig", shownAlignment: "good" });
+    // Private-information applicability reads the OWNED definition's ability
+    // ("learn" offers night information), not the canonical Loric's text.
+    expect(offersNightInformation(LORICS.find((l) => l.id === "bigwig")!.ability ?? "")).toBe(false);
+    expect(getPrivateInfoApplicability(player(id), registry).extraText).toBe(true);
+    // And it round-trips the current schema unchanged.
+    expect(StorytellerGamePersistedSchema.safeParse(game()).success).toBe(true);
+  });
+
+  it("the canonical Loric Big Wig stays a non-player Role: refused as an Actual or Shown Role by the seam", () => {
+    liveGame(); // a script with no character "bigwig"
+    expect(classifyRole(setupScript, "bigwig").kind).toBe("refused");
+    const b = baseline();
+    const id = chef();
+    expect(resolve([changeRoleIntent(player(id), "bigwig")])).toMatchObject({ ok: false, code: "role" });
+    expect(resolve([setPerceptionIntent(player(id), { shownRole: "bigwig", shownAlignment: null })])).toMatchObject({ ok: false, code: "perception" });
+    expectInert(b);
+    // A script that lists the canonical Loric itself (an official id string)
+    // still never admits it as a player Role; the registry keeps the Loric.
+    const listed = parseClocktowerScript(["chef", "imp", "bigwig"]);
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    expect(classifyRole(listed.script, "bigwig").kind).toBe("refused");
+    expect(buildRegistry(listed.script).get("bigwig")!.type).toBe("loric");
+  });
+
+  it("canonical Traveler precedence is unchanged: a homebrew ordinary character reusing a Traveler id still resolves to the canonical Traveler", () => {
+    const script: Script = { id: "home-thief", name: "Home", characters: [
+      { id: "thief", name: "Homebrew Thief", type: "townsfolk", ability: "Homebrew." }, ...canonicalExcept("thief")] };
+    expect(classifyRole(script, "thief")).toMatchObject({ kind: "traveler", role: { type: "traveler" } });
+    expect(buildRegistry(script).get("thief")).toBe(TRAVELERS.find((t) => t.id === "thief"));
+    expect(ordinaryRoleChoices(script).some((r) => r.id === "thief")).toBe(false);
+  });
+
+  it("a Fabled reusing an admitted custom ordinary Role's id does not replace it either; non-colliding custom Roles are unchanged", () => {
+    const doomsayer = { id: "doomsayer", name: "Homebrew Doomsayer", type: "outsider" as const, ability: "Homebrew." };
+    const brewer = { id: "brewer", name: "Brewer", type: "townsfolk" as const, ability: "Homebrew." };
+    const script: Script = { id: "home-fabled", name: "Home", characters: [doomsayer, brewer, ...canonicalExcept("doomsayer")],
+      fabled: [FABLED.find((f) => f.id === "doomsayer")!] };
+    expect(classifyRole(script, "doomsayer")).toEqual({ kind: "ordinary", role: doomsayer });
+    expect(buildRegistry(script).get("doomsayer")).toBe(doomsayer);
+    expect(classifyRole(script, "brewer")).toEqual({ kind: "ordinary", role: brewer });
+    expect(buildRegistry(script).get("brewer")).toBe(brewer);
+    // A script's non-ordinary custom entry keeps the previous precedence.
+    const fabledTyped: Script = { id: "home-f", name: "Home", characters: [{ id: "bigwig", name: "X", type: "fabled" }, ...canonicalExcept("bigwig")] };
+    expect(classifyRole(fabledTyped, "bigwig").kind).toBe("refused");
+    expect(buildRegistry(fabledTyped).get("bigwig")!.type).toBe("loric");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ASTRA-10D-002: perception-derived invalidation (draft deletion/pruning,
+// packet withdrawal, packet epoch) is decided from the ORIGINAL versus the
+// FINAL semantic perception -- never from intermediate intent traversal.
+// ---------------------------------------------------------------------------
+describe("ASTRA-10D-002: perception invalidation follows original vs FINAL perception", () => {
+  const packet = (shownRole: string, shownAlignment: "good" | "evil") => ({ id: "sent", payload: { shownRole, shownAlignment } });
+  /** Seeds a draft, a published packet and a known epoch on `id`. */
+  function seed(id: PlayerId, over: Partial<STPlayerRecord>) {
+    store.setState({ game: { ...game(), players: { ...game().players, [id]: { ...player(id), packetEpoch: "epoch-keep", ...over } } } });
+    store.setState({ undoStack: [] });
+  }
+  /** The perception bundle of `p` re-bound to an intermediate observed state. */
+  const from = (p: STPlayerRecord, observed: { shownRole: string | null; shownAlignment: "good" | "evil" | null; behaviorMode?: STPlayerRecord["behaviorMode"] },
+    next: { shownRole: string | null; shownAlignment: "good" | "evil" | null; behaviorMode?: STPlayerRecord["behaviorMode"] }): RoleIntent => ({
+    ...setPerceptionIntent(p, next),
+    expectedShownRole: observed.shownRole, expectedShownAlignment: observed.shownAlignment,
+    ...(next.behaviorMode !== undefined ? { expectedBehaviorMode: observed.behaviorMode } : {}),
+  });
+
+  it("NZ1: shown Chef -> Librarian -> Chef with a draft and a published packet is a TRUE no-op (draft, packet and epoch unchanged; no commit)", () => {
+    liveGame();
+    const id = chef();
+    seed(id, { privateInfo: { extraText: "draft" }, publishedPacket: packet("chef", "good") });
+    const p = player(id);
+    const original = { shownRole: p.shownRole, shownAlignment: p.shownAlignment };
+    expect(original.shownRole).toBe("chef");
+    const intents = [
+      setPerceptionIntent(p, { shownRole: "librarian", shownAlignment: null }),
+      from(p, { shownRole: "librarian", shownAlignment: null }, original),
+    ];
+    // The pure plan: net-zero, and no epoch is ever drawn.
+    const ids = counterIds();
+    expect(planRoleTransaction(game(), { intents }, { script: setupScript, ids })).toEqual({ ok: true, changed: false });
+    expect(ids.packetEpoch()).toBe("epoch-1");
+    // The store: no commit at all.
+    const b = baseline();
+    expect(resolve(intents)).toEqual({ ok: true, changed: false });
+    expectInert(b);
+    expect(player(id)).toBe(p);
+    expect(player(id)).toMatchObject({ privateInfo: { extraText: "draft" }, publishedPacket: packet("chef", "good"), packetEpoch: "epoch-keep" });
+  });
+
+  it("NZ2: behavior fake-demon -> normal -> fake-demon keeps the original applicable draft (bluffs, fake Minions) and the packet", () => {
+    liveGame();
+    const id = chef();
+    const other = holder("imp");
+    seed(id, { shownRole: "imp", shownAlignment: null, behaviorMode: "fake_demon_behavior",
+      privateInfo: { bluffs: ["chef", "saint", "monk"], fakeMinions: [other], extraText: "you are the demon" },
+      publishedPacket: packet("imp", "evil") });
+    const p = player(id);
+    const fake = { shownRole: "imp", shownAlignment: null, behaviorMode: "fake_demon_behavior" as const };
+    const normal = { shownRole: "imp", shownAlignment: null, behaviorMode: "normal" as const };
+    const intents = [setPerceptionIntent(p, normal), from(p, normal, fake)];
+    const b = baseline();
+    expect(resolve(intents)).toEqual({ ok: true, changed: false });
+    expectInert(b);
+    expect(player(id)).toBe(p);
+    expect(player(id).privateInfo).toEqual({ bluffs: ["chef", "saint", "monk"], fakeMinions: [other], extraText: "you are the demon" });
+    expect(player(id).publishedPacket).toEqual(packet("imp", "evil"));
+    expect(player(id).packetEpoch).toBe("epoch-keep");
+  });
+
+  it("NZ3: a real same-Role Traveler restart with a shownAlignment null -> explicit -> null round trip commits the restart only (no epoch, no draft/packet change)", () => {
+    const zed = liveGameWithTraveler("thief");
+    const arrival = { demonInfoComplete: true, firstNightComplete: true, completedAtNight: 1 };
+    seed(zed, { travelerArrival: { ...arrival }, privateInfo: { extraText: "draft" }, publishedPacket: packet("thief", "good") });
+    const z = player(zed);
+    expect(z).toMatchObject({ shownRole: "thief", shownAlignment: null });
+    const intents = [
+      correctRoleIntent(z, "thief", "restart"),
+      setPerceptionIntent(z, { shownRole: "thief", shownAlignment: "evil" }),
+      from(z, { shownRole: "thief", shownAlignment: "evil" }, { shownRole: "thief", shownAlignment: null }),
+    ];
+    // The plan: ONLY the restart -- perception adds no field, no epoch.
+    const ids = counterIds();
+    const planned = planRoleTransaction(game(), { intents }, { script: setupScript, ids });
+    expect(planned).toMatchObject({ ok: true, changed: true });
+    if (!planned.ok || !planned.changed) return;
+    expect(planned.plan.players).toEqual({ [zed]: { set: { travelerArrival: { demonInfoComplete: false, firstNightComplete: false } }, remove: [] } });
+    expect(planned.plan.history).toEqual([]);
+    expect(ids.packetEpoch()).toBe("epoch-1");
+    // The store: one commit; the restart is real, the perception is not.
+    const b = baseline();
+    expect(resolve(intents)).toEqual({ ok: true, changed: true });
+    expectOneCommit(b);
+    expect(player(zed).travelerArrival).toEqual({ demonInfoComplete: false, firstNightComplete: false });
+    expect(player(zed)).toMatchObject({ shownRole: "thief", shownAlignment: null, packetEpoch: "epoch-keep",
+      privateInfo: { extraText: "draft" }, publishedPacket: packet("thief", "good") });
+  });
+
+  it("an Actual Role that really changes still invalidates for the old Role even while the perception round-trips (one epoch)", () => {
+    liveGame();
+    const id = chef();
+    seed(id, { privateInfo: { extraText: "draft" }, publishedPacket: packet("chef", "good") });
+    const p = player(id);
+    const original = { shownRole: p.shownRole, shownAlignment: p.shownAlignment };
+    const intents = [
+      setPerceptionIntent(p, { shownRole: "librarian", shownAlignment: null }),
+      changeRoleIntent(p, "empath"),
+      from(p, { shownRole: "librarian", shownAlignment: null }, original),
+    ];
+    const ids = counterIds();
+    const planned = planRoleTransaction(game(), { intents }, { script: setupScript, ids });
+    expect(planned).toMatchObject({ ok: true, changed: true });
+    if (!planned.ok || !planned.changed) return;
+    expect(planned.plan.players[id]).toEqual({ set: { actualRole: "empath", packetEpoch: "epoch-1" }, remove: ["privateInfo", "publishedPacket"] });
+    expect(ids.packetEpoch()).toBe("epoch-2"); // exactly one epoch was drawn
+    const b = baseline();
+    expect(resolve(intents)).toEqual({ ok: true, changed: true });
+    expectOneCommit(b);
+    expect(player(id)).toMatchObject({ actualRole: "empath", ...original });
+    expect(player(id).privateInfo).toBeUndefined();
+    expect(player(id).publishedPacket).toBeUndefined();
+    expect(player(id).packetEpoch).not.toBe("epoch-keep");
+    expect(roleHistory()).toHaveLength(1);
+  });
+
+  it("a final Shown Role that genuinely differs (Chef -> Librarian -> Empath) clears the draft and withdraws the packet exactly once", () => {
+    liveGame();
+    const id = chef();
+    seed(id, { privateInfo: { extraText: "draft" }, publishedPacket: packet("chef", "good") });
+    const p = player(id);
+    const intents = [
+      setPerceptionIntent(p, { shownRole: "librarian", shownAlignment: null }),
+      from(p, { shownRole: "librarian", shownAlignment: null }, { shownRole: "empath", shownAlignment: null }),
+    ];
+    const ids = counterIds();
+    const planned = planRoleTransaction(game(), { intents }, { script: setupScript, ids });
+    expect(planned).toMatchObject({ ok: true, changed: true });
+    if (!planned.ok || !planned.changed) return;
+    expect(player(id).shownAlignment).toBe("good"); // so the derived (null) final alignment is a change too
+    expect(planned.plan.players[id]).toEqual({ set: { shownRole: "empath", shownAlignment: null, packetEpoch: "epoch-1" },
+      remove: ["privateInfo", "publishedPacket"] });
+    expect(ids.packetEpoch()).toBe("epoch-2");
+    expect(planned.plan.history).toEqual([]);
+  });
+
+  it("an alignment-only FINAL change prunes against the final perception only: fields an intermediate mode made inapplicable survive", () => {
+    liveGame();
+    const id = chef();
+    const other = holder("imp");
+    seed(id, { shownRole: "imp", shownAlignment: null, behaviorMode: "fake_demon_behavior",
+      privateInfo: { bluffs: ["chef", "saint", "monk"], fakeMinions: [other] }, publishedPacket: packet("imp", "evil") });
+    const p = player(id);
+    const normal = { shownRole: "imp", shownAlignment: null, behaviorMode: "normal" as const };
+    const intents = [
+      setPerceptionIntent(p, normal),
+      from(p, normal, { shownRole: "imp", shownAlignment: "evil", behaviorMode: "fake_demon_behavior" }),
+    ];
+    const ids = counterIds();
+    const planned = planRoleTransaction(game(), { intents }, { script: setupScript, ids });
+    expect(planned).toMatchObject({ ok: true, changed: true });
+    if (!planned.ok || !planned.changed) return;
+    // Only the net perception change (alignment), the withdrawal and ONE epoch.
+    expect(planned.plan.players[id]).toEqual({ set: { shownAlignment: "evil", packetEpoch: "epoch-1" }, remove: ["publishedPacket"] });
+    expect(ids.packetEpoch()).toBe("epoch-2");
+    const b = baseline();
+    expect(resolve(intents)).toEqual({ ok: true, changed: true });
+    expectOneCommit(b);
+    expect(player(id).privateInfo).toEqual({ bluffs: ["chef", "saint", "monk"], fakeMinions: [other] });
+    expect(player(id).publishedPacket).toBeUndefined();
+    // The same final change made directly is the same result (order-independent).
+    state().undo();
+    expect(resolve([setPerceptionIntent(player(id), { shownRole: "imp", shownAlignment: "evil", behaviorMode: "fake_demon_behavior" })]))
+      .toEqual({ ok: true, changed: true });
+    expect(player(id).privateInfo).toEqual({ bluffs: ["chef", "saint", "monk"], fakeMinions: [other] });
+  });
+
+  it("a genuinely different final mode prunes what the FINAL perception makes inapplicable", () => {
+    liveGame();
+    const id = chef();
+    const other = holder("imp");
+    seed(id, { shownRole: "imp", shownAlignment: null, behaviorMode: "fake_demon_behavior",
+      privateInfo: { bluffs: ["chef", "saint", "monk"], fakeMinions: [other], extraText: "note" }, publishedPacket: packet("imp", "evil") });
+    expect(resolve([setPerceptionIntent(player(id), { shownRole: "imp", shownAlignment: null, behaviorMode: "drunk_fake_role_behavior" })]))
+      .toEqual({ ok: true, changed: true });
+    // Not a fake Demon any more: bluffs / fake Minions are inapplicable; the
+    // simulated-information note stays applicable.
+    expect(player(id).privateInfo).toEqual({ extraText: "note" });
+    expect(player(id).publishedPacket).toBeUndefined();
+  });
+
+  it("Undo restores the exact snapshot of an accepted transaction that contained a perception round trip", () => {
+    liveGame();
+    const id = chef();
+    const other = holder("empath");
+    seed(id, { privateInfo: { extraText: "draft" }, publishedPacket: packet("chef", "good") });
+    const snapshot = structuredClone(game());
+    const p = player(id);
+    const intents = [
+      setPerceptionIntent(p, { shownRole: "librarian", shownAlignment: null }),
+      from(p, { shownRole: "librarian", shownAlignment: null }, { shownRole: p.shownRole, shownAlignment: p.shownAlignment }),
+      setPerceptionIntent(player(other), { shownRole: "investigator", shownAlignment: null }),
+    ];
+    const b = baseline();
+    expect(resolve(intents)).toEqual({ ok: true, changed: true });
+    expectOneCommit(b);
+    expect(player(id)).toBe(b.game.players[id]); // the round-tripped participant is untouched
+    expect(player(other).shownRole).toBe("investigator");
+    state().undo();
+    expect(game()).toEqual(snapshot);
+    expect(state().undoStack).toHaveLength(0);
   });
 });
 

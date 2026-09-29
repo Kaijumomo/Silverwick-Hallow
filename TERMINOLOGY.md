@@ -143,11 +143,21 @@ Never infer historical continuity from a PlayerId, seat, name or UID.
 ## 12. Life State
 
 A player's life/death situation in Current State: `alive`, `ghostVote` (the
-dead-player vote token), and `exiled` (true only while a Traveler's *current*
-death resulted from an exile). Interpreted in one place, `lifeStatusOf()` /
-`publicLifeOf()` in `src/stores/lifeState.ts`. Life State is public table
-information; Privacy Mode never hides it. Suspicious legacy combinations are
-flagged **Needs check** (Storyteller-only), never rejected.
+dead-player vote token), and `exiled` (true only while the participant's
+*current* death resulted from an exile). Interpreted in one place,
+`lifeStatusOf()` / `publicLifeOf()` in `src/stores/lifeState.ts`, from the Life
+fields only. Life State is public table information; Privacy Mode never hides
+it. Suspicious legacy combinations are flagged **Needs check**
+(Storyteller-only), never rejected.
+
+**Exile-death** (Phase 10D, Sol-amended): `exiled` means the *current death*
+resulted from an exile. Only a Traveler can undergo a normal gameplay exile,
+but once that exile-death exists it is independent of later Role or
+ordinary-vs-Traveler changes -- a Role change never reads or writes Life, and
+the participant stays Exiled (Storyteller and public grammar) whatever their
+character. It ends when that death ends (e.g. a resurrection) or when an
+explicit Life correction removes it; a Life correction may also set it
+whatever the current Role. Its only invariant is `exiled => dead`.
 
 Life State changes only through the **life-resolution boundary**
 (`planLifeTransaction` in `src/stores/lifeResolution.ts`, committed by the

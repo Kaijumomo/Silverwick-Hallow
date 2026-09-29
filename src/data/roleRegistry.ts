@@ -1,4 +1,4 @@
-import type { Alignment, InformationAction, RoleDef, RoleId, Script } from "@/stores/types";
+import type { Alignment, InformationAction, RoleDef, RoleId, RoleType, Script } from "@/stores/types";
 import { TRAVELERS } from "@/data/travelers";
 import { LORICS } from "@/data/lorics";
 import { INFORMATION_ACTIONS } from "@/data/informationActions";
@@ -39,12 +39,26 @@ export function deriveAlignment(role: RoleDef): Alignment {
   }
 }
 
+/** Phase 10D: the only types an ORDINARY participant's Actual or Shown Role may
+ * have -- shared by the Role boundary (classifyRole) and the registry below. */
+export const ORDINARY_ROLE_TYPES: readonly RoleType[] = ["townsfolk", "outsider", "minion", "demon"];
+export const isOrdinaryRoleType = (type: unknown): boolean =>
+  typeof type === "string" && (ORDINARY_ROLE_TYPES as readonly string[]).includes(type);
+
 export function buildRegistry(script: Script): RoleRegistry {
   const map = new Map<RoleId, RoleDef>();
   for (const r of script.characters) map.set(r.id, r);
-  if (script.fabled) for (const r of script.fabled) map.set(r.id, r);
+  // Phase 10D (ASTRA-10D-004): an ordinary-typed character of THIS script
+  // owns its id -- it is the very definition the Role boundary admits
+  // (classifyRole) and the pickers offer, so projection and private
+  // information resolve that same Role. A Fabled or Loric that merely reuses
+  // the id never silently replaces it (the Role Ownership Boundary: an id match
+  // alone never transfers another definition). Only the canonical Traveler
+  // catalogue keeps its (frozen) precedence, exactly as in classifyRole.
+  const ownedOrdinary = (id: RoleId) => isOrdinaryRoleType(map.get(id)?.type);
+  if (script.fabled) for (const r of script.fabled) if (!ownedOrdinary(r.id)) map.set(r.id, r);
   for (const r of TRAVELERS) map.set(r.id, r);
-  for (const r of LORICS) map.set(r.id, r);
+  for (const r of LORICS) if (!ownedOrdinary(r.id)) map.set(r.id, r);
   return {
     get: (id) => map.get(id),
     alignmentOf: (id) => {

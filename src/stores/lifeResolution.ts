@@ -72,8 +72,10 @@ export type SpendGhostVoteIntent = { kind: "spendGhostVote"; playerId: PlayerId 
 export type RestoreGhostVoteIntent = { kind: "restoreGhostVote"; playerId: PlayerId };
 
 /** The complete life status a Storyteller correction sets. A living player
- * always holds their vote and is never exiled; only a dead Traveler may be
- * exile-dead. */
+ * always holds their vote and is never exiled. A dead participant may be
+ * recorded as exile-dead whatever their CURRENT Role (Phase 10D,
+ * ASTRA-10D-C01): `exiled` says what caused the current death, which the
+ * current Role cannot prove. */
 export type LifeStatusTarget =
   | { alive: true }
   | { alive: false; ghostVote: boolean; exiled?: boolean };
@@ -370,7 +372,7 @@ export function planLifeTransaction(
   });
 
   /** Builds a correction-recorded event at `moment`, validating the
-   * structural rules (Day-only kinds, required outcomes, Traveler exile). */
+   * structural rules (Day-only kinds, required outcomes, the subject). */
   const buildSpecEvent = (
     spec: LifeEventSpec,
     moment: LiveGameMoment,
@@ -379,17 +381,12 @@ export function planLifeTransaction(
   ): LifeEvent | LifeRefusal => {
     if (!spec || typeof spec !== "object") return refuse("Invalid Life Event.");
     let subject: CurrentParticipantRef;
-    let subjectPlayer: STPlayerRecord | undefined;
     if (spec.playerId !== undefined) {
       const resolved = seated(spec.playerId);
       if ("ok" in resolved) return resolved;
       subject = resolved.ref;
-      subjectPlayer = resolved.player;
     } else if (fallbackSubject) {
       subject = fallbackSubject;
-      // The original subject may still be seated; if so, judge them by it.
-      const maybe = ownPlayer(game, fallbackSubject.playerId);
-      if (maybe?.participantId === fallbackSubject.participantId) subjectPlayer = maybe;
     } else {
       return refuse("Choose a player.");
     }
@@ -405,7 +402,11 @@ export function planLifeTransaction(
       case "exile":
         if (moment.phase !== "day") return refuse("Exiles happen during the Day.");
         if (!["died", "survived"].includes(spec.outcome)) return refuse("Choose an exile outcome.");
-        if (subjectPlayer && !subjectPlayer.isTraveler) return refuse("Only a Traveler can be exiled.");
+        // Phase 10D (ASTRA-10D-C02): a CORRECTION asserts that this past Day
+        // event was an exile. The subject's CURRENT Role is no evidence of
+        // their Role at that moment (a later Role change never touches Life),
+        // and Role History is not consulted. The live gameplay `exile` intent
+        // still requires a current Traveler.
         return { ...common, kind: "exile", moment: moment as DayGameMoment, outcome: spec.outcome };
       default:
         return refuse("Invalid Life Event.");
@@ -504,9 +505,10 @@ export function planLifeTransaction(
           next = { ...f, alive: true, ghostVote: true, exiled: false };
         } else {
           if (typeof target.ghostVote !== "boolean") return refuse("Choose whether the vote is available.");
-          const exiled = target.exiled === true;
-          if (exiled && !s.player.isTraveler) return refuse("Only a Traveler can be exile-dead.");
-          next = { ...f, alive: false, ghostVote: target.ghostVote, exiled };
+          // Phase 10D (ASTRA-10D-C01): repairs Life truth whatever the
+          // participant's current Role -- the Role cannot prove what caused the
+          // current death. Still no Life Event: only Current State changes.
+          next = { ...f, alive: false, ghostVote: target.ghostVote, exiled: target.exiled === true };
         }
         // A correction never restores a used ability (no resurrection).
         setFields(s.player, s.ref, next);

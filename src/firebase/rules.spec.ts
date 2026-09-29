@@ -16,7 +16,7 @@ import { previewPrivatePacket } from "@/stores/privatePackets";
 import { publishPrivatePacket } from "./privatePacketCommands";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
-import { participantRefOf, refersToParticipant } from "@/stores/participants";
+import { newParticipantId, participantRefOf, refersToParticipant } from "@/stores/participants";
 import {
   cancelJoinRequest,
   createLobby,
@@ -25,7 +25,7 @@ import {
   revokePlayerMembership,
   seatPlayer,
 } from "./lobby";
-import { acceptLeaveRequest, applyTravelerChoice, commitTravelerChoiceLocally, rejectLeaveRequest } from "./membershipCommands";
+import { acceptLeaveRequest, applyTravelerChoice, commitTravelerChoiceLocally, observeTravelerChoice, rejectLeaveRequest } from "./membershipCommands";
 import { requireActiveSession } from "./lifecycle";
 import {
   authorizePublicDisplay,
@@ -496,7 +496,9 @@ describe("Firebase RTDB membership authorization", () => {
     await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
 
     let applied: { playerId: string; participantId: string } | null = null;
-    await applyTravelerChoice(backend(st), code, alice, "thief", (binding) => { applied = binding; });
+    // Phase 10D (ASTRA-10D-001): the request as observed for the seated participation.
+    const observed = { playerId: "p-alice", participantId: "pt-alice-1", roleId: "thief" };
+    await applyTravelerChoice(backend(st), code, alice, observed, (binding) => { applied = binding; });
 
     expect(applied).toEqual({ playerId: "p-alice", participantId: "pt-alice-1" });
     expect((await ref(st, "travelerChoices/" + alice).once("value")).exists()).toBe(false);
@@ -520,8 +522,8 @@ describe("Firebase RTDB membership authorization", () => {
     await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
     const raw = new FirebaseRoomBackend(db(st) as unknown as Database);
     let applied: string | null = null;
-    await expect(applyTravelerChoice(raw, code, alice, "thief", (binding) => { applied = binding.playerId; }))
-      .rejects.toThrow();
+    await expect(applyTravelerChoice(raw, code, alice, { playerId: "p-alice", participantId: "pt-alice-1", roleId: "thief" },
+      (binding) => { applied = binding.playerId; })).rejects.toThrow();
     expect(applied).toBe("p-alice");
     expect((await ref(st, "travelerChoices/" + alice).once("value")).val()).toBe("thief");
   });
@@ -587,9 +589,11 @@ describe("Firebase RTDB membership authorization", () => {
         await lobby.child("rosterParticipants/" + alice).set({ playerId: seat, participantId: "pt-alice-1", name: "Alice" });
       });
       await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
-      await applyTravelerChoice(backend(st), code, alice, "thief", commitTravelerChoiceLocally);
+      await applyTravelerChoice(backend(st), code, alice, observeTravelerChoice(seat, "thief")!, commitTravelerChoiceLocally);
       expect(store.getState().game!.players[seat]!.actualRole).toBe(""); // never applied
-      expect((await ref(st, "travelerChoices/" + alice).once("value")).exists()).toBe(false); // cleared, not replayed
+      // ASTRA-10D-001: the record attributes the request to ANOTHER participation
+      // than the one this callback observed -- it is not consumed either.
+      expect((await ref(st, "travelerChoices/" + alice).once("value")).val()).toBe("thief");
 
       // The replacement participation's own record and its own request apply.
       await env.withSecurityRulesDisabled(async ctx => {
@@ -597,11 +601,87 @@ describe("Firebase RTDB membership authorization", () => {
           .set({ playerId: seat, participantId: occupant, name: "Alice" });
       });
       await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("gunslinger"));
-      await applyTravelerChoice(backend(st), code, alice, "gunslinger", commitTravelerChoiceLocally);
+      await applyTravelerChoice(backend(st), code, alice, observeTravelerChoice(seat, "gunslinger")!, commitTravelerChoiceLocally);
       expect(store.getState().game!.players[seat]!.actualRole).toBe("gunslinger");
       expect(store.getState().game!.players[seat]!.participantId).toBe(occupant);
       expect((await ref(st, "travelerChoices/" + alice).once("value")).exists()).toBe(false);
     } finally { store.setState({ game: null, lobby: null, undoStack: [] }); }
+  });
+
+  // ASTRA-10D-001: a callback is bound, when observed, to the request AND the
+  // participation it was observed for; both are revalidated against the REAL
+  // database before any local mutation.
+  async function seatedLocalTraveler() {
+    const store = useStorytellerStore;
+    await seed();
+    // The seed's legacy binding of alice is revoked first (real rules).
+    await revokeMembership(backend(st), code, alice);
+    store.getState().newGame("tb", { plannedPlayerCount: 1 });
+    store.getState().addPlayerToSeat("Alice");
+    for (let i = 0; i < 5; i++) store.getState().addPlayer("Extra " + i);
+    const seat = store.getState().game!.seatOrder[0]!;
+    expect(store.getState().setIsTraveler(seat, true).ok).toBe(true);
+    const participantId = store.getState().game!.players[seat]!.participantId!;
+    await seatPlayer(backend(st), code, alice, seat, null, { participantId, name: "Alice" });
+    return { store, seat, participantId };
+  }
+
+  test("ASTRA-10D-001 CHOICE1: a callback observed for A never applies to -- nor consumes the request of -- the same uid re-seated as B (real rules)", async () => {
+    useStorytellerStore.setState({ game: null, lobby: null, undoStack: [] });
+    try {
+      const { store, seat, participantId: a } = await seatedLocalTraveler();
+      await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
+      const cachedA = observeTravelerChoice(seat, "thief")!;
+      expect(cachedA).toEqual({ playerId: seat, participantId: a, roleId: "thief" });
+
+      // A is revoked (the fenced update clears A's request); the same uid is
+      // seated again as B.
+      await revokePlayerMembership(backend(st), code, seat);
+      expect(store.getState().unseatPlayer(seat)).toBe(true);
+      expect((await ref(st, "travelerChoices/" + alice).once("value")).exists()).toBe(false);
+      const b = newParticipantId();
+      store.getState().addToPendingQueue(alice, "Alice");
+      await seatPlayer(backend(st), code, alice, seat, null, { participantId: b, name: "Alice" });
+      expect(store.getState().assignPendingToSeat(alice, seat, b)).toBe(true);
+      expect(store.getState().game!.players[seat]).toMatchObject({ participantId: b, isTraveler: true, actualRole: "" });
+
+      // The cached callback after its request was cleared: B unchanged.
+      await applyTravelerChoice(backend(st), code, alice, cachedA, commitTravelerChoiceLocally);
+      expect(store.getState().game!.players[seat]).toMatchObject({ participantId: b, actualRole: "" });
+
+      // B (bound -- real rules allow it) asks for the IDENTICAL character: A's
+      // callback still neither applies nor consumes it.
+      await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
+      const before = store.getState().game;
+      await applyTravelerChoice(backend(st), code, alice, cachedA, commitTravelerChoiceLocally);
+      expect(store.getState().game).toBe(before);
+      expect((await ref(st, "travelerChoices/" + alice).once("value")).val()).toBe("thief");
+
+      // B's own observation applies it to B and clears it through the fenced path.
+      await applyTravelerChoice(backend(st), code, alice, observeTravelerChoice(seat, "thief")!, commitTravelerChoiceLocally);
+      expect(store.getState().game!.players[seat]).toMatchObject({ participantId: b, actualRole: "thief" });
+      expect((await ref(st, "travelerChoices/" + alice).once("value")).exists()).toBe(false);
+    } finally { useStorytellerStore.setState({ game: null, lobby: null, undoStack: [] }); }
+  });
+
+  test("ASTRA-10D-001 CHOICE2: a consumed request's cached callback never re-applies after Undo returns the participant to unassigned (real rules)", async () => {
+    useStorytellerStore.setState({ game: null, lobby: null, undoStack: [] });
+    try {
+      const { store, seat } = await seatedLocalTraveler();
+      await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
+      const first = observeTravelerChoice(seat, "thief")!;
+      const duplicate = observeTravelerChoice(seat, "thief")!;
+      await applyTravelerChoice(backend(st), code, alice, first, commitTravelerChoiceLocally);
+      expect(store.getState().game!.players[seat]!.actualRole).toBe("thief");
+      expect((await ref(st, "travelerChoices/" + alice).once("value")).exists()).toBe(false);
+
+      store.getState().undo();
+      expect(store.getState().game!.players[seat]).toMatchObject({ actualRole: "", isTraveler: true });
+      const before = store.getState().game;
+      await applyTravelerChoice(backend(st), code, alice, duplicate, commitTravelerChoiceLocally);
+      expect(store.getState().game).toBe(before);
+      expect((await ref(st, "travelerChoices/" + alice).once("value")).exists()).toBe(false);
+    } finally { useStorytellerStore.setState({ game: null, lobby: null, undoStack: [] }); }
   });
 
   test("a second writer is denied until expiry, then the old token is fenced", async () => {

@@ -363,11 +363,15 @@ describe("Phase 10A: guards and true no-ops", () => {
     expectUnchanged(before);
   });
 
-  it("new commands never create an invalid combination: exile-dead only for a Traveler, a living player keeps their vote", () => {
+  // Phase 10D (ASTRA-10D-C01): exile-death is death-scoped, so a correction
+  // may set it whatever the CURRENT Role (see exileDeathRoleIndependence.test);
+  // a living participant still always holds their vote and is never exiled.
+  it("new commands never create an invalid combination: a living player keeps their vote and is never exiled", () => {
     const { ids } = liveGame();
     const before = snap();
-    expect(state().correctLifeStatus(ids[0]!, { alive: false, ghostVote: true, exiled: true }).ok).toBe(false);
     expect(state().correctLifeStatus(ids[0]!, { alive: true, ghostVote: false } as never).ok).toBe(false);
+    expect(state().correctLifeStatus(ids[0]!, { alive: true, exiled: true } as never).ok).toBe(false);
+    expect(state().correctLifeStatus(ids[0]!, { alive: true, ghostVote: true, exiled: false } as never).ok).toBe(false);
     expectUnchanged(before);
   });
 

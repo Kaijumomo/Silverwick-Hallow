@@ -3,7 +3,7 @@ import { useStorytellerStore } from "@/stores/storytellerStore";
 import { connectFirebase } from "./session";
 import type { RoomBackend } from "./backend";
 import { classifyStorytellerError, lifecycleMessage } from "./lifecycle";
-import { applyTravelerChoice, commitTravelerChoiceLocally } from "./membershipCommands";
+import { applyTravelerChoice, commitTravelerChoiceLocally, observeTravelerChoice } from "./membershipCommands";
 import { closeMultiplayerSession, initialConnectionStatus, leaveMultiplayerOffline, reportRuntimeError, retryStorytellerSession, scopeKey, useSessionRuntime, useStorytellerSync } from "./storytellerSync";
 
 export function StorytellerSession() {
@@ -133,8 +133,10 @@ export function ConnectionStatus() {
  * choice through the Role seam (resolveRoles) the Storyteller's own manual
  * Traveler override uses (never a second mutation path), and the
  * Storyteller's override remains fully available afterward: applying a
- * choice is just another Role change, not a lock. Phase 10D: it is bound to
- * the participation instance the authoritative roster record names
+ * choice is just another Role change, not a lock. Phase 10D: each observed
+ * request is bound, when observed, to the participation instance holding the
+ * seat, and is applied only while the request itself is unchanged and the
+ * authoritative roster record still names that same participation
  * (ParticipantId stays Storyteller-private -- the player-written request
  * carries only a character), so a request from an earlier participation can
  * never apply to a replacement. Independent of
@@ -170,7 +172,13 @@ export function useApplyTravelerChoices(code: string | undefined) {
     if (!writer || !code) return;
     for (const [uid, { playerId, roleId }] of Object.entries(travelerChoices)) {
       if (!playerId) continue; // unresolved for now; retried once the roster resolves it
-      applyTravelerChoice(writer, code, uid, roleId, commitTravelerChoiceLocally)
+      // Phase 10D (ASTRA-10D-001): bound HERE, when the request is observed, to
+      // the participation holding the seat. The queued callback revalidates the
+      // request and that participation instead of re-resolving whoever holds
+      // the seat by the time it runs.
+      const observed = observeTravelerChoice(playerId, roleId);
+      if (!observed) continue; // no participation holds the seat right now
+      applyTravelerChoice(writer, code, uid, observed, commitTravelerChoiceLocally)
         .catch(error => reportRuntimeError("traveler-choice", lifecycleMessage(error)));
     }
   }, [writer, code, travelerChoices]);

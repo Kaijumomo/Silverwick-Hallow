@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { buildRegistry } from "@/data/roleRegistry";
 import { isInitialRevealComplete } from "@/stores/identity";
+import { changeRoleIntent, correctRoleIntent, setPerceptionIntent, type RoleIntent } from "@/stores/roleResolution";
 import { TRAVELERS } from "@/data/travelers";
 import { selectScriptById, useStorytellerStore } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
@@ -17,6 +18,15 @@ export function TravelerArrival({ playerId, compact = false }: { playerId: strin
   if (!game || !p?.isTraveler || !script || p.isEmpty) return null;
   const role = publicTravelerRole(p);
   if (hidden) return <p>Traveler: {role?.name ?? "Character not chosen"}</p>;
+  // Phase 10D (ASTRA-10D-003): every Traveler Role action is built from the
+  // Traveler record THIS render shows (`p`) and submitted through the Role
+  // seam -- never re-read at click time -- so if the character or the occupant
+  // changed in between, the seam refuses it as stale (its message names no
+  // character) and nothing changes.
+  const runRoles = (intents: RoleIntent[]) => {
+    const result = state.resolveRoles({ intents });
+    setRoleError(result.ok ? null : result.message);
+  };
   const guidance = travelerGuidance(p);
   const info = travelerDemonInformation(p, game, buildRegistry(script));
   const needsProcedure = travelerNeedsFirstNight(p) && !p.travelerArrival?.firstNightComplete;
@@ -31,8 +41,7 @@ export function TravelerArrival({ playerId, compact = false }: { playerId: strin
           // assigning a Traveler's first character (or any later change) is an
           // ordinary Role change.
           const committedSetup = game.phase === "setup" && isInitialRevealComplete(game) && !!p.actualRole;
-          const result = committedSetup ? state.correctRole(playerId, e.target.value) : state.assignRole(playerId, e.target.value);
-          setRoleError(result.ok ? null : result.message);
+          runRoles([committedSetup ? correctRoleIntent(p, e.target.value) : changeRoleIntent(p, e.target.value)]);
         }}>
           <option value="" disabled>Choose Traveler</option>
           {TRAVELERS.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
@@ -47,7 +56,8 @@ export function TravelerArrival({ playerId, compact = false }: { playerId: strin
         </button>)}
       </div>
       <p className="behavior-help">Character is public. Actual alignment reaches this Traveler's own private view automatically.</p>
-      {role && p.shownRole !== role.id && <button className="btn btn-sm" onClick={() => state.showAssignedRole(playerId)}>Show public character in player view</button>}
+      {role && p.shownRole !== role.id && <button className="btn btn-sm"
+        onClick={() => runRoles([setPerceptionIntent(p, { shownRole: role.id, shownAlignment: null })])}>Show public character in player view</button>}
     </>}
     {guidance.length ? guidance.map(message => <p className="behavior-help" key={message}>{message}</p>) : <p role="status">Ready for play</p>}
     {p.alive && !p.exiled && travelerNeedsArrivalCheck(p) && !p.travelerArrival?.arrivalCheckComplete && <>

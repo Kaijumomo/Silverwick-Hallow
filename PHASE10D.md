@@ -82,6 +82,13 @@ Refusal codes: `invalid | phase | notSeated | stale | conflict | mixedCorrection
   change and no packet invalidation (the packet epoch is minted only for a
   participant whose perception assumptions really changed and still differ at
   the end).
+- Perception-derived invalidation (draft deletion/pruning, packet withdrawal,
+  packet epoch) is decided ONCE, from each participant's ORIGINAL versus FINAL
+  Shown Role / Shown Alignment / behavior mode -- never from intermediate
+  intents (ASTRA-10D-002). A perception that round-trips (Chef -> Librarian ->
+  Chef) invalidates nothing, even when the same resolution also commits another
+  real change (e.g. a Traveler arrival `restart`); a real Actual Role change
+  still invalidates everything prepared for the old Role.
 
 ## Actual Role change / correction
 
@@ -138,7 +145,14 @@ Loric, off-script and unknown ids are refused as Actual and Shown Roles for
 ordinary participants. Custom/homebrew characters are valid exactly when they
 are on the current custom script with an allowed type. The UI pickers use the
 same policy (`ordinaryRoleChoices`), so routine UI never offers a choice the
-command must reject. The Traveler catalogue was reconciled with canonical data:
+command must reject. **Role ownership** (ASTRA-10D-004): the registry
+(`buildRegistry`) resolves an admitted ordinary script character to that same
+owned definition -- a Fabled or Loric reusing its id (e.g. a homebrew
+Townsfolk `bigwig` vs the canonical Loric Big Wig) never replaces it -- so
+classification, pickers, registry, projection and private-information
+resolution agree; only the canonical Traveler catalogue keeps its precedence.
+One `ORDINARY_ROLE_TYPES` definition is shared by the Role boundary and the
+registry. The Traveler catalogue was reconciled with canonical data:
 **Cacklejack** was missing from `TRAVELERS` (17 vs 18 canonical Travelers) and is
 added, including the `travelerChoices` rule's catalogue pattern.
 
@@ -230,13 +244,32 @@ stays Storyteller-private and no player permission or writer fencing changed.
   `travelerChoices/{uid}` in the SAME fenced multi-path update.
 - **Seating** (`seatPlayer`) clears a stale `travelerChoices/{uid}` in the same
   fenced update that creates the new binding.
-- **Application** (`applyTravelerChoice`) re-resolves the roster binding AND
-  reads the authoritative `rosterParticipants/{uid}` record; only a record
-  naming the same seat yields a `{playerId, participantId}` binding. The local
-  commit (`commitTravelerChoiceLocally`) requires the local occupant to hold
-  that ParticipantId and submits `changeActualRole` with
-  `expectedActualRole: ""` and `expectedIsTraveler: true`. A request whose
-  binding is unprovable, mismatched or superseded is cleared, never replayed.
+- **Observation** (ASTRA-10D-001): each observed request is bound, when it is
+  observed (`observeTravelerChoice`, in `useApplyTravelerChoices`), to the
+  participation instance holding the seat: `{playerId, participantId, roleId}`.
+  ParticipantId comes from the Storyteller's own Current State -- nothing is
+  added to the player-written request, and there is no request nonce.
+- **Application** (`applyTravelerChoice`), inside the fenced writer's exclusive
+  section and before any local mutation, re-establishes that the request still
+  exists remotely with the observed character, that the uid's CURRENT roster
+  binding is the observed seat, and that the authoritative
+  `rosterParticipants/{uid}` record names the observed ParticipantId and seat.
+  The local commit (`commitTravelerChoiceLocally`) then requires the local
+  occupant to still hold that ParticipantId as an unassigned Traveler and
+  submits `changeActualRole` with `expectedActualRole: ""` and
+  `expectedIsTraveler: true`. So a cached callback of an earlier participation
+  never applies to (or consumes the request of) its replacement, a consumed or
+  cleared request never re-applies (not even after an Undo returns the
+  participant to blank), and an older callback never consumes a different
+  value. The same participation's currently-existing identical request may be
+  processed by any of its callbacks.
+- **Cleanup** stays fenced and idempotent: the request is cleared only when it
+  provably belongs to the observed participation (applied, or superseded by a
+  Storyteller assignment / status change) or provably to no participation (the
+  uid has no binding). A request the binding or record attributes to another
+  participation -- or cannot attribute (no valid record) -- is left for its own
+  participation's observation; revocation and seating still clear it
+  atomically.
 
 Proven at the emulator/rules boundary in `src/firebase/rules.spec.ts` and at the
 production-command boundary in `membershipCommands.test.ts` /
@@ -252,6 +285,30 @@ role" applies the explicit perception in the same atomic resolution;
 correction is a progressively disclosed "Correct the recorded role…"; an unsafe
 Shown Role shows "Needs check". Privacy Mode keeps the Drawer's safe view (no
 Role detail); refusal text never names a character.
+
+Traveler arrival panel (ASTRA-10D-003): the public-character selector and "Show
+public character in player view" build their intents (`changeRoleIntent`,
+`correctRoleIntent`, `setPerceptionIntent`) from the Traveler record the panel
+RENDERED and submit them through `resolveRoles`, like the Drawer; a stale
+selection (the character or the occupant changed in between) receives the
+seam's structured `stale` refusal inline and changes nothing. The PlayerId-only
+compatibility wrappers remain for non-render-bound callers.
+
+## Traveler status and Life are independent (ASTRA-10D-C01 conformance)
+
+- Traveler status is Role state; Life is Life state. Ordinary <-> Traveler
+  Role transitions (gameplay or correction) never read or write `alive`,
+  `ghostVote` or `exiled`, and the Role planner never reads `exiled` to decide
+  a Role.
+- An exile-death therefore survives every Role transition: a Traveler who was
+  exiled and died and later becomes ordinary (or another Traveler) stays
+  dead, exiled, with the same ghost vote -- a valid state, shown as Exiled to
+  the Storyteller and publicly (see TERMINOLOGY.md §12 and the PHASE10A.md
+  compatibility amendment). The Life Event Window and Life History are not
+  touched by the Role transition; Role History records only the Role change.
+- Life corrections and correction-recorded exile events (amend / late record)
+  do not consult the current Role (ASTRA-10D-C02); gameplay exile still
+  requires a current Traveler. No schema/store version change.
 
 ## Writer audit
 

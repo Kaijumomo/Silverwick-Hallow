@@ -129,7 +129,7 @@ export function LifeControls({ player }: { player: STPlayerRecord }) {
               <label className="label" htmlFor={`life-correct-${player.id}`}>Correct to</label>
               <select id={`life-correct-${player.id}`} value={correction}
                 onChange={(e) => setCorrection(e.target.value as StatusChoice)}>
-                {statusChoicesFor(player).map((option) => (
+                {statusChoicesFor().map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>

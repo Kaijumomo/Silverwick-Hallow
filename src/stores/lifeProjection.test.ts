@@ -110,9 +110,12 @@ describe("Phase 10A: lifeStatusOf / publicLifeOf", () => {
     const livingNoVote = makeSTPlayer({ alive: true, ghostVote: false });
     expect(lifeStatusOf(livingNoVote).anomalies).toEqual(["aliveWithoutVote"]);
     expect(publicLifeOf(livingNoVote)).toEqual({ alive: true, ghostVote: true });
+    // Phase 10D (ASTRA-10D-C01): an exile-death is death-scoped, not
+    // Role-scoped -- a dead participant who is no longer (or never was) a
+    // Traveler is still exile-dead: no anomaly, and publicly Exiled.
     const exiledOrdinary = makeSTPlayer({ alive: false, ghostVote: true, exiled: true });
-    expect(lifeStatusOf(exiledOrdinary)).toEqual({ state: "deadVote", anomalies: ["exiledNonTraveler"] });
-    expect(publicLifeOf(exiledOrdinary)).toEqual({ alive: false, ghostVote: true });
+    expect(lifeStatusOf(exiledOrdinary)).toEqual({ state: "exiledVote", anomalies: [] });
+    expect(publicLifeOf(exiledOrdinary)).toEqual({ alive: false, ghostVote: true, exiled: true });
     const deadEmptySeat = makeSTPlayer({ isEmpty: true, alive: false });
     expect(lifeStatusOf(deadEmptySeat).anomalies).toEqual(["emptySeatLifeState"]);
   });

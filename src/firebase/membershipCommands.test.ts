@@ -14,7 +14,7 @@ import {
   revokePlayerMembership,
   seatPlayer,
 } from "./lobby";
-import { acceptLeaveRequest, applyTravelerChoice, commitTravelerChoiceLocally, rejectLeaveRequest, revokePlayerAndCommit, seatPlayerAndCommit, storytellerOccupancyCompletion } from "./membershipCommands";
+import { acceptLeaveRequest, applyTravelerChoice, commitTravelerChoiceLocally, observeTravelerChoice, rejectLeaveRequest, revokePlayerAndCommit, seatPlayerAndCommit, storytellerOccupancyCompletion } from "./membershipCommands";
 import { usePlayerSync } from "./playerSync";
 
 class FailingUpdateBackend extends MemoryRoomBackend {
@@ -344,6 +344,9 @@ describe("membership commands", () => {
   // Phase 10D: it is the production commit itself -- bound to the participation
   // instance the authoritative roster record names -- not a stand-in.
   const commitLocal = commitTravelerChoiceLocally;
+  // Phase 10D (ASTRA-10D-001): production binds each request, when observed, to
+  // the participation holding the seat (useApplyTravelerChoices).
+  const observe = (playerId: string, roleId: string) => observeTravelerChoice(playerId, roleId)!;
   // Production seating hands ONE ParticipantId to both the server-side
   // rosterParticipants record and the local occupant (SeatAssignPopup).
   const seatBound = async (backend: MemoryRoomBackend, uid: string, playerId: string) => {
@@ -369,7 +372,7 @@ describe("membership commands", () => {
     expect(useStorytellerStore.getState().setIsTraveler(playerId, true).ok).toBe(true);
     await backend.set(travelerChoicePath("ROOM", uid), "thief");
 
-    await applyTravelerChoice(backend, "ROOM", uid, "thief", commitLocal);
+    await applyTravelerChoice(backend, "ROOM", uid, observe(playerId, "thief"), commitLocal);
 
     expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("thief");
     expect(await backend.get(travelerChoicePath("ROOM", uid))).toBeUndefined();
@@ -381,12 +384,13 @@ describe("membership commands", () => {
     await seatBound(backend, uid, playerId);
     seedExtraOrdinary(5);
     expect(useStorytellerStore.getState().setIsTraveler(playerId, true).ok).toBe(true);
-    // Player requests Thief...
+    // Player requests Thief, and the request is observed...
     await backend.set(travelerChoicePath("ROOM", uid), "thief");
-    // ...but before the request is processed, the Storyteller assigns Gunslinger.
+    const observed = observe(playerId, "thief");
+    // ...but before it is processed, the Storyteller assigns Gunslinger.
     useStorytellerStore.getState().assignRole(playerId, "gunslinger");
 
-    await applyTravelerChoice(backend, "ROOM", uid, "thief", commitLocal);
+    await applyTravelerChoice(backend, "ROOM", uid, observed, commitLocal);
 
     // Gunslinger remains; the stale Thief request is cleared, not applied.
     expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("gunslinger");
@@ -401,12 +405,12 @@ describe("membership commands", () => {
     expect(useStorytellerStore.getState().setIsTraveler(playerId, true).ok).toBe(true);
     await backend.set(travelerChoicePath("ROOM", uid), "scapegoat");
 
-    await applyTravelerChoice(backend, "ROOM", uid, "scapegoat", commitLocal);
+    await applyTravelerChoice(backend, "ROOM", uid, observe(playerId, "scapegoat"), commitLocal);
 
     expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("scapegoat");
   });
 
-  it("re-resolves uid -> playerId from the CURRENT roster, never a caller-assumed id", async () => {
+  it("applies only when the CURRENT roster binding is the observed seat -- never a caller-assumed (stale) seat", async () => {
     const backend = new MemoryRoomBackend();
     const { uid, playerId: firstSeat } = prepareSeat();
     await seatBound(backend, uid, firstSeat);
@@ -421,9 +425,15 @@ describe("membership commands", () => {
       playerId: secondSeat, participantId: useStorytellerStore.getState().game!.players[secondSeat]!.participantId!, name: "Bob",
     });
 
-    const applied: string[] = [];
-    await applyTravelerChoice(backend, "ROOM", uid, "thief", (binding) => { applied.push(binding.playerId); });
+    await backend.set(travelerChoicePath("ROOM", uid), "thief");
 
+    const applied: string[] = [];
+    // Observed for the seat the uid WAS bound to: the current binding differs.
+    await applyTravelerChoice(backend, "ROOM", uid, observe(firstSeat, "thief"), (binding) => { applied.push(binding.playerId); });
+    expect(applied).toEqual([]);
+    expect(await backend.get(travelerChoicePath("ROOM", uid))).toBe("thief"); // not consumed
+    // Observed for the uid's current seat: applied there.
+    await applyTravelerChoice(backend, "ROOM", uid, observe(secondSeat, "thief"), (binding) => { applied.push(binding.playerId); });
     expect(applied).toEqual([secondSeat]);
   });
 
@@ -432,7 +442,7 @@ describe("membership commands", () => {
     await backend.set(travelerChoicePath("ROOM", "uid-ghost"), "thief");
     let called = false;
 
-    await applyTravelerChoice(backend, "ROOM", "uid-ghost", "thief", () => { called = true; });
+    await applyTravelerChoice(backend, "ROOM", "uid-ghost", { playerId: "p-gone", participantId: "pt-gone", roleId: "thief" }, () => { called = true; });
 
     expect(called).toBe(false);
     expect(await backend.get(travelerChoicePath("ROOM", "uid-ghost"))).toBeUndefined();
@@ -446,7 +456,7 @@ describe("membership commands", () => {
     // converted them back to ordinary before this request was applied.
     await backend.set(travelerChoicePath("ROOM", uid), "thief");
 
-    await applyTravelerChoice(backend, "ROOM", uid, "thief", commitLocal);
+    await applyTravelerChoice(backend, "ROOM", uid, observe(playerId, "thief"), commitLocal);
 
     expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("");
     expect(await backend.get(travelerChoicePath("ROOM", uid))).toBeUndefined();
@@ -459,7 +469,7 @@ describe("membership commands", () => {
     seedExtraOrdinary(5);
     expect(useStorytellerStore.getState().setIsTraveler(playerId, true).ok).toBe(true);
     await backend.set(travelerChoicePath("ROOM", uid), "thief");
-    await applyTravelerChoice(backend, "ROOM", uid, "thief", commitLocal);
+    await applyTravelerChoice(backend, "ROOM", uid, observe(playerId, "thief"), commitLocal);
     expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("thief");
 
     // Storyteller manually overrides to a different Traveler character --
@@ -531,21 +541,23 @@ describe("membership commands", () => {
       expect(useStorytellerStore.getState().game!.players[playerId]!.isTraveler).toBe(true);
       await backend.set(travelerChoicePath("ROOM", uid), "gunslinger");
       const bound: { playerId: string; participantId: string }[] = [];
-      await applyTravelerChoice(backend, "ROOM", uid, "gunslinger", (binding, role) => { bound.push(binding); commitLocal(binding, role); });
+      await applyTravelerChoice(backend, "ROOM", uid, observe(playerId, "gunslinger"), (binding, role) => { bound.push(binding); commitLocal(binding, role); });
       expect(bound).toEqual([{ playerId, participantId: second.participantId }]);
       expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("gunslinger");
       expect(await backend.get(travelerChoicePath("ROOM", uid))).toBeUndefined();
     });
 
-    it("a request is never applied when the authoritative record's participation is not the local occupant -- it is cleared", async () => {
+    it("a request is never applied when the authoritative record's participation is not the observed local occupant -- nor consumed by that callback", async () => {
       const { backend, uid, playerId } = await seatedTraveler();
       // The roster record names a DIFFERENT participation than the one the
       // Storyteller's own seat holds (e.g. a stale local game).
       await backend.set(rosterParticipantPath("ROOM", uid), { playerId, participantId: newParticipantId(), name: "Alice" });
       await backend.set(travelerChoicePath("ROOM", uid), "thief");
-      await applyTravelerChoice(backend, "ROOM", uid, "thief", commitLocal);
+      await applyTravelerChoice(backend, "ROOM", uid, observe(playerId, "thief"), commitLocal);
       expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("");
-      expect(await backend.get(travelerChoicePath("ROOM", uid))).toBeUndefined();
+      // ASTRA-10D-001: the request is attributed to another participation, so a
+      // callback observed for this occupant must not consume it either.
+      expect(await backend.get(travelerChoicePath("ROOM", uid))).toBe("thief");
     });
 
     it("the Role seam itself refuses a choice bound to a participation the seat no longer holds (stale)", async () => {
@@ -558,7 +570,7 @@ describe("membership commands", () => {
       expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("");
     });
 
-    it("a binding with no participation record (legacy, unprovable) is cleared without being applied", async () => {
+    it("a binding with no participation record (legacy, unprovable) is never applied -- nor consumed, since it cannot be attributed to the observed participation", async () => {
       const backend = new MemoryRoomBackend();
       const { uid, playerId } = prepareSeat();
       await seatPlayerAndCommit(backend, "ROOM", uid, playerId, null, () =>
@@ -567,21 +579,160 @@ describe("membership commands", () => {
       expect(useStorytellerStore.getState().setIsTraveler(playerId, true).ok).toBe(true);
       await backend.set(travelerChoicePath("ROOM", uid), "thief");
       let called = false;
-      await applyTravelerChoice(backend, "ROOM", uid, "thief", () => { called = true; });
+      await applyTravelerChoice(backend, "ROOM", uid, observe(playerId, "thief"), () => { called = true; });
       expect(called).toBe(false);
-      expect(await backend.get(travelerChoicePath("ROOM", uid))).toBeUndefined();
+      expect(await backend.get(travelerChoicePath("ROOM", uid))).toBe("thief");
     });
 
-    it("a record naming a different seat than the roster binding is never applied", async () => {
+    // -----------------------------------------------------------------------
+    // ASTRA-10D-001: a callback is bound to the request AND the participation
+    // it was observed for; both are revalidated before any local mutation.
+    // -----------------------------------------------------------------------
+    describe("ASTRA-10D-001: request participation + freshness", () => {
+      const occupant = (playerId: string) => useStorytellerStore.getState().game!.players[playerId]!;
+      /** Revoke the current participation and seat the SAME uid again as a new one. */
+      async function reseat(backend: MemoryRoomBackend, uid: string, playerId: string) {
+        await revokePlayerAndCommit(backend, "ROOM", playerId, storytellerOccupancyCompletion("unseat", playerId));
+        useStorytellerStore.getState().addToPendingQueue(uid, "Alice");
+        const next = await seatBound(backend, uid, playerId);
+        expect(occupant(playerId).isTraveler).toBe(true);
+        return next;
+      }
+
+      it("CHOICE1: old callback A -> revoke -> reseat the same uid as B -> old callback: B is unchanged, and B's own request is neither applied nor consumed by A's callback", async () => {
+        const { backend, uid, playerId, participant: a } = await seatedTraveler();
+        await backend.set(travelerChoicePath("ROOM", uid), "thief");
+        const cachedA = observe(playerId, "thief");
+        expect(cachedA).toEqual({ playerId, participantId: a.participantId, roleId: "thief" });
+
+        const b = await reseat(backend, uid, playerId);
+        expect(b.participantId).not.toBe(a.participantId);
+        // A's request went with A (revocation + seating both cleared it).
+        expect(await backend.get(travelerChoicePath("ROOM", uid))).toBeUndefined();
+        await applyTravelerChoice(backend, "ROOM", uid, cachedA, commitLocal);
+        expect(occupant(playerId)).toMatchObject({ participantId: b.participantId, actualRole: "" });
+
+        // Even when B requests the IDENTICAL character, A's cached callback
+        // neither applies it to B nor consumes it.
+        await backend.set(travelerChoicePath("ROOM", uid), "thief");
+        const before = useStorytellerStore.getState().game;
+        await applyTravelerChoice(backend, "ROOM", uid, cachedA, commitLocal);
+        expect(useStorytellerStore.getState().game).toBe(before);
+        expect(await backend.get(travelerChoicePath("ROOM", uid))).toBe("thief");
+
+        // B's own observation applies B's own request, bound to B.
+        const bound: { playerId: string; participantId: string }[] = [];
+        await applyTravelerChoice(backend, "ROOM", uid, observe(playerId, "thief"), (binding, role) => { bound.push(binding); commitLocal(binding, role); });
+        expect(bound).toEqual([{ playerId, participantId: b.participantId }]);
+        expect(occupant(playerId)).toMatchObject({ participantId: b.participantId, actualRole: "thief" });
+        expect(await backend.get(travelerChoicePath("ROOM", uid))).toBeUndefined();
+      });
+
+      it("CHOICE2: a consumed/cleared request's cached callback never re-applies, even after Undo returns the same participant to unassigned", async () => {
+        const { backend, uid, playerId } = await seatedTraveler();
+        await backend.set(travelerChoicePath("ROOM", uid), "thief");
+        // The same request observed twice (the effect re-runs on every runtime
+        // map change): two cached callbacks for one request.
+        const first = observe(playerId, "thief");
+        const duplicate = observe(playerId, "thief");
+        await applyTravelerChoice(backend, "ROOM", uid, first, commitLocal);
+        expect(occupant(playerId).actualRole).toBe("thief");
+        expect(await backend.get(travelerChoicePath("ROOM", uid))).toBeUndefined();
+
+        useStorytellerStore.getState().undo();
+        expect(occupant(playerId)).toMatchObject({ actualRole: "", isTraveler: true });
+        const before = useStorytellerStore.getState().game;
+        const undo = useStorytellerStore.getState().undoStack.length;
+        await applyTravelerChoice(backend, "ROOM", uid, duplicate, commitLocal);
+        expect(useStorytellerStore.getState().game).toBe(before);
+        expect(useStorytellerStore.getState().undoStack).toHaveLength(undo);
+        expect(occupant(playerId).actualRole).toBe("");
+
+        // A FRESH request from the same current participation applies normally.
+        await backend.set(travelerChoicePath("ROOM", uid), "thief");
+        await applyTravelerChoice(backend, "ROOM", uid, observe(playerId, "thief"), commitLocal);
+        expect(occupant(playerId).actualRole).toBe("thief");
+      });
+
+      it("CHOICE3: a Storyteller's manual assignment made after observation still wins; the obsolete request is cleared", async () => {
+        const { backend, uid, playerId } = await seatedTraveler();
+        await backend.set(travelerChoicePath("ROOM", uid), "thief");
+        const observed = observe(playerId, "thief");
+        expect(useStorytellerStore.getState().assignRole(playerId, "gunslinger")).toMatchObject({ ok: true, changed: true });
+        await applyTravelerChoice(backend, "ROOM", uid, observed, commitLocal);
+        expect(occupant(playerId).actualRole).toBe("gunslinger");
+        expect(await backend.get(travelerChoicePath("ROOM", uid))).toBeUndefined();
+      });
+
+      it("CHOICE3: a changed binding (the uid now seated elsewhere as a new participation) protects both seats", async () => {
+        const { backend, uid, playerId } = await seatedTraveler();
+        await backend.set(travelerChoicePath("ROOM", uid), "thief");
+        const cachedA = observe(playerId, "thief");
+        await revokePlayerAndCommit(backend, "ROOM", playerId, storytellerOccupancyCompletion("unseat", playerId));
+        useStorytellerStore.getState().addTravelerSeat();
+        const elsewhere = useStorytellerStore.getState().game!.seatOrder.find((id) => id !== playerId && occupant(id).isEmpty)!;
+        useStorytellerStore.getState().addToPendingQueue(uid, "Alice");
+        const b = await seatBound(backend, uid, elsewhere);
+        expect(useStorytellerStore.getState().setIsTraveler(elsewhere, true).ok).toBe(true);
+        await backend.set(travelerChoicePath("ROOM", uid), "thief"); // B's own request
+        const before = useStorytellerStore.getState().game;
+        await applyTravelerChoice(backend, "ROOM", uid, cachedA, commitLocal);
+        expect(useStorytellerStore.getState().game).toBe(before);
+        expect(occupant(elsewhere)).toMatchObject({ participantId: b.participantId, actualRole: "" });
+        expect(await backend.get(travelerChoicePath("ROOM", uid))).toBe("thief");
+      });
+
+      it("a stale callback never consumes a DIFFERENT Role value; the newer value's own callback applies it", async () => {
+        const { backend, uid, playerId } = await seatedTraveler();
+        await backend.set(travelerChoicePath("ROOM", uid), "thief");
+        const older = observe(playerId, "thief");
+        await backend.set(travelerChoicePath("ROOM", uid), "scapegoat"); // the player changed their mind
+        let called = false;
+        await applyTravelerChoice(backend, "ROOM", uid, older, () => { called = true; });
+        expect(called).toBe(false);
+        expect(occupant(playerId).actualRole).toBe("");
+        expect(await backend.get(travelerChoicePath("ROOM", uid))).toBe("scapegoat");
+        await applyTravelerChoice(backend, "ROOM", uid, observe(playerId, "scapegoat"), commitLocal);
+        expect(occupant(playerId).actualRole).toBe("scapegoat");
+        expect(await backend.get(travelerChoicePath("ROOM", uid))).toBeUndefined();
+      });
+
+      it("a callback observed for no participation is not created: an empty seat yields no observation", async () => {
+        const { backend, uid, playerId } = await seatedTraveler();
+        await revokePlayerAndCommit(backend, "ROOM", playerId, storytellerOccupancyCompletion("unseat", playerId));
+        expect(observeTravelerChoice(playerId, "thief")).toBeNull();
+        expect(observeTravelerChoice("no-such-seat", "thief")).toBeNull();
+        expect(observeTravelerChoice("__proto__", "thief")).toBeNull();
+        expect(await backend.get(travelerChoicePath("ROOM", uid))).toBeUndefined();
+      });
+
+      it("request cleanup stays idempotent: a repeated callback writes nothing and changes nothing once the request is consumed", async () => {
+        const { backend, uid, playerId } = await seatedTraveler();
+        await backend.set(travelerChoicePath("ROOM", uid), "thief");
+        const observed = observe(playerId, "thief");
+        const writes: string[] = [];
+        const set = backend.set.bind(backend);
+        backend.set = async (path, value) => { writes.push(path); await set(path, value); };
+        await applyTravelerChoice(backend, "ROOM", uid, observed, commitLocal);
+        expect(writes).toEqual([travelerChoicePath("ROOM", uid)]);
+        const after = useStorytellerStore.getState().game;
+        await applyTravelerChoice(backend, "ROOM", uid, observed, commitLocal);
+        expect(writes).toEqual([travelerChoicePath("ROOM", uid)]); // no second write
+        expect(useStorytellerStore.getState().game).toBe(after);
+        expect(occupant(playerId).actualRole).toBe("thief");
+      });
+    });
+
+    it("a record naming a different seat than the roster binding is never applied (nor consumed)", async () => {
       const { backend, uid, playerId } = await seatedTraveler();
       await backend.set(rosterParticipantPath("ROOM", uid), {
         playerId: "some-other-seat", participantId: useStorytellerStore.getState().game!.players[playerId]!.participantId!, name: "Alice",
       });
       await backend.set(travelerChoicePath("ROOM", uid), "thief");
       let called = false;
-      await applyTravelerChoice(backend, "ROOM", uid, "thief", () => { called = true; });
+      await applyTravelerChoice(backend, "ROOM", uid, observe(playerId, "thief"), () => { called = true; });
       expect(called).toBe(false);
-      expect(await backend.get(travelerChoicePath("ROOM", uid))).toBeUndefined();
+      expect(await backend.get(travelerChoicePath("ROOM", uid))).toBe("thief");
     });
   });
 });

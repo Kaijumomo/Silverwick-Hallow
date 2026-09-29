@@ -223,6 +223,129 @@ describe("Traveler public character", () => {
   });
 });
 
+// ASTRA-10D-003: the Traveler selector is bound to the Traveler record it
+// RENDERED. Each "controlled render" commits a render, then -- inside one act
+// scope, so React has not re-rendered yet -- the underlying state changes and
+// the Storyteller's input lands on the already-rendered (stale) control.
+describe("ASTRA-10D-003: Traveler Role actions are bound to the rendered Traveler record", () => {
+  function liveTraveler(role = "thief") {
+    goLive();
+    state().addPlayer("Zed");
+    const zed = idOf("Zed");
+    expect(player(zed).isTraveler).toBe(true);
+    if (role) expect(state().assignRole(zed, role)).toMatchObject({ ok: true, changed: true });
+    store.setState({ undoStack: [] });
+    return zed;
+  }
+  const select = () => screen.getByLabelText("Public character") as HTMLSelectElement;
+
+  it("stale same participant: rendered Thief, underlying becomes Gunslinger, the stale selector choosing Scapegoat is refused -- Gunslinger remains", () => {
+    const zed = liveTraveler("thief");
+    render(<TravelerArrival playerId={zed} />);
+    expect(select().value).toBe("thief");
+    let afterGunslinger = game();
+    let seq = state().localSeq;
+    act(() => {
+      expect(state().assignRole(zed, "gunslinger")).toMatchObject({ ok: true, changed: true });
+      afterGunslinger = game();
+      seq = state().localSeq;
+      fireEvent.change(select(), { target: { value: "scapegoat" } });
+    });
+    expect(player(zed)).toMatchObject({ actualRole: "gunslinger", shownRole: "gunslinger", publicDisplayRole: "gunslinger" });
+    expect(game()).toBe(afterGunslinger); // the stale click changed nothing
+    expect(state().localSeq).toBe(seq);
+    expect(roleHistory().map((h) => h.change)).toEqual([
+      { kind: "value", from: { actualRole: "" }, to: { actualRole: "thief" } },
+      { kind: "value", from: { actualRole: "thief" }, to: { actualRole: "gunslinger" } },
+    ]);
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent(/nothing was changed/i);
+    // The refusal is safe: it names no character.
+    expect(alert.textContent).not.toMatch(/thief|gunslinger|scapegoat/i);
+  });
+
+  it("replacement: A's rendered selector never mutates participation B now occupying the same PlayerId", () => {
+    const zed = liveTraveler("thief");
+    render(<TravelerArrival playerId={zed} />);
+    const a = player(zed).participantId;
+    let replacement = player(zed);
+    act(() => {
+      expect(state().unseatPlayer(zed)).toBe(true);
+      state().addToPendingQueue("uid-new", "Newbie");
+      expect(state().assignPendingToSeat("uid-new", zed)).toBe(true);
+      replacement = player(zed);
+      fireEvent.change(select(), { target: { value: "scapegoat" } });
+    });
+    expect(replacement.participantId).not.toBe(a);
+    expect(replacement).toMatchObject({ isTraveler: true, actualRole: "" });
+    expect(player(zed)).toBe(replacement); // B unchanged
+    expect(screen.getByRole("alert")).toHaveTextContent(/nothing was changed/i);
+    expect(screen.getByRole("alert").textContent).not.toMatch(/thief|scapegoat/i);
+  });
+
+  it("a stale 'Show public character' is refused too; a current one applies through the seam", () => {
+    const zed = liveTraveler("thief");
+    // A Traveler whose public character is not (yet) shown in their own view.
+    store.setState({ game: { ...game(), players: { ...game().players, [zed]: { ...player(zed), shownRole: null } } } });
+    render(<TravelerArrival playerId={zed} />);
+    act(() => {
+      expect(state().assignRole(zed, "gunslinger")).toMatchObject({ ok: true, changed: true });
+      fireEvent.click(screen.getByRole("button", { name: "Show public character in player view" }));
+    });
+    expect(player(zed)).toMatchObject({ actualRole: "gunslinger", shownRole: "gunslinger" });
+    expect(screen.getByRole("alert")).toHaveTextContent(/nothing was changed/i);
+    cleanup();
+    store.setState({ game: { ...game(), players: { ...game().players, [zed]: { ...player(zed), shownRole: null } } } });
+    render(<TravelerArrival playerId={zed} />);
+    fireEvent.click(screen.getByRole("button", { name: "Show public character in player view" }));
+    expect(player(zed)).toMatchObject({ actualRole: "gunslinger", shownRole: "gunslinger" });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("a current (non-stale) Traveler change succeeds as ONE gameplay commit", () => {
+    const zed = liveTraveler("thief");
+    state().setAbilityUsed(zed, true);
+    store.setState({ undoStack: [] });
+    render(<TravelerArrival playerId={zed} />);
+    const seq = state().localSeq;
+    fireEvent.change(select(), { target: { value: "gunslinger" } });
+    expect(player(zed)).toMatchObject({ actualRole: "gunslinger", shownRole: "gunslinger", publicDisplayRole: "gunslinger", abilityUsed: false });
+    expect(state().undoStack).toHaveLength(1);
+    expect(state().localSeq).toBe(seq + 1);
+    expect(roleHistory().at(-1)).toMatchObject({ change: { from: { actualRole: "thief" }, to: { actualRole: "gunslinger" } } });
+    expect(roleHistory().at(-1)!.correction).toBeUndefined();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("after the initial Reveal (before Night 1): an unassigned Traveler is assigned; a committed character is CORRECTED (abilityUsed kept, no History)", () => {
+    state().setRolePool(standardRoles(7));
+    expect(state().dealRolePool().ok).toBe(true);
+    for (const id of game().seatOrder) needsShownIdentity(player(id).actualRole) ? state().setShownRole(id, "chef") : state().showAssignedRole(id);
+    expect(state().revealRoles().ok).toBe(true);
+    state().addPlayer("Zed");
+    const zed = idOf("Zed");
+    render(<TravelerArrival playerId={zed} />);
+    fireEvent.change(select(), { target: { value: "thief" } });
+    expect(player(zed)).toMatchObject({ actualRole: "thief", shownRole: "thief" });
+    state().setAbilityUsed(zed, true);
+    fireEvent.change(select(), { target: { value: "gunslinger" } });
+    expect(player(zed)).toMatchObject({ actualRole: "gunslinger", shownRole: "gunslinger", abilityUsed: true });
+    expect(game().phase).toBe("setup");
+    expect(game().history).toHaveLength(0);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("Privacy Mode: only the public character is shown -- no selector, no Role actions, no refusal text", () => {
+    const zed = liveTraveler("thief");
+    usePrivacyStore.setState({ enabled: true });
+    render(<TravelerArrival playerId={zed} />);
+    expect(screen.getByText("Traveler: Thief")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Public character")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
 describe("Privacy Mode", () => {
   it("renders no Role transition detail: the safe view has no pickers, corrections, perception controls or role names, and a refusal never names a character", () => {
     goLive();

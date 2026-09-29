@@ -161,6 +161,28 @@ export async function rejectLeaveRequest(backend: RoomBackend, code: string, uid
 export type TravelerChoiceBinding = { playerId: PlayerId; participantId: ParticipantId };
 
 /**
+ * Phase 10D (ASTRA-10D-001): ONE observed Traveler request, bound at
+ * observation time to the participation instance that then held the seat. The
+ * player-written request carries only a character id; the ParticipantId comes
+ * from the Storyteller's own Current State and stays Storyteller-private (no
+ * player-visible field, no request nonce).
+ */
+export type ObservedTravelerChoice = TravelerChoiceBinding & { roleId: RoleId };
+
+/**
+ * Binds a request observed for `playerId` (the live roster's binding of the
+ * requesting uid) to the participation instance the Storyteller's seat holds
+ * NOW. Null while the seat holds no participation: nothing is processed until
+ * the request can be observed for one.
+ */
+export function observeTravelerChoice(playerId: PlayerId, roleId: RoleId): ObservedTravelerChoice | null {
+  const game = useStorytellerStore.getState().game;
+  const occupant = game && Object.prototype.hasOwnProperty.call(game.players, playerId) ? game.players[playerId] : undefined;
+  if (!occupant || occupant.isEmpty || !occupant.participantId) return null;
+  return { playerId, participantId: occupant.participantId, roleId };
+}
+
+/**
  * The production local commit of a Traveler choice (Phase 10D): the choice is
  * applied through the Role seam, BOUND to the participation instance the
  * authoritative roster record named (`binding.participantId`) and to the
@@ -183,42 +205,56 @@ export function commitTravelerChoiceLocally(binding: TravelerChoiceBinding, role
 
 /**
  * Applies a player's self-chosen Traveler character (Phase 9 Setup
- * finalization B4, revised; Phase 10D participation binding). The requesting
- * uid's playerId is re-resolved from the CURRENT live roster, and -- Phase 10D
- * -- so is the participation instance: the ParticipantId is read from the
- * authoritative `rosterParticipants/{uid}` record (Storyteller-only, written
- * with the binding in the same fenced update), never from the player-written
- * request (which carries only a character id) and never inferred from a seat,
- * name or UID. `commitLocal` receives that {playerId, participantId} binding
- * and must apply the choice through the Role seam bound to it (expecting a
- * blank Role); a request whose binding has no such record, or whose record
- * names a different seat, is stale and is cleared WITHOUT being applied.
- * Precedence: a current Storyteller-assigned Traveler character always wins
- * over an older pending player choice -- the caller applies the choice only
- * when the seat is still a Traveler with NO character assigned yet. Always
- * clears the request node afterward, whether or not a binding was found
- * (stale requests are pure cleanup, never replayed) -- the player may
- * resubmit for their current participation.
+ * finalization B4, revised; Phase 10D participation binding). The participation
+ * instance is never read from the player-written request (which carries only a
+ * character id) and never inferred from a seat, name or UID.
  *
- * Revocation and re-seating additionally clear `travelerChoices/{uid}` in
- * their own fenced multi-path update (see lobby.ts), so an earlier
- * participation's request cannot even survive to be observed here.
+ * Phase 10D (ASTRA-10D-001): the callback is bound to the request AND to the
+ * participation it was OBSERVED for (`observed`, see observeTravelerChoice),
+ * and inside the fenced writer's exclusive section -- before anything local
+ * changes -- it re-establishes all of:
+ *  1. the request still exists remotely with the observed character, so a
+ *     request that was consumed or cleared never re-applies (not even after an
+ *     Undo returns the participant to blank), and an older callback never
+ *     consumes a different (newer) value;
+ *  2. the uid's CURRENT roster binding is the observed seat;
+ *  3. the authoritative `rosterParticipants/{uid}` record (Storyteller-only,
+ *     written with the binding in one fenced update) names the observed
+ *     ParticipantId and seat;
+ *  4. `commitLocal`: the local occupant still is that participant and still an
+ *     unassigned Traveler, submitted through the Role seam with the expected
+ *     state blank / Traveler (so a Storyteller-assigned character wins).
+ *
+ * The request is cleared (fenced, idempotent -- never replayed) only when it
+ * provably belongs to the observed participation (1-3 hold: applied, or
+ * superseded by a Storyteller assignment / status change) or provably to NO
+ * participation (the uid has no binding; a player can write one only while
+ * bound). A request the binding or record attributes to ANOTHER participation
+ * -- or that cannot be attributed (no valid record) -- is neither applied nor
+ * consumed by this callback: a request left by an earlier participation never
+ * reaches its replacement, and a replacement's own request is processed by
+ * its own observation. Revocation and re-seating also clear
+ * `travelerChoices/{uid}` in their own fenced multi-path update (lobby.ts).
  */
 export async function applyTravelerChoice(
   backend: RoomBackend,
   code: string,
   uid: string,
-  roleId: RoleId,
+  observed: ObservedTravelerChoice,
   commitLocal: (binding: TravelerChoiceBinding, roleId: RoleId) => void,
 ): Promise<void> {
-  if (backend.runExclusive) return backend.runExclusive(inner => applyTravelerChoice(inner, code, uid, roleId, commitLocal));
-  const bindings = await readRosterBindings(backend, code);
-  const playerId = bindings[uid];
-  if (playerId) {
-    const record = decodeRosterParticipant(await backend.get(rosterParticipantPath(code, uid)));
-    if (record.status === "ready" && record.data.playerId === playerId) {
-      commitLocal({ playerId, participantId: record.data.participantId }, roleId);
-    }
+  if (backend.runExclusive) return backend.runExclusive(inner => applyTravelerChoice(inner, code, uid, observed, commitLocal));
+  const request = travelerChoicePath(code, uid);
+  if ((await backend.get(request)) !== observed.roleId) return;
+  const playerId = (await readRosterBindings(backend, code))[uid];
+  if (!playerId) {
+    await backend.set(request, null);
+    return;
   }
-  await backend.set(travelerChoicePath(code, uid), null);
+  if (playerId !== observed.playerId) return;
+  const record = decodeRosterParticipant(await backend.get(rosterParticipantPath(code, uid)));
+  if (record.status !== "ready" || record.data.playerId !== observed.playerId ||
+    record.data.participantId !== observed.participantId) return;
+  commitLocal({ playerId: observed.playerId, participantId: observed.participantId }, observed.roleId);
+  await backend.set(request, null);
 }
