@@ -1,10 +1,12 @@
 import { iconUrlFor } from "@/data/iconUrl";
+import { ownedScriptCharacters } from "@/data/roleRegistry";
 import type { Script } from "@/stores/types";
 import { BAG_TYPES } from "./setupPolicies";
 import { TYPE_LABEL } from "./SetupFindings";
 
 export function RolePoolEditor({ script, pool, onChange }: { script: Script; pool: string[]; onChange: (pool: string[]) => void }) {
-  const roles = [...new Map(script.characters.map(r => [r.id, r])).values()];
+  // SOL-10D-C03: one entry per RoleId -- its first (owning) definition.
+  const roles = ownedScriptCharacters(script);
   return <div className="setup-role-editor">
     {BAG_TYPES.map(type => <section key={type} className="setup-role-group" aria-label={TYPE_LABEL[type]}>
       <h3 className={`setup-eyebrow type-${type}`}>{TYPE_LABEL[type]} <span>{pool.filter(id => roles.find(r => r.id === id)?.type === type).length} selected</span></h3>

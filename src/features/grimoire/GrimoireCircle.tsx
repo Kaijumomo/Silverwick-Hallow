@@ -13,7 +13,7 @@ import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
 import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 import { effectsNeedingCheck } from "@/stores/effects";
 import { identityNeedsCheck } from "@/stores/projections";
-import { buildRegistry } from "@/data/roleRegistry";
+import { buildRegistry, ownedScriptCharacters } from "@/data/roleRegistry";
 import { effectAccessibleSummary, effectIndicatorLabel, effectIndicators, type EffectIndicatorSummary } from "@/stores/effectRegistry";
 import { lifeAccessibleLabel, lifeStatusOf } from "@/stores/lifeState";
 import { LifeShroud, LifeStateText, VoteToken } from "@/features/life/LifeMarks";
@@ -27,7 +27,8 @@ import {
 } from "@/features/reminders/reminderPresentation";
 
 export function buildRoleDisplayMap(script: Script | undefined): Map<string, RoleDef> {
-  const map = new Map((script?.characters ?? []).map((c) => [c.id, c]));
+  // SOL-10D-C03: one definition per RoleId -- the first, its owner.
+  const map = new Map(ownedScriptCharacters(script).map((c) => [c.id, c]));
   for (const t of TRAVELERS) map.set(t.id, t);
   return map;
 }

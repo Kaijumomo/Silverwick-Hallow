@@ -45,9 +45,29 @@ export const ORDINARY_ROLE_TYPES: readonly RoleType[] = ["townsfolk", "outsider"
 export const isOrdinaryRoleType = (type: unknown): boolean =>
   typeof type === "string" && (ORDINARY_ROLE_TYPES as readonly string[]).includes(type);
 
+/**
+ * SOL-10D-C03: RoleId is the character identity key. A script's characters,
+ * ONE per RoleId: the FIRST definition of an id owns it. New imports reject
+ * duplicate ids (parseClocktowerScript); an already-stored legacy script may
+ * still carry later duplicates, which no Role consumer ever resolves --
+ * classification (classifyRole's first match), pickers, this registry (and so
+ * projection and private information), display and Setup all read a script's
+ * characters through this one owner rule.
+ */
+export function ownedScriptCharacters(script: Pick<Script, "characters"> | null | undefined): RoleDef[] {
+  const seen = new Set<RoleId>();
+  const owned: RoleDef[] = [];
+  for (const role of script?.characters ?? []) {
+    if (seen.has(role.id)) continue;
+    seen.add(role.id);
+    owned.push(role);
+  }
+  return owned;
+}
+
 export function buildRegistry(script: Script): RoleRegistry {
   const map = new Map<RoleId, RoleDef>();
-  for (const r of script.characters) map.set(r.id, r);
+  for (const r of ownedScriptCharacters(script)) map.set(r.id, r);
   // Phase 10D (ASTRA-10D-004): an ordinary-typed character of THIS script
   // owns its id -- it is the very definition the Role boundary admits
   // (classifyRole) and the pickers offer, so projection and private

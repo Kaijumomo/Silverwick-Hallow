@@ -346,6 +346,29 @@ describe("ASTRA-10D-003: Traveler Role actions are bound to the rendered Travele
   });
 });
 
+// SOL-10D-C03: a legacy STORED script may still carry a duplicate RoleId; the
+// Drawer displays, offers and derives from the FIRST (owning) definition --
+// the same one the Role seam, registry and projection resolve.
+describe("SOL-10D-C03: the Drawer resolves a legacy duplicate RoleId to its first definition", () => {
+  it("the Actual role card, the pickers and the derived alignment all use the owner", () => {
+    goLive();
+    const chef = setupScript.characters.find((r) => r.id === "chef")!;
+    const evilChef = { id: "chef", name: "Evil Chef", type: "minion" as const, ability: "Homebrew." };
+    store.setState({ customScripts: { [setupScript.id]: { ...setupScript,
+      characters: [chef, evilChef, ...setupScript.characters.filter((r) => r.id !== "chef")] } } });
+    const id = holder("chef");
+    expect(state().setShownAlignment(id, null)).toMatchObject({ ok: true });
+    render(<SeatDrawer seat={id} />);
+    const card = within(document.querySelector(".role-display") as HTMLElement);
+    expect(card.getByText("Chef")).toBeInTheDocument();
+    expect(card.getByText("townsfolk")).toBeInTheDocument();
+    expect(screen.queryByText("Evil Chef")).toBeNull();
+    expect(actualSection().getAllByRole("button", { name: "Chef townsfolk" })).toHaveLength(1);
+    expect(behaviorSection().getAllByRole("button", { name: "Chef townsfolk" })).toHaveLength(1);
+    expect(behaviorSection().getByRole("button", { name: "auto (good)" })).toBeInTheDocument();
+  });
+});
+
 describe("Privacy Mode", () => {
   it("renders no Role transition detail: the safe view has no pickers, corrections, perception controls or role names, and a refusal never names a character", () => {
     goLive();

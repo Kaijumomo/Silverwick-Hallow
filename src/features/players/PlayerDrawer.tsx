@@ -13,7 +13,7 @@ import { publicTravelerRole } from "@/stores/travelers";
 import { getPrivateInfoApplicability } from "@/stores/privatePackets";
 import { roleAuthority } from "@/data/canonical";
 import { evilInformationPolicy } from "@/features/nightOrder/nightRules";
-import { buildRegistry } from "@/data/roleRegistry";
+import { buildRegistry, ownedScriptCharacters } from "@/data/roleRegistry";
 import { useModalBehavior } from "@/components/Modal";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { EffectControls } from "@/features/effects/EffectControls";
@@ -201,9 +201,12 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
     setNotesDraft(player.stNotes);
   }, [player.id, player.stNotes]);
 
+  // SOL-10D-C03: a script's characters, one per RoleId -- its first (owning)
+  // definition, the same one the Role seam, registry and projection resolve.
+  const ownedCharacters = useMemo(() => ownedScriptCharacters(script), [script]);
   const roleById = useMemo(
-    () => new Map((script?.characters ?? []).map((c) => [c.id, c])),
-    [script]
+    () => new Map(ownedCharacters.map((c) => [c.id, c])),
+    [ownedCharacters]
   );
   const registry = useMemo(() => script ? buildRegistry(script) : null, [script]);
   const applicability = registry ? getPrivateInfoApplicability(player, registry) : null;
@@ -619,7 +622,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
           {role && applicability?.fakeMinions && (
             <LunaticInfo
               player={player}
-              roles={script.characters}
+              roles={ownedCharacters}
               roleById={roleById}
               otherPlayers={Object.values(game.players)
                 .filter((p) => p.id !== player.id)
@@ -632,7 +635,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
           {role?.type === "demon" && player.behaviorMode === "normal" && (
             <DemonInfo
               player={player}
-              roles={script.characters}
+              roles={ownedCharacters}
               roleById={roleById}
               inPlayRoles={registry && evilInformationPolicy(Object.values(game.players), registry, game).allowInPlayBluffs ? new Set() : inPlayRoles}
               allowInPlay={!!registry && evilInformationPolicy(Object.values(game.players), registry, game).allowInPlayBluffs}

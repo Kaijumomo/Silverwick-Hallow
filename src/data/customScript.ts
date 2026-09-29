@@ -72,6 +72,15 @@ export function parseClocktowerScript(input: unknown): ParseResult {
   let scriptAuthor: string | undefined;
   let metaId: string | undefined;
   const characters: RoleDef[] = [];
+  // SOL-10D-C03: RoleId is the character identity key -- a new import may not
+  // carry two character entries with the same (resolved) RoleId, however each
+  // entered (official id string or character object). Rejected, never
+  // silently deduplicated.
+  const seenIds = new Set<string>();
+  const duplicate = (id: string, index: number): ParseResult => ({
+    ok: false,
+    error: `Duplicate character id "${id}" at index ${index}: each character may appear only once in a script.`,
+  });
 
   for (let i = 0; i < input.length; i++) {
     const entry = input[i];
@@ -99,6 +108,8 @@ export function parseClocktowerScript(input: unknown): ParseResult {
           error: `Unknown official role id: ${entry}`,
         };
       }
+      if (seenIds.has(role.id)) return duplicate(role.id, i);
+      seenIds.add(role.id);
       characters.push(role);
       continue;
     }
@@ -106,6 +117,8 @@ export function parseClocktowerScript(input: unknown): ParseResult {
     if (typeof entry === "object" && entry !== null) {
       const norm = normalizeRole(entry as Record<string, unknown>, i);
       if (!norm.ok) return { ok: false, error: norm.error };
+      if (seenIds.has(norm.role.id)) return duplicate(norm.role.id, i);
+      seenIds.add(norm.role.id);
       characters.push(norm.role);
       continue;
     }

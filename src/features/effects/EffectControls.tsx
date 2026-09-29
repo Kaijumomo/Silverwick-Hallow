@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { selectScriptById, useStorytellerStore, type EffectCommandResult } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { TRAVELERS } from "@/data/travelers";
+import { ownedScriptCharacters } from "@/data/roleRegistry";
 import { effectNeedsCheck, manualEffectId, manualEffectState } from "@/stores/effects";
 import {
   KNOWN_EFFECT_TYPES,
@@ -269,7 +270,7 @@ function AddEffectForm({ game, target, onDone, onError }: {
   onError: (message: string | null) => void;
 }) {
   const script = useStorytellerStore((s) => selectScriptById(s, game.scriptId));
-  const roles = useMemo<RoleDef[]>(() => [...(script?.characters ?? []), ...TRAVELERS], [script]);
+  const roles = useMemo<RoleDef[]>(() => [...ownedScriptCharacters(script), ...TRAVELERS], [script]);
   const [type, setType] = useState<string>(KNOWN_EFFECT_TYPES[0]!.type);
   const [customType, setCustomType] = useState("");
   // The source is bound to the participation instance at the moment it is

@@ -181,3 +181,67 @@ describe("parseClocktowerScript — mixed script", () => {
     }
   });
 });
+
+// SOL-10D-C03: RoleId is the character identity key -- a NEW import may not
+// carry two character entries with the same RoleId, however each entered.
+describe("parseClocktowerScript — SOL-10D-C03 duplicate RoleIds are rejected", () => {
+  const rejected = (input: unknown[], id: string) => {
+    const r = parseClocktowerScript(input);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error).toMatch(/Duplicate character id/);
+      expect(r.error).toContain(`"${id}"`);
+    }
+  };
+
+  it("official string + official string", () => {
+    rejected(["chef", "chef"], "chef");
+  });
+
+  it("official string, then a custom object with the same id", () => {
+    rejected(["chef", { id: "chef", name: "Homebrew Chef", team: "townsfolk", ability: "x" }], "chef");
+  });
+
+  it("a custom object, then the official string with the same id", () => {
+    rejected([{ id: "chef", name: "Homebrew Chef", team: "minion", ability: "x" }, "chef"], "chef");
+  });
+
+  it("two custom objects with the same id", () => {
+    rejected([
+      { id: "brewer", name: "Brewer", team: "townsfolk", ability: "x" },
+      { id: "brewer", name: "Brewer Two", team: "outsider", ability: "y" },
+    ], "brewer");
+  });
+
+  it("official strings that RESOLVE to the same RoleId (normalized spellings) are duplicates too", () => {
+    rejected(["snake-charmer", "snake_charmer"], "snakecharmer");
+    rejected(["Chef", "chef"], "chef");
+  });
+
+  it("a duplicate of a Traveler / Loric id is rejected like any other", () => {
+    rejected(["thief", { id: "thief", name: "Homebrew Thief", team: "townsfolk", ability: "x" }], "thief");
+    rejected([{ id: "bigwig", name: "Bigwig", team: "townsfolk", ability: "x" }, "bigwig"], "bigwig");
+  });
+
+  it("the error names the index of the duplicate entry (after any _meta)", () => {
+    const r = parseClocktowerScript([{ id: "_meta", name: "Dup" }, "chef", "imp", "chef"]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/at index 3/);
+  });
+
+  it("a new import is never silently deduplicated", () => {
+    const r = parseClocktowerScript(["washerwoman", "chef", "chef"]);
+    expect(r).toEqual({ ok: false, error: expect.stringContaining("chef") });
+  });
+
+  it("distinct RoleIds still import normally (official, homebrew, and a homebrew reusing a Loric id once)", () => {
+    const r = parseClocktowerScript([
+      { id: "_meta", name: "Distinct" },
+      "washerwoman", "imp",
+      { id: "brewer", name: "Brewer", team: "townsfolk", ability: "x" },
+      { id: "bigwig", name: "Bigwig (homebrew)", team: "townsfolk", ability: "y" },
+    ]);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.script.characters.map((c) => c.id)).toEqual(["washerwoman", "imp", "brewer", "bigwig"]);
+  });
+});

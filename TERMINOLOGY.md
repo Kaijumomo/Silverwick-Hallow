@@ -117,6 +117,10 @@ changed. Character ability evaluation is not part of it.
 - **Role type policy** -- an ordinary participant's Actual/Shown Role is a
   townsfolk/outsider/minion/demon character of the current script; a Traveler's
   character comes from the canonical Traveler catalogue.
+- **RoleId ownership** -- a RoleId names exactly one character of a script:
+  a new import may not repeat one, and in a legacy script that still does,
+  the FIRST definition owns the id for every Role consumer (the canonical
+  Traveler catalogue keeps its precedence).
 - **Role plan** -- partial-field patches only (never a whole player record), so
   it composes with Life/Effect/Reminder plans on a working snapshot.
 

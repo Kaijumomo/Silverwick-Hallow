@@ -156,6 +156,26 @@ registry. The Traveler catalogue was reconciled with canonical data:
 **Cacklejack** was missing from `TRAVELERS` (17 vs 18 canonical Travelers) and is
 added, including the `travelerChoices` rule's catalogue pattern.
 
+**RoleId uniqueness** (SOL-10D-C03): RoleId is the character identity key, so a
+script names each character once.
+
+- A NEW custom-script import with two character entries carrying the same
+  RoleId is rejected (`parseClocktowerScript`), whichever way each entered --
+  official id string or character object, compared on the resolved RoleId --
+  with an error naming the duplicate id. It is never silently deduplicated.
+- An already-stored LEGACY script that still carries a duplicate is not
+  rejected, reset or migrated. Every runtime Role consumer resolves one
+  deterministic owner, the FIRST definition (`ownedScriptCharacters`):
+  `classifyRole`, `ordinaryRoleChoices`, `buildRegistry` (and so projection
+  and private-information resolution), the Grimoire and Player Drawer role
+  lookups and bluff lists, the Setup pool editor and bag fill, the Effect
+  source list and the Almanac. A later duplicate is never admitted, offered
+  or resolved. The Setup readiness check still reports conflicting
+  definitions of a character in play, as before.
+- The canonical Traveler catalogue keeps its precedence (the explicit Phase
+  10D exception), and an admitted ordinary owner keeps its id against Fabled
+  and Loric overlays (ASTRA-10D-004). No schema/store version change.
+
 ## Perception
 
 Actual truth never automatically becomes ordinary perception. `setPerception`

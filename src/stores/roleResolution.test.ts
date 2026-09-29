@@ -31,10 +31,12 @@ import { HistoryRecordSchema, StorytellerGamePersistedSchema } from "./schemas";
 import { participantRefOf } from "./participants";
 import { identityNeedsCheck, projectToSelf } from "./projections";
 import { getPrivateInfoApplicability, offersNightInformation } from "./privatePackets";
-import { buildRegistry } from "@/data/roleRegistry";
+import { buildRegistry, ownedScriptCharacters } from "@/data/roleRegistry";
+import { buildRoleDisplayMap } from "@/features/grimoire/GrimoireCircle";
+import { makeSTPlayer } from "@/test/fixtures";
 import { isCanonicalRole } from "@/data/canonical";
 import { parseClocktowerScript } from "@/data/customScript";
-import type { PlayerId, Script, StorytellerLobbyRecord, STPlayerRecord } from "./types";
+import type { PlayerId, RoleDef, Script, StorytellerLobbyRecord, STPlayerRecord } from "./types";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -868,6 +870,129 @@ describe("ASTRA-10D-004: a custom ordinary Role reusing a canonical Loric id kee
     const fabledTyped: Script = { id: "home-f", name: "Home", characters: [{ id: "bigwig", name: "X", type: "fabled" }, ...canonicalExcept("bigwig")] };
     expect(classifyRole(fabledTyped, "bigwig").kind).toBe("refused");
     expect(buildRegistry(fabledTyped).get("bigwig")!.type).toBe("loric");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SOL-10D-C03: RoleId is the character identity key. New imports reject a
+// duplicate RoleId; an already-stored LEGACY script may still carry one, and
+// every runtime Role consumer then resolves ONE deterministic owner -- the
+// FIRST definition. Canonical Traveler precedence and the ASTRA-10D-004
+// overlay rule are unchanged.
+// ---------------------------------------------------------------------------
+describe("SOL-10D-C03: a legacy script's duplicate RoleId is owned by its FIRST definition everywhere", () => {
+  const canonicalChef = setupScript.characters.find((r) => r.id === "chef")!;
+  // Deliberately free of show/tell/learn/information/signal/nod wording, so
+  // private-information applicability differs from the canonical Chef's.
+  const evilChef: RoleDef = { id: "chef", name: "Evil Chef", type: "minion", ability: "Homebrew minion with a quiet ability.",
+    provenance: { status: "homebrew" } };
+  const others = (...ids: string[]) => setupScript.characters.filter((r) => !ids.includes(r.id));
+  /** A legacy STORED Script object built directly (a new import is refused). */
+  const legacy = (first: RoleDef, second: RoleDef, id = "legacy-dup"): Script =>
+    ({ id, name: "Legacy", characters: [first, second, ...others(first.id)] });
+  const shownChef = (over: Partial<STPlayerRecord> = {}) =>
+    makeSTPlayer({ actualRole: "chef", shownRole: "chef", shownAlignment: null, behaviorMode: "normal", ...over });
+  const promptOffersInfo = (role: RoleDef) =>
+    [role.firstNightPrompt ?? role.ability, role.otherNightPrompt ?? role.ability].some((p) => offersNightInformation(p ?? ""));
+
+  it("preconditions: the two definitions differ in type, alignment and private-information prompts", () => {
+    expect(canonicalChef).toMatchObject({ id: "chef", type: "townsfolk" });
+    expect(promptOffersInfo(canonicalChef)).toBe(true);
+    expect(promptOffersInfo(evilChef)).toBe(false);
+  });
+
+  it("no collateral: for a script with unique RoleIds the owner rule is the identity (same objects, same order)", () => {
+    const owned = ownedScriptCharacters(setupScript);
+    expect(owned).toHaveLength(setupScript.characters.length);
+    owned.forEach((role, index) => expect(role).toBe(setupScript.characters[index]));
+    const ordinary = ["townsfolk", "outsider", "minion", "demon"];
+    expect(ordinaryRoleChoices(setupScript)).toEqual(
+      setupScript.characters.filter((r) => ordinary.includes(r.type) && !TRAVELERS.some((t) => t.id === r.id)));
+    const registry = buildRegistry(setupScript);
+    for (const role of ordinaryRoleChoices(setupScript)) expect(registry.get(role.id)).toBe(role);
+  });
+
+  it("Townsfolk FIRST, Minion second: classification, picker, registry, display, projection and private information all resolve the first", () => {
+    const script = legacy(canonicalChef, evilChef);
+    const cls = classifyRole(script, "chef");
+    expect(cls.kind).toBe("ordinary");
+    if (cls.kind === "ordinary") expect(cls.role).toBe(canonicalChef);
+    const chefs = ordinaryRoleChoices(script).filter((r) => r.id === "chef");
+    expect(chefs).toHaveLength(1);
+    expect(chefs[0]).toBe(canonicalChef);
+    const registry = buildRegistry(script);
+    expect(registry.get("chef")).toBe(canonicalChef);
+    expect(registry.alignmentOf("chef")).toBe("good");
+    expect(buildRoleDisplayMap(script).get("chef")).toBe(canonicalChef);
+    const p = shownChef();
+    expect(identityNeedsCheck(p, registry)).toBe(false);
+    expect(projectToSelf(p, registry)).toEqual({ shownRole: "chef", shownAlignment: "good" });
+    expect(getPrivateInfoApplicability(p, registry).extraText).toBe(true);
+  });
+
+  it("reversed -- Minion FIRST, Townsfolk second: every consumer resolves the Minion", () => {
+    const script = legacy(evilChef, canonicalChef);
+    const cls = classifyRole(script, "chef");
+    expect(cls.kind).toBe("ordinary");
+    if (cls.kind === "ordinary") expect(cls.role).toBe(evilChef);
+    const chefs = ordinaryRoleChoices(script).filter((r) => r.id === "chef");
+    expect(chefs).toHaveLength(1);
+    expect(chefs[0]).toBe(evilChef);
+    const registry = buildRegistry(script);
+    expect(registry.get("chef")).toBe(evilChef);
+    expect(registry.alignmentOf("chef")).toBe("evil");
+    expect(buildRoleDisplayMap(script).get("chef")).toBe(evilChef);
+    const p = shownChef();
+    expect(identityNeedsCheck(p, registry)).toBe(false);
+    expect(projectToSelf(p, registry)).toEqual({ shownRole: "chef", shownAlignment: "evil" });
+    expect(getPrivateInfoApplicability(p, registry).extraText).toBe(false);
+  });
+
+  it("a non-ordinary FIRST definition owns the id too: its later ordinary duplicate is never admitted, offered or resolved", () => {
+    const fabledFirst: RoleDef = { id: "chef", name: "Chef?", type: "fabled" };
+    const script = legacy(fabledFirst, canonicalChef);
+    expect(classifyRole(script, "chef").kind).toBe("refused");
+    expect(ordinaryRoleChoices(script).some((r) => r.id === "chef")).toBe(false);
+    const registry = buildRegistry(script);
+    expect(registry.get("chef")).toBe(fabledFirst);
+    expect(identityNeedsCheck(shownChef(), registry)).toBe(true);
+    expect(projectToSelf(shownChef(), registry)).toBeNull();
+  });
+
+  it("the Role seam admits exactly the owner in a live game whose stored script is a legacy duplicate, and projection agrees", () => {
+    liveGame();
+    const script = legacy(evilChef, canonicalChef, setupScript.id); // the game's own stored script
+    store.setState({ customScripts: { [setupScript.id]: script } });
+    const id = holder("empath");
+    expect(resolve([changeRoleIntent(player(id), "chef"),
+      setPerceptionIntent(player(id), { shownRole: "chef", shownAlignment: null })])).toEqual({ ok: true, changed: true });
+    expect(player(id)).toMatchObject({ actualRole: "chef", shownRole: "chef", shownAlignment: null });
+    expect(projectToSelf(player(id), buildRegistry(script))).toEqual({ shownRole: "chef", shownAlignment: "evil" });
+    // The stored legacy script is used as is: never rejected, reset or rewritten.
+    expect(state().customScripts[setupScript.id]).toBe(script);
+    expect(state().customScripts[setupScript.id]!.characters.filter((r) => r.id === "chef")).toHaveLength(2);
+  });
+
+  it("ASTRA-10D-004 is preserved: a homebrew ordinary FIRST owner keeps its id against the Loric overlay and its own later duplicate", () => {
+    const first: RoleDef = { id: "bigwig", name: "Bigwig (homebrew)", type: "townsfolk", ability: "Homebrew." };
+    const later: RoleDef = { id: "bigwig", name: "Bigwig II", type: "minion", ability: "Homebrew." };
+    const script = legacy(first, later);
+    const cls = classifyRole(script, "bigwig");
+    expect(cls.kind).toBe("ordinary");
+    if (cls.kind === "ordinary") expect(cls.role).toBe(first);
+    expect(buildRegistry(script).get("bigwig")).toBe(first);
+    expect(ordinaryRoleChoices(script).filter((r) => r.id === "bigwig")).toEqual([first]);
+    // The canonical Loric is still refused where the script has no such character.
+    expect(classifyRole(setupScript, "bigwig").kind).toBe("refused");
+  });
+
+  it("canonical Traveler precedence is unchanged even when a legacy script duplicates a Traveler id", () => {
+    const script = legacy({ id: "thief", name: "Homebrew Thief", type: "townsfolk", ability: "x" },
+      { id: "thief", name: "Homebrew Thief II", type: "minion", ability: "y" });
+    const thief = TRAVELERS.find((t) => t.id === "thief")!;
+    expect(classifyRole(script, "thief")).toEqual({ kind: "traveler", role: thief });
+    expect(buildRegistry(script).get("thief")).toBe(thief);
+    expect(ordinaryRoleChoices(script).some((r) => r.id === "thief")).toBe(false);
   });
 });
 

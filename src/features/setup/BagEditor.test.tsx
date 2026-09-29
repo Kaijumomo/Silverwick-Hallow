@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { act, cleanup, render, screen, fireEvent } from "@testing-library/react";
+import { act, cleanup, render, screen, fireEvent, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BagEditor } from "./BagEditor";
+import { RolePoolEditor } from "./RolePoolEditor";
+import { TYPE_LABEL } from "./SetupFindings";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { SETUP_COUNTS } from "@/data/setupCounts";
 import type { RoleId, Script } from "@/stores/types";
@@ -94,5 +96,22 @@ describe("BagEditor Fill & Re-roll", () => {
     render(<Harness plannedPlayerCount={null} />);
     expect(screen.getByRole("button", { name: "Fill the Bag" })).toBeDisabled();
     expect(screen.getByText(/Choose a supported player count/)).toBeVisible();
+  });
+});
+
+// SOL-10D-C03: a legacy STORED script may still carry a duplicate RoleId (new
+// imports reject one); the pool editor offers that id once, as its FIRST
+// (owning) definition, under the owner's type.
+describe("RolePoolEditor — SOL-10D-C03 legacy duplicate RoleIds", () => {
+  it("shows a duplicate RoleId once, as its first definition", () => {
+    const chef = troubleBrewing.characters.find((r) => r.id === "chef")!;
+    const evilChef = { id: "chef", name: "Evil Chef", type: "minion" as const, ability: "x" };
+    const script: Script = { ...troubleBrewing, id: "legacy-dup",
+      characters: [chef, evilChef, ...troubleBrewing.characters.filter((r) => r.id !== "chef")] };
+    render(<RolePoolEditor script={script} pool={[]} onChange={() => {}} />);
+    expect(screen.getAllByRole("button", { name: "Chef" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Evil Chef" })).toBeNull();
+    expect(within(screen.getByRole("region", { name: TYPE_LABEL.townsfolk })).getByRole("button", { name: "Chef" })).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: TYPE_LABEL.minion })).queryByRole("button", { name: /Chef/ })).toBeNull();
   });
 });

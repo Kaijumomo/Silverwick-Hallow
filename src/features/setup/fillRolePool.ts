@@ -1,6 +1,7 @@
 import { isCanonicalRole } from "@/data/canonical";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
+import { ownedScriptCharacters } from "@/data/roleRegistry";
 import { activeJinxesFor } from "@/data/jinxes";
 import {
   compositionCandidates, hasCountPolicy, hasUncertainComposition, isBagType, sameCounts,
@@ -63,7 +64,10 @@ export function fillRolePool(input: FillRolePoolInput): FillBagResult {
     fabledIds = [], loricIds = [], chosenComposition, random = Math.random,
   } = input;
 
-  const roleById = new Map(scriptCharacters.map(r => [r.id, r]));
+  // SOL-10D-C03: one definition per RoleId -- the first, its owner -- for
+  // both pinned-role typing and the eligible candidates.
+  const characters = ownedScriptCharacters({ characters: scriptCharacters });
+  const roleById = new Map(characters.map(r => [r.id, r]));
   const pinnedRoles: RoleDef[] = [];
   for (const id of pinnedIds) {
     const role = roleById.get(id);
@@ -130,7 +134,7 @@ export function fillRolePool(input: FillRolePoolInput): FillBagResult {
     // Never introduce a character the Storyteller didn't choose that would itself
     // change the expected composition (count-policy roles) or whose setup this
     // analyzer can't confidently reason about (uncertain-composition roles).
-    const eligible = scriptCharacters.filter(r =>
+    const eligible = characters.filter(r =>
       r.type === type && !pinnedIds.includes(r.id) &&
       !hasCountPolicy(r.id) && !hasUncertainComposition(r.id));
     if (eligible.length < remaining) return { ok: false, failure: {

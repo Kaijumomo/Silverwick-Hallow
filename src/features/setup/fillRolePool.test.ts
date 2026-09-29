@@ -247,3 +247,44 @@ describe("fillRolePool", () => {
     expect(result.failure.reason).toBe("insufficient-roles");
   });
 });
+
+// SOL-10D-C03: a legacy STORED script may still carry a duplicate RoleId (new
+// imports reject one). The bag fill types a pinned id, and draws candidates,
+// only from each id's FIRST (owning) definition -- a later duplicate is never
+// a character of its own type.
+describe("fillRolePool — SOL-10D-C03 legacy duplicate RoleIds: the first definition owns the id", () => {
+  const chef = TB.find(r => r.id === "chef")!;
+  const evilChef: RoleDef = { id: "chef", name: "Evil Chef", type: "minion", ability: "x", provenance: { status: "homebrew" } };
+  const rest = TB.filter(r => r.id !== "chef");
+
+  it("a pinned duplicate id counts as its FIRST definition's type (Townsfolk first, Minion second)", () => {
+    const owner = new Map([...rest, chef].map(r => [r.id, r]));
+    for (const random of [identityRandom, reverseRandom]) {
+      const result = fillRolePool({ pinnedIds: ["chef"], targetPlayerCount: 5, scriptCharacters: [chef, evilChef, ...rest], random });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(countsOf(result.pool, owner)).toEqual(SETUP_COUNTS[5]);
+      expect(result.pool.filter(id => id === "chef")).toHaveLength(1);
+    }
+  });
+
+  it("reversed (Minion first): the later Townsfolk duplicate never fills a Townsfolk slot, and no id is drawn twice", () => {
+    const owner = new Map([...rest, evilChef].map(r => [r.id, r]));
+    for (const random of [identityRandom, reverseRandom]) {
+      const result = fillRolePool({ pinnedIds: [], targetPlayerCount: 5, scriptCharacters: [evilChef, chef, ...rest], random });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(countsOf(result.pool, owner)).toEqual(SETUP_COUNTS[5]);
+      expect(new Set(result.pool).size).toBe(result.pool.length);
+    }
+  });
+
+  it("no collateral: a script with unique RoleIds fills exactly as before", () => {
+    const unique = fillRolePool({ pinnedIds: [], targetPlayerCount: 7, scriptCharacters: TB, random: identityRandom });
+    expect(unique.ok).toBe(true);
+    if (unique.ok) expect(unique.pool).toEqual(identityPick(tbEligible("townsfolk"), SETUP_COUNTS[7]!.townsfolk)
+      .concat(identityPick(tbEligible("outsider"), SETUP_COUNTS[7]!.outsider))
+      .concat(identityPick(tbEligible("minion"), SETUP_COUNTS[7]!.minion))
+      .concat(identityPick(tbEligible("demon"), SETUP_COUNTS[7]!.demon)));
+  });
+});

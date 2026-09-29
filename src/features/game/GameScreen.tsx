@@ -9,6 +9,7 @@ import { SeatAssignPopup } from "@/features/grimoire/SeatAssignPopup";
 import { TRAVELERS } from "@/data/travelers";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
+import { ownedScriptCharacters } from "@/data/roleRegistry";
 import { connectFirebase } from "@/firebase/session";
 import { isFirebaseConfigured } from "@/firebase/config";
 import { createLobby, formatCode } from "@/firebase/lobby";
@@ -279,7 +280,7 @@ export function GameScreen() {
   };
 
   const almanacRoles = useMemo(
-    () => [...(script?.characters ?? []), ...TRAVELERS, ...FABLED, ...LORICS],
+    () => [...ownedScriptCharacters(script), ...TRAVELERS, ...FABLED, ...LORICS],
     [script]
   );
 

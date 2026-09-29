@@ -1,5 +1,5 @@
 import { MAX_TOTAL_PLAYERS } from "@/data/setupCounts";
-import { ORDINARY_ROLE_TYPES, buildRegistry, isOrdinaryRoleType } from "@/data/roleRegistry";
+import { ORDINARY_ROLE_TYPES, buildRegistry, isOrdinaryRoleType, ownedScriptCharacters } from "@/data/roleRegistry";
 import { getTraveler } from "@/data/travelers";
 import { cloneOwned, durableProvenance, historyId, isLiveGamePhase, sameSnapshot, type MutationContext } from "./history";
 import { isInitialRevealComplete } from "./identity";
@@ -96,9 +96,11 @@ export function classifyRole(script: Script | null | undefined, id: unknown): Ro
 }
 
 /** The Roles an ordinary participant may be given or shown on `script`. UI
- * pickers use exactly this so they never offer a choice the command rejects. */
+ * pickers use exactly this so they never offer a choice the command rejects.
+ * One choice per RoleId -- its FIRST definition, the owner classifyRole
+ * admits (SOL-10D-C03); a legacy later duplicate is never offered. */
 export function ordinaryRoleChoices(script: Script | null | undefined): RoleDef[] {
-  return (script?.characters ?? []).filter((role) => isOrdinaryRoleType(role.type) && !getTraveler(role.id));
+  return ownedScriptCharacters(script).filter((role) => isOrdinaryRoleType(role.type) && !getTraveler(role.id));
 }
 
 // ---------------------------------------------------------------------------
