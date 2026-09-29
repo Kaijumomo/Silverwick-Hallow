@@ -278,13 +278,23 @@ export function GameScreen() {
     }
   };
 
-  // CLOSURE-03: the script's characters and the Traveler catalogue as Role
-  // resolution defines them (one per RoleId; the canonical Traveler over any
-  // script definition of the same id), then the Fabled and Loric catalogues.
-  const almanacRoles = useMemo(
-    () => [...resolvedCharacters(script), ...FABLED, ...LORICS],
-    [script]
-  );
+  // CLOSURE-03: ONE displayed definition per RoleId. The script's characters
+  // and the Traveler catalogue come first, exactly as Role resolution defines
+  // them (resolvedCharacters: first definition, the canonical Traveler over any
+  // script definition of the same id, an admitted ordinary owner kept against
+  // Fabled/Loric). A Fabled or Loric catalogue entry is then listed only when
+  // its RoleId is not already displayed -- never as a second definition of an
+  // id (LUNA-CLOSURE-03-R1: e.g. a homebrew Townsfolk `bigwig` vs the Loric).
+  const almanacRoles = useMemo(() => {
+    const roles = resolvedCharacters(script);
+    const shown = new Set(roles.map((role) => role.id));
+    for (const role of [...FABLED, ...LORICS]) {
+      if (shown.has(role.id)) continue;
+      shown.add(role.id);
+      roles.push(role);
+    }
+    return roles;
+  }, [script]);
 
   if (!game) return null;
   const selected = selectedPlayerId ? game.players[selectedPlayerId] : null;

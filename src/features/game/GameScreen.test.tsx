@@ -4,6 +4,10 @@ import { GameScreen } from "./GameScreen";
 import { useStorytellerStore as storyteller } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
+import { FABLED } from "@/data/fabled";
+import { LORICS } from "@/data/lorics";
+import { TRAVELERS } from "@/data/travelers";
+import type { RoleDef, Script } from "@/stores/types";
 
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class {
@@ -60,24 +64,74 @@ describe("Storyteller privacy mode", () => {
   });
 });
 
-// Phase 10D (CLOSURE-03): the Almanac lists the script's characters and the
-// Traveler catalogue as Role resolution defines them -- one entry per RoleId,
-// the canonical Traveler over a legacy script's homebrew definition of the id.
-describe("CLOSURE-03: the Almanac follows canonical Traveler precedence", () => {
-  it("a legacy script whose FIRST 'thief' is a homebrew Demon lists ONE Thief -- the canonical Traveler", () => {
-    const legacy = { id: "legacy-thief", name: "Legacy", characters: [
-      { id: "thief", name: "Homebrew Thief", type: "demon" as const, ability: "Homebrew Demon." },
-      ...troubleBrewing.characters,
-    ] };
-    storyteller.setState({ game: null, lobby: null, undoStack: [], customScripts: { [legacy.id]: legacy } });
-    storyteller.getState().newGame(legacy.id);
+// Phase 10D (CLOSURE-03; LUNA-CLOSURE-03-R1): the Almanac shows ONE definition
+// per RoleId. The script's characters and the Traveler catalogue are listed as
+// Role resolution defines them (first definition, canonical Traveler
+// precedence, an admitted ordinary owner kept against Fabled/Loric); a Fabled
+// or Loric catalogue entry appears only when its RoleId is not already shown.
+describe("CLOSURE-03: the Almanac lists ONE definition per RoleId", () => {
+  const homebrewBigwig = { id: "bigwig", name: "Homebrew Bigwig", type: "townsfolk" as const, ability: "Homebrew Townsfolk." };
+  const homebrewDoomsayer = { id: "doomsayer", name: "Homebrew Doomsayer", type: "outsider" as const, ability: "Homebrew Outsider." };
+  const homebrewThief = { id: "thief", name: "Homebrew Thief", type: "demon" as const, ability: "Homebrew Demon." };
+
+  /** Opens the Storyteller Almanac for a custom script: `first` ahead of the
+   * Trouble Brewing characters. `distinct` is how many different RoleIds the
+   * script, the Traveler catalogue and the Fabled/Loric catalogues name. */
+  function openAlmanac(first: RoleDef[]) {
+    const script: Script = { id: "almanac-owner", name: "Almanac owner", characters: [...first, ...troubleBrewing.characters] };
+    storyteller.setState({ game: null, lobby: null, undoStack: [], customScripts: { [script.id]: script } });
+    storyteller.getState().newGame(script.id);
     render(<GameScreen />);
     fireEvent.click(screen.getByRole("button", { name: "Almanac" }));
     const almanac = within(screen.getByRole("dialog"));
-    expect(almanac.queryByText("Homebrew Thief")).toBeNull();
-    const thieves = almanac.getAllByText("Thief", { selector: ".almanac-name" });
-    expect(thieves).toHaveLength(1);
-    expect(thieves[0]).toHaveClass("type-traveler");
-    expect(almanac.getAllByText("Chef", { selector: ".almanac-name" })).toHaveLength(1);
+    const cards = (name: string) => almanac.queryAllByText(name, { selector: ".almanac-name" });
+    const distinct = new Set([...script.characters, ...TRAVELERS, ...FABLED, ...LORICS].map((r) => r.id)).size;
+    return { almanac, cards, distinct };
+  }
+
+  it("A: a homebrew Townsfolk `bigwig` appears exactly once -- the canonical Loric Big Wig is not a second entry", () => {
+    const { almanac, cards, distinct } = openAlmanac([homebrewBigwig]);
+    expect(cards("Homebrew Bigwig")).toHaveLength(1);
+    expect(cards("Homebrew Bigwig")[0]).toHaveClass("type-townsfolk");
+    expect(cards(LORICS.find((r) => r.id === "bigwig")!.name)).toHaveLength(0);
+    expect(almanac.getByText(`${distinct} characters`)).toBeInTheDocument();
+  });
+
+  it("B: a homebrew Outsider `doomsayer` appears exactly once -- the canonical Fabled Doomsayer is not a second entry", () => {
+    const { almanac, cards, distinct } = openAlmanac([homebrewDoomsayer]);
+    expect(cards("Homebrew Doomsayer")).toHaveLength(1);
+    expect(cards("Homebrew Doomsayer")[0]).toHaveClass("type-outsider");
+    expect(cards(FABLED.find((r) => r.id === "doomsayer")!.name)).toHaveLength(0);
+    expect(almanac.getByText(`${distinct} characters`)).toBeInTheDocument();
+  });
+
+  it("C: a legacy homebrew Demon `thief` vs the canonical Traveler -- exactly one Thief, the canonical Traveler", () => {
+    const { almanac, cards, distinct } = openAlmanac([homebrewThief]);
+    expect(cards("Homebrew Thief")).toHaveLength(0);
+    expect(cards("Thief")).toHaveLength(1);
+    expect(cards("Thief")[0]).toHaveClass("type-traveler");
+    expect(cards("Chef")).toHaveLength(1);
+    expect(almanac.getByText(`${distinct} characters`)).toBeInTheDocument();
+  });
+
+  it("D: every Fabled and Loric whose RoleId no displayed script/Traveler Role owns still appears, once", () => {
+    const { cards } = openAlmanac([homebrewBigwig, homebrewDoomsayer]);
+    expect(cards("Angel")).toHaveLength(1);
+    expect(cards("Angel")[0]).toHaveClass("type-fabled");
+    expect(cards("Gardener")).toHaveLength(1);
+    expect(cards("Gardener")[0]).toHaveClass("type-loric");
+    for (const role of [...FABLED, ...LORICS].filter((r) => r.id !== "bigwig" && r.id !== "doomsayer")) {
+      expect(cards(role.name)).toHaveLength(1);
+    }
+  });
+
+  it("E: with Loric, Fabled and Traveler collisions together, the Almanac holds no duplicate RoleId -- one entry per distinct RoleId", () => {
+    const { almanac, cards, distinct } = openAlmanac([homebrewBigwig, homebrewDoomsayer, homebrewThief]);
+    expect(almanac.getByText(`${distinct} characters`)).toBeInTheDocument();
+    expect(almanac.getAllByRole("listitem")).toHaveLength(distinct);
+    expect(cards("Homebrew Bigwig")).toHaveLength(1);
+    expect(cards("Homebrew Doomsayer")).toHaveLength(1);
+    expect(cards("Thief")).toHaveLength(1);
+    expect(cards("Homebrew Thief")).toHaveLength(0);
   });
 });

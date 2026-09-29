@@ -189,7 +189,10 @@ script names each character once.
   display map already did). A script definition shadowed by a canonical
   Traveler (e.g. a legacy homebrew Demon `thief`) is never displayed, offered
   or acted on: the Traveler Thief's Drawer shows no Demon bluff controls.
-  Bluff candidates are `ordinaryRoleChoices`. The Setup pool editor and bag
+  The Almanac then adds a Fabled or Loric catalogue entry only when its RoleId
+  is not already shown, so a homebrew ordinary owner (e.g. Townsfolk `bigwig`,
+  Outsider `doomsayer`) is never listed beside the catalogue character of the
+  same id (LUNA-CLOSURE-03-R1). Bluff candidates are `ordinaryRoleChoices`. The Setup pool editor and bag
   fill remain ordinary script-owner lists by type; Setup analysis still blocks
   a Traveler-shadowed owner there as a conflict.
 
