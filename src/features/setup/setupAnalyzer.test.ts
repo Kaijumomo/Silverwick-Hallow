@@ -5,7 +5,9 @@ import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
 import { SETUP_COUNTS } from "@/data/setupCounts";
 import { makeSTPlayer } from "@/test/fixtures";
 import { canonicalRoles } from "@/data/canonical";
-import type { StorytellerLobbyRecord, Script } from "@/stores/types";
+import { buildRegistry } from "@/data/roleRegistry";
+import { assignedBagIsCoherent } from "./setupRefinement";
+import type { RoleDef, StorytellerLobbyRecord, Script } from "@/stores/types";
 
 // Composition/provenance/structural analysis is this file's concern, not deal
 // policy (covered in setupCommands.test.ts), so games analyzed here are
@@ -129,9 +131,15 @@ describe("provenance, definitions and duplicates", () => {
   it("unknown pooled role blocks dealing", () => {
     expect(analyze(setupGame(standardRoles(5),{rolePool:["mystery",...standardRoles(5).slice(1)]})).readiness.deal.ok).toBe(false);
   });
-  it("conflicting active definitions block safely", () => {
+  // SOL-10D-C03-R1 (supersedes "conflicting active definitions block safely"):
+  // the script's FIRST definition owns a RoleId; a conflicting LATER legacy
+  // duplicate is inert -- surfaced as a nonblocking check, never a blocker.
+  it("a conflicting later legacy duplicate is a nonblocking check, never a blocker", () => {
     const s={...setupScript,characters:[...setupScript.characters,{id:"chef",name:"Other Chef",type:"demon" as const}]};
-    expect(codes(setupGame(standardRoles(7)),s)).toContain("conflicting-definition:assigned:chef");
+    const a=analyze(setupGame(standardRoles(7)),s);
+    expect(a.findings.some(f=>f.code.startsWith("conflicting-definition:"))).toBe(false);
+    expect(a.findings.find(f=>f.code==="duplicate-definition:assigned:chef")?.severity).toBe("check");
+    expect(a.readiness.begin.ok).toBe(true);
   });
   it("identical repeated script definitions are harmless", () => {
     const s={...setupScript,characters:[...setupScript.characters,...canonicalRoles(["chef"])]};
@@ -162,6 +170,113 @@ describe("provenance, definitions and duplicates", () => {
   });
   it("Pope does not silently allow duplicate Minions", () => {
     expect(codes(setupGame(["chef","empath","poisoner","poisoner","imp"],{lorics:["pope"]}))).toContain("duplicate:assigned:poisoner");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SOL-10D-C03-R1: Setup analysis uses the same first-definition ownership as
+// every runtime Role consumer. In a legacy stored script that still carries a
+// duplicate RoleId (new imports reject one), the FIRST definition is
+// authoritative and later definitions are inert: a later conflicting duplicate
+// never, by itself, makes Deal or Begin unready. Genuine blockers still block.
+// ---------------------------------------------------------------------------
+describe("SOL-10D-C03-R1: legacy duplicate RoleIds follow first-definition ownership in Setup", () => {
+  const canonicalChef = setupScript.characters.find(r => r.id === "chef")!;
+  const otherChef: RoleDef = { id: "chef", name: "Other Chef", type: "demon", ability: "Homebrew demon." };
+  const evilChef: RoleDef = { id: "chef", name: "Evil Chef", type: "minion", ability: "Homebrew minion.", provenance: { status: "homebrew" } };
+  /** Canonical Chef FIRST (its usual place); `later` appended after it. */
+  const laterDuplicate = (later: RoleDef): Script => ({ ...setupScript, id: "legacy-dup", characters: [...setupScript.characters, later] });
+  /** `first` BEFORE the canonical Chef, which becomes the later duplicate. */
+  const firstDuplicate = (first: RoleDef): Script => ({ ...setupScript, id: "legacy-rev", characters: [first, ...setupScript.characters] });
+  /** The blockers that gate `action` (a Deal-scoped blocker never gates Begin). */
+  const blockersFor = (a: ReturnType<typeof analyze>, action: "deal" | "begin") =>
+    a.findings.filter(f => f.severity === "blocker" && (!f.actions || f.actions.includes(action)));
+  const ASSIGNED_WITH_CHEF = ["washerwoman", "librarian", "chef", "poisoner", "imp"];   // chef as Townsfolk
+  const ASSIGNED_CHEF_MINION = ["washerwoman", "librarian", "investigator", "chef", "imp"]; // chef as Minion
+  const unDealt = () => ["", "", "", "", ""];
+
+  it("A. assigned: the runtime resolves the first Chef; a nonblocking duplicate-definition check; Begin (and Reveal/Shuffle coherence) ready", () => {
+    const s = laterDuplicate(otherChef);
+    expect(buildRegistry(s).get("chef")).toBe(canonicalChef);
+    const g = setupGame(ASSIGNED_WITH_CHEF);
+    const context = selectSetupContext({ ...g, setupRolesDealt: true, setupRolesRevealed: true }, s);
+    const a = analyzeSetup(context);
+    expect(a.assigned.actual).toEqual(SETUP_COUNTS[5]); // Chef counted as its owner, a Townsfolk
+    expect(blockersFor(a, "begin")).toEqual([]);
+    expect(a.findings.some(f => f.code.startsWith("conflicting-definition:"))).toBe(false);
+    const check = a.findings.find(f => f.code === "duplicate-definition:assigned:chef");
+    expect(check).toMatchObject({ severity: "check", source: "assigned" });
+    expect(check!.message).toBe("Legacy duplicate definition for Chef. Silverwick is using the first definition.");
+    expect(check!.message).not.toMatch(/resolve|repair|before starting/i);
+    expect(a.readiness.begin.ok).toBe(true);
+    expect(assignedBagIsCoherent(context, a)).toBe(true);
+  });
+
+  it("B. pool: the pool resolves the first owner, the later duplicate is inert, Deal is ready", () => {
+    const s = laterDuplicate(otherChef);
+    const a = analyze(setupGame(unDealt(), { rolePool: ASSIGNED_WITH_CHEF }), s);
+    expect(a.pool.actual).toEqual(SETUP_COUNTS[5]);
+    expect(a.findings.find(f => f.code === "duplicate-definition:pool:chef")).toMatchObject({ severity: "check", actions: ["deal"] });
+    expect(a.findings.some(f => f.code.startsWith("conflicting-definition:"))).toBe(false);
+    expect(blockersFor(a, "deal")).toEqual([]);
+    expect(a.readiness.deal.ok).toBe(true);
+  });
+
+  it("C. reversed ownership (Minion first, canonical Townsfolk later): type and composition follow the first owner; no duplicate-definition blocker", () => {
+    const s = firstDuplicate(evilChef);
+    expect(buildRegistry(s).get("chef")).toBe(evilChef);
+    const minion = { townsfolk: 3, outsider: 0, minion: 1, demon: 1 };
+    const assigned = analyze(setupGame(ASSIGNED_CHEF_MINION), s);
+    expect(assigned.assigned.actual).toEqual(minion);
+    expect(assigned.findings.some(f => f.code.startsWith("conflicting-definition:"))).toBe(false);
+    expect(assigned.findings.find(f => f.code === "duplicate-definition:assigned:chef")?.severity).toBe("check");
+    expect(blockersFor(assigned, "begin")).toEqual([]);
+    expect(assigned.readiness.begin.ok).toBe(true);
+    const pool = analyze(setupGame(unDealt(), { rolePool: ASSIGNED_CHEF_MINION }), s);
+    expect(pool.pool.actual).toEqual(minion);
+    expect(pool.findings.some(f => f.code.startsWith("conflicting-definition:"))).toBe(false);
+    expect(pool.readiness.deal.ok).toBe(true);
+    // The later (Townsfolk) definition never reinterprets the composition: the
+    // SAME roles counted with it would be 4 Townsfolk and no Minion.
+    expect(pool.pool.actual).not.toEqual({ townsfolk: 4, outsider: 0, minion: 0, demon: 1 });
+  });
+
+  it("D. an identical later duplicate stays harmless: no finding at all, Begin ready", () => {
+    const s = laterDuplicate(canonicalRoles(["chef"])[0]!);
+    const a = analyze(setupGame(ASSIGNED_WITH_CHEF), s);
+    expect(a.findings.some(f => f.code.startsWith("conflicting-definition:") || f.code.startsWith("duplicate-definition:"))).toBe(false);
+    expect(a.readiness.begin.ok).toBe(true);
+  });
+
+  it("E. genuine blockers still block with a legacy duplicate script: an unknown Role", () => {
+    const s = laterDuplicate(otherChef);
+    const assigned = analyze(setupGame(["mystery", "librarian", "chef", "poisoner", "imp"]), s);
+    expect(assigned.findings.find(f => f.code === "unresolved:assigned:mystery")?.severity).toBe("blocker");
+    expect(assigned.readiness.begin.ok).toBe(false);
+    const pool = analyze(setupGame(unDealt(), { rolePool: ["mystery", "librarian", "chef", "poisoner", "imp"] }), s);
+    expect(pool.readiness.deal.ok).toBe(false);
+  });
+
+  it.each([true, false])("E. genuine blockers still block with a legacy duplicate script: Traveler type contradiction (isTraveler %s)", flag => {
+    const s = laterDuplicate(otherChef);
+    const g = setupGame(ASSIGNED_WITH_CHEF);
+    g.players.p0!.isTraveler = flag; g.players.p0!.actualRole = flag ? "chef" : "thief";
+    const a = analyze(g, s);
+    expect(a.findings.find(f => f.code === "traveler-type:p0")?.severity).toBe("blocker");
+    expect(a.readiness.begin.ok).toBe(false);
+  });
+
+  it("E. an OWNING definition the runtime overrides (a canonical Traveler shadowing it) still blocks as a conflict", () => {
+    // The script's FIRST "thief" is a homebrew Townsfolk; the canonical Traveler
+    // catalogue keeps its precedence, so the runtime is not using the script's
+    // own owning definition -- a genuine conflict, not an inert later duplicate.
+    const s: Script = { ...setupScript, id: "legacy-thief",
+      characters: [{ id: "thief", name: "Homebrew Thief", type: "townsfolk", ability: "Homebrew." }, ...setupScript.characters] };
+    const g = setupGame(standardRoles(5));
+    g.players.t = makeSTPlayer({ id: "t", seat: 5, isTraveler: true, actualRole: "thief", actualAlignment: "good" }); g.seatOrder.push("t");
+    const a = analyze(g, s);
+    expect(a.findings.find(f => f.code === "conflicting-definition:assigned:thief")?.severity).toBe("blocker");
+    expect(a.readiness.begin.ok).toBe(false);
   });
 });
 

@@ -170,8 +170,14 @@ script names each character once.
   and private-information resolution), the Grimoire and Player Drawer role
   lookups and bluff lists, the Setup pool editor and bag fill, the Effect
   source list and the Almanac. A later duplicate is never admitted, offered
-  or resolved. The Setup readiness check still reports conflicting
-  definitions of a character in play, as before.
+  or resolved.
+- Setup analysis uses the same owner (SOL-10D-C03-R1): a later duplicate
+  that differs from the first definition is a nonblocking Storyteller check
+  ("Legacy duplicate definition for Chef. Silverwick is using the first
+  definition."), never a Deal, Reveal or Begin blocker. Only an OWNING
+  definition the runtime does not use -- e.g. one shadowed by the canonical
+  Traveler catalogue -- still blocks as a conflict, alongside the unchanged
+  genuine blockers (unresolved Role, Traveler/type contradiction, ...).
 - The canonical Traveler catalogue keeps its precedence (the explicit Phase
   10D exception), and an admitted ordinary owner keeps its id against Fabled
   and Loric overlays (ASTRA-10D-004). No schema/store version change.

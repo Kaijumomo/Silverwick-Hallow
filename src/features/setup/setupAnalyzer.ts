@@ -64,15 +64,24 @@ export function analyzeSetup(context: SetupContext): SetupAnalysis {
   for (const r of [...(script?.characters ?? []), ...(script?.fabled ?? [])]) {
     definitions.set(r.id, [...(definitions.get(r.id) ?? []), r]);
   }
+  const differs = (a: RoleDef, b: RoleDef) => meaning(a) !== meaning(b) || isCanonicalRole(a) !== isCanonicalRole(b);
   function inspectRole(id: string, source: SetupSource, actions: SetupAction[], playerId?: string) {
     const role = registry?.get(id);
     if (!role) {
       add("unresolved:" + source + ":" + id, "blocker", `Character "${id}" cannot resolve in this game's runtime. Restore its definition or choose another role.`, source, actions, playerId);
       return undefined;
     }
-    const defs = definitions.get(id) ?? [];
-    if (defs.some(def => meaning(def) !== meaning(role) || isCanonicalRole(def) !== isCanonicalRole(role)))
+    // SOL-10D-C03-R1: the script's FIRST definition of a RoleId owns it; a later
+    // definition of the same id (a legacy duplicate -- new imports reject one)
+    // is inert and never resolved. Only the owning definition disagreeing with
+    // what the runtime resolves (e.g. a canonical Traveler shadowing it) is a
+    // conflict that blocks; a differing later duplicate is surfaced as a
+    // nonblocking check.
+    const [owner, ...later] = definitions.get(id) ?? [];
+    if (owner && differs(owner, role))
       add("conflicting-definition:" + source + ":" + id, "blocker", `Conflicting definitions for ${role.name}; resolve the active script before starting.`, source, actions, playerId);
+    else if (later.some(def => differs(def, role)))
+      add("duplicate-definition:" + source + ":" + id, "check", `Legacy duplicate definition for ${role.name}. Silverwick is using the first definition.`, source, actions, playerId);
     return role;
   }
 

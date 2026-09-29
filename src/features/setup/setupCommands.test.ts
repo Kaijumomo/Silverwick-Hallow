@@ -501,3 +501,33 @@ describe("Traveler designation before/after Deal (Phase 9 Setup finalization B4,
     }
   });
 });
+
+// SOL-10D-C03-R1: a legacy STORED script that still carries a conflicting
+// duplicate RoleId is never rejected, reset or mutated, and the later duplicate
+// never by itself blocks the real Deal, Reveal or Begin commands -- the FIRST
+// definition owns the id throughout.
+describe("SOL-10D-C03-R1: Deal, Reveal and Begin with a legacy duplicate-RoleId script", () => {
+  const canonicalChef = setupScript.characters.find(r => r.id === "chef")!;
+  it.each([
+    ["Townsfolk owner first", [...setupScript.characters, { id: "chef", name: "Other Chef", type: "demon" as const, ability: "x" }],
+      ["washerwoman", "librarian", "chef", "poisoner", "imp"], "townsfolk"],
+    ["Minion owner first (reversed)", [{ id: "chef", name: "Evil Chef", type: "minion" as const, ability: "x", provenance: { status: "homebrew" as const } }, ...setupScript.characters],
+      ["washerwoman", "librarian", "investigator", "chef", "imp"], "minion"],
+  ] as const)("%s", (_label, characters, pool, ownerType) => {
+    const legacy = { ...setupScript, characters: [...characters] };
+    store.setState({ customScripts: { [setupScript.id]: legacy } });
+    state().newGame(setupScript.id, { plannedPlayerCount: 5, plannedRoles: [...pool] });
+    for (let i = 0; i < 5; i++) state().addPlayerToSeat("Player " + i);
+    expect(state().dealRolePool()).toEqual({ ok: true });
+    expect(state().revealRoles()).toEqual({ ok: true });
+    expect(state().beginNightOne()).toEqual({ ok: true });
+    expect(game().phase).toBe("night");
+    const holder = game().seatOrder.find(id => game().players[id]!.actualRole === "chef")!;
+    expect(buildRegistry(legacy).get("chef")!.type).toBe(ownerType);
+    expect(buildRegistry(legacy).get("chef")).toBe(ownerType === "townsfolk" ? canonicalChef : characters[0]);
+    expect(game().players[holder]!.actualRole).toBe("chef");
+    // The stored legacy script itself is untouched: never rejected, reset or deduplicated.
+    expect(state().customScripts[setupScript.id]).toBe(legacy);
+    expect(state().customScripts[setupScript.id]!.characters.filter(r => r.id === "chef")).toHaveLength(2);
+  });
+});
