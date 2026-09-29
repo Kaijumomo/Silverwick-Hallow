@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { selectScriptById, useStorytellerStore, type ReminderCommandResult } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
-import { TRAVELERS } from "@/data/travelers";
+import { resolvedCharacters } from "@/data/roleRegistry";
 import { momentLabel } from "@/stores/lifeEvents";
 import {
   MAX_REMINDER_LABEL_LENGTH,
@@ -176,10 +176,11 @@ export function ReminderControls({ player }: { player: STPlayerRecord }) {
 // Display helpers
 // ---------------------------------------------------------------------------
 
+/** CLOSURE-03: named by the ONE definition the registry resolves for the id. */
 function roleLabel(roleId: string | undefined, game: StorytellerLobbyRecord): string | undefined {
   if (!roleId) return undefined;
   const script = selectScriptById(useStorytellerStore.getState(), game.scriptId);
-  const role = script?.characters.find((r) => r.id === roleId) ?? TRAVELERS.find((r) => r.id === roleId);
+  const role = resolvedCharacters(script).find((r) => r.id === roleId);
   return role?.name ?? roleId;
 }
 
@@ -284,10 +285,8 @@ function ReminderOptions({ game, source, onSource, sourceCharacter, onSourceChar
   onNote: (note: string) => void;
 }) {
   const script = useStorytellerStore((s) => selectScriptById(s, game.scriptId));
-  const roles = useMemo<RoleDef[]>(() => {
-    const seen = new Set<string>();
-    return [...(script?.characters ?? []), ...TRAVELERS].filter((role) => !seen.has(role.id) && !!seen.add(role.id));
-  }, [script]);
+  // CLOSURE-03: one choice per RoleId, the definition the registry resolves.
+  const roles = useMemo<RoleDef[]>(() => resolvedCharacters(script), [script]);
   const seated = game.seatOrder
     .map((id) => game.players[id])
     .filter((p): p is STPlayerRecord => !!p && !p.isEmpty && !!p.participantId);

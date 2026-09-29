@@ -528,11 +528,65 @@ describe("Firebase RTDB membership authorization", () => {
     expect((await ref(st, "travelerChoices/" + alice).once("value")).val()).toBe("thief");
   });
 
-  test("a player may resubmit a different choice before the Storyteller applies it", async () => {
+  // Phase 10D (CLOSURE-01, Sol-amended): a player's pending Traveler request is
+  // IMMUTABLE for the player until the Storyteller or the membership lifecycle
+  // consumes/clears it. The request stays a bare catalogue RoleId; the rule
+  // admits only a create (no request yet) or a same-value idempotent resubmit.
+  const choiceOf = async () => (await ref(st, "travelerChoices/" + alice).once("value")).val();
+
+  test("IMM-1: an eligible seated player's first Traveler request is accepted", async () => {
     await seed();
     await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
+    expect(await choiceOf()).toBe("thief");
+  });
+
+  test("IMM-2: with Thief pending, a different Traveler request is denied and Thief remains", async () => {
+    await seed();
+    await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
+    await assertFails(ref(alice, "travelerChoices/" + alice).set("scapegoat"));
+    expect(await choiceOf()).toBe("thief");
+  });
+
+  test("IMM-3: the player cannot cancel or delete a pending request", async () => {
+    await seed();
+    await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
+    await assertFails(ref(alice, "travelerChoices/" + alice).remove());
+    await assertFails(ref(alice, "travelerChoices/" + alice).set(null));
+    expect(await choiceOf()).toBe("thief");
+  });
+
+  test("IMM-4: resubmitting the SAME pending value is an accepted idempotent no-op", async () => {
+    await seed();
+    await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
+    await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
+    expect(await choiceOf()).toBe("thief");
+  });
+
+  test("IMM-5: once the Storyteller legitimately clears the request, a later choice is a NEW request and is accepted", async () => {
+    await seed();
+    await seatPlayer(backend(st), code, alice, "p-alice", null, { participantId: "pt-alice-1", name: "Alice" });
+    await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
+    // The production Storyteller callback: the request provably belongs to the
+    // observed participation, which is superseded (nothing applied) -- it is
+    // cleared through the fenced writer path.
+    let processed = false;
+    await applyTravelerChoice(backend(st), code, alice, { playerId: "p-alice", participantId: "pt-alice-1", roleId: "thief" },
+      () => { processed = true; });
+    expect(processed).toBe(true);
+    expect(await choiceOf()).toBeNull();
     await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("scapegoat"));
-    expect((await ref(st, "travelerChoices/" + alice).once("value")).val()).toBe("scapegoat");
+    expect(await choiceOf()).toBe("scapegoat");
+  });
+
+  test("IMM-8: bypassing the UI, direct client writes cannot replace a pending request (set, multi-path update, collection write, transaction)", async () => {
+    await seed();
+    await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
+    const direct = new FirebaseRoomBackend(db(alice) as unknown as Database);
+    await expect(direct.set(path("travelerChoices/" + alice), "gunslinger")).rejects.toThrow(/permission[_ ]denied/i);
+    await expect(direct.update({ [path("travelerChoices/" + alice)]: "gunslinger" })).rejects.toThrow(/permission[_ ]denied/i);
+    await assertFails(ref(alice, "travelerChoices").set({ [alice]: "gunslinger" }));
+    await expect(direct.transaction(path("travelerChoices/" + alice), () => "gunslinger")).rejects.toThrow(/permission[_ ]denied/i);
+    expect(await choiceOf()).toBe("thief");
   });
 
   // Phase 10D (AC-10D-22/23): a Traveler choice belongs to ONE participation.
@@ -596,9 +650,14 @@ describe("Firebase RTDB membership authorization", () => {
       expect((await ref(st, "travelerChoices/" + alice).once("value")).val()).toBe("thief");
 
       // The replacement participation's own record and its own request apply.
+      // (Seating it writes the record and retires the earlier request in ONE
+      // fenced update -- modeled here -- so its own request is a new one.)
       await env.withSecurityRulesDisabled(async ctx => {
-        await ctx.database().ref("lobbies/" + code + "/rosterParticipants/" + alice)
-          .set({ playerId: seat, participantId: occupant, name: "Alice" });
+        const lobby = ctx.database().ref("lobbies/" + code);
+        await lobby.update({
+          ["rosterParticipants/" + alice]: { playerId: seat, participantId: occupant, name: "Alice" },
+          ["travelerChoices/" + alice]: null,
+        });
       });
       await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("gunslinger"));
       await applyTravelerChoice(backend(st), code, alice, observeTravelerChoice(seat, "gunslinger")!, commitTravelerChoiceLocally);
@@ -682,6 +741,57 @@ describe("Firebase RTDB membership authorization", () => {
       expect(store.getState().game).toBe(before);
       expect((await ref(st, "travelerChoices/" + alice).once("value")).exists()).toBe(false);
     } finally { useStorytellerStore.setState({ game: null, lobby: null, undoStack: [] }); }
+  });
+
+  // Phase 10D (CLOSURE-01, Sol-amended): with pending requests immutable, the
+  // request-value freshness check protects a LATER request generation. Two
+  // callbacks observed Thief; the first consumes it, Undo returns the
+  // participant to unassigned and the player submits a NEW Scapegoat request;
+  // the stale second callback then runs through the production writer.
+  test("IMM-6: a stale callback of a consumed request never applies, nor consumes, the later request generation (real rules, production SessionWriter)", async () => {
+    const store = useStorytellerStore;
+    store.setState({ game: null, lobby: null, undoStack: [] });
+    const raw = new FirebaseRoomBackend(db(st) as unknown as Database);
+    await createLobby(raw, st, { codeGenerator: () => code });
+    const metadata = (await ref(st, "session").once("value")).val();
+    const writer = new SessionWriter(raw, code, metadata.id);
+    const gate = () => { let open!: () => void; const opened = new Promise<void>((resolve) => { open = resolve; }); return { open, opened }; };
+    try {
+      await writer.start();
+      store.getState().newGame("tb", { plannedPlayerCount: 1 });
+      store.getState().addPlayerToSeat("Alice");
+      for (let i = 0; i < 5; i++) store.getState().addPlayer("Extra " + i);
+      const seat = store.getState().game!.seatOrder[0]!;
+      expect(store.getState().setIsTraveler(seat, true).ok).toBe(true);
+      const participantId = store.getState().game!.players[seat]!.participantId!;
+      await seatPlayer(writer, code, alice, seat, null, { participantId, name: "Alice" });
+      await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
+
+      const first = observeTravelerChoice(seat, "thief")!;
+      const stale = observeTravelerChoice(seat, "thief")!;
+      const hold = gate();
+      const gap = gate();
+      const held = writer.runExclusive(() => hold.opened);
+      const consumed = applyTravelerChoice(writer, code, alice, first, commitTravelerChoiceLocally);
+      const paused = writer.runExclusive(() => gap.opened);
+      const resumed = applyTravelerChoice(writer, code, alice, stale, commitTravelerChoiceLocally);
+
+      hold.open(); await held; await consumed;
+      expect(store.getState().game!.players[seat]).toMatchObject({ participantId, actualRole: "thief" });
+      expect((await ref(st, "travelerChoices/" + alice).once("value")).exists()).toBe(false);
+
+      store.getState().undo();
+      expect(store.getState().game!.players[seat]).toMatchObject({ participantId, isTraveler: true, actualRole: "" });
+      await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("scapegoat")); // a NEW request
+      const before = store.getState().game;
+
+      gap.open(); await paused; await resumed;
+      expect(store.getState().game).toBe(before); // Thief not re-applied by the stale callback
+      expect((await ref(st, "travelerChoices/" + alice).once("value")).val()).toBe("scapegoat"); // not consumed
+    } finally {
+      await writer.dispose();
+      store.setState({ game: null, lobby: null, undoStack: [] });
+    }
   });
 
   test("a second writer is denied until expiry, then the old token is fenced", async () => {

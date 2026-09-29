@@ -5,7 +5,7 @@ import { PrivateInformation } from "./PrivateInformation";
 import { usePlayerStore } from "@/stores/playerStore";
 import { connectFirebase } from "@/firebase/session";
 import { isFirebaseConfigured, getConfigSource } from "@/firebase/config";
-import { applyJoinIntent, chooseTraveler, joinLobby, leaveLobby, usePlayerSync } from "@/firebase/playerSync";
+import { applyJoinIntent, chooseTraveler, joinLobby, leaveLobby, useOwnTravelerChoice, usePlayerSync } from "@/firebase/playerSync";
 import { TRAVELERS } from "@/data/travelers";
 import { lifecycleMessage } from "@/firebase/lifecycle";
 import { FirebaseConfigDialog } from "@/features/firebase/FirebaseConfigDialog";
@@ -85,6 +85,8 @@ function PlayerScreenContent({ initialCode }: Props) {
   }, [initialCode, retry]);
 
   usePlayerSync(backend, retry);
+  // CLOSURE-01: the player's own pending Traveler request, if any.
+  const pendingTravelerChoice = useOwnTravelerChoice(backend, status === "seated");
 
   const leave = async () => {
     if (!backend || leaving) return;
@@ -280,6 +282,9 @@ function PlayerScreenContent({ initialCode }: Props) {
 
   const chooseTravelerRole = async (roleId: string) => {
     if (!backend) { setTravelerChoiceError("Not connected. Reconnect and try again."); return; }
+    // A pending request is immutable until the Storyteller clears it: never a
+    // replacement write (the server rule refuses one anyway).
+    if (pendingTravelerChoice) return;
     setTravelerChoiceError(null);
     setTravelerChoiceBusy(true);
     try { await chooseTraveler(backend, roleId); }
@@ -321,6 +326,7 @@ function PlayerScreenContent({ initialCode }: Props) {
         <TravelerChoicePanel
           busy={travelerChoiceBusy}
           error={travelerChoiceError}
+          pending={pendingTravelerChoice}
           onChoose={chooseTravelerRole}
         />
       )}
@@ -363,17 +369,29 @@ function PlayerScreenContent({ initialCode }: Props) {
 function TravelerChoicePanel({
   busy,
   error,
+  pending,
   onChoose,
 }: {
   busy: boolean;
   error: string | null;
+  /** CLOSURE-01: the submitted request still waiting for the Storyteller. */
+  pending: string | null;
   onChoose: (roleId: string) => void;
 }) {
+  if (pending) {
+    const name = TRAVELERS.find((r) => r.id === pending)?.name ?? pending;
+    return (
+      <div className="traveler-choice-panel" role="region" aria-label="Choose your Traveler">
+        <h3 className="drawer-section-title">Choose your Traveler</h3>
+        <p role="status">{name} selected · waiting for Storyteller</p>
+      </div>
+    );
+  }
   return (
     <div className="traveler-choice-panel" role="region" aria-label="Choose your Traveler">
       <h3 className="drawer-section-title">Choose your Traveler</h3>
       <p className="behavior-help">
-        The Storyteller has marked you as a Traveler. Pick your character below — once chosen, it's shown to everyone right away.
+        The Storyteller has marked you as a Traveler. Pick your character below — it can't be changed while it waits for the Storyteller.
       </p>
       <div className="role-picker-grid">
         {TRAVELERS.map((r) => (

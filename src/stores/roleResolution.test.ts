@@ -31,7 +31,7 @@ import { HistoryRecordSchema, StorytellerGamePersistedSchema } from "./schemas";
 import { participantRefOf } from "./participants";
 import { identityNeedsCheck, projectToSelf } from "./projections";
 import { getPrivateInfoApplicability, offersNightInformation } from "./privatePackets";
-import { buildRegistry, ownedScriptCharacters } from "@/data/roleRegistry";
+import { buildRegistry, ownedScriptCharacters, resolvedCharacters } from "@/data/roleRegistry";
 import { buildRoleDisplayMap } from "@/features/grimoire/GrimoireCircle";
 import { makeSTPlayer } from "@/test/fixtures";
 import { isCanonicalRole } from "@/data/canonical";
@@ -993,6 +993,75 @@ describe("SOL-10D-C03: a legacy script's duplicate RoleId is owned by its FIRST 
     expect(classifyRole(script, "thief")).toEqual({ kind: "traveler", role: thief });
     expect(buildRegistry(script).get("thief")).toBe(thief);
     expect(ordinaryRoleChoices(script).some((r) => r.id === "thief")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 10D (CLOSURE-03): a list that offers or names "a character" -- the
+// Drawer's Role lookups, the Effect/Reminder source character, the Almanac --
+// takes ONE definition per RoleId from the registry's own resolution:
+// first-definition ownership (SOL-10D-C03), canonical Traveler precedence over
+// ANY script definition of the same id, the ASTRA-10D-004 overlay rule.
+// Ordinary lists keep ordinaryRoleChoices.
+// ---------------------------------------------------------------------------
+describe("CLOSURE-03: resolvedCharacters is the registry's resolution, one entry per RoleId", () => {
+  const thief = TRAVELERS.find((t) => t.id === "thief")!;
+  const homebrewThief: RoleDef = { id: "thief", name: "Homebrew Thief", type: "demon", ability: "Homebrew Demon." };
+  /** Astra's legacy STORED script: the homebrew Demon is the FIRST "thief". */
+  const legacyThief: Script = { ...setupScript, id: "legacy-thief", characters: [homebrewThief, ...setupScript.characters] };
+
+  it("the Astra collision lists exactly one thief -- the canonical Traveler, the very definition the classifier, registry and Grimoire resolve", () => {
+    expect(ownedScriptCharacters(legacyThief).find((r) => r.id === "thief")).toBe(homebrewThief); // raw first definition
+    expect(resolvedCharacters(legacyThief).filter((r) => r.id === "thief")).toEqual([thief]);
+    expect(resolvedCharacters(legacyThief).find((r) => r.id === "thief")).toBe(thief);
+    expect(resolvedCharacters(legacyThief)).not.toContain(homebrewThief);
+    expect(classifyRole(legacyThief, "thief")).toEqual({ kind: "traveler", role: thief });
+    expect(buildRegistry(legacyThief).get("thief")).toBe(thief);
+    expect(buildRoleDisplayMap(legacyThief).get("thief")).toBe(thief);
+    expect(ordinaryRoleChoices(legacyThief).some((r) => r.id === "thief")).toBe(false);
+  });
+
+  it("every entry is exactly the registry's definition; ids are unique; every Traveler appears once; no script means the Traveler catalogue", () => {
+    for (const script of [setupScript, legacyThief]) {
+      const listed = resolvedCharacters(script);
+      const registry = buildRegistry(script);
+      expect(new Set(listed.map((r) => r.id)).size).toBe(listed.length);
+      for (const role of listed) expect(registry.get(role.id)).toBe(role);
+      for (const t of TRAVELERS) expect(listed.filter((r) => r.id === t.id)).toEqual([t]);
+    }
+    expect(resolvedCharacters(null)).toEqual(TRAVELERS);
+  });
+
+  it("OWNER-5: a homebrew ordinary Role with a non-Traveler id is listed as the script's own definition", () => {
+    const hollowKing: RoleDef = { id: "hollowking", name: "Hollow King", type: "demon", ability: "Homebrew." };
+    const script: Script = { ...setupScript, id: "home-king", characters: [...setupScript.characters, hollowKing] };
+    expect(resolvedCharacters(script).filter((r) => r.id === "hollowking")).toEqual([hollowKing]);
+    expect(resolvedCharacters(script).find((r) => r.id === "hollowking")).toBe(hollowKing);
+    expect(buildRegistry(script).get("hollowking")).toBe(hollowKing);
+    expect(ordinaryRoleChoices(script)).toContain(hollowKing);
+  });
+
+  it("OWNER-6: ASTRA-10D-004 -- a homebrew ordinary owner keeps its id against the Loric catalogue and a Fabled of the same id", () => {
+    const bigwig: RoleDef = { id: "bigwig", name: "Bigwig (homebrew)", type: "townsfolk", ability: "Homebrew." };
+    const doomsayer: RoleDef = { id: "doomsayer", name: "Homebrew Doomsayer", type: "outsider", ability: "Homebrew." };
+    const script: Script = { ...setupScript, id: "home-overlay", characters: [bigwig, doomsayer, ...setupScript.characters],
+      fabled: [FABLED.find((f) => f.id === "doomsayer")!] };
+    const listed = resolvedCharacters(script);
+    expect(listed.filter((r) => r.id === "bigwig")).toEqual([bigwig]);
+    expect(listed.filter((r) => r.id === "doomsayer")).toEqual([doomsayer]);
+    expect(buildRegistry(script).get("bigwig")).toBe(bigwig);
+    expect(buildRegistry(script).get("doomsayer")).toBe(doomsayer);
+    expect(LORICS.some((l) => l.id === "bigwig")).toBe(true);
+  });
+
+  it("OWNER-7: legacy first-definition ownership of an ordinary duplicate is unchanged -- the FIRST definition is listed, once", () => {
+    const canonicalChef = setupScript.characters.find((r) => r.id === "chef")!;
+    const evilChef: RoleDef = { id: "chef", name: "Evil Chef", type: "minion", ability: "Homebrew." };
+    const others = setupScript.characters.filter((r) => r.id !== "chef");
+    const evilFirst: Script = { id: "legacy-chef", name: "Legacy", characters: [evilChef, canonicalChef, ...others] };
+    const canonicalFirst: Script = { id: "legacy-chef-2", name: "Legacy", characters: [canonicalChef, evilChef, ...others] };
+    expect(resolvedCharacters(evilFirst).filter((r) => r.id === "chef")).toEqual([evilChef]);
+    expect(resolvedCharacters(canonicalFirst).filter((r) => r.id === "chef")).toEqual([canonicalChef]);
   });
 });
 

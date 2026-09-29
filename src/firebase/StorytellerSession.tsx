@@ -3,7 +3,7 @@ import { useStorytellerStore } from "@/stores/storytellerStore";
 import { connectFirebase } from "./session";
 import type { RoomBackend } from "./backend";
 import { classifyStorytellerError, lifecycleMessage } from "./lifecycle";
-import { applyTravelerChoice, commitTravelerChoiceLocally, observeTravelerChoice } from "./membershipCommands";
+import { applyTravelerChoice, commitTravelerChoiceLocally, observeTravelerChoice, pendingTravelerChoiceParticipation } from "./membershipCommands";
 import { closeMultiplayerSession, initialConnectionStatus, leaveMultiplayerOffline, reportRuntimeError, retryStorytellerSession, scopeKey, useSessionRuntime, useStorytellerSync } from "./storytellerSync";
 
 export function StorytellerSession() {
@@ -164,10 +164,20 @@ export function ConnectionStatus() {
  * fenced writer is actually available; a request left pending while
  * disconnected/reconnecting is retried automatically once it appears, from
  * this same effect re-running on its next value.
+ *
+ * Phase 10D (CLOSURE-02): likewise, a request observed while its seat holds
+ * no participation yet (e.g. the Storyteller's own seating acknowledgment has
+ * not landed) is retried automatically when that seat's participation
+ * changes: `participation` is a focused derivation of exactly the
+ * participations the pending requests would be observed for, so the
+ * effect re-runs then -- no polling, no reaction to unrelated game changes --
+ * and each retry is observed for, and revalidated against, the participation
+ * that is current at that moment.
  */
 export function useApplyTravelerChoices(code: string | undefined) {
   const travelerChoices = useSessionRuntime(s => s.travelerChoices);
   const writer = useSessionRuntime(s => s.backend);
+  const participation = useStorytellerStore(s => pendingTravelerChoiceParticipation(s.game, travelerChoices));
   useEffect(() => {
     if (!writer || !code) return;
     for (const [uid, { playerId, roleId }] of Object.entries(travelerChoices)) {
@@ -181,5 +191,7 @@ export function useApplyTravelerChoices(code: string | undefined) {
       applyTravelerChoice(writer, code, uid, observed, commitTravelerChoiceLocally)
         .catch(error => reportRuntimeError("traveler-choice", lifecycleMessage(error)));
     }
-  }, [writer, code, travelerChoices]);
+    // `participation` is read through observeTravelerChoice above; it is a
+    // dependency so that a change of it re-runs this effect (CLOSURE-02).
+  }, [writer, code, travelerChoices, participation]);
 }

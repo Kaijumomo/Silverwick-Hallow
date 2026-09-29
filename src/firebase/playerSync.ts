@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePlayerStore } from "@/stores/playerStore";
 import { canonicalJoin, cancelJoinRequest, knockOnLobby, normaliseCode } from "./lobby";
 import { joinRequestPath, publicPath, rosterEntryPath, playerPath, presencePath } from "./paths";
@@ -66,12 +66,39 @@ export async function leaveLobby(backend: RoomBackend) {
  * applyTravelerChoice in membershipCommands.ts. Restricted client-side to the supported Traveler
  * catalogue as defense in depth; Firebase rules enforce the same
  * restriction server-side.
+ *
+ * Phase 10D (CLOSURE-01, Sol-amended): a submitted request is immutable for
+ * the player until the Storyteller or the membership lifecycle clears it. The
+ * rules admit only a first request or a same-value resubmit; a different
+ * Traveler, or deleting it, is refused server-side. The UI shows the pending
+ * choice instead of offering another (useOwnTravelerChoice).
  */
 export async function chooseTraveler(backend: RoomBackend, roleId: RoleId): Promise<void> {
   const ps = usePlayerStore.getState();
   if (!ps.code || !ps.uid) throw new LifecycleError("cancelled", "Not connected to a lobby.");
   if (!TRAVELERS.some(t => t.id === roleId)) throw new Error("Not a supported Traveler character.");
   await backend.set(travelerChoicePath(ps.code, ps.uid), roleId);
+}
+
+/**
+ * Phase 10D (CLOSURE-01, Sol-amended): this player's OWN pending Traveler
+ * request -- a catalogue RoleId -- or null while none is pending. A self-scoped
+ * read (the rules let a uid read only its own request); anything absent,
+ * unreadable or not a catalogue id reads as null. Display only: the server
+ * rule, not this view, is what refuses a replacement.
+ */
+export function useOwnTravelerChoice(backend: RoomBackend | null, enabled: boolean): RoleId | null {
+  const code = usePlayerStore(s => s.code);
+  const uid = usePlayerStore(s => s.uid);
+  const [choice, setChoice] = useState<RoleId | null>(null);
+  useEffect(() => {
+    if (!backend || !code || !uid || !enabled) return;
+    const off = backend.subscribe(travelerChoicePath(code, uid), value => {
+      setChoice(typeof value === "string" && TRAVELERS.some(t => t.id === value) ? value : null);
+    }, () => setChoice(null));
+    return () => { off(); setChoice(null); };
+  }, [backend, code, uid, enabled]);
+  return enabled ? choice : null;
 }
 
 export function usePlayerSync(backend: RoomBackend | null, retry = 0) {

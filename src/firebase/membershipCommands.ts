@@ -1,4 +1,4 @@
-import type { ParticipantId, PlayerSelfRecord, PlayerId, RoleId } from "@/stores/types";
+import type { ParticipantId, PlayerSelfRecord, PlayerId, RoleId, StorytellerLobbyRecord } from "@/stores/types";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import type { RoomBackend } from "./backend";
 import {
@@ -169,6 +169,13 @@ export type TravelerChoiceBinding = { playerId: PlayerId; participantId: Partici
  */
 export type ObservedTravelerChoice = TravelerChoiceBinding & { roleId: RoleId };
 
+/** The participation instance `playerId`'s seat holds in `game`, or null while
+ * it holds none (absent, empty, or no ParticipantId). */
+function seatParticipation(game: StorytellerLobbyRecord | null | undefined, playerId: PlayerId): ParticipantId | null {
+  const occupant = game && Object.prototype.hasOwnProperty.call(game.players, playerId) ? game.players[playerId] : undefined;
+  return occupant && !occupant.isEmpty && occupant.participantId ? occupant.participantId : null;
+}
+
 /**
  * Binds a request observed for `playerId` (the live roster's binding of the
  * requesting uid) to the participation instance the Storyteller's seat holds
@@ -176,10 +183,24 @@ export type ObservedTravelerChoice = TravelerChoiceBinding & { roleId: RoleId };
  * the request can be observed for one.
  */
 export function observeTravelerChoice(playerId: PlayerId, roleId: RoleId): ObservedTravelerChoice | null {
-  const game = useStorytellerStore.getState().game;
-  const occupant = game && Object.prototype.hasOwnProperty.call(game.players, playerId) ? game.players[playerId] : undefined;
-  if (!occupant || occupant.isEmpty || !occupant.participantId) return null;
-  return { playerId, participantId: occupant.participantId, roleId };
+  const participantId = seatParticipation(useStorytellerStore.getState().game, playerId);
+  return participantId ? { playerId, participantId, roleId } : null;
+}
+
+/**
+ * Phase 10D (CLOSURE-02): the participation each pending request would be
+ * observed for right now (see observeTravelerChoice), as one comparable value.
+ * A request deferred only because its seat holds no participation yet is
+ * retried exactly when this changes -- the Storyteller's own seating commit, a
+ * recovered occupant, a new participation of the same seat -- and is then
+ * observed for, and validated against, that participation. Storyteller-local
+ * (never published); ignores every other game change.
+ */
+export function pendingTravelerChoiceParticipation(
+  game: StorytellerLobbyRecord | null | undefined,
+  choices: Record<string, { playerId: PlayerId | null }>,
+): string {
+  return JSON.stringify(Object.values(choices).map(({ playerId }) => playerId ? seatParticipation(game, playerId) : null));
 }
 
 /**
@@ -215,8 +236,16 @@ export function commitTravelerChoiceLocally(binding: TravelerChoiceBinding, role
  * changes -- it re-establishes all of:
  *  1. the request still exists remotely with the observed character, so a
  *     request that was consumed or cleared never re-applies (not even after an
- *     Undo returns the participant to blank), and an older callback never
- *     consumes a different (newer) value;
+ *     Undo returns the participant to blank), and a callback observed for an
+ *     earlier request never applies or consumes a LATER request generation.
+ *     CLOSURE-01 (Sol-amended): a pending request is immutable for the player
+ *     -- the rules admit only a create or a same-value resubmit, never a
+ *     replacement or deletion -- and every Storyteller-side write that clears
+ *     it (this command, revocation, seating) runs in this same exclusive
+ *     section. So the value read here is exactly the value this callback
+ *     later clears; a different value can only be a new request made after
+ *     an earlier one was legitimately cleared. This is not a general
+ *     compare-and-consume: it relies on that immutability rule;
  *  2. the uid's CURRENT roster binding is the observed seat;
  *  3. the authoritative `rosterParticipants/{uid}` record (Storyteller-only,
  *     written with the binding in one fenced update) names the observed

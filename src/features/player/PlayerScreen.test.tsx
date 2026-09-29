@@ -15,12 +15,17 @@ vi.mock("@/firebase/playerSync", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/firebase/playerSync")>();
   return { ...actual, usePlayerSync: () => {}, leaveLobby: vi.fn(async () => {}), chooseTraveler: vi.fn(async () => {}) };
 });
+// An in-memory backend stands in for the connection so the screen's own
+// self-scoped read of its pending Traveler request (CLOSURE-01) has data.
+const connection = vi.hoisted(() => ({ backend: null as unknown }));
 vi.mock("@/firebase/session", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/firebase/session")>();
-  return { ...actual, connectFirebase: async () => ({ backend: {} as never, uid: "alice" }) };
+  return { ...actual, connectFirebase: async () => ({ backend: connection.backend as never, uid: "alice" }) };
 });
 
 import { chooseTraveler, leaveLobby } from "@/firebase/playerSync";
+import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { travelerChoicePath } from "@/firebase/lifecycle";
 import { PlayerScreen } from "./PlayerScreen";
 
 const validCfg = {
@@ -68,7 +73,10 @@ function seedSeatedTraveler(publicDisplayRole?: string) {
   }));
 }
 
+let memory: MemoryRoomBackend;
 beforeEach(() => {
+  memory = new MemoryRoomBackend();
+  connection.backend = memory;
   __setEnvOverrideForTests({});
   saveFirebaseConfig(validCfg);
   vi.mocked(leaveLobby).mockClear();
@@ -153,5 +161,41 @@ describe("PlayerScreen Traveler choice (Phase 9 Setup finalization B4)", () => {
     render(<PlayerScreen />);
     await screen.findByText("Request to leave lobby");
     expect(screen.queryByText("Choose your Traveler")).toBeNull();
+  });
+});
+
+// Phase 10D (CLOSURE-01, Sol-amended): a pending Traveler request is immutable
+// for the player until the Storyteller or the membership lifecycle clears it.
+describe("CLOSURE-01 IMM-7: the player's pending Traveler request locks the choice", () => {
+  const request = travelerChoicePath("ABCD2345", "alice");
+  const requestWrites = () => memory.writeLog.filter((w) => w.path === request).length;
+
+  it("while pending: the submitted Traveler is shown as waiting, no other choice is offered and no replacement write happens; once cleared the choice returns", async () => {
+    await memory.set(request, "thief");
+    const writesBefore = requestWrites();
+    seedSeatedTraveler(undefined);
+    render(<PlayerScreen />);
+    expect(await screen.findByText("Thief selected · waiting for Storyteller")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Scapegoat/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Thief/ })).toBeNull();
+    expect(chooseTraveler).not.toHaveBeenCalled();
+    expect(requestWrites()).toBe(writesBefore);
+
+    // The Storyteller clears it (applied elsewhere / superseded): the player,
+    // still an unassigned Traveler, may make a NEW request.
+    await act(async () => { await memory.set(request, null); });
+    expect(await screen.findByRole("button", { name: /Scapegoat/ })).toBeInTheDocument();
+    expect(screen.queryByText(/waiting for Storyteller/)).toBeNull();
+  });
+
+  it("a successful first submission switches the panel to the pending state", async () => {
+    vi.mocked(chooseTraveler).mockImplementation(async (b, roleId) => { await b.set(request, roleId); });
+    seedSeatedTraveler(undefined);
+    render(<PlayerScreen />);
+    await screen.findByText("Choose your Traveler");
+    fireEvent.click(screen.getByRole("button", { name: /Scapegoat/ }));
+    expect(await screen.findByText("Scapegoat selected · waiting for Storyteller")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Thief/ })).toBeNull();
+    expect(chooseTraveler).toHaveBeenCalledTimes(1);
   });
 });

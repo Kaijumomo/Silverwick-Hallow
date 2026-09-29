@@ -682,11 +682,15 @@ describe("membership commands", () => {
         expect(await backend.get(travelerChoicePath("ROOM", uid))).toBe("thief");
       });
 
-      it("a stale callback never consumes a DIFFERENT Role value; the newer value's own callback applies it", async () => {
+      it("a stale callback never consumes a DIFFERENT (later-generation) Role value; the newer value's own callback applies it", async () => {
         const { backend, uid, playerId } = await seatedTraveler();
         await backend.set(travelerChoicePath("ROOM", uid), "thief");
         const older = observe(playerId, "thief");
-        await backend.set(travelerChoicePath("ROOM", uid), "scapegoat"); // the player changed their mind
+        // CLOSURE-01 (Sol-amended): a pending request is immutable for the
+        // player, so a different value only exists as a NEW request after the
+        // earlier one was legitimately cleared.
+        await backend.set(travelerChoicePath("ROOM", uid), null);
+        await backend.set(travelerChoicePath("ROOM", uid), "scapegoat");
         let called = false;
         await applyTravelerChoice(backend, "ROOM", uid, older, () => { called = true; });
         expect(called).toBe(false);

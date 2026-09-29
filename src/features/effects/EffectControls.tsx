@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { selectScriptById, useStorytellerStore, type EffectCommandResult } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
-import { TRAVELERS } from "@/data/travelers";
-import { ownedScriptCharacters } from "@/data/roleRegistry";
+import { resolvedCharacters } from "@/data/roleRegistry";
 import { effectNeedsCheck, manualEffectId, manualEffectState } from "@/stores/effects";
 import {
   KNOWN_EFFECT_TYPES,
@@ -137,10 +136,13 @@ type InstanceIntent =
    * incomplete migrated Current State, never a gameplay update. */
   | { kind: "correctAmend"; effectId: string; amendment: { expiry: { kind: "none" } | { kind: "at"; moment: { phase: "night" | "day"; day: number } } } };
 
+/** CLOSURE-03: a source character is named by the ONE definition the registry
+ * resolves for its RoleId (the canonical Traveler over any script definition
+ * of the same id) -- never a shadowed or later-duplicate script definition. */
 function roleLabel(roleId: string | undefined, game: StorytellerLobbyRecord): string | undefined {
   if (!roleId) return undefined;
   const script = selectScriptById(useStorytellerStore.getState(), game.scriptId);
-  const role = script?.characters.find((r) => r.id === roleId) ?? TRAVELERS.find((r) => r.id === roleId);
+  const role = resolvedCharacters(script).find((r) => r.id === roleId);
   return role?.name ?? roleId;
 }
 
@@ -270,7 +272,8 @@ function AddEffectForm({ game, target, onDone, onError }: {
   onError: (message: string | null) => void;
 }) {
   const script = useStorytellerStore((s) => selectScriptById(s, game.scriptId));
-  const roles = useMemo<RoleDef[]>(() => [...ownedScriptCharacters(script), ...TRAVELERS], [script]);
+  // CLOSURE-03: one choice per RoleId, the definition the registry resolves.
+  const roles = useMemo<RoleDef[]>(() => resolvedCharacters(script), [script]);
   const [type, setType] = useState<string>(KNOWN_EFFECT_TYPES[0]!.type);
   const [customType, setCustomType] = useState("");
   // The source is bound to the participation instance at the moment it is

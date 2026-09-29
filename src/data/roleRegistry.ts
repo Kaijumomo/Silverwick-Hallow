@@ -65,6 +65,26 @@ export function ownedScriptCharacters(script: Pick<Script, "characters"> | null 
   return owned;
 }
 
+/**
+ * Phase 10D (CLOSURE-03): every character a Role-dependent list offers or names
+ * for `script` -- the script's characters and the canonical Traveler catalogue
+ * -- ONE entry per RoleId, each exactly the definition buildRegistry resolves
+ * for that id: the script's first definition (SOL-10D-C03), the canonical
+ * Traveler over ANY script definition of the same id, and the ASTRA-10D-004
+ * overlay rule. A script definition the registry never resolves (a later
+ * duplicate, or one shadowed by a canonical Traveler) is never listed. Lists
+ * of ordinary choices use ordinaryRoleChoices instead (roleResolution.ts).
+ */
+export function resolvedCharacters(script: Script | null | undefined): RoleDef[] {
+  const registry = buildRegistry(script ?? { id: "", name: "", characters: [] });
+  const travelerIds = new Set(TRAVELERS.map((role) => role.id));
+  const ids = [
+    ...ownedScriptCharacters(script).map((role) => role.id).filter((id) => !travelerIds.has(id)),
+    ...travelerIds,
+  ];
+  return ids.map((id) => registry.get(id)).filter((role): role is RoleDef => role !== undefined);
+}
+
 export function buildRegistry(script: Script): RoleRegistry {
   const map = new Map<RoleId, RoleDef>();
   for (const r of ownedScriptCharacters(script)) map.set(r.id, r);

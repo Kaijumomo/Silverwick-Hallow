@@ -6,10 +6,9 @@ import { Almanac } from "@/features/almanac/Almanac";
 import { NightOrderPanel } from "@/features/nightOrder/NightOrderPanel";
 import { SetupPanel } from "@/features/setup/SetupPanel";
 import { SeatAssignPopup } from "@/features/grimoire/SeatAssignPopup";
-import { TRAVELERS } from "@/data/travelers";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
-import { ownedScriptCharacters } from "@/data/roleRegistry";
+import { resolvedCharacters } from "@/data/roleRegistry";
 import { connectFirebase } from "@/firebase/session";
 import { isFirebaseConfigured } from "@/firebase/config";
 import { createLobby, formatCode } from "@/firebase/lobby";
@@ -279,8 +278,11 @@ export function GameScreen() {
     }
   };
 
+  // CLOSURE-03: the script's characters and the Traveler catalogue as Role
+  // resolution defines them (one per RoleId; the canonical Traveler over any
+  // script definition of the same id), then the Fabled and Loric catalogues.
   const almanacRoles = useMemo(
-    () => [...ownedScriptCharacters(script), ...TRAVELERS, ...FABLED, ...LORICS],
+    () => [...resolvedCharacters(script), ...FABLED, ...LORICS],
     [script]
   );
 

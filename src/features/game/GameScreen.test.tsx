@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { GameScreen } from "./GameScreen";
 import { useStorytellerStore as storyteller } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
+import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class {
@@ -56,5 +57,27 @@ describe("Storyteller privacy mode", () => {
     fireEvent.click(screen.getByRole("button", { name: "Disable Privacy Mode" }));
     expect(screen.getByText("Updated while hidden")).toBeInTheDocument();
     expect(screen.getAllByText("Chef").length).toBeGreaterThan(0);
+  });
+});
+
+// Phase 10D (CLOSURE-03): the Almanac lists the script's characters and the
+// Traveler catalogue as Role resolution defines them -- one entry per RoleId,
+// the canonical Traveler over a legacy script's homebrew definition of the id.
+describe("CLOSURE-03: the Almanac follows canonical Traveler precedence", () => {
+  it("a legacy script whose FIRST 'thief' is a homebrew Demon lists ONE Thief -- the canonical Traveler", () => {
+    const legacy = { id: "legacy-thief", name: "Legacy", characters: [
+      { id: "thief", name: "Homebrew Thief", type: "demon" as const, ability: "Homebrew Demon." },
+      ...troubleBrewing.characters,
+    ] };
+    storyteller.setState({ game: null, lobby: null, undoStack: [], customScripts: { [legacy.id]: legacy } });
+    storyteller.getState().newGame(legacy.id);
+    render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "Almanac" }));
+    const almanac = within(screen.getByRole("dialog"));
+    expect(almanac.queryByText("Homebrew Thief")).toBeNull();
+    const thieves = almanac.getAllByText("Thief", { selector: ".almanac-name" });
+    expect(thieves).toHaveLength(1);
+    expect(thieves[0]).toHaveClass("type-traveler");
+    expect(almanac.getAllByText("Chef", { selector: ".almanac-name" })).toHaveLength(1);
   });
 });

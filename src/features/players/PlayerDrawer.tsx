@@ -13,7 +13,7 @@ import { publicTravelerRole } from "@/stores/travelers";
 import { getPrivateInfoApplicability } from "@/stores/privatePackets";
 import { roleAuthority } from "@/data/canonical";
 import { evilInformationPolicy } from "@/features/nightOrder/nightRules";
-import { buildRegistry, ownedScriptCharacters } from "@/data/roleRegistry";
+import { buildRegistry, resolvedCharacters } from "@/data/roleRegistry";
 import { useModalBehavior } from "@/components/Modal";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { EffectControls } from "@/features/effects/EffectControls";
@@ -201,13 +201,17 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
     setNotesDraft(player.stNotes);
   }, [player.id, player.stNotes]);
 
-  // SOL-10D-C03: a script's characters, one per RoleId -- its first (owning)
-  // definition, the same one the Role seam, registry and projection resolve.
-  const ownedCharacters = useMemo(() => ownedScriptCharacters(script), [script]);
+  // SOL-10D-C03 / CLOSURE-03: every Role this drawer displays or names -- the
+  // current and shown Role, a bluff -- is the ONE definition the registry
+  // resolves for its RoleId (a script's first definition; the canonical
+  // Traveler over any script definition of the same id), the same one the Role
+  // seam, projection, Grimoire and private information use. Bluff candidates
+  // are the ordinary choices the Role seam admits, never a shadowed definition.
   const roleById = useMemo(
-    () => new Map(ownedCharacters.map((c) => [c.id, c])),
-    [ownedCharacters]
+    () => new Map(resolvedCharacters(script).map((c) => [c.id, c])),
+    [script]
   );
+  const ordinaryChoices = useMemo(() => ordinaryRoleChoices(script), [script]);
   const registry = useMemo(() => script ? buildRegistry(script) : null, [script]);
   const applicability = registry ? getPrivateInfoApplicability(player, registry) : null;
   // Phase 10D: every Role/perception change goes through the one Role seam,
@@ -263,14 +267,8 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
     <PrivacySafeContents player={player} onClose={close} />
   </DrawerShell>;
   const role = player.actualRole ? roleById.get(player.actualRole) : undefined;
-  const shownRoleDef = player.shownRole ? roleById.get(player.shownRole) ?? TRAVELERS.find(r => r.id === player.shownRole) : undefined;
-
-  // When traveler, look up role from traveler list instead of script.
-  const travelerRoleDef = player.isTraveler && player.actualRole
-    ? TRAVELERS.find((t) => t.id === player.actualRole)
-    : undefined;
-
-  const displayRole = role ?? travelerRoleDef;
+  const shownRoleDef = player.shownRole ? roleById.get(player.shownRole) : undefined;
+  const displayRole = role;
 
   const commitName = () => {
     if (nameDraft.trim() && nameDraft.trim() !== player.name) {
@@ -304,7 +302,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   // Role pool for the main "Actual role" picker: only what the Role seam will
   // accept -- an ordinary participant's Townsfolk/Outsider/Minion/Demon of this
   // script, or a Traveler's canonical characters. Never Fabled or Loric.
-  const rolePool = player.isTraveler ? TRAVELERS : ordinaryRoleChoices(script);
+  const rolePool = player.isTraveler ? TRAVELERS : ordinaryChoices;
   const perceptionNeedsCheck = !!registry && identityNeedsCheck(player, registry);
 
   // Phase 9 Setup finalization (FINAL SETUP INTEGRATION REVISION, Section
@@ -622,7 +620,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
           {role && applicability?.fakeMinions && (
             <LunaticInfo
               player={player}
-              roles={ownedCharacters}
+              roles={ordinaryChoices}
               roleById={roleById}
               otherPlayers={Object.values(game.players)
                 .filter((p) => p.id !== player.id)
@@ -635,7 +633,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
           {role?.type === "demon" && player.behaviorMode === "normal" && (
             <DemonInfo
               player={player}
-              roles={ownedCharacters}
+              roles={ordinaryChoices}
               roleById={roleById}
               inPlayRoles={registry && evilInformationPolicy(Object.values(game.players), registry, game).allowInPlayBluffs ? new Set() : inPlayRoles}
               allowInPlay={!!registry && evilInformationPolicy(Object.values(game.players), registry, game).allowInPlayBluffs}

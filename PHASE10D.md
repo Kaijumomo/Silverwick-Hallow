@@ -181,6 +181,17 @@ script names each character once.
 - The canonical Traveler catalogue keeps its precedence (the explicit Phase
   10D exception), and an admitted ordinary owner keeps its id against Fabled
   and Loric overlays (ASTRA-10D-004). No schema/store version change.
+- Downstream consumers apply the same precedence (CLOSURE-03): every list
+  that offers or names a character -- the Player Drawer's current and shown
+  Role and bluff names, the Effect and Reminder source character (picker and
+  label), the Almanac -- takes ONE definition per RoleId from
+  `resolvedCharacters`, exactly what `buildRegistry` resolves (the Grimoire's
+  display map already did). A script definition shadowed by a canonical
+  Traveler (e.g. a legacy homebrew Demon `thief`) is never displayed, offered
+  or acted on: the Traveler Thief's Drawer shows no Demon bluff controls.
+  Bluff candidates are `ordinaryRoleChoices`. The Setup pool editor and bag
+  fill remain ordinary script-owner lists by type; Setup analysis still blocks
+  a Traveler-shadowed owner there as a conflict.
 
 ## Perception
 
@@ -263,8 +274,25 @@ Mode).
 
 ## Traveler-choice participation fix
 
-Player-written Traveler requests still carry only a character id; ParticipantId
-stays Storyteller-private and no player permission or writer fencing changed.
+Player-written Traveler requests still carry only a character id (a canonical
+Traveler RoleId at `travelerChoices/{uid}`); ParticipantId stays
+Storyteller-private and writer fencing is unchanged.
+
+- **Pending request is immutable for the player** (CLOSURE-01, Sol amendment):
+  once submitted, the request stays exactly as submitted until the Storyteller
+  or the membership lifecycle consumes/clears it. The player rule admits only a
+  first request (no request yet) or a same-value resubmit (an idempotent
+  no-op); a different Traveler while one is pending is refused, and the player
+  cannot cancel or delete it. After the Storyteller/lifecycle clears it, a
+  later choice is a NEW request (a new generation). The player screen shows
+  the pending choice ("Thief selected · waiting for Storyteller") instead of
+  the picker and never writes a replacement; the server rule, not the UI, is
+  what enforces it. This replaces the earlier behavior that let a player
+  replace a pending choice directly; no request nonce, claim path, conditional
+  writer primitive or schema change was added.
+- **Deployment order:** the Firebase Rules must be deployed before the updated
+  client. The rules enforce immutability for every client, including older
+  ones; the new UI against the old rules would only discourage a replacement.
 
 - **Revocation** (`revokePlayerMembership`, legacy `revokeMembership`) clears
   `travelerChoices/{uid}` in the SAME fenced multi-path update.
@@ -275,6 +303,16 @@ stays Storyteller-private and no player permission or writer fencing changed.
   participation instance holding the seat: `{playerId, participantId, roleId}`.
   ParticipantId comes from the Storyteller's own Current State -- nothing is
   added to the player-written request, and there is no request nonce.
+- **Liveness** (CLOSURE-02): a request observed while its seat holds no
+  participation yet (e.g. before the Storyteller's own seating acknowledgment
+  lands) is neither processed against the empty seat nor dropped.
+  `useApplyTravelerChoices` also depends on
+  `pendingTravelerChoiceParticipation` -- the participation each pending
+  request would be observed for -- so when it changes (seating acknowledgment,
+  recovery restoring the occupant, a new participation of the same uid) the
+  request is observed for the now-current participation and revalidated
+  exactly as below. No polling, no reaction to unrelated game changes, no
+  second request write.
 - **Application** (`applyTravelerChoice`), inside the fenced writer's exclusive
   section and before any local mutation, re-establishes that the request still
   exists remotely with the observed character, that the uid's CURRENT roster
@@ -286,9 +324,13 @@ stays Storyteller-private and no player permission or writer fencing changed.
   `expectedIsTraveler: true`. So a cached callback of an earlier participation
   never applies to (or consumes the request of) its replacement, a consumed or
   cleared request never re-applies (not even after an Undo returns the
-  participant to blank), and an older callback never consumes a different
-  value. The same participation's currently-existing identical request may be
-  processed by any of its callbacks.
+  participant to blank), and a callback observed for an earlier request never
+  applies or consumes a LATER request generation (a different value can only
+  be a new request made after the earlier one was cleared). This relies on the
+  immutability rule above plus the writer's exclusive section, in which every
+  Storyteller-side clear runs; it is not a general compare-and-consume. The
+  same participation's currently-existing identical request may be processed
+  by any of its callbacks.
 - **Cleanup** stays fenced and idempotent: the request is cleared only when it
   provably belongs to the observed participation (applied, or superseded by a
   Storyteller assignment / status change) or provably to no participation (the
@@ -297,9 +339,11 @@ stays Storyteller-private and no player permission or writer fencing changed.
   participation's observation; revocation and seating still clear it
   atomically.
 
-Proven at the emulator/rules boundary in `src/firebase/rules.spec.ts` and at the
-production-command boundary in `membershipCommands.test.ts` /
-`StorytellerSession.travelerChoices.test.ts`.
+Proven at the emulator/rules boundary in `src/firebase/rules.spec.ts` (IMM-1..6,
+IMM-8), at the production-command boundary in `membershipCommands.test.ts` /
+`StorytellerSession.travelerChoices.test.ts` /
+`StorytellerSession.travelerChoiceLiveness.test.ts`, and for the player's pending
+lock in `PlayerScreen.test.tsx` (IMM-7).
 
 ## UI
 

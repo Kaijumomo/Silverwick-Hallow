@@ -10,7 +10,9 @@ import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { setupScript, standardRoles } from "@/test/setupFixtures";
 import { needsShownIdentity } from "@/stores/identity";
-import { GrimoireCircle } from "@/features/grimoire/GrimoireCircle";
+import { GrimoireCircle, buildRoleDisplayMap } from "@/features/grimoire/GrimoireCircle";
+import { TRAVELERS } from "@/data/travelers";
+import { buildRegistry, resolvedCharacters } from "@/data/roleRegistry";
 import { PlayerDrawer } from "./PlayerDrawer";
 import { TravelerArrival } from "./TravelerArrival";
 import type { PlayerId } from "@/stores/types";
@@ -366,6 +368,121 @@ describe("SOL-10D-C03: the Drawer resolves a legacy duplicate RoleId to its firs
     expect(actualSection().getAllByRole("button", { name: "Chef townsfolk" })).toHaveLength(1);
     expect(behaviorSection().getAllByRole("button", { name: "Chef townsfolk" })).toHaveLength(1);
     expect(behaviorSection().getByRole("button", { name: "auto (good)" })).toBeInTheDocument();
+  });
+});
+
+// Phase 10D (CLOSURE-03): canonical Traveler precedence downstream. Astra's
+// reachable sequence: a legacy STORED script whose FIRST definition of "thief"
+// is a homebrew Demon (the canonical Traveler Thief is listed later, and the
+// canonical Traveler catalogue has explicit precedence over any script
+// definition of that id); ordinary Setup never uses the id; live play begins;
+// a late Traveler arrives and is assigned the canonical Traveler Thief. Every
+// Role-dependent control then resolves the ONE definition the registry does.
+describe("CLOSURE-03: the Drawer, private information, Effect/Reminder source and Grimoire follow canonical Traveler precedence", () => {
+  const canonicalThief = TRAVELERS.find((r) => r.id === "thief")!;
+  const homebrewThief = { id: "thief", name: "Homebrew Thief", type: "demon" as const, ability: "Homebrew Demon that steals." };
+  function astraSequence(first: { id: string; name: string; type: "demon" | "townsfolk"; ability: string } = homebrewThief) {
+    const legacy = { ...setupScript, characters: [first, ...setupScript.characters] };
+    store.setState({ customScripts: { [setupScript.id]: legacy } }); // 1. the legacy collision
+    goLive(); // 2-3. ordinary Setup never uses the id; live play begins
+    expect(game().seatOrder.some((id) => player(id).actualRole === first.id)).toBe(false);
+    state().addPlayer("Zed"); // 4. a late Traveler arrives
+    const zed = idOf("Zed");
+    expect(player(zed).isTraveler).toBe(true);
+    expect(state().assignRole(zed, "thief")).toMatchObject({ ok: true, changed: true }); // 5. canonical Traveler Thief
+    store.setState({ undoStack: [] });
+    return { legacy, zed };
+  }
+  const characterOptions = (select: HTMLElement, id: string) =>
+    Array.from((select as HTMLSelectElement).options).filter((o) => o.value === id).map((o) => o.textContent);
+  const addEffectForm = () => {
+    fireEvent.click(screen.getByRole("button", { name: "+ Add effect" }));
+    return within(screen.getByRole("form", { name: "Add effect" }));
+  };
+
+  it("OWNER-1: the Traveler's Drawer resolves the canonical Traveler Thief -- no Demon bluff controls, nothing of the inert homebrew Demon", () => {
+    const { zed } = astraSequence();
+    render(<SeatDrawer seat={zed} />);
+    expect(screen.queryByText("Demon bluffs (ST private)")).toBeNull();
+    expect(screen.queryByText("Demon setup information")).toBeNull();
+    expect(screen.queryByText("Bluffs:")).toBeNull();
+    expect(screen.queryByText(/Homebrew/)).toBeNull();
+    const arrival = within(screen.getByRole("region", { name: "Traveler arrival for Zed" }));
+    expect((arrival.getByLabelText("Public character") as HTMLSelectElement).value).toBe("thief");
+    expect(player(zed).privateInfo?.bluffs).toBeUndefined();
+  });
+
+  it("OWNER-2: no private-information control offers or creates bluff data from a shadowed definition -- a real Demon's bluff pool omits a Traveler-shadowed good character", () => {
+    // A GOOD-typed homebrew first definition shadowed by the canonical Traveler
+    // Gunslinger would otherwise be a bluff candidate.
+    const homebrewGunslinger = { id: "gunslinger", name: "Homebrew Gunslinger", type: "townsfolk" as const, ability: "Homebrew." };
+    const { zed } = astraSequence(homebrewGunslinger);
+    render(<SeatDrawer seat={zed} />);
+    expect(screen.queryByText("Bluffs:")).toBeNull(); // the Traveler Thief has no bluff controls at all
+    cleanup();
+    const imp = holder("imp");
+    render(<SeatDrawer seat={imp} />);
+    const bluffs = within(screen.getByText("Demon bluffs (ST private)").closest("section")!);
+    expect(bluffs.queryByRole("button", { name: /Gunslinger/ })).toBeNull();
+    expect(bluffs.queryByRole("button", { name: /Thief/ })).toBeNull();
+    fireEvent.click(bluffs.getByRole("button", { name: "Monk townsfolk" }));
+    expect(player(imp).privateInfo?.bluffs).toEqual(["monk"]);
+  });
+
+  it("OWNER-3: the Effect source picker offers exactly one thief -- the canonical Traveler Thief -- and names a created Effect's source by it; the Reminder source picker agrees", () => {
+    const { zed } = astraSequence();
+    const target = holder("chef");
+    render(<SeatDrawer seat={target} />);
+    const form = addEffectForm();
+    const character = form.getByLabelText("Character") as HTMLSelectElement;
+    expect(characterOptions(character, "thief")).toEqual(["Thief"]);
+    const values = Array.from(character.options).map((o) => o.value);
+    expect(new Set(values).size).toBe(values.length); // one option per RoleId
+    // Choosing Zed as the source defaults to Zed's Actual Role: the canonical Thief.
+    fireEvent.change(form.getByLabelText("Caused by"), { target: { value: zed } });
+    expect(character.value).toBe("thief");
+    expect(character.selectedOptions[0]!.textContent).toBe("Thief");
+    fireEvent.click(form.getByRole("button", { name: "Add" }));
+    expect(player(target).effects.some((e) => e.sourceCharacter === "thief")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: /Show details/ }));
+    expect(screen.getByText("Zed · Thief")).toBeInTheDocument();
+    expect(screen.queryByText(/Homebrew/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "More options" }));
+    const reminderOptions = within(screen.getByRole("group", { name: "Reminder options" }));
+    expect(characterOptions(reminderOptions.getByLabelText("Character"), "thief")).toEqual(["Thief"]);
+  });
+
+  it("OWNER-4: registry, Grimoire, Drawer and Effect source all resolve the SAME definition of thief", () => {
+    const { legacy, zed } = astraSequence();
+    expect(buildRegistry(legacy).get("thief")).toBe(canonicalThief);
+    expect(buildRoleDisplayMap(legacy).get("thief")).toBe(canonicalThief);
+    expect(resolvedCharacters(legacy).filter((r) => r.id === "thief")).toEqual([canonicalThief]);
+    render(<GrimoireCircle />);
+    const token = screen.getByRole("button", { name: /^Zed, seat/ });
+    expect(within(token).getByText(canonicalThief.name)).toHaveClass("type-traveler");
+    cleanup();
+    render(<SeatDrawer seat={zed} />);
+    expect(screen.queryByText(/Homebrew/)).toBeNull();
+    expect(screen.queryByText("Demon bluffs (ST private)")).toBeNull();
+    expect(characterOptions(addEffectForm().getByLabelText("Character"), "thief")).toEqual([canonicalThief.name]);
+  });
+
+  it("OWNER-5: a homebrew ordinary Role with a non-Traveler id is unchanged -- its own card, its Demon bluff controls and one source-character option", () => {
+    const hollowKing = { id: "hollowking", name: "Hollow King", type: "demon" as const, ability: "Homebrew Demon." };
+    const lampwright = { id: "lampwright", name: "Lampwright", type: "townsfolk" as const, ability: "Homebrew townsfolk." };
+    store.setState({ customScripts: { [setupScript.id]: { ...setupScript, characters: [...setupScript.characters, hollowKing, lampwright] } } });
+    goLive();
+    const demon = holder("imp");
+    expect(state().assignRole(demon, "hollowking")).toMatchObject({ ok: true, changed: true });
+    render(<SeatDrawer seat={demon} />);
+    const card = within(document.querySelector(".role-display") as HTMLElement);
+    expect(card.getByText("Hollow King")).toBeInTheDocument();
+    expect(card.getByText("demon")).toBeInTheDocument();
+    const bluffs = within(screen.getByText("Demon bluffs (ST private)").closest("section")!);
+    expect(bluffs.getByRole("button", { name: "Lampwright townsfolk" })).toBeInTheDocument();
+    const character = addEffectForm().getByLabelText("Character");
+    expect(characterOptions(character, "hollowking")).toEqual(["Hollow King"]);
+    expect(characterOptions(character, "lampwright")).toEqual(["Lampwright"]);
   });
 });
 
