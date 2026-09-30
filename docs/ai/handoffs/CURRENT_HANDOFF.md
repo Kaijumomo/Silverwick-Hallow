@@ -1,7 +1,52 @@
 # Silverwick Hollow — Current Handoff
 
-**Date:** 2026-09-28\
-**State:** Phase 10C is **CLOSED** and integrated into `main`. Phase 10D — Role Transitions is **NEXT**, on `dev/phase-10d`. 10D has **not** been designed yet.
+**Date:** 2026-09-30\
+**State:** Phase 10D — Role Transitions is **CLOSED** (Sol: **CLOSED — READY FOR INTEGRATION**). Its docs-only closure commit is the integration checkpoint. Integration is rules-first: the Phase 10D Firebase Rules are deployed to production and verified, then `main` is fast-forwarded to that commit, then `dev/phase-10e` is created from that exact `main`. Phase 10E — Alignment Transitions is **NEXT**; it has **not** been designed yet.
+
+## Phase 10D — CLOSED
+
+Final reviewed implementation checkpoint (before docs-only closure metadata):
+`62055408e75ba33a9b1900e19b1d4bcd3cbf93aa`
+
+The docs-only closure commit on top of it is the integration checkpoint: `main` is fast-forwarded to it only after the rules-first release step below, and `dev/phase-10e` is created from that exact `main`. Verify exact SHAs rather than branch names.
+
+Lineage on top of `c6fce7dd77e50baf4a34c75529ad48490558296d`: implementation `b2e0c6bf4d43537d770fcfcc2cc9b4abca22c4fe` → post-Luna remediation (same-Role Traveler `restart`) `4ca328256058c48c834c968d63a61a732364227f` → SOL-10D-R2 Astra remediation ASTRA-10D-001…004 + C01/C02 Life amendments `921b73ef102ff3d9b4456b78c759f571893c9b8c` → SOL-10D-C03 duplicate RoleId ownership `a5ef611150ee85f76915e5b4eece828c6ecd30d6` → SOL-10D-C03-R1 Setup compatibility `444820274eb5fd672d567bbc9c95bf24fd0865ef` → CLOSURE-01 immutable pending Traveler requests / CLOSURE-02 deferred request liveness / CLOSURE-03 canonical Traveler downstream ownership `a614496187bbf43cd4541d8a73a30645d7d7bdf2` → LUNA-CLOSURE-03-R1 Almanac RoleId uniqueness `b4068b4f517e51015c3c974d73ddc6503036f416` → ASTRA-FINAL-01 stopped-writer lifecycle `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` → docs-only closure.
+
+Schema / store version: **v22**.
+
+Final verification evidence at `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa`:
+- typecheck PASS
+- normal tests **3172/3172 across 119 files**
+- Firebase emulator tests **201/201**, 0 skipped
+- production build PASS
+- `git diff --check` PASS
+- final reviewed worktree clean
+- ASTRA-FINAL-01: independently mechanically verified by Luna at the final target (real Firebase-emulator regression at all three awaited-read boundaries; every expected no-mutation assertion passed; complete gate passed)
+- Sol verdict: **CLOSED — READY FOR INTEGRATION**
+
+Remaining Blocker/High/Medium implementation or contract findings: **None.** CLOSURE-02 and CLOSURE-03 are closed.
+
+Evidence limitation: the final requested Astra re-confirmation of ASTRA-FINAL-01 could not be executed, because that review environment repeatedly classified the authorized local concurrency regression task as cybersecurity content. Sol adjudicated this as a **review-environment limitation**, not a remaining product defect or product evidence gap: Astra originally established the defect, the exact remediation was implemented, and Luna independently executed the real-emulator regression at all three boundaries with every expected assertion and the complete gate passing. There is **no** Astra PASS for a post-`62055408` confirmation — that run did not occur.
+
+### Release order — Firebase Rules first
+
+Phase 10D changed `src/firebase/rules.json`: a player's pending Traveler request is immutable for the player until the Storyteller or the membership lifecycle clears it. The rules enforce that for every client, including older ones; the new client only discourages a replacement. The web client ships from `main` automatically, but rules change only through `npm run rules:deploy`. Therefore:
+
+1. `npx firebase use <PROJECT_ID>` then `npm run rules:deploy` (Realtime Database rules only);
+2. `npm run rules:verify -- --project <PROJECT_ID>` (add `--instance <DB_INSTANCE>` for a non-default instance) must exit 0 with the deployed rules identical to `src/firebase/rules.json`;
+3. only then fast-forward `main` to the Phase 10D closure commit.
+
+### Phase 10D frozen behavior (summary)
+
+See `PHASE10D.md` for the full model and semantics.
+- `actualRole` is authoritative Current State; `shownRole` / perception stays separate; Actual Alignment stays separate from Role (10D never changes it).
+- One participant-bound, pure Role transaction seam (`planRoleTransaction` / `applyRolePlan`, committed through `resolveRoles`); gameplay Role change, Role correction and perception change are distinct; multi-participant Role resolution is atomic (one replacement, one Undo entry, one localSeq step).
+- Ordinary ↔ Traveler transitions are supported; a Traveler arrival correction is `preserve` (default) or `restart`.
+- Role History is explanatory only; ParticipantId binding refuses stale intents.
+- Canonical Role ownership: first-definition ownership for legacy script duplicates, canonical Traveler precedence, ASTRA-10D-004 Fabled/Loric protection — shared by every Role consumer, downstream lists included.
+- A player's pending Traveler request is immutable until the Storyteller or membership lifecycle clears it; a later request is a new generation; an in-flight Storyteller callback passes a final synchronous writer-lifetime gate before any local Role mutation (ASTRA-FINAL-01).
+- Role changes preserve Life, Effects, Reminders and Actual Alignment unless a separately authorized primitive changes them.
+- Store/game schema v22 migration behavior preserved.
 
 ## Phase 10C — CLOSED
 
@@ -192,8 +237,8 @@ Operational status: production Firebase rules were **not** deployed by the hotfi
 - **10A Life Transition Semantics + visual life-state grammar — CLOSED**
 - **10B Effect Lifecycle + visual Effect indicators — CLOSED**
 - **10C Reminder Workflow + visual Reminder tokens — CLOSED**
-- **10D Role Transitions — NEXT (architecture challenge first)**
-- 10E Alignment Transitions
+- **10D Role Transitions — CLOSED**
+- **10E Alignment Transitions — NEXT (architecture challenge first)**
 - 10F Guided Ability Resolution / Night Actions
 - 10G Advanced Storyteller bookkeeping / final visual integration
 
@@ -203,18 +248,18 @@ Phase 10 may increase Silverwick's mechanical intelligence, but routine Storytel
 
 This requirement continues through 10C–10G.
 
-## Phase 10D starting intent
+## Phase 10E starting intent
 
-10D is **not yet designed**. Nothing below is a decision; it is the roadmap scope the architecture challenge must examine: Actual Role and Shown Role transitions, correction vs gameplay semantics, durable History and replacement workflows -- consistent with the frozen 10A Life, 10B Effect and 10C Reminder seams, ParticipantId identity and the Actual/Shown distinction.
+10E is **not yet designed**. Nothing below is a decision; it is the roadmap scope the architecture challenge must examine: Actual Alignment mutation semantics, shown/perceived alignment where needed, History/provenance, correction vs gameplay transition -- consistent with the frozen 10A Life, 10B Effect, 10C Reminder and 10D Role seams, ParticipantId identity and the Actual/Shown distinction.
 
-Do not implement Role ability evaluation in 10D.
+Do not implement ability resolution (Phase 10F) in 10E.
 
 ## Starting branch
 
 Use:
-`dev/phase-10d`
+`dev/phase-10e`
 
-It was created from the exact integrated `main` carrying the Phase 10C closure commit and has no implementation changes.
+It is to be created from the exact integrated `main` carrying the Phase 10D closure commit, with no implementation changes. Verify `dev/phase-10e` equals that `main` before starting.
 
 At the start of any new session, verify the exact branch SHA and read:
 - `docs/ai/MASTER_IMPLEMENTATION_PLAN.md`
@@ -222,10 +267,10 @@ At the start of any new session, verify the exact branch SHA and read:
 - `PHASE10A.md`
 - `PHASE10B.md`
 - `PHASE10C.md`
+- `PHASE10D.md`
 - `TERMINOLOGY.md`
 
 ## Immediate next task
 
-Perform the **Phase 10D architecture challenge before coding** on
-`dev/phase-10d` (verify the exact commit SHA). No 10D implementation begins
-until the challenge is adjudicated into a Sol implementation contract.
+1. If `main` does not yet equal the Phase 10D docs-only closure commit, finish the rules-first integration first (deploy and verify the Firebase Rules, fast-forward `main`, create `dev/phase-10e` from that exact `main`).
+2. Then perform the **Phase 10E architecture challenge before coding** on `dev/phase-10e` (verify the exact commit SHA). No 10E implementation begins until the challenge is adjudicated into a Sol implementation contract.

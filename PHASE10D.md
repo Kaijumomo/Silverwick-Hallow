@@ -1,13 +1,82 @@
 # Phase 10D — Role Transitions
 
-Status: **implemented on `dev/phase-10d`, awaiting independent verification.**
-This document records the frozen Phase 10D contract and what was delivered. It
-does not claim the phase is closed; closure belongs to the review workflow.
+Status: **CLOSED.** Store schema **v22** (`GAME_SCHEMA_VERSION = 22`,
+`STORE_VERSION = 22`). This document records the frozen Phase 10D contract and
+what was delivered.
 
-Store schema **v22** (`GAME_SCHEMA_VERSION = 22`, `STORE_VERSION = 22`).
+Final reviewed implementation checkpoint (before docs-only closure metadata):
+`62055408e75ba33a9b1900e19b1d4bcd3cbf93aa`. The docs-only closure commit on
+top of it is the integration checkpoint. Integration is rules-first: the Phase
+10D Firebase Rules are deployed to production and verified, and only then is
+`main` fast-forwarded to that commit (see "Release order" below).
 
 Starting checkpoint: `c6fce7dd77e50baf4a34c75529ad48490558296d` (`main` =
 `dev/phase-10d` at implementation start; Phase 10A/10B/10C closed).
+
+## Closure record
+
+Phase 10D — **CLOSED**. Sol verdict: **CLOSED — READY FOR INTEGRATION.**
+
+History, on top of `c6fce7dd77e50baf4a34c75529ad48490558296d`:
+
+- Initial implementation — the authoritative Role transition seam, store v22
+  (`b2e0c6bf4d43537d770fcfcc2cc9b4abca22c4fe`).
+- Luna mechanical verification, followed by the same-Role Traveler `restart`
+  correction remediation (`4ca328256058c48c834c968d63a61a732364227f`).
+- Astra findings ASTRA-10D-001…004 and the C01/C02 Life amendments
+  (exile-death is death-scoped; correction-recorded exile events), remediated
+  together as SOL-10D-R2 (`921b73ef102ff3d9b4456b78c759f571893c9b8c`).
+- Duplicate RoleId ownership correction, SOL-10D-C03
+  (`a5ef611150ee85f76915e5b4eece828c6ecd30d6`).
+- Setup compatibility correction, SOL-10D-C03-R1
+  (`444820274eb5fd672d567bbc9c95bf24fd0865ef`).
+- Final closure remediation (`a614496187bbf43cd4541d8a73a30645d7d7bdf2`):
+  immutable pending Traveler player requests (CLOSURE-01, Sol amendment),
+  deferred request liveness (CLOSURE-02) and canonical Traveler downstream
+  ownership (CLOSURE-03).
+- Almanac RoleId uniqueness correction, LUNA-CLOSURE-03-R1
+  (`b4068b4f517e51015c3c974d73ddc6503036f416`).
+- Stopped-writer lifecycle correction, ASTRA-FINAL-01
+  (`62055408e75ba33a9b1900e19b1d4bcd3cbf93aa`).
+
+Final verification evidence at `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa`:
+
+- `npm run typecheck` — PASS
+- `npm test` — **3172/3172 across 119 files**
+- `npm run test:rules` — **201/201**, 0 skipped
+- `npm run build` — PASS
+- `git diff --check` — PASS
+- final reviewed worktree — clean
+
+Closure status:
+
+- No unresolved accepted Blocker/High/Medium implementation or contract
+  finding.
+- CLOSURE-02 — closed. CLOSURE-03 — closed.
+- ASTRA-FINAL-01 — independently mechanically verified by Luna at the final
+  target: Luna executed the real Firebase-emulator regression at all three
+  awaited-read boundaries, every expected no-mutation assertion passed, and
+  the complete gate passed.
+
+Evidence limitation: the final requested Astra re-confirmation of
+ASTRA-FINAL-01 could not be executed, because that review environment
+repeatedly classified the authorized local concurrency regression task as
+cybersecurity content. Sol adjudicated this as a REVIEW-ENVIRONMENT
+LIMITATION, not a remaining product defect or product evidence gap: Astra
+originally established the defect, the exact remediation was implemented, and
+Luna independently executed the real-emulator regression at all three
+boundaries with every expected assertion passing and the complete gate
+passing. There is no Astra PASS for a post-`62055408` confirmation, because
+that run did not occur.
+
+### Release order
+
+Phase 10D changed `src/firebase/rules.json` (player-side immutability of a
+pending Traveler request). The rules enforce that for every client, including
+older ones, while the new client only discourages a replacement. The web
+client ships from `main` automatically, but rules change only through
+`npm run rules:deploy`, so the Firebase Rules are deployed and verified
+(`npm run rules:verify -- --project <PROJECT_ID>`) **before** `main` moves.
 
 ## The primitive
 
@@ -192,9 +261,10 @@ script names each character once.
   The Almanac then adds a Fabled or Loric catalogue entry only when its RoleId
   is not already shown, so a homebrew ordinary owner (e.g. Townsfolk `bigwig`,
   Outsider `doomsayer`) is never listed beside the catalogue character of the
-  same id (LUNA-CLOSURE-03-R1). Bluff candidates are `ordinaryRoleChoices`. The Setup pool editor and bag
-  fill remain ordinary script-owner lists by type; Setup analysis still blocks
-  a Traveler-shadowed owner there as a conflict.
+  same id (LUNA-CLOSURE-03-R1). Bluff candidates are `ordinaryRoleChoices`.
+  The Setup pool editor and bag fill remain ordinary script-owner lists by
+  type; Setup analysis still blocks a Traveler-shadowed owner there as a
+  conflict.
 
 ## Perception
 

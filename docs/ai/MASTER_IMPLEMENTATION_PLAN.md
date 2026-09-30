@@ -1,14 +1,15 @@
 # Silverwick Hollow — Master Implementation Plan
 
 **Status:** Active canonical roadmap  
-**Updated:** 2026-09-28\
+**Updated:** 2026-09-30\
 **Integrated branch:** `main`  
 **Phase 10A closure checkpoint:** `d798266b988e49f904aa8f8658c917fd5b7e7abb`  
 **Pre-10B Firebase lifecycle hotfix checkpoint:** `38b10119544ce2c02590e9bc9c741aab995a91d1`  
 **Phase 10B final reviewed implementation checkpoint:** `3c9e20f4506258bab143b5f20750deb34b290379` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10C final reviewed implementation checkpoint:** `ca808fa18e97d758750aad63ceacc2bea3d8f627` (integrated into `main` with the docs-only closure commit on top)\
-**Schema:** v21 (integrated on `main`)\
-**Current phase:** Phase 10D — Role Transitions (NEXT: architecture challenge before coding)
+**Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (the docs-only closure commit on top is fast-forwarded into `main` after the rules-first release step)\
+**Schema:** v22\
+**Current phase:** Phase 10E — Alignment Transitions (NEXT: architecture challenge before coding)
 
 ## Product invariants
 
@@ -180,11 +181,45 @@ Structured placement/removal/update, source/target/lifetime, free text where app
 Frozen principle carried in from 10B: if a mechanical condition is authoritative as an Effect, a Reminder may visualize or help bookkeep it but must never become a second independent source of that mechanical truth. Routine Reminder placement/removal must be fast and visually obvious; advanced detail stays progressively disclosed.
 
 ### 10D — Role Transitions
-**Status:** NEXT — architecture challenge before coding (not yet designed). Branch `dev/phase-10d`, created from the exact integrated `main` carrying the Phase 10C closure.
+**Status:** CLOSED\
+**Final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa`\
+**Integration:** the docs-only closure commit on top of that checkpoint, fast-forwarded into `main` only after the Phase 10D Firebase Rules are deployed to production and verified (rules first, then client). See `PHASE10D.md`.\
+**Schema/store:** v22
 
-Actual Role and Shown Role transitions, correction vs gameplay semantics, durable History and replacement workflows.
+Lineage on top of `c6fce7dd77e50baf4a34c75529ad48490558296d`: implementation `b2e0c6bf4d43537d770fcfcc2cc9b4abca22c4fe` → post-Luna remediation `4ca328256058c48c834c968d63a61a732364227f` → SOL-10D-R2 Astra remediation incl. C01/C02 Life amendments `921b73ef102ff3d9b4456b78c759f571893c9b8c` → SOL-10D-C03 duplicate RoleId ownership `a5ef611150ee85f76915e5b4eece828c6ecd30d6` → SOL-10D-C03-R1 Setup compatibility `444820274eb5fd672d567bbc9c95bf24fd0865ef` → CLOSURE-01/02/03 `a614496187bbf43cd4541d8a73a30645d7d7bdf2` → LUNA-CLOSURE-03-R1 `b4068b4f517e51015c3c974d73ddc6503036f416` → ASTRA-FINAL-01 `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa`.
+
+Final closure gate:
+
+- typecheck PASS
+- normal tests **3172/3172 across 119 files**
+- Firebase emulator tests **201/201**, 0 skipped
+- production build PASS
+- `git diff --check` PASS
+- final reviewed worktree clean
+- remaining closure-blocking (Blocker/High/Medium) findings: **None**; CLOSURE-02 and CLOSURE-03 closed; ASTRA-FINAL-01 independently mechanically verified by Luna at the final target
+- evidence limitation: the final Astra re-confirmation of ASTRA-FINAL-01 could not run (that review environment classified the authorized local concurrency regression as cybersecurity content); Sol adjudicated it a review-environment limitation, not a product defect or evidence gap. There is no Astra PASS for that final run.
+- Sol verdict: **CLOSED — READY FOR INTEGRATION**
+
+Frozen Phase 10D architecture:
+
+- `actualRole` is authoritative Current State; `shownRole` / perception stays separate.
+- Actual Alignment remains separate from Role (10D never changes it).
+- One participant-bound, pure Role transaction seam (`planRoleTransaction` / `applyRolePlan`, committed through `resolveRoles`).
+- Gameplay Role change, Role correction and perception change are distinct operations.
+- Multi-participant Role resolution is atomic (one replacement, one Undo entry, one localSeq step).
+- Ordinary ↔ Traveler transitions are supported; a Traveler arrival correction is `preserve` or `restart`.
+- Role History is explanatory only; Current State is never rebuilt from it.
+- ParticipantId binding protects against stale state (a stale intent is refused).
+- Canonical Role ownership: first-definition ownership for legacy script duplicates, canonical Traveler precedence, ASTRA-10D-004 Fabled/Loric protection — applied by every Role consumer, downstream lists included.
+- A player's pending Traveler request is immutable until the Storyteller or membership lifecycle clears it (Firebase Rules enforced).
+- Role changes preserve Life, Effects, Reminders and Actual Alignment unless a separately authorized primitive changes them.
+- Store/game schema v22 migration behavior is preserved.
+
+Release order: Phase 10D changed `src/firebase/rules.json`; the client ships from `main` automatically, so the Firebase Rules are deployed and verified before `main` moves.
 
 ### 10E — Alignment Transitions
+**Status:** NEXT — architecture challenge before coding (not yet designed). Phase 10E work starts on `dev/phase-10e`, to be created from the exact integrated `main` carrying the Phase 10D closure.
+
 Actual Alignment mutation semantics, shown/perceived alignment where needed, History/provenance, correction vs gameplay transition.
 
 ### 10F — Guided Ability Resolution / Night Actions
@@ -216,7 +251,8 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 - Reviewers verify exact commit identity rather than trusting branch names.
 - `dev/phase-10c` was created from the exact integrated `main` carrying the Phase 10B closure.
 - `dev/phase-10d` is created from the exact integrated `main` carrying the Phase 10C closure.
+- `dev/phase-10e` is created from the exact integrated `main` carrying the Phase 10D closure.
 
 ## Immediate next action
 
-Perform the **Phase 10D architecture challenge** (Role Transitions) on `dev/phase-10d`. Do **not** begin implementation until the challenge is adjudicated into a Sol implementation contract. Verify exact commit identity rather than trusting branch names.
+After the rules-first integration of Phase 10D, perform the **Phase 10E architecture challenge** (Alignment Transitions) on `dev/phase-10e`, to be created from the exact integrated `main` carrying the Phase 10D closure. Do **not** begin implementation until the challenge is adjudicated into a Sol implementation contract. Verify exact commit identity rather than trusting branch names.
