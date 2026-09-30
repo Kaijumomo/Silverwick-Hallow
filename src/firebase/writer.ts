@@ -109,6 +109,9 @@ export class SessionWriter implements RoomBackend {
       setIfAbsent: async () => { throw new Error("Writer commands cannot claim lobby identities."); },
       transaction: async () => { throw new Error("Use the session writer for mutations."); },
       onDisconnectSet: (path, value) => this.onDisconnectSet(path, value),
+      // ASTRA-FINAL-01: an in-lane operation can synchronously prove, after
+      // its own awaits, that THIS writer has not stopped meanwhile.
+      assertActive: () => this.assertActive(),
     };
   }
   /** Acquires the lease and returns a coherent {observedGuard, authorityHandle}

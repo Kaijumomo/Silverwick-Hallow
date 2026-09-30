@@ -18,6 +18,14 @@ export type Unsubscribe = () => void;
 
 export interface RoomBackend {
   runExclusive?<T>(operation: (backend: RoomBackend) => Promise<T>): Promise<T>;
+  /**
+   * Phase 10D (ASTRA-FINAL-01): the writer-lifetime capability of a writer
+   * lane -- present on a SessionWriter and on the in-lane backend its
+   * runExclusive hands an operation. Synchronous, no I/O: throws a "cancelled"
+   * LifecycleError once that writer has definitively stopped. A raw backend
+   * (no writer lifetime) omits it.
+   */
+  assertActive?(): void;
   /** Atomic read/modify/write. Returning undefined aborts the transaction. */
   transaction(path: string, change: (current: unknown) => Json | undefined): Promise<boolean>;
   /** Set a value at `path`. Equivalent to RTDB `set()`. */

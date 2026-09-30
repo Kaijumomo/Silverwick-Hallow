@@ -250,7 +250,13 @@ export function commitTravelerChoiceLocally(binding: TravelerChoiceBinding, role
  *  3. the authoritative `rosterParticipants/{uid}` record (Storyteller-only,
  *     written with the binding in one fenced update) names the observed
  *     ParticipantId and seat;
- *  4. `commitLocal`: the local occupant still is that participant and still an
+ *  4. ASTRA-FINAL-01: after the last await, the writer executing this
+ *     operation is still active -- a FINAL synchronous writer-lifetime gate
+ *     (`backend.assertActive`), with no await between it and the local
+ *     mutation. A writer that stopped while a read above was in flight (its
+ *     lease lost, another tab taking over) never mutates local Current State;
+ *     server writes stay fenced by Firebase as before;
+ *  5. `commitLocal`: the local occupant still is that participant and still an
  *     unassigned Traveler, submitted through the Role seam with the expected
  *     state blank / Traveler (so a Storyteller-assigned character wins).
  *
@@ -284,6 +290,9 @@ export async function applyTravelerChoice(
   const record = decodeRosterParticipant(await backend.get(rosterParticipantPath(code, uid)));
   if (record.status !== "ready" || record.data.playerId !== observed.playerId ||
     record.data.participantId !== observed.participantId) return;
+  // ASTRA-FINAL-01: final writer-lifetime gate. Synchronous and immediately
+  // before the local Role mutation -- no await in between.
+  backend.assertActive?.();
   commitLocal({ playerId: observed.playerId, participantId: observed.participantId }, observed.roleId);
   await backend.set(request, null);
 }

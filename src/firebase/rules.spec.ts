@@ -2,7 +2,7 @@
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { ref as modularRef, update as modularUpdate, type Database } from "firebase/database";
 import { FirebaseRoomBackend } from "./firebaseBackend";
 import type { Json } from "./backend";
@@ -792,6 +792,138 @@ describe("Firebase RTDB membership authorization", () => {
       await writer.dispose();
       store.setState({ game: null, lobby: null, undoStack: [] });
     }
+  });
+
+  // Phase 10D (ASTRA-FINAL-01): a Traveler-choice operation that began through
+  // writer A while A was active may still be inside a Firebase read when A
+  // stops and writer B legitimately takes over. When that read resolves, A's
+  // callback must pass a FINAL synchronous writer-lifetime gate before any
+  // local Role mutation. Real rules, production SessionWriters.
+  describe("ASTRA-FINAL-01: a stopped SessionWriter never performs the Traveler choice's local Role mutation", () => {
+    /** The Storyteller's connection with ONE chosen read in flight: issued now
+     * (its value fixed by the server now), delivered only when released. */
+    class InFlightReadBackend extends FirebaseRoomBackend {
+      private held: { path: string; gate: Promise<void>; reached: () => void } | null = null;
+      holdNextRead(target: string) {
+        let release!: () => void;
+        let reached!: () => void;
+        const inFlight = new Promise<void>((resolve) => { reached = resolve; });
+        this.held = { path: target, gate: new Promise<void>((resolve) => { release = resolve; }), reached };
+        return { inFlight, release };
+      }
+      async get(target: string): Promise<unknown> {
+        const value = await super.get(target);
+        const held = this.held;
+        if (held && held.path === target) { this.held = null; held.reached(); await held.gate; }
+        return value;
+      }
+    }
+    const request = path("travelerChoices/" + alice);
+    const requestValue = async () => (await ref(st, "travelerChoices/" + alice).once("value")).val();
+    const store = useStorytellerStore;
+    const writers: SessionWriter[] = [];
+
+    /** Writer A (active) over an in-flight-capable connection, and a local
+     * unassigned Traveler P seated through it, with a pending Thief request. */
+    async function thiefPendingThroughWriterA() {
+      store.setState({ game: null, lobby: null, undoStack: [] });
+      const raw = new InFlightReadBackend(db(st) as unknown as Database);
+      await createLobby(raw, st, { codeGenerator: () => code });
+      const sessionId = (await ref(st, "session").once("value")).val().id as string;
+      const writerA = new SessionWriter(raw, code, sessionId);
+      writers.push(writerA);
+      await writerA.start();
+      store.getState().newGame("tb", { plannedPlayerCount: 1 });
+      store.getState().addPlayerToSeat("Alice");
+      for (let i = 0; i < 5; i++) store.getState().addPlayer("Extra " + i);
+      const seat = store.getState().game!.seatOrder[0]!;
+      expect(store.getState().setIsTraveler(seat, true).ok).toBe(true);
+      const participantId = store.getState().game!.players[seat]!.participantId!;
+      await seatPlayer(writerA, code, alice, seat, null, { participantId, name: "Alice" });
+      await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("thief"));
+      return { raw, sessionId, writerA, seat, participantId };
+    }
+    const snapshot = () => ({ game: store.getState().game, localSeq: store.getState().localSeq, undo: store.getState().undoStack.length });
+
+    afterEach(async () => {
+      for (const writer of writers.splice(0).reverse()) await writer.dispose().catch(() => {});
+      store.setState({ game: null, lobby: null, undoStack: [] });
+    });
+
+    test.each([
+      ["the request freshness read", () => request],
+      ["the roster binding read", () => path("roster")],
+      ["the rosterParticipants read", () => path("rosterParticipants/" + alice)],
+    ])("takeover while A is inside %s: A's resumed callback changes nothing locally; B's later Scapegoat generation survives", async (_boundary, target) => {
+      const { raw, sessionId, writerA, seat, participantId } = await thiefPendingThroughWriterA();
+      const observed = observeTravelerChoice(seat, "thief")!;
+      const read = raw.holdNextRead(target());
+      const running = applyTravelerChoice(writerA, code, alice, observed, commitTravelerChoiceLocally);
+      await read.inFlight; // A's operation has started and is inside the awaited read
+
+      writerA.stop(); // A definitively stops...
+      await env.withSecurityRulesDisabled(async (ctx) => { await ctx.database().ref(path("writer/expiresAt")).set(0); }); // ...and its lease lapses
+      const writerB = new SessionWriter(new FirebaseRoomBackend(db(st) as unknown as Database), code, sessionId);
+      writers.push(writerB);
+      await writerB.start(); // B legitimately takes over
+      // B's own fenced flow retires Thief (applied in B's own tab's Current State).
+      const appliedByB: string[] = [];
+      await applyTravelerChoice(writerB, code, alice, observed, (_binding, roleId) => { appliedByB.push(roleId); });
+      expect(appliedByB).toEqual(["thief"]);
+      expect(await requestValue()).toBeNull();
+      await assertSucceeds(ref(alice, "travelerChoices/" + alice).set("scapegoat")); // a later request generation
+
+      const before = snapshot();
+      expect(before.game!.players[seat]).toMatchObject({ participantId, isTraveler: true, actualRole: "" });
+      read.release(); // A's old read resolves
+      await expect(running).rejects.toMatchObject({ kind: "cancelled" });
+
+      expect(writerA.isStopped()).toBe(true);
+      const after = snapshot();
+      expect(after.game).toBe(before.game); // no local Current State change at all
+      expect(after.game!.players[seat]).toMatchObject({ participantId, actualRole: "" });
+      expect(after.localSeq - before.localSeq).toBe(0);
+      expect(after.undo - before.undo).toBe(0);
+      expect(await requestValue()).toBe("scapegoat");
+    });
+
+    test("A: an active writer applies a current request to the matching participant and clears it (one Role change)", async () => {
+      const { writerA, seat, participantId } = await thiefPendingThroughWriterA();
+      const before = snapshot();
+      await applyTravelerChoice(writerA, code, alice, observeTravelerChoice(seat, "thief")!, commitTravelerChoiceLocally);
+      const after = snapshot();
+      expect(after.game!.players[seat]).toMatchObject({ participantId, actualRole: "thief" });
+      expect(after.localSeq - before.localSeq).toBe(1);
+      expect(after.undo - before.undo).toBe(1);
+      expect(await requestValue()).toBeNull();
+    });
+
+    test("B: a writer stopped before the operation starts refuses it -- no local mutation, request untouched", async () => {
+      const { writerA, seat } = await thiefPendingThroughWriterA();
+      const observed = observeTravelerChoice(seat, "thief")!;
+      writerA.stop();
+      const before = snapshot();
+      await expect(applyTravelerChoice(writerA, code, alice, observed, commitTravelerChoiceLocally)).rejects.toMatchObject({ kind: "cancelled" });
+      const after = snapshot();
+      expect(after.game).toBe(before.game);
+      expect(after.localSeq - before.localSeq).toBe(0);
+      expect(after.undo - before.undo).toBe(0);
+      expect(await requestValue()).toBe("thief");
+    });
+
+    test("E: a manual Storyteller assignment made while the operation is in flight wins; the stale request is retired, never applied", async () => {
+      const { raw, writerA, seat, participantId } = await thiefPendingThroughWriterA();
+      const read = raw.holdNextRead(path("rosterParticipants/" + alice));
+      const running = applyTravelerChoice(writerA, code, alice, observeTravelerChoice(seat, "thief")!, commitTravelerChoiceLocally);
+      await read.inFlight;
+      expect(store.getState().assignRole(seat, "gunslinger")).toMatchObject({ ok: true, changed: true });
+      const before = snapshot();
+      read.release();
+      await running;
+      expect(store.getState().game).toBe(before.game);
+      expect(store.getState().game!.players[seat]).toMatchObject({ participantId, actualRole: "gunslinger" });
+      expect(await requestValue()).toBeNull();
+    });
   });
 
   test("a second writer is denied until expiry, then the old token is fenced", async () => {

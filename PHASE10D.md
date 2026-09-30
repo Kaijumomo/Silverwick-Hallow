@@ -321,6 +321,13 @@ Storyteller-private and writer fencing is unchanged.
   exists remotely with the observed character, that the uid's CURRENT roster
   binding is the observed seat, and that the authoritative
   `rosterParticipants/{uid}` record names the observed ParticipantId and seat.
+  After those reads, a final synchronous writer-lifetime gate
+  (ASTRA-FINAL-01) -- with no await between it and the local commit --
+  requires that the SessionWriter executing the operation has not stopped
+  meanwhile (e.g. its lease was lost and another tab took over). A stopped
+  writer's in-flight callback never mutates local Current State (no Role
+  change, localSeq step or Undo entry) and never consumes a later request
+  generation; server writes remain fenced by Firebase as before.
   The local commit (`commitTravelerChoiceLocally`) then requires the local
   occupant to still hold that ParticipantId as an unassigned Traveler and
   submits `changeActualRole` with `expectedActualRole: ""` and

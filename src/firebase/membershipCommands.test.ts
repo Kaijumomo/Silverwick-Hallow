@@ -16,10 +16,30 @@ import {
 } from "./lobby";
 import { acceptLeaveRequest, applyTravelerChoice, commitTravelerChoiceLocally, observeTravelerChoice, rejectLeaveRequest, revokePlayerAndCommit, seatPlayerAndCommit, storytellerOccupancyCompletion } from "./membershipCommands";
 import { usePlayerSync } from "./playerSync";
+import { SessionWriter } from "./writer";
 
 class FailingUpdateBackend extends MemoryRoomBackend {
   async update(_updates: Record<string, Json>): Promise<void> {
     throw new Error("offline");
+  }
+}
+
+/** A read of one chosen path is issued (its value fixed) now but delivered only
+ * when released -- a Firebase read still in flight. */
+class InFlightReadMemoryBackend extends MemoryRoomBackend {
+  private held: { path: string; gate: Promise<void>; reached: () => void } | null = null;
+  holdNextRead(target: string) {
+    let release!: () => void;
+    let reached!: () => void;
+    const inFlight = new Promise<void>((resolve) => { reached = resolve; });
+    this.held = { path: target, gate: new Promise<void>((resolve) => { release = resolve; }), reached };
+    return { inFlight, release };
+  }
+  async get(target: string): Promise<unknown> {
+    const value = await super.get(target);
+    const held = this.held;
+    if (held && held.path === target) { this.held = null; held.reached(); await held.gate; }
+    return value;
   }
 }
 
@@ -487,14 +507,41 @@ describe("membership commands", () => {
   // record names -- and only when the local occupant is that participant.
   // -------------------------------------------------------------------------
   describe("Phase 10D: a Traveler choice never crosses a participation boundary", () => {
-    async function seatedTraveler() {
-      const backend = new MemoryRoomBackend();
+    async function seatedTraveler<B extends MemoryRoomBackend = MemoryRoomBackend>(backend: B = new MemoryRoomBackend() as B) {
       const { uid, playerId } = prepareSeat();
       const participant = await seatBound(backend, uid, playerId);
       seedExtraOrdinary(5);
       expect(useStorytellerStore.getState().setIsTraveler(playerId, true).ok).toBe(true);
       return { backend, uid, playerId, participant };
     }
+
+    // ASTRA-FINAL-01: the production SessionWriter's in-lane backend carries a
+    // synchronous writer-lifetime gate the operation checks after its LAST
+    // await, immediately before the local Role mutation. (The takeover proof
+    // against real rules is in rules.spec.ts.)
+    it("ASTRA-FINAL-01: a SessionWriter stopped while the operation's last read is in flight never mutates locally; an active writer applies", async () => {
+      const backend = new InFlightReadMemoryBackend();
+      const { uid, playerId } = await seatedTraveler(backend);
+      await backend.set(travelerChoicePath("ROOM", uid), "thief");
+      const stopped = new SessionWriter(backend, "ROOM", "session-1");
+      const read = backend.holdNextRead(rosterParticipantPath("ROOM", uid));
+      const running = applyTravelerChoice(stopped, "ROOM", uid, observe(playerId, "thief"), commitLocal);
+      await read.inFlight;
+      stopped.stop();
+      const before = useStorytellerStore.getState();
+      read.release();
+      await expect(running).rejects.toMatchObject({ kind: "cancelled" });
+      const after = useStorytellerStore.getState();
+      expect(after.game).toBe(before.game);
+      expect(after.localSeq).toBe(before.localSeq);
+      expect(after.undoStack).toHaveLength(before.undoStack.length);
+      expect(await backend.get(travelerChoicePath("ROOM", uid))).toBe("thief");
+
+      const active = new SessionWriter(backend, "ROOM", "session-1");
+      await applyTravelerChoice(active, "ROOM", uid, observe(playerId, "thief"), commitLocal);
+      expect(useStorytellerStore.getState().game!.players[playerId]!.actualRole).toBe("thief");
+      expect(await backend.get(travelerChoicePath("ROOM", uid))).toBeUndefined();
+    });
 
     it("revoking the membership clears the uid's pending choice in the same update", async () => {
       const { backend, uid, playerId } = await seatedTraveler();
