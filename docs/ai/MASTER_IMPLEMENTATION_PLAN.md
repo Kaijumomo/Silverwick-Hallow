@@ -9,8 +9,8 @@
 **Phase 10C final reviewed implementation checkpoint:** `ca808fa18e97d758750aad63ceacc2bea3d8f627` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
-**Schema:** v22 (integrated on `main`)\
-**Current phase:** Phase 10E — Alignment Transitions (CLOSED — READY FOR INTEGRATION)
+**Schema:** v23 (integrated on `main`)\
+**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (NEXT: architecture challenge before coding)
 
 ## Product invariants
 
@@ -221,14 +221,16 @@ Frozen Phase 10D architecture:
 Release order: Phase 10D changed `src/firebase/rules.json`; the client ships from `main` automatically, so the Firebase Rules were deployed and verified before `main` moved. The project owner ran `npm run rules:deploy` against the production project's default Realtime Database instance from `22dfd49e7220d642eec353c2ea83fa3a2547ce8b`, then the read-only `npm run rules:verify`, which reported that the deployed rules match `src/firebase/rules.json`. Both steps were owner-run and owner-reported. The client deployment from `main` was not observed by the integration session.
 
 ### 10E — Alignment Transitions
-**Status:** CLOSED — READY FOR INTEGRATION. Final reviewed implementation checkpoint: `f978c366ab18fffb873b7ea150c1b3ec69e8f71b`. Luna targeted remediation verification passed; Astra targeted closure passed with ASTRA-10E-001..005 closed and no remaining findings/evidence gaps. See `PHASE10E.md` §§26–27. Not yet integrated in this closure commit.
+**Status:** CLOSED AND INTEGRATED. Final reviewed implementation checkpoint: `f978c366ab18fffb873b7ea150c1b3ec69e8f71b`. Docs-only closure/integration checkpoint: `6129c7f4585da0e12aeea3a9a5007c88fb508ad7`; `main` fast-forwarded to it with no merge commit, and a docs-only integration record sits directly on top. Luna targeted remediation verification passed; Astra targeted closure passed with ASTRA-10E-001..005 closed and no remaining findings/evidence gaps. See `PHASE10E.md` §§26–28.
 
 Delivered (store/game schema v23): `src/stores/alignmentResolution.ts` (pure `planAlignmentTransaction` / `applyAlignmentPlan`) committed by `resolveAlignments`; `setActualAlignment` / `setTravelerAlignment` are adapters over it; the Phase 10D `setPerception` seam admits `shownAlignment: "undisclosed"`; projection honors Normal / explicit / Not Told for ordinary participants and Travelers; the self wire renders an alignment-less identity; v22 -> v23 normalizes Traveler Good/Evil Shown Alignment to Normal with v23 evidence detected first; `occupySeat` drops stale seat alignment; Storyteller UI `src/features/players/AlignmentControls.tsx`; architecture guard `src/stores/alignmentArchitecture.test.ts`. No Firebase Rules change.
 
 Frozen direction: one participant-bound Actual Alignment transaction seam; gameplay change vs correction; atomic multi-participant changes; Actual Alignment independent of Role; v23 player-facing alignment perception with Normal / explicit Good / explicit Evil / Not Told; Normal ordinary perception derives from Shown Role while Normal Traveler perception follows Actual Alignment; v22 -> v23 normalization clears inert legacy Traveler shown-alignment copies to Normal; strict v23 Alignment History correction/correlation metadata; occupancy-boundary hardening so a new participant never inherits stale seat alignment; Storyteller UI separates Actual Alignment truth from player-facing perception; 10F remains responsible for ability logic.
 
 ### 10F — Guided Ability Resolution / Night Actions
-Structured ability semantics, deterministic interaction resolution, Storyteller prompts for judgment/choice, effect/protection/poisoning interactions, and authoritative mutation through 10A–10E seams.
+**Status:** NEXT — architecture challenge before coding. Start from the exact final integrated `main` after Phase 10E. No 10F implementation is authorized until the architecture challenge is adjudicated into a Sol implementation contract.
+
+Structured ability semantics, deterministic interaction resolution, Storyteller prompts for judgment/choice, effect/protection/poisoning interactions, and authoritative mutation through the frozen 10A–10E seams.
 
 ### 10G — Advanced Storyteller Bookkeeping / Final Visual Integration
 Ability-specific bookkeeping that does not belong in generic Life/Effect/Reminder/Role/Alignment primitives, final visual integration, and Phase 10 closure.
@@ -257,7 +259,8 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 - `dev/phase-10c` was created from the exact integrated `main` carrying the Phase 10B closure.
 - `dev/phase-10d` was created from the exact integrated `main` carrying the Phase 10C closure.
 - `dev/phase-10e` starts from the exact final `main` of the Phase 10D integration: the docs-only integration record directly on top of the Phase 10D closure commit `22dfd49e7220d642eec353c2ea83fa3a2547ce8b`.
+- `dev/phase-10f` starts from the exact final integrated `main` of the Phase 10E integration: the docs-only integration record directly on top of closure checkpoint `6129c7f4585da0e12aeea3a9a5007c88fb508ad7`.
 
 ## Immediate next action
 
-Fast-forward `main` to the Phase 10E docs-only closure checkpoint once created, record integration, then create `dev/phase-10f` from the exact final integrated `main`. Phase 10F begins with architecture challenge before coding.
+Create/use `dev/phase-10f` from the exact final integrated `main`, then perform the **Phase 10F architecture challenge before coding**. Review the frozen 10A–10E seams and determine the smallest safe guided ability-resolution coordinator. Do not begin 10F implementation until Sol freezes the contract.

@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-01\
-**State:** Phase 10D — Role Transitions is **CLOSED** (Sol: **CLOSED — READY FOR INTEGRATION**) and **INTEGRATED** into `main`. Integration was rules-first: the Phase 10D Firebase Rules were deployed to production and verified, then `main` was fast-forwarded to the docs-only closure commit `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the integration checkpoint), and a docs-only integration record directly on top of it is the final `main`. Phase 10E — Alignment Transitions is **CLOSED — READY FOR INTEGRATION** on `dev/phase-10e`. Final reviewed implementation checkpoint: `f978c366ab18fffb873b7ea150c1b3ec69e8f71b`. Luna targeted verification and Astra targeted closure both passed; no remaining findings/evidence gaps.
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Final reviewed implementation checkpoint: `f978c366ab18fffb873b7ea150c1b3ec69e8f71b`; docs-only closure/integration checkpoint: `6129c7f4585da0e12aeea3a9a5007c88fb508ad7`. `main` was fast-forwarded with no merge commit. Phase 10F — Guided Ability Resolution / Night Actions is **NEXT**, on `dev/phase-10f`, which must start from the exact final integrated `main` and begins with architecture challenge before coding.
 
 ## Phase 10D — CLOSED
 
@@ -242,8 +242,8 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 - **10B Effect Lifecycle + visual Effect indicators — CLOSED**
 - **10C Reminder Workflow + visual Reminder tokens — CLOSED**
 - **10D Role Transitions — CLOSED**
-- **10E Alignment Transitions — CLOSED — READY FOR INTEGRATION**
-- 10F Guided Ability Resolution / Night Actions
+- **10E Alignment Transitions — CLOSED AND INTEGRATED**
+- **10F Guided Ability Resolution / Night Actions — NEXT (architecture challenge first)**
 - 10G Advanced Storyteller bookkeeping / final visual integration
 
 ## Standing Phase 10 UX invariant
@@ -354,6 +354,39 @@ Closure evidence:
 
 Schema/store version: **v23**.
 
+## Phase 10E integration — 2026-10-01
+
+Phase 10E is **CLOSED AND INTEGRATED**.
+
+- Final reviewed implementation checkpoint: `f978c366ab18fffb873b7ea150c1b3ec69e8f71b`.
+- Docs-only closure/integration checkpoint: `6129c7f4585da0e12aeea3a9a5007c88fb508ad7`.
+- `main` fast-forwarded to the closure checkpoint with no merge commit.
+- No Firebase Rules change or deployment was required.
+- Luna targeted remediation verification: PASS.
+- Astra targeted closure: PASS — ASTRA-10E-001..005 CLOSED.
+- remaining findings/evidence gaps: none.
+- schema/store: v23.
+
+## Phase 10F starting intent
+
+10F is **not yet designed**. It must begin by challenging how ability resolution composes the already-frozen Life, Effect, Reminder, Role and Alignment planners without creating a second authority path or hard-coding Storyteller judgment.
+
+Starting branch:
+
+`dev/phase-10f`
+
+It must start from the exact final integrated `main` containing this integration record.
+
+Before any 10F coding, read:
+- `docs/ai/MASTER_IMPLEMENTATION_PLAN.md`
+- `docs/ai/handoffs/CURRENT_HANDOFF.md`
+- `PHASE10A.md`
+- `PHASE10B.md`
+- `PHASE10C.md`
+- `PHASE10D.md`
+- `PHASE10E.md`
+- `TERMINOLOGY.md`
+
 ## Immediate next task
 
-Integrate the Phase 10E docs-only closure checkpoint into `main`, record the integration, then create `dev/phase-10f` from the exact final integrated `main`. Phase 10F starts with architecture challenge before coding.
+Perform the **Phase 10F architecture challenge before coding** on `dev/phase-10f`. Do not begin implementation until the challenge is adjudicated into a Sol implementation contract.

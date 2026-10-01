@@ -1,6 +1,6 @@
 # Phase 10E — Alignment Transitions
 
-Status: **CLOSED — READY FOR INTEGRATION.** Store/game schema **v23** (`GAME_SCHEMA_VERSION = 23`, `STORE_VERSION = 23`).  
+Status: **CLOSED AND INTEGRATED.** Store/game schema **v23** (`GAME_SCHEMA_VERSION = 23`, `STORE_VERSION = 23`).  
 Decision date: **2026-10-01**  
 Starting repository checkpoint: **b170d3d448a4b035a273443894611e69cf882c10**  
 Starting branch: **dev/phase-10e**  
@@ -876,3 +876,17 @@ Frozen Phase 10E outcomes:
 Setup ordering remains explicit: fresh Setup Role assignment/refinement may canonicalize Actual Alignment; any special starting Alignment is applied/re-applied after the final relevant Setup Role refinement.
 
 Sol verdict: **CLOSED — READY FOR INTEGRATION**.
+
+
+## 28. Integration record — 2026-10-01
+
+Phase 10E is **CLOSED and INTEGRATED** into `main`.
+
+- Final reviewed implementation checkpoint: `f978c366ab18fffb873b7ea150c1b3ec69e8f71b`.
+- Docs-only closure / integration checkpoint: `6129c7f4585da0e12aeea3a9a5007c88fb508ad7`.
+- `main` was fast-forwarded to the closure checkpoint with no merge commit.
+- A docs-only integration record directly on top is the final integrated `main`.
+- No Firebase Rules change or deployment was required for Phase 10E.
+- Phase 10F must branch from that exact final integrated `main`.
+
+The next phase is **Phase 10F — Guided Ability Resolution / Night Actions**. It begins with architecture challenge before coding.
