@@ -290,7 +290,7 @@ describe("C. local v17 -> v18 migration of every Undo snapshot", () => {
     expect(before.undoStack.some((entry) => categoriesOf(entry).includes("role"))).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 0));
     const current = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as { state: Raw; version: number };
-    expect(current.version).toBe(22);
+    expect(current.version).toBe(23);
 
     const v17Blob = {
       version: 17,
@@ -404,7 +404,7 @@ describe("migrateGameEntry v17 -> v18 step", () => {
     // Phase 10A: the only addition on the way to v19 is the Life Event Window
     // (Phase 10B: and, to v20, only the version marker -- no Effects here).
     const { lifeEventWindow, gameSchemaVersion, ...rest } = entry;
-    expect(gameSchemaVersion).toBe(22);
+    expect(gameSchemaVersion).toBe(23);
     expect(JSON.stringify(rest)).toBe(before);
     expect(lifeEventWindow).toEqual({ coverageFrom: { phase: "day", day: 2 }, events: [] });
     expect(StorytellerGamePersistedSchema.safeParse(entry).success).toBe(true);

@@ -199,3 +199,25 @@ describe("CLOSURE-01 IMM-7: the player's pending Traveler request locks the choi
     expect(chooseTraveler).toHaveBeenCalledTimes(1);
   });
 });
+
+// Phase 10E (10E-AC-15): a valid shown identity whose alignment the
+// Storyteller deliberately did not tell arrives without `shownAlignment`; the
+// player sees that character with no alignment label -- never the waiting
+// state, and never an invented alignment.
+describe("PlayerScreen: identity without an alignment (Phase 10E undisclosed)", () => {
+  it("an ordinary identity with no alignment renders the character and no alignment label", async () => {
+    usePlayerStore.setState({ self: { shownRole: "chef" }, revealed: true });
+    const { container } = render(<PlayerScreen />);
+    await screen.findByText("Request to leave lobby");
+    expect(container.querySelector(".sealed-card-name")).toHaveTextContent("Chef");
+    expect(container.querySelector("[class*='alignment-']")).toBeNull();
+    expect(screen.queryByText(/Still waiting/)).toBeNull();
+  });
+
+  it("a told alignment still renders its label (control)", async () => {
+    usePlayerStore.setState({ self: { shownRole: "chef", shownAlignment: "evil" }, revealed: true });
+    const { container } = render(<PlayerScreen />);
+    await screen.findByText("Request to leave lobby");
+    expect(container.querySelector(".label.alignment-evil")).toHaveTextContent("evil");
+  });
+});

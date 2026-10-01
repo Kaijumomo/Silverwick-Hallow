@@ -7,6 +7,7 @@ import { selectScriptById, useStorytellerStore } from "@/stores/storytellerStore
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { publicTravelerRole, travelerDemonInformation, travelerGuidance, travelerNeedsFirstNight, travelerNeedsArrivalCheck } from "@/stores/travelers";
 import { PlayerInformation } from "./PlayerInformation";
+import { ActualAlignmentControls, PlayerFacingAlignmentControls } from "./AlignmentControls";
 
 export function TravelerArrival({ playerId, compact = false }: { playerId: string; compact?: boolean }) {
   const state = useStorytellerStore();
@@ -48,14 +49,13 @@ export function TravelerArrival({ playerId, compact = false }: { playerId: strin
         </select>
       </label>
       {roleError && <p role="alert" className="field-error">{roleError}</p>}
-      <div className="drawer-row" role="group" aria-label="Actual Traveler alignment (Storyteller private)">
-        <span>Actual alignment</span>
-        {(["good", "evil"] as const).map(alignment => <button key={alignment} className="toggle-pill"
-          aria-pressed={p.actualAlignment === alignment} onClick={() => state.setTravelerAlignment(playerId, alignment)}>
-          {alignment === "good" ? "Good" : "Evil"}
-        </button>)}
-      </div>
-      <p className="behavior-help">Character is public. Actual alignment reaches this Traveler's own private view automatically.</p>
+      {/* Phase 10E: the same Alignment seam (Actual Alignment) and the same
+          perception seam (player-facing alignment) as every participant --
+          no Traveler-only alignment writer. Keyed by the participation
+          instance. */}
+      <ActualAlignmentControls key={`alignment:${p.participantId ?? p.id}`} player={p} />
+      <PlayerFacingAlignmentControls key={`perceived:${p.participantId ?? p.id}`} player={p} />
+      <p className="behavior-help">Character is public. With Normal, their actual alignment reaches their own private view automatically.</p>
       {role && p.shownRole !== role.id && <button className="btn btn-sm"
         onClick={() => runRoles([setPerceptionIntent(p, { shownRole: role.id, shownAlignment: null })])}>Show public character in player view</button>}
     </>}

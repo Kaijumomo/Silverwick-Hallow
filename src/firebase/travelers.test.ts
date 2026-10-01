@@ -69,6 +69,22 @@ describe("Phase 9B membership and private delivery", () => {
     expect(before.isTraveler).toBe(false); expect(before.travelerArrival).toBeUndefined();
     expect(await b.get(`${root}/roster/bob`)).toBe(other);
   });
+  it("Phase 10E (10E-AC-14 / AC-15): an undisclosed perception reaches the player as the character with no alignment -- end to end, never the sentinel, never WAITING", async () => {
+    const { b, id, other, writer } = await setup();
+    store.getState().showAssignedRole(other);
+    store.setState({ game: { ...store.getState().game!, phase: "night", day: 4 } });
+    expect(store.getState().setShownAlignment(other, "undisclosed")).toMatchObject({ ok: true, changed: true });
+    expect(store.getState().setShownAlignment(id, "undisclosed")).toMatchObject({ ok: true, changed: true });
+    await knockOnLobby(b, code, "bob", "Demon"); await seatPlayer(writer, code, "bob", other, null);
+    usePlayerStore.getState().setSession({ code, uid: "bob", requestedName: "Demon" });
+    disposals.push(startPlayerHandshake(b, code, "bob"));
+    await waitFor(() => expect(usePlayerStore.getState().self).toEqual({ shownRole: "imp" }));
+    await waitFor(async () => expect(await b.get(`${root}/player/${other}`)).toEqual({ shownRole: "imp" }));
+    expect(await b.get(`${root}/player/${id}`)).toEqual({ shownRole: "thief" }); // the Traveler too
+    const written = JSON.stringify([await b.get(`${root}/player`), await b.get(`${root}/public`)]);
+    expect(written).not.toContain("undisclosed");
+    expect(written).not.toContain("evil");
+  });
   it("writer takeover (Phase 9C.2A/OPUS-001): newer unacknowledged local Traveler truth survives reconnect over the older acknowledged checkpoint", async () => {
     const { b, id, writer, manager, lobby, review } = await setup();
     await publishPrivatePacket(id, review(), writer);
@@ -79,16 +95,18 @@ describe("Phase 9B membership and private delivery", () => {
     // accepted baseline (nothing else has committed since), so reconnect
     // must KEEP_LOCAL rather than silently reverting to the older
     // acknowledged checkpoint (the OPUS-001 fix).
+    const completedBefore = store.getState().game!.players[id]!.travelerArrival!.demonInfoComplete;
     store.getState().setTravelerAlignment(id, "good");
     const nextWriter = new SessionWriter(b, code, lobby.sessionId);
     const nextManager = await startStorytellerSession(b, lobby, nextWriter);
     disposals.push(async () => { nextManager.stop(); await nextWriter.dispose(); });
     const restored = store.getState().game!.players[id]!;
     expect(restored.actualAlignment).toBe("good");
-    // setTravelerAlignment resets completion and invalidates the previously
-    // published packet — both are genuine consequences of the surviving
-    // local edit, not data loss.
-    expect(restored.travelerArrival!.demonInfoComplete).toBe(false);
+    // The Traveler Actual Alignment change withdraws the previously published
+    // packet -- a genuine consequence of the surviving local edit, not data
+    // loss. Phase 10E (PHASE10E.md 10, 10E-AC-19): it never resets arrival
+    // completion -- information already delivered is not "forgotten".
+    expect(restored.travelerArrival!.demonInfoComplete).toBe(completedBefore);
     expect(restored.publishedPacket).toBeUndefined();
     expect(await b.get(`${root}/public/players/${id}/publicDisplayRole`)).toBe("thief");
   });

@@ -241,7 +241,7 @@ describe("Phase 9R.2 migration: remote-checkpoint version detection", () => {
     // Phase 10B: migration now reaches v20, whose explicit gameSchemaVersion
     // is current-version evidence; without the v19/v20 additions the same
     // game is v17-evidenced.
-    expect(detectLegacyGameVersion(persisted(current))).toBe(22);
+    expect(detectLegacyGameVersion(persisted(current))).toBe(23);
     const { lifeEventWindow: _window, ...v17 } = asV19(current);
     expect(detectLegacyGameVersion(persisted(v17))).toBe(17);
     // Any single marker suffices.

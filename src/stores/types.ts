@@ -38,6 +38,12 @@ export type ParticipantRef =
   | { kind: "legacy"; playerId: PlayerId };
 export type RoleId = string;
 export type Alignment = "good" | "evil";
+/** Phase 10E (v23): STORED player-facing alignment perception -- never an
+ * Actual Alignment. `undisclosed` means "show the character, omit the
+ * alignment"; it is perception only and is never sent to a player (the self
+ * projection expresses it by omitting `shownAlignment`). See
+ * STPlayerRecord.shownAlignment for the Normal (`null`) semantics. */
+export type ShownAlignment = Alignment | "undisclosed";
 export type RoleType =
   | "townsfolk"
   | "outsider"
@@ -560,9 +566,9 @@ export type HistoryRecord = HistoryRecordCommon & {
   change?: HistoryChange;
   lifeEvent?: HistoryLifeEvent;
   /** A Storyteller correction of wrongly recorded Current State, as opposed
-   * to a gameplay mutation. Valid for "life" (Phase 10A), from v20 "effect"
-   * and from v21 "reminder" records. Old History is never rewritten by a
-   * correction. */
+   * to a gameplay mutation. Valid for "life" (Phase 10A), from v20 "effect",
+   * from v21 "reminder", from v22 "role" and from v23 "alignment" records.
+   * Old History is never rewritten by a correction. */
   correction?: true;
   /** Phase 10B (v20), "effect" records only: which Effect lifecycle
    * operation this record explains -- the one thing the generic `change`
@@ -570,7 +576,8 @@ export type HistoryRecord = HistoryRecordCommon & {
    * remove vs expire are both `removed`). `expire` is the deterministic
    * phase-expiry provenance. */
   effectOperation?: EffectHistoryOperation;
-  /** Phase 10B (v20) "effect" and Phase 10C (v21) "reminder" records only:
+  /** Phase 10B (v20) "effect", Phase 10C (v21) "reminder", Phase 10D (v22)
+   * "role" and Phase 10E (v23) "alignment" records only:
    * correlation of the records one transaction produced (e.g. a future
    * ability resolution spanning several domains). Correlation METADATA only
    * -- not an idempotency key, not authority, not assumed globally unique. */
@@ -693,8 +700,14 @@ export type STPlayerRecord = {
   actualRole: RoleId;
   /** Explicit intended identity for the next sync. Null means unrevealed. */
   shownRole: RoleId | null;
-  /** Null derives from shownRole only; never from actual identity. */
-  shownAlignment: Alignment | null;
+  /** Player-facing alignment perception (Phase 10E, v23). Written only by
+   * the Phase 10D perception seam (setPerception).
+   *  - null ("Normal"): an ordinary participant's alignment derives from the
+   *    valid Shown Role only -- never from the Actual Alignment; a Traveler's
+   *    follows their current Actual Alignment (omitted while unresolved).
+   *  - "good" / "evil": explicitly shown, whatever the Actual Alignment.
+   *  - "undisclosed": the character is shown, the alignment omitted. */
+  shownAlignment: ShownAlignment | null;
   behaviorMode: BehaviorMode;
   publicDisplayRole: RoleId | null;
   alive: boolean;
@@ -714,7 +727,10 @@ export type STPlayerRecord = {
    * a Traveler, and never overwritten by a later gameplay character change
    * (see freshAssignment vs assignRole in storytellerStore.ts). Use
    * actualAlignmentOf() (src/stores/effects.ts) for the explicit
-   * Good/Evil/unresolved tri-state view. */
+   * Good/Evil/unresolved tri-state view. Phase 10E: every live/general change
+   * goes through the Alignment seam (alignmentResolution.ts /
+   * resolveAlignments); a newly occupied participation instance always
+   * starts unresolved (occupySeat). */
   actualAlignment?: Alignment;
   /** Structured active effects (Drunk, Poisoned, Protected, and any future
    * ability-created effect). Storyteller-private -- never projected to
@@ -770,8 +786,10 @@ export type StorytellerLobbyRecord = {
    * version is 22; a snapshot marked 20 receives v20 -> v21 -> v22, one marked
    * 21 receives v21 -> v22 (a stamp), any other marker receives no migration
    * at all -- malformed current-version data (including a marker older than
-   * the evidence it carries) fails validation instead of being "repaired". */
-  gameSchemaVersion: 22;
+   * the evidence it carries) fails validation instead of being "repaired".
+   * Phase 10E: the current version is 23; marker 22 receives v22 -> v23 (a
+   * Traveler's inert explicit Shown Alignment is normalized to Normal). */
+  gameSchemaVersion: 23;
   code: string;
   storytellerUid: string;
   scriptId: string;
@@ -837,7 +855,10 @@ export type StorytellerLobbyRecord = {
  * identity is deliberately never exposed here (Section 20). */
 export type PlayerSelfRecord = {
   shownRole: RoleId;
-  /** Travelers have no default alignment. Only an explicit shown choice is sent. */
+  /** The player-facing alignment, when the player is told one. Omitted when
+   * the alignment is deliberately not told (stored `undisclosed`) or a
+   * Traveler's Actual Alignment is still unresolved -- the identity is still
+   * valid. Never the literal `undisclosed` sentinel. */
   shownAlignment?: Alignment;
   demon?: { id: PlayerId; name: string; seat: number };
   bluffs?: RoleId[];

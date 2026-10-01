@@ -58,17 +58,24 @@ export function projectIdentity(
 ): PlayerSelfRecord | null {
   const state = identityState(p, registry);
   if (state.kind === "none" || state.kind === "unsafe") return null;
+  // Phase 10E (v23): player-facing alignment perception. `undisclosed` shows
+  // the (valid) character and OMITS the alignment -- for an ordinary
+  // participant and a Traveler alike. The sentinel itself never reaches the
+  // player, and it never makes an unsafe Shown Role projectable (handled
+  // above, fail-closed).
+  if (p.shownAlignment === "undisclosed") return { shownRole: state.shownRole };
   if (state.kind === "traveler") {
-    // Phase 9 Setup finalization (FINAL SETUP INTEGRATION REVISION, Section
-    // 7): normal Traveler alignment delivery is automatic and always
-    // reflects the current actual alignment -- never a shownAlignment
-    // mirror, which could otherwise go stale after a later actual-alignment
-    // change and silently override it. A future deception mechanic that
-    // needs a false perceived alignment belongs in its own explicit
-    // mechanic, not this fallback.
-    const alignment = p.actualAlignment;
+    // Normal (null): a Traveler is automatically told their CURRENT Actual
+    // Alignment (omitted while unresolved). An explicit good/evil -- a
+    // deliberate perception choice made through the perception seam -- is
+    // honored instead. (Phase 10D's "Traveler shownAlignment is inert" is
+    // amended by Phase 10E; v22 leftovers are normalized to null by the
+    // v22 -> v23 migration.)
+    const alignment = p.shownAlignment ?? p.actualAlignment;
     return alignment ? { shownRole: state.shownRole, shownAlignment: alignment } : { shownRole: state.shownRole };
   }
+  // Ordinary: explicit good/evil, else derived from the Shown Role. Never the
+  // Actual Alignment.
   return { shownRole: state.shownRole, shownAlignment: p.shownAlignment ?? state.derived };
 }
 

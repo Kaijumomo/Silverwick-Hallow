@@ -206,7 +206,7 @@ describe("ASTRA-10D-C01: an exile-death survives every Role transition", () => {
     const { tess } = exiledTraveler();
     expect(state().resolveRoles({ intents: toOrdinary(player(tess), "chef") })).toEqual({ ok: true, changed: true });
     const current = JSON.parse(JSON.stringify(game())) as StorytellerLobbyRecord;
-    expect(current.gameSchemaVersion).toBe(22);
+    expect(current.gameSchemaVersion).toBe(23);
     expect(StorytellerGamePersistedSchema.parse(structuredClone(current))).toEqual(current);
     // The persisted-store migration at the current marker is a no-op.
     const migrated = migrateStoreState({ game: structuredClone(current), undoStack: [structuredClone(current)] }, 22) as { game: StorytellerLobbyRecord };

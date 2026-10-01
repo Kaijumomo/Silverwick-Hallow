@@ -220,7 +220,7 @@ describe("Phase 9B persistence", () => {
     const expected = JSON.parse(JSON.stringify(p()));
     expect(expected).toMatchObject({ alive: false, exiled: true });
     const saved = localStorage.getItem("new-blood-st")!;
-    expect(JSON.parse(saved).version).toBe(22);
+    expect(JSON.parse(saved).version).toBe(23);
     store.setState({ game: null }); localStorage.setItem("new-blood-st", saved);
     await store.persist.rehydrate(); expect(p()).toEqual(expected);
   });

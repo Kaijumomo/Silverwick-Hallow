@@ -28,10 +28,10 @@ it("manual actual assignment waits for the explicit show action", () => {
   expect(current().actualRole).toBe("chef");
   expect(current().shownRole).toBeNull();
   expect(screen.getByText("Role not revealed yet")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "auto (—)" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Normal (—)" })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Show assigned role" }));
   expect(current().shownRole).toBe("chef");
-  expect(screen.getByRole("button", { name: "auto (good)" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Normal (Good)" })).toBeInTheDocument();
 });
 
 it("Drunk has explicit shown-role controls even before a behavior mode is selected", () => {

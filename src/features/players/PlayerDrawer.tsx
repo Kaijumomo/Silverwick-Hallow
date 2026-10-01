@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
-import { deriveAlignment } from "@/data/roleRegistry";
 import { TRAVELERS } from "@/data/travelers";
 import { isInitialRevealComplete, needsShownIdentity, shownRoleFilter } from "@/stores/identity";
 import { canRefineSetup } from "@/features/setup/setupRefinement";
@@ -9,6 +8,7 @@ import { changeRoleIntent, correctRoleIntent, ordinaryRoleChoices, setPerception
 import type { RoleIntent } from "@/stores/roleResolution";
 import { identityNeedsCheck } from "@/stores/projections";
 import { TravelerArrival } from "./TravelerArrival";
+import { ActualAlignmentControls, PlayerFacingAlignmentControls } from "./AlignmentControls";
 import { publicTravelerRole } from "@/stores/travelers";
 import { getPrivateInfoApplicability } from "@/stores/privatePackets";
 import { roleAuthority } from "@/data/canonical";
@@ -22,7 +22,6 @@ import { lifeStatusOf } from "@/stores/lifeState";
 import { LifeControls } from "@/features/life/LifeControls";
 import { LifeStateText } from "@/features/life/LifeMarks";
 import type {
-  Alignment,
   BehaviorMode,
   RoleDef,
   RoleType,
@@ -292,13 +291,6 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
     }
   };
 
-  const effectiveAlignment: Alignment | "—" = (() => {
-    if (!player.shownRole) return "—";
-    if (player.shownAlignment) return player.shownAlignment;
-    const ref = shownRoleDef;
-    return ref ? deriveAlignment(ref) : "—";
-  })();
-
   // Role pool for the main "Actual role" picker: only what the Role seam will
   // accept -- an ordinary participant's Townsfolk/Outsider/Minion/Demon of this
   // script, or a Traveler's canonical characters. Never Fabled or Loric.
@@ -514,6 +506,18 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
             {roleError && <p role="alert" className="field-error">{roleError}</p>}
           </section>}
 
+          {/* Phase 10E: Actual Alignment truth through the Alignment seam --
+              separate from the player-facing alignment (perception, below).
+              A Traveler's lives in their arrival section. Keyed by the
+              participation instance so no cue/disclosure state carries over
+              to a different occupant of this seat. */}
+          {!player.isTraveler && (
+            <section className="drawer-section">
+              <h3 className="drawer-section-title">Alignment (ST private)</h3>
+              <ActualAlignmentControls key={`alignment:${player.participantId ?? player.id}`} player={player} />
+            </section>
+          )}
+
           {displayRole && !player.isTraveler && (
             <section className="drawer-section">
               <h3 className="drawer-section-title">
@@ -578,36 +582,10 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
               />
               <p className="behavior-help">Choosing a shown role sends that identity when connected. Clearing it returns the player to waiting. Previously delivered information cannot be unseen.</p>
 
-              <div className="behavior-row">
-                <label>Shown alignment:</label>
-                <button
-                  className="toggle-pill"
-                  aria-pressed={player.shownAlignment === null}
-                  onClick={() => {
-                    runRoles([setPerceptionIntent(player, { shownRole: player.shownRole, shownAlignment: null })], setPerceptionError);
-                  }}
-                >
-                  auto ({effectiveAlignment})
-                </button>
-                <button
-                  className="toggle-pill"
-                  aria-pressed={player.shownAlignment === "good"}
-                  onClick={() => {
-                    runRoles([setPerceptionIntent(player, { shownRole: player.shownRole, shownAlignment: "good" })], setPerceptionError);
-                  }}
-                >
-                  good
-                </button>
-                <button
-                  className="toggle-pill"
-                  aria-pressed={player.shownAlignment === "evil"}
-                  onClick={() => {
-                    runRoles([setPerceptionIntent(player, { shownRole: player.shownRole, shownAlignment: "evil" })], setPerceptionError);
-                  }}
-                >
-                  evil
-                </button>
-              </div>
+              {/* Phase 10E: player-facing alignment through the perception
+                  seam -- Normal (derived from the shown character) by
+                  default; explicit overrides progressively disclosed. */}
+              <PlayerFacingAlignmentControls key={`perceived:${player.participantId ?? player.id}`} player={player} />
               {perceptionNeedsCheck && (
                 <p role="alert" className="field-error">
                   <strong>Needs check:</strong> the shown character cannot be sent to this player. Choose what they are shown.

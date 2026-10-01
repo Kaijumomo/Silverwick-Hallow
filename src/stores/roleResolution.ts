@@ -9,7 +9,6 @@ import { pruneInapplicablePrivateInfo } from "./privatePackets";
 import { BehaviorModeSchema, MutationContextInputSchema, ProvenanceSchema } from "./schemas";
 import { newTravelerArrival } from "./travelers";
 import type {
-  Alignment,
   BehaviorMode,
   HistoryRecord,
   ParticipantId,
@@ -17,6 +16,7 @@ import type {
   RoleDef,
   RoleId,
   Script,
+  ShownAlignment,
   STPlayerRecord,
   StorytellerLobbyRecord,
 } from "./types";
@@ -149,19 +149,23 @@ export type TravelerArrivalPolicy = "preserve" | "restart";
  * Explicitly change what character / alignment / behavior this participant is
  * being shown. Neutral with respect to gameplay-vs-correction. The primitive
  * never infers an ordinary player's Shown Role from the Actual Role.
- * `shownAlignment: null` derives from the SHOWN Role only; an explicit
- * good/evil is shown explicitly. Every field being overwritten carries its
- * expected current value (`expectedBehaviorMode` exactly when `behaviorMode` is
- * supplied).
+ *
+ * Phase 10E (v23) player-facing alignment: `shownAlignment: null` is Normal
+ * (an ordinary participant's alignment derives from the SHOWN Role only; a
+ * Traveler's follows their Actual Alignment); explicit `good` / `evil` are
+ * shown explicitly; `undisclosed` shows the character without an alignment.
+ * This is the ONE perception writer -- the Alignment seam never writes it.
+ * Every field being overwritten carries its expected current value
+ * (`expectedBehaviorMode` exactly when `behaviorMode` is supplied).
  */
 export type SetPerceptionIntent = {
   kind: "setPerception";
   target: RoleParticipantBinding;
   expectedShownRole: RoleId | null;
-  expectedShownAlignment: Alignment | null;
+  expectedShownAlignment: ShownAlignment | null;
   expectedBehaviorMode?: BehaviorMode;
   shownRole: RoleId | null;
-  shownAlignment: Alignment | null;
+  shownAlignment: ShownAlignment | null;
   behaviorMode?: BehaviorMode;
 };
 
@@ -331,7 +335,8 @@ const INTENT_KEYS: Record<RoleIntent["kind"], Set<string>> = {
 };
 const isActualKind = (kind: RoleIntent["kind"]): boolean => kind === "changeActualRole" || kind === "correctActualRole";
 
-const isAlignment = (value: unknown): value is Alignment => value === "good" || value === "evil";
+const isShownAlignment = (value: unknown): value is ShownAlignment =>
+  value === "good" || value === "evil" || value === "undisclosed";
 const isRoleIdString = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0 && value.length <= MAX_ROLE_ID_LENGTH;
 const isBehaviorMode = (value: unknown): value is BehaviorMode => BehaviorModeSchema.safeParse(value).success;
@@ -550,9 +555,9 @@ export function planRoleTransaction(
     // --- setPerception ----------------------------------------------------
     const p = intent;
     if (p.expectedShownRole !== null && !isRoleIdString(p.expectedShownRole)) return at(fail("invalid", "The observed Shown Role must be given."));
-    if (p.expectedShownAlignment !== null && !isAlignment(p.expectedShownAlignment)) return at(fail("invalid", "The observed Shown Alignment must be given."));
+    if (p.expectedShownAlignment !== null && !isShownAlignment(p.expectedShownAlignment)) return at(fail("invalid", "The observed Shown Alignment must be given."));
     if (p.shownRole !== null && !isRoleIdString(p.shownRole)) return at(fail("invalid", "Choose what to show."));
-    if (p.shownAlignment !== null && !isAlignment(p.shownAlignment)) return at(fail("invalid", "Shown Alignment is good, evil or derived (null)."));
+    if (p.shownAlignment !== null && !isShownAlignment(p.shownAlignment)) return at(fail("invalid", "Shown Alignment is Normal (null), good, evil or undisclosed."));
     const changingMode = p.behaviorMode !== undefined;
     if (changingMode && !isBehaviorMode(p.behaviorMode)) return at(fail("invalid", "Invalid behavior mode."));
     if (changingMode !== (p.expectedBehaviorMode !== undefined)) {
@@ -565,9 +570,10 @@ export function planRoleTransaction(
       return at(fail("stale", "This player's shown identity changed -- nothing was changed. Review and try again."));
     }
     // Ordinary perception is explicit; a Traveler's public character is not a
-    // choice (Actual / Shown / public character stay together). A Traveler's
-    // alignment perception fields are stored as given -- a Traveler's own
-    // projection always reflects their Actual Alignment (see projectIdentity).
+    // choice (Actual / Shown / public character stay together). Phase 10E: a
+    // Traveler's player-facing alignment is honored by their own projection --
+    // Normal (null) follows their Actual Alignment, an explicit good / evil /
+    // undisclosed overrides it (see projectIdentity).
     if (w.isTraveler) {
       if (p.shownRole !== (w.actualRole || null)) {
         return at(fail("perception", "A Traveler's character is public and is shown as themself."));
@@ -708,7 +714,7 @@ export function correctRoleIntent(
  * is included only when given. */
 export function setPerceptionIntent(
   player: STPlayerRecord,
-  perception: { shownRole: RoleId | null; shownAlignment: Alignment | null; behaviorMode?: BehaviorMode },
+  perception: { shownRole: RoleId | null; shownAlignment: ShownAlignment | null; behaviorMode?: BehaviorMode },
 ): SetPerceptionIntent {
   return {
     kind: "setPerception", target: bindingOf(player),
@@ -716,4 +722,11 @@ export function setPerceptionIntent(
     ...(perception.behaviorMode !== undefined ? { expectedBehaviorMode: player.behaviorMode, behaviorMode: perception.behaviorMode } : {}),
     shownRole: perception.shownRole, shownAlignment: perception.shownAlignment,
   };
+}
+
+/** Phase 10E: a player-facing alignment change of `player` (as rendered) --
+ * Normal (null), Shown Good, Shown Evil or Not told (undisclosed) -- keeping
+ * the rendered Shown Role. One setPerception bundle. */
+export function shownAlignmentIntent(player: STPlayerRecord, shownAlignment: ShownAlignment | null): SetPerceptionIntent {
+  return setPerceptionIntent(player, { shownRole: player.shownRole, shownAlignment });
 }

@@ -128,7 +128,9 @@ describe("routine operation goes through the Role seam", () => {
     goLive();
     const id = holder("chef");
     render(<SeatDrawer seat={id} />);
-    fireEvent.click(behaviorSection().getByRole("button", { name: "evil" }));
+    // Phase 10E: explicit player-facing overrides are progressively disclosed
+    // (open here because the dealt perception is already explicit).
+    fireEvent.click(behaviorSection().getByRole("button", { name: "Shown Evil" }));
     expect(player(id).shownAlignment).toBe("evil");
     fireEvent.change(behaviorSection().getByLabelText("Mode:"), { target: { value: "custom" } });
     expect(player(id).behaviorMode).toBe("custom");
@@ -136,7 +138,7 @@ describe("routine operation goes through the Role seam", () => {
     expect(player(id)).toMatchObject({ shownRole: null, shownAlignment: null });
     // No alignment without a character: refused, explained, nothing changed.
     const before = player(id);
-    fireEvent.click(behaviorSection().getByRole("button", { name: "good" }));
+    fireEvent.click(behaviorSection().getByRole("button", { name: "Shown Good" }));
     expect(player(id)).toBe(before);
     expect(screen.getByRole("alert")).toHaveTextContent(/choose a character to show/i);
   });
@@ -367,7 +369,7 @@ describe("SOL-10D-C03: the Drawer resolves a legacy duplicate RoleId to its firs
     expect(screen.queryByText("Evil Chef")).toBeNull();
     expect(actualSection().getAllByRole("button", { name: "Chef townsfolk" })).toHaveLength(1);
     expect(behaviorSection().getAllByRole("button", { name: "Chef townsfolk" })).toHaveLength(1);
-    expect(behaviorSection().getByRole("button", { name: "auto (good)" })).toBeInTheDocument();
+    expect(behaviorSection().getByRole("button", { name: "Normal (Good)" })).toBeInTheDocument();
   });
 });
 

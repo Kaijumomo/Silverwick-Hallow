@@ -517,7 +517,10 @@ without writing a field. `src/stores/roleArchitecture.test.ts` guards this.
    `changeActualRole` (which rejects the policy) are unaffected.
 3. A Traveler's alignment perception fields are stored as given (their own
    projection always reflects the Actual Alignment); their Shown Role must be
-   their own character.
+   their own character. **Amended by Phase 10E (store v23, `PHASE10E.md`
+   3.2):** a Traveler's `shownAlignment` is no longer inert -- `null` (Normal)
+   follows the Actual Alignment, an explicit good/evil/undisclosed is honored;
+   v22 leftovers are normalized to `null` by the v22 -> v23 migration.
 4. The compatibility wrappers never flip ordinary-vs-Traveler status; the seam
    does.
 

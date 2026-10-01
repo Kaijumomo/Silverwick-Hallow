@@ -103,7 +103,7 @@ describe("Section 6: the exact v17 regression -- a retired sourcePlayer inside a
     expect(StorytellerGamePersistedSchema.safeParse(base).success).toBe(true); // control: otherwise valid
     // This is already-current data (Phase 10B: its explicit gameSchemaVersion
     // is v20 evidence): remote recovery would never migrate it.
-    expect(detectLegacyGameVersion(base as unknown as Record<string, unknown>)).toBe(22);
+    expect(detectLegacyGameVersion(base as unknown as Record<string, unknown>)).toBe(23);
     const index = indexOf(base, category, kind);
     const bad = withItemField(base, index, "sourcePlayer", "a");
 
@@ -240,7 +240,7 @@ describe("Section 12: an all-empty, markerless v17 game is harmlessly detected a
     // Every identity/category step is a no-op; only the v19 window (and the
     // v20 marker -- there are no Effects) is added.
     const { lifeEventWindow, gameSchemaVersion, ...rest } = entry;
-    expect(gameSchemaVersion).toBe(22);
+    expect(gameSchemaVersion).toBe(23);
     expect(lifeEventWindow).toEqual({ coverageFrom: { phase: "night", day: 1 }, events: [] });
     expect(JSON.stringify(rest)).toBe(before);
     expect(rest).toEqual(beforeDeep);

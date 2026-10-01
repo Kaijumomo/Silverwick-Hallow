@@ -71,10 +71,49 @@ export function withV22Roles<T>(entry: T): T {
   return copy as unknown as T;
 }
 
+/**
+ * Phase 10E test helper: exactly what the v22 -> v23 migration step does to
+ * one v22 game-shaped entry (see migrateEntryV22ToV23 in
+ * src/stores/gameMigration.ts): every TRAVELER carrying `shownAlignment` good
+ * or evil is normalized to `null`; nothing else changes (ordinary
+ * participants, Actual Alignment, History untouched); stamped
+ * `gameSchemaVersion: 23`. Returns a deep copy.
+ */
+export function withV23Alignment<T>(entry: T): T {
+  const copy = structuredClone(entry) as unknown as Record<string, unknown>;
+  const players = copy.players as Record<string, { isTraveler?: boolean; shownAlignment?: unknown }> | undefined;
+  for (const player of Object.values(players ?? {})) {
+    if (player.isTraveler === true && (player.shownAlignment === "good" || player.shownAlignment === "evil")) player.shownAlignment = null;
+  }
+  copy.gameSchemaVersion = 23;
+  return copy as unknown as T;
+}
+
 /** A legacy (pre-v20) entry's expected CURRENT result: the v19 -> v20 step,
- * then v20 -> v21, then v21 -> v22. */
+ * then v20 -> v21, v21 -> v22 and v22 -> v23. */
 export function withCurrentMigration<T>(entry: T): T {
-  return withV22Roles(withV21Reminders(withV20Lifecycle(entry)));
+  return withV23Alignment(withV22Roles(withV21Reminders(withV20Lifecycle(entry))));
+}
+
+/**
+ * Phase 10E: the inverse used to build a v22 fixture from a current game --
+ * what a v22 writer stored: no Alignment correction and no correlated
+ * Alignment record (v23-only History metadata), no `undisclosed` perception
+ * (stored as Normal instead), marker 22.
+ */
+export function asV22<T>(entry: T): T {
+  const copy = structuredClone(entry) as unknown as Record<string, unknown>;
+  const history = copy.history as Record<string, unknown>[] | undefined;
+  if (history) {
+    copy.history = history.filter((record) =>
+      !(record.category === "alignment" && (record.correction !== undefined || record.resolutionId !== undefined)));
+  }
+  const players = copy.players as Record<string, { shownAlignment?: unknown }> | undefined;
+  for (const player of Object.values(players ?? {})) {
+    if (player.shownAlignment === "undisclosed") player.shownAlignment = null;
+  }
+  copy.gameSchemaVersion = 22;
+  return copy as unknown as T;
 }
 
 /**
@@ -84,7 +123,7 @@ export function withCurrentMigration<T>(entry: T): T {
  * indistinguishable from v21 by design (v22 is a stamp).
  */
 export function asV21<T>(entry: T): T {
-  const copy = structuredClone(entry) as unknown as Record<string, unknown>;
+  const copy = structuredClone(asV22(entry)) as unknown as Record<string, unknown>;
   const history = copy.history as Record<string, unknown>[] | undefined;
   if (history) {
     copy.history = history.filter((record) =>

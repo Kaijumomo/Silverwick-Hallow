@@ -15,6 +15,7 @@ import { requireActiveSession } from "./lifecycle";
 import { SessionWriter } from "./writer";
 import { startStorytellerSession, useSessionRuntime } from "./storytellerSync";
 import { SnapshotValidationError } from "./snapshots";
+import { withV23Alignment } from "@/test/v20Migration";
 
 const code = "RMDR2345";
 const root = `lobbies/${code}`;
@@ -99,10 +100,11 @@ function expectedV21(entry: Raw): Raw {
   copy.gameSchemaVersion = 21;
   return copy;
 }
-/** Phase 10D: what a marker-20 game is migrated to TODAY -- the v21 result
- * (above) stamped v22 (v21 -> v22 changes nothing else). */
+/** Phase 10D/10E: what a marker-20 game is migrated to TODAY -- the v21
+ * result (above) stamped v22 (v21 -> v22 changes nothing else), then v22 ->
+ * v23 (a Traveler's explicit Shown Alignment, if any, normalized to Normal). */
 function expectedCurrent(entry: Raw): Raw {
-  return { ...expectedV21(entry), gameSchemaVersion: 22 };
+  return withV23Alignment({ ...expectedV21(entry), gameSchemaVersion: 22 });
 }
 const remindersOf = (g: Raw, id: string) => (g.players as Record<string, { reminders: Raw[] }>)[id]!.reminders;
 
@@ -166,23 +168,23 @@ describe("Phase 10C migration: v20 -> v21", () => {
     expect(StorytellerGamePersistedSchema.safeParse(setup).success).toBe(true);
   });
 
-  it("a genuine v20 localStorage blob rehydrates as current (v22) with a legacy finite Reminder surfaced as Needs check", async () => {
+  it("a genuine v20 localStorage blob rehydrates as current (v23) with a legacy finite Reminder surfaced as Needs check", async () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 20, state: { game: v20Game(), undoStack: [v20Game("night", 2)] } }));
     await useStorytellerStore.persist.rehydrate();
     expect(takeMigrationResetFlag()).toBe(false);
     const game = useStorytellerStore.getState().game!;
-    expect(game.gameSchemaVersion).toBe(22);
+    expect(game.gameSchemaVersion).toBe(23);
     expect(game.players.b!.reminders[1]!.cleanupCue).toEqual({ kind: "unresolved" });
     expect(game.players.e!.reminders).toEqual([]);
-    expect(useStorytellerStore.getState().undoStack[0]!.gameSchemaVersion).toBe(22);
+    expect(useStorytellerStore.getState().undoStack[0]!.gameSchemaVersion).toBe(23);
   });
 
-  it("a marker-less genuine legacy (v19) entry runs the whole chain through v22", () => {
+  it("a marker-less genuine legacy (v19) entry runs the whole chain through v23", () => {
     const v19 = v20Game();
     delete v19.gameSchemaVersion;
     const result = migrateStoreState({ game: v19, undoStack: [] }, 19) as { game: Raw };
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(result.game.gameSchemaVersion).toBe(22);
+    expect(result.game.gameSchemaVersion).toBe(23);
     expect(remindersOf(result.game, "b")[1]!.cleanupCue).toEqual({ kind: "unresolved" });
     expect(remindersOf(result.game, "e")).toEqual([]);
   });
@@ -223,28 +225,28 @@ describe("Phase 10C: malformed legacy data is never normalized", () => {
 describe("Phase 10C/10D: explicit version evidence routing", () => {
   const current = () => expectedCurrent(v20Game());
 
-  it("marker 21: only the v21 -> v22 STAMP -- Reminders and everything else are untouched", () => {
+  it("marker 21: only the v21 -> v22 STAMP then v22 -> v23 -- Reminders and everything else are untouched", () => {
     const game = expectedV21(v20Game());
     expect(detectLegacyGameVersion(game)).toBe(21);
     const copy = structuredClone(game);
     migrateGameEntry(copy, 13, { kind: "canonical-only" });
-    expect(copy).toEqual({ ...game, gameSchemaVersion: 22 });
+    expect(copy).toEqual(withV23Alignment({ ...game, gameSchemaVersion: 22 }));
   });
 
-  it("marker 22: no migration at all -- detected as current, same object content", () => {
+  it("marker 23: no migration at all -- detected as current, same object content", () => {
     const game = current();
-    expect(detectLegacyGameVersion(game)).toBe(22);
+    expect(detectLegacyGameVersion(game)).toBe(23);
     const copy = structuredClone(game);
     migrateGameEntry(copy, 13, { kind: "canonical-only" });
     expect(copy).toEqual(game);
   });
 
   it.each([
-    ["23", 23], ["a string 20", "20"], ["null", null], ["an object", { v: 20 }],
+    ["24", 24], ["a string 20", "20"], ["null", null], ["an object", { v: 20 }],
   ])("a malformed/unsupported marker (%s) is never reinterpreted as legacy: untouched and rejected", (_label, marker) => {
     const game = v20Game();
     game.gameSchemaVersion = marker;
-    expect(detectLegacyGameVersion(game)).toBe(22);
+    expect(detectLegacyGameVersion(game)).toBe(23);
     const copy = structuredClone(game);
     migrateGameEntry(copy, 13, { kind: "canonical-only" });
     expect(copy).toEqual(game);
@@ -279,7 +281,7 @@ describe("Phase 10C/10D: explicit version evidence routing", () => {
     const game = v20Game();
     delete game.gameSchemaVersion;
     inject(game);
-    expect(detectLegacyGameVersion(game)).toBe(22);
+    expect(detectLegacyGameVersion(game)).toBe(23);
     const copy = structuredClone(game);
     migrateGameEntry(copy, 19, { kind: "canonical-only" });
     expect("gameSchemaVersion" in copy).toBe(false);
@@ -352,7 +354,7 @@ async function recoverFrom(game: Raw) {
 }
 
 describe("Phase 10C: remote checkpoint recovery", () => {
-  it("a marker-20 checkpoint migrates first, then validates, then is adopted as v22 -- two independent recoveries agree", async () => {
+  it("a marker-20 checkpoint migrates first, then validates, then is adopted as v23 -- two independent recoveries agree", async () => {
     const first = await recoverFrom(v20Game());
     const recovered = await first.start();
     disposals.push(() => recovered.stop());
@@ -401,7 +403,7 @@ describe("LUNA-10C-001: valid empty-seat orphans are dropped; malformed Reminder
     expect(seat.reminders).toEqual([]);
     expect(seat.isEmpty).toBe(true);
     expect("participantId" in seat).toBe(false);
-    expect(entry.gameSchemaVersion).toBe(22);
+    expect(entry.gameSchemaVersion).toBe(23);
     expect(entry.history).toEqual(original.history); // no migration History
     expect(StorytellerGamePersistedSchema.safeParse(entry).success).toBe(true);
   };
@@ -505,6 +507,6 @@ describe("LUNA-10C-001: valid empty-seat orphans are dropped; malformed Reminder
     disposals.push(() => recovered.stop());
     expect(recovered.outcome).toBe("live");
     expect(useStorytellerStore.getState().game!.players.e!.reminders).toEqual([]);
-    expect(useStorytellerStore.getState().game!.gameSchemaVersion).toBe(22);
+    expect(useStorytellerStore.getState().game!.gameSchemaVersion).toBe(23);
   });
 });

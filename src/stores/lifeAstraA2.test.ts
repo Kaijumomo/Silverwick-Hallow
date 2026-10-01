@@ -214,7 +214,7 @@ describe("10A-ASTRA-004: the revised v19 History mirror persists, recovers and i
     const before = structuredClone(game());
     await new Promise((resolve) => setTimeout(resolve, 0));
     const raw = localStorage.getItem(STORAGE_KEY)!;
-    expect(JSON.parse(raw).version).toBe(22);
+    expect(JSON.parse(raw).version).toBe(23);
     store.setState({ game: null, undoStack: [], localSeq: 0 });
     localStorage.setItem(STORAGE_KEY, raw);
     await store.persist.rehydrate();
@@ -227,7 +227,7 @@ describe("10A-ASTRA-004: the revised v19 History mirror persists, recovers and i
     const current = JSON.parse(JSON.stringify({ game: game(), undoStack: state().undoStack }));
     expect(migrateStoreState(current, 21)).toBe(current);
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(detectLegacyGameVersion(current.game)).toBe(22);
+    expect(detectLegacyGameVersion(current.game)).toBe(23);
     expect(detectLegacyGameVersion(asV19(current.game))).toBe(19);
   });
 

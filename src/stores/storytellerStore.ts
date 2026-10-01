@@ -7,7 +7,7 @@ import { StorytellerStateSchema } from "./schemas";
 import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { currentGameMoment, manualEffectId } from "./effects";
-import { cloneOwned, durableProvenance, type MutationContext, recordIfLive, sameSnapshot } from "./history";
+import { cloneOwned, durableProvenance, type MutationContext, sameSnapshot } from "./history";
 import {
   applyEffectPlan,
   effectApplicationMoment,
@@ -29,6 +29,14 @@ import {
   type RoleTransaction,
   type TravelerArrivalPolicy,
 } from "./roleResolution";
+import {
+  applyAlignmentPlan,
+  changeAlignmentIntent,
+  defaultAlignmentIds,
+  planAlignmentTransaction,
+  type AlignmentRefusal,
+  type AlignmentTransaction,
+} from "./alignmentResolution";
 import {
   applyReminderPlan,
   newReminderId,
@@ -91,6 +99,7 @@ import type {
   ReminderInput,
   RoleId,
   Script,
+  ShownAlignment,
   STPlayerRecord,
   StorytellerLobbyRecord,
   SyncMeta,
@@ -103,7 +112,7 @@ const UNDO_LIMIT = 20;
  * `merge` (Phase 9C.2B.2) passes to migrateStoreState when Zustand's own
  * persist middleware skips calling `migrate` outright, which it does
  * whenever the persisted version already equals this one. */
-const STORE_VERSION = 22;
+const STORE_VERSION = 23;
 
 let _migrationResetFlag = false;
 /** Returns true (once) when migrate() discarded incompatible persisted state. */
@@ -182,18 +191,23 @@ const arrivalPlayer = (player: STPlayerRecord, game: StorytellerLobbyRecord): ST
  * participation instance, so no notation ever survives a participant
  * boundary into the next occupant (addPlayer, addPlayerToSeat,
  * assignPendingToSeat and restoreSeatedMember all come through here).
+ *
+ * Phase 10E: likewise Actual Alignment always starts UNRESOLVED -- alignment
+ * belongs to a participation instance, never to a seat, so a stale or
+ * malformed `actualAlignment` left on the reusable empty seat object is never
+ * inherited (normal seating, planned-seat fill, pending-player seating and
+ * recovery seating all come through here). Legacy empty-seat state carrying
+ * one stays loadable; only this boundary drops it.
  */
 const occupySeat = (
   seat: STPlayerRecord,
   name: string,
   game: StorytellerLobbyRecord,
   participantId: ParticipantId = newParticipantId(),
-): STPlayerRecord => ({
-  ...arrivalPlayer({ ...seat, name, isEmpty: false }, game),
-  participantId,
-  effects: [],
-  reminders: [],
-});
+): STPlayerRecord => {
+  const { actualAlignment: _staleSeatAlignment, ...occupant } = arrivalPlayer({ ...seat, name, isEmpty: false }, game);
+  return { ...occupant, participantId, effects: [], reminders: [] };
+};
 
 const clone = <T,>(v: T): T =>
   typeof structuredClone === "function"
@@ -271,6 +285,13 @@ export type ReminderCommandResult =
 export type RoleCommandResult =
   | { ok: true; changed: boolean }
   | RoleRefusal;
+
+/** Phase 10E: result of every Actual Alignment command. `changed: false` is a
+ * true no-op (nothing committed, no Undo, no localSeq step, no packet epoch);
+ * a refusal changes nothing either. */
+export type AlignmentCommandResult =
+  | { ok: true; changed: boolean }
+  | AlignmentRefusal;
 
 export type LobbyConnection = {
   code: string;
@@ -421,11 +442,11 @@ export type StorytellerStore = {
    * recorded. A different Shown Role derives its alignment (null) unless the
    * role is unchanged. */
   setShownRole: (id: PlayerId, roleId: RoleId | null) => RoleCommandResult;
-  setShownAlignment: (id: PlayerId, alignment: Alignment | null) => RoleCommandResult;
+  setShownAlignment: (id: PlayerId, alignment: ShownAlignment | null) => RoleCommandResult;
   setBehaviorMode: (id: PlayerId, mode: BehaviorMode) => RoleCommandResult;
   setPerception: (
     id: PlayerId,
-    perception: { shownRole: RoleId | null; shownAlignment: Alignment | null; behaviorMode?: BehaviorMode },
+    perception: { shownRole: RoleId | null; shownAlignment: ShownAlignment | null; behaviorMode?: BehaviorMode },
     context?: MutationContext,
   ) => RoleCommandResult;
   setBluffs: (id: PlayerId, bluffs: RoleId[]) => void;
@@ -441,13 +462,28 @@ export type StorytellerStore = {
    * action is ever required. Never restarts the game or lobby, and never
    * touches any other player's role. */
   setIsTraveler: (id: PlayerId, isTraveler: boolean) => SetupCommandResult;
-  /** Optional Mutation Context (Phase 9D.2 closure) -- see assignRole. */
-  setTravelerAlignment: (id: PlayerId, alignment: Alignment, context?: MutationContext) => void;
-  /** Phase 9D.1: the single safe generic command for intentionally
-   * changing any player's current actual alignment (ordinary or
-   * Traveler). Never inferred, never called automatically. Optional
-   * Mutation Context (Phase 9D.2 closure) -- see assignRole. */
-  setActualAlignment: (id: PlayerId, alignment: Alignment, context?: MutationContext) => void;
+  // --- Phase 10E: Actual Alignment -------------------------------------------
+  /** THE authoritative Actual Alignment writer. Plans one atomic
+   * AlignmentTransaction (alignmentResolution.ts) -- participant-bound
+   * gameplay changes OR corrections (never mixed), at most one per
+   * participant -- and commits an accepted plan as exactly one game
+   * replacement: partial-field patches of every affected participant (plus a
+   * Traveler's packet withdrawal / fresh epoch / Demon-draft cleanup) and
+   * Alignment History, one Undo entry, one localSeq step. A refusal or true
+   * no-op changes nothing. Never writes perception (setPerception owns it).
+   * New render-bound UI calls this directly; a future ability engine submits
+   * its resolved intents here too. */
+  resolveAlignments: (transaction: AlignmentTransaction) => AlignmentCommandResult;
+  /** Compatibility adapter: one gameplay Actual Alignment change of a
+   * TRAVELER, bound to whoever occupies `id` right now (refused for an
+   * ordinary participant). Routes through resolveAlignments; callers may
+   * ignore the result. Optional Mutation Context supplies Provenance. */
+  setTravelerAlignment: (id: PlayerId, alignment: Alignment, context?: MutationContext) => AlignmentCommandResult;
+  /** Compatibility adapter: one gameplay Actual Alignment change of any
+   * participant, bound to whoever occupies `id` right now and the alignment /
+   * Traveler status observed at call time. Routes through resolveAlignments;
+   * never inferred, never called automatically. */
+  setActualAlignment: (id: PlayerId, alignment: Alignment, context?: MutationContext) => AlignmentCommandResult;
   prepareTravelerDemon: (id: PlayerId) => void;
   completeTravelerInformation: (id: PlayerId) => void;
   completeTravelerArrivalCheck: (id: PlayerId) => void;
@@ -648,19 +684,6 @@ export type StorytellerStore = {
   restoreRemoteCheckpoint: (game: StorytellerLobbyRecord, guard: GuardStamp | null) => void;
 };
 
-// Phase 9D.5 fix: an unresolved actualAlignment is `undefined`, never a
-// concrete value -- History must record that absence as an absent key
-// (matching the "absence means unresolved" convention actualAlignment
-// already uses everywhere else), never as an explicit `undefined`-valued
-// property. The two are equivalent under JSON (localStorage, the
-// stringified remote checkpoint), but a literal `undefined` property
-// reaches the Firebase Realtime Database client raw (writeProjections'
-// un-stringified `storyteller` path) and that client rejects it outright,
-// so recording a Traveler's or ordinary player's very first alignment
-// while live-synced would fail this write with no history ever landing.
-const alignmentHistoryValue = (value: Alignment | undefined): Record<string, unknown> =>
-  value === undefined ? {} : { actualAlignment: value };
-
 /** Phase 10C: the fields addReminder's caller-facing input may carry
  * (ReminderInput). Anything else is refused by key presence. */
 const REMINDER_INPUT_KEYS: ReadonlySet<string> = new Set(["id", "label", "sourcePlayer", "sourceCharacter", "note", "cleanup"]);
@@ -742,6 +765,7 @@ const currentOccupant = (game: StorytellerLobbyRecord | null, id: PlayerId): STP
   return player && !player.isEmpty && player.participantId ? player : undefined;
 };
 const notSeatedRefusal = (): RoleRefusal => ({ ok: false, code: "notSeated", message: "This player is not seated." });
+const alignmentNotSeated = (): AlignmentRefusal => ({ ok: false, code: "notSeated", message: "This player is not seated." });
 
 /**
  * Phase 9R.4 (B8 remediation #2): setSeatOrder() only REORDERS -- seat
@@ -1001,14 +1025,18 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // per-entry migration. An entry marked 20 receives v20 -> v21.
   //
   // v22 (Phase 10D): authoritative Role transitions -- the same shared
-  // per-entry migration, a stamp on top of v21. Routing is per entry (Current
-  // State and every Undo snapshot independently, exactly like remote
-  // checkpoint recovery): marker 20 -> v20 -> v21 -> v22; marker 21 -> v21 ->
-  // v22; marker 22 -> nothing; an older marker carrying newer evidence, a
+  // per-entry migration, a stamp on top of v21.
+  //
+  // v23 (Phase 10E): Alignment transitions -- the same shared per-entry
+  // migration: a Traveler's inert explicit Shown Alignment is normalized to
+  // Normal (null). Routing is per entry (Current State and every Undo snapshot
+  // independently, exactly like remote checkpoint recovery): marker 20 -> v20
+  // -> v21 -> v22 -> v23; marker 21 -> v21 -> v22 -> v23; marker 22 -> v22 ->
+  // v23; marker 23 -> nothing; an older marker carrying newer evidence, a
   // marker-less entry carrying v20+ evidence, or any malformed marker receives
   // nothing and is rejected by the schema gate below. A marker-less genuine
-  // legacy entry runs the whole chain through v22.
-  if (fromVersion < 22) {
+  // legacy entry runs the whole chain through v23.
+  if (fromVersion < 23) {
     const customScripts = (s as { customScripts?: Record<string, Script> }).customScripts ?? {};
     // Phase 9R.1 Astra remediation (Finding A2): local persisted migration
     // uses "trusted" evidence -- this state's OWN saved customScripts,
@@ -2081,42 +2109,34 @@ export const useStorytellerStore = create<StorytellerStore>()(
         return { ok: true };
       },
 
-      setTravelerAlignment: (id, alignment, context) => {
+      resolveAlignments: (transaction) => {
         const { game, undoStack } = get();
-        const p = game ? ownPlayer(game, id) : undefined;
-        if (!game || !p?.isTraveler || p.actualAlignment === alignment) return;
-        const next = invalidatePrivatePacket({ ...p, actualAlignment: alignment,
-          travelerArrival: { ...(p.travelerArrival ?? newTravelerArrival()), demonInfoComplete: false } });
-        delete next.privateInfo;
-        const updatedGame = { ...game, players: { ...game.players, [id]: next } };
-        const recorded = recordIfLive(game, updatedGame, () => ({
-          category: "alignment", playerId: id,
-          change: { kind: "value", from: alignmentHistoryValue(p.actualAlignment), to: { actualAlignment: alignment } },
-          context,
-        }));
-        if (!recorded) return;
-        set({ undoStack: pushUndo(game, undoStack), game: recorded });
+        if (!game) return { ok: false, code: "invalid", message: "No game is open." };
+        // guard -> plan (pure) -> one commit. The planner binds every target
+        // to the participation instance and the Actual Alignment / Traveler
+        // status the caller saw, validates every intent before anything is
+        // committed, and returns a refusal, a true no-op, or the partial-field
+        // Alignment plan (patches + History).
+        const result = planAlignmentTransaction(game, transaction, { ids: defaultAlignmentIds });
+        if (!result.ok) return result;
+        if (!result.changed) return { ok: true, changed: false };
+        set({ undoStack: pushUndo(game, undoStack), game: applyAlignmentPlan(game, result.plan) });
+        return { ok: true, changed: true };
+      },
+
+      setTravelerAlignment: (id, alignment, context) => {
+        const player = currentOccupant(get().game, id);
+        if (!player) return alignmentNotSeated();
+        // Compatibility meaning: Traveler-only (the seam itself serves every
+        // participant).
+        if (!player.isTraveler) return { ok: false, code: "invalid", message: "This player is not a Traveler." };
+        return get().resolveAlignments({ intents: [changeAlignmentIntent(player, alignment)], ...(context ? { context } : {}) });
       },
 
       setActualAlignment: (id, alignment, context) => {
-        const { game, undoStack } = get();
-        const p = game ? ownPlayer(game, id) : undefined;
-        if (!game || !p || p.actualAlignment === alignment) return;
-        // A Traveler's self projection mirrors actualAlignment directly
-        // (see projectIdentity) -- changing it invalidates any already-
-        // published packet exactly like setTravelerAlignment does. An
-        // ordinary player's actualAlignment never reaches a projection, so
-        // no invalidation is needed there.
-        const patched = { ...p, actualAlignment: alignment };
-        const next = p.isTraveler ? invalidatePrivatePacket(patched) : patched;
-        const updatedGame = { ...game, players: { ...game.players, [id]: next } };
-        const recorded = recordIfLive(game, updatedGame, () => ({
-          category: "alignment", playerId: id,
-          change: { kind: "value", from: alignmentHistoryValue(p.actualAlignment), to: { actualAlignment: alignment } },
-          context,
-        }));
-        if (!recorded) return;
-        set({ undoStack: pushUndo(game, undoStack), game: recorded });
+        const player = currentOccupant(get().game, id);
+        if (!player) return alignmentNotSeated();
+        return get().resolveAlignments({ intents: [changeAlignmentIntent(player, alignment)], ...(context ? { context } : {}) });
       },
 
       prepareTravelerDemon: (id) => {

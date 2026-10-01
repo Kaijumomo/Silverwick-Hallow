@@ -170,6 +170,9 @@ function registryForScript(scriptId: unknown, evidence: MigrationScriptEvidence)
  *
  * v21 -> v22 (Phase 10D): authoritative Role transitions. A stamp only -- see
  * migrateEntryV21ToV22.
+ *
+ * v22 -> v23 (Phase 10E): Alignment transitions. A Traveler's inert explicit
+ * Shown Alignment is normalized to Normal -- see migrateEntryV22ToV23.
  */
 /**
  * Migrates exactly one player entry's v13-shaped fields, in place.
@@ -547,6 +550,46 @@ function migrateEntryV21ToV22(e: Record<string, unknown>): void {
   e.gameSchemaVersion = 22;
 }
 
+/**
+ * v22 -> v23 (Phase 10E): Alignment transitions, in place. A small REAL
+ * migration, not a stamp.
+ *
+ * Under v22 a Traveler's stored `shownAlignment` was inert: their own self
+ * projection always followed their Actual Alignment, and any explicit
+ * good/evil left on a Traveler was a historical leftover (e.g. of the retired
+ * "show alignment to Traveler" copy). v23 HONORS an explicit Traveler Shown
+ * Alignment, so carrying those leftovers forward would revive stale values and
+ * change what existing players see. Each Traveler carrying `shownAlignment`
+ * good or evil is therefore normalized to `null` (Normal: follow the Actual
+ * Alignment) -- exactly the behavior v22 actually delivered.
+ *
+ * Deliberately NOT done: Actual Alignment is never copied into
+ * `shownAlignment`; an ordinary participant's `shownAlignment` is never
+ * touched; `undisclosed` is never invented; Actual Alignment, Role, Life,
+ * Effects, Reminders, arrival completion, Information Delivery and History are
+ * untouched.
+ *
+ * Fail-closed (Finding A3): the entry is stamped `gameSchemaVersion: 23` only
+ * when it is otherwise valid for this step -- its `players` is an object whose
+ * every record is an object. Otherwise it is left completely untouched and
+ * unstamped (marker 22), so the v23 schema rejects it rather than a
+ * half-examined entry being stamped into validity. Deterministic and
+ * idempotent, applied independently per entry (Current State, every Undo
+ * snapshot, a remote checkpoint's game). The caller has already established
+ * that the entry carries marker 22 and no v23-only evidence.
+ */
+function migrateEntryV22ToV23(e: Record<string, unknown>): void {
+  if (!isObject(e.players)) return;
+  const seats = Object.values(e.players);
+  if (!seats.every(isObject)) return;
+  for (const seat of seats as Record<string, unknown>[]) {
+    if (seat.isTraveler === true && (seat.shownAlignment === "good" || seat.shownAlignment === "evil")) {
+      seat.shownAlignment = null;
+    }
+  }
+  e.gameSchemaVersion = 23;
+}
+
 export function migrateGameEntry(
   entry: unknown,
   fromVersion: number,
@@ -558,15 +601,16 @@ export function migrateGameEntry(
     players?: Record<string, unknown>;
   };
 
-  // Phase 10C/10D: an explicit `gameSchemaVersion` marker routes this entry,
-  // per entry, whatever version the OUTER persisted envelope claims:
-  //   20                          -> v20 -> v21, then v21 -> v22;
-  //   21                          -> v21 -> v22 (a stamp);
-  //   20 / 21 + newer evidence    -> malformed current-version data: no
-  //                                  migration, the v22 schema rejects it
+  // Phase 10C/10D/10E: an explicit `gameSchemaVersion` marker routes this
+  // entry, per entry, whatever version the OUTER persisted envelope claims:
+  //   20                          -> v20 -> v21, then v21 -> v22 -> v23;
+  //   21                          -> v21 -> v22 (a stamp), then v22 -> v23;
+  //   22                          -> v22 -> v23;
+  //   20 / 21 / 22 + newer evidence -> malformed current-version data: no
+  //                                  migration, the v23 schema rejects it
   //                                  (an older marker never repairs newer
   //                                  evidence into validity);
-  //   22, or any other value      -> no migration at all; the current schema
+  //   23, or any other value      -> no migration at all; the current schema
   //                                  judges it (a malformed/unsupported
   //                                  marker is never reinterpreted as legacy).
   // Applied independently to Current State, every Undo entry and a remote
@@ -577,27 +621,33 @@ export function migrateGameEntry(
   // "below" an envelope that already claims the target version.
   const record = e as Record<string, unknown>;
   if (hasOwnKey(record, "gameSchemaVersion")) {
-    if (record.gameSchemaVersion === 20 && fromVersion < 21 && !hasV21Evidence(record) && !hasV22Evidence(record)) {
+    if (record.gameSchemaVersion === 20 && fromVersion < 21 &&
+      !hasV21Evidence(record) && !hasV22Evidence(record) && !hasV23Evidence(record)) {
       migrateEntryV20ToV21(record);
     }
-    // v21 -> v22 only for an entry that IS marker 21 now: one the v20 -> v21
-    // step completed (it leaves a malformed entry untouched and unstamped --
-    // never stamped into validity by a later step), or one already marked 21.
-    if (record.gameSchemaVersion === PREVIOUS_GAME_SCHEMA_VERSION && fromVersion < 22 && !hasV22Evidence(record)) {
+    // Each later step only for an entry that IS that marker now: one the
+    // previous step completed (a step leaves a malformed entry untouched and
+    // unstamped -- never stamped into validity by a later step), or one
+    // already carrying it.
+    if (record.gameSchemaVersion === 21 && fromVersion < 22 && !hasV22Evidence(record) && !hasV23Evidence(record)) {
       migrateEntryV21ToV22(record);
+    }
+    if (record.gameSchemaVersion === PREVIOUS_GAME_SCHEMA_VERSION && fromVersion < 23 && !hasV23Evidence(record)) {
+      migrateEntryV22ToV23(record);
     }
     return;
   }
-  // Phase 10B (ASTRA-10B-002) / 10C / 10D: marker-less v20, v21 or v22
-  // evidence is malformed current-version data (every v20+ writer stamps the
-  // marker). It receives no legacy step at all -- not v19 -> v20, and not any
-  // earlier repair (a missing v19 window, a v17 category rename, v14
-  // statuses...) -- and is judged (rejected) by the current schema alone.
-  // v22 evidence is checked FIRST and explicitly: a Role correction carries
-  // the generic `correction` key (v19 Life evidence) and a Role resolutionId
-  // the generic `resolutionId` key (v20 evidence), so an older heuristic
-  // could otherwise claim it and stamp it into validity.
-  if (hasV22Evidence(record) || hasV20Evidence(record) || hasV21Evidence(record)) return;
+  // Phase 10B (ASTRA-10B-002) / 10C / 10D / 10E: marker-less v20+ evidence is
+  // malformed current-version data (every v20+ writer stamps the marker). It
+  // receives no legacy step at all -- not v19 -> v20, and not any earlier
+  // repair (a missing v19 window, a v17 category rename, v14 statuses...) --
+  // and is judged (rejected) by the current schema alone.
+  // v23 evidence is checked FIRST and explicitly, then v22: an Alignment or
+  // Role correction carries the generic `correction` key (v19 Life evidence)
+  // and an Alignment or Role resolutionId the generic `resolutionId` key (v20
+  // evidence), so an older heuristic could otherwise claim it and stamp it
+  // into validity.
+  if (hasV23Evidence(record) || hasV22Evidence(record) || hasV20Evidence(record) || hasV21Evidence(record)) return;
 
   if (fromVersion < 14) {
     const players = e.players;
@@ -676,6 +726,7 @@ export function migrateGameEntry(
     migrateEntryV19ToV20(record);
     migrateEntryV20ToV21(record);
     if (record.gameSchemaVersion === 21) migrateEntryV21ToV22(record);
+    if (record.gameSchemaVersion === 22) migrateEntryV22ToV23(record);
   }
 }
 
@@ -748,18 +799,18 @@ export function migrateGameEntry(
  * it). Marker-less v21 evidence (hasV21Evidence) likewise reports 21.
  */
 export function detectLegacyGameVersion(game: Record<string, unknown>): number | null {
-  // Phase 10C/10D: the explicit marker is decisive. 20 and 21 are the earlier
-  // versions still migrated; 22 -- and any malformed or unsupported marker --
-  // is reported as current, so migrateGameEntry runs no legacy step and the
-  // current schema judges (rejects) it.
+  // Phase 10C/10D/10E: the explicit marker is decisive. 20, 21 and 22 are the
+  // earlier versions still migrated; 23 -- and any malformed or unsupported
+  // marker -- is reported as current, so migrateGameEntry runs no legacy step
+  // and the current schema judges (rejects) it.
   if (hasOwnKey(game, "gameSchemaVersion")) {
     const marker = game.gameSchemaVersion;
     return MIGRATABLE_GAME_SCHEMA_VERSIONS.find((version) => version === marker) ?? GAME_SCHEMA_VERSION;
   }
-  // v22 evidence first: it must never be claimed by an older heuristic
-  // (a Role correction's `correction` key is also v19 Life evidence, and a
-  // Role `resolutionId` is also v20 evidence).
-  if (hasV22Evidence(game) || hasV21Evidence(game)) return GAME_SCHEMA_VERSION;
+  // v23, then v22, evidence first: it must never be claimed by an older
+  // heuristic (an Alignment/Role correction's `correction` key is also v19
+  // Life evidence, and an Alignment/Role `resolutionId` is also v20 evidence).
+  if (hasV23Evidence(game) || hasV22Evidence(game) || hasV21Evidence(game)) return GAME_SCHEMA_VERSION;
   if (hasV20Evidence(game)) return 20;
   if (hasV19LifeEvidence(game)) return 19;
   if (hasV17IdentityEvidence(game)) return 17;
@@ -913,5 +964,30 @@ export function hasV21Evidence(game: Record<string, unknown>): boolean {
  */
 export function hasV22Evidence(game: Record<string, unknown>): boolean {
   return someEntry(game.history, (h) => isObject(h) && h.category === "role" &&
+    (hasOwnKey(h, "correction") || hasOwnKey(h, "resolutionId")));
+}
+
+/**
+ * Phase 10E: true when a game-shaped entry carries ANY v23-only evidence a v22
+ * writer never produced:
+ *
+ *  - players[*].shownAlignment === "undisclosed"   (v23 perception value)
+ *  - an "alignment" History Record's `correction`  (an Alignment correction)
+ *  - an "alignment" History Record's `resolutionId` (a correlated Alignment
+ *    resolution)
+ *
+ * History keys count by PRESENCE, not validity. Under an older marker (20/21/
+ * 22) such evidence means malformed current-version data: it is never
+ * migrated, repaired or stamped, and the v23 schema rejects the entry.
+ * Marker-less, it is likewise never treated as legacy. Deliberately NOT
+ * evidence: a Traveler's stored `shownAlignment` good/evil -- a legitimate v22
+ * leftover the v22 -> v23 step normalizes. The History check is
+ * category-scoped: `correction`/`resolutionId` on other categories are older,
+ * legitimate evidence handled by their own detectors.
+ */
+export function hasV23Evidence(game: Record<string, unknown>): boolean {
+  const players = isObject(game.players) ? Object.values(game.players) : [];
+  if (players.some((p) => isObject(p) && p.shownAlignment === "undisclosed")) return true;
+  return someEntry(game.history, (h) => isObject(h) && h.category === "alignment" &&
     (hasOwnKey(h, "correction") || hasOwnKey(h, "resolutionId")));
 }

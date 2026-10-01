@@ -1078,8 +1078,8 @@ describe("ASTRA-10D-002: perception invalidation follows original vs FINAL perce
     store.setState({ undoStack: [] });
   }
   /** The perception bundle of `p` re-bound to an intermediate observed state. */
-  const from = (p: STPlayerRecord, observed: { shownRole: string | null; shownAlignment: "good" | "evil" | null; behaviorMode?: STPlayerRecord["behaviorMode"] },
-    next: { shownRole: string | null; shownAlignment: "good" | "evil" | null; behaviorMode?: STPlayerRecord["behaviorMode"] }): RoleIntent => ({
+  const from = (p: STPlayerRecord, observed: { shownRole: string | null; shownAlignment: STPlayerRecord["shownAlignment"]; behaviorMode?: STPlayerRecord["behaviorMode"] },
+    next: { shownRole: string | null; shownAlignment: STPlayerRecord["shownAlignment"]; behaviorMode?: STPlayerRecord["behaviorMode"] }): RoleIntent => ({
     ...setPerceptionIntent(p, next),
     expectedShownRole: observed.shownRole, expectedShownAlignment: observed.shownAlignment,
     ...(next.behaviorMode !== undefined ? { expectedBehaviorMode: observed.behaviorMode } : {}),
@@ -1649,7 +1649,7 @@ describe("resolveRoles: one commit, Undo and persistence", () => {
     expect(state().correctRole(holder("empath"), "monk")).toMatchObject({ ok: true });
     const round = StorytellerGamePersistedSchema.parse(JSON.parse(JSON.stringify(game())));
     expect(round).toEqual(JSON.parse(JSON.stringify(game())));
-    expect(round.gameSchemaVersion).toBe(22);
+    expect(round.gameSchemaVersion).toBe(23);
     // Current State never comes from History: dropping the History leaves it.
     expect(StorytellerGamePersistedSchema.safeParse({ ...JSON.parse(JSON.stringify(game())), history: [] }).success).toBe(true);
   });

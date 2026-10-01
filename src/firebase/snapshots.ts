@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { getTraveler } from "@/data/travelers";
 import { PlayerSelfRecordSchema, PublicLobbyRecordSchema } from "@/stores/schemas";
 import type { PlayerSelfRecord, PublicLobbyRecord } from "@/stores/types";
 import type { RoomBackend, Unsubscribe } from "./backend";
@@ -88,11 +87,20 @@ export function decodePublicSnapshot(raw: unknown, expectedCode?: string): Publi
   return { status: "ready", data };
 }
 
+/**
+ * The player's own identity. No shown character -> WAITING (no identity yet).
+ * Phase 10E: a valid shown character WITHOUT an alignment is a complete
+ * identity for an ordinary participant and a Traveler alike (the Storyteller
+ * deliberately did not tell the alignment, or a Traveler's is unresolved) --
+ * rendered as that character with no alignment label, never as WAITING. The
+ * self node is written whole by the Storyteller (writeProjections), so a
+ * missing alignment is never a half-arrived write.
+ */
 export function decodeSelfSnapshot(raw: unknown): Snapshot<PlayerSelfRecord> {
   if (raw == null) return WAITING;
   const partial = selfShape.partial().safeParse(raw);
   if (!partial.success) return invalid(partial.error);
-  if (partial.data.shownRole === undefined || partial.data.shownAlignment === undefined && !getTraveler(partial.data.shownRole)) return WAITING;
+  if (partial.data.shownRole === undefined) return WAITING;
   return parse(selfShape, raw);
 }
 export const decodeRosterEntry = (raw: unknown): Snapshot<string> => raw == null ? WAITING : parse(id, raw);

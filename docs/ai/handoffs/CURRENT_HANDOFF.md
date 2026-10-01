@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-01\
-**State:** Phase 10D — Role Transitions is **CLOSED** (Sol: **CLOSED — READY FOR INTEGRATION**) and **INTEGRATED** into `main`. Integration was rules-first: the Phase 10D Firebase Rules were deployed to production and verified, then `main` was fast-forwarded to the docs-only closure commit `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the integration checkpoint), and a docs-only integration record directly on top of it is the final `main`. Phase 10E — Alignment Transitions is **CONTRACT FROZEN / IMPLEMENTATION AUTHORIZED** on `dev/phase-10e`. The architecture challenge, BOTC rules clarification, targeted Traveler-perception challenge, Sol adjudication and project-owner approval are complete. `PHASE10E.md` is now authoritative for implementation.
+**State:** Phase 10D — Role Transitions is **CLOSED** (Sol: **CLOSED — READY FOR INTEGRATION**) and **INTEGRATED** into `main`. Integration was rules-first: the Phase 10D Firebase Rules were deployed to production and verified, then `main` was fast-forwarded to the docs-only closure commit `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the integration checkpoint), and a docs-only integration record directly on top of it is the final `main`. Phase 10E — Alignment Transitions is **IMPLEMENTATION DELIVERED / AWAITING LUNA VERIFICATION** on `dev/phase-10e` (contract frozen in `PHASE10E.md`; not closed, not integrated).
 
 ## Phase 10D — CLOSED
 
@@ -242,7 +242,7 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 - **10B Effect Lifecycle + visual Effect indicators — CLOSED**
 - **10C Reminder Workflow + visual Reminder tokens — CLOSED**
 - **10D Role Transitions — CLOSED**
-- **10E Alignment Transitions — CONTRACT FROZEN; IMPLEMENTATION AUTHORIZED**
+- **10E Alignment Transitions — IMPLEMENTATION DELIVERED; AWAITING LUNA VERIFICATION**
 - 10F Guided Ability Resolution / Night Actions
 - 10G Advanced Storyteller bookkeeping / final visual integration
 
@@ -286,10 +286,26 @@ At the start of any new session, verify the exact branch SHA and read:
 - `PHASE10D.md`
 - `TERMINOLOGY.md`
 
+## Phase 10E implementation (delivered, unverified)
+
+Implementation review checkpoint: the `dev/phase-10e` commit named in the implementation report (verify the exact SHA). Started from the contract-freeze commit `98558c506b400d352af8cbff5521114a341f2e57`. Schema / store version: **v23**. No Firebase Rules / authority change. The required local gate results (typecheck, normal tests, emulator rules tests, build, `git diff --check`) are recorded in the implementation report for that exact SHA.
+
+Delivered:
+- `src/stores/alignmentResolution.ts` -- pure `planAlignmentTransaction` / `applyAlignmentPlan` (intents `changeActualAlignment` / `correctActualAlignment`; refusal family invalid / phase / notSeated / stale / conflict / mixedCorrection / tooMany; partial-field patches limited to `actualAlignment`, `privateInfo`, `publishedPacket`, `packetEpoch`), committed once by `resolveAlignments`.
+- `setActualAlignment` / `setTravelerAlignment` are thin adapters (return the structured result). `setTravelerAlignment` no longer resets `demonInfoComplete` or clears the whole draft (PHASE10E.md 10).
+- Phase 10D `setPerception` admits `undisclosed`; `shownAlignmentIntent` helper; projection: Normal / explicit / Not Told for ordinary and Traveler; self decoder renders a shown identity without alignment (never WAITING).
+- v22 -> v23 (`migrateEntryV22ToV23`): Traveler `shownAlignment` good/evil -> null, fail-closed stamp; `hasV23Evidence` (undisclosed, alignment `correction` / `resolutionId`) runs before older heuristics; strict v23 Alignment History snapshots in `HistoryRecordSchema`.
+- `occupySeat` drops a stale seat `actualAlignment` (every new participation starts unresolved; legacy empty-seat state stays loadable).
+- UI: `src/features/players/AlignmentControls.tsx` -- Actual Alignment (one-tap gameplay change, disclosed "Correct the recorded alignment…"), Player-facing alignment (Normal, disclosed Shown Good / Shown Evil / Not told, "View overridden"), ordinary "Player view differs" advisory; used by PlayerDrawer (ordinary) and TravelerArrival (Traveler); Privacy Mode renders none of it.
+- Guard: `src/stores/alignmentArchitecture.test.ts`. Tests: `alignmentResolution`, `alignmentPerception`, `alignmentMigration`, `AlignmentControls` suites plus updated version-ladder tests.
+
+Implementation interpretations (for Luna / Sol review; none changes the frozen contract):
+1. Setup's `dealtIdentity` (unchanged, AC-20) stores a dealt ordinary participant's Shown Alignment explicitly (equal to the derived value), and v23 must not touch ordinary perception. Per AC-41 literally, such a participant therefore shows "View overridden" until the Storyteller taps Normal (projection is identical either way). Sol may decide whether Setup should store Normal (`null`) instead.
+2. The ordinary "Player view differs" advisory appears after any committed Actual Alignment change of an ordinary participant (gameplay or correction) while their projected alignment differs from the new Actual (including Not told); it never changes perception itself.
+3. "Correct the recorded alignment…" is offered after Reveal and in Live Play; before Reveal a plain change already repairs Setup (no History either way), mirroring the 10D Role correction disclosure.
+4. An ordinary participant's packet/draft is not alignment-dependent and is untouched by an Actual Alignment change; Traveler packet invalidation follows PHASE10E.md 10.
+5. The transaction bound is `MAX_TOTAL_PLAYERS` (one intent per participant).
+
 ## Immediate next task
 
-Begin **Phase 10E implementation** from the commit containing the frozen `PHASE10E.md` contract on `dev/phase-10e`.
-
-Default implementation model: **Claude Code / Sonnet 5.5**.
-
-Implement only the frozen contract, run the complete required local gate, create and push a fixed implementation review checkpoint, and return that exact SHA for Luna mechanical verification. Stop and return to Sol if the frozen contract proves materially contradictory; do not improvise architecture.
+**Luna mechanical verification** of the Phase 10E implementation review checkpoint against `PHASE10E.md` (10E-AC-01..42). Do not merge to `main`, deploy Rules or production, or declare Phase 10E closed before the review workflow completes.

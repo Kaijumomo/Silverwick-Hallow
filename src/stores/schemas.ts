@@ -1,6 +1,10 @@
 import { z } from "zod";
 
 export const AlignmentSchema = z.enum(["good", "evil"]);
+/** Phase 10E (v23): STORED player-facing alignment perception. `undisclosed`
+ * is perception only -- never an Actual Alignment, and never on the self wire
+ * (PlayerSelfRecordSchema keeps AlignmentSchema). */
+export const ShownAlignmentSchema = z.enum(["good", "evil", "undisclosed"]);
 
 export const RoleTypeSchema = z.enum([
   "townsfolk",
@@ -466,6 +470,12 @@ const addSnapshotIssues = (
 /** Phase 10D (v22): the strict `from` / `to` snapshot of an Actual Role
  * History change -- only the Actual Role, never perception. */
 const RoleHistorySnapshotSchema = z.object({ actualRole: z.string() }).strict();
+/** Phase 10E (v23): the strict snapshots of an Actual Alignment History
+ * change -- only the Actual Alignment, never perception. `to` is always
+ * exactly `{ actualAlignment: good|evil }`; `from` is that, or the canonical
+ * empty `{}` for an unresolved origin. */
+const AlignmentHistoryToSchema = z.object({ actualAlignment: AlignmentSchema }).strict();
+const AlignmentHistoryFromSchema = z.union([z.object({}).strict(), AlignmentHistoryToSchema]);
 
 export const HistoryRecordSchema = z.object({
   id: z.string().min(1),
@@ -493,10 +503,11 @@ export const HistoryRecordSchema = z.object({
     if (record.lifeEvent !== undefined) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only a life History Record mirrors Life Events", path: ["lifeEvent"] });
     }
-    // Phase 10B/10C/10D: a correction is valid for "life", "effect",
-    // "reminder" and (v22) "role" only.
-    if (record.correction !== undefined && record.category !== "effect" && record.category !== "reminder" && record.category !== "role") {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only a life, effect, reminder or role History Record may be a correction", path: ["correction"] });
+    // Phase 10B/10C/10D/10E: a correction is valid for "life", "effect",
+    // "reminder", (v22) "role" and (v23) "alignment" only.
+    if (record.correction !== undefined && record.category !== "effect" && record.category !== "reminder" &&
+      record.category !== "role" && record.category !== "alignment") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only a life, effect, reminder, role or alignment History Record may be a correction", path: ["correction"] });
     }
   } else if (record.change === undefined && record.lifeEvent === undefined) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a life History Record must carry a change or a Life Event", path: ["change"] });
@@ -510,8 +521,9 @@ export const HistoryRecordSchema = z.object({
   if (record.category !== "reminder" && record.reminderOperation !== undefined) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only a reminder History Record carries a Reminder operation", path: ["reminderOperation"] });
   }
-  if (record.resolutionId !== undefined && record.category !== "effect" && record.category !== "reminder" && record.category !== "role") {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only an effect, reminder or role History Record carries a resolution id", path: ["resolutionId"] });
+  if (record.resolutionId !== undefined && record.category !== "effect" && record.category !== "reminder" &&
+    record.category !== "role" && record.category !== "alignment") {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "only an effect, reminder, role or alignment History Record carries a resolution id", path: ["resolutionId"] });
   }
   if (record.category === "role" && (record.correction !== undefined || record.resolutionId !== undefined)) {
     // Phase 10D (v22): a role record carrying v22-only metadata is a
@@ -523,6 +535,19 @@ export const HistoryRecordSchema = z.object({
       RoleHistorySnapshotSchema.safeParse(change.from).success && RoleHistorySnapshotSchema.safeParse(change.to).success;
     if (!strictSides) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a role correction or correlated role record is a value change of exactly { actualRole }", path: ["change"] });
+    }
+  }
+  if (record.category === "alignment" && (record.correction !== undefined || record.resolutionId !== undefined)) {
+    // Phase 10E (v23): an alignment record carrying v23-only metadata is a
+    // NEW-shape Actual Alignment change: a value change from `{}` (unresolved)
+    // or `{ actualAlignment }` to exactly `{ actualAlignment }`. (Legacy
+    // alignment History has neither key and keeps its original, looser
+    // contract -- it is never rewritten into this shape.)
+    const change = record.change;
+    const strictSides = change?.kind === "value" &&
+      AlignmentHistoryFromSchema.safeParse(change.from).success && AlignmentHistoryToSchema.safeParse(change.to).success;
+    if (!strictSides) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "an alignment correction or correlated alignment record is a value change from {} or { actualAlignment } to exactly { actualAlignment }", path: ["change"] });
     }
   }
   if (record.category === "reminder") {
@@ -694,7 +719,7 @@ export const STPlayerRecordSchema = z.object({
   joinedAt: z.number().int().nonnegative(),
   actualRole: z.string().min(1),
   shownRole: z.string().min(1).nullable(),
-  shownAlignment: AlignmentSchema.nullable(),
+  shownAlignment: ShownAlignmentSchema.nullable(),
   behaviorMode: BehaviorModeSchema,
   publicDisplayRole: z.string().min(1).nullable(),
   alive: z.boolean(),
@@ -756,18 +781,20 @@ export const NightStepRecordSchema = z.object({
 });
 
 /** Phase 10B: the current game snapshot schema version (see
- * StorytellerLobbyRecord.gameSchemaVersion). Phase 10C: v21. Phase 10D: v22. */
-export const GAME_SCHEMA_VERSION = 22 as const;
-/** Phase 10D: the explicit markers migration still accepts, routed PER ENTRY
- * (see migrateGameEntry): 20 receives v20 -> v21 -> v22, 21 receives v21 ->
- * v22 (a stamp), 22 is current and receives nothing. Any other marker is
- * never reinterpreted as legacy -- the current schema rejects it. */
-export const MIGRATABLE_GAME_SCHEMA_VERSIONS = [20, 21] as const;
-/** The immediately previous explicit marker (v21 -> v22). */
-export const PREVIOUS_GAME_SCHEMA_VERSION = 21 as const;
+ * StorytellerLobbyRecord.gameSchemaVersion). Phase 10C: v21. Phase 10D: v22.
+ * Phase 10E: v23. */
+export const GAME_SCHEMA_VERSION = 23 as const;
+/** Phase 10E: the explicit markers migration still accepts, routed PER ENTRY
+ * (see migrateGameEntry): 20 receives v20 -> v21 -> v22 -> v23, 21 receives
+ * v21 -> v22 -> v23, 22 receives v22 -> v23, 23 is current and receives
+ * nothing. Any other marker is never reinterpreted as legacy -- the current
+ * schema rejects it. */
+export const MIGRATABLE_GAME_SCHEMA_VERSIONS = [20, 21, 22] as const;
+/** The immediately previous explicit marker (v22 -> v23). */
+export const PREVIOUS_GAME_SCHEMA_VERSION = 22 as const;
 
 export const StorytellerLobbyRecordSchema = z.object({
-  // Phase 10B (v20) / 10C (v21): required explicit version evidence, NO
+  // Phase 10B (v20) / 10C (v21) / 10D (v22) / 10E (v23): required explicit version evidence, NO
   // default -- a current-version game missing it (or carrying any other
   // value, including a stale 20) is rejected; older data receives it only
   // from migration.

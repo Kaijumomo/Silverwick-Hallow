@@ -217,7 +217,7 @@ describe("projectToSelf — Demon bluffs privacy", () => {
 describe("Lobby-level projections", () => {
   function makeLobby(): StorytellerLobbyRecord {
     return {
-      gameSchemaVersion: 22,
+      gameSchemaVersion: 23,
       code: "ABCD12",
       storytellerUid: "uid-st",
       scriptId: "tb",
@@ -477,7 +477,7 @@ describe("Privacy regression matrix — all behavior modes", () => {
 describe("projectLobbyToSelfMap — Phase 9C.4 setup privacy barrier", () => {
   function setupLobby(players: StorytellerLobbyRecord["players"], over: Partial<StorytellerLobbyRecord> = {}): StorytellerLobbyRecord {
     return {
-      gameSchemaVersion: 22, code: "SETUP01", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
+      gameSchemaVersion: 23, code: "SETUP01", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
       bluffs: [], fabled: [], lorics: [], notes: "ST-only",
       seatOrder: Object.keys(players), nightProgress: {}, rolePool: [], history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       plannedPlayerCount: Object.keys(players).length, plannedTravelerCount: 0, pendingPlayers: {}, players, ...over,
@@ -558,23 +558,31 @@ describe("projectLobbyToSelfMap — Phase 9C.4 setup privacy barrier", () => {
     expect(selves.t1).toEqual({ shownRole: "thief" });
   });
 
-  it("E2 (FINAL SETUP INTEGRATION REVISION, Section 7): a Traveler's current actual alignment survives self-projection privately, never through the ordinary barrier or public view, while the barrier still withholds an incomplete ordinary set, and a stale shownAlignment mirror never overrides it", () => {
-    const traveler = { ...validTraveler("t1", 1), actualAlignment: "evil" as const, shownAlignment: "good" as const };
+  it("E2 (FINAL SETUP INTEGRATION REVISION, Section 7; amended by Phase 10E): a Traveler's current actual alignment survives self-projection privately under Normal, never through the ordinary barrier or public view, while the barrier still withholds an incomplete ordinary set; an explicit override is honored", () => {
+    const traveler = { ...validTraveler("t1", 1), actualAlignment: "evil" as const, shownAlignment: null };
     const lobby = setupLobby({ p1: incompleteOrdinary("p1", 0), t1: traveler });
     const selves = projectLobbyToSelfMap(lobby, registry);
     // Ordinary barrier is still fully armed: p1 is incomplete, so no
     // ordinary self record publishes at all.
     expect(selves.p1).toBeUndefined();
-    // The Traveler's own self record reflects the current actual alignment
-    // -- the stale shownAlignment mirror ("good", left over from before a
-    // later actual-alignment change) never overrides it.
+    // Normal (null): the Traveler's own self record reflects the current
+    // actual alignment automatically.
     expect(selves.t1).toEqual({ shownRole: "thief", shownAlignment: "evil" });
+    // Phase 10E (PHASE10E.md 3.2, 10E-AC-13): an explicit player-facing
+    // alignment is a deliberate perception choice and IS honored for a
+    // Traveler (the v22 "stale mirror" leftovers are normalized to Normal by
+    // the v22 -> v23 migration, so none survives to override silently).
+    const overridden = setupLobby({ p1: incompleteOrdinary("p1", 0), t1: { ...traveler, shownAlignment: "good" as const } });
+    expect(projectLobbyToSelfMap(overridden, registry).t1).toEqual({ shownRole: "thief", shownAlignment: "good" });
     // Public view never receives alignment in any form, for the Traveler
     // or anyone else.
-    const pub = JSON.stringify(projectToPublic(lobby.players.t1!, true));
-    expect(pub).not.toContain("evil");
-    expect(pub).not.toContain("actualAlignment");
-    expect(pub).not.toContain("shownAlignment");
+    for (const players of [lobby.players, overridden.players]) {
+      const pub = JSON.stringify(projectToPublic(players.t1!, true));
+      expect(pub).not.toContain("evil");
+      expect(pub).not.toContain("good");
+      expect(pub).not.toContain("actualAlignment");
+      expect(pub).not.toContain("shownAlignment");
+    }
   });
 
   it("F: an empty planned ordinary seat does not arm the barrier", () => {

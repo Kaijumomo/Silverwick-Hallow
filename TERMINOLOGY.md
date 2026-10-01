@@ -110,8 +110,8 @@ changed. Character ability evaluation is not part of it.
   `correction: true`. A Traveler arrival correction is `preserve` (default) or
   an explicit `restart`.
 - **Perception** (`setPerception`) -- Shown Role, Shown Alignment and optional
-  behavior mode as one explicit bundle. `shownAlignment: null` derives from the
-  Shown Role only. An identical bundle is a true no-op. A non-Traveler never
+  behavior mode as one explicit bundle. `shownAlignment: null` is Normal (see
+  section 10). An identical bundle is a true no-op. A non-Traveler never
   ends with a Traveler, Fabled or Loric Shown Role; a Traveler's Shown Role is
   their own public character.
 - **Role type policy** -- an ordinary participant's Actual/Shown Role is a
@@ -129,10 +129,42 @@ designation) stays Setup-specific and never becomes a live Role transition.
 
 ## 10. Actual Alignment vs Shown Alignment
 
-- **Actual Alignment** (`actualAlignment`): authoritative truth. When absent,
-  it is unresolved, never invented.
-- **Shown Alignment** (`shownAlignment`): explicit perception. `null` derives
-  from the Shown Role only, never from the Actual Alignment.
+- **Actual Alignment** (`actualAlignment`): authoritative truth -- Good, Evil,
+  or absent (unresolved, never invented). Never `undisclosed`.
+- **Shown Alignment** (`shownAlignment`, store v23): player-facing alignment
+  perception, written only by the perception seam (`setPerception`):
+  - `null` -- **Normal**: an ordinary participant's alignment derives from the
+    valid Shown Role only (never from the Actual Alignment); a Traveler is
+    automatically told their current Actual Alignment (omitted while
+    unresolved).
+  - `good` / `evil` -- explicitly shown, whatever the Actual Alignment.
+  - `undisclosed` -- **Not told**: the character is shown, the alignment
+    omitted. The sentinel itself is never sent to a player.
+
+**Alignment boundary** (`planAlignmentTransaction` / `applyAlignmentPlan` in
+`src/stores/alignmentResolution.ts`, committed by the store's
+`resolveAlignments`, store v23): one participant-bound, atomic Actual
+Alignment primitive; it never writes perception and never evaluates an
+ability.
+
+- **Alignment Intent** -- `changeActualAlignment` (a real gameplay event) or
+  `correctActualAlignment` (the recorded truth was wrong), each bound to
+  PlayerId + ParticipantId + the observed Actual Alignment (`null` =
+  unresolved) + the observed Traveler status; a moved binding or observed value
+  is `stale`. Never bound to the Actual Role. Destination Good or Evil only. At
+  most one intent per ParticipantId; gameplay and correction never mix.
+- **Alignment Correction** -- same final Current State as a gameplay change;
+  its Live Play History carries `correction: true`.
+- **Traveler Alignment change** -- withdraws the published packet, mints a
+  fresh packet epoch and drops `privateInfo.travelerDemon`, even when an
+  explicit perception keeps the visible label; arrival completion,
+  Information Delivery and Night progress are preserved (delivered
+  information is never "forgotten").
+- **Alignment History** -- `{ actualAlignment }` value records (an unresolved
+  origin is `{}`), Live Play only; legacy pre-v23 Alignment History is never
+  rewritten.
+- `setActualAlignment` / `setTravelerAlignment` are compatibility adapters
+  over the seam. A newly occupied participation always starts unresolved.
 
 ## 11. PlayerId vs ParticipantId vs ParticipantRef
 
