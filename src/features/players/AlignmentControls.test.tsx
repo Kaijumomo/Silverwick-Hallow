@@ -33,6 +33,17 @@ function SeatDrawer({ seat }: { seat: PlayerId }) {
 const alignmentSection = () => within(screen.getByText("Alignment (ST private)").closest("section")!);
 const actualGroup = () => within(screen.getByRole("group", { name: /^Actual (Traveler )?alignment/ }));
 const facingGroup = () => within(screen.getByRole("group", { name: "Player-facing alignment" }));
+/** Opens the player-facing override disclosure and returns queries scoped to
+ * THAT <details> element. Its buttons appear after React's asynchronous
+ * disclosure-state work, so the async lookup must search only this container:
+ * a whole-document role query over a large drawer can exceed Testing
+ * Library's default wait budget under the parallel runner (Phase 10E
+ * test-harness remediation). */
+function openOverrides() {
+  const disclosure = within(screen.getByText("Override what they are told…").closest("details")!);
+  fireEvent.click(disclosure.getByText("Override what they are told…"));
+  return disclosure;
+}
 
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
@@ -157,8 +168,7 @@ describe("10E-AC-41: player-facing alignment -- Normal by default, overrides dis
     expect(facingGroup().getByRole("button", { name: "Normal (Good)" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText("View overridden")).toBeNull();
     expect(screen.queryByRole("button", { name: "Shown Evil" })).toBeNull(); // overrides are disclosed, not shown
-    fireEvent.click(screen.getByText("Override what they are told…"));
-    fireEvent.click(await screen.findByRole("button", { name: "Shown Evil" }));
+    fireEvent.click(await openOverrides().findByRole("button", { name: "Shown Evil" }));
     expect(player(chef).shownAlignment).toBe("evil");
     expect(screen.getByText("View overridden")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Not told" }));
@@ -181,8 +191,7 @@ describe("10E-AC-41: player-facing alignment -- Normal by default, overrides dis
     expect(facingGroup().getByRole("button", { name: "Normal (Evil)" })).toHaveAttribute("aria-pressed", "true");
     expect(projectToSelf(player(zed), registry)).toEqual({ shownRole: "thief", shownAlignment: "evil" });
     expect(screen.queryByRole("button", { name: /show alignment to traveler/i })).toBeNull();
-    fireEvent.click(screen.getByText("Override what they are told…"));
-    fireEvent.click(await screen.findByRole("button", { name: "Shown Good" }));
+    fireEvent.click(await openOverrides().findByRole("button", { name: "Shown Good" }));
     expect(player(zed)).toMatchObject({ actualAlignment: "evil", shownAlignment: "good" });
     expect(screen.getByText("View overridden")).toBeInTheDocument();
     // A later Actual change still withdraws any packet (the label stays Good).
@@ -323,8 +332,7 @@ describe("PHASE10E.md 15: ordinary disclosure advisory", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review player view" }));
     expect(document.activeElement).toBe(document.getElementById(playerFacingAlignmentId(player(chef))));
     // The Storyteller chooses to tell them Evil: the views agree, the cue goes.
-    fireEvent.click(screen.getByText("Override what they are told…"));
-    fireEvent.click(await screen.findByRole("button", { name: "Shown Evil" }));
+    fireEvent.click(await openOverrides().findByRole("button", { name: "Shown Evil" }));
     expect(screen.queryByText(/Player view differs/)).toBeNull();
   });
 
