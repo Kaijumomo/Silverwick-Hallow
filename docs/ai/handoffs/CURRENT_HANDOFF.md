@@ -242,7 +242,7 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 - **10B Effect Lifecycle + visual Effect indicators — CLOSED**
 - **10C Reminder Workflow + visual Reminder tokens — CLOSED**
 - **10D Role Transitions — CLOSED**
-- **10E Alignment Transitions — IMPLEMENTATION DELIVERED; TARGETED PRE-LUNA REMEDIATION REQUIRED**
+- **10E Alignment Transitions — PRE-LUNA REMEDIATION DELIVERED; AWAITING LUNA VERIFICATION**
 - 10F Guided Ability Resolution / Night Actions
 - 10G Advanced Storyteller bookkeeping / final visual integration
 
@@ -300,8 +300,8 @@ Delivered:
 - Guard: `src/stores/alignmentArchitecture.test.ts`. Tests: `alignmentResolution`, `alignmentPerception`, `alignmentMigration`, `AlignmentControls` suites plus updated version-ladder tests.
 
 Sol pre-Luna adjudication:
-1. **REMEDIATE:** "View overridden" is semantic. Existing Setup explicit Good/Evil equal to Normal must not create routine override noise. Do not change Deal storage or ordinary migration; compute the cue from effective divergence from Normal, with Not told always overridden.
-2. **REMEDIATE:** "Player view differs" may arm only after gameplay `changeActualAlignment`, never after `correctActualAlignment`.
+1. **REMEDIATED (SOL-10E-R1):** "View overridden" is semantic (`alignmentViewOverridden` / `normalAlignmentOf` in `AlignmentControls.tsx`). Existing Setup explicit Good/Evil equal to Normal must not create routine override noise. Do not change Deal storage or ordinary migration; compute the cue from effective divergence from Normal, with Not told always overridden.
+2. **REMEDIATED (SOL-10E-R2):** "Player view differs" may arm only after gameplay `changeActualAlignment`, never after `correctActualAlignment`.
 3. **ACCEPTED INTERPRETATION:** before Reveal the separate correction affordance may stay hidden because Setup has no History and a plain change repairs the same Current State.
 4. **ACCEPTED INTERPRETATION:** ordinary packet/draft stays untouched by Actual Alignment mutation.
 5. The transaction bound remains `MAX_TOTAL_PLAYERS` (one intent per participant).
@@ -310,8 +310,4 @@ These are narrow Sol clarifications recorded in `PHASE10E.md` §25; architecture
 
 ## Immediate next task
 
-Apply the **targeted Sol pre-Luna remediation** in `PHASE10E.md` §25:
-- make "View overridden" semantic rather than raw non-null storage;
-- arm "Player view differs" only after gameplay `changeActualAlignment`, never correction.
-
-Add/adjust focused UI tests, rerun the complete required local gate, create/push a new fixed review checkpoint, then hand that exact SHA to Luna. Do not merge to `main`, deploy Rules or production, or declare Phase 10E closed.
+**Luna mechanical verification** of the Phase 10E remediation review checkpoint (the `dev/phase-10e` commit carrying SOL-10E-R1 / R2 on top of `32f5a58e9fe0888917cd7ff8a498691506f39af8`; verify the exact SHA reported in the remediation handoff) against `PHASE10E.md` (10E-AC-01..42 and §25). Do not merge to `main`, deploy Rules or production, or declare Phase 10E closed.

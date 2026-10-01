@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { selectScriptById, useStorytellerStore } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
-import { buildRegistry, deriveAlignment } from "@/data/roleRegistry";
+import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import { isInitialRevealComplete } from "@/stores/identity";
 import { alignmentChangeOpen, changeAlignmentIntent, correctAlignmentIntent, type AlignmentIntent } from "@/stores/alignmentResolution";
 import { shownAlignmentIntent } from "@/stores/roleResolution";
@@ -18,8 +18,8 @@ import type { Alignment, ShownAlignment, STPlayerRecord } from "@/stores/types";
  *    disclosed.
  *  - PlayerFacingAlignmentControls -- what the player is told, through the
  *    Phase 10D perception seam (setPerception). Normal is the default; the
- *    explicit overrides are progressively disclosed, and an active override
- *    shows a concise "View overridden" cue.
+ *    explicit overrides are progressively disclosed, and a MEANINGFUL departure
+ *    from Normal shows a concise "View overridden" cue (PHASE10E.md 15/25).
  *
  * Every action is built from the record THIS render shows (`player`) -- never
  * re-read at click time -- so a seat whose participant, alignment or Traveler
@@ -33,6 +33,33 @@ const alignmentLabel = (alignment: Alignment): string => alignment === "good" ? 
  * cue directs the Storyteller there). */
 export const playerFacingAlignmentId = (player: Pick<STPlayerRecord, "id">): string => `player-facing-alignment-${player.id}`;
 
+/**
+ * The alignment Normal (`shownAlignment: null`) would CURRENTLY tell this
+ * participant -- undefined when Normal tells none. An ordinary participant's
+ * derives from their valid Shown Role (exactly the projection's own rule,
+ * never the Actual Alignment); a Traveler's is their current Actual Alignment
+ * (none while unresolved).
+ */
+export function normalAlignmentOf(player: STPlayerRecord, registry: RoleRegistry | null): Alignment | undefined {
+  if (player.isTraveler) return player.actualAlignment;
+  return registry ? projectIdentity({ ...player, shownAlignment: null }, registry)?.shownAlignment : undefined;
+}
+
+/**
+ * SOL-10E-R1 (PHASE10E.md 15/25, 10E-AC-41): whether the player-facing
+ * alignment MEANINGFULLY departs from Normal -- a semantic cue, never a
+ * raw-storage warning. Not told (`undisclosed`) always does; an explicit
+ * Good/Evil does only while it differs from what Normal currently tells (so a
+ * stored value identical to Normal -- e.g. Setup's dealt perception -- shows
+ * nothing, and one that later diverges because Normal changed shows the cue
+ * then); Normal itself never does. Read-only: nothing is normalized.
+ */
+export function alignmentViewOverridden(player: STPlayerRecord, registry: RoleRegistry | null): boolean {
+  if (player.shownAlignment === null) return false;
+  if (player.shownAlignment === "undisclosed") return true;
+  return player.shownAlignment !== normalAlignmentOf(player, registry);
+}
+
 export function ActualAlignmentControls({ player }: { player: STPlayerRecord }) {
   const game = useStorytellerStore((s) => s.game);
   const script = useStorytellerStore((s) => (game ? selectScriptById(s, game.scriptId) : undefined));
@@ -40,15 +67,18 @@ export function ActualAlignmentControls({ player }: { player: STPlayerRecord }) 
   const hidden = usePrivacyStore((s) => s.enabled);
   const [error, setError] = useState<string | null>(null);
   const [correctionOpen, setCorrectionOpen] = useState(false);
-  // Armed by a committed change of an ORDINARY participant's Actual
-  // Alignment; the cue itself shows only while the player view still differs.
+  // SOL-10E-R2: armed only by an accepted GAMEPLAY change
+  // (changeActualAlignment) of an ORDINARY participant -- never by a
+  // correction, which repairs the record rather than asserting a newly
+  // experienced alignment change. The cue itself shows only while the player
+  // view still differs.
   const [cueArmed, setCueArmed] = useState(false);
   if (!game || hidden || player.isEmpty || !player.participantId) return null;
 
   const run = (intent: AlignmentIntent) => {
     const result = resolveAlignments({ intents: [intent] });
     setError(result.ok ? null : result.message);
-    if (result.ok && result.changed && !player.isTraveler) setCueArmed(true);
+    if (result.ok && result.changed && !player.isTraveler && intent.kind === "changeActualAlignment") setCueArmed(true);
   };
   const current = player.actualAlignment;
   const ended = game.phase === "ended";
@@ -114,7 +144,8 @@ export function PlayerFacingAlignmentControls({ player }: { player: STPlayerReco
   const script = useStorytellerStore((s) => (game ? selectScriptById(s, game.scriptId) : undefined));
   const resolveRoles = useStorytellerStore((s) => s.resolveRoles);
   const hidden = usePrivacyStore((s) => s.enabled);
-  const overridden = player.shownAlignment !== null;
+  const registry = script ? buildRegistry(script) : null;
+  const overridden = alignmentViewOverridden(player, registry);
   const [open, setOpen] = useState(overridden);
   const [error, setError] = useState<string | null>(null);
   if (!game || hidden || player.isEmpty || !player.participantId) return null;
@@ -123,14 +154,10 @@ export function PlayerFacingAlignmentControls({ player }: { player: STPlayerReco
     const result = resolveRoles({ intents: [shownAlignmentIntent(player, shownAlignment)] });
     setError(result.ok ? null : result.message);
   };
-  // What Normal currently means for this participant: an ordinary player's
-  // alignment derives from their Shown Role; a Traveler's follows their
-  // Actual Alignment.
-  const shownDef = !player.isTraveler && player.shownRole && script ? buildRegistry(script).get(player.shownRole) : undefined;
-  const normal = player.isTraveler
-    ? player.actualAlignment ? alignmentLabel(player.actualAlignment) : "not chosen"
-    : shownDef && shownDef.type !== "traveler" && shownDef.type !== "fabled" && shownDef.type !== "loric"
-      ? alignmentLabel(deriveAlignment(shownDef)) : "—";
+  // What Normal currently means for this participant (the same definition
+  // the override cue compares against).
+  const normalAlignment = normalAlignmentOf(player, registry);
+  const normal = normalAlignment ? alignmentLabel(normalAlignment) : player.isTraveler ? "not chosen" : "—";
 
   return <div className="alignment-perception">
     <div id={playerFacingAlignmentId(player)} tabIndex={-1} className="drawer-row" role="group" aria-label="Player-facing alignment">

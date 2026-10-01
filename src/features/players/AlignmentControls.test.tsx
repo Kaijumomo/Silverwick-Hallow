@@ -15,7 +15,7 @@ import { projectToSelf } from "@/stores/projections";
 import { buildRegistry } from "@/data/roleRegistry";
 import { PlayerDrawer } from "./PlayerDrawer";
 import { TravelerArrival } from "./TravelerArrival";
-import { ActualAlignmentControls, PlayerFacingAlignmentControls, playerFacingAlignmentId } from "./AlignmentControls";
+import { ActualAlignmentControls, PlayerFacingAlignmentControls, alignmentViewOverridden, playerFacingAlignmentId } from "./AlignmentControls";
 import type { PlayerId } from "@/stores/types";
 
 const state = () => store.getState();
@@ -192,15 +192,121 @@ describe("10E-AC-41: player-facing alignment -- Normal by default, overrides dis
     expect(projectToSelf(player(zed), registry)!.shownAlignment).toBe("good");
   });
 
-  it("a dealt ordinary perception is stored explicitly and therefore shows the override cue (literal AC-41; Normal is one tap away)", () => {
+});
+
+// SOL-10E-R1 (PHASE10E.md 15 / 25, 10E-AC-41): "View overridden" is semantic --
+// a meaningful departure from what Normal CURRENTLY tells the player, never
+// mere non-null storage. Stored values are never normalized to suppress it.
+describe("SOL-10E-R1: semantic 'View overridden'", () => {
+  const cue = () => screen.queryByText("View overridden");
+  const traveler = () => {
+    state().addPlayer("Zed");
+    const zed = idOf("Zed");
+    state().assignRole(zed, "thief");
+    return zed;
+  };
+
+  it("a normal Deal's explicit stored alignment equal to Normal shows no cue -- and is not rewritten", () => {
     goLive();
     const chef = holder("chef");
+    const imp = holder("imp");
     expect(player(chef).shownAlignment).toBe("good"); // Setup's dealtIdentity stores the derived value explicitly
+    expect(player(imp).shownAlignment).toBe("evil");
+    for (const id of [chef, imp]) {
+      const { unmount } = render(<SeatDrawer seat={id} />);
+      expect(cue()).toBeNull();
+      expect(screen.queryByRole("button", { name: "Shown Good" })).toBeNull(); // nothing to disclose: closed
+      unmount();
+    }
+    expect(player(chef).shownAlignment).toBe("good"); // never auto-cleared
+    expect(player(imp).shownAlignment).toBe("evil");
+    expect(alignmentViewOverridden(player(chef), registry)).toBe(false);
+    expect(alignmentViewOverridden(player(imp), registry)).toBe(false);
+  });
+
+  it("an explicit ordinary alignment differing from Normal shows the cue (Good where Normal is Evil, Evil where Normal is Good)", () => {
+    goLive();
+    const chef = holder("chef");
+    const imp = holder("imp");
+    state().setShownAlignment(chef, "evil");
+    state().setShownAlignment(imp, "good");
+    for (const id of [chef, imp]) {
+      const { unmount } = render(<SeatDrawer seat={id} />);
+      expect(cue()).toBeInTheDocument();
+      unmount();
+    }
+    expect(alignmentViewOverridden(player(chef), registry)).toBe(true);
+    expect(alignmentViewOverridden(player(imp), registry)).toBe(true);
+  });
+
+  it("a Traveler's explicit value equal to their Actual Alignment shows no cue; a differing one does", () => {
+    goLive();
+    const zed = traveler();
+    state().setTravelerAlignment(zed, "evil");
+    state().setShownAlignment(zed, "evil");
+    const { unmount } = render(<SeatDrawer seat={zed} />);
+    expect(cue()).toBeNull();
+    unmount();
+    state().setShownAlignment(zed, "good");
+    render(<SeatDrawer seat={zed} />);
+    expect(cue()).toBeInTheDocument();
+  });
+
+  it.each(["good", "evil"] as const)("a Traveler with unresolved Actual Alignment and explicit %s shows the cue", (value) => {
+    goLive();
+    const zed = traveler();
+    expect(player(zed).actualAlignment).toBeUndefined();
+    state().setShownAlignment(zed, value);
+    render(<SeatDrawer seat={zed} />);
+    expect(cue()).toBeInTheDocument();
+  });
+
+  it("Not told (undisclosed) always shows the cue -- ordinary, resolved Traveler and unresolved Traveler", () => {
+    goLive();
+    const chef = holder("chef");
+    const zed = traveler();
+    const yan = (() => { state().addPlayer("Yan"); const id = idOf("Yan"); state().assignRole(id, "beggar"); return id; })();
+    state().setTravelerAlignment(zed, "good");
+    for (const id of [chef, zed, yan]) {
+      state().setShownAlignment(id, "undisclosed");
+      const { unmount } = render(<SeatDrawer seat={id} />);
+      expect(cue()).toBeInTheDocument();
+      unmount();
+      expect(alignmentViewOverridden(player(id), registry)).toBe(true);
+    }
+  });
+
+  it("Normal (null) never shows the cue", () => {
+    goLive();
+    const zed = traveler();
+    for (const id of [holder("chef"), zed]) {
+      state().setShownAlignment(id, null);
+      const { unmount } = render(<SeatDrawer seat={id} />);
+      expect(cue()).toBeNull();
+      unmount();
+    }
+  });
+
+  it("when Normal later changes, an already-stored explicit value becomes meaningfully overridden and the cue appears by itself", () => {
+    goLive();
+    // Traveler: explicit Good equal to Actual Good -> the Actual becomes Evil.
+    const zed = traveler();
+    state().setTravelerAlignment(zed, "good");
+    state().setShownAlignment(zed, "good");
+    const { unmount } = render(<SeatDrawer seat={zed} />);
+    expect(cue()).toBeNull();
+    act(() => { state().setTravelerAlignment(zed, "evil"); });
+    expect(cue()).toBeInTheDocument();
+    expect(player(zed).shownAlignment).toBe("good"); // the stored value itself never moved
+    unmount();
+    // Ordinary: the dealt explicit Good stays, but the Shown Role becomes an
+    // Evil character, so Normal now tells Evil.
+    const chef = holder("chef");
     render(<SeatDrawer seat={chef} />);
-    expect(screen.getByText("View overridden")).toBeInTheDocument();
-    fireEvent.click(facingGroup().getByRole("button", { name: "Normal (Good)" }));
-    expect(screen.queryByText("View overridden")).toBeNull();
-    expect(projectToSelf(player(chef), registry)).toEqual({ shownRole: "chef", shownAlignment: "good" });
+    expect(cue()).toBeNull();
+    act(() => { state().setPerception(chef, { shownRole: "imp", shownAlignment: "good" }); });
+    expect(player(chef).shownAlignment).toBe("good");
+    expect(cue()).toBeInTheDocument();
   });
 });
 
@@ -219,6 +325,38 @@ describe("PHASE10E.md 15: ordinary disclosure advisory", () => {
     // The Storyteller chooses to tell them Evil: the views agree, the cue goes.
     fireEvent.click(screen.getByText("Override what they are told…"));
     fireEvent.click(await screen.findByRole("button", { name: "Shown Evil" }));
+    expect(screen.queryByText(/Player view differs/)).toBeNull();
+  });
+
+  it("SOL-10E-R2: a correction reaching the same final Actual Alignment never arms the advisory (Live Play and after Reveal)", async () => {
+    goLive();
+    const chef = holder("chef");
+    state().setShownAlignment(chef, null);
+    render(<SeatDrawer seat={chef} />);
+    fireEvent.click(screen.getByText("Correct the recorded alignment…"));
+    fireEvent.click(await alignmentSection().findByRole("button", { name: "Correct to Evil" }));
+    expect(player(chef).actualAlignment).toBe("evil");
+    expect(alignmentHistory().at(-1)).toMatchObject({ correction: true });
+    // The player view does differ (derived Good vs Actual Evil), yet a repair
+    // of the record is not a newly experienced change: no advisory.
+    expect(projectToSelf(player(chef), registry)!.shownAlignment).toBe("good");
+    expect(screen.queryByText(/Player view differs/)).toBeNull();
+    // A later GAMEPLAY change does arm it when the view differs.
+    fireEvent.click(actualGroup().getByRole("button", { name: "Good" }));
+    expect(screen.queryByText(/Player view differs/)).toBeNull(); // Good again: the derived Good now matches
+    fireEvent.click(actualGroup().getByRole("button", { name: "Evil" }));
+    expect(screen.getByText(/Player view differs from the new alignment/)).toBeInTheDocument();
+  });
+
+  it("SOL-10E-R2: in the Reveal window only corrections are possible, and they never arm the advisory", async () => {
+    deal();
+    expect(state().revealRoles().ok).toBe(true);
+    const imp = holder("imp");
+    state().setShownAlignment(imp, null);
+    render(<SeatDrawer seat={imp} />);
+    fireEvent.click(screen.getByText("Correct the recorded alignment…"));
+    fireEvent.click(await alignmentSection().findByRole("button", { name: "Correct to Good" }));
+    expect(player(imp).actualAlignment).toBe("good");
     expect(screen.queryByText(/Player view differs/)).toBeNull();
   });
 

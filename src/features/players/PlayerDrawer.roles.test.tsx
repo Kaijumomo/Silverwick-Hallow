@@ -124,13 +124,15 @@ describe("routine operation goes through the Role seam", () => {
     expect(player(id)).toMatchObject({ shownRole: "chef", shownAlignment: "evil", privateInfo: { extraText: "draft" } });
   });
 
-  it("Shown alignment, behavior mode and 'clear' are explicit perception changes; a refusal is shown inline and changes nothing", () => {
+  it("Shown alignment, behavior mode and 'clear' are explicit perception changes; a refusal is shown inline and changes nothing", async () => {
     goLive();
     const id = holder("chef");
     render(<SeatDrawer seat={id} />);
     // Phase 10E: explicit player-facing overrides are progressively disclosed
-    // (open here because the dealt perception is already explicit).
-    fireEvent.click(behaviorSection().getByRole("button", { name: "Shown Evil" }));
+    // (closed here: the dealt explicit Good equals Normal, so nothing is
+    // meaningfully overridden -- SOL-10E-R1).
+    fireEvent.click(behaviorSection().getByText("Override what they are told…"));
+    fireEvent.click(await behaviorSection().findByRole("button", { name: "Shown Evil" }));
     expect(player(id).shownAlignment).toBe("evil");
     fireEvent.change(behaviorSection().getByLabelText("Mode:"), { target: { value: "custom" } });
     expect(player(id).behaviorMode).toBe("custom");

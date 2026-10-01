@@ -10,7 +10,7 @@
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
 **Schema:** v22 (integrated on `main`)\
-**Current phase:** Phase 10E — Alignment Transitions (implementation delivered; targeted pre-Luna remediation required)
+**Current phase:** Phase 10E — Alignment Transitions (implementation + pre-Luna remediation delivered; awaiting Luna verification)
 
 ## Product invariants
 
@@ -221,7 +221,7 @@ Frozen Phase 10D architecture:
 Release order: Phase 10D changed `src/firebase/rules.json`; the client ships from `main` automatically, so the Firebase Rules were deployed and verified before `main` moved. The project owner ran `npm run rules:deploy` against the production project's default Realtime Database instance from `22dfd49e7220d642eec353c2ea83fa3a2547ce8b`, then the read-only `npm run rules:verify`, which reported that the deployed rules match `src/firebase/rules.json`. Both steps were owner-run and owner-reported. The client deployment from `main` was not observed by the integration session.
 
 ### 10E — Alignment Transitions
-**Status:** IMPLEMENTATION DELIVERED — TARGETED PRE-LUNA REMEDIATION REQUIRED. Phase 10E runs on `dev/phase-10e`. First implementation checkpoint: `d1ed33a23975bd8af707a83672ab9f4b7cf4f45f`. Sol's narrow UI clarification is recorded in `PHASE10E.md` §25. Not closed; not integrated.
+**Status:** PRE-LUNA REMEDIATION DELIVERED — AWAITING LUNA VERIFICATION. Phase 10E runs on `dev/phase-10e`. First implementation checkpoint: `d1ed33a23975bd8af707a83672ab9f4b7cf4f45f`. Sol's narrow UI clarification (`PHASE10E.md` §25) is implemented as SOL-10E-R1 (semantic "View overridden") and SOL-10E-R2 (gameplay-only "Player view differs") in the remediation review checkpoint reported in the remediation handoff (verify the exact SHA). Not closed; not integrated.
 
 Delivered (store/game schema v23): `src/stores/alignmentResolution.ts` (pure `planAlignmentTransaction` / `applyAlignmentPlan`) committed by `resolveAlignments`; `setActualAlignment` / `setTravelerAlignment` are adapters over it; the Phase 10D `setPerception` seam admits `shownAlignment: "undisclosed"`; projection honors Normal / explicit / Not Told for ordinary participants and Travelers; the self wire renders an alignment-less identity; v22 -> v23 normalizes Traveler Good/Evil Shown Alignment to Normal with v23 evidence detected first; `occupySeat` drops stale seat alignment; Storyteller UI `src/features/players/AlignmentControls.tsx`; architecture guard `src/stores/alignmentArchitecture.test.ts`. No Firebase Rules change.
 
@@ -260,4 +260,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Apply the targeted pre-Luna remediation in `PHASE10E.md` §25 to checkpoint `d1ed33a23975bd8af707a83672ab9f4b7cf4f45f`: semantic "View overridden" cue and gameplay-only "Player view differs" arming. Rerun the complete local gate, create/push a new fixed review checkpoint, then hand that SHA to Luna for mechanical verification.
+**Luna mechanical verification** of the Phase 10E remediation review checkpoint (the `dev/phase-10e` commit carrying SOL-10E-R1/R2 on top of `32f5a58e9fe0888917cd7ff8a498691506f39af8`) against `PHASE10E.md` (10E-AC-01..42 and §25). Local implementation evidence is not independent verification.
