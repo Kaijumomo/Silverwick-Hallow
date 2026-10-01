@@ -1,14 +1,15 @@
 # Silverwick Hollow — Master Implementation Plan
 
 **Status:** Active canonical roadmap  
-**Updated:** 2026-09-30\
+**Updated:** 2026-10-01\
 **Integrated branch:** `main`  
 **Phase 10A closure checkpoint:** `d798266b988e49f904aa8f8658c917fd5b7e7abb`  
 **Pre-10B Firebase lifecycle hotfix checkpoint:** `38b10119544ce2c02590e9bc9c741aab995a91d1`  
 **Phase 10B final reviewed implementation checkpoint:** `3c9e20f4506258bab143b5f20750deb34b290379` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10C final reviewed implementation checkpoint:** `ca808fa18e97d758750aad63ceacc2bea3d8f627` (integrated into `main` with the docs-only closure commit on top)\
-**Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (the docs-only closure commit on top is fast-forwarded into `main` after the rules-first release step)\
-**Schema:** v22\
+**Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
+**Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
+**Schema:** v22 (integrated on `main`)\
 **Current phase:** Phase 10E — Alignment Transitions (NEXT: architecture challenge before coding)
 
 ## Product invariants
@@ -106,6 +107,8 @@ Final Luna verification:
 
 Operational note: the code hotfix is closed, but production Go Live still depends on the deployed Firebase RTDB rules matching `src/firebase/rules.json`. Verify/deploy the current rules before treating the production incident itself as closed.
 
+Update 2026-10-01: as part of the Phase 10D integration, the project owner deployed the current rules to production and verified them (see 10D below). No production Go Live → live lobby → End Game smoke test is recorded, so the production incident itself is not recorded as closed.
+
 ## Phase 10 roadmap
 
 ### 10B — Effect Lifecycle + Visual Effect Indicators
@@ -183,7 +186,7 @@ Frozen principle carried in from 10B: if a mechanical condition is authoritative
 ### 10D — Role Transitions
 **Status:** CLOSED\
 **Final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa`\
-**Integration:** the docs-only closure commit on top of that checkpoint, fast-forwarded into `main` only after the Phase 10D Firebase Rules are deployed to production and verified (rules first, then client). See `PHASE10D.md`.\
+**Integration:** the docs-only closure commit on top of that checkpoint, `22dfd49e7220d642eec353c2ea83fa3a2547ce8b`, fast-forwarded into `main` (no merge commit) on 2026-10-01 (UTC), only after the Phase 10D Firebase Rules were deployed to production and verified (rules first, then client). A docs-only integration-record commit directly on top of it is the final `main` of this integration. See `PHASE10D.md`.\
 **Schema/store:** v22
 
 Lineage on top of `c6fce7dd77e50baf4a34c75529ad48490558296d`: implementation `b2e0c6bf4d43537d770fcfcc2cc9b4abca22c4fe` → post-Luna remediation `4ca328256058c48c834c968d63a61a732364227f` → SOL-10D-R2 Astra remediation incl. C01/C02 Life amendments `921b73ef102ff3d9b4456b78c759f571893c9b8c` → SOL-10D-C03 duplicate RoleId ownership `a5ef611150ee85f76915e5b4eece828c6ecd30d6` → SOL-10D-C03-R1 Setup compatibility `444820274eb5fd672d567bbc9c95bf24fd0865ef` → CLOSURE-01/02/03 `a614496187bbf43cd4541d8a73a30645d7d7bdf2` → LUNA-CLOSURE-03-R1 `b4068b4f517e51015c3c974d73ddc6503036f416` → ASTRA-FINAL-01 `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa`.
@@ -215,10 +218,10 @@ Frozen Phase 10D architecture:
 - Role changes preserve Life, Effects, Reminders and Actual Alignment unless a separately authorized primitive changes them.
 - Store/game schema v22 migration behavior is preserved.
 
-Release order: Phase 10D changed `src/firebase/rules.json`; the client ships from `main` automatically, so the Firebase Rules are deployed and verified before `main` moves.
+Release order: Phase 10D changed `src/firebase/rules.json`; the client ships from `main` automatically, so the Firebase Rules were deployed and verified before `main` moved. The project owner ran `npm run rules:deploy` against the production project's default Realtime Database instance from `22dfd49e7220d642eec353c2ea83fa3a2547ce8b`, then the read-only `npm run rules:verify`, which reported that the deployed rules match `src/firebase/rules.json`. Both steps were owner-run and owner-reported. The client deployment from `main` was not observed by the integration session.
 
 ### 10E — Alignment Transitions
-**Status:** NEXT — architecture challenge before coding (not yet designed). Phase 10E work starts on `dev/phase-10e`, to be created from the exact integrated `main` carrying the Phase 10D closure.
+**Status:** NEXT — architecture challenge before coding (not yet designed). Phase 10E work starts on `dev/phase-10e`, at the exact final `main` of the Phase 10D integration (the docs-only integration record directly on top of `22dfd49e7220d642eec353c2ea83fa3a2547ce8b`).
 
 Actual Alignment mutation semantics, shown/perceived alignment where needed, History/provenance, correction vs gameplay transition.
 
@@ -250,9 +253,9 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 - Each Phase 10 subphase starts from current `main` on a fresh branch.
 - Reviewers verify exact commit identity rather than trusting branch names.
 - `dev/phase-10c` was created from the exact integrated `main` carrying the Phase 10B closure.
-- `dev/phase-10d` is created from the exact integrated `main` carrying the Phase 10C closure.
-- `dev/phase-10e` is created from the exact integrated `main` carrying the Phase 10D closure.
+- `dev/phase-10d` was created from the exact integrated `main` carrying the Phase 10C closure.
+- `dev/phase-10e` starts from the exact final `main` of the Phase 10D integration: the docs-only integration record directly on top of the Phase 10D closure commit `22dfd49e7220d642eec353c2ea83fa3a2547ce8b`.
 
 ## Immediate next action
 
-After the rules-first integration of Phase 10D, perform the **Phase 10E architecture challenge** (Alignment Transitions) on `dev/phase-10e`, to be created from the exact integrated `main` carrying the Phase 10D closure. Do **not** begin implementation until the challenge is adjudicated into a Sol implementation contract. Verify exact commit identity rather than trusting branch names.
+Phase 10D is integrated. Perform the **Phase 10E architecture challenge** (Alignment Transitions) on `dev/phase-10e`. Do **not** begin implementation until the challenge is adjudicated into a Sol implementation contract. Verify exact commit identity rather than trusting branch names.

@@ -1,16 +1,16 @@
 # Silverwick Hollow — Current Handoff
 
-**Date:** 2026-09-30\
-**State:** Phase 10D — Role Transitions is **CLOSED** (Sol: **CLOSED — READY FOR INTEGRATION**). Its docs-only closure commit is the integration checkpoint. Integration is rules-first: the Phase 10D Firebase Rules are deployed to production and verified, then `main` is fast-forwarded to that commit, then `dev/phase-10e` is created from that exact `main`. Phase 10E — Alignment Transitions is **NEXT**; it has **not** been designed yet.
+**Date:** 2026-10-01\
+**State:** Phase 10D — Role Transitions is **CLOSED** (Sol: **CLOSED — READY FOR INTEGRATION**) and **INTEGRATED** into `main`. Integration was rules-first: the Phase 10D Firebase Rules were deployed to production and verified, then `main` was fast-forwarded to the docs-only closure commit `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the integration checkpoint), and a docs-only integration record directly on top of it is the final `main`. Phase 10E — Alignment Transitions is **NEXT**, on `dev/phase-10e`, which starts from that exact final `main`; it has **not** been designed yet.
 
 ## Phase 10D — CLOSED
 
 Final reviewed implementation checkpoint (before docs-only closure metadata):
 `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa`
 
-The docs-only closure commit on top of it is the integration checkpoint: `main` is fast-forwarded to it only after the rules-first release step below, and `dev/phase-10e` is created from that exact `main`. Verify exact SHAs rather than branch names.
+The docs-only closure commit on top of it, `22dfd49e7220d642eec353c2ea83fa3a2547ce8b`, is the integration checkpoint: `main` was fast-forwarded to it (no merge commit) after the rules-first release step below. A docs-only integration-record commit directly on top of it is the final `main`, and `dev/phase-10e` starts from that exact `main`. Verify exact SHAs rather than branch names.
 
-Lineage on top of `c6fce7dd77e50baf4a34c75529ad48490558296d`: implementation `b2e0c6bf4d43537d770fcfcc2cc9b4abca22c4fe` → post-Luna remediation (same-Role Traveler `restart`) `4ca328256058c48c834c968d63a61a732364227f` → SOL-10D-R2 Astra remediation ASTRA-10D-001…004 + C01/C02 Life amendments `921b73ef102ff3d9b4456b78c759f571893c9b8c` → SOL-10D-C03 duplicate RoleId ownership `a5ef611150ee85f76915e5b4eece828c6ecd30d6` → SOL-10D-C03-R1 Setup compatibility `444820274eb5fd672d567bbc9c95bf24fd0865ef` → CLOSURE-01 immutable pending Traveler requests / CLOSURE-02 deferred request liveness / CLOSURE-03 canonical Traveler downstream ownership `a614496187bbf43cd4541d8a73a30645d7d7bdf2` → LUNA-CLOSURE-03-R1 Almanac RoleId uniqueness `b4068b4f517e51015c3c974d73ddc6503036f416` → ASTRA-FINAL-01 stopped-writer lifecycle `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` → docs-only closure.
+Lineage on top of `c6fce7dd77e50baf4a34c75529ad48490558296d`: implementation `b2e0c6bf4d43537d770fcfcc2cc9b4abca22c4fe` → post-Luna remediation (same-Role Traveler `restart`) `4ca328256058c48c834c968d63a61a732364227f` → SOL-10D-R2 Astra remediation ASTRA-10D-001…004 + C01/C02 Life amendments `921b73ef102ff3d9b4456b78c759f571893c9b8c` → SOL-10D-C03 duplicate RoleId ownership `a5ef611150ee85f76915e5b4eece828c6ecd30d6` → SOL-10D-C03-R1 Setup compatibility `444820274eb5fd672d567bbc9c95bf24fd0865ef` → CLOSURE-01 immutable pending Traveler requests / CLOSURE-02 deferred request liveness / CLOSURE-03 canonical Traveler downstream ownership `a614496187bbf43cd4541d8a73a30645d7d7bdf2` → LUNA-CLOSURE-03-R1 Almanac RoleId uniqueness `b4068b4f517e51015c3c974d73ddc6503036f416` → ASTRA-FINAL-01 stopped-writer lifecycle `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` → docs-only closure `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (integration checkpoint) → docs-only integration record (final `main`).
 
 Schema / store version: **v22**.
 
@@ -35,6 +35,8 @@ Phase 10D changed `src/firebase/rules.json`: a player's pending Traveler request
 1. `npx firebase use <PROJECT_ID>` then `npm run rules:deploy` (Realtime Database rules only);
 2. `npm run rules:verify -- --project <PROJECT_ID>` (add `--instance <DB_INSTANCE>` for a non-default instance) must exit 0 with the deployed rules identical to `src/firebase/rules.json`;
 3. only then fast-forward `main` to the Phase 10D closure commit.
+
+Release record: the project owner ran `npm run rules:deploy` against the production Firebase project's default Realtime Database instance from `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (`src/firebase/rules.json` SHA-256 `9cccdc7f474d4948007f5e3b62fa485d0e20e6e06b50194258f348e01e0db076`). The read-only `npm run rules:verify` then reported that the deployed rules match `src/firebase/rules.json`. Both steps were owner-run and owner-reported; the integration session did not observe them directly. `main` was then fast-forwarded on 2026-10-01 (UTC) from `c6fce7dd77e50baf4a34c75529ad48490558296d` to `22dfd49e7220d642eec353c2ea83fa3a2547ce8b`. The integration-record commit on top changes documentation only, so the deployed rules still match `main`. The client ships from `main` automatically; that client deployment was not observed from the integration session.
 
 ### Phase 10D frozen behavior (summary)
 
@@ -232,6 +234,8 @@ Frozen hotfix behavior:
 
 Operational status: production Firebase rules were **not** deployed by the hotfix implementation or verification environments. Before treating the real production incident as closed, verify that deployed RTDB rules match `src/firebase/rules.json`, deploy current rules if needed, and smoke-test Go Live → live lobby → End Game.
 
+Update 2026-10-01: as part of the Phase 10D integration, the project owner deployed the current rules to production and verified them (see the Phase 10D release record above). No production Go Live → live lobby → End Game smoke test is recorded, so the production incident itself is not recorded as closed.
+
 ## Phase 10 roadmap
 
 - **10A Life Transition Semantics + visual life-state grammar — CLOSED**
@@ -259,7 +263,7 @@ Do not implement ability resolution (Phase 10F) in 10E.
 Use:
 `dev/phase-10e`
 
-It is to be created from the exact integrated `main` carrying the Phase 10D closure commit, with no implementation changes. Verify `dev/phase-10e` equals that `main` before starting.
+It starts from the exact final `main` of the Phase 10D integration (the docs-only integration record directly on top of the Phase 10D closure commit `22dfd49e7220d642eec353c2ea83fa3a2547ce8b`), with no implementation changes. Verify `dev/phase-10e` equals that `main` before starting.
 
 At the start of any new session, verify the exact branch SHA and read:
 - `docs/ai/MASTER_IMPLEMENTATION_PLAN.md`
@@ -272,5 +276,6 @@ At the start of any new session, verify the exact branch SHA and read:
 
 ## Immediate next task
 
-1. If `main` does not yet equal the Phase 10D docs-only closure commit, finish the rules-first integration first (deploy and verify the Firebase Rules, fast-forward `main`, create `dev/phase-10e` from that exact `main`).
-2. Then perform the **Phase 10E architecture challenge before coding** on `dev/phase-10e` (verify the exact commit SHA). No 10E implementation begins until the challenge is adjudicated into a Sol implementation contract.
+Perform the **Phase 10E architecture challenge before coding** on
+`dev/phase-10e` (verify the exact commit SHA). No 10E implementation begins
+until the challenge is adjudicated into a Sol implementation contract.

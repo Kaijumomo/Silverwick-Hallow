@@ -6,16 +6,18 @@ what was delivered.
 
 Final reviewed implementation checkpoint (before docs-only closure metadata):
 `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa`. The docs-only closure commit on
-top of it is the integration checkpoint. Integration is rules-first: the Phase
-10D Firebase Rules are deployed to production and verified, and only then is
-`main` fast-forwarded to that commit (see "Release order" below).
+top of it, `22dfd49e7220d642eec353c2ea83fa3a2547ce8b`, is the integration
+checkpoint. Integration was rules-first: the Phase 10D Firebase Rules were
+deployed to production and verified, and only then was `main` fast-forwarded
+to that commit (see "Release order" and "Integration record" below).
 
 Starting checkpoint: `c6fce7dd77e50baf4a34c75529ad48490558296d` (`main` =
 `dev/phase-10d` at implementation start; Phase 10A/10B/10C closed).
 
 ## Closure record
 
-Phase 10D — **CLOSED**. Sol verdict: **CLOSED — READY FOR INTEGRATION.**
+Phase 10D — **CLOSED** and **INTEGRATED** into `main`. Sol verdict:
+**CLOSED — READY FOR INTEGRATION.**
 
 History, on top of `c6fce7dd77e50baf4a34c75529ad48490558296d`:
 
@@ -77,6 +79,31 @@ older ones, while the new client only discourages a replacement. The web
 client ships from `main` automatically, but rules change only through
 `npm run rules:deploy`, so the Firebase Rules are deployed and verified
 (`npm run rules:verify -- --project <PROJECT_ID>`) **before** `main` moves.
+
+### Integration record
+
+Integration was completed on 2026-10-01 (UTC), in the release order above:
+
+1. The project owner deployed the rules with `npm run rules:deploy` (Realtime
+   Database rules only) to the production Firebase project's default Realtime
+   Database instance, from the integration checkpoint
+   `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (`src/firebase/rules.json`
+   SHA-256 `9cccdc7f474d4948007f5e3b62fa485d0e20e6e06b50194258f348e01e0db076`).
+   The read-only `npm run rules:verify -- --project <PROJECT_ID>` then
+   reported that the deployed rules match `src/firebase/rules.json`. Both
+   steps were run and reported by the project owner; the integration session
+   did not observe them directly.
+2. `main` was fast-forwarded, with no merge commit, from
+   `c6fce7dd77e50baf4a34c75529ad48490558296d` to the integration checkpoint
+   `22dfd49e7220d642eec353c2ea83fa3a2547ce8b`.
+3. A docs-only integration-record commit directly on top of the integration
+   checkpoint records these facts. It is the final `main` of the Phase 10D
+   integration and the starting point of `dev/phase-10e`. It changes no code,
+   test or rules file, so the deployed rules still match `main`.
+
+The web client ships from `main` automatically through hosting configured
+outside this repository; that client deployment was not observed from the
+integration session.
 
 ## The primitive
 
