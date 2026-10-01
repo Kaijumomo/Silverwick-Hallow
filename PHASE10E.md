@@ -1,11 +1,14 @@
 # Phase 10E — Alignment Transitions
 
-Status: **FROZEN — IMPLEMENTATION AUTHORIZED**  
+Status: **CLOSED — READY FOR INTEGRATION.** Store/game schema **v23** (`GAME_SCHEMA_VERSION = 23`, `STORE_VERSION = 23`).  
 Decision date: **2026-10-01**  
 Starting repository checkpoint: **b170d3d448a4b035a273443894611e69cf882c10**  
 Starting branch: **dev/phase-10e**  
 Starting schema/store: **v22**  
-Target schema/store: **v23**
+Final schema/store: **v23**
+
+Final reviewed implementation checkpoint (before docs-only closure metadata):  
+`f978c366ab18fffb873b7ea150c1b3ec69e8f71b`.
 
 This document is the Sol implementation contract for Phase 10E. It incorporates the independent Opus 5.5 architecture challenge, the targeted Traveler-perception follow-up, the BOTC rules review, Sol adjudication, and project-owner approval. Implementation begins from the commit containing this frozen contract, not from an older Phase 10D checkpoint.
 
@@ -818,3 +821,58 @@ Astra's demonstrated same-Role `replaceSetupRole` behavior is therefore not clas
 The remediation checkpoint must add focused regressions for A1-A5 and the Traveler perception-preservation amendment, run the complete normal/default-parallel suite, rules/emulator suite, typecheck, build and diff check, and finish clean.
 
 After implementation, route first to **Luna targeted mechanical verification** of the accepted findings/contract amendment. If mechanically closed, return to **Astra targeted closure review** before Sol closure.
+
+
+## 27. Closure record — 2026-10-01
+
+Phase 10E — **CLOSED — READY FOR INTEGRATION**.
+
+Sol closure basis:
+
+- Frozen implementation contract approved by the project owner.
+- Independent Opus architecture challenge + targeted Traveler-perception challenge adjudicated by Sol.
+- Initial implementation completed and mechanically verified.
+- SOL-10E-R1/R2 pre-Luna UI clarifications implemented and closed.
+- Luna full mechanical verification passed after the independently proven test-harness timing flake was corrected.
+- Astra adversarial review found ASTRA-10E-001..005 plus two semantic questions.
+- Sol adjudicated those findings in §26.
+- Remediation checkpoint: `f978c366ab18fffb873b7ea150c1b3ec69e8f71b`.
+- Luna targeted remediation verification: **PASS — READY FOR ASTRA TARGETED CLOSURE REVIEW**.
+- Astra targeted closure: **PASS — ASTRA-10E-001..005 CLOSED; READY FOR SOL CLOSURE**.
+- Remaining closure-blocking findings: **None**.
+- Remaining evidence gaps: **None**.
+
+Final independently verified gate at the reviewed checkpoint:
+
+- typecheck PASS;
+- default normal tests: **126 files, 3321/3321 passed, 0 skipped**;
+- Firebase emulator/rules: **201/201 passed, 0 skipped**;
+- production build PASS;
+- `git diff --check` PASS;
+- final review worktrees clean.
+
+Astra's targeted closure additionally executed **73/73** independent closure probes and **657/657** focused/adjacent tests with no new findings.
+
+Frozen Phase 10E outcomes:
+
+- one participant-bound Actual Alignment transaction seam;
+- gameplay Alignment change vs correction;
+- atomic multi-participant Alignment resolution;
+- Actual Role and Actual Alignment remain independent;
+- player-facing Alignment supports Normal / explicit Good / explicit Evil / Not Told;
+- ordinary Normal derives from Shown Role;
+- Traveler Normal follows Actual Alignment;
+- Traveler→Traveler Role changes preserve explicit Alignment perception;
+- v22→v23 migration normalizes inert legacy Traveler shown-alignment copies to Normal;
+- strict v23 Alignment History correction/correlation snapshots;
+- Night/Day persisted state requires a valid live Game Moment;
+- new participation never inherits stale seat Alignment;
+- Traveler Actual Alignment change invalidates stale alignment-dependent packet material without erasing historical delivery/completion;
+- Setup Traveler designation is Setup-only;
+- incompatible Traveler perception fails closed;
+- public/self privacy boundaries remain intact;
+- 10F ability resolution remains out of scope.
+
+Setup ordering remains explicit: fresh Setup Role assignment/refinement may canonicalize Actual Alignment; any special starting Alignment is applied/re-applied after the final relevant Setup Role refinement.
+
+Sol verdict: **CLOSED — READY FOR INTEGRATION**.

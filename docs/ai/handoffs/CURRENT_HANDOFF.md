@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-01\
-**State:** Phase 10D — Role Transitions is **CLOSED** (Sol: **CLOSED — READY FOR INTEGRATION**) and **INTEGRATED** into `main`. Integration was rules-first: the Phase 10D Firebase Rules were deployed to production and verified, then `main` was fast-forwarded to the docs-only closure commit `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the integration checkpoint), and a docs-only integration record directly on top of it is the final `main`. Phase 10E — Alignment Transitions is **ASTRA REVIEW COMPLETE / SOL REMEDIATION REQUIRED** on `dev/phase-10e` (contract frozen in `PHASE10E.md`; not closed, not integrated).
+**State:** Phase 10D — Role Transitions is **CLOSED** (Sol: **CLOSED — READY FOR INTEGRATION**) and **INTEGRATED** into `main`. Integration was rules-first: the Phase 10D Firebase Rules were deployed to production and verified, then `main` was fast-forwarded to the docs-only closure commit `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the integration checkpoint), and a docs-only integration record directly on top of it is the final `main`. Phase 10E — Alignment Transitions is **CLOSED — READY FOR INTEGRATION** on `dev/phase-10e`. Final reviewed implementation checkpoint: `f978c366ab18fffb873b7ea150c1b3ec69e8f71b`. Luna targeted verification and Astra targeted closure both passed; no remaining findings/evidence gaps.
 
 ## Phase 10D — CLOSED
 
@@ -242,7 +242,7 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 - **10B Effect Lifecycle + visual Effect indicators — CLOSED**
 - **10C Reminder Workflow + visual Reminder tokens — CLOSED**
 - **10D Role Transitions — CLOSED**
-- **10E Alignment Transitions — ASTRA REMEDIATION DELIVERED; AWAITING LUNA TARGETED VERIFICATION**
+- **10E Alignment Transitions — CLOSED — READY FOR INTEGRATION**
 - 10F Guided Ability Resolution / Night Actions
 - 10G Advanced Storyteller bookkeeping / final visual integration
 
@@ -334,6 +334,26 @@ Remediation delivered (on top of `3b6fcb90752dc8d591b531d5b954aa0ce193c6e1`; exa
 - Traveler -> Traveler Role change/correction preserves `shownAlignment` (roleResolution.ts); ordinary -> Traveler still starts at Normal.
 - Regressions: `src/stores/alignmentAstraRemediation.test.ts`, `src/features/players/alignmentAstraRemediation.test.tsx`.
 
+## Phase 10E closure — 2026-10-01
+
+Final reviewed implementation checkpoint:
+`f978c366ab18fffb873b7ea150c1b3ec69e8f71b`
+
+Sol verdict:
+**CLOSED — READY FOR INTEGRATION**
+
+Closure evidence:
+- Luna targeted verification: PASS.
+- Astra targeted closure: PASS — ASTRA-10E-001..005 CLOSED.
+- normal tests: 126 files, 3321/3321, 0 skipped.
+- Firebase emulator/rules: 201/201, 0 skipped.
+- typecheck PASS.
+- build PASS.
+- `git diff --check` PASS.
+- remaining findings/evidence gaps: none.
+
+Schema/store version: **v23**.
+
 ## Immediate next task
 
-**Luna targeted mechanical verification** of the Phase 10E Astra remediation checkpoint against `PHASE10E.md` §26, then Astra targeted closure review. Do not merge to `main`, deploy Rules or production, or begin 10F.
+Integrate the Phase 10E docs-only closure checkpoint into `main`, record the integration, then create `dev/phase-10f` from the exact final integrated `main`. Phase 10F starts with architecture challenge before coding.
