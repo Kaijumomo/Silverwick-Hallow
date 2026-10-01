@@ -707,3 +707,114 @@ The first implementation checkpoint exposed two narrow UI interpretation gaps. S
 2. **Gameplay advisory versus correction.** "Player view differs" is a gameplay-disclosure advisory. It may arm only after an accepted `changeActualAlignment` for an ordinary participant. It must not arm after `correctActualAlignment`; a correction fixes the record rather than asserting a newly experienced gameplay transition.
 3. **Pre-Reveal correction UI.** It is acceptable for the UI to omit the separate correction affordance before Reveal because Setup writes no History and a normal pre-Reveal change repairs the same Current State. The underlying correction seam remains valid where called.
 4. **Ordinary packet/draft behavior.** No change: ordinary private packets/drafts are not invalidated solely by Actual Alignment mutation because ordinary Actual Alignment is not projected and no ordinary alignment-dependent packet field exists in 10E.
+
+
+## 26. Sol Astra adjudication — 2026-10-01
+
+Astra adversarial review of checkpoint `264ab0bc1380452216aaec944bb9e2f5498802cb` returned REVISE with five demonstrated implementation findings and two semantic questions. Sol adjudicates them as follows.
+
+### Accepted findings requiring remediation
+
+#### SOL-10E-A1 — Setup-only Traveler designation must be lifecycle-gated
+
+Astra demonstrated that `setIsTraveler` can still run on an Ended snapshot when initial Reveal was never completed, because the command checks only Reveal state. That violates the Setup-only ownership of this writer.
+
+Freeze:
+- `setIsTraveler` is valid only while `game.phase === "setup"` and before initial Reveal.
+- Night, Day and Ended refuse before any mutation.
+- UI must not expose an actionable Setup Traveler toggle outside that lifecycle.
+- Refusal changes no Current State, Undo, localSeq, packet or plan count.
+
+This closes ASTRA-10E-001.
+
+#### SOL-10E-A2 — Traveler projection must fail closed on incompatible Shown Role
+
+A schema-valid/recovered Traveler may carry an ordinary Shown Role even though the Role seam would never create that state. The self projection must not reinterpret such a record as an ordinary identity and derive alignment from that ordinary Role.
+
+Freeze:
+- for `isTraveler: true`, a projectable self identity requires a valid Traveler Shown Role that is the participant's own current Traveler character (`shownRole === actualRole`);
+- otherwise identity is unsafe / Needs check and self projection fails closed;
+- a non-Traveler carrying a Traveler Shown Role remains unsafe;
+- valid Traveler Normal perception continues to use Actual Alignment; explicit Good/Evil/undisclosed keeps the v23 semantics;
+- migration does not invent or repair the incompatible Role.
+
+This closes ASTRA-10E-002.
+
+#### SOL-10E-A3 — Live snapshots require a valid live Game Moment
+
+Astra demonstrated schema-valid Night/Day day-0 snapshots on which Alignment and Role mutation can commit without explanatory History because `currentLiveMoment` returns null.
+
+This is a persisted-timeline boundary defect, not permission to create History without a valid moment.
+
+Freeze:
+- a Storyteller game whose phase is Night or Day must have `day >= 1`; persisted validation/recovery must reject Night/Day day-0 rather than reinterpret it;
+- Alignment planner must refuse a live-phase mutation when `currentLiveMoment(game)` is null, before ids/patches are produced;
+- Role planner receives the same defense-in-depth guard because it shares the same `live && current` History pattern and Phase 10F will compose both seams;
+- Setup remains day-0 capable; Ended may retain the day at which it ended, including an ended pre-game snapshot if supported by existing lifecycle;
+- migration must not silently repair a malformed Night/Day day-0 entry into validity.
+
+This closes ASTRA-10E-003 and directly hardens the frozen 10D Role seam without reopening Role semantics.
+
+#### SOL-10E-A4 — Gameplay disclosure advisory is one unresolved gameplay cue
+
+Astra demonstrated a previously resolved gameplay advisory reappearing after a later correction because the component retained `cueArmed=true`.
+
+Freeze:
+- a correction never arms, revives or carries forward the "Player view differs" gameplay advisory;
+- when the player-facing view comes into agreement with the gameplay-changed Actual Alignment, that advisory is resolved and must be disarmed;
+- an accepted correction clears any outstanding local gameplay-disclosure advisory for that rendered participation;
+- a later independent gameplay change may arm a new advisory if its resulting player view differs;
+- participant replacement must not inherit local cue state.
+
+This closes ASTRA-10E-004.
+
+#### SOL-10E-A5 — v23 Alignment History snapshots must reject extra own keys before normalization
+
+Astra demonstrated an Alignment correction snapshot whose raw snapshot carried an extra own key that generic History parsing removed before the v23 strict Alignment refinement inspected it.
+
+Freeze:
+- for v23-shaped Alignment History (Alignment record carrying `correction` or `resolutionId`), raw `change.from` / `change.to` must preserve enough input shape for exact-key validation;
+- accepted `from` is exactly `{}` or exactly `{ actualAlignment: good|evil }`;
+- accepted `to` is exactly `{ actualAlignment: good|evil }`;
+- no extra own key may be silently removed before this contract is checked;
+- legacy pre-v23 Alignment History remains intentionally loose and is not rewritten or globally tightened;
+- do not broaden this into unrelated History-format changes unless mechanically necessary to preserve the raw snapshot at the shared boundary.
+
+This closes ASTRA-10E-005.
+
+### Semantic question 1 — Traveler Role change while Alignment perception is overridden
+
+Sol decision: **preserve explicit Traveler Alignment perception across Traveler -> Traveler Role changes and corrections.**
+
+Phase 10D originally reset Traveler `shownAlignment` to null because the field was inert for Traveler self projection. Phase 10E made it meaningful. A Role change must not silently terminate an independent Good/Evil/Not Told Alignment-perception decision.
+
+Freeze:
+- Traveler -> Traveler Role change/correction updates Actual Role, Shown Role and public Traveler character together;
+- preserve the existing `shownAlignment` value (null / good / evil / undisclosed);
+- null therefore continues Normal-follow-Actual behavior;
+- explicit Good/Evil/undisclosed remains explicit after the Role change;
+- ordinary -> Traveler starts with Normal (`shownAlignment: null`) unless an explicit perception intent in the same composed resolution establishes another value;
+- Traveler -> ordinary continues to require valid ordinary perception as already defined by Phase 10D;
+- Role change still performs its existing packet/draft invalidation; this decision concerns Alignment perception ownership only.
+
+This is a narrow amendment to the Phase 10D Traveler-perception behavior, required by the Phase 10E v23 perception model.
+
+### Semantic question 2 — special starting Alignment versus Setup refinement
+
+Sol decision: **no new preservation rule in 10E. Setup fresh-assignment operations may canonicalize starting Alignment.**
+
+Deal / Shuffle / Swap / Manual Override / Edit Bag are Setup construction. Their existing fresh-assignment behavior may rederive canonical Actual Alignment from the assigned Role.
+
+Freeze:
+- a special starting Alignment is applied after the final Setup Role assignment/refinement that should determine the bag/roles;
+- if the Storyteller performs another fresh Setup assignment afterward, that fresh assignment may overwrite the earlier special Alignment and the special Alignment must be re-applied;
+- Phase 10E does not introduce hidden alignment-override provenance solely to preserve such a value through a re-deal/refinement;
+- future Phase 10F setup ability orchestration must order deterministic special starting Alignment after the Role-assignment/refinement step it depends on.
+
+Astra's demonstrated same-Role `replaceSetupRole` behavior is therefore not classified as a 10E implementation defect.
+
+### Remediation gate
+
+The remediation checkpoint must add focused regressions for A1-A5 and the Traveler perception-preservation amendment, run the complete normal/default-parallel suite, rules/emulator suite, typecheck, build and diff check, and finish clean.
+
+After implementation, route first to **Luna targeted mechanical verification** of the accepted findings/contract amendment. If mechanically closed, return to **Astra targeted closure review** before Sol closure.

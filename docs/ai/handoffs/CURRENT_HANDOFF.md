@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-01\
-**State:** Phase 10D — Role Transitions is **CLOSED** (Sol: **CLOSED — READY FOR INTEGRATION**) and **INTEGRATED** into `main`. Integration was rules-first: the Phase 10D Firebase Rules were deployed to production and verified, then `main` was fast-forwarded to the docs-only closure commit `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the integration checkpoint), and a docs-only integration record directly on top of it is the final `main`. Phase 10E — Alignment Transitions is **IMPLEMENTATION DELIVERED / AWAITING LUNA VERIFICATION** on `dev/phase-10e` (contract frozen in `PHASE10E.md`; not closed, not integrated).
+**State:** Phase 10D — Role Transitions is **CLOSED** (Sol: **CLOSED — READY FOR INTEGRATION**) and **INTEGRATED** into `main`. Integration was rules-first: the Phase 10D Firebase Rules were deployed to production and verified, then `main` was fast-forwarded to the docs-only closure commit `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the integration checkpoint), and a docs-only integration record directly on top of it is the final `main`. Phase 10E — Alignment Transitions is **ASTRA REVIEW COMPLETE / SOL REMEDIATION REQUIRED** on `dev/phase-10e` (contract frozen in `PHASE10E.md`; not closed, not integrated).
 
 ## Phase 10D — CLOSED
 
@@ -242,7 +242,7 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 - **10B Effect Lifecycle + visual Effect indicators — CLOSED**
 - **10C Reminder Workflow + visual Reminder tokens — CLOSED**
 - **10D Role Transitions — CLOSED**
-- **10E Alignment Transitions — PRE-LUNA REMEDIATION DELIVERED; AWAITING LUNA VERIFICATION**
+- **10E Alignment Transitions — ASTRA REVIEW COMPLETE; SOL REMEDIATION REQUIRED**
 - 10F Guided Ability Resolution / Night Actions
 - 10G Advanced Storyteller bookkeeping / final visual integration
 
@@ -308,6 +308,23 @@ Sol pre-Luna adjudication:
 
 These are narrow Sol clarifications recorded in `PHASE10E.md` §25; architecture is not reopened.
 
+## Phase 10E Astra adjudication — 2026-10-01
+
+Astra reviewed exact checkpoint `264ab0bc1380452216aaec944bb9e2f5498802cb` and returned REVISE.
+
+Sol accepted five implementation findings for remediation:
+- SOL-10E-A1: `setIsTraveler` must be Setup-only, not merely pre-Reveal.
+- SOL-10E-A2: a Traveler with an incompatible/non-self Shown Role fails self projection closed / Needs check.
+- SOL-10E-A3: Night/Day day-0 is invalid persisted live state; Alignment and Role also refuse if a live Game Moment cannot be formed.
+- SOL-10E-A4: the ordinary gameplay disclosure cue must resolve permanently once addressed and never revive because of a correction.
+- SOL-10E-A5: strict v23 Alignment History snapshots reject extra raw own keys before generic parsing can erase them.
+
+Sol also froze:
+- Traveler -> Traveler Role changes/corrections preserve explicit Alignment perception (`shownAlignment`), including Not Told.
+- Setup fresh-assignment operations may canonicalize Actual Alignment; special starting Alignment is applied/re-applied after the final relevant Setup Role refinement. No additional preservation mechanism is added in 10E.
+
+The full adjudication is authoritative in `PHASE10E.md` §26.
+
 ## Immediate next task
 
-**Luna mechanical verification** of the Phase 10E remediation review checkpoint (the `dev/phase-10e` commit carrying SOL-10E-R1 / R2 on top of `32f5a58e9fe0888917cd7ff8a498691506f39af8`; verify the exact SHA reported in the remediation handoff) against `PHASE10E.md` (10E-AC-01..42 and §25). Do not merge to `main`, deploy Rules or production, or declare Phase 10E closed.
+Implement only `PHASE10E.md` §26 on `dev/phase-10e`. Add focused regressions, rerun the complete local gate, push a fixed remediation checkpoint, then send that exact SHA to Luna for targeted mechanical verification. Do not merge to `main`, deploy Rules or production, or begin 10F.
