@@ -242,7 +242,7 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 - **10B Effect Lifecycle + visual Effect indicators — CLOSED**
 - **10C Reminder Workflow + visual Reminder tokens — CLOSED**
 - **10D Role Transitions — CLOSED**
-- **10E Alignment Transitions — IMPLEMENTATION DELIVERED; AWAITING LUNA VERIFICATION**
+- **10E Alignment Transitions — IMPLEMENTATION DELIVERED; TARGETED PRE-LUNA REMEDIATION REQUIRED**
 - 10F Guided Ability Resolution / Night Actions
 - 10G Advanced Storyteller bookkeeping / final visual integration
 
@@ -299,13 +299,19 @@ Delivered:
 - UI: `src/features/players/AlignmentControls.tsx` -- Actual Alignment (one-tap gameplay change, disclosed "Correct the recorded alignment…"), Player-facing alignment (Normal, disclosed Shown Good / Shown Evil / Not told, "View overridden"), ordinary "Player view differs" advisory; used by PlayerDrawer (ordinary) and TravelerArrival (Traveler); Privacy Mode renders none of it.
 - Guard: `src/stores/alignmentArchitecture.test.ts`. Tests: `alignmentResolution`, `alignmentPerception`, `alignmentMigration`, `AlignmentControls` suites plus updated version-ladder tests.
 
-Implementation interpretations (for Luna / Sol review; none changes the frozen contract):
-1. Setup's `dealtIdentity` (unchanged, AC-20) stores a dealt ordinary participant's Shown Alignment explicitly (equal to the derived value), and v23 must not touch ordinary perception. Per AC-41 literally, such a participant therefore shows "View overridden" until the Storyteller taps Normal (projection is identical either way). Sol may decide whether Setup should store Normal (`null`) instead.
-2. The ordinary "Player view differs" advisory appears after any committed Actual Alignment change of an ordinary participant (gameplay or correction) while their projected alignment differs from the new Actual (including Not told); it never changes perception itself.
-3. "Correct the recorded alignment…" is offered after Reveal and in Live Play; before Reveal a plain change already repairs Setup (no History either way), mirroring the 10D Role correction disclosure.
-4. An ordinary participant's packet/draft is not alignment-dependent and is untouched by an Actual Alignment change; Traveler packet invalidation follows PHASE10E.md 10.
-5. The transaction bound is `MAX_TOTAL_PLAYERS` (one intent per participant).
+Sol pre-Luna adjudication:
+1. **REMEDIATE:** "View overridden" is semantic. Existing Setup explicit Good/Evil equal to Normal must not create routine override noise. Do not change Deal storage or ordinary migration; compute the cue from effective divergence from Normal, with Not told always overridden.
+2. **REMEDIATE:** "Player view differs" may arm only after gameplay `changeActualAlignment`, never after `correctActualAlignment`.
+3. **ACCEPTED INTERPRETATION:** before Reveal the separate correction affordance may stay hidden because Setup has no History and a plain change repairs the same Current State.
+4. **ACCEPTED INTERPRETATION:** ordinary packet/draft stays untouched by Actual Alignment mutation.
+5. The transaction bound remains `MAX_TOTAL_PLAYERS` (one intent per participant).
+
+These are narrow Sol clarifications recorded in `PHASE10E.md` §25; architecture is not reopened.
 
 ## Immediate next task
 
-**Luna mechanical verification** of the Phase 10E implementation review checkpoint against `PHASE10E.md` (10E-AC-01..42). Do not merge to `main`, deploy Rules or production, or declare Phase 10E closed before the review workflow completes.
+Apply the **targeted Sol pre-Luna remediation** in `PHASE10E.md` §25:
+- make "View overridden" semantic rather than raw non-null storage;
+- arm "Player view differs" only after gameplay `changeActualAlignment`, never correction.
+
+Add/adjust focused UI tests, rerun the complete required local gate, create/push a new fixed review checkpoint, then hand that exact SHA to Luna. Do not merge to `main`, deploy Rules or production, or declare Phase 10E closed.

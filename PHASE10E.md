@@ -396,9 +396,13 @@ Normal means:
 
 Exceptional choices are progressively disclosed.
 
-When perception is not Normal, show a concise Storyteller-only "View overridden" indicator.
+The Storyteller-only "View overridden" indicator is semantic, not a raw-storage warning:
+- show it when the current effective player-facing alignment differs from what Normal would currently produce;
+- always show it for an explicit undisclosed / Not told state;
+- do NOT show it merely because shownAlignment stores an explicit Good/Evil value that is currently identical to Normal.
+Do not rewrite or normalize an ordinary participant's stored explicit Good/Evil merely to suppress the cue. If Normal later changes and that explicit value becomes meaningfully different, the cue appears then.
 
-For an ordinary participant, when a gameplay Actual Alignment change leaves the effective player-facing alignment different from the new Actual Alignment, surface a concise advisory cue that the player view differs and link/direct the Storyteller to the existing perception control. Do not automatically decide whether the mechanic requires disclosure.
+For an ordinary participant, when a GAMEPLAY Actual Alignment change leaves the effective player-facing alignment different from the new Actual Alignment, surface a concise advisory cue that the player view differs and link/direct the Storyteller to the existing perception control. A correction must not arm this advisory automatically: correction repairs Silverwick's record and does not itself establish that the player experienced a new alignment change. Do not automatically decide whether a mechanic requires disclosure.
 
 Traveler arrival UI uses the same Alignment seam for Actual Alignment and the same perception seam for player-facing alignment. No Traveler-only Actual Alignment writer remains authoritative.
 
@@ -638,7 +642,7 @@ Tests prove no unauthorized live/general Actual Alignment writer bypasses the Al
 Player Drawer and Traveler arrival flows expose Actual Alignment truth separately from player-facing alignment perception, with normal actions low-friction and correction/override controls progressively disclosed.
 
 **10E-AC-41 — Override visibility**  
-An explicit Good/Evil/undisclosed perception displays a Storyteller-only override cue; Normal is the default and needs no extra action.
+The Storyteller-only override cue reflects a meaningful departure from Normal, not merely non-null storage. Show it when effective player-facing alignment differs from what Normal would currently produce, and always for undisclosed / Not told. An explicit Good/Evil value currently identical to Normal does not show the cue; if Normal later changes and the stored explicit value diverges, the cue then appears. Normal remains the default and needs no extra action.
 
 **10E-AC-42 — Future-engine seam**  
 The Alignment planner imports no character ability evaluation and accepts a valid evolving working snapshot so a later 10F coordinator can compose already-resolved domain plans before one authoritative commit.
@@ -693,3 +697,13 @@ F. Exact implementation review checkpoint SHA and confirmation that dev/phase-10
 G. Advancement statement: ready for Luna mechanical verification, or Sol decision needed.
 
 Local implementation evidence is not independent verification.
+
+
+## 25. Sol pre-Luna clarification — 2026-10-01
+
+The first implementation checkpoint exposed two narrow UI interpretation gaps. Sol adjudicates them without reopening the Phase 10E architecture:
+
+1. **Default Deal storage versus "View overridden".** Existing Setup intentionally stores explicit ordinary shownAlignment values during Deal. v23 intentionally does not rewrite ordinary perception because those values may be historically intentional. Therefore UI must not equate "non-null shownAlignment" with "meaningfully overridden." The cue is based on effective divergence from Normal, with undisclosed always treated as an override. Do not change Deal storage or the v22 -> v23 ordinary migration for this issue.
+2. **Gameplay advisory versus correction.** "Player view differs" is a gameplay-disclosure advisory. It may arm only after an accepted `changeActualAlignment` for an ordinary participant. It must not arm after `correctActualAlignment`; a correction fixes the record rather than asserting a newly experienced gameplay transition.
+3. **Pre-Reveal correction UI.** It is acceptable for the UI to omit the separate correction affordance before Reveal because Setup writes no History and a normal pre-Reveal change repairs the same Current State. The underlying correction seam remains valid where called.
+4. **Ordinary packet/draft behavior.** No change: ordinary private packets/drafts are not invalidated solely by Actual Alignment mutation because ordinary Actual Alignment is not projected and no ordinary alignment-dependent packet field exists in 10E.
