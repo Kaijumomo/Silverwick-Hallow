@@ -10,7 +10,7 @@
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
 **Schema:** v22 (integrated on `main`)\
-**Current phase:** Phase 10E — Alignment Transitions (NEXT: architecture challenge before coding)
+**Current phase:** Phase 10E — Alignment Transitions (CONTRACT FROZEN; implementation authorized)
 
 ## Product invariants
 
@@ -221,9 +221,9 @@ Frozen Phase 10D architecture:
 Release order: Phase 10D changed `src/firebase/rules.json`; the client ships from `main` automatically, so the Firebase Rules were deployed and verified before `main` moved. The project owner ran `npm run rules:deploy` against the production project's default Realtime Database instance from `22dfd49e7220d642eec353c2ea83fa3a2547ce8b`, then the read-only `npm run rules:verify`, which reported that the deployed rules match `src/firebase/rules.json`. Both steps were owner-run and owner-reported. The client deployment from `main` was not observed by the integration session.
 
 ### 10E — Alignment Transitions
-**Status:** NEXT — architecture challenge before coding (not yet designed). Phase 10E work starts on `dev/phase-10e`, at the exact final `main` of the Phase 10D integration (the docs-only integration record directly on top of `22dfd49e7220d642eec353c2ea83fa3a2547ce8b`).
+**Status:** CONTRACT FROZEN — IMPLEMENTATION AUTHORIZED. Phase 10E runs on `dev/phase-10e` from the final Phase 10D-integrated `main`. See `PHASE10E.md` for the frozen Sol contract.
 
-Actual Alignment mutation semantics, shown/perceived alignment where needed, History/provenance, correction vs gameplay transition.
+Frozen direction: one participant-bound Actual Alignment transaction seam; gameplay change vs correction; atomic multi-participant changes; Actual Alignment independent of Role; v23 player-facing alignment perception with Normal / explicit Good / explicit Evil / Not Told; Normal ordinary perception derives from Shown Role while Normal Traveler perception follows Actual Alignment; v22 -> v23 normalization clears inert legacy Traveler shown-alignment copies to Normal; strict v23 Alignment History correction/correlation metadata; occupancy-boundary hardening so a new participant never inherits stale seat alignment; Storyteller UI separates Actual Alignment truth from player-facing perception; 10F remains responsible for ability logic.
 
 ### 10F — Guided Ability Resolution / Night Actions
 Structured ability semantics, deterministic interaction resolution, Storyteller prompts for judgment/choice, effect/protection/poisoning interactions, and authoritative mutation through 10A–10E seams.
@@ -258,4 +258,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Phase 10D is integrated. Perform the **Phase 10E architecture challenge** (Alignment Transitions) on `dev/phase-10e`. Do **not** begin implementation until the challenge is adjudicated into a Sol implementation contract. Verify exact commit identity rather than trusting branch names.
+Phase 10E architecture is adjudicated and the implementation contract is frozen in `PHASE10E.md`. Begin **Claude Code / Sonnet 5.5 implementation** on `dev/phase-10e` from the contract-freeze commit. Implement only the frozen contract, create/push a fixed implementation review checkpoint, run the complete required local gate, then hand that exact SHA to Luna for mechanical verification.

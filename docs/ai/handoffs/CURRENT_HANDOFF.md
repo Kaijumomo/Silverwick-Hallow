@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-01\
-**State:** Phase 10D — Role Transitions is **CLOSED** (Sol: **CLOSED — READY FOR INTEGRATION**) and **INTEGRATED** into `main`. Integration was rules-first: the Phase 10D Firebase Rules were deployed to production and verified, then `main` was fast-forwarded to the docs-only closure commit `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the integration checkpoint), and a docs-only integration record directly on top of it is the final `main`. Phase 10E — Alignment Transitions is **NEXT**, on `dev/phase-10e`, which starts from that exact final `main`; it has **not** been designed yet.
+**State:** Phase 10D — Role Transitions is **CLOSED** (Sol: **CLOSED — READY FOR INTEGRATION**) and **INTEGRATED** into `main`. Integration was rules-first: the Phase 10D Firebase Rules were deployed to production and verified, then `main` was fast-forwarded to the docs-only closure commit `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the integration checkpoint), and a docs-only integration record directly on top of it is the final `main`. Phase 10E — Alignment Transitions is **CONTRACT FROZEN / IMPLEMENTATION AUTHORIZED** on `dev/phase-10e`. The architecture challenge, BOTC rules clarification, targeted Traveler-perception challenge, Sol adjudication and project-owner approval are complete. `PHASE10E.md` is now authoritative for implementation.
 
 ## Phase 10D — CLOSED
 
@@ -242,7 +242,7 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 - **10B Effect Lifecycle + visual Effect indicators — CLOSED**
 - **10C Reminder Workflow + visual Reminder tokens — CLOSED**
 - **10D Role Transitions — CLOSED**
-- **10E Alignment Transitions — NEXT (architecture challenge first)**
+- **10E Alignment Transitions — CONTRACT FROZEN; IMPLEMENTATION AUTHORIZED**
 - 10F Guided Ability Resolution / Night Actions
 - 10G Advanced Storyteller bookkeeping / final visual integration
 
@@ -252,11 +252,23 @@ Phase 10 may increase Silverwick's mechanical intelligence, but routine Storytel
 
 This requirement continues through 10C–10G.
 
-## Phase 10E starting intent
+## Phase 10E frozen implementation direction
 
-10E is **not yet designed**. Nothing below is a decision; it is the roadmap scope the architecture challenge must examine: Actual Alignment mutation semantics, shown/perceived alignment where needed, History/provenance, correction vs gameplay transition -- consistent with the frozen 10A Life, 10B Effect, 10C Reminder and 10D Role seams, ParticipantId identity and the Actual/Shown distinction.
+The architecture challenge is complete and adjudicated. `PHASE10E.md` is the frozen Sol implementation contract.
 
-Do not implement ability resolution (Phase 10F) in 10E.
+Key frozen decisions:
+- one participant-bound Actual Alignment planner/commit seam;
+- gameplay Alignment change and correction are distinct;
+- Actual Role and Actual Alignment never infer each other;
+- player-facing alignment perception supports Normal / explicit Good / explicit Evil / Not Told through the existing 10D perception seam;
+- Normal ordinary perception derives from Shown Role; Normal Traveler perception follows Actual Alignment;
+- v23 normalizes inert legacy Traveler shown-alignment copies to Normal and adds Alignment History correction/correlation support;
+- new participation never inherits stale seat alignment;
+- Traveler Actual Alignment changes invalidate alignment-dependent private packet material without erasing historical arrival completion or Information Delivery;
+- multi-participant Alignment changes are atomic;
+- ability evaluation remains Phase 10F.
+
+Do not implement ability resolution in 10E.
 
 ## Starting branch
 
@@ -276,6 +288,8 @@ At the start of any new session, verify the exact branch SHA and read:
 
 ## Immediate next task
 
-Perform the **Phase 10E architecture challenge before coding** on
-`dev/phase-10e` (verify the exact commit SHA). No 10E implementation begins
-until the challenge is adjudicated into a Sol implementation contract.
+Begin **Phase 10E implementation** from the commit containing the frozen `PHASE10E.md` contract on `dev/phase-10e`.
+
+Default implementation model: **Claude Code / Sonnet 5.5**.
+
+Implement only the frozen contract, run the complete required local gate, create and push a fixed implementation review checkpoint, and return that exact SHA for Luna mechanical verification. Stop and return to Sol if the frozen contract proves materially contradictory; do not improvise architecture.
