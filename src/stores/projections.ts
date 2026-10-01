@@ -37,6 +37,14 @@ function identityState(p: STPlayerRecord, registry: RoleRegistry): IdentityState
   const role = registry.get(p.shownRole);
   if (!role) return { kind: "unsafe" };
   if (role.type === "fabled" || role.type === "loric") return { kind: "unsafe" };
+  // SOL-10E-A2 (ASTRA-10E-002): a Traveler's only projectable identity is
+  // their OWN current Traveler character. Any other Shown Role on a Traveler
+  // (an ordinary character, another Traveler) fails closed -- never
+  // reinterpreted as an ordinary identity with a derived alignment, never a
+  // fallback to the Actual Role, and never repaired here.
+  if (p.isTraveler) {
+    return role.type === "traveler" && p.shownRole === p.actualRole ? { kind: "traveler", shownRole: p.shownRole } : { kind: "unsafe" };
+  }
   if (role.type === "traveler") {
     // A Traveler character is a public character of a TRAVELER only. Shown
     // to anyone else it would carry that participant's Actual Alignment

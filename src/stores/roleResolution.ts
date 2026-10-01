@@ -363,6 +363,13 @@ export function planRoleTransaction(
   // --- Guards --------------------------------------------------------------
   // Ended games are frozen: nothing about Role or perception changes.
   if (game.phase === "ended") return refuse("phase", "This game has ended; its Roles are frozen.");
+  // SOL-10E-A3 (ASTRA-10E-003, defense in depth): a Live Play Actual Role
+  // mutation always carries its History, which needs a valid live Game
+  // Moment. A Night/Day snapshot without one is malformed: refuse before any
+  // id, patch or epoch.
+  if (isLiveGamePhase(game.phase) && currentLiveMoment(game) === null) {
+    return refuse("phase", "This game's live moment is invalid; nothing was changed.");
+  }
   if (!isPlainObject(transaction)) return refuse("invalid", "Invalid Role transaction.");
   const unknownTransactionKey = unknownRoleKey(transaction as unknown as Record<string, unknown>, TRANSACTION_KEYS);
   if (unknownTransactionKey !== undefined) return refuse("invalid", `Unknown Role transaction field "${unknownTransactionKey}".`);
@@ -534,7 +541,12 @@ export function planRoleTransaction(
         // Traveler character is public: Actual / Shown / public stay together.
         next.shownRole = destination || null;
         next.publicDisplayRole = destination || null;
-        next.shownAlignment = null;
+        // Phase 10E (PHASE10E.md 26, semantic question 1): a Traveler ->
+        // Traveler change/correction PRESERVES the independent player-facing
+        // alignment perception (Normal / Good / Evil / Not told); only an
+        // ordinary -> Traveler change starts at Normal (a perception intent
+        // later in the same resolution may set another value).
+        if (!w.isTraveler) next.shownAlignment = null;
         next.behaviorMode = "normal";
         if (!isCorrection || policy === "restart") {
           next.travelerArrival = newTravelerArrival();

@@ -242,7 +242,7 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 - **10B Effect Lifecycle + visual Effect indicators — CLOSED**
 - **10C Reminder Workflow + visual Reminder tokens — CLOSED**
 - **10D Role Transitions — CLOSED**
-- **10E Alignment Transitions — ASTRA REVIEW COMPLETE; SOL REMEDIATION REQUIRED**
+- **10E Alignment Transitions — ASTRA REMEDIATION DELIVERED; AWAITING LUNA TARGETED VERIFICATION**
 - 10F Guided Ability Resolution / Night Actions
 - 10G Advanced Storyteller bookkeeping / final visual integration
 
@@ -325,6 +325,15 @@ Sol also froze:
 
 The full adjudication is authoritative in `PHASE10E.md` §26.
 
+Remediation delivered (on top of `3b6fcb90752dc8d591b531d5b954aa0ce193c6e1`; exact checkpoint SHA in the remediation report):
+- A1: `setIsTraveler` refuses unless `phase === "setup"` (and before Reveal); the Player Drawer shows the Setup Traveler toggle only in that window.
+- A2: `identityState` (projections.ts) treats any Traveler whose Shown Role is not their own Traveler character as unsafe / Needs check.
+- A3: `StorytellerGamePersistedSchema` rejects Night/Day with `day < 1`; the Alignment and Role planners refuse a live phase without a live Game Moment before drawing any id.
+- A4: `AlignmentControls` models the advisory as one gameplay cue `{ participantId, alignment }`, disarmed when no longer pending and cleared by any accepted correction.
+- A5: `HistoryRecordSchema` checks v23 Alignment snapshots' raw own keys before generic parsing (legacy History unchanged).
+- Traveler -> Traveler Role change/correction preserves `shownAlignment` (roleResolution.ts); ordinary -> Traveler still starts at Normal.
+- Regressions: `src/stores/alignmentAstraRemediation.test.ts`, `src/features/players/alignmentAstraRemediation.test.tsx`.
+
 ## Immediate next task
 
-Implement only `PHASE10E.md` §26 on `dev/phase-10e`. Add focused regressions, rerun the complete local gate, push a fixed remediation checkpoint, then send that exact SHA to Luna for targeted mechanical verification. Do not merge to `main`, deploy Rules or production, or begin 10F.
+**Luna targeted mechanical verification** of the Phase 10E Astra remediation checkpoint against `PHASE10E.md` §26, then Astra targeted closure review. Do not merge to `main`, deploy Rules or production, or begin 10F.

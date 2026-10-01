@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { selectScriptById, useStorytellerStore } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
@@ -6,7 +6,7 @@ import { isInitialRevealComplete } from "@/stores/identity";
 import { alignmentChangeOpen, changeAlignmentIntent, correctAlignmentIntent, type AlignmentIntent } from "@/stores/alignmentResolution";
 import { shownAlignmentIntent } from "@/stores/roleResolution";
 import { projectIdentity } from "@/stores/projections";
-import type { Alignment, ShownAlignment, STPlayerRecord } from "@/stores/types";
+import type { Alignment, ParticipantId, ShownAlignment, STPlayerRecord } from "@/stores/types";
 
 /**
  * Phase 10E: Storyteller-private alignment controls.
@@ -60,6 +60,11 @@ export function alignmentViewOverridden(player: STPlayerRecord, registry: RoleRe
   return player.shownAlignment !== normalAlignmentOf(player, registry);
 }
 
+/** SOL-10E-A4: ONE unresolved gameplay-disclosure question -- which
+ * participation instance a gameplay change was made to, and the Actual
+ * Alignment it produced. Never a sticky flag whose meaning outlives it. */
+type GameplayDisclosureCue = { participantId: ParticipantId; alignment: Alignment };
+
 export function ActualAlignmentControls({ player }: { player: STPlayerRecord }) {
   const game = useStorytellerStore((s) => s.game);
   const script = useStorytellerStore((s) => (game ? selectScriptById(s, game.scriptId) : undefined));
@@ -67,18 +72,36 @@ export function ActualAlignmentControls({ player }: { player: STPlayerRecord }) 
   const hidden = usePrivacyStore((s) => s.enabled);
   const [error, setError] = useState<string | null>(null);
   const [correctionOpen, setCorrectionOpen] = useState(false);
-  // SOL-10E-R2: armed only by an accepted GAMEPLAY change
-  // (changeActualAlignment) of an ORDINARY participant -- never by a
-  // correction, which repairs the record rather than asserting a newly
-  // experienced alignment change. The cue itself shows only while the player
-  // view still differs.
-  const [cueArmed, setCueArmed] = useState(false);
+  // SOL-10E-R2 / SOL-10E-A4: the "Player view differs" advisory is one
+  // unresolved gameplay-disclosure question. It is armed only by an accepted
+  // GAMEPLAY change (changeActualAlignment) of an ORDINARY participant, and is
+  // pending only while it still describes this participation instance, the
+  // Actual Alignment that change produced, and a player view that differs. It
+  // is resolved (disarmed) the moment any of that stops being true -- the view
+  // comes into agreement, the participant is replaced, or the Actual moves --
+  // and an accepted correction clears it outright: a correction never arms,
+  // revives or carries forward a gameplay advisory.
+  const [gameplayCue, setGameplayCue] = useState<GameplayDisclosureCue | null>(null);
+  // What the player is currently told (their projected self alignment)
+  // against the Actual Alignment. It never decides whether a mechanic
+  // requires disclosure.
+  const registry = script ? buildRegistry(script) : null;
+  const told = !player.isTraveler && registry ? projectIdentity(player, registry) : null;
+  const viewDiffers = !!told && !!player.actualAlignment && told.shownAlignment !== player.actualAlignment;
+  const cuePending = gameplayCue !== null && gameplayCue.participantId === player.participantId &&
+    player.actualAlignment === gameplayCue.alignment && viewDiffers;
+  useEffect(() => {
+    if (gameplayCue !== null && !cuePending) setGameplayCue(null);
+  }, [gameplayCue, cuePending]);
   if (!game || hidden || player.isEmpty || !player.participantId) return null;
+  const participantId = player.participantId;
 
   const run = (intent: AlignmentIntent) => {
     const result = resolveAlignments({ intents: [intent] });
     setError(result.ok ? null : result.message);
-    if (result.ok && result.changed && !player.isTraveler && intent.kind === "changeActualAlignment") setCueArmed(true);
+    if (!result.ok) return;
+    if (intent.kind === "correctActualAlignment") setGameplayCue(null);
+    else if (result.changed && !player.isTraveler) setGameplayCue({ participantId, alignment: intent.actualAlignment });
   };
   const current = player.actualAlignment;
   const ended = game.phase === "ended";
@@ -86,12 +109,6 @@ export function ActualAlignmentControls({ player }: { player: STPlayerRecord }) 
   // A correction is meaningful once the starting record is committed (after
   // Reveal) or in Live Play; before Reveal a plain change already repairs it.
   const correctionAvailable = !ended && (game.phase !== "setup" || isInitialRevealComplete(game));
-  // The ordinary disclosure advisory: what the player is currently told
-  // (their projected self alignment) against the new Actual Alignment. It
-  // never decides whether a mechanic requires disclosure.
-  const registry = script ? buildRegistry(script) : null;
-  const told = !player.isTraveler && registry ? projectIdentity(player, registry) : null;
-  const viewDiffers = !!told && !!current && told.shownAlignment !== current;
   const focusPlayerView = () => {
     const target = document.getElementById(playerFacingAlignmentId(player));
     target?.scrollIntoView?.({ block: "center" });
@@ -126,7 +143,7 @@ export function ActualAlignmentControls({ player }: { player: STPlayerRecord }) 
       </>}
     </details>}
     {error && <p role="alert" className="field-error">{error}</p>}
-    {cueArmed && viewDiffers && <p role="status" className="behavior-help alignment-view-cue">
+    {cuePending && <p role="status" className="behavior-help alignment-view-cue">
       Player view differs from the new alignment.{" "}
       <button className="btn btn-sm" onClick={focusPlayerView}>Review player view</button>
     </p>}

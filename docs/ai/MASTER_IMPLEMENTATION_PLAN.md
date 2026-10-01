@@ -10,7 +10,7 @@
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
 **Schema:** v22 (integrated on `main`)\
-**Current phase:** Phase 10E — Alignment Transitions (Astra review complete; Sol remediation required)
+**Current phase:** Phase 10E — Alignment Transitions (Astra remediation delivered; awaiting Luna targeted verification)
 
 ## Product invariants
 
@@ -221,7 +221,7 @@ Frozen Phase 10D architecture:
 Release order: Phase 10D changed `src/firebase/rules.json`; the client ships from `main` automatically, so the Firebase Rules were deployed and verified before `main` moved. The project owner ran `npm run rules:deploy` against the production project's default Realtime Database instance from `22dfd49e7220d642eec353c2ea83fa3a2547ce8b`, then the read-only `npm run rules:verify`, which reported that the deployed rules match `src/firebase/rules.json`. Both steps were owner-run and owner-reported. The client deployment from `main` was not observed by the integration session.
 
 ### 10E — Alignment Transitions
-**Status:** ASTRA REVIEW COMPLETE — SOL REMEDIATION REQUIRED. Astra reviewed `264ab0bc1380452216aaec944bb9e2f5498802cb` and returned REVISE. Sol adjudication and the bounded remediation contract are recorded in `PHASE10E.md` §26. Not closed; not integrated.
+**Status:** ASTRA REMEDIATION DELIVERED — AWAITING LUNA TARGETED VERIFICATION. Astra reviewed `264ab0bc1380452216aaec944bb9e2f5498802cb` and returned REVISE; Sol's bounded remediation contract (`PHASE10E.md` §26: SOL-10E-A1..A5 plus Traveler -> Traveler perception preservation) is implemented on `dev/phase-10e` in the remediation checkpoint reported in the remediation handoff (verify the exact SHA). Setup fresh-assignment ordering is unchanged. Not closed; not integrated.
 
 Delivered (store/game schema v23): `src/stores/alignmentResolution.ts` (pure `planAlignmentTransaction` / `applyAlignmentPlan`) committed by `resolveAlignments`; `setActualAlignment` / `setTravelerAlignment` are adapters over it; the Phase 10D `setPerception` seam admits `shownAlignment: "undisclosed"`; projection honors Normal / explicit / Not Told for ordinary participants and Travelers; the self wire renders an alignment-less identity; v22 -> v23 normalizes Traveler Good/Evil Shown Alignment to Normal with v23 evidence detected first; `occupySeat` drops stale seat alignment; Storyteller UI `src/features/players/AlignmentControls.tsx`; architecture guard `src/stores/alignmentArchitecture.test.ts`. No Firebase Rules change.
 
@@ -260,4 +260,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Implement the bounded Astra remediation frozen in `PHASE10E.md` §26 on `dev/phase-10e`: SOL-10E-A1..A5 plus Traveler->Traveler perception preservation. Keep Setup fresh-assignment ordering unchanged. Run the complete local gate, create/push a fixed remediation checkpoint, then hand that SHA to Luna targeted verification followed by Astra targeted closure.
+**Luna targeted mechanical verification** of the Phase 10E Astra remediation checkpoint (the `dev/phase-10e` commit carrying SOL-10E-A1..A5 and the Traveler -> Traveler perception amendment on top of `3b6fcb90752dc8d591b531d5b954aa0ce193c6e1`), then Astra targeted closure review before Sol closure.

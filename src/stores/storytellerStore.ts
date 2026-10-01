@@ -2046,6 +2046,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!game) return { ok: false, message: "No game is open." };
         const existing = ownPlayer(game, id);
         if (!existing) return { ok: false, message: "This player is not seated." };
+        // SOL-10E-A1 (ASTRA-10E-001): Setup-only ownership. This Setup
+        // writer (which also resets Role, perception and Actual Alignment)
+        // runs only while the game itself is still in Setup -- Night, Day and
+        // Ended (even an ended pre-Reveal snapshot) refuse before any
+        // mutation. Live ordinary <-> Traveler transitions belong to the
+        // Phase 10D Role seam, never to this command.
+        if (game.phase !== "setup") return { ok: false, message: "Traveler status is set up only during Setup." };
         if (existing.isTraveler === isTraveler) return { ok: true };
         // Phase 9 Setup finalization (FINAL SETUP INTEGRATION REVISION,
         // Section 2): Reveal is a hard starting-setup commitment boundary --

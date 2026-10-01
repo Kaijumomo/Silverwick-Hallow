@@ -183,7 +183,7 @@ describe("Perception seam (Phase 10D setPerception) admits the v23 domain", () =
     expect(player(chef)).toBe(rendered);
   });
 
-  it("a perception change that alters the player's view withdraws the published packet (10D rule), and a Traveler character change resets to Normal", () => {
+  it("a perception change that alters the player's view withdraws the published packet (10D rule), and a Traveler -> Traveler character change preserves the perception (PHASE10E.md 26)", () => {
     liveGame();
     const chef = holder("chef");
     store.setState({ game: { ...game(), players: { ...game().players, [chef]: { ...player(chef), publishedPacket: { id: "k", payload: { shownRole: "chef", shownAlignment: "good" } } } } } });
@@ -194,7 +194,7 @@ describe("Perception seam (Phase 10D setPerception) admits the v23 domain", () =
     state().assignRole(zed, "thief");
     state().setShownAlignment(zed, "evil");
     state().assignRole(zed, "scapegoat");
-    expect(player(zed).shownAlignment).toBeNull();
+    expect(player(zed).shownAlignment).toBe("evil");
   });
 
   it("the persisted player schema admits undisclosed as perception only (never as Actual Alignment)", () => {

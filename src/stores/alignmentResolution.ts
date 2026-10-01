@@ -267,6 +267,12 @@ export function planAlignmentTransaction(
   // --- Guards --------------------------------------------------------------
   // Ended games are frozen: no Actual Alignment changes.
   if (game.phase === "ended") return refuse("phase", "This game has ended; alignments are frozen.");
+  // SOL-10E-A3 (ASTRA-10E-003): a Live Play mutation always carries its
+  // explanatory History, which needs a valid live Game Moment. A Night/Day
+  // snapshot without one is malformed: refuse before any id, patch or epoch.
+  if (isLiveGamePhase(game.phase) && currentLiveMoment(game) === null) {
+    return refuse("phase", "This game's live moment is invalid; nothing was changed.");
+  }
   if (!isPlainObject(transaction)) return refuse("invalid", "Invalid alignment transaction.");
   const unknownTransactionKey = unknownKey(transaction as unknown as Record<string, unknown>, TRANSACTION_KEYS);
   if (unknownTransactionKey !== undefined) return refuse("invalid", `Unknown alignment transaction field "${unknownTransactionKey}".`);

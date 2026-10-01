@@ -431,7 +431,7 @@ describe("Pre-Reveal Setup refinement (Phase 9 Setup finalization B3)", () => {
     expect(screen.queryByRole("button", { name: "Traveler" })).toBeNull();
   });
 
-  it("FINAL SETUP INTEGRATION REVISION Section 2: the generic role picker and Traveler toggle return once gameplay begins", () => {
+  it("FINAL SETUP INTEGRATION REVISION Section 2: the generic role picker returns once gameplay begins (the Setup Traveler toggle does not -- SOL-10E-A1)", () => {
     const g = dealtGame();
     store.getState().revealRoles();
     store.setState({ game: { ...store.getState().game!, phase: "night", day: 1 } });
@@ -442,7 +442,10 @@ describe("Pre-Reveal Setup refinement (Phase 9 Setup finalization B3)", () => {
     const actualRoleSection = screen.getByText("Actual role (ST private)").closest("section")!;
     fireEvent.click(within(actualRoleSection).getByRole("button", { name: "Drunk outsider" }));
     expect(store.getState().game!.players[target]!.actualRole).toBe("drunk");
-    expect(screen.queryByRole("button", { name: "Not a traveler" })).not.toBeNull();
+    // PHASE10E.md 26 (SOL-10E-A1): the Setup Traveler designation is not
+    // actionable in Live Play; the status is shown, never toggled here.
+    expect(screen.queryByRole("button", { name: "Not a traveler" })).toBeNull();
+    expect(screen.getByText(/Traveler status is set up only during Setup/)).toBeInTheDocument();
   });
 
   it("outside the refinement window, the actual-role picker keeps the generic assignRole() behavior", () => {

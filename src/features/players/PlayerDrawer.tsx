@@ -377,7 +377,11 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
 
           <section className="drawer-section">
             <h3 className="drawer-section-title">Travel status</h3>
-            {committedReadOnly ? (
+            {/* SOL-10E-A1: the Setup Traveler designation is actionable only
+                while the game is in Setup and before the initial Reveal. */}
+            {game.phase !== "setup" ? (
+              <p className="behavior-help">{player.isTraveler ? "Traveler" : "Not a traveler"} — Traveler status is set up only during Setup.</p>
+            ) : committedReadOnly ? (
               <p className="behavior-help">Roles are revealed; Traveler status is locked in until this game ends or a new one starts.</p>
             ) : (
               <div className="drawer-row">

@@ -477,7 +477,29 @@ const RoleHistorySnapshotSchema = z.object({ actualRole: z.string() }).strict();
 const AlignmentHistoryToSchema = z.object({ actualAlignment: AlignmentSchema }).strict();
 const AlignmentHistoryFromSchema = z.union([z.object({}).strict(), AlignmentHistoryToSchema]);
 
-export const HistoryRecordSchema = z.object({
+/**
+ * SOL-10E-A5 (ASTRA-10E-005): the strict v23 Alignment snapshot contract,
+ * checked against the RAW snapshot objects -- before the generic
+ * `z.record` snapshot parser can drop an own key it cannot represent (e.g. a
+ * JSON-parsed own `__proto__`). Applies only to an "alignment" record
+ * carrying v23 metadata (`correction` / `resolutionId`) with a value change;
+ * legacy Alignment History keeps its loose contract, and every other shape
+ * is left to the parsed refinement below.
+ */
+function rawAlignmentSnapshotIssue(raw: unknown): string | null {
+  if (!isPlainRecord(raw) || raw.category !== "alignment") return null;
+  if (!hasOwn(raw, "correction") && !hasOwn(raw, "resolutionId")) return null;
+  const change = raw.change;
+  if (!isPlainRecord(change) || change.kind !== "value") return null;
+  const exactAlignment = (side: unknown): boolean => isPlainRecord(side) &&
+    Object.keys(side).length === 1 && hasOwn(side, "actualAlignment") && (side.actualAlignment === "good" || side.actualAlignment === "evil");
+  const emptyOrAlignment = (side: unknown): boolean => (isPlainRecord(side) && Object.keys(side).length === 0) || exactAlignment(side);
+  if (!emptyOrAlignment(change.from)) return "from";
+  if (!exactAlignment(change.to)) return "to";
+  return null;
+}
+
+const HistoryRecordObjectSchema = z.object({
   id: z.string().min(1),
   category: HistoryCategorySchema,
   participant: ParticipantRefSchema,
@@ -639,6 +661,15 @@ export const HistoryRecordSchema = z.object({
     if (!checked.success) addSnapshotIssues(ctx, `${record.category} History snapshot`, snapshot.path, checked.error.issues);
   }
 });
+
+export const HistoryRecordSchema = z.preprocess((raw, ctx) => {
+  const side = rawAlignmentSnapshotIssue(raw);
+  if (side !== null) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["change", side],
+      message: "an alignment correction or correlated alignment record is a value change from {} or { actualAlignment } to exactly { actualAlignment } -- no other own key" });
+  }
+  return raw;
+}, HistoryRecordObjectSchema);
 
 // The non-Player Information Value variants are shared verbatim by the
 // command-input (InformationValueSchema) and stored
@@ -1069,6 +1100,12 @@ export const StorytellerGamePersistedSchema = z.preprocess((raw, ctx) => {
   players: z.record(z.string(), STPlayerRecordPersistedSchema),
   pendingPlayers: z.record(z.string(), z.string()).default({}),
 }).superRefine((game, ctx) => {
+  // SOL-10E-A3 (ASTRA-10E-003): Live Play has a valid live Game Moment --
+  // Night/Day are day >= 1. Setup may be day 0; an ended snapshot keeps the
+  // day it ended at. Rejected, never repaired.
+  if ((game.phase === "night" || game.phase === "day") && game.day < 1) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a Night/Day game must be on day 1 or later", path: ["day"] });
+  }
   checkSeatGeometry(game, ctx);
   checkCurrentParticipantIdentityUniqueness(game, ctx);
   checkEffectTemporalCoherence(game, ctx);
