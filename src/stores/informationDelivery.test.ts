@@ -3,7 +3,7 @@ import { useStorytellerStore as store } from "./storytellerStore";
 import { buildRegistry } from "@/data/roleRegistry";
 import { setupScript } from "@/test/setupFixtures";
 import { projectLobbyToPublic, projectLobbyToSelfMap, projectToPublic, projectToSelf } from "./projections";
-import { parseInformationValues, validateInformationValues, validateRequirementsCoherent } from "./informationDelivery";
+import { applyInformationDeliveryPlan, parseInformationValues, planInformationDelivery, validateInformationValues, validateRequirementsCoherent } from "./informationDelivery";
 import { participantRefOf } from "./participants";
 import type { InformationAction, InformationValue } from "./types";
 
@@ -193,6 +193,58 @@ describe("Phase 9D.3: structural validation", () => {
       { requirementId: "a", kind: "number", value: 3 },
       { requirementId: "b", kind: "player", playerIds: [] },
     ]).ok).toBe(false);
+  });
+});
+
+describe("Phase 10F foundation: pure Information Delivery planning", () => {
+  it("plans without mutating Current State, then applies exactly one owned delivery record", () => {
+    freshGame();
+    const id = seatAs(0, "chef");
+    atNight(1);
+    const before = game();
+    const beforeDeliveries = before.informationDeliveries;
+
+    const result = planInformationDelivery(before, {
+      recipientPlayerId: id,
+      informationActionId: "chef-first-night",
+      values: [{ requirementId: "pairs", kind: "number", value: 2 }],
+      context: { provenance: { reason: "ability" } },
+    }, {
+      registry,
+      deliveryId: () => "delivery-10f-foundation",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(game()).toBe(before);
+    expect(game().informationDeliveries).toBe(beforeDeliveries);
+    if (!result.ok) return;
+
+    expect(result.record).toMatchObject({
+      id: "delivery-10f-foundation",
+      recipient: participantRefOf(before, id),
+      actualRole: "chef",
+      informationActionId: "chef-first-night",
+      moment: { phase: "night", day: 1 },
+      values: [{ requirementId: "pairs", kind: "number", value: 2 }],
+      provenance: { reason: "ability" },
+    });
+
+    const applied = applyInformationDeliveryPlan(before, result.record);
+    expect(applied).not.toBe(before);
+    expect(applied.players).toBe(before.players);
+    expect(applied.history).toBe(before.history);
+    expect(applied.informationDeliveries).toEqual([result.record]);
+    expect(before.informationDeliveries).toEqual([]);
+  });
+
+  it("refuses a stale/non-seated recipient without producing a record", () => {
+    freshGame();
+    const result = planInformationDelivery(game(), {
+      recipientPlayerId: "missing-seat",
+      informationActionId: "chef-first-night",
+      values: [{ requirementId: "pairs", kind: "number", value: 1 }],
+    }, { registry });
+    expect(result).toEqual({ ok: false, message: "This player is not seated." });
   });
 });
 
