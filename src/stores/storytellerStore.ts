@@ -6,8 +6,8 @@ import { LORICS } from "@/data/lorics";
 import { StorytellerStateSchema } from "./schemas";
 import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
-import { currentGameMoment, manualEffectId } from "./effects";
-import { cloneOwned, durableProvenance, type MutationContext, sameSnapshot } from "./history";
+import { manualEffectId } from "./effects";
+import { cloneOwned, type MutationContext, sameSnapshot } from "./history";
 import {
   applyEffectPlan,
   effectApplicationMoment,
@@ -45,7 +45,7 @@ import {
   type ReminderRefusal,
   type ReminderTransaction,
 } from "./reminderResolution";
-import { newParticipantId, participantIdAppearsIn, participantRefOf, recordedInformationValues } from "./participants";
+import { newParticipantId, participantIdAppearsIn, participantRefOf } from "./participants";
 import { detectLegacyGameVersion, migrateGameEntry } from "./gameMigration";
 import { freshLifeEventWindow, pruneLifeEventWindow } from "./lifeEvents";
 import {
@@ -60,11 +60,8 @@ import {
   type LifeTransaction,
 } from "./lifeResolution";
 import {
-  informationDeliveryId,
-  parseInformationValues,
-  validateInformationTiming,
-  validateInformationValues,
-  validateRequirementsCoherent,
+  applyInformationDeliveryPlan,
+  planInformationDelivery,
 } from "./informationDelivery";
 import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 import { invalidatePrivatePacket } from "./privatePackets";
@@ -88,7 +85,6 @@ import type {
   GuardStamp,
   InformationActionId,
   InformationDeliveryId,
-  InformationDeliveryRecord,
   InformationValue,
   LifeEventId,
   NightStepRecord,
@@ -2389,94 +2385,30 @@ export const useStorytellerStore = create<StorytellerStore>()(
       recordInformationDelivery: (recipientPlayerId, informationActionId, values, context) => {
         const { game, undoStack } = get();
         if (!game) return { ok: false, message: "No game is open." };
-        // 1-2. Recipient is a current participant (Phase 9R.2: an occupied
-        // seat with a participant identity -- never an empty seat or a
-        // nonexistent/inherited id) and has an Actual Role. The recipient
-        // is snapshotted HERE, at acceptance -- never resolved again later.
-        const recipient = participantRefOf(game, recipientPlayerId);
-        const player = recipient ? game.players[recipientPlayerId] : undefined;
-        if (!recipient || !player) return { ok: false, message: "This player is not seated." };
-        if (!player.actualRole) return { ok: false, message: "This player has no Actual Role yet." };
         const script = selectScriptById(get(), game.scriptId);
         if (!script) return { ok: false, message: "Unknown script." };
-        const registry = buildRegistry(script);
-        // 3. Information Action belongs to that Role. A malformed Role
-        // definition with two Actions sharing one id must fail safely
-        // rather than silently using whichever Array.find() finds first.
-        const matchingActions = registry
-          .informationActionsOf(player.actualRole)
-          .filter((a) => a.id === informationActionId);
-        if (matchingActions.length === 0) {
-          return { ok: false, message: `"${player.actualRole}" has no Information Action "${informationActionId}".` };
-        }
-        if (matchingActions.length > 1) {
-          return { ok: false, message: `Malformed Role Information: duplicate Information Action id "${informationActionId}".` };
-        }
-        const action = matchingActions[0]!;
-        // 4. Timing valid where timing is known.
-        const timingCheck = validateInformationTiming(action.timing, game);
-        if (!timingCheck.ok) return timingCheck;
-        // 5. Information Requirements are themselves coherent.
-        const coherence = validateRequirementsCoherent(action.requirements);
-        if (!coherence.ok) return coherence;
-        // 6. Complete runtime structural validation (Phase 9R.1 Astra
-        // remediation, Finding A1): TypeScript's InformationValue union
-        // constrains authoring, never a runtime caller. Parses `values`
-        // against the canonical InformationValueSchema and, from here on,
-        // uses ONLY the schema-parsed (canonical) representation -- never
-        // the raw caller input -- so a structurally malformed or
-        // extra-property-bearing value can never reach reference
-        // validation or storage.
-        const parsedValues = parseInformationValues(values);
-        if (!parsedValues.ok) return parsedValues;
-        // 7-8. Information Values reference real Players/Roles in the
-        // current authoritative snapshot / active Role registry, and
-        // satisfy each Requirement's declared cardinality.
-        const validation = validateInformationValues(action.requirements, parsedValues.values, {
-          // Phase 9R.1 (Finding B3.2): an own-property-safe existence check
-          // -- `id in game.players` also resolves true for an inherited
-          // Object.prototype property name (e.g. "toString"), which is
-          // never an actual seated player. Phase 9R.2: participantRefOf()
-          // keeps that own-property check and additionally requires a
-          // current participant -- an empty seat names nobody, so it can
-          // never be snapshotted as Player-valued Information.
-          playerIds: { has: (id) => participantRefOf(game, id) !== null },
-          roleIds: { has: (id) => !!registry.get(id) },
-        });
-        if (!validation.ok) return validation;
-        // 9. Phase 9R.2: Player-valued Information is stored as immutable
-        // ParticipantRefs of whoever those players are RIGHT NOW (the input
-        // stays live PlayerIds, since the Storyteller is selecting current
-        // players), and Provenance's live source likewise becomes a
-        // durable snapshot -- neither is ever re-resolved from the roster.
-        const recordedValues = recordedInformationValues(game, parsedValues.values);
-        if (!recordedValues) return { ok: false, message: "A referenced Player is not seated." };
-        const provenance = durableProvenance(game, context?.provenance);
-        if (provenance === null) return { ok: false, message: "The Provenance source Player is not seated." };
 
-        // Phase 9R.1 (Finding B5): currentGameMoment(game) is undefined
-        // once the game has ended -- omit `moment` entirely rather than
-        // storing it as a literal `undefined` property.
-        const moment = currentGameMoment(game);
-        // Phase 9R.1 (Finding B4): own a deep-cloned, undefined-stripped
-        // snapshot of the recorded `values` (including nested arrays like
-        // `participants`), the recipient snapshot, and the Provenance --
-        // none may keep sharing references with objects/arrays the caller
-        // still owns.
-        const record: InformationDeliveryRecord = cloneOwned({
-          id: informationDeliveryId(),
-          recipient,
-          actualRole: player.actualRole,
+        // Phase 10F foundation: the exact Phase 9D validation/reference
+        // conversion now lives in one pure planner so a later ability
+        // coordinator can compose a delivery into its evolving working
+        // snapshot without creating an intermediate store commit. This
+        // compatibility command still owns the same single Undo/localSeq
+        // boundary it always did.
+        const result = planInformationDelivery(game, {
+          recipientPlayerId,
           informationActionId,
-          ...(moment ? { moment } : {}),
-          values: recordedValues,
-          ...(provenance ? { provenance } : {}),
+          values,
+          ...(context ? { context } : {}),
+        }, {
+          registry: buildRegistry(script),
         });
+        if (!result.ok) return result;
+
         set({
           undoStack: pushUndo(game, undoStack),
-          game: { ...game, informationDeliveries: [...game.informationDeliveries, record] },
+          game: applyInformationDeliveryPlan(game, result.record),
         });
-        return { ok: true, id: record.id };
+        return { ok: true, id: result.record.id };
       },
 
       removeInformationDelivery: (deliveryId) => {
