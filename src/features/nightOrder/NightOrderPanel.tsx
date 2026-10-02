@@ -16,6 +16,7 @@ import { captureFingerprint, planAbilityResolution } from "@/stores/abilityResol
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { lifeEventsForParticipantAt } from "@/stores/lifeEvents";
 import { AbilityWorkspace, type WorkspaceTarget } from "@/features/abilities/AbilityWorkspace";
+import { participantAllowed } from "@/features/abilities/RequirementInput";
 import { bindingOf, seatedParticipants, stepAbility, useTargetPicker, type StepAbility } from "@/features/abilities/abilityUi";
 
 // ---------------------------------------------------------------------------
@@ -84,6 +85,8 @@ function InlineSimpleAbility({ step, day, descriptor, guided, onEscalate }: {
   const picking = useTargetPicker((s) => s.active);
   const input = descriptor.inputs[0]!;
   const { game } = guided;
+  const actor = game.players[step.playerId];
+  const actorBinding = actor?.participantId ? bindingOf(actor) : null;
   const resolve = () => {
     const chosen = game.players[target];
     if (!chosen || chosen.isEmpty || !chosen.participantId) return;
@@ -105,7 +108,8 @@ function InlineSimpleAbility({ step, day, descriptor, guided, onEscalate }: {
     <div className="ability-inline" role="group" aria-label={`${descriptor.presentation.action} (inline)`}>
       <select aria-label={input.label} value={target} onChange={(e) => { setTarget(e.target.value); setError(null); }}>
         <option value="">{input.label}…</option>
-        {seatedParticipants(game).map((p) => <option key={p.id} value={p.id}>{p.name || `Seat ${p.seat + 1}`} · seat {p.seat + 1}</option>)}
+        {seatedParticipants(game).filter((p) => participantAllowed(p, input, actorBinding)).map((p) =>
+          <option key={p.id} value={p.id}>{p.name || `Seat ${p.seat + 1}`} · seat {p.seat + 1}</option>)}
       </select>
       <button className="btn btn-sm" aria-pressed={!!picking} onClick={() => picking ? useTargetPicker.getState().cancel()
         : useTargetPicker.getState().start(input.label, (binding) => setTarget(binding.playerId))}>

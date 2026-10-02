@@ -1,0 +1,160 @@
+// SOL-10F-L2: the workspace renders every AbilityInputRequirement by its own
+// kind, cardinality and constraints -- declared inputs and asked judgments
+// alike -- and passes exactly the declared typed payload to the coordinator.
+// Rules-neutral fixtures only (no character semantics).
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { AbilityWorkspace } from "./AbilityWorkspace";
+import { useStorytellerStore as store } from "@/stores/storytellerStore";
+import { usePrivacyStore } from "@/stores/privacyStore";
+import { canonicalRoles } from "@/data/canonical";
+import { buildRegistry } from "@/data/roleRegistry";
+import { makeSTPlayer } from "@/test/fixtures";
+import type { AbilityDescriptor, AbilityEvaluationContext, AbilitySemanticsRegistry } from "@/abilities/semantics";
+import type { AbilityResolutionRequest } from "@/stores/abilityResolution";
+import type { Script, StorytellerLobbyRecord } from "@/stores/types";
+
+const script: Script = { id: "typed-test", name: "Typed test", characters: canonicalRoles(["washerwoman", "chef", "empath", "imp", "librarian", "monk"]) };
+const registry = buildRegistry(script);
+const game = () => store.getState().game!;
+let seen: AbilityEvaluationContext[] = [];
+const outcomeFor = (ctx: AbilityEvaluationContext) => ({ kind: "outcome" as const, outcome: {
+  operations: [{ domain: "reminder" as const, intents: [{ kind: "place" as const, target: ctx.actor.binding, reminder: { label: "fixture" } }] }] } });
+
+/** Every input kind, cardinality and constraint (rules-neutral). */
+const TYPED: AbilityDescriptor = {
+  roleId: "washerwoman", timing: ["firstNight"], invocation: "wake", usage: { kind: "unlimited" }, hooks: [],
+  presentation: { complexity: "complex", action: "Typed fixture" },
+  inputs: [
+    { id: "pair", kind: "participant", count: 2, source: "player", constraints: ["distinct", "notSelf", "alive"], label: "the pair" },
+    { id: "deadOne", kind: "participant", source: "storyteller", constraints: ["dead"], label: "a dead player" },
+    { id: "chars", kind: "character", count: 2, source: "storyteller", label: "the characters" },
+    { id: "side", kind: "alignment", source: "storyteller", label: "the alignment" },
+    { id: "num", kind: "number", source: "storyteller", label: "the number" },
+    { id: "flag", kind: "boolean", source: "player", label: "the yes/no" },
+    { id: "words", kind: "text", source: "storyteller", label: "the words" },
+  ],
+  evaluator: (ctx) => { seen.push(ctx); return outcomeFor(ctx); },
+};
+/** No declared inputs; the evaluator asks for a NON-boolean judgment. */
+const JUDGED: AbilityDescriptor = {
+  roleId: "librarian", timing: ["firstNight"], invocation: "wake", usage: { kind: "unlimited" }, hooks: [], inputs: [],
+  presentation: { complexity: "complex", action: "Judged fixture" },
+  evaluator: (ctx) => {
+    seen.push(ctx);
+    return ctx.judgments.judged ? outcomeFor(ctx) : { kind: "needsInput", message: "The Storyteller decides which pair.",
+      requirements: [{ id: "judged", kind: "participant", count: 2, source: "judgment", constraints: ["distinct"], label: "the judged pair" }] };
+  },
+};
+const SEMANTICS: AbilitySemanticsRegistry = new Map([[TYPED.roleId, TYPED], [JUDGED.roleId, JUDGED]]);
+
+beforeEach(() => {
+  seen = [];
+  usePrivacyStore.setState({ enabled: false });
+  const roles = ["washerwoman", "chef", "empath", "imp", "librarian"];
+  const players = roles.map((actualRole, seat) => makeSTPlayer({ id: `p${seat}`, name: ["Ann", "Ben", "Cat", "Dan", "Eli"][seat]!, seat,
+    actualRole, shownRole: actualRole, actualAlignment: registry.alignmentOf(actualRole), alive: seat !== 2 }));
+  const g: StorytellerLobbyRecord = {
+    gameSchemaVersion: 24, code: "", storytellerUid: "local", scriptId: script.id, phase: "night", day: 1,
+    players: Object.fromEntries(players.map((p) => [p.id, p])), seatOrder: players.map((p) => p.id),
+    plannedPlayerCount: 5, plannedTravelerCount: 0, rolePool: [], fabled: [], lorics: [], bluffs: [], notes: "", nightProgress: {}, pendingPlayers: {},
+    history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] }, setupRolesDealt: true, setupRolesRevealed: true,
+  };
+  store.setState({ game: g, undoStack: [], localSeq: 0, customScripts: { [script.id]: script } });
+});
+afterEach(cleanup);
+
+function open(descriptor: AbilityDescriptor, actorId: string) {
+  function Host() {
+    const current = store((s) => s.game)!;
+    return <AbilityWorkspace game={current} script={script} registry={registry} semantics={SEMANTICS} descriptor={descriptor} manualReason=""
+      target={{ actorId, roleId: descriptor.roleId, roleName: descriptor.roleId }} onClose={() => {}} onResolved={() => {}} />;
+  }
+  render(<Host />);
+  return screen.getByRole("dialog");
+}
+const options = (select: HTMLElement) => [...(select as HTMLSelectElement).options].filter((o) => o.value).map((o) => ({ value: o.value, disabled: o.disabled }));
+
+describe("SOL-10F-L2: every input kind, cardinality and constraint", () => {
+  it("renders each kind faithfully and passes exactly the declared typed payload to the coordinator", () => {
+    const resolveSpy = vi.spyOn(store.getState(), "resolveAbility");
+    store.setState({ resolveAbility: resolveSpy as never });
+    const dialog = open(TYPED, "p0");
+    // Player / Storyteller choices are visibly distinct.
+    expect(within(dialog).getAllByText("Player choice")).toHaveLength(2);
+    expect(within(dialog).getAllByText("Storyteller choice")).toHaveLength(5);
+
+    // participant, count 2, distinct + notSelf + alive: exactly two pickers;
+    // the actor (p0) and the dead p2 are not offered.
+    const pair1 = within(dialog).getByRole("combobox", { name: "the pair 1" });
+    const pair2 = within(dialog).getByRole("combobox", { name: "the pair 2" });
+    expect(within(dialog).queryByRole("combobox", { name: "the pair 3" })).toBeNull();
+    expect(options(pair1).map((o) => o.value)).toEqual(["p1", "p3", "p4"]);
+    expect(within(dialog).getByText(/choose 2 \(all different, not themself, living players only\)/)).toBeInTheDocument();
+    fireEvent.change(pair1, { target: { value: "p1" } });
+    expect(options(pair2).find((o) => o.value === "p1")!.disabled).toBe(true); // distinct
+    fireEvent.change(pair2, { target: { value: "p3" } });
+    // participant, dead only.
+    const deadOne = within(dialog).getByRole("combobox", { name: "a dead player" });
+    expect(options(deadOne).map((o) => o.value)).toEqual(["p2"]);
+    fireEvent.change(deadOne, { target: { value: "p2" } });
+    // character, count 2: a real character picker from the active script.
+    const char1 = within(dialog).getByRole("combobox", { name: "the characters 1" });
+    expect(options(char1).map((o) => o.value)).toEqual(expect.arrayContaining(["washerwoman", "chef", "imp", "monk"]));
+    fireEvent.change(char1, { target: { value: "chef" } });
+    fireEvent.change(within(dialog).getByRole("combobox", { name: "the characters 2" }), { target: { value: "imp" } });
+    // alignment: typed choice.
+    fireEvent.click(within(within(dialog).getByRole("radiogroup", { name: "the alignment" })).getByLabelText("Evil"));
+    // number: empty is NOT 0.
+    const num = within(dialog).getByRole("spinbutton", { name: "the number" });
+    expect(within(dialog).getByRole("button", { name: /^(Confirm and record|Resolve)$/ })).toBeDisabled();
+    fireEvent.change(num, { target: { value: "0" } });
+    // text.
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "the words" }), { target: { value: "hello" } });
+    // boolean untouched: still incomplete (never silently "no").
+    expect(within(dialog).getByRole("region", { name: "Result" })).toHaveTextContent("the yes/no");
+    expect(within(dialog).getByRole("button", { name: /^(Confirm and record|Resolve)$/ })).toBeDisabled();
+    fireEvent.click(within(within(dialog).getByRole("radiogroup", { name: "the yes/no" })).getByLabelText("No"));
+
+    const expected = {
+      pair: { kind: "participant", participants: [{ playerId: "p1", participantId: game().players.p1!.participantId }, { playerId: "p3", participantId: game().players.p3!.participantId }] },
+      deadOne: { kind: "participant", participants: [{ playerId: "p2", participantId: game().players.p2!.participantId }] },
+      chars: { kind: "character", roleIds: ["chef", "imp"] },
+      side: { kind: "alignment", alignment: "evil" },
+      num: { kind: "number", value: 0 },
+      flag: { kind: "boolean", value: false },
+      words: { kind: "text", value: "hello" },
+    };
+    expect(seen.at(-1)!.inputs).toEqual(expected);
+    fireEvent.click(within(dialog).getByRole("button", { name: /^(Confirm and record|Resolve)$/ }));
+    expect(resolveSpy).toHaveBeenCalledTimes(1);
+    expect((resolveSpy.mock.calls[0]![0] as AbilityResolutionRequest & { inputs: unknown }).inputs).toEqual(expected);
+    expect(game().players.p0!.reminders.map((r) => r.label)).toEqual(["fixture"]);
+  });
+
+  it("clearing a number makes it unanswered again (empty is never 0)", () => {
+    const dialog = open(TYPED, "p0");
+    const num = within(dialog).getByRole("spinbutton", { name: "the number" });
+    fireEvent.change(num, { target: { value: "7" } });
+    fireEvent.change(num, { target: { value: "" } });
+    expect(seen.every((ctx) => ctx.inputs.num === undefined)).toBe(true);
+    expect(within(dialog).getByRole("region", { name: "Result" })).toHaveTextContent("the number");
+  });
+
+  it("a NON-boolean judgment renders by its own kind and cardinality (two distinct participants), labelled as judgment", () => {
+    const dialog = open(JUDGED, "p4");
+    const judgment = within(dialog).getByRole("region", { name: "Storyteller judgment" });
+    expect(within(judgment).queryByRole("checkbox")).toBeNull();
+    expect(within(judgment).getByText("Storyteller judgment", { selector: ".origin-tag" })).toBeInTheDocument();
+    const first = within(judgment).getByRole("combobox", { name: "the judged pair 1" });
+    const second = within(judgment).getByRole("combobox", { name: "the judged pair 2" });
+    fireEvent.change(first, { target: { value: "p0" } });
+    expect(options(second).find((o) => o.value === "p0")!.disabled).toBe(true);
+    fireEvent.change(second, { target: { value: "p1" } });
+    expect(seen.at(-1)!.judgments.judged).toEqual({ kind: "participant",
+      participants: [{ playerId: "p0", participantId: game().players.p0!.participantId }, { playerId: "p1", participantId: game().players.p1!.participantId }] });
+    // The asked field stays visible once answered, so it can be changed.
+    expect(within(dialog).getByRole("region", { name: "Storyteller judgment" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /^(Confirm and record|Resolve)$/ })).toBeEnabled();
+  });
+});

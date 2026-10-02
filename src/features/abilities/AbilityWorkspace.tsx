@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/Modal";
 import { KNOWN_EFFECT_TYPES } from "@/stores/effectRegistry";
 import { changeRoleIntent, ordinaryRoleChoices } from "@/stores/roleResolution";
@@ -15,7 +15,8 @@ import {
 import type { AbilityDescriptor, AbilityInputRequirement, AbilityInputValue, AbilitySemanticsRegistry } from "@/abilities/semantics";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import type { Alignment, Script, StorytellerLobbyRecord } from "@/stores/types";
-import { bindingOf, describeOutcome, ORIGIN_LABEL, seatedParticipants, type ValueOrigin } from "./abilityUi";
+import { bindingOf, describeOutcome, seatedParticipants } from "./abilityUi";
+import { OriginTag, RequirementInput } from "./RequirementInput";
 
 /**
  * Phase 10F: the ability workspace (PHASE10F Section 15.2) -- progressive
@@ -70,9 +71,6 @@ const MANUAL_KINDS: { kind: ManualDraft["kind"]; label: string }[] = [
   { kind: "reminder", label: "Reminder" },
 ];
 
-function OriginTag({ origin }: { origin: ValueOrigin }) {
-  return <span className={`origin-tag origin-${origin}`}>{ORIGIN_LABEL[origin]}</span>;
-}
 
 export function AbilityWorkspace({ game, script, registry, semantics, target, descriptor, manualReason, initialInputs, onClose, onResolved }: Props) {
   // Captured ONCE, at open: the state the Storyteller is resolving against.
@@ -122,9 +120,16 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
     : { mode: "manual", fingerprint, roleId: target.roleId, outcome: manualOutcome(), reason, completeStep };
   const planned = request ? planAbilityResolution(game, request, env) : null;
   const stale = !fingerprint || (planned && !planned.ok && planned.code === "stale");
-  const askedJudgments: AbilityInputRequirement[] = planned && !planned.ok && planned.code === "needsInput"
+  // SOL-10F-L2: every judgment the coordinator asks for is rendered by its own
+  // kind / cardinality / constraints, and stays visible once asked.
+  const asked: AbilityInputRequirement[] = planned && !planned.ok && planned.code === "needsInput"
     ? (planned.requirements ?? []).filter((requirement) => requirement.source === "judgment" && !descriptor?.inputs.some((input) => input.id === requirement.id))
     : [];
+  const [judgmentFields, setJudgmentFields] = useState<AbilityInputRequirement[]>([]);
+  const newlyAsked = asked.filter((requirement) => !judgmentFields.some((known) => known.id === requirement.id));
+  useEffect(() => {
+    if (newlyAsked.length) setJudgmentFields((known) => [...known, ...newlyAsked.filter((r) => !known.some((k) => k.id === r.id))]);
+  });
   const preview = planned?.ok && planned.changed ? describeOutcome(game, planned.plan.outcome, registry) : [];
 
   const confirm = () => {
@@ -157,35 +162,27 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
             <section aria-label="Choices" className="ability-section">
               <h3 className="drawer-section-title">{descriptor.presentation.action}</h3>
               {descriptor.inputs.map((input) => (
-                <label key={input.id} className="ability-field">
-                  <span>{input.label} <OriginTag origin={input.source} /></span>
-                  {input.kind === "participant"
-                    ? participantSelect((inputs[input.id] as { participants?: ParticipantBinding[] } | undefined)?.participants?.[0]?.playerId ?? "", (id) => {
-                      const chosen = binding(id);
-                      setInputs((prev) => {
-                        const next = { ...prev };
-                        if (chosen) next[input.id] = { kind: "participant", participants: [chosen] };
-                        else delete next[input.id];
-                        return next;
-                      });
-                    }, input.label)
-                    : input.kind === "number"
-                      ? <input type="number" aria-label={input.label} onChange={(e) => setInputs((prev) => ({ ...prev, [input.id]: { kind: "number", value: Number(e.target.value) } }))} />
-                      : input.kind === "boolean"
-                        ? <input type="checkbox" aria-label={input.label} onChange={(e) => setInputs((prev) => ({ ...prev, [input.id]: { kind: "boolean", value: e.target.checked } }))} />
-                        : <input type="text" aria-label={input.label} onChange={(e) => setInputs((prev) => ({ ...prev, [input.id]: { kind: "text", value: e.target.value } }))} />}
-                </label>
+                <RequirementInput key={input.id} requirement={input} game={game} script={script} actor={fingerprint?.actor ?? null}
+                  {...(initialInputs?.[input.id] ? { initial: initialInputs[input.id] } : {})}
+                  onChange={(value) => setInputs((prev) => {
+                    const next = { ...prev };
+                    if (value) next[input.id] = value;
+                    else delete next[input.id];
+                    return next;
+                  })} />
               ))}
             </section>
-            {askedJudgments.length > 0 && (
+            {judgmentFields.length > 0 && (
               <section aria-label="Storyteller judgment" className="ability-section">
                 <h3 className="drawer-section-title">Storyteller judgment</h3>
-                {askedJudgments.map((requirement) => (
-                  <label key={requirement.id} className="ability-field ability-judgment">
-                    <input type="checkbox" checked={(judgments[requirement.id] as { value?: boolean } | undefined)?.value === true}
-                      onChange={(e) => setJudgments((prev) => ({ ...prev, [requirement.id]: { kind: "boolean", value: e.target.checked } }))} />
-                    <span>{requirement.label} <OriginTag origin="judgment" /></span>
-                  </label>
+                {judgmentFields.map((requirement) => (
+                  <RequirementInput key={requirement.id} requirement={requirement} game={game} script={script} actor={fingerprint?.actor ?? null}
+                    onChange={(value) => setJudgments((prev) => {
+                      const next = { ...prev };
+                      if (value) next[requirement.id] = value;
+                      else delete next[requirement.id];
+                      return next;
+                    })} />
                 ))}
               </section>
             )}

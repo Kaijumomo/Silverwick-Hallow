@@ -3189,3 +3189,8 @@ select:focus-visible,
   border-radius: var(--radius-md);
   font-size: 12px;
 }
+/* SOL-10F-L2: typed requirement fields. */
+fieldset.ability-field { border: 0; padding: 0; margin: 0; }
+fieldset.ability-field legend { padding: 0; margin-bottom: 4px; }
+.ability-field-hint { color: var(--text-faint); font-size: 11px; }
+.ability-choice { display: inline-flex; align-items: center; gap: 4px; margin-right: 12px; font-size: 13px; }
