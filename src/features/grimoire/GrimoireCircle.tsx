@@ -1,3 +1,4 @@
+import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
 import { fitTokenRing, grimoireDiameter, seatPosition, tokenSizeForCount, type TokenBounds } from "./layout";
@@ -352,6 +353,7 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
   );
   const selectedPlayerId = useStorytellerStore((s) => s.selectedPlayerId);
   const selectPlayer = useStorytellerStore((s) => s.selectPlayer);
+  const picking = useTargetPicker((s) => s.active);
   const addPlayerToSeat = useStorytellerStore((s) => s.addPlayerToSeat);
   const addEmptySeat = useStorytellerStore((s) => s.addEmptySeat);
   const removePlayer = useStorytellerStore((s) => s.removePlayer);
@@ -535,7 +537,8 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
     const dist = Math.sqrt(dx * dx + dy * dy);
     const elapsed = Date.now() - drag.startTime;
     if (dist < TAP_MAX_PX && elapsed < TAP_MAX_MS) {
-      selectPlayer(drag.id);
+      // Phase 10F: a tap may be a guided-ability target pick; a drag never is.
+      if (!pickSeatIfPicking(game, drag.id)) selectPlayer(drag.id);
     } else if (ghostPos) {
       setTokenPosition(drag.id, ghostPos.x, ghostPos.y);
     }
@@ -547,6 +550,12 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
 
   const modeControls = (
     <div className="grimoire-mode-controls">
+      {picking && (
+        <div className="grimoire-picking" role="status">
+          Choosing {picking.label}: tap a seat
+          <button className="grimoire-mode-btn" onClick={() => useTargetPicker.getState().cancel()}>Cancel</button>
+        </div>
+      )}
       <button className="grimoire-mode-btn" onClick={handleAddSeat} aria-label={arrivalsAreTravelers(game) ? "Add empty Traveler seat" : "Add empty planned seat"}>
         + New {arrivalsAreTravelers(game) ? "Traveler seat" : "seat"}
       </button>
@@ -651,7 +660,7 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
                   setSeatOrder(order);
                 }}
                 onFreeRoamPointerDown={handleTokenPointerDown}
-                onClick={() => selectPlayer(id)}
+                onClick={() => { if (!pickSeatIfPicking(game, id)) selectPlayer(id); }}
               />
             );
           })
