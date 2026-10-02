@@ -47,6 +47,8 @@ import {
 } from "./reminderResolution";
 import { newParticipantId, participantIdAppearsIn } from "./participants";
 import { isParticipantRoleStepEntry, planNightStepStatus } from "./nightProgress";
+import { planAbilityResolution, type AbilityRefusal, type AbilityResolutionRequest } from "./abilityResolution";
+import { CANONICAL_ABILITY_SEMANTICS, type AbilitySemanticsRegistry } from "@/abilities/semantics";
 import { detectLegacyGameVersion, migrateGameEntry } from "./gameMigration";
 import { freshLifeEventWindow, pruneLifeEventWindow } from "./lifeEvents";
 import {
@@ -290,6 +292,14 @@ export type AlignmentCommandResult =
   | { ok: true; changed: boolean }
   | AlignmentRefusal;
 
+/** Phase 10F: result of resolveAbility. `changed: false` is a true no-op
+ * (nothing committed, no Undo, no localSeq step); every refusal changes
+ * nothing. */
+export type AbilityCommandResult =
+  | { ok: true; changed: false }
+  | { ok: true; changed: true; resolutionId: string }
+  | AbilityRefusal;
+
 export type LobbyConnection = {
   code: string;
   uid: string;
@@ -471,6 +481,17 @@ export type StorytellerStore = {
    * New render-bound UI calls this directly; a future ability engine submits
    * its resolved intents here too. */
   resolveAlignments: (transaction: AlignmentTransaction) => AlignmentCommandResult;
+  /**
+   * Phase 10F: the ONE Storyteller-owned ability command (PHASE10F Section
+   * 3.4). Synchronously plans the request against the CURRENT game with the
+   * pure coordinator (planAbilityResolution -- which revalidates the workflow
+   * fingerprint and every participant binding right here, immediately before
+   * commit) and commits an accepted plan as exactly one game replacement, one
+   * Undo entry, one localSeq step and so one projection cycle. A refusal at
+   * any internal stage, or a true no-op, commits nothing. It never calls
+   * another store command. `semantics` defaults to the canonical registry.
+   */
+  resolveAbility: (request: AbilityResolutionRequest, semantics?: AbilitySemanticsRegistry) => AbilityCommandResult;
   /** Compatibility adapter: one gameplay Actual Alignment change of a
    * TRAVELER, bound to whoever occupies `id` right now (refused for an
    * ordinary participant). Routes through resolveAlignments; callers may
@@ -1912,6 +1933,22 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!result.changed) return { ok: true, changed: false };
         set({ undoStack: pushUndo(game, undoStack), game: applyRolePlan(game, result.plan) });
         return { ok: true, changed: true };
+      },
+
+      resolveAbility: (request, semantics) => {
+        const { game, undoStack } = get();
+        if (!game) return { ok: false, code: "invalid", message: "No game is open." };
+        const script = selectScriptById(get(), game.scriptId) ?? null;
+        // plan (pure, against Current State as it is NOW) -> one commit.
+        const result = planAbilityResolution(game, request, {
+          script,
+          registry: buildRegistry(script ?? { id: game.scriptId, name: "", characters: [] }),
+          semantics: semantics ?? CANONICAL_ABILITY_SEMANTICS,
+        });
+        if (!result.ok) return result;
+        if (!result.changed) return { ok: true, changed: false };
+        set({ undoStack: pushUndo(game, undoStack), game: result.plan.game });
+        return { ok: true, changed: true, resolutionId: result.plan.resolutionId };
       },
 
       assignRole: (id, roleId, context) => {
