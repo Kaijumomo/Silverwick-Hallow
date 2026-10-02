@@ -14,7 +14,7 @@ import { makeSTPlayer } from "@/test/fixtures";
 import { FIXTURE_SEMANTICS } from "@/test/abilityFixtures";
 import { captureFingerprint, planAbilityResolution } from "@/stores/abilityResolution";
 import { usePrivacyStore } from "@/stores/privacyStore";
-import { stripComments } from "@/stores/roleArchitecture.test";
+import { stripCommentsForGuard as stripComments } from "@/test/writerGuard";
 import type { Script, StorytellerLobbyRecord } from "@/stores/types";
 
 const script: Script = { id: "opg", name: "Once per game", characters: canonicalRoles(["seamstress", "slayer", "chef", "imp"]) };

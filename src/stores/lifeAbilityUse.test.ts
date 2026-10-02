@@ -12,7 +12,7 @@ import { useStorytellerStore as store } from "./storytellerStore";
 import { applyLifePlan, planLifeTransaction, type LifeIdSource } from "./lifeResolution";
 import { changeRoleIntent, correctRoleIntent } from "./roleResolution";
 import { StorytellerGamePersistedSchema } from "./schemas";
-import { stripComments } from "./roleArchitecture.test";
+import { stripCommentsForGuard as stripComments } from "@/test/writerGuard";
 import { setupGame, setupScript } from "@/test/setupFixtures";
 import type { PlayerId, StorytellerLobbyRecord } from "./types";
 

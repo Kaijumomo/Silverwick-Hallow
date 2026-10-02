@@ -14,7 +14,7 @@ import { canonicalRoles } from "@/data/canonical";
 import { buildRegistry } from "@/data/roleRegistry";
 import { makeSTPlayer } from "@/test/fixtures";
 import { FIXTURE_SEMANTICS } from "@/test/abilityFixtures";
-import { stripComments } from "@/stores/roleArchitecture.test";
+import { stripCommentsForGuard as stripComments } from "@/test/writerGuard";
 import type { Script, StorytellerLobbyRecord } from "@/stores/types";
 
 const script: Script = { id: "day-test", name: "Day test", characters: canonicalRoles(["slayer", "chef", "monk", "imp", "empath"]) };

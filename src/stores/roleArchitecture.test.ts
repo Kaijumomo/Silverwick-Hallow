@@ -16,26 +16,21 @@
 //    replaces `game` wholesale and writes no field.
 //
 // The scan strips comments and looks for WRITE-LIKE shapes only (an object
-// literal / patch value ending in `,` or `}`, a property assignment, a delete);
-// a false positive merely asks for review.
+// literal / patch property however it is closed -- `,`, `}`, `};`, `})`, end
+// of line -- a property or bracket assignment, a delete); a false positive
+// merely asks for review.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { stripCommentsForGuard, writeLinesFor } from "@/test/writerGuard";
 
 const SRC = resolve(__dirname, "..");
-const FIELDS = "actualRole|shownRole|shownAlignment|behaviorMode|isTraveler|publicDisplayRole";
-const WRITE_PATTERNS = [
-  new RegExp(`\\b(${FIELDS})\\s*:\\s*[^;\\n]*[,}]\\s*$`, "gm"),
-  new RegExp(`\\.(${FIELDS})\\s*=[^=]`, "g"),
-  new RegExp(`delete\\s+[\\w.\\[\\]]*\\.(${FIELDS})\\b`, "g"),
-  new RegExp(`\\[\\s*['"](${FIELDS})['"]\\s*\\]\\s*=`, "g"),
-];
+// SOL-10F-L7: one shared write-shape detector (src/test/writerGuard.ts) for
+// the Role and Alignment guards -- catches `{ ...p, actualRole: x };`
+// (semicolon-terminated), property / bracket assignment and delete.
+const FIELDS = ["actualRole", "shownRole", "shownAlignment", "behaviorMode", "isTraveler", "publicDisplayRole"];
 
-export function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/(^|[^:"'`\\])\/\/.*$/gm, "$1");
-}
+const stripComments = stripCommentsForGuard;
 
 function productionSources(dir = SRC): string[] {
   const out: string[] = [];
@@ -51,16 +46,7 @@ function productionSources(dir = SRC): string[] {
   return out;
 }
 
-const lineOf = (code: string, index: number) => code.slice(0, index).split("\n").length;
-function writeLines(source: string): number[] {
-  const code = stripComments(source);
-  const lines = new Set<number>();
-  for (const pattern of WRITE_PATTERNS) {
-    pattern.lastIndex = 0;
-    for (let match = pattern.exec(code); match; match = pattern.exec(code)) lines.add(lineOf(code, match.index));
-  }
-  return [...lines].sort((a, b) => a - b);
-}
+const writeLines = (source: string): number[] => writeLinesFor(FIELDS, source);
 
 /** The reviewed modules that may contain write-like shapes for these fields,
  * each for a stated, non-live reason. */
@@ -73,6 +59,9 @@ const ALLOWED_MODULES: Record<string, string> = {
   "stores/projections.ts": "builds projection RECORDS (public/self), never Current State",
   "stores/informationDelivery.ts": "an Information Delivery RECORD snapshots the recipient's Actual Role (Phase 10F pure planner), never Current State",
   "stores/abilityResolution.ts": "captureFingerprint snapshots the OBSERVED Role/perception into a read-only workflow fingerprint (Phase 10F), never Current State",
+  // SOL-10F-L7: admitted ONLY at its AlignmentChange log entry (the observed
+  // Traveler status), asserted below; ALIGNMENT_PLAN_FIELDS forbids isTraveler.
+  "stores/alignmentResolution.ts": "the Alignment seam's AlignmentChange record carries the OBSERVED Traveler status, never a player patch",
   "firebase/snapshots.ts": "wire decoders for projection records",
   "firebase/membershipCommands.ts": "builds a Role-seam INTENT for a Traveler choice",
   "features/players/PlayerDrawer.tsx": "builds Role-seam INTENTS from the rendered record",
@@ -87,7 +76,14 @@ const ALLOWED_STORE_UNITS = new Set([
   // Delivery record's Actual Role snapshot moved into the pure planner,
   // informationDelivery.ts, so recordInformationDelivery writes none.)
   "setShownRole",
+  // SOL-10F-L7: the strengthened detector now also sees these two adapters'
+  // perception SPECs (`setPerception(id, { ...: x })`). Same reason as
+  // setShownRole; each flagged line is asserted below to be ONLY that call.
+  "setShownAlignment", "setBehaviorMode",
 ]);
+
+/** Units whose only write shape is a perception spec handed to setPerception. */
+const PERCEPTION_SPEC_UNITS = new Set(["setShownRole", "setShownAlignment", "setBehaviorMode"]);
 
 function enclosingUnit(source: string, line: number): string {
   const lines = stripComments(source).split("\n");
@@ -114,6 +110,24 @@ describe("Phase 10D architecture guard: no writer bypasses the Role seam", () =>
     // The Setup Deal / refinement commands write through the one reviewed
     // builder (freshAssignment -> dealtIdentity), never field by field.
     expect(units.has("freshAssignment")).toBe(false);
+  });
+
+  it("SOL-10F-L7: the perception adapters' only write shape is the spec they hand to setPerception", () => {
+    const source = readFileSync(join(SRC, "stores/storytellerStore.ts"), "utf8");
+    const code = stripComments(source).split("\n");
+    const hits = writeLines(source).filter((line) => PERCEPTION_SPEC_UNITS.has(enclosingUnit(source, line)));
+    expect(new Set(hits.map((line) => enclosingUnit(source, line)))).toEqual(PERCEPTION_SPEC_UNITS);
+    for (const line of hits) {
+      // Walk back to the opening `return get().setPerception(id, {` with no
+      // statement boundary in between: the hit is inside that spec literal.
+      let open = line - 1;
+      while (open >= 0 && !/^\s*return get\(\)\.setPerception\(id, \{/.test(code[open]!)) {
+        expect(code[open], `line ${line} is not inside a setPerception spec`).not.toMatch(/;/);
+        open--;
+      }
+      expect(open, `line ${line}`).toBeGreaterThanOrEqual(0);
+      expect(code.slice(open, line + 2).join("\n"), `line ${line}`).toMatch(/\}\);/);
+    }
   });
 
   it("every compatibility wrapper is a thin adapter over resolveRoles / setPerception -- no parallel mutation path", () => {
@@ -173,9 +187,39 @@ describe("Phase 10D architecture guard: no writer bypasses the Role seam", () =>
     }
   });
 
-  it("a planted direct writer would be caught by the detector (self-check)", () => {
-    const planted = "const next = { ...player, actualRole: roleId, isTraveler: true };\nplayer.shownRole = 'x';\n";
-    expect(writeLines(planted).length).toBeGreaterThan(0);
-    expect(writeLines("const view = (p) => p.actualRole;\nconst t: { actualRole: string };")).toEqual([]);
+  it("the Alignment seam's only Role-field write shape is its AlignmentChange log entry (never a player patch)", () => {
+    const source = readFileSync(join(SRC, "stores/alignmentResolution.ts"), "utf8");
+    const code = stripComments(source).split("\n");
+    const hits = writeLines(source);
+    expect(hits.length).toBe(1);
+    expect(code.slice(hits[0]! - 2, hits[0]!).join("\n")).toMatch(/changes\.push\(\{[^]*isTraveler: player\.isTraveler \}\);/);
+  });
+
+  it("SOL-10F-L7: planted direct writers are caught regardless of formatting (self-check)", () => {
+    for (const field of FIELDS) {
+      for (const planted of [
+        `const next = { ...p, ${field}: "x" };`,
+        `const next = { ...p, ${field}: "x" }`,
+        `set({ game: patch(game, { ${field}: value }) });`,
+        `const next = {\n  ...p,\n  ${field}: value,\n};`,
+        `const next = {\n  ...p,\n  ${field}: value\n};`,
+        `Object.assign(p, { ${field}: value });`,
+        `p.${field} = value;`,
+        `p.${field}=value;`,
+        `p["${field}"] = value;`,
+        `delete p.${field};`,
+        `delete p["${field}"];`,
+      ]) expect(writeLines(planted), planted).not.toEqual([]);
+    }
+    // Reads, comparisons and type annotations are not writes.
+    expect(writeLines([
+      "const view = (p) => p.actualRole;",
+      "if (p.actualRole === roleId || p.shownRole == null) x();",
+      "const t: { actualRole: string };",
+      "type T = { shownAlignment: ShownAlignment | null; behaviorMode: BehaviorMode };",
+      "  shownRole: RoleDef | undefined;",
+      "  isTraveler?: boolean;",
+      '// p.actualRole = "commented out";',
+    ].join("\n"))).toEqual([]);
   });
 });

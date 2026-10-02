@@ -13,24 +13,20 @@
 //  - validated whole-snapshot restoration (undo / restoreRemoteCheckpoint)
 //    replaces `game` wholesale and writes no field.
 //
-// The scan reuses the Role guard's write-shape detector (comment-stripped,
-// write-like shapes only); a false positive merely asks for review.
+// The scan uses the SAME write-shape detector as the Role guard
+// (src/test/writerGuard.ts, SOL-10F-L7: comment-stripped, write-like shapes
+// only, however the literal or statement is closed); a false positive merely
+// asks for review.
 // Traceability: 10E-AC-39, 10E-AC-42 (imports), 10E-AC-38 (adapter shape).
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { stripComments } from "./roleArchitecture.test";
+import { stripCommentsForGuard as stripComments, writePatterns } from "@/test/writerGuard";
 
 const SRC = resolve(__dirname, "..");
 const FIELD = "actualAlignment";
 const WRITE_PATTERNS = [
-  new RegExp(`\\b(${FIELD})\\s*:\\s*[^;\\n]*[,}]\\s*$`, "gm"),
-  new RegExp(`\\.(${FIELD})\\s*=[^=]`, "g"),
-  new RegExp(`delete\\s+[\\w.\\[\\]]*\\.(${FIELD})\\b`, "g"),
-  new RegExp(`\\[\\s*['"](${FIELD})['"]\\s*\\]\\s*=`, "g"),
-  // A single-line object literal / patch (`{ ...p, actualAlignment: x };`),
-  // which the multi-line shape above cannot see.
-  new RegExp(`\\b(${FIELD})\\s*:\\s*[^;\\n]*\\}`, "g"),
+  ...writePatterns([FIELD]),
   // Destructuring that renames the field away (how occupySeat drops it).
   new RegExp(`\\{\\s*(${FIELD})\\s*:\\s*_\\w+\\s*,`, "g"),
 ];
@@ -174,10 +170,28 @@ describe("Phase 10E architecture guard: no writer bypasses the Alignment seam", 
     }
   });
 
-  it("a planted direct writer would be caught by the detector (self-check)", () => {
-    expect(writeLines("const next = { ...player, actualAlignment: \"evil\" };\n").length).toBeGreaterThan(0);
-    expect(writeLines("player.actualAlignment = 'good';\n").length).toBeGreaterThan(0);
-    expect(writeLines("delete next.actualAlignment;\n").length).toBeGreaterThan(0);
-    expect(writeLines("const view = (p) => p.actualAlignment;\nif (p.actualAlignment === \"evil\") x();\n")).toEqual([]);
+  it("SOL-10F-L7: planted direct actualAlignment writers are caught regardless of formatting (self-check)", () => {
+    for (const planted of [
+      'const next = { ...player, actualAlignment: "evil" };',
+      'const next = { ...player, actualAlignment: "evil" }',
+      "set({ game: patch(game, { actualAlignment: value }) });",
+      "const next = {\n  ...player,\n  actualAlignment: value,\n};",
+      "const next = {\n  ...player,\n  actualAlignment: value\n};",
+      "Object.assign(player, { actualAlignment: value });",
+      "player.actualAlignment = 'good';",
+      "player.actualAlignment='good';",
+      'player["actualAlignment"] = value;',
+      "delete next.actualAlignment;",
+      'delete next["actualAlignment"];',
+    ]) expect(writeLines(planted), planted).not.toEqual([]);
+    // Reads, comparisons and type annotations are not writes.
+    expect(writeLines([
+      "const view = (p) => p.actualAlignment;",
+      'if (p.actualAlignment === "evil" || p.actualAlignment == null) x();',
+      "type T = { actualAlignment: Alignment };",
+      "  actualAlignment: Alignment | null;",
+      "  actualAlignment?: Alignment;",
+      '// player.actualAlignment = "commented out";',
+    ].join("\n"))).toEqual([]);
   });
 });

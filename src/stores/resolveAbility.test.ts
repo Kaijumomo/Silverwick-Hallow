@@ -8,7 +8,7 @@ import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useStorytellerStore as store } from "./storytellerStore";
 import { captureFingerprint, type AbilityOutcome, type ParticipantBinding } from "./abilityResolution";
-import { stripComments } from "./roleArchitecture.test";
+import { stripCommentsForGuard as stripComments } from "@/test/writerGuard";
 import { setupGame, setupScript } from "@/test/setupFixtures";
 import { FIXTURE_SEMANTICS } from "@/test/abilityFixtures";
 import { buildRegistry } from "@/data/roleRegistry";

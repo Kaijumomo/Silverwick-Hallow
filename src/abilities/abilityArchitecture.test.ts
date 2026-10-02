@@ -16,7 +16,7 @@ import { join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import rawRoles from "@/data/canonical/roles.json";
 import jinxData from "@/data/canonical/jinxes.json";
-import { stripComments } from "@/stores/roleArchitecture.test";
+import { stripCommentsForGuard as stripComments } from "@/test/writerGuard";
 import { buildCoverageManifest, coverageSummary, PROOF_SET } from "./coverage";
 import { CANONICAL_ABILITY_SEMANTICS } from "./semantics";
 import { CANONICAL_MODIFIER_SCOPES } from "./modifiers";
