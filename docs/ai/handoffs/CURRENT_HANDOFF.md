@@ -464,3 +464,20 @@ Gate and exact counts: see the remediation report for the final HEAD.
 ## Immediate next task
 
 Luna re-verifies the SOL-10F-L1…L7 remediation at the exact `dev/phase-10f` HEAD named in the remediation report (code checkpoint `e5a9b9d019d469609a3c6246043b18dc5d72bf62` plus the docs-only handoff commit). Do not implement proof-character semantics, merge, deploy or close 10F. Authoritative BOTC rules research can proceed in parallel, but Sol does not freeze the proof-character matrix until the rules-neutral foundation passes Luna re-verification.
+
+
+## Luna remediation re-verification — 2026-10-02
+
+Luna re-verified exact target `180b20e173b5dcccc3a6a1853d37987c6589c4de` and returned **REVISE** on one remaining High finding. The full gate passed: typecheck; **3,498/3,498** normal tests across 137 files; **201/201** Firebase emulator tests, 0 skipped; production build; worktree and baseline-range diff checks.
+
+Closed by Luna: **SOL-10F-L1, L2, L4, L5, L6, L7**.
+
+Still open:
+
+- **SOL-10F-L3-R1 HIGH — invocation eligibility.** The Day entry uses the shared workspace/coordinator, but `triggered` and `passive` timing are currently treated as actionable in either live phase without consulting `AbilityDescriptor.invocation`. A passive descriptor with `invocation:"none"` can therefore be offered and accepted.
+
+Sol froze the narrow correction in `PHASE10F.md` §23: generic Day guided entry requires explicit `day` timing plus `publicClaim`/ `procedure`; ordinary Night cadence requires first/other-Night timing plus `wake`/ `procedure`; triggered/passive are not automatically actionable and remain Manual/reference until an explicit supported invocation path exists; coordinator and UI must share/enforce the same rule.
+
+## Immediate next task
+
+Claude Code remediates SOL-10F-L3-R1 only, adds the §23 invocation matrix regressions, runs the full gate, and returns one exact clean checkpoint for narrow Luna re-verification. Production `CANONICAL_ABILITY_SEMANTICS` remains empty. Do not implement proof-character semantics, merge, deploy or close 10F.
