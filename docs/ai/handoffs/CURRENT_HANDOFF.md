@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-02\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: frozen contract `PHASE10F.md`; Luna returned **REVISE** on `b1d6bd7f071c8f5195c5f440abcaa43441446aaf`; the targeted **SOL-10F-L1…L7 remediation is complete and READY FOR LUNA RE-VERIFICATION** on `dev/phase-10f` (remediation code checkpoint `e5a9b9d019d469609a3c6246043b18dc5d72bf62`, with a docs-only handoff commit on top; schema/store v24). Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`; contract-freeze checkpoint: `727530e9364a0c971326c06ce45855adcf39828b`. 10F is NOT closed: production `CANONICAL_ABILITY_SEMANTICS` stays empty and proof-character semantics await authoritative BOTC rules evidence.
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: frozen contract `PHASE10F.md`; Luna closed SOL-10F-L1, L2, L4, L5, L6 and L7 at `180b20e173b5dcccc3a6a1853d37987c6589c4de` and returned REVISE on **SOL-10F-L3-R1** (§23); that narrow remediation is complete and **READY FOR NARROW LUNA RE-VERIFICATION** on `dev/phase-10f` (code checkpoint `93b850d77ea9b8a7adf3ae4db3f4ac7dc7d54a68`, with a docs-only handoff commit on top; schema/store v24). Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`; contract-freeze checkpoint: `727530e9364a0c971326c06ce45855adcf39828b`. 10F is NOT closed: production `CANONICAL_ABILITY_SEMANTICS` stays empty and proof-character semantics await authoritative BOTC rules evidence.
 
 ## Phase 10D — CLOSED
 
@@ -461,7 +461,7 @@ Targeted remediation on top of `32770202c3865cffa1e600e0c28f781f93c6dc6c` (the L
 
 Gate and exact counts: see the remediation report for the final HEAD.
 
-## Immediate next task
+## Next task after L1…L7 (done — Luna re-verified at `180b20e`)
 
 Luna re-verifies the SOL-10F-L1…L7 remediation at the exact `dev/phase-10f` HEAD named in the remediation report (code checkpoint `e5a9b9d019d469609a3c6246043b18dc5d72bf62` plus the docs-only handoff commit). Do not implement proof-character semantics, merge, deploy or close 10F. Authoritative BOTC rules research can proceed in parallel, but Sol does not freeze the proof-character matrix until the rules-neutral foundation passes Luna re-verification.
 
@@ -478,6 +478,15 @@ Still open:
 
 Sol froze the narrow correction in `PHASE10F.md` §23: generic Day guided entry requires explicit `day` timing plus `publicClaim`/ `procedure`; ordinary Night cadence requires first/other-Night timing plus `wake`/ `procedure`; triggered/passive are not automatically actionable and remain Manual/reference until an explicit supported invocation path exists; coordinator and UI must share/enforce the same rule.
 
+## SOL-10F-L3-R1 remediation — 2026-10-02
+
+Narrow remediation on top of `6309152625c86e08ef418d916588fd4cacd9d73a`; code checkpoint `93b850d77ea9b8a7adf3ae4db3f4ac7dc7d54a68`. No proof-character mechanic, no Firebase Rules / writer change; production `CANONICAL_ABILITY_SEMANTICS` stays empty; L1, L2, L4–L7 untouched.
+
+- `src/abilities/invocation.ts` — the ONE pure, rules-neutral `invocationEligibility(descriptor, path, moment)` contract: `dayEntry` = Day + explicit `day` timing + `publicClaim` / `procedure`; `nightOrder` = Night + explicit `firstNight` (Night 1) / `otherNight` (later Nights) + `wake` / `procedure`. `triggered` / `passive` timing never yields a generic path (no trigger inferred from timing); invocation `none` is never directly actionable; `setup` stays Setup-owned.
+- Guided requests carry a runtime-validated `invocationPath: "nightOrder" | "dayEntry"` (missing / unknown → `invalid`). `planAbilityResolution` replaces `timingAllows` with the shared contract and refuses an ineligible descriptor `notApplicable` without mutation.
+- The Day entry (`AbilityEntry`) and the Night Order rows use the same contract through `pathAbility()`; an ineligible descriptor falls back to the Manual path with the reason. The Day entry offers no guided action at Night.
+- Regressions: `src/abilities/invocation.test.tsx` (§23 matrix, an exhaustive 360-combination helper = entry point = coordinator agreement check, rendered Day entry and Night Order rows, crafted-request refusals, path validation, Manual path); architecture guard (only `abilities/invocation.ts` interprets descriptor timing / invocation). Planted mutations (coordinator ignoring eligibility, Day entry ignoring it, the old triggered/passive rule, timing-only eligibility, unvalidated path) each fail the guards.
+
 ## Immediate next task
 
-Claude Code remediates SOL-10F-L3-R1 only, adds the §23 invocation matrix regressions, runs the full gate, and returns one exact clean checkpoint for narrow Luna re-verification. Production `CANONICAL_ABILITY_SEMANTICS` remains empty. Do not implement proof-character semantics, merge, deploy or close 10F.
+Luna narrowly re-verifies SOL-10F-L3-R1 at the exact `dev/phase-10f` HEAD named in the remediation report (code checkpoint `93b850d77ea9b8a7adf3ae4db3f4ac7dc7d54a68` plus the docs-only handoff commit). Production `CANONICAL_ABILITY_SEMANTICS` remains empty. Do not implement proof-character semantics, merge, deploy or close 10F.
