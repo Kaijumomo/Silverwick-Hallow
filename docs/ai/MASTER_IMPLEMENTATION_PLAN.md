@@ -273,4 +273,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Luna re-verification of the SOL-10F-L1…L7 remediation (`PHASE10F.md` §22) at the exact `dev/phase-10f` HEAD named in the remediation report. Keep production `CANONICAL_ABILITY_SEMANTICS` empty. In parallel, obtain authoritative BOTC rules evidence for the proof set; Sol freezes that rules matrix only after the rules-neutral foundation passes re-verification. Do not merge, deploy or close 10F.
+Claude Code performs the narrow SOL-10F-L3-R1 remediation in `PHASE10F.md` §23: central rules-neutral timing+invocation eligibility shared by Day/Night UI and coordinator, with triggered/passive remaining unavailable until an explicit supported invocation path exists. Keep production `CANONICAL_ABILITY_SEMANTICS` empty. Run the complete gate and return one exact checkpoint for narrow Luna re-verification. Do not merge, deploy, close 10F or implement proof-character semantics.
