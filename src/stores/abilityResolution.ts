@@ -555,7 +555,8 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   }
 
   // --- Guided ----------------------------------------------------------------
-  const actor = boundParticipant(game, request.fingerprint?.actor);
+  if (!isObject(request.fingerprint)) return refuse("invalid", "A guided resolution needs the workflow it was opened from.");
+  const actor = boundParticipant(game, request.fingerprint.actor);
   if (!actor) return refuse("stale", "The player in this seat changed since this workflow opened.");
   const semantics = resolveAbilitySemantics(request.roleId, environment.registry, environment.semantics ?? CANONICAL_ABILITY_SEMANTICS);
   if (semantics.kind === "homebrew") return refuse("unsupported", `${semantics.role.name} is not a verified official character -- resolve it manually.`);

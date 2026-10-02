@@ -399,4 +399,9 @@ describe("10F-AC-25: structured, non-throwing refusals for hostile input", () =>
     expect(result).toMatchObject({ ok: false });
     expect(["invalid", "stale", "unsupported", "domain"]).toContain((result as { code: string }).code);
   });
+
+  it("a guided request without its workflow fingerprint is malformed (invalid), not stale", () => {
+    const g = game();
+    expect(planAbilityResolution(g, { mode: "guided", roleId: "monk", inputs: {} } as never, env())).toMatchObject({ ok: false, code: "invalid" });
+  });
 });
