@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
-**Date:** 2026-10-01\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Final reviewed implementation checkpoint: `f978c366ab18fffb873b7ea150c1b3ec69e8f71b`; docs-only closure/integration checkpoint: `6129c7f4585da0e12aeea3a9a5007c88fb508ad7`. `main` was fast-forwarded with no merge commit. Phase 10F — Guided Ability Resolution / Night Actions is **NEXT**, on `dev/phase-10f`, which must start from the exact final integrated `main` and begins with architecture challenge before coding.
+**Date:** 2026-10-02\
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions has a **FROZEN SOL IMPLEMENTATION CONTRACT** in `PHASE10F.md` and implementation is **IN PROGRESS** on `dev/phase-10f`. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`; contract-freeze checkpoint: `727530e9364a0c971326c06ce45855adcf39828b`; first rules-neutral implementation slice through `5ee705fbd2a39d89eaabc900a0e6a5682d884cf4`. Target schema/store: v24.
 
 ## Phase 10D — CLOSED
 
@@ -243,7 +243,7 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 - **10C Reminder Workflow + visual Reminder tokens — CLOSED**
 - **10D Role Transitions — CLOSED**
 - **10E Alignment Transitions — CLOSED AND INTEGRATED**
-- **10F Guided Ability Resolution / Night Actions — NEXT (architecture challenge first)**
+- **10F Guided Ability Resolution / Night Actions — SOL CONTRACT FROZEN; IMPLEMENTATION IN PROGRESS**
 - 10G Advanced Storyteller bookkeeping / final visual integration
 
 ## Standing Phase 10 UX invariant
@@ -367,26 +367,34 @@ Phase 10E is **CLOSED AND INTEGRATED**.
 - remaining findings/evidence gaps: none.
 - schema/store: v23.
 
-## Phase 10F starting intent
+## Phase 10F — frozen contract / implementation start
 
-10F is **not yet designed**. It must begin by challenging how ability resolution composes the already-frozen Life, Effect, Reminder, Role and Alignment planners without creating a second authority path or hard-coding Storyteller judgment.
+The independent architecture challenge is complete and Sol has adjudicated it. `PHASE10F.md` is the authoritative implementation contract.
 
-Starting branch:
+Frozen core:
+- one pure ability coordinator composes frozen 10A–10E planners against one evolving working snapshot;
+- one accepted resolution commits exactly once (one Undo, one localSeq, one projection cycle);
+- mechanical operation order is character semantics, never a generic domain fallback;
+- every actor/target workflow binding is ParticipantId-safe and stale-checked;
+- deterministic mechanics are automated; player choice, Storyteller choice, discretion, ambiguity and unsupported interactions remain explicit;
+- Reminders remain write-only notation for mechanics;
+- Effect applicability is derived, never cached into Effect lifecycle state;
+- v24 makes Information Delivery composable and able to identify a performed/simulated Role;
+- v24 makes player Night progress participant-scoped;
+- during Night, public/player-town projection withholds Life State rather than reconstructing a pre-Night truth;
+- the Night Order becomes an interactive operating dashboard with inline simple actions and a progressively disclosed workspace for complex/judgment-heavy resolutions;
+- full canonical semantic coverage moves to Phase 11 after 10G.
 
-`dev/phase-10f`
+Implementation lineage so far:
+- `727530e9364a0c971326c06ce45855adcf39828b` — create/freeze `PHASE10F.md`;
+- `069dd36058df8a5f968a132e37e3118bfd757873` — extract pure `planInformationDelivery` / `applyInformationDeliveryPlan`;
+- `dc38a6a00087b6b1302598ca21ef608e8978b11b` — route the legacy store Information Delivery command through that pure plan;
+- `5ee705fbd2a39d89eaabc900a0e6a5682d884cf4` — add planner purity/application regression coverage.
 
-It must start from the exact final integrated `main` containing this integration record.
+No Phase 10F character-specific mechanics have been coded yet. That is deliberate: the architecture challenge identified several BOTC ruling questions that require authoritative source verification before the proof-character semantic modules are frozen or implemented.
 
-Before any 10F coding, read:
-- `docs/ai/MASTER_IMPLEMENTATION_PLAN.md`
-- `docs/ai/handoffs/CURRENT_HANDOFF.md`
-- `PHASE10A.md`
-- `PHASE10B.md`
-- `PHASE10C.md`
-- `PHASE10D.md`
-- `PHASE10E.md`
-- `TERMINOLOGY.md`
+No Firebase Rules / writer-fencing changes are authorized by the 10F contract.
 
 ## Immediate next task
 
-Perform the **Phase 10F architecture challenge before coding** on `dev/phase-10f`. Do not begin implementation until the challenge is adjudicated into a Sol implementation contract.
+Continue the first Phase 10F foundation slice: v24 schema/migration for simulated/composable Information Delivery, participant-scoped Night progress and Night public-Life withholding; then add composable `abilityUsed` intents through the Life seam and the rules-neutral coordinator/semantic interfaces. Run the required gate before creating the first implementation review checkpoint.
