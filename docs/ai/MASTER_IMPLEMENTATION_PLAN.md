@@ -228,7 +228,7 @@ Delivered (store/game schema v23): `src/stores/alignmentResolution.ts` (pure `pl
 Frozen direction: one participant-bound Actual Alignment transaction seam; gameplay change vs correction; atomic multi-participant changes; Actual Alignment independent of Role; v23 player-facing alignment perception with Normal / explicit Good / explicit Evil / Not Told; Normal ordinary perception derives from Shown Role while Normal Traveler perception follows Actual Alignment; v22 -> v23 normalization clears inert legacy Traveler shown-alignment copies to Normal; strict v23 Alignment History correction/correlation metadata; occupancy-boundary hardening so a new participant never inherits stale seat alignment; Storyteller UI separates Actual Alignment truth from player-facing perception; 10F remains responsible for ability logic.
 
 ### 10F — Guided Ability Resolution / Night Actions
-**Status:** RULES-NEUTRAL IMPLEMENTATION AT REVIEW CHECKPOINT — READY FOR LUNA. Not closed: proof-character semantics are blocked on authoritative BOTC rules evidence.\
+**Status:** RULES-NEUTRAL LUNA REVIEW — REVISE; TARGETED REMEDIATION REQUIRED. Not closed; proof-character semantics remain blocked until rules-neutral re-verification and authoritative BOTC rules evidence.\
 **Contract:** `PHASE10F.md` (frozen 2026-10-02).\
 **Starting checkpoint:** `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`.\
 **Contract-freeze checkpoint:** `727530e9364a0c971326c06ce45855adcf39828b`.\
@@ -272,4 +272,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Luna review of the Phase 10F rules-neutral implementation checkpoint `403f641944db035d170a9321562e88be096dc77b` on `dev/phase-10f`. In parallel, obtain authoritative BOTC rules evidence for the proof set (questions listed in the handoff) so Sol can freeze the proof-character rules matrix; only then implement the proof-character semantic modules (contract Slices 6–7). Do not merge, deploy or close 10F.
+Claude Code targeted remediation of the accepted Luna findings SOL-10F-L1…L7 in `PHASE10F.md` §22 on `dev/phase-10f`, followed by Luna re-verification of the new exact checkpoint. Keep production `CANONICAL_ABILITY_SEMANTICS` empty. In parallel, obtain authoritative BOTC rules evidence for the proof set; Sol freezes that rules matrix only after the rules-neutral foundation passes re-verification. Do not merge, deploy or close 10F.
