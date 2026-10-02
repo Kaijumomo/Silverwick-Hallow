@@ -1,3 +1,4 @@
+import { AbilityEntry } from "@/features/abilities/AbilityEntry";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
 import { TRAVELERS } from "@/data/travelers";
@@ -356,6 +357,11 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
               exile, resurrection, vote token, correction) -- never a bare
               alive/dead toggle. */}
           <LifeControls player={player} />
+
+          {/* Phase 10F (SOL-10F-L3): progressively disclosed ability entry --
+              the same workspace / coordinator / one-commit command as the
+              Night Order; keyed by participation so no draft carries over. */}
+          <AbilityEntry key={player.participantId ?? player.id} player={player} />
 
           <section className="drawer-section">
             <h3 className="drawer-section-title">State</h3>
