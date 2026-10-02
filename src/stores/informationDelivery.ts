@@ -1,12 +1,19 @@
 import { z } from "zod";
+import type { RoleRegistry } from "@/data/roleRegistry";
+import { currentGameMoment } from "./effects";
+import { cloneOwned, durableProvenance, type MutationContext } from "./history";
+import { participantRefOf, recordedInformationValues } from "./participants";
 import { InformationValueSchema } from "./schemas";
 import type {
+  InformationActionId,
   InformationDeliveryId,
+  InformationDeliveryRecord,
   InformationRequirement,
   InformationTiming,
   InformationValue,
   PlayerId,
   RoleId,
+  StorytellerLobbyRecord,
 } from "./types";
 
 export const informationDeliveryId = (): InformationDeliveryId =>
@@ -217,4 +224,102 @@ export function validateInformationValues(
   }
 
   return { ok: true };
+}
+
+
+/**
+ * Phase 10F foundation: pure Information Delivery planning.
+ *
+ * The old store command performed validation, durable-reference conversion,
+ * record construction and the store commit in one function. Ability resolution
+ * needs the first four steps without creating an intermediate authoritative
+ * commit, so they live here as a pure planner. The legacy store command remains
+ * an adapter over this plan and therefore keeps its existing behavior.
+ *
+ * This first extraction deliberately preserves the v23 record shape exactly.
+ * The approved v24 performed-role/resolution correlation extension is a
+ * separate migration slice so no current-version snapshot is written with
+ * fields its schema would silently strip.
+ */
+export type InformationDeliveryPlanRequest = {
+  recipientPlayerId: PlayerId;
+  informationActionId: InformationActionId;
+  values: unknown;
+  context?: MutationContext;
+};
+
+export type InformationDeliveryPlanEnvironment = {
+  registry: RoleRegistry;
+  deliveryId?: () => InformationDeliveryId;
+};
+
+export type InformationDeliveryPlanResult =
+  | { ok: true; record: InformationDeliveryRecord }
+  | { ok: false; message: string };
+
+export function planInformationDelivery(
+  game: StorytellerLobbyRecord,
+  request: InformationDeliveryPlanRequest,
+  environment: InformationDeliveryPlanEnvironment,
+): InformationDeliveryPlanResult {
+  const recipient = participantRefOf(game, request.recipientPlayerId);
+  const player = recipient ? game.players[request.recipientPlayerId] : undefined;
+  if (!recipient || !player) return { ok: false, message: "This player is not seated." };
+  if (!player.actualRole) return { ok: false, message: "This player has no Actual Role yet." };
+
+  const matchingActions = environment.registry
+    .informationActionsOf(player.actualRole)
+    .filter((action) => action.id === request.informationActionId);
+  if (matchingActions.length === 0) {
+    return { ok: false, message: `"${player.actualRole}" has no Information Action "${request.informationActionId}".` };
+  }
+  if (matchingActions.length > 1) {
+    return { ok: false, message: `Malformed Role Information: duplicate Information Action id "${request.informationActionId}".` };
+  }
+  const action = matchingActions[0]!;
+
+  const timingCheck = validateInformationTiming(action.timing, game);
+  if (!timingCheck.ok) return timingCheck;
+
+  const coherence = validateRequirementsCoherent(action.requirements);
+  if (!coherence.ok) return coherence;
+
+  const parsedValues = parseInformationValues(request.values);
+  if (!parsedValues.ok) return parsedValues;
+
+  const validation = validateInformationValues(action.requirements, parsedValues.values, {
+    playerIds: { has: (id) => participantRefOf(game, id) !== null },
+    roleIds: { has: (id) => !!environment.registry.get(id) },
+  });
+  if (!validation.ok) return validation;
+
+  const recordedValues = recordedInformationValues(game, parsedValues.values);
+  if (!recordedValues) return { ok: false, message: "A referenced Player is not seated." };
+
+  const provenance = durableProvenance(game, request.context?.provenance);
+  if (provenance === null) return { ok: false, message: "The Provenance source Player is not seated." };
+
+  const moment = currentGameMoment(game);
+  const record: InformationDeliveryRecord = cloneOwned({
+    id: (environment.deliveryId ?? informationDeliveryId)(),
+    recipient,
+    actualRole: player.actualRole,
+    informationActionId: request.informationActionId,
+    ...(moment ? { moment } : {}),
+    values: recordedValues,
+    ...(provenance ? { provenance } : {}),
+  });
+
+  return { ok: true, record };
+}
+
+/** Pure application of one accepted Information Delivery plan. */
+export function applyInformationDeliveryPlan(
+  game: StorytellerLobbyRecord,
+  record: InformationDeliveryRecord,
+): StorytellerLobbyRecord {
+  return {
+    ...game,
+    informationDeliveries: [...game.informationDeliveries, record],
+  };
 }
