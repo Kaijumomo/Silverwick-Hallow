@@ -331,6 +331,37 @@ delivery time, the Information Action, the values, Game Moment and
 Provenance. Created by `recordInformationDelivery()`. It is not a History
 Record.
 
+Phase 10F (store v24): planned purely by `planInformationDelivery()` (the
+store command is its adapter), so an ability resolution can include it in its
+one commit. Two optional fields: **performedRole** -- the character procedure
+actually performed when it differs from the Actual Role (a simulated wake, e.g.
+a Drunk shown the Empath; it never implies the recipient holds that Role) --
+and **resolutionId** (correlation metadata). Undo removes the stored record;
+it never "unsays" what was told.
+
+## 18a. Guided ability resolution (Phase 10F)
+
+- **Ability semantics**: a verified descriptor (timing, usage, inputs, hook
+  scopes, presentation) plus an optional pure evaluator, attached to a
+  character only when canonical ownership is proven. Ability prose is never
+  parsed. No semantics -> the Manual path.
+- **Rules Query**: pure, derived answers (functioning, impairment, protection,
+  registration, neighbours, Life Events with coverage). Never persisted; an
+  unknown interaction is a Storyteller judgment, never an invented rule.
+- **Ability resolution**: one ordered outcome over the frozen primitives,
+  planned on one evolving working snapshot by `planAbilityResolution` and
+  committed once by `resolveAbility` (one Undo, one localSeq step).
+- **Workflow fingerprint**: the render-time actor/Role/phase/usage/step state a
+  guided workflow is opened against; a mismatch at commit is `stale`.
+- **Manual resolution** ("Resolve manually / unmodeled interaction"): the
+  Storyteller's already-resolved outcome over the same primitives, recorded
+  with `reason: "manual"` -- never presented as a computed rule. Not an
+  "override".
+- **Participant-scoped Night progress** (v24): a step about one participant is
+  keyed by their ParticipantId (`p:{participantId}:{wakeRole}`), never the seat.
+- **Night Life withholding** (v24): during Night the public / player-town
+  projection carries no Life State; Day resumes it from Current State.
+
 ## 19. Storyteller-private
 
 Visible only to the Storyteller: the `storyteller` and `checkpoint` Firebase

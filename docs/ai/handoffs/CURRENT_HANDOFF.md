@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-02\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions has a **FROZEN SOL IMPLEMENTATION CONTRACT** in `PHASE10F.md` and implementation is **IN PROGRESS** on `dev/phase-10f`. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`; contract-freeze checkpoint: `727530e9364a0c971326c06ce45855adcf39828b`; first rules-neutral implementation slice through `5ee705fbd2a39d89eaabc900a0e6a5682d884cf4`. Target schema/store: v24.
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: frozen contract `PHASE10F.md`; the **rules-neutral implementation is at a review checkpoint, READY FOR LUNA**, on `dev/phase-10f` at `403f641944db035d170a9321562e88be096dc77b` (schema/store v24). Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`; contract-freeze checkpoint: `727530e9364a0c971326c06ce45855adcf39828b`. 10F is NOT closed: proof-character semantics await authoritative BOTC rules evidence.
 
 ## Phase 10D — CLOSED
 
@@ -243,7 +243,7 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 - **10C Reminder Workflow + visual Reminder tokens — CLOSED**
 - **10D Role Transitions — CLOSED**
 - **10E Alignment Transitions — CLOSED AND INTEGRATED**
-- **10F Guided Ability Resolution / Night Actions — SOL CONTRACT FROZEN; IMPLEMENTATION IN PROGRESS**
+- **10F Guided Ability Resolution / Night Actions — RULES-NEUTRAL IMPLEMENTATION READY FOR LUNA (not closed)**
 - 10G Advanced Storyteller bookkeeping / final visual integration
 
 ## Standing Phase 10 UX invariant
@@ -385,16 +385,51 @@ Frozen core:
 - the Night Order becomes an interactive operating dashboard with inline simple actions and a progressively disclosed workspace for complex/judgment-heavy resolutions;
 - full canonical semantic coverage moves to Phase 11 after 10G.
 
-Implementation lineage so far:
+Implementation lineage:
 - `727530e9364a0c971326c06ce45855adcf39828b` — create/freeze `PHASE10F.md`;
-- `069dd36058df8a5f968a132e37e3118bfd757873` — extract pure `planInformationDelivery` / `applyInformationDeliveryPlan`;
-- `dc38a6a00087b6b1302598ca21ef608e8978b11b` — route the legacy store Information Delivery command through that pure plan;
-- `5ee705fbd2a39d89eaabc900a0e6a5682d884cf4` — add planner purity/application regression coverage.
+- `069dd36` / `dc38a6a` / `5ee705f` — pre-handoff pure Information Delivery extraction (Sol-authored);
+- `f57ea42` / `36e5290` — roadmap / handoff docs;
+- `800eedc` — **review remediation (verdict REVISE)**: the pre-handoff extraction failed the gate -- an unused import broke `tsc -b` (typecheck and build), the 10D Role-seam guard (run by the Role and Alignment guard suites) failed on the moved Actual Role snapshot, and refusal precedence drifted ("Unknown script." before the recipient checks). Fixed, with equivalence / purity / composability / one-commit evidence;
+- `edeafc3` (+ `8dc6ebd` build-artifact restore) — Slice 1: v24 strict deliveries (authorized `performedRole`, `resolutionId`), participant-scoped Night progress (`src/stores/nightProgress.ts`), v23 → v24 migration (seat-keyed participant progress dropped, never re-keyed), Night public-Life withholding (projection, wire decoder, Public Display, player town list);
+- `0d8714d` — Slice 2: Life `useAbility` / `correctAbilityUsed`; `setAbilityUsed` is an adapter (Night/Day only, records Life History); abilityUsed writer guard;
+- `c142fc2` — Slice 3: ability semantics contract (`src/abilities/semantics.ts`), hook/modifier gating (`src/abilities/modifiers.ts`), Rules Query (`src/stores/rulesQuery.ts`), pure coordinator (`src/stores/abilityResolution.ts`), pure `planNightStepStatus`;
+- `364d4f2` — Slice 4: one-commit `resolveAbility`;
+- `5429e48` — Slices 5–6: interactive Night Order, workspace, Manual path, Grimoire target picker, Privacy Mode;
+- `6deda52` — generated coverage manifest (`src/abilities/coverage.ts`) and 10F architecture guards;
+- `2b8ad61` — preview label polish;
+- `403f641` — guided request without a fingerprint refuses `invalid` (**implementation review checkpoint**);
+- docs commit on top — `PHASE10F.md` trailing-double-space hard breaks converted to `\\` hard breaks (identical rendering, no content change) so the range `git diff --check` passes; roadmap / handoff / terminology.
 
-No Phase 10F character-specific mechanics have been coded yet. That is deliberate: the architecture challenge identified several BOTC ruling questions that require authoritative source verification before the proof-character semantic modules are frozen or implemented.
+Gate at `403f641` (plus the docs commit on top): see the final implementation report (typecheck, full normal suite, Firebase emulator suite, production build, `git diff --check`).
 
-No Firebase Rules / writer-fencing changes are authorized by the 10F contract.
+Behavior changes to note for review:
+- `setAbilityUsed` now goes through the Life boundary: refused in Setup / after the game ends, and a live toggle records one Life History record (`correction: true` when clearing).
+- During Night, public / player-town views show no Life State for anyone (including earlier deaths); Day restores it.
+- v23 → v24 drops seat-keyed participant Night progress (a one-night bookkeeping reset), preserving global and custom steps.
+
+No character-specific mechanics are encoded: `CANONICAL_ABILITY_SEMANTICS` is empty, so every Night row offers "Resolve manually / unmodeled interaction"; guided flows are exercised with rules-neutral fixtures only (`src/test/abilityFixtures.ts`). The official BOTC wiki/site was not reachable from the implementation environment (network policy).
+
+No Firebase Rules / writer-fencing change was made.
+
+### Proof-character rules evidence still required (contract Slice 6)
+
+The official BOTC wiki / site was unreachable from the implementation environment; only the pinned canonical data (ability text, night order, jinxes) was available, and ability text alone is not a ruling. Before any proof-character module is written, these need authoritative answers:
+
+1. **Poisoner** -- exact duration boundary of the poison (through which phase transition); does it end immediately if the Poisoner dies, becomes drunk/poisoned or loses their ability mid-Night/Day (Effect persistence `whileSourceFunctions` vs `independent`); may the Poisoner choose themself or a dead player?
+2. **Monk** -- does "safe from the Demon" cover every Demon-caused death that Night (including a Demon's self-kill / star-pass and Demon abilities other than the nightly kill); does it persist if the Monk dies or becomes impaired later that Night; exact expiry boundary?
+3. **Imp** -- kill resolution against Safe-from-the-Demon / Cannot-die / generic protection; on self-kill, which Minion becomes the Imp (Storyteller choice among living Minions?) and its interaction with the Scarlet Woman; mechanical order of the Imp's death vs the Minion's Role change; does the new Imp act again that Night; does an impaired Imp's self-kill still pass the Demon?
+4. **Fortune Teller** -- the red herring as an authoritative Setup fact (where it lives; may it change); registration of Recluse / Spy / other misregistering characters as Storyteller judgment; what an impaired Fortune Teller may be told; dead-player choices.
+5. **Drunk shown as Empath** -- any constraint on the arbitrary information (or purely Storyteller choice)?
+6. **Ravenkeeper** -- which Night deaths trigger it (any cause, including Minion abilities / executions at night?); is an impaired Ravenkeeper still woken; ordering when the death happens after the Ravenkeeper's night position.
+7. **Slayer** -- does an impaired Slayer use up the ability; may a dead Slayer act; may they target themself; registration of the target as Demon (Recluse) as judgment.
+8. **Cult Leader** -- which neighbour's alignment (living neighbours? Storyteller choice when they differ); does the Cult Leader learn the change; Shown Alignment handling.
+9. **Pit-Hag** -- legal destinations (not in play only?), alignment of the changed player, the "arbitrary deaths" when a Demon is created (who decides, ordering), does the changed player act with the new ability tonight, ability-use reset.
+10. **Al-Hadikhia** -- exact order of the three choices and outcomes, "choose to live" for an already-dead player, and the all-three-live case.
+11. **Tinker** -- confirm pure Storyteller discretion with no protection interactions (Monk / Soldier / Cannot-die).
+12. **Harlot** -- consent flow, who decides the deaths, simultaneous or ordered deaths, timing.
+13. **Toymaker** -- an authoritative home for "the Demon has skipped an attack" history (10G), first-night evil information below 7 players.
+14. **Baron** -- confirm Setup-only (no in-game mechanic) for the negative proof.
 
 ## Immediate next task
 
-Continue the first Phase 10F foundation slice: v24 schema/migration for simulated/composable Information Delivery, participant-scoped Night progress and Night public-Life withholding; then add composable `abilityUsed` intents through the Life seam and the rules-neutral coordinator/semantic interfaces. Run the required gate before creating the first implementation review checkpoint.
+Luna review of `403f641944db035d170a9321562e88be096dc77b`. In parallel: collect authoritative BOTC rules evidence for the proof set so Sol can freeze the proof-character rules matrix (contract Slice 6) before any proof-character semantic module is written (Slice 7).

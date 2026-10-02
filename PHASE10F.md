@@ -1,10 +1,10 @@
 # Phase 10F — Guided Ability Resolution / Night Actions
 
-**Status:** SOL CONTRACT FROZEN — IMPLEMENTATION AUTHORIZED  
-**Decision date:** 2026-10-02  
-**Starting branch:** `dev/phase-10f`  
-**Starting checkpoint:** `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`  
-**Starting schema/store:** v23  
+**Status:** SOL CONTRACT FROZEN — IMPLEMENTATION AUTHORIZED\
+**Decision date:** 2026-10-02\
+**Starting branch:** `dev/phase-10f`\
+**Starting checkpoint:** `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`\
+**Starting schema/store:** v23\
 **Target schema/store:** v24
 
 ## 1. Purpose
@@ -396,123 +396,123 @@ Generate a manifest from the pinned canonical data.
 
 ### Composition
 
-**10F-AC-01 — Atomic cross-domain**  
+**10F-AC-01 — Atomic cross-domain**\
 One ability spanning multiple domains commits all accepted consequences together or none.
 
-**10F-AC-02 — One boundary**  
+**10F-AC-02 — One boundary**\
 An accepted resolution creates exactly one Undo entry, one localSeq step and one projection cycle.
 
-**10F-AC-03 — Evolving working snapshot**  
+**10F-AC-03 — Evolving working snapshot**\
 Every sub-plan observes the snapshot produced by all preceding accepted operations.
 
-**10F-AC-04 — Explicit mechanical order**  
+**10F-AC-04 — Explicit mechanical order**\
 Every multi-domain mechanical resolution defines its operation order. There is no silent global mechanical fallback order.
 
-**10F-AC-05 — Final validation**  
+**10F-AC-05 — Final validation**\
 The composed game must pass the authoritative persisted-game schema before commit.
 
-**10F-AC-06 — True no-op**  
+**10F-AC-06 — True no-op**\
 A resolution that changes neither authoritative state nor requested progress commits nothing.
 
 ### Identity
 
-**10F-AC-07 — Participant-bound targets**  
+**10F-AC-07 — Participant-bound targets**\
 Seat reuse cannot redirect a stale choice or Life operation to a replacement participant.
 
-**10F-AC-08 — Stale actor/workflow**  
+**10F-AC-08 — Stale actor/workflow**\
 Actor ParticipantId, relevant Role/perception, phase/day, usage and step identity/status are revalidated before commit.
 
-**10F-AC-09 — Participant-scoped Night progress**  
+**10F-AC-09 — Participant-scoped Night progress**\
 A new participant never inherits another participant's completion marker.
 
 ### Rules versus judgment
 
-**10F-AC-10 — Deterministic answer**  
+**10F-AC-10 — Deterministic answer**\
 An encoded one-answer mechanic is computed rather than re-asked.
 
-**10F-AC-11 — Manual/unmodeled interaction**  
+**10F-AC-11 — Manual/unmodeled interaction**\
 A Storyteller can explicitly switch to manual resolution when Silverwick lacks a modeled interaction; the bypass is visible and not silently treated as the computed rule.
 
-**10F-AC-12 — Impairment**  
+**10F-AC-12 — Impairment**\
 A modeled impaired ability does not create functioning Current State outcomes; information remains an explicit Storyteller communication choice where rules require it.
 
-**10F-AC-13 — Derived applicability**  
+**10F-AC-13 — Derived applicability**\
 Stored Effects are not rewritten merely because an evaluator derives that they do or do not currently apply.
 
-**10F-AC-14 — Protection specificity**  
+**10F-AC-14 — Protection specificity**\
 Distinct protection types keep distinct mechanics; generic Protected never implies Cannot Die.
 
-**10F-AC-15 — Ability use**  
+**10F-AC-15 — Ability use**\
 A once-per-game use marker commits atomically with the ability outcome through the Life boundary.
 
-**10F-AC-16 — Ordered Life**  
+**10F-AC-16 — Ordered Life**\
 A multi-event same-participant Life resolution preserves intent order through one Life transaction.
 
 ### Information and notation
 
-**10F-AC-17 — Composable Information Delivery**  
+**10F-AC-17 — Composable Information Delivery**\
 A delivery may be planned into the same final snapshot as other domains; the legacy store command remains an adapter.
 
-**10F-AC-18 — Simulated delivery**  
+**10F-AC-18 — Simulated delivery**\
 v24 can record Actual Role plus performedRole for a simulated ability with no invented Current State mechanics.
 
-**10F-AC-19 — Delivery Undo semantics**  
+**10F-AC-19 — Delivery Undo semantics**\
 Undo removes the stored delivery record but UI never claims spoken information was erased.
 
-**10F-AC-20 — Reminders write-only**  
+**10F-AC-20 — Reminders write-only**\
 Ability modules may write Reminders through the 10C seam and are architecture-guarded from reading Reminder text/presence as mechanical authority.
 
 ### Boundaries
 
-**10F-AC-21 — Setup separation**  
+**10F-AC-21 — Setup separation**\
 Setup composition remains Setup-owned.
 
-**10F-AC-22 — Travelers**  
+**10F-AC-22 — Travelers**\
 Traveler outcomes use frozen primitives; arrival behavior remains separate and participant-bound.
 
-**10F-AC-23 — Modifier gating**  
+**10F-AC-23 — Modifier gating**\
 Unknown modifiers/jinxes gate only mechanics they could affect; no unsupported interaction is silently automated.
 
-**10F-AC-24 — Homebrew safety**  
+**10F-AC-24 — Homebrew safety**\
 Homebrew, including official-id reuse, never inherits canonical automation.
 
-**10F-AC-25 — Structured refusals**  
+**10F-AC-25 — Structured refusals**\
 The result taxonomy is distinct, safe, non-throwing and atomic.
 
 ### Recovery/privacy
 
-**10F-AC-26 — Ephemeral workflow**  
+**10F-AC-26 — Ephemeral workflow**\
 Reload/reconnect/checkpoint adoption persists committed state only and invalidates stale drafts.
 
-**10F-AC-27 — Authority unchanged**  
+**10F-AC-27 — Authority unchanged**\
 No change to writer fencing, SessionWriter authority or Firebase remote paths.
 
-**10F-AC-28 — Privacy**  
+**10F-AC-28 — Privacy**\
 The guided workspace is Storyteller-private and suppressed under Privacy Mode; projections gain only fields explicitly approved by this contract.
 
-**10F-AC-29 — Night Life withholding**  
+**10F-AC-29 — Night Life withholding**\
 During Night, public/player-town views reveal no Life State; Day resumes normal public Life projection from Current State.
 
 ### UX
 
-**10F-AC-30 — Interactive Night Order**  
+**10F-AC-30 — Interactive Night Order**\
 Night rows expose status, next need/result, triggered/skipped states and guided entry.
 
-**10F-AC-31 — Simple flow**  
+**10F-AC-31 — Simple flow**\
 A simple target-and-Effect ability can be completed in at most target + Resolve after opening.
 
-**10F-AC-32 — Complex preview**  
+**10F-AC-32 — Complex preview**\
 Significant/multi-participant/judgment resolutions preview the combined consequences before confirmation.
 
 ### Extensibility/schema
 
-**10F-AC-33 — Extensible semantics**  
+**10F-AC-33 — Extensible semantics**\
 Adding a supported canonical character requires a semantics module/tests, not coordinator or frozen-domain redesign.
 
-**10F-AC-34 — Coverage manifest**  
+**10F-AC-34 — Coverage manifest**\
 A generated canonical manifest tracks the proof set now and full Phase 11 coverage later.
 
-**10F-AC-35 — v24 migration**  
+**10F-AC-35 — v24 migration**\
 v23 migrates deterministically to v24 for the approved Information Delivery / Night-progress / projection contract, including Current State, Undo entries and remote checkpoint recovery.
 
 ## 20. Implementation sequence
