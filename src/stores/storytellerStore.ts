@@ -536,7 +536,8 @@ export type StorytellerStore = {
    * spendGhostVote, `true` is restoreGhostVote -- both legal only while
    * dead. */
   setGhostVote: (id: PlayerId, ghostVote: boolean, context?: MutationContext) => void;
-  setAbilityUsed: (id: PlayerId, used: boolean) => void;
+  /** Phase 10F: an adapter over resolveLife (useAbility / correctAbilityUsed). */
+  setAbilityUsed: (id: PlayerId, used: boolean, context?: MutationContext) => LifeCommandResult;
   // --- Phase 10B: Effects -----------------------------------------------------
   /** THE authoritative Effect writer. Plans one atomic EffectTransaction
    * (effectResolution.ts) -- one or more ordered, already-resolved Effect
@@ -2268,15 +2269,20 @@ export const useStorytellerStore = create<StorytellerStore>()(
         else get().spendGhostVote(id, context);
       },
 
-      setAbilityUsed: (id, abilityUsed) => {
-        const { game, undoStack } = get();
-        if (!game) return;
-        // Phase 9R.4 (B8): unknown player or already-current value.
-        const existing = ownPlayer(game, id);
-        if (!existing || existing.abilityUsed === abilityUsed) return;
-        set({
-          undoStack: pushUndo(game, undoStack),
-          game: patchPlayer(game, id, { abilityUsed }),
+      // Phase 10F (Section 6): a compatibility adapter over the authoritative
+      // Life boundary -- never a second abilityUsed writer. Marking the ability
+      // used is a gameplay `useAbility`; clearing it is a `correctAbilityUsed`
+      // correction (a true resurrection's reset is Life's own). Like every
+      // Life intent it is refused outside Night/Day. Phase 9R.4 (B8): an
+      // unknown player or the already-current value is completely inert.
+      setAbilityUsed: (id, abilityUsed, context) => {
+        const game = get().game;
+        const existing = game ? ownPlayer(game, id) : undefined;
+        if (!game || !existing || existing.isEmpty) return { ok: false, code: "refused", message: "That seat has no player." };
+        if (existing.abilityUsed === abilityUsed) return { ok: true, changed: false, eventIds: [] };
+        return get().resolveLife({
+          intents: [abilityUsed ? { kind: "useAbility", playerId: id } : { kind: "correctAbilityUsed", playerId: id, used: false }],
+          ...(context ? { context } : {}),
         });
       },
 

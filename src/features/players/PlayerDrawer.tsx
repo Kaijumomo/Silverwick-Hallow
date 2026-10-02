@@ -181,6 +181,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   const [nameDraft, setNameDraft] = useState(player.name);
   const [refinementError, setRefinementError] = useState<string | null>(null);
   const [roleError, setRoleError] = useState<string | null>(null);
+  const [abilityError, setAbilityError] = useState<string | null>(null);
   const [perceptionError, setPerceptionError] = useState<string | null>(null);
   // Optional, per change: also show the player the new character in the same
   // atomic resolution (never assumed -- a concealed character needs the
@@ -358,15 +359,23 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
 
           <section className="drawer-section">
             <h3 className="drawer-section-title">State</h3>
+            {/* Phase 10F: through the Life boundary -- marking used is a
+                gameplay use, clearing it a correction; Night/Day only. */}
             <div className="drawer-row">
               <button
                 className="toggle-pill"
                 aria-pressed={player.abilityUsed}
-                onClick={() => setAbilityUsed(player.id, !player.abilityUsed)}
+                disabled={game?.phase !== "night" && game?.phase !== "day"}
+                title={game?.phase !== "night" && game?.phase !== "day" ? "Ability use is recorded during Night or Day." : undefined}
+                onClick={() => {
+                  const result = setAbilityUsed(player.id, !player.abilityUsed);
+                  setAbilityError(result.ok ? null : result.message);
+                }}
               >
                 Ability used
               </button>
             </div>
+            {abilityError && <p className="behavior-help" role="alert">{abilityError}</p>}
           </section>
 
           {/* Phase 10B: Effects -- one-tap manual quick effects, the compact

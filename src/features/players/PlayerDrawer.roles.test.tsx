@@ -333,7 +333,8 @@ describe("ASTRA-10D-003: Traveler Role actions are bound to the rendered Travele
     render(<TravelerArrival playerId={zed} />);
     fireEvent.change(select(), { target: { value: "thief" } });
     expect(player(zed)).toMatchObject({ actualRole: "thief", shownRole: "thief" });
-    state().setAbilityUsed(zed, true);
+    // Fixture staging only (Phase 10F: Life refuses ability use in Setup).
+    store.setState({ game: { ...game(), players: { ...game().players, [zed]: { ...player(zed), abilityUsed: true } } } });
     fireEvent.change(select(), { target: { value: "gunslinger" } });
     expect(player(zed)).toMatchObject({ actualRole: "gunslinger", shownRole: "gunslinger", abilityUsed: true });
     expect(game().phase).toBe("setup");

@@ -175,8 +175,10 @@ describe("Phase 9R.4 (B8): scalar setters with the already-current value are com
 
     const contrast = baseline();
     state().setAbilityUsed(id, true);
-    expectOneMutation(contrast);
+    // Phase 10F: through the Life boundary -- one truthful "life" History record.
+    expectOneMutation(contrast, { history: 1 });
     expect(player(id).abilityUsed).toBe(true);
+    expect(game().history.at(-1)).toMatchObject({ category: "life", change: { kind: "value", from: { abilityUsed: false }, to: { abilityUsed: true } } });
     const again = baseline();
     state().setAbilityUsed(id, true);
     expectInert(again);

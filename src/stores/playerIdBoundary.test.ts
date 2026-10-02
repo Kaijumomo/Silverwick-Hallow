@@ -405,7 +405,10 @@ describe("Phase 9R.4 (B8 remediation): representative families -- inherited ids 
     inertThenValid(setupFixture, (id) => state().setBehaviorMode(id, "fake_demon_behavior"), first, {},
       (id) => expect(player(id).behaviorMode).toBe("fake_demon_behavior")));
 
-  it("5. setAbilityUsed", () => inertThenValid(setupFixture, (id) => state().setAbilityUsed(id, true), first, {},
+  // Phase 10F: setAbilityUsed is an adapter over the Life boundary -- a Live
+  // Play gameplay use with one Life History record (Setup refuses it, like
+  // every Life change).
+  it("5. setAbilityUsed", () => inertThenValid(liveFixture, (id) => state().setAbilityUsed(id, true), first, { history: 1 },
     (id) => expect(player(id).abilityUsed).toBe(true)));
 
   it("6. setNotes", () => inertThenValid(setupFixture, (id) => state().setNotes(id, "watch"), first, {},

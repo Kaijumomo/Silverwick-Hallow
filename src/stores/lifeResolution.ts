@@ -32,6 +32,10 @@ import type {
  * accepted plan as exactly one game replacement: one Undo entry, one localSeq
  * step, one projection. Nothing is ever applied partially.
  *
+ * Phase 10F: `abilityUsed` is written ONLY here (useAbility /
+ * correctAbilityUsed, and a true resurrection's reset) -- plus the reviewed
+ * Role-seam gameplay reset and Setup's fresh assignment. No other writer.
+ *
  * FUTURE ABILITY-ENGINE SEAM: a later rules engine evaluates Role abilities
  * (asking the Storyteller where required), then submits the resulting,
  * already-resolved Life Intent(s) -- possibly several subjects at once --
@@ -71,6 +75,18 @@ export type ResurrectionIntent = { kind: "resurrection"; playerId: PlayerId };
 export type SpendGhostVoteIntent = { kind: "spendGhostVote"; playerId: PlayerId };
 export type RestoreGhostVoteIntent = { kind: "restoreGhostVote"; playerId: PlayerId };
 
+/**
+ * Phase 10F (narrow 10A amendment, PHASE10F Section 6): a GAMEPLAY use of the
+ * participant's current ability -- `abilityUsed` false -> true. It composes
+ * atomically with every other gameplay Life intent of the same resolution
+ * (e.g. a once-per-game ability that also kills: useAbility + death, in intent
+ * order). Refused when the ability is already used: using it again is not a
+ * gameplay event Silverwick may record. Never resets anything; a later
+ * resurrection in the same transaction still restores the ability (generic
+ * resurrection semantics), and a Role change resets it through the Role seam.
+ */
+export type UseAbilityIntent = { kind: "useAbility"; playerId: PlayerId };
+
 /** The complete life status a Storyteller correction sets. A living player
  * always holds their vote and is never exiled. A dead participant may be
  * recorded as exile-dead whatever their CURRENT Role (Phase 10D,
@@ -83,6 +99,12 @@ export type LifeStatusTarget =
 /** Status-only correction: fixes Current State without pretending any
  * gameplay event happened. Never restores a used ability. */
 export type CorrectStatusIntent = { kind: "correctStatus"; playerId: PlayerId; target: LifeStatusTarget };
+/** Phase 10F: a CORRECTION of the recorded ability-use marker (the
+ * Storyteller recorded a use that did not happen, or missed one). Distinct from
+ * `useAbility` (gameplay), from a resurrection's reset and from a Role
+ * change's reset; recorded with `correction: true`. Setting the value it
+ * already holds contributes nothing. */
+export type CorrectAbilityUsedIntent = { kind: "correctAbilityUsed"; playerId: PlayerId; used: boolean };
 /** Removes one event still in the window. Current State is repaired only by
  * an explicit CorrectStatusIntent in the same transaction. */
 export type RetractEventIntent = { kind: "retractEvent"; eventId: LifeEventId };
@@ -107,8 +129,9 @@ export type GameplayLifeIntent =
   | ExileIntent
   | ResurrectionIntent
   | SpendGhostVoteIntent
-  | RestoreGhostVoteIntent;
-export type CorrectionLifeIntent = CorrectStatusIntent | RetractEventIntent | AmendEventIntent | LateRecordIntent;
+  | RestoreGhostVoteIntent
+  | UseAbilityIntent;
+export type CorrectionLifeIntent = CorrectStatusIntent | RetractEventIntent | AmendEventIntent | LateRecordIntent | CorrectAbilityUsedIntent;
 export type LifeIntent = GameplayLifeIntent | CorrectionLifeIntent;
 
 /**
@@ -165,7 +188,7 @@ export const MAX_LIFE_INTENTS = 20;
 
 const isCorrectionIntent = (intent: LifeIntent): intent is CorrectionLifeIntent =>
   intent.kind === "correctStatus" || intent.kind === "retractEvent" ||
-  intent.kind === "amendEvent" || intent.kind === "lateRecord";
+  intent.kind === "amendEvent" || intent.kind === "lateRecord" || intent.kind === "correctAbilityUsed";
 
 export const newLifeEventId = (): LifeEventId =>
   "le-" + (globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`);
@@ -492,6 +515,19 @@ export function planLifeTransaction(
         const spend = intent.kind === "spendGhostVote";
         if (f.ghostVote !== spend) return refuse(spend ? "That vote is already used." : "That vote is already available.");
         setFields(s.player, s.ref, { ...f, ghostVote: !spend });
+        break;
+      }
+      case "useAbility": {
+        const s = seated(intent.playerId); if ("ok" in s) return s;
+        const f = fieldsOf(s.player);
+        if (f.abilityUsed) return refuse(`${displayName(s.player)}'s ability is already used.`);
+        setFields(s.player, s.ref, { ...f, abilityUsed: true });
+        break;
+      }
+      case "correctAbilityUsed": {
+        const s = seated(intent.playerId); if ("ok" in s) return s;
+        if (typeof intent.used !== "boolean") return refuse("Choose whether the ability is used.");
+        setFields(s.player, s.ref, { ...fieldsOf(s.player), abilityUsed: intent.used });
         break;
       }
       case "correctStatus": {
