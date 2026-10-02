@@ -120,8 +120,11 @@ describe("setup-aware information, never an automatic publication", () => {
 describe("state-sensitive and deceptive procedures", () => {
   it.each(["butler", "seamstress"])("%s has an actionable first-night procedure", role =>
     expect(wakes(generate([role]))).toContainEqual(expect.objectContaining({ effectiveRoleId: role, prompt: expect.stringMatching(/choose/i) })));
-  it("used once-per-game abilities do not automatically recur", () =>
-    expect(wakes(generate(["seamstress"], false, { seamstress: { abilityUsed: true } }))).toHaveLength(0));
+  it("SOL-10F-L6: a used, unverified once-per-game character is not suppressed by prose", () =>
+    // SOL-10F-L6: prose-derived `oncePerGame` never suppresses a row -- the
+    // unverified once-per-game character stays visible, marked used.
+    expect(wakes(generate(["seamstress"], false, { seamstress: { abilityUsed: true } }))).toEqual([
+      expect.objectContaining({ effectiveRoleId: "seamstress", abilityUsed: true })]));
   it("dead ordinary characters are omitted, death-triggered Ravenkeeper is a conditional check", () => {
     const steps = wakes(generate(["empath", "ravenkeeper"], false, { empath: { alive: false }, ravenkeeper: { alive: false } }));
     expect(steps).toHaveLength(1);

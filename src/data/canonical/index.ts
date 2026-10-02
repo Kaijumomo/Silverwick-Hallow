@@ -28,6 +28,8 @@ const roles = new Map<string, RoleDef>(rawRoles.map(raw => {
     edition: raw.edition === "carousel" ? "experimental" : raw.edition,
     ...(firstNight ? { firstNight, firstNightPrompt: instruction(raw.firstNightReminder || raw.ability) } : {}),
     ...(otherNight ? { otherNight, otherNightPrompt: instruction(raw.otherNightReminder || raw.ability) } : {}),
+    // Reference metadata ONLY (SOL-10F-L6): derived from prose, so it is never
+    // mechanical authority -- usage comes from a verified AbilityDescriptor.
     oncePerGame: /^Once per game\b/i.test(raw.ability),
     provenance: {
       status: raw.edition === "carousel" ? "official-experimental" : "official",

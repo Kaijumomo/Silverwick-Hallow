@@ -181,7 +181,10 @@ export function computeNightOrder(
     const afterDeath = !isFirstNight && (DEATH_CHECKS.has(roleId) || roleId === "zombuul" ||
       registry.get(player.actualRole)?.type === "minion" && seated.some(p => p.alive && p.actualRole === "vigormortis"));
     if (!player.alive && !afterDeath) continue;
-    if (roleDef.oncePerGame && player.abilityUsed) continue;
+    // SOL-10F-L6: no generic suppression from prose-derived `oncePerGame`.
+    // Usage authority is a verified AbilityDescriptor (enforced by the
+    // coordinator); an unverified character stays visible (its "used" state is
+    // shown on the row) for the Storyteller's own check / Manual path.
     if (!isFirstNight && roleId === "king" && seated.filter(p => !p.alive).length < seated.filter(p => p.alive).length) continue;
     if (player.actualRole === "lunatic") order = at("lunatic") + (isFirstNight ? 0.1 : 0);
     if (isDeceived && FIRST_NIGHT_ADMIN.has(roleId)) prompt =
