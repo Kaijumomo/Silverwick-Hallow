@@ -670,3 +670,42 @@ Before a Luna re-verification checkpoint:
 - do not implement proof-character rules yet.
 
 Only after Luna re-verifies this rules-neutral foundation may Sol freeze the authoritative proof-character rules matrix.
+
+
+## 23. Luna targeted re-verification adjudication — 2026-10-02
+
+Luna re-verified exact remediation target `180b20e173b5dcccc3a6a1853d37987c6589c4de` and returned **REVISE** on one remaining issue. SOL-10F-L1, L2, L4, L5, L6 and L7 passed; the full gate also passed (typecheck; 3,498/3,498 normal tests across 137 files; 201/201 Firebase emulator tests; production build; both diff checks).
+
+### SOL-10F-L3-R1 — Invocation eligibility must be enforced — HIGH
+
+The Day entry exists and correctly uses the shared AbilityWorkspace / coordinator, but the current generic eligibility logic treats `triggered` and `passive` timing as actionable in either live phase without consulting `AbilityDescriptor.invocation`.
+
+Freeze this correction:
+
+- **Generic Day entry** is guided only when the verified descriptor explicitly has `timing: "day"` **and** an actionable Day invocation of `"publicClaim"` or `"procedure"`.
+- **Generic Night Order guided entry** remains for explicit first/other-Night timing and an actionable Night invocation of `"wake"` or `"procedure"`.
+- `timing: "triggered"` does **not** by itself make a descriptor actionable from the Day drawer or ordinary Night cadence.
+- `timing: "passive"` is never a user-invoked guided action merely because the game is in a live phase.
+- `invocation: "none"` is never directly actionable.
+- Triggered/passive abilities remain Manual/reference-only until a verified semantic module and an explicit supported invocation/trigger path authorize them. Do not guess a trigger from timing alone.
+- The **coordinator must enforce the same invocation eligibility as the UI**. UI hiding is not authority; a crafted Guided request that uses an unsupported timing/invocation combination must refuse safely.
+- This remediation does not define Ravenkeeper/Tinker/etc. rules. Their future proof-character contracts may add the explicit trigger/Storyteller-invocation path they require after authoritative BOTC rules verification.
+
+Preferred implementation: centralize the rules-neutral timing+invocation eligibility in one pure helper shared by UI and coordinator, rather than duplicating a Day-only check.
+
+Required regressions:
+
+1. `timing:["passive"], invocation:"none"` is not offered by Day entry and a crafted Guided request is refused.
+2. `timing:["triggered"], invocation:"procedure"` is not automatically offered merely because phase is Day/Night; it remains unavailable until an explicit trigger path exists.
+3. `timing:["day"], invocation:"publicClaim"` is eligible in Day.
+4. `timing:["day"], invocation:"procedure"` is eligible in Day.
+5. `timing:["day"], invocation:"wake"` is not eligible in Day.
+6. `timing:["otherNight"], invocation:"wake"` is eligible on later Night.
+7. `timing:["otherNight"], invocation:"publicClaim"` is not eligible through ordinary Night Order.
+8. UI and coordinator use the same eligibility rule.
+
+No other Luna finding is reopened by this adjudication.
+
+### Gate after remediation
+
+Keep production `CANONICAL_ABILITY_SEMANTICS` empty. Run targeted invocation tests plus typecheck, full normal suite, Firebase emulator suite, production build, and both diff checks. Return one exact clean checkpoint for a narrow Luna closure re-check of SOL-10F-L3-R1.
