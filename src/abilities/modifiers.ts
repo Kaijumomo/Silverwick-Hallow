@@ -1,6 +1,7 @@
 import jinxData from "@/data/canonical/jinxes.json";
 import { isCanonicalRole } from "@/data/canonical";
 import type { RoleRegistry } from "@/data/roleRegistry";
+import type { InformationConstraintValue } from "./semantics";
 import type { RoleId, StorytellerLobbyRecord } from "@/stores/types";
 
 /**
@@ -37,7 +38,7 @@ export type ModifierHookResult =
   /** The modifier constrains the evaluation's information answer: only these
    * values may be delivered (rules-neutral shape; e.g. a "must be false"
    * information modifier). */
-  | { kind: "constrainInformation"; requirementId: string; allowed: readonly unknown[]; reason: string }
+  | { kind: "constrainInformation"; requirementId: string; allowed: readonly InformationConstraintValue[]; reason: string }
   /** The modifier requires an explicit Storyteller decision. */
   | { kind: "judgment"; message: string }
   /** The modifier makes this ability not resolve automatically at all. */

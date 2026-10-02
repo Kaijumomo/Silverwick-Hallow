@@ -9,6 +9,7 @@ import {
   type AbilityJudgments,
   type AbilitySemanticsRegistry,
   type InformationConstraint,
+  type InformationConstraintValue,
 } from "@/abilities/semantics";
 import { activeModifiers, type ModifierDefinition } from "@/abilities/modifiers";
 import { applyAlignmentPlan, defaultAlignmentIds, planAlignmentTransaction, type AlignmentIdSource, type AlignmentIntent } from "./alignmentResolution";
@@ -247,9 +248,36 @@ export function captureFingerprint(
   };
 }
 
-/** Revalidates a fingerprint against `game` (10F-AC-08). Null when current. */
+const PHASES: readonly unknown[] = ["setup", "night", "day", "ended"];
+const STEP_STATUSES: readonly unknown[] = ["pending", "done", "skipped", "absent"];
+const isNonNegativeInteger = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value) && value >= 0;
+
+/**
+ * SOL-10F-L4: STRUCTURAL validation of a runtime fingerprint, before any
+ * comparison with Current State. A malformed / incomplete fingerprint is a
+ * malformed caller request (`invalid`), never stale state. Null when well-formed.
+ */
+export function fingerprintShapeError(fingerprint: unknown): string | null {
+  if (!isObject(fingerprint)) return "The workflow fingerprint is missing or malformed.";
+  if (!isBinding(fingerprint.actor)) return "The workflow fingerprint names no bound participant.";
+  if (typeof fingerprint.actualRole !== "string") return "The workflow fingerprint has no Actual Role.";
+  if (fingerprint.shownRole !== null && typeof fingerprint.shownRole !== "string") return "The workflow fingerprint has a malformed Shown Role.";
+  if (typeof fingerprint.isTraveler !== "boolean") return "The workflow fingerprint has no Traveler status.";
+  if (!PHASES.includes(fingerprint.phase) || !isNonNegativeInteger(fingerprint.day)) return "The workflow fingerprint has no valid Game Moment.";
+  if (typeof fingerprint.abilityUsed !== "boolean") return "The workflow fingerprint has no ability-use state.";
+  if (fingerprint.step !== undefined) {
+    const step = fingerprint.step;
+    if (!isObject(step) || !isNonNegativeInteger(step.day) || typeof step.stepKey !== "string" || !step.stepKey || !STEP_STATUSES.includes(step.status)) {
+      return "The workflow fingerprint has a malformed Night step.";
+    }
+  }
+  return null;
+}
+
+/** SOL-10F-L4: compares a WELL-FORMED fingerprint with Current State
+ * (10F-AC-08). Null when current; otherwise why it is stale. Callers validate
+ * the shape first (fingerprintShapeError). */
 export function staleReason(game: StorytellerLobbyRecord, fingerprint: AbilityWorkflowFingerprint): string | null {
-  if (!isObject(fingerprint) || !isBinding(fingerprint.actor)) return "This workflow is malformed.";
   const actor = boundParticipant(game, fingerprint.actor);
   if (!actor) return "The player in this seat changed since this workflow opened.";
   if (actor.actualRole !== fingerprint.actualRole || actor.shownRole !== fingerprint.shownRole || actor.isTraveler !== fingerprint.isTraveler) {
@@ -470,6 +498,45 @@ export function composeAbilityOutcome(
 }
 
 // ---------------------------------------------------------------------------
+// Typed information constraints (SOL-10F-L5)
+// ---------------------------------------------------------------------------
+
+const CONSTRAINT_KINDS: readonly unknown[] = ["number", "boolean", "text", "role", "alignment", "player"];
+function isConstraintValue(value: unknown): value is InformationConstraintValue {
+  if (!isObject(value) || !CONSTRAINT_KINDS.includes(value.kind)) return false;
+  switch (value.kind) {
+    case "number": return typeof value.value === "number" && Number.isFinite(value.value);
+    case "boolean": return typeof value.value === "boolean";
+    case "text": return typeof value.value === "string";
+    case "role": return typeof value.roleId === "string" && !!value.roleId;
+    case "alignment": return value.alignment === "good" || value.alignment === "evil";
+    case "player": return Array.isArray(value.participantIds) && value.participantIds.every((id) => typeof id === "string" && !!id) &&
+      (value.order === "ordered" || value.order === "unordered");
+  }
+  return false;
+}
+
+/** Whether one delivered value is exactly an allowed constraint value. Kinds
+ * must match; Player-valued information compares the bound ParticipantIds
+ * (never the reusable PlayerId), with the constraint's explicit cardinality and
+ * order. */
+function constraintAllows(allowed: InformationConstraintValue, delivered: Record<string, unknown>): boolean {
+  switch (allowed.kind) {
+    case "number": case "boolean": case "text":
+      return delivered.kind === allowed.kind && delivered.value === allowed.value;
+    case "role": return delivered.kind === "role" && delivered.roleId === allowed.roleId;
+    case "alignment": return delivered.kind === "alignment" && delivered.alignment === allowed.alignment;
+    case "player": {
+      if (delivered.kind !== "player" || !Array.isArray(delivered.participants) || !delivered.participants.every(isBinding)) return false;
+      const ids = delivered.participants.map((binding) => binding.participantId);
+      if (ids.length !== allowed.participantIds.length) return false;
+      const [a, b] = allowed.order === "ordered" ? [ids, [...allowed.participantIds]] : [[...ids].sort(), [...allowed.participantIds].sort()];
+      return a.every((id, index) => id === b[index]);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Guided evaluation
 // ---------------------------------------------------------------------------
 
@@ -537,6 +604,8 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   }
   const resolutionId = requested ?? (environment.ids?.resolutionId ?? newResolutionId)();
   if (request.fingerprint !== undefined) {
+    const malformed = fingerprintShapeError(request.fingerprint);
+    if (malformed) return refuse("invalid", malformed);
     const stale = staleReason(game, request.fingerprint);
     if (stale) return refuse("stale", stale);
   }
@@ -651,15 +720,20 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   if (!functioning && !simulated && outcome.operations.some((operation) => isMechanical(operation.domain) && !usesOwnAbility(operation))) {
     return refuse("illegal", "This ability is not functioning (drunk, poisoned or lost): it changes nothing but its use.");
   }
-  // A verified information modifier constrains what may be delivered: every
-  // constrained value must be one the modifier allows.
+  // A verified information modifier constrains what may be delivered: EVERY
+  // delivered value of the constrained requirement -- Player-valued included
+  // (SOL-10F-L5), compared by stable ParticipantId -- must be one the modifier
+  // allows. A constraint that cannot be enforced fails safe (unsupported); it
+  // is never silently skipped.
   for (const constraint of constraints) {
+    if (!Array.isArray(constraint.allowed) || !constraint.allowed.every(isConstraintValue)) {
+      return refuse("unsupported", "A rule modifier's information constraint cannot be enforced -- resolve manually.");
+    }
     for (const operation of outcome.operations) {
-      if (operation.domain !== "information") continue;
+      if (operation.domain !== "information" || !Array.isArray(operation.values)) continue;
       for (const value of operation.values) {
-        if (value.requirementId !== constraint.requirementId || value.kind === "player") continue;
-        const delivered = "value" in value ? value.value : "roleId" in value ? value.roleId : value.alignment;
-        if (!constraint.allowed.includes(delivered)) return refuse("illegal", constraint.reason);
+        if (!isObject(value) || value.requirementId !== constraint.requirementId) continue;
+        if (!constraint.allowed.some((allowed) => constraintAllows(allowed, value))) return refuse("illegal", constraint.reason);
       }
     }
   }

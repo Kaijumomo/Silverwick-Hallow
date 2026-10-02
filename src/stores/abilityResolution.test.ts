@@ -13,7 +13,7 @@ import {
   type ParticipantBinding,
 } from "./abilityResolution";
 import { activeModifiers, type ModifierDefinition } from "@/abilities/modifiers";
-import { resolveAbilitySemantics, type AbilityInputs } from "@/abilities/semantics";
+import { resolveAbilitySemantics, type AbilityDescriptor, type AbilityInputs } from "@/abilities/semantics";
 import { buildRegistry } from "@/data/roleRegistry";
 import { setupGame, setupScript } from "@/test/setupFixtures";
 import { FIXTURE_SEMANTICS } from "@/test/abilityFixtures";
@@ -32,6 +32,8 @@ function game(phase: "night" | "day" = "night", day = 2, over: Partial<Storytell
 /** The game with seat `id` now holding Actual Role `roleId` (fixture-only). */
 const withRole = (g: StorytellerLobbyRecord, id: string, roleId: string): StorytellerLobbyRecord =>
   ({ ...g, players: { ...g.players, [id]: { ...g.players[id]!, actualRole: roleId } } });
+const withParticipant = (g: StorytellerLobbyRecord, id: string, participantId: string): StorytellerLobbyRecord =>
+  ({ ...g, players: { ...g.players, [id]: { ...g.players[id]!, participantId } } });
 const bind = (g: StorytellerLobbyRecord, id: string): ParticipantBinding => ({ playerId: id, participantId: g.players[id]!.participantId! });
 const pick = (g: StorytellerLobbyRecord, id: string) => ({ kind: "participant" as const, participants: [bind(g, id)] });
 let counter = 0;
@@ -346,7 +348,7 @@ describe("10F-AC-23: modifiers gate only what they could affect", () => {
   it("rules-neutral: a VERIFIED information modifier constrains another evaluator's delivered value", () => {
     const constrain: ModifierDefinition = { id: "fixture:information-constraint", source: "custom", label: "Fixture constraint", scopes: ["information"],
       hook: ({ roleId }) => roleId === "empath"
-        ? { kind: "constrainInformation", requirementId: "evilNeighbors", allowed: [0], reason: "The fixture modifier allows only 0." }
+        ? { kind: "constrainInformation", requirementId: "evilNeighbors", allowed: [{ kind: "number", value: 0 }], reason: "The fixture modifier allows only 0." }
         : { kind: "noEffect" } };
     const g = game();
     const refused = planAbilityResolution(g, guided(g, "p2", "empath", { answer: { kind: "number", value: 1 } }), env({ modifiers: [constrain] }));
@@ -467,5 +469,110 @@ describe("SOL-10F-L1: jinx activation uses authoritative REPRESENTED canonical c
   it("Fabled / Lorics still come from authoritative game.fabled / game.lorics", () => {
     const g = game("night", 2, { fabled: ["toymaker"], lorics: ["bootlegger"] });
     expect(activeModifiers(g, registry).map((m) => m.id)).toEqual(["fabled:toymaker", "loric:bootlegger"]);
+  });
+});
+
+describe("SOL-10F-L4: malformed fingerprint = invalid; well-formed but changed = stale", () => {
+  const base = () => { const g = game(); return { g, fp: captureFingerprint(g, "p0")! }; };
+  const request = (fingerprint: unknown) => ({ mode: "guided", fingerprint, roleId: "monk", inputs: {} }) as never;
+
+  it.each([
+    ["missing", undefined],
+    ["null", null],
+    ["a string", "fp"],
+    ["no actor", (fp: Record<string, unknown>) => { delete fp.actor; }],
+    ["a malformed binding", (fp: Record<string, unknown>) => { fp.actor = { playerId: "p0" }; }],
+    ["an empty ParticipantId", (fp: Record<string, unknown>) => { fp.actor = { playerId: "p0", participantId: "" }; }],
+    ["no Actual Role", (fp: Record<string, unknown>) => { delete fp.actualRole; }],
+    ["a numeric Shown Role", (fp: Record<string, unknown>) => { fp.shownRole = 3; }],
+    ["no Traveler status", (fp: Record<string, unknown>) => { delete fp.isTraveler; }],
+    ["an unknown phase", (fp: Record<string, unknown>) => { fp.phase = "dusk"; }],
+    ["a fractional day", (fp: Record<string, unknown>) => { fp.day = 1.5; }],
+    ["no ability-use state", (fp: Record<string, unknown>) => { fp.abilityUsed = "no"; }],
+    ["a malformed step", (fp: Record<string, unknown>) => { fp.step = { day: 2, stepKey: "", status: "done" }; }],
+    ["a step with an unknown status", (fp: Record<string, unknown>) => { fp.step = { day: 2, stepKey: "p:x:monk", status: "maybe" }; }],
+  ])("%s -> invalid (guided and manual)", (_label, change) => {
+    const { g, fp } = base();
+    let fingerprint: unknown = change;
+    if (typeof change === "function") { fingerprint = structuredClone(fp); (change as (f: Record<string, unknown>) => void)(fingerprint as Record<string, unknown>); }
+    expect(planAbilityResolution(g, request(fingerprint), env())).toMatchObject({ ok: false, code: "invalid" });
+    if (fingerprint !== undefined) {
+      expect(planAbilityResolution(g, { mode: "manual", fingerprint, reason: "r", outcome: { operations: [] } } as never, env())).toMatchObject({ ok: false, code: "invalid" });
+    }
+  });
+
+  it.each([
+    ["a replacement participant", (g: StorytellerLobbyRecord) => withParticipant(g, "p0", "someone-new")],
+    ["an Actual Role change", (g: StorytellerLobbyRecord) => withRole(g, "p0", "chef")],
+    ["a Shown Role change", (g: StorytellerLobbyRecord) => ({ ...g, players: { ...g.players, p0: { ...g.players.p0!, shownRole: "chef" } } })],
+    ["a phase change", (g: StorytellerLobbyRecord) => ({ ...g, phase: "day" as const })],
+    ["a day change", (g: StorytellerLobbyRecord) => ({ ...g, day: 3 })],
+    ["an ability-use change", (g: StorytellerLobbyRecord) => ({ ...g, players: { ...g.players, p0: { ...g.players.p0!, abilityUsed: true } } })],
+  ])("a well-formed fingerprint after %s -> stale", (_label, change) => {
+    const { g, fp } = base();
+    expect(planAbilityResolution(change(g), request(fp), env())).toMatchObject({ ok: false, code: "stale" });
+  });
+
+  it("a well-formed step fingerprint whose step status changed -> stale", () => {
+    const { g } = base();
+    const fp = captureFingerprint(g, "p0", { day: 2, stepKey: "p:x:monk" })!;
+    const changed = { ...g, nightProgress: { "2:p:x:monk": { status: "skipped" as const, notes: "" } } };
+    expect(planAbilityResolution(changed, request(fp), env())).toMatchObject({ ok: false, code: "stale" });
+  });
+});
+
+describe("SOL-10F-L5: a verified information constraint never silently skips Player-valued information", () => {
+  // Rules-neutral fixture: a two-player + character delivery (the Washerwoman
+  // Information Action's SHAPE only -- not its rules).
+  const PAIR_INFO: AbilityDescriptor = {
+    roleId: "washerwoman", timing: ["firstNight"], invocation: "wake", usage: { kind: "unlimited" }, hooks: ["information"],
+    inputs: [{ id: "pair", kind: "participant", count: 2, source: "storyteller", label: "the pair" }],
+    presentation: { complexity: "complex", action: "fixture" },
+    evaluator: ({ actor, inputs }) => ({ kind: "outcome", outcome: { operations: [{ domain: "information", recipient: actor.binding, informationActionId: "washerwoman-first-night",
+      values: [{ requirementId: "players", kind: "player", participants: (inputs.pair as { participants: ParticipantBinding[] }).participants },
+        { requirementId: "role", kind: "role", roleId: "chef" }] }] } }),
+  };
+  const semantics = new Map([[PAIR_INFO.roleId, PAIR_INFO]]);
+  const firstNight = () => {
+    const g = withRole(game("night", 1), "p0", "washerwoman");
+    g.players.p0 = { ...g.players.p0!, shownRole: "washerwoman" };
+    return g;
+  };
+  const constrainTo = (allowed: unknown[]): ModifierDefinition => ({ id: "fixture:pair", source: "custom", label: "Fixture pair constraint", scopes: ["information"],
+    hook: () => ({ kind: "constrainInformation", requirementId: "players", allowed: allowed as never, reason: "The fixture allows only that pair." }) });
+  const plan = (g: StorytellerLobbyRecord, pair: [string, string], allowed: unknown[]) => planAbilityResolution(g,
+    guided(g, "p0", "washerwoman", { pair: { kind: "participant", participants: pair.map((id) => bind(g, id)) } }),
+    env({ semantics, modifiers: [constrainTo(allowed)] }));
+
+  it("an allowed pair passes; any other pair is illegal (enforced, not skipped)", () => {
+    const g = firstNight();
+    const allowed = [{ kind: "player", participantIds: [g.players.p2!.participantId, g.players.p3!.participantId], order: "unordered" }];
+    expect(plan(g, ["p2", "p3"], allowed)).toMatchObject({ ok: true, changed: true });
+    expect(plan(g, ["p3", "p2"], allowed)).toMatchObject({ ok: true, changed: true }); // unordered
+    expect(plan(g, ["p2", "p4"], allowed)).toMatchObject({ ok: false, code: "illegal", message: "The fixture allows only that pair." });
+  });
+
+  it("order and cardinality are honored exactly as the constraint states", () => {
+    const g = firstNight();
+    const ordered = [{ kind: "player", participantIds: [g.players.p2!.participantId, g.players.p3!.participantId], order: "ordered" }];
+    expect(plan(g, ["p2", "p3"], ordered)).toMatchObject({ ok: true, changed: true });
+    expect(plan(g, ["p3", "p2"], ordered)).toMatchObject({ ok: false, code: "illegal" });
+    const single = [{ kind: "player", participantIds: [g.players.p2!.participantId], order: "unordered" }];
+    expect(plan(g, ["p2", "p3"], single)).toMatchObject({ ok: false, code: "illegal" });
+  });
+
+  it("comparison is by stable ParticipantId, never the reusable PlayerId", () => {
+    const g = firstNight();
+    // The constraint names the PREVIOUS occupant of seat p3; the seat now holds someone else.
+    const allowed = [{ kind: "player", participantIds: [g.players.p2!.participantId, "previous-occupant-of-p3"], order: "unordered" }];
+    expect(plan(g, ["p2", "p3"], allowed)).toMatchObject({ ok: false, code: "illegal" });
+  });
+
+  it("a constraint of the wrong kind or a malformed constraint fails safe (never passes unenforced)", () => {
+    const g = firstNight();
+    expect(plan(g, ["p2", "p3"], [{ kind: "number", value: 2 }])).toMatchObject({ ok: false, code: "illegal" });
+    for (const malformed of [[2], [{ kind: "player", participantIds: ["a"] }], [{ kind: "player", participantIds: "a", order: "unordered" }], [{ kind: "mystery" }]]) {
+      expect(plan(g, ["p2", "p3"], malformed)).toMatchObject({ ok: false, code: "unsupported" });
+    }
   });
 });

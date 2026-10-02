@@ -3,7 +3,7 @@ import type { RoleRegistry } from "@/data/roleRegistry";
 import type { HookScope } from "./modifiers";
 import type { AbilityOutcome, ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
-import type { Alignment, InformationActionId, RoleDef, RoleId, STPlayerRecord } from "@/stores/types";
+import type { Alignment, InformationActionId, ParticipantId, RoleDef, RoleId, STPlayerRecord } from "@/stores/types";
 
 /**
  * Phase 10F: the Ability Semantics contract (PHASE10F Section 3.1).
@@ -143,7 +143,20 @@ export type AbilityEvaluationContext = {
   constraints: readonly InformationConstraint[];
 };
 
-export type InformationConstraint = { modifierId: string; requirementId: string; allowed: readonly unknown[]; reason: string };
+/**
+ * SOL-10F-L5: a typed, normalized information-constraint value. Player-valued
+ * information is expressed by stable ParticipantIds (never reusable PlayerIds)
+ * with an explicit order rule; the list length is the exact cardinality.
+ */
+export type InformationConstraintValue =
+  | { kind: "number"; value: number }
+  | { kind: "boolean"; value: boolean }
+  | { kind: "text"; value: string }
+  | { kind: "role"; roleId: RoleId }
+  | { kind: "alignment"; alignment: Alignment }
+  | { kind: "player"; participantIds: readonly ParticipantId[]; order: "ordered" | "unordered" };
+
+export type InformationConstraint = { modifierId: string; requirementId: string; allowed: readonly InformationConstraintValue[]; reason: string };
 
 /**
  * What a pure evaluator returns. Never a partial result: either a complete,
