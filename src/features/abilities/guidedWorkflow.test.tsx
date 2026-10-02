@@ -148,7 +148,7 @@ describe("10F-AC-11 / AC-19: Manual / unmodeled interaction", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "+ Effect" }));
     fireEvent.change(within(dialog).getByRole("combobox", { name: "Step 1 player" }), { target: { value: "p4" } });
     const preview = within(dialog).getByRole("region", { name: "Result" });
-    expect(preview).toHaveTextContent("Eve gains poisoned");
+    expect(preview).toHaveTextContent("Eve gains Poisoned");
     fireEvent.click(within(dialog).getByRole("button", { name: "Confirm and record" }));
     expect(game().players.p4!.effects.map((e) => e.type)).toEqual(["poisoned"]);
     expect(game().history.at(-1)!.provenance).toMatchObject({ reason: "manual", note: "Homebrew interaction" });

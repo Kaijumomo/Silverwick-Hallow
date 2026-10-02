@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { resolveAbilitySemantics, type AbilityDescriptor, type AbilitySemanticsRegistry, type InputSource } from "@/abilities/semantics";
 import type { RoleRegistry } from "@/data/roleRegistry";
+import { effectDefinitionOf } from "@/stores/effectRegistry";
 import type { AbilityOperation, AbilityOutcome, ParticipantBinding } from "@/stores/abilityResolution";
 import type { PlayerId, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 
@@ -70,7 +71,7 @@ export function describeOperation(game: StorytellerLobbyRecord, operation: Abili
     case "effect":
       return operation.intents.map((intent) => {
         const who = nameOf(game, intent.target);
-        if (intent.kind === "apply" || intent.kind === "correctApply") return `${who} gains ${intent.effect.type}`;
+        if (intent.kind === "apply" || intent.kind === "correctApply") return `${who} gains ${effectDefinitionOf(intent.effect.type).label}`;
         if (intent.kind === "remove" || intent.kind === "correctRemove") return `${who} loses an Effect`;
         return `${who}: Effect ${intent.kind}`;
       });
