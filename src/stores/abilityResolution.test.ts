@@ -29,6 +29,9 @@ function game(phase: "night" | "day" = "night", day = 2, over: Partial<Storytell
   for (const p of Object.values(g.players)) p.actualAlignment = registry.alignmentOf(p.actualRole);
   return g;
 }
+/** The game with seat `id` now holding Actual Role `roleId` (fixture-only). */
+const withRole = (g: StorytellerLobbyRecord, id: string, roleId: string): StorytellerLobbyRecord =>
+  ({ ...g, players: { ...g.players, [id]: { ...g.players[id]!, actualRole: roleId } } });
 const bind = (g: StorytellerLobbyRecord, id: string): ParticipantBinding => ({ playerId: id, participantId: g.players[id]!.participantId! });
 const pick = (g: StorytellerLobbyRecord, id: string) => ({ kind: "participant" as const, participants: [bind(g, id)] });
 let counter = 0;
@@ -44,13 +47,12 @@ const counterIds = (): AbilityEnvironment["ids"] => {
     resolutionId: () => `res-${++counter}`,
   };
 };
-/** Explicitly NO active modifiers unless a test supplies them: the fixture
- * script carries every canonical character, so every canonical jinx pair would
- * otherwise (correctly) gate its characters. */
+/** Explicitly NO active modifiers unless a test supplies them (the jinx /
+ * Fabled tests compute them from the game). */
 const env = (over: Partial<AbilityEnvironment> = {}): AbilityEnvironment =>
   ({ script: setupScript, registry, semantics: FIXTURE_SEMANTICS, ids: counterIds(), modifiers: [], ...over });
-/** The game's own Fabled / Lorics, with no jinx (no script). */
-const fabledOf = (g: StorytellerLobbyRecord) => env({ modifiers: activeModifiers(g, null) });
+/** The game's own active modifiers (its Fabled / Lorics and represented jinxes). */
+const fabledOf = (g: StorytellerLobbyRecord) => env({ modifiers: activeModifiers(g, registry) });
 function guided(g: StorytellerLobbyRecord, actor: string, roleId: string, inputs: AbilityInputs = {}, extra: Partial<AbilityResolutionRequest> = {}): AbilityResolutionRequest {
   return { mode: "guided", fingerprint: captureFingerprint(g, actor)!, roleId, inputs, ...extra } as AbilityResolutionRequest;
 }
@@ -331,21 +333,16 @@ describe("10F-AC-23: modifiers gate only what they could affect", () => {
   });
 
   it("a jinx gates only its own two characters", () => {
-    const jinxed: Script = { ...setupScript }; // the full canonical script: every jinx pair is on it
-    const modifiers = activeModifiers({ fabled: [], lorics: [] }, jinxed);
-    expect(modifiers.some((m) => m.source === "jinx")).toBe(true);
-    const g = game();
-    // The Leviathan / Monk jinx reaches the Monk; the Slayer has no jinx on it.
+    const g = withRole(game(), "p5", "leviathan");
+    const modifiers = activeModifiers(g, registry);
+    // Both Leviathan jinxes whose partners are seated (Monk, Pit-Hag) -- and only those.
+    expect(modifiers.filter((m) => m.source === "jinx").map((m) => m.id).sort()).toEqual(["jinx:leviathan+monk", "jinx:leviathan+pithag"]);
     expect(planAbilityResolution(g, guided(g, "p0", "monk", { target: pick(g, "p2") }), env({ modifiers })))
-      .toMatchObject({ ok: false, code: "needsInput", requirements: expect.arrayContaining([expect.objectContaining({ id: "modifier:jinx:leviathan+monk" })]) });
-    // A script without the Leviathan (or the Riot) carries no Monk jinx -- and the Monk's
-    // evaluation is no longer gated (no other jinx reaches it).
-    const small = activeModifiers({ fabled: [], lorics: [] }, { characters: setupScript.characters.filter((r) => r.id !== "leviathan" && r.id !== "riot") });
-    expect(small.some((m) => m.id === "jinx:leviathan+monk")).toBe(false);
-    expect(small.some((m) => m.characters?.includes("monk"))).toBe(false);
-    expect(planAbilityResolution(g, guided(g, "p0", "monk", { target: pick(g, "p2") }), env({ modifiers: small }))).toMatchObject({ ok: true, changed: true });
+      .toMatchObject({ ok: false, code: "needsInput", requirements: [expect.objectContaining({ id: "modifier:jinx:leviathan+monk" })] });
+    // The Slayer is not an endpoint: never gated by it.
+    const day = withRole(game("day"), "p5", "leviathan");
+    expect(planAbilityResolution(day, guided(day, "p1", "slayer", { target: pick(day, "p4") }), fabledOf(day))).toMatchObject({ ok: true, changed: true });
   });
-
   it("rules-neutral: a VERIFIED information modifier constrains another evaluator's delivered value", () => {
     const constrain: ModifierDefinition = { id: "fixture:information-constraint", source: "custom", label: "Fixture constraint", scopes: ["information"],
       hook: ({ roleId }) => roleId === "empath"
@@ -403,5 +400,72 @@ describe("10F-AC-25: structured, non-throwing refusals for hostile input", () =>
   it("a guided request without its workflow fingerprint is malformed (invalid), not stale", () => {
     const g = game();
     expect(planAbilityResolution(g, { mode: "guided", roleId: "monk", inputs: {} } as never, env())).toMatchObject({ ok: false, code: "invalid" });
+  });
+});
+
+describe("SOL-10F-L1: jinx activation uses authoritative REPRESENTED canonical characters", () => {
+  const jinxIds = (g: StorytellerLobbyRecord, reg = registry) => activeModifiers(g, reg).filter((m) => m.source === "jinx").map((m) => m.id);
+
+  it("1. both endpoints on the script but neither represented -> no jinx", () => {
+    const g = withRole(game(), "p0", "chef"); // no Monk, no Leviathan seated; both are on the full canonical script
+    expect(setupScript.characters.some((r) => r.id === "leviathan") && setupScript.characters.some((r) => r.id === "monk")).toBe(true);
+    expect(jinxIds(g)).not.toContain("jinx:leviathan+monk");
+  });
+
+  it("2. the evaluated character represented, the other endpoint absent -> no gate", () => {
+    const g = game();
+    expect(jinxIds(g)).toEqual([]);
+    expect(planAbilityResolution(g, guided(g, "p0", "monk", { target: pick(g, "p2") }), fabledOf(g))).toMatchObject({ ok: true, changed: true });
+  });
+
+  it("3. both canonical endpoints represented -> gate", () => {
+    const g = withRole(game(), "p5", "leviathan");
+    expect(jinxIds(g)).toContain("jinx:leviathan+monk");
+    expect(planAbilityResolution(g, guided(g, "p0", "monk", { target: pick(g, "p2") }), fabledOf(g))).toMatchObject({ ok: false, code: "needsInput" });
+  });
+
+  it("4. a dead participant still represents their current character", () => {
+    const g = withRole(game(), "p5", "leviathan");
+    g.players.p5 = { ...g.players.p5!, alive: false, ghostVote: false };
+    expect(jinxIds(g)).toContain("jinx:leviathan+monk");
+  });
+
+  it("5. a Role change away immediately removes the gate (derived on every evaluation)", () => {
+    const g = withRole(game(), "p5", "leviathan");
+    expect(jinxIds(g)).toContain("jinx:leviathan+monk");
+    const changed = withRole(g, "p5", "chef");
+    expect(jinxIds(changed)).toEqual([]);
+    expect(planAbilityResolution(changed, guided(changed, "p0", "monk", { target: pick(changed, "p2") }), fabledOf(changed))).toMatchObject({ ok: true, changed: true });
+  });
+
+  it("6. a homebrew definition reusing an endpoint id never activates the canonical jinx", () => {
+    const leviathan = registry.get("leviathan")!;
+    const homebrew: Script = { ...setupScript, characters: [{ ...leviathan, ability: "Homebrew text.", provenance: { status: "homebrew" } },
+      ...setupScript.characters.filter((r) => r.id !== "leviathan")] };
+    const g = withRole(game(), "p5", "leviathan");
+    expect(jinxIds(g, buildRegistry(homebrew))).toEqual([]);
+  });
+
+  it("7. several participants with the same Roles never duplicate the modifier", () => {
+    let g = withRole(withRole(game(), "p5", "leviathan"), "p2", "leviathan");
+    g = withRole(g, "p6", "monk");
+    const ids = jinxIds(g);
+    expect(ids.filter((id) => id === "jinx:leviathan+monk")).toHaveLength(1);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("an empty seat, an unassigned Role or a Shown Role never represents a character", () => {
+    const g = game();
+    g.players.p5 = { ...g.players.p5!, actualRole: "", shownRole: "leviathan" };
+    expect(jinxIds(g)).toEqual([]);
+    const empty = withRole(game(), "p5", "leviathan");
+    empty.players.p5 = { ...empty.players.p5!, isEmpty: true };
+    delete empty.players.p5!.participantId;
+    expect(jinxIds(empty)).toEqual([]);
+  });
+
+  it("Fabled / Lorics still come from authoritative game.fabled / game.lorics", () => {
+    const g = game("night", 2, { fabled: ["toymaker"], lorics: ["bootlegger"] });
+    expect(activeModifiers(g, registry).map((m) => m.id)).toEqual(["fabled:toymaker", "loric:bootlegger"]);
   });
 });

@@ -200,7 +200,7 @@ export type AbilityEnvironment = {
   script: Script | null;
   registry: RoleRegistry;
   semantics?: AbilitySemanticsRegistry;
-  /** Defaults to activeModifiers(game, script). */
+  /** Defaults to activeModifiers(game, registry). */
   modifiers?: readonly ModifierDefinition[];
   ids?: AbilityIdSources;
 };
@@ -577,7 +577,7 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   if (inputCheck) return inputCheck;
 
   const query = createRulesQuery(game, { registry: environment.registry, script: environment.script, ...(environment.semantics ? { semantics: environment.semantics } : {}),
-    modifiers: environment.modifiers ?? activeModifiers(game, environment.script) });
+    modifiers: environment.modifiers ?? activeModifiers(game, environment.registry) });
   const judgments = isObject(request.judgments) ? request.judgments : {};
   let judgmentUsed = false;
   // 10F-AC-12: impairment is derived, never guessed. Unknown -> an explicit

@@ -1,5 +1,7 @@
 import jinxData from "@/data/canonical/jinxes.json";
-import type { RoleId, Script, StorytellerLobbyRecord } from "@/stores/types";
+import { isCanonicalRole } from "@/data/canonical";
+import type { RoleRegistry } from "@/data/roleRegistry";
+import type { RoleId, StorytellerLobbyRecord } from "@/stores/types";
 
 /**
  * Phase 10F: the hook / modifier vocabulary (PHASE10F Section 12).
@@ -105,15 +107,39 @@ const JINX_PAIRS: readonly [RoleId, RoleId][] = (jinxData as JinxEntry[]).flatMa
   entry.jinx.map((j) => [entry.id, j.id] as [RoleId, RoleId]));
 
 /**
- * The modifiers active for `game`: every Fabled / Loric in play (classified
- * above; an unknown or custom one gates globally -- its rules cannot be
- * bounded), and every canonical jinx whose BOTH characters are on the script
- * (a jinx may apply as soon as both are possible; over-inclusive is safe). A
- * jinx gates only evaluations of its own two characters.
+ * SOL-10F-L1: the canonical characters currently REPRESENTED in authoritative
+ * game state -- the Actual Role of at least one current occupied participant
+ * (dead participants still represent their current character), and only when
+ * the definition the active registry resolves for it passes the canonical
+ * ownership boundary. A script-only / unassigned character, a Shown Role, and a
+ * homebrew definition reusing an official id never count. Derived on every call,
+ * so a Role change immediately changes what is represented.
+ */
+export function representedCanonicalCharacters(
+  game: Pick<StorytellerLobbyRecord, "players">,
+  registry: RoleRegistry,
+): Set<RoleId> {
+  const represented = new Set<RoleId>();
+  for (const player of Object.values(game.players ?? {})) {
+    if (!player || player.isEmpty || !player.participantId || typeof player.actualRole !== "string" || !player.actualRole) continue;
+    if (represented.has(player.actualRole)) continue;
+    const role = registry.get(player.actualRole);
+    if (role && isCanonicalRole(role)) represented.add(player.actualRole);
+  }
+  return represented;
+}
+
+/**
+ * The modifiers active for `game`: every Fabled / Loric in authoritative
+ * `game.fabled` / `game.lorics` (classified above; an unknown or custom one
+ * gates globally -- its rules cannot be bounded), and every canonical jinx whose
+ * BOTH endpoints are currently represented (SOL-10F-L1). An active jinx with no
+ * verified hook still only gates evaluations of its own two characters, to an
+ * explicit Storyteller judgment / the Manual path -- never an inferred rule.
  */
 export function activeModifiers(
-  game: Pick<StorytellerLobbyRecord, "fabled" | "lorics">,
-  script: Pick<Script, "characters"> | null | undefined,
+  game: Pick<StorytellerLobbyRecord, "fabled" | "lorics" | "players">,
+  registry: RoleRegistry,
   verified: ReadonlyMap<string, ModifierDefinition["hook"]> = new Map(),
 ): ModifierDefinition[] {
   const out: ModifierDefinition[] = [];
@@ -125,10 +151,13 @@ export function activeModifiers(
   };
   for (const id of new Set(game.fabled ?? [])) classify("fabled", id);
   for (const id of new Set(game.lorics ?? [])) classify("loric", id);
-  const onScript = new Set((script?.characters ?? []).map((role) => role?.id).filter((id): id is string => typeof id === "string"));
+  const represented = representedCanonicalCharacters(game, registry);
+  const seen = new Set<string>();
   for (const [a, b] of JINX_PAIRS) {
-    if (!onScript.has(a) || !onScript.has(b)) continue;
+    if (!represented.has(a) || !represented.has(b)) continue;
     const key = `jinx:${a}+${b}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     const hook = verified.get(key);
     out.push({ id: key, source: "jinx", label: `${a} / ${b} jinx`, scopes: ["global"], characters: [a, b], ...(hook ? { hook } : {}) });
   }

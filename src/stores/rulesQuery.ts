@@ -79,7 +79,7 @@ export type RulesQueryEnvironment = {
   registry: RoleRegistry;
   script: Pick<Script, "characters"> | null;
   semantics?: AbilitySemanticsRegistry;
-  /** Precomputed active modifiers (defaults to activeModifiers(game, script)). */
+  /** Precomputed active modifiers (defaults to activeModifiers(game, registry)). */
   modifiers?: readonly ModifierDefinition[];
 };
 
@@ -133,7 +133,7 @@ export function boundParticipant(game: StorytellerLobbyRecord, binding: Particip
 }
 
 export function createRulesQuery(game: StorytellerLobbyRecord, environment: RulesQueryEnvironment): RulesQuery {
-  const modifiers = environment.modifiers ?? activeModifiers(game, environment.script);
+  const modifiers = environment.modifiers ?? activeModifiers(game, environment.registry);
   const participant = (binding: ParticipantBinding) => boundParticipant(game, binding);
   const seated = () => game.seatOrder.map((id) => game.players[id]).filter((p): p is STPlayerRecord => !!p && !p.isEmpty && !!p.participantId);
 

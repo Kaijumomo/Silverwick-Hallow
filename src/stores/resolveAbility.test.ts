@@ -132,21 +132,29 @@ describe("10F-AC-08 / AC-26: synchronous final stale revalidation", () => {
     live();
     const stepKey = `p:${game().players.p0!.participantId}:monk`;
     const b = baseline();
+    // SOL-10F-L1: the script carries the Monk's jinx partners, but no partner
+    // is REPRESENTED, so the store's modifier gate does not ask.
     const result = state().resolveAbility({ mode: "guided", fingerprint: captureFingerprint(game(), "p0", { day: 2, stepKey })!, roleId: "monk",
       inputs: { target: { kind: "participant", participants: [bind("p2")] } }, completeStep: true }, FIXTURE_SEMANTICS);
-    // The full canonical script puts the Monk's jinx partners on it: the
-    // store's modifier gate asks first (10F-AC-23)...
-    expect(result).toMatchObject({ ok: false, code: "needsInput" });
-    expectInert(b);
-    // ...and resolves once the Storyteller judges each jinx inapplicable.
-    const judged = state().resolveAbility({ mode: "guided", fingerprint: captureFingerprint(game(), "p0", { day: 2, stepKey })!, roleId: "monk",
-      inputs: { target: { kind: "participant", participants: [bind("p2")] } }, completeStep: true,
-      judgments: { "modifier:jinx:leviathan+monk": { kind: "boolean", value: true }, "modifier:jinx:riot+monk": { kind: "boolean", value: true } } }, FIXTURE_SEMANTICS);
-    expect(judged).toMatchObject({ ok: true, changed: true });
+    expect(result).toMatchObject({ ok: true, changed: true });
     expect(state().undoStack).toHaveLength(b.undo.length + 1);
     expect(state().localSeq).toBe(b.seq + 1);
     expect(game().nightProgress[`2:${stepKey}`]?.status).toBe("done");
     expect(game().players.p2!.effects).toHaveLength(1);
+  });
+
+  it("SOL-10F-L1 through the store: a REPRESENTED jinx partner gates; an explicit judgment clears it", () => {
+    live();
+    // Seat p5 now holds the canonical Leviathan: the Leviathan / Monk jinx is active.
+    store.setState({ game: { ...game(), players: { ...game().players, p5: { ...game().players.p5!, actualRole: "leviathan" } } } });
+    const request = () => ({ mode: "guided" as const, fingerprint: captureFingerprint(game(), "p0")!, roleId: "monk",
+      inputs: { target: { kind: "participant" as const, participants: [bind("p2")] } } });
+    const b = baseline();
+    expect(state().resolveAbility(request(), FIXTURE_SEMANTICS)).toMatchObject({ ok: false, code: "needsInput",
+      requirements: [expect.objectContaining({ id: "modifier:jinx:leviathan+monk", source: "judgment" })] });
+    expectInert(b);
+    expect(state().resolveAbility({ ...request(), judgments: { "modifier:jinx:leviathan+monk": { kind: "boolean", value: true } } }, FIXTURE_SEMANTICS))
+      .toMatchObject({ ok: true, changed: true });
   });
 
   it("production has no verified semantics yet: a guided request is unsupported and points to Manual", () => {
