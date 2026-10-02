@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-02\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: frozen contract `PHASE10F.md`; the **rules-neutral implementation is at a review checkpoint, READY FOR LUNA**, on `dev/phase-10f` at `403f641944db035d170a9321562e88be096dc77b` (schema/store v24). Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`; contract-freeze checkpoint: `727530e9364a0c971326c06ce45855adcf39828b`. 10F is NOT closed: proof-character semantics await authoritative BOTC rules evidence.
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: frozen contract `PHASE10F.md`; Luna returned **REVISE** on `b1d6bd7f071c8f5195c5f440abcaa43441446aaf`; the targeted **SOL-10F-L1…L7 remediation is complete and READY FOR LUNA RE-VERIFICATION** on `dev/phase-10f` (remediation code checkpoint `e5a9b9d019d469609a3c6246043b18dc5d72bf62`, with a docs-only handoff commit on top; schema/store v24). Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`; contract-freeze checkpoint: `727530e9364a0c971326c06ce45855adcf39828b`. 10F is NOT closed: production `CANONICAL_ABILITY_SEMANTICS` stays empty and proof-character semantics await authoritative BOTC rules evidence.
 
 ## Phase 10D — CLOSED
 
@@ -448,6 +448,19 @@ Accepted without remediation from this pass: live-only `setAbilityUsed` compatib
 
 Production `CANONICAL_ABILITY_SEMANTICS` remains empty.
 
+## SOL-10F-L1…L7 remediation — 2026-10-02
+
+Targeted remediation on top of `32770202c3865cffa1e600e0c28f781f93c6dc6c` (the Luna-remediation handoff). No proof-character mechanic, no 10A–10E contract change, no Firebase Rules change; production `CANONICAL_ABILITY_SEMANTICS` is still empty.
+
+- `b334420b25551d1d4f65ed4a2296602f8a7ebdc4` — **L1:** `representedCanonicalCharacters` (Actual Role of a current occupied participant, dead included, canonical ownership via `isCanonicalRole` on the active registry's definition); a jinx is active only when BOTH endpoints are represented. Script-only / unassigned / Shown Role / empty seat / homebrew-reusing-an-official-id never activate it; Fabled / Lorics still come from `game.fabled` / `game.lorics`.
+- `aa0f4ed7a377adc1e5cf1b1d95ddb13a3d4ef3fe` — **L2:** `RequirementInput` renders every declared kind (participant with `count` / `notSelf` / `alive` / `dead` / `distinct`, character, alignment, number, boolean, text) for descriptor inputs AND evaluator-asked typed judgments; no default values; the exact typed payload reaches the evaluator and `resolveAbility`.
+- `f4c10d7a90c9953bf285b3829d179a98652bc51f` — **L3:** Storyteller-private Day entry point (`AbilityEntry` in the Player Drawer): offers a guided ability only when a verified descriptor acts in the current phase, otherwise the Manual path; same workspace, same coordinator, same one-commit `resolveAbility`; hidden in Privacy Mode and outside Night/Day.
+- `54b0cad64c1f3abd16ee756666d2f96f2171eefb` — **L4/L5:** a malformed fingerprint is `invalid`, a well-formed but changed one is `stale`; information constraints are typed (`InformationConstraintValue`; Player-valued constraints compare stable ParticipantIds with an explicit order rule and exact cardinality); a malformed constraint is `unsupported`, a mismatch `illegal` — never silently skipped.
+- `2808f6ed5fd7b8bc9fdf4df327f7bd4da8270b26` — **L6:** prose-derived `RoleDef.oncePerGame` no longer suppresses a Night row; usage authority is the verified `AbilityDescriptor.usage`; guarded (no production `.oncePerGame` mechanical read).
+- `f2a1697d70fa225f2cda2073d49c618ff92cc82b`, `e5a9b9d019d469609a3c6246043b18dc5d72bf62` — **L7:** one shared formatting-independent write detector (`src/test/writerGuard.ts`) for the Role, Alignment and abilityUsed guards (catches `{ ...p, actualRole: x };`, `})`, multi-line literals, property / bracket assignment, delete; excludes type members). Newly visible sites are asserted, not merely allowlisted: the Alignment seam's single AlignmentChange log entry; the `setShownAlignment` / `setBehaviorMode` perception specs inside `setPerception(id, { … })`; and the 10F read-only snapshot modules (`abilityResolution.ts` → `captureFingerprint`, `informationDelivery.ts` → `planInformationDelivery`, `nightOrder.ts` → `computeNightOrder`) admitted only as verbatim `field: player.field` copies inside that unit. Planted-mutation evidence (each restored): `actualRole` / `actualAlignment` `};` writers in an allowlisted store unit and in a non-reviewed module, an `actualRole` writer in an allowlisted snapshot module outside its unit, direct and literal `abilityUsed` writers, the coordinator calling `resolveLife`, a Reminder read in the Rules Query, and a Night public `alive` leak — every one fails its guard.
+
+Gate and exact counts: see the remediation report for the final HEAD.
+
 ## Immediate next task
 
-Claude Code remediates SOL-10F-L1…L7 only, adds targeted regressions/mutation self-checks, runs the complete gate, and returns a new exact review checkpoint for Luna. Do not implement proof-character semantics, merge, deploy or close 10F. Authoritative BOTC rules research can proceed in parallel, but Sol does not freeze the proof-character matrix until the rules-neutral foundation passes Luna re-verification.
+Luna re-verifies the SOL-10F-L1…L7 remediation at the exact `dev/phase-10f` HEAD named in the remediation report (code checkpoint `e5a9b9d019d469609a3c6246043b18dc5d72bf62` plus the docs-only handoff commit). Do not implement proof-character semantics, merge, deploy or close 10F. Authoritative BOTC rules research can proceed in parallel, but Sol does not freeze the proof-character matrix until the rules-neutral foundation passes Luna re-verification.
