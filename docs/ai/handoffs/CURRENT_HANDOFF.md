@@ -430,6 +430,24 @@ The official BOTC wiki / site was unreachable from the implementation environmen
 13. **Toymaker** -- an authoritative home for "the Demon has skipped an attack" history (10G), first-night evil information below 7 players.
 14. **Baron** -- confirm Setup-only (no in-game mechanic) for the negative proof.
 
+## Luna rules-neutral review — 2026-10-02
+
+Luna reviewed exact target `b1d6bd7f071c8f5195c5f440abcaa43441446aaf` in a fresh isolated clean worktree and returned **REVISE**. Required gates all passed: typecheck; **3,474/3,474** normal tests across 134 files; **201/201** Firebase emulator tests, 0 skipped; production build; worktree and baseline-range `git diff --check`.
+
+Sol accepted seven targeted findings, frozen in `PHASE10F.md` §22:
+
+- **SOL-10F-L1 HIGH:** jinx activation must use canonical authoritative represented-character state, not script membership alone.
+- **SOL-10F-L2 HIGH:** AbilityWorkspace must faithfully render every declared typed input/cardinality, including typed judgments.
+- **SOL-10F-L3 HIGH:** add a Storyteller-private Day ability entry point using the same workspace/coordinator.
+- **SOL-10F-L4 MEDIUM:** malformed fingerprint → `invalid`; valid-but-changed fingerprint → `stale`.
+- **SOL-10F-L5 MEDIUM:** verified information constraints may not silently skip Player-valued information.
+- **SOL-10F-L6 MEDIUM:** prose-derived `RoleDef.oncePerGame` may not drive mechanical Night suppression; usage authority is the verified AbilityDescriptor.
+- **SOL-10F-L7 MEDIUM:** strengthen Role/Alignment writer guards; Luna mutation proved an ordinary semicolon-terminated Role write escaped the older regex.
+
+Accepted without remediation from this pass: live-only `setAbilityUsed` compatibility; modal Grimoire picker limitation with accessible fallback; Fabled/Loric scope table as non-semantic safety metadata; v24 migration, Night Life withholding, Information Delivery extraction, Rules Query purity and one-commit coordinator.
+
+Production `CANONICAL_ABILITY_SEMANTICS` remains empty.
+
 ## Immediate next task
 
-Luna review of `403f641944db035d170a9321562e88be096dc77b`. In parallel: collect authoritative BOTC rules evidence for the proof set so Sol can freeze the proof-character rules matrix (contract Slice 6) before any proof-character semantic module is written (Slice 7).
+Claude Code remediates SOL-10F-L1…L7 only, adds targeted regressions/mutation self-checks, runs the complete gate, and returns a new exact review checkpoint for Luna. Do not implement proof-character semantics, merge, deploy or close 10F. Authoritative BOTC rules research can proceed in parallel, but Sol does not freeze the proof-character matrix until the rules-neutral foundation passes Luna re-verification.
