@@ -2,6 +2,7 @@ import { BUILTIN_SCRIPTS } from "@/data/scripts";
 import { buildRegistry, deriveAlignment, type RoleRegistry } from "@/data/roleRegistry";
 import { legacyCurrentParticipantId, legacyParticipantRef } from "./participants";
 import { migratedLifeEventCoverage } from "./lifeEvents";
+import { migrateNightProgressV23ToV24 } from "./nightProgress";
 import {
   GAME_SCHEMA_VERSION,
   GameMomentSchema,
@@ -590,6 +591,38 @@ function migrateEntryV22ToV23(e: Record<string, unknown>): void {
   e.gameSchemaVersion = 23;
 }
 
+/**
+ * v23 -> v24 (Phase 10F): guided ability resolution, in place.
+ *
+ * Night progress becomes participation-scoped (PHASE10F Section 9). Every v23
+ * participant-scoped step key names a REUSABLE seat (`p:{playerId}:...`,
+ * `travelerArrival:{playerId}:...`, ...); nothing authoritative proves which
+ * participation instance completed it, so that progress is DROPPED -- never
+ * re-keyed onto whoever occupies the seat now (see
+ * migrateNightProgressV23ToV24). Global and custom (`manual:*`) steps, every
+ * Traveler's own `travelerArrival` completion record (already carried on the
+ * participant's record), Information Delivery and History are preserved
+ * exactly: no delivery gains a `performedRole` or `resolutionId`.
+ *
+ * Night public-Life withholding (Section 10) is a projection rule only -- no
+ * stored field changes.
+ *
+ * Fail-closed (Finding A3): the entry is stamped `gameSchemaVersion: 24` only
+ * when `nightProgress` is absent (the schema supplies `{}`) or a plain object.
+ * Otherwise it is left untouched and unstamped (marker 23), so the v24 schema
+ * rejects it. Deterministic and idempotent, applied independently per entry
+ * (Current State, every Undo snapshot, a remote checkpoint's game). The caller
+ * has already established that the entry carries marker 23 and no v24-only
+ * evidence.
+ */
+function migrateEntryV23ToV24(e: Record<string, unknown>): void {
+  if (e.nightProgress !== undefined) {
+    if (!isObject(e.nightProgress)) return;
+    e.nightProgress = migrateNightProgressV23ToV24(e.nightProgress);
+  }
+  e.gameSchemaVersion = 24;
+}
+
 export function migrateGameEntry(
   entry: unknown,
   fromVersion: number,
@@ -601,16 +634,17 @@ export function migrateGameEntry(
     players?: Record<string, unknown>;
   };
 
-  // Phase 10C/10D/10E: an explicit `gameSchemaVersion` marker routes this
+  // Phase 10C/10D/10E/10F: an explicit `gameSchemaVersion` marker routes this
   // entry, per entry, whatever version the OUTER persisted envelope claims:
-  //   20                          -> v20 -> v21, then v21 -> v22 -> v23;
-  //   21                          -> v21 -> v22 (a stamp), then v22 -> v23;
-  //   22                          -> v22 -> v23;
-  //   20 / 21 / 22 + newer evidence -> malformed current-version data: no
-  //                                  migration, the v23 schema rejects it
+  //   20                          -> v20 -> v21, then v21 -> ... -> v24;
+  //   21                          -> v21 -> v22 (a stamp), then -> v24;
+  //   22                          -> v22 -> v23 -> v24;
+  //   23                          -> v23 -> v24;
+  //   20..23 + newer evidence     -> malformed current-version data: no
+  //                                  migration, the v24 schema rejects it
   //                                  (an older marker never repairs newer
   //                                  evidence into validity);
-  //   23, or any other value      -> no migration at all; the current schema
+  //   24, or any other value      -> no migration at all; the current schema
   //                                  judges it (a malformed/unsupported
   //                                  marker is never reinterpreted as legacy).
   // Applied independently to Current State, every Undo entry and a remote
@@ -622,18 +656,22 @@ export function migrateGameEntry(
   const record = e as Record<string, unknown>;
   if (hasOwnKey(record, "gameSchemaVersion")) {
     if (record.gameSchemaVersion === 20 && fromVersion < 21 &&
-      !hasV21Evidence(record) && !hasV22Evidence(record) && !hasV23Evidence(record)) {
+      !hasV21Evidence(record) && !hasV22Evidence(record) && !hasV23Evidence(record) && !hasV24Evidence(record)) {
       migrateEntryV20ToV21(record);
     }
     // Each later step only for an entry that IS that marker now: one the
     // previous step completed (a step leaves a malformed entry untouched and
     // unstamped -- never stamped into validity by a later step), or one
     // already carrying it.
-    if (record.gameSchemaVersion === 21 && fromVersion < 22 && !hasV22Evidence(record) && !hasV23Evidence(record)) {
+    if (record.gameSchemaVersion === 21 && fromVersion < 22 &&
+      !hasV22Evidence(record) && !hasV23Evidence(record) && !hasV24Evidence(record)) {
       migrateEntryV21ToV22(record);
     }
-    if (record.gameSchemaVersion === PREVIOUS_GAME_SCHEMA_VERSION && fromVersion < 23 && !hasV23Evidence(record)) {
+    if (record.gameSchemaVersion === 22 && fromVersion < 23 && !hasV23Evidence(record) && !hasV24Evidence(record)) {
       migrateEntryV22ToV23(record);
+    }
+    if (record.gameSchemaVersion === PREVIOUS_GAME_SCHEMA_VERSION && fromVersion < 24 && !hasV24Evidence(record)) {
+      migrateEntryV23ToV24(record);
     }
     return;
   }
@@ -647,7 +685,7 @@ export function migrateGameEntry(
   // and an Alignment or Role resolutionId the generic `resolutionId` key (v20
   // evidence), so an older heuristic could otherwise claim it and stamp it
   // into validity.
-  if (hasV23Evidence(record) || hasV22Evidence(record) || hasV20Evidence(record) || hasV21Evidence(record)) return;
+  if (hasV24Evidence(record) || hasV23Evidence(record) || hasV22Evidence(record) || hasV20Evidence(record) || hasV21Evidence(record)) return;
 
   if (fromVersion < 14) {
     const players = e.players;
@@ -727,6 +765,7 @@ export function migrateGameEntry(
     migrateEntryV20ToV21(record);
     if (record.gameSchemaVersion === 21) migrateEntryV21ToV22(record);
     if (record.gameSchemaVersion === 22) migrateEntryV22ToV23(record);
+    if (record.gameSchemaVersion === 23) migrateEntryV23ToV24(record);
   }
 }
 
@@ -799,8 +838,8 @@ export function migrateGameEntry(
  * it). Marker-less v21 evidence (hasV21Evidence) likewise reports 21.
  */
 export function detectLegacyGameVersion(game: Record<string, unknown>): number | null {
-  // Phase 10C/10D/10E: the explicit marker is decisive. 20, 21 and 22 are the
-  // earlier versions still migrated; 23 -- and any malformed or unsupported
+  // Phase 10C/10D/10E/10F: the explicit marker is decisive. 20..23 are the
+  // earlier versions still migrated; 24 -- and any malformed or unsupported
   // marker -- is reported as current, so migrateGameEntry runs no legacy step
   // and the current schema judges (rejects) it.
   if (hasOwnKey(game, "gameSchemaVersion")) {
@@ -810,7 +849,7 @@ export function detectLegacyGameVersion(game: Record<string, unknown>): number |
   // v23, then v22, evidence first: it must never be claimed by an older
   // heuristic (an Alignment/Role correction's `correction` key is also v19
   // Life evidence, and an Alignment/Role `resolutionId` is also v20 evidence).
-  if (hasV23Evidence(game) || hasV22Evidence(game) || hasV21Evidence(game)) return GAME_SCHEMA_VERSION;
+  if (hasV24Evidence(game) || hasV23Evidence(game) || hasV22Evidence(game) || hasV21Evidence(game)) return GAME_SCHEMA_VERSION;
   if (hasV20Evidence(game)) return 20;
   if (hasV19LifeEvidence(game)) return 19;
   if (hasV17IdentityEvidence(game)) return 17;
@@ -990,4 +1029,22 @@ export function hasV23Evidence(game: Record<string, unknown>): boolean {
   if (players.some((p) => isObject(p) && p.shownAlignment === "undisclosed")) return true;
   return someEntry(game.history, (h) => isObject(h) && h.category === "alignment" &&
     (hasOwnKey(h, "correction") || hasOwnKey(h, "resolutionId")));
+}
+
+/**
+ * Phase 10F: true when a game-shaped entry carries ANY v24-only evidence a v23
+ * writer never produced -- PRESENCE, not validity:
+ *
+ *  - informationDeliveries[*].performedRole   (a simulated/performed Role)
+ *  - informationDeliveries[*].resolutionId    (ability-resolution correlation)
+ *
+ * Under an older marker (20..23) such evidence means malformed current-version
+ * data: it is never migrated, repaired or stamped, and the v24 schema rejects
+ * the entry. Marker-less, it is likewise never treated as legacy.
+ * Deliberately NOT evidence: a `p:...` Night-progress key -- a v23 seat-keyed
+ * and a v24 participant-keyed step are structurally indistinguishable, which is
+ * exactly why v23 participant-scoped progress is dropped rather than re-keyed.
+ */
+export function hasV24Evidence(game: Record<string, unknown>): boolean {
+  return someEntry(game.informationDeliveries, (d) => hasOwnKey(d, "performedRole") || hasOwnKey(d, "resolutionId"));
 }

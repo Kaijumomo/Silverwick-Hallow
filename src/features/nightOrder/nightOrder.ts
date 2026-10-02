@@ -5,6 +5,7 @@ import { wakeIdentity } from "@/stores/wakeIdentity";
 import { evilInformationPolicy, type NightContext } from "./nightRules";
 import { publicTravelerRole, travelerNeedsFirstNight } from "@/stores/travelers";
 import { hasEffect } from "@/stores/effects";
+import { participantScopedStepKey, participantStepKey, stepParticipantOf, travelerArrivalStepKey } from "@/stores/nightProgress";
 
 export type NightStep =
   | {
@@ -18,11 +19,15 @@ export type NightStep =
       recipientIds?: PlayerId[];
       setupRecipientIds?: PlayerId[];
       travelerArrivalId?: PlayerId;
+      /** Phase 10F: the participant a participant-scoped global step is about. */
+      participantId?: string;
     }
   | {
       kind: "player";
-      stepKey: string;       // "p:{playerId}:{shownRoleId}"
+      stepKey: string;       // "p:{participantId}:{shownRoleId}" (Phase 10F, v24)
       playerId: PlayerId;
+      /** Phase 10F: the participation instance this wake belongs to. */
+      participantId: string;
       playerName: string;
       seat: number;
       alive: boolean;
@@ -57,7 +62,10 @@ export function computeNightOrder(
   context: NightContext = {},
 ): NightStep[] {
   const registry = buildRegistry(script);
-  const seated = seatOrder.map(id => players[id]).filter((p): p is STPlayerRecord => !!p && !p.isEmpty);
+  // Phase 10F (v24): every participant-scoped step is keyed by the occupant's
+  // ParticipantId; a seat without a participation identity has no steps.
+  const seated = seatOrder.map(id => players[id]).filter((p): p is STPlayerRecord & { participantId: string } =>
+    !!p && stepParticipantOf(p) !== null);
   const policy = evilInformationPolicy(seated, registry, context);
   const steps: NightStep[] = [];
   const at = (id: string) => canonicalOrder(id, isFirstNight) ?? 0.5;
@@ -117,14 +125,14 @@ export function computeNightOrder(
   for (const p of lunatics) {
     const shown = wakeIdentity(p, registry);
     if (!shown) continue;
-    if (isFirstNight) global("lunaticInfo:" + p.id, "Lunatic — simulated Demon introduction",
+    if (isFirstNight) global(participantScopedStepKey("lunaticInfo", p.participantId), "Lunatic — simulated Demon introduction",
       policy.normalStartingInfo
         ? "Give the configured pretend Minions and good-character bluffs to " + p.name + ". Then privately inform the real Demon who the Lunatic is. Check Poppy Grower/jinx interactions before giving information."
         : "No ordinary fake team/bluffs at this player count. Privately inform the real Demon who the Lunatic is; check relevant jinxes.",
-      at("lunatic"), { setupRecipientIds: policy.normalStartingInfo ? [p.id] : [] });
-    if (!isFirstNight || shown.role.firstNight) global("lunaticTargets:" + p.id, "Lunatic choices — inform the real Demon",
+      at("lunatic"), { setupRecipientIds: policy.normalStartingInfo ? [p.id] : [], participantId: p.participantId });
+    if (!isFirstNight || shown.role.firstNight) global(participantScopedStepKey("lunaticTargets", p.participantId), "Lunatic choices — inform the real Demon",
       "After " + p.name + "'s simulated procedure, show their choice(s) to the real Demon before its action. No attack is caused by the Lunatic. Track choices and jinx exceptions manually.",
-      at("lunatic") + 0.2);
+      at("lunatic") + 0.2, { participantId: p.participantId });
   }
 
   const customOrders = new Map<number, string>();
@@ -133,9 +141,9 @@ export function computeNightOrder(
     if (player.isTraveler && player.alive && !isFirstNight && travelerNeedsFirstNight(player) &&
       (!player.travelerArrival?.firstNightComplete || player.travelerArrival.completedAtNight === context.day)) {
       const role = publicTravelerRole(player)!;
-      global(`travelerArrival:${player.id}:${role.id}`, `${player.name} — ${role.name} arrival`,
+      global(travelerArrivalStepKey(player.participantId, role.id), `${player.name} — ${role.name} arrival`,
         role.firstNightPrompt ?? role.firstNightReminder ?? role.ability ?? "Review the character reference.", 0.25,
-        { travelerArrivalId: player.id, advisory: "Storyteller timing check: this Traveler's first night is not the game's first night. Place this procedure among tonight's actions manually. Resolve any gained ability separately; the normal repeat wake is suppressed for this arrival night." });
+        { travelerArrivalId: player.id, participantId: player.participantId, advisory: "Storyteller timing check: this Traveler's first night is not the game's first night. Place this procedure among tonight's actions manually. Resolve any gained ability separately; the normal repeat wake is suppressed for this arrival night." });
       continue;
     }
     if (!player.actualRole) continue;
@@ -143,9 +151,10 @@ export function computeNightOrder(
         registry.get(player.actualRole)?.provenance?.status !== "homebrew" &&
         !["poppygrower", "magician"].includes(player.actualRole)) {
       const actual = canonicalRolesIfKnown(player.actualRole);
-      if (actual) global("admin:" + player.id + ":" + actual.id, actual.name + " — Storyteller procedure",
+      if (actual) global(participantScopedStepKey("admin", player.participantId, actual.id), actual.name + " — Storyteller procedure",
         (actual.firstNightPrompt ?? actual.ability ?? "") +
-        " This is not a wake of " + player.name + ". Check suppression, impairment and jinxes before delivery.", at(actual.id));
+        " This is not a wake of " + player.name + ". Check suppression, impairment and jinxes before delivery.", at(actual.id),
+        { participantId: player.participantId });
     }
     const resolved = wakeIdentity(player, registry);
     if (!resolved) continue;
@@ -153,16 +162,16 @@ export function computeNightOrder(
     const canonical = isCanonicalRole(roleDef);
     let order = isFirstNight ? roleDef.firstNight : roleDef.otherNight;
     if (!canonical && order === undefined && (isFirstNight ? roleDef.firstNightPrompt : roleDef.otherNightPrompt)) {
-      global("missingOrder:" + player.id, "Night reference — Storyteller check required",
-        player.name + ": instruction has no night position. Place a custom step manually.", 0.3);
+      global(participantScopedStepKey("missingOrder", player.participantId), "Night reference — Storyteller check required",
+        player.name + ": instruction has no night position. Place a custom step manually.", 0.3, { participantId: player.participantId });
     }
     if (order === undefined || order === 0) continue;
     let prompt = isFirstNight
       ? (roleDef.firstNightPrompt ?? roleDef.firstNightReminder ?? roleDef.ability ?? "")
       : (roleDef.otherNightPrompt ?? roleDef.otherNightReminder ?? roleDef.ability ?? "");
     if (!Number.isFinite(order) || order < 0 || !prompt.trim()) {
-      global("invalid:" + player.id, "Night reference — Storyteller check required",
-        player.name + ": invalid order or missing instruction. Add a manual step after checking the reference.", 0.3);
+      global(participantScopedStepKey("invalid", player.participantId), "Night reference — Storyteller check required",
+        player.name + ": invalid order or missing instruction. Add a manual step after checking the reference.", 0.3, { participantId: player.participantId });
       continue;
     }
     if (isFirstNight && canonical && FIRST_NIGHT_ADMIN.has(roleId) && !isDeceived) {
@@ -182,8 +191,8 @@ export function computeNightOrder(
     // canonical tiebreak between DIFFERENT characters. Same-role seats are OK.
     let advisory = !canonical ? roleAuthority(roleDef) + ": verify this procedure and timing." : "";
     if (!canonical && customOrders.has(order) && customOrders.get(order) !== roleId) {
-      global("orderConflict:" + player.id, "Shared custom timing — Storyteller check required",
-        "Different custom characters share a night position. Choose their relative order manually.", order - 0.01);
+      global(participantScopedStepKey("orderConflict", player.participantId), "Shared custom timing — Storyteller check required",
+        "Different custom characters share a night position. Choose their relative order manually.", order - 0.01, { participantId: player.participantId });
     }
     if (!canonical) customOrders.set(order, roleId);
     if (DEATH_CHECKS.has(roleId) || !player.alive) advisory += " Check the ability's death/event condition tonight; historical triggers are not tracked.";
@@ -194,7 +203,8 @@ export function computeNightOrder(
     if (policy.toymaker && roleDef.type === "demon" && !isDeceived && !isFirstNight)
       advisory += " Toymaker: check attack-skip history. Do not wake/allow a game-ending attack if the required skip has not occurred.";
     steps.push({
-      kind: "player", stepKey: "p:" + player.id + ":" + roleId, playerId: player.id,
+      kind: "player", stepKey: participantStepKey(player.participantId, roleId), playerId: player.id,
+      participantId: player.participantId,
       playerName: player.name, seat: player.seat, alive: player.alive, abilityUsed: player.abilityUsed,
       effectiveRoleId: roleId, effectiveRoleName: roleDef.name, roleType: roleDef.type,
       prompt, reminder: roleDef.ability ?? "", order, advisory: advisory.trim(),

@@ -1,3 +1,4 @@
+import { travelerArrivalStepKey } from "./nightProgress";
 import { beforeEach, describe, expect, it } from "vitest";
 import { useStorytellerStore as store, migrateStoreState, takeMigrationResetFlag } from "./storytellerStore";
 import { buildRegistry } from "@/data/roleRegistry";
@@ -97,31 +98,37 @@ describe("Phase 9B Traveler identity and population", () => {
   });
 });
 
+/** Phase 10F (v24): the Traveler's arrival step key, bound to the participation
+ * instance (never the seat "t"). */
+const arrivalKey = () => travelerArrivalStepKey(p().participantId!, "apprentice");
+
 describe("Phase 9B personal first night", () => {
   it.each([1, 4])("completes the personal procedure on Night %s without duplicate wakes", day => {
     traveler("apprentice"); store.getState().setTravelerAlignment("t", "good");
     store.setState({ game: { ...game(), phase: "night", day } });
-    const beforeOrdinary = night().filter(s => !s.stepKey.includes("t:apprentice"));
-    const step = night().find(s => s.stepKey.endsWith("t:apprentice"))!;
+    // Phase 10F (v24): the arrival step is keyed by the ParticipantId.
+    const arrival = arrivalKey();
+    const beforeOrdinary = night().filter(s => s.stepKey !== arrival && s.stepKey !== `p:${p().participantId}:apprentice`);
+    const step = night().find(s => s.stepKey === arrival || s.stepKey === `p:${p().participantId}:apprentice`)!;
     expect(step).toBeDefined();
     if (day > 1) expect(step.advisory).toMatch(/timing check/);
     store.getState().setNightStepStatus(day, step.stepKey, "done");
     expect(p().travelerArrival).toMatchObject({ firstNightComplete: true, completedAtNight: day });
     expect(game().day).toBe(day);
-    expect(night().filter(s => s.stepKey.endsWith("t:apprentice"))).toHaveLength(1);
-    expect(night().filter(s => !s.stepKey.includes("t:apprentice"))).toEqual(beforeOrdinary);
+    expect(night().filter(s => s.stepKey === arrival || s.stepKey === `p:${p().participantId}:apprentice`)).toHaveLength(1);
+    expect(night().filter(s => s.stepKey !== arrival && s.stepKey !== `p:${p().participantId}:apprentice`)).toEqual(beforeOrdinary);
     store.setState({ game: { ...game(), day: day + 1 } });
-    expect(night().some(s => s.stepKey.startsWith("travelerArrival:t"))).toBe(false);
+    expect(night().some(s => s.stepKey.startsWith("travelerArrival:"))).toBe(false);
     expect(travelerGuidance(p())).toEqual([]);
   });
   it("skipping does not claim personal completion", () => {
     traveler("apprentice"); store.setState({ game: { ...game(), phase: "night", day: 4 } });
-    store.getState().setNightStepStatus(4, "travelerArrival:t:apprentice", "skipped");
+    store.getState().setNightStepStatus(4, arrivalKey(), "skipped");
     expect(p().travelerArrival!.firstNightComplete).toBe(false);
   });
   it("changing away and back cannot inherit a completed arrival step", () => {
     traveler("apprentice"); store.setState({ game: { ...game(), phase: "night", day: 4 } });
-    const key = "travelerArrival:t:apprentice";
+    const key = arrivalKey();
     store.getState().setNightStepStatus(4, key, "done");
     store.getState().assignRole("t", "thief"); store.getState().assignRole("t", "apprentice");
     expect(game().nightProgress[`4:${key}`]).toBeUndefined();
@@ -129,7 +136,7 @@ describe("Phase 9B personal first night", () => {
   });
   it("explicit reset of tonight's progress also resets personal completion", () => {
     traveler("apprentice"); store.setState({ game: { ...game(), phase: "night", day: 4 } });
-    store.getState().setNightStepStatus(4, "travelerArrival:t:apprentice", "done");
+    store.getState().setNightStepStatus(4, arrivalKey(), "done");
     store.getState().clearNightProgress(4);
     expect(p().travelerArrival!.firstNightComplete).toBe(false);
     expect(p().travelerArrival).not.toHaveProperty("completedAtNight");
@@ -138,7 +145,7 @@ describe("Phase 9B personal first night", () => {
     traveler("apprentice"); delete p().travelerArrival;
     store.setState({ game: { ...game(), phase: "night", day: 4 } });
     expect(travelerGuidance(p()).join(" ")).toMatch(/unknown/);
-    expect(night().find(s => s.stepKey.startsWith("travelerArrival:t"))?.advisory).toMatch(/timing check/);
+    expect(night().find(s => s.stepKey === arrivalKey())?.advisory).toMatch(/timing check/);
   });
   it.each(["death", "exile"])("%s suppresses arrival but preserves the player", action => {
     traveler("apprentice");
@@ -220,7 +227,7 @@ describe("Phase 9B persistence", () => {
     const expected = JSON.parse(JSON.stringify(p()));
     expect(expected).toMatchObject({ alive: false, exiled: true });
     const saved = localStorage.getItem("new-blood-st")!;
-    expect(JSON.parse(saved).version).toBe(23);
+    expect(JSON.parse(saved).version).toBe(24);
     store.setState({ game: null }); localStorage.setItem("new-blood-st", saved);
     await store.persist.rehydrate(); expect(p()).toEqual(expected);
   });

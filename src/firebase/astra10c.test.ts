@@ -13,7 +13,7 @@ import { planLifeTransaction } from "@/stores/lifeResolution";
 import { participantRefOf } from "@/stores/participants";
 import { setupScript, standardRoles } from "@/test/setupFixtures";
 import { buildRichPhase9Game } from "@/test/phase9RichState";
-import { asV20, withV21Reminders, withV22Roles, withV23Alignment } from "@/test/v20Migration";
+import { asV20, withV21Reminders, withV22Roles, withV23Alignment, withV24Guided } from "@/test/v20Migration";
 import type { ReminderIntent, ReminderParticipantBinding } from "@/stores/reminderResolution";
 import type { PlayerId, StorytellerLobbyRecord } from "@/stores/types";
 import { MemoryRoomBackend } from "./memoryBackend";
@@ -232,7 +232,7 @@ describe("ASTRA-10C-002: legacy Reminder History cannot smuggle value records or
   it("marker-less + a nested History cleanupCue is current evidence: never migrated as older legacy", () => {
     const g = marker20WithNestedCue();
     delete g.gameSchemaVersion;
-    expect(detectLegacyGameVersion(g)).toBe(23);
+    expect(detectLegacyGameVersion(g)).toBe(24);
     const copy = structuredClone(g);
     migrateGameEntry(copy, 13, { kind: "canonical-only" });
     expect(copy).toEqual(g);
@@ -274,8 +274,8 @@ describe("ASTRA-10C-003: an entry's own version routes old store migrations", ()
     (v20 as RawGame).fabled = ["djinn"]; // an old step would never touch it anyway; content must survive exactly
     const result = migrateStoreState({ game: structuredClone(v20), undoStack: [structuredClone(v20)] }, 1) as { game: Raw; undoStack: Raw[] };
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(result.game).toEqual(withV23Alignment(withV22Roles(withV21Reminders(v20))));
-    expect(result.undoStack[0]).toEqual(withV23Alignment(withV22Roles(withV21Reminders(v20))));
+    expect(result.game).toEqual(withV24Guided(withV23Alignment(withV22Roles(withV21Reminders(v20)))));
+    expect(result.undoStack[0]).toEqual(withV24Guided(withV23Alignment(withV22Roles(withV21Reminders(v20)))));
   });
 
   it("Current State and each Undo entry follow their own path (marker 23 / genuine v13 / marker 20)", () => {
@@ -290,12 +290,12 @@ describe("ASTRA-10C-003: an entry's own version routes old store migrations", ()
     expect(takeMigrationResetFlag()).toBe(false);
     expect(result.game).toEqual(current); // no legacy repair
     const [migrated13, migrated20] = result.undoStack;
-    expect(migrated13!.gameSchemaVersion).toBe(23);
+    expect(migrated13!.gameSchemaVersion).toBe(24);
     for (const p of Object.values(migrated13!.players).filter((p) => p.isEmpty !== true)) {
       expect(p.participantId).toBe(`legacy-current:${p.id}`); // the v13+ path ran
       expect(p.actualAlignment).toBeDefined(); // v13 -> v14 derivation ran
     }
-    expect(migrated20).toEqual(withV23Alignment(withV22Roles(withV21Reminders(v20)))); // only v20 -> v21 -> v22 -> v23
+    expect(migrated20).toEqual(withV24Guided(withV23Alignment(withV22Roles(withV21Reminders(v20))))); // only v20 -> v21 -> v22 -> v23
   });
 
   it("a genuine old save (v1 envelope, v1-shaped game) still migrates through the whole chain", () => {
@@ -306,7 +306,7 @@ describe("ASTRA-10C-003: an entry's own version routes old store migrations", ()
     for (const p of Object.values(old.players)) { delete p.participantId; delete p.effects; delete p.isEmpty; }
     const result = migrateStoreState({ game: old, undoStack: [] }, 1) as { game: Raw };
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(result.game).toMatchObject({ gameSchemaVersion: 23, fabled: [], lorics: [], rolePool: [], plannedTravelerCount: 0, pendingPlayers: {} });
+    expect(result.game).toMatchObject({ gameSchemaVersion: 24, fabled: [], lorics: [], rolePool: [], plannedTravelerCount: 0, pendingPlayers: {} });
   });
 
   it("a pre-v8 envelope with a lobby cannot drop/rewrite a newer game entry: it fails closed", () => {

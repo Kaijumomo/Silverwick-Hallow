@@ -18,17 +18,21 @@ export function PublicSeat({ player, size, x, y }: Props) {
   // Phase 10A: one public life grammar. The shroud and vote token overlay
   // the seat whether or not Traveler role art is shown -- a dead Traveler
   // stays visibly dead (previously the art replaced the death marker).
+  // Phase 10F: null while Life State is withheld (Night) -- then no
+  // alive/dead token art, class, shroud, vote token or text is rendered, so
+  // the seat implies nothing about Life.
   const life = publicLifeStateOf(player);
+  const dead = life !== null && life !== "alive";
 
-  const tokenSrc = !player.alive && player.ghostVote
+  const tokenSrc = dead && player.ghostVote
     ? "/tokens/PublicDeadVote.png"
-    : !player.alive
+    : dead
     ? "/tokens/PublicDead.png"
     : "/tokens/PublicAlive.png";
 
-  const stateIcon = (
+  const stateIcon = life === null ? null : (
     <img
-      className={`public-seat-state-png ${player.alive ? "token-alive" : "token-dead"}`}
+      className={`public-seat-state-png ${dead ? "token-dead" : "token-alive"}`}
       src={tokenSrc}
       alt=""
       draggable={false}
@@ -37,7 +41,7 @@ export function PublicSeat({ player, size, x, y }: Props) {
 
   return (
     <div
-      className={`public-seat ${player.alive ? "alive" : "dead"} life-${life} ${player.online ? "" : "offline"}`}
+      className={`public-seat ${life === null ? "life-withheld" : `${dead ? "dead" : "alive"} life-${life}`} ${player.online ? "" : "offline"}`}
       style={{
         left: `calc(50% + ${x}px)`,
         top: `calc(50% + ${y}px)`,
@@ -66,12 +70,12 @@ export function PublicSeat({ player, size, x, y }: Props) {
               aria-label="Offline"
             />
           )}
-          <LifeShroud state={life} />
+          {life && <LifeShroud state={life} />}
         </div>
-        <VoteToken state={life} />
+        {life && <VoteToken state={life} />}
       </div>
       <div className="public-seat-name">{player.name}</div>
-      {!player.alive && <LifeStateText state={life} className="public-seat-ghost" />}
+      {dead && life && <LifeStateText state={life} className="public-seat-ghost" />}
       {role && <div className="public-seat-role">{role.name}</div>}
       {player.isTraveler && <div className="public-seat-traveler">traveler</div>}
     </div>

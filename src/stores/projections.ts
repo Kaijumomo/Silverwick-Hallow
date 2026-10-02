@@ -2,7 +2,7 @@ import { deriveAlignment, type RoleRegistry } from "@/data/roleRegistry";
 import { PlayerSelfRecordSchema } from "./schemas";
 import { isInitialRevealComplete } from "./identity";
 import { publicTravelerRole } from "./travelers";
-import { publicLifeOf } from "./lifeState";
+import { publicLifeOf, publicLifeWithheld } from "./lifeState";
 import type {
   Alignment,
   PlayerId,
@@ -100,19 +100,26 @@ export function projectToSelf(p: STPlayerRecord, registry: RoleRegistry): Player
 
 export function projectToPublic(
   p: STPlayerRecord,
-  online: boolean
+  online: boolean,
+  phase?: PublicLobbyRecord["phase"],
 ): PlayerPublicRecord {
   // Phase 10A: public life goes through the one public-life seam
   // (lifeState.ts) -- dead/alive, vote token and exile-death are public
   // table information; Life Events, ParticipantIds and anomalies never are.
-  const life = publicLifeOf(p);
+  //
+  // Phase 10F (v24, Section 10): during Night a guided ability can change
+  // Life mid-Night, so public/player-town projection reveals NO Life State
+  // while the phase is Night -- the fields are ABSENT for every player alike
+  // (never `false`, never a reconstructed pre-Night truth). Day resumes the
+  // normal projection from Current State. projectLobbyToPublic always passes
+  // the game's phase; it is the only production caller.
+  const life = publicLifeWithheld(phase) ? null : publicLifeOf(p);
   const out: PlayerPublicRecord = {
     id: p.id,
     name: p.name,
     seat: p.seat,
-    alive: life.alive,
-    ghostVote: life.ghostVote,
-    ...(life.exiled ? { exiled: true as const } : {}),
+    ...(life ? { alive: life.alive, ghostVote: life.ghostVote } : {}),
+    ...(life?.exiled ? { exiled: true as const } : {}),
     online,
     joinedAt: p.joinedAt,
     isTraveler: p.isTraveler,
@@ -134,7 +141,7 @@ export function projectLobbyToPublic(
   for (const id of Object.keys(st.players)) {
     const p = st.players[id]!;
     if (p.isEmpty) continue; // don't expose unoccupied seats to players
-    players[id] = projectToPublic(p, !!online[id]);
+    players[id] = projectToPublic(p, !!online[id], st.phase);
   }
   const out: PublicLobbyRecord = {
     code: st.code,

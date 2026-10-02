@@ -107,6 +107,9 @@ const chef = () => holder("chef");
 // ---------------------------------------------------------------------------
 // Role classification (by authoritative Role TYPE)
 // ---------------------------------------------------------------------------
+/** Phase 10F (v24): Night progress is keyed by the participation instance. */
+const pid = (id: PlayerId) => player(id).participantId!;
+
 describe("Role classification and picker policy", () => {
   it("ordinary destinations are townsfolk/outsider/minion/demon of the current script; Travelers come from the canonical catalogue", () => {
     expect(classifyRole(setupScript, "chef").kind).toBe("ordinary");
@@ -1336,7 +1339,7 @@ describe("ordinary <-> Traveler transitions (live play)", () => {
   it("Traveler correction: `preserve` (default) leaves arrival/progress and demonInfoComplete intact; `restart` reinitializes only the authorized arrival/progress", () => {
     const zed = liveGameWithTraveler("thief");
     const arrival = { demonInfoComplete: true, firstNightComplete: true, completedAtNight: 1 };
-    const stepKeys = [`1:travelerArrival:${zed}:thief`, `1:p:${zed}:thief`, "1:demonInfo"];
+    const stepKeys = [`1:travelerArrival:${pid(zed)}:thief`, `1:p:${pid(zed)}:thief`, "1:demonInfo"];
     const seed = () => store.setState({ game: { ...game(), phase: "night", day: 1,
       nightProgress: Object.fromEntries(stepKeys.map((k) => [k, { status: "done", notes: "" }])),
       players: { ...game().players, [zed]: { ...player(zed), abilityUsed: true, actualAlignment: "evil", travelerArrival: { ...arrival } } } } });
@@ -1369,8 +1372,8 @@ describe("ordinary <-> Traveler transitions (live play)", () => {
         .toMatchObject({ ok: true, changed: true });
       const step = { status: "done" as const, notes: "" };
       store.setState({ game: { ...game(), phase: "night", day: 1,
-        nightProgress: { [`1:travelerArrival:${zed}:thief`]: step, [`1:p:${zed}:thief`]: step,
-          [`1:travelerArrival:${other}:x`]: step, [`1:p:${other}:empath`]: step, "1:demonInfo": step, [`0:p:${zed}:thief`]: step },
+        nightProgress: { [`1:travelerArrival:${pid(zed)}:thief`]: step, [`1:p:${pid(zed)}:thief`]: step,
+          [`1:travelerArrival:${pid(other)}:x`]: step, [`1:p:${pid(other)}:empath`]: step, "1:demonInfo": step, [`0:p:${pid(zed)}:thief`]: step },
         players: { ...game().players, [zed]: { ...player(zed), abilityUsed: true, actualAlignment: "evil", travelerArrival: { ...arrival },
           privateInfo: { extraText: "draft" }, packetEpoch: "epoch-keep" } } } });
       store.setState({ undoStack: [] });
@@ -1415,7 +1418,7 @@ describe("ordinary <-> Traveler transitions (live play)", () => {
       expect(after.reminders?.length).toBeGreaterThan(0);
       // Only this Traveler's current-night arrival/role steps are cleared.
       expect(Object.keys(game().nightProgress).sort()).toEqual(
-        [`1:travelerArrival:${other}:x`, `1:p:${other}:empath`, "1:demonInfo", `0:p:${zed}:thief`].sort());
+        [`1:travelerArrival:${pid(other)}:x`, `1:p:${pid(other)}:empath`, "1:demonInfo", `0:p:${pid(zed)}:thief`].sort());
       // Every other participant is the very same record.
       for (const id of game().seatOrder) if (id !== zed) expect(game().players[id]).toBe(b.game.players[id]);
       // No Role History value record is fabricated (the Actual Role did not change).
@@ -1433,7 +1436,7 @@ describe("ordinary <-> Traveler transitions (live play)", () => {
       expect(result.plan.players).toEqual({ [zed]: { set: { travelerArrival: { demonInfoComplete: false, firstNightComplete: false } }, remove: [] } });
       expect(result.plan.history).toEqual([]);
       expect(result.plan.actualRoleChanges).toEqual([]);
-      expect(result.plan.nightProgressRemove.sort()).toEqual([`1:p:${zed}:thief`, `1:travelerArrival:${zed}:thief`].sort());
+      expect(result.plan.nightProgressRemove.sort()).toEqual([`1:p:${pid(zed)}:thief`, `1:travelerArrival:${pid(zed)}:thief`].sort());
       expect(ids.packetEpoch()).toBe("epoch-1"); // never drawn by the plan
     });
 
@@ -1448,7 +1451,7 @@ describe("ordinary <-> Traveler transitions (live play)", () => {
     it("restart with an initial arrival but stale night steps still clears exactly those steps (one commit)", () => {
       const zed = liveGameWithTraveler("thief");
       const step = { status: "done" as const, notes: "" };
-      store.setState({ game: { ...game(), phase: "night", day: 1, nightProgress: { [`1:p:${zed}:thief`]: step, "1:demonInfo": step } } });
+      store.setState({ game: { ...game(), phase: "night", day: 1, nightProgress: { [`1:p:${pid(zed)}:thief`]: step, "1:demonInfo": step } } });
       const b = baseline();
       expect(resolve([correctRoleIntent(player(zed), "thief", "restart")])).toEqual({ ok: true, changed: true });
       expectOneCommit(b);
@@ -1649,7 +1652,7 @@ describe("resolveRoles: one commit, Undo and persistence", () => {
     expect(state().correctRole(holder("empath"), "monk")).toMatchObject({ ok: true });
     const round = StorytellerGamePersistedSchema.parse(JSON.parse(JSON.stringify(game())));
     expect(round).toEqual(JSON.parse(JSON.stringify(game())));
-    expect(round.gameSchemaVersion).toBe(23);
+    expect(round.gameSchemaVersion).toBe(24);
     // Current State never comes from History: dropping the History leaves it.
     expect(StorytellerGamePersistedSchema.safeParse({ ...JSON.parse(JSON.stringify(game())), history: [] }).success).toBe(true);
   });

@@ -640,7 +640,7 @@ export function SealedCard({
 // Town view — roster, online dot, per-seat notes (no neighbour subtitles)
 // ---------------------------------------------------------------------------
 
-function TownView({
+export function TownView({
   publicLobby,
   ownPlayerId,
   code,
@@ -660,17 +660,21 @@ function TownView({
     [scriptCharacters]
   );
 
+  // Phase 10F: during Night the public projection withholds Life State, so
+  // no alive count is derived or shown (`lifeShown` false).
   const counts = useMemo(() => {
-    if (!publicLobby) return { alive: 0, dead: 0, online: 0, total: 0 };
-    let alive = 0, dead = 0, online = 0;
+    if (!publicLobby) return { alive: 0, dead: 0, online: 0, total: 0, lifeShown: false };
+    let alive = 0, dead = 0, online = 0, lifeShown = true;
     for (const id of publicLobby.seatOrder) {
       const p = publicLobby.players[id];
       if (!p) continue;
-      if (p.alive) alive++;
+      const life = publicLifeStateOf(p);
+      if (life === null) lifeShown = false;
+      else if (life === "alive") alive++;
       else dead++;
       if (p.online) online++;
     }
-    return { alive, dead, online, total: publicLobby.seatOrder.length };
+    return { alive, dead, online, total: publicLobby.seatOrder.length, lifeShown };
   }, [publicLobby]);
 
   if (!publicLobby) return null;
@@ -683,7 +687,7 @@ function TownView({
     <div className="town-view">
       <div className="town-view-header">
         <h3 className="drawer-section-title" style={{ margin: 0 }}>Town</h3>
-        <span className="label">{counts.alive}/{counts.total} alive</span>
+        {counts.lifeShown && <span className="label">{counts.alive}/{counts.total} alive</span>}
         <span className="label">{counts.online}/{counts.total} online</span>
       </div>
 
@@ -694,11 +698,12 @@ function TownView({
           const isYou = id === ownPlayerId;
           const nKey = `${code}:${id}`;
           const note = townNotes[nKey] ?? null;
+          const life = publicLifeStateOf(p);
 
           return (
             <li
               key={id}
-              className={`town-row ${p.alive ? "" : "dead"} life-${publicLifeStateOf(p)} ${isYou ? "you" : ""}`}
+              className={`town-row ${life === null ? "life-withheld" : `${life === "alive" ? "" : "dead"} life-${life}`} ${isYou ? "you" : ""}`}
             >
               <button
                 type="button"
@@ -706,7 +711,7 @@ function TownView({
                 onClick={() => {
                   if (!isYou) setNoteTarget(id);
                 }}
-                aria-label={`${lifeAccessibleLabel(p.name, p.seat + 1, publicLifeStateOf(p))} — tap to add notes`}
+                aria-label={`${lifeAccessibleLabel(p.name, p.seat + 1, life)} — tap to add notes`}
               >
                 <span className="label town-row-seat">seat {p.seat + 1}</span>
                 <span className="town-name">
@@ -722,7 +727,7 @@ function TownView({
                   />
                   {/* Phase 10A: the shared public life grammar -- dead,
                       vote available/used, exiled -- always in text. */}
-                  <LifeStateText state={publicLifeStateOf(p)} className="label" />
+                  {life && <LifeStateText state={life} className="label" />}
                 </span>
               </button>
               {note && (note.roles.length > 0 || note.confidence) && (

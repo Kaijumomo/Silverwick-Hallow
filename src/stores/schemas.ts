@@ -713,16 +713,36 @@ export const RecordedInformationValueSchema = z.discriminatedUnion("kind", [
   TextInformationValueSchema,
 ]);
 
+/** Phase 10F (v24): the bound on an Information Delivery's correlation id --
+ * the same bound every other domain's `resolutionId` uses. */
+export const MAX_RESOLUTION_ID_LENGTH = 200;
+
+/**
+ * Phase 10F (v24): one Information Delivery Record. STRICT -- an unknown or
+ * malformed current-version field fails closed instead of being silently
+ * stripped. `performedRole` names the character procedure actually performed
+ * when it differs from the recipient's Actual Role (a simulated wake, e.g. a
+ * Drunk shown as the Empath); it is never equal to `actualRole` and never
+ * invented by migration. `resolutionId` is optional correlation metadata
+ * shared with the other records one ability resolution produced (not an
+ * idempotency key; never invented by migration).
+ */
 export const InformationDeliveryRecordSchema = z.object({
   id: z.string().min(1),
   recipient: ParticipantRefSchema,
   recipientPlayerId: RetiredPlayerIdField,
   actualRole: z.string().min(1),
+  performedRole: z.string().min(1).optional(),
   informationActionId: z.string().min(1),
   moment: GameMomentSchema.optional(),
   values: z.array(RecordedInformationValueSchema),
   provenance: ProvenanceSchema.optional(),
   note: z.string().optional(),
+  resolutionId: z.string().min(1).max(MAX_RESOLUTION_ID_LENGTH).optional(),
+}).strict().superRefine((delivery, ctx) => {
+  if (delivery.performedRole !== undefined && delivery.performedRole === delivery.actualRole) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "performedRole is recorded only when it differs from the Actual Role", path: ["performedRole"] });
+  }
 });
 
 export const PlayerSelfRecordSchema = z.object({
@@ -791,12 +811,16 @@ export const STPlayerRecordSchema = z.object({
   participantId: z.string().min(1).optional(),
 });
 
+/** Phase 10F (v24): a public player record. Life State (`alive`, `ghostVote`,
+ * `exiled`) is ABSENT -- withheld, not false -- while the public phase is
+ * Night (see publicLifeWithheld / checkPublicLifeWithholding); outside Night
+ * `alive` and `ghostVote` are both present. */
 export const PlayerPublicRecordSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   seat: z.number().int().nonnegative(),
-  alive: z.boolean(),
-  ghostVote: z.boolean(),
+  alive: z.boolean().optional(),
+  ghostVote: z.boolean().optional(),
   online: z.boolean(),
   joinedAt: z.number().int().nonnegative(),
   isTraveler: z.boolean(),
@@ -813,19 +837,19 @@ export const NightStepRecordSchema = z.object({
 
 /** Phase 10B: the current game snapshot schema version (see
  * StorytellerLobbyRecord.gameSchemaVersion). Phase 10C: v21. Phase 10D: v22.
- * Phase 10E: v23. */
-export const GAME_SCHEMA_VERSION = 23 as const;
-/** Phase 10E: the explicit markers migration still accepts, routed PER ENTRY
- * (see migrateGameEntry): 20 receives v20 -> v21 -> v22 -> v23, 21 receives
- * v21 -> v22 -> v23, 22 receives v22 -> v23, 23 is current and receives
- * nothing. Any other marker is never reinterpreted as legacy -- the current
- * schema rejects it. */
-export const MIGRATABLE_GAME_SCHEMA_VERSIONS = [20, 21, 22] as const;
-/** The immediately previous explicit marker (v22 -> v23). */
-export const PREVIOUS_GAME_SCHEMA_VERSION = 22 as const;
+ * Phase 10E: v23. Phase 10F: v24. */
+export const GAME_SCHEMA_VERSION = 24 as const;
+/** Phase 10F: the explicit markers migration still accepts, routed PER ENTRY
+ * (see migrateGameEntry): 20 receives v20 -> ... -> v24, 21 receives v21 ->
+ * ... -> v24, 22 receives v22 -> v23 -> v24, 23 receives v23 -> v24, 24 is
+ * current and receives nothing. Any other marker is never reinterpreted as
+ * legacy -- the current schema rejects it. */
+export const MIGRATABLE_GAME_SCHEMA_VERSIONS = [20, 21, 22, 23] as const;
+/** The immediately previous explicit marker (v23 -> v24). */
+export const PREVIOUS_GAME_SCHEMA_VERSION = 23 as const;
 
 export const StorytellerLobbyRecordSchema = z.object({
-  // Phase 10B (v20) / 10C (v21) / 10D (v22) / 10E (v23): required explicit version evidence, NO
+  // Phase 10B (v20) / 10C (v21) / 10D (v22) / 10E (v23) / 10F (v24): required explicit version evidence, NO
   // default -- a current-version game missing it (or carrying any other
   // value, including a stale 20) is rejected; older data receives it only
   // from migration.

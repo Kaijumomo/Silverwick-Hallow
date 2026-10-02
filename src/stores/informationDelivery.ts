@@ -3,7 +3,8 @@ import type { RoleRegistry } from "@/data/roleRegistry";
 import { currentGameMoment } from "./effects";
 import { cloneOwned, durableProvenance, type MutationContext } from "./history";
 import { participantRefOf, recordedInformationValues } from "./participants";
-import { InformationValueSchema } from "./schemas";
+import { InformationValueSchema, MAX_RESOLUTION_ID_LENGTH } from "./schemas";
+import { wakeIdentity } from "./wakeIdentity";
 import type {
   InformationActionId,
   InformationDeliveryId,
@@ -236,16 +237,26 @@ export function validateInformationValues(
  * commit, so they live here as a pure planner. The legacy store command remains
  * an adapter over this plan and therefore keeps its existing behavior.
  *
- * This first extraction deliberately preserves the v23 record shape exactly.
- * The approved v24 performed-role/resolution correlation extension is a
- * separate migration slice so no current-version snapshot is written with
- * fields its schema would silently strip.
+ * Phase 10F (v24): a delivery may additionally record
+ *  - `performedRole`: the character procedure actually performed when it
+ *    differs from the recipient's Actual Role. AUTHORIZED, never trusted: it
+ *    must be the recipient's current SIMULATED wake identity (wakeIdentity --
+ *    e.g. a Drunk shown as the Empath), resolvable in the active registry, and
+ *    the Information Action must belong to it. A caller can never attach an
+ *    arbitrary Role. Recording it creates no Current State and never implies
+ *    the recipient holds that Role.
+ *  - `resolutionId`: correlation with the other records of one ability
+ *    resolution (bounded; metadata only).
  */
 export type InformationDeliveryPlanRequest = {
   recipientPlayerId: PlayerId;
   informationActionId: InformationActionId;
   values: unknown;
   context?: MutationContext;
+  /** Phase 10F: the simulated procedure performed (see above). Omitted, or
+   * equal to the Actual Role, means the Actual Role's own ability. */
+  performedRole?: RoleId;
+  resolutionId?: string;
 };
 
 export type InformationDeliveryPlanEnvironment = {
@@ -271,11 +282,31 @@ export function planInformationDelivery(
   const { registry } = environment;
   if (!registry) return { ok: false, message: "Unknown script." };
 
+  const { resolutionId } = request;
+  if (resolutionId !== undefined &&
+    (typeof resolutionId !== "string" || !resolutionId || resolutionId.length > MAX_RESOLUTION_ID_LENGTH)) {
+    return { ok: false, message: "Invalid resolution id." };
+  }
+  // Phase 10F: the Role whose Information Action was performed. An explicit
+  // performedRole equal to the Actual Role is the ordinary case (never stored).
+  let performedRole: RoleId | undefined;
+  if (request.performedRole !== undefined && request.performedRole !== player.actualRole) {
+    if (typeof request.performedRole !== "string" || !request.performedRole) {
+      return { ok: false, message: "Invalid performed character." };
+    }
+    const wake = wakeIdentity(player, registry);
+    if (!wake || !wake.simulated || wake.shownRoleId !== request.performedRole) {
+      return { ok: false, message: "That character is not this player's simulated wake -- a delivery can only record a performed character the player is currently shown." };
+    }
+    performedRole = request.performedRole;
+  }
+  const actingRole = performedRole ?? player.actualRole;
+
   const matchingActions = registry
-    .informationActionsOf(player.actualRole)
+    .informationActionsOf(actingRole)
     .filter((action) => action.id === request.informationActionId);
   if (matchingActions.length === 0) {
-    return { ok: false, message: `"${player.actualRole}" has no Information Action "${request.informationActionId}".` };
+    return { ok: false, message: `"${actingRole}" has no Information Action "${request.informationActionId}".` };
   }
   if (matchingActions.length > 1) {
     return { ok: false, message: `Malformed Role Information: duplicate Information Action id "${request.informationActionId}".` };
@@ -308,10 +339,12 @@ export function planInformationDelivery(
     id: (environment.deliveryId ?? informationDeliveryId)(),
     recipient,
     actualRole: player.actualRole,
+    ...(performedRole ? { performedRole } : {}),
     informationActionId: request.informationActionId,
     ...(moment ? { moment } : {}),
     values: recordedValues,
     ...(provenance ? { provenance } : {}),
+    ...(resolutionId ? { resolutionId } : {}),
   });
 
   return { ok: true, record };

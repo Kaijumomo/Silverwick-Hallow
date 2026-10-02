@@ -217,7 +217,7 @@ describe("projectToSelf — Demon bluffs privacy", () => {
 describe("Lobby-level projections", () => {
   function makeLobby(): StorytellerLobbyRecord {
     return {
-      gameSchemaVersion: 23,
+      gameSchemaVersion: 24,
       code: "ABCD12",
       storytellerUid: "uid-st",
       scriptId: "tb",
@@ -477,7 +477,7 @@ describe("Privacy regression matrix — all behavior modes", () => {
 describe("projectLobbyToSelfMap — Phase 9C.4 setup privacy barrier", () => {
   function setupLobby(players: StorytellerLobbyRecord["players"], over: Partial<StorytellerLobbyRecord> = {}): StorytellerLobbyRecord {
     return {
-      gameSchemaVersion: 23, code: "SETUP01", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
+      gameSchemaVersion: 24, code: "SETUP01", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
       bluffs: [], fabled: [], lorics: [], notes: "ST-only",
       seatOrder: Object.keys(players), nightProgress: {}, rolePool: [], history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       plannedPlayerCount: Object.keys(players).length, plannedTravelerCount: 0, pendingPlayers: {}, players, ...over,

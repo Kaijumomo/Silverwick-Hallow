@@ -46,6 +46,7 @@ import {
   type ReminderTransaction,
 } from "./reminderResolution";
 import { newParticipantId, participantIdAppearsIn } from "./participants";
+import { isParticipantRoleStepEntry, participantStepKey, travelerArrivalStepKey } from "./nightProgress";
 import { detectLegacyGameVersion, migrateGameEntry } from "./gameMigration";
 import { freshLifeEventWindow, pruneLifeEventWindow } from "./lifeEvents";
 import {
@@ -108,7 +109,7 @@ const UNDO_LIMIT = 20;
  * `merge` (Phase 9C.2B.2) passes to migrateStoreState when Zustand's own
  * persist middleware skips calling `migrate` outright, which it does
  * whenever the persisted version already equals this one. */
-const STORE_VERSION = 23;
+const STORE_VERSION = 24;
 
 let _migrationResetFlag = false;
 /** Returns true (once) when migrate() discarded incompatible persisted state. */
@@ -816,9 +817,14 @@ const freshAssignment = (existing: STPlayerRecord, role: RoleId, registry: RoleR
 
 const CLEAN_STATE = { game: null, view: "home" as const, undoStack: [] as never[], customScripts: {}, lobby: null };
 
-const resetTravelerNightProgress = (game: StorytellerLobbyRecord, id: PlayerId) =>
-  Object.fromEntries(Object.entries(game.nightProgress).filter(([key]) =>
-    !key.startsWith(`${game.day}:travelerArrival:${id}:`) && !key.startsWith(`${game.day}:p:${id}:`)));
+/** Phase 10F (v24): clears tonight's arrival / guided-wake steps of the
+ * participation instance at `id` -- keyed by ParticipantId, never the seat. */
+const resetTravelerNightProgress = (game: StorytellerLobbyRecord, id: PlayerId) => {
+  const participantId = game.players[id]?.participantId;
+  if (!participantId) return game.nightProgress;
+  return Object.fromEntries(Object.entries(game.nightProgress).filter(([key]) =>
+    !isParticipantRoleStepEntry(key, game.day, participantId)));
+};
 
 /** Phase 9R.1 Astra remediation (Finding M2): `undoStack` is untrusted
  * persisted-state data -- it may be genuinely absent (`undefined`), a
@@ -1032,7 +1038,14 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // marker-less entry carrying v20+ evidence, or any malformed marker receives
   // nothing and is rejected by the schema gate below. A marker-less genuine
   // legacy entry runs the whole chain through v23.
-  if (fromVersion < 23) {
+  //
+  // v24 (Phase 10F): guided ability resolution -- the same shared per-entry
+  // migration: marker 23 -> v24 drops ambiguous seat-addressed participant
+  // Night progress (never re-keyed onto the current occupant) and stamps 24;
+  // Information Delivery is preserved exactly (no performedRole/resolutionId
+  // is invented). Every older marker continues the chain through v24; an
+  // older marker carrying v24 evidence receives nothing and is rejected.
+  if (fromVersion < 24) {
     const customScripts = (s as { customScripts?: Record<string, Script> }).customScripts ?? {};
     // Phase 9R.1 Astra remediation (Finding A2): local persisted migration
     // uses "trusted" evidence -- this state's OWN saved customScripts,
@@ -2519,8 +2532,12 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const np = game.nightProgress ?? {};
         const existing: NightStepRecord = np[key] ?? { status: "pending", notes: "" };
         let players = game.players;
-        const traveler = Object.values(players).find(p => p.isTraveler && travelerNeedsFirstNight(p) &&
-          (stepKey === `travelerArrival:${p.id}:${p.actualRole}` || day === 1 && stepKey === `p:${p.id}:${p.actualRole}`));
+        // Phase 10F (v24): the Traveler-arrival coupling is participation-bound
+        // -- a step key names the ParticipantId, so a replacement occupant of
+        // the seat never completes (or inherits) another participant's arrival.
+        const traveler = Object.values(players).find(p => p.isTraveler && travelerNeedsFirstNight(p) && !!p.participantId &&
+          (stepKey === travelerArrivalStepKey(p.participantId, p.actualRole) ||
+            day === 1 && stepKey === participantStepKey(p.participantId, p.actualRole)));
         if (traveler && game.phase === "night" && game.day === day && traveler.alive && !traveler.exiled) {
           const arrival = { ...(traveler.travelerArrival ?? newTravelerArrival()), firstNightComplete: status === "done" };
           if (status === "done") arrival.completedAtNight = day;

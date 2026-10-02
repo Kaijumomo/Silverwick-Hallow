@@ -4,6 +4,7 @@ import { getTraveler } from "@/data/travelers";
 import { cloneOwned, durableProvenance, historyId, isLiveGamePhase, sameSnapshot, type MutationContext } from "./history";
 import { isInitialRevealComplete } from "./identity";
 import { currentLiveMoment } from "./lifeEvents";
+import { isParticipantRoleStepEntry } from "./nightProgress";
 import { participantRefOf } from "./participants";
 import { pruneInapplicablePrivateInfo } from "./privatePackets";
 import { BehaviorModeSchema, MutationContextInputSchema, ProvenanceSchema } from "./schemas";
@@ -664,8 +665,12 @@ export function planRoleTransaction(
   const nightProgressRemove: string[] = [];
   for (const playerId of clearProgress) {
     if (!finalOf.has(playerId) && !restarted.has(playerId)) continue;
+    // Phase 10F (v24): tonight's arrival / guided-wake steps are keyed by the
+    // participation instance (src/stores/nightProgress.ts), never the seat.
+    const participantId = game.players[playerId]?.participantId;
+    if (!participantId) continue;
     for (const key of Object.keys(game.nightProgress)) {
-      if (key.startsWith(`${game.day}:travelerArrival:${playerId}:`) || key.startsWith(`${game.day}:p:${playerId}:`)) {
+      if (isParticipantRoleStepEntry(key, game.day, participantId)) {
         if (!nightProgressRemove.includes(key)) nightProgressRemove.push(key);
       }
     }

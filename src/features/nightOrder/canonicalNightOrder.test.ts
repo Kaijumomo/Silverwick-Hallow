@@ -48,10 +48,10 @@ describe("publisher night-sheet golden procedures (pinned September 2026)", () =
     "philosopher", "snakecharmer", "witch", "cerenovus", "pithag", "fanggu", "nodashii", "vortox", "vigormortis", "barber", "sweetheart", "sage", "dreamer", "flowergirl", "towncrier", "oracle", "seamstress", "juggler", "mathematician",
   ]));
   it("BMR first night", () => expect(procedure(badMoonRising, true)).toEqual([
-    "minionInfo", "lunaticInfo:lunatic", "demonInfo", "sailor", "courtier", "godfather", "devilsadvocate", "pukka", "grandmother", "chambermaid",
+    "minionInfo", "lunaticInfo:fixture-participant-lunatic", "demonInfo", "sailor", "courtier", "godfather", "devilsadvocate", "pukka", "grandmother", "chambermaid",
   ]));
   it("BMR other night: protection, choices, simulated Demon, real deaths, resurrection, information", () => expect(procedure(badMoonRising, false)).toEqual([
-    "sailor", "courtier", "innkeeper", "gambler", "devilsadvocate", "simulated:po", "lunaticTargets:lunatic", "exorcist", "zombuul", "pukka", "shabaloth", "po", "assassin", "godfather", "gossip", "professor", "tinker", "moonchild", "grandmother", "chambermaid",
+    "sailor", "courtier", "innkeeper", "gambler", "devilsadvocate", "simulated:po", "lunaticTargets:fixture-participant-lunatic", "exorcist", "zombuul", "pukka", "shabaloth", "po", "assassin", "godfather", "gossip", "professor", "tinker", "moonchild", "grandmother", "chambermaid",
   ]));
 });
 
@@ -130,7 +130,7 @@ describe("state-sensitive and deceptive procedures", () => {
   it("King waits for dead to equal living, but informs Demon on the first night", () => {
     expect(wakes(generate(["king", "imp"], false))).toHaveLength(1);
     expect(wakes(generate(["king", "imp"], false, { imp: { alive: false } })).map(s => s.effectiveRoleId)).toEqual(["king"]);
-    expect(generate(["king", "imp"]).some(s => s.stepKey === "admin:king:king")).toBe(true);
+    expect(generate(["king", "imp"]).some(s => s.stepKey === "admin:fixture-participant-king:king")).toBe(true);
   });
   it.each([["drunk", "empath"], ["marionette", "fortuneteller"], ["lunatic", "imp"]])("%s keeps perception separate from ability and player projection", (actual, shown) => {
     const g = game([actual, "imp"], { [actual]: { shownRole: shown } });
@@ -141,7 +141,7 @@ describe("state-sensitive and deceptive procedures", () => {
     const payload = projectToSelf(g.players[actual]!, buildRegistry(all));
     expect(payload).not.toHaveProperty("actualRole");
     expect(payload?.shownRole).toBe(shown);
-    if (actual === "lunatic") expect(steps.findIndex(s => s.stepKey === "lunaticTargets:lunatic")).toBeLessThan(steps.findIndex(s => s.stepKey === "p:imp:imp"));
+    if (actual === "lunatic") expect(steps.findIndex(s => s.stepKey === "lunaticTargets:fixture-participant-lunatic")).toBeLessThan(steps.findIndex(s => s.stepKey === "p:fixture-participant-imp:imp"));
   });
   it("unconfigured deception never creates an actual-role wake or private identity", () => {
     const g = game(["drunk", "marionette", "lunatic"], Object.fromEntries(["drunk", "marionette", "lunatic"].map(r => [r, { shownRole: null }])));
@@ -162,7 +162,7 @@ describe("night reference validation", () => {
   it("missing custom instruction produces a manual check", () => {
     const script: Script = { id: "home", name: "Home", characters: [{ id: "custom", name: "Custom", type: "townsfolk", firstNight: 5 }] };
     const g = game(["custom"]);
-    expect(computeNightOrder(g.players, g.seatOrder, script, true)).toContainEqual(expect.objectContaining({ stepKey: "invalid:custom" }));
+    expect(computeNightOrder(g.players, g.seatOrder, script, true)).toContainEqual(expect.objectContaining({ stepKey: "invalid:fixture-participant-custom" }));
   });
   it("different custom characters with shared timing require manual ordering", () => {
     const script: Script = { id: "home", name: "Home", characters: ["a", "b"].map(id => ({ id, name: id, type: "townsfolk", firstNight: 5, ability: "Choose a player." })) };

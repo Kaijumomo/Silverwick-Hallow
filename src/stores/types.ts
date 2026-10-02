@@ -650,12 +650,23 @@ export type InformationDeliveryRecord = {
   /** Snapshot of the Recipient's Actual Role at the moment of delivery --
    * never re-derived from their Current State. */
   actualRole: RoleId;
+  /** Phase 10F (v24): the character ability/procedure actually PERFORMED when
+   * it differs from `actualRole` -- a simulated wake (e.g. a Drunk shown as
+   * the Empath) whose `informationActionId` belongs to this Role. Absent when
+   * the Actual Role's own ability was performed (every pre-v24 delivery).
+   * Records what was communicated; it never implies the recipient holds this
+   * Role or that any functioning ability produced Current State. */
+  performedRole?: RoleId;
   informationActionId: InformationActionId;
   /** Absent only when the moment genuinely isn't known -- never invented. */
   moment?: GameMoment;
   values: RecordedInformationValue[];
   provenance?: Provenance;
   note?: string;
+  /** Phase 10F (v24): correlation with the other records one ability
+   * resolution produced. Metadata only -- not an idempotency key, not
+   * authority, not assumed globally unique. Never invented by migration. */
+  resolutionId?: string;
 };
 
 export type GrimoireMode = "ring" | "freeRoam";
@@ -788,8 +799,11 @@ export type StorytellerLobbyRecord = {
    * at all -- malformed current-version data (including a marker older than
    * the evidence it carries) fails validation instead of being "repaired".
    * Phase 10E: the current version is 23; marker 22 receives v22 -> v23 (a
-   * Traveler's inert explicit Shown Alignment is normalized to Normal). */
-  gameSchemaVersion: 23;
+   * Traveler's inert explicit Shown Alignment is normalized to Normal).
+   * Phase 10F: the current version is 24; marker 23 receives v23 -> v24
+   * (participant-scoped Night progress; ambiguous seat-addressed progress is
+   * dropped, never reassigned). */
+  gameSchemaVersion: 24;
   code: string;
   storytellerUid: string;
   scriptId: string;
@@ -801,7 +815,10 @@ export type StorytellerLobbyRecord = {
   notes: string;
   players: Record<PlayerId, STPlayerRecord>;
   seatOrder: PlayerId[];
-  /** Keys: "${day}:${stepKey}" — e.g. "1:demonInfo", "2:p:abc123" */
+  /** Keys: "${day}:${stepKey}" — e.g. "1:demonInfo", "2:p:{participantId}:empath".
+   * Phase 10F (v24): every step ABOUT one participant is keyed by their
+   * immutable ParticipantId, never by the reusable seat (see
+   * src/stores/nightProgress.ts). */
   nightProgress: Record<string, NightStepRecord>;
   /** Pre-picked roles waiting to be dealt. ST-only — never written to public/*. */
   rolePool: RoleId[];
@@ -867,12 +884,17 @@ export type PlayerSelfRecord = {
   extraText?: string;
 };
 
+/** Phase 10F (v24): `alive` / `ghostVote` / `exiled` are public table
+ * information outside Night only. While the public phase is Night they are
+ * ABSENT (withheld) for every player -- never reconstructed from a pre-Night
+ * truth, never `false` -- and normal public Life resumes when Day begins (see
+ * projectToPublic and publicLifeStateOf). */
 export type PlayerPublicRecord = {
   id: PlayerId;
   name: string;
   seat: number;
-  alive: boolean;
-  ghostVote: boolean;
+  alive?: boolean;
+  ghostVote?: boolean;
   online: boolean;
   joinedAt: number;
   isTraveler: boolean;

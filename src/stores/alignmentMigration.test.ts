@@ -10,7 +10,7 @@ import { GAME_SCHEMA_VERSION, HistoryRecordSchema, StorytellerGamePersistedSchem
 import { detectLegacyGameVersion, hasV19LifeEvidence, hasV20Evidence, hasV23Evidence, migrateGameEntry } from "./gameMigration";
 import { correctAlignmentIntent, changeAlignmentIntent } from "./alignmentResolution";
 import { setupScript, standardRoles } from "@/test/setupFixtures";
-import { asV20, asV21, asV22, withV22Roles, withV21Reminders, withV23Alignment } from "@/test/v20Migration";
+import { asV20, asV21, asV22, withV22Roles, withV21Reminders, withV23Alignment, withV24Guided } from "@/test/v20Migration";
 import { MemoryRoomBackend } from "@/firebase/memoryBackend";
 import { createLobby } from "@/firebase/lobby";
 import { requireActiveSession } from "@/firebase/lifecycle";
@@ -85,8 +85,9 @@ describe("10E-AC-27 / AC-28: v22 -> v23 Traveler normalization", () => {
     (expected.players as Players)[zed]!.shownAlignment = null;
     (expected.players as Players)[yan]!.shownAlignment = null;
     expected.gameSchemaVersion = 23;
-    expect(copy).toEqual(expected);
-    expect(copy).toEqual(withV23Alignment(v22));
+    // Phase 10F: the chain continues through v23 -> v24.
+    expect(copy).toEqual(withV24Guided(expected));
+    expect(copy).toEqual(withV24Guided(withV23Alignment(v22)));
     expect(players[zed]!.actualAlignment).toBe("evil");
     expect(JSON.stringify(copy.history)).toBe(JSON.stringify(v22.history));
     expect(JSON.stringify(copy.informationDeliveries)).toBe(JSON.stringify(v22.informationDeliveries));
@@ -109,7 +110,8 @@ describe("10E-AC-27 / AC-28: v22 -> v23 Traveler normalization", () => {
     const normal = asV22(currentGame());
     const before = structuredClone(normal);
     migrateGameEntry(normal, 22, { kind: "canonical-only" });
-    expect(normal).toEqual({ ...before, gameSchemaVersion: 23 });
+    // Phase 10F: the chain continues through v23 -> v24.
+    expect(normal).toEqual(withV24Guided({ ...before, gameSchemaVersion: 23 }));
   });
 
   it("fail-closed: a v22 entry with a non-object player record is left unstamped and rejected", () => {
@@ -147,10 +149,10 @@ describe("10E-AC-29: per-entry migration for Current State, every Undo entry and
     const v20 = asV20(current);
     const result = migrateStoreState({ game: structuredClone(v22), undoStack: [structuredClone(current), structuredClone(v21), structuredClone(v20), structuredClone(v22)] }, 20) as { game: Raw; undoStack: Raw[] };
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(result.game).toEqual(withV23Alignment(v22));
-    expect(result.undoStack[0]).toEqual(current); // marker 23: untouched
-    expect(result.undoStack[1]).toEqual(withV23Alignment(withV22Roles(v21)));
-    expect(result.undoStack[2]).toEqual(withV23Alignment(withV22Roles(withV21Reminders(v20))));
+    expect(result.game).toEqual(withV24Guided(withV23Alignment(v22)));
+    expect(result.undoStack[0]).toEqual(current); // marker 24: untouched
+    expect(result.undoStack[1]).toEqual(withV24Guided(withV23Alignment(withV22Roles(v21))));
+    expect(result.undoStack[2]).toEqual(withV24Guided(withV23Alignment(withV22Roles(withV21Reminders(v20)))));
     expect(result.undoStack[3]).toEqual(result.game);
     for (const entry of [result.game, ...result.undoStack]) expect(StorytellerGamePersistedSchema.safeParse(entry).success).toBe(true);
   });
@@ -159,12 +161,12 @@ describe("10E-AC-29: per-entry migration for Current State, every Undo entry and
     localStorage.setItem("new-blood-st", JSON.stringify({ version: 22, state: { game: v22WithLeftovers(), undoStack: [v22WithLeftovers()] } }));
     await store.persist.rehydrate();
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(game().gameSchemaVersion).toBe(23);
+    expect(game().gameSchemaVersion).toBe(24);
     for (const id of travelerIds(game() as unknown as Raw)) expect(game().players[id]!.shownAlignment).toBeNull();
-    expect(state().undoStack[0]!.gameSchemaVersion).toBe(23);
+    expect(state().undoStack[0]!.gameSchemaVersion).toBe(24);
     state().setNotes(game().seatOrder[0]!, "x");
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(JSON.parse(localStorage.getItem("new-blood-st")!).version).toBe(23);
+    expect(JSON.parse(localStorage.getItem("new-blood-st")!).version).toBe(24);
   });
 
   async function recoverFrom(entry: Raw) {
@@ -188,7 +190,7 @@ describe("10E-AC-29: per-entry migration for Current State, every Undo entry and
     disposals.push(() => recovered.stop());
     expect(recovered.outcome).toBe("live");
     const once = structuredClone(game());
-    expect(once).toEqual(withV23Alignment(entry));
+    expect(once).toEqual(withV24Guided(withV23Alignment(entry)));
     expect(JSON.parse(JSON.stringify(once))).toEqual(JSON.parse(JSON.stringify(local.game)));
     for (const dispose of disposals.splice(0).reverse()) await dispose();
     store.setState({ game: null, lobby: null, undoStack: [], localSeq: 0, sync: null });
@@ -286,7 +288,7 @@ describe("10E-AC-30 / AC-31: v23 evidence runs first and fails closed", () => {
     expect(detectLegacyGameVersion(g)).toBe(22);
     const result = migrateStoreState({ game: structuredClone(g), undoStack: [] }, 22) as { game: Raw };
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(result.game).toEqual(withV23Alignment(g));
+    expect(result.game).toEqual(withV24Guided(withV23Alignment(g)));
   });
 
   it("the evidence is narrow: correction / resolutionId on other categories, or a plain Alignment record, is not v23 evidence", () => {
@@ -298,10 +300,10 @@ describe("10E-AC-30 / AC-31: v23 evidence runs first and fails closed", () => {
   });
 
   it("unsupported / newer markers remain rejected and are never reinterpreted", () => {
-    for (const marker of [24, "23", null, { v: 23 }]) {
+    for (const marker of [25, "24", null, { v: 24 }]) {
       const g = currentGame();
       g.gameSchemaVersion = marker;
-      expect(detectLegacyGameVersion(g)).toBe(23);
+      expect(detectLegacyGameVersion(g)).toBe(24);
       const copy = structuredClone(g);
       migrateGameEntry(copy, 13, { kind: "canonical-only" });
       expect(copy).toEqual(g);
@@ -323,7 +325,7 @@ describe("10E-AC-32: persisted round-trip", () => {
     const snapshot = JSON.parse(JSON.stringify({ game: game(), undoStack: state().undoStack }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     const saved = localStorage.getItem("new-blood-st")!;
-    expect(JSON.parse(saved).version).toBe(23);
+    expect(JSON.parse(saved).version).toBe(24);
     store.setState({ game: null, undoStack: [] });
     localStorage.setItem("new-blood-st", saved);
     await store.persist.rehydrate();

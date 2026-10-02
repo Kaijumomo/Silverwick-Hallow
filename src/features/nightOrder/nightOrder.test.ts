@@ -231,7 +231,7 @@ describe("Marionette setup is separate from team introductions", () => {
     ]);
     const steps = computeNightOrder(players, seatOrder, troubleBrewing, true);
     expect(steps.find(s => s.stepKey === "demonInfo")).toBeUndefined();
-    expect(steps.find(s => s.stepKey === "admin:p-mar:marionette")?.prompt).toContain("Marionette");
+    expect(steps.find(s => s.stepKey === "admin:fixture-participant-p-mar:marionette")?.prompt).toContain("Marionette");
   });
 
   it("demonInfo prompt does NOT mention Marionette when none are in play", () => {

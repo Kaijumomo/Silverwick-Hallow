@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { PlayerSelfRecordSchema, PublicLobbyRecordSchema } from "@/stores/schemas";
 import type { PlayerSelfRecord, PublicLobbyRecord } from "@/stores/types";
+import { publicLifeWithheld } from "@/stores/lifeState";
 import type { RoomBackend, Unsubscribe } from "./backend";
 
 export type SnapshotIssue = { path: (string | number)[]; code: string };
@@ -80,6 +81,20 @@ export function decodePublicSnapshot(raw: unknown, expectedCode?: string): Publi
   const data = complete.data;
   for (const [key, player] of Object.entries(data.players)) {
     if (key !== player.id) return invalidField("players", "id_mismatch");
+  }
+  // Phase 10F (v24, Section 10): Life State is public only outside Night.
+  // During Night every Life field is DROPPED here as well -- fail closed even
+  // if an older writer still sent it -- so no view can render a mid-Night
+  // Life change. Outside Night a record without `alive`/`ghostVote` is an
+  // incomplete projection, never "withheld".
+  if (publicLifeWithheld(data.phase)) {
+    for (const player of Object.values(data.players)) {
+      delete player.alive;
+      delete player.ghostVote;
+      delete player.exiled;
+    }
+  } else if (Object.values(data.players).some((player) => typeof player.alive !== "boolean" || typeof player.ghostVote !== "boolean")) {
+    return invalidField("players", "life_missing");
   }
   if (new Set(data.seatOrder).size !== data.seatOrder.length) return invalidField("seatOrder", "duplicate_id");
   // References can arrive before their records; don't expose a partial model.

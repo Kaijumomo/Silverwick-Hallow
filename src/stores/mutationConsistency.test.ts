@@ -525,7 +525,8 @@ describe("Phase 9R.4 (B8): night progress", () => {
 
   it("setNightStepStatus on a Traveler's first-night step is inert only when the arrival record would not change either", () => {
     const t = travelerGame("apprentice", "good", { phase: "night", day: 1, setupRolesDealt: true, setupRolesRevealed: true });
-    const step = `p:${t}:apprentice`;
+    // Phase 10F (v24): the guided wake is keyed by the participation instance.
+    const step = `p:${player(t).participantId}:apprentice`;
     const done = baseline();
     state().setNightStepStatus(1, step, "done");
     expectOneMutation(done);
@@ -581,7 +582,7 @@ describe("Phase 9R.4 (B8): night progress", () => {
 
   it("clearNightProgress(day) still resets a Traveler first night completed on that day even with no step key left", () => {
     const t = travelerGame("apprentice", "good", { phase: "night", day: 1, setupRolesDealt: true, setupRolesRevealed: true });
-    state().setNightStepStatus(1, `p:${t}:apprentice`, "done");
+    state().setNightStepStatus(1, `p:${player(t).participantId}:apprentice`, "done");
     store.setState({ game: { ...game(), nightProgress: {} } });
     const before = baseline();
     state().clearNightProgress(1);

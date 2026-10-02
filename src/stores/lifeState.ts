@@ -79,12 +79,28 @@ export function publicLifeOf(player: LifeFields): Pick<PlayerPublicRecord, "aliv
   }
 }
 
-/** Display state of an already-projected public record. */
-export function publicLifeStateOf(record: Pick<PlayerPublicRecord, "alive" | "ghostVote" | "exiled">): LifeState {
+/**
+ * Phase 10F (v24, Section 10): whether public/player-town projection withholds
+ * Life State in `phase`. True exactly during Night -- a guided Night ability
+ * may change Life mid-Night, and the table learns of it at Day. Never
+ * reconstructs a pre-Night state; the Storyteller's own views are unaffected.
+ */
+export const publicLifeWithheld = (phase: string | undefined): boolean => phase === "night";
+
+/** Display state of an already-projected public record, or `null` when its Life
+ * State is withheld (Phase 10F: a Night projection carries no `alive`). Callers
+ * render a withheld record neutrally -- no dead/alive text, label, class,
+ * shroud or vote token -- so nothing about Life is implied. */
+export function publicLifeStateOf(record: Pick<PlayerPublicRecord, "alive" | "ghostVote" | "exiled">): LifeState | null {
+  if (typeof record.alive !== "boolean") return null;
   if (record.alive) return "alive";
   if (record.exiled === true) return record.ghostVote ? "exiledVote" : "exiledVoteUsed";
   return record.ghostVote ? "deadVote" : "deadVoteUsed";
 }
+
+/** Accessible-name suffix for a withheld public Life State -- identical for
+ * every player, so it reveals nothing. */
+export const LIFE_WITHHELD_LABEL = "life not shown during the night";
 
 export const isDeadState = (state: LifeState): boolean => state !== "alive";
 export const isExiledState = (state: LifeState): boolean => state === "exiledVote" || state === "exiledVoteUsed";
@@ -121,6 +137,6 @@ export const LIFE_ANOMALY_LABEL: Record<LifeAnomaly, string> = {
 
 /** Accessible name for a seat: "Alice, seat 3, dead, vote available". The
  * Storyteller-only `needsCheck` suffix is added only when asked for. */
-export function lifeAccessibleLabel(name: string, seatNumber: number, state: LifeState, needsCheck = false): string {
-  return `${name || "Unnamed player"}, seat ${seatNumber}, ${LIFE_STATE_LABEL[state]}${needsCheck ? ", needs check" : ""}`;
+export function lifeAccessibleLabel(name: string, seatNumber: number, state: LifeState | null, needsCheck = false): string {
+  return `${name || "Unnamed player"}, seat ${seatNumber}, ${state ? LIFE_STATE_LABEL[state] : LIFE_WITHHELD_LABEL}${needsCheck ? ", needs check" : ""}`;
 }
