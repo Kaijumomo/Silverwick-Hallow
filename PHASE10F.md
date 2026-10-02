@@ -549,3 +549,124 @@ Before Luna handoff:
 - clean review checkpoint.
 
 Phase 10F does not close until Luna/Astra/Sol closure and integration complete.
+
+
+## 22. Luna rules-neutral verification adjudication — 2026-10-02
+
+Luna independently verified exact checkpoint `b1d6bd7f071c8f5195c5f440abcaa43441446aaf` in an isolated clean worktree and returned **REVISE**. The full required gate passed (typecheck; 3,474 normal tests across 134 files; 201/201 Firebase emulator tests; production build; both diff checks), and the v24 migration, Information Delivery extraction, Life/`abilityUsed` ownership, Night Life withholding, Rules Query purity and one-commit coordinator were mechanically supported.
+
+Sol accepts seven findings for targeted remediation before the proof-character rules matrix is frozen.
+
+### SOL-10F-L1 — Jinx activation uses authoritative represented characters, not script membership — HIGH
+
+The current rules-neutral jinx gate activates a canonical jinx when both ids merely appear on the script. This is too broad and conflicts with the low-friction modifier rule.
+
+Freeze:
+
+- a canonical jinx is considered potentially active only when both jinx endpoints are **currently represented in authoritative game state**;
+- representation means at least one current participant whose `actualRole` is that endpoint and whose resolved definition passes the existing canonical ownership boundary;
+- dead participants still represent their current character;
+- a Role change immediately changes which jinx endpoints are represented;
+- an unassigned/script-only character does not activate a jinx;
+- a homebrew/custom definition reusing an official id never activates the canonical jinx;
+- once active, an unverified jinx still gates only the affected character evaluation and remains Storyteller judgment/manual until its semantics are verified.
+
+Fabled/Loric activation continues to come from authoritative `game.fabled` / `game.lorics`.
+
+### SOL-10F-L2 — Guided workspace renders the declared typed input contract — HIGH
+
+The workspace must support every `AbilityInputRequirement` shape already declared by the semantics contract rather than coercing several kinds to text or one participant.
+
+Freeze:
+
+- `participant`: render exactly the declared `count` (default 1), capture `ParticipantBinding` for each, enforce `distinct` / `notSelf` / alive/dead constraints consistently with coordinator validation;
+- `character`: emit `{ kind: "character", roleIds }`, using a character picker appropriate to the active script/registry;
+- `alignment`: emit the typed Alignment value;
+- `number`, `boolean`, `text`: preserve their typed values;
+- Storyteller-judgment requirements use the **requirement's own kind and cardinality**, not an unconditional boolean checkbox;
+- player choice, Storyteller choice and Storyteller judgment remain visually distinct;
+- no UI coercion may create a payload different from the declared semantics type.
+
+### SOL-10F-L3 — Day ability entry point — HIGH
+
+Phase 10F includes Day-timed / Storyteller-invoked ability shapes and the proof set includes Slayer. The guided engine cannot be Night-only.
+
+Add a Storyteller-private Day ability entry point using the **same AbilityWorkspace / coordinator**, not a second resolver. Preferred product boundary:
+
+- Player Drawer exposes a progressively disclosed **Abilities / Use ability…** action during live play;
+- during Day it can launch verified Day semantics for that participant;
+- unsupported/unmodeled behavior may launch the same Manual workspace explicitly;
+- fingerprinting, ParticipantId safety, confirmation policy, Privacy Mode and one-commit behavior are identical to Night;
+- do not duplicate character mechanics or build a separate Day rules engine.
+
+Night Order remains the primary Night dashboard.
+
+### SOL-10F-L4 — malformed fingerprint is `invalid`, changed valid fingerprint is `stale` — MEDIUM
+
+Validate the fingerprint's runtime structure before stale comparison.
+
+- malformed/missing required fingerprint content → `invalid`;
+- a structurally valid fingerprint whose participant/Role/perception/phase/day/ability-use/step no longer matches → `stale`.
+
+Do not classify malformed caller input as stale state.
+
+### SOL-10F-L5 — information constraints cannot silently skip Player-valued information — MEDIUM
+
+A verified information constraint must never silently bypass a matching Player-valued delivery.
+
+Implement one of these fail-safe shapes:
+
+1. preferred: define a typed normalized information-constraint value union and compare Player-valued candidates by durable/current `ParticipantId` bindings (including cardinality/order as explicitly represented by the constraint); or
+2. if no current verified hook needs this shape, explicitly return `unsupported` / judgment for a Player-valued constraint until a typed comparator exists.
+
+The existing silent `continue` is forbidden.
+
+### SOL-10F-L6 — prose-derived `oncePerGame` is not mechanical authority — MEDIUM
+
+The legacy canonical adapter currently derives `RoleDef.oncePerGame` from ability prose and Night Order uses it to suppress a row. That violates the 10F rule that ability prose is not executable mechanics.
+
+Freeze:
+
+- 10F usage behavior comes from `AbilityDescriptor.usage` only;
+- generic Night Order must not suppress/authorize an ability because prose-derived `roleDef.oncePerGame` is true;
+- the legacy field may remain as backward-compatible/reference metadata if other non-mechanical consumers require it, but no 10F mechanical decision may read it;
+- unsupported/unverified characters remain visible/manual rather than silently omitted because of prose parsing.
+
+Audit all production reads of `oncePerGame`.
+
+### SOL-10F-L7 — strengthen Role/Alignment writer guards — MEDIUM
+
+Luna's mutation proof showed the older Role writer detector misses an ordinary semicolon-terminated object-literal write.
+
+Strengthen the guard so equivalent direct writes are caught regardless of ordinary `}` / `};` formatting, and add planted self-checks that would fail for:
+
+- `const next = { ...p, actualRole: "x" };`
+- direct property assignment;
+- bracket assignment;
+- delete;
+- the analogous `actualAlignment` forms.
+
+Keep the reviewed false-positive allowlists narrow. No current production bypass was found.
+
+### Accepted Luna watchpoints
+
+- `setAbilityUsed` live-only compatibility: **accepted**; no Setup production dependency exists.
+- Grimoire picking only outside the modal workspace: **accepted** for 10F because the complex workspace has an accessible picker fallback.
+- Fabled/Loric structural scope table: **accepted as safety-gating metadata only**; it is not semantic authority and must not produce deterministic BOTC outcomes.
+- v24 migration / Night Life withholding / Information Delivery / one-commit coordinator: no Sol remediation from this Luna pass.
+
+### Remediation gate
+
+Before a Luna re-verification checkpoint:
+
+- remediate SOL-10F-L1…L7;
+- add targeted regressions and mutation/self-checks for each;
+- run typecheck;
+- full normal suite;
+- Firebase emulator suite;
+- production build;
+- `git diff --check` and baseline-range `git diff --check`;
+- keep `CANONICAL_ABILITY_SEMANTICS` production-empty;
+- do not implement proof-character rules yet.
+
+Only after Luna re-verifies this rules-neutral foundation may Sol freeze the authoritative proof-character rules matrix.
