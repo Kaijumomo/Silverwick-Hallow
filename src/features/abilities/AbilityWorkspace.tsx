@@ -12,6 +12,7 @@ import {
   type AbilityResolutionRequest,
   type ParticipantBinding,
 } from "@/stores/abilityResolution";
+import type { InvocationPath } from "@/abilities/invocation";
 import type { AbilityDescriptor, AbilityInputRequirement, AbilityInputValue, AbilitySemanticsRegistry } from "@/abilities/semantics";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import type { Alignment, Script, StorytellerLobbyRecord } from "@/stores/types";
@@ -37,6 +38,9 @@ export type WorkspaceTarget = {
   actorId: string;
   roleId: string;
   roleName: string;
+  /** SOL-10F-L3-R1: the entry point that opened the workspace; a guided
+   * request carries it and the coordinator enforces its eligibility. */
+  invocationPath: InvocationPath;
   step?: { day: number; stepKey: string };
 };
 
@@ -116,7 +120,7 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
   };
 
   const request: AbilityResolutionRequest | null = !fingerprint ? null : mode === "guided"
-    ? { mode: "guided", fingerprint, roleId: target.roleId, inputs, judgments, completeStep }
+    ? { mode: "guided", invocationPath: target.invocationPath, fingerprint, roleId: target.roleId, inputs, judgments, completeStep }
     : { mode: "manual", fingerprint, roleId: target.roleId, outcome: manualOutcome(), reason, completeStep };
   const planned = request ? planAbilityResolution(game, request, env) : null;
   const stale = !fingerprint || (planned && !planned.ok && planned.code === "stale");

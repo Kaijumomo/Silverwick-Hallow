@@ -1,34 +1,30 @@
 import { useMemo, useState } from "react";
 import { buildRegistry } from "@/data/roleRegistry";
-import { CANONICAL_ABILITY_SEMANTICS, type AbilityDescriptor, type AbilitySemanticsRegistry, type AbilityTiming } from "@/abilities/semantics";
+import { CANONICAL_ABILITY_SEMANTICS, type AbilitySemanticsRegistry } from "@/abilities/semantics";
 import { selectScriptById, useStorytellerStore } from "@/stores/storytellerStore";
 import { wakeIdentity } from "@/stores/wakeIdentity";
-import type { STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
+import type { STPlayerRecord } from "@/stores/types";
 import { AbilityWorkspace } from "./AbilityWorkspace";
-import { stepAbility } from "./abilityUi";
+import { pathAbility } from "./abilityUi";
 
 /**
  * Phase 10F (SOL-10F-L3): the Storyteller-private ability entry point for a
- * participant outside the Night Order -- the Day (e.g. a public Day claim), and
- * any Live Play moment. Progressive disclosure in the Player Drawer:
- * Abilities -> Use ability... -> the SAME AbilityWorkspace, the SAME
+ * participant outside the Night Order. Progressive disclosure in the Player
+ * Drawer: Abilities -> Use ability... -> the SAME AbilityWorkspace, the SAME
  * coordinator and the SAME one-commit resolveAbility. There is no second
- * (Day) resolver: timing applicability comes from the verified descriptor, and
- * anything unmodeled goes to the explicit Manual path.
+ * (Day) resolver.
+ *
+ * SOL-10F-L3-R1: a guided ability is offered here only when the shared
+ * invocation-eligibility contract (src/abilities/invocation.ts, the one the
+ * coordinator enforces for the "dayEntry" path) admits it: Day phase, explicit
+ * `day` timing, a `publicClaim` / `procedure` invocation. Triggered / passive
+ * timing and invocation `none` are never offered; Night abilities run from the
+ * Night Order. Anything else goes to the explicit Manual path, which stays
+ * available in every live phase.
  *
  * Rendered only inside the drawer body, which Privacy Mode replaces with a
  * privacy shell -- so the open workspace and every draft unmount with it.
  */
-
-/** Descriptor timings that may act in the current Live Play phase. */
-export function timingsForPhase(game: Pick<StorytellerLobbyRecord, "phase" | "day">): AbilityTiming[] {
-  if (game.phase === "day") return ["day", "triggered", "passive"];
-  if (game.phase === "night") return [game.day === 1 ? "firstNight" : "otherNight", "triggered", "passive"];
-  return [];
-}
-
-export const actsNow = (descriptor: AbilityDescriptor, game: Pick<StorytellerLobbyRecord, "phase" | "day">): boolean =>
-  descriptor.timing.some((timing) => timingsForPhase(game).includes(timing));
 
 type Props = {
   player: STPlayerRecord;
@@ -48,11 +44,9 @@ export function AbilityEntry({ player, semantics = CANONICAL_ABILITY_SEMANTICS }
   const wake = wakeIdentity(player, registry);
   const roleId = wake?.simulated ? wake.shownRoleId : player.actualRole;
   const roleName = registry.get(roleId)?.name ?? roleId;
-  const ability = stepAbility(roleId, registry, semantics);
-  const descriptor = ability.kind === "guided" && actsNow(ability.descriptor, game) ? ability.descriptor : null;
-  const unavailable = ability.kind === "guided" && !descriptor
-    ? `${roleName} has no verified ${game.phase === "day" ? "Day" : "Night"} ability.`
-    : ability.kind === "manual" ? ability.reason : null;
+  const ability = pathAbility(roleId, registry, semantics, "dayEntry", game);
+  const descriptor = ability.kind === "guided" ? ability.descriptor : null;
+  const unavailable = ability.kind === "manual" ? `${roleName}: ${ability.reason}` : null;
 
   return (
     <section className="drawer-section ability-entry">
@@ -69,7 +63,7 @@ export function AbilityEntry({ player, semantics = CANONICAL_ABILITY_SEMANTICS }
       </details>
       {open && (
         <AbilityWorkspace game={game} script={script} registry={registry} semantics={semantics}
-          target={{ actorId: player.id, roleId, roleName }}
+          target={{ actorId: player.id, roleId, roleName, invocationPath: "dayEntry" }}
           descriptor={open === "guided" ? descriptor : null}
           manualReason={open === "manual" ? (unavailable ?? "") : ""}
           onClose={() => setOpen(null)}

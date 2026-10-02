@@ -17,7 +17,7 @@ import { createRulesQuery } from "@/stores/rulesQuery";
 import { lifeEventsForParticipantAt } from "@/stores/lifeEvents";
 import { AbilityWorkspace, type WorkspaceTarget } from "@/features/abilities/AbilityWorkspace";
 import { participantAllowed } from "@/features/abilities/RequirementInput";
-import { bindingOf, seatedParticipants, stepAbility, useTargetPicker, type StepAbility } from "@/features/abilities/abilityUi";
+import { bindingOf, pathAbility, seatedParticipants, useTargetPicker, type StepAbility } from "@/features/abilities/abilityUi";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -93,7 +93,7 @@ function InlineSimpleAbility({ step, day, descriptor, guided, onEscalate }: {
     const inputs = { [input.id]: { kind: "participant" as const, participants: [bindingOf(chosen)] } };
     const fingerprint = captureFingerprint(game, step.playerId, { day, stepKey: step.stepKey });
     if (!fingerprint) { setError("This player is no longer seated."); return; }
-    const request = { mode: "guided" as const, fingerprint, roleId: step.effectiveRoleId, inputs, completeStep: true };
+    const request = { mode: "guided" as const, invocationPath: "nightOrder" as const, fingerprint, roleId: step.effectiveRoleId, inputs, completeStep: true };
     const planned = planAbilityResolution(game, request, { script: guided.script, registry: guided.registry, semantics: guided.semantics });
     // Anything beyond the simple class escalates to the workspace (choices
     // kept): a judgment, or a consequence that needs a preview.
@@ -342,7 +342,9 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
     if (tonight.status === "known" && tonight.events.some((e) => e.kind === "death")) chips.push("died tonight");
     return chips;
   };
-  const abilityOf = (step: NightStep): StepAbility | null => step.kind === "player" ? stepAbility(step.effectiveRoleId, registry, semantics) : null;
+  // SOL-10F-L3-R1: guided only when the shared invocation-eligibility contract
+  // admits the descriptor on the ordinary Night Order tonight.
+  const abilityOf = (step: NightStep): StepAbility | null => step.kind === "player" ? pathAbility(step.effectiveRoleId, registry, semantics, "nightOrder", game) : null;
   const policy = evilInformationPolicy(game.seatOrder.map(id => game.players[id]!).filter(Boolean), registry, game);
   const setupPlayers = game.seatOrder.filter(id => {
     const p = game.players[id];
@@ -397,7 +399,7 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
               <StepCard step={step} record={progress[`${game.day}:${step.stepKey}`]} day={game.day}
                 ability={abilityOf(step)} chips={chipsFor(step)} guided={guided} lastResolution={lastResolution}
                 onOpenWorkspace={step.kind === "player" ? (initialInputs) => setWorkspace({
-                  target: { actorId: step.playerId, roleId: step.effectiveRoleId, roleName: step.effectiveRoleName, step: { day: game.day, stepKey: step.stepKey } },
+                  target: { actorId: step.playerId, roleId: step.effectiveRoleId, roleName: step.effectiveRoleName, invocationPath: "nightOrder", step: { day: game.day, stepKey: step.stepKey } },
                   ability: abilityOf(step)!, ...(initialInputs ? { initialInputs } : {}),
                 }) : undefined} />
               {step.kind === "global" && step.setupRecipientIds?.filter(id => setupPlayers.includes(id)).map(id => <details className="information-review" key={id}>

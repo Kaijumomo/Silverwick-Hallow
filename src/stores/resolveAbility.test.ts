@@ -111,7 +111,7 @@ describe("10F-AC-08 / AC-26: synchronous final stale revalidation", () => {
   it("a workflow opened before another change is refused at commit, never applied against the new state", () => {
     live();
     const fingerprint = captureFingerprint(game(), "p0")!;
-    const request = { mode: "guided" as const, fingerprint, roleId: "monk", inputs: { target: { kind: "participant" as const, participants: [bind("p2")] } } };
+    const request = { mode: "guided" as const, invocationPath: "nightOrder" as const, fingerprint, roleId: "monk", inputs: { target: { kind: "participant" as const, participants: [bind("p2")] } } };
     // Something else changes the actor in between (e.g. a Role correction).
     store.setState({ game: { ...game(), players: { ...game().players, p0: { ...game().players.p0!, shownRole: "chef" } } } });
     const b = baseline();
@@ -121,7 +121,7 @@ describe("10F-AC-08 / AC-26: synchronous final stale revalidation", () => {
 
   it("seat reuse between opening and commit refuses the chosen target", () => {
     live();
-    const request = { mode: "guided" as const, fingerprint: captureFingerprint(game(), "p0")!, roleId: "monk", inputs: { target: { kind: "participant" as const, participants: [bind("p2")] } } };
+    const request = { mode: "guided" as const, invocationPath: "nightOrder" as const, fingerprint: captureFingerprint(game(), "p0")!, roleId: "monk", inputs: { target: { kind: "participant" as const, participants: [bind("p2")] } } };
     store.setState({ game: { ...game(), players: { ...game().players, p2: { ...game().players.p2!, participantId: "a-new-person" } } } });
     const b = baseline();
     expect(state().resolveAbility(request, FIXTURE_SEMANTICS)).toMatchObject({ ok: false, code: "stale" });
@@ -134,7 +134,7 @@ describe("10F-AC-08 / AC-26: synchronous final stale revalidation", () => {
     const b = baseline();
     // SOL-10F-L1: the script carries the Monk's jinx partners, but no partner
     // is REPRESENTED, so the store's modifier gate does not ask.
-    const result = state().resolveAbility({ mode: "guided", fingerprint: captureFingerprint(game(), "p0", { day: 2, stepKey })!, roleId: "monk",
+    const result = state().resolveAbility({ mode: "guided", invocationPath: "nightOrder", fingerprint: captureFingerprint(game(), "p0", { day: 2, stepKey })!, roleId: "monk",
       inputs: { target: { kind: "participant", participants: [bind("p2")] } }, completeStep: true }, FIXTURE_SEMANTICS);
     expect(result).toMatchObject({ ok: true, changed: true });
     expect(state().undoStack).toHaveLength(b.undo.length + 1);
@@ -147,7 +147,7 @@ describe("10F-AC-08 / AC-26: synchronous final stale revalidation", () => {
     live();
     // Seat p5 now holds the canonical Leviathan: the Leviathan / Monk jinx is active.
     store.setState({ game: { ...game(), players: { ...game().players, p5: { ...game().players.p5!, actualRole: "leviathan" } } } });
-    const request = () => ({ mode: "guided" as const, fingerprint: captureFingerprint(game(), "p0")!, roleId: "monk",
+    const request = () => ({ mode: "guided" as const, invocationPath: "nightOrder" as const, fingerprint: captureFingerprint(game(), "p0")!, roleId: "monk",
       inputs: { target: { kind: "participant" as const, participants: [bind("p2")] } } });
     const b = baseline();
     expect(state().resolveAbility(request(), FIXTURE_SEMANTICS)).toMatchObject({ ok: false, code: "needsInput",
@@ -160,7 +160,7 @@ describe("10F-AC-08 / AC-26: synchronous final stale revalidation", () => {
   it("production has no verified semantics yet: a guided request is unsupported and points to Manual", () => {
     live();
     const b = baseline();
-    expect(state().resolveAbility({ mode: "guided", fingerprint: captureFingerprint(game(), "p0")!, roleId: "monk",
+    expect(state().resolveAbility({ mode: "guided", invocationPath: "nightOrder", fingerprint: captureFingerprint(game(), "p0")!, roleId: "monk",
       inputs: { target: { kind: "participant", participants: [bind("p2")] } } })).toMatchObject({ ok: false, code: "unsupported" });
     expectInert(b);
   });

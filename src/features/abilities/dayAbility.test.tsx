@@ -76,7 +76,7 @@ describe("SOL-10F-L3: Day ability entry through the same workspace / coordinator
     render(<Entry id="p2" />); // the Monk fixture is otherNight-only
     openAbilities();
     expect(screen.queryByRole("button", { name: /Use ability/ })).toBeNull();
-    expect(screen.getByText("Monk has no verified Day ability.")).toBeInTheDocument();
+    expect(screen.getByText("Monk: This ability does not act during the Day.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Resolve manually / unmodeled interaction" })).toBeInTheDocument();
   });
 

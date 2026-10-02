@@ -46,7 +46,7 @@ describe("SOL-10F-L6: oncePerGame authority", () => {
 
   it("a VERIFIED descriptor with usage oncePerGame is notApplicable once used (descriptor authority)", () => {
     const g = game("day");
-    const result = planAbilityResolution(g, { mode: "guided", fingerprint: captureFingerprint(g, "p1")!, roleId: "slayer",
+    const result = planAbilityResolution(g, { mode: "guided", invocationPath: "dayEntry", fingerprint: captureFingerprint(g, "p1")!, roleId: "slayer",
       inputs: { target: { kind: "participant", participants: [{ playerId: "p3", participantId: g.players.p3!.participantId! }] } } },
     { script, registry, semantics: FIXTURE_SEMANTICS, modifiers: [] });
     expect(result).toMatchObject({ ok: false, code: "notApplicable" });

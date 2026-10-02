@@ -56,7 +56,9 @@ const env = (over: Partial<AbilityEnvironment> = {}): AbilityEnvironment =>
 /** The game's own active modifiers (its Fabled / Lorics and represented jinxes). */
 const fabledOf = (g: StorytellerLobbyRecord) => env({ modifiers: activeModifiers(g, registry) });
 function guided(g: StorytellerLobbyRecord, actor: string, roleId: string, inputs: AbilityInputs = {}, extra: Partial<AbilityResolutionRequest> = {}): AbilityResolutionRequest {
-  return { mode: "guided", fingerprint: captureFingerprint(g, actor)!, roleId, inputs, ...extra } as AbilityResolutionRequest;
+  // SOL-10F-L3-R1: the generic path for the phase (Night Order / Day entry).
+  const invocationPath = g.phase === "day" ? "dayEntry" : "nightOrder";
+  return { mode: "guided", invocationPath, fingerprint: captureFingerprint(g, actor)!, roleId, inputs, ...extra } as AbilityResolutionRequest;
 }
 const deepFreeze = <T,>(value: T): T => {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
@@ -474,7 +476,7 @@ describe("SOL-10F-L1: jinx activation uses authoritative REPRESENTED canonical c
 
 describe("SOL-10F-L4: malformed fingerprint = invalid; well-formed but changed = stale", () => {
   const base = () => { const g = game(); return { g, fp: captureFingerprint(g, "p0")! }; };
-  const request = (fingerprint: unknown) => ({ mode: "guided", fingerprint, roleId: "monk", inputs: {} }) as never;
+  const request = (fingerprint: unknown) => ({ mode: "guided", invocationPath: "nightOrder", fingerprint, roleId: "monk", inputs: {} }) as never;
 
   it.each([
     ["missing", undefined],

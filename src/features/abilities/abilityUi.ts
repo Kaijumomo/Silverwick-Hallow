@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { invocationEligibility, type GameMoment, type InvocationPath } from "@/abilities/invocation";
 import { resolveAbilitySemantics, type AbilityDescriptor, type AbilitySemanticsRegistry, type InputSource } from "@/abilities/semantics";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { effectDefinitionOf } from "@/stores/effectRegistry";
@@ -33,6 +34,20 @@ export function stepAbility(roleId: string, registry: RoleRegistry, semantics: A
   if (resolved.kind === "supported") return { kind: "guided", descriptor: resolved.descriptor };
   if (resolved.kind === "homebrew") return { kind: "manual", reason: `${resolved.role.name} is not a verified official character.` };
   return { kind: "manual", reason: "Silverwick has no verified rules for this ability yet." };
+}
+
+/**
+ * SOL-10F-L3-R1: how a participant's ability resolves through ONE generic entry
+ * point at the current Game Moment -- guided only when canonical ownership,
+ * verified semantics AND the shared invocation-eligibility contract (the same
+ * one the coordinator enforces) all allow it; otherwise the Manual path with
+ * the reason.
+ */
+export function pathAbility(roleId: string, registry: RoleRegistry, semantics: AbilitySemanticsRegistry, path: InvocationPath, moment: GameMoment): StepAbility {
+  const ability = stepAbility(roleId, registry, semantics);
+  if (ability.kind !== "guided") return ability;
+  const eligibility = invocationEligibility(ability.descriptor, path, moment);
+  return eligibility.eligible ? ability : { kind: "manual", reason: eligibility.reason };
 }
 
 export const bindingOf = (player: Pick<STPlayerRecord, "id" | "participantId">): ParticipantBinding =>

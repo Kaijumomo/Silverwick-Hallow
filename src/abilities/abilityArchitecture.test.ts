@@ -9,7 +9,9 @@
 //  - semantics are resolved ONLY through the canonical ownership gate;
 //  - derived Effect applicability is never written back;
 //  - evaluators / Rules Query are pure;
-//  - public / self projections gain no 10F field.
+//  - public / self projections gain no 10F field;
+//  - SOL-10F-L3-R1: ability timing / invocation is interpreted ONLY by the
+//    shared invocation-eligibility contract (abilities/invocation.ts).
 // Traceability: 10F-AC-13, AC-20, AC-24, AC-28, AC-33, AC-34.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
@@ -43,6 +45,7 @@ function productionSources(dir = SRC): string[] {
 
 /** The generic 10F rules / workflow modules. */
 const GENERIC = [
+  "abilities/invocation.ts",
   "stores/abilityResolution.ts",
   "abilities/semantics.ts",
   "features/abilities/abilityUi.ts",
@@ -80,7 +83,7 @@ describe("10F architecture guards", () => {
   });
 
   it("Rules Query and ability modules are pure: no store, clock, randomness or I/O", () => {
-    for (const module of ["stores/rulesQuery.ts", "abilities/modifiers.ts", "abilities/semantics.ts", "abilities/coverage.ts"]) {
+    for (const module of ["stores/rulesQuery.ts", "abilities/modifiers.ts", "abilities/semantics.ts", "abilities/coverage.ts", "abilities/invocation.ts"]) {
       const code = read(module);
       for (const forbidden of [/useStorytellerStore/, /Math\.random/, /Date\.now/, /new Date\b/, /localStorage/, /\bfetch\(/, /firebase/i]) {
         expect(code, `${module} ${forbidden}`).not.toMatch(forbidden);
@@ -107,6 +110,16 @@ describe("10F architecture guards", () => {
   it("evaluators are pure functions of their context (fixtures included): no store / clock / randomness", () => {
     const fixtures = readFileSync(join(SRC, "test/abilityFixtures.ts"), "utf8");
     for (const forbidden of [/useStorytellerStore/, /Math\.random/, /Date\.now/, /\.reminders\b/]) expect(fixtures).not.toMatch(forbidden);
+  });
+
+  it("SOL-10F-L3-R1: only the shared invocation contract interprets descriptor timing / invocation; UI and coordinator call it", () => {
+    const readers = productionSources().filter((module) => /\.(timing|invocation)\b/.test(read(module)));
+    expect(readers.sort()).toEqual(["abilities/invocation.ts", "stores/informationDelivery.ts"]);
+    // informationDelivery.ts reads an Information ACTION's timing (a different type), never an ability descriptor's.
+    expect(read("stores/informationDelivery.ts").match(/[\w.]+\.(timing|invocation)\b/g)).toEqual(["action.timing"]);
+    for (const module of ["stores/abilityResolution.ts", "features/abilities/abilityUi.ts"]) expect(read(module), module).toMatch(/\binvocationEligibility\(/);
+    for (const module of ["features/abilities/AbilityEntry.tsx", "features/nightOrder/NightOrderPanel.tsx"]) expect(read(module), module).toMatch(/\bpathAbility\(/);
+    expect(read("stores/abilityResolution.ts")).not.toMatch(/timingAllows/);
   });
 
   it("production semantics are deliberately empty until authoritative rules verification", () => {

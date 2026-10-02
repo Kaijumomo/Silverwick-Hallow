@@ -11,6 +11,7 @@ import {
   type InformationConstraint,
   type InformationConstraintValue,
 } from "@/abilities/semantics";
+import { invocationEligibility, isInvocationPath, type InvocationPath } from "@/abilities/invocation";
 import { activeModifiers, type ModifierDefinition } from "@/abilities/modifiers";
 import { applyAlignmentPlan, defaultAlignmentIds, planAlignmentTransaction, type AlignmentIdSource, type AlignmentIntent } from "./alignmentResolution";
 import { applyEffectPlan, planEffectTransaction, type EffectIdSource, type EffectIntent } from "./effectResolution";
@@ -123,6 +124,11 @@ export type AbilityWorkflowFingerprint = {
 export type GuidedAbilityRequest = {
   mode: "guided";
   fingerprint: AbilityWorkflowFingerprint;
+  /** SOL-10F-L3-R1: the generic entry point this guided resolution is invoked
+   * through -- the ordinary Night Order or the Day entry. Runtime-validated;
+   * the coordinator applies the shared invocation-eligibility contract
+   * (src/abilities/invocation.ts) for exactly this path. */
+  invocationPath: InvocationPath;
   /** The Role whose ability/procedure is performed (the wake identity). */
   roleId: RoleId;
   inputs: AbilityInputs;
@@ -540,18 +546,6 @@ function constraintAllows(allowed: InformationConstraintValue, delivered: Record
 // Guided evaluation
 // ---------------------------------------------------------------------------
 
-function timingAllows(descriptor: AbilityDescriptor, game: StorytellerLobbyRecord): boolean {
-  return descriptor.timing.some((timing) => {
-    switch (timing) {
-      case "firstNight": return game.phase === "night" && game.day === 1;
-      case "otherNight": return game.phase === "night" && game.day > 1;
-      case "day": return game.phase === "day";
-      case "triggered": case "passive": return game.phase === "night" || game.phase === "day";
-      case "setup": return false; // Setup composition stays Setup-owned (Section 11)
-    }
-  });
-}
-
 /** Structural validation of every declared input. Missing -> needsInput;
  * malformed -> invalid; stale binding -> stale; violated constraint -> illegal. */
 function checkInputs(game: StorytellerLobbyRecord, descriptor: AbilityDescriptor, actor: ParticipantBinding, inputs: AbilityInputs): AbilityRefusal | null {
@@ -625,6 +619,7 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
 
   // --- Guided ----------------------------------------------------------------
   if (!isObject(request.fingerprint)) return refuse("invalid", "A guided resolution needs the workflow it was opened from.");
+  if (!isInvocationPath(request.invocationPath)) return refuse("invalid", "A guided resolution must name its invocation path (the Night Order or the Day entry).");
   const actor = boundParticipant(game, request.fingerprint.actor);
   if (!actor) return refuse("stale", "The player in this seat changed since this workflow opened.");
   const semantics = resolveAbilitySemantics(request.roleId, environment.registry, environment.semantics ?? CANONICAL_ABILITY_SEMANTICS);
@@ -638,7 +633,10 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   const simulated = !performsActual && wake?.simulated === true && wake.shownRoleId === request.roleId;
   if (!performsActual && !simulated) return refuse("invalid", "That is not this player's ability.");
 
-  if (!timingAllows(descriptor, game)) return refuse("notApplicable", "This ability does not act now.");
+  // SOL-10F-L3-R1: the SAME timing + invocation contract the entry points use;
+  // a crafted request cannot reach an ability its path may not invoke.
+  const eligibility = invocationEligibility(descriptor, request.invocationPath, game);
+  if (!eligibility.eligible) return refuse("notApplicable", eligibility.reason);
   if (descriptor.usage.kind === "oncePerGame" && actor.abilityUsed && !simulated) return refuse("notApplicable", "This ability has already been used.");
 
   const actorBinding = { playerId: actor.id, participantId: actor.participantId! };

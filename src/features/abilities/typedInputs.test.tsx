@@ -68,7 +68,7 @@ function open(descriptor: AbilityDescriptor, actorId: string) {
   function Host() {
     const current = store((s) => s.game)!;
     return <AbilityWorkspace game={current} script={script} registry={registry} semantics={SEMANTICS} descriptor={descriptor} manualReason=""
-      target={{ actorId, roleId: descriptor.roleId, roleName: descriptor.roleId }} onClose={() => {}} onResolved={() => {}} />;
+      target={{ actorId, roleId: descriptor.roleId, roleName: descriptor.roleId, invocationPath: "nightOrder" }} onClose={() => {}} onResolved={() => {}} />;
   }
   render(<Host />);
   return screen.getByRole("dialog");
