@@ -21,7 +21,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { stripCommentsForGuard as stripComments, writePatterns } from "@/test/writerGuard";
+import { enclosingUnitFor, stripCommentsForGuard as stripComments, writePatterns } from "@/test/writerGuard";
 
 const SRC = resolve(__dirname, "..");
 const FIELD = "actualAlignment";
@@ -54,16 +54,7 @@ function writeLines(source: string): number[] {
   }
   return [...lines].sort((a, b) => a - b);
 }
-function enclosingUnit(source: string, line: number): string {
-  const lines = stripComments(source).split("\n");
-  for (let i = line - 1; i >= 0; i--) {
-    const top = /^(?:export )?(?:const|function|async function) (\w+)/.exec(lines[i]!);
-    if (top) return top[1]!;
-    const command = /^ {6}(\w+): (?:\(|async \()/.exec(lines[i]!);
-    if (command) return command[1]!;
-  }
-  return "<module>";
-}
+const enclosingUnit = enclosingUnitFor;
 const source = (module: string) => readFileSync(join(SRC, module), "utf8");
 function storeBody(name: string): string {
   const code = stripComments(source("stores/storytellerStore.ts"));

@@ -22,7 +22,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { stripCommentsForGuard, writeLinesFor } from "@/test/writerGuard";
+import { enclosingUnitFor, snapshotViolations, stripCommentsForGuard, writeLinesFor } from "@/test/writerGuard";
 
 const SRC = resolve(__dirname, "..");
 // SOL-10F-L7: one shared write-shape detector (src/test/writerGuard.ts) for
@@ -82,19 +82,17 @@ const ALLOWED_STORE_UNITS = new Set([
   "setShownAlignment", "setBehaviorMode",
 ]);
 
+/** SOL-10F-L7: the Phase 10F read-only snapshot modules above are admitted
+ * ONLY at their reviewed unit and only as verbatim observed copies. */
+const SNAPSHOT_SITES: Record<string, string> = {
+  "stores/abilityResolution.ts": "captureFingerprint",
+  "stores/informationDelivery.ts": "planInformationDelivery",
+};
+
 /** Units whose only write shape is a perception spec handed to setPerception. */
 const PERCEPTION_SPEC_UNITS = new Set(["setShownRole", "setShownAlignment", "setBehaviorMode"]);
 
-function enclosingUnit(source: string, line: number): string {
-  const lines = stripComments(source).split("\n");
-  for (let i = line - 1; i >= 0; i--) {
-    const top = /^(?:export )?(?:const|function|async function) (\w+)/.exec(lines[i]!);
-    if (top) return top[1]!;
-    const command = /^ {6}(\w+): (?:\(|async \()/.exec(lines[i]!);
-    if (command) return command[1]!;
-  }
-  return "<module>";
-}
+const enclosingUnit = enclosingUnitFor;
 
 describe("Phase 10D architecture guard: no writer bypasses the Role seam", () => {
   it("only the reviewed modules contain write-like shapes for Role/perception fields", () => {
@@ -110,6 +108,20 @@ describe("Phase 10D architecture guard: no writer bypasses the Role seam", () =>
     // The Setup Deal / refinement commands write through the one reviewed
     // builder (freshAssignment -> dealtIdentity), never field by field.
     expect(units.has("freshAssignment")).toBe(false);
+  });
+
+  it("SOL-10F-L7: the 10F snapshot modules write Role fields only as observed copies inside their reviewed unit", () => {
+    for (const [module, unit] of Object.entries(SNAPSHOT_SITES)) {
+      const text = readFileSync(join(SRC, module), "utf8");
+      expect(writeLines(text).length, module).toBeGreaterThan(0);
+      expect(snapshotViolations(FIELDS, text, unit), module).toEqual([]);
+    }
+    // Self-check: a planted writer inside the reviewed unit, or a copy outside it, is caught.
+    const planted = 'function captureFingerprint(player) {\n  return { actualRole: player.actualRole,\n    shownRole: "imp" };\n}\nfunction other(player) {\n  return { actualRole: player.actualRole };\n}';
+    expect(snapshotViolations(FIELDS, planted, "captureFingerprint")).toEqual([
+      '3 (captureFingerprint): shownRole: "imp" };',
+      "6 (other): return { actualRole: player.actualRole };",
+    ]);
   });
 
   it("SOL-10F-L7: the perception adapters' only write shape is the spec they hand to setPerception", () => {

@@ -50,3 +50,34 @@ export function writeLinesFor(fields: readonly string[], source: string): number
   }
   return [...lines].sort((a, b) => a - b);
 }
+
+/** The top-level helper or store command (6-space `name: (` member) that
+ * encloses `line` (1-based) in the comment-stripped source. */
+export function enclosingUnitFor(source: string, line: number): string {
+  const lines = stripCommentsForGuard(source).split("\n");
+  for (let i = line - 1; i >= 0; i--) {
+    const top = /^(?:export )?(?:const|function|async function) (\w+)/.exec(lines[i]!);
+    if (top) return top[1]!;
+    const command = /^ {6}(\w+): (?:\(|async \()/.exec(lines[i]!);
+    if (command) return command[1]!;
+  }
+  return "<module>";
+}
+
+/**
+ * SOL-10F-L7: a read-only SNAPSHOT module (a workflow fingerprint, a Night step
+ * view, a delivery record) is admitted only inside its one reviewed unit, and
+ * only as verbatim OBSERVED copies `field: player.field`. Returns every
+ * write-shaped line that is anything else -- a planted writer elsewhere in an
+ * allowlisted module is therefore still caught.
+ */
+export function snapshotViolations(fields: readonly string[], source: string, unit: string): string[] {
+  const code = stripCommentsForGuard(source).split("\n");
+  const copy = new RegExp(`(?<![.\\w])(${fields.join("|")})[ \\t]*:[ \\t]*player\\.\\1(?=[ \\t]*[,}]|[ \\t]*$)`, "g");
+  return writeLinesFor(fields, source).flatMap((line) => {
+    const text = code[line - 1]!;
+    const where = enclosingUnitFor(source, line);
+    const residue = writeLinesFor(fields, text.replace(copy, ""));
+    return where === unit && residue.length === 0 ? [] : [`${line} (${where}): ${text.trim()}`];
+  });
+}

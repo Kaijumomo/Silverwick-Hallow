@@ -12,7 +12,7 @@ import { useStorytellerStore as store } from "./storytellerStore";
 import { applyLifePlan, planLifeTransaction, type LifeIdSource } from "./lifeResolution";
 import { changeRoleIntent, correctRoleIntent } from "./roleResolution";
 import { StorytellerGamePersistedSchema } from "./schemas";
-import { stripCommentsForGuard as stripComments } from "@/test/writerGuard";
+import { snapshotViolations, stripCommentsForGuard as stripComments, writeLinesFor } from "@/test/writerGuard";
 import { setupGame, setupScript } from "@/test/setupFixtures";
 import type { PlayerId, StorytellerLobbyRecord } from "./types";
 
@@ -201,8 +201,9 @@ function productionSources(dir = SRC): string[] {
   }
   return out;
 }
-const WRITES = [/\babilityUsed\s*:\s*(?!boolean\b)[^;\n,}]+[,}]/g, /\.abilityUsed\s*=[^=]/g, /delete\s+[\w.[\]]*\.abilityUsed\b/g, /\[\s*['"]abilityUsed['"]\s*\]\s*=/g];
-const writeCount = (source: string) => WRITES.reduce((n, pattern) => n + (stripComments(source).match(pattern)?.length ?? 0), 0);
+// SOL-10F-L7: the same formatting-independent detector as the Role and
+// Alignment guards (src/test/writerGuard.ts).
+const writeCount = (source: string) => writeLinesFor(["abilityUsed"], source).length;
 
 /** The reviewed abilityUsed writers and why each is allowed. */
 const ALLOWED: Record<string, string> = {
@@ -212,6 +213,12 @@ const ALLOWED: Record<string, string> = {
   "stores/schemas.ts": "persisted shape",
   "features/nightOrder/nightOrder.ts": "copies the value into a READ-ONLY Night step view, never Current State",
   "stores/abilityResolution.ts": "captureFingerprint snapshots the OBSERVED value into a read-only workflow fingerprint, never Current State",
+};
+/** SOL-10F-L7: the read-only snapshot modules are admitted ONLY at their
+ * reviewed unit and only as the verbatim observed copy. */
+const SNAPSHOT_SITES: Record<string, string> = {
+  "features/nightOrder/nightOrder.ts": "computeNightOrder",
+  "stores/abilityResolution.ts": "captureFingerprint",
 };
 
 describe("Architecture guard: abilityUsed has no writer outside the reviewed seams", () => {
@@ -223,8 +230,9 @@ describe("Architecture guard: abilityUsed has no writer outside the reviewed sea
     const code = stripComments(readFileSync(join(SRC, "stores/storytellerStore.ts"), "utf8"));
     const lines = code.split("\n");
     const units = new Set<string>();
-    lines.forEach((line, index) => {
-      if (!WRITES.some((pattern) => { pattern.lastIndex = 0; return pattern.test(line); })) return;
+    const hits = new Set(writeLinesFor(["abilityUsed"], code));
+    lines.forEach((_line, index) => {
+      if (!hits.has(index + 1)) return;
       for (let i = index; i >= 0; i--) {
         const top = /^(?:export )?(?:const|function) (\w+)/.exec(lines[i]!) ?? /^ {6}(\w+): (?:\(|async \()/.exec(lines[i]!);
         if (top) { units.add(top[1]!); break; }
@@ -232,9 +240,26 @@ describe("Architecture guard: abilityUsed has no writer outside the reviewed sea
     });
     expect([...units].sort()).toEqual(["blankPlayer", "freshAssignment"]);
   });
-  it("a planted writer is detected (self-check)", () => {
-    expect(writeCount("const next = { ...p, abilityUsed: true };\n")).toBeGreaterThan(0);
-    expect(writeCount("p.abilityUsed = true;")).toBeGreaterThan(0);
-    expect(writeCount("const used = p.abilityUsed;")).toBe(0);
+  it("SOL-10F-L7: the snapshot modules copy abilityUsed only verbatim, inside their reviewed unit", () => {
+    for (const [module, unit] of Object.entries(SNAPSHOT_SITES)) {
+      const text = readFileSync(join(SRC, module), "utf8");
+      expect(writeCount(text), module).toBeGreaterThan(0);
+      expect(snapshotViolations(["abilityUsed"], text, unit), module).toEqual([]);
+    }
+  });
+  it("a planted writer is detected regardless of formatting (self-check)", () => {
+    for (const planted of [
+      "const next = { ...p, abilityUsed: true };",
+      "const next = { ...p, abilityUsed: true }",
+      "set({ game: patch(game, { abilityUsed: value }) });",
+      "const next = {\n  ...p,\n  abilityUsed: value\n};",
+      "Object.assign(p, { abilityUsed: true });",
+      "p.abilityUsed = true;",
+      'p["abilityUsed"] = true;',
+      "delete p.abilityUsed;",
+    ]) expect(writeCount(planted), planted).toBeGreaterThan(0);
+    expect(writeCount("const used = p.abilityUsed;\nif (p.abilityUsed === true) x();\ntype T = { abilityUsed: boolean };\n  abilityUsed?: boolean;")).toBe(0);
+    // Inside an allowlisted snapshot module, only the verbatim copy passes.
+    expect(snapshotViolations(["abilityUsed"], "function computeNightOrder(player) {\n  return { abilityUsed: player.abilityUsed, x: { ...player, abilityUsed: true } };\n}", "computeNightOrder")).toHaveLength(1);
   });
 });
