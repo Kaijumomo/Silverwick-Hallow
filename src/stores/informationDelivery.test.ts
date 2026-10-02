@@ -248,6 +248,108 @@ describe("Phase 10F foundation: pure Information Delivery planning", () => {
   });
 });
 
+describe("Phase 10F review: the extraction is behavior-preserving, pure and composable", () => {
+  const deepFreeze = <T,>(value: T): T => {
+    if (value && typeof value === "object" && !Object.isFrozen(value)) {
+      Object.freeze(value);
+      for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child);
+    }
+    return value;
+  };
+
+  it("refusal precedence is unchanged: an unseated recipient is reported before an unresolvable script", () => {
+    freshGame();
+    const unseated = planInformationDelivery(game(), {
+      recipientPlayerId: "missing-seat", informationActionId: "chef-first-night", values: [],
+    }, { registry: null });
+    expect(unseated).toEqual({ ok: false, message: "This player is not seated." });
+    const id = seatAs(0, "chef");
+    const noScript = planInformationDelivery(game(), {
+      recipientPlayerId: id, informationActionId: "chef-first-night", values: [],
+    }, { registry: null });
+    expect(noScript).toEqual({ ok: false, message: "Unknown script." });
+    // The legacy adapter reports the same order (script lookup cannot fail
+    // first): an unknown script with an unseated recipient says "not seated".
+    store.setState({ game: { ...game(), scriptId: "no-such-script" } });
+    expect(state().recordInformationDelivery("missing-seat", "chef-first-night", [])).toEqual({ ok: false, message: "This player is not seated." });
+    expect(state().recordInformationDelivery(id, "chef-first-night", [])).toEqual({ ok: false, message: "Unknown script." });
+  });
+
+  it("never mutates the game or the caller's input (both deep-frozen) and is deterministic with an injected id", () => {
+    freshGame();
+    const id = seatAs(0, "washerwoman");
+    const [p2, p3] = [game().seatOrder[1]!, game().seatOrder[2]!];
+    atNight(1);
+    const frozenGame = deepFreeze(structuredClone(game()));
+    const values = deepFreeze([
+      { requirementId: "players", kind: "player", playerIds: [p2, p3] },
+      { requirementId: "role", kind: "role", roleId: "empath" },
+    ]);
+    const request = deepFreeze({ recipientPlayerId: id, informationActionId: "washerwoman-first-night", values,
+      context: { provenance: { sourcePlayer: p2, reason: "ability" } } });
+    const env = { registry, deliveryId: () => "fixed-delivery" };
+    const a = planInformationDelivery(frozenGame, request, env);
+    const b = planInformationDelivery(frozenGame, request, env);
+    expect(a.ok).toBe(true);
+    expect(a).toEqual(b);
+    if (!a.ok || !b.ok) return;
+    // Owned output: no shared references with the caller's input or the game.
+    expect(a.record).not.toBe(b.record);
+    expect(a.record.recipient).not.toBe(b.record.recipient);
+    const playerValue = a.record.values.find((v) => v.kind === "player");
+    expect(playerValue && "participants" in playerValue && playerValue.participants).toEqual([
+      participantRefOf(frozenGame, p2), participantRefOf(frozenGame, p3),
+    ]);
+    expect(a.record.provenance).toEqual({ sourceParticipant: participantRefOf(frozenGame, p2), reason: "ability" });
+  });
+
+  it("composes against an evolving working snapshot: a later plan sees an earlier applied delivery, the store is untouched", () => {
+    freshGame();
+    const chef = seatAs(0, "chef");
+    const empath = seatAs(1, "empath");
+    atNight(1);
+    const storeGame = game();
+    const seq = state().localSeq;
+    const undo = state().undoStack;
+    let working = storeGame;
+    for (const [recipient, action, value] of [[chef, "chef-first-night", 0], [empath, "empath-first-night", 1]] as const) {
+      const planned = planInformationDelivery(working, {
+        recipientPlayerId: recipient, informationActionId: action,
+        values: [{ requirementId: action === "chef-first-night" ? "pairs" : "evilNeighbors", kind: "number", value }],
+      }, { registry, deliveryId: () => "d-" + recipient });
+      expect(planned.ok).toBe(true);
+      if (!planned.ok) return;
+      const next = applyInformationDeliveryPlan(working, planned.record);
+      expect(next.informationDeliveries.slice(0, -1)).toEqual(working.informationDeliveries);
+      expect(next.informationDeliveries.at(-1)).toBe(planned.record);
+      expect(next.players).toBe(working.players);
+      expect(next.lifeEventWindow).toBe(working.lifeEventWindow);
+      working = next;
+    }
+    expect(working.informationDeliveries.map((d) => d.id)).toEqual(["d-" + chef, "d-" + empath]);
+    expect(game()).toBe(storeGame);
+    expect(state().localSeq).toBe(seq);
+    expect(state().undoStack).toBe(undo);
+  });
+
+  it("the legacy adapter still commits exactly once: one Undo entry and one localSeq step per accepted delivery", () => {
+    freshGame();
+    const id = seatAs(0, "chef");
+    atNight(1);
+    const undoBefore = state().undoStack.length;
+    const seqBefore = state().localSeq;
+    const before = game();
+    const result = state().recordInformationDelivery(id, "chef-first-night", [{ requirementId: "pairs", kind: "number", value: 3 }]);
+    expect(result.ok).toBe(true);
+    expect(state().undoStack).toHaveLength(undoBefore + 1);
+    expect(state().undoStack.at(-1)).toEqual(before);
+    expect(state().localSeq).toBe(seqBefore + 1);
+    expect(deliveries()).toHaveLength(1);
+    expect(game().players).toBe(before.players);
+    expect(game().history).toBe(before.history);
+  });
+});
+
 describe("Phase 9D.3: Information Delivery Record", () => {
   it("a successful command creates exactly one record with Recipient, Actual Role snapshot, Action, values, and Game Moment", () => {
     freshGame();

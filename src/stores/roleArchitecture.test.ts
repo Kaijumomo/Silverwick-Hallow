@@ -71,6 +71,7 @@ const ALLOWED_MODULES: Record<string, string> = {
   "stores/schemas.ts": "the persisted-shape schemas",
   "stores/gameMigration.ts": "legacy migration",
   "stores/projections.ts": "builds projection RECORDS (public/self), never Current State",
+  "stores/informationDelivery.ts": "an Information Delivery RECORD snapshots the recipient's Actual Role (Phase 10F pure planner), never Current State",
   "firebase/snapshots.ts": "wire decoders for projection records",
   "firebase/membershipCommands.ts": "builds a Role-seam INTENT for a Traveler choice",
   "features/players/PlayerDrawer.tsx": "builds Role-seam INTENTS from the rendered record",
@@ -80,10 +81,11 @@ const ALLOWED_MODULES: Record<string, string> = {
 /** Store units (top-level helpers / commands) that may write these fields. */
 const ALLOWED_STORE_UNITS = new Set([
   "blankPlayer", "arrivalPlayer", "migrateStoreState", "setIsTraveler",
-  // Not player writes: the compatibility adapter builds a perception SPEC it
-  // hands to setPerception (checked below), and an Information Delivery
-  // records a snapshot of the recipient's Actual Role.
-  "setShownRole", "recordInformationDelivery",
+  // Not a player write: the compatibility adapter builds a perception SPEC it
+  // hands to setPerception (checked below). (Phase 10F: the Information
+  // Delivery record's Actual Role snapshot moved into the pure planner,
+  // informationDelivery.ts, so recordInformationDelivery writes none.)
+  "setShownRole",
 ]);
 
 function enclosingUnit(source: string, line: number): string {

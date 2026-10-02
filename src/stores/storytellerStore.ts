@@ -45,7 +45,7 @@ import {
   type ReminderRefusal,
   type ReminderTransaction,
 } from "./reminderResolution";
-import { newParticipantId, participantIdAppearsIn, participantRefOf } from "./participants";
+import { newParticipantId, participantIdAppearsIn } from "./participants";
 import { detectLegacyGameVersion, migrateGameEntry } from "./gameMigration";
 import { freshLifeEventWindow, pruneLifeEventWindow } from "./lifeEvents";
 import {
@@ -2386,21 +2386,21 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const { game, undoStack } = get();
         if (!game) return { ok: false, message: "No game is open." };
         const script = selectScriptById(get(), game.scriptId);
-        if (!script) return { ok: false, message: "Unknown script." };
 
         // Phase 10F foundation: the exact Phase 9D validation/reference
         // conversion now lives in one pure planner so a later ability
         // coordinator can compose a delivery into its evolving working
         // snapshot without creating an intermediate store commit. This
         // compatibility command still owns the same single Undo/localSeq
-        // boundary it always did.
+        // boundary it always did. An unresolvable script is reported by the
+        // planner AFTER the recipient checks -- the Phase 9D refusal order.
         const result = planInformationDelivery(game, {
           recipientPlayerId,
           informationActionId,
           values,
           ...(context ? { context } : {}),
         }, {
-          registry: buildRegistry(script),
+          registry: script ? buildRegistry(script) : null,
         });
         if (!result.ok) return result;
 

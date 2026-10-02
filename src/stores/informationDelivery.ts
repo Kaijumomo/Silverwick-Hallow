@@ -249,7 +249,9 @@ export type InformationDeliveryPlanRequest = {
 };
 
 export type InformationDeliveryPlanEnvironment = {
-  registry: RoleRegistry;
+  /** The game's active Role registry; null when its script cannot be
+   * resolved (refused as "Unknown script." after the recipient checks). */
+  registry: RoleRegistry | null;
   deliveryId?: () => InformationDeliveryId;
 };
 
@@ -266,8 +268,10 @@ export function planInformationDelivery(
   const player = recipient ? game.players[request.recipientPlayerId] : undefined;
   if (!recipient || !player) return { ok: false, message: "This player is not seated." };
   if (!player.actualRole) return { ok: false, message: "This player has no Actual Role yet." };
+  const { registry } = environment;
+  if (!registry) return { ok: false, message: "Unknown script." };
 
-  const matchingActions = environment.registry
+  const matchingActions = registry
     .informationActionsOf(player.actualRole)
     .filter((action) => action.id === request.informationActionId);
   if (matchingActions.length === 0) {
@@ -289,7 +293,7 @@ export function planInformationDelivery(
 
   const validation = validateInformationValues(action.requirements, parsedValues.values, {
     playerIds: { has: (id) => participantRefOf(game, id) !== null },
-    roleIds: { has: (id) => !!environment.registry.get(id) },
+    roleIds: { has: (id) => !!registry.get(id) },
   });
   if (!validation.ok) return validation;
 
