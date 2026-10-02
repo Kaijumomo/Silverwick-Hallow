@@ -46,7 +46,7 @@ import {
   type ReminderTransaction,
 } from "./reminderResolution";
 import { newParticipantId, participantIdAppearsIn } from "./participants";
-import { isParticipantRoleStepEntry, participantStepKey, travelerArrivalStepKey } from "./nightProgress";
+import { isParticipantRoleStepEntry, planNightStepStatus } from "./nightProgress";
 import { detectLegacyGameVersion, migrateGameEntry } from "./gameMigration";
 import { freshLifeEventWindow, pruneLifeEventWindow } from "./lifeEvents";
 import {
@@ -71,7 +71,7 @@ import { analyzeSetup } from "@/features/setup/setupAnalyzer";
 import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
 import { assignedBagIsCoherent, canRefineSetup, matchBagToAssignments } from "@/features/setup/setupRefinement";
 import { isBagType } from "@/features/setup/setupPolicies";
-import { arrivalsAreTravelers, newTravelerArrival, publicTravelerRole, travelerDemonInformation, travelerNeedsFirstNight, travelerNeedsArrivalCheck } from "./travelers";
+import { arrivalsAreTravelers, newTravelerArrival, publicTravelerRole, travelerDemonInformation, travelerNeedsArrivalCheck } from "./travelers";
 import { getTraveler } from "@/data/travelers";
 import { MAX_PLAYERS, MAX_TOTAL_PLAYERS, MIN_PLAYERS } from "@/data/setupCounts";
 import type { SetupCommandResult } from "@/features/setup/setupReadiness";
@@ -2534,35 +2534,16 @@ export const useStorytellerStore = create<StorytellerStore>()(
       setNightStepStatus: (day, stepKey, status) => {
         const { game, undoStack } = get();
         if (!game) return;
-        const key = `${day}:${stepKey}`;
-        const np = game.nightProgress ?? {};
-        const existing: NightStepRecord = np[key] ?? { status: "pending", notes: "" };
-        let players = game.players;
-        // Phase 10F (v24): the Traveler-arrival coupling is participation-bound
-        // -- a step key names the ParticipantId, so a replacement occupant of
-        // the seat never completes (or inherits) another participant's arrival.
-        const traveler = Object.values(players).find(p => p.isTraveler && travelerNeedsFirstNight(p) && !!p.participantId &&
-          (stepKey === travelerArrivalStepKey(p.participantId, p.actualRole) ||
-            day === 1 && stepKey === participantStepKey(p.participantId, p.actualRole)));
-        if (traveler && game.phase === "night" && game.day === day && traveler.alive && !traveler.exiled) {
-          const arrival = { ...(traveler.travelerArrival ?? newTravelerArrival()), firstNightComplete: status === "done" };
-          if (status === "done") arrival.completedAtNight = day;
-          else delete arrival.completedAtNight;
-          if (!sameSnapshot(arrival, traveler.travelerArrival))
-            players = { ...players, [traveler.id]: { ...traveler, travelerArrival: arrival } };
-        }
-        // Phase 9R.4 (B8): the step's stored status already matches and no
-        // Traveler arrival changes. An absent key is never "already
-        // current": storing it is real (it is how a custom step exists).
-        if (np[key]?.status === status && players === game.players) return;
-        set({
-          undoStack: pushUndo(game, undoStack),
-          game: {
-            ...game,
-            players,
-            nightProgress: { ...np, [key]: { ...existing, status } },
-          },
-        });
+        // Phase 10F: the pure step plan (nightProgress.ts) -- the same rule an
+        // ability resolution composes into its one final snapshot. The
+        // Traveler-arrival coupling is participation-bound (v24): a step key
+        // names the ParticipantId, so a replacement occupant of the seat never
+        // completes (or inherits) another participant's arrival. Phase 9R.4
+        // (B8): null is a true no-op (an absent key is never "already
+        // current": storing it is real -- it is how a custom step exists).
+        const next = planNightStepStatus(game, day, stepKey, status);
+        if (!next) return;
+        set({ undoStack: pushUndo(game, undoStack), game: next });
       },
 
       setNightStepNotes: (day, stepKey, notes) => {

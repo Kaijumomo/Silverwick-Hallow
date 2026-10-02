@@ -72,6 +72,7 @@ const ALLOWED_MODULES: Record<string, string> = {
   "stores/gameMigration.ts": "legacy migration",
   "stores/projections.ts": "builds projection RECORDS (public/self), never Current State",
   "stores/informationDelivery.ts": "an Information Delivery RECORD snapshots the recipient's Actual Role (Phase 10F pure planner), never Current State",
+  "stores/abilityResolution.ts": "captureFingerprint snapshots the OBSERVED Role/perception into a read-only workflow fingerprint (Phase 10F), never Current State",
   "firebase/snapshots.ts": "wire decoders for projection records",
   "firebase/membershipCommands.ts": "builds a Role-seam INTENT for a Traveler choice",
   "features/players/PlayerDrawer.tsx": "builds Role-seam INTENTS from the rendered record",

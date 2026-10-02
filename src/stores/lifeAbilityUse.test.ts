@@ -211,6 +211,7 @@ const ALLOWED: Record<string, string> = {
   "stores/storytellerStore.ts": "blankPlayer construction and Setup freshAssignment reset (audited below)",
   "stores/schemas.ts": "persisted shape",
   "features/nightOrder/nightOrder.ts": "copies the value into a READ-ONLY Night step view, never Current State",
+  "stores/abilityResolution.ts": "captureFingerprint snapshots the OBSERVED value into a read-only workflow fingerprint, never Current State",
 };
 
 describe("Architecture guard: abilityUsed has no writer outside the reviewed seams", () => {

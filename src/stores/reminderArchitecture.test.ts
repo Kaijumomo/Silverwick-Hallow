@@ -76,6 +76,11 @@ const MECHANICS_MODULES = [
   "features/nightOrder/nightOrder.ts",
   "features/nightOrder/nightRules.ts",
   "features/publicDisplay/presenters.ts",
+  // Phase 10F: the Rules Query and the ability semantics / modifier contract
+  // answer rules questions -- they never touch Reminders at all.
+  "stores/rulesQuery.ts",
+  "abilities/semantics.ts",
+  "abilities/modifiers.ts",
 ];
 
 /** The reviewed modules allowed to touch Reminder state: persistence
@@ -92,6 +97,10 @@ const ALLOWED = new Set([
   "features/reminders/ReminderControls.tsx",
   "features/players/PlayerDrawer.tsx",
   "features/grimoire/GrimoireCircle.tsx",
+  // Phase 10F: the ability coordinator WRITES notation through the 10C seam
+  // (planReminderTransaction / applyReminderPlan) -- never reads Reminders;
+  // checked precisely below.
+  "stores/abilityResolution.ts",
 ]);
 
 function productionSources(dir = SRC): string[] {
@@ -119,6 +128,15 @@ describe("Phase 10C architecture guard: Reminders are notation, never mechanics 
     expect(coupled.filter((module) => !ALLOWED.has(module))).toEqual([]);
     // No mechanics module is ever allowlisted.
     expect(MECHANICS_MODULES.filter((module) => ALLOWED.has(module))).toEqual([]);
+  });
+
+  it("Phase 10F (10F-AC-20): the ability coordinator only WRITES Reminders through the seam; it never reads them", () => {
+    const code = stripComments(readFileSync(join(SRC, "stores/abilityResolution.ts"), "utf8"));
+    for (const forbidden of [/\.reminders\b/, /\bReminderRecord\b/, /reminderPresentation/, /features\/reminders\//, /reminderCleanupStatus/]) {
+      expect(code).not.toMatch(forbidden);
+    }
+    const imported = /import \{([^}]*)\} from "\.\/reminderResolution";/.exec(code)?.[1]?.split(",").map((name) => name.trim()).filter(Boolean).sort();
+    expect(imported).toEqual(["applyReminderPlan", "planReminderTransaction", "type ReminderIdSource", "type ReminderIntent"].sort());
   });
 
   it("the Reminder seam itself contains no rule logic: it never reads Effects, Life State, Roles or Alignment", () => {

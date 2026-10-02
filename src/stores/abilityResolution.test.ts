@@ -1,0 +1,402 @@
+// Phase 10F, Slice 3: the pure ability coordinator (PHASE10F Sections 3-5,
+// 7, 12, 14). Rules-neutral fixtures only (src/test/abilityFixtures.ts) --
+// no production character semantics are exercised or implied.
+// Traceability: 10F-AC-01, 03..08, 10..14, 17, 18, 23..25, 33.
+import { describe, expect, it } from "vitest";
+import {
+  captureFingerprint,
+  composeAbilityOutcome,
+  planAbilityResolution,
+  type AbilityEnvironment,
+  type AbilityOutcome,
+  type AbilityResolutionRequest,
+  type ParticipantBinding,
+} from "./abilityResolution";
+import { activeModifiers, type ModifierDefinition } from "@/abilities/modifiers";
+import { resolveAbilitySemantics, type AbilityInputs } from "@/abilities/semantics";
+import { buildRegistry } from "@/data/roleRegistry";
+import { setupGame, setupScript } from "@/test/setupFixtures";
+import { FIXTURE_SEMANTICS } from "@/test/abilityFixtures";
+import type { LifeIdSource } from "./lifeResolution";
+import type { Script, StorytellerLobbyRecord } from "./types";
+
+const registry = buildRegistry(setupScript);
+const ROLES = ["monk", "slayer", "empath", "pithag", "imp", "chef", "drunk"];
+
+function game(phase: "night" | "day" = "night", day = 2, over: Partial<StorytellerLobbyRecord> = {}): StorytellerLobbyRecord {
+  const g = setupGame(ROLES, { phase, day, setupRolesDealt: true, setupRolesRevealed: true, ...over });
+  g.players.p6 = { ...g.players.p6!, shownRole: "empath", shownAlignment: null, behaviorMode: "drunk_fake_role_behavior" };
+  for (const p of Object.values(g.players)) p.actualAlignment = registry.alignmentOf(p.actualRole);
+  return g;
+}
+const bind = (g: StorytellerLobbyRecord, id: string): ParticipantBinding => ({ playerId: id, participantId: g.players[id]!.participantId! });
+const pick = (g: StorytellerLobbyRecord, id: string) => ({ kind: "participant" as const, participants: [bind(g, id)] });
+let counter = 0;
+const counterIds = (): AbilityEnvironment["ids"] => {
+  let e = 0, h = 0, d = 0, x = 0, r = 0, p = 0;
+  return {
+    life: { eventId: () => `le-${++e}`, historyId: () => `hl-${++h}` },
+    effect: { effectId: () => `fx-${++x}`, historyId: () => `he-${++h}` },
+    reminder: { reminderId: () => `rm-${++r}`, historyId: () => `hr-${++h}` },
+    role: { historyId: () => `hro-${++h}`, packetEpoch: () => `ep-${++p}` },
+    alignment: { historyId: () => `ha-${++h}`, packetEpoch: () => `ep-${++p}` },
+    deliveryId: () => `d-${++d}`,
+    resolutionId: () => `res-${++counter}`,
+  };
+};
+/** Explicitly NO active modifiers unless a test supplies them: the fixture
+ * script carries every canonical character, so every canonical jinx pair would
+ * otherwise (correctly) gate its characters. */
+const env = (over: Partial<AbilityEnvironment> = {}): AbilityEnvironment =>
+  ({ script: setupScript, registry, semantics: FIXTURE_SEMANTICS, ids: counterIds(), modifiers: [], ...over });
+/** The game's own Fabled / Lorics, with no jinx (no script). */
+const fabledOf = (g: StorytellerLobbyRecord) => env({ modifiers: activeModifiers(g, null) });
+function guided(g: StorytellerLobbyRecord, actor: string, roleId: string, inputs: AbilityInputs = {}, extra: Partial<AbilityResolutionRequest> = {}): AbilityResolutionRequest {
+  return { mode: "guided", fingerprint: captureFingerprint(g, actor)!, roleId, inputs, ...extra } as AbilityResolutionRequest;
+}
+const deepFreeze = <T,>(value: T): T => {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value as Record<string, unknown>)) deepFreeze(child);
+  }
+  return value;
+};
+
+describe("10F-AC-24 / AC-33: semantics attach only through canonical ownership", () => {
+  it("canonical definition + verified semantics -> supported; canonical without semantics -> unsupported", () => {
+    expect(resolveAbilitySemantics("monk", registry, FIXTURE_SEMANTICS).kind).toBe("supported");
+    expect(resolveAbilitySemantics("washerwoman", registry, FIXTURE_SEMANTICS)).toMatchObject({ kind: "unsupported", reason: "noSemantics" });
+    expect(resolveAbilitySemantics("no-such-role", registry, FIXTURE_SEMANTICS)).toMatchObject({ kind: "unsupported", reason: "unknownRole" });
+  });
+
+  it("a homebrew character reusing an official RoleId inherits NO semantics (and the coordinator sends it to Manual)", () => {
+    const monk = registry.get("monk")!;
+    const homebrew: Script = { id: "hb", name: "Homebrew", characters: [
+      { ...monk, ability: "Each night*, choose a player: something homebrew happens.", provenance: { status: "homebrew" } },
+      ...setupScript.characters.filter((r) => r.id !== "monk"),
+    ] };
+    const hbRegistry = buildRegistry(homebrew);
+    expect(resolveAbilitySemantics("monk", hbRegistry, FIXTURE_SEMANTICS).kind).toBe("homebrew");
+    // Same id, modified text but stale "official" provenance: still not canonical.
+    const forged: Script = { ...homebrew, characters: [{ ...monk, ability: "Changed." }, ...homebrew.characters.slice(1)] };
+    expect(resolveAbilitySemantics("monk", buildRegistry(forged), FIXTURE_SEMANTICS).kind).toBe("homebrew");
+    const g = game();
+    const result = planAbilityResolution(g, guided(g, "p0", "monk", { target: pick(g, "p2") }), env({ script: homebrew, registry: hbRegistry }));
+    expect(result).toMatchObject({ ok: false, code: "unsupported" });
+  });
+});
+
+describe("10F-AC-10 / AC-31: a simple target -> Effect ability", () => {
+  it("plans one Effect with origin and correlation; pure and deterministic", () => {
+    const g = deepFreeze(game());
+    const request = guided(g, "p0", "monk", { target: pick(g, "p2") }, { resolutionId: "res-fixed" });
+    const a = planAbilityResolution(g, request, env());
+    const b = planAbilityResolution(g, request, env());
+    expect(a).toEqual(b);
+    expect(a).toMatchObject({ ok: true, changed: true });
+    if (!a.ok || !a.changed) return;
+    expect(a.plan.needsConfirmation).toBe(false); // one participant, no judgment
+    expect(a.plan.game.players.p2!.effects).toEqual([expect.objectContaining({ id: "fx-1", type: "marked", sourceCharacter: "monk",
+      sourceParticipant: expect.objectContaining({ participantId: g.players.p0!.participantId }) })]);
+    expect(a.plan.game.history.at(-1)).toMatchObject({ category: "effect", resolutionId: "res-fixed" });
+    expect(g.players.p2!.effects).toEqual([]); // input untouched (deep-frozen)
+  });
+
+  it("input structure: missing -> needsInput; stale binding -> stale; violated constraint -> illegal; malformed -> invalid", () => {
+    const g = game();
+    expect(planAbilityResolution(g, guided(g, "p0", "monk", {}), env())).toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: "target" }] });
+    expect(planAbilityResolution(g, guided(g, "p0", "monk", { target: { kind: "participant", participants: [{ playerId: "p2", participantId: "someone-else" }] } }), env()))
+      .toMatchObject({ ok: false, code: "stale" });
+    expect(planAbilityResolution(g, guided(g, "p0", "monk", { target: pick(g, "p0") }), env())).toMatchObject({ ok: false, code: "illegal" });
+    const dead = { ...g, players: { ...g.players, p2: { ...g.players.p2!, alive: false } } };
+    expect(planAbilityResolution(dead, guided(dead, "p0", "monk", { target: pick(dead, "p2") }), env())).toMatchObject({ ok: false, code: "illegal" });
+    expect(planAbilityResolution(g, guided(g, "p0", "monk", { target: { kind: "number", value: 2 } }), env())).toMatchObject({ ok: false, code: "invalid" });
+  });
+
+  it("timing / ownership: wrong phase -> notApplicable; someone else's ability -> invalid; descriptor without evaluator -> unsupported", () => {
+    const day = game("day");
+    expect(planAbilityResolution(day, guided(day, "p0", "monk", { target: pick(day, "p2") }), env())).toMatchObject({ ok: false, code: "notApplicable" });
+    const g = game();
+    expect(planAbilityResolution(g, guided(g, "p2", "monk", { target: pick(g, "p3") }), env())).toMatchObject({ ok: false, code: "invalid" });
+    const first = game("night", 1);
+    expect(planAbilityResolution(first, guided(first, "p5", "chef"), env())).toMatchObject({ ok: false, code: "unsupported" });
+  });
+});
+
+describe("10F-AC-07 / AC-08: stale workflow and participant bindings", () => {
+  it("every fingerprint field is revalidated before planning", () => {
+    const g = game();
+    const request = guided(g, "p0", "monk", { target: pick(g, "p2") });
+    const stale = (changed: StorytellerLobbyRecord) => expect(planAbilityResolution(changed, request, env())).toMatchObject({ ok: false, code: "stale" });
+    stale({ ...g, players: { ...g.players, p0: { ...g.players.p0!, participantId: "new-occupant" } } }); // seat reused
+    stale({ ...g, players: { ...g.players, p0: { ...g.players.p0!, actualRole: "chef" } } });
+    stale({ ...g, players: { ...g.players, p0: { ...g.players.p0!, shownRole: "chef" } } });
+    stale({ ...g, players: { ...g.players, p0: { ...g.players.p0!, abilityUsed: true } } });
+    stale({ ...g, day: 3 });
+    stale({ ...g, phase: "day" });
+    const withStep = guided(g, "p0", "monk", { target: pick(g, "p2") }, { fingerprint: captureFingerprint(g, "p0", { day: 2, stepKey: "p:x:monk" })! });
+    const done = { ...g, nightProgress: { "2:p:x:monk": { status: "done" as const, notes: "" } } };
+    expect(planAbilityResolution(done, withStep, env())).toMatchObject({ ok: false, code: "stale" });
+  });
+
+  it("a Life binding whose seat was reused refuses the WHOLE resolution (H-06), nothing planned", () => {
+    const g = game("day");
+    const reused = { ...g, players: { ...g.players, p2: { ...g.players.p2!, participantId: "replacement" } } };
+    const outcome: AbilityOutcome = { operations: [{ domain: "life", intents: [{ kind: "death", target: bind(g, "p2") }] }] };
+    expect(composeAbilityOutcome(reused, outcome, env(), { resolutionId: "r" })).toMatchObject({ ok: false, code: "stale", operationIndex: 0, intentIndex: 0 });
+  });
+});
+
+describe("10F-AC-01 / AC-03 / AC-04 / AC-05 / AC-06: composition", () => {
+  it("each operation observes the snapshot produced by the preceding ones (evolving working snapshot)", () => {
+    const g = game("day");
+    const p2 = bind(g, "p2");
+    // death then resurrection of the same participant in separate operations:
+    // the resurrection is only legal because it sees the death.
+    const outcome: AbilityOutcome = { operations: [
+      { domain: "life", intents: [{ kind: "death", target: p2 }] },
+      { domain: "life", intents: [{ kind: "resurrection", target: p2 }] },
+    ] };
+    const result = composeAbilityOutcome(g, outcome, env(), { resolutionId: "r" });
+    expect(result).toMatchObject({ ok: true, changed: true });
+    if (!result.ok || !result.changed) return;
+    expect(result.plan.game.lifeEventWindow.events.map((e) => e.kind)).toEqual(["death", "resurrection"]);
+    expect(result.plan.game.players.p2!.alive).toBe(true);
+  });
+
+  it("any refusing sub-plan refuses everything (atomic), preserving domain / code / indices", () => {
+    const g = game("day");
+    const outcome: AbilityOutcome = { mechanicalOrder: "declared", operations: [
+      { domain: "effect", intents: [{ kind: "apply", target: bind(g, "p2"), effect: { type: "marked", lifetime: { kind: "manual" } } }] },
+      { domain: "life", intents: [{ kind: "death", target: bind(g, "p3") }, { kind: "death", target: bind(g, "p3") }] },
+    ] };
+    expect(composeAbilityOutcome(g, outcome, env(), { resolutionId: "r" }))
+      .toMatchObject({ ok: false, code: "domain", domain: "life", domainCode: "refused", operationIndex: 1 });
+  });
+
+  it("there is NO generic mechanical order: multi-domain without a declared order is an incomplete definition", () => {
+    const g = game();
+    expect(planAbilityResolution(g, guided(g, "p3", "pithag", { target: pick(g, "p5") }), env())).toMatchObject({ ok: false, code: "unsupported" });
+    const ordered = planAbilityResolution(g, guided(g, "p4", "imp", { target: pick(g, "p5") }), env());
+    expect(ordered).toMatchObject({ ok: true, changed: true });
+    if (!ordered.ok || !ordered.changed) return;
+    expect(ordered.plan.game.players.p5).toMatchObject({ actualRole: "monk", alive: false });
+    expect(ordered.plan.needsConfirmation).toBe(true); // Role + Life
+    // Role, then Life, then notation -- in the declared order, correlated by
+    // one resolution id (Life correlates through its Life Event, per 10A).
+    const added = ordered.plan.game.history.slice(g.history.length);
+    expect(added.map((h) => h.category)).toEqual(["role", "life", "reminder"]);
+    expect(added.filter((h) => h.category !== "life").every((h) => h.resolutionId === ordered.plan.resolutionId)).toBe(true);
+    expect(ordered.plan.game.lifeEventWindow.events.at(-1)!.resolutionId).toBe(ordered.plan.resolutionId);
+  });
+
+  it("bookkeeping may only follow the resolved mechanics", () => {
+    const g = game();
+    const outcome: AbilityOutcome = { operations: [
+      { domain: "reminder", intents: [{ kind: "place", target: bind(g, "p2"), reminder: { label: "x" } }] },
+      { domain: "effect", intents: [{ kind: "apply", target: bind(g, "p2"), effect: { type: "marked", lifetime: { kind: "manual" } } }] },
+    ] };
+    expect(composeAbilityOutcome(g, outcome, env(), { resolutionId: "r" })).toMatchObject({ ok: false, code: "invalid" });
+  });
+
+  it("a same-participant Role chain is refused as unsupported, never collapsed", () => {
+    const g = game();
+    const p5 = g.players.p5!;
+    const change = (to: string, from: string) => ({ kind: "changeActualRole" as const, target: bind(g, "p5"), expectedActualRole: from, expectedIsTraveler: p5.isTraveler, actualRole: to });
+    const outcome: AbilityOutcome = { operations: [{ domain: "role", intents: [change("monk", "chef")] }, { domain: "role", intents: [change("empath", "monk")] }] };
+    expect(composeAbilityOutcome(g, outcome, env(), { resolutionId: "r" })).toMatchObject({ ok: false, code: "unsupported" });
+  });
+
+  it("the composed snapshot must pass the authoritative persisted schema (invalidComposition)", () => {
+    const g = game("day");
+    // Two Life operations whose id source repeats an event id: each planner
+    // accepts its own, the COMPOSED window holds a duplicate id.
+    const dup: LifeIdSource = { eventId: () => "le-dup", historyId: (() => { let n = 0; return () => `h-${++n}`; })() };
+    const outcome: AbilityOutcome = { operations: [
+      { domain: "life", intents: [{ kind: "death", target: bind(g, "p2") }] },
+      { domain: "life", intents: [{ kind: "death", target: bind(g, "p3") }] },
+    ] };
+    expect(composeAbilityOutcome(g, outcome, env({ ids: { ...counterIds(), life: dup } }), { resolutionId: "r" }))
+      .toMatchObject({ ok: false, code: "invalidComposition" });
+  });
+
+  it("a true no-op changes nothing (same reference, changed: false)", () => {
+    const g = game("day");
+    const outcome: AbilityOutcome = { operations: [{ domain: "life", intents: [{ kind: "correctAbilityUsed", target: bind(g, "p1"), used: false }] }] };
+    expect(composeAbilityOutcome(g, outcome, env(), { resolutionId: "r" })).toEqual({ ok: true, changed: false });
+    expect(composeAbilityOutcome(g, { operations: [] }, env(), { resolutionId: "r" })).toEqual({ ok: true, changed: false });
+  });
+
+  it("step completion joins the SAME final snapshot", () => {
+    const g = game();
+    const request = guided(g, "p0", "monk", { target: pick(g, "p2") },
+      { fingerprint: captureFingerprint(g, "p0", { day: 2, stepKey: `p:${g.players.p0!.participantId}:monk` })!, completeStep: true });
+    const result = planAbilityResolution(g, request, env());
+    expect(result).toMatchObject({ ok: true, changed: true });
+    if (!result.ok || !result.changed) return;
+    expect(result.plan.game.nightProgress[`2:p:${g.players.p0!.participantId}:monk`]).toEqual({ status: "done", notes: "" });
+    expect(result.plan.game.players.p2!.effects).toHaveLength(1);
+  });
+});
+
+describe("10F-AC-15: once-per-game use commits with its outcome", () => {
+  it("use + outcome in one Life transaction; an already-used ability is notApplicable", () => {
+    const g = game("day");
+    const result = planAbilityResolution(g, guided(g, "p1", "slayer", { target: pick(g, "p4") }), env());
+    expect(result).toMatchObject({ ok: true, changed: true });
+    if (!result.ok || !result.changed) return;
+    expect(result.plan.game.players.p1!.abilityUsed).toBe(true);
+    expect(result.plan.game.players.p4!.alive).toBe(false);
+    const used = result.plan.game;
+    expect(planAbilityResolution(used, guided(used, "p1", "slayer", { target: pick(used, "p5") }), env())).toMatchObject({ ok: false, code: "notApplicable" });
+  });
+});
+
+describe("10F-AC-12 / AC-14: impairment and protection are derived, never guessed", () => {
+  it("a manually poisoned actor creates no functioning outcome (only the use is recorded)", () => {
+    const g = game("day");
+    g.players.p1 = { ...g.players.p1!, effects: [{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }] };
+    const result = planAbilityResolution(g, guided(g, "p1", "slayer", { target: pick(g, "p4") }), env());
+    expect(result).toMatchObject({ ok: true, changed: true });
+    if (!result.ok || !result.changed) return;
+    expect(result.plan.game.players.p1!.abilityUsed).toBe(true);
+    expect(result.plan.game.players.p4!.alive).toBe(true);
+  });
+
+  it("a mechanical outcome from an impaired actor is refused (illegal)", () => {
+    const g = game();
+    g.players.p4 = { ...g.players.p4!, effects: [{ id: "manual:drunk", type: "drunk", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }] };
+    expect(planAbilityResolution(g, guided(g, "p4", "imp", { target: pick(g, "p5") }), env())).toMatchObject({ ok: false, code: "illegal" });
+  });
+
+  it("a sourced impairment of undeclared persistence asks the Storyteller; the judgment is honored and forces confirmation", () => {
+    const g = game("day");
+    const source = { kind: "participant" as const, participantId: g.players.p3!.participantId!, playerId: "p3", nameAtTime: "Player 3" };
+    g.players.p1 = { ...g.players.p1!, effects: [{ id: "fx-src", type: "poisoned", sourceParticipant: source, sourceCharacter: "pithag", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }] };
+    const ask = planAbilityResolution(g, guided(g, "p1", "slayer", { target: pick(g, "p4") }), env());
+    expect(ask).toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: "actor:functioning", source: "judgment" }] });
+    const judged = planAbilityResolution(g, guided(g, "p1", "slayer", { target: pick(g, "p4") }, { judgments: { "actor:functioning": { kind: "boolean", value: true } } }), env());
+    expect(judged).toMatchObject({ ok: true, changed: true, plan: { needsConfirmation: true } });
+    // The stored Effect is never rewritten by the derivation (10F-AC-13).
+    if (judged.ok && judged.changed) expect(judged.plan.game.players.p1!.effects).toEqual(g.players.p1!.effects);
+  });
+
+  it("a suppressed impairment never applies; a custom Effect type acquires no rule by name", () => {
+    const g = game("day");
+    g.players.p1 = { ...g.players.p1!, effects: [
+      { id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" }, state: "suppressed", expiry: { kind: "none" } },
+      { id: "fx-c", type: "poisonedish", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } },
+    ] };
+    const result = planAbilityResolution(g, guided(g, "p1", "slayer", { target: pick(g, "p4") }), env());
+    expect(result).toMatchObject({ ok: true, changed: true });
+    if (result.ok && result.changed) expect(result.plan.game.players.p4!.alive).toBe(false);
+  });
+});
+
+describe("10F-AC-18: a simulated wake has no ability", () => {
+  it("a Drunk shown the Empath records a delivery with performedRole and Actual Role drunk -- no Current State", () => {
+    const g = game();
+    const result = planAbilityResolution(g, guided(g, "p6", "empath", { answer: { kind: "number", value: 2 } }), env());
+    expect(result).toMatchObject({ ok: true, changed: true });
+    if (!result.ok || !result.changed) return;
+    expect(result.plan.game.informationDeliveries).toEqual([expect.objectContaining({ actualRole: "drunk", performedRole: "empath", resolutionId: result.plan.resolutionId })]);
+    expect(result.plan.game.players).toBe(g.players);
+    expect(result.plan.game.history).toBe(g.history);
+  });
+
+  it("a simulated wake producing a mechanical operation is refused (illegal)", () => {
+    const g = game();
+    g.players.p6 = { ...g.players.p6!, shownRole: "imp" };
+    expect(planAbilityResolution(g, guided(g, "p6", "imp", { target: pick(g, "p2") }), env())).toMatchObject({ ok: false, code: "illegal" });
+  });
+});
+
+describe("10F-AC-23: modifiers gate only what they could affect", () => {
+  it("an unverified Fabled reaching the ability's scope gates it; an unrelated one does not", () => {
+    const toymaker = game("day", 2, { fabled: ["toymaker"] }); // death/targeting/setup/information
+    const ask = planAbilityResolution(toymaker, guided(toymaker, "p1", "slayer", { target: pick(toymaker, "p4") }), fabledOf(toymaker));
+    expect(ask).toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: "modifier:fabled:toymaker" }] });
+    const cleared = planAbilityResolution(toymaker, guided(toymaker, "p1", "slayer", { target: pick(toymaker, "p4") },
+      { judgments: { "modifier:fabled:toymaker": { kind: "boolean", value: true } } }), fabledOf(toymaker));
+    expect(cleared).toMatchObject({ ok: true, changed: true, plan: { needsConfirmation: true } });
+    const ferryman = game("day", 2, { fabled: ["ferryman"] }); // voting only
+    expect(planAbilityResolution(ferryman, guided(ferryman, "p1", "slayer", { target: pick(ferryman, "p4") }), fabledOf(ferryman))).toMatchObject({ ok: true, changed: true });
+  });
+
+  it("Bootlegger-style global rules and an unknown custom Fabled gate everything", () => {
+    for (const over of [{ lorics: ["bootlegger"] }, { fabled: ["homebrew-fabled"] }]) {
+      const g = game("night", 2, over);
+      expect(planAbilityResolution(g, guided(g, "p0", "monk", { target: pick(g, "p2") }), fabledOf(g))).toMatchObject({ ok: false, code: "needsInput" });
+    }
+  });
+
+  it("a jinx gates only its own two characters", () => {
+    const jinxed: Script = { ...setupScript }; // the full canonical script: every jinx pair is on it
+    const modifiers = activeModifiers({ fabled: [], lorics: [] }, jinxed);
+    expect(modifiers.some((m) => m.source === "jinx")).toBe(true);
+    const g = game();
+    // The Leviathan / Monk jinx reaches the Monk; the Slayer has no jinx on it.
+    expect(planAbilityResolution(g, guided(g, "p0", "monk", { target: pick(g, "p2") }), env({ modifiers })))
+      .toMatchObject({ ok: false, code: "needsInput", requirements: expect.arrayContaining([expect.objectContaining({ id: "modifier:jinx:leviathan+monk" })]) });
+    // A script without the Leviathan (or the Riot) carries no Monk jinx -- and the Monk's
+    // evaluation is no longer gated (no other jinx reaches it).
+    const small = activeModifiers({ fabled: [], lorics: [] }, { characters: setupScript.characters.filter((r) => r.id !== "leviathan" && r.id !== "riot") });
+    expect(small.some((m) => m.id === "jinx:leviathan+monk")).toBe(false);
+    expect(small.some((m) => m.characters?.includes("monk"))).toBe(false);
+    expect(planAbilityResolution(g, guided(g, "p0", "monk", { target: pick(g, "p2") }), env({ modifiers: small }))).toMatchObject({ ok: true, changed: true });
+  });
+
+  it("rules-neutral: a VERIFIED information modifier constrains another evaluator's delivered value", () => {
+    const constrain: ModifierDefinition = { id: "fixture:information-constraint", source: "custom", label: "Fixture constraint", scopes: ["information"],
+      hook: ({ roleId }) => roleId === "empath"
+        ? { kind: "constrainInformation", requirementId: "evilNeighbors", allowed: [0], reason: "The fixture modifier allows only 0." }
+        : { kind: "noEffect" } };
+    const g = game();
+    const refused = planAbilityResolution(g, guided(g, "p2", "empath", { answer: { kind: "number", value: 1 } }), env({ modifiers: [constrain] }));
+    expect(refused).toMatchObject({ ok: false, code: "illegal", message: "The fixture modifier allows only 0." });
+    expect(planAbilityResolution(g, guided(g, "p2", "empath", { answer: { kind: "number", value: 0 } }), env({ modifiers: [constrain] })))
+      .toMatchObject({ ok: true, changed: true });
+    // An unrelated evaluator is untouched by it.
+    expect(planAbilityResolution(g, guided(g, "p0", "monk", { target: pick(g, "p2") }), env({ modifiers: [constrain] }))).toMatchObject({ ok: true, changed: true });
+  });
+});
+
+describe("10F-AC-11: the Manual / unmodeled-interaction path", () => {
+  it("requires a stated reason, labels every record, always previews, and commits nothing on refusal", () => {
+    const g = game("day");
+    const outcome: AbilityOutcome = { operations: [{ domain: "life", intents: [{ kind: "death", target: bind(g, "p2") }] }] };
+    expect(planAbilityResolution(g, { mode: "manual", outcome, reason: "  " }, env())).toMatchObject({ ok: false, code: "invalid" });
+    const result = planAbilityResolution(g, { mode: "manual", outcome, reason: "Homebrew Fabled interaction", context: { provenance: { sourcePlayer: "p1", sourceCharacter: "slayer" } } }, env());
+    expect(result).toMatchObject({ ok: true, changed: true, plan: { needsConfirmation: true } });
+    if (!result.ok || !result.changed) return;
+    expect(result.plan.game.history.at(-1)!.provenance).toMatchObject({ reason: "manual", note: "Homebrew Fabled interaction", sourceCharacter: "slayer" });
+    expect(result.plan.game.lifeEventWindow.events.at(-1)!.provenance).toMatchObject({ reason: "manual" });
+  });
+
+  it("an unsupported / homebrew ability is never a dead end: the same primitives resolve it manually", () => {
+    const g = game("night", 1);
+    expect(planAbilityResolution(g, guided(g, "p5", "chef"), env())).toMatchObject({ ok: false, code: "unsupported" });
+    const manual = planAbilityResolution(g, { mode: "manual", fingerprint: captureFingerprint(g, "p5")!, reason: "No modeled rule",
+      outcome: { operations: [{ domain: "information", recipient: bind(g, "p5"), informationActionId: "chef-first-night", values: [{ requirementId: "pairs", kind: "number", value: 1 }] }] } }, env());
+    expect(manual).toMatchObject({ ok: true, changed: true });
+  });
+});
+
+describe("10F-AC-25: structured, non-throwing refusals for hostile input", () => {
+  it.each([
+    null, undefined, 7, "x", {}, { mode: "other" },
+    { mode: "guided" }, { mode: "guided", fingerprint: null, roleId: "monk", inputs: {} },
+    { mode: "manual", reason: "r" }, { mode: "manual", reason: "r", outcome: { operations: "x" } },
+    { mode: "manual", reason: "r", outcome: { operations: [null] } },
+    { mode: "manual", reason: "r", outcome: { operations: [{ domain: "life", intents: "x" }] } },
+    { mode: "manual", reason: "r", outcome: { operations: [{ domain: "life", intents: [{ kind: "retractEvent", target: { playerId: "p1", participantId: "fixture-participant-p1" } }] }] } },
+    { mode: "manual", reason: "r", outcome: { operations: [{ domain: "nope" }] } },
+    { mode: "manual", reason: "r", resolutionId: "", outcome: { operations: [] } },
+  ])("%j", (request) => {
+    const g = game("day");
+    let result: unknown;
+    expect(() => { result = planAbilityResolution(g, request as never, env()); }).not.toThrow();
+    expect(result).toMatchObject({ ok: false });
+    expect(["invalid", "stale", "unsupported", "domain"]).toContain((result as { code: string }).code);
+  });
+});
