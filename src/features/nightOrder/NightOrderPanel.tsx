@@ -16,7 +16,7 @@ import { captureFingerprint, planAbilityResolution, type ParticipantBinding } fr
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { lifeEventsForParticipantAt } from "@/stores/lifeEvents";
 import { AbilityWorkspace, type WorkspaceTarget } from "@/features/abilities/AbilityWorkspace";
-import { participantAllowed } from "@/features/abilities/RequirementInput";
+import { ParticipantSelect, participantAllowed } from "@/features/abilities/RequirementInput";
 import { bindingOf, pathAbility, seatedParticipants, triggerAbility, useTargetPicker, type StepAbility } from "@/features/abilities/abilityUi";
 import { wakeIdentity } from "@/stores/wakeIdentity";
 import { participantStepKey } from "@/stores/nightProgress";
@@ -91,9 +91,8 @@ function InlineSimpleAbility({ step, day, descriptor, guided, onEscalate }: {
   const { game } = guided;
   const actor = game.players[step.playerId];
   const actorBinding = actor?.participantId ? bindingOf(actor) : null;
-  const select = (playerId: string) => {
-    const chosen = Object.prototype.hasOwnProperty.call(game.players, playerId) ? game.players[playerId] : undefined;
-    setTarget(chosen && !chosen.isEmpty && chosen.participantId ? bindingOf(chosen) : null);
+  const select = (binding: ParticipantBinding | null) => {
+    setTarget(binding);
     setError(null);
   };
   const resolve = () => {
@@ -114,13 +113,11 @@ function InlineSimpleAbility({ step, day, descriptor, guided, onEscalate }: {
   };
   return (
     <div className="ability-inline" role="group" aria-label={`${descriptor.presentation.action} (inline)`}>
-      <select aria-label={input.label} value={target?.playerId ?? ""} onChange={(e) => select(e.target.value)}>
-        <option value="">{input.label}…</option>
-        {seatedParticipants(game).filter((p) => participantAllowed(p, input, actorBinding)).map((p) =>
-          <option key={p.id} value={p.id}>{p.name || `Seat ${p.seat + 1}`} · seat {p.seat + 1}</option>)}
-      </select>
+      {/* SOL-10F-B1: the shared slot -- a stale pick shows as stale, never as the seat's new occupant. */}
+      <ParticipantSelect game={game} value={target} label={input.label} placeholder={`${input.label}…`}
+        candidates={seatedParticipants(game).filter((p) => participantAllowed(p, input, actorBinding))} onChange={select} />
       <button className="btn btn-sm" aria-pressed={!!picking} onClick={() => picking ? useTargetPicker.getState().cancel()
-        : useTargetPicker.getState().start(input.label, (binding) => { setTarget(binding); setError(null); })}>
+        : useTargetPicker.getState().start(input.label, select)}>
         {picking ? "Cancel pick" : "Pick on Grimoire"}
       </button>
       <button className="btn btn-sm btn-gold" disabled={!target} onClick={resolve}>Resolve</button>

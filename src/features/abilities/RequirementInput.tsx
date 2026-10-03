@@ -3,7 +3,7 @@ import { resolvedCharacters } from "@/data/roleRegistry";
 import type { AbilityInputRequirement, AbilityInputValue, InputConstraint } from "@/abilities/semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { Alignment, Script, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
-import { bindingOf, ORIGIN_LABEL, seatedParticipants, type ValueOrigin } from "./abilityUi";
+import { captureBinding, isCurrentBinding, ORIGIN_LABEL, seatedParticipants, type ValueOrigin } from "./abilityUi";
 
 /**
  * Phase 10F (SOL-10F-L2): renders ONE AbilityInputRequirement faithfully --
@@ -37,6 +37,51 @@ export function participantAllowed(player: STPlayerRecord, requirement: Pick<Abi
   return true;
 }
 
+/** Never a PlayerId: PlayerIds are Firebase keys, which cannot hold U+0000. */
+const STALE_OPTION = "\u0000stale";
+
+/**
+ * SOL-10F-B1: ONE participant slot. Its value is the ParticipantBinding
+ * captured the instant the slot was chosen (captureBinding) -- never a
+ * PlayerId re-bound later. A captured binding whose seat now holds someone
+ * else is KEPT (so the coordinator refuses it as stale) and is SHOWN as stale
+ * -- never relabelled as the seat's replacement occupant -- until the
+ * Storyteller explicitly chooses again (choosing that seat again captures the
+ * NEW occupant's binding).
+ */
+export function ParticipantSelect({ game, value, candidates, label, placeholder = "Choose a player…", disabled, optionDisabled, onChange }: {
+  game: StorytellerLobbyRecord;
+  value: ParticipantBinding | null;
+  candidates: readonly STPlayerRecord[];
+  label: string;
+  placeholder?: string;
+  disabled?: boolean;
+  optionDisabled?: (player: STPlayerRecord) => boolean;
+  onChange: (binding: ParticipantBinding | null) => void;
+}) {
+  const stale = value !== null && !isCurrentBinding(game, value);
+  // A CURRENT captured participant the filtered list no longer offers is
+  // still shown as what it is (the coordinator enforces the constraints).
+  const unlisted = value !== null && !stale && !candidates.some((p) => p.id === value.playerId) ? game.players[value.playerId] : undefined;
+  const name = (p: STPlayerRecord) => `${p.name || `Seat ${p.seat + 1}`} · seat ${p.seat + 1}`;
+  return (
+    <>
+      <select aria-label={label} value={value === null ? "" : stale ? STALE_OPTION : value.playerId} disabled={disabled} aria-invalid={stale || undefined}
+        data-stale={stale || undefined}
+        onChange={(e) => {
+          if (e.target.value === STALE_OPTION) return;
+          onChange(e.target.value === "" ? null : captureBinding(game, e.target.value));
+        }}>
+        <option value="">{placeholder}</option>
+        {stale && <option value={STALE_OPTION} disabled>No longer in that seat — choose again</option>}
+        {unlisted && <option value={unlisted.id}>{name(unlisted)}</option>}
+        {candidates.map((p) => <option key={p.id} value={p.id} disabled={optionDisabled?.(p)}>{name(p)}</option>)}
+      </select>
+      {stale && <span className="behavior-help" role="status">The player chosen for {label} is no longer in that seat — choose again.</span>}
+    </>
+  );
+}
+
 type Props = {
   requirement: AbilityInputRequirement;
   game: StorytellerLobbyRecord;
@@ -54,10 +99,15 @@ export function RequirementInput({ requirement, game, script, actor, onChange, i
   const constraints = requirement.constraints ?? [];
   const label = requirement.label;
 
-  // Draft slots (strings) for the multi-slot kinds and the raw number text.
-  const initialSlots = initial?.kind === "participant" ? initial.participants.map((b) => b.playerId)
-    : initial?.kind === "character" ? initial.roleIds : [];
-  const [slots, setSlots] = useState<string[]>(() => Array.from({ length: count }, (_, i) => initialSlots[i] ?? ""));
+  // SOL-10F-B1: participant slots hold the ParticipantBinding captured when
+  // EACH slot was chosen (an initial answer keeps its own bindings) -- never a
+  // PlayerId; completing another slot never rebuilds an earlier one.
+  const [participantSlots, setParticipantSlots] = useState<(ParticipantBinding | null)[]>(() => Array.from({ length: count }, (_, i) => {
+    const binding = initial?.kind === "participant" ? initial.participants[i] : undefined;
+    return binding ? { playerId: binding.playerId, participantId: binding.participantId } : null;
+  }));
+  // Draft character slots (RoleIds) and the raw number text.
+  const [slots, setSlots] = useState<string[]>(() => Array.from({ length: count }, (_, i) => (initial?.kind === "character" ? initial.roleIds[i] : undefined) ?? ""));
   const [numberText, setNumberText] = useState(initial?.kind === "number" ? String(initial.value) : "");
   // Slice 7: an explicit "nobody" answer for an allowNone participant choice.
   const [nobody, setNobody] = useState(initial?.kind === "participant" && initial.participants.length === 0 && !!requirement.allowNone);
@@ -84,12 +134,23 @@ export function RequirementInput({ requirement, game, script, actor, onChange, i
   switch (requirement.kind) {
     case "participant": {
       const candidates = seatedParticipants(game).filter((player) => participantAllowed(player, requirement, actor));
-      const toValue = (ids: string[]): AbilityInputValue | undefined => {
-        if (constraints.includes("distinct") && new Set(ids).size !== ids.length) return undefined;
-        const bindings = ids.map((id) => game.players[id]).filter((p): p is STPlayerRecord => !!p && !p.isEmpty && !!p.participantId).map(bindingOf);
-        return bindings.length === ids.length ? { kind: "participant", participants: bindings } : undefined;
+      const distinct = constraints.includes("distinct");
+      const chosenIds = participantSlots.flatMap((binding) => (binding ? [binding.participantId] : []));
+      // Distinctness is by ParticipantId (the participation instance), never the seat.
+      const duplicate = distinct && chosenIds.length !== new Set(chosenIds).size;
+      // Complete -> EXACTLY the captured bindings (a stale one included, so the
+      // coordinator refuses it); incomplete or duplicate -> no answer yet.
+      const toValue = (bindings: (ParticipantBinding | null)[]): AbilityInputValue | undefined => {
+        if (bindings.some((binding) => binding === null)) return undefined;
+        const complete = bindings as ParticipantBinding[];
+        if (distinct && new Set(complete.map((binding) => binding.participantId)).size !== complete.length) return undefined;
+        return { kind: "participant", participants: complete.map((binding) => ({ playerId: binding.playerId, participantId: binding.participantId })) };
       };
-      const duplicate = constraints.includes("distinct") && slots.filter(Boolean).length !== new Set(slots.filter(Boolean)).size;
+      const updateSlot = (index: number, binding: ParticipantBinding | null) => {
+        const next = participantSlots.map((slot, i) => (i === index ? binding : slot));
+        setParticipantSlots(next);
+        if (!nobody) onChange(toValue(next));
+      };
       return (
         <fieldset className="ability-field" data-requirement={requirement.id}>
           <legend>{header}</legend>
@@ -97,21 +158,16 @@ export function RequirementInput({ requirement, game, script, actor, onChange, i
             <label className="ability-choice">
               <input type="checkbox" checked={nobody} onChange={(e) => {
                 setNobody(e.target.checked);
-                onChange(e.target.checked ? { kind: "participant", participants: [] } : (slots.every(Boolean) ? toValue(slots) : undefined));
+                onChange(e.target.checked ? { kind: "participant", participants: [] } : toValue(participantSlots));
               }} />
               Nobody
             </label>
           )}
-          {slots.map((slot, index) => (
-            <select key={index} disabled={nobody} aria-label={count > 1 ? `${label} ${index + 1}` : label} value={slot}
-              onChange={(e) => updateSlots(index, e.target.value, toValue)}>
-              <option value="">Choose a player…</option>
-              {candidates.map((p) => (
-                <option key={p.id} value={p.id} disabled={constraints.includes("distinct") && slots.some((s, i) => i !== index && s === p.id)}>
-                  {p.name || `Seat ${p.seat + 1}`} · seat {p.seat + 1}
-                </option>
-              ))}
-            </select>
+          {participantSlots.map((binding, index) => (
+            <ParticipantSelect key={index} game={game} value={binding} candidates={candidates} disabled={nobody}
+              label={count > 1 ? `${label} ${index + 1}` : label}
+              optionDisabled={(p) => distinct && participantSlots.some((other, i) => i !== index && other?.participantId === p.participantId)}
+              onChange={(next) => updateSlot(index, next)} />
           ))}
           {duplicate && <p className="behavior-help" role="alert">Choose different players.</p>}
         </fieldset>

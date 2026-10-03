@@ -16,8 +16,8 @@ import type { InvocationPath } from "@/abilities/invocation";
 import type { AbilityDescriptor, AbilityInputRequirement, AbilityInputValue, AbilitySemanticsRegistry } from "@/abilities/semantics";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import type { Alignment, Script, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
-import { bindingOf, describeOutcome, seatedParticipants } from "./abilityUi";
-import { OriginTag, RequirementInput } from "./RequirementInput";
+import { describeOutcome, seatedParticipants } from "./abilityUi";
+import { OriginTag, ParticipantSelect, RequirementInput } from "./RequirementInput";
 
 /**
  * Phase 10F: the ability workspace (PHASE10F Section 15.2) -- progressive
@@ -97,10 +97,9 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
   const participants = seatedParticipants(game);
   const env = useMemo(() => ({ script, registry, semantics }), [script, registry, semantics]);
 
-  const pickParticipant = (playerId: string): PickedParticipant => {
-    const player = Object.prototype.hasOwnProperty.call(game.players, playerId) ? game.players[playerId] : undefined;
-    return player && !player.isEmpty && player.participantId ? { binding: bindingOf(player), observed: player } : null;
-  };
+  /** The binding captured by the slot, with the record observed at that moment. */
+  const pickParticipant = (binding: ParticipantBinding | null): PickedParticipant =>
+    binding ? { binding, observed: game.players[binding.playerId]! } : null;
 
   /** The Manual outcome, or null while any step still has no player (a step
    * is never silently dropped). A stale picked player stays in the outcome so
@@ -189,11 +188,8 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
     onResolved({ resolutionId: result.resolutionId, game: committed, delivered: committed.informationDeliveries.length > game.informationDeliveries.length });
   };
 
-  const participantSelect = (value: string, onChange: (id: string) => void, label: string) => (
-    <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="">Choose a player…</option>
-      {participants.map((p) => <option key={p.id} value={p.id}>{p.name || `Seat ${p.seat + 1}`} · seat {p.seat + 1}</option>)}
-    </select>
+  const participantSelect = (value: ParticipantBinding | null, onChange: (binding: ParticipantBinding | null) => void, label: string) => (
+    <ParticipantSelect game={game} value={value} candidates={participants} label={label} onChange={onChange} />
   );
 
   return (
@@ -246,7 +242,7 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
               {drafts.map((draft, index) => (
                 <li key={index} className="manual-op">
                   <span className="manual-op-kind">{MANUAL_KINDS.find((k) => k.kind === draft.kind)!.label}</span>
-                  {participantSelect(draft.target?.binding.playerId ?? "", (id) => setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, target: pickParticipant(id) } : d))), `Step ${index + 1} player`)}
+                  {participantSelect(draft.target?.binding ?? null, (binding) => setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, target: pickParticipant(binding) } : d))), `Step ${index + 1} player`)}
                   {draft.kind === "effect" && (
                     <select aria-label={`Step ${index + 1} effect`} value={draft.type} onChange={(e) => setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, type: e.target.value } as ManualDraft : d)))}>
                       {KNOWN_EFFECT_TYPES.map((definition) => <option key={definition.type} value={definition.type}>{definition.label}</option>)}

@@ -4,7 +4,7 @@ import { resolveAbilitySemantics, type AbilityDescriptor, type AbilitySemanticsR
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { effectDefinitionOf } from "@/stores/effectRegistry";
 import type { AbilityOperation, AbilityOutcome, ParticipantBinding } from "@/stores/abilityResolution";
-import type { RulesQuery } from "@/stores/rulesQuery";
+import { boundParticipant, type RulesQuery } from "@/stores/rulesQuery";
 import type { PlayerId, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 
 /**
@@ -68,6 +68,22 @@ export function triggerAbility(roleId: string, registry: RoleRegistry, semantics
 
 export const bindingOf = (player: Pick<STPlayerRecord, "id" | "participantId">): ParticipantBinding =>
   ({ playerId: player.id, participantId: player.participantId ?? "" });
+
+/**
+ * SOL-10F-A2 / B1: the ONE way a UI selection becomes a participant answer --
+ * the binding of the participation instance occupying `playerId` AT THIS
+ * MOMENT (own-property safe), or null for an empty / unknown seat. Every
+ * select control and the Grimoire picker capture through it, so a slot holds
+ * `{playerId, participantId}` from the instant it is chosen, never a bare
+ * PlayerId re-bound later.
+ */
+export function captureBinding(game: StorytellerLobbyRecord, playerId: PlayerId): ParticipantBinding | null {
+  const player = Object.prototype.hasOwnProperty.call(game.players, playerId) ? game.players[playerId] : undefined;
+  return player && !player.isEmpty && player.participantId ? bindingOf(player) : null;
+}
+
+/** Whether a captured binding still names the seat's CURRENT occupant. */
+export const isCurrentBinding = (game: StorytellerLobbyRecord, binding: ParticipantBinding): boolean => !!boundParticipant(game, binding);
 
 /** Current occupied participants, in seat order. */
 export function seatedParticipants(game: StorytellerLobbyRecord): STPlayerRecord[] {
@@ -164,9 +180,9 @@ export const useTargetPicker = create<TargetPickerState>((set) => ({
 export function pickSeatIfPicking(game: StorytellerLobbyRecord | null, playerId: PlayerId): boolean {
   const active = useTargetPicker.getState().active;
   if (!active || !game) return false;
-  const player = Object.prototype.hasOwnProperty.call(game.players, playerId) ? game.players[playerId] : undefined;
-  if (!player || player.isEmpty || !player.participantId) return false;
+  const binding = captureBinding(game, playerId);
+  if (!binding) return false;
   useTargetPicker.setState({ active: null });
-  active.onPick(bindingOf(player));
+  active.onPick(binding);
   return true;
 }
