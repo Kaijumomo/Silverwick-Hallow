@@ -1,4 +1,6 @@
 import type { AbilityDescriptor } from "../semantics";
+import { EMPATH } from "./empath";
+import { FORTUNE_TELLER } from "./fortuneteller";
 import { MONK } from "./monk";
 import { POISONER } from "./poisoner";
 
@@ -8,4 +10,4 @@ import { POISONER } from "./poisoner";
  * production Ability Semantics Registry (semantics.ts); it is only ever
  * consulted through the canonical ownership gate (resolveAbilitySemantics).
  */
-export const VERIFIED_DESCRIPTORS: readonly AbilityDescriptor[] = [POISONER, MONK];
+export const VERIFIED_DESCRIPTORS: readonly AbilityDescriptor[] = [POISONER, MONK, EMPATH, FORTUNE_TELLER];

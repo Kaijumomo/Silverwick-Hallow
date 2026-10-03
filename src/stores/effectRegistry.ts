@@ -54,6 +54,7 @@ const INDICATORS: Record<string, EffectIndicatorDefinition> = {
   mad: { key: "mad", label: "Mad", family: "obligation" },
   marked: { key: "marked", label: "Marked", family: "conditional" },
   registration: { key: "registration", label: "Registers falsely", family: "registration" },
+  redHerring: { key: "redHerring", label: "Red Herring", family: "registration" },
 };
 
 /** Known semantic Effect types. Adding one here never changes mechanics. */
@@ -69,6 +70,8 @@ const DEFINITIONS: Record<string, EffectDefinition> = {
   mad: { type: "mad", label: "Mad", indicator: "mad" },
   marked: { type: "marked", label: "Marked", indicator: "marked" },
   registersFalsely: { type: "registersFalsely", label: "Registers falsely", indicator: "registration" },
+  fortuneTellerRedHerring: { type: "fortuneTellerRedHerring", label: "Red Herring", indicator: "redHerring",
+    description: "Storyteller-private: the good player who registers as a Demon to the Fortune Teller." },
 };
 
 /** The order known indicators appear in; unknown ones follow. */

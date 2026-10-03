@@ -101,8 +101,21 @@ export function describeOperation(game: StorytellerLobbyRecord, operation: Abili
         : `${nameOf(game, intent.target)} becomes the ${roleName(intent.actualRole)}`);
     case "alignment":
       return operation.intents.map((intent) => `${nameOf(game, intent.target)} becomes ${intent.actualAlignment}`);
-    case "information":
-      return [`Record what ${nameOf(game, operation.recipient)} was told`];
+    case "information": {
+      // Presentation only: what is recorded as told (never re-derived).
+      const told = (Array.isArray(operation.values) ? operation.values : []).map((value) => {
+        switch (value.kind) {
+          case "number": return String(value.value);
+          case "boolean": return value.value ? "Yes" : "No";
+          case "text": return `"${value.value}"`;
+          case "role": return roleName(value.roleId);
+          case "alignment": return value.alignment;
+          case "player": return value.participants.map((binding: ParticipantBinding) => nameOf(game, binding)).join(" & ");
+        }
+        return "";
+      }).filter(Boolean);
+      return [`Record what ${nameOf(game, operation.recipient)} was told${told.length ? `: ${told.join(" · ")}` : ""}`];
+    }
     case "nightStep":
       return [`Mark the step ${operation.status}`];
   }

@@ -4,7 +4,7 @@ import { activeModifiers, gateEvaluation, type HookScope, type ModifierDefinitio
 import { resolveAbilitySemantics, type AbilitySemanticsRegistry } from "@/abilities/semantics";
 import { currentLiveMoment, lifeEventsAt, type LifeEventQueryResult } from "./lifeEvents";
 import type { ParticipantBinding } from "./abilityResolution";
-import type { Alignment, EffectRecord, LifeEvent, LiveGameMoment, RoleId, STPlayerRecord, Script, StorytellerLobbyRecord } from "./types";
+import type { Alignment, EffectRecord, LifeEvent, LiveGameMoment, RoleDef, RoleId, STPlayerRecord, Script, StorytellerLobbyRecord } from "./types";
 
 /**
  * Phase 10F: the Rules Query layer (PHASE10F Section 3.2) -- pure, DERIVED
@@ -42,8 +42,13 @@ const unknown = <T,>(reason: string): QueryAnswer<T> => ({ known: false, reason 
  *    "cannot die" automatically; any death question needs a Storyteller
  *    decision.
  *  - judgment: an interaction that always needs a Storyteller decision.
+ *  - storytellerFact: Phase 10F Slice 7 -- Storyteller-private authoritative
+ *    state recorded as an Effect (e.g. the Fortune Teller's Red Herring,
+ *    matrix Section 7). It applies exactly while active, with NO dependence on
+ *    any source functioning; only the evaluator that owns the fact decides
+ *    when it matters. It is never a Reminder.
  */
-export type EffectSemantics = "impairment" | "noAbility" | "demonProtection" | "deathImmunity" | "genericProtection" | "judgment";
+export type EffectSemantics = "impairment" | "noAbility" | "demonProtection" | "deathImmunity" | "genericProtection" | "judgment" | "storytellerFact";
 export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>> = {
   drunk: "impairment",
   poisoned: "impairment",
@@ -53,6 +58,7 @@ export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>
   protected: "genericProtection",
   soberHealthy: "judgment",
   registersFalsely: "judgment",
+  fortuneTellerRedHerring: "storytellerFact",
 };
 export const effectSemanticsOf = (type: string): EffectSemantics | undefined =>
   Object.prototype.hasOwnProperty.call(APPROVED_EFFECT_SEMANTICS, type) ? APPROVED_EFFECT_SEMANTICS[type] : undefined;
@@ -72,7 +78,10 @@ export const REGISTRATION_ALTERING: Readonly<Record<RoleId, "self" | "anyGood" |
   zombuul: "self",
   legion: "self",
   lycanthrope: "anyGood",
-  fortuneteller: "observerGood",
+  // Phase 10F Slice 7: the Fortune Teller's "a good player registers as a
+  // Demon to you" is no longer a blanket registration judgment -- it is the
+  // authoritative `fortuneTellerRedHerring` fact (matrix Section 7), read by the
+  // Fortune Teller evaluator through factHolders().
 };
 
 export type RulesQueryEnvironment = {
@@ -112,8 +121,17 @@ export type RulesQuery = {
   /** The nearest living participants on each side (skipping empty seats and
    * the dead), or null when there is none. */
   aliveNeighbours: (binding: ParticipantBinding) => QueryAnswer<{ left: ParticipantBinding | null; right: ParticipantBinding | null }>;
+  /** Phase 10F Slice 7: the ACTIVE registry's definition of `roleId` (its
+   * character type, canonical ownership...), or undefined. Definitions only --
+   * never ability prose interpretation. */
+  roleOf: (roleId: RoleId) => RoleDef | undefined;
   /** Occupied participants whose ACTUAL Role is `roleId`. */
   inPlay: (roleId: RoleId) => ParticipantBinding[];
+  /** Phase 10F Slice 7: every current participant holding an ACTIVE Effect of
+   * an approved `storytellerFact` type, with the Effect id (authoritative
+   * Current State only -- never a Reminder). Unknown for any other type: a
+   * custom Effect name is never treated as a fact. */
+  factHolders: (type: string) => QueryAnswer<{ holder: ParticipantBinding; effectId: string }[]>;
   /** Life Events at `moment` (with honest coverage). */
   lifeEvents: (moment: LiveGameMoment, test?: (event: LifeEvent) => boolean) => LifeEventQueryResult;
   /** The modifier gate for an evaluation of `roleId` touching `scopes`. */
@@ -142,6 +160,7 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     if (effect.state !== "active") return known(false); // a lifecycle DECISION, not derived
     const semantics = effectSemanticsOf(effect.type);
     if (!semantics) return unknown(`"${effect.type}" is a custom Effect: Silverwick applies no rule to it by name.`);
+    if (semantics === "storytellerFact") return known(true); // as recorded; no source dependence
     const key = `${holder.participantId}:${effect.id}`;
     if (visiting.has(key)) return unknown("These Effects depend on each other: the Storyteller decides.");
     // A Storyteller's manual Effect (no origin participant) applies as recorded.
@@ -267,7 +286,11 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
       };
       return known({ left: find(-1), right: find(1) });
     }),
+    roleOf: (roleId) => (typeof roleId === "string" && roleId ? environment.registry.get(roleId) : undefined),
     inPlay: (roleId) => seated().filter((p) => p.actualRole === roleId).map(bindingOf),
+    factHolders: (type) => effectSemanticsOf(type) !== "storytellerFact"
+      ? unknown(`"${type}" is not an approved Storyteller fact.`)
+      : known(seated().flatMap((p) => p.effects.filter((e) => e.type === type && e.state === "active").map((e) => ({ holder: bindingOf(p), effectId: e.id })))),
     lifeEvents: (moment, test) => lifeEventsAt(game, moment, test),
     modifierGate: (roleId, scopes) => gateEvaluation(modifiers, roleId, scopes, game),
   };

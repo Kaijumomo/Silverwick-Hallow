@@ -124,10 +124,13 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
     : { mode: "manual", fingerprint, roleId: target.roleId, outcome: manualOutcome(), reason, completeStep };
   const planned = request ? planAbilityResolution(game, request, env) : null;
   const stale = !fingerprint || (planned && !planned.ok && planned.code === "stale");
-  // SOL-10F-L2: every judgment the coordinator asks for is rendered by its own
-  // kind / cardinality / constraints, and stays visible once asked.
+  // SOL-10F-L2: every follow-up the coordinator asks for is rendered by its own
+  // kind / cardinality / constraints, and stays visible once asked. Slice 7: an
+  // evaluator may ask a further PLAYER or STORYTELLER choice (e.g. a consent, a
+  // successor) as well as a judgment -- each keeps its own origin; judgments
+  // answer `judgments`, choices answer `inputs`.
   const asked: AbilityInputRequirement[] = planned && !planned.ok && planned.code === "needsInput"
-    ? (planned.requirements ?? []).filter((requirement) => requirement.source === "judgment" && !descriptor?.inputs.some((input) => input.id === requirement.id))
+    ? (planned.requirements ?? []).filter((requirement) => !descriptor?.inputs.some((input) => input.id === requirement.id))
     : [];
   const [judgmentFields, setJudgmentFields] = useState<AbilityInputRequirement[]>([]);
   const newlyAsked = asked.filter((requirement) => !judgmentFields.some((known) => known.id === requirement.id));
@@ -176,10 +179,24 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
                   })} />
               ))}
             </section>
-            {judgmentFields.length > 0 && (
+            {judgmentFields.some((requirement) => requirement.source !== "judgment") && (
+              <section aria-label="Further choices" className="ability-section">
+                <h3 className="drawer-section-title">Further choices</h3>
+                {judgmentFields.filter((requirement) => requirement.source !== "judgment").map((requirement) => (
+                  <RequirementInput key={requirement.id} requirement={requirement} game={game} script={script} actor={fingerprint?.actor ?? null}
+                    onChange={(value) => setInputs((prev) => {
+                      const next = { ...prev };
+                      if (value) next[requirement.id] = value;
+                      else delete next[requirement.id];
+                      return next;
+                    })} />
+                ))}
+              </section>
+            )}
+            {judgmentFields.some((requirement) => requirement.source === "judgment") && (
               <section aria-label="Storyteller judgment" className="ability-section">
                 <h3 className="drawer-section-title">Storyteller judgment</h3>
-                {judgmentFields.map((requirement) => (
+                {judgmentFields.filter((requirement) => requirement.source === "judgment").map((requirement) => (
                   <RequirementInput key={requirement.id} requirement={requirement} game={game} script={script} actor={fingerprint?.actor ?? null}
                     onChange={(value) => setJudgments((prev) => {
                       const next = { ...prev };
