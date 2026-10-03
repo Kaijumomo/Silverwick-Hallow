@@ -10,7 +10,7 @@
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
 **Schema:** v23 integrated on `main`; v24 implemented on `dev/phase-10f`\
-**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (D1/D2/E1 remediated, `PHASE10F.md` §§43, 45 → Luna narrow verification → Astra narrow final closure recheck → Sol closure adjudication; Phase 10F open)
+**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (D1/D2/E1 behavior verified by Luna; one Windows-only E1 test portability fix required before Luna PASS; Phase 10F open)
 
 ## Product invariants
 
@@ -228,7 +228,7 @@ Delivered (store/game schema v23): `src/stores/alignmentResolution.ts` (pure `pl
 Frozen direction: one participant-bound Actual Alignment transaction seam; gameplay change vs correction; atomic multi-participant changes; Actual Alignment independent of Role; v23 player-facing alignment perception with Normal / explicit Good / explicit Evil / Not Told; Normal ordinary perception derives from Shown Role while Normal Traveler perception follows Actual Alignment; v22 -> v23 normalization clears inert legacy Traveler shown-alignment copies to Normal; strict v23 Alignment History correction/correlation metadata; occupancy-boundary hardening so a new participant never inherits stale seat alignment; Storyteller UI separates Actual Alignment truth from player-facing perception; 10F remains responsible for ability logic.
 
 ### 10F — Guided Ability Resolution / Night Actions
-**Status:** SOL-10F-D1/D2/E1 REMEDIATED (`PHASE10F.md` §§43, 45) — READY FOR LUNA NARROW VERIFICATION, then Astra narrow final closure recheck, then Sol closure adjudication. Not closed.\
+**Status:** D1/D2/E1 BEHAVIOR VERIFIED; LUNA-10F-E1-TEST-01 TEST-ONLY PORTABILITY FIX REQUIRED. Not closed.\
 **Contract:** `PHASE10F.md` (frozen 2026-10-02).\
 **Starting checkpoint:** `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`.\
 **Contract-freeze checkpoint:** `727530e9364a0c971326c06ce45855adcf39828b`.\
@@ -278,4 +278,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Luna performs one narrow combined mechanical verification of `PHASE10F.md` §42 SOL-10F-D1/D2 (recorded in §43, code checkpoint `a0968d0ff6149b7f16eb9fabb7e1eb8dda32ea0c`) and §44 SOL-10F-E1 (recorded in §45, code checkpoint `c6a2938e4e3c5ef3b17013c833cd335fe623b6f8`; docs-only record on top) at the exact current `dev/phase-10f` HEAD: the mirrored 10 MiB string-leaf limit, the mechanical-only protection source identity, the shared checkpoint serializer, the writer's exact-checkpoint check, the store's supported-roster envelope proof and its atomic refusal, plus A/B/C preservation, the full gate and §§1–45 integrity. Do not send directly to Astra. After Luna PASS, Astra performs one narrow D1/D2/E1 final closure recheck; on Astra PASS, Sol adjudicates Phase 10F closure. Do not merge, deploy or close 10F.
+Claude Code makes exactly one test-only portability correction in `src/firebase/checkpointAggregateCompatibility.sdk.test.ts`: normalize discovered relative paths before comparing them with `firebase/checkpoint.ts`, without weakening the single-serializer guard. No production files change. Run the E1 targeted suite, full normal suite, typecheck/build/diff checks and return one exact clean checkpoint to Luna. On Luna PASS, Astra performs the final narrow D1/D2/E1 closure recheck. Do not merge, deploy or close 10F.
