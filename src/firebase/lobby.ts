@@ -16,14 +16,12 @@ import {
 } from "./paths";
 import type { ParticipantId, PlayerId, PlayerSelfRecord } from "@/stores/types";
 import { sessionPath, outcomePath, leavePath, travelerChoicePath, LifecycleError } from "./lifecycle";
+import { ROOM_CODE_ALPHABET, ROOM_CODE_LENGTH, ROOM_CODE_PATTERN } from "./roomCode";
 import { decodeRosterEntry, decodeRosterParticipant, decodeJoinRequests, decodeRoster, decodeLobbyStatus, reportSnapshotProblem, SnapshotValidationError, subscribeDecoded, DATA_ERROR_MESSAGE, CONNECTION_ERROR_MESSAGE } from "./snapshots";
-
-// Confusable-glyph-free alphabet (no 0/O, 1/I/L). 30 chars, ~656bn 8-char codes.
-const ALPHABET = "BCDFGHJKLMNPQRSTVWXYZ23456789";
 
 /** Format a raw 8-char code for display as "XXXX-XXXX". Shorter codes returned as-is. */
 export function formatCode(code: string): string {
-  if (code.length === 8) return `${code.slice(0, 4)}-${code.slice(4)}`;
+  if (code.length === ROOM_CODE_LENGTH) return `${code.slice(0, 4)}-${code.slice(4)}`;
   return code;
 }
 
@@ -35,12 +33,12 @@ export function normaliseCode(raw: string): string {
 export function canonicalJoin(code: string, name: string) {
   const canonicalCode = normaliseCode(code);
   const canonicalName = name.trim();
-  if (!/^[A-Z0-9]{8}$/.test(canonicalCode)) throw new LifecycleError("invalid", "Enter a valid eight-character lobby code.");
+  if (!ROOM_CODE_PATTERN.test(canonicalCode)) throw new LifecycleError("invalid", "Enter a valid eight-character lobby code.");
   if (!canonicalName || canonicalName.length > 20 || /[\r\n\t]/.test(canonicalName)) throw new LifecycleError("invalid", "Enter a name of 1–20 characters on one line.");
   return { code: canonicalCode, name: canonicalName };
 }
 
-export function generateCode(length = 8): string {
+export function generateCode(length = ROOM_CODE_LENGTH): string {
   let out = "";
   const arr =
     typeof globalThis.crypto !== "undefined"
@@ -48,7 +46,7 @@ export function generateCode(length = 8): string {
       : null;
   for (let i = 0; i < length; i++) {
     const r = arr ? arr[i]! : Math.floor(Math.random() * 256);
-    out += ALPHABET[r % ALPHABET.length];
+    out += ROOM_CODE_ALPHABET[r % ROOM_CODE_ALPHABET.length];
   }
   return out;
 }

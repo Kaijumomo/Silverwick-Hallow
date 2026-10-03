@@ -13,7 +13,7 @@ import { revokePlayerMembership } from "./lobby";
 import type { RoomBackend } from "./backend";
 import type { OnlineMap } from "@/stores/projections";
 import { decodeMembershipRevocations, decodePresence, decodeRoster, decodeRosterParticipants, decodeJoinRequests, SnapshotValidationError, type MembershipRevocationRecord, type RosterParticipantRecord } from "./snapshots";
-import { membershipRevocationsPath, rosterParticipantsPath } from "./paths";
+import { membershipRevocationsPath, rosterParticipantsPath, storytellerPathSegments } from "./paths";
 import type { RevocationAction } from "./lobby";
 import { SessionWriter, FENCE_MARGIN_MS, type AuthorityHandle } from "./writer";
 import { classifyStorytellerError, decodeSession, guardSchema, isTransient, leaseSchema, LifecycleError, sessionPath, type SessionFailure } from "./lifecycle";
@@ -1184,7 +1184,7 @@ async function readCheckpoint(
   // game/roster object's own root), so depth/path-byte-length accounting
   // matches what the real SDK will actually count on the next projection.
   if (
-    !validateFirebaseWritableValue(parsed.data, ["lobbies", lobby.code, "storyteller"]).ok ||
+    !validateFirebaseWritableValue(parsed.data, storytellerPathSegments(lobby.code)).ok ||
     !validateFirebaseWritableValue(rosterParsed.data, ["lobbies", lobby.code, "roster"]).ok
   ) {
     return { state: { kind: "invalid" }, restored: null };

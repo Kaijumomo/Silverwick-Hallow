@@ -25,8 +25,11 @@ export const joinRequestPath = (code: string, uid: string) =>
 export const publicPath = (code: string) => `lobbies/${code}/public`;
 export const playerPath = (code: string, playerId: PlayerId) =>
   `lobbies/${code}/player/${playerId}`;
+/** The Storyteller-private game projection's destination, as path segments
+ * (the shape firebaseWriteCompatibility measures a write against). */
+export const storytellerPathSegments = (code: string): readonly string[] => ["lobbies", code, "storyteller"];
 export const storytellerPath = (code: string) =>
-  `lobbies/${code}/storyteller`;
+  storytellerPathSegments(code).join("/");
 export const presencePath = (code: string, uid: string) =>
   `lobbies/${code}/presence/${uid}`;
 // Phase 9C.6 (OPUS-002): Storyteller-owned Public Display capability, and the

@@ -76,6 +76,9 @@ import { isBagType } from "@/features/setup/setupPolicies";
 import { arrivalsAreTravelers, newTravelerArrival, publicTravelerRole, travelerDemonInformation, travelerNeedsArrivalCheck } from "./travelers";
 import { getTraveler } from "@/data/travelers";
 import { MAX_PLAYERS, MAX_TOTAL_PLAYERS, MIN_PLAYERS } from "@/data/setupCounts";
+import { validateFirebaseWritableValue } from "@/firebase/firebaseWriteCompatibility";
+import { storytellerPathSegments } from "@/firebase/paths";
+import { MAX_ROOM_CODE_SHAPE } from "@/firebase/roomCode";
 import type { SetupCommandResult } from "@/features/setup/setupReadiness";
 import type {
   Alignment,
@@ -1949,6 +1952,18 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
         if (!result.ok) return result;
         if (!result.changed) return { ok: true, changed: false };
+        // SOL-10F-C3: an accepted plan becomes authoritative only if the
+        // production writer can project it. The SAME compatibility check the
+        // checkpoint recovery uses, against the SAME Storyteller destination
+        // the writer writes -- the live lobby's, or (before a room exists) the
+        // canonical maximum supported code shape. Refused -> nothing committed
+        // (no game, Undo, localSeq, History, delivery or Night progress); the
+        // pure coordinator stays storage-agnostic.
+        const writable = validateFirebaseWritableValue(result.plan.game, storytellerPathSegments(get().lobby?.code ?? MAX_ROOM_CODE_SHAPE));
+        if (!writable.ok) {
+          return { ok: false, code: "invalidComposition",
+            message: `This result cannot be safely stored online (the resulting game ${writable.message.replace(/\.$/, "")}) -- nothing was recorded. Resolve it another way.` };
+        }
         set({ undoStack: pushUndo(game, undoStack), game: result.plan.game });
         return { ok: true, changed: true, resolutionId: result.plan.resolutionId };
       },
