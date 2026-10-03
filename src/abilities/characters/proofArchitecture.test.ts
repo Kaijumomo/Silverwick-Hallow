@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { stripCommentsForGuard as stripComments } from "@/test/writerGuard";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import { VERIFIED_DESCRIPTORS } from "./index";
+import { effectSemanticsOf } from "@/stores/rulesQuery";
 
 const DIR = resolve(__dirname);
 const SRC = resolve(__dirname, "../..");
@@ -68,6 +69,18 @@ describe("Slice 7 guards: authority boundaries", () => {
     expect(invocation).toMatch(/path === "nightTrigger" && !descriptor\.nightTrigger/);
     // Exactly one verified descriptor declares a Night trigger: the Ravenkeeper.
     expect(VERIFIED_DESCRIPTORS.filter((d) => d.nightTrigger).map((d) => d.roleId)).toEqual(["ravenkeeper"]);
+  });
+
+  it("SOL-10F-S7-F2: independent Storyteller facts -- declared only by the Fortune Teller, only storytellerFact types, guarded generically", () => {
+    expect(VERIFIED_DESCRIPTORS.filter((d) => d.independentFacts?.length).map((d) => [d.roleId, d.independentFacts])).toEqual([["fortuneteller", ["fortuneTellerRedHerring"]]]);
+    for (const d of VERIFIED_DESCRIPTORS) for (const type of d.independentFacts ?? []) expect(effectSemanticsOf(type), type).toBe("storytellerFact");
+    const coordinator = read(join(SRC, "stores/abilityResolution.ts"));
+    // The exception is generic (no character named) and keeps every narrowing condition.
+    expect(coordinator).toMatch(/declaredFacts\.includes\(intent\.effect\.type\)/);
+    expect(coordinator).toMatch(/effectSemanticsOf\(intent\.effect\.type\) === "storytellerFact"/);
+    expect(coordinator).toMatch(/intent\.effect\.source === undefined && intent\.effect\.sourceCharacter === undefined/);
+    expect(coordinator).toMatch(/intent\.kind === "apply"/);
+    expect(coordinator).toMatch(/!functioning && !simulated && outcome\.operations\.some\(\(operation\) => isMechanical\(operation\.domain\) && !usesOwnAbility\(operation\) && !independentFact\(operation\)\)/);
   });
 
   it("the Toymaker hook never reads Reminders or claims skip history", () => {

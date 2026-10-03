@@ -120,6 +120,16 @@ export type AbilityDescriptor = {
    * source stops functioning. Read by the Rules Query; an undeclared sourced
    * Effect's applicability is unknown (Storyteller judgment), never assumed. */
   sourcedEffects?: readonly { type: string; persistence: "independent" | "whileSourceFunctions" }[];
+  /** SOL-10F-S7-F2: authoritative Storyteller-FACT Effect types this ability's
+   * workflow may initialize INDEPENDENTLY of whether the actor's ability is
+   * functioning (e.g. setup bookkeeping the Storyteller establishes before the
+   * wake). The coordinator admits such an application through its
+   * non-functioning guard only when the type is declared here AND classified
+   * `storytellerFact` by the Rules Query AND the Effect carries no source
+   * participant / source character. A simulated wake can never create one.
+   * Every other mechanical outcome of a non-functioning ability stays
+   * forbidden. */
+  independentFacts?: readonly string[];
   presentation: AbilityPresentation;
   evaluator?: AbilityEvaluator;
 };

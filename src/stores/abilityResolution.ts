@@ -20,7 +20,7 @@ import { applyLifePlan, planLifeTransaction, type LifeConfirmationToken, type Li
 import { participantStepKey, planNightStepStatus } from "./nightProgress";
 import { applyReminderPlan, planReminderTransaction, type ReminderIdSource, type ReminderIntent } from "./reminderResolution";
 import { applyRolePlan, defaultRoleIds, planRoleTransaction, type RoleIdSource, type RoleIntent } from "./roleResolution";
-import { boundParticipant, createRulesQuery } from "./rulesQuery";
+import { boundParticipant, createRulesQuery, effectSemanticsOf } from "./rulesQuery";
 import { MAX_RESOLUTION_ID_LENGTH, StorytellerGamePersistedSchema } from "./schemas";
 import { wakeIdentity } from "./wakeIdentity";
 import type { MutationContext } from "./history";
@@ -753,8 +753,19 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
       intent.kind === "useAbility" && isBinding(intent.target) && intent.target.participantId === actorBinding.participantId))) {
     return refuse("unsupported", "This once-per-game ability's definition does not record its use -- the definition is incomplete.");
   }
-  // A non-functioning ability changes no Current State beyond recording its use.
-  if (!functioning && !simulated && outcome.operations.some((operation) => isMechanical(operation.domain) && !usesOwnAbility(operation))) {
+  // SOL-10F-S7-F2: an independent Storyteller fact -- ONLY an Effect `apply` of
+  // a type the descriptor declares in `independentFacts`, classified
+  // `storytellerFact`, with no source participant / source character. It is
+  // Storyteller-owned bookkeeping, not an outcome of the ability functioning.
+  const declaredFacts = Array.isArray(descriptor.independentFacts) ? descriptor.independentFacts : [];
+  const independentFact = (operation: AbilityOperation) => operation.domain === "effect" && operation.intents.length > 0 &&
+    operation.intents.every((intent) => isObject(intent) && intent.kind === "apply" && isObject(intent.effect) &&
+      typeof intent.effect.type === "string" && declaredFacts.includes(intent.effect.type) &&
+      effectSemanticsOf(intent.effect.type) === "storytellerFact" &&
+      intent.effect.source === undefined && intent.effect.sourceCharacter === undefined);
+  // A non-functioning ability changes no Current State beyond recording its use
+  // (and, for a real -- never simulated -- actor, a declared independent fact).
+  if (!functioning && !simulated && outcome.operations.some((operation) => isMechanical(operation.domain) && !usesOwnAbility(operation) && !independentFact(operation))) {
     return refuse("illegal", "This ability is not functioning (drunk, poisoned or lost): it changes nothing but its use.");
   }
   // A verified information modifier constrains what may be delivered: EVERY
