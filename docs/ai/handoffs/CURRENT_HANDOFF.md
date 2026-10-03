@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-03\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions is **CLOSED by Sol and READY FOR INTEGRATION**. Final production code checkpoint: `c6a2938e4e3c5ef3b17013c833cd335fe623b6f8`; final reviewed target: `a2d6d1b99242317269bf86f54e6d234e0644df33`; Astra final adversarial verdict: PASS. `PHASE10F.md` §49 records closure. Phase 10F has not yet been merged into `main`.
+**State:** Phase 10F — Guided Ability Resolution / Night Actions is **CLOSED AND INTEGRATED** into `main`. `main` was fast-forwarded from `2252c5e76284fcd12d0e4d5debdfc34f66f86a17` to the closed Phase 10F branch head `6f51f8acb78a71f73ee704ffced636f6b4ea0300`; no merge commit and no unrelated production change. Final reviewed target: `a2d6d1b99242317269bf86f54e6d234e0644df33`; final production checkpoint: `c6a2938e4e3c5ef3b17013c833cd335fe623b6f8`. `PHASE10F.md` §50 records integration. Schema/store v24 is now integrated on `main`. Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration is next; no 10G code has started.
 
 ## Phase 10D — CLOSED
 
@@ -863,3 +863,21 @@ Deferred post-10F hardening remains recorded: generalize the E1 checkpoint-envel
 ## Immediate next task
 
 Integrate the closed Phase 10F branch into `main`, verify the resulting ancestry/diff, record the integration checkpoint, then create `dev/phase-10g` from that exact integrated `main`.
+
+## Phase 10F integration — complete — 2026-10-03
+
+Phase 10F is **CLOSED AND INTEGRATED**.
+
+- pre-integration `main`: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`
+- fast-forward integration checkpoint: `6f51f8acb78a71f73ee704ffced636f6b4ea0300`
+- final reviewed target in lineage: `a2d6d1b99242317269bf86f54e6d234e0644df33`
+- final production code checkpoint in lineage: `c6a2938e4e3c5ef3b17013c833cd335fe623b6f8`
+- Firebase Rules: unchanged in 10F
+- merge commit: none
+- this integration record: documentation only
+
+Deferred store-wide checkpoint-preflight hardening remains recorded for later work and does not reopen 10F.
+
+## Immediate next task
+
+Create `dev/phase-10g` from the exact final integrated `main`. Do not code 10G yet. First perform the architecture challenge and freeze the Phase 10G implementation contract.

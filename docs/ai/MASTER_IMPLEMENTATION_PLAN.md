@@ -9,8 +9,8 @@
 **Phase 10C final reviewed implementation checkpoint:** `ca808fa18e97d758750aad63ceacc2bea3d8f627` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
-**Schema:** v23 integrated on `main`; v24 implemented on `dev/phase-10f`\
-**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions **CLOSED** at reviewed target `a2d6d1b99242317269bf86f54e6d234e0644df33`; ready for integration into `main`.
+**Schema:** v24 integrated on `main`\
+**Current phase:** Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration — architecture challenge / scope freeze next.
 
 ## Product invariants
 
@@ -228,7 +228,7 @@ Delivered (store/game schema v23): `src/stores/alignmentResolution.ts` (pure `pl
 Frozen direction: one participant-bound Actual Alignment transaction seam; gameplay change vs correction; atomic multi-participant changes; Actual Alignment independent of Role; v23 player-facing alignment perception with Normal / explicit Good / explicit Evil / Not Told; Normal ordinary perception derives from Shown Role while Normal Traveler perception follows Actual Alignment; v22 -> v23 normalization clears inert legacy Traveler shown-alignment copies to Normal; strict v23 Alignment History correction/correlation metadata; occupancy-boundary hardening so a new participant never inherits stale seat alignment; Storyteller UI separates Actual Alignment truth from player-facing perception; 10F remains responsible for ability logic.
 
 ### 10F — Guided Ability Resolution / Night Actions
-**Status:** **CLOSED — READY FOR INTEGRATION.** Sol closure is recorded in `PHASE10F.md` §49.\
+**Status:** **CLOSED AND INTEGRATED.** Sol closure: `PHASE10F.md` §49; integration: §50.\
 **Contract:** `PHASE10F.md` (frozen 2026-10-02).\
 **Starting checkpoint:** `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`.\
 **Contract-freeze checkpoint:** `727530e9364a0c971326c06ce45855adcf39828b`.\
@@ -240,6 +240,7 @@ Frozen direction: one participant-bound Actual Alignment transaction seam; gamep
 **SOL-10F-D1/D2 code checkpoint:** `a0968d0ff6149b7f16eb9fabb7e1eb8dda32ea0c` (docs-only record commit on top).\
 **SOL-10F-E1 code checkpoint:** `c6a2938e4e3c5ef3b17013c833cd335fe623b6f8` (docs-only record commit on top).\
 **Phase 10F final reviewed target:** `a2d6d1b99242317269bf86f54e6d234e0644df33`.\
+**Phase 10F integration checkpoint:** `6f51f8acb78a71f73ee704ffced636f6b4ea0300` (fast-forwarded into `main`; this roadmap/handoff integration record is docs-only on top).\
 **Schema/store:** v24 (on `dev/phase-10f`).
 
 Frozen direction: one pure ability coordinator composes the existing Life, Effect, Reminder, Role and Alignment planners on one evolving working snapshot and commits once; mechanical operation order is ability-defined; Storyteller choice/judgment remains explicit; Reminders remain non-authoritative; participant-bound workflow identity prevents seat-reuse staleness; Information Delivery becomes composable and records simulated/performed-role context in v24; player Night progress becomes participant-scoped; public/player-town Life State is withheld during Night; the Night Order becomes a guided operating dashboard with progressive disclosure and complex-outcome previews.
@@ -249,6 +250,9 @@ The architecture challenge and Sol adjudication found no contradiction requiring
 Implemented (see `docs/ai/handoffs/CURRENT_HANDOFF.md` for the lineage and gate): the reviewed-and-repaired pure Information Delivery plan; store v24 (strict deliveries with authorized `performedRole` / `resolutionId`, participant-scoped Night progress with v23 seat-keyed progress dropped, Night public-Life withholding); composable `useAbility` / `correctAbilityUsed` Life intents; the rules-neutral semantics contract, Rules Query, hook/modifier gating, pure coordinator and one-commit `resolveAbility`; the Manual / unmodeled path; the interactive Night Order, workspace, Grimoire target picker and Privacy Mode behavior; the generated coverage manifest and architecture guards. Slice 6 froze the proof-character rules matrix (`docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md`); Slice 7 implemented it (`PHASE10F.md` §26): eleven guided / support semantics, verified-Manual Tinker / Toymaker / Drunk, Setup-owned Baron, an explicit verified Night-trigger path (Ravenkeeper only), the authoritative Red Herring fact, star-pass suppression through participant-scoped Night progress, and the corrected coverage manifest.
 
 ### 10G — Advanced Storyteller Bookkeeping / Final Visual Integration
+**Status:** NOT STARTED — architecture challenge / scope freeze next.\
+**Starting point:** exact final integrated `main` after the Phase 10F documentation-only integration record.\
+
 Ability-specific bookkeeping that does not belong in generic Life/Effect/Reminder/Role/Alignment primitives, final visual integration, and Phase 10 closure.
 
 ## Phase workflow
@@ -279,4 +283,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Integrate the closed Phase 10F branch into `main`, verify exact ancestry and diff hygiene, record the integration checkpoint, then create `dev/phase-10g` from that exact integrated `main`.
+Create `dev/phase-10g` from the exact final integrated `main`. Before coding, review the current repository and canonical Phase 10 roadmap, inventory the remaining advanced Storyteller bookkeeping / visual-integration work, and run the Phase 10G architecture challenge. Freeze the smallest correct 10G contract before implementation.

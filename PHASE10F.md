@@ -1632,3 +1632,20 @@ Final reviewed checkpoints:
 The §46 post-10F hardening note remains explicitly deferred: older non-ability Storyteller mutators do not all perform the E1 checkpoint-envelope proof before their local commit. The production writer nevertheless rejects an unwritable exact checkpoint before any partial remote projection. Generalizing the pre-commit checkpoint guard across legacy game-mutating commands is useful store-wide hardening, but it is outside the frozen Phase 10F ability-resolution scope and does not reopen this closure.
 
 This closure does NOT itself merge or deploy. The next repository action is to integrate the closed Phase 10F checkpoint into `main`, record the integration, and only then branch Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration from that exact integrated `main`.
+
+## 50. Phase 10F integration record — 2026-10-03
+
+Phase 10F is **CLOSED AND INTEGRATED**.
+
+Repository integration:
+
+- previous `main`: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`;
+- closed Phase 10F branch head fast-forwarded into `main`: `6f51f8acb78a71f73ee704ffced636f6b4ea0300`;
+- final reviewed target contained in that lineage: `a2d6d1b99242317269bf86f54e6d234e0644df33`;
+- final production code checkpoint contained in that lineage: `c6a2938e4e3c5ef3b17013c833cd335fe623b6f8`;
+- integration used a fast-forward only; no merge commit and no unrelated production changes;
+- this §50 record and the roadmap/handoff integration updates are documentation-only on top of the fast-forwarded checkpoint.
+
+All Phase 10F closure evidence remains as recorded in §49. The deferred post-10F store-wide checkpoint-preflight hardening remains recorded and does not reopen 10F.
+
+The next phase is **Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration**. Its development branch must start from the exact final integrated `main`; no 10G implementation is authorized by this integration record itself.
