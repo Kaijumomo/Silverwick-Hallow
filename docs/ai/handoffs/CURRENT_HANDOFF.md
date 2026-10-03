@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-03\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: rules-neutral foundation and proof-character matrix are frozen; Slice 7 passed Luna, then Astra adversarial review returned **REVISE** with eight reproduced defects. Sol accepted ASTRA-10F-S7-001…008 as SOL-10F-A1…A8 and additionally froze A9 (Ravenkeeper role-at-death evidence) and A10 (exact trigger-event consumption). Targeted remediation is required before Luna/Astra re-verification. Schema/store remains v24 unless the optional Life Event role snapshot requires only an additive unreleased-v24 amendment. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: Slice 7 passed Luna, Astra found eight adversarial defects, Sol froze A1…A10, and Claude Code has remediated all ten at code checkpoint `9b6a25bdd134f7d60fb8366c8f781252b2f4f3a6`. Sol spot-check accepts the remediation for targeted Luna verification. Schema/store remains v24 with additive optional `actualRoleAtEvent`; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
 
 ## Phase 10D — CLOSED
 
@@ -689,3 +689,15 @@ Claude Code remediates SOL-10F-A1…A10 exactly as frozen in `PHASE10F.md` §31,
 ## SOL-10F-A1…A10 remediation — 2026-10-03
 
 All ten §31 findings are remediated at code checkpoint `9b6a25bdd134f7d60fb8366c8f781252b2f4f3a6` with a docs-only record on top (`PHASE10F.md` §32). Full gate green; schema/store v24 (optional additive `actualRoleAtEvent`) and Firebase Rules unchanged. Next: Luna targeted mechanical verification of A1…A10 (not Astra directly). 10F is not closed; nothing merged or deployed.
+
+## Sol accepts A1…A10 remediation for Luna — 2026-10-03
+
+Claude Code remediated all §31 findings at code checkpoint `9b6a25bdd134f7d60fb8366c8f781252b2f4f3a6`; the reported gate is green (3,827/3,827 normal tests, 201/201 emulator tests, typecheck/build/diff checks PASS).
+
+Sol independently spot-checked the key authority seams and accepts the checkpoint for Luna targeted verification.
+
+A docs-only packaging regression truncated `PHASE10F.md` to §32 only. Sol restored the exact full §§1–31 contract from `a5df7674067344900a57c508ecbfde0fb261ba0c`, preserved §32 unchanged, and added §33. No production code changed in this repair.
+
+## Immediate next task
+
+Luna targets SOL-10F-A1…A10 and the restored documentation at the exact current `dev/phase-10f` HEAD. If PASS, send the same implementation back to Astra for adversarial re-verification. Phase 10F remains open.
