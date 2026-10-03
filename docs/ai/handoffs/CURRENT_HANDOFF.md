@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-03\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: Slice 7 passed Luna; Astra's first adversarial review produced A1…A10, all remediated and Luna-verified; Astra re-verification produced B1…B6, all remediated at code checkpoint `b9a7c58cca86a5e0b7b54ccdd1957aef90c866f2` and now independently Luna-verified with PASS. Slice 7 is **READY FOR ASTRA closure adversarial re-verification**. Schema/store remains unreleased v24; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: A1…A10 and B1…B6 are remediated and Luna-verified; Astra closure re-verification established three additional defects. Sol accepts them as SOL-10F-C1…C3: deep answer snapshots, protection-dependency-scoped judgments, and pre-commit Firebase write compatibility. One final targeted remediation loop is required before closure adjudication. Schema/store remains unreleased v24; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
 
 ## Phase 10D — CLOSED
 
@@ -243,7 +243,7 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 - **10C Reminder Workflow + visual Reminder tokens — CLOSED**
 - **10D Role Transitions — CLOSED**
 - **10E Alignment Transitions — CLOSED AND INTEGRATED**
-- **10F Guided Ability Resolution / Night Actions — B1…B6 LUNA-VERIFIED; READY FOR ASTRA CLOSURE RE-VERIFICATION (not closed)**
+- **10F Guided Ability Resolution / Night Actions — ASTRA CLOSURE RE-VERIFICATION REVISE; C1…C3 REMEDIATION REQUIRED (not closed)**
 - 10G Advanced Storyteller bookkeeping / final visual integration
 
 ## Standing Phase 10 UX invariant
@@ -762,3 +762,19 @@ Independent evidence included 119/119 targeted B/A remediation tests, 3,897/3,89
 ## Immediate next task
 
 Astra performs the closure adversarial re-verification of the remediated Slice 7 implementation, focusing on bypasses/regressions around B1…B6 and cross-seam composition with A1…A10. Phase 10F remains open.
+
+## Astra Slice 7 closure re-verification — REVISE / Sol C1…C3 adjudication — 2026-10-03
+
+Astra closure-reverified exact target `1bda40ced3d31cfa2993c4129a2c02c1b1ba97cb`. All original A1…A10 and B1…B6 permanent counterexamples remained closed and the baseline gate passed, but Astra established three additional defects:
+
+- nested answer objects remain caller-owned after outer-map canonicalization, allowing getter/Proxy values to change after validation;
+- Al-Hadikhia protection attempt ids do not include authoritative protection dependencies outside the selected/procedure prefix;
+- long schema-valid identifiers can still expand an encoded Night-progress path beyond Firebase's 768-byte destination-relative limit.
+
+Sol accepts these as `SOL-10F-C1…C3` in `PHASE10F.md` §39.
+
+The synthetic guided Role-correction concern is not promoted; no shipped proof-character evaluator emits correction intents.
+
+## Immediate next task
+
+Claude Code remediates C1…C3 exactly as frozen in §39, preserves all prior closures, runs the full gate and returns one exact clean checkpoint to Luna. After Luna PASS, Astra performs a narrow C1…C3 closure recheck. Phase 10F remains open.
