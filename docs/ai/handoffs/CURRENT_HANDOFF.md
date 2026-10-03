@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-02\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: the rules-neutral foundation passed Luna (§24), Sol froze the proof-character rules matrix (§25), and **Slice 7 — proof-character semantics — is implemented and READY FOR LUNA** on `dev/phase-10f` (code checkpoint `aa14fee0811e9f0b19ba3a4fd714cb5cca0488bc`, with a docs-only handoff commit on top; schema/store v24, unchanged). Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: the rules-neutral foundation passed Luna (§24), Sol froze the proof-character rules matrix (§25), and **Slice 7 — proof-character semantics — is implemented and READY FOR LUNA** on `dev/phase-10f` (code checkpoint `d9b927ae172f5327910e8a31d375096118cf7850`, with a docs-only handoff commit on top; schema/store v24, unchanged). Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
 
 ## Phase 10D — CLOSED
 
@@ -552,7 +552,7 @@ Implemented in the frozen order on top of `e656642e3c99a09aaba6d0883c07e817af67d
 - `7a341d9` — Poisoner and Monk;
 - `cb94ac8` — Empath (support), Drunk shown as the Empath, Fortune Teller + authoritative Red Herring;
 - `40863b9` — Slayer and Cult Leader (nightly portion);
-- `167dc1c` — Harlot (owner-authorized `harlot-other-night` Information Action) and Al-Hadikhia;
+- `167dc1c` — Harlot (owner-authorized `harlot-other-night` Information Action) and Al-Hadikhia; a follow-up commit records the owner-specified final action shape (`chosenPlayer` + `role`, other Nights) and its ownership tests;
 - `f256b0b` — Imp star-pass + narrow Scarlet Woman priority;
 - `0499583` — Ravenkeeper + explicit verified Night trigger;
 - `6c78644` — Pit-Hag (non-Demon branch; Demon creation Manual);
@@ -560,7 +560,7 @@ Implemented in the frozen order on top of `e656642e3c99a09aaba6d0883c07e817af67d
 - `aa14fee` — proof-character architecture guards (code checkpoint);
 - docs-only handoff commit on top (also normalizes four pre-existing trailing-whitespace hard breaks in the matrix header so the baseline-range `git diff --check` passes).
 
-Gate at `aa14fee`: typecheck PASS; full normal suite 3,745/3,745 across 153 files (0 skipped); Firebase emulator 201/201 (0 skipped); build PASS; diff checks PASS (after the whitespace normalization). Seven planted mutations (Reminder-as-Red-Herring, History-based trigger, generic trigger path, star-pass store call, Reminder-based Toymaker skip, live Baron semantics, prose parsing) were each caught and restored.
+Gate at final code checkpoint `d9b927a` (Harlot action `chosenPlayer` + `role`): typecheck PASS; full normal suite 3,751/3,751 across 153 files (0 skipped); Firebase emulator 201/201 (0 skipped); build PASS; diff checks PASS. Earlier gate at `aa14fee`: typecheck PASS; full normal suite 3,745/3,745 across 153 files (0 skipped); Firebase emulator 201/201 (0 skipped); build PASS; diff checks PASS (after the whitespace normalization). Seven planted mutations (Reminder-as-Red-Herring, History-based trigger, generic trigger path, star-pass store call, Reminder-based Toymaker skip, live Baron semantics, prose parsing) were each caught and restored.
 
 Manual / deferred boundaries kept: Cult Leader Day vote; Pit-Hag Demon creation (10G), Traveller transformation, concealed identities; Tinker discretion (Manual path does not check protection — reference text says to); Toymaker skip history (10G); mid-game Fortune Teller without a Red Herring; Baron live ability (none).
 

@@ -788,7 +788,7 @@ This completes contract Slice 6 (rules freeze). Slice 7 — proof-character sema
 
 **Status: IMPLEMENTATION CHECKPOINT — READY FOR LUNA. Phase 10F is NOT closed; nothing merged or deployed.**
 
-Implemented strictly to `docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md`, in the frozen order. Code checkpoint: `aa14fee0811e9f0b19ba3a4fd714cb5cca0488bc` (a docs-only commit sits on top). Schema / store version unchanged (v24); no Firebase Rules change.
+Implemented strictly to `docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md`, in the frozen order. Code checkpoint: `d9b927ae172f5327910e8a31d375096118cf7850` (the owner-specified final Harlot Information Action shape on top of `aa14fee`; a docs-only commit sits on top). Schema / store version unchanged (v24); no Firebase Rules change.
 
 ### Production semantics
 
@@ -812,8 +812,10 @@ Implemented strictly to `docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md`, in the fro
 
 ### Owner decision recorded
 
-The pinned canonical data had no Harlot Information Action. Per the contract, implementation stopped and asked; the project owner explicitly authorized a Silverwick-authored `harlot-other-night` Information Action (one Role value: the character shown), added to `src/data/informationActions.ts`.
+The pinned canonical data had no Harlot Information Action. Per the contract, implementation stopped and asked; the project owner explicitly authorized a Silverwick-authored `harlot-other-night` Information Action -- structured metadata for the frozen Harlot rule, not a new mechanic -- in `src/data/informationActions.ts` (never the pinned `src/data/canonical/roles.json`): timing `otherNight`; requirements `chosenPlayer` (player, exactly 1: the consenting player the Harlot chose) and `role` (role, exactly 1: the character shown). It is subject to the canonical ownership boundary (`roleRegistry.silverwickInformationActions`): a custom / homebrew definition reusing `harlot` inherits nothing.
 
 ### Gate at `aa14fee`
 
 typecheck PASS; proof suites 182/182 (15 files); 10F foundation / guard suites 355/355 (16 files); full normal suite 3,745/3,745 across 153 files (0 skipped); Firebase emulator 201/201 (0 skipped); production build PASS; worktree `git diff --check` PASS. The baseline-range `git diff --check` failed at the required starting HEAD `e656642` on four pre-existing trailing-double-space hard breaks in this matrix's header; the docs commit converts them to `\` hard breaks (identical rendering, no content change), after which the range check passes.
+
+Re-gate at the final code checkpoint `d9b927a` (after the owner-specified Harlot action shape): typecheck PASS; proof suites 188/188 (15 files); 10F foundation / guard suites 355/355 (16 files); full normal suite 3,751/3,751 across 153 files (0 skipped); Firebase emulator 201/201 (0 skipped); production build PASS; worktree and baseline-range `git diff --check` PASS. `src/data/canonical/roles.json` is unchanged.
