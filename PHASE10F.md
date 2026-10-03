@@ -1544,3 +1544,33 @@ The established reproduction was run before the fix: with a live room, two Manua
 Out of E1 scope, recorded for Sol: other Storyteller commands that grow the game (for example notes) are not pre-checked against the checkpoint, exactly as they were not pre-checked by C3/D1; if one ever pushes the checkpoint past the limit, the writer now refuses the whole projection with a data error instead of the SDK rejecting it, and nothing is partially projected.
 
 Next: Luna performs one narrow combined D1/D2/E1 mechanical verification at the exact current `dev/phase-10f` HEAD. Do not send directly to Astra. After Luna PASS, Astra performs one narrow D1/D2/E1 closure recheck; then Sol closure adjudication. Phase 10F remains open. No merge or deployment is authorized.
+
+## 46. Sol pre-Luna acceptance of D1/D2/E1 — 2026-10-03
+
+Sol independently spot-checked the pushed D1/D2/E1 implementation at code checkpoint `c6a2938e4e3c5ef3b17013c833cd335fe623b6f8` and accepts it for one narrow combined Luna verification.
+
+The spot-check confirmed:
+
+- D1 mirrors Firebase RTDB's 10 MiB single-string-leaf ceiling through the shared compatibility helper;
+- D2 removes display-only `ParticipantRef.nameAtTime` from the protection-dependency identity while retaining mechanical source identity;
+- E1 centralizes checkpoint serialization, preflights the exact derived checkpoint at the writer, and preflights a conservative supported-roster checkpoint envelope before an authoritative ability-store commit;
+- the E1 store refusal remains before the single authoritative `set()`;
+- no checkpoint format, Firebase Rules, recovery contract, schema version or proof-character semantics changed.
+
+### Adjudication of the out-of-E1 store-command observation
+
+Claude also noted that older non-ability Storyteller commands such as freeform player notes are not preflighted against the derived checkpoint size before their local commit. Sol does NOT promote that observation as a Phase 10F closure blocker.
+
+Reason:
+
+- C3/D1/E1 freeze the persistence guarantee for Phase 10F's ability-resolution authority boundary;
+- E1 additionally gives the production writer an exact checkpoint compatibility gate before the multi-path projection, so an oversized non-ability local mutation cannot partially project public/player/Storyteller state or publish a broken checkpoint;
+- making every pre-existing Storyteller command perform the same pre-commit checkpoint proof would be a broader store-wide persistence project outside the frozen Phase 10F ability scope.
+
+Record this as post-10F store hardening: centralize the E1 pre-commit checkpoint-compatibility guard for all Storyteller game-mutating commands that can grow persisted state. It is not silently considered solved, but it does not reopen Slice 7 or block the D1/D2/E1 verification path.
+
+### Next gate
+
+Luna independently verifies D1/D2/E1 only, plus smoke preservation of prior A/B/C closures and the full automated gate. On Luna PASS, Astra performs one narrow D1/D2/E1 closure recheck. On Astra PASS, stop the reviewer loop and hand Phase 10F to Sol closure adjudication.
+
+Phase 10F remains open. No merge or deployment is authorized.
