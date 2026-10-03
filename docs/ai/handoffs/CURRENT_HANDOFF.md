@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-03\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: A1…A10 and B1…B6 are remediated and Luna-verified; Astra closure re-verification established three additional defects. Sol accepts them as SOL-10F-C1…C3: deep answer snapshots, protection-dependency-scoped judgments, and pre-commit Firebase write compatibility. One final targeted remediation loop is required before closure adjudication. Schema/store remains unreleased v24; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: A1…A10 and B1…B6 are remediated and Luna-verified; Astra closure re-verification established SOL-10F-C1…C3 (deep answer snapshots, protection-dependency-scoped judgments, pre-commit Firebase write compatibility), now remediated at code checkpoint `c3ae6910ba6752bac62162a6f67f81076c598502` (`PHASE10F.md` §40) and ready for Luna targeted verification. Closure adjudication follows Luna PASS and a narrow Astra C1…C3 recheck. Schema/store remains unreleased v24; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
 
 ## Phase 10D — CLOSED
 
@@ -778,3 +778,11 @@ The synthetic guided Role-correction concern is not promoted; no shipped proof-c
 ## Immediate next task
 
 Claude Code remediates C1…C3 exactly as frozen in §39, preserves all prior closures, runs the full gate and returns one exact clean checkpoint to Luna. After Luna PASS, Astra performs a narrow C1…C3 closure recheck. Phase 10F remains open.
+
+## SOL-10F-C1…C3 remediation — 2026-10-03
+
+All three §39 findings are remediated at code checkpoint `c3ae6910ba6752bac62162a6f67f81076c598502` with a docs-only record on top (`PHASE10F.md` §40): one typed deep copier over the `AbilityInputValue` union whose canonical values are frozen primitives / arrays / bindings read through property descriptors only, so accessor-backed nested fields and throwing Proxy traps are `invalid` and no caller object is read after canonicalization (C1); `RulesQuery.protectionDependencyStamp` — an exact snapshot of every occupied participant's identity, alive state as seen by the query (`assumingAlive` overlays included), Actual Role and Effect records — bound into every UNKNOWN protection judgment id, scoped and unscoped, with Harlot's order probe comparing protection answers directly (C2); the store's `resolveAbility` runs the existing `validateFirebaseWritableValue` against the live lobby's Storyteller destination, or the canonical maximum room-code shape (`src/firebase/roomCode.ts`) before a room exists, and refuses an unwritable plan as `invalidComposition` before `set()` (C3). Gate: typecheck PASS; C1…C3 46/46; B1…B6 70/70; A1…A10 61/61; 3,943/3,943 normal tests across 160 files; 201/201 emulator tests, 0 skipped; build and both `git diff --check` PASS; installed-SDK boundary proof PASS. Store stays unreleased v24; Firebase Rules unchanged; no new character-rule work.
+
+## Immediate next task
+
+Luna independently verifies SOL-10F-C1…C3, A1…A10 / B1…B6 preservation, the full gate and §§1–40 documentation integrity at the exact current `dev/phase-10f` HEAD. Do not send directly to Astra. After Luna PASS, Astra performs a narrow C1…C3 closure recheck. Phase 10F remains open; nothing merged or deployed.

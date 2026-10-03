@@ -10,7 +10,7 @@
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
 **Schema:** v23 integrated on `main`; v24 implemented on `dev/phase-10f`\
-**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (Astra closure re-verification REVISE; SOL-10F-C1…C3 final targeted remediation required; Phase 10F not closed)
+**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (Astra closure re-verification REVISE → SOL-10F-C1…C3 remediated, `PHASE10F.md` §40; Luna targeted verification next; Phase 10F not closed)
 
 ## Product invariants
 
@@ -228,7 +228,7 @@ Delivered (store/game schema v23): `src/stores/alignmentResolution.ts` (pure `pl
 Frozen direction: one participant-bound Actual Alignment transaction seam; gameplay change vs correction; atomic multi-participant changes; Actual Alignment independent of Role; v23 player-facing alignment perception with Normal / explicit Good / explicit Evil / Not Told; Normal ordinary perception derives from Shown Role while Normal Traveler perception follows Actual Alignment; v22 -> v23 normalization clears inert legacy Traveler shown-alignment copies to Normal; strict v23 Alignment History correction/correlation metadata; occupancy-boundary hardening so a new participant never inherits stale seat alignment; Storyteller UI separates Actual Alignment truth from player-facing perception; 10F remains responsible for ability logic.
 
 ### 10F — Guided Ability Resolution / Night Actions
-**Status:** ASTRA CLOSURE RE-VERIFICATION REVISE — SOL-10F-C1…C3 TARGETED REMEDIATION REQUIRED. Not closed.\
+**Status:** SOL-10F-C1…C3 REMEDIATED (`PHASE10F.md` §40) — READY FOR LUNA TARGETED VERIFICATION. Not closed.\
 **Contract:** `PHASE10F.md` (frozen 2026-10-02).\
 **Starting checkpoint:** `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`.\
 **Contract-freeze checkpoint:** `727530e9364a0c971326c06ce45855adcf39828b`.\
@@ -236,6 +236,7 @@ Frozen direction: one participant-bound Actual Alignment transaction seam; gamep
 **Remediation code checkpoint:** `e5a9b9d019d469609a3c6246043b18dc5d72bf62` (SOL-10F-L1…L7; docs-only handoff commit on top).\
 **SOL-10F-L3-R1 code checkpoint:** `93b850d77ea9b8a7adf3ae4db3f4ac7dc7d54a68` (shared invocation-eligibility contract; docs-only handoff commit on top).\
 **SOL-10F-B1…B6 code checkpoint:** `b9a7c58cca86a5e0b7b54ccdd1957aef90c866f2` (docs-only record commit on top).\
+**SOL-10F-C1…C3 code checkpoint:** `c3ae6910ba6752bac62162a6f67f81076c598502` (docs-only record commit on top).\
 **Schema/store:** v24 (on `dev/phase-10f`).
 
 Frozen direction: one pure ability coordinator composes the existing Life, Effect, Reminder, Role and Alignment planners on one evolving working snapshot and commits once; mechanical operation order is ability-defined; Storyteller choice/judgment remains explicit; Reminders remain non-authoritative; participant-bound workflow identity prevents seat-reuse staleness; Information Delivery becomes composable and records simulated/performed-role context in v24; player Night progress becomes participant-scoped; public/player-town Life State is withheld during Night; the Night Order becomes a guided operating dashboard with progressive disclosure and complex-outcome previews.
@@ -275,4 +276,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Claude Code remediates `PHASE10F.md` §39 SOL-10F-C1…C3 only: deep inert AbilityInputValue snapshots, generic protection-dependency stamps for UNKNOWN death-protection judgments, and pre-commit Firebase write-compatibility validation at the Storyteller ability store boundary. Preserve A1…A10, B1…B6 and every proof-character/manual boundary. After the full gate, return one exact checkpoint to Luna; after Luna PASS, Astra performs a narrow C1…C3 closure recheck. Do not merge, deploy or close 10F.
+Luna independently verifies `PHASE10F.md` §39 SOL-10F-C1…C3 as recorded in §40 (code checkpoint `c3ae6910ba6752bac62162a6f67f81076c598502`; docs-only record on top) at the exact current `dev/phase-10f` HEAD: deep inert AbilityInputValue snapshots, protection-dependency-stamped UNKNOWN protection judgments, and the pre-commit Firebase write-compatibility preflight in the store's `resolveAbility` — plus A1…A10 / B1…B6 preservation, the full gate and §§1–40 documentation integrity. Do not send directly to Astra. After Luna PASS, Astra performs a narrow C1…C3 closure recheck; only then may Sol adjudicate Phase 10F closure. Do not merge, deploy or close 10F.
