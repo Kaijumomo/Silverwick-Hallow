@@ -819,3 +819,57 @@ The pinned canonical data had no Harlot Information Action. Per the contract, im
 typecheck PASS; proof suites 182/182 (15 files); 10F foundation / guard suites 355/355 (16 files); full normal suite 3,745/3,745 across 153 files (0 skipped); Firebase emulator 201/201 (0 skipped); production build PASS; worktree `git diff --check` PASS. The baseline-range `git diff --check` failed at the required starting HEAD `e656642` on four pre-existing trailing-double-space hard breaks in this matrix's header; the docs commit converts them to `\` hard breaks (identical rendering, no content change), after which the range check passes.
 
 Re-gate at the final code checkpoint `d9b927a` (after the owner-specified Harlot action shape): typecheck PASS; proof suites 188/188 (15 files); 10F foundation / guard suites 355/355 (16 files); full normal suite 3,751/3,751 across 153 files (0 skipped); Firebase emulator 201/201 (0 skipped); production build PASS; worktree and baseline-range `git diff --check` PASS. `src/data/canonical/roles.json` is unchanged.
+
+
+## 27. Sol pre-Luna Slice 7 fidelity adjudication — 2026-10-03
+
+The Slice 7 implementation report at `eb4822e421e4b18a72dbef91adcea0ac8e00204e` is **not yet ready for Luna**. Sol accepted the owner-authorized Harlot Information Action shape, but found two source/contract fidelity defects during spot-check.
+
+### SOL-10F-S7-F1 — Harlot may choose themself — HIGH
+
+The official Harlot How-to-Run says the Harlot points at **any player**. The frozen matrix requires one living participant and deliberately contains no `notSelf` constraint.
+
+Current implementation declares the Harlot target with `constraints: ["alive", "notSelf"]`, incorrectly rejecting a legal self-choice.
+
+Freeze:
+
+- Harlot target is exactly one **living** participant;
+- self is legal;
+- consent remains the selected participant's Player choice;
+- if the Harlot selected themself, the workflow must still preserve the rule shape without inventing a second participant;
+- any resulting "both might die" consequence must be resolved without creating duplicate contradictory Life intents for one ParticipantId.
+
+Add explicit self-target tests for consent No, consent Yes/no-death, and consent Yes/Storyteller-death.
+
+### SOL-10F-S7-F2 — Red Herring fact is independent of Fortune Teller functioning — HIGH
+
+The official Fortune Teller How-to-Run establishes the Red Herring while preparing the first Night. The Red Herring is the same player throughout the game. This authoritative Storyteller fact therefore exists independently of whether the Fortune Teller is later poisoned/drunk when their first-night wake occurs.
+
+The frozen matrix already defines `fortuneTellerRedHerring` as Storyteller-private authoritative setup/current state with **no mechanical dependence on source functioning**, and says a missing initial fact is created during the first Fortune Teller workflow before Information Delivery.
+
+Current implementation branches to impaired-information handling before Red Herring creation. Because the coordinator correctly forbids ordinary mechanical state from a non-functioning ability, an impaired Night-1 Fortune Teller creates no Red Herring and leaves later Nights requiring correction. That contradicts the source and matrix.
+
+Freeze:
+
+- an **actual canonical Fortune Teller** on Night 1 must establish exactly one Red Herring fact when missing, even if the Fortune Teller is currently drunk/poisoned;
+- the Red Herring creation is Storyteller-owned authoritative setup bookkeeping, not an effect produced by a functioning Fortune Teller ability;
+- a simulated Drunk shown as Fortune Teller must **not** create a Red Herring;
+- after the fact is established, an impaired Fortune Teller still receives arbitrary structurally valid Yes/No information;
+- later Nights reuse the same fact;
+- do not weaken the general invariant that a non-functioning ability cannot create mechanical Current State.
+
+Preferred generic seam: add an explicit descriptor-authorized independent Storyteller-fact capability and permit only those declared `storytellerFact` Effect applications through the non-functioning guard. Keep it source-independent (no sourceParticipant/sourceCharacter) and architecture-guarded. Do not special-case Fortune Teller inside the coordinator.
+
+Required regression cases:
+
+1. sober Night-1 Fortune Teller missing Red Herring -> choose/create fact + deliver;
+2. poisoned Night-1 actual Fortune Teller missing Red Herring -> choose/create same fact + arbitrary Boolean delivery;
+3. Drunk simulated as Fortune Teller -> no Red Herring creation;
+4. later Night after impaired Night 1 -> same Red Herring reused;
+5. Red Herring remains one participant throughout the game;
+6. no Reminder truth source;
+7. generic impaired abilities still cannot create ordinary Effect/Life/Role/Alignment state.
+
+### Gate
+
+Remediate F1 and F2 only, run targeted tests plus the full Phase 10F gate, and return one exact clean checkpoint for Luna. Do not merge, deploy or close 10F.
