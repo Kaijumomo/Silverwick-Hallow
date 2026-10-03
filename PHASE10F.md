@@ -1301,3 +1301,29 @@ The B5/B6 key encoding remains an unreleased-v24 contract refinement; `STORE_VER
 No proof-character rule boundary is reopened by this acceptance. Luna must independently verify B1…B6, preservation of A1…A10, the full regression gate and documentation integrity before Astra closure re-verification.
 
 Phase 10F remains open. No merge or deployment is authorized.
+
+## 38. Luna targeted B1…B6 verification complete — 2026-10-03
+
+Luna independently verified exact target `ace4382963ac3eeec6209dac696ea3b415c07535` and returned:
+
+**PASS — SOL-10F-B1…B6 CLOSED; PHASE 10F SLICE 7 READY FOR ASTRA CLOSURE RE-VERIFICATION**
+
+Independent evidence:
+
+- targeted B1…B6 + A1…A10 suites: **119/119** across four files;
+- full normal suite: **3,897/3,897** across 158 files;
+- Firebase emulator suite: **201/201**, 0 skipped;
+- Firebase SDK key-compatibility suite: **19/19**;
+- typecheck PASS;
+- production build PASS;
+- worktree and baseline-range diff checks PASS.
+
+Luna independently closed B1…B6, confirmed A1…A10 preservation, proof-character regressions, v24 key-encoding behavior, Firebase write compatibility and complete `PHASE10F.md` documentation through §37.
+
+No remaining Luna finding exists for the B1…B6 remediation.
+
+### Next gate
+
+Astra performs the closure adversarial re-verification of Slice 7. Astra should attack the surviving claims and repaired seams, especially composition between B1…B6 and the prior A1…A10 fixes, rather than repeat Luna's mechanical acceptance matrix.
+
+Phase 10F remains open. No merge or deployment is authorized.
