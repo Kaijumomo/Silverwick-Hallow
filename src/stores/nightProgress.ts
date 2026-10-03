@@ -14,7 +14,9 @@ import type { NightStepRecord, NightStepStatus, ParticipantId, RoleId, STPlayerR
  *
  * This module is the ONE place these step keys are built and recognised, so the
  * Night Order, the Role seam's Traveler-arrival coupling, the store's step
- * commands and v23 -> v24 migration can never drift apart.
+ * commands and v23 -> v24 migration can never drift apart. SOL-10F-B5 / B6:
+ * every dynamic component is encoded by encodeNightProgressComponent, so keys
+ * are collision-free and valid Firebase keys whatever the ids contain.
  */
 
 /** The participant-scoped step families (`{prefix}:{participantId}[:...]`). */
@@ -23,30 +25,67 @@ export const PARTICIPANT_STEP_PREFIXES = [
 ] as const;
 export type ParticipantStepPrefix = typeof PARTICIPANT_STEP_PREFIXES[number];
 
+/** The characters a component keeps as-is: ASCII letters, digits, `-`, `_`. */
+const PLAIN_COMPONENT_CHARACTER = /[A-Za-z0-9_-]/;
+
+/**
+ * SOL-10F-B5 / B6: the ONE encoding of every DYNAMIC component (ParticipantId,
+ * RoleId, LifeEvent id...) of a participant-scoped Night-progress key. Each
+ * UTF-16 code unit outside `[A-Za-z0-9_-]` becomes `%` + exactly four
+ * upper-case hex digits; everything else is kept, so ordinary ids (UUIDs,
+ * canonical RoleIds) read unchanged.
+ *
+ *  - injective for EVERY string (lone surrogates included, never a throw):
+ *    `%` itself is escaped, every escape has a fixed width, and a plain
+ *    character is never `%`;
+ *  - the result never contains `:` (the family delimiter), so joining
+ *    encoded components with `:` cannot shift one component into the next;
+ *  - the result never contains a character Firebase forbids in a key
+ *    (`.`, `#`, `$`, `[`, `]`, `/`, control characters) -- e.g. a LifeEvent id
+ *    `death.v1` encodes as `death%002Ev1`.
+ *
+ * Static family prefixes (`p`, `travelerArrival`, `trigger`, ...) stay plain.
+ * This is the FINAL v24 key encoding (v24 is unreleased; see PHASE10F §35 B5).
+ */
+export function encodeNightProgressComponent(value: string): string {
+  let out = "";
+  for (let i = 0; i < value.length; i++) {
+    const character = value[i]!;
+    out += PLAIN_COMPONENT_CHARACTER.test(character) ? character : `%${value.charCodeAt(i).toString(16).toUpperCase().padStart(4, "0")}`;
+  }
+  return out;
+}
+
+/** A static family prefix followed by its ENCODED dynamic components. */
+const composeStepKey = (prefix: ParticipantStepPrefix, ...components: string[]): string =>
+  [prefix, ...components.map(encodeNightProgressComponent)].join(":");
+
 /** A guided participant wake: `p:{participantId}:{wakeRole}`. `wakeRole` is the
  * Role whose procedure is performed (the Shown Role for a simulated wake). */
 export const participantStepKey = (participantId: ParticipantId, wakeRole: RoleId): string =>
-  `p:${participantId}:${wakeRole}`;
+  composeStepKey("p", participantId, wakeRole);
 
 /** A late Traveler's arrival procedure: `travelerArrival:{participantId}:{roleId}`. */
 export const travelerArrivalStepKey = (participantId: ParticipantId, roleId: RoleId): string =>
-  `travelerArrival:${participantId}:${roleId}`;
+  composeStepKey("travelerArrival", participantId, roleId);
 
 /**
  * SOL-10F-A10: the consumption step of ONE verified Night trigger, keyed by
  * the participation instance, the Role whose trigger it is and the exact
  * authoritative LifeEvent id that fired it (`null` when coverage was unknown
- * and the Storyteller judged it). Each part is URI-encoded, so the key is
- * collision-safe (a ':' inside an id cannot shift the parts) and carries no
- * character Firebase forbids in a key beyond those ids already carry.
+ * and the Storyteller judged it): `trigger:{participantId}:{roleId}:n` or
+ * `trigger:{participantId}:{roleId}:i{eventId}`. SOL-10F-B5 / B6: every
+ * dynamic part goes through encodeNightProgressComponent (collision-free and
+ * Firebase-key-safe); `n` / `i` cannot collide because an encoded event id is
+ * always prefixed by `i`.
  */
 export const nightTriggerStepKey = (participantId: ParticipantId, roleId: RoleId, eventId: string | null): string =>
-  ["trigger", encodeURIComponent(participantId), encodeURIComponent(roleId), eventId === null ? "n" : `i${encodeURIComponent(eventId)}`].join(":");
+  [composeStepKey("trigger", participantId, roleId), eventId === null ? "n" : `i${encodeNightProgressComponent(eventId)}`].join(":");
 
 /** Any other participant-scoped step (`lunaticInfo:{participantId}`,
- * `admin:{participantId}:{roleId}`, ...). */
+ * `admin:{participantId}:{roleId}`, ...); every component is encoded. */
 export const participantScopedStepKey = (prefix: ParticipantStepPrefix, participantId: ParticipantId, ...rest: string[]): string =>
-  [prefix, participantId, ...rest].join(":");
+  composeStepKey(prefix, participantId, ...rest);
 
 /** The occupied participant's id, or null for an empty seat / no identity. */
 export const stepParticipantOf = (player: Pick<STPlayerRecord, "isEmpty" | "participantId">): ParticipantId | null =>

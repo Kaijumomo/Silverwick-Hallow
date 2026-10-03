@@ -2,7 +2,7 @@ import type { AbilityDescriptor, AbilityInvocation, AbilityTiming, NightTriggerK
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
 import { isDeathEvent } from "@/stores/lifeEvents";
-import { nightTriggerStepKey } from "@/stores/nightProgress";
+import { encodeNightProgressComponent, nightTriggerStepKey } from "@/stores/nightProgress";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
 /**
@@ -98,9 +98,11 @@ export type NightTriggerStatus =
   | { kind: "unknown"; reason: string; eventId: string | null };
 
 /** The judgment id asked when a verified trigger cannot be established --
- * bound to the trigger event it is about (SOL-10F-A1 / A10). */
+ * bound to the trigger event it is about (SOL-10F-A1 / A10). The event id uses
+ * the same injective, never-throwing component encoding as the trigger's
+ * Night-progress key (SOL-10F-B5). */
 export const nightTriggerJudgmentId = (trigger: NightTriggerKind, eventId: string | null) =>
-  `trigger:${trigger}:${eventId === null ? "n" : `i${encodeURIComponent(eventId)}`}`;
+  `trigger:${trigger}:${eventId === null ? "n" : `i${encodeNightProgressComponent(eventId)}`}`;
 
 /** The consumption step of a trigger at the current Night (exact key). */
 export const nightTriggerProgressKey = (day: number, actor: ParticipantBinding, roleId: string, eventId: string | null) =>
