@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-03\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: A1…A10, B1…B6 and C1…C3 remain remediated; Astra's final C1…C3 closure recheck established two residual defects. Sol accepts them as SOL-10F-D1/D2: Firebase single-string-leaf compatibility and exclusion of display-only ParticipantRef prose from protection dependency identity. One final narrow remediation/verification loop remains before Sol closure adjudication. Schema/store remains unreleased v24; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: A1…A10, B1…B6 and C1…C3 remain remediated; Astra's final C1…C3 closure recheck established SOL-10F-D1/D2 (Firebase single-string-leaf compatibility; display-only ParticipantRef prose excluded from protection dependency identity), now remediated at code checkpoint `a0968d0ff6149b7f16eb9fabb7e1eb8dda32ea0c` (`PHASE10F.md` §43). Next: Luna narrow verification → Astra narrow closure recheck → Sol closure adjudication. Schema/store remains unreleased v24; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
 
 ## Phase 10D — CLOSED
 
@@ -807,3 +807,13 @@ Sol accepts these as `SOL-10F-D1/D2` in `PHASE10F.md` §42. A stale current road
 ## Immediate next task
 
 Claude Code remediates D1/D2 exactly as frozen in §42, preserves A/B/C closures, runs the full gate and returns one exact clean checkpoint to Luna for narrow D1/D2 verification. After Luna PASS, Astra performs one narrow D1/D2 closure recheck. Phase 10F remains open.
+
+## SOL-10F-D1/D2 remediation — 2026-10-03
+
+Both §42 findings are remediated at code checkpoint `a0968d0ff6149b7f16eb9fabb7e1eb8dda32ea0c` with a docs-only record on top (`PHASE10F.md` §43). D1: `validateFirebaseWritableValue` mirrors the installed SDK's `MAX_LEAF_SIZE_` (10,485,760 bytes, counted with the existing `firebaseStringLength`) for every string leaf, so the unchanged C3 preflight in `resolveAbility` refuses an oversized Manual text delivery or Effect field as `invalidComposition` before `set()`. D2: the protection-dependency stamp carries only an Effect source ParticipantRef's mechanical identity (kind, PlayerId, ParticipantId), never `nameAtTime`; the stored ref is not rewritten. Gate: typecheck PASS; D1/D2 17/17; C1…C3 46/46; B1…B6 70/70; A1…A10 61/61; 3,960/3,960 normal tests across 162 files; 201/201 emulator tests, 0 skipped; build and both `git diff --check` PASS; installed-SDK boundary proof PASS. Store stays unreleased v24; Firebase Rules unchanged.
+
+Residual observation for Sol (not in §42 scope, not remediated; see §43): the writer's `lobbies/{code}/checkpoint` leaf is `JSON.stringify({ game, roster })`, so a game whose individual strings all pass D1 can still exceed 10 MiB in that single leaf and make the writer's whole update fail (reproduced with two 6 MB Manual deliveries).
+
+## Immediate next task
+
+Luna performs the narrow D1/D2 verification at the exact current `dev/phase-10f` HEAD. Do not send directly to Astra. After Luna PASS, Astra performs one narrow D1/D2 closure recheck; then Sol closure adjudication. Phase 10F remains open; nothing merged or deployed.
