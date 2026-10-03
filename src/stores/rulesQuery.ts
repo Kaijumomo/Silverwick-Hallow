@@ -243,7 +243,9 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
    * PlayerId: PlayerId, ParticipantId (replacement / departure), alive AS SEEN
    * BY THIS QUERY (hypothetical overlays included), Actual Role, and every
    * Effect record in order (id, type, lifecycle state, source character, source
-   * participant, expiry, parameters) together with the source character's
+   * participant's MECHANICAL identity -- SOL-10F-D2: kind, PlayerId and
+   * ParticipantId, never the `nameAtTime` display snapshot -- expiry,
+   * parameters) together with the source character's
    * persistence declaration as this query's environment resolves it.
    * Authoritative Current State only: never History, Reminders or prose
    * (names and notes are excluded). Exact JSON, so no collision handling is
@@ -255,6 +257,14 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     if (!value || typeof value !== "object") return value ?? null;
     return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortedKeys((value as Record<string, unknown>)[key])]));
   };
+  /** SOL-10F-D2: an Effect source ParticipantRef's mechanical identity only
+   * (the stored ref is never rewritten). */
+  const sourceIdentity = (ref: EffectRecord["sourceParticipant"]): unknown => {
+    if (!ref) return null;
+    if (ref.kind === "participant") return [ref.kind, ref.playerId, ref.participantId];
+    if (ref.kind === "legacy") return [ref.kind, ref.playerId];
+    return sortedKeys(ref); // unreachable for schema-valid state; conservative
+  };
   const declarationOf = (effect: EffectRecord): unknown => {
     if (!effect.sourceCharacter) return null;
     const resolved = resolveAbilitySemantics(effect.sourceCharacter, environment.registry, environment.semantics);
@@ -265,7 +275,7 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
       const player = game.players[playerId];
       if (!player || player.isEmpty || !player.participantId) return [];
       return [[playerId, player.participantId, player.alive, player.actualRole, (player.effects ?? []).map((effect) => [
-        effect.id, effect.type, effect.state, effect.sourceCharacter ?? null, sortedKeys(effect.sourceParticipant),
+        effect.id, effect.type, effect.state, effect.sourceCharacter ?? null, sourceIdentity(effect.sourceParticipant),
         sortedKeys(effect.expiry), sortedKeys(effect.parameters), declarationOf(effect)])]];
     })]);
 
