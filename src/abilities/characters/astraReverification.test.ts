@@ -200,6 +200,28 @@ describe("SOL-10F-B3 -- answer maps are canonical own-property snapshots", () =>
     expect(reads).toBe(1);
   });
 
+  it("the evaluator consumes the SAME snapshot: a follow-up input / judgment getter is read once", () => {
+    const g = patchPlayer(proofGame(["alhadikhia", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"]), "p1",
+      { effects: [{ id: "gp", type: "protected", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as Fx] });
+    const reads = { choice: 0, judgment: 0 };
+    const inputs: Record<string, unknown> = { chosen: pick(g, "p1", "p2", "p3") };
+    Object.defineProperty(inputs, choiceId(0, bind(g, "p1")), { enumerable: true,
+      get: () => (++reads.choice === 1 ? { kind: "boolean", value: false } : { kind: "boolean", value: true }) });
+    inputs[choiceId(1, bind(g, "p2"))] = { kind: "boolean", value: true };
+    inputs[choiceId(2, bind(g, "p3"))] = { kind: "boolean", value: true };
+    const first = plan(g, request(g, "p0", "alhadikhia", inputs as Record<string, never>));
+    const [protection] = requirementIds(first); // p1's die was consumed (not the second read's 'live')
+    expect(protection).toMatch(/^protection:demon@/);
+    expect(reads.choice).toBe(1);
+    const judgments = {};
+    Object.defineProperty(judgments, protection!, { enumerable: true,
+      get: () => (++reads.judgment === 1 ? { kind: "boolean", value: false } : { kind: "boolean", value: true }) });
+    reads.choice = 0;
+    const done = plan(g, request(g, "p0", "alhadikhia", inputs as Record<string, never>, { judgments: judgments as Record<string, never> }));
+    expect(done.ok && done.changed ? done.plan.outcome.operations.flatMap((o) => (o.domain === "life" ? o.intents.map((i) => `${i.kind}:${i.target.playerId}`) : [])) : []).toEqual(["death:p1"]);
+    expect(reads).toEqual({ choice: 1, judgment: 1 });
+  });
+
   it("B3 x modifier gate: an inherited modifier confirmation is ignored", () => {
     const g = { ...proofGame(["imp", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"]), fabled: ["toymaker"] };
     expect(requirementIds(attack(g, Object.create({ "modifier:fabled:toymaker": { kind: "boolean", value: true } })))).toEqual(["modifier:fabled:toymaker"]);
@@ -361,6 +383,23 @@ describe("SOL-10F-B2 -- protection judgments belong to one death attempt + its s
     expect(requirementIds(run(g, [false, true, true], { [initial]: Y }))).toEqual([final]);
   });
 
+  it("identical prefix and state: the initial and final attempt on player 3 still differ (only the stage separates them)", () => {
+    // Positions 1 and 2 (p1, p3) cannot die (known); position 3 (p2) has a generic Protected (unknown).
+    // 1 and 2 live; 3 dies -> judged protected -> all alive -> the final deaths: 1 and 2 known to survive ->
+    // position 3's FINAL attempt sees exactly the same choices, resolved intents and alive vector as its
+    // initial attempt; it is still a NEW death attempt.
+    const fx = (id: string, type: string) => ({ id, type, lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as Fx);
+    let g = proofGame(AL);
+    g = patchPlayer(g, "p1", { effects: [fx("cd1", "cannotDie")] });
+    g = patchPlayer(g, "p3", { effects: [fx("cd3", "cannotDie")] });
+    g = patchPlayer(g, "p2", { effects: [fx("gp", "protected")] });
+    const initial = onlyAsked(run(g, [true, true, false]));
+    const final = onlyAsked(run(g, [true, true, false], { [initial]: Y }));
+    expect(final).not.toBe(initial);
+    expect(JSON.parse(JSON.parse(final.slice("protection:demon@".length))[0]).slice(1)).toEqual(JSON.parse(JSON.parse(initial.slice("protection:demon@".length))[0]).slice(1));
+    expect(lifeIntents(run(g, [true, true, false], { [initial]: Y, [final]: N }))).toEqual(["death:p2"]);
+  });
+
   it("changing an earlier choice / consequence changes every later attempt id; an old judgment cannot satisfy the new attempt", () => {
     // Generic Protected on p2 (the Monk, position 3): unknown -> judgment.
     let g = proofGame(AL);
@@ -393,5 +432,39 @@ describe("SOL-10F-B2 -- protection judgments belong to one death attempt + its s
     expect(protectionJudgmentId("demon", { playerId: "p1", participantId: "a" }, { id: "x" })).not.toBe("protection:demon:a");
     // A ParticipantId / scope token can never make a scoped id collide with an unscoped one.
     expect(protectionJudgmentId("demon", { playerId: "p1", participantId: "@[\"x\",\"a\"]" })).not.toBe(protectionJudgmentId("demon", { playerId: "p1", participantId: "a" }, { id: "x" }));
+  });
+});
+
+describe("SOL-10F-B5/B6 cross-seam -- trigger consumption and Undo under encoded keys", () => {
+  beforeEach(() => store.setState({ game: null, undoStack: [], localSeq: 0 }));
+  // p0 ravenkeeper (hostile ParticipantId), p1 imp; the death is recorded as LifeEvent "death.v1".
+  function died(): StorytellerLobbyRecord {
+    const g = patchPlayer(proofGame(["ravenkeeper", "imp", "chef", "monk", "empath", "saint", "washerwoman"]), "p0", { participantId: "rk.1:a/b" });
+    return planned(plan(g, request(g, "p1", "imp", { target: pick(g, "p0") }),
+      proofEnv({ ids: { ...proofEnv().ids, life: { eventId: () => "death.v1", historyId: () => "hl-death.v1" } } })));
+  }
+  const trigger = (g: StorytellerLobbyRecord, target: string, extra: Record<string, unknown> = {}) =>
+    request(g, "p0", "ravenkeeper", { target: pick(g, target) }, { invocationPath: "nightTrigger", ...extra });
+
+  it("the exact event is consumed under its encoded key (even with completeStep:false); the replay is refused; Undo restores it", () => {
+    const g = died();
+    const key = `2:${nightTriggerStepKey("rk.1:a/b", "ravenkeeper", "death.v1")}`;
+    expect(key).toBe("2:trigger:rk%002E1%003Aa%002Fb:ravenkeeper:ideath%002Ev1");
+    openInStore(g);
+    expect(store.getState().resolveAbility(trigger(g, "p2", { completeStep: false }))).toMatchObject({ ok: true, changed: true });
+    expect(store.getState().game!.nightProgress[key]).toEqual(done);
+    expect(store.getState().undoStack).toHaveLength(1);
+    const after = store.getState().game!;
+    expect(plan(after, trigger(g, "p3", { trigger: { eventId: "death.v1" } }))).toMatchObject({ ok: false });
+    expect(plan(after, trigger(after, "p3"))).toMatchObject({ ok: false, code: "notApplicable", message: expect.stringMatching(/already resolved/) });
+    store.getState().undo();
+    expect(store.getState().game!.nightProgress[key]).toBeUndefined();
+    expect(plan(store.getState().game!, trigger(store.getState().game!, "p3"))).toMatchObject({ ok: true, changed: true });
+  });
+
+  it("a raw pre-fix composite key for the same event is NOT treated as consumed (no guessed ownership)", () => {
+    const g = died();
+    const raw = { ...g, nightProgress: { "2:trigger:rk.1%3Aa%2Fb:ravenkeeper:ideath.v1": done } };
+    expect(plan(raw, trigger(raw, "p2"))).toMatchObject({ ok: true, changed: true });
   });
 });
