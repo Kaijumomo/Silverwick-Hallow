@@ -10,7 +10,7 @@
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
 **Schema:** v23 integrated on `main`; v24 implemented on `dev/phase-10f`\
-**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (LUNA-10F-E1-TEST-01 test-only portability fix implemented; full gate green; ready for Luna confirmation; Phase 10F remains open)
+**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions **CLOSED** at reviewed target `a2d6d1b99242317269bf86f54e6d234e0644df33`; ready for integration into `main`.
 
 ## Product invariants
 
@@ -228,7 +228,7 @@ Delivered (store/game schema v23): `src/stores/alignmentResolution.ts` (pure `pl
 Frozen direction: one participant-bound Actual Alignment transaction seam; gameplay change vs correction; atomic multi-participant changes; Actual Alignment independent of Role; v23 player-facing alignment perception with Normal / explicit Good / explicit Evil / Not Told; Normal ordinary perception derives from Shown Role while Normal Traveler perception follows Actual Alignment; v22 -> v23 normalization clears inert legacy Traveler shown-alignment copies to Normal; strict v23 Alignment History correction/correlation metadata; occupancy-boundary hardening so a new participant never inherits stale seat alignment; Storyteller UI separates Actual Alignment truth from player-facing perception; 10F remains responsible for ability logic.
 
 ### 10F — Guided Ability Resolution / Night Actions
-**Status:** D1/D2/E1 behavior verified; LUNA-10F-E1-TEST-01 test-only portability fix implemented; full gate green; ready for Luna confirmation. Not closed.\
+**Status:** **CLOSED — READY FOR INTEGRATION.** Sol closure is recorded in `PHASE10F.md` §49.\
 **Contract:** `PHASE10F.md` (frozen 2026-10-02).\
 **Starting checkpoint:** `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`.\
 **Contract-freeze checkpoint:** `727530e9364a0c971326c06ce45855adcf39828b`.\
@@ -239,6 +239,7 @@ Frozen direction: one participant-bound Actual Alignment transaction seam; gamep
 **SOL-10F-C1…C3 code checkpoint:** `c3ae6910ba6752bac62162a6f67f81076c598502` (docs-only record commit on top).\
 **SOL-10F-D1/D2 code checkpoint:** `a0968d0ff6149b7f16eb9fabb7e1eb8dda32ea0c` (docs-only record commit on top).\
 **SOL-10F-E1 code checkpoint:** `c6a2938e4e3c5ef3b17013c833cd335fe623b6f8` (docs-only record commit on top).\
+**Phase 10F final reviewed target:** `a2d6d1b99242317269bf86f54e6d234e0644df33`.\
 **Schema/store:** v24 (on `dev/phase-10f`).
 
 Frozen direction: one pure ability coordinator composes the existing Life, Effect, Reminder, Role and Alignment planners on one evolving working snapshot and commits once; mechanical operation order is ability-defined; Storyteller choice/judgment remains explicit; Reminders remain non-authoritative; participant-bound workflow identity prevents seat-reuse staleness; Information Delivery becomes composable and records simulated/performed-role context in v24; player Night progress becomes participant-scoped; public/player-town Life State is withheld during Night; the Night Order becomes a guided operating dashboard with progressive disclosure and complex-outcome previews.
@@ -278,4 +279,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Luna confirms the clean checkpoint containing the test-only Windows/Linux path normalization and green E1/full/typecheck/build/diff gates. On Luna PASS, Astra performs the final narrow D1/D2/E1 closure recheck. Do not merge, deploy or close 10F.
+Integrate the closed Phase 10F branch into `main`, verify exact ancestry and diff hygiene, record the integration checkpoint, then create `dev/phase-10g` from that exact integrated `main`.
