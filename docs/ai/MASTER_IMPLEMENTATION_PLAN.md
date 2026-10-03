@@ -10,7 +10,7 @@
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
 **Schema:** v23 integrated on `main`; v24 implemented on `dev/phase-10f`\
-**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (Slice 7 Luna verification complete — READY FOR ASTRA adversarial review; Phase 10F not closed)
+**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (Astra Slice 7 REVISE; SOL-10F-A1…A10 targeted remediation required; Phase 10F not closed)
 
 ## Product invariants
 
@@ -274,4 +274,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Astra adversarially reviews Phase 10F Slice 7 at the exact current `dev/phase-10f` target. Luna has completed mechanical/rules-fidelity verification and the documentation rechecks; no semantic blocker remains from Luna. Astra should attack the surviving claims rather than repeat Luna's acceptance matrix: state/composition edge cases, stale identity, unusual schema-valid state, modifier interactions, Undo/recovery, privacy, and future-primitive safety. Report proven/supported defects separately from unproven concerns for Sol adjudication. Do not merge, deploy or close 10F.
+Claude Code remediates `PHASE10F.md` §31 SOL-10F-A1…A10 only. The eight reproduced Astra defects are accepted; Sol additionally froze Ravenkeeper role-at-death evidence and exact trigger-event consumption from Astra's contract questions. Preserve all previously passing Slice 7 semantics and Manual/deferred boundaries. After a clean full gate, return one exact checkpoint to Luna for targeted verification before any Astra re-review. Do not merge, deploy or close 10F.
