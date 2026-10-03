@@ -427,6 +427,17 @@ export function composeAbilityOutcome(
     if (operation.domain !== "information" && operation.domain !== "nightStep" && !Array.isArray(operation.intents)) {
       return refuse("invalid", "Malformed ability operation.", { operationIndex });
     }
+    // SOL-10F-A2: a bound target that no longer occupies its seat in the
+    // WORKING snapshot is stale, whatever the domain -- never retargeted to the
+    // seat's new occupant (Life additionally re-checks while translating).
+    if (operation.domain === "effect" || operation.domain === "reminder" || operation.domain === "role" || operation.domain === "alignment") {
+      for (const [intentIndex, intent] of operation.intents.entries()) {
+        const bound = isObject(intent) ? (intent as { target?: unknown }).target : undefined;
+        if (isBinding(bound) && !boundParticipant(working, bound)) {
+          return refuse("stale", "A chosen player is no longer in that seat -- review and resolve again.", { operationIndex, intentIndex });
+        }
+      }
+    }
     switch (operation.domain) {
       case "life": {
         const intents: LifeIntent[] = [];

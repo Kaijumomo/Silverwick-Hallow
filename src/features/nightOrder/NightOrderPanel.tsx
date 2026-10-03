@@ -12,7 +12,7 @@ import { evilInformationPolicy } from "./nightRules";
 import type { NightStepRecord, NightStepStatus, Script, StorytellerLobbyRecord } from "@/stores/types";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { CANONICAL_ABILITY_SEMANTICS, type AbilityDescriptor, type AbilityInputValue, type AbilitySemanticsRegistry } from "@/abilities/semantics";
-import { captureFingerprint, planAbilityResolution } from "@/stores/abilityResolution";
+import { captureFingerprint, planAbilityResolution, type ParticipantBinding } from "@/stores/abilityResolution";
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { lifeEventsForParticipantAt } from "@/stores/lifeEvents";
 import { AbilityWorkspace, type WorkspaceTarget } from "@/features/abilities/AbilityWorkspace";
@@ -82,17 +82,23 @@ function InlineSimpleAbility({ step, day, descriptor, guided, onEscalate }: {
   step: Extract<NightStep, { kind: "player" }>; day: number; descriptor: AbilityDescriptor; guided: GuidedContext;
   onEscalate: (initialInputs?: Record<string, AbilityInputValue>) => void;
 }) {
-  const [target, setTarget] = useState("");
+  // SOL-10F-A2: the target is the bound participation instance captured WHEN it
+  // was selected -- never a seat id re-bound to whoever sits there at Resolve.
+  const [target, setTarget] = useState<ParticipantBinding | null>(null);
   const [error, setError] = useState<string | null>(null);
   const picking = useTargetPicker((s) => s.active);
   const input = descriptor.inputs[0]!;
   const { game } = guided;
   const actor = game.players[step.playerId];
   const actorBinding = actor?.participantId ? bindingOf(actor) : null;
+  const select = (playerId: string) => {
+    const chosen = Object.prototype.hasOwnProperty.call(game.players, playerId) ? game.players[playerId] : undefined;
+    setTarget(chosen && !chosen.isEmpty && chosen.participantId ? bindingOf(chosen) : null);
+    setError(null);
+  };
   const resolve = () => {
-    const chosen = game.players[target];
-    if (!chosen || chosen.isEmpty || !chosen.participantId) return;
-    const inputs = { [input.id]: { kind: "participant" as const, participants: [bindingOf(chosen)] } };
+    if (!target) return;
+    const inputs = { [input.id]: { kind: "participant" as const, participants: [target] } };
     const fingerprint = captureFingerprint(game, step.playerId, { day, stepKey: step.stepKey });
     if (!fingerprint) { setError("This player is no longer seated."); return; }
     const request = { mode: "guided" as const, invocationPath: "nightOrder" as const, fingerprint, roleId: step.effectiveRoleId, inputs, completeStep: true };
@@ -108,13 +114,13 @@ function InlineSimpleAbility({ step, day, descriptor, guided, onEscalate }: {
   };
   return (
     <div className="ability-inline" role="group" aria-label={`${descriptor.presentation.action} (inline)`}>
-      <select aria-label={input.label} value={target} onChange={(e) => { setTarget(e.target.value); setError(null); }}>
+      <select aria-label={input.label} value={target?.playerId ?? ""} onChange={(e) => select(e.target.value)}>
         <option value="">{input.label}…</option>
         {seatedParticipants(game).filter((p) => participantAllowed(p, input, actorBinding)).map((p) =>
           <option key={p.id} value={p.id}>{p.name || `Seat ${p.seat + 1}`} · seat {p.seat + 1}</option>)}
       </select>
       <button className="btn btn-sm" aria-pressed={!!picking} onClick={() => picking ? useTargetPicker.getState().cancel()
-        : useTargetPicker.getState().start(input.label, (binding) => setTarget(binding.playerId))}>
+        : useTargetPicker.getState().start(input.label, (binding) => { setTarget(binding); setError(null); })}>
         {picking ? "Cancel pick" : "Pick on Grimoire"}
       </button>
       <button className="btn btn-sm btn-gold" disabled={!target} onClick={resolve}>Resolve</button>

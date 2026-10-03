@@ -1,6 +1,6 @@
 import type { AbilityDescriptor, AbilityEvaluationContext } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
-import { answerOf, ask, deathAttempt, lifeOperation, nameOf, nothing, outcome, participantsOf, requireLivingActor } from "./shared";
+import { answerOf, ask, deathAttempt, lifeOperation, nameOf, nothing, outcome, participantsOf, requireLivingActor, subjectId } from "./shared";
 
 /**
  * Al-Hadikhia -- GUIDED. docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md Section 13
@@ -12,8 +12,9 @@ import { answerOf, ask, deathAttempt, lifeOperation, nameOf, nothing, outcome, p
  *  - nobody chosen (an explicit empty answer, allowNone) -> no Life change, no
  *    announcement record; the step may complete;
  *  - exactly 3 distinct participants, in the declared 1 -> 2 -> 3 order; each
- *    one's live/die choice is asked and resolved in that order against the
- *    EVOLVING Life state (RulesQuery.assumingAlive):
+ *    one's live/die choice is asked and its consequence SETTLED (any
+ *    protection judgment included) before the next player is asked
+ *    (SOL-10F-A6), against the EVOLVING Life state (RulesQuery.assumingAlive):
  *      live: dead -> resurrection; alive -> nothing;
  *      die: dead -> stays dead; alive -> Demon-caused death unless protected
  *           (known protected -> stays alive; unknown -> judgment);
@@ -22,7 +23,9 @@ import { answerOf, ask, deathAttempt, lifeOperation, nameOf, nothing, outcome, p
  * All Life events form ONE ordered Life transaction (10F-AC-16).
  * Impaired / simulated: choices only; no Life change.
  */
-export const choiceId = (index: number) => `choice:${index + 1}`;
+/** SOL-10F-A1: a live/die choice belongs to BOTH its ordered position and the
+ * participant in it -- replacing that participant asks afresh. */
+export const choiceId = (index: number, who: ParticipantBinding) => subjectId(`choice:${index + 1}`, who);
 
 export const AL_HADIKHIA: AbilityDescriptor = {
   roleId: "alhadikhia",
@@ -38,17 +41,9 @@ export const AL_HADIKHIA: AbilityDescriptor = {
     if (dead) return dead;
     const chosen = participantsOf(context.inputs, "chosen") ?? [];
     if (!chosen.length) return nothing();
-    // Each player's own choice, asked strictly in order 1 -> 2 -> 3.
-    const lives: boolean[] = [];
-    for (const [index, who] of chosen.entries()) {
-      const answer = answerOf(context.inputs, choiceId(index), "boolean");
-      if (!answer) return ask(`${index + 1}. ${nameOf(context, who)} silently chooses to live or die.`,
-        { id: choiceId(index), kind: "boolean", source: "player", label: `${index + 1}. ${nameOf(context, who)} chooses to LIVE (No: chooses to die)` });
-      lives.push(answer.value);
-    }
-    if (context.simulated || !context.functioning) return nothing();
+    const mechanics = !context.simulated && context.functioning;
 
-    // The evolving working Life state of THIS resolution.
+    // The evolving working Life state of THIS resolution (one final commit).
     let query = context.query;
     const isAlive = (who: ParticipantBinding) => query.participant(who)?.alive === true;
     const intents: { kind: "death" | "resurrection"; target: ParticipantBinding }[] = [];
@@ -60,8 +55,16 @@ export const AL_HADIKHIA: AbilityDescriptor = {
       }
       return attempt;
     };
+    // SOL-10F-A6: the running procedure, strictly 1 -> 2 -> 3. Player N's
+    // choice is asked, then its consequence is SETTLED (including any
+    // protection judgment) before player N+1 is asked anything.
     for (const [index, who] of chosen.entries()) {
-      if (lives[index]) {
+      const id = choiceId(index, who);
+      const answer = answerOf(context.inputs, id, "boolean");
+      if (!answer) return ask(`${index + 1}. ${nameOf(context, who)} silently chooses to live or die.`,
+        { id, kind: "boolean", source: "player", label: `${index + 1}. ${nameOf(context, who)} chooses to LIVE (No: chooses to die)` });
+      if (!mechanics) continue; // impaired / simulated: choices only
+      if (answer.value) {
         if (!isAlive(who)) {
           intents.push({ kind: "resurrection", target: who });
           query = query.assumingAlive(who, true);
@@ -72,6 +75,7 @@ export const AL_HADIKHIA: AbilityDescriptor = {
       const attempt = kill(who);
       if (attempt.kind === "ask") return ask(attempt.message, attempt.requirement);
     }
+    if (!mechanics) return nothing();
     if (chosen.every(isAlive)) {
       for (const who of chosen) {
         const attempt = kill(who);

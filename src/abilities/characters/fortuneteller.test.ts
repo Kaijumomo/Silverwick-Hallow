@@ -2,6 +2,7 @@
 // (matrix Section 7). Production semantics.
 import { beforeEach, describe, expect, it } from "vitest";
 import { COMMUNICATED, RED_HERRING, RED_HERRING_CHOICE, registersAsDemonJudgment } from "./fortuneteller";
+import { subjectId } from "./shared";
 import { bind, homebrewEnv, impair, openInStore, patchPlayer, pick, plan, planned, proofGame, proofRegistry, request, requirementIds, reseat, yes } from "@/test/proofFixtures";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { CANONICAL_ABILITY_SEMANTICS, type AbilityDescriptor, type AbilitySemanticsRegistry } from "@/abilities/semantics";
@@ -16,7 +17,12 @@ const herringOn = (g: StorytellerLobbyRecord, id: string, effectId = "rh-1"): St
   patchPlayer(g, id, { effects: [...g.players[id]!.effects, { id: effectId, type: RED_HERRING, lifetime: { kind: "manual" }, state: "active",
     expiry: { kind: "none" }, appliedAt: { phase: "night", day: 1 } } as EffectRecord] });
 const answer = (g: StorytellerLobbyRecord) => g.informationDeliveries.at(-1)!.values.find((v) => v.requirementId === "isDemon");
-const ask = (g: StorytellerLobbyRecord, a: string, b: string, extra = {}) => plan(g, request(g, "p0", "fortuneteller", { targets: pick(g, a, b), ...extra }));
+/** SOL-10F-A1: the communicated answer is bound to the chosen pair. */
+const comm = (g: StorytellerLobbyRecord, a: string, b: string) => subjectId(COMMUNICATED, bind(g, a), bind(g, b));
+const pairBound = (g: StorytellerLobbyRecord, a: string, b: string, extra: Record<string, unknown>) =>
+  Object.fromEntries(Object.entries(extra).map(([key, value]) => [key === COMMUNICATED ? comm(g, a, b) : key, value]));
+const ask = (g: StorytellerLobbyRecord, a: string, b: string, extra: Record<string, unknown> = {}) =>
+  plan(g, request(g, "p0", "fortuneteller", { targets: pick(g, a, b), ...pairBound(g, a, b, extra) } as never));
 
 describe("Red Herring -- authoritative state", () => {
   it("Night 1 with no Red Herring: the Storyteller chooses a good player and the Effect is created in the SAME resolution, before delivery", () => {
@@ -110,7 +116,7 @@ describe("Fortune Teller -- the answer", () => {
 
   it("a poisoned Fortune Teller: two choices recorded with either Boolean the Storyteller gives", () => {
     const poisoned = impair(g, "p0");
-    expect(requirementIds(ask(poisoned, "p1", "p2"))).toEqual([COMMUNICATED]);
+    expect(requirementIds(ask(poisoned, "p1", "p2"))).toEqual([comm(poisoned, "p1", "p2")]);
     for (const value of [true, false]) {
       const next = planned(ask(poisoned, "p1", "p2", { [COMMUNICATED]: yes(value) }));
       expect(answer(next)).toMatchObject({ value });
@@ -176,7 +182,7 @@ describe("SOL-10F-S7-F2 -- the Red Herring is independent of the Fortune Teller 
     for (const type of ["poisoned", "drunk"]) {
       const g = impair(n1(), "p0", type);
       expect(requirementIds(ask(g, "p1", "p2"))).toEqual([RED_HERRING_CHOICE]);
-      expect(requirementIds(ask(g, "p1", "p2", { [RED_HERRING_CHOICE]: pick(g, "p3") }))).toEqual([COMMUNICATED]);
+      expect(requirementIds(ask(g, "p1", "p2", { [RED_HERRING_CHOICE]: pick(g, "p3") }))).toEqual([comm(g, "p1", "p2")]);
       for (const value of [true, false]) {
         const result = ask(g, "p1", "p2", { [RED_HERRING_CHOICE]: pick(g, "p3"), [COMMUNICATED]: yes(value) });
         expect(domainsOf(result)).toEqual(["effect", "information"]);
@@ -207,8 +213,8 @@ describe("SOL-10F-S7-F2 -- the Red Herring is independent of the Fortune Teller 
   it("5. a Drunk simulated as the Fortune Teller creates NO Red Herring, even on Night 1", () => {
     const g = patchPlayer(proofGame(["drunk", "imp", "chef", "monk", "recluse", "poisoner", "empath"], "night", 1), "p0",
       { shownRole: "fortuneteller", shownAlignment: null, behaviorMode: "drunk_fake_role_behavior" });
-    expect(requirementIds(plan(g, request(g, "p0", "fortuneteller", { targets: pick(g, "p1", "p2") })))).toEqual([COMMUNICATED]);
-    const next = planned(plan(g, request(g, "p0", "fortuneteller", { targets: pick(g, "p1", "p2"), [COMMUNICATED]: yes(true),
+    expect(requirementIds(plan(g, request(g, "p0", "fortuneteller", { targets: pick(g, "p1", "p2") })))).toEqual([comm(g, "p1", "p2")]);
+    const next = planned(plan(g, request(g, "p0", "fortuneteller", { targets: pick(g, "p1", "p2"), [comm(g, "p1", "p2")]: yes(true),
       [RED_HERRING_CHOICE]: pick(g, "p3") })));
     expect(herrings(next)).toEqual([]);
     expect(next.informationDeliveries).toEqual([expect.objectContaining({ actualRole: "drunk", performedRole: "fortuneteller" })]);
@@ -275,7 +281,7 @@ describe("SOL-10F-S7-F2 -- the Red Herring is independent of the Fortune Teller 
   it("10. Undo removes the newly-created fact AND the delivery together (one commit)", () => {
     const g = impair(n1(), "p0");
     openInStore(g);
-    expect(store.getState().resolveAbility(request(g, "p0", "fortuneteller", { targets: pick(g, "p1", "p2"), [RED_HERRING_CHOICE]: pick(g, "p3"), [COMMUNICATED]: yes(false) })))
+    expect(store.getState().resolveAbility(request(g, "p0", "fortuneteller", { targets: pick(g, "p1", "p2"), [RED_HERRING_CHOICE]: pick(g, "p3"), [comm(g, "p1", "p2")]: yes(false) })))
       .toMatchObject({ ok: true, changed: true });
     expect(store.getState().undoStack).toHaveLength(1);
     expect(herrings(store.getState().game!)).toEqual(["p3"]);

@@ -13,7 +13,7 @@ const ROLES = ["alhadikhia", "chef", "monk", "empath", "saint", "poisoner", "was
 const base = () => proofGame(ROLES);
 const LIVE = true, DIE = false;
 function choices(g: StorytellerLobbyRecord, ids: string[], picks: boolean[]): Record<string, AbilityInputValue> {
-  return { chosen: pick(g, ...ids), ...Object.fromEntries(picks.map((value, index) => [choiceId(index), yes(value)])) };
+  return { chosen: pick(g, ...ids), ...Object.fromEntries(picks.map((value, index) => [choiceId(index, bind(g, ids[index]!)), yes(value)])) };
 }
 const run = (g: StorytellerLobbyRecord, ids: string[], picks: boolean[], extra = {}) => plan(g, request(g, "p0", "alhadikhia", choices(g, ids, picks), extra));
 const intents = (result: ReturnType<typeof plan>) => result.ok && result.changed
@@ -42,8 +42,8 @@ describe("Al-Hadikhia -- choosing", () => {
 
   it("asks each player's live/die choice in order, one at a time", () => {
     const g = base();
-    expect(requirementIds(plan(g, request(g, "p0", "alhadikhia", { chosen: pick(g, "p1", "p2", "p3") })))).toEqual([choiceId(0)]);
-    expect(requirementIds(plan(g, request(g, "p0", "alhadikhia", { chosen: pick(g, "p1", "p2", "p3"), [choiceId(0)]: yes(DIE) })))).toEqual([choiceId(1)]);
+    expect(requirementIds(plan(g, request(g, "p0", "alhadikhia", { chosen: pick(g, "p1", "p2", "p3") })))).toEqual([choiceId(0, bind(g, "p1"))]);
+    expect(requirementIds(plan(g, request(g, "p0", "alhadikhia", { chosen: pick(g, "p1", "p2", "p3"), [choiceId(0, bind(g, "p1"))]: yes(DIE) })))).toEqual([choiceId(1, bind(g, "p2"))]);
   });
 });
 

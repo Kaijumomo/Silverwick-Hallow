@@ -2,9 +2,10 @@
 // (matrix Section 9). Production semantics.
 import { beforeEach, describe, expect, it } from "vitest";
 import { CHARACTER_JUDGMENT, RAVENKEEPER, SHOWN } from "./ravenkeeper";
+import { subjectId } from "./shared";
 import { CANONICAL_ABILITY_SEMANTICS, type AbilityDescriptor, type AbilityInputValue, type AbilitySemanticsRegistry } from "@/abilities/semantics";
 import { invocationEligibility, nightTriggerJudgmentId } from "@/abilities/invocation";
-import { homebrewEnv, impair, openInStore, patchPlayer, pick, plan, planned, proofEnv, proofGame, request, requirementIds, reseat, yes } from "@/test/proofFixtures";
+import { bind, homebrewEnv, impair, openInStore, patchPlayer, pick, plan, planned, proofEnv, proofGame, request, requirementIds, reseat, yes } from "@/test/proofFixtures";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { participantStepKey } from "@/stores/nightProgress";
 import type { LifeEvent, StorytellerLobbyRecord } from "@/stores/types";
@@ -17,8 +18,13 @@ function killedTonight(): StorytellerLobbyRecord {
   const g = proofGame(ROLES, "night", 2);
   return planned(plan(g, request(g, "p1", "imp", { target: pick(g, "p0") })));
 }
-const trigger = (g: StorytellerLobbyRecord, target: string, inputs: Record<string, AbilityInputValue> = {}, extra = {}) =>
-  plan(g, request(g, "p0", "ravenkeeper", { target: pick(g, target), ...inputs }, { invocationPath: "nightTrigger", withStep: true, completeStep: true, ...extra }));
+/** SOL-10F-A1: the shown / judged character is bound to the chosen player. */
+const sid = (g: StorytellerLobbyRecord, target: string, base: string) => subjectId(base, bind(g, target));
+const bound = (g: StorytellerLobbyRecord, target: string, values: Record<string, AbilityInputValue>) =>
+  Object.fromEntries(Object.entries(values).map(([key, value]) => [[SHOWN, CHARACTER_JUDGMENT].includes(key) ? sid(g, target, key) : key, value]));
+const trigger = (g: StorytellerLobbyRecord, target: string, inputs: Record<string, AbilityInputValue> = {}, extra: { judgments?: Record<string, AbilityInputValue> } & Record<string, unknown> = {}) =>
+  plan(g, request(g, "p0", "ravenkeeper", { target: pick(g, target), ...bound(g, target, inputs) },
+    { invocationPath: "nightTrigger", withStep: true, completeStep: true, ...extra, ...(extra.judgments ? { judgments: bound(g, target, extra.judgments) } : {}) }));
 const death = (g: StorytellerLobbyRecord, id: string, phase: "night" | "day", day: number): LifeEvent => ({ id: `le-${id}-${phase}${day}`, kind: "death",
   subject: { kind: "participant", participantId: g.players[id]!.participantId!, playerId: id, nameAtTime: g.players[id]!.name }, moment: { phase, day } } as LifeEvent);
 
@@ -103,14 +109,14 @@ describe("Ravenkeeper -- information", () => {
   it("any participant (alive or dead); registration ambiguity -> the Storyteller's judgment", () => {
     const g = killedTonight();
     expect(planned(trigger(g, "p0")).informationDeliveries.at(-1)!.values[1]).toEqual({ requirementId: "role", kind: "role", roleId: "ravenkeeper" });
-    expect(requirementIds(trigger(g, "p3"))).toEqual([CHARACTER_JUDGMENT]);
+    expect(requirementIds(trigger(g, "p3"))).toEqual([sid(g, "p3", CHARACTER_JUDGMENT)]);
     const shown = planned(trigger(g, "p3", {}, { judgments: { [CHARACTER_JUDGMENT]: character("scarletwoman") } }));
     expect(shown.informationDeliveries.at(-1)!.values[1]).toEqual({ requirementId: "role", kind: "role", roleId: "scarletwoman" });
   });
 
   it("an impaired Ravenkeeper: the wake and choice are simulated; the Storyteller shows any character", () => {
     const g = impair(killedTonight(), "p0", "drunk");
-    expect(requirementIds(trigger(g, "p2"))).toEqual([SHOWN]);
+    expect(requirementIds(trigger(g, "p2"))).toEqual([sid(g, "p2", SHOWN)]);
     const next = planned(trigger(g, "p2", { [SHOWN]: character("imp") }));
     expect(next.informationDeliveries.at(-1)!.values[1]).toEqual({ requirementId: "role", kind: "role", roleId: "imp" });
     expect(next.players).toBe(g.players);

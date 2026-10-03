@@ -36,6 +36,16 @@ export function answerOf<K extends AbilityInputValue["kind"]>(
   return value && typeof value === "object" && value.kind === kind ? value as Extract<AbilityInputValue, { kind: K }> : undefined;
 }
 
+/**
+ * SOL-10F-A1: the identity of an evaluator follow-up that belongs to specific
+ * participants (a consent, a live/die choice, an answer about a chosen pair).
+ * Changing the subject changes the id, so an answer collected for one subject
+ * can never be consumed for another -- even from a crafted request. The ids
+ * are JSON-encoded, so ParticipantIds containing ":" cannot collide.
+ */
+export const subjectId = (base: string, ...subjects: ParticipantBinding[]): string =>
+  `${base}:${JSON.stringify(subjects.map((subject) => subject.participantId))}`;
+
 export const nameOf = (context: AbilityEvaluationContext, binding: ParticipantBinding): string => {
   const player = context.query.participant(binding);
   return player?.name || (player ? `Seat ${player.seat + 1}` : "That player");

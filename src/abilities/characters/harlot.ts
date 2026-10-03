@@ -1,7 +1,7 @@
 import type { AbilityDescriptor, AbilityEvaluation, AbilityEvaluationContext } from "../semantics";
 import type { AbilityOperation, ParticipantBinding } from "@/stores/abilityResolution";
 import type { RoleId } from "@/stores/types";
-import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, nothing, outcome, requireLivingActor } from "./shared";
+import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, nothing, outcome, requireLivingActor, subjectId } from "./shared";
 
 /**
  * Harlot -- GUIDED (Traveller). docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md
@@ -30,6 +30,8 @@ import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, n
  * recorded after mechanics in one snapshot (PHASE10F Section 4).
  * Impaired / simulated: the Storyteller chooses the character shown; no death.
  */
+// SOL-10F-A1: every follow-up belongs to the chosen participant -- its id is
+// subjectId(base, chosen), so changing the target asks afresh.
 export const CONSENT = "consent";
 export const CHARACTER_JUDGMENT = "harlot:character";
 export const SHOWN = "shown";
@@ -57,30 +59,30 @@ export const HARLOT: AbilityDescriptor = {
     const dead = requireLivingActor(context);
     if (dead) return dead;
     const target = firstParticipant(context.inputs, "target");
-    const consent = answerOf(context.inputs, CONSENT, "boolean");
+    const consent = answerOf(context.inputs, subjectId(CONSENT, target), "boolean");
     if (!consent) return ask(`${nameOf(context, target)} is shown that the Harlot chose them: do they agree?`,
-      { id: CONSENT, kind: "boolean", source: "player", label: `${nameOf(context, target)} agrees` });
+      { id: subjectId(CONSENT, target), kind: "boolean", source: "player", label: `${nameOf(context, target)} agrees` });
     if (!consent.value) return nothing();
 
     if (context.simulated || !context.functioning) {
-      const shown = answerOf(context.inputs, SHOWN, "character");
+      const shown = answerOf(context.inputs, subjectId(SHOWN, target), "character");
       if (!shown || shown.roleIds.length !== 1) return ask("This Harlot has no functioning ability: choose the character shown.",
-        { id: SHOWN, kind: "character", source: "storyteller", label: "The character shown to the Harlot" });
+        { id: subjectId(SHOWN, target), kind: "character", source: "storyteller", label: "The character shown to the Harlot" });
       return inform(context, target, shown.roleIds[0]!);
     }
     let roleId: RoleId;
     const registered = context.query.registration(target, "harlot").character;
     if (registered.known) roleId = registered.value;
     else {
-      const judged = answerOf(context.judgments, CHARACTER_JUDGMENT, "character");
+      const judged = answerOf(context.judgments, subjectId(CHARACTER_JUDGMENT, target), "character");
       if (!judged || judged.roleIds.length !== 1) return ask(registered.reason,
-        { id: CHARACTER_JUDGMENT, kind: "character", source: "judgment", label: `The character ${nameOf(context, target)} registers as to the Harlot` });
+        { id: subjectId(CHARACTER_JUDGMENT, target), kind: "character", source: "judgment", label: `The character ${nameOf(context, target)} registers as to the Harlot` });
       roleId = judged.roleIds[0]!;
     }
 
-    const consequence = answerOf(context.inputs, DEATH_CONSEQUENCE, "boolean");
+    const consequence = answerOf(context.inputs, subjectId(DEATH_CONSEQUENCE, target), "boolean");
     if (!consequence) return ask("Both players MIGHT die: the Storyteller decides.",
-      { id: DEATH_CONSEQUENCE, kind: "boolean", source: "storyteller", label: "The Harlot and the chosen player die (if not protected)" });
+      { id: subjectId(DEATH_CONSEQUENCE, target), kind: "boolean", source: "storyteller", label: "The Harlot and the chosen player die (if not protected)" });
     if (!consequence.value) return inform(context, target, roleId);
 
     // "You both" -- the distinct participants involved: ONE death attempt per

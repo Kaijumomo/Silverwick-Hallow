@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { CANONICAL_ABILITY_SEMANTICS, resolveAbilitySemantics, type AbilityInputValue, type AbilitySemanticsRegistry } from "@/abilities/semantics";
 import { CHARACTER_JUDGMENT, CONSENT, DEATH_CONSEQUENCE, HARLOT, SHOWN } from "./harlot";
-import { protectionJudgmentId } from "./shared";
+import { protectionJudgmentId, subjectId } from "./shared";
 import { bind, homebrewEnv, homebrewScript, proofRegistry, impair, patchPlayer, pick, plan, planned, proofEnv, proofGame, request, requirementIds, reseat, yes } from "@/test/proofFixtures";
 import type { EffectRecord, RoleDef, StorytellerLobbyRecord } from "@/stores/types";
 import { buildRegistry, silverwickInformationActions } from "@/data/roleRegistry";
@@ -19,8 +19,15 @@ function base(day = 2): StorytellerLobbyRecord {
     travelerArrival: { demonInfoComplete: true, firstNightComplete: true, completedAtNight: 1 } });
 }
 const character = (roleId: string): AbilityInputValue => ({ kind: "character", roleIds: [roleId] });
-const run = (g: StorytellerLobbyRecord, target: string, inputs: Record<string, AbilityInputValue> = {}, extra = {}) =>
-  plan(g, request(g, "p0", "harlot", { target: pick(g, target), ...inputs }, extra));
+/** SOL-10F-A1: Harlot follow-ups are bound to the chosen participant -- these
+ * tests name them by base id and bind them to the call's own target here. */
+const sid = (g: StorytellerLobbyRecord, target: string, base: string) => subjectId(base, bind(g, target));
+const BOUND = [CONSENT, SHOWN, DEATH_CONSEQUENCE, CHARACTER_JUDGMENT];
+const bound = (g: StorytellerLobbyRecord, target: string, values: Record<string, AbilityInputValue>) =>
+  Object.fromEntries(Object.entries(values).map(([key, value]) => [BOUND.includes(key) ? sid(g, target, key) : key, value]));
+const run = (g: StorytellerLobbyRecord, target: string, inputs: Record<string, AbilityInputValue> = {}, extra: { judgments?: Record<string, AbilityInputValue> } & Record<string, unknown> = {}) =>
+  plan(g, request(g, "p0", "harlot", { target: pick(g, target), ...bound(g, target, inputs) },
+    { ...extra, ...(extra.judgments ? { judgments: bound(g, target, extra.judgments) } : {}) }));
 /** The recorded Harlot delivery values: the chosen participant's durable ref + the character. */
 const told = (g: StorytellerLobbyRecord, chosen: string, roleId: string) => [
   { requirementId: "chosenPlayer", kind: "player", participants: [expect.objectContaining({ kind: "participant", participantId: g.players[chosen]!.participantId, playerId: chosen })] },
@@ -31,7 +38,7 @@ const effect = (type: string, over: Partial<EffectRecord> = {}): EffectRecord =>
 
 describe("Harlot -- consent", () => {
   it("asks the chosen player's consent (their own Player choice) after the choice", () => {
-    expect(run(base(), "p1")).toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: CONSENT, source: "player", kind: "boolean" }] });
+    expect(run(base(), "p1")).toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: sid(base(), "p1", CONSENT), source: "player", kind: "boolean" }] });
   });
 
   it("declines: no information and no death", () => {
@@ -44,7 +51,7 @@ describe("Harlot -- consent", () => {
 
   it("agrees + no death consequence: information only, recorded exactly", () => {
     const g = base();
-    expect(requirementIds(run(g, "p1", { [CONSENT]: yes() }))).toEqual([DEATH_CONSEQUENCE]);
+    expect(requirementIds(run(g, "p1", { [CONSENT]: yes() }))).toEqual([sid(g, "p1", DEATH_CONSEQUENCE)]);
     const next = planned(run(g, "p1", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes(false) }));
     expect(next.informationDeliveries).toEqual([expect.objectContaining({ actualRole: "harlot", informationActionId: "harlot-other-night",
       values: told(g, "p1", "chef") })]);
@@ -85,13 +92,13 @@ describe("Harlot -- consent", () => {
       ["harlot", { ...HARLOT, sourcedEffects: [{ type: "cannotDie", persistence: "whileSourceFunctions" }] }]]);
     const g = base();
     const linked = patchPlayer(g, "p1", { effects: [effect("cannotDie", { sourceParticipant: { kind: "participant", participantId: g.players.p0!.participantId!, playerId: "p0", nameAtTime: "Player 0" }, sourceCharacter: "harlot" })] });
-    expect(plan(linked, request(linked, "p0", "harlot", { target: pick(linked, "p1"), [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }), proofEnv({ semantics })))
+    expect(plan(linked, request(linked, "p0", "harlot", { target: pick(linked, "p1"), ...bound(linked, "p1", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }) }), proofEnv({ semantics })))
       .toMatchObject({ ok: false, code: "unsupported", message: expect.stringMatching(/order matters/) });
   });
 
   it("registration ambiguity: the Storyteller decides the character shown", () => {
     const g = base();
-    expect(requirementIds(run(g, "p2", { [CONSENT]: yes() }))).toEqual([CHARACTER_JUDGMENT]);
+    expect(requirementIds(run(g, "p2", { [CONSENT]: yes() }))).toEqual([sid(g, "p2", CHARACTER_JUDGMENT)]);
     const next = planned(run(g, "p2", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes(false) }, { judgments: { [CHARACTER_JUDGMENT]: character("chef") } }));
     expect(next.informationDeliveries[0]!.values).toEqual(told(g, "p2", "chef"));
   });
@@ -101,19 +108,19 @@ describe("Harlot -- targets, timing, impairment, identity", () => {
   it("the target must be a LIVING participant (SOL-10F-S7-F1: the Harlot themself is legal)", () => {
     const g = patchPlayer(base(), "p1", { alive: false });
     expect(run(g, "p1")).toMatchObject({ ok: false, code: "illegal" });
-    expect(requirementIds(run(g, "p0"))).toEqual([CONSENT]);
+    expect(requirementIds(run(g, "p0"))).toEqual([sid(g, "p0", CONSENT)]);
   });
 
   it("Each night*: not the game's first Night; a late-arriving Harlot acts on a later Night by the GAME's Night number", () => {
     const n1 = base(1);
     expect(run(n1, "p1")).toMatchObject({ ok: false, code: "notApplicable" });
     const late = patchPlayer(base(3), "p0", { travelerArrival: { demonInfoComplete: false, firstNightComplete: false } });
-    expect(requirementIds(run(late, "p1"))).toEqual([CONSENT]);
+    expect(requirementIds(run(late, "p1"))).toEqual([sid(late, "p1", CONSENT)]);
   });
 
   it("an impaired Harlot: the Storyteller chooses the character shown; no death is offered", () => {
     const g = impair(base(), "p0");
-    expect(requirementIds(run(g, "p1", { [CONSENT]: yes() }))).toEqual([SHOWN]);
+    expect(requirementIds(run(g, "p1", { [CONSENT]: yes() }))).toEqual([sid(g, "p1", SHOWN)]);
     const next = planned(run(g, "p1", { [CONSENT]: yes(), [SHOWN]: character("imp") }));
     expect(next.informationDeliveries[0]!.values).toEqual(told(g, "p1", "imp"));
     expect(next.players).toBe(g.players);
@@ -121,7 +128,7 @@ describe("Harlot -- targets, timing, impairment, identity", () => {
 
   it("a stale target (and with it the consent) after seat reuse is refused", () => {
     const g = base();
-    const req = request(g, "p0", "harlot", { target: pick(g, "p1"), [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() });
+    const req = request(g, "p0", "harlot", { target: pick(g, "p1"), ...bound(g, "p1", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }) });
     expect(plan(reseat(g, "p1"), req)).toMatchObject({ ok: false, code: "stale" });
   });
 
@@ -199,7 +206,7 @@ describe("SOL-10F-S7-F1 -- the Harlot may choose themself", () => {
 
   it("1. a living Harlot choosing themself is legal: their own consent is asked", () => {
     const g = base();
-    expect(run(g, "p0")).toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: CONSENT, source: "player", label: "Player 0 agrees" }] });
+    expect(run(g, "p0")).toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: sid(g, "p0", CONSENT), source: "player", label: "Player 0 agrees" }] });
   });
 
   it("2. self + consent No -> no delivery, no death", () => {
@@ -243,7 +250,7 @@ describe("SOL-10F-S7-F1 -- the Harlot may choose themself", () => {
 
   it("6. stale ParticipantId safety: a self-choice captured before seat reuse is refused", () => {
     const g = base();
-    const req = request(g, "p0", "harlot", { target: pick(g, "p0"), [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() });
+    const req = request(g, "p0", "harlot", { target: pick(g, "p0"), ...bound(g, "p0", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }) });
     expect(plan(reseat(g, "p0"), req)).toMatchObject({ ok: false, code: "stale" });
   });
 });

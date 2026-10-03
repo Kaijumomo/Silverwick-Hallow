@@ -5,7 +5,11 @@
 import { describe, expect, it } from "vitest";
 import { activeModifiers, type ModifierDefinition } from "@/abilities/modifiers";
 import { abilityInputValueError } from "@/stores/abilityResolution";
-import { impair, num, patchPlayer, pick, plan, planned, proofEnv, proofGame, proofRegistry, request, requirementIds, yes } from "@/test/proofFixtures";
+import { bind, impair, num, patchPlayer, pick, plan, planned, proofEnv, proofGame, proofRegistry, request, requirementIds, yes } from "@/test/proofFixtures";
+import { CONSENT, DEATH_CONSEQUENCE } from "./harlot";
+import { choiceId } from "./alhadikhia";
+import { COMMUNICATED } from "./fortuneteller";
+import { protectionJudgmentId, subjectId } from "./shared";
 import type { AbilityInputValue } from "@/abilities/semantics";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
@@ -103,5 +107,79 @@ describe("SOL-10F-A8 -- every AbilityInputValue is validated at runtime", () => 
     const impaired = impair(empath(), "p0");
     expect(planned(plan(impaired, request(impaired, "p0", "empath", { communicated: num(0) }))).informationDeliveries[0]!.values).toEqual(
       [{ requirementId: "evilNeighbors", kind: "number", value: 0 }]);
+  });
+});
+
+describe("SOL-10F-A1 -- evaluator follow-ups are bound to their subject (coordinator authority)", () => {
+  const harlot = () => patchPlayer(proofGame(["harlot", "chef", "monk", "imp", "empath", "saint", "spy"]), "p0",
+    { isTraveler: true, actualAlignment: "good", travelerArrival: { demonInfoComplete: true, firstNightComplete: true, completedAtNight: 1 } });
+
+  it("Astra's reproduction: Harlot consent collected for Player 1 cannot be consumed after switching the target to Player 2", () => {
+    const g = harlot();
+    const forA = subjectId(CONSENT, bind(g, "p1"));
+    const forB = subjectId(CONSENT, bind(g, "p2"));
+    expect(requirementIds(plan(g, request(g, "p0", "harlot", { target: pick(g, "p1") })))).toEqual([forA]);
+    // A crafted request carrying A's consent (and A's death decision) for target B.
+    const crafted = plan(g, request(g, "p0", "harlot", { target: pick(g, "p2"), [forA]: yes(), [subjectId(DEATH_CONSEQUENCE, bind(g, "p1"))]: yes() }));
+    expect(requirementIds(crafted)).toEqual([forB]);
+    expect(requirementIds(plan(g, request(g, "p0", "harlot", { target: pick(g, "p2"), [forB]: yes() })))).toEqual([subjectId(DEATH_CONSEQUENCE, bind(g, "p2"))]);
+  });
+
+  it("Astra's reproduction: an Al-Hadikhia choice collected for player 1 cannot be consumed after replacing player 1", () => {
+    const g = proofGame(["alhadikhia", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"]);
+    const old = { [choiceId(0, bind(g, "p1"))]: yes(false), [choiceId(1, bind(g, "p2"))]: yes(true), [choiceId(2, bind(g, "p3"))]: yes(true) };
+    expect(requirementIds(plan(g, request(g, "p0", "alhadikhia", { chosen: pick(g, "p4", "p2", "p3"), ...old })))).toEqual([choiceId(0, bind(g, "p4"))]);
+    // The same participant at a DIFFERENT position is a different choice too.
+    expect(requirementIds(plan(g, request(g, "p0", "alhadikhia", { chosen: pick(g, "p2", "p1", "p3"), ...old })))).toEqual([choiceId(0, bind(g, "p2"))]);
+  });
+
+  it("a Fortune Teller's communicated answer is bound to the chosen pair", () => {
+    const g = impair(proofGame(["fortuneteller", "imp", "chef", "monk", "recluse", "poisoner", "empath"], "night", 2), "p0");
+    const forPair = subjectId(COMMUNICATED, bind(g, "p1"), bind(g, "p2"));
+    expect(requirementIds(plan(g, request(g, "p0", "fortuneteller", { targets: pick(g, "p2", "p3"), [forPair]: yes() }))))
+      .toEqual([subjectId(COMMUNICATED, bind(g, "p2"), bind(g, "p3"))]);
+  });
+
+  it("subject ids cannot collide for ParticipantIds containing ':'", () => {
+    const a = { playerId: "x", participantId: "a:b" }, b = { playerId: "y", participantId: "c" };
+    const c = { playerId: "x", participantId: "a" }, d = { playerId: "y", participantId: "b:c" };
+    expect(subjectId("communicated", a, b)).not.toBe(subjectId("communicated", c, d));
+  });
+});
+
+describe("SOL-10F-A6 -- Al-Hadikhia settles each player before asking the next", () => {
+  const AL = ["alhadikhia", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"];
+  const generic = (g: StorytellerLobbyRecord, ...ids: string[]) => ids.reduce((acc, id) => patchPlayer(acc, id, { effects: [{ id: `gp-${id}`, type: "protected",
+    lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as StorytellerLobbyRecord["players"][string]["effects"][number]] }), g);
+  const C = (g: StorytellerLobbyRecord, n: number, id: string) => choiceId(n, bind(g, id));
+  const P = (g: StorytellerLobbyRecord, id: string) => protectionJudgmentId("demon", bind(g, id));
+  const run = (g: StorytellerLobbyRecord, inputs: Record<string, AbilityInputValue>, judgments: Record<string, AbilityInputValue> = {}) =>
+    plan(g, request(g, "p0", "alhadikhia", { chosen: pick(g, "p1", "p2", "p3"), ...inputs }, { judgments }));
+
+  it("Astra's reproduction: an unresolved protection judgment for player 1 is asked BEFORE player 2's choice", () => {
+    const g = generic(proofGame(AL), "p1");
+    expect(requirementIds(run(g, { [C(g, 0, "p1")]: yes(false) }))).toEqual([P(g, "p1")]);
+    expect(requirementIds(run(g, { [C(g, 0, "p1")]: yes(false) }, { [P(g, "p1")]: yes(true) }))).toEqual([C(g, 1, "p2")]);
+  });
+
+  it("the same holds through player 3, and then for the final all-alive deaths in 1 -> 2 -> 3 order", () => {
+    const g = generic(proofGame(AL), "p2", "p3");
+    const choices = { [C(g, 0, "p1")]: yes(true), [C(g, 1, "p2")]: yes(false) };
+    expect(requirementIds(run(g, choices))).toEqual([P(g, "p2")]);
+    // p2 protected (stays alive) -> only then is player 3 asked.
+    expect(requirementIds(run(g, choices, { [P(g, "p2")]: yes(true) }))).toEqual([C(g, 2, "p3")]);
+    // All three alive (p2 survived its 'die'): the final deaths -- p1 dies, p2 reuses its settled judgment, p3 is asked.
+    const all = { ...choices, [C(g, 2, "p3")]: yes(true) };
+    expect(requirementIds(run(g, all, { [P(g, "p2")]: yes(true) }))).toEqual([P(g, "p3")]);
+    const done = run(g, all, { [P(g, "p2")]: yes(true), [P(g, "p3")]: yes(false) });
+    expect(done.ok && done.changed ? done.plan.outcome.operations.flatMap((o) => (o.domain === "life" ? o.intents.map((i) => `${i.kind}:${i.target.playerId}`) : [])) : [])
+      .toEqual(["death:p1", "death:p3"]);
+  });
+
+  it("the final all-alive judgments are asked one at a time, in order", () => {
+    const g = generic(proofGame(AL), "p1", "p3");
+    const all = { [C(g, 0, "p1")]: yes(true), [C(g, 1, "p2")]: yes(true), [C(g, 2, "p3")]: yes(true) };
+    expect(requirementIds(run(g, all))).toEqual([P(g, "p1")]);
+    expect(requirementIds(run(g, all, { [P(g, "p1")]: yes(false) }))).toEqual([P(g, "p3")]);
   });
 });

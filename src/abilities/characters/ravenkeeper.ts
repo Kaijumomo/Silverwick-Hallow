@@ -1,7 +1,7 @@
 import type { AbilityDescriptor, AbilityEvaluation, AbilityEvaluationContext } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RoleId } from "@/stores/types";
-import { answerOf, ask, firstParticipant, nameOf, outcome } from "./shared";
+import { answerOf, ask, firstParticipant, nameOf, outcome, subjectId } from "./shared";
 
 /**
  * Ravenkeeper -- GUIDED triggered ability. docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md
@@ -44,16 +44,16 @@ export const RAVENKEEPER: AbilityDescriptor = {
   evaluator: (context) => {
     const target = firstParticipant(context.inputs, "target");
     if (context.simulated || !context.functioning) {
-      const shown = answerOf(context.inputs, SHOWN, "character");
+      const shown = answerOf(context.inputs, subjectId(SHOWN, target), "character");
       if (!shown || shown.roleIds.length !== 1) return ask("This Ravenkeeper has no functioning ability: choose the character shown.",
-        { id: SHOWN, kind: "character", source: "storyteller", label: "The character shown to the Ravenkeeper" });
+        { id: subjectId(SHOWN, target), kind: "character", source: "storyteller", label: "The character shown to the Ravenkeeper" });
       return inform(context, target, shown.roleIds[0]!);
     }
     const registered = context.query.registration(target, "ravenkeeper").character;
     if (registered.known) return inform(context, target, registered.value);
-    const judged = answerOf(context.judgments, CHARACTER_JUDGMENT, "character");
+    const judged = answerOf(context.judgments, subjectId(CHARACTER_JUDGMENT, target), "character");
     if (!judged || judged.roleIds.length !== 1) return ask(registered.reason,
-      { id: CHARACTER_JUDGMENT, kind: "character", source: "judgment", label: `The character ${nameOf(context, target)} registers as to the Ravenkeeper` });
+      { id: subjectId(CHARACTER_JUDGMENT, target), kind: "character", source: "judgment", label: `The character ${nameOf(context, target)} registers as to the Ravenkeeper` });
     return inform(context, target, judged.roleIds[0]!);
   },
 };

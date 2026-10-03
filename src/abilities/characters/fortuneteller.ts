@@ -1,6 +1,6 @@
 import type { AbilityDescriptor, AbilityEvaluation, AbilityEvaluationContext } from "../semantics";
 import type { AbilityOperation, ParticipantBinding } from "@/stores/abilityResolution";
-import { answerOf, ask, followUpParticipant, nameOf, outcome, participantsOf, requireLivingActor } from "./shared";
+import { answerOf, ask, followUpParticipant, nameOf, outcome, participantsOf, requireLivingActor, subjectId } from "./shared";
 
 /**
  * Fortune Teller -- GUIDED with the approved Red Herring state.
@@ -69,9 +69,10 @@ function evaluate(context: AbilityEvaluationContext): AbilityEvaluation {
   if (dead) return dead;
   const targets = participantsOf(context.inputs, "targets")!;
   const communicated = (before: AbilityOperation[] = []): AbilityEvaluation => {
-    const told = answerOf(context.inputs, COMMUNICATED, "boolean");
+    // SOL-10F-A1: the answer belongs to THIS chosen pair.
+    const told = answerOf(context.inputs, subjectId(COMMUNICATED, ...targets), "boolean");
     if (!told) return ask("This Fortune Teller has no functioning ability: choose the answer to give.",
-      { id: COMMUNICATED, kind: "boolean", source: "storyteller", label: "Answer given: either is a Demon" });
+      { id: subjectId(COMMUNICATED, ...targets), kind: "boolean", source: "storyteller", label: "Answer given: either is a Demon" });
     return deliver(context, targets, told.value, before);
   };
   // A simulated wake (e.g. a Drunk shown as the Fortune Teller) has no

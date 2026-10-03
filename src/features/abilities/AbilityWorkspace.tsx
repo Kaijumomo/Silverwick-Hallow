@@ -15,7 +15,7 @@ import {
 import type { InvocationPath } from "@/abilities/invocation";
 import type { AbilityDescriptor, AbilityInputRequirement, AbilityInputValue, AbilitySemanticsRegistry } from "@/abilities/semantics";
 import type { RoleRegistry } from "@/data/roleRegistry";
-import type { Alignment, Script, StorytellerLobbyRecord } from "@/stores/types";
+import type { Alignment, Script, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 import { bindingOf, describeOutcome, seatedParticipants } from "./abilityUi";
 import { OriginTag, RequirementInput } from "./RequirementInput";
 
@@ -58,12 +58,18 @@ type Props = {
   onResolved: (resolution: { resolutionId: string; game: StorytellerLobbyRecord; delivered: boolean }) => void;
 };
 
+/** SOL-10F-A2: a Manual step's player is the bound participation instance
+ * captured WHEN it was chosen, with the record observed at that moment (the
+ * Role / Alignment seams' expected-state fields come from it) -- never a seat
+ * re-bound at Resolve time. */
+type PickedParticipant = { binding: ParticipantBinding; observed: STPlayerRecord } | null;
+
 type ManualDraft =
-  | { kind: "death" | "resurrection" | "useAbility"; target: string }
-  | { kind: "effect"; target: string; type: string }
-  | { kind: "reminder"; target: string; label: string }
-  | { kind: "role"; target: string; roleId: string }
-  | { kind: "alignment"; target: string; alignment: Alignment };
+  | { kind: "death" | "resurrection" | "useAbility"; target: PickedParticipant }
+  | { kind: "effect"; target: PickedParticipant; type: string }
+  | { kind: "reminder"; target: PickedParticipant; label: string }
+  | { kind: "role"; target: PickedParticipant; roleId: string }
+  | { kind: "alignment"; target: PickedParticipant; alignment: Alignment };
 
 const MANUAL_KINDS: { kind: ManualDraft["kind"]; label: string }[] = [
   { kind: "death", label: "Death" },
@@ -89,17 +95,19 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
   const participants = seatedParticipants(game);
   const env = useMemo(() => ({ script, registry, semantics }), [script, registry, semantics]);
 
-  const binding = (playerId: string): ParticipantBinding | null => {
-    const player = game.players[playerId];
-    return player && !player.isEmpty && player.participantId ? bindingOf(player) : null;
+  const pickParticipant = (playerId: string): PickedParticipant => {
+    const player = Object.prototype.hasOwnProperty.call(game.players, playerId) ? game.players[playerId] : undefined;
+    return player && !player.isEmpty && player.participantId ? { binding: bindingOf(player), observed: player } : null;
   };
 
-  const manualOutcome = (): AbilityOutcome => {
+  /** The Manual outcome, or null while any step still has no player (a step
+   * is never silently dropped). A stale picked player stays in the outcome so
+   * the coordinator refuses it as `stale` -- never retargeted. */
+  const manualOutcome = (): AbilityOutcome | null => {
     const operations: AbilityOperation[] = [];
     for (const draft of drafts) {
-      const who = binding(draft.target);
-      if (!who) continue;
-      const current = game.players[draft.target]!;
+      if (!draft.target) return null;
+      const { binding: who, observed } = draft.target;
       switch (draft.kind) {
         case "death": case "resurrection": case "useAbility":
           operations.push({ domain: "life", intents: [{ kind: draft.kind, target: who }] }); break;
@@ -107,21 +115,22 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
           operations.push({ domain: "effect", intents: [{ kind: "apply", target: who, effect: { type: draft.type, lifetime: { kind: "manual" } } }] }); break;
         case "reminder":
           operations.push({ domain: "reminder", intents: [{ kind: "place", target: who, reminder: { label: draft.label } }] }); break;
-        // Built by the seams' own intent builders from the record the
-        // Storyteller sees (bound participant + observed state).
+        // Built by the seams' own intent builders from the record OBSERVED when
+        // the player was chosen (bound participant + observed state).
         case "role":
-          operations.push({ domain: "role", intents: [changeRoleIntent(current, draft.roleId)] }); break;
+          operations.push({ domain: "role", intents: [changeRoleIntent(observed, draft.roleId)] }); break;
         case "alignment":
-          operations.push({ domain: "alignment", intents: [changeAlignmentIntent(current, draft.alignment)] }); break;
+          operations.push({ domain: "alignment", intents: [changeAlignmentIntent(observed, draft.alignment)] }); break;
       }
     }
     // The Storyteller's list order IS the declared order of this manual outcome.
     return { operations, mechanicalOrder: "declared" };
   };
+  const manual = mode === "manual" ? manualOutcome() : null;
 
   const request: AbilityResolutionRequest | null = !fingerprint ? null : mode === "guided"
     ? { mode: "guided", invocationPath: target.invocationPath, fingerprint, roleId: target.roleId, inputs, judgments, completeStep }
-    : { mode: "manual", fingerprint, roleId: target.roleId, outcome: manualOutcome(), reason, completeStep };
+    : manual ? { mode: "manual", fingerprint, roleId: target.roleId, outcome: manual, reason, completeStep } : null;
   const planned = request ? planAbilityResolution(game, request, env) : null;
   const stale = !fingerprint || (planned && !planned.ok && planned.code === "stale");
   // SOL-10F-L2: every follow-up the coordinator asks for is rendered by its own
@@ -137,6 +146,36 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
   useEffect(() => {
     if (newlyAsked.length) setJudgmentFields((known) => [...known, ...newlyAsked.filter((r) => !known.some((k) => k.id === r.id))]);
   });
+
+  // SOL-10F-A1: a follow-up answer belongs to the prerequisites it was asked
+  // under. Changing a DECLARED input discards every follow-up field and answer;
+  // changing a follow-up discards every later one in the asked chain. (The
+  // evaluator's subject-bound requirement ids remain the authority.)
+  const declaredIds = new Set(descriptor?.inputs.map((input) => input.id) ?? []);
+  const setAnswer = (record: Record<string, AbilityInputValue>, id: string, value: AbilityInputValue | undefined) => {
+    const next = { ...record };
+    if (value) next[id] = value;
+    else delete next[id];
+    return next;
+  };
+  const changeBase = (id: string, value: AbilityInputValue | undefined) => {
+    setInputs((prev) => setAnswer(Object.fromEntries(Object.entries(prev).filter(([key]) => declaredIds.has(key))), id, value));
+    setJudgments({});
+    setJudgmentFields([]);
+  };
+  const changeFollowUp = (requirement: AbilityInputRequirement, value: AbilityInputValue | undefined) => {
+    const position = judgmentFields.findIndex((field) => field.id === requirement.id);
+    const later = new Set(position < 0 ? [] : judgmentFields.slice(position + 1).map((field) => field.id));
+    const prune = (record: Record<string, AbilityInputValue>) => Object.fromEntries(Object.entries(record).filter(([key]) => !later.has(key)));
+    if (requirement.source === "judgment") {
+      setJudgments((prev) => setAnswer(prune(prev), requirement.id, value));
+      setInputs(prune);
+    } else {
+      setInputs((prev) => setAnswer(prune(prev), requirement.id, value));
+      setJudgments(prune);
+    }
+    if (later.size) setJudgmentFields((fields) => fields.filter((field) => !later.has(field.id)));
+  };
   const preview = planned?.ok && planned.changed ? describeOutcome(game, planned.plan.outcome, registry) : [];
 
   const confirm = () => {
@@ -171,12 +210,7 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
               {descriptor.inputs.map((input) => (
                 <RequirementInput key={input.id} requirement={input} game={game} script={script} actor={fingerprint?.actor ?? null}
                   {...(initialInputs?.[input.id] ? { initial: initialInputs[input.id] } : {})}
-                  onChange={(value) => setInputs((prev) => {
-                    const next = { ...prev };
-                    if (value) next[input.id] = value;
-                    else delete next[input.id];
-                    return next;
-                  })} />
+                  onChange={(value) => changeBase(input.id, value)} />
               ))}
             </section>
             {judgmentFields.some((requirement) => requirement.source !== "judgment") && (
@@ -184,12 +218,7 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
                 <h3 className="drawer-section-title">Further choices</h3>
                 {judgmentFields.filter((requirement) => requirement.source !== "judgment").map((requirement) => (
                   <RequirementInput key={requirement.id} requirement={requirement} game={game} script={script} actor={fingerprint?.actor ?? null}
-                    onChange={(value) => setInputs((prev) => {
-                      const next = { ...prev };
-                      if (value) next[requirement.id] = value;
-                      else delete next[requirement.id];
-                      return next;
-                    })} />
+                    onChange={(value) => changeFollowUp(requirement, value)} />
                 ))}
               </section>
             )}
@@ -198,12 +227,7 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
                 <h3 className="drawer-section-title">Storyteller judgment</h3>
                 {judgmentFields.filter((requirement) => requirement.source === "judgment").map((requirement) => (
                   <RequirementInput key={requirement.id} requirement={requirement} game={game} script={script} actor={fingerprint?.actor ?? null}
-                    onChange={(value) => setJudgments((prev) => {
-                      const next = { ...prev };
-                      if (value) next[requirement.id] = value;
-                      else delete next[requirement.id];
-                      return next;
-                    })} />
+                    onChange={(value) => changeFollowUp(requirement, value)} />
                 ))}
               </section>
             )}
@@ -220,7 +244,7 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
               {drafts.map((draft, index) => (
                 <li key={index} className="manual-op">
                   <span className="manual-op-kind">{MANUAL_KINDS.find((k) => k.kind === draft.kind)!.label}</span>
-                  {participantSelect(draft.target, (id) => setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, target: id } : d))), `Step ${index + 1} player`)}
+                  {participantSelect(draft.target?.binding.playerId ?? "", (id) => setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, target: pickParticipant(id) } : d))), `Step ${index + 1} player`)}
                   {draft.kind === "effect" && (
                     <select aria-label={`Step ${index + 1} effect`} value={draft.type} onChange={(e) => setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, type: e.target.value } as ManualDraft : d)))}>
                       {KNOWN_EFFECT_TYPES.map((definition) => <option key={definition.type} value={definition.type}>{definition.label}</option>)}
@@ -250,11 +274,11 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
             <div className="manual-add" role="group" aria-label="Add a step">
               {MANUAL_KINDS.map(({ kind, label }) => (
                 <button key={kind} className="btn btn-sm" onClick={() => setDrafts((prev) => [...prev,
-                  kind === "effect" ? { kind, target: "", type: "poisoned" }
-                    : kind === "reminder" ? { kind, target: "", label: "" }
-                      : kind === "role" ? { kind, target: "", roleId: "" }
-                        : kind === "alignment" ? { kind, target: "", alignment: "evil" }
-                          : { kind, target: "" }])}>+ {label}</button>
+                  kind === "effect" ? { kind, target: null, type: "poisoned" }
+                    : kind === "reminder" ? { kind, target: null, label: "" }
+                      : kind === "role" ? { kind, target: null, roleId: "" }
+                        : kind === "alignment" ? { kind, target: null, alignment: "evil" }
+                          : { kind, target: null }])}>+ {label}</button>
               ))}
             </div>
           </section>
@@ -265,7 +289,8 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
             <h3 className="drawer-section-title">Result <OriginTag origin={mode === "guided" ? "computed" : "manual"} /></h3>
             {preview.length > 0
               ? <ul>{preview.map((line, i) => <li key={i}>{line}</li>)}</ul>
-              : <p className="behavior-help">{planned && !planned.ok ? planned.message : "Nothing to record yet."}</p>}
+              : <p className="behavior-help">{planned && !planned.ok ? planned.message
+                : mode === "manual" && drafts.length > 0 && !manual ? "Choose a player for every step." : "Nothing to record yet."}</p>}
             {target.step && (
               <label className="ability-field ability-judgment">
                 <input type="checkbox" checked={completeStep} onChange={(e) => setCompleteStep(e.target.checked)} />

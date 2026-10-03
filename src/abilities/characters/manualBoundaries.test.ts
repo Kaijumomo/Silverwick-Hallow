@@ -10,7 +10,8 @@ import { computeNightOrder } from "@/features/nightOrder/nightOrder";
 import { evilInformationPolicy } from "@/features/nightOrder/nightRules";
 import { INVOCATION_PATHS } from "@/abilities/invocation";
 import { TOYMAKER_ATTACK_MESSAGE } from "./modifierHooks";
-import { homebrewScript, patchPlayer, pick, plan, planned, proofEnv, proofGame, proofRegistry, proofScript, request, requirementIds, yes } from "@/test/proofFixtures";
+import { choiceId } from "./alhadikhia";
+import { bind, homebrewScript, patchPlayer, pick, plan, planned, proofEnv, proofGame, proofRegistry, proofScript, request, requirementIds, yes } from "@/test/proofFixtures";
 import { buildRegistry } from "@/data/roleRegistry";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
@@ -60,7 +61,8 @@ describe("Toymaker -- verified hook; skip history is never claimed", () => {
 
   it("every Demon attack evaluation is gated (Al-Hadikhia too)", () => {
     const al = withToymaker(proofGame(["alhadikhia", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"], "night", 2));
-    const req = request(al, "p0", "alhadikhia", { chosen: pick(al, "p1", "p2", "p3"), "choice:1": yes(false), "choice:2": yes(false), "choice:3": yes(false) });
+    const req = request(al, "p0", "alhadikhia", { chosen: pick(al, "p1", "p2", "p3"),
+      ...Object.fromEntries(["p1", "p2", "p3"].map((id, index) => [choiceId(index, bind(al, id)), yes(false)])) });
     expect(requirementIds(plan(al, req, proofEnv({ modifiers: activeModifiers(al, proofRegistry) })))).toEqual(["modifier:fabled:toymaker"]);
   });
 
