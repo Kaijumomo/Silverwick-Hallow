@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-03\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: A1…A10, B1…B6 and C1…C3 remain closed; D1/D2 are remediated at code checkpoint `a0968d0ff6149b7f16eb9fabb7e1eb8dda32ea0c` and SOL-10F-E1 (the derived `JSON.stringify({ game, roster })` checkpoint leaf) at code checkpoint `c6a2938e4e3c5ef3b17013c833cd335fe623b6f8` (`PHASE10F.md` §45). D1/D2/E1 remediated → Luna narrow verification → Astra narrow final closure recheck → Sol closure adjudication. Schema/store remains unreleased v24; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: D1/D2/E1 production behavior passed Luna's narrow verification, but the exact target did not receive PASS because one static E1 source-scan test hard-codes a POSIX relative path and fails on Windows path separators. Sol adjudicates this as LUNA-10F-E1-TEST-01, a test-only portability defect; no production remediation is required. Fix that guard without weakening it, rerun the final gate, then return to Luna. Schema/store remains unreleased v24; Firebase Rules unchanged. 10F is NOT closed; nothing merged or deployed.
 
 ## Phase 10D — CLOSED
 
@@ -837,3 +837,13 @@ Gate: typecheck PASS; E1 17/17; D1/D2 17/17; C1…C3 46/46; B1…B6 70/70; A1…
 ## Immediate next task
 
 Luna performs one narrow combined D1/D2/E1 mechanical verification at the exact current `dev/phase-10f` HEAD (D1/D2 code `a0968d0ff6149b7f16eb9fabb7e1eb8dda32ea0c`, E1 code `c6a2938e4e3c5ef3b17013c833cd335fe623b6f8`, §§1–45). Do not send directly to Astra. After Luna PASS, Astra performs one narrow D1/D2/E1 final closure recheck; then Sol closure adjudication. Phase 10F remains open; nothing merged or deployed.
+
+## Luna D1/D2/E1 verification — production behavior PASS, test harness REVISE — 2026-10-03
+
+Luna independently verified exact target `3d51f061ca6ed1ab090082e96128057aea277430`. D1, D2 and E1 behavioral checks passed. The only red gate is a Windows-only path-separator assertion in the E1 static single-serializer source scan.
+
+Sol records this as `LUNA-10F-E1-TEST-01` in `PHASE10F.md` §47. The correction is test-only and must preserve the guard's exact meaning.
+
+## Immediate next task
+
+Claude Code changes only the E1 test path normalization, runs the targeted/full gate and returns one exact clean checkpoint to Luna. No production file changes. After Luna PASS, Astra performs the final narrow D1/D2/E1 closure recheck. Phase 10F remains open.
