@@ -17,7 +17,7 @@ import { applyAlignmentPlan, defaultAlignmentIds, planAlignmentTransaction, type
 import { applyEffectPlan, planEffectTransaction, type EffectIdSource, type EffectIntent } from "./effectResolution";
 import { applyInformationDeliveryPlan, planInformationDelivery } from "./informationDelivery";
 import { applyLifePlan, planLifeTransaction, type LifeConfirmationToken, type LifeIdSource, type LifeIntent, type LifeStatusTarget } from "./lifeResolution";
-import { participantStepKey, planNightStepStatus } from "./nightProgress";
+import { nightTriggerStepKey, participantStepKey, planNightStepStatus } from "./nightProgress";
 import { applyReminderPlan, planReminderTransaction, type ReminderIdSource, type ReminderIntent } from "./reminderResolution";
 import { applyRolePlan, defaultRoleIds, planRoleTransaction, type RoleIdSource, type RoleIntent } from "./roleResolution";
 import { boundParticipant, createRulesQuery, effectSemanticsOf } from "./rulesQuery";
@@ -119,6 +119,9 @@ export type AbilityWorkflowFingerprint = {
   abilityUsed: boolean;
   /** The Night step the workflow was opened from, with its status then. */
   step?: { day: number; stepKey: string; status: NightStepStatus | "absent" };
+  /** SOL-10F-A10: for a verified Night trigger, the exact LifeEvent that fired
+   * it (null when coverage was unknown and the Storyteller judges it). */
+  trigger?: { eventId: string | null };
 };
 
 export type GuidedAbilityRequest = {
@@ -239,6 +242,7 @@ export function captureFingerprint(
   game: StorytellerLobbyRecord,
   actorPlayerId: PlayerId,
   step?: { day: number; stepKey: string },
+  trigger?: { eventId: string | null },
 ): AbilityWorkflowFingerprint | null {
   const player = Object.prototype.hasOwnProperty.call(game.players, actorPlayerId) ? game.players[actorPlayerId]! : undefined;
   if (!player || player.isEmpty || !player.participantId) return null;
@@ -251,6 +255,7 @@ export function captureFingerprint(
     day: game.day,
     abilityUsed: player.abilityUsed,
     ...(step ? { step: { ...step, status: game.nightProgress[`${step.day}:${step.stepKey}`]?.status ?? "absent" } } : {}),
+    ...(trigger ? { trigger: { eventId: trigger.eventId } } : {}),
   };
 }
 
@@ -271,6 +276,12 @@ export function fingerprintShapeError(fingerprint: unknown): string | null {
   if (typeof fingerprint.isTraveler !== "boolean") return "The workflow fingerprint has no Traveler status.";
   if (!PHASES.includes(fingerprint.phase) || !isNonNegativeInteger(fingerprint.day)) return "The workflow fingerprint has no valid Game Moment.";
   if (typeof fingerprint.abilityUsed !== "boolean") return "The workflow fingerprint has no ability-use state.";
+  if (fingerprint.trigger !== undefined) {
+    const trigger = fingerprint.trigger;
+    if (!isObject(trigger) || !(trigger.eventId === null || (typeof trigger.eventId === "string" && trigger.eventId.length > 0))) {
+      return "The workflow fingerprint has a malformed trigger event.";
+    }
+  }
   if (fingerprint.step !== undefined) {
     const step = fingerprint.step;
     if (!isObject(step) || !isNonNegativeInteger(step.day) || typeof step.stepKey !== "string" || !step.stepKey || !STEP_STATUSES.includes(step.status)) {
@@ -395,6 +406,9 @@ type ComposeOptions = {
   context?: MutationContext;
   resolutionId: string;
   completeStep?: AbilityWorkflowFingerprint["step"];
+  /** SOL-10F-A10: the exact trigger-event step a successful Night-trigger
+   * resolution ALWAYS consumes in the same snapshot (never caller-optional). */
+  consumeTrigger?: { day: number; stepKey: string; status: "done" };
   /** A simulated wake has no ability: only bookkeeping may result. */
   simulated?: { performedRole: RoleId };
 };
@@ -505,6 +519,9 @@ export function composeAbilityOutcome(
   }
   if (options.completeStep) {
     working = planNightStepStatus(working, options.completeStep.day, options.completeStep.stepKey, "done") ?? working;
+  }
+  if (options.consumeTrigger) {
+    working = planNightStepStatus(working, options.consumeTrigger.day, options.consumeTrigger.stepKey, "done") ?? working;
   }
 
   // True no-op: no authoritative state and no requested progress changed.
@@ -713,17 +730,14 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   // acted tonight" -- a step this participation instance already completed or
   // had skipped (e.g. a new Imp after a star-pass) is never re-granted by the
   // ordinary Night Order, whatever the re-derived rows or a crafted request say.
-  if ((request.invocationPath === "nightOrder" || request.invocationPath === "nightTrigger") && actor.participantId) {
+  if (request.invocationPath === "nightOrder" && actor.participantId) {
     const own = game.nightProgress[`${game.day}:${participantStepKey(actor.participantId, request.roleId)}`]?.status;
     if (own === "done" || own === "skipped") return refuse("notApplicable", "This player's step for this ability is already complete or skipped tonight.");
   }
-  // Slice 7: a verified Night trigger resolves as THIS participation instance's
-  // own step, so it can be completed exactly once (no duplicate execution).
-  if (request.invocationPath === "nightTrigger" && actor.participantId) {
-    const step = request.fingerprint.step;
-    if (!step || step.day !== game.day || step.stepKey !== participantStepKey(actor.participantId, request.roleId)) {
-      return refuse("invalid", "A triggered ability resolves as this player's own Night step.");
-    }
+  // SOL-10F-A10: a verified Night trigger is bound to the exact trigger event
+  // the workflow was opened for (revalidated below) and consumed by it.
+  if (request.invocationPath === "nightTrigger" && !request.fingerprint.trigger) {
+    return refuse("invalid", "A triggered ability must name the trigger event it resolves.");
   }
 
   const actorBinding = { playerId: actor.id, participantId: actor.participantId! };
@@ -755,11 +769,19 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   // Slice 7: the verified trigger must be established from authoritative state
   // (Life Event Window with coverage); unknown is an explicit Storyteller
   // judgment, never "did not trigger".
+  let consumeTrigger: { day: number; stepKey: string; status: "done" } | undefined;
   if (request.invocationPath === "nightTrigger") {
     const trigger = nightTriggerStatus(descriptor, actorBinding, query);
     if (trigger.kind === "notTriggered") return refuse("notApplicable", trigger.reason);
+    // SOL-10F-A10: the open trigger must still be EXACTLY the event this
+    // workflow was opened for (a consumed, removed or different event is stale);
+    // its Role evidence was re-read with it (SOL-10F-A9).
+    if (trigger.eventId !== request.fingerprint.trigger!.eventId) {
+      return refuse("stale", "The trigger this workflow was opened for is no longer open -- review and resolve again.");
+    }
+    consumeTrigger = { day: game.day, stepKey: nightTriggerStepKey(actorBinding.participantId, request.roleId, trigger.eventId), status: "done" };
     if (trigger.kind === "unknown") {
-      const id = nightTriggerJudgmentId(descriptor.nightTrigger!);
+      const id = nightTriggerJudgmentId(descriptor.nightTrigger!, trigger.eventId);
       const judged = judgments[id];
       if (!isObject(judged) || judged.kind !== "boolean") {
         return refuse("needsInput", trigger.reason, { requirements: [{ id, kind: "boolean", source: "judgment", label: "This ability triggered tonight" }] });
@@ -866,6 +888,7 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
     resolutionId,
     ...(request.context ? { context: request.context } : {}),
     ...(completeStep ? { completeStep } : {}),
+    ...(consumeTrigger ? { consumeTrigger } : {}),
     ...(simulated ? { simulated: { performedRole: request.roleId } } : {}),
   });
   if (result.ok && result.changed) result.plan.needsConfirmation = outcomeNeedsConfirmation(outcome, judgmentAnswered);

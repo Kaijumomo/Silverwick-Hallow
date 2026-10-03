@@ -2,6 +2,7 @@ import type { AbilityDescriptor, AbilityInvocation, AbilityTiming, NightTriggerK
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
 import { isDeathEvent } from "@/stores/lifeEvents";
+import { nightTriggerStepKey } from "@/stores/nightProgress";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
 /**
@@ -87,36 +88,73 @@ export function invocationEligibility(
 }
 
 export type NightTriggerStatus =
-  | { kind: "triggered" }
+  /** SOL-10F-A10: fired by this exact authoritative LifeEvent. */
+  | { kind: "triggered"; eventId: string }
   | { kind: "notTriggered"; reason: string }
-  /** Authoritative state cannot establish it either way (e.g. the Life Event
-   * Window does not cover tonight): a Storyteller judgment, NEVER "no". */
-  | { kind: "unknown"; reason: string };
+  /** Authoritative state cannot establish it either way (the Life Event Window
+   * does not cover tonight, or the event carries no Role evidence): a
+   * Storyteller judgment, NEVER "no". `eventId` is the event concerned, or
+   * null when there is none to point at. */
+  | { kind: "unknown"; reason: string; eventId: string | null };
 
-/** The judgment id asked when a verified trigger cannot be established. */
-export const nightTriggerJudgmentId = (trigger: NightTriggerKind) => `trigger:${trigger}`;
+/** The judgment id asked when a verified trigger cannot be established --
+ * bound to the trigger event it is about (SOL-10F-A1 / A10). */
+export const nightTriggerJudgmentId = (trigger: NightTriggerKind, eventId: string | null) =>
+  `trigger:${trigger}:${eventId === null ? "n" : `i${encodeURIComponent(eventId)}`}`;
+
+/** The consumption step of a trigger at the current Night (exact key). */
+export const nightTriggerProgressKey = (day: number, actor: ParticipantBinding, roleId: string, eventId: string | null) =>
+  `${day}:${nightTriggerStepKey(actor.participantId, roleId, eventId)}`;
 
 /**
- * Slice 7: evaluates a descriptor's VERIFIED Night trigger for one exact
- * participation instance, from authoritative Current State only (the Life
- * Event Window with its honest coverage). Pure; never History, never Reminders.
+ * Slice 7 / SOL-10F-A9 / A10: evaluates a descriptor's VERIFIED Night trigger
+ * for one exact participation instance, from authoritative Current State only
+ * -- the Life Event Window with its honest coverage, each event's recorded
+ * Role evidence, and the event-specific consumption steps. Pure; never
+ * History, never Reminders, never the CURRENT Role as evidence of a past one.
+ *
+ * actorDiedTonight: the first not-yet-consumed death event of this
+ * participant tonight whose `actualRoleAtEvent` is this ability's character.
+ * An event with no Role evidence is UNKNOWN (judgment). For a simulated wake
+ * (e.g. a Drunk shown this character) an event recorded under the actor's
+ * unchanged Actual Role is UNKNOWN too -- what they were shown at that moment
+ * is not recorded -- never assumed. A death under another character never
+ * fires it.
  */
 export function nightTriggerStatus(
-  descriptor: Pick<AbilityDescriptor, "nightTrigger">,
+  descriptor: Pick<AbilityDescriptor, "nightTrigger" | "roleId">,
   actor: ParticipantBinding,
   query: RulesQuery,
 ): NightTriggerStatus {
   if (!descriptor.nightTrigger) return { kind: "notTriggered", reason: "This ability has no verified Night trigger." };
   const moment = query.moment();
   if (!moment || moment.phase !== "night") return { kind: "notTriggered", reason: "A Night trigger exists only during the Night." };
+  const consumed = (eventId: string | null) => {
+    const status = query.game.nightProgress[nightTriggerProgressKey(moment.day, actor, descriptor.roleId, eventId)]?.status;
+    return status === "done" || status === "skipped";
+  };
   switch (descriptor.nightTrigger) {
     case "actorDiedTonight": {
       const deaths = query.lifeEvents(moment, (event) => isDeathEvent(event) && event.subject.participantId === actor.participantId);
-      if (deaths.status === "unknown") {
-        return { kind: "unknown", reason: "Silverwick cannot tell whether this player died tonight (the Life Event record does not cover tonight): the Storyteller decides." };
+      const events = deaths.status === "known" ? deaths.events : deaths.recorded;
+      const current = query.participant(actor)?.actualRole;
+      let resolved = false;
+      for (const event of events) {
+        if (consumed(event.id)) { resolved = true; continue; }
+        const evidence = event.actualRoleAtEvent;
+        if (!evidence) return { kind: "unknown", eventId: event.id, reason: "This death has no recorded character evidence: the Storyteller decides whether it triggered this ability." };
+        if (evidence === descriptor.roleId) return { kind: "triggered", eventId: event.id };
+        if (current !== descriptor.roleId && evidence === current) {
+          return { kind: "unknown", eventId: event.id, reason: "A simulated wake: what this player was shown when they died is not recorded -- the Storyteller decides." };
+        }
       }
-      return deaths.events.length > 0 ? { kind: "triggered" } : { kind: "notTriggered", reason: "This player has not died tonight." };
+      if (deaths.status === "unknown") {
+        if (consumed(null)) return { kind: "notTriggered", reason: "This trigger was already resolved tonight." };
+        return { kind: "unknown", eventId: null, reason: "Silverwick cannot tell whether this player died tonight (the Life Event record does not cover tonight): the Storyteller decides." };
+      }
+      return { kind: "notTriggered", reason: resolved ? "This trigger was already resolved tonight."
+        : events.length ? "This player did not die tonight as this character." : "This player has not died tonight." };
     }
   }
-  return { kind: "unknown", reason: "Unknown trigger: the Storyteller decides." };
+  return { kind: "unknown", eventId: null, reason: "Unknown trigger: the Storyteller decides." };
 }

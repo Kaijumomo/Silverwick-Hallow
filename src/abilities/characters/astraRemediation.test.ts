@@ -2,7 +2,13 @@
 // for Astra's Slice 7 counterexamples and the A9 / A10 contract cases.
 // Each `describe` names its finding; Astra's original reproduction is the
 // first case where one exists.
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { nightTriggerJudgmentId, nightTriggerStatus } from "@/abilities/invocation";
+import { RAVENKEEPER } from "./ravenkeeper";
+import { StorytellerGamePersistedSchema } from "@/stores/schemas";
+import { useStorytellerStore as store } from "@/stores/storytellerStore";
+import { nightTriggerStepKey } from "@/stores/nightProgress";
+import { openInStore, reseat } from "@/test/proofFixtures";
 import { activeModifiers, prospectiveJinxes, type ModifierDefinition } from "@/abilities/modifiers";
 import { buildRegistry } from "@/data/roleRegistry";
 import { createRulesQuery } from "@/stores/rulesQuery";
@@ -322,5 +328,122 @@ describe("SOL-10F-A7 -- participant Night-progress identity is exact", () => {
     const keys = participantRoleStepEntries(2, "alpha", ["beggar", "imp"]);
     expect(keys.has(`2:${participantStepKey("alpha:beta", "imp")}`)).toBe(false);
     expect(keys.has(`2:${participantStepKey("alpha", "imp")}`)).toBe(true);
+  });
+});
+
+// p0 ravenkeeper (or chef), p1 imp, p2 chef, p3 monk ...
+const RK = ["ravenkeeper", "imp", "chef", "monk", "empath", "saint", "washerwoman"];
+const qOf = (g: StorytellerLobbyRecord) => createRulesQuery(g, { registry: proofRegistry, script: proofScript, semantics: CANONICAL_ABILITY_SEMANTICS, modifiers: [] });
+const impKills = (g: StorytellerLobbyRecord, victim: string) => planned(plan(g, request(g, "p1", "imp", { target: pick(g, victim) })));
+const rkTrigger = (g: StorytellerLobbyRecord, target: string, extra: Record<string, unknown> = {}) =>
+  plan(g, request(g, "p0", "ravenkeeper", { target: pick(g, target) }, { invocationPath: "nightTrigger", ...extra }));
+const deathEvents = (g: StorytellerLobbyRecord, id: string) => g.lifeEventWindow.events.filter((e) => e.kind === "death" && e.subject.participantId === g.players[id]!.participantId);
+
+describe("SOL-10F-A9 -- the Ravenkeeper must have been the Ravenkeeper at the triggering death", () => {
+  it("a Ravenkeeper killed as the Ravenkeeper: the event records the Role and triggers", () => {
+    const g = impKills(proofGame(RK), "p0");
+    expect(deathEvents(g, "p0")).toEqual([expect.objectContaining({ actualRoleAtEvent: "ravenkeeper" })]);
+    expect(nightTriggerStatus(RAVENKEEPER, bind(g, "p0"), qOf(g))).toEqual({ kind: "triggered", eventId: deathEvents(g, "p0")[0]!.id });
+    expect(rkTrigger(g, "p2")).toMatchObject({ ok: true, changed: true });
+  });
+
+  it("Astra's reproduction: died as the Chef, later made the Ravenkeeper -> NO automatic trigger", () => {
+    const g0 = proofGame(["chef", ...RK.slice(1)]);
+    const died = impKills(g0, "p0");
+    expect(deathEvents(died, "p0")[0]!.actualRoleAtEvent).toBe("chef");
+    const made = patchPlayer(died, "p0", { actualRole: "ravenkeeper", shownRole: "ravenkeeper" });
+    expect(nightTriggerStatus(RAVENKEEPER, bind(made, "p0"), qOf(made))).toMatchObject({ kind: "notTriggered" });
+    expect(rkTrigger(made, "p2")).toMatchObject({ ok: false, code: "notApplicable" });
+  });
+
+  it("an event with no Role evidence (older / migrated) is UNKNOWN -> a judgment bound to that event; never inferred from the current Role", () => {
+    const died = impKills(proofGame(RK), "p0");
+    const legacy = { ...died, lifeEventWindow: { ...died.lifeEventWindow, events: died.lifeEventWindow.events.map(({ actualRoleAtEvent: _gone, ...e }) => e) } } as StorytellerLobbyRecord;
+    const eventId = deathEvents(legacy, "p0")[0]!.id;
+    expect(nightTriggerStatus(RAVENKEEPER, bind(legacy, "p0"), qOf(legacy))).toMatchObject({ kind: "unknown", eventId });
+    const id = nightTriggerJudgmentId("actorDiedTonight", eventId);
+    expect(requirementIds(rkTrigger(legacy, "p2"))).toEqual([id]);
+    expect(rkTrigger(legacy, "p2", { judgments: { [id]: yes(true) } })).toMatchObject({ ok: true, changed: true });
+    expect(StorytellerGamePersistedSchema.safeParse(legacy).success).toBe(true); // absence stays valid
+  });
+
+  it("a Ravenkeeper who died and then changed character: the event still proves the Ravenkeeper death", () => {
+    const died = impKills(proofGame(RK), "p0");
+    const changed = patchPlayer(died, "p0", { actualRole: "chef", shownRole: "chef" });
+    expect(nightTriggerStatus(RAVENKEEPER, bind(changed, "p0"), qOf(changed))).toMatchObject({ kind: "triggered" });
+  });
+
+  it("seat reuse does not inherit the trigger", () => {
+    const g = reseat(impKills(proofGame(RK), "p0"), "p0");
+    expect(nightTriggerStatus(RAVENKEEPER, bind(g, "p0"), qOf(g))).toMatchObject({ kind: "notTriggered" });
+  });
+
+  describe("persistence / recovery", () => {
+    beforeEach(() => { localStorage.clear(); store.setState({ game: null, undoStack: [], localSeq: 0 }); });
+    it("actualRoleAtEvent survives schema validation, JSON round-trip, Undo history and localStorage rehydration", async () => {
+      const g = proofGame(RK);
+      openInStore(g);
+      expect(store.getState().resolveAbility(request(g, "p1", "imp", { target: pick(g, "p0") }))).toMatchObject({ ok: true, changed: true });
+      const live = store.getState().game!;
+      expect(StorytellerGamePersistedSchema.parse(JSON.parse(JSON.stringify(live))).lifeEventWindow.events).toEqual(live.lifeEventWindow.events);
+      const mirrored = live.history.flatMap((h) => (h.lifeEvent?.operations ?? []).map((o) => o.event));
+      expect(mirrored).toEqual([expect.objectContaining({ actualRoleAtEvent: "ravenkeeper" })]);
+      const persisted = localStorage.getItem("new-blood-st")!;
+      expect(persisted).toContain("actualRoleAtEvent");
+      store.setState({ game: null, undoStack: [] }); // (persist rewrites storage here)
+      localStorage.setItem("new-blood-st", persisted);
+      await store.persist.rehydrate();
+      expect(deathEvents(store.getState().game!, "p0")).toEqual([expect.objectContaining({ actualRoleAtEvent: "ravenkeeper" })]);
+    });
+  });
+});
+
+describe("SOL-10F-A10 -- a Night trigger is consumed by its exact LifeEvent", () => {
+  const consumedKey = (g: StorytellerLobbyRecord, eventId: string) => `${g.day}:${nightTriggerStepKey(g.players.p0!.participantId!, "ravenkeeper", eventId)}`;
+
+  it("Astra's reproduction: a crafted completeStep:false request STILL consumes the exact trigger; the replay is refused", () => {
+    const g = impKills(proofGame(RK), "p0");
+    const eventId = deathEvents(g, "p0")[0]!.id;
+    const first = planned(rkTrigger(g, "p2", { completeStep: false }));
+    expect(first.nightProgress[consumedKey(g, eventId)]).toEqual({ status: "done", notes: "" });
+    // Same event again (the workflow bound to it): refused.
+    expect(plan(first, request(g, "p0", "ravenkeeper", { target: pick(g, "p3") }, { invocationPath: "nightTrigger", trigger: { eventId } }))).toMatchObject({ ok: false });
+    expect(rkTrigger(first, "p3")).toMatchObject({ ok: false, code: "notApplicable", message: expect.stringMatching(/already resolved/) });
+  });
+
+  it("Undo restores the trigger's availability", () => {
+    const g = impKills(proofGame(RK), "p0");
+    openInStore(g);
+    expect(store.getState().resolveAbility(rkTriggerRequest(g))).toMatchObject({ ok: true, changed: true });
+    expect(rkTrigger(store.getState().game!, "p3")).toMatchObject({ ok: false, code: "notApplicable" });
+    store.getState().undo();
+    expect(rkTrigger(store.getState().game!, "p3")).toMatchObject({ ok: true, changed: true });
+  });
+  const rkTriggerRequest = (g: StorytellerLobbyRecord) => request(g, "p0", "ravenkeeper", { target: pick(g, "p2") }, { invocationPath: "nightTrigger" });
+
+  it("a second, distinct qualifying death is a distinct trigger; consuming the first does not suppress it", () => {
+    const once = impKills(proofGame(RK), "p0");
+    const firstId = deathEvents(once, "p0")[0]!.id;
+    const resolved = planned(rkTrigger(once, "p2"));
+    // Resurrected, then killed again the same Night (both as the Ravenkeeper).
+    const back = planned(plan(resolved, { mode: "manual", reason: "test", outcome: { operations: [{ domain: "life", intents: [{ kind: "resurrection", target: bind(resolved, "p0") }] }] } }));
+    const twice = impKills(back, "p0");
+    const [e1, e2] = deathEvents(twice, "p0");
+    expect(e1!.id).toBe(firstId);
+    expect(e2!.id).not.toBe(firstId);
+    expect(nightTriggerStatus(RAVENKEEPER, bind(twice, "p0"), qOf(twice))).toEqual({ kind: "triggered", eventId: e2!.id });
+    const second = planned(rkTrigger(twice, "p3"));
+    expect(Object.keys(second.nightProgress).filter((k) => k.includes("trigger:")).sort()).toEqual([consumedKey(twice, e1!.id), consumedKey(twice, e2!.id)].sort());
+  });
+
+  it("a removed or replaced trigger event refuses the workflow bound to it; changed Role evidence is revalidated", () => {
+    const g = impKills(proofGame(RK), "p0");
+    const req = rkTriggerRequest(g);
+    const removed = { ...g, lifeEventWindow: { ...g.lifeEventWindow, events: [] } };
+    expect(plan(removed, req)).toMatchObject({ ok: false, code: "notApplicable" });
+    const replaced = { ...g, lifeEventWindow: { ...g.lifeEventWindow, events: g.lifeEventWindow.events.map((e) => ({ ...e, id: `${e.id}-amended` })) } };
+    expect(plan(replaced, req)).toMatchObject({ ok: false, code: "stale" });
+    const recharactered = { ...g, lifeEventWindow: { ...g.lifeEventWindow, events: g.lifeEventWindow.events.map((e) => ({ ...e, actualRoleAtEvent: "chef" })) } };
+    expect(plan(recharactered, req)).toMatchObject({ ok: false, code: "notApplicable" });
   });
 });

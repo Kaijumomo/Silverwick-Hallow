@@ -66,7 +66,7 @@ describe("Ravenkeeper -- the verified trigger", () => {
   it("unknown Life Event coverage is NOT 'did not trigger': the Storyteller judges", () => {
     const g = proofGame(ROLES, "night", 2);
     const migrated = { ...patchPlayer(g, "p0", { alive: false }), lifeEventWindow: { coverageFrom: { phase: "day" as const, day: 2 }, events: [] } };
-    const id = nightTriggerJudgmentId("actorDiedTonight");
+    const id = nightTriggerJudgmentId("actorDiedTonight", null);
     expect(requirementIds(trigger(migrated, "p2"))).toEqual([id]);
     expect(trigger(migrated, "p2", {}, { judgments: { [id]: yes(false) } })).toMatchObject({ ok: false, code: "notApplicable" });
     const judged = trigger(migrated, "p2", {}, { judgments: { [id]: yes(true) } });
@@ -82,9 +82,14 @@ describe("Ravenkeeper -- the verified trigger", () => {
     expect(plan(next, request(next, "p0", "ravenkeeper", { target: pick(next, "p3") }, { invocationPath: "nightTrigger", withStep: true }))).toMatchObject({ ok: false, code: "notApplicable" });
   });
 
-  it("the trigger resolves as the participant's own step only", () => {
+  it("SOL-10F-A10: a trigger request must name the trigger event it resolves (no event binding -> invalid)", () => {
     const g = killedTonight();
-    expect(plan(g, request(g, "p0", "ravenkeeper", { target: pick(g, "p2") }, { invocationPath: "nightTrigger" }))).toMatchObject({ ok: false, code: "invalid" });
+    const req = request(g, "p0", "ravenkeeper", { target: pick(g, "p2") }, { invocationPath: "nightTrigger" });
+    const unbound = { ...req, fingerprint: { ...req.fingerprint!, trigger: undefined } } as typeof req;
+    delete (unbound.fingerprint as { trigger?: unknown }).trigger;
+    expect(plan(g, unbound)).toMatchObject({ ok: false, code: "invalid" });
+    // Bound to the event, it resolves -- and needs no Night Order row step.
+    expect(plan(g, req)).toMatchObject({ ok: true, changed: true });
   });
 
   it("the ordinary Night Order and Day entry never run it; only the declared trigger path does", () => {

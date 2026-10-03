@@ -375,6 +375,10 @@ const lifeEventCommon = {
   subject: CurrentParticipantRefSchema,
   resolutionId: z.string().min(1).optional(),
   provenance: ProvenanceSchema.optional(),
+  /** SOL-10F-A9 (optional, additive, unreleased v24): the subject's Actual
+   * Role when the event was accepted. Absent on older / migrated events and on
+   * corrections of past moments -- absence means UNKNOWN, never "no Role". */
+  actualRoleAtEvent: z.string().min(1).optional(),
 };
 export const LifeEventSchema = z.discriminatedUnion("kind", [
   z.object({ ...lifeEventCommon, kind: z.literal("death"), moment: LiveGameMomentSchema }).strict(),

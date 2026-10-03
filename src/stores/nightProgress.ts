@@ -19,7 +19,7 @@ import type { NightStepRecord, NightStepStatus, ParticipantId, RoleId, STPlayerR
 
 /** The participant-scoped step families (`{prefix}:{participantId}[:...]`). */
 export const PARTICIPANT_STEP_PREFIXES = [
-  "p", "travelerArrival", "lunaticInfo", "lunaticTargets", "admin", "missingOrder", "invalid", "orderConflict",
+  "p", "travelerArrival", "lunaticInfo", "lunaticTargets", "admin", "missingOrder", "invalid", "orderConflict", "trigger",
 ] as const;
 export type ParticipantStepPrefix = typeof PARTICIPANT_STEP_PREFIXES[number];
 
@@ -31,6 +31,17 @@ export const participantStepKey = (participantId: ParticipantId, wakeRole: RoleI
 /** A late Traveler's arrival procedure: `travelerArrival:{participantId}:{roleId}`. */
 export const travelerArrivalStepKey = (participantId: ParticipantId, roleId: RoleId): string =>
   `travelerArrival:${participantId}:${roleId}`;
+
+/**
+ * SOL-10F-A10: the consumption step of ONE verified Night trigger, keyed by
+ * the participation instance, the Role whose trigger it is and the exact
+ * authoritative LifeEvent id that fired it (`null` when coverage was unknown
+ * and the Storyteller judged it). Each part is URI-encoded, so the key is
+ * collision-safe (a ':' inside an id cannot shift the parts) and carries no
+ * character Firebase forbids in a key beyond those ids already carry.
+ */
+export const nightTriggerStepKey = (participantId: ParticipantId, roleId: RoleId, eventId: string | null): string =>
+  ["trigger", encodeURIComponent(participantId), encodeURIComponent(roleId), eventId === null ? "n" : `i${encodeURIComponent(eventId)}`].join(":");
 
 /** Any other participant-scoped step (`lunaticInfo:{participantId}`,
  * `admin:{participantId}:{roleId}`, ...). */

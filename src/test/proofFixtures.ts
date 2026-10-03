@@ -14,6 +14,8 @@ import {
 import type { InvocationPath } from "@/abilities/invocation";
 import type { AbilityInputs, AbilityInputValue } from "@/abilities/semantics";
 import { useStorytellerStore } from "@/stores/storytellerStore";
+import { nightTriggerStatus } from "@/abilities/invocation";
+import { createRulesQuery } from "@/stores/rulesQuery";
 import { participantStepKey } from "@/stores/nightProgress";
 import { makeSTPlayer } from "./fixtures";
 import { dealtIdentity } from "@/stores/identity";
@@ -64,8 +66,10 @@ export const impair = (g: StorytellerLobbyRecord, id: string, type = "poisoned")
     expiry: { kind: "none" }, appliedAt: { phase: g.phase, day: g.day } } as STPlayerRecord["effects"][number]] });
 
 let ids = 0;
+/** Module-wide: ids stay unique across successive resolutions in one test
+ * (two resolutions must never mint the same Life Event / History id). */
+let n = 0;
 export function proofEnv(over: Partial<AbilityEnvironment> = {}): AbilityEnvironment {
-  let n = 0;
   const next = (prefix: string) => () => `${prefix}-${++n}`;
   return {
     script: proofScript, registry: proofRegistry, semantics: CANONICAL_ABILITY_SEMANTICS,
@@ -81,13 +85,25 @@ export function request(
   actor: string,
   roleId: RoleId,
   inputs: AbilityInputs = {},
-  extra: Partial<Extract<AbilityResolutionRequest, { mode: "guided" }>> & { invocationPath?: InvocationPath; withStep?: boolean } = {},
+  extra: Partial<Extract<AbilityResolutionRequest, { mode: "guided" }>> & { invocationPath?: InvocationPath; withStep?: boolean; trigger?: { eventId: string | null } } = {},
 ): AbilityResolutionRequest {
-  const { withStep, ...rest } = extra;
+  const { withStep, trigger, ...rest } = extra;
   const invocationPath = rest.invocationPath ?? (g.phase === "day" ? "dayEntry" : "nightOrder");
   const participantId = g.players[actor]!.participantId!;
   const step = withStep ? { day: g.day, stepKey: participantStepKey(participantId, roleId) } : undefined;
-  return { mode: "guided", invocationPath, fingerprint: captureFingerprint(g, actor, step)!, roleId, inputs, ...rest } as AbilityResolutionRequest;
+  // SOL-10F-A10: like the UI, a Night-trigger workflow binds the trigger event
+  // that is open when it is opened (a test may name another one explicitly).
+  const bound = trigger ?? (invocationPath === "nightTrigger" ? openTriggerEvent(g, actor, roleId) : undefined);
+  return { mode: "guided", invocationPath, fingerprint: captureFingerprint(g, actor, step, bound)!, roleId, inputs, ...rest } as AbilityResolutionRequest;
+}
+
+/** The trigger event currently open for `actor`'s `roleId` (null when the
+ * trigger is unknown without an event, or not open at all). */
+export function openTriggerEvent(g: StorytellerLobbyRecord, actor: string, roleId: RoleId): { eventId: string | null } {
+  const descriptor = CANONICAL_ABILITY_SEMANTICS.get(roleId);
+  if (!descriptor) return { eventId: null };
+  const status = nightTriggerStatus(descriptor, bind(g, actor), createRulesQuery(g, { registry: proofRegistry, script: proofScript, semantics: CANONICAL_ABILITY_SEMANTICS, modifiers: [] }));
+  return { eventId: status.kind === "notTriggered" ? null : status.eventId };
 }
 
 export const plan = (g: StorytellerLobbyRecord, req: AbilityResolutionRequest, env: AbilityEnvironment = proofEnv()): AbilityPlanResult =>

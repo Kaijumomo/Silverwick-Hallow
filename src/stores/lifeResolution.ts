@@ -387,12 +387,16 @@ export function planLifeTransaction(
     if (!player || !ref || ref.kind !== "participant") return refuse("That seat has no player.");
     return { player, ref };
   };
-  const eventCommon = (subject: CurrentParticipantRef, extraResolution?: string) => ({
+  const eventCommon = (subject: CurrentParticipantRef, extraResolution?: string, actualRoleAtEvent?: string) => ({
     id: ids.eventId(),
     subject: cloneOwned(subject),
     ...((extraResolution ?? resolutionId) ? { resolutionId: extraResolution ?? resolutionId } : {}),
     ...(provenance ? { provenance: cloneOwned(provenance) } : {}),
+    ...(typeof actualRoleAtEvent === "string" && actualRoleAtEvent ? { actualRoleAtEvent } : {}),
   });
+  /** SOL-10F-A9: a GAMEPLAY event accepted now records its subject's Actual
+   * Role from Current State (Life never changes Role within a transaction). */
+  const liveEventCommon = (s: { player: STPlayerRecord; ref: CurrentParticipantRef }) => eventCommon(s.ref, undefined, s.player.actualRole);
 
   /** Builds a correction-recorded event at `moment`, validating the
    * structural rules (Day-only kinds, required outcomes, the subject). */
@@ -447,7 +451,7 @@ export function planLifeTransaction(
         const f = fieldsOf(s.player);
         if (!f.alive) return refuse(`${displayName(s.player)} is already dead.`);
         setFields(s.player, s.ref, DEAD(f, false));
-        const refusal = addEvent({ ...eventCommon(s.ref), kind: "death", moment: { ...current } });
+        const refusal = addEvent({ ...liveEventCommon(s), kind: "death", moment: { ...current } });
         if (refusal) return refusal;
         break;
       }
@@ -479,7 +483,7 @@ export function planLifeTransaction(
             message: `An execution is already recorded for Day ${current.day}. Record an additional execution?` };
         }
         if (intent.outcome === "died") setFields(s.player, s.ref, DEAD(f, false));
-        const refusal = addEvent({ ...eventCommon(s.ref), kind: "execution", moment: current as DayGameMoment, outcome: intent.outcome });
+        const refusal = addEvent({ ...liveEventCommon(s), kind: "execution", moment: current as DayGameMoment, outcome: intent.outcome });
         if (refusal) return refusal;
         break;
       }
@@ -491,7 +495,7 @@ export function planLifeTransaction(
         if (!f.alive) return refuse(`${displayName(s.player)} is already dead.`);
         if (intent.outcome !== "died" && intent.outcome !== "survived") return refuse("Choose an exile outcome.");
         if (intent.outcome === "died") setFields(s.player, s.ref, DEAD(f, true));
-        const refusal = addEvent({ ...eventCommon(s.ref), kind: "exile", moment: current as DayGameMoment, outcome: intent.outcome });
+        const refusal = addEvent({ ...liveEventCommon(s), kind: "exile", moment: current as DayGameMoment, outcome: intent.outcome });
         if (refusal) return refusal;
         break;
       }
@@ -503,7 +507,7 @@ export function planLifeTransaction(
         // longer exile-dead, and their ability (once-per-game included)
         // restored.
         setFields(s.player, s.ref, { alive: true, ghostVote: true, exiled: false, abilityUsed: false });
-        const refusal = addEvent({ ...eventCommon(s.ref), kind: "resurrection", moment: { ...current } });
+        const refusal = addEvent({ ...liveEventCommon(s), kind: "resurrection", moment: { ...current } });
         if (refusal) return refusal;
         break;
       }
@@ -560,8 +564,12 @@ export function planLifeTransaction(
       case "amendEvent": {
         const original = events.find((e) => e.id === intent.eventId);
         if (!original) return refuse("That event is no longer in the recent Life Event window.");
-        const replacement = buildSpecEvent(intent.replacement, original.moment, original.subject, original.resolutionId);
-        if ("ok" in replacement) return replacement;
+        const built = buildSpecEvent(intent.replacement, original.moment, original.subject, original.resolutionId);
+        if ("ok" in built) return built;
+        // SOL-10F-A9: an amend of the SAME subject at the same moment keeps the
+        // original's Role evidence; a different subject has none (unknown).
+        const replacement: LifeEvent = built.subject.participantId === original.subject.participantId && original.actualRoleAtEvent
+          ? { ...built, actualRoleAtEvent: original.actualRoleAtEvent } : built;
         if (replacement.kind === original.kind && replacement.subject.participantId === original.subject.participantId &&
           ("outcome" in replacement ? replacement.outcome : undefined) === ("outcome" in original ? original.outcome : undefined)) {
           return refuse("The amended event is identical to the original.");

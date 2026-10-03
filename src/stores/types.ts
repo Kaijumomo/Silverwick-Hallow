@@ -225,6 +225,11 @@ type LifeEventCommon = {
    * future multi-target ability). Absent for a single manual action. */
   resolutionId?: string;
   provenance?: Provenance;
+  /** SOL-10F-A9: authoritative evidence of the subject's Actual Role when the
+   * event was accepted (recorded on new gameplay events; carried by an amend
+   * of the same moment). Absent -> unknown; never inferred from the current
+   * Role, never from History. */
+  actualRoleAtEvent?: RoleId;
 };
 
 /**

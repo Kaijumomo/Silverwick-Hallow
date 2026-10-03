@@ -376,11 +376,10 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
     const wake = wakeIdentity(player, registry);
     if (!wake || !player.participantId) return [];
     const ability = triggerAbility(wake.shownRoleId, registry, semantics, query, bindingOf(player));
-    if (!ability || ability.kind !== "guided" || ability.trigger?.kind === "notTriggered") return [];
+    // SOL-10F-A10: open = the trigger status (consumption is per trigger event).
+    if (!ability || ability.kind !== "guided" || !ability.trigger || ability.trigger.kind === "notTriggered") return [];
     const stepKey = participantStepKey(player.participantId, wake.shownRoleId);
-    const status = progress[`${game.day}:${stepKey}`]?.status;
-    if (status === "done" || status === "skipped") return [];
-    return [{ player, roleId: wake.shownRoleId, roleName: wake.role.name, stepKey, ability }];
+    return [{ player, roleId: wake.shownRoleId, roleName: wake.role.name, stepKey, ability, eventId: ability.trigger.eventId }];
   });
   const policy = evilInformationPolicy(game.seatOrder.map(id => game.players[id]!).filter(Boolean), registry, game);
   const setupPlayers = game.seatOrder.filter(id => {
@@ -424,12 +423,12 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
         {triggered.length > 0 && (
           <section className="triggered-now" aria-label="Triggered now">
             <h3 className="drawer-section-title">Triggered now</h3>
-            {triggered.map(({ player, roleId, roleName, stepKey, ability }) => (
+            {triggered.map(({ player, roleId, roleName, stepKey, ability, eventId }) => (
               <div key={stepKey} className="step-card" data-status="pending">
                 <span className="step-role-name">{roleName}</span>
                 <span className="step-player-name">{player.name || `Seat ${player.seat + 1}`} · {ability.kind === "guided" && ability.trigger?.kind === "unknown" ? "trigger needs a check" : "died tonight"}</span>
                 <button className="btn btn-sm btn-gold" onClick={() => setWorkspace({
-                  target: { actorId: player.id, roleId, roleName, invocationPath: "nightTrigger", step: { day: game.day, stepKey } }, ability })}>Guide</button>
+                  target: { actorId: player.id, roleId, roleName, invocationPath: "nightTrigger", step: { day: game.day, stepKey }, trigger: { eventId } }, ability })}>Guide</button>
               </div>
             ))}
           </section>
@@ -451,7 +450,8 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
                   const ability = abilityOf(step)!;
                   const path = ability.kind === "guided" ? ability.invocationPath ?? "nightOrder" : "nightOrder";
                   setWorkspace({
-                    target: { actorId: step.playerId, roleId: step.effectiveRoleId, roleName: step.effectiveRoleName, invocationPath: path, step: { day: game.day, stepKey: step.stepKey } },
+                    target: { actorId: step.playerId, roleId: step.effectiveRoleId, roleName: step.effectiveRoleName, invocationPath: path, step: { day: game.day, stepKey: step.stepKey },
+                      ...(ability.kind === "guided" && ability.trigger && ability.trigger.kind !== "notTriggered" ? { trigger: { eventId: ability.trigger.eventId } } : {}) },
                     ability: manual && ability.kind === "guided" && ability.trigger?.kind === "notTriggered" ? { kind: "manual", reason: ability.trigger.reason } : ability,
                     ...(initialInputs ? { initialInputs } : {}),
                   });

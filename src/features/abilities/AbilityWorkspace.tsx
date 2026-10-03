@@ -42,6 +42,8 @@ export type WorkspaceTarget = {
    * request carries it and the coordinator enforces its eligibility. */
   invocationPath: InvocationPath;
   step?: { day: number; stepKey: string };
+  /** SOL-10F-A10: the exact trigger event a Night-trigger workflow resolves. */
+  trigger?: { eventId: string | null };
 };
 
 type Props = {
@@ -84,7 +86,7 @@ const MANUAL_KINDS: { kind: ManualDraft["kind"]; label: string }[] = [
 
 export function AbilityWorkspace({ game, script, registry, semantics, target, descriptor, manualReason, initialInputs, onClose, onResolved }: Props) {
   // Captured ONCE, at open: the state the Storyteller is resolving against.
-  const [fingerprint] = useState(() => captureFingerprint(game, target.actorId, target.step));
+  const [fingerprint] = useState(() => captureFingerprint(game, target.actorId, target.step, target.trigger));
   const [mode, setMode] = useState<"guided" | "manual">(descriptor ? "guided" : "manual");
   const [inputs, setInputs] = useState<Record<string, AbilityInputValue>>(initialInputs ?? {});
   const [judgments, setJudgments] = useState<Record<string, AbilityInputValue>>({});
@@ -291,7 +293,7 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
               ? <ul>{preview.map((line, i) => <li key={i}>{line}</li>)}</ul>
               : <p className="behavior-help">{planned && !planned.ok ? planned.message
                 : mode === "manual" && drafts.length > 0 && !manual ? "Choose a player for every step." : "Nothing to record yet."}</p>}
-            {target.step && (
+            {target.step && target.invocationPath !== "nightTrigger" && (
               <label className="ability-field ability-judgment">
                 <input type="checkbox" checked={completeStep} onChange={(e) => setCompleteStep(e.target.checked)} />
                 <span>Mark this Night step done</span>

@@ -86,7 +86,9 @@ describe("Phase 10A: basic death", () => {
     expect(player(id)).toMatchObject({ alive: false, ghostVote: true });
     expect("exiled" in player(id)).toBe(false);
     const ref = participantRefOf(game(), id)!;
-    expect(events()).toEqual([{ id: expect.any(String), kind: "death", subject: ref, moment: NIGHT1, provenance: { reason: "demon" } }]);
+    // SOL-10F-A9: a gameplay event records the subject's Actual Role at acceptance.
+    expect(events()).toEqual([{ id: expect.any(String), kind: "death", subject: ref, moment: NIGHT1, provenance: { reason: "demon" },
+      actualRoleAtEvent: player(id).actualRole }]);
     if (result.ok) expect(result.eventIds).toEqual([events()[0]!.id]);
     const record = game().history.at(-1)!;
     expect(record).toMatchObject({
