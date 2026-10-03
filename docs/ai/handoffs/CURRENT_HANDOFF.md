@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-03\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: D1/D2/E1 production behavior passed Luna's narrow verification, but the exact target did not receive PASS because one static E1 source-scan test hard-codes a POSIX relative path and fails on Windows path separators. Sol adjudicates this as LUNA-10F-E1-TEST-01, a test-only portability defect; no production remediation is required. Fix that guard without weakening it, rerun the final gate, then return to Luna. Schema/store remains unreleased v24; Firebase Rules unchanged. 10F is NOT closed; nothing merged or deployed.
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: D1/D2/E1 production behavior passed Luna's narrow verification. LUNA-10F-E1-TEST-01 was corrected with a test-only Windows/Linux path normalization; the exact single-serializer assertion remains intact. The previously failing test, E1 suite, full Vitest suite, typecheck, build, and diff checks are green. Ready for Luna confirmation. Schema/store remains unreleased v24; Firebase Rules unchanged. 10F is NOT closed; nothing merged or deployed.
 
 ## Phase 10D — CLOSED
 
@@ -846,4 +846,4 @@ Sol records this as `LUNA-10F-E1-TEST-01` in `PHASE10F.md` §47. The correction 
 
 ## Immediate next task
 
-Claude Code changes only the E1 test path normalization, runs the targeted/full gate and returns one exact clean checkpoint to Luna. No production file changes. After Luna PASS, Astra performs the final narrow D1/D2/E1 closure recheck. Phase 10F remains open.
+Luna confirms the exact clean checkpoint after the test-only path-normalization correction. On Luna PASS, Astra performs the final narrow D1/D2/E1 closure recheck. Phase 10F remains open; nothing merged or deployed.

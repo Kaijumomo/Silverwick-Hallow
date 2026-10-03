@@ -913,6 +913,12 @@ Astra is not asked to repeat Luna's full acceptance matrix or to invent a quota 
 
 Phase 10F remains open. No merge or deployment is authorized.
 
+## 48. LUNA-10F-E1-TEST-01 portability correction — 2026-10-03
+
+`LUNA-10F-E1-TEST-01` was test-only. No production behavior or production files changed. The E1 serializer source-scan guard now derives paths with Node's `relative()` and normalizes the platform separator to `/`; it still requires the complete discovered set to equal exactly `["firebase/checkpoint.ts"]`. Windows/Linux path normalization makes the guard portable without weakening it.
+
+Verification is green: the previously failing source-scan test **1/1**, E1 **17/17**, full Vitest **3,977/3,977 across 163 files**, typecheck, build, and both diff checks passed. The clean exact checkpoint is ready for Luna confirmation. Phase 10F remains open; nothing is merged or deployed.
+
 ## 31. Sol adjudication of Astra Slice 7 adversarial review — 2026-10-03
 
 Astra reviewed exact target `f87ab315a5ccef3819fb1e5126107b0a9ce73e56` and returned **REVISE** with eight reproduced defects. Sol accepts all eight findings. Two of Astra's additional design questions are also frozen into targeted remediation because the existing Phase 10F contract already requires non-retroactive trigger evidence and duplicate-trigger prevention.

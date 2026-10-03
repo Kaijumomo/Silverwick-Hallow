@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { deleteApp, initializeApp, setLogLevel } from "firebase/app";
 import { getDatabase, goOffline, ref, update } from "firebase/database";
@@ -119,7 +119,7 @@ describe("SOL-10F-E1 -- one shared checkpoint serializer, used byte-for-byte by 
     };
     walk(root);
     const serializers = files.filter((file) => /JSON\.stringify\(\{\s*game\b/.test(readFileSync(file, "utf8")));
-    expect(serializers.map((file) => file.slice(root.length + 1))).toEqual(["firebase/checkpoint.ts"]);
+    expect(serializers.map((file) => relative(root, file).split(sep).join("/"))).toEqual(["firebase/checkpoint.ts"]);
     const sync = readFileSync(resolve(__dirname, "sync.ts"), "utf8");
     expect(sync).toMatch(/serializeCheckpoint\(stState, ctx\.membership \?\? \{\}\)/);
     const updateAt = sync.indexOf("await backend.update(updates)");
