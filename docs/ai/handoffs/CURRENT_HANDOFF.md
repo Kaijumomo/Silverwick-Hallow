@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-03\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: Slice 7 passed Luna; Astra's first adversarial review produced A1…A10, all remediated and Luna-verified; Astra re-verification then established six additional defects. Sol accepts them as SOL-10F-B1…B6 and targeted remediation is required before Luna/Astra closure re-verification. Schema/store remains unreleased v24; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: Slice 7 passed Luna; Astra's first adversarial review produced A1…A10, all remediated and Luna-verified; Astra re-verification then established six additional defects. Sol accepted them as SOL-10F-B1…B6; Claude Code remediated all six at code checkpoint `b9a7c58cca86a5e0b7b54ccdd1957aef90c866f2` (`PHASE10F.md` §36) and the full gate is green. Next: Luna targeted verification, then Astra closure re-verification. Schema/store remains unreleased v24; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
 
 ## Phase 10D — CLOSED
 
@@ -732,3 +732,11 @@ Not promoted: ordinary Role-away-and-back same-Night replay policy and multiple 
 ## Immediate next task
 
 Claude Code remediates B1…B6 exactly as frozen in §35, adds direct Astra counterexample regressions, preserves A1…A10, runs the full gate and returns one exact clean checkpoint to Luna. Phase 10F remains open.
+
+## SOL-10F-B1…B6 remediation — 2026-10-03
+
+All six §35 findings are remediated at code checkpoint `b9a7c58cca86a5e0b7b54ccdd1957aef90c866f2` with a docs-only record on top (`PHASE10F.md` §36): per-slot ParticipantBinding capture with a visible stale state (B1); attempt-scoped Al-Hadikhia protection judgments (B2); canonical own-property answer maps (B3); ordered prospective-jinx simulation (B4); one shared collision-free, Firebase-key-safe Night-progress component encoding (B5/B6). Gate: typecheck PASS; 3,897/3,897 normal tests across 158 files; 201/201 emulator tests, 0 skipped; build and both `git diff --check` PASS; installed-SDK key proof PASS. Store stays unreleased v24 (final key encoding, no migration); Firebase Rules unchanged. A1…A10 closures preserved (the one A6 test that asserted reuse of an initial protection judgment in the final sequence now asserts the B2 contract).
+
+## Immediate next task
+
+Luna targets SOL-10F-B1…B6 (and A1…A10 preservation) at the exact current `dev/phase-10f` HEAD. Do not send directly to Astra. If Luna passes, Astra performs the closure re-verification. Phase 10F remains open; nothing merged or deployed.

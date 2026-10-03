@@ -10,7 +10,7 @@
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
 **Schema:** v23 integrated on `main`; v24 implemented on `dev/phase-10f`\
-**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (Astra adversarial re-verification REVISE; SOL-10F-B1…B6 targeted remediation required; Phase 10F not closed)
+**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (Astra adversarial re-verification REVISE; SOL-10F-B1…B6 remediated at `b9a7c58cca86a5e0b7b54ccdd1957aef90c866f2`, awaiting Luna targeted verification; Phase 10F not closed)
 
 ## Product invariants
 
@@ -228,13 +228,14 @@ Delivered (store/game schema v23): `src/stores/alignmentResolution.ts` (pure `pl
 Frozen direction: one participant-bound Actual Alignment transaction seam; gameplay change vs correction; atomic multi-participant changes; Actual Alignment independent of Role; v23 player-facing alignment perception with Normal / explicit Good / explicit Evil / Not Told; Normal ordinary perception derives from Shown Role while Normal Traveler perception follows Actual Alignment; v22 -> v23 normalization clears inert legacy Traveler shown-alignment copies to Normal; strict v23 Alignment History correction/correlation metadata; occupancy-boundary hardening so a new participant never inherits stale seat alignment; Storyteller UI separates Actual Alignment truth from player-facing perception; 10F remains responsible for ability logic.
 
 ### 10F — Guided Ability Resolution / Night Actions
-**Status:** ASTRA RE-VERIFICATION REVISE — SOL-10F-B1…B6 TARGETED REMEDIATION REQUIRED. Not closed.\
+**Status:** ASTRA RE-VERIFICATION REVISE — SOL-10F-B1…B6 REMEDIATED (`PHASE10F.md` §36), AWAITING LUNA TARGETED VERIFICATION. Not closed.\
 **Contract:** `PHASE10F.md` (frozen 2026-10-02).\
 **Starting checkpoint:** `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`.\
 **Contract-freeze checkpoint:** `727530e9364a0c971326c06ce45855adcf39828b`.\
 **Implementation review checkpoint:** `403f641944db035d170a9321562e88be096dc77b` (Luna REVISE at `b1d6bd7f071c8f5195c5f440abcaa43441446aaf`).\
 **Remediation code checkpoint:** `e5a9b9d019d469609a3c6246043b18dc5d72bf62` (SOL-10F-L1…L7; docs-only handoff commit on top).\
 **SOL-10F-L3-R1 code checkpoint:** `93b850d77ea9b8a7adf3ae4db3f4ac7dc7d54a68` (shared invocation-eligibility contract; docs-only handoff commit on top).\
+**SOL-10F-B1…B6 code checkpoint:** `b9a7c58cca86a5e0b7b54ccdd1957aef90c866f2` (docs-only record commit on top).\
 **Schema/store:** v24 (on `dev/phase-10f`).
 
 Frozen direction: one pure ability coordinator composes the existing Life, Effect, Reminder, Role and Alignment planners on one evolving working snapshot and commits once; mechanical operation order is ability-defined; Storyteller choice/judgment remains explicit; Reminders remain non-authoritative; participant-bound workflow identity prevents seat-reuse staleness; Information Delivery becomes composable and records simulated/performed-role context in v24; player Night progress becomes participant-scoped; public/player-town Life State is withheld during Night; the Night Order becomes a guided operating dashboard with progressive disclosure and complex-outcome previews.
@@ -274,4 +275,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Claude Code remediates `PHASE10F.md` §35 SOL-10F-B1…B6 only: per-slot ParticipantBinding capture for incomplete multi-player inputs, attempt/dependency-scoped Al-Hadikhia protection judgments, canonical own-property answer maps, ordered prospective-jinx simulation, collision-free participant Night-progress encoding, and Firebase-safe key encoding. Preserve all prior A1…A10 closures and accepted Manual/deferred boundaries. After the full gate, return one exact checkpoint to Luna for targeted verification before Astra closure re-verification. Do not merge, deploy or close 10F.
+SOL-10F-B1…B6 are remediated at code checkpoint `b9a7c58cca86a5e0b7b54ccdd1957aef90c866f2` (`PHASE10F.md` §36; full gate green, v24 key encoding final, Firebase Rules unchanged). Luna performs targeted mechanical verification of B1…B6 and A1…A10 preservation at the exact current `dev/phase-10f` HEAD; only after a Luna PASS does the checkpoint go to Astra for closure re-verification. Do not merge, deploy or close 10F.
