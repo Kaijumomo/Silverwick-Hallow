@@ -822,8 +822,9 @@ export type StorytellerLobbyRecord = {
   seatOrder: PlayerId[];
   /** Keys: "${day}:${stepKey}" — e.g. "1:demonInfo", "2:p:{participantId}:empath".
    * Phase 10F (v24): every step ABOUT one participant is keyed by their
-   * immutable ParticipantId, never by the reusable seat (see
-   * src/stores/nightProgress.ts). */
+   * immutable ParticipantId, never by the reusable seat; every dynamic key
+   * component is encoded by encodeNightProgressComponent (SOL-10F-B5 / B6:
+   * collision-free and Firebase-key-safe) -- see src/stores/nightProgress.ts. */
   nightProgress: Record<string, NightStepRecord>;
   /** Pre-picked roles waiting to be dealt. ST-only — never written to public/*. */
   rolePool: RoleId[];
