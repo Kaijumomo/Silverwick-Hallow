@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { NightOrderPanel } from "@/features/nightOrder/NightOrderPanel";
+import { AbilityEntry } from "./AbilityEntry";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
@@ -79,5 +80,41 @@ describe("Fortune Teller -- Night 1 Red Herring is chosen inside the same resolu
     expect(game().players.p3!.effects).toEqual([expect.objectContaining({ type: "fortuneTellerRedHerring" })]);
     expect(game().informationDeliveries.at(-1)!.values.at(-1)).toMatchObject({ kind: "boolean", value: true });
     expect(state().undoStack).toHaveLength(1);
+  });
+});
+
+function Entry({ id }: { id: string }) {
+  const player = store((s) => s.game?.players[id]);
+  return player ? <AbilityEntry player={player} /> : null;
+}
+
+describe("Slayer -- the Day entry", () => {
+  it("Player Drawer: Use ability… -> preview (use + death) -> Confirm, one commit", () => {
+    open(named(["slayer", "imp", "chef", "monk", "saint", "poisoner", "empath"], "day", 2));
+    render(<Entry id="p0" />);
+    fireEvent.click(screen.getByRole("button", { name: "Use ability… (Slayer)" }));
+    const dialog = screen.getByRole("dialog", { name: /Slayer — guided resolution/ });
+    fireEvent.change(within(dialog).getByRole("combobox", { name: "The player publicly chosen" }), { target: { value: "p1" } });
+    const preview = within(dialog).getByRole("region", { name: "Result" });
+    expect(within(preview).getByText("Player 0's ability is used")).toBeInTheDocument();
+    expect(within(preview).getByText("Player 1 dies")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Confirm and record" }));
+    expect(game().players.p1!.alive).toBe(false);
+    expect(game().players.p0!.abilityUsed).toBe(true);
+    expect(state().undoStack).toHaveLength(1);
+  });
+
+  it("at Night the Player Drawer stays Manual-only for ordinary Night abilities", () => {
+    open(named(["poisoner", "imp", "chef", "monk", "saint", "spy", "empath"], "night", 2));
+    render(<Entry id="p0" />);
+    expect(screen.queryByRole("button", { name: /Use ability/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Resolve manually / unmodeled interaction" })).toBeInTheDocument();
+  });
+
+  it("the Cult Leader's Day portion is Manual-only in the Day entry", () => {
+    open(named(["cultleader", "imp", "chef", "monk", "saint", "spy", "empath"], "day", 2));
+    render(<Entry id="p0" />);
+    expect(screen.queryByRole("button", { name: /Use ability/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Resolve manually / unmodeled interaction" })).toBeInTheDocument();
   });
 });
