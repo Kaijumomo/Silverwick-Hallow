@@ -516,3 +516,35 @@ Accepted Sol interpretations retained: Night guided work is owned by Night Order
 ## Immediate next task
 
 Sol researches and freezes the authoritative proof-character rules matrix for Poisoner, Monk, Imp, Fortune Teller, simulated Drunk→Empath, Ravenkeeper, Slayer, Cult Leader, Pit-Hag, Al-Hadikhia, Tinker, Harlot, Toymaker and Baron. Use official BOTC sources for character behavior and distinguish explicit rules from Storyteller judgment. Do not implement production semantics until the rules matrix is frozen.
+
+
+## Phase 10F proof-character rules freeze — 2026-10-02
+
+Sol completed the authoritative rules research and froze contract Slice 6 in:
+
+`docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md`
+
+The matrix is grounded in the publisher Blood on the Clocktower Wiki character How-to-Run pages plus the Abilities / States / Glossary rules pages, cross-checked against Silverwick's pinned canonical data revision `f10cd02e3401af227ce406287eaae7bb99a06a42`.
+
+Authorized implementation set:
+
+- Poisoner — guided Effect;
+- Monk — guided safe-from-Demon Effect;
+- Imp — guided kill/star-pass with narrow Scarlet Woman priority dependency;
+- Fortune Teller — guided information + authoritative Red Herring Effect;
+- Empath support semantic + simulated Drunk→Empath delivery;
+- Ravenkeeper — verified Night death trigger + information;
+- Slayer — guided Day public claim / once-per-game;
+- Cult Leader — guided nightly Alignment; Day cult vote stays Manual/out of voting scope;
+- Pit-Hag — guided non-Demon Role change; Demon creation stays Manual pending 10G arbitrary-death state;
+- Al-Hadikhia — ordered three-player Life resolution;
+- Tinker — verified Manual;
+- Harlot — guided consent/info/might-death;
+- Toymaker — verified Manual/10G skip-state dependency;
+- Baron — Setup-owned negative proof.
+
+Key architecture decisions are in PHASE10F.md §25 and the matrix.
+
+## Immediate next task
+
+Claude Code implements Slice 7 from `docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md`, preserving the frozen manual/deferred boundaries. Do not expand into Phase 11 coverage. After a clean full gate, return one exact implementation checkpoint for Luna.
