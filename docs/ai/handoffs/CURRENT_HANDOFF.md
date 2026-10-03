@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
-**Date:** 2026-10-02\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: the rules-neutral foundation passed Luna (§24), Sol froze the proof-character rules matrix (§25), and **Slice 7 — proof-character semantics — is implemented and READY FOR LUNA** on `dev/phase-10f` (code checkpoint `d9b927ae172f5327910e8a31d375096118cf7850`, with a docs-only handoff commit on top; schema/store v24, unchanged). Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
+**Date:** 2026-10-03\
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: rules-neutral foundation passed; proof-character rules matrix frozen; Slice 7 proof-character semantics implemented; Luna's substantive Slice 7 review found **no semantic/mechanical blocker**; `LUNA-10F-S7-001` (missing PHASE10F §§24–27) is closed; `DOC-10F-RECHECK-001` (stale current summaries) has been remediated and awaits one narrow Luna confirmation before Astra. Code checkpoint remains `53ab172a723d70b2de4220d448ec8da8f79a173a`; schema/store v24 unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
 
 ## Phase 10D — CLOSED
 
@@ -611,3 +611,29 @@ Luna's prior gate: 543/543 focused tests across 27 files; 3,766/3,766 full tests
 ## Immediate next task
 
 Luna performs a narrow documentation-only recheck at the exact current dev/phase-10f HEAD. Verify §§1–29 are present and the repair is documentation-only. If PASS, hand Slice 7 to Astra. Phase 10F remains open.
+
+## Luna documentation recheck — stale current summaries remediated — 2026-10-03
+
+Luna's narrow recheck confirmed that `PHASE10F.md` now contains the complete §§1–29 and that the missing-section defect `LUNA-10F-S7-001` is closed. The repair was documentation-only.
+
+The recheck returned one remaining Medium documentation finding:
+
+- **DOC-10F-RECHECK-001:** the Master Plan and Current Handoff top-level current-state summaries still described Slice 7 as awaiting Luna and named older checkpoints/tasks.
+
+Sol remediated that finding by updating only the current-state summary fields and the newest immediate-next-action guidance. Historical dated review/implementation records are intentionally preserved unchanged.
+
+Current truth after this remediation:
+
+- Slice 7 substantive Luna review: **PASS on code/semantics**;
+- `LUNA-10F-S7-001`: **closed**;
+- `DOC-10F-RECHECK-001`: **remediated, awaiting narrow Luna confirmation**;
+- Phase 10F: **open**;
+- next gate after confirmation: **Astra adversarial Slice 7 review**;
+- production code remains at code checkpoint `53ab172a723d70b2de4220d448ec8da8f79a173a`;
+- schema/store remains v24;
+- no Firebase Rules change;
+- no merge or deploy.
+
+## Immediate next task
+
+Luna performs one final narrow documentation/current-summary confirmation on the exact current `dev/phase-10f` HEAD. Verify the top-level Master Plan and Current Handoff summaries now match the current state above and that the latest repository changes are documentation-only. On PASS, hand Slice 7 to Astra. Phase 10F remains open.
