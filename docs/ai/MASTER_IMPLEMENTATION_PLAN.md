@@ -10,7 +10,7 @@
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
 **Schema:** v23 integrated on `main`; v24 implemented on `dev/phase-10f`\
-**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (Astra closure re-verification REVISE → SOL-10F-C1…C3 remediated, `PHASE10F.md` §40; Luna targeted verification next; Phase 10F not closed)
+**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (C1…C3 Luna-verified; Astra final recheck next; Phase 10F not closed)
 
 ## Product invariants
 
@@ -276,4 +276,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Luna independently verifies `PHASE10F.md` §39 SOL-10F-C1…C3 as recorded in §40 (code checkpoint `c3ae6910ba6752bac62162a6f67f81076c598502`; docs-only record on top) at the exact current `dev/phase-10f` HEAD: deep inert AbilityInputValue snapshots, protection-dependency-stamped UNKNOWN protection judgments, and the pre-commit Firebase write-compatibility preflight in the store's `resolveAbility` — plus A1…A10 / B1…B6 preservation, the full gate and §§1–40 documentation integrity. Do not send directly to Astra. After Luna PASS, Astra performs a narrow C1…C3 closure recheck; only then may Sol adjudicate Phase 10F closure. Do not merge, deploy or close 10F.
+Astra performs the final narrow C1…C3 recheck at the exact current dev/phase-10f target. On PASS, Sol performs Phase 10F closure adjudication. Do not merge, deploy or close 10F.
