@@ -16,7 +16,8 @@ import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, n
  *     No -> no information, no death;
  *  3. Yes -> the character shown is their registration to the Harlot
  *     (ambiguity -> Storyteller judgment), recorded through Information
- *     Delivery (`harlot-other-night`, an owner-authorized Silverwick id);
+ *     Delivery (`harlot-other-night`, owner-authorized Silverwick metadata:
+ *     the consenting chosen player + the character shown);
  *  4. "might" -> the Storyteller chooses whether the death consequence happens;
  *     if so, both deaths are attempted in ONE resolution, each respecting
  *     protectedFrom(..., "any"). If one death would change whether the other
@@ -33,9 +34,12 @@ export const CHARACTER_JUDGMENT = "harlot:character";
 export const SHOWN = "shown";
 export const DEATH_CONSEQUENCE = "deathConsequence";
 
-function inform(context: AbilityEvaluationContext, roleId: RoleId, before: AbilityOperation[] = []): AbilityEvaluation {
-  return outcome([...before, { domain: "information", recipient: context.actor.binding, informationActionId: "harlot-other-night",
-    values: [{ requirementId: "role", kind: "role", roleId }] }]);
+/** Records the consenting player the Harlot chose and the character shown. */
+function inform(context: AbilityEvaluationContext, chosen: ParticipantBinding, roleId: RoleId, before: AbilityOperation[] = []): AbilityEvaluation {
+  return outcome([...before, { domain: "information", recipient: context.actor.binding, informationActionId: "harlot-other-night", values: [
+    { requirementId: "chosenPlayer", kind: "player", participants: [chosen] },
+    { requirementId: "role", kind: "role", roleId },
+  ] }]);
 }
 
 export const HARLOT: AbilityDescriptor = {
@@ -60,7 +64,7 @@ export const HARLOT: AbilityDescriptor = {
       const shown = answerOf(context.inputs, SHOWN, "character");
       if (!shown || shown.roleIds.length !== 1) return ask("This Harlot has no functioning ability: choose the character shown.",
         { id: SHOWN, kind: "character", source: "storyteller", label: "The character shown to the Harlot" });
-      return inform(context, shown.roleIds[0]!);
+      return inform(context, target, shown.roleIds[0]!);
     }
     let roleId: RoleId;
     const registered = context.query.registration(target, "harlot").character;
@@ -75,7 +79,7 @@ export const HARLOT: AbilityDescriptor = {
     const consequence = answerOf(context.inputs, DEATH_CONSEQUENCE, "boolean");
     if (!consequence) return ask("Both players MIGHT die: the Storyteller decides.",
       { id: DEATH_CONSEQUENCE, kind: "boolean", source: "storyteller", label: "The Harlot and the chosen player die (if not protected)" });
-    if (!consequence.value) return inform(context, roleId);
+    if (!consequence.value) return inform(context, target, roleId);
 
     const pair: ParticipantBinding[] = [context.actor.binding, target];
     const deaths: { kind: "death"; target: ParticipantBinding }[] = [];
@@ -89,6 +93,6 @@ export const HARLOT: AbilityDescriptor = {
       }
       if (alone.kind === "dies") deaths.push({ kind: "death", target: who });
     }
-    return inform(context, roleId, deaths.length ? [lifeOperation(deaths)] : []);
+    return inform(context, target, roleId, deaths.length ? [lifeOperation(deaths)] : []);
   },
 };

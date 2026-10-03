@@ -85,6 +85,18 @@ export function resolvedCharacters(script: Script | null | undefined): RoleDef[]
   return ids.map((id) => registry.get(id)).filter((role): role is RoleDef => role !== undefined);
 }
 
+/**
+ * The Silverwick-authored Information Actions (src/data/informationActions.ts)
+ * a resolved definition may use: ONLY when it is the genuine canonical Role
+ * (Role Ownership Boundary). A homebrew / modified definition reusing the id
+ * inherits none of them.
+ */
+export function silverwickInformationActions(role: RoleDef): InformationAction[] {
+  const fallback = Object.prototype.hasOwnProperty.call(INFORMATION_ACTIONS, role.id) ? INFORMATION_ACTIONS[role.id] : undefined;
+  if (!fallback) return [];
+  return isCanonicalRole(role) ? fallback : [];
+}
+
 export function buildRegistry(script: Script): RoleRegistry {
   const map = new Map<RoleId, RoleDef>();
   for (const r of ownedScriptCharacters(script)) map.set(r.id, r);
@@ -112,9 +124,7 @@ export function buildRegistry(script: Script): RoleRegistry {
       const role = map.get(id);
       if (!role) return [];
       if (role.informationActions) return role.informationActions;
-      const fallback = INFORMATION_ACTIONS[id];
-      if (!fallback) return [];
-      return isCanonicalRole(role) ? fallback : [];
+      return silverwickInformationActions(role);
     },
   };
 }
