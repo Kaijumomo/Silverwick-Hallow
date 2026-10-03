@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-03\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: A1…A10, B1…B6 and C1…C3 remain closed; D1/D2 are remediated at code checkpoint `a0968d0ff6149b7f16eb9fabb7e1eb8dda32ea0c`. During D1 verification, Claude established a separate derived-checkpoint persistence defect: the writer stores `JSON.stringify({ game, roster })` as one Firebase string leaf, so several individually valid game strings can aggregate beyond Firebase's leaf limit after the ability store has already committed. Sol accepts this as SOL-10F-E1 and requires one narrow remediation before Luna. Schema/store remains unreleased v24; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: A1…A10, B1…B6 and C1…C3 remain closed; D1/D2 are remediated at code checkpoint `a0968d0ff6149b7f16eb9fabb7e1eb8dda32ea0c` and SOL-10F-E1 (the derived `JSON.stringify({ game, roster })` checkpoint leaf) at code checkpoint `c6a2938e4e3c5ef3b17013c833cd335fe623b6f8` (`PHASE10F.md` §45). D1/D2/E1 remediated → Luna narrow verification → Astra narrow final closure recheck → Sol closure adjudication. Schema/store remains unreleased v24; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
 
 ## Phase 10D — CLOSED
 
@@ -243,7 +243,7 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 - **10C Reminder Workflow + visual Reminder tokens — CLOSED**
 - **10D Role Transitions — CLOSED**
 - **10E Alignment Transitions — CLOSED AND INTEGRATED**
-- **10F Guided Ability Resolution / Night Actions — ASTRA CLOSURE RE-VERIFICATION REVISE; C1…C3 REMEDIATION REQUIRED (not closed)**
+- **10F Guided Ability Resolution / Night Actions — D1/D2/E1 REMEDIATED; LUNA NARROW VERIFICATION NEXT (not closed)**
 - 10G Advanced Storyteller bookkeeping / final visual integration
 
 ## Standing Phase 10 UX invariant
@@ -827,3 +827,13 @@ Do not send the current D1/D2 checkpoint to Luna yet.
 ## Immediate next task
 
 Claude Code remediates E1 only: shared exact checkpoint serialization, conservative proven roster envelope for the pre-commit store proof, and exact writer-side defense-in-depth validation. Preserve D1/D2 and all earlier closures. After the full gate, Luna verifies D1/D2/E1 together, then Astra performs one narrow closure recheck. Phase 10F remains open.
+
+## SOL-10F-E1 remediation — 2026-10-03
+
+The §44 finding is remediated at code checkpoint `c6a2938e4e3c5ef3b17013c833cd335fe623b6f8` with a docs-only record on top (`PHASE10F.md` §45). One pure shared serializer, `serializeCheckpoint` (`src/firebase/checkpoint.ts`), is the exact `JSON.stringify({ game, roster })` the writer stores. `writeProjections` validates that exact string — real roster, real `lobbies/{code}/checkpoint` destination — with the existing `validateFirebaseWritableValue` before `backend.update`, and throws `LifecycleError("invalid")` without projecting anything when it cannot be written. `resolveAbility` additionally proves, before its single `set()`, that the planned game's checkpoint fits with the conservative supported-roster envelope: every PlayerId record of the planned and current games bound to a distinct worst-case UID of `MAX_AUTH_UID_LENGTH` (128, Firebase Authentication's own limit, `src/firebase/authUid.ts`) characters at six serialized bytes each, with the game's `code` / `storytellerUid` at their supported maxima; otherwise `invalidComposition` and nothing is committed. Checkpoint format, Firebase Rules and recovery contract unchanged; store stays unreleased v24.
+
+Gate: typecheck PASS; E1 17/17; D1/D2 17/17; C1…C3 46/46; B1…B6 70/70; A1…A10 61/61; Firebase SDK compatibility 385/385; 3,977/3,977 normal tests across 163 files; 201/201 emulator tests, 0 skipped; build and both `git diff --check` PASS. The two-6-MB-delivery reproduction failed before the fix (both committed; the installed SDK rejected the 12,004,275-byte checkpoint) and is refused atomically after it; the installed SDK agrees at the exact 10,485,760-byte checkpoint boundary.
+
+## Immediate next task
+
+Luna performs one narrow combined D1/D2/E1 mechanical verification at the exact current `dev/phase-10f` HEAD (D1/D2 code `a0968d0ff6149b7f16eb9fabb7e1eb8dda32ea0c`, E1 code `c6a2938e4e3c5ef3b17013c833cd335fe623b6f8`, §§1–45). Do not send directly to Astra. After Luna PASS, Astra performs one narrow D1/D2/E1 final closure recheck; then Sol closure adjudication. Phase 10F remains open; nothing merged or deployed.
