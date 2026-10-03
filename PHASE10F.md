@@ -1407,3 +1407,15 @@ Remediated exactly the §39 findings, on top of `9052df36ab338b1e025d7695aa8e82b
 Unchanged by decision (§39 out of scope): ordinary Role-away-and-back replay; null / unrecorded trigger multiplicity; multiple Scarlet Woman policy; departed sourced-Effect UNKNOWN; synthetic guided Role-correction semantics (Phase 11 design risk).
 
 Gate at `c3ae6910ba6752bac62162a6f67f81076c598502`: typecheck PASS; C1…C3 targeted suites 46/46 (2 files: `astraClosure.test.ts`, `abilityCommitCompatibility.sdk.test.ts`); B1…B6 suites 70/70 (3 files); A1…A10 suites 61/61 (2 files); proof-character suites 260/260 (16 files); 10F foundation / architecture / writer guards 639/639 (17 files); Life Event migration / recovery / checkpoint suites 163/163 (8 files); Firebase SDK compatibility suites 358/358 (4 files); full normal suite 3,943/3,943 across 160 files (0 skipped); Firebase emulator 201/201 (0 skipped); build PASS; worktree and baseline-range `git diff --check` PASS; every intermediate code commit typechecks. All three Astra counterexamples reproduced before the fixes (C1: a nested `value` getter false → true and false → `"no"` killed the Chef through the real coordinator; C2: the Chef's protection id `protection:demon:<pid>` was identical before and after the external Monk resurrection and the old judgment killed; C3: a Ravenkeeper trigger for LifeEvent `".".repeat(160)` committed locally — Undo 1, localSeq +1 — and the installed SDK then refused the game at 890 bytes) and refuse / ask correctly after. The installed Firebase SDK (12.12.1, offline oracle) agrees with the store preflight on both sides of the exact 768-byte boundary with a real maximum-length room code, and before a room exists. Six planted mutations (retain the caller's nested answer object; execute nested accessors; drop the stamp from the judgment id; drop alive state from the stamp; skip the preflight; an empty-room placeholder) were each caught (6 / 10 / 11 / 8 / 8 / 2 failures) and restored.
+
+## 41. Luna targeted C1…C3 verification complete — 2026-10-03
+
+Luna independently verified exact target `87bfa2c781fb0b46651a1f7f060732846bd2c8ed` and returned:
+
+**PASS — SOL-10F-C1…C3 CLOSED; PHASE 10F SLICE 7 READY FOR ASTRA FINAL CLOSURE RECHECK**
+
+Independent evidence: C1…C3 targeted 46/46; full normal suite 3,943/3,943 across 160 files; Firebase emulator 201/201 with 0 skipped; Firebase SDK compatibility 358/358; typecheck, build and both diff checks PASS. A1…A10 and B1…B6 preservation also passed.
+
+The next gate is one narrow Astra final closure recheck focused on C1…C3 and their immediate interactions. On Astra PASS, the next step is Sol closure adjudication.
+
+Phase 10F remains open. No merge or deployment is authorized.
