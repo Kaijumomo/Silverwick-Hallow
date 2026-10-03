@@ -122,8 +122,10 @@ describe("10F architecture guards", () => {
     expect(read("stores/abilityResolution.ts")).not.toMatch(/timingAllows/);
   });
 
-  it("production semantics are deliberately empty until authoritative rules verification", () => {
-    expect(CANONICAL_ABILITY_SEMANTICS.size).toBe(0);
+  it("production semantics contain ONLY the matrix-authorized proof / support characters (Slice 7)", () => {
+    const authorized = ["poisoner", "monk", "empath", "fortuneteller", "slayer", "cultleader", "harlot", "alhadikhia", "imp", "ravenkeeper", "pithag"];
+    for (const id of CANONICAL_ABILITY_SEMANTICS.keys()) expect(authorized, id).toContain(id);
+    for (const id of ["baron", "tinker", "toymaker", "drunk", "scarletwoman"]) expect(CANONICAL_ABILITY_SEMANTICS.has(id), id).toBe(false);
   });
 });
 
@@ -155,7 +157,7 @@ describe("10F-AC-34: canonical coverage manifest", () => {
 
   it("tracks the proof set, the Baron negative proof and Fabled/Loric scopes", () => {
     for (const id of PROOF_SET.filter((p) => p !== "baron")) {
-      expect(manifest.find((e) => e.id === id)).toMatchObject({ status: "proofPendingEvidence" });
+      expect(manifest.find((e) => e.id === id)).toMatchObject({ status: CANONICAL_ABILITY_SEMANTICS.has(id) ? "supported" : "proofPendingEvidence" });
     }
     expect(manifest.find((e) => e.id === "baron")).toMatchObject({ status: "setupOwned" });
     for (const entry of manifest.filter((e) => e.kind === "fabled" || e.kind === "loric")) {
@@ -163,7 +165,7 @@ describe("10F-AC-34: canonical coverage manifest", () => {
       expect(entry.scopes).toEqual(CANONICAL_MODIFIER_SCOPES[entry.id]);
     }
     expect(manifest.filter((e) => e.kind === "jinx").every((e) => e.status === "gatedJudgment")).toBe(true);
-    expect(manifest.some((e) => e.status === "supported")).toBe(false);
+    expect(manifest.filter((e) => e.status === "supported").map((e) => e.id).sort()).toEqual([...CANONICAL_ABILITY_SEMANTICS.keys()].sort());
   });
 
   it("a registered semantics module flips exactly its entry to supported (extension needs no coordinator change)", () => {

@@ -1,4 +1,5 @@
 import { isCanonicalRole } from "@/data/canonical";
+import { VERIFIED_DESCRIPTORS } from "./characters";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import type { HookScope } from "./modifiers";
 import type { AbilityOutcome, ParticipantBinding } from "@/stores/abilityResolution";
@@ -168,7 +169,11 @@ export type AbilityEvaluation =
   | { kind: "needsInput"; requirements: readonly AbilityInputRequirement[]; message: string }
   | { kind: "notApplicable"; message: string }
   | { kind: "unsupported"; message: string }
-  | { kind: "illegal"; message: string };
+  | { kind: "illegal"; message: string }
+  /** Phase 10F Slice 7: a FOLLOW-UP participant answer the evaluator itself
+   * asked for (so the coordinator's declared-input validation never saw it)
+   * no longer names the bound participation instance. */
+  | { kind: "stale"; message: string };
 
 /** A small PURE function: no store, no clock, no randomness, no Reminder
  * reads (architecture-guarded). */
@@ -180,12 +185,12 @@ export type AbilityEvaluator = (context: AbilityEvaluationContext) => AbilityEva
 export type AbilitySemanticsRegistry = ReadonlyMap<RoleId, AbilityDescriptor>;
 
 /**
- * Phase 10F: production semantics. Deliberately EMPTY at this checkpoint --
- * no proof-character mechanic is encoded until its rules matrix is verified
- * against authoritative BOTC sources (PHASE10F Sections 17 and 20). Until a
- * character is added here, its ability resolves through the Manual workspace.
+ * Phase 10F: production semantics -- exactly the proof / support characters
+ * frozen in docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md (Slice 7), assembled
+ * from their semantics modules (src/abilities/characters). Every other
+ * character resolves through the Manual workspace.
  */
-export const CANONICAL_ABILITY_SEMANTICS: AbilitySemanticsRegistry = new Map();
+export const CANONICAL_ABILITY_SEMANTICS: AbilitySemanticsRegistry = new Map(VERIFIED_DESCRIPTORS.map((descriptor) => [descriptor.roleId, descriptor]));
 
 export type SemanticsResolution =
   | { kind: "supported"; descriptor: AbilityDescriptor; role: RoleDef }

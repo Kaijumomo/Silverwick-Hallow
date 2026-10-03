@@ -160,6 +160,10 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     if (declared !== "whileSourceFunctions") return unknown(`Whether this ${effect.type} Effect still applies depends on its source: the Storyteller decides.`);
     const sourcePlayer = boundParticipant(game, { playerId: source.playerId, participantId: source.participantId });
     if (!sourcePlayer) return unknown("The Effect's source is no longer in play: the Storyteller decides.");
+    // Matrix Section 1 / 4: a persistent ability effect ends when its source
+    // changes character -- the source no longer HAS that ability (derived; the
+    // stored Effect is never rewritten).
+    if (sourceCharacter && sourcePlayer.actualRole !== sourceCharacter) return known(false);
     const next = new Set(visiting).add(key);
     const functioning = functions(sourcePlayer, next);
     if (!functioning.known) return functioning;

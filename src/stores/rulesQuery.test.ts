@@ -61,10 +61,11 @@ describe("10F-AC-12 / AC-13: impairment and applicability are derived, never cac
 
   it("a sourced Effect follows its source only as DECLARED; undeclared is unknown; dependency cycles fail safe to unknown", () => {
     const g = game();
-    // Chef poisoned by the Poisoner (p5); the Poisoner poisoned by the Chef.
-    g.players.p1 = { ...g.players.p1!, effects: [effect({ id: "e1", type: "poisoned", sourceParticipant: ref(g, "p5"), sourceCharacter: "poisoner" })] };
+    // Two Poisoners (p1, p5) each poisoned by the other. (A source must still
+    // hold its source character -- matrix Section 4; asserted below.)
+    g.players.p1 = { ...g.players.p1!, actualRole: "poisoner", effects: [effect({ id: "e1", type: "poisoned", sourceParticipant: ref(g, "p5"), sourceCharacter: "poisoner" })] };
     g.players.p5 = { ...g.players.p5!, effects: [effect({ id: "e2", type: "poisoned", sourceParticipant: ref(g, "p1"), sourceCharacter: "poisoner" })] };
-    expect(q(g).impaired(b(g, "p1"))).toMatchObject({ known: false }); // undeclared persistence
+    expect(q(g, new Map()).impaired(b(g, "p1"))).toMatchObject({ known: false }); // undeclared persistence (no semantics module)
     const fixture = (persistence: "independent" | "whileSourceFunctions"): AbilitySemanticsRegistry => new Map([["poisoner", {
       roleId: "poisoner", timing: ["otherNight"], invocation: "wake", usage: { kind: "unlimited" }, inputs: [], hooks: [],
       sourcedEffects: [{ type: "poisoned", persistence }], presentation: { complexity: "simple", action: "fixture" },
@@ -79,6 +80,9 @@ describe("10F-AC-12 / AC-13: impairment and applicability are derived, never cac
     // The source died -> it no longer functions -> the poison stops applying.
     const dead = { ...healthy, players: { ...healthy.players, p5: { ...healthy.players.p5!, alive: false } } };
     expect(q(dead, fixture("whileSourceFunctions")).impaired(b(dead, "p1"))).toEqual({ known: true, value: false });
+    // The source changed character -> it no longer has the ability -> the poison stops applying.
+    const changed = { ...healthy, players: { ...healthy.players, p5: { ...healthy.players.p5!, actualRole: "imp" } } };
+    expect(q(changed, fixture("whileSourceFunctions")).impaired(b(changed, "p1"))).toEqual({ known: true, value: false });
   });
 
   it("a stale binding answers unknown, never another occupant's state", () => {

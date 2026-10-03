@@ -700,6 +700,7 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
     case "notApplicable": return refuse("notApplicable", evaluation.message);
     case "unsupported": return refuse("unsupported", evaluation.message);
     case "illegal": return refuse("illegal", evaluation.message);
+    case "stale": return refuse("stale", evaluation.message);
     case "outcome": break;
     default: return refuse("invalid", "The ability evaluator returned no outcome.");
   }
