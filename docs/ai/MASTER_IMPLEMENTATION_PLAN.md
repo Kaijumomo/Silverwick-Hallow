@@ -10,7 +10,7 @@
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
 **Schema:** v23 integrated on `main`; v24 implemented on `dev/phase-10f`\
-**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (Astra final closure recheck REVISE → SOL-10F-D1/D2 remediated, `PHASE10F.md` §43 → Luna narrow verification → Astra narrow closure recheck → Sol closure adjudication; Phase 10F open)
+**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (D1/D2 remediated; SOL-10F-E1 checkpoint persistence remediation required before Luna; Phase 10F not closed)
 
 ## Product invariants
 
@@ -277,4 +277,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Luna performs the narrow mechanical verification of `PHASE10F.md` §42 SOL-10F-D1/D2 as recorded in §43 (code checkpoint `a0968d0ff6149b7f16eb9fabb7e1eb8dda32ea0c`; docs-only record on top) at the exact current `dev/phase-10f` HEAD: the mirrored 10 MiB string-leaf limit and the mechanical-only protection source identity, plus A/B/C preservation, the full gate and §§1–43 integrity. Do not send directly to Astra. After Luna PASS, Astra performs one narrow D1/D2 closure recheck; on Astra PASS, Sol adjudicates Phase 10F closure (including §43's residual checkpoint-leaf observation). Do not merge, deploy or close 10F.
+Claude Code remediates `PHASE10F.md` §44 SOL-10F-E1 only, preserving the completed D1/D2 fixes and every A/B/C closure. E1 must preflight the production-derived checkpoint string before authoritative ability commit using one shared checkpoint serializer and a proven conservative supported-roster envelope; `writeProjections` also checks the exact derived checkpoint string before its update. If the roster envelope cannot be proven from existing constraints, stop and return the design blocker rather than inventing a byte margin. After the full gate, Luna performs one narrow combined D1/D2/E1 verification. Do not merge, deploy or close 10F.
