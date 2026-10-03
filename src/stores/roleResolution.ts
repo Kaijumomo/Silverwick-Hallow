@@ -741,6 +741,16 @@ export function setPerceptionIntent(
   };
 }
 
+/** Phase 10F Slice 7: a gameplay Actual Role change of `player` (as rendered)
+ * that the player is TOLD about -- the Actual Role change followed by the
+ * matching Shown Role in the same Role transaction (one Actual Role intent plus
+ * its perception, as the seam allows), keeping the player-facing alignment
+ * exactly as it is (alignment never changes merely because a character does).
+ * Only for a participant whose perception is ordinary; callers decide that. */
+export function toldRoleChangeIntents(player: STPlayerRecord, actualRole: RoleId): [ChangeActualRoleIntent, SetPerceptionIntent] {
+  return [changeRoleIntent(player, actualRole), setPerceptionIntent(player, { shownRole: actualRole, shownAlignment: player.shownAlignment })];
+}
+
 /** Phase 10E: a player-facing alignment change of `player` (as rendered) --
  * Normal (null), Shown Good, Shown Evil or Not told (undisclosed) -- keeping
  * the rendered Shown Role. One setPerception bundle. */

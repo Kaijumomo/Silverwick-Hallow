@@ -17,7 +17,7 @@ import { applyAlignmentPlan, defaultAlignmentIds, planAlignmentTransaction, type
 import { applyEffectPlan, planEffectTransaction, type EffectIdSource, type EffectIntent } from "./effectResolution";
 import { applyInformationDeliveryPlan, planInformationDelivery } from "./informationDelivery";
 import { applyLifePlan, planLifeTransaction, type LifeConfirmationToken, type LifeIdSource, type LifeIntent, type LifeStatusTarget } from "./lifeResolution";
-import { planNightStepStatus } from "./nightProgress";
+import { participantStepKey, planNightStepStatus } from "./nightProgress";
 import { applyReminderPlan, planReminderTransaction, type ReminderIdSource, type ReminderIntent } from "./reminderResolution";
 import { applyRolePlan, defaultRoleIds, planRoleTransaction, type RoleIdSource, type RoleIntent } from "./roleResolution";
 import { boundParticipant, createRulesQuery } from "./rulesQuery";
@@ -643,6 +643,14 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   const eligibility = invocationEligibility(descriptor, request.invocationPath, game);
   if (!eligibility.eligible) return refuse("notApplicable", eligibility.reason);
   if (descriptor.usage.kind === "oncePerGame" && actor.abilityUsed && !simulated) return refuse("notApplicable", "This ability has already been used.");
+  // Slice 7: participant-scoped Night progress is the authority for "already
+  // acted tonight" -- a step this participation instance already completed or
+  // had skipped (e.g. a new Imp after a star-pass) is never re-granted by the
+  // ordinary Night Order, whatever the re-derived rows or a crafted request say.
+  if (request.invocationPath === "nightOrder" && actor.participantId) {
+    const own = game.nightProgress[`${game.day}:${participantStepKey(actor.participantId, request.roleId)}`]?.status;
+    if (own === "done" || own === "skipped") return refuse("notApplicable", "This player's step for this ability is already complete or skipped tonight.");
+  }
 
   const actorBinding = { playerId: actor.id, participantId: actor.participantId! };
   const inputCheck = checkInputs(game, descriptor, actorBinding, request.inputs);
