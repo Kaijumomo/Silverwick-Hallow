@@ -1484,3 +1484,46 @@ Gate at `a0968d0ff6149b7f16eb9fabb7e1eb8dda32ea0c`: typecheck PASS; D1/D2 target
 ### Residual observation for Sol — not in §42 scope, not remediated
 
 The production writer (`writeProjections`) writes, in the same multi-path update as the Storyteller projection, `lobbies/{code}/checkpoint` = `JSON.stringify({ game, roster })` — ONE string leaf holding the whole game. D1 checks every leaf of the Storyteller value, but not this derived leaf. Reproduced through the real store and the real `writeProjections` over the installed SDK: two Manual text Information Deliveries of 6,000,000 bytes each both pass the preflight and commit (Undo 2), and the writer's update is then rejected synchronously ("contains a string greater than 10485760 utf8 bytes in property 'lobbies.ZZZZZZZZ.checkpoint'", checkpoint ≈ 12,003,955 bytes). A single delivery just under the D1 leaf limit has the same effect. Proposed shape, for Sol to accept or reject: the same C3 preflight also runs `validateFirebaseWritableValue(JSON.stringify({ game: planned, roster }), ["lobbies", code, "checkpoint"])` with the same helper — needing an agreed roster bound before a room exists — or a recorded, explicitly accepted limitation. It was not implemented because §42 freezes D1 as the per-leaf mirror, and this pass was told to add no other store-side size check.
+
+## 44. Sol adjudication of derived checkpoint-leaf persistence gap — 2026-10-03
+
+Claude Code remediated §42 D1/D2 at code checkpoint `a0968d0ff6149b7f16eb9fabb7e1eb8dda32ea0c` and, during its required SDK/writer checks, established one additional persistence defect outside the literal D1/D2 edits. Sol accepts it as a Phase 10F closure blocker because it contradicts C3's authoritative guarantee that an ability result accepted by the Storyteller store is safe for the production writer to persist.
+
+### SOL-10F-E1 — preflight the derived checkpoint leaf, not only the Storyteller object — MEDIUM
+
+The production projection writer writes both:
+
+- the structured Storyteller game at `lobbies/{code}/storyteller`; and
+- one derived checkpoint STRING at `lobbies/{code}/checkpoint` equal to `JSON.stringify({ game, roster })`.
+
+D1 now correctly validates Firebase's 10 MiB limit on every string leaf inside the structured game. That is insufficient for the derived checkpoint leaf: several individually valid leaves can aggregate into a checkpoint string larger than Firebase permits. Reproduced through the real store and real `writeProjections`: two Manual Information deliveries of roughly 6 MB each pass the ability-store game preflight and commit locally, then the installed SDK rejects the writer update because the checkpoint leaf is roughly 12 MB.
+
+Freeze:
+
+- one pure shared checkpoint serializer builds the exact checkpoint string shape used by production: `JSON.stringify({ game, roster })`;
+- `writeProjections` uses that shared serializer, never an independent duplicate;
+- `writeProjections` performs a defense-in-depth compatibility check of the EXACT derived checkpoint string against the real checkpoint destination before calling `backend.update`;
+- the Storyteller ability store must ALSO prove checkpoint compatibility BEFORE its authoritative `set()`, so an ability result cannot become locally authoritative and only then discover that the writer cannot persist its required checkpoint;
+- because `resolveAbility` does not own the live UID→PlayerId membership map, its pre-commit proof must use a conservative, mechanically proven upper bound for every supported roster that can accompany the current game — not an empty roster, short dummy roster or arbitrary byte margin;
+- derive that roster envelope from existing product/platform constraints (including the supported maximum participants, the supported authentication UID contract, and the current game's possible roster PlayerIds). Add/share constants only where the underlying contract is already real; do not invent a new roster-size policy;
+- the conservative envelope must be proven to serialize to AT LEAST as many checkpoint bytes as any supported actual roster for that current game. If that cannot be proven from existing constraints, STOP and return the design blocker to Sol rather than guessing;
+- validate the derived checkpoint string with the existing `validateFirebaseWritableValue` helper at the checkpoint destination. Do not implement a second Firebase size algorithm;
+- an incompatible ability plan returns `invalidComposition` before commit with the same atomicity guarantees as C3/D1: no game replacement, Undo, localSeq, History, delivery, Effect or Night progress;
+- ordinary writable ability outcomes remain unchanged;
+- no checkpoint format change, chunking, compression, Firebase Rules change or recovery-contract rewrite is authorized in E1.
+
+Required proof:
+
+1. Reproduce the established two-delivery aggregate failure before E1.
+2. After E1, the same planned result is refused before the second authoritative ability commit that would cross the checkpoint limit.
+3. Prove a checkpoint just inside the supported envelope commits and the installed SDK accepts the exact writer update.
+4. Prove the first byte/state outside the envelope refuses before commit and the SDK would reject.
+5. Prove `writeProjections` and the store use the same serializer/compatibility semantics.
+6. Preserve D1's individual-leaf boundary tests and D2's mechanical source-identity tests.
+7. Preserve all A/B/C closures and proof-character semantics.
+
+### Closure path
+
+Do NOT send the D1/D2 checkpoint to Luna yet. Claude Code remediates E1 on top of the current branch, preserving D1/D2. Then Luna performs one narrow combined D1/D2/E1 mechanical verification. On Luna PASS, Astra performs one narrow D1/D2/E1 closure recheck. On Astra PASS, stop the review loop and hand Phase 10F to Sol closure adjudication.
+
+Phase 10F remains open. No merge or deployment is authorized.
