@@ -585,3 +585,17 @@ Claude Code remediates F1/F2 only, adds the §27 regressions, runs the full gate
 ## SOL-10F-S7-F1 / F2 remediation — 2026-10-03
 
 F1 (Harlot may choose themself; one death attempt per participant) and F2 (descriptor-declared independent Storyteller facts; the actual Fortune Teller's Red Herring is established on Night 1 even while impaired) are remediated at code checkpoint `53ab172a723d70b2de4220d448ec8da8f79a173a` with a docs-only record on top (`PHASE10F.md` §28). Full gate green; schema/store v24 and Firebase Rules unchanged. Awaiting Sol's decision on the Luna hand-off; 10F is not closed.
+
+
+## Sol accepts F1/F2 remediation — Luna handoff — 2026-10-03
+
+Sol independently spot-checked exact pushed target `bd9050c97acef292173ef3437b139465f8493f2e` and accepts the §27 fixes for independent review:
+
+- Harlot self-target now matches the frozen/source-backed rule: one living participant, self legal, one death attempt per ParticipantId.
+- Fortune Teller Night-1 Red Herring initialization is now an independent Storyteller fact, not a functioning-ability outcome; actual impaired FT establishes it, simulated Drunk-as-FT does not, and the generic non-functioning guard remains narrow.
+
+No additional Sol blocker was found in this targeted pre-Luna spot-check.
+
+## Immediate next task
+
+Luna independently reviews the complete Slice 7 implementation at exact target `bd9050c97acef292173ef3437b139465f8493f2e`, including all proof characters/support semantics, Manual/deferred boundaries, the Harlot Information Action, Red Herring state, Ravenkeeper trigger, Imp star-pass, Toymaker/Tinker/Baron boundaries, architecture mutation guards and the full gate. Phase 10F remains open.
