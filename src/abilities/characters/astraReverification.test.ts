@@ -19,6 +19,8 @@ import { buildRegistry } from "@/data/roleRegistry";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { bind, homebrewScript, openInStore, patchPlayer, pick, plan, planned, proofEnv, proofGame, proofRegistry, proofScript, request, requirementIds } from "@/test/proofFixtures";
 import type { AbilityDescriptor, AbilityInputValue } from "@/abilities/semantics";
+import { choiceId } from "./alhadikhia";
+import { protectionJudgmentId } from "./shared";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
 const done = { status: "done" as const, notes: "" };
@@ -290,5 +292,106 @@ describe("SOL-10F-B4 -- prospective jinxes follow the ordered Role transitions",
   it("checkOrdering's same-participant limitation is preserved (two Actual Role changes of one player are refused)", () => {
     const g = proofGame(PIT);
     expect(run(g, [["p1", "slayer"], ["p1", "soldier"]], true)).toMatchObject({ ok: false, code: "unsupported", message: expect.stringMatching(/more than once/) });
+  });
+});
+
+describe("SOL-10F-B2 -- protection judgments belong to one death attempt + its state", () => {
+  type Fx = StorytellerLobbyRecord["players"][string]["effects"][number];
+  const AL = ["alhadikhia", "chef", "monk", "poisoner", "empath", "saint", "washerwoman"];
+  const lifeIntents = (result: ReturnType<typeof plan>) => result.ok && result.changed
+    ? result.plan.outcome.operations.flatMap((o) => (o.domain === "life" ? o.intents.map((i) => `${i.kind}:${i.target.playerId}`) : [])) : [];
+  const onlyAsked = (result: ReturnType<typeof plan>) => {
+    const asked = requirementIds(result);
+    expect(asked).toHaveLength(1);
+    return asked[0]!;
+  };
+  const sourced = (g: StorytellerLobbyRecord, id: string, type: string, sourceId: string, sourceCharacter: string): Fx => ({
+    id, type, sourceCharacter, lifetime: { kind: "untilDawn" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 },
+    sourceParticipant: { kind: "participant", participantId: g.players[sourceId]!.participantId!, playerId: sourceId, nameAtTime: g.players[sourceId]!.name } } as Fx);
+  /** Astra's state: p1 Chef safe from the Demon by p2 Monk; the Monk is
+   * Sober & healthy (functioning uncertain) and poisoned by p3, a DEAD Poisoner. */
+  function astra(): StorytellerLobbyRecord {
+    let g = patchPlayer(proofGame(AL), "p3", { alive: false });
+    g = patchPlayer(g, "p1", { effects: [sourced(g, "safe", "safeFromDemon", "p2", "monk")] });
+    return patchPlayer(g, "p2", { effects: [
+      { id: "sh", type: "soberHealthy", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as Fx,
+      sourced(g, "poison", "poisoned", "p3", "poisoner")] });
+  }
+  const order = ["p1", "p3", "p2"]; // Chef, Poisoner, Monk
+  const run = (g: StorytellerLobbyRecord, picks: boolean[], judgments: Record<string, AbilityInputValue> = {}) =>
+    plan(g, request(g, "p0", "alhadikhia", { chosen: pick(g, ...order),
+      ...Object.fromEntries(picks.map((value, index) => [choiceId(index, bind(g, order[index]!)), { kind: "boolean", value }])) }, { judgments }));
+  const Y = { kind: "boolean", value: true } as const, N = { kind: "boolean", value: false } as const;
+
+  it("Astra's reproduction: the Chef's INITIAL protection judgment never settles the Chef's FINAL all-alive death attempt", () => {
+    const g = astra();
+    const initial = onlyAsked(run(g, [false]));                  // Chef chooses die -> protection unknown
+    expect(requirementIds(run(g, [false], { [initial]: Y }))).toEqual([choiceId(1, bind(g, "p3"))]);
+    // Poisoner chooses live (resurrected), Monk chooses live -> all alive -> the final sequence.
+    const final = onlyAsked(run(g, [false, true, true], { [initial]: Y }));
+    expect(final).not.toBe(initial);
+    expect(final.startsWith("protection:demon@")).toBe(true);
+    expect(JSON.parse(final.slice("protection:demon@".length))[1]).toBe(bind(g, "p1").participantId);
+    // Answered: the Chef dies, then the Poisoner and the Monk (known unprotected) -- 1 -> 2 -> 3.
+    expect(lifeIntents(run(g, [false, true, true], { [initial]: Y, [final]: N }))).toEqual(["resurrection:p3", "death:p1", "death:p3", "death:p2"]);
+    expect(lifeIntents(run(g, [false, true, true], { [initial]: Y, [final]: Y }))).toEqual(["resurrection:p3", "death:p3", "death:p2"]);
+  });
+
+  it("Astra's state commits ONCE (one Undo entry) and Undo restores it", () => {
+    const g = astra();
+    openInStore(g);
+    const initial = onlyAsked(run(g, [false]));
+    const final = onlyAsked(run(g, [false, true, true], { [initial]: Y }));
+    const req = request(g, "p0", "alhadikhia", { chosen: pick(g, ...order), [choiceId(0, bind(g, "p1"))]: N, [choiceId(1, bind(g, "p3"))]: Y, [choiceId(2, bind(g, "p2"))]: Y },
+      { judgments: { [initial]: Y, [final]: N } });
+    expect(store.getState().resolveAbility(req)).toMatchObject({ ok: true, changed: true });
+    expect(store.getState().undoStack).toHaveLength(1);
+    expect(["p1", "p2", "p3"].map((id) => store.getState().game!.players[id]!.alive)).toEqual([false, false, false]);
+    store.getState().undo();
+    expect(store.getState().game).toEqual(g);
+  });
+
+  it("even when nothing changed between them, the initial and final attempts on one player are separate judgments", () => {
+    let g = proofGame(AL);
+    g = patchPlayer(g, "p1", { effects: [{ id: "gp", type: "protected", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as Fx] });
+    const initial = onlyAsked(run(g, [false]));
+    const final = onlyAsked(run(g, [false, true, true], { [initial]: Y }));
+    expect(final).not.toBe(initial);
+    // A crafted request answering only the initial attempt never settles the final one.
+    expect(requirementIds(run(g, [false, true, true], { [initial]: Y }))).toEqual([final]);
+  });
+
+  it("changing an earlier choice / consequence changes every later attempt id; an old judgment cannot satisfy the new attempt", () => {
+    // Generic Protected on p2 (the Monk, position 3): unknown -> judgment.
+    let g = proofGame(AL);
+    g = patchPlayer(g, "p2", { effects: [{ id: "gp", type: "protected", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as Fx] });
+    const afterChefLives = onlyAsked(run(g, [true, true, false]));
+    const afterChefDies = onlyAsked(run(g, [false, true, false]));
+    const afterPoisonerDies = onlyAsked(run(g, [true, false, false]));
+    expect(new Set([afterChefLives, afterChefDies, afterPoisonerDies]).size).toBe(3);
+    expect(requirementIds(run(g, [false, true, false], { [afterChefLives]: Y }))).toEqual([afterChefDies]);
+    // A different ordered selection is a different attempt too.
+    const reordered = plan(g, request(g, "p0", "alhadikhia", { chosen: pick(g, "p3", "p1", "p2"),
+      [choiceId(0, bind(g, "p3"))]: Y, [choiceId(1, bind(g, "p1"))]: Y, [choiceId(2, bind(g, "p2"))]: N }, { judgments: { [afterChefLives]: Y } }));
+    expect(requirementIds(reordered)).toHaveLength(1);
+    expect(requirementIds(reordered)[0]).not.toBe(afterChefLives);
+  });
+
+  it("known protection is recomputed automatically at every attempt (never a judgment)", () => {
+    // A functioning Monk's Safe from the Demon on the Chef: known protected, initially AND finally.
+    let g = proofGame(AL);
+    g = patchPlayer(g, "p1", { effects: [sourced(g, "safe", "safeFromDemon", "p2", "monk")] });
+    expect(lifeIntents(run(g, [false, true, true]))).toEqual(["death:p3", "death:p2"]);
+    // The Monk chooses die first in another order: the Chef's later attempt is known UNprotected.
+    const monkFirst = plan(g, request(g, "p0", "alhadikhia", { chosen: pick(g, "p2", "p1", "p3"),
+      [choiceId(0, bind(g, "p2"))]: N, [choiceId(1, bind(g, "p1"))]: N, [choiceId(2, bind(g, "p3"))]: Y }));
+    expect(lifeIntents(monkFirst)).toEqual(["death:p2", "death:p1"]);
+  });
+
+  it("single-attempt characters keep their stable target + cause identity", () => {
+    expect(protectionJudgmentId("demon", { playerId: "p1", participantId: "a" })).toBe("protection:demon:a");
+    expect(protectionJudgmentId("demon", { playerId: "p1", participantId: "a" }, { id: "x" })).not.toBe("protection:demon:a");
+    // A ParticipantId / scope token can never make a scoped id collide with an unscoped one.
+    expect(protectionJudgmentId("demon", { playerId: "p1", participantId: "@[\"x\",\"a\"]" })).not.toBe(protectionJudgmentId("demon", { playerId: "p1", participantId: "a" }, { id: "x" }));
   });
 });

@@ -1,6 +1,6 @@
 import type { AbilityDescriptor, AbilityEvaluationContext } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
-import { answerOf, ask, deathAttempt, lifeOperation, nameOf, nothing, outcome, participantsOf, requireLivingActor, subjectId } from "./shared";
+import { answerOf, ask, deathAttempt, lifeOperation, nameOf, nothing, outcome, participantsOf, requireLivingActor, subjectId, type DeathAttemptScope } from "./shared";
 
 /**
  * Al-Hadikhia -- GUIDED. docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md Section 13
@@ -22,10 +22,41 @@ import { answerOf, ask, deathAttempt, lifeOperation, nameOf, nothing, outcome, p
  *    is attempted for each, again 1 -> 2 -> 3 and again Demon-caused.
  * All Life events form ONE ordered Life transaction (10F-AC-16).
  * Impaired / simulated: choices only; no Life change.
+ *
+ * SOL-10F-B2: every death attempt is a DISTINCT attempt with its own scoped
+ * protection judgment (attemptScope): an initial-choice attempt never settles
+ * the final all-alive attempt on the same player, and a changed earlier choice
+ * or consequence changes every later attempt's identity.
  */
 /** SOL-10F-A1: a live/die choice belongs to BOTH its ordered position and the
  * participant in it -- replacing that participant asks afresh. */
 export const choiceId = (index: number, who: ParticipantBinding) => subjectId(`choice:${index + 1}`, who);
+
+type HypotheticalIntent = { kind: "death" | "resurrection"; target: ParticipantBinding };
+
+/**
+ * SOL-10F-B2: the deterministic identity of ONE Al-Hadikhia death attempt --
+ * its stage (`initial`: the consequence of a "die" choice; `final`: the
+ * all-alive deaths), its ordered position, the ordered chosen ParticipantIds,
+ * every live/die choice resolved so far, the hypothetical Life intents already
+ * resolved in this procedure and the resulting alive/dead vector of the chosen
+ * players. Anything that changes the state the attempt is evaluated against
+ * changes the token. Structured data only (never prose).
+ */
+export function attemptScope(
+  stage: "initial" | "final",
+  index: number,
+  chosen: readonly ParticipantBinding[],
+  choices: readonly boolean[],
+  resolved: readonly HypotheticalIntent[],
+  alive: readonly boolean[],
+): DeathAttemptScope {
+  return {
+    id: JSON.stringify([stage, index + 1, chosen.map((who) => who.participantId), choices,
+      resolved.map((intent) => [intent.kind, intent.target.participantId]), alive]),
+    label: stage === "initial" ? `${index + 1}. after choosing to die` : `${index + 1}. final death: all three alive`,
+  };
+}
 
 export const AL_HADIKHIA: AbilityDescriptor = {
   roleId: "alhadikhia",
@@ -46,9 +77,13 @@ export const AL_HADIKHIA: AbilityDescriptor = {
     // The evolving working Life state of THIS resolution (one final commit).
     let query = context.query;
     const isAlive = (who: ParticipantBinding) => query.participant(who)?.alive === true;
-    const intents: { kind: "death" | "resurrection"; target: ParticipantBinding }[] = [];
-    const kill = (who: ParticipantBinding) => {
-      const attempt = deathAttempt(context, who, "demon", query);
+    const intents: HypotheticalIntent[] = [];
+    const choices: boolean[] = [];
+    // SOL-10F-B2: each attempt is scoped to its stage, position and the
+    // resolved prefix / evolving Life state it is evaluated against.
+    const kill = (who: ParticipantBinding, stage: "initial" | "final", index: number) => {
+      const scope = attemptScope(stage, index, chosen, choices, intents, chosen.map(isAlive));
+      const attempt = deathAttempt(context, who, "demon", query, scope);
       if (attempt.kind === "dies") {
         intents.push({ kind: "death", target: who });
         query = query.assumingAlive(who, false);
@@ -63,6 +98,7 @@ export const AL_HADIKHIA: AbilityDescriptor = {
       const answer = answerOf(context.inputs, id, "boolean");
       if (!answer) return ask(`${index + 1}. ${nameOf(context, who)} silently chooses to live or die.`,
         { id, kind: "boolean", source: "player", label: `${index + 1}. ${nameOf(context, who)} chooses to LIVE (No: chooses to die)` });
+      choices.push(answer.value);
       if (!mechanics) continue; // impaired / simulated: choices only
       if (answer.value) {
         if (!isAlive(who)) {
@@ -72,13 +108,13 @@ export const AL_HADIKHIA: AbilityDescriptor = {
         continue;
       }
       if (!isAlive(who)) continue;
-      const attempt = kill(who);
+      const attempt = kill(who, "initial", index);
       if (attempt.kind === "ask") return ask(attempt.message, attempt.requirement);
     }
     if (!mechanics) return nothing();
     if (chosen.every(isAlive)) {
-      for (const who of chosen) {
-        const attempt = kill(who);
+      for (const [index, who] of chosen.entries()) {
+        const attempt = kill(who, "final", index);
         if (attempt.kind === "ask") return ask(attempt.message, attempt.requirement);
       }
     }

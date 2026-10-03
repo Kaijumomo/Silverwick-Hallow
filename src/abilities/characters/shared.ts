@@ -85,8 +85,23 @@ export function requireLivingActor(context: AbilityEvaluationContext): AbilityEv
 
 export type DeathCause = "demon" | "any";
 
-/** The judgment id asked when protection against one death is unknown. */
-export const protectionJudgmentId = (cause: DeathCause, binding: ParticipantBinding) => `protection:${cause}:${binding.participantId}`;
+/**
+ * SOL-10F-B2: the explicit identity of ONE death attempt within a resolution
+ * that may attempt the same target's death more than once (or under different
+ * evolving states). `id` is a deterministic token the CALLER derives from the
+ * attempt's stage, position and the resolved state preceding it -- never
+ * prose; `label` tells the Storyteller which attempt is asked about.
+ */
+export type DeathAttemptScope = { id: string; label?: string };
+
+/** The judgment id asked when protection against one death is unknown. A
+ * single-attempt ability keeps the stable target + cause identity; a scoped
+ * attempt (SOL-10F-B2) binds the attempt too, so a judgment answered for one
+ * attempt can never settle another -- JSON-encoded, so no ParticipantId or
+ * scope token can make two attempts collide, and `@` keeps scoped ids apart
+ * from unscoped ones. */
+export const protectionJudgmentId = (cause: DeathCause, binding: ParticipantBinding, scope?: DeathAttemptScope) =>
+  scope === undefined ? `protection:${cause}:${binding.participantId}` : `protection:${cause}@${JSON.stringify([scope.id, binding.participantId])}`;
 
 export type DeathDecision =
   | { kind: "dies" }
@@ -98,24 +113,27 @@ export type DeathDecision =
  * the ACTUAL cause; known protected -> no death; known unprotected -> death;
  * unknown (custom / generic Protected / unresolved source) -> an explicit
  * Storyteller judgment, never inferred. `query` may be a hypothetical query
- * over the evolving Life state of this resolution.
+ * over the evolving Life state of this resolution. `attempt` (SOL-10F-B2)
+ * scopes the judgment to one particular death attempt; known answers are
+ * always recomputed from `query` and never read a judgment.
  */
 export function deathAttempt(
   context: AbilityEvaluationContext,
   target: ParticipantBinding,
   cause: DeathCause,
   query = context.query,
+  attempt?: DeathAttemptScope,
 ): DeathDecision {
   const answer = query.protectedFrom(target, cause);
   if (answer.known) return answer.value ? { kind: "survives" } : { kind: "dies" };
-  const id = protectionJudgmentId(cause, target);
+  const id = protectionJudgmentId(cause, target, attempt);
   const judged = answerOf(context.judgments, id, "boolean");
   if (judged) return judged.value ? { kind: "survives" } : { kind: "dies" };
   return {
     kind: "ask",
     message: answer.reason,
     requirement: { id, kind: "boolean", source: "judgment",
-      label: `${nameOf(context, target)} is protected from this ${cause === "demon" ? "Demon " : ""}death (Yes: they do not die)` },
+      label: `${nameOf(context, target)} is protected from this ${cause === "demon" ? "Demon " : ""}death${attempt?.label ? ` (${attempt.label})` : ""} (Yes: they do not die)` },
   };
 }
 
