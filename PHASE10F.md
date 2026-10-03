@@ -1327,3 +1327,71 @@ No remaining Luna finding exists for the B1…B6 remediation.
 Astra performs the closure adversarial re-verification of Slice 7. Astra should attack the surviving claims and repaired seams, especially composition between B1…B6 and the prior A1…A10 fixes, rather than repeat Luna's mechanical acceptance matrix.
 
 Phase 10F remains open. No merge or deployment is authorized.
+
+## 39. Sol adjudication of Astra Slice 7 closure re-verification — 2026-10-03
+
+Astra closure-reverified exact target `1bda40ced3d31cfa2993c4129a2c02c1b1ba97cb`. All previously established A1…A10 and B1…B6 counterexamples remained closed and the complete baseline gate passed, but Astra established three additional authority/persistence defects. Sol accepts all three for one final targeted remediation pass.
+
+### SOL-10F-C1 — deep inert answer snapshots — MEDIUM
+
+Accepted from ASTRA-10F-C1.
+
+The B3 own-property map fix snapshots the outer answer map but retains each caller-owned nested answer object by reference. A getter/Proxy can therefore return one value during validation and a different value during later consumption.
+
+Freeze:
+
+- canonicalization must produce an inert DEEP snapshot of every supplied `AbilityInputValue` before validation or evaluation;
+- validation and all later consumers read only the canonical nested values;
+- participant arrays and each `ParticipantBinding` are copied too;
+- accessor properties / Proxies / unsupported exotic shapes may be rejected instead of executed repeatedly;
+- if accessors are supported, each source property is read at most once before validation, then never read again;
+- malformed own nested values remain `invalid`;
+- inherited / non-enumerable top-level answers remain absent as already frozen.
+
+A validated Boolean can never later become a string or another Boolean value through caller mutation/getters.
+
+### SOL-10F-C2 — unknown protection judgments include an authoritative dependency stamp — MEDIUM
+
+Accepted from ASTRA-10F-C2.
+
+The B2 Al-Hadikhia attempt token describes the procedure prefix, but an UNKNOWN protection answer can depend on authoritative Current State outside that prefix (for example an unselected Monk source being resurrected while the workflow remains open).
+
+Freeze:
+
+- Rules Query exposes a deterministic protection-dependency stamp for `protectedFrom(target, cause)` under the exact query/hypothetical state used for that attempt;
+- the stamp is derived from authoritative Current State inputs that can affect the protection result, never History or Reminder notation;
+- a conservative superset is acceptable: it may cause a fresh judgment after an unrelated mechanically-relevant participant/effect change, but it must never miss a change that can alter protection applicability;
+- at minimum the stamp must account for current participant identity, alive state, Actual Role and Effect state/origin data needed by protection/effect applicability and source functioning, including the hypothetical alive overlays of `assumingAlive`;
+- every UNKNOWN protection judgment id includes BOTH the existing attempt scope (when present) and this dependency stamp;
+- if a relevant source dies, resurrects, changes Role, gains/loses/suppresses/resumes an Effect, or is replaced/departs, the old protection judgment cannot satisfy the new query state;
+- known true/false protection continues to be recomputed directly and ignores Storyteller judgments.
+
+This is a generic `deathAttempt` / RulesQuery authority seam, not an Al-Hadikhia-only special case.
+
+### SOL-10F-C3 — Firebase write compatibility must be checked before authoritative ability commit — MEDIUM
+
+Accepted from ASTRA-10F-C3.
+
+Character-safe encoding does not make an arbitrarily long schema-valid identifier safe under Firebase RTDB's 768-byte destination-relative path limit. A long LifeEvent id can still produce a locally accepted Night-progress key that the Firebase SDK refuses.
+
+Freeze:
+
+- before `resolveAbility` commits an accepted changed plan, the Storyteller store performs the existing Firebase write-compatibility check against the exact planned storyteller game and a supported storyteller destination path;
+- when the game is already in a live lobby, use the actual lobby/code destination;
+- when resolving locally before a room exists, use the repository's canonical maximum supported room-code shape so local state is not accepted merely because an empty/short placeholder path is easier to fit;
+- if the planned result is not Firebase-writable, return a structured refusal and commit NOTHING: no game replacement, Undo, localSeq, History, delivery or Night progress;
+- reuse the existing `firebaseWriteCompatibility` implementation / SDK-matched path rules; do not invent a second byte-length algorithm;
+- retain the collision-free/Firebase-character-safe B5/B6 encoding;
+- do not make arbitrary raw LifeEvent ids into Firebase keys through another path.
+
+The compatibility preflight is an authoritative STORE boundary check; the pure ability coordinator remains Firebase-agnostic.
+
+### Astra concern not promoted
+
+- Guided synthetic descriptors emitting Role correction intents remain a future-primitive design risk, not an established shipped defect. No current proof-character evaluator uses correction intents. Phase 11 must preserve the distinction between gameplay Role changes and Storyteller corrections; do not broaden prospective gameplay jinx logic to corrections in this remediation.
+
+### Closure path after remediation
+
+Claude Code remediates SOL-10F-C1…C3 only, preserving A1…A10 and B1…B6. Add direct regressions for Astra's three reproductions and cross-seam coverage. Run the full Phase 10F gate and return one exact clean checkpoint to Luna for targeted verification. After Luna PASS, Astra performs a narrowly scoped C1…C3 closure recheck. Only then may Sol perform Phase 10F closure adjudication.
+
+Phase 10F remains open. No merge or deployment is authorized.
