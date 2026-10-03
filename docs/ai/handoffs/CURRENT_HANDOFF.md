@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-03\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: Slice 7 passed Luna, Astra found eight adversarial defects, Sol froze A1…A10, and Claude Code has remediated all ten at code checkpoint `9b6a25bdd134f7d60fb8366c8f781252b2f4f3a6`. Sol spot-check accepts the remediation for targeted Luna verification. Schema/store remains v24 with additive optional `actualRoleAtEvent`; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: Slice 7 passed Luna, Astra found eight adversarial defects, Sol froze A1…A10, Claude Code remediated all ten at code checkpoint `9b6a25bdd134f7d60fb8366c8f781252b2f4f3a6`, and Luna has now independently verified all A1…A10 with PASS. Slice 7 is **READY FOR ASTRA adversarial re-verification**. Schema/store remains v24 with additive optional `actualRoleAtEvent`; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
 
 ## Phase 10D — CLOSED
 
@@ -701,3 +701,15 @@ A docs-only packaging regression truncated `PHASE10F.md` to §32 only. Sol resto
 ## Immediate next task
 
 Luna targets SOL-10F-A1…A10 and the restored documentation at the exact current `dev/phase-10f` HEAD. If PASS, send the same implementation back to Astra for adversarial re-verification. Phase 10F remains open.
+
+## Luna A1…A10 targeted verification — PASS / Astra re-review handoff — 2026-10-03
+
+Luna independently reviewed exact target `ce8b11df9b992023398bbdad7c0a2ee7ec0bc59c` and returned:
+
+**PASS — SOL-10F-A1…A10 CLOSED; PHASE 10F SLICE 7 READY FOR ASTRA RE-VERIFICATION**
+
+Independent evidence included 577/577 targeted remediation/proof/foundation tests, 3,827/3,827 full normal tests, 201/201 emulator tests, typecheck/build/diff checks PASS, complete §§1–33 documentation, and no remaining finding.
+
+## Immediate next task
+
+Astra adversarially re-verifies the same remediated production checkpoint and the exact current branch target, focusing on bypasses/regressions around A1…A10 and cross-seam composition. Phase 10F remains open.
