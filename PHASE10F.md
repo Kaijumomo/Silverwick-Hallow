@@ -1154,3 +1154,117 @@ No remaining Luna finding exists for the A1…A10 remediation.
 ### Next gate
 
 Astra adversarially re-verifies the remediated Slice 7 implementation, concentrating on the original eight reproduced defects, the A9/A10 trigger clarifications, and interactions among the repaired generic seams. Phase 10F remains open; no merge or deployment is authorized.
+
+## 35. Sol adjudication of Astra A1…A10 adversarial re-verification — 2026-10-03
+
+Astra adversarially re-verified exact target `cf980bf1d6a240dfb49dc1c100151c546a84c03f` after Luna closed SOL-10F-A1…A10. Astra confirmed the original ten counterexamples are fixed, but established six additional mechanical defects and one stale-documentation inconsistency. Sol accepts all six mechanical findings for targeted remediation.
+
+### SOL-10F-B1 — incomplete multi-slot participant inputs capture bindings per slot — HIGH
+
+Accepted from Astra re-verification finding 1.
+
+The A2 selection-time identity rule applies to EACH slot as soon as that slot is selected, not only when a multi-slot answer becomes complete.
+
+Freeze:
+
+- `RequirementInput` participant drafts store `ParticipantBinding | null` per slot, never PlayerId strings;
+- a slot captures `{playerId, participantId}` immediately when selected by select control or Grimoire picker;
+- completing another slot preserves every earlier binding unchanged;
+- if an earlier selected participant leaves or the seat is reused before the whole requirement is complete, the completed value retains the stale binding and the coordinator refuses it;
+- the rendered control must not silently relabel a stale captured binding as the replacement occupant; show a stale/reselect state where needed;
+- distinctness is by ParticipantId.
+
+This applies to Al-Hadikhia, Fortune Teller, and every future multi-participant requirement.
+
+### SOL-10F-B2 — protection judgments are attempt- and dependency-scoped — MEDIUM
+
+Accepted from Astra re-verification finding 2.
+
+A Storyteller protection judgment answers one particular death attempt under one particular evolving resolution state. It is not reusable merely because target + cause are the same later.
+
+Freeze:
+
+- `deathAttempt` admits an explicit judgment-scope / attempt identity;
+- Al-Hadikhia uses distinct ids for initial-choice attempts versus final all-alive attempts;
+- each Al-Hadikhia attempt id also binds the ordered target/position and the resolved decision/state prefix that precedes that attempt, so changing an earlier choice or consequence cannot reuse a later judgment through a crafted request;
+- UI dependency invalidation still clears later judgments, but evaluator identity remains authoritative;
+- other single-attempt proof characters may keep their existing stable target/cause judgment identity.
+
+A prior initial protection judgment must never settle the final all-alive death attempt.
+
+### SOL-10F-B3 — ability answer maps are canonical own-property snapshots — MEDIUM
+
+Accepted from Astra re-verification finding 3.
+
+Validation and consumption must operate on the SAME answer set.
+
+Freeze:
+
+- canonicalize `request.inputs` and `request.judgments` to own enumerable properties only before validation/evaluation;
+- all subsequent descriptor checks, functioning judgments, modifier confirmations, trigger judgments and evaluator reads use those canonical maps;
+- inherited or non-enumerable prototype answers are absent, never consumed;
+- malformed OWN values still return `invalid`;
+- an inherited `actor:functioning` therefore results in the ordinary missing-answer requirement, never a kill or other mechanic.
+
+Do not rely on TypeScript typing or ordinary property lookup over the caller object.
+
+### SOL-10F-B4 — prospective jinx gating follows the ordered Role-transition sequence — MEDIUM
+
+Accepted from Astra re-verification finding 4.
+
+A final represented-Role set is insufficient. A creation interaction may occur and then disappear, or a pair may be removed and recreated, within one declared guided outcome.
+
+Freeze:
+
+- prospective-jinx analysis consumes Actual Role change intents in their declared operation + intent order;
+- simulate represented canonical Roles after EACH proposed Actual Role change;
+- record any canonical pinned jinx that becomes active at any step because of that change, even if a later change removes it;
+- if an active pair is removed and later recreated, the recreation is a new prospective creation event and is gated;
+- any unverified prospective jinx encountered anywhere in the sequence makes the WHOLE guided resolution unsupported/Manual before composition commits;
+- canonical ownership rules and "not script membership" remain unchanged.
+
+This is a future-primitive authority rule even though the current shipped Pit-Hag evaluator emits only one Actual Role change.
+
+### SOL-10F-B5 — all participant-scoped Night-progress components use collision-free encoding — MEDIUM
+
+Accepted from Astra re-verification finding 5 and supersedes §31 A7's raw composite-key form.
+
+Raw delimiter concatenation is not collision-free when both ParticipantId and RoleId are schema-valid arbitrary strings.
+
+Freeze:
+
+- one shared `encodeNightProgressComponent` (or equivalent) encodes every dynamic key component before concatenation;
+- use it in `participantStepKey`, `travelerArrivalStepKey`, generic participant-scoped builders, and Night-trigger keys;
+- encoding must distinguish raw `:`, `%`, Unicode and delimiter-like values;
+- static family prefixes remain readable;
+- every reader/writer/cleanup path derives keys through the same builders;
+- Phase 10F store v24 is unreleased: this remediation defines the final v24 key encoding. Do not bump STORE_VERSION solely for pre-release raw v24 development keys;
+- do not guess ownership of an ambiguous legacy/raw v24 composite key. Tests must prove no cross-participant cleanup for adversarial ParticipantId + RoleId pairs.
+
+The ordinary Role-away-and-back re-wake policy remains unchanged and is not part of this finding.
+
+### SOL-10F-B6 — Night-progress encoding is Firebase-key-safe — MEDIUM
+
+Accepted from Astra re-verification finding 6.
+
+Collision-free encoding must also satisfy Firebase Realtime Database key rules.
+
+Freeze:
+
+- the shared component encoding used by B5 must encode every Firebase-forbidden key character, including `.`, `#`, `$`, `[`, `]` and `/`, as well as the delimiter `:` and the escape marker so encodings cannot collide;
+- do not rely on bare `encodeURIComponent` because it leaves `.` unchanged;
+- event ids such as `death.v1` must produce a writable trigger progress key;
+- prove this through both pure key tests and the installed Firebase SDK/emulator-facing path where practical.
+
+### Documentation inconsistency — accepted and corrected in current-state summaries
+
+Astra also found stale subordinate 10F status lines that still described earlier Luna/doc-review states. Historical dated records remain unchanged; current status summaries must describe: Astra re-verification REVISE → SOL-10F-B1…B6 remediation → Luna targeted verification → Astra closure recheck → Phase 10F open.
+
+### Astra concerns not promoted
+
+- **Ordinary Role-away-and-back same-Night replay:** no new 10F rule. Existing progress retention remains conservative; Pit-Hag does not invent extra wakes.
+- **Multiple unrecorded/null trigger occurrences:** no new 10F rule. Concrete recorded LifeEvents remain event-specific; an unknown-coverage null trigger remains a single conservative Storyteller-judged trigger identity for that participant/Role/Night.
+
+### Remediation gate
+
+Claude Code remediates SOL-10F-B1…B6 only, preserving all prior A1…A10 closures. Add direct regressions for Astra's six counterexamples plus cross-seam coverage. Run the complete Phase 10F gate and return one exact clean checkpoint to Luna. Do not send directly to Astra, merge, deploy or close 10F.
