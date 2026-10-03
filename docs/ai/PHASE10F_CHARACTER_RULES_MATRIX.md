@@ -586,14 +586,14 @@ For each target, resolve their choice before asking/resolving the next:
 
 **Choose die**
 - if already dead, remains dead;
-- if alive, evaluate `protectedFrom(target, "any")`;
+- if alive, evaluate `protectedFrom(target, "demon")` because this death is caused by a Demon ability;
 - if protected, remains alive;
 - if unknown, Storyteller judgment;
 - otherwise dies.
 
 After all three choices, inspect the evolving final alive state.
 
-If all three are alive, attempt to kill all three, in 1→2→3 order, again respecting individual death protection.
+If all three are alive, attempt to kill all three, in 1→2→3 order, again using `protectedFrom(target, "demon")`. Monk-style safe-from-Demon protection therefore blocks Al-Hadikhia-caused death while it applies.
 
 The official rule explicitly says a player who chose death but did not die counts as alive for the all-live calculation.
 
