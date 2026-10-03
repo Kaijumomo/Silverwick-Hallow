@@ -709,3 +709,45 @@ No other Luna finding is reopened by this adjudication.
 ### Gate after remediation
 
 Keep production `CANONICAL_ABILITY_SEMANTICS` empty. Run targeted invocation tests plus typecheck, full normal suite, Firebase emulator suite, production build, and both diff checks. Return one exact clean checkpoint for a narrow Luna closure re-check of SOL-10F-L3-R1.
+
+
+## 24. Luna rules-neutral foundation closure — 2026-10-02
+
+Luna independently re-verified exact target `aeda04351895175eb78a147fe9c133519fd4f3ba` and returned:
+
+**PASS — SOL-10F-L3-R1 CLOSED; RULES-NEUTRAL FOUNDATION READY FOR SOL CHARACTER-RULE FREEZE**
+
+This is not Phase 10F closure. It closes only the rules-neutral foundation review gate before proof-character semantics.
+
+Verified at this target:
+
+- repository identity: `dev/phase-10f`, baseline relationship 0 / 33;
+- shared invocation contract: one pure rules-neutral timing + invocation authority used by Day UI, Night UI and coordinator;
+- Day guided eligibility: explicit `day` timing + `publicClaim` / `procedure`;
+- Night guided eligibility: explicit first/other-Night timing + `wake` / `procedure`;
+- triggered/passive timing does not invent a generic invocation path;
+- crafted Guided requests cannot bypass invocation eligibility;
+- Player Drawer remains Manual-only for Night guided work; Night Order owns ordinary guided Night execution;
+- `nightOrder` request need not carry `fingerprint.step` unless `completeStep` is requested;
+- late Traveler arrival first-night exceptions remain deferred to verified Traveler semantics;
+- SOL-10F-L1, L2, L4, L5, L6, L7 regression smoke remained green;
+- production `CANONICAL_ABILITY_SEMANTICS` remains empty.
+
+Final verification gate at `aeda04351895175eb78a147fe9c133519fd4f3ba`:
+
+- typecheck PASS;
+- invocation suite: 64/64;
+- targeted regression smoke: 295/295 across 12 files;
+- full normal suite: 3,563/3,563 across 138 files;
+- Firebase emulator suite: 201/201, 0 skipped;
+- production build PASS;
+- worktree and baseline-range `git diff --check` PASS;
+- final review worktree clean.
+
+### Next authorized work
+
+Sol may now research and freeze the authoritative proof-character rules matrix (contract Slice 6).
+
+Do not populate production `CANONICAL_ABILITY_SEMANTICS` until that matrix is frozen from authoritative BOTC sources.
+
+Phase 10F remains open.
