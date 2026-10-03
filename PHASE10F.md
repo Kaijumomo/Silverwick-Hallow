@@ -783,3 +783,37 @@ Important partial/manual boundaries:
 - the narrow Scarlet Woman Imp-star-pass priority is authorized as an Imp dependency without expanding to full Scarlet Woman coverage.
 
 This completes contract Slice 6 (rules freeze). Slice 7 — proof-character semantic implementation — is now authorized.
+
+## 26. Slice 7 — proof-character semantic implementation (implementation checkpoint) — 2026-10-03
+
+**Status: IMPLEMENTATION CHECKPOINT — READY FOR LUNA. Phase 10F is NOT closed; nothing merged or deployed.**
+
+Implemented strictly to `docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md`, in the frozen order. Code checkpoint: `aa14fee0811e9f0b19ba3a4fd714cb5cca0488bc` (a docs-only commit sits on top). Schema / store version unchanged (v24); no Firebase Rules change.
+
+### Production semantics
+
+`CANONICAL_ABILITY_SEMANTICS` is assembled from per-character modules in `src/abilities/characters/` (each traced to its matrix section) and is still consulted only through the canonical ownership gate: Poisoner, Monk, Empath (support), Fortune Teller, Slayer, Cult Leader (nightly portion), Harlot, Al-Hadikhia, Imp (with the narrow Scarlet Woman priority), Ravenkeeper, Pit-Hag (non-Demon branch). Verified-Manual (never invokable, reference text only): Tinker, Toymaker, Drunk. Setup-owned: Baron.
+
+### Generic seams added (all pure, ParticipantId-safe, independently tested)
+
+- `AbilityEvaluation` `stale` result for follow-up participant answers an evaluator itself asked for.
+- Workspace renders every evaluator follow-up by origin (Player / Storyteller choices answer `inputs`, judgments answer `judgments`).
+- `RulesQuery.roleOf` (active registry definition), `RulesQuery.factHolders` (approved `storytellerFact` Effects only), `RulesQuery.assumingAlive` (hypothetical evolving Life state within one resolution).
+- Effect semantics `storytellerFact` (no source dependence) for the approved `fortuneTellerRedHerring` Effect; Effect presentation entry "Red Herring".
+- A `whileSourceFunctions` Effect stops applying when its source no longer holds the source character (matrix §1/§4; derived, never rewritten).
+- `REGISTRATION_ALTERING` drops the blanket `fortuneteller` observer entry (superseded by the authoritative Red Herring fact).
+- `AbilityInputRequirement.allowNone` ("nobody, or exactly `count`") + "Nobody" UI control.
+- Coordinator Role-chain check counts only Actual Role intents (the Role seam itself admits perception alongside one Actual Role change).
+- Coordinator guard: a Night Order / Night-trigger guided request is refused when that participation instance's own step for the ability is already done or skipped tonight (star-pass suppression; no duplicate trigger; no `abilityUsed` faking).
+- Explicit verified Night trigger: `AbilityDescriptor.nightTrigger` (`"actorDiedTonight"`), invocation path `nightTrigger` (eligible only for a declared trigger), `nightTriggerStatus` from the Life Event Window with honest coverage (unknown → judgment). Night Order "Triggered now" strip.
+- Seam-owned builder `roleResolution.toldRoleChangeIntents` (a Role change the player is told about).
+- Verified-Manual classification resolved through the ownership gate (`verifiedManual`); coverage status `verifiedManual` replaces the retired `proofPendingEvidence`.
+- Verified Toymaker modifier hook (judgment only for a canonical Demon's death-touching evaluation).
+
+### Owner decision recorded
+
+The pinned canonical data had no Harlot Information Action. Per the contract, implementation stopped and asked; the project owner explicitly authorized a Silverwick-authored `harlot-other-night` Information Action (one Role value: the character shown), added to `src/data/informationActions.ts`.
+
+### Gate at `aa14fee`
+
+typecheck PASS; proof suites 182/182 (15 files); 10F foundation / guard suites 355/355 (16 files); full normal suite 3,745/3,745 across 153 files (0 skipped); Firebase emulator 201/201 (0 skipped); production build PASS; worktree `git diff --check` PASS. The baseline-range `git diff --check` failed at the required starting HEAD `e656642` on four pre-existing trailing-double-space hard breaks in this matrix's header; the docs commit converts them to `\` hard breaks (identical rendering, no content change), after which the range check passes.

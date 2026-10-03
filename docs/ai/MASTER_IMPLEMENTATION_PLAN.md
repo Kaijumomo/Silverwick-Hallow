@@ -10,7 +10,7 @@
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
 **Schema:** v23 integrated on `main`; v24 implemented on `dev/phase-10f`\
-**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (L1, L2, L4–L7 closed by Luna; SOL-10F-L3-R1 remediation complete; READY FOR NARROW LUNA RE-VERIFICATION)
+**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (rules-neutral foundation PASS; rules matrix frozen; Slice 7 proof-character semantics implemented — READY FOR LUNA)
 
 ## Product invariants
 
@@ -228,7 +228,7 @@ Delivered (store/game schema v23): `src/stores/alignmentResolution.ts` (pure `pl
 Frozen direction: one participant-bound Actual Alignment transaction seam; gameplay change vs correction; atomic multi-participant changes; Actual Alignment independent of Role; v23 player-facing alignment perception with Normal / explicit Good / explicit Evil / Not Told; Normal ordinary perception derives from Shown Role while Normal Traveler perception follows Actual Alignment; v22 -> v23 normalization clears inert legacy Traveler shown-alignment copies to Normal; strict v23 Alignment History correction/correlation metadata; occupancy-boundary hardening so a new participant never inherits stale seat alignment; Storyteller UI separates Actual Alignment truth from player-facing perception; 10F remains responsible for ability logic.
 
 ### 10F — Guided Ability Resolution / Night Actions
-**Status:** LUNA RE-VERIFICATION — L1, L2, L4–L7 CLOSED; SOL-10F-L3-R1 (§23) NARROW REMEDIATION COMPLETE — READY FOR NARROW LUNA RE-VERIFICATION. Not closed; proof-character semantics remain blocked until authoritative BOTC rules evidence.\
+**Status:** SLICE 7 IMPLEMENTED — READY FOR LUNA (code checkpoint `aa14fee0811e9f0b19ba3a4fd714cb5cca0488bc`, docs-only commit on top). Not closed.\
 **Contract:** `PHASE10F.md` (frozen 2026-10-02).\
 **Starting checkpoint:** `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`.\
 **Contract-freeze checkpoint:** `727530e9364a0c971326c06ce45855adcf39828b`.\
@@ -241,7 +241,7 @@ Frozen direction: one pure ability coordinator composes the existing Life, Effec
 
 The architecture challenge and Sol adjudication found no contradiction requiring 10A–10E redesign. Narrow 10F-authorized amendments include composable ability-use state through the Life boundary and pure Information Delivery planning. Full canonical Character / Traveler / Fabled / Loric semantic coverage moves to Phase 11 after 10G, with 10F proving the engine against a diverse fixed proof set.
 
-Implemented (see `docs/ai/handoffs/CURRENT_HANDOFF.md` for the lineage and gate): the reviewed-and-repaired pure Information Delivery plan; store v24 (strict deliveries with authorized `performedRole` / `resolutionId`, participant-scoped Night progress with v23 seat-keyed progress dropped, Night public-Life withholding); composable `useAbility` / `correctAbilityUsed` Life intents; the rules-neutral semantics contract, Rules Query, hook/modifier gating, pure coordinator and one-commit `resolveAbility`; the Manual / unmodeled path; the interactive Night Order, workspace, Grimoire target picker and Privacy Mode behavior; the generated coverage manifest and architecture guards. Production semantics are deliberately EMPTY: no proof character is encoded until its rules matrix is verified from authoritative BOTC sources (Slices 6–7 of the contract remain).
+Implemented (see `docs/ai/handoffs/CURRENT_HANDOFF.md` for the lineage and gate): the reviewed-and-repaired pure Information Delivery plan; store v24 (strict deliveries with authorized `performedRole` / `resolutionId`, participant-scoped Night progress with v23 seat-keyed progress dropped, Night public-Life withholding); composable `useAbility` / `correctAbilityUsed` Life intents; the rules-neutral semantics contract, Rules Query, hook/modifier gating, pure coordinator and one-commit `resolveAbility`; the Manual / unmodeled path; the interactive Night Order, workspace, Grimoire target picker and Privacy Mode behavior; the generated coverage manifest and architecture guards. Slice 6 froze the proof-character rules matrix (`docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md`); Slice 7 implemented it (`PHASE10F.md` §26): eleven guided / support semantics, verified-Manual Tinker / Toymaker / Drunk, Setup-owned Baron, an explicit verified Night-trigger path (Ravenkeeper only), the authoritative Red Herring fact, star-pass suppression through participant-scoped Night progress, and the corrected coverage manifest.
 
 ### 10G — Advanced Storyteller Bookkeeping / Final Visual Integration
 Ability-specific bookkeeping that does not belong in generic Life/Effect/Reminder/Role/Alignment primitives, final visual integration, and Phase 10 closure.
@@ -274,4 +274,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Claude Code implements contract Slice 7 from `docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md` in the frozen order, using only the source-backed automation/manual boundaries recorded there. Production `CANONICAL_ABILITY_SEMANTICS` may now be populated for the authorized proof/support semantics. Do not expand into full canonical coverage, merge, deploy or close 10F. After implementation, hand the exact checkpoint to Luna for mechanical rules verification.
+Luna independently verifies Slice 7 (proof-character semantics) at the exact pushed `dev/phase-10f` HEAD named in the implementation report; then Astra / Sol per the matrix closure boundary (§21). Do not merge, deploy or close 10F.

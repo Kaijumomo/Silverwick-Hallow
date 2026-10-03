@@ -1,9 +1,9 @@
 # Phase 10F — Authoritative Proof-Character Rules Matrix
 
-**Status:** SOL RULES FREEZE — IMPLEMENTATION AUTHORIZED AFTER THIS CHECKPOINT  
-**Date:** 2026-10-02  
-**Rules-neutral implementation verified at:** `aeda04351895175eb78a147fe9c133519fd4f3ba`  
-**Canonical repository data revision:** `f10cd02e3401af227ce406287eaae7bb99a06a42`  
+**Status:** SOL RULES FREEZE — IMPLEMENTATION AUTHORIZED AFTER THIS CHECKPOINT\
+**Date:** 2026-10-02\
+**Rules-neutral implementation verified at:** `aeda04351895175eb78a147fe9c133519fd4f3ba`\
+**Canonical repository data revision:** `f10cd02e3401af227ce406287eaae7bb99a06a42`\
 **Scope:** Phase 10F proof set only. Full canonical coverage remains Phase 11.
 
 ## 1. Source policy
