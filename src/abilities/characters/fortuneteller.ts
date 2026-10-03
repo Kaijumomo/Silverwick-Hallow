@@ -3,8 +3,8 @@ import type { AbilityOperation, ParticipantBinding } from "@/stores/abilityResol
 import { answerOf, ask, followUpParticipant, nameOf, outcome, participantsOf, requireLivingActor } from "./shared";
 
 /**
- * Fortune Teller -- GUIDED with the approved Red Herring state (matrix
- * Section 7).
+ * Fortune Teller -- GUIDED with the approved Red Herring state.
+ * docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md Section 7.
  *
  * "Each night, choose 2 players: you learn if either is a Demon. There is a
  * good player that registers as a Demon to you."
