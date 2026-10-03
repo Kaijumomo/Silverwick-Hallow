@@ -1419,3 +1419,55 @@ Independent evidence: C1…C3 targeted 46/46; full normal suite 3,943/3,943 acro
 The next gate is one narrow Astra final closure recheck focused on C1…C3 and their immediate interactions. On Astra PASS, the next step is Sol closure adjudication.
 
 Phase 10F remains open. No merge or deployment is authorized.
+
+## 42. Sol adjudication of Astra final C1…C3 recheck — 2026-10-03
+
+Astra rechecked exact target `7173499e8a8c495393f00f82706fbd14f7cbfb12`. The original C1/C2/C3 reproductions are blocked and all A/B-series regressions remain closed, but Astra established two residual defects plus one current-status documentation inconsistency. Sol accepts both mechanical findings.
+
+### SOL-10F-D1 — mirror Firebase's single-string leaf size limit — MEDIUM
+
+Accepted from ASTRA C3-R1.
+
+The shared Firebase compatibility helper currently mirrors key characters, path depth, destination-relative path length, number validity, reserved metadata, priority/server-value construction, but deliberately omits Firebase RTDB's single-string-leaf size ceiling. Astra proved that omission is reachable through supported ability outcomes: a Manual text Information Delivery and a Manual Effect field can produce a schema-valid storyteller game that `validateFirebaseWritableValue` accepts while the installed Firebase SDK rejects.
+
+Freeze:
+
+- inspect the installed Firebase SDK and mirror its exact single-string-leaf size limit and byte-counting semantics in `firebaseWriteCompatibility.ts`;
+- use the helper's existing Firebase-compatible string-length routine rather than a second UTF-8 algorithm;
+- the compatibility helper must accept the SDK boundary value and reject the first byte beyond it, matching the installed SDK;
+- the check applies to every string leaf reachable anywhere in the value tree, including Manual Information values, Effect fields, History and other persisted Storyteller state;
+- `resolveAbility` keeps the C3 pre-commit store preflight unchanged in authority/order: an oversized result is refused as `invalidComposition` before the authoritative `set()`;
+- no truncation, sanitization or silent coercion of authoritative user content;
+- add SDK-oracle regressions for 10 MiB boundary acceptance/rejection and real-store atomic refusal.
+
+This closes the gap in C3's claim that the shared compatibility helper predicts whether the installed SDK can accept the planned Storyteller value.
+
+### SOL-10F-D2 — protection dependency identity excludes display-only ParticipantRef prose — LOW
+
+Accepted from ASTRA C2-R1.
+
+The C2 dependency stamp correctly excludes current player names, notes, Reminders and History, but currently serializes the complete durable Effect `sourceParticipant` snapshot. For a current-kind ParticipantRef that includes `nameAtTime`, a correction that refreshes only this historical display snapshot changes the protection judgment id even though the source participation identity and all mechanics are unchanged.
+
+Freeze:
+
+- protection dependency serialization of an Effect source ParticipantRef includes mechanical identity only;
+- for `kind: "participant"`: include `kind`, `playerId` and `participantId`; exclude `nameAtTime`;
+- for `kind: "legacy"`: include `kind` and `playerId`;
+- do not mutate or rewrite the stored durable ParticipantRef itself; only the transient C2 dependency serialization changes;
+- source replacement/departure, ParticipantId change, alive state, Actual Role, Effect state/origin/lifecycle/parameters and source-functioning dependencies must still invalidate as C2 requires;
+- a display-only `nameAtTime` refresh must not change the protection judgment id;
+- current player rename, History, Reminders, notes and other prose remain excluded.
+
+### DOC-D1 — current roadmap status consistency — LOW
+
+A current Phase 10F roadmap status line still describes the previous Luna-targeted gate. Update current-status summaries to the actual state: Astra final recheck REVISE -> D1/D2 remediation -> targeted Luna verification -> narrow Astra closure recheck -> Sol closure adjudication. Historical dated records remain unchanged.
+
+### Not promoted
+
+No additional C1 defect, character-rule defect, jinx defect, trigger defect or privacy defect was established. Previously deferred Phase 11 topics remain deferred.
+
+### Remediation path
+
+Claude Code remediates SOL-10F-D1 and SOL-10F-D2 only, plus DOC-D1, preserving C1…C3, B1…B6 and A1…A10. After the full gate, return one exact clean checkpoint to Luna for a very narrow D1/D2 mechanical verification. On Luna PASS, Astra performs one final narrow D1/D2 closure recheck. On Astra PASS, stop the review loop and hand Phase 10F to Sol closure adjudication.
+
+Phase 10F remains open. No merge or deployment is authorized.
