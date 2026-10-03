@@ -274,4 +274,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Sol researches and freezes the authoritative proof-character rules matrix for the Phase 10F proof set using official BOTC sources. Production `CANONICAL_ABILITY_SEMANTICS` remains empty until that matrix is frozen. After the rules freeze, Claude Code implements the proof-character semantic modules and scenario tests, followed by Luna/Astra/Sol review. Do not merge, deploy or close 10F yet.
+Claude Code implements contract Slice 7 from `docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md` in the frozen order, using only the source-backed automation/manual boundaries recorded there. Production `CANONICAL_ABILITY_SEMANTICS` may now be populated for the authorized proof/support semantics. Do not expand into full canonical coverage, merge, deploy or close 10F. After implementation, hand the exact checkpoint to Luna for mechanical rules verification.
