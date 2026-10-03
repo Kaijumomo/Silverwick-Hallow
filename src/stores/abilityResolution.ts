@@ -587,64 +587,153 @@ const INPUT_VALUE_KEYS: Readonly<Record<string, readonly string[]>> = {
   text: ["kind", "value"],
 };
 
+/** SOL-10F-C1: a hostile-input bound on any answer list (far above any real
+ * answer: no answer names more participants than seats, or more characters
+ * than a script holds). Not a game rule. */
+const MAX_ANSWER_ITEMS = 1024;
+
+/** A malformed own answer found while copying it (caught below, never thrown out). */
+class MalformedAnswer extends Error {}
+
 /**
- * The ONE canonical structural validator of a runtime AbilityInputValue --
- * declared inputs, evaluator follow-ups and judgments alike. Null when
- * well-formed; otherwise why not. Structure only (never truthiness): exact
- * cardinality / subject / constraint rules stay with checkInputs (declared
- * requirements) and the evaluator that asked a follow-up.
+ * SOL-10F-C1: the OWN enumerable string-keyed DATA fields of `source`, each
+ * property descriptor read exactly once. An accessor-backed field is refused
+ * (never executed); a non-enumerable or inherited field is absent. Values are
+ * taken from the descriptor, so neither a getter nor a Proxy `get` trap ever
+ * runs; a throwing Proxy trap surfaces as a malformed answer.
  */
-export function abilityInputValueError(value: unknown): string | null {
-  if (!isObject(value) || !Object.prototype.hasOwnProperty.call(value, "kind") || typeof value.kind !== "string" ||
-    !Object.prototype.hasOwnProperty.call(INPUT_VALUE_KEYS, value.kind)) {
-    return "An answer has no recognised kind.";
+function ownDataFields(source: object): Map<string, unknown> {
+  const fields = new Map<string, unknown>();
+  for (const key of Reflect.ownKeys(source)) {
+    if (typeof key !== "string") continue;
+    const descriptor = Object.getOwnPropertyDescriptor(source, key);
+    if (!descriptor || !descriptor.enumerable) continue;
+    if (!("value" in descriptor)) throw new MalformedAnswer("An answer field is computed by an accessor, not plain data.");
+    fields.set(key, descriptor.value);
   }
-  const allowed = INPUT_VALUE_KEYS[value.kind]!;
-  const keys = Object.keys(value);
-  if (keys.some((key) => !allowed.includes(key))) return "An answer carries unexpected fields.";
+  return fields;
+}
+
+/** SOL-10F-C1: a fresh, frozen copy of a dense array of own data elements
+ * (no holes, no accessor / non-enumerable elements, no extra fields), each
+ * element copied by `item`. */
+function copyList<T>(source: unknown, item: (value: unknown) => T, message: string): readonly T[] {
+  if (!Array.isArray(source)) throw new MalformedAnswer(message);
+  const length = Object.getOwnPropertyDescriptor(source, "length")?.value;
+  if (!Number.isSafeInteger(length) || length < 0 || length > MAX_ANSWER_ITEMS) throw new MalformedAnswer(message);
+  const fields = ownDataFields(source);
+  if (fields.size !== length) throw new MalformedAnswer(message);
+  const copy: T[] = [];
+  for (let index = 0; index < length; index++) {
+    if (!fields.has(String(index))) throw new MalformedAnswer(message);
+    copy.push(item(fields.get(String(index))));
+  }
+  return Object.freeze(copy);
+}
+
+/** SOL-10F-C1: a fresh, frozen ParticipantBinding holding only the source's
+ * own `playerId` / `participantId` DATA strings. */
+function copyBinding(source: unknown): ParticipantBinding {
+  const message = "A player answer must name bound participants.";
+  if (!isObject(source)) throw new MalformedAnswer(message);
+  const fields = ownDataFields(source);
+  const playerId = fields.get("playerId");
+  const participantId = fields.get("participantId");
+  if (typeof playerId !== "string" || typeof participantId !== "string" || !participantId) throw new MalformedAnswer(message);
+  return Object.freeze({ playerId, participantId });
+}
+
+/**
+ * SOL-10F-C1: the ONE typed deep copier of a runtime AbilityInputValue --
+ * declared inputs, evaluator follow-ups and judgments alike. Returns an inert,
+ * frozen copy holding only primitives and fresh arrays / bindings: no
+ * caller-owned object survives, and the source is never read again. Structure
+ * only (never truthiness): exact cardinality / subject / constraint rules stay
+ * with checkInputs (declared requirements) and the evaluator that asked a
+ * follow-up. Throws MalformedAnswer (or whatever a hostile Proxy trap throws).
+ */
+function copyAbilityInputValue(source: unknown): AbilityInputValue {
+  if (!isObject(source)) throw new MalformedAnswer("An answer has no recognised kind.");
+  const fields = ownDataFields(source);
+  const kind = fields.get("kind");
+  if (typeof kind !== "string" || !Object.prototype.hasOwnProperty.call(INPUT_VALUE_KEYS, kind)) throw new MalformedAnswer("An answer has no recognised kind.");
+  const allowed = INPUT_VALUE_KEYS[kind]!;
+  if ([...fields.keys()].some((key) => !allowed.includes(key))) throw new MalformedAnswer("An answer carries unexpected fields.");
   // SOL-10F-B3: the payload must be the answer's OWN field -- an inherited one
   // is absent, never consumed.
-  if (!allowed.every((key) => keys.includes(key))) return "An answer is missing its value.";
-  switch (value.kind) {
+  if (!allowed.every((key) => fields.has(key))) throw new MalformedAnswer("An answer is missing its value.");
+  switch (kind) {
     case "participant":
-      return Array.isArray(value.participants) && value.participants.every(isBinding) ? null : "A player answer must name bound participants.";
+      return Object.freeze({ kind, participants: copyList(fields.get("participants"), copyBinding, "A player answer must name bound participants.") as ParticipantBinding[] });
     case "character":
-      return Array.isArray(value.roleIds) && value.roleIds.every((id) => typeof id === "string" && id.length > 0) ? null : "A character answer must name characters.";
-    case "alignment":
-      return value.alignment === "good" || value.alignment === "evil" ? null : "An alignment answer must be good or evil.";
-    case "number":
-      return typeof value.value === "number" && Number.isFinite(value.value) ? null : "A number answer must be a finite number.";
-    case "boolean":
-      return typeof value.value === "boolean" ? null : "A yes/no answer must be a real Boolean.";
-    case "text":
-      return typeof value.value === "string" ? null : "A text answer must be text.";
+      return Object.freeze({ kind, roleIds: copyList(fields.get("roleIds"), (id) => {
+        if (typeof id !== "string" || !id) throw new MalformedAnswer("A character answer must name characters.");
+        return id;
+      }, "A character answer must name characters.") as RoleId[] });
+    case "alignment": {
+      const alignment = fields.get("alignment");
+      if (alignment !== "good" && alignment !== "evil") throw new MalformedAnswer("An alignment answer must be good or evil.");
+      return Object.freeze({ kind, alignment });
+    }
+    case "number": {
+      const value = fields.get("value");
+      if (typeof value !== "number" || !Number.isFinite(value)) throw new MalformedAnswer("A number answer must be a finite number.");
+      return Object.freeze({ kind, value });
+    }
+    case "boolean": {
+      const value = fields.get("value");
+      if (typeof value !== "boolean") throw new MalformedAnswer("A yes/no answer must be a real Boolean.");
+      return Object.freeze({ kind, value });
+    }
+    case "text": {
+      const value = fields.get("value");
+      if (typeof value !== "string") throw new MalformedAnswer("A text answer must be text.");
+      return Object.freeze({ kind, value });
+    }
   }
-  return "An answer has no recognised kind.";
+  throw new MalformedAnswer("An answer has no recognised kind.");
+}
+
+const answerError = (error: unknown): string => (error instanceof MalformedAnswer ? error.message : "An answer could not be read as plain data.");
+
+/** The canonical structural validator of a runtime AbilityInputValue (SOL-10F-A8),
+ * expressed through the same deep copier the coordinator consumes. Null when
+ * well-formed; otherwise why not. */
+export function abilityInputValueError(value: unknown): string | null {
+  try {
+    copyAbilityInputValue(value);
+    return null;
+  } catch (error) {
+    return answerError(error);
+  }
 }
 
 /**
- * SOL-10F-B3: the canonical answer map of a caller's `inputs` / `judgments`
- * -- a frozen, null-prototype snapshot of its OWN enumerable string-keyed
- * entries, each read exactly once. Validation and every later read (declared
- * inputs, functioning, modifier confirmations, the Night trigger, the
- * evaluator) use THIS map, so an inherited or non-enumerable answer is absent
- * everywhere -- never validated away and then consumed by ordinary property
- * lookup. Null when the caller's value is not a plain answer record.
+ * SOL-10F-B3 + SOL-10F-C1: the canonical answer map of a caller's `inputs` /
+ * `judgments` -- a frozen, null-prototype map of its OWN enumerable
+ * string-keyed entries, each entry read exactly once (B3) and IMMEDIATELY
+ * deep-copied into an inert canonical value (C1) before the next entry is
+ * read. Validation and every later read (declared inputs, functioning,
+ * modifier confirmations, the Night trigger, the evaluator) use THIS map, so
+ * an inherited or non-enumerable answer is absent everywhere and no caller
+ * object -- outer map, answer, array or binding -- is ever read again: a
+ * getter, Proxy or later caller mutation cannot change what was validated.
+ * Null when the caller's value is not a plain answer record; `invalid` for a
+ * malformed own answer (or a hostile getter / Proxy trap that throws).
  */
-export function ownAnswerMap(value: unknown): Readonly<Record<string, AbilityInputValue>> | null {
-  if (!isObject(value)) return null;
+function canonicalAnswerMap(value: unknown, malformed: string): { ok: true; map: Readonly<Record<string, AbilityInputValue>> } | AbilityRefusal {
   const map: Record<string, AbilityInputValue> = Object.create(null);
-  for (const key of Object.keys(value)) map[key] = value[key] as AbilityInputValue;
-  return Object.freeze(map);
-}
-
-/** Every supplied input and judgment (canonical maps), declared or not, must be well-formed. */
-function checkAnswerPayloads(inputs: AbilityInputs, judgments: AbilityJudgments): AbilityRefusal | null {
-  for (const [id, value] of [...Object.entries(inputs), ...Object.entries(judgments)]) {
-    const error = abilityInputValueError(value);
-    if (error) return refuse("invalid", `${error} ("${id}")`);
+  let id = "";
+  try {
+    if (!isObject(value)) return refuse("invalid", malformed);
+    for (const key of Object.keys(value)) {
+      id = key;
+      map[key] = copyAbilityInputValue(value[key]);
+    }
+  } catch (error) {
+    return id ? refuse("invalid", `${answerError(error)} ("${id}")`) : refuse("invalid", malformed);
   }
-  return null;
+  return { ok: true, map: Object.freeze(map) };
 }
 
 // ---------------------------------------------------------------------------
@@ -760,14 +849,13 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   }
 
   const actorBinding = { playerId: actor.id, participantId: actor.participantId! };
-  // SOL-10F-B3: canonical own-property snapshots BEFORE any validation or
-  // consumption; the caller's objects are never read again below.
-  const inputs = ownAnswerMap(request.inputs);
-  if (!inputs) return refuse("invalid", "Malformed ability inputs.");
-  const judgments = request.judgments === undefined ? ownAnswerMap({})! : ownAnswerMap(request.judgments);
-  if (!judgments) return refuse("invalid", "Malformed Storyteller judgments.");
-  const payloads = checkAnswerPayloads(inputs, judgments);
-  if (payloads) return payloads;
+  // SOL-10F-B3 + C1: canonical own-property DEEP snapshots BEFORE any
+  // validation or consumption; no caller object is ever read again below.
+  const canonicalInputs = canonicalAnswerMap(request.inputs, "Malformed ability inputs.");
+  if (!canonicalInputs.ok) return canonicalInputs;
+  const canonicalJudgments = canonicalAnswerMap(request.judgments === undefined ? {} : request.judgments, "Malformed Storyteller judgments.");
+  if (!canonicalJudgments.ok) return canonicalJudgments;
+  const inputs = canonicalInputs.map, judgments = canonicalJudgments.map;
   const inputCheck = checkInputs(game, descriptor, actorBinding, inputs);
   if (inputCheck) return inputCheck;
 
