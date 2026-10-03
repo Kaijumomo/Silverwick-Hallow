@@ -685,3 +685,7 @@ Not promoted: multiple Scarlet Women (Storyteller choice remains fail-safe) and 
 ## Immediate next task
 
 Claude Code remediates SOL-10F-A1…A10 exactly as frozen in `PHASE10F.md` §31, adds regressions for Astra's reproductions and A9/A10, runs the full gate and returns one exact clean checkpoint to Luna. Do not merge, deploy or close 10F.
+
+## SOL-10F-A1…A10 remediation — 2026-10-03
+
+All ten §31 findings are remediated at code checkpoint `9b6a25bdd134f7d60fb8366c8f781252b2f4f3a6` with a docs-only record on top (`PHASE10F.md` §32). Full gate green; schema/store v24 (optional additive `actualRoleAtEvent`) and Firebase Rules unchanged. Next: Luna targeted mechanical verification of A1…A10 (not Astra directly). 10F is not closed; nothing merged or deployed.
