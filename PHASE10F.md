@@ -912,3 +912,184 @@ Astra performs the adversarial Slice 7 review. Astra's task is to try to falsify
 Astra is not asked to repeat Luna's full acceptance matrix or to invent a quota of findings. Established defects must be distinguished from unproven concerns and design questions.
 
 Phase 10F remains open. No merge or deployment is authorized.
+
+## 31. Sol adjudication of Astra Slice 7 adversarial review — 2026-10-03
+
+Astra reviewed exact target `f87ab315a5ccef3819fb1e5126107b0a9ce73e56` and returned **REVISE** with eight reproduced defects. Sol accepts all eight findings. Two of Astra's additional design questions are also frozen into targeted remediation because the existing Phase 10F contract already requires non-retroactive trigger evidence and duplicate-trigger prevention.
+
+### SOL-10F-A1 — dependent follow-up answers must not transfer — HIGH
+
+Accepted from ASTRA-10F-S7-001.
+
+A follow-up Player / Storyteller answer belongs to the prerequisites under which it was collected. Changing a target, ordered participant list, or earlier follow-up must not silently reuse a later answer for a different subject or branch.
+
+Freeze:
+
+- evaluator-requested participant-specific requirements must carry stable subject identity in their requirement identity / validation;
+- Harlot consent is bound to the selected participant;
+- Al-Hadikhia each live/die choice is bound to both ordered position and ParticipantId;
+- changing any declared base input invalidates all dependent follow-up UI state;
+- changing a follow-up invalidates later dependent follow-ups in that chain;
+- coordinator/evaluator authority must ignore/refuse stale subject-bound answers even if a crafted request supplies them.
+
+Do not treat UI clearing alone as authority.
+
+### SOL-10F-A2 — selections capture ParticipantBinding at selection time — HIGH
+
+Accepted from ASTRA-10F-S7-002.
+
+Inline and Manual UI selections may never store only a reusable PlayerId and later bind it to whoever currently occupies that seat.
+
+Freeze:
+
+- every participant selection captures `{playerId, participantId}` at the moment of selection;
+- Grimoire picker and select control must preserve the same binding;
+- seat reuse after selection causes `stale`, never retargeting;
+- Manual draft operations retain the selected binding and any expected Role/Alignment observation needed by the seam intent builder;
+- do not silently drop a stale Manual draft.
+
+### SOL-10F-A3 — verified and unverified modifiers compose — HIGH
+
+Accepted from ASTRA-10F-S7-003.
+
+An unverified reaching modifier may not suppress verified hook evaluation.
+
+Freeze the modifier gate as a combined result containing BOTH:
+
+- every reaching unverified modifier requiring explicit Storyteller confirmation / Manual handling; and
+- every reaching verified hook result (`unsupported`, `judgment`, or information constraint).
+
+All applicable verified hook results remain enforceable after unverified-modifier questions are answered.
+
+### SOL-10F-A4 — prospective Role creation must gate creation-triggered jinxes — HIGH
+
+Accepted from ASTRA-10F-S7-004.
+
+The existing represented-character rule remains correct for ordinary CURRENT-state jinx activation, but it is insufficient for a Role-changing ability whose operation itself creates a jinx endpoint.
+
+Freeze:
+
+- add a generic **prospective jinx** query for a proposed canonical Role creation / change;
+- derive it from the pinned canonical jinx pairs plus the proposed resulting Role representation, never broad script membership;
+- if the proposed Role change would newly create a relevant unverified jinx, the automated Role change must fail safe before mutation;
+- for Phase 10F, an unverified prospective creation jinx routes the WHOLE transformation to Manual / unsupported rather than allowing a generic "does not change this resolution" bypass;
+- Pit-Hag → Damsel is therefore Manual in 10F; the Storyteller chooses which player becomes the Damsel;
+- the same prospective gate applies to other Pit-Hag destination jinxes in the pinned matrix.
+
+Do not globally activate jinxes merely because both characters appear on the script.
+
+### SOL-10F-A5 — definitive source death precedes functioning uncertainty — MEDIUM
+
+Accepted from ASTRA-10F-S7-005.
+
+For a `whileSourceFunctions` Effect:
+
+1. stale source Role mismatch => false;
+2. known source death => false;
+3. only then evaluate impairment / noAbility uncertainty.
+
+A known-dead source cannot keep a persistent Effect alive through a Storyteller functioning judgment.
+
+A departed/unseated source remains **unknown** in 10F; Astra's separate departure-policy concern is not merged into this fix.
+
+### SOL-10F-A6 — Al-Hadikhia must settle each player before asking the next — MEDIUM
+
+Accepted from ASTRA-10F-S7-006.
+
+Preserve one final atomic commit, but evaluation must follow the running procedure:
+
+1. ask player 1 live/die;
+2. resolve all authoritative/judgment consequences of player 1 against the hypothetical evolving state;
+3. only then ask player 2;
+4. settle player 2;
+5. only then ask player 3;
+6. settle player 3;
+7. apply the final all-alive rule.
+
+An unresolved protection judgment for player N blocks collection of player N+1's choice.
+
+The dependent-answer invalidation in A1 applies to this ordered chain.
+
+### SOL-10F-A7 — participant-scoped Night progress must use exact identity — MEDIUM
+
+Accepted from ASTRA-10F-S7-007.
+
+Do not use textual prefix matching over unescaped ParticipantIds.
+
+Freeze:
+
+- Role/Traveler transitions remove only exact known participant-step keys belonging to that participation instance;
+- derive exact keys from the participant's observed/final Actual Role and Shown Role / Traveler arrival roles as needed;
+- a ParticipantId that is a textual prefix of another valid ParticipantId must never match that other participant's progress;
+- preserve existing persisted v24 keys; no guessed reassignment.
+
+### SOL-10F-A8 — runtime validate all AbilityInputValue payloads — MEDIUM
+
+Accepted from ASTRA-10F-S7-008.
+
+Before any evaluator consumes request `inputs` or `judgments`, structurally validate EVERY supplied AbilityInputValue, including undeclared evaluator follow-ups.
+
+At minimum:
+
+- boolean => actual boolean;
+- number => finite number;
+- text => string;
+- alignment => good/evil;
+- character => array of non-empty RoleIds;
+- participant => array of valid ParticipantBindings.
+
+Declared requirement cardinality/constraints remain enforced by `checkInputs`; evaluator follow-ups enforce their own exact cardinality/subject rules. A malformed scalar must return `invalid`, never be consumed by truthiness.
+
+### SOL-10F-A9 — Ravenkeeper trigger requires Ravenkeeper at the triggering death — MEDIUM
+
+Accepted from Astra's design question as a contract clarification.
+
+A death that occurred before the participant became the Ravenkeeper does not retroactively satisfy "If you die at night".
+
+The authoritative trigger evidence must therefore include the participant's Actual Role at the Life Event moment.
+
+Freeze:
+
+- add an optional authoritative Role snapshot to newly recorded Life Events in unreleased v24 (no schema-version bump required);
+- new Life Events record the subject's Actual Role at acceptance time;
+- Ravenkeeper automatic trigger requires `actualRoleAtEvent === "ravenkeeper"`;
+- old/migrated Life Events without that evidence are `unknown` for this trigger and require Storyteller judgment / Manual, never a guess;
+- History remains non-authoritative.
+
+### SOL-10F-A10 — a Night trigger is consumed by exact trigger-event identity — MEDIUM
+
+Accepted from Astra's duplicate-trigger design question.
+
+A successful `nightTrigger` resolution may not opt out of consuming the trigger.
+
+Freeze:
+
+- the trigger predicate resolves to the exact authoritative LifeEvent id;
+- the trigger workflow/fingerprint binds that event id;
+- successful trigger resolution marks an event-specific participant Night-progress key done in the SAME atomic result;
+- a repeated request for the same trigger event is refused even if a caller sets `completeStep:false`;
+- distinct later qualifying death events may have distinct trigger identities and are not conflated with the earlier event;
+- UI may not expose "leave trigger incomplete" for a verified trigger.
+
+This supersedes the single participant+Role trigger-consumption assumption for Ravenkeeper while preserving ordinary Night Order step behavior.
+
+### Astra questions not promoted to defects
+
+- **Multiple functioning Scarlet Women:** current fail-safe Storyteller choice among multiple priority copies is accepted for unusual duplicate-character state; no 10F change.
+- **Departed `whileSourceFunctions` source:** remains explicit UNKNOWN in 10F; do not infer death from departure/unseating.
+- Astra's positive attack results for independent Storyteller facts, accumulated `assumingAlive`, atomic Manual fallbacks, privacy, Undo/recovery, star-pass ordinary replay suppression and trigger revalidation remain accepted evidence.
+
+### Remediation gate
+
+Claude Code remediates SOL-10F-A1…A10 only. Add targeted regressions reproducing Astra's counterexamples plus the A9/A10 contract cases. Then run:
+
+- typecheck;
+- targeted Astra remediation suites;
+- all proof-character suites;
+- Phase 10F foundation / architecture / writer guards;
+- full normal suite;
+- Firebase emulator suite;
+- production build;
+- worktree and baseline-range diff checks.
+
+Return one exact clean checkpoint to Luna for targeted mechanical verification. Do not send directly to Astra, merge, deploy or close 10F.
