@@ -913,12 +913,6 @@ Astra is not asked to repeat Luna's full acceptance matrix or to invent a quota 
 
 Phase 10F remains open. No merge or deployment is authorized.
 
-## 48. LUNA-10F-E1-TEST-01 portability correction — 2026-10-03
-
-`LUNA-10F-E1-TEST-01` was test-only. No production behavior or production files changed. The E1 serializer source-scan guard now derives paths with Node's `relative()` and normalizes the platform separator to `/`; it still requires the complete discovered set to equal exactly `["firebase/checkpoint.ts"]`. Windows/Linux path normalization makes the guard portable without weakening it.
-
-Verification is green: the previously failing source-scan test **1/1**, E1 **17/17**, full Vitest **3,977/3,977 across 163 files**, typecheck, build, and both diff checks passed. The clean exact checkpoint is ready for Luna confirmation. Phase 10F remains open; nothing is merged or deployed.
-
 ## 31. Sol adjudication of Astra Slice 7 adversarial review — 2026-10-03
 
 Astra reviewed exact target `f87ab315a5ccef3819fb1e5126107b0a9ce73e56` and returned **REVISE** with eight reproduced defects. Sol accepts all eight findings. Two of Astra's additional design questions are also frozen into targeted remediation because the existing Phase 10F contract already requires non-retroactive trigger evidence and duplicate-trigger prevention.
@@ -1604,3 +1598,37 @@ Adjudication:
 No Claude production-remediation loop is authorized. This is one test-only portability correction.
 
 Phase 10F remains open. No merge or deployment is authorized.
+
+## 48. LUNA-10F-E1-TEST-01 portability correction — 2026-10-03
+
+`LUNA-10F-E1-TEST-01` was test-only. No production behavior or production files changed. The E1 serializer source-scan guard now derives paths with Node's `relative()` and normalizes the platform separator to `/`; it still requires the complete discovered set to equal exactly `["firebase/checkpoint.ts"]`. Windows/Linux path normalization makes the guard portable without weakening it.
+
+Verification is green: the previously failing source-scan test **1/1**, E1 **17/17**, full Vitest **3,977/3,977 across 163 files**, typecheck, build, and both diff checks passed. The clean exact checkpoint is ready for Luna confirmation. Phase 10F remains open; nothing is merged or deployed.
+
+## 49. Sol Phase 10F closure adjudication — CLOSED — 2026-10-03
+
+**Verdict: CLOSED — READY FOR INTEGRATION.**
+
+Sol closes Phase 10F — Guided Ability Resolution / Night Actions at final reviewed target `a2d6d1b99242317269bf86f54e6d234e0644df33`.
+
+Astra's final narrow adversarial closure recheck returned:
+
+**PASS — PHASE 10F FINAL ADVERSARIAL CLOSURE COMPLETE; READY FOR SOL CLOSURE ADJUDICATION**
+
+Closure basis:
+
+- the exact reviewed target is the remote `dev/phase-10f` head reviewed by Astra, with the approved Phase 10F baseline as ancestor and `main` unchanged during review;
+- all accepted A1…A10, B1…B6, C1…C3, D1/D2 and E1 remediation contracts remain closed;
+- no production code changed after E1 production checkpoint `c6a2938e4e3c5ef3b17013c833cd335fe623b6f8`; the later portability repair changed only the E1 test guard and documentation;
+- the final Astra gate passed E1 17/17, D1/D2 17/17, C1…C3 46/46, B1…B6 70/70, A1…A10 61/61, proof-character 188/188, foundation/architecture/writer 505/505, migration/recovery/checkpoint 427/427, Firebase SDK compatibility 385/385, full Vitest 3,977/3,977 across 163 files, Firebase emulator 201/201 with zero skipped, typecheck, build and both diff checks;
+- no remaining in-scope production defect or regression was established.
+
+Final reviewed checkpoints:
+
+- Phase 10F baseline: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`;
+- final production code checkpoint: `c6a2938e4e3c5ef3b17013c833cd335fe623b6f8`;
+- final reviewed target: `a2d6d1b99242317269bf86f54e6d234e0644df33`.
+
+The §46 post-10F hardening note remains explicitly deferred: older non-ability Storyteller mutators do not all perform the E1 checkpoint-envelope proof before their local commit. The production writer nevertheless rejects an unwritable exact checkpoint before any partial remote projection. Generalizing the pre-commit checkpoint guard across legacy game-mutating commands is useful store-wide hardening, but it is outside the frozen Phase 10F ability-resolution scope and does not reopen this closure.
+
+This closure does NOT itself merge or deploy. The next repository action is to integrate the closed Phase 10F checkpoint into `main`, record the integration, and only then branch Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration from that exact integrated `main`.
