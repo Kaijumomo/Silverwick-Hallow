@@ -1574,3 +1574,27 @@ Record this as post-10F store hardening: centralize the E1 pre-commit checkpoint
 Luna independently verifies D1/D2/E1 only, plus smoke preservation of prior A/B/C closures and the full automated gate. On Luna PASS, Astra performs one narrow D1/D2/E1 closure recheck. On Astra PASS, stop the reviewer loop and hand Phase 10F to Sol closure adjudication.
 
 Phase 10F remains open. No merge or deployment is authorized.
+
+## 47. Sol adjudication of Luna E1 verification harness failure — 2026-10-03
+
+Luna verified exact target `3d51f061ca6ed1ab090082e96128057aea277430`. All requested D1, D2 and E1 production-behavior checks passed, including the Firebase leaf boundary, mechanical protection-source identity, shared checkpoint serializer, conservative roster envelope, store pre-commit atomicity and writer exact-checkpoint refusal. The only failing gate was one E1 static source-scan test on Windows.
+
+### LUNA-10F-E1-TEST-01 — platform-neutral source-scan path — TEST-ONLY
+
+The test `src/firebase/checkpointAggregateCompatibility.sdk.test.ts` enumerates production files with Node path helpers, then compares the discovered relative path to the hard-coded POSIX string `"firebase/checkpoint.ts"`.
+
+On Windows, the discovered relative path uses `\` separators, so the assertion fails even though the source scan found the correct single production serializer and all runtime E1 behavior checks passed.
+
+Adjudication:
+
+- this is NOT a D1/D2/E1 production defect;
+- this does not reopen any A/B/C/D/E contract;
+- repair only the test's path normalization so its assertion compares one platform-neutral relative-path representation;
+- do not weaken the guard: it must still prove exactly one production serializer and that it is `firebase/checkpoint.ts`;
+- no production file may change;
+- after the test-only repair, rerun the E1 targeted suite and the full normal suite at minimum, plus typecheck/build/diff checks required by the final gate;
+- because the exact target changes, Luna must verify the repaired target before Astra.
+
+No Claude production-remediation loop is authorized. This is one test-only portability correction.
+
+Phase 10F remains open. No merge or deployment is authorized.
