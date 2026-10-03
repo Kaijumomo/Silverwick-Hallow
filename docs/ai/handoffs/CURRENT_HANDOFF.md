@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-03\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: Slice 7 passed Luna; Astra's first adversarial review produced A1…A10, all remediated and Luna-verified; Astra re-verification then established six additional defects. Sol accepted them as SOL-10F-B1…B6; Claude Code remediated all six at code checkpoint `b9a7c58cca86a5e0b7b54ccdd1957aef90c866f2` (`PHASE10F.md` §36) and the full gate is green. Next: Luna targeted verification, then Astra closure re-verification. Schema/store remains unreleased v24; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: Slice 7 passed Luna; Astra's first adversarial review produced A1…A10, all remediated and Luna-verified; Astra re-verification produced B1…B6, all remediated at code checkpoint `b9a7c58cca86a5e0b7b54ccdd1957aef90c866f2` and Sol spot-check accepts them for targeted Luna verification. Next gate: Luna B1…B6 verification, then Astra closure re-verification. Schema/store remains unreleased v24; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
 
 ## Phase 10D — CLOSED
 
@@ -243,7 +243,7 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 - **10C Reminder Workflow + visual Reminder tokens — CLOSED**
 - **10D Role Transitions — CLOSED**
 - **10E Alignment Transitions — CLOSED AND INTEGRATED**
-- **10F Guided Ability Resolution / Night Actions — ASTRA RE-VERIFICATION REVISE; B1…B6 REMEDIATION REQUIRED (not closed)**
+- **10F Guided Ability Resolution / Night Actions — B1…B6 REMEDIATED; READY FOR LUNA TARGETED VERIFICATION (not closed)**
 - 10G Advanced Storyteller bookkeeping / final visual integration
 
 ## Standing Phase 10 UX invariant
@@ -740,3 +740,13 @@ All six §35 findings are remediated at code checkpoint `b9a7c58cca86a5e0b7b54cc
 ## Immediate next task
 
 Luna targets SOL-10F-B1…B6 (and A1…A10 preservation) at the exact current `dev/phase-10f` HEAD. Do not send directly to Astra. If Luna passes, Astra performs the closure re-verification. Phase 10F remains open; nothing merged or deployed.
+
+## Sol accepts B1…B6 remediation for Luna — 2026-10-03
+
+Claude Code remediated all §35 findings at code checkpoint `b9a7c58cca86a5e0b7b54ccdd1957aef90c866f2`; §36 records the implementation and green gate.
+
+Sol independently spot-checked the six repaired authority seams and accepts the code checkpoint for Luna targeted verification. The complete contract remains intact; no production code changed after the code checkpoint.
+
+## Immediate next task
+
+Luna independently verifies B1…B6, A1…A10 preservation, proof-character/foundation regressions, Firebase-safe Night-progress encoding and documentation integrity at the exact current `dev/phase-10f` HEAD. If PASS, Astra performs the closure adversarial re-verification. Phase 10F remains open.
