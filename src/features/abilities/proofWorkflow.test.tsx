@@ -171,3 +171,13 @@ describe("Ravenkeeper -- the trigger surfaces immediately after the death", () =
     expect(card("Ravenkeeper", "Player 0")).toHaveAttribute("data-status", "done");
   });
 });
+
+describe("Tinker -- verified Manual reference in the Player Drawer", () => {
+  it("Day: no guided action; the verified reference text and the Manual path are shown", () => {
+    open(named(["tinker", "imp", "chef", "monk", "saint", "spy", "empath"], "day", 2));
+    render(<Entry id="p0" />);
+    expect(screen.queryByRole("button", { name: /Use ability/ })).toBeNull();
+    expect(screen.getByText(/Storyteller discretion IS the Tinker's mechanic/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Resolve manually / unmodeled interaction" })).toBeInTheDocument();
+  });
+});

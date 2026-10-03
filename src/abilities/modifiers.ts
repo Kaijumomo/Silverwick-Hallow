@@ -2,6 +2,7 @@ import jinxData from "@/data/canonical/jinxes.json";
 import { isCanonicalRole } from "@/data/canonical";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import type { InformationConstraintValue } from "./semantics";
+import { VERIFIED_MODIFIER_HOOKS } from "./characters/modifierHooks";
 import type { RoleId, StorytellerLobbyRecord } from "@/stores/types";
 
 /**
@@ -141,7 +142,7 @@ export function representedCanonicalCharacters(
 export function activeModifiers(
   game: Pick<StorytellerLobbyRecord, "fabled" | "lorics" | "players">,
   registry: RoleRegistry,
-  verified: ReadonlyMap<string, ModifierDefinition["hook"]> = new Map(),
+  verified: ReadonlyMap<string, ModifierDefinition["hook"]> = VERIFIED_MODIFIER_HOOKS,
 ): ModifierDefinition[] {
   const out: ModifierDefinition[] = [];
   const classify = (source: "fabled" | "loric", id: RoleId) => {

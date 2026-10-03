@@ -122,9 +122,10 @@ describe("10F architecture guards", () => {
     expect(read("stores/abilityResolution.ts")).not.toMatch(/timingAllows/);
   });
 
-  it("production semantics contain ONLY the matrix-authorized proof / support characters (Slice 7)", () => {
-    const authorized = ["poisoner", "monk", "empath", "fortuneteller", "slayer", "cultleader", "harlot", "alhadikhia", "imp", "ravenkeeper", "pithag"];
-    for (const id of CANONICAL_ABILITY_SEMANTICS.keys()) expect(authorized, id).toContain(id);
+  it("production semantics are EXACTLY the matrix-authorized guided proof / support characters (Slice 7)", () => {
+    expect([...CANONICAL_ABILITY_SEMANTICS.keys()].sort()).toEqual(
+      ["alhadikhia", "cultleader", "empath", "fortuneteller", "harlot", "imp", "monk", "pithag", "poisoner", "ravenkeeper", "slayer"]);
+    // Negative proofs: Setup-owned, verified-Manual and dependency-only ids are never live semantics.
     for (const id of ["baron", "tinker", "toymaker", "drunk", "scarletwoman"]) expect(CANONICAL_ABILITY_SEMANTICS.has(id), id).toBe(false);
   });
 });
@@ -156,12 +157,18 @@ describe("10F-AC-34: canonical coverage manifest", () => {
   });
 
   it("tracks the proof set, the Baron negative proof and Fabled/Loric scopes", () => {
+    const verifiedManual = ["tinker", "toymaker", "drunk"];
     for (const id of PROOF_SET.filter((p) => p !== "baron")) {
-      expect(manifest.find((e) => e.id === id)).toMatchObject({ status: CANONICAL_ABILITY_SEMANTICS.has(id) ? "supported" : "proofPendingEvidence" });
+      expect(manifest.find((e) => e.id === id), id).toMatchObject({ status: verifiedManual.includes(id) ? "verifiedManual" : "supported" });
     }
     expect(manifest.find((e) => e.id === "baron")).toMatchObject({ status: "setupOwned" });
+    // Slice 7: no completed proof rule still claims rules evidence is pending.
+    expect(JSON.stringify(manifest)).not.toMatch(/proofPending|Manual until its rules matrix/);
+    expect(manifest.find((e) => e.id === "empath")).toMatchObject({ status: "supported", note: expect.stringMatching(/Support semantic/) });
+    for (const id of ["cultleader", "pithag"]) expect(manifest.find((e) => e.id === id)!.note, id).toMatch(/GUIDED-PARTIAL/);
+    expect(manifest.find((e) => e.id === "scarletwoman")).toMatchObject({ status: "unclassified", note: expect.stringMatching(/star-pass/) });
     for (const entry of manifest.filter((e) => e.kind === "fabled" || e.kind === "loric")) {
-      expect(entry.status).toBe(entry.id === "toymaker" ? "proofPendingEvidence" : "modifierScoped");
+      expect(entry.status).toBe(entry.id === "toymaker" ? "verifiedManual" : "modifierScoped");
       expect(entry.scopes).toEqual(CANONICAL_MODIFIER_SCOPES[entry.id]);
     }
     expect(manifest.filter((e) => e.kind === "jinx").every((e) => e.status === "gatedJudgment")).toBe(true);

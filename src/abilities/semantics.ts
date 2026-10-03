@@ -1,5 +1,6 @@
 import { isCanonicalRole } from "@/data/canonical";
 import { VERIFIED_DESCRIPTORS } from "./characters";
+import { VERIFIED_MANUAL } from "./characters/classification";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import type { HookScope } from "./modifiers";
 import type { AbilityOutcome, ParticipantBinding } from "@/stores/abilityResolution";
@@ -211,6 +212,9 @@ export const CANONICAL_ABILITY_SEMANTICS: AbilitySemanticsRegistry = new Map(VER
 
 export type SemanticsResolution =
   | { kind: "supported"; descriptor: AbilityDescriptor; role: RoleDef }
+  /** Slice 7: official rules verified, but the 10F representation is Manual /
+   * reference only (matrix Section 2) -- never invokable. */
+  | { kind: "verifiedManual"; role: RoleDef; note: string }
   /** No verified semantics for a canonical character. */
   | { kind: "unsupported"; role: RoleDef | undefined; reason: "noSemantics" | "unknownRole" }
   /** The definition is not proven canonical (homebrew / imported / custom /
@@ -231,6 +235,9 @@ export function resolveAbilitySemantics(
   if (!role) return { kind: "unsupported", role: undefined, reason: "unknownRole" };
   if (!isCanonicalRole(role)) return { kind: "homebrew", role };
   const descriptor = semantics.get(roleId);
-  if (!descriptor || descriptor.roleId !== roleId) return { kind: "unsupported", role, reason: "noSemantics" };
+  if (!descriptor || descriptor.roleId !== roleId) {
+    const note = VERIFIED_MANUAL.get(roleId);
+    return note ? { kind: "verifiedManual", role, note } : { kind: "unsupported", role, reason: "noSemantics" };
+  }
   return { kind: "supported", descriptor, role };
 }

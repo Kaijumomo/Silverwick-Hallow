@@ -629,6 +629,7 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   if (!actor) return refuse("stale", "The player in this seat changed since this workflow opened.");
   const semantics = resolveAbilitySemantics(request.roleId, environment.registry, environment.semantics ?? CANONICAL_ABILITY_SEMANTICS);
   if (semantics.kind === "homebrew") return refuse("unsupported", `${semantics.role.name} is not a verified official character -- resolve it manually.`);
+  if (semantics.kind === "verifiedManual") return refuse("unsupported", semantics.note);
   if (semantics.kind === "unsupported") return refuse("unsupported", "Silverwick has no verified rules for this ability yet -- resolve it manually.");
   const { descriptor } = semantics;
 

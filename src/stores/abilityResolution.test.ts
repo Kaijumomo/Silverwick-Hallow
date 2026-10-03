@@ -319,11 +319,12 @@ describe("10F-AC-18: a simulated wake has no ability", () => {
 
 describe("10F-AC-23: modifiers gate only what they could affect", () => {
   it("an unverified Fabled reaching the ability's scope gates it; an unrelated one does not", () => {
-    const toymaker = game("day", 2, { fabled: ["toymaker"] }); // death/targeting/setup/information
+    // (Slice 7: Toymaker now has a VERIFIED hook; Angel stays unverified with a death scope.)
+    const toymaker = game("day", 2, { fabled: ["angel"] }); // death
     const ask = planAbilityResolution(toymaker, guided(toymaker, "p1", "slayer", { target: pick(toymaker, "p4") }), fabledOf(toymaker));
-    expect(ask).toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: "modifier:fabled:toymaker" }] });
+    expect(ask).toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: "modifier:fabled:angel" }] });
     const cleared = planAbilityResolution(toymaker, guided(toymaker, "p1", "slayer", { target: pick(toymaker, "p4") },
-      { judgments: { "modifier:fabled:toymaker": { kind: "boolean", value: true } } }), fabledOf(toymaker));
+      { judgments: { "modifier:fabled:angel": { kind: "boolean", value: true } } }), fabledOf(toymaker));
     expect(cleared).toMatchObject({ ok: true, changed: true, plan: { needsConfirmation: true } });
     const ferryman = game("day", 2, { fabled: ["ferryman"] }); // voting only
     expect(planAbilityResolution(ferryman, guided(ferryman, "p1", "slayer", { target: pick(ferryman, "p4") }), fabledOf(ferryman))).toMatchObject({ ok: true, changed: true });

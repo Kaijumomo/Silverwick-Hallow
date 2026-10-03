@@ -36,6 +36,7 @@ export function stepAbility(roleId: string, registry: RoleRegistry, semantics: A
   const resolved = resolveAbilitySemantics(roleId, registry, semantics);
   if (resolved.kind === "supported") return { kind: "guided", descriptor: resolved.descriptor };
   if (resolved.kind === "homebrew") return { kind: "manual", reason: `${resolved.role.name} is not a verified official character.` };
+  if (resolved.kind === "verifiedManual") return { kind: "manual", reason: resolved.note };
   return { kind: "manual", reason: "Silverwick has no verified rules for this ability yet." };
 }
 
