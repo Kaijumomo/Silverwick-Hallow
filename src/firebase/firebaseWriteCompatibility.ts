@@ -52,13 +52,18 @@
  *    all before update() returns. See checkNodeConstruction()'s own doc
  *    comment for the exact rules.
  *
- * Deliberately not replicated: the 10 MiB single-string-leaf size limit
- * (MAX_LEAF_SIZE_) -- unreachable for any string this codebase's schema
- * produces (Storyteller notes/names are human-typed, nowhere near 10 MiB),
- * and the task's own guidance is not to overbuild for values that can't be
- * reached. JSON parsing already excludes JavaScript-only values (undefined,
+ *  - maximum single-string leaf size: 10 MiB (10 * 1024 * 1024) bytes --
+ *    MAX_LEAF_SIZE_ (PHASE10F Section 42, SOL-10F-D1). Phase 9R.1 left this
+ *    out as unreachable; Astra showed a supported Manual ability outcome
+ *    reaches it, so it is mirrored exactly: any string leaf anywhere in the
+ *    value (never a key) whose firebaseStringLength exceeds the limit is
+ *    rejected, at the same point in the per-node order as the SDK (after the
+ *    non-finite-number check, before an object's children). A string of
+ *    exactly 10 MiB is accepted.
+ *
+ * JSON parsing already excludes JavaScript-only values (undefined,
  * functions, symbols) from remote checkpoint input, so those are not
- * special-cased either.
+ * special-cased.
  *
  * Pure, read-only, deterministic: never mutates its input, never performs
  * a real Firebase write, and returns only a compatibility verdict.
@@ -67,6 +72,8 @@
 const ILLEGAL_KEY_CHARACTERS = /[[\].#$/\u0000-\u001F\u007F]/;
 const MAX_PATH_DEPTH = 32;
 const MAX_PATH_LENGTH_BYTES = 768;
+/** SOL-10F-D1: the installed SDK's MAX_LEAF_SIZE_ (@firebase/database). */
+const MAX_LEAF_SIZE_BYTES = 10 * 1024 * 1024;
 
 export type FirebaseWriteValidationResult = { ok: true } | { ok: false; message: string };
 
@@ -194,6 +201,12 @@ function check(value: unknown, path: PathState): string | null {
   }
   if (typeof value === "number" && !Number.isFinite(value)) {
     return `contains ${String(value)}, which Firebase RTDB cannot store.`;
+  }
+  // SOL-10F-D1: mirrors validateFirebaseData's leaf-size check exactly,
+  // including its `length > MAX / 3` shortcut (a string that short can never
+  // exceed the limit under firebaseStringLength, so the verdict is the same).
+  if (typeof value === "string" && value.length > MAX_LEAF_SIZE_BYTES / 3 && firebaseStringLength(value) > MAX_LEAF_SIZE_BYTES) {
+    return `contains a string greater than ${MAX_LEAF_SIZE_BYTES} utf8 bytes.`;
   }
   if (value !== null && typeof value === "object") {
     // Mirrors the SDK's each() (`for (key in obj) if (obj.hasOwnProperty(key))`):
