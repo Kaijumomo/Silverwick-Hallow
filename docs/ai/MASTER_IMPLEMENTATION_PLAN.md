@@ -274,4 +274,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Narrow Luna re-verification of SOL-10F-L3-R1 (`PHASE10F.md` §23) at the exact `dev/phase-10f` HEAD named in the remediation report. Keep production `CANONICAL_ABILITY_SEMANTICS` empty. Do not merge, deploy, close 10F or implement proof-character semantics.
+Sol researches and freezes the authoritative proof-character rules matrix for the Phase 10F proof set using official BOTC sources. Production `CANONICAL_ABILITY_SEMANTICS` remains empty until that matrix is frozen. After the rules freeze, Claude Code implements the proof-character semantic modules and scenario tests, followed by Luna/Astra/Sol review. Do not merge, deploy or close 10F yet.
