@@ -1282,3 +1282,22 @@ Remediated exactly the §35 findings, on top of `e72ddf5abcdac5e15f32f035d5a6d87
 Unchanged by decision (§35 "not promoted"): ordinary Role-away-and-back same-Night replay policy; the single conservative `eventId:null` trigger identity.
 
 Gate at `b9a7c58cca86a5e0b7b54ccdd1957aef90c866f2`: typecheck PASS; targeted B1…B6 suites 70/70 (3 files: `astraReverification.test.ts`, `astraReverificationUi.test.tsx`, `nightProgressKeys.sdk.test.ts`); A1…A10 suites 61/61 (2 files); proof-character suites 210/210 (16 files); 10F foundation / architecture / writer guards 416/416 (17 files); Life Event migration / recovery / checkpoint suites 163/163 (8 files); full normal suite 3,897/3,897 across 158 files (0 skipped); Firebase emulator 201/201 (0 skipped); build PASS; worktree and baseline-range `git diff --check` PASS. The installed Firebase SDK (12.12.1, offline oracle) rejects the pre-fix raw `…:ideath.v1` trigger key and accepts every encoded key, including an end-to-end Imp kill recorded as LifeEvent `death.v1` followed by the consumed Ravenkeeper trigger. All eight Astra counterexamples reproduced before the fixes (B1 Al-Hadikhia + Fortune Teller emitted the replacement's binding; B2 reused the initial judgment; B3 consumed an inherited `"no"` as functioning and killed the Chef; B4 missed both jinx sequences; B5 produced the identical key `p:alpha:beta:gunslinger`; B6 produced a Firebase-invalid key) and refuse / ask correctly after. The B1 UI regressions fail 8/15 on the pre-fix UI; twelve planted seam mutations (scope ignored, stage or prefix dropped from the attempt token, raw judgment / input reads, inherited value fields, first-vs-last jinx comparison, `:` / `.` / `%` kept plain, raw joins, bare `encodeURIComponent`) were each caught and restored.
+
+## 37. Sol pre-Luna acceptance of B1…B6 remediation — 2026-10-03
+
+Sol independently spot-checked the pushed B1…B6 remediation at code checkpoint `b9a7c58cca86a5e0b7b54ccdd1957aef90c866f2` and accepts it for targeted Luna verification.
+
+The spot-check confirmed the intended authority shapes:
+
+- multi-participant UI slots retain the exact `ParticipantBinding` captured when each slot is selected, including incomplete requirements;
+- Al-Hadikhia protection judgments are scoped to a particular death attempt and evolving resolution prefix, so initial and final attempts cannot share one Storyteller answer;
+- guided answer maps are canonical own-property snapshots used by every downstream consumer;
+- prospective jinx analysis simulates Actual Role changes in declared order rather than comparing only the initial and final represented sets;
+- every dynamic component of participant-scoped Night progress uses one injective encoder;
+- the same encoding is Firebase-key-safe, including dotted LifeEvent ids, and is exercised through the installed Firebase SDK.
+
+The B5/B6 key encoding remains an unreleased-v24 contract refinement; `STORE_VERSION` stays 24 and no Firebase Rules change is required.
+
+No proof-character rule boundary is reopened by this acceptance. Luna must independently verify B1…B6, preservation of A1…A10, the full regression gate and documentation integrity before Astra closure re-verification.
+
+Phase 10F remains open. No merge or deployment is authorized.
