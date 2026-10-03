@@ -12,7 +12,7 @@ import {
   type InformationConstraintValue,
 } from "@/abilities/semantics";
 import { invocationEligibility, isInvocationPath, nightTriggerJudgmentId, nightTriggerStatus, type InvocationPath } from "@/abilities/invocation";
-import { activeModifiers, type ModifierDefinition } from "@/abilities/modifiers";
+import { activeModifiers, prospectiveJinxes, type ModifierDefinition } from "@/abilities/modifiers";
 import { applyAlignmentPlan, defaultAlignmentIds, planAlignmentTransaction, type AlignmentIdSource, type AlignmentIntent } from "./alignmentResolution";
 import { applyEffectPlan, planEffectTransaction, type EffectIdSource, type EffectIntent } from "./effectResolution";
 import { applyInformationDeliveryPlan, planInformationDelivery } from "./informationDelivery";
@@ -849,6 +849,17 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
         if (!constraint.allowed.some((allowed) => constraintAllows(allowed, value))) return refuse("illegal", constraint.reason);
       }
     }
+  }
+  // SOL-10F-A4: a guided Actual Role change that would itself bring an
+  // UNVERIFIED canonical jinx into play is never automated -- the WHOLE
+  // resolution goes to Manual before any mutation (no generic "does not change
+  // this resolution" confirmation can bypass a rule triggered by the creation).
+  const roleChanges = outcome.operations.flatMap((operation) => operation.domain === "role"
+    ? operation.intents.flatMap((intent) => isObject(intent) && intent.kind === "changeActualRole" && isBinding(intent.target) && typeof intent.actualRole === "string"
+      ? [{ playerId: intent.target.playerId, roleId: intent.actualRole }] : []) : []);
+  const createdJinxes = prospectiveJinxes(game, environment.registry, roleChanges).filter((jinx) => !jinx.hook);
+  if (createdJinxes.length) {
+    return refuse("unsupported", `This character change would bring an unverified jinx into play (${createdJinxes.map((jinx) => jinx.label).join(", ")}) -- resolve the whole action manually.`);
   }
   const judgmentAnswered = judgmentUsed || descriptor.inputs.some((requirement) => requirement.source === "judgment") || Object.keys(judgments).length > 0;
   const result = composeAbilityOutcome(game, outcome, environment, {

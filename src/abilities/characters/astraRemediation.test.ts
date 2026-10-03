@@ -3,7 +3,9 @@
 // Each `describe` names its finding; Astra's original reproduction is the
 // first case where one exists.
 import { describe, expect, it } from "vitest";
-import { activeModifiers, type ModifierDefinition } from "@/abilities/modifiers";
+import { activeModifiers, prospectiveJinxes, type ModifierDefinition } from "@/abilities/modifiers";
+import { buildRegistry } from "@/data/roleRegistry";
+import { homebrewScript } from "@/test/proofFixtures";
 import { abilityInputValueError } from "@/stores/abilityResolution";
 import { bind, impair, num, patchPlayer, pick, plan, planned, proofEnv, proofGame, proofRegistry, request, requirementIds, yes } from "@/test/proofFixtures";
 import { CONSENT, DEATH_CONSEQUENCE } from "./harlot";
@@ -181,5 +183,51 @@ describe("SOL-10F-A6 -- Al-Hadikhia settles each player before asking the next",
     const all = { [C(g, 0, "p1")]: yes(true), [C(g, 1, "p2")]: yes(true), [C(g, 2, "p3")]: yes(true) };
     expect(requirementIds(run(g, all))).toEqual([P(g, "p1")]);
     expect(requirementIds(run(g, all, { [P(g, "p1")]: yes(false) }))).toEqual([P(g, "p3")]);
+  });
+});
+
+describe("SOL-10F-A4 -- a Role change that creates a jinx endpoint is gated prospectively", () => {
+  // p0 pithag, p1 chef (the target), p2 imp, ...
+  const PIT = ["pithag", "chef", "imp", "monk", "empath", "saint", "washerwoman"];
+  const hag = (g: StorytellerLobbyRecord, roleId: string, extra: Record<string, unknown> = {}) =>
+    plan(g, request(g, "p0", "pithag", { target: pick(g, "p1"), character: { kind: "character", roleIds: [roleId] } }, extra), envOf(g));
+
+  it("Astra's reproduction: Pit-Hag -> an absent Damsel routes the WHOLE action to Manual; nothing changes", () => {
+    const g = proofGame(PIT);
+    expect(hag(g, "damsel")).toMatchObject({ ok: false, code: "unsupported", message: expect.stringMatching(/pithag \/ damsel jinx/) });
+    // No generic confirmation can bypass it.
+    expect(hag(g, "damsel", { judgments: { "modifier:jinx:pithag+damsel": yes() } })).toMatchObject({ ok: false, code: "unsupported" });
+  });
+
+  it("every other Pit-Hag destination in the pinned jinx data is gated the same way", () => {
+    const g = proofGame(PIT);
+    for (const roleId of ["cultleader", "goon", "ogre", "politician", "villageidiot", "heretic", "summoner"]) {
+      expect(hag(g, roleId), roleId).toMatchObject({ ok: false, code: "unsupported", message: expect.stringMatching(/jinx/) });
+    }
+  });
+
+  it("a created endpoint jinxed with ANOTHER represented character is gated too (not only the Pit-Hag's own jinxes)", () => {
+    const g = proofGame(["pithag", "chef", "alhadikhia", "monk", "empath", "saint", "washerwoman"]);
+    expect(hag(g, "scarletwoman")).toMatchObject({ ok: false, code: "unsupported", message: expect.stringMatching(/scarletwoman \/ alhadikhia jinx/) });
+  });
+
+  it("an existing Damsel: the ordinary 'already in play' no-op remains (after the CURRENT jinx's confirmation)", () => {
+    const g = proofGame(["pithag", "chef", "imp", "monk", "empath", "saint", "damsel"]);
+    expect(requirementIds(hag(g, "damsel"))).toEqual(["modifier:jinx:pithag+damsel"]);
+    expect(hag(g, "damsel", { judgments: { "modifier:jinx:pithag+damsel": yes() } })).toEqual({ ok: true, changed: false });
+  });
+
+  it("an unrelated destination stays guided, and a jinx pair merely on the script gates nothing", () => {
+    const g = proofGame(PIT); // the script carries every character, including Scarlet Woman / Al-Hadikhia
+    expect(planned(hag(g, "slayer")).players.p1!.actualRole).toBe("slayer");
+    expect(planned(hag(g, "scarletwoman")).players.p1!.actualRole).toBe("scarletwoman"); // Al-Hadikhia not represented
+    expect(prospectiveJinxes(g, proofRegistry, [{ playerId: "p1", roleId: "slayer" }])).toEqual([]);
+  });
+
+  it("a homebrew definition reusing a jinxed id gains no canonical jinx behaviour", () => {
+    const g = proofGame(PIT);
+    const registry = buildRegistry(homebrewScript("damsel"));
+    expect(prospectiveJinxes(g, registry, [{ playerId: "p1", roleId: "damsel" }])).toEqual([]);
+    expect(prospectiveJinxes(g, proofRegistry, [{ playerId: "p1", roleId: "damsel" }]).map((j) => j.id)).toEqual(["jinx:pithag+damsel"]);
   });
 });

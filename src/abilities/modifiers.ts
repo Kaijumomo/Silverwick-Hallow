@@ -120,13 +120,17 @@ const JINX_PAIRS: readonly [RoleId, RoleId][] = (jinxData as JinxEntry[]).flatMa
 export function representedCanonicalCharacters(
   game: Pick<StorytellerLobbyRecord, "players">,
   registry: RoleRegistry,
+  /** SOL-10F-A4: a hypothetical Actual Role for some seats (prospective query);
+   * read-only -- no record is built or written. */
+  proposedRoleOf: (playerId: string) => RoleId | undefined = () => undefined,
 ): Set<RoleId> {
   const represented = new Set<RoleId>();
-  for (const player of Object.values(game.players ?? {})) {
-    if (!player || player.isEmpty || !player.participantId || typeof player.actualRole !== "string" || !player.actualRole) continue;
-    if (represented.has(player.actualRole)) continue;
-    const role = registry.get(player.actualRole);
-    if (role && isCanonicalRole(role)) represented.add(player.actualRole);
+  for (const [playerId, player] of Object.entries(game.players ?? {})) {
+    if (!player || player.isEmpty || !player.participantId) continue;
+    const roleId = proposedRoleOf(playerId) ?? player.actualRole;
+    if (typeof roleId !== "string" || !roleId || represented.has(roleId)) continue;
+    const role = registry.get(roleId);
+    if (role && isCanonicalRole(role)) represented.add(roleId);
   }
   return represented;
 }
@@ -173,6 +177,39 @@ export function activeModifiers(
  * hook's result -- so answering an unverified modifier never discards a
  * verified rule.
  */
+/**
+ * SOL-10F-A4: the PROSPECTIVE jinx query for proposed Actual Role changes.
+ * Ordinary activation (above) reads CURRENT represented characters; a
+ * Role-changing ability can itself create a jinx endpoint (e.g. a Pit-Hag
+ * creating a Damsel), so this derives, purely, the canonical jinxes that would
+ * become ACTIVE only because of the proposed changes: both endpoints
+ * represented after them (same canonical-ownership rule, never script
+ * membership) and not both before. Each comes back as a jinx modifier (with its
+ * verified hook when one exists).
+ */
+export function prospectiveJinxes(
+  game: Pick<StorytellerLobbyRecord, "players">,
+  registry: RoleRegistry,
+  changes: readonly { playerId: string; roleId: RoleId }[],
+  verified: ReadonlyMap<string, ModifierDefinition["hook"]> = VERIFIED_MODIFIER_HOOKS,
+): ModifierDefinition[] {
+  if (!changes.length) return [];
+  const proposed = new Map(changes.map((change) => [change.playerId, change.roleId]));
+  const before = representedCanonicalCharacters(game, registry);
+  const after = representedCanonicalCharacters(game, registry, (playerId) => proposed.get(playerId));
+  const out: ModifierDefinition[] = [];
+  const seen = new Set<string>();
+  for (const [a, b] of JINX_PAIRS) {
+    if (!after.has(a) || !after.has(b) || (before.has(a) && before.has(b))) continue;
+    const key = `jinx:${a}+${b}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const hook = verified.get(key);
+    out.push({ id: key, source: "jinx", label: `${a} / ${b} jinx`, scopes: ["global"], characters: [a, b], ...(hook ? { hook } : {}) });
+  }
+  return out;
+}
+
 export type ModifierGate =
   | { kind: "clear" }
   /** At least one reaching UNVERIFIED modifier, plus every reaching verified
