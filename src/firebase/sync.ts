@@ -6,8 +6,13 @@ import {
 import type { RoleRegistry } from "@/data/roleRegistry";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import type { Json, RoomBackend } from "./backend";
+import { serializeCheckpoint } from "./checkpoint";
+import { validateFirebaseWritableValue } from "./firebaseWriteCompatibility";
+import { LifecycleError } from "./lifecycle";
 import { acknowledgePackets } from "./packetDeliveryState";
 import {
+  checkpointPath,
+  checkpointPathSegments,
   playerPath,
   publicPath,
   storytellerPath,
@@ -64,7 +69,16 @@ export async function writeProjections(ctx: WriteContext): Promise<void> {
   // ST-private state. Only the ST can read this path (Firebase rules enforce).
   updates[storytellerPath(code)] = stState as unknown as Json;
   // JSON preserves empty arrays/maps for a fully validated writer takeover.
-  updates[`lobbies/${code}/checkpoint`] = JSON.stringify({ game: stState, roster: ctx.membership ?? {} });
+  const checkpoint = serializeCheckpoint(stState, ctx.membership ?? {});
+  // SOL-10F-E1 defense in depth: the store already refuses an ability result
+  // whose checkpoint could not fit, but THIS exact string (real roster, real
+  // destination) is what Firebase will judge. Refused before any write, so no
+  // public/player/Storyteller path is projected without its checkpoint.
+  const writable = validateFirebaseWritableValue(checkpoint, checkpointPathSegments(code));
+  if (!writable.ok) {
+    throw new LifecycleError("invalid", `This game cannot be saved online: its recovery checkpoint ${writable.message.replace(/\.$/, "")}. Nothing was written; undo the most recent change, then retry.`);
+  }
+  updates[checkpointPath(code)] = checkpoint;
 
   await backend.update(updates);
   acknowledgePackets(code, Object.fromEntries(Object.entries(stState.players)

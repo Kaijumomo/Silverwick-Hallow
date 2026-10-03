@@ -76,6 +76,7 @@ import { isBagType } from "@/features/setup/setupPolicies";
 import { arrivalsAreTravelers, newTravelerArrival, publicTravelerRole, travelerDemonInformation, travelerNeedsArrivalCheck } from "./travelers";
 import { getTraveler } from "@/data/travelers";
 import { MAX_PLAYERS, MAX_TOTAL_PLAYERS, MIN_PLAYERS } from "@/data/setupCounts";
+import { validateCheckpointEnvelope } from "@/firebase/checkpoint";
 import { validateFirebaseWritableValue } from "@/firebase/firebaseWriteCompatibility";
 import { storytellerPathSegments } from "@/firebase/paths";
 import { MAX_ROOM_CODE_SHAPE } from "@/firebase/roomCode";
@@ -1963,6 +1964,16 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!writable.ok) {
           return { ok: false, code: "invalidComposition",
             message: `This result cannot be safely stored online (the resulting game ${writable.message.replace(/\.$/, "")}) -- nothing was recorded. Resolve it another way.` };
+        }
+        // SOL-10F-E1: the writer also persists the whole game as ONE derived
+        // checkpoint string beside the live roster this store does not own.
+        // Proven against the conservative supported-roster envelope (every
+        // seat bound to a maximum-length UID, under any room) with the SAME
+        // serializer and validator the writer uses -- never an empty roster.
+        const checkpoint = validateCheckpointEnvelope(result.plan.game, game);
+        if (!checkpoint.ok) {
+          return { ok: false, code: "invalidComposition",
+            message: `This result cannot be safely stored online (the game's recovery checkpoint ${checkpoint.message.replace(/\.$/, "")}) -- nothing was recorded. Resolve it another way.` };
         }
         set({ undoStack: pushUndo(game, undoStack), game: result.plan.game });
         return { ok: true, changed: true, resolutionId: result.plan.resolutionId };

@@ -30,6 +30,11 @@ export const playerPath = (code: string, playerId: PlayerId) =>
 export const storytellerPathSegments = (code: string): readonly string[] => ["lobbies", code, "storyteller"];
 export const storytellerPath = (code: string) =>
   storytellerPathSegments(code).join("/");
+/** SOL-10F-E1: the derived recovery checkpoint's destination (one string
+ * leaf, see checkpoint.ts), as path segments. */
+export const checkpointPathSegments = (code: string): readonly string[] => ["lobbies", code, "checkpoint"];
+export const checkpointPath = (code: string) =>
+  checkpointPathSegments(code).join("/");
 export const presencePath = (code: string, uid: string) =>
   `lobbies/${code}/presence/${uid}`;
 // Phase 9C.6 (OPUS-002): Storyteller-owned Public Display capability, and the
