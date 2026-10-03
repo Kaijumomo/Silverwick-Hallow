@@ -427,11 +427,17 @@ describe("SOL-10F-B2 -- protection judgments belong to one death attempt + its s
     expect(lifeIntents(monkFirst)).toEqual(["death:p2", "death:p1"]);
   });
 
-  it("single-attempt characters keep their stable target + cause identity", () => {
-    expect(protectionJudgmentId("demon", { playerId: "p1", participantId: "a" })).toBe("protection:demon:a");
-    expect(protectionJudgmentId("demon", { playerId: "p1", participantId: "a" }, { id: "x" })).not.toBe("protection:demon:a");
-    // A ParticipantId / scope token can never make a scoped id collide with an unscoped one.
-    expect(protectionJudgmentId("demon", { playerId: "p1", participantId: "@[\"x\",\"a\"]" })).not.toBe(protectionJudgmentId("demon", { playerId: "p1", participantId: "a" }, { id: "x" }));
+  // SOL-10F-C2 (PHASE10F Section 39) supersedes B2's "single-attempt characters
+  // keep their stable target + cause identity": EVERY protection judgment id
+  // now binds the RulesQuery dependency stamp too (see astraClosure.test.ts).
+  it("single-attempt ids stay unscoped but bind the dependency stamp; scoped and unscoped ids never collide", () => {
+    const a = { playerId: "p1", participantId: "a" };
+    expect(protectionJudgmentId("demon", a, "S")).toBe('protection:demon:["a","S"]');
+    expect(protectionJudgmentId("demon", a, "S")).not.toBe(protectionJudgmentId("demon", a, "T"));
+    expect(protectionJudgmentId("demon", a, "S", { id: "x" })).not.toBe(protectionJudgmentId("demon", a, "S"));
+    // No ParticipantId / scope token / stamp can make a scoped id collide with an unscoped one, or two ids collide.
+    expect(protectionJudgmentId("demon", { playerId: "p1", participantId: '@["x","a"' }, "S")).not.toBe(protectionJudgmentId("demon", a, "S", { id: "x" }));
+    expect(protectionJudgmentId("demon", { playerId: "p1", participantId: 'a","S' }, "T")).not.toBe(protectionJudgmentId("demon", a, 'S","T'));
   });
 });
 

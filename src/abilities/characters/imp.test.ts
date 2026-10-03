@@ -2,8 +2,7 @@
 // (matrix Sections 6 and 18.1). Production semantics.
 import { beforeEach, describe, expect, it } from "vitest";
 import { SUCCESSOR, swFunctionsJudgment } from "./imp";
-import { protectionJudgmentId } from "./shared";
-import { bind, homebrewEnv, homebrewScript, impair, openInStore, patchPlayer, pick, plan, planned, proofEnv, proofGame, proofScript, request, requirementIds, reseat, yes } from "@/test/proofFixtures";
+import { protectionId, homebrewEnv, homebrewScript, impair, openInStore, patchPlayer, pick, plan, planned, proofEnv, proofGame, proofScript, request, requirementIds, reseat, yes } from "@/test/proofFixtures";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { computeNightOrder } from "@/features/nightOrder/nightOrder";
 import { participantStepKey } from "@/stores/nightProgress";
@@ -31,7 +30,7 @@ describe("Imp -- killing another player", () => {
   it("a Monk-protected target does not die; generic Protected -> judgment", () => {
     expect(kill(monkSafe(base(), "p4"), "p4")).toEqual({ ok: true, changed: false });
     const generic = patchPlayer(base(), "p4", { effects: [{ id: "gp", type: "protected", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as EffectRecord] });
-    const id = protectionJudgmentId("demon", bind(generic, "p4"));
+    const id = protectionId(generic, "demon", "p4");
     expect(requirementIds(kill(generic, "p4"))).toEqual([id]);
     expect(planned(kill(generic, "p4", { judgments: { [id]: yes(false) } })).players.p4!.alive).toBe(false);
   });

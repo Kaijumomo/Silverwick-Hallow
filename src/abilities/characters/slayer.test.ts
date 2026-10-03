@@ -1,8 +1,7 @@
 // Phase 10F Slice 7 -- Slayer (matrix Section 10). Production semantics.
 import { beforeEach, describe, expect, it } from "vitest";
 import { registersAsDemonJudgment } from "./slayer";
-import { protectionJudgmentId } from "./shared";
-import { bind, homebrewEnv, impair, openInStore, patchPlayer, pick, plan, planned, proofGame, request, requirementIds, reseat, yes } from "@/test/proofFixtures";
+import { bind, protectionId, homebrewEnv, impair, openInStore, patchPlayer, pick, plan, planned, proofGame, request, requirementIds, reseat, yes } from "@/test/proofFixtures";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import type { EffectRecord, StorytellerLobbyRecord } from "@/stores/types";
 
@@ -60,7 +59,7 @@ describe("Slayer -- functioning", () => {
     expect(planned(shoot(monked, "p1")).players.p1!.alive).toBe(false);
     // Generic Protected -> explicit judgment.
     const generic = patchPlayer(day(), "p1", { effects: [effect("protected")] });
-    const id = protectionJudgmentId("any", bind(generic, "p1"));
+    const id = protectionId(generic, "any", "p1");
     expect(requirementIds(shoot(generic, "p1"))).toEqual([id]);
     expect(planned(shoot(generic, "p1", { judgments: { [id]: yes(true) } })).players.p1!.alive).toBe(true);
     expect(planned(shoot(generic, "p1", { judgments: { [id]: yes(false) } })).players.p1!.alive).toBe(false);

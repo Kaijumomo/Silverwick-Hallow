@@ -5,8 +5,8 @@
 import { describe, expect, it } from "vitest";
 import { CANONICAL_ABILITY_SEMANTICS, resolveAbilitySemantics, type AbilityInputValue, type AbilitySemanticsRegistry } from "@/abilities/semantics";
 import { CHARACTER_JUDGMENT, CONSENT, DEATH_CONSEQUENCE, HARLOT, SHOWN } from "./harlot";
-import { protectionJudgmentId, subjectId } from "./shared";
-import { bind, homebrewEnv, homebrewScript, proofRegistry, impair, patchPlayer, pick, plan, planned, proofEnv, proofGame, request, requirementIds, reseat, yes } from "@/test/proofFixtures";
+import { subjectId } from "./shared";
+import { bind, protectionId, homebrewEnv, homebrewScript, proofRegistry, impair, patchPlayer, pick, plan, planned, proofEnv, proofGame, request, requirementIds, reseat, yes } from "@/test/proofFixtures";
 import type { EffectRecord, RoleDef, StorytellerLobbyRecord } from "@/stores/types";
 import { buildRegistry, silverwickInformationActions } from "@/data/roleRegistry";
 import { planInformationDelivery } from "@/stores/informationDelivery";
@@ -81,7 +81,7 @@ describe("Harlot -- consent", () => {
     const monked = patchPlayer(base(), "p1", { effects: [effect("safeFromDemon")] });
     expect(planned(run(monked, "p1", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() })).players.p1!.alive).toBe(false);
     const generic = patchPlayer(base(), "p1", { effects: [effect("protected")] });
-    const id = protectionJudgmentId("any", bind(generic, "p1"));
+    const id = protectionId(generic, "any", "p1");
     expect(requirementIds(run(generic, "p1", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }))).toEqual([id]);
     expect(planned(run(generic, "p1", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }, { judgments: { [id]: yes(true) } })).players.p1!.alive).toBe(true);
   });
@@ -242,7 +242,7 @@ describe("SOL-10F-S7-F1 -- the Harlot may choose themself", () => {
     const monked = patchPlayer(base(), "p0", { effects: [effect("safeFromDemon")] }); // Demon-only: no block
     expect(deathIntents(run(monked, "p0", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }))).toHaveLength(1);
     const generic = patchPlayer(base(), "p0", { effects: [effect("protected")] });
-    const id = protectionJudgmentId("any", bind(generic, "p0"));
+    const id = protectionId(generic, "any", "p0");
     expect(requirementIds(run(generic, "p0", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }))).toEqual([id]);
     expect(deathIntents(run(generic, "p0", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }, { judgments: { [id]: yes(false) } }))).toHaveLength(1);
     expect(deathIntents(run(generic, "p0", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }, { judgments: { [id]: yes(true) } }))).toEqual([]);

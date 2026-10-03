@@ -94,14 +94,32 @@ export type DeathCause = "demon" | "any";
  */
 export type DeathAttemptScope = { id: string; label?: string };
 
-/** The judgment id asked when protection against one death is unknown. A
- * single-attempt ability keeps the stable target + cause identity; a scoped
- * attempt (SOL-10F-B2) binds the attempt too, so a judgment answered for one
- * attempt can never settle another -- JSON-encoded, so no ParticipantId or
- * scope token can make two attempts collide, and `@` keeps scoped ids apart
- * from unscoped ones. */
-export const protectionJudgmentId = (cause: DeathCause, binding: ParticipantBinding, scope?: DeathAttemptScope) =>
-  scope === undefined ? `protection:${cause}:${binding.participantId}` : `protection:${cause}@${JSON.stringify([scope.id, binding.participantId])}`;
+/** The judgment id asked when protection against one death is unknown. It
+ * binds the target, the cause and (SOL-10F-C2) the RulesQuery protection-
+ * dependency stamp of the exact state the attempt is evaluated against, so a
+ * judgment answered under one state can never settle the same question after
+ * a relevant change (a source dying / resurrecting, changing Role, leaving, an
+ * Effect added / removed / suppressed / resumed). A scoped attempt
+ * (SOL-10F-B2) binds the attempt too, so a judgment answered for one attempt
+ * can never settle another. JSON-encoded, so no ParticipantId, scope token or
+ * stamp can make two ids collide, and `@` keeps scoped ids apart from unscoped
+ * ones. */
+export const protectionJudgmentId = (cause: DeathCause, binding: ParticipantBinding, dependency: string, scope?: DeathAttemptScope) =>
+  scope === undefined
+    ? `protection:${cause}:${JSON.stringify([binding.participantId, dependency])}`
+    : `protection:${cause}@${JSON.stringify([scope.id, binding.participantId, dependency])}`;
+
+/**
+ * SOL-10F-C2: whether `target`'s protection against `cause` reads differently
+ * under two queries (e.g. Current State vs. a hypothetical in which another
+ * death happened first): KNOWN answers compare by value; UNKNOWN only matches
+ * UNKNOWN. It reads no Storyteller judgment -- a judgment answers one death
+ * attempt under one state, never a comparison between two states.
+ */
+export function protectionDiffers(a: AbilityEvaluationContext["query"], b: AbilityEvaluationContext["query"], target: ParticipantBinding, cause: DeathCause): boolean {
+  const left = a.protectedFrom(target, cause), right = b.protectedFrom(target, cause);
+  return left.known !== right.known || (left.known && right.known && left.value !== right.value);
+}
 
 export type DeathDecision =
   | { kind: "dies" }
@@ -114,8 +132,9 @@ export type DeathDecision =
  * unknown (custom / generic Protected / unresolved source) -> an explicit
  * Storyteller judgment, never inferred. `query` may be a hypothetical query
  * over the evolving Life state of this resolution. `attempt` (SOL-10F-B2)
- * scopes the judgment to one particular death attempt; known answers are
- * always recomputed from `query` and never read a judgment.
+ * scopes the judgment to one particular death attempt, and the judgment id
+ * always carries `query`'s protection-dependency stamp (SOL-10F-C2); known
+ * answers are always recomputed from `query` and never read a judgment.
  */
 export function deathAttempt(
   context: AbilityEvaluationContext,
@@ -126,7 +145,8 @@ export function deathAttempt(
 ): DeathDecision {
   const answer = query.protectedFrom(target, cause);
   if (answer.known) return answer.value ? { kind: "survives" } : { kind: "dies" };
-  const id = protectionJudgmentId(cause, target, attempt);
+  // SOL-10F-C2: the id binds the dependency stamp of the queried state.
+  const id = protectionJudgmentId(cause, target, query.protectionDependencyStamp(target, cause), attempt);
   const judged = answerOf(context.judgments, id, "boolean");
   if (judged) return judged.value ? { kind: "survives" } : { kind: "dies" };
   return {

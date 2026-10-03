@@ -2,8 +2,7 @@
 // rule: every Al-Hadikhia death is Demon-caused -> protectedFrom(.., "demon")).
 import { beforeEach, describe, expect, it } from "vitest";
 import { attemptScope, choiceId } from "./alhadikhia";
-import { protectionJudgmentId } from "./shared";
-import { bind, homebrewEnv, impair, openInStore, patchPlayer, pick, plan, planned, proofGame, request, requirementIds, reseat, yes } from "@/test/proofFixtures";
+import { bind, protectionId, homebrewEnv, impair, openInStore, patchPlayer, pick, plan, planned, proofGame, request, requirementIds, reseat, yes } from "@/test/proofFixtures";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import type { AbilityInputValue } from "@/abilities/semantics";
 import type { EffectRecord, StorytellerLobbyRecord } from "@/stores/types";
@@ -104,10 +103,10 @@ describe("Al-Hadikhia -- resolution", () => {
   it("Demon-caused: protection is queried for 'demon' -- unknown -> judgment (scoped to this death attempt, SOL-10F-B2)", () => {
     const g = patchPlayer(base(), "p1", { effects: [{ id: "gp", type: "protected", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as EffectRecord] });
     const [id] = requirementIds(run(g, ["p1", "p2", "p3"], [DIE, DIE, DIE]));
-    expect(id).toBe(protectionJudgmentId("demon", bind(g, "p1"), attemptScope("initial", 0, [bind(g, "p1"), bind(g, "p2"), bind(g, "p3")], [DIE], [], [true, true, true])));
+    expect(id).toBe(protectionId(g, "demon", "p1", attemptScope("initial", 0, [bind(g, "p1"), bind(g, "p2"), bind(g, "p3")], [DIE], [], [true, true, true])));
     expect(intents(run(g, ["p1", "p2", "p3"], [DIE, DIE, DIE], { judgments: { [id!]: yes(true) } }))).toEqual(["death:p2", "death:p3"]);
     // The unscoped single-attempt identity never settles an Al-Hadikhia attempt.
-    expect(requirementIds(run(g, ["p1", "p2", "p3"], [DIE, DIE, DIE], { judgments: { [protectionJudgmentId("demon", bind(g, "p1"))]: yes(true) } }))).toEqual([id]);
+    expect(requirementIds(run(g, ["p1", "p2", "p3"], [DIE, DIE, DIE], { judgments: { [protectionId(g, "demon", "p1")]: yes(true) } }))).toEqual([id]);
   });
 
   it("an impaired Al-Hadikhia: choices only, no Life change", () => {

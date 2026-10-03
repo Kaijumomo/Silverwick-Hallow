@@ -1,7 +1,7 @@
 import type { AbilityDescriptor, AbilityEvaluation, AbilityEvaluationContext } from "../semantics";
 import type { AbilityOperation, ParticipantBinding } from "@/stores/abilityResolution";
 import type { RoleId } from "@/stores/types";
-import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, nothing, outcome, requireLivingActor, subjectId } from "./shared";
+import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, nothing, outcome, protectionDiffers, requireLivingActor, subjectId } from "./shared";
 
 /**
  * Harlot -- GUIDED (Traveller). docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md
@@ -95,7 +95,9 @@ export const HARLOT: AbilityDescriptor = {
       const alone = deathAttempt(context, who, "any");
       if (alone.kind === "ask") return ask(alone.message, alone.requirement);
       const other = pair[1 - index];
-      if (other && deathAttempt(context, who, "any", context.query.assumingAlive(other, false)).kind !== alone.kind) {
+      // SOL-10F-C2: the order probe compares protection itself (never a
+      // judgment): the judgment answered above settles only this real attempt.
+      if (other && protectionDiffers(context.query, context.query.assumingAlive(other, false), who, "any")) {
         return { kind: "unsupported", message: "Whether one of these deaths is prevented depends on the other death happening first -- the order matters, so resolve it manually." };
       }
       if (alone.kind === "dies") deaths.push({ kind: "death", target: who });

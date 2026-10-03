@@ -116,6 +116,15 @@ export type RulesQuery = {
   /** Protection against a death of `cause`. `generic` Protected never answers
    * "protected" automatically. */
   protectedFrom: (binding: ParticipantBinding, cause: "demon" | "any") => QueryAnswer<boolean>;
+  /** SOL-10F-C2: a deterministic, EXACT (never hashed) stamp of every piece of
+   * authoritative Current State this query can consult when answering
+   * `protectedFrom(binding, cause)` -- under THIS query's state, hypothetical
+   * `assumingAlive` overlays included. Equal stamps mean the protection
+   * question is being asked of the same state; any change that can alter
+   * protection applicability changes it. A conservative superset: it may also
+   * change after an unrelated mechanical change, never miss a relevant one.
+   * Transient workflow identity only; never persisted. */
+  protectionDependencyStamp: (binding: ParticipantBinding, cause: "demon" | "any") => string;
   /** What the participant registers as, to an `observer` character. */
   registration: (binding: ParticipantBinding, observer?: RoleId) => RegistrationAnswer;
   /** The nearest living participants on each side (skipping empty seats and
@@ -226,6 +235,40 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     return known(true);
   };
 
+  /**
+   * SOL-10F-C2: the protection-dependency snapshot of this query's state --
+   * computed once per query (each `assumingAlive` overlay is its own query).
+   * protectedFrom can reach, through Effect sources and their functioning, ANY
+   * occupied participant, so the snapshot covers every one of them, ordered by
+   * PlayerId: PlayerId, ParticipantId (replacement / departure), alive AS SEEN
+   * BY THIS QUERY (hypothetical overlays included), Actual Role, and every
+   * Effect record in order (id, type, lifecycle state, source character, source
+   * participant, expiry, parameters) together with the source character's
+   * persistence declaration as this query's environment resolves it.
+   * Authoritative Current State only: never History, Reminders or prose
+   * (names and notes are excluded). Exact JSON, so no collision handling is
+   * needed.
+   */
+  let dependencySnapshot: string | undefined;
+  const sortedKeys = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(sortedKeys);
+    if (!value || typeof value !== "object") return value ?? null;
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortedKeys((value as Record<string, unknown>)[key])]));
+  };
+  const declarationOf = (effect: EffectRecord): unknown => {
+    if (!effect.sourceCharacter) return null;
+    const resolved = resolveAbilitySemantics(effect.sourceCharacter, environment.registry, environment.semantics);
+    return [resolved.kind, resolved.kind === "supported" ? resolved.descriptor.sourcedEffects?.find((entry) => entry.type === effect.type)?.persistence ?? null : null];
+  };
+  const protectionDependencies = (): string => dependencySnapshot ??= JSON.stringify(["protection-dependency-v1",
+    Object.keys(game.players).sort().flatMap((playerId) => {
+      const player = game.players[playerId];
+      if (!player || player.isEmpty || !player.participantId) return [];
+      return [[playerId, player.participantId, player.alive, player.actualRole, (player.effects ?? []).map((effect) => [
+        effect.id, effect.type, effect.state, effect.sourceCharacter ?? null, sortedKeys(effect.sourceParticipant),
+        sortedKeys(effect.expiry), sortedKeys(effect.parameters), declarationOf(effect)])]];
+    })]);
+
   const require = <T,>(binding: ParticipantBinding, run: (player: STPlayerRecord) => QueryAnswer<T>): QueryAnswer<T> => {
     const player = participant(binding);
     return player ? run(player) : unknown("That participant is no longer in this seat.");
@@ -256,6 +299,7 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
       }
       return undetermined ? unknown(undetermined) : known(false);
     }),
+    protectionDependencyStamp: () => protectionDependencies(),
     registration: (binding, observer) => {
       const player = participant(binding);
       if (!player) {

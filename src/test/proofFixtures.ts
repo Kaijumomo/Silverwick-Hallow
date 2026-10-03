@@ -17,6 +17,7 @@ import { useStorytellerStore } from "@/stores/storytellerStore";
 import { nightTriggerStatus } from "@/abilities/invocation";
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { participantStepKey } from "@/stores/nightProgress";
+import { protectionJudgmentId, type DeathAttemptScope, type DeathCause } from "@/abilities/characters/shared";
 import { makeSTPlayer } from "./fixtures";
 import { dealtIdentity } from "@/stores/identity";
 import type { RoleDef, RoleId, STPlayerRecord, Script, StorytellerLobbyRecord } from "@/stores/types";
@@ -115,6 +116,16 @@ export function planned(result: AbilityPlanResult): StorytellerLobbyRecord {
   if (!result.ok || !result.changed) throw new Error("not a changing plan");
   return result.plan.game;
 }
+
+/** The Current State Rules Query the coordinator builds over `g` (proof script). */
+export const proofQuery = (g: StorytellerLobbyRecord) =>
+  createRulesQuery(g, { registry: proofRegistry, script: proofScript, semantics: CANONICAL_ABILITY_SEMANTICS });
+
+/** SOL-10F-C2: the protection judgment id deathAttempt asks for `id` against
+ * `query` (default: Current State of `g`) -- target, cause, the query's
+ * protection-dependency stamp and the optional B2 attempt scope. */
+export const protectionId = (g: StorytellerLobbyRecord, cause: DeathCause, id: string, scope?: DeathAttemptScope, query = proofQuery(g)): string =>
+  protectionJudgmentId(cause, bind(g, id), query.protectionDependencyStamp(bind(g, id), cause), scope);
 
 export const requirementIds = (result: AbilityPlanResult): string[] =>
   !result.ok && result.code === "needsInput" ? (result.requirements ?? []).map((r) => r.id) : [];
