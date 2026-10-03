@@ -599,3 +599,15 @@ No additional Sol blocker was found in this targeted pre-Luna spot-check.
 ## Immediate next task
 
 Luna independently reviews the complete Slice 7 implementation at exact target `bd9050c97acef292173ef3437b139465f8493f2e`, including all proof characters/support semantics, Manual/deferred boundaries, the Harlot Information Action, Red Herring state, Ravenkeeper trigger, Imp star-pass, Toymaker/Tinker/Baron boundaries, architecture mutation guards and the full gate. Phase 10F remains open.
+
+## Luna Slice 7 review — documentation-only revise — 2026-10-03
+
+Luna reviewed exact target d80333000497eea51508fd5cf5ab94bbd3c54a9e. All Slice 7 proof-character semantics and focused foundation checks passed. The sole finding was LUNA-10F-S7-001: PHASE10F.md had been truncated by a docs-only commit and was missing §§24–27.
+
+Sol restored PHASE10F.md by taking the complete §§1–27 contract from 9153b4548f33445cb39b6635f3b8b6971b5efd81 and appending the existing §§28–29 records unchanged. The restored contract now contains §§1–29. No production code, schema/store version, or Firebase Rules changed.
+
+Luna's prior gate: 543/543 focused tests across 27 files; 3,766/3,766 full tests across 153 files; 201/201 emulator tests; typecheck/build/diff checks all passed.
+
+## Immediate next task
+
+Luna performs a narrow documentation-only recheck at the exact current dev/phase-10f HEAD. Verify §§1–29 are present and the repair is documentation-only. If PASS, hand Slice 7 to Astra. Phase 10F remains open.
