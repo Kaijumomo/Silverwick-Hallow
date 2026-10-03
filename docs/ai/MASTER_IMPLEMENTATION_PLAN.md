@@ -10,7 +10,7 @@
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
 **Schema:** v23 integrated on `main`; v24 implemented on `dev/phase-10f`\
-**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (SOL-10F-A1…A10 Luna-verified — READY FOR ASTRA adversarial re-verification; Phase 10F not closed)
+**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (Astra adversarial re-verification REVISE; SOL-10F-B1…B6 targeted remediation required; Phase 10F not closed)
 
 ## Product invariants
 
@@ -228,7 +228,7 @@ Delivered (store/game schema v23): `src/stores/alignmentResolution.ts` (pure `pl
 Frozen direction: one participant-bound Actual Alignment transaction seam; gameplay change vs correction; atomic multi-participant changes; Actual Alignment independent of Role; v23 player-facing alignment perception with Normal / explicit Good / explicit Evil / Not Told; Normal ordinary perception derives from Shown Role while Normal Traveler perception follows Actual Alignment; v22 -> v23 normalization clears inert legacy Traveler shown-alignment copies to Normal; strict v23 Alignment History correction/correlation metadata; occupancy-boundary hardening so a new participant never inherits stale seat alignment; Storyteller UI separates Actual Alignment truth from player-facing perception; 10F remains responsible for ability logic.
 
 ### 10F — Guided Ability Resolution / Night Actions
-**Status:** LUNA SLICE 7 REVIEW — CODE/SEMANTICS PASS; DOC REPAIR RECHECK REQUIRED. Not closed.\
+**Status:** ASTRA RE-VERIFICATION REVISE — SOL-10F-B1…B6 TARGETED REMEDIATION REQUIRED. Not closed.\
 **Contract:** `PHASE10F.md` (frozen 2026-10-02).\
 **Starting checkpoint:** `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`.\
 **Contract-freeze checkpoint:** `727530e9364a0c971326c06ce45855adcf39828b`.\
@@ -274,4 +274,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Astra adversarially re-verifies the remediated Phase 10F Slice 7 implementation at the exact current `dev/phase-10f` target. Luna independently closed SOL-10F-A1…A10 and the full gate. Astra should re-run the original counterexamples, attack the repaired generic seams in combination, and look for regression or bypass paths rather than repeat Luna's acceptance checklist. Report proven defects separately from unproven concerns for Sol adjudication. Do not merge, deploy or close 10F.
+Claude Code remediates `PHASE10F.md` §35 SOL-10F-B1…B6 only: per-slot ParticipantBinding capture for incomplete multi-player inputs, attempt/dependency-scoped Al-Hadikhia protection judgments, canonical own-property answer maps, ordered prospective-jinx simulation, collision-free participant Night-progress encoding, and Firebase-safe key encoding. Preserve all prior A1…A10 closures and accepted Manual/deferred boundaries. After the full gate, return one exact checkpoint to Luna for targeted verification before Astra closure re-verification. Do not merge, deploy or close 10F.
