@@ -90,10 +90,23 @@ export type AbilityPresentation = {
   action: string;
 };
 
+/**
+ * Phase 10F Slice 7: the VERIFIED Night-trigger vocabulary. A descriptor gains
+ * the explicit `nightTrigger` invocation path ONLY by declaring one of these;
+ * `"triggered"` timing alone never makes anything actionable.
+ *  - actorDiedTonight: the actor's exact participation instance died during
+ *    the CURRENT Night, as recorded in the Life Event Window with known
+ *    coverage (matrix Section 9). History and Reminders are never consulted.
+ */
+export type NightTriggerKind = "actorDiedTonight";
+
 export type AbilityDescriptor = {
   roleId: RoleId;
   timing: readonly AbilityTiming[];
   invocation: AbilityInvocation;
+  /** Phase 10F Slice 7: an explicit, verified Night trigger (see
+   * NightTriggerKind). Interpreted only by the shared invocation contract. */
+  nightTrigger?: NightTriggerKind;
   usage: AbilityUsage;
   inputs: readonly AbilityInputRequirement[];
   /** The hook scopes this ability's mechanics touch. A modifier/jinx gates

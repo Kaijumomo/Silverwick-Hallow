@@ -72,6 +72,9 @@ const deepFreeze = <T,>(value: T): T => {
 /** Section 23's frozen rule, written out independently as the test oracle. */
 function expected(timing: readonly AbilityTiming[], invocation: AbilityInvocation, path: InvocationPath, moment: Moment): boolean {
   if (path === "dayEntry") return moment.phase === "day" && timing.includes("day") && (invocation === "publicClaim" || invocation === "procedure");
+  // Slice 7: the explicit Night-trigger path needs a VERIFIED trigger
+  // declaration; none of these generic descriptors has one -> never eligible.
+  if (path === "nightTrigger") return false;
   const tonight: AbilityTiming = moment.day === 1 ? "firstNight" : "otherNight";
   return moment.phase === "night" && timing.includes(tonight) && (invocation === "wake" || invocation === "procedure");
 }
@@ -137,7 +140,7 @@ describe("SOL-10F-L3-R1: exhaustive timing x invocation x path x moment agreemen
     INVOCATION_PATHS.flatMap((path) => MOMENTS.map((moment) => ({ timing, invocation, path, moment })))));
 
   it(`covers ${cases.length} combinations, all agreeing with Section 23`, () => {
-    expect(cases).toHaveLength(9 * 4 * 2 * 5);
+    expect(cases).toHaveLength(9 * 4 * 3 * 5);
     let eligibleCount = 0;
     for (const { timing, invocation, path, moment } of cases) {
       const label = `${timing.join("+")}/${invocation} via ${path} @ ${moment.label}`;

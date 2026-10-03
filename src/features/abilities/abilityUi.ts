@@ -1,9 +1,10 @@
 import { create } from "zustand";
-import { invocationEligibility, type GameMoment, type InvocationPath } from "@/abilities/invocation";
+import { invocationEligibility, nightTriggerStatus, type GameMoment, type InvocationPath, type NightTriggerStatus } from "@/abilities/invocation";
 import { resolveAbilitySemantics, type AbilityDescriptor, type AbilitySemanticsRegistry, type InputSource } from "@/abilities/semantics";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { effectDefinitionOf } from "@/stores/effectRegistry";
 import type { AbilityOperation, AbilityOutcome, ParticipantBinding } from "@/stores/abilityResolution";
+import type { RulesQuery } from "@/stores/rulesQuery";
 import type { PlayerId, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 
 /**
@@ -24,7 +25,9 @@ export const ORIGIN_LABEL: Record<ValueOrigin, string> = {
 };
 
 export type StepAbility =
-  | { kind: "guided"; descriptor: AbilityDescriptor }
+  /** `invocationPath` (Slice 7): the path the guided resolution uses when it
+   * is not the row's ordinary one -- the explicit verified Night trigger. */
+  | { kind: "guided"; descriptor: AbilityDescriptor; invocationPath?: InvocationPath; trigger?: NightTriggerStatus }
   | { kind: "manual"; reason: string };
 
 /** How a Night row's ability resolves: verified semantics (through canonical
@@ -48,6 +51,18 @@ export function pathAbility(roleId: string, registry: RoleRegistry, semantics: A
   if (ability.kind !== "guided") return ability;
   const eligibility = invocationEligibility(ability.descriptor, path, moment);
   return eligibility.eligible ? ability : { kind: "manual", reason: eligibility.reason };
+}
+
+/**
+ * Slice 7: the explicit verified Night-trigger path for one participant -- only
+ * for a descriptor that DECLARES a verified trigger (the same shared contract
+ * the coordinator enforces), with the trigger's status from authoritative
+ * state. Null when the ability has no such path.
+ */
+export function triggerAbility(roleId: string, registry: RoleRegistry, semantics: AbilitySemanticsRegistry, query: RulesQuery, actor: ParticipantBinding): StepAbility | null {
+  const ability = pathAbility(roleId, registry, semantics, "nightTrigger", query.game);
+  if (ability.kind !== "guided") return null;
+  return { ...ability, invocationPath: "nightTrigger", trigger: nightTriggerStatus(ability.descriptor, actor, query) };
 }
 
 export const bindingOf = (player: Pick<STPlayerRecord, "id" | "participantId">): ParticipantBinding =>

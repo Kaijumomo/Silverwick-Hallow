@@ -7,6 +7,7 @@ import { HARLOT } from "./harlot";
 import { IMP } from "./imp";
 import { MONK } from "./monk";
 import { POISONER } from "./poisoner";
+import { RAVENKEEPER } from "./ravenkeeper";
 import { SLAYER } from "./slayer";
 
 /**
@@ -15,4 +16,4 @@ import { SLAYER } from "./slayer";
  * production Ability Semantics Registry (semantics.ts); it is only ever
  * consulted through the canonical ownership gate (resolveAbilitySemantics).
  */
-export const VERIFIED_DESCRIPTORS: readonly AbilityDescriptor[] = [POISONER, MONK, EMPATH, FORTUNE_TELLER, SLAYER, CULT_LEADER, HARLOT, AL_HADIKHIA, IMP];
+export const VERIFIED_DESCRIPTORS: readonly AbilityDescriptor[] = [POISONER, MONK, EMPATH, FORTUNE_TELLER, SLAYER, CULT_LEADER, HARLOT, AL_HADIKHIA, IMP, RAVENKEEPER];

@@ -17,7 +17,9 @@ import { createRulesQuery } from "@/stores/rulesQuery";
 import { lifeEventsForParticipantAt } from "@/stores/lifeEvents";
 import { AbilityWorkspace, type WorkspaceTarget } from "@/features/abilities/AbilityWorkspace";
 import { participantAllowed } from "@/features/abilities/RequirementInput";
-import { bindingOf, pathAbility, seatedParticipants, useTargetPicker, type StepAbility } from "@/features/abilities/abilityUi";
+import { bindingOf, pathAbility, seatedParticipants, triggerAbility, useTargetPicker, type StepAbility } from "@/features/abilities/abilityUi";
+import { wakeIdentity } from "@/stores/wakeIdentity";
+import { participantStepKey } from "@/stores/nightProgress";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -59,7 +61,7 @@ type StepCardProps = {
   chips?: string[];
   guided?: GuidedContext;
   lastResolution?: LastResolution | null;
-  onOpenWorkspace?: (initialInputs?: Record<string, AbilityInputValue>) => void;
+  onOpenWorkspace?: (initialInputs?: Record<string, AbilityInputValue>, manual?: boolean) => void;
 };
 
 type GuidedContext = {
@@ -197,10 +199,17 @@ function StepCard({ step, record, day, ability, chips = [], guided, lastResoluti
             </>
           ) : status === "skipped" ? (
             <span className="step-result">Skipped</span>
+          ) : ability.kind === "guided" && ability.trigger?.kind === "notTriggered" ? (
+            <>
+              <span className="step-action">Not triggered: {ability.trigger.reason}</span>
+              <button className="btn btn-sm" onClick={() => onOpenWorkspace?.(undefined, true)}>Resolve manually / unmodeled interaction</button>
+            </>
           ) : ability.kind === "guided" ? (
             <>
+              {ability.trigger && <span className="step-badge" data-trigger={ability.trigger.kind}>
+                {ability.trigger.kind === "triggered" ? "Triggered tonight" : "Trigger needs a check"}</span>}
               <span className="step-action">{ability.descriptor.presentation.action}</span>
-              {guided && isSimple(ability.descriptor)
+              {guided && isSimple(ability.descriptor) && !ability.invocationPath
                 ? <InlineSimpleAbility step={step} day={day} descriptor={ability.descriptor} guided={guided} onEscalate={(inputs) => onOpenWorkspace?.(inputs)} />
                 : <button className="btn btn-sm btn-gold" onClick={() => onOpenWorkspace?.()}>Guide</button>}
             </>
@@ -326,6 +335,7 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
     });
   }
   const registry = useMemo(() => buildRegistry(script), [script]);
+  const progress = game.nightProgress ?? {};
   const query = createRulesQuery(game, { registry, script, semantics, modifiers: [] });
   const guided: GuidedContext = { game, script, registry, semantics, onResolved: setLastResolution };
   /** Storyteller-private state chips for a wake (derived; never stored). */
@@ -343,8 +353,29 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
     return chips;
   };
   // SOL-10F-L3-R1: guided only when the shared invocation-eligibility contract
-  // admits the descriptor on the ordinary Night Order tonight.
-  const abilityOf = (step: NightStep): StepAbility | null => step.kind === "player" ? pathAbility(step.effectiveRoleId, registry, semantics, "nightOrder", game) : null;
+  // admits the descriptor on the ordinary Night Order tonight -- or (Slice 7)
+  // through the explicit VERIFIED Night-trigger path when the descriptor
+  // declares one (never for "triggered" timing alone).
+  const abilityOf = (step: NightStep): StepAbility | null => {
+    if (step.kind !== "player") return null;
+    const ordinary = pathAbility(step.effectiveRoleId, registry, semantics, "nightOrder", game);
+    if (ordinary.kind === "guided") return ordinary;
+    const player = game.players[step.playerId];
+    return (player?.participantId && triggerAbility(step.effectiveRoleId, registry, semantics, query, bindingOf(player))) || ordinary;
+  };
+  /** Slice 7: verified triggers that fired (or need a check) tonight and are
+   * still open -- surfaced at the top of the dashboard immediately, not at
+   * an arbitrary scheduled row. */
+  const triggered = seatedParticipants(game).flatMap((player) => {
+    const wake = wakeIdentity(player, registry);
+    if (!wake || !player.participantId) return [];
+    const ability = triggerAbility(wake.shownRoleId, registry, semantics, query, bindingOf(player));
+    if (!ability || ability.kind !== "guided" || ability.trigger?.kind === "notTriggered") return [];
+    const stepKey = participantStepKey(player.participantId, wake.shownRoleId);
+    const status = progress[`${game.day}:${stepKey}`]?.status;
+    if (status === "done" || status === "skipped") return [];
+    return [{ player, roleId: wake.shownRoleId, roleName: wake.role.name, stepKey, ability }];
+  });
   const policy = evilInformationPolicy(game.seatOrder.map(id => game.players[id]!).filter(Boolean), registry, game);
   const setupPlayers = game.seatOrder.filter(id => {
     const p = game.players[id];
@@ -357,7 +388,6 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
     catch { return true; }
   });
 
-  const progress = game.nightProgress ?? {};
   const resolvedCount = steps.filter((s) => {
     const rec = progress[`${game.day}:${s.stepKey}`];
     return rec?.status === "done" || rec?.status === "skipped";
@@ -385,6 +415,19 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
       </div>
 
       <div className="night-panel-body">
+        {triggered.length > 0 && (
+          <section className="triggered-now" aria-label="Triggered now">
+            <h3 className="drawer-section-title">Triggered now</h3>
+            {triggered.map(({ player, roleId, roleName, stepKey, ability }) => (
+              <div key={stepKey} className="step-card" data-status="pending">
+                <span className="step-role-name">{roleName}</span>
+                <span className="step-player-name">{player.name || `Seat ${player.seat + 1}`} · {ability.kind === "guided" && ability.trigger?.kind === "unknown" ? "trigger needs a check" : "died tonight"}</span>
+                <button className="btn btn-sm btn-gold" onClick={() => setWorkspace({
+                  target: { actorId: player.id, roleId, roleName, invocationPath: "nightTrigger", step: { day: game.day, stepKey } }, ability })}>Guide</button>
+              </div>
+            ))}
+          </section>
+        )}
         {game.seatOrder.filter(id => {
           const p = game.players[id];
           return p?.isTraveler && p.alive && !p.exiled && travelerGuidance(p).length > 0;
@@ -398,10 +441,15 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
             <div key={step.stepKey}>
               <StepCard step={step} record={progress[`${game.day}:${step.stepKey}`]} day={game.day}
                 ability={abilityOf(step)} chips={chipsFor(step)} guided={guided} lastResolution={lastResolution}
-                onOpenWorkspace={step.kind === "player" ? (initialInputs) => setWorkspace({
-                  target: { actorId: step.playerId, roleId: step.effectiveRoleId, roleName: step.effectiveRoleName, invocationPath: "nightOrder", step: { day: game.day, stepKey: step.stepKey } },
-                  ability: abilityOf(step)!, ...(initialInputs ? { initialInputs } : {}),
-                }) : undefined} />
+                onOpenWorkspace={step.kind === "player" ? (initialInputs, manual) => {
+                  const ability = abilityOf(step)!;
+                  const path = ability.kind === "guided" ? ability.invocationPath ?? "nightOrder" : "nightOrder";
+                  setWorkspace({
+                    target: { actorId: step.playerId, roleId: step.effectiveRoleId, roleName: step.effectiveRoleName, invocationPath: path, step: { day: game.day, stepKey: step.stepKey } },
+                    ability: manual && ability.kind === "guided" && ability.trigger?.kind === "notTriggered" ? { kind: "manual", reason: ability.trigger.reason } : ability,
+                    ...(initialInputs ? { initialInputs } : {}),
+                  });
+                } : undefined} />
               {step.kind === "global" && step.setupRecipientIds?.filter(id => setupPlayers.includes(id)).map(id => <details className="information-review" key={id}>
                 <summary>Setup information — {game.players[id]!.name}</summary>
                 <button className="btn btn-sm" onClick={() => useStorytellerStore.getState().selectPlayer(id)}>Edit setup information</button>

@@ -150,3 +150,24 @@ describe("Al-Hadikhia -- ordered choices in the workspace", () => {
     expect(game().players.p1!.alive).toBe(true);
   });
 });
+
+describe("Ravenkeeper -- the trigger surfaces immediately after the death", () => {
+  it("Imp kills the Ravenkeeper -> 'Triggered now' offers Guide at once; resolving completes the Ravenkeeper's own step", () => {
+    open(named(["ravenkeeper", "imp", "chef", "monk", "saint", "poisoner", "empath"]));
+    render(<Night />);
+    expect(screen.queryByRole("region", { name: "Triggered now" })).toBeNull();
+    expect(within(card("Ravenkeeper", "Player 0")).getByText(/Not triggered/)).toBeInTheDocument();
+    fireEvent.click(within(card("Imp", "Player 1")).getByRole("button", { name: "Guide" }));
+    fireEvent.change(within(workspace()).getByRole("combobox", { name: "The player to kill" }), { target: { value: "p0" } });
+    fireEvent.click(within(workspace()).getByRole("button", { name: "Confirm and record" }));
+    expect(game().players.p0!.alive).toBe(false);
+    const strip = screen.getByRole("region", { name: "Triggered now" });
+    fireEvent.click(within(strip).getByRole("button", { name: "Guide" }));
+    fireEvent.change(within(workspace()).getByRole("combobox", { name: "The player chosen" }), { target: { value: "p2" } });
+    expect(within(workspace()).getByText(/Record what Player 0 was told: Player 2 · Chef/)).toBeInTheDocument();
+    fireEvent.click(within(workspace()).getByRole("button", { name: "Resolve" }));
+    expect(game().informationDeliveries.at(-1)).toMatchObject({ informationActionId: "ravenkeeper-triggered" });
+    expect(screen.queryByRole("region", { name: "Triggered now" })).toBeNull();
+    expect(card("Ravenkeeper", "Player 0")).toHaveAttribute("data-status", "done");
+  });
+});

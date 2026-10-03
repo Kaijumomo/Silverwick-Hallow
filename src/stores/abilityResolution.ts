@@ -11,7 +11,7 @@ import {
   type InformationConstraint,
   type InformationConstraintValue,
 } from "@/abilities/semantics";
-import { invocationEligibility, isInvocationPath, type InvocationPath } from "@/abilities/invocation";
+import { invocationEligibility, isInvocationPath, nightTriggerJudgmentId, nightTriggerStatus, type InvocationPath } from "@/abilities/invocation";
 import { activeModifiers, type ModifierDefinition } from "@/abilities/modifiers";
 import { applyAlignmentPlan, defaultAlignmentIds, planAlignmentTransaction, type AlignmentIdSource, type AlignmentIntent } from "./alignmentResolution";
 import { applyEffectPlan, planEffectTransaction, type EffectIdSource, type EffectIntent } from "./effectResolution";
@@ -647,9 +647,17 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   // acted tonight" -- a step this participation instance already completed or
   // had skipped (e.g. a new Imp after a star-pass) is never re-granted by the
   // ordinary Night Order, whatever the re-derived rows or a crafted request say.
-  if (request.invocationPath === "nightOrder" && actor.participantId) {
+  if ((request.invocationPath === "nightOrder" || request.invocationPath === "nightTrigger") && actor.participantId) {
     const own = game.nightProgress[`${game.day}:${participantStepKey(actor.participantId, request.roleId)}`]?.status;
     if (own === "done" || own === "skipped") return refuse("notApplicable", "This player's step for this ability is already complete or skipped tonight.");
+  }
+  // Slice 7: a verified Night trigger resolves as THIS participation instance's
+  // own step, so it can be completed exactly once (no duplicate execution).
+  if (request.invocationPath === "nightTrigger" && actor.participantId) {
+    const step = request.fingerprint.step;
+    if (!step || step.day !== game.day || step.stepKey !== participantStepKey(actor.participantId, request.roleId)) {
+      return refuse("invalid", "A triggered ability resolves as this player's own Night step.");
+    }
   }
 
   const actorBinding = { playerId: actor.id, participantId: actor.participantId! };
@@ -673,6 +681,22 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
           label: `${actor.name || "This player"}'s ability is functioning` }] });
       }
       functioning = judged.value;
+      judgmentUsed = true;
+    }
+  }
+  // Slice 7: the verified trigger must be established from authoritative state
+  // (Life Event Window with coverage); unknown is an explicit Storyteller
+  // judgment, never "did not trigger".
+  if (request.invocationPath === "nightTrigger") {
+    const trigger = nightTriggerStatus(descriptor, actorBinding, query);
+    if (trigger.kind === "notTriggered") return refuse("notApplicable", trigger.reason);
+    if (trigger.kind === "unknown") {
+      const id = nightTriggerJudgmentId(descriptor.nightTrigger!);
+      const judged = judgments[id];
+      if (!isObject(judged) || judged.kind !== "boolean") {
+        return refuse("needsInput", trigger.reason, { requirements: [{ id, kind: "boolean", source: "judgment", label: "This ability triggered tonight" }] });
+      }
+      if (!judged.value) return refuse("notApplicable", "The Storyteller judged that this ability did not trigger.");
       judgmentUsed = true;
     }
   }
