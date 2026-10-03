@@ -751,3 +751,35 @@ Sol may now research and freeze the authoritative proof-character rules matrix (
 Do not populate production `CANONICAL_ABILITY_SEMANTICS` until that matrix is frozen from authoritative BOTC sources.
 
 Phase 10F remains open.
+
+
+## 25. Authoritative proof-character rules freeze — 2026-10-02
+
+The Phase 10F proof-character rules matrix is frozen in:
+
+`docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md`
+
+Source policy:
+
+- publisher Blood on the Clocktower Wiki character How-to-Run pages;
+- publisher Abilities / States / Glossary rules pages;
+- pinned Silverwick canonical data revision `f10cd02e3401af227ce406287eaae7bb99a06a42`;
+- explicit Sol mapping decisions where a correct BOTC rule needs a Silverwick state/UX representation.
+
+The matrix covers the 14 proof cases plus the minimum Empath / Scarlet Woman dependencies required to prove Drunk→Empath and Imp star-pass behavior.
+
+Production character semantics may now be implemented **only** to the boundaries frozen in that matrix.
+
+Important partial/manual boundaries:
+
+- Cult Leader Day cult vote remains outside the nominations/voting scope.
+- Pit-Hag Demon creation remains Manual in 10F because arbitrary deaths tonight need 10G game-level state.
+- Tinker remains verified Manual because Storyteller discretion is the mechanic.
+- Toymaker attack-skip history remains a 10G authoritative-state dependency.
+- Baron remains Setup-owned with no live evaluator.
+- Ravenkeeper is authorized to add an explicit verified Night-trigger invocation path; this does not make all `triggered` descriptors generically actionable.
+- Fortune Teller Red Herring is approved as Storyteller-private authoritative Effect state (`fortuneTellerRedHerring`), not a Reminder.
+- Empath is authorized as a support semantic so simulated Drunk→Empath Information Delivery can be represented truthfully.
+- the narrow Scarlet Woman Imp-star-pass priority is authorized as an Imp dependency without expanding to full Scarlet Woman coverage.
+
+This completes contract Slice 6 (rules freeze). Slice 7 — proof-character semantic implementation — is now authorized.
