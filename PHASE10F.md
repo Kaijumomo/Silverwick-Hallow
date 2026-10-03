@@ -1131,3 +1131,26 @@ Spot-check confirmed the intended shapes for:
 A documentation packaging regression in the implementation handoff temporarily replaced the full `PHASE10F.md` contract with §32 only. Sol restored §§1–31 from exact pre-remediation contract target `a5df7674067344900a57c508ecbfde0fb261ba0c`, retained §32 unchanged, and added this §33 record. No production code changed in that restoration.
 
 This is not a closure verdict. Luna must independently verify SOL-10F-A1…A10 and the complete gate before any Astra re-review.
+
+## 34. Luna targeted A1…A10 verification complete — 2026-10-03
+
+Luna independently verified exact target `ce8b11df9b992023398bbdad7c0a2ee7ec0bc59c` and returned:
+
+**PASS — SOL-10F-A1…A10 CLOSED; PHASE 10F SLICE 7 READY FOR ASTRA RE-VERIFICATION**
+
+Independent gate evidence:
+
+- targeted remediation + proof-character/foundation suites: **577/577** across 28 files;
+- full normal suite: **3,827/3,827** across 155 files;
+- Firebase emulator suite: **201/201**, 0 skipped;
+- typecheck PASS;
+- production build PASS;
+- worktree and baseline-range diff checks PASS.
+
+Luna independently closed all ten remediation findings, confirmed `actualRoleAtEvent` persistence and event-specific Night-trigger consumption, accepted the simulated Drunk-shown-Ravenkeeper UNKNOWN fail-safe, and confirmed `PHASE10F.md` completeness through §33.
+
+No remaining Luna finding exists for the A1…A10 remediation.
+
+### Next gate
+
+Astra adversarially re-verifies the remediated Slice 7 implementation, concentrating on the original eight reproduced defects, the A9/A10 trigger clarifications, and interactions among the repaired generic seams. Phase 10F remains open; no merge or deployment is authorized.
