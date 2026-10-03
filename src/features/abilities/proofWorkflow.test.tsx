@@ -118,3 +118,35 @@ describe("Slayer -- the Day entry", () => {
     expect(screen.getByRole("button", { name: "Resolve manually / unmodeled interaction" })).toBeInTheDocument();
   });
 });
+
+describe("Al-Hadikhia -- ordered choices in the workspace", () => {
+  it("three ordered selects; each live/die choice appears in turn; the preview keeps 1 -> 2 -> 3", () => {
+    open(named(["alhadikhia", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"]));
+    render(<Night />);
+    fireEvent.click(within(card("Al-Hadikhia", "Player 0")).getByRole("button", { name: "Guide" }));
+    const ws = workspace();
+    const label = "The 3 players chosen, in order (or nobody)";
+    fireEvent.change(within(ws).getByRole("combobox", { name: `${label} 1` }), { target: { value: "p3" } });
+    fireEvent.change(within(ws).getByRole("combobox", { name: `${label} 2` }), { target: { value: "p1" } });
+    fireEvent.change(within(ws).getByRole("combobox", { name: `${label} 3` }), { target: { value: "p4" } });
+    const live = (name: string) => within(within(ws).getByRole("radiogroup", { name })).getByRole("radio", { name: "Yes" });
+    expect(within(ws).queryByRole("radiogroup", { name: /^2\./ })).toBeNull();
+    fireEvent.click(live("1. Player 3 chooses to LIVE (No: chooses to die)"));
+    fireEvent.click(live("2. Player 1 chooses to LIVE (No: chooses to die)"));
+    fireEvent.click(live("3. Player 4 chooses to LIVE (No: chooses to die)"));
+    const lines = within(within(ws).getByRole("region", { name: "Result" })).getAllByRole("listitem").map((li) => li.textContent);
+    expect(lines.slice(0, 3)).toEqual(["Player 3 dies", "Player 1 dies", "Player 4 dies"]);
+    fireEvent.click(within(ws).getByRole("button", { name: "Confirm and record" }));
+    expect(["p3", "p1", "p4"].map((id) => game().players[id]!.alive)).toEqual([false, false, false]);
+  });
+
+  it("Nobody is an explicit answer: the step completes with no Life change", () => {
+    open(named(["alhadikhia", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"]));
+    render(<Night />);
+    fireEvent.click(within(card("Al-Hadikhia", "Player 0")).getByRole("button", { name: "Guide" }));
+    fireEvent.click(within(workspace()).getByRole("checkbox", { name: "Nobody" }));
+    fireEvent.click(within(workspace()).getByRole("button", { name: "Resolve" }));
+    expect(Object.values(game().nightProgress)).toEqual([expect.objectContaining({ status: "done" })]);
+    expect(game().players.p1!.alive).toBe(true);
+  });
+});

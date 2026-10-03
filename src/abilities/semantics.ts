@@ -72,6 +72,10 @@ export type AbilityInputRequirement = {
   source: InputSource;
   /** Exactly this many values (default 1). */
   count?: number;
+  /** Phase 10F Slice 7 (participant requirements only): the answer may also
+   * be NOBODY -- an explicit empty choice -- instead of exactly `count`
+   * (e.g. "you may choose 3 players"). Never a sentinel player. */
+  allowNone?: boolean;
   constraints?: readonly InputConstraint[];
   label: string;
 };

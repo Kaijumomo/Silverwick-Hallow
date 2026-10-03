@@ -59,6 +59,8 @@ export function RequirementInput({ requirement, game, script, actor, onChange, i
     : initial?.kind === "character" ? initial.roleIds : [];
   const [slots, setSlots] = useState<string[]>(() => Array.from({ length: count }, (_, i) => initialSlots[i] ?? ""));
   const [numberText, setNumberText] = useState(initial?.kind === "number" ? String(initial.value) : "");
+  // Slice 7: an explicit "nobody" answer for an allowNone participant choice.
+  const [nobody, setNobody] = useState(initial?.kind === "participant" && initial.participants.length === 0 && !!requirement.allowNone);
 
   const header = (
     <span className="ability-field-label">
@@ -75,6 +77,7 @@ export function RequirementInput({ requirement, game, script, actor, onChange, i
   const updateSlots = (index: number, value: string, toValue: (complete: string[]) => AbilityInputValue | undefined) => {
     const next = slots.map((slot, i) => (i === index ? value : slot));
     setSlots(next);
+    if (nobody) return;
     onChange(next.every(Boolean) ? toValue(next) : undefined);
   };
 
@@ -90,8 +93,17 @@ export function RequirementInput({ requirement, game, script, actor, onChange, i
       return (
         <fieldset className="ability-field" data-requirement={requirement.id}>
           <legend>{header}</legend>
+          {requirement.allowNone && (
+            <label className="ability-choice">
+              <input type="checkbox" checked={nobody} onChange={(e) => {
+                setNobody(e.target.checked);
+                onChange(e.target.checked ? { kind: "participant", participants: [] } : (slots.every(Boolean) ? toValue(slots) : undefined));
+              }} />
+              Nobody
+            </label>
+          )}
           {slots.map((slot, index) => (
-            <select key={index} aria-label={count > 1 ? `${label} ${index + 1}` : label} value={slot}
+            <select key={index} disabled={nobody} aria-label={count > 1 ? `${label} ${index + 1}` : label} value={slot}
               onChange={(e) => updateSlots(index, e.target.value, toValue)}>
               <option value="">Choose a player…</option>
               {candidates.map((p) => (

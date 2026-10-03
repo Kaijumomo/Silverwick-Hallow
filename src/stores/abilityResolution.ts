@@ -370,11 +370,15 @@ function checkOrdering(outcome: AbilityOutcome): AbilityRefusal | null {
   }
   // A same-participant Role or Alignment chain the frozen seam does not
   // support is refused, never silently collapsed.
+  // The Role seam itself accepts ONE Actual Role intent per participant with
+  // perception intents alongside it (PHASE10D), so only Actual Role intents
+  // form a chain; a perception update with its Role change is not one.
   for (const domain of ["role", "alignment"] as const) {
     const seen = new Set<string>();
     for (const operation of outcome.operations) {
       if (operation.domain !== domain) continue;
       for (const intent of operation.intents) {
+        if (domain === "role" && (intent as { kind?: unknown }).kind === "setPerception") continue;
         const target = (intent as { target?: unknown }).target;
         if (!isBinding(target)) continue;
         if (seen.has(target.participantId)) {
@@ -557,8 +561,9 @@ function checkInputs(game: StorytellerLobbyRecord, descriptor: AbilityDescriptor
     if (!isObject(value) || value.kind !== requirement.kind) return refuse("invalid", `Malformed answer for "${requirement.label}".`);
     if (value.kind !== "participant") continue;
     const count = requirement.count ?? 1;
-    if (!Array.isArray(value.participants) || !value.participants.every(isBinding) || value.participants.length !== count) {
-      return refuse("invalid", `"${requirement.label}" needs exactly ${count} player${count === 1 ? "" : "s"}.`);
+    const none = requirement.allowNone === true && Array.isArray(value.participants) && value.participants.length === 0;
+    if (!Array.isArray(value.participants) || !value.participants.every(isBinding) || (value.participants.length !== count && !none)) {
+      return refuse("invalid", `"${requirement.label}" needs exactly ${count} player${count === 1 ? "" : "s"}${requirement.allowNone ? " (or nobody)" : ""}.`);
     }
     for (const binding of value.participants) {
       const player = boundParticipant(game, binding);

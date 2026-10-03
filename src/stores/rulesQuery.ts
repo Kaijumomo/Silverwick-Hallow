@@ -136,6 +136,12 @@ export type RulesQuery = {
   lifeEvents: (moment: LiveGameMoment, test?: (event: LifeEvent) => boolean) => LifeEventQueryResult;
   /** The modifier gate for an evaluation of `roleId` touching `scopes`. */
   modifierGate: (roleId: RoleId, scopes: readonly HookScope[]) => ModifierGate;
+  /** Phase 10F Slice 7: the same derived queries over a HYPOTHETICAL Life
+   * state in which this participant is alive / dead -- the evolving working
+   * state inside ONE resolution (e.g. a protection whose source died earlier
+   * in the same ordered resolution). Pure; never persisted; a stale binding
+   * returns this query unchanged. */
+  assumingAlive: (binding: ParticipantBinding, alive: boolean) => RulesQuery;
 };
 
 export const bindingOf = (player: Pick<STPlayerRecord, "id" | "participantId">): ParticipantBinding =>
@@ -221,7 +227,7 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     return player ? run(player) : unknown("That participant is no longer in this seat.");
   };
 
-  return {
+  const self: RulesQuery = {
     game,
     moment: () => currentLiveMoment(game),
     participant,
@@ -293,5 +299,11 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
       : known(seated().flatMap((p) => p.effects.filter((e) => e.type === type && e.state === "active").map((e) => ({ holder: bindingOf(p), effectId: e.id })))),
     lifeEvents: (moment, test) => lifeEventsAt(game, moment, test),
     modifierGate: (roleId, scopes) => gateEvaluation(modifiers, roleId, scopes, game),
+    assumingAlive: (binding, alive) => {
+      const player = participant(binding);
+      if (!player) return self;
+      return createRulesQuery({ ...game, players: { ...game.players, [player.id]: { ...player, alive } } }, { ...environment, modifiers });
+    },
   };
+  return self;
 }

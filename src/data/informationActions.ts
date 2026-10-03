@@ -115,6 +115,22 @@ export const INFORMATION_ACTIONS: Record<RoleId, InformationAction[]> = {
   // their character." -- Player + Role, and genuinely triggered (only
   // happens if the Ravenkeeper themself dies at night that night) rather
   // than a fixed per-night cadence.
+  // "Each night*, choose a living player: if they agree, you learn their
+  // character, but you both might die." -- Role only, other nights only.
+  // Phase 10F Slice 7: Silverwick-authored action id, explicitly authorized by
+  // the project owner (the pinned data had no Harlot Information Action);
+  // only the character shown is recorded.
+  harlot: [
+    {
+      id: "harlot-other-night",
+      timing: { kind: "otherNight" },
+      instruction: "If the chosen player agreed, show the Harlot that player's character token.",
+      requirements: [
+        { id: "role", kind: "role", label: "The character shown to the Harlot" },
+      ],
+    },
+  ],
+
   ravenkeeper: [
     {
       id: "ravenkeeper-triggered",
