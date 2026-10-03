@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-03\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: A1…A10 and B1…B6 are remediated and Luna-verified; Astra closure re-verification established SOL-10F-C1…C3 (deep answer snapshots, protection-dependency-scoped judgments, pre-commit Firebase write compatibility), now remediated at code checkpoint `c3ae6910ba6752bac62162a6f67f81076c598502` (`PHASE10F.md` §40) and ready for Luna targeted verification. Closure adjudication follows Luna PASS and a narrow Astra C1…C3 recheck. Schema/store remains unreleased v24; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: A1…A10, B1…B6 and C1…C3 are remediated and Luna-verified. The exact Slice 7 target is ready for one narrow Astra final closure recheck focused only on C1…C3 and immediate cross-seam regressions. On Astra PASS, Sol performs closure adjudication. Schema/store remains unreleased v24; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
 
 ## Phase 10D — CLOSED
 
@@ -786,3 +786,11 @@ All three §39 findings are remediated at code checkpoint `c3ae6910ba6752bac6216
 ## Immediate next task
 
 Luna independently verifies SOL-10F-C1…C3, A1…A10 / B1…B6 preservation, the full gate and §§1–40 documentation integrity at the exact current `dev/phase-10f` HEAD. Do not send directly to Astra. After Luna PASS, Astra performs a narrow C1…C3 closure recheck. Phase 10F remains open; nothing merged or deployed.
+
+## Luna C1…C3 targeted verification — PASS / Astra final closure handoff — 2026-10-03
+
+Luna independently reviewed exact target `87bfa2c781fb0b46651a1f7f060732846bd2c8ed` and returned:
+
+**PASS — SOL-10F-C1…C3 CLOSED; PHASE 10F SLICE 7 READY FOR ASTRA FINAL CLOSURE RECHECK**
+
+The final gate is one narrow Astra C1…C3 closure recheck. On PASS, hand Slice 7 to Sol for closure adjudication. Phase 10F remains open.
