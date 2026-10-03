@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-03\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: D1/D2/E1 production behavior passed Luna's narrow verification. LUNA-10F-E1-TEST-01 was corrected with a test-only Windows/Linux path normalization; the exact single-serializer assertion remains intact. The previously failing test, E1 suite, full Vitest suite, typecheck, build, and diff checks are green. Ready for Luna confirmation. Schema/store remains unreleased v24; Firebase Rules unchanged. 10F is NOT closed; nothing merged or deployed.
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions is **CLOSED by Sol and READY FOR INTEGRATION**. Final production code checkpoint: `c6a2938e4e3c5ef3b17013c833cd335fe623b6f8`; final reviewed target: `a2d6d1b99242317269bf86f54e6d234e0644df33`; Astra final adversarial verdict: PASS. `PHASE10F.md` §49 records closure. Phase 10F has not yet been merged into `main`.
 
 ## Phase 10D — CLOSED
 
@@ -847,3 +847,19 @@ Sol records this as `LUNA-10F-E1-TEST-01` in `PHASE10F.md` §47. The correction 
 ## Immediate next task
 
 Luna confirms the exact clean checkpoint after the test-only path-normalization correction. On Luna PASS, Astra performs the final narrow D1/D2/E1 closure recheck. Phase 10F remains open; nothing merged or deployed.
+
+## Phase 10F closure — Sol adjudication — 2026-10-03
+
+**CLOSED — READY FOR INTEGRATION**
+
+Astra's final narrow D1/D2/E1 review of exact target `a2d6d1b99242317269bf86f54e6d234e0644df33` returned PASS with no established in-scope defect. Sol independently verified the reviewed target and records closure in `PHASE10F.md` §49.
+
+Final production checkpoint: `c6a2938e4e3c5ef3b17013c833cd335fe623b6f8`.
+
+Final reviewed target: `a2d6d1b99242317269bf86f54e6d234e0644df33`.
+
+Deferred post-10F hardening remains recorded: generalize the E1 checkpoint-envelope precommit guard from the ability command to older Storyteller mutators that can grow persisted state. This does not reopen Phase 10F.
+
+## Immediate next task
+
+Integrate the closed Phase 10F branch into `main`, verify the resulting ancestry/diff, record the integration checkpoint, then create `dev/phase-10g` from that exact integrated `main`.
