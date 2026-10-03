@@ -10,7 +10,7 @@
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
 **Schema:** v23 integrated on `main`; v24 implemented on `dev/phase-10f`\
-**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (Astra adversarial re-verification REVISE; SOL-10F-B1…B6 remediated at `b9a7c58cca86a5e0b7b54ccdd1957aef90c866f2`, awaiting Luna targeted verification; Phase 10F not closed)
+**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (SOL-10F-B1…B6 remediated and Sol spot-check accepted — READY FOR LUNA targeted verification; Phase 10F not closed)
 
 ## Product invariants
 
@@ -275,4 +275,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-SOL-10F-B1…B6 are remediated at code checkpoint `b9a7c58cca86a5e0b7b54ccdd1957aef90c866f2` (`PHASE10F.md` §36; full gate green, v24 key encoding final, Firebase Rules unchanged). Luna performs targeted mechanical verification of B1…B6 and A1…A10 preservation at the exact current `dev/phase-10f` HEAD; only after a Luna PASS does the checkpoint go to Astra for closure re-verification. Do not merge, deploy or close 10F.
+Luna independently verifies SOL-10F-B1…B6 at the exact current `dev/phase-10f` HEAD. The production remediation checkpoint is `b9a7c58cca86a5e0b7b54ccdd1957aef90c866f2`; commits above it are documentation-only. Verify the six Astra re-verification remediations, preservation of A1…A10, proof-character/foundation regressions, the Firebase-safe Night-progress key contract, and the complete `PHASE10F.md` documentation. On PASS, send the same implementation to Astra for closure adversarial re-verification. Do not merge, deploy or close 10F.
