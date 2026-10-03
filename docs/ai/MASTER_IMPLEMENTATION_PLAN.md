@@ -228,7 +228,7 @@ Delivered (store/game schema v23): `src/stores/alignmentResolution.ts` (pure `pl
 Frozen direction: one participant-bound Actual Alignment transaction seam; gameplay change vs correction; atomic multi-participant changes; Actual Alignment independent of Role; v23 player-facing alignment perception with Normal / explicit Good / explicit Evil / Not Told; Normal ordinary perception derives from Shown Role while Normal Traveler perception follows Actual Alignment; v22 -> v23 normalization clears inert legacy Traveler shown-alignment copies to Normal; strict v23 Alignment History correction/correlation metadata; occupancy-boundary hardening so a new participant never inherits stale seat alignment; Storyteller UI separates Actual Alignment truth from player-facing perception; 10F remains responsible for ability logic.
 
 ### 10F — Guided Ability Resolution / Night Actions
-**Status:** SLICE 7 IMPLEMENTED — READY FOR LUNA (code checkpoint `d9b927ae172f5327910e8a31d375096118cf7850`, docs-only commit on top). Not closed.\
+**Status:** SLICE 7 PRE-LUNA SOL REVIEW — TARGETED REMEDIATION REQUIRED (Harlot self-target + Fortune Teller Red Herring/functioning independence). Not closed.\
 **Contract:** `PHASE10F.md` (frozen 2026-10-02).\
 **Starting checkpoint:** `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`.\
 **Contract-freeze checkpoint:** `727530e9364a0c971326c06ce45855adcf39828b`.\
@@ -274,4 +274,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Luna independently verifies Slice 7 (proof-character semantics) at the exact pushed `dev/phase-10f` HEAD named in the implementation report; then Astra / Sol per the matrix closure boundary (§21). Do not merge, deploy or close 10F.
+Claude Code remediates only `PHASE10F.md` §27 findings SOL-10F-S7-F1 and SOL-10F-S7-F2. Harlot must allow a living self-target; Fortune Teller Red Herring creation must be Storyteller-owned authoritative fact initialization independent of an actual Fortune Teller's current functioning, without weakening the general non-functioning ability guard. Re-run the full gate and return one exact checkpoint for Luna. Do not merge, deploy or close 10F.
