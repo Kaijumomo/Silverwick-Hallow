@@ -894,3 +894,21 @@ Sol independently spot-checked the §27 remediation at exact pushed target `bd90
 The owner-authorized Harlot Information Action remains `harlot-other-night` with `chosenPlayer` + `role`; pinned publisher data remains unchanged.
 
 This is a **Sol handoff decision only**, not Phase 10F closure. The next gate is an independent Luna mechanical/rules-fidelity review of the complete Slice 7 implementation at exact target `bd9050c97acef292173ef3437b139465f8493f2e`.
+
+## 30. Luna Slice 7 verification complete — 2026-10-03
+
+Luna independently closed the final documentation recheck at exact target `abef4b6e3fb5d0b1792bf72b283a779fa6d50099` and returned:
+
+**PASS — DOC-10F-RECHECK-001 CLOSED; PHASE 10F SLICE 7 READY FOR ASTRA**
+
+Repository identity, documentation completeness, historical-record preservation, repair scope and diff hygiene all passed. The complete `PHASE10F.md` contract remains §§1–29 at the reviewed target; this §30 records the resulting handoff state.
+
+The earlier substantive Luna review had already found no proof-character semantic/mechanical blocker and independently passed the full Slice 7 gate. No production code changed during the documentation repair/recheck sequence.
+
+### Next gate
+
+Astra performs the adversarial Slice 7 review. Astra's task is to try to falsify the safety/correctness claims that survived Luna: state-transition edge cases, identity/staleness, composition/order, recovery/Undo, privacy, schema-valid unusual states, modifier interactions, and future-primitive safety.
+
+Astra is not asked to repeat Luna's full acceptance matrix or to invent a quota of findings. Established defects must be distinguished from unproven concerns and design questions.
+
+Phase 10F remains open. No merge or deployment is authorized.
