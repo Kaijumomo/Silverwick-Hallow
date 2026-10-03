@@ -567,3 +567,17 @@ Manual / deferred boundaries kept: Cult Leader Day vote; Pit-Hag Demon creation 
 ## Immediate next task
 
 Luna independently and mechanically verifies Slice 7 at the exact pushed `dev/phase-10f` HEAD named in the implementation report. Do not merge, deploy or close 10F.
+
+
+## Sol pre-Luna Slice 7 adjudication — 2026-10-03
+
+Sol spot-checked the pushed Slice 7 checkpoint `eb4822e421e4b18a72dbef91adcea0ac8e00204e`. The owner-authorized Harlot Information Action (`chosenPlayer` + `role`) is accepted. Two targeted fidelity defects remain before Luna:
+
+- **SOL-10F-S7-F1 HIGH — Harlot self-target.** Official How-to-Run permits the Harlot to point at any player; the matrix requires one living participant and no `notSelf`. Current semantics incorrectly forbids self.
+- **SOL-10F-S7-F2 HIGH — Fortune Teller Red Herring initialization.** Red Herring is established while preparing the first Night and is source/functioning-independent authoritative Storyteller state. Current impaired Night-1 branch skips creation because ordinary non-functioning abilities cannot change Current State. Add the narrow generic independent-storyteller-fact seam frozen in `PHASE10F.md` §27; simulated Drunk-as-Fortune-Teller must not create the fact.
+
+Do not send this checkpoint to Luna yet.
+
+## Immediate next task
+
+Claude Code remediates F1/F2 only, adds the §27 regressions, runs the full gate, pushes one exact clean checkpoint, and stops for Luna. Phase 10F remains open.
