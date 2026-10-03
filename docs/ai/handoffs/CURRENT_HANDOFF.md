@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-03\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: rules-neutral foundation passed; proof-character rules matrix frozen; Slice 7 proof-character semantics implemented; Luna substantive Slice 7 verification and both documentation rechecks are complete with **PASS**; Slice 7 is **READY FOR ASTRA adversarial review**. Production code checkpoint remains `53ab172a723d70b2de4220d448ec8da8f79a173a`; schema/store v24 unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: rules-neutral foundation and proof-character matrix are frozen; Slice 7 passed Luna, then Astra adversarial review returned **REVISE** with eight reproduced defects. Sol accepted ASTRA-10F-S7-001…008 as SOL-10F-A1…A8 and additionally froze A9 (Ravenkeeper role-at-death evidence) and A10 (exact trigger-event consumption). Targeted remediation is required before Luna/Astra re-verification. Schema/store remains v24 unless the optional Life Event role snapshot requires only an additive unreleased-v24 amendment. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
 
 ## Phase 10D — CLOSED
 
@@ -659,3 +659,29 @@ No remaining Luna finding exists for Slice 7. The substantive character-semantic
 ## Immediate next task
 
 Astra adversarially reviews the complete Slice 7 implementation. Attack the surviving safety/correctness claims rather than repeating Luna's mechanical acceptance matrix. Focus on reachable state/composition edge cases, participant identity, modifier interaction, Undo/recovery, privacy, unusual schema-valid state and future-primitive safety. Distinguish proven/supported defects from unproven concerns. Hand findings to Sol for adjudication. Phase 10F remains open.
+
+## Astra Slice 7 adversarial review — REVISE / Sol adjudication — 2026-10-03
+
+Astra reviewed exact target `f87ab315a5ccef3819fb1e5126107b0a9ce73e56`. Baseline gate remained green, but Astra reproduced eight defects:
+
+- follow-up answers transferred across target changes;
+- inline/Manual PlayerId selections rebound to replacement occupants;
+- unverified modifiers suppressed verified hooks;
+- Pit-Hag creation missed a jinx activated by the created character;
+- known source death was weakened to unknown by functioning uncertainty;
+- Al-Hadikhia asked later players before settling earlier protection judgments;
+- ParticipantId prefix matching cleared another participant's Night progress;
+- malformed evaluator-follow-up Boolean payloads were consumed mechanically.
+
+Sol accepted all eight as §31 A1…A8.
+
+Sol also resolved two Astra design questions into remediation requirements:
+
+- **A9:** Ravenkeeper trigger evidence must prove the participant was Ravenkeeper at the triggering death; add an optional Actual Role snapshot to new unreleased-v24 Life Events, with absent legacy evidence treated as unknown.
+- **A10:** a verified Night trigger is consumed by exact LifeEvent identity in the same resolution; callers cannot opt out with `completeStep:false`. Distinct qualifying deaths remain distinct triggers.
+
+Not promoted: multiple Scarlet Women (Storyteller choice remains fail-safe) and departed sourced-Effect origin (remains unknown, not inferred dead).
+
+## Immediate next task
+
+Claude Code remediates SOL-10F-A1…A10 exactly as frozen in `PHASE10F.md` §31, adds regressions for Astra's reproductions and A9/A10, runs the full gate and returns one exact clean checkpoint to Luna. Do not merge, deploy or close 10F.
