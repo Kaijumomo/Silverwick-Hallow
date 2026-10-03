@@ -1,7 +1,7 @@
 # Silverwick Hollow — Master Implementation Plan
 
 **Status:** Active canonical roadmap  
-**Updated:** 2026-10-02\
+**Updated:** 2026-10-03\
 **Integrated branch:** `main`  
 **Phase 10A closure checkpoint:** `d798266b988e49f904aa8f8658c917fd5b7e7abb`  
 **Pre-10B Firebase lifecycle hotfix checkpoint:** `38b10119544ce2c02590e9bc9c741aab995a91d1`  
@@ -10,7 +10,7 @@
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
 **Schema:** v23 integrated on `main`; v24 implemented on `dev/phase-10f`\
-**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (rules-neutral foundation PASS; rules matrix frozen; Slice 7 proof-character semantics implemented — READY FOR LUNA)
+**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (Slice 7 substantive Luna review PASS; documentation repair completed; narrow documentation confirmation pending before Astra)
 
 ## Product invariants
 
@@ -274,4 +274,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Luna performs a narrow documentation recheck at the exact current `dev/phase-10f` HEAD after restoration of the full `PHASE10F.md` contract. The prior Slice 7 review found no proof-character semantic blocker and all code gates passed; the sole finding was missing §§24–27 caused by a docs-only truncation. Confirm §§1–29 are present, repository identity is clean, and the restoration is documentation-only. If that passes, hand the same Slice 7 implementation to Astra for adversarial review. Do not merge, deploy or close 10F.
+Luna performs one narrow current-summary confirmation at the exact current `dev/phase-10f` HEAD. The substantive Slice 7 semantic review already passed; `LUNA-10F-S7-001` (missing §§24–27) is closed, and the remaining documentation finding `DOC-10F-RECHECK-001` has now been remediated by updating the Master Plan and Current Handoff current-state summaries. Confirm the repair is documentation-only and the latest status is: Slice 7 substantive PASS, Phase 10F still open, Astra next after this confirmation. On PASS, hand Slice 7 to Astra for adversarial review. Do not merge, deploy or close 10F.
