@@ -228,7 +228,7 @@ Delivered (store/game schema v23): `src/stores/alignmentResolution.ts` (pure `pl
 Frozen direction: one participant-bound Actual Alignment transaction seam; gameplay change vs correction; atomic multi-participant changes; Actual Alignment independent of Role; v23 player-facing alignment perception with Normal / explicit Good / explicit Evil / Not Told; Normal ordinary perception derives from Shown Role while Normal Traveler perception follows Actual Alignment; v22 -> v23 normalization clears inert legacy Traveler shown-alignment copies to Normal; strict v23 Alignment History correction/correlation metadata; occupancy-boundary hardening so a new participant never inherits stale seat alignment; Storyteller UI separates Actual Alignment truth from player-facing perception; 10F remains responsible for ability logic.
 
 ### 10F — Guided Ability Resolution / Night Actions
-**Status:** SLICE 7 IMPLEMENTED + SOL PRE-LUNA REMEDIATION ACCEPTED — READY FOR LUNA. Not closed.\
+**Status:** LUNA SLICE 7 REVIEW — CODE/SEMANTICS PASS; DOC REPAIR RECHECK REQUIRED. Not closed.\
 **Contract:** `PHASE10F.md` (frozen 2026-10-02).\
 **Starting checkpoint:** `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`.\
 **Contract-freeze checkpoint:** `727530e9364a0c971326c06ce45855adcf39828b`.\
@@ -274,4 +274,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Luna independently verifies the complete Slice 7 proof-character semantics at exact `dev/phase-10f` target `bd9050c97acef292173ef3437b139465f8493f2e` (code checkpoint `53ab172a723d70b2de4220d448ec8da8f79a173a`). The review must include the frozen character matrix, Harlot owner-authorized Information Action, F1/F2 remediation, trigger/state boundaries, Manual/deferred boundaries, architecture guards, and full gate. Do not merge, deploy or close 10F.
+Luna performs a narrow documentation recheck at the exact current `dev/phase-10f` HEAD after restoration of the full `PHASE10F.md` contract. The prior Slice 7 review found no proof-character semantic blocker and all code gates passed; the sole finding was missing §§24–27 caused by a docs-only truncation. Confirm §§1–29 are present, repository identity is clean, and the restoration is documentation-only. If that passes, hand the same Slice 7 implementation to Astra for adversarial review. Do not merge, deploy or close 10F.
