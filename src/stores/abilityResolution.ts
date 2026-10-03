@@ -595,11 +595,16 @@ const INPUT_VALUE_KEYS: Readonly<Record<string, readonly string[]>> = {
  * requirements) and the evaluator that asked a follow-up.
  */
 export function abilityInputValueError(value: unknown): string | null {
-  if (!isObject(value) || typeof value.kind !== "string" || !Object.prototype.hasOwnProperty.call(INPUT_VALUE_KEYS, value.kind)) {
+  if (!isObject(value) || !Object.prototype.hasOwnProperty.call(value, "kind") || typeof value.kind !== "string" ||
+    !Object.prototype.hasOwnProperty.call(INPUT_VALUE_KEYS, value.kind)) {
     return "An answer has no recognised kind.";
   }
   const allowed = INPUT_VALUE_KEYS[value.kind]!;
-  if (Object.keys(value).some((key) => !allowed.includes(key))) return "An answer carries unexpected fields.";
+  const keys = Object.keys(value);
+  if (keys.some((key) => !allowed.includes(key))) return "An answer carries unexpected fields.";
+  // SOL-10F-B3: the payload must be the answer's OWN field -- an inherited one
+  // is absent, never consumed.
+  if (!allowed.every((key) => keys.includes(key))) return "An answer is missing its value.";
   switch (value.kind) {
     case "participant":
       return Array.isArray(value.participants) && value.participants.every(isBinding) ? null : "A player answer must name bound participants.";
@@ -617,11 +622,25 @@ export function abilityInputValueError(value: unknown): string | null {
   return "An answer has no recognised kind.";
 }
 
-/** Every supplied input and judgment, declared or not, must be well-formed. */
-function checkAnswerPayloads(inputs: unknown, judgments: unknown): AbilityRefusal | null {
-  if (!isObject(inputs)) return refuse("invalid", "Malformed ability inputs.");
-  if (judgments !== undefined && !isObject(judgments)) return refuse("invalid", "Malformed Storyteller judgments.");
-  for (const [id, value] of [...Object.entries(inputs), ...Object.entries(judgments ?? {})]) {
+/**
+ * SOL-10F-B3: the canonical answer map of a caller's `inputs` / `judgments`
+ * -- a frozen, null-prototype snapshot of its OWN enumerable string-keyed
+ * entries, each read exactly once. Validation and every later read (declared
+ * inputs, functioning, modifier confirmations, the Night trigger, the
+ * evaluator) use THIS map, so an inherited or non-enumerable answer is absent
+ * everywhere -- never validated away and then consumed by ordinary property
+ * lookup. Null when the caller's value is not a plain answer record.
+ */
+export function ownAnswerMap(value: unknown): Readonly<Record<string, AbilityInputValue>> | null {
+  if (!isObject(value)) return null;
+  const map: Record<string, AbilityInputValue> = Object.create(null);
+  for (const key of Object.keys(value)) map[key] = value[key] as AbilityInputValue;
+  return Object.freeze(map);
+}
+
+/** Every supplied input and judgment (canonical maps), declared or not, must be well-formed. */
+function checkAnswerPayloads(inputs: AbilityInputs, judgments: AbilityJudgments): AbilityRefusal | null {
+  for (const [id, value] of [...Object.entries(inputs), ...Object.entries(judgments)]) {
     const error = abilityInputValueError(value);
     if (error) return refuse("invalid", `${error} ("${id}")`);
   }
@@ -741,14 +760,19 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   }
 
   const actorBinding = { playerId: actor.id, participantId: actor.participantId! };
-  const payloads = checkAnswerPayloads(request.inputs, request.judgments);
+  // SOL-10F-B3: canonical own-property snapshots BEFORE any validation or
+  // consumption; the caller's objects are never read again below.
+  const inputs = ownAnswerMap(request.inputs);
+  if (!inputs) return refuse("invalid", "Malformed ability inputs.");
+  const judgments = request.judgments === undefined ? ownAnswerMap({})! : ownAnswerMap(request.judgments);
+  if (!judgments) return refuse("invalid", "Malformed Storyteller judgments.");
+  const payloads = checkAnswerPayloads(inputs, judgments);
   if (payloads) return payloads;
-  const inputCheck = checkInputs(game, descriptor, actorBinding, request.inputs);
+  const inputCheck = checkInputs(game, descriptor, actorBinding, inputs);
   if (inputCheck) return inputCheck;
 
   const query = createRulesQuery(game, { registry: environment.registry, script: environment.script, ...(environment.semantics ? { semantics: environment.semantics } : {}),
     modifiers: environment.modifiers ?? activeModifiers(game, environment.registry) });
-  const judgments = isObject(request.judgments) ? request.judgments : {};
   let judgmentUsed = false;
   // 10F-AC-12: impairment is derived, never guessed. Unknown -> an explicit
   // Storyteller judgment; a simulated wake never functions.
@@ -819,7 +843,7 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   }
   if (!descriptor.evaluator) return refuse("unsupported", "This ability's outcome is not modeled -- resolve it manually.");
   const evaluation = descriptor.evaluator({ actor: { binding: actorBinding, player: actor }, roleId: request.roleId, simulated, functioning,
-    inputs: request.inputs, judgments, query, constraints });
+    inputs, judgments, query, constraints });
   switch (evaluation.kind) {
     case "needsInput": return refuse("needsInput", evaluation.message, { requirements: evaluation.requirements });
     case "notApplicable": return refuse("notApplicable", evaluation.message);

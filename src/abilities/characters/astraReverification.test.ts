@@ -15,7 +15,7 @@ import {
 } from "@/stores/nightProgress";
 import { applyRolePlan, correctRoleIntent, defaultRoleIds, planRoleTransaction } from "@/stores/roleResolution";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
-import { bind, homebrewScript, openInStore, patchPlayer, pick, plan, planned, proofGame, proofScript, request } from "@/test/proofFixtures";
+import { bind, homebrewScript, openInStore, patchPlayer, pick, plan, planned, proofGame, proofScript, request, requirementIds } from "@/test/proofFixtures";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
 const done = { status: "done" as const, notes: "" };
@@ -138,5 +138,77 @@ describe("SOL-10F-B5/B6 cross-seam -- Imp star-pass skip and duplicate-step prot
     expect(first.nightProgress[`2:${participantStepKey("pois#$[]", "poisoner")}`]?.status).toBe("done");
     expect(Object.keys(first.nightProgress)).toEqual(["2:p:pois%0023%0024%005B%005D:poisoner"]);
     expect(plan(first, request(first, "p0", "poisoner", { target: pick(first, "p2") }))).toMatchObject({ ok: false, code: "notApplicable" });
+  });
+});
+
+describe("SOL-10F-B3 -- answer maps are canonical own-property snapshots", () => {
+  type Fx = StorytellerLobbyRecord["players"][string]["effects"][number];
+  const soberHealthy = { id: "sh", type: "soberHealthy", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as Fx;
+  /** p0 = an Imp whose functioning is UNKNOWN (Sober & healthy) -> the coordinator asks actor:functioning. */
+  const uncertainImp = () => patchPlayer(proofGame(["imp", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"]), "p0", { effects: [soberHealthy] });
+  const attack = (g: StorytellerLobbyRecord, judgments: unknown, inputs: unknown = { target: pick(g, "p1") }) =>
+    plan(g, request(g, "p0", "imp", inputs as Record<string, never>, { judgments: judgments as Record<string, never> }));
+
+  it("Astra's reproduction: an INHERITED malformed actor:functioning is absent -> the functioning answer is asked; nobody dies", () => {
+    const g = uncertainImp();
+    const judgments = Object.create({ "actor:functioning": { kind: "boolean", value: "no" } });
+    expect(attack(g, judgments)).toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: "actor:functioning" }] });
+  });
+
+  it("an inherited VALID Boolean is ignored too", () => {
+    const g = uncertainImp();
+    expect(requirementIds(attack(g, Object.create({ "actor:functioning": { kind: "boolean", value: true } })))).toEqual(["actor:functioning"]);
+  });
+
+  it("a non-enumerable own answer is absent", () => {
+    const g = uncertainImp();
+    const judgments = {};
+    Object.defineProperty(judgments, "actor:functioning", { value: { kind: "boolean", value: true }, enumerable: false });
+    expect(requirementIds(attack(g, judgments))).toEqual(["actor:functioning"]);
+  });
+
+  it("an own malformed value is invalid; an own valid false stays false; a null-prototype own map works", () => {
+    const g = uncertainImp();
+    expect(attack(g, { "actor:functioning": { kind: "boolean", value: "no" } })).toMatchObject({ ok: false, code: "invalid" });
+    expect(attack(g, { "actor:functioning": { kind: "boolean", value: false } })).toEqual({ ok: true, changed: false }); // impaired Imp: nothing
+    const nullProto = Object.assign(Object.create(null), { "actor:functioning": { kind: "boolean", value: true } });
+    expect(planned(attack(g, nullProto)).players.p1!.alive).toBe(false);
+  });
+
+  it("an inherited declared input is absent (the input is asked)", () => {
+    const g = proofGame(["imp", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"]);
+    expect(attack(g, {}, Object.create({ target: pick(g, "p1") }))).toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: "target" }] });
+  });
+
+  it("an answer whose kind / value are inherited is invalid (never consumed through the prototype)", () => {
+    const g = uncertainImp();
+    expect(attack(g, { "actor:functioning": Object.create({ kind: "boolean", value: true }) })).toMatchObject({ ok: false, code: "invalid" });
+    expect(attack(g, { "actor:functioning": Object.assign(Object.create({ value: true }), { kind: "boolean" }) })).toMatchObject({ ok: false, code: "invalid" });
+  });
+
+  it("each answer is read exactly once: a getter cannot pass validation and then change", () => {
+    const g = uncertainImp();
+    let reads = 0;
+    const judgments = {};
+    Object.defineProperty(judgments, "actor:functioning", { enumerable: true, get: () => (++reads === 1 ? { kind: "boolean", value: false } : { kind: "boolean", value: true }) });
+    expect(attack(g, judgments)).toEqual({ ok: true, changed: false }); // the validated false is the consumed false
+    expect(reads).toBe(1);
+  });
+
+  it("B3 x modifier gate: an inherited modifier confirmation is ignored", () => {
+    const g = { ...proofGame(["imp", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"]), fabled: ["toymaker"] };
+    expect(requirementIds(attack(g, Object.create({ "modifier:fabled:toymaker": { kind: "boolean", value: true } })))).toEqual(["modifier:fabled:toymaker"]);
+    expect(planned(attack(g, { "modifier:fabled:toymaker": { kind: "boolean", value: true } })).players.p1!.alive).toBe(false);
+  });
+
+  it("B3 x Night trigger: an inherited trigger judgment is ignored", () => {
+    const g0 = proofGame(["ravenkeeper", "imp", "chef", "monk", "empath", "saint", "washerwoman"]);
+    const died = planned(plan(g0, request(g0, "p1", "imp", { target: pick(g0, "p0") })));
+    const legacy = { ...died, lifeEventWindow: { ...died.lifeEventWindow, events: died.lifeEventWindow.events.map(({ actualRoleAtEvent: _gone, ...e }) => e) } } as StorytellerLobbyRecord;
+    const trigger = (judgments: unknown) => plan(legacy, request(legacy, "p0", "ravenkeeper", { target: pick(legacy, "p2") }, { invocationPath: "nightTrigger", judgments: judgments as Record<string, never> }));
+    const [id] = requirementIds(trigger({}));
+    expect(id).toMatch(/^trigger:actorDiedTonight:i/);
+    expect(requirementIds(trigger(Object.create({ [id!]: { kind: "boolean", value: true } })))).toEqual([id]);
+    expect(trigger({ [id!]: { kind: "boolean", value: true } })).toMatchObject({ ok: true, changed: true });
   });
 });
