@@ -10,7 +10,7 @@
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
 **Schema:** v23 integrated on `main`; v24 implemented on `dev/phase-10f`\
-**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (SOL-10F-A1…A10 remediation implemented and Sol spot-checked — READY FOR LUNA targeted verification; Phase 10F not closed)
+**Current phase:** Phase 10F — Guided Ability Resolution / Night Actions (SOL-10F-A1…A10 Luna-verified — READY FOR ASTRA adversarial re-verification; Phase 10F not closed)
 
 ## Product invariants
 
@@ -274,4 +274,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Luna independently verifies SOL-10F-A1…A10 at the exact current `dev/phase-10f` HEAD. The implementation checkpoint is `9b6a25bdd134f7d60fb8366c8f781252b2f4f3a6`; commits above it are documentation-only. Verify the ten Astra remediations, the additive Life Event Role evidence and event-specific trigger consumption, the restored complete `PHASE10F.md` contract, all proof-character regressions, architecture/writer guards and the full gate. On PASS, return Slice 7 to Astra for adversarial re-verification. Do not merge, deploy or close 10F.
+Astra adversarially re-verifies the remediated Phase 10F Slice 7 implementation at the exact current `dev/phase-10f` target. Luna independently closed SOL-10F-A1…A10 and the full gate. Astra should re-run the original counterexamples, attack the repaired generic seams in combination, and look for regression or bypass paths rather than repeat Luna's acceptance checklist. Report proven defects separately from unproven concerns for Sol adjudication. Do not merge, deploy or close 10F.
