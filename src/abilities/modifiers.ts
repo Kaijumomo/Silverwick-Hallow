@@ -166,13 +166,19 @@ export function activeModifiers(
   return out;
 }
 
+/**
+ * The modifier gate of ONE evaluation. SOL-10F-A3: a gated evaluation carries
+ * BOTH halves -- the reaching unverified modifiers (each needs an explicit
+ * Storyteller confirmation or the Manual workspace) AND every reaching verified
+ * hook's result -- so answering an unverified modifier never discards a
+ * verified rule.
+ */
 export type ModifierGate =
   | { kind: "clear" }
-  /** Unverified modifiers that could affect this evaluation: each needs an
-   * explicit Storyteller judgment ("does not change this resolution") or the
-   * Manual workspace. */
-  | { kind: "gated"; modifiers: ModifierDefinition[] }
-  /** Verified hooks constrained the evaluation (rules-neutral results). */
+  /** At least one reaching UNVERIFIED modifier, plus every reaching verified
+   * hook result (possibly none). */
+  | { kind: "gated"; modifiers: ModifierDefinition[]; results: { modifier: ModifierDefinition; result: ModifierHookResult }[] }
+  /** Only verified hooks reached, and they constrained the evaluation. */
   | { kind: "constrained"; results: { modifier: ModifierDefinition; result: ModifierHookResult }[] };
 
 /** Does `modifier` reach an evaluation of `roleId` touching `scopes`? */
@@ -183,8 +189,8 @@ export function modifierReaches(modifier: ModifierDefinition, roleId: RoleId, sc
 
 /**
  * Gates one evaluation. Unrelated modifiers are ignored (never a global
- * block); a reaching UNVERIFIED modifier gates; a reaching VERIFIED one runs
- * its pure hook.
+ * block); a reaching UNVERIFIED modifier gates; EVERY reaching VERIFIED one
+ * runs its pure hook (SOL-10F-A3: also alongside unverified ones).
  */
 export function gateEvaluation(
   modifiers: readonly ModifierDefinition[],
@@ -194,9 +200,11 @@ export function gateEvaluation(
 ): ModifierGate {
   const reaching = modifiers.filter((modifier) => modifierReaches(modifier, roleId, scopes));
   const unverified = reaching.filter((modifier) => !modifier.hook);
-  if (unverified.length) return { kind: "gated", modifiers: unverified };
+  // Every reaching VERIFIED hook runs, whatever unverified modifiers also reach.
   const results = reaching
+    .filter((modifier) => !!modifier.hook)
     .map((modifier) => ({ modifier, result: modifier.hook!({ roleId, scopes, game }) }))
     .filter(({ result }) => result.kind !== "noEffect");
+  if (unverified.length) return { kind: "gated", modifiers: unverified, results };
   return results.length ? { kind: "constrained", results } : { kind: "clear" };
 }

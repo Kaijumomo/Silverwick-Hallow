@@ -547,6 +547,60 @@ function constraintAllows(allowed: InformationConstraintValue, delivered: Record
 }
 
 // ---------------------------------------------------------------------------
+// SOL-10F-A8: runtime structure of EVERY AbilityInputValue
+// ---------------------------------------------------------------------------
+
+const INPUT_VALUE_KEYS: Readonly<Record<string, readonly string[]>> = {
+  participant: ["kind", "participants"],
+  character: ["kind", "roleIds"],
+  alignment: ["kind", "alignment"],
+  number: ["kind", "value"],
+  boolean: ["kind", "value"],
+  text: ["kind", "value"],
+};
+
+/**
+ * The ONE canonical structural validator of a runtime AbilityInputValue --
+ * declared inputs, evaluator follow-ups and judgments alike. Null when
+ * well-formed; otherwise why not. Structure only (never truthiness): exact
+ * cardinality / subject / constraint rules stay with checkInputs (declared
+ * requirements) and the evaluator that asked a follow-up.
+ */
+export function abilityInputValueError(value: unknown): string | null {
+  if (!isObject(value) || typeof value.kind !== "string" || !Object.prototype.hasOwnProperty.call(INPUT_VALUE_KEYS, value.kind)) {
+    return "An answer has no recognised kind.";
+  }
+  const allowed = INPUT_VALUE_KEYS[value.kind]!;
+  if (Object.keys(value).some((key) => !allowed.includes(key))) return "An answer carries unexpected fields.";
+  switch (value.kind) {
+    case "participant":
+      return Array.isArray(value.participants) && value.participants.every(isBinding) ? null : "A player answer must name bound participants.";
+    case "character":
+      return Array.isArray(value.roleIds) && value.roleIds.every((id) => typeof id === "string" && id.length > 0) ? null : "A character answer must name characters.";
+    case "alignment":
+      return value.alignment === "good" || value.alignment === "evil" ? null : "An alignment answer must be good or evil.";
+    case "number":
+      return typeof value.value === "number" && Number.isFinite(value.value) ? null : "A number answer must be a finite number.";
+    case "boolean":
+      return typeof value.value === "boolean" ? null : "A yes/no answer must be a real Boolean.";
+    case "text":
+      return typeof value.value === "string" ? null : "A text answer must be text.";
+  }
+  return "An answer has no recognised kind.";
+}
+
+/** Every supplied input and judgment, declared or not, must be well-formed. */
+function checkAnswerPayloads(inputs: unknown, judgments: unknown): AbilityRefusal | null {
+  if (!isObject(inputs)) return refuse("invalid", "Malformed ability inputs.");
+  if (judgments !== undefined && !isObject(judgments)) return refuse("invalid", "Malformed Storyteller judgments.");
+  for (const [id, value] of [...Object.entries(inputs), ...Object.entries(judgments ?? {})]) {
+    const error = abilityInputValueError(value);
+    if (error) return refuse("invalid", `${error} ("${id}")`);
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Guided evaluation
 // ---------------------------------------------------------------------------
 
@@ -662,6 +716,8 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   }
 
   const actorBinding = { playerId: actor.id, participantId: actor.participantId! };
+  const payloads = checkAnswerPayloads(request.inputs, request.judgments);
+  if (payloads) return payloads;
   const inputCheck = checkInputs(game, descriptor, actorBinding, request.inputs);
   if (inputCheck) return inputCheck;
 
@@ -701,33 +757,31 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
       judgmentUsed = true;
     }
   }
+  // SOL-10F-A3: the gate carries BOTH the reaching unverified modifiers and
+  // every reaching verified hook result; all of them are enforced together --
+  // answering an unverified modifier never discards a verified rule.
   const gate = query.modifierGate(request.roleId, descriptor.hooks);
-  if (gate.kind === "gated") {
-    const open = gate.modifiers.filter((modifier) => {
-      const answer = judgments[`modifier:${modifier.id}`];
-      return !(isObject(answer) && answer.kind === "boolean" && answer.value === true);
-    });
-    if (open.length) {
-      return refuse("needsInput", "A rule modifier in play could change this ability. Confirm it does not, or resolve manually.", {
-        requirements: open.map((modifier) => ({ id: `modifier:${modifier.id}`, kind: "boolean", source: "judgment", label: `${modifier.label} does not change this resolution` })),
-      });
-    }
-    judgmentUsed = true;
+  const unverified = gate.kind === "gated" ? gate.modifiers : [];
+  const verified = gate.kind === "clear" ? [] : gate.results;
+  for (const { result } of verified) if (result.kind === "unsupported") return refuse("unsupported", result.message);
+  const confirmed = (id: string) => { const answer = judgments[`modifier:${id}`]; return isObject(answer) && answer.kind === "boolean" && answer.value === true; };
+  const openModifiers: AbilityInputRequirement[] = [
+    ...unverified.filter((modifier) => !confirmed(modifier.id)).map((modifier) =>
+      ({ id: `modifier:${modifier.id}`, kind: "boolean" as const, source: "judgment" as const, label: `${modifier.label} does not change this resolution` })),
+    ...verified.filter(({ modifier, result }) => result.kind === "judgment" && !confirmed(modifier.id)).map(({ modifier, result }) =>
+      ({ id: `modifier:${modifier.id}`, kind: "boolean" as const, source: "judgment" as const, label: (result as { message: string }).message })),
+  ];
+  if (openModifiers.length) {
+    const verifiedJudgment = verified.find(({ modifier, result }) => result.kind === "judgment" && !confirmed(modifier.id));
+    return refuse("needsInput", verifiedJudgment && !unverified.some((modifier) => !confirmed(modifier.id))
+      ? (verifiedJudgment.result as { message: string }).message
+      : "A rule modifier in play could change this ability. Confirm it does not, or resolve manually.", { requirements: openModifiers });
   }
+  if (unverified.length || verified.some(({ result }) => result.kind === "judgment")) judgmentUsed = true;
   const constraints: InformationConstraint[] = [];
-  if (gate.kind === "constrained") {
-    for (const { modifier, result } of gate.results) {
-      if (result.kind === "unsupported") return refuse("unsupported", result.message);
-      if (result.kind === "judgment") {
-        const answer = judgments[`modifier:${modifier.id}`];
-        if (!(isObject(answer) && answer.kind === "boolean" && answer.value === true)) {
-          return refuse("needsInput", result.message, { requirements: [{ id: `modifier:${modifier.id}`, kind: "boolean", source: "judgment", label: result.message }] });
-        }
-        judgmentUsed = true;
-      }
-      if (result.kind === "constrainInformation") {
-        constraints.push({ modifierId: modifier.id, requirementId: result.requirementId, allowed: result.allowed, reason: result.reason });
-      }
+  for (const { modifier, result } of verified) {
+    if (result.kind === "constrainInformation") {
+      constraints.push({ modifierId: modifier.id, requirementId: result.requirementId, allowed: result.allowed, reason: result.reason });
     }
   }
   if (!descriptor.evaluator) return refuse("unsupported", "This ability's outcome is not modeled -- resolve it manually.");
