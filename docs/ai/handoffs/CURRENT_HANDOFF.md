@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-03\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: A1…A10, B1…B6 and C1…C3 remain remediated; Astra's final C1…C3 closure recheck established SOL-10F-D1/D2 (Firebase single-string-leaf compatibility; display-only ParticipantRef prose excluded from protection dependency identity), now remediated at code checkpoint `a0968d0ff6149b7f16eb9fabb7e1eb8dda32ea0c` (`PHASE10F.md` §43). Next: Luna narrow verification → Astra narrow closure recheck → Sol closure adjudication. Schema/store remains unreleased v24; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: A1…A10, B1…B6 and C1…C3 remain closed; D1/D2 are remediated at code checkpoint `a0968d0ff6149b7f16eb9fabb7e1eb8dda32ea0c`. During D1 verification, Claude established a separate derived-checkpoint persistence defect: the writer stores `JSON.stringify({ game, roster })` as one Firebase string leaf, so several individually valid game strings can aggregate beyond Firebase's leaf limit after the ability store has already committed. Sol accepts this as SOL-10F-E1 and requires one narrow remediation before Luna. Schema/store remains unreleased v24; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
 
 ## Phase 10D — CLOSED
 
@@ -817,3 +817,13 @@ Residual observation for Sol (not in §42 scope, not remediated; see §43): the 
 ## Immediate next task
 
 Luna performs the narrow D1/D2 verification at the exact current `dev/phase-10f` HEAD. Do not send directly to Astra. After Luna PASS, Astra performs one narrow D1/D2 closure recheck; then Sol closure adjudication. Phase 10F remains open; nothing merged or deployed.
+
+## Sol accepts derived checkpoint persistence gap as E1 — 2026-10-03
+
+D1/D2 are implemented and their full gate is green. The additional checkpoint observation in §43 is independently accepted as `SOL-10F-E1` in `PHASE10F.md` §44 because it breaks the production persistence guarantee C3 was intended to establish: `resolveAbility` may commit a game whose structured Storyteller value is Firebase-compatible while the production writer's required derived checkpoint string is not.
+
+Do not send the current D1/D2 checkpoint to Luna yet.
+
+## Immediate next task
+
+Claude Code remediates E1 only: shared exact checkpoint serialization, conservative proven roster envelope for the pre-commit store proof, and exact writer-side defense-in-depth validation. Preserve D1/D2 and all earlier closures. After the full gate, Luna verifies D1/D2/E1 together, then Astra performs one narrow closure recheck. Phase 10F remains open.
