@@ -490,3 +490,29 @@ Narrow remediation on top of `6309152625c86e08ef418d916588fd4cacd9d73a`; code ch
 ## Immediate next task
 
 Luna narrowly re-verifies SOL-10F-L3-R1 at the exact `dev/phase-10f` HEAD named in the remediation report (code checkpoint `93b850d77ea9b8a7adf3ae4db3f4ac7dc7d54a68` plus the docs-only handoff commit). Production `CANONICAL_ABILITY_SEMANTICS` remains empty. Do not implement proof-character semantics, merge, deploy or close 10F.
+
+
+## Luna invocation closure / rules-neutral foundation PASS — 2026-10-02
+
+Luna re-verified exact target `aeda04351895175eb78a147fe9c133519fd4f3ba` and returned:
+
+**PASS — SOL-10F-L3-R1 CLOSED; RULES-NEUTRAL FOUNDATION READY FOR SOL CHARACTER-RULE FREEZE**
+
+Gate evidence:
+
+- invocation suite **64/64**;
+- targeted regression smoke **295/295** across 12 files;
+- full normal suite **3,563/3,563** across 138 files;
+- Firebase emulator suite **201/201**, 0 skipped;
+- typecheck PASS;
+- production build PASS;
+- worktree and baseline-range diff checks PASS;
+- final detached review worktree clean.
+
+No findings remain in the rules-neutral foundation review. Production `CANONICAL_ABILITY_SEMANTICS` is still empty.
+
+Accepted Sol interpretations retained: Night guided work is owned by Night Order while the Player Drawer keeps the Manual fallback; `nightOrder` path does not require a Night-step fingerprint unless completing a step; late-arriving Traveler first-night exceptions remain Manual/deferred until verified Traveler semantics.
+
+## Immediate next task
+
+Sol researches and freezes the authoritative proof-character rules matrix for Poisoner, Monk, Imp, Fortune Teller, simulated Drunk→Empath, Ravenkeeper, Slayer, Cult Leader, Pit-Hag, Al-Hadikhia, Tinker, Harlot, Toymaker and Baron. Use official BOTC sources for character behavior and distinguish explicit rules from Storyteller judgment. Do not implement production semantics until the rules matrix is frozen.
