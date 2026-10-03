@@ -747,8 +747,14 @@ export function setPerceptionIntent(
  * its perception, as the seam allows), keeping the player-facing alignment
  * exactly as it is (alignment never changes merely because a character does).
  * Only for a participant whose perception is ordinary; callers decide that. */
-export function toldRoleChangeIntents(player: STPlayerRecord, actualRole: RoleId): [ChangeActualRoleIntent, SetPerceptionIntent] {
-  return [changeRoleIntent(player, actualRole), setPerceptionIntent(player, { shownRole: actualRole, shownAlignment: player.shownAlignment })];
+export function toldRoleChangeIntents(
+  player: STPlayerRecord,
+  actualRole: RoleId,
+  /** An explicit player-facing alignment, when keeping Normal would make the
+   * new Shown Role imply an alignment the player does not have. */
+  shownAlignment: ShownAlignment | null = player.shownAlignment,
+): [ChangeActualRoleIntent, SetPerceptionIntent] {
+  return [changeRoleIntent(player, actualRole), setPerceptionIntent(player, { shownRole: actualRole, shownAlignment })];
 }
 
 /** Phase 10E: a player-facing alignment change of `player` (as rendered) --
