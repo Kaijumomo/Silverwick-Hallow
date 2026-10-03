@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-03\
-**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: A1…A10, B1…B6 and C1…C3 are remediated and Luna-verified. The exact Slice 7 target is ready for one narrow Astra final closure recheck focused only on C1…C3 and immediate cross-seam regressions. On Astra PASS, Sol performs closure adjudication. Schema/store remains unreleased v24; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
+**State:** Phase 10E — Alignment Transitions is **CLOSED AND INTEGRATED** into `main`. Phase 10F — Guided Ability Resolution / Night Actions: A1…A10, B1…B6 and C1…C3 remain remediated; Astra's final C1…C3 closure recheck established two residual defects. Sol accepts them as SOL-10F-D1/D2: Firebase single-string-leaf compatibility and exclusion of display-only ParticipantRef prose from protection dependency identity. One final narrow remediation/verification loop remains before Sol closure adjudication. Schema/store remains unreleased v24; Firebase Rules unchanged. Starting checkpoint: `2252c5e76284fcd12d0e4d5debdfc34f66f86a17`. 10F is NOT closed; nothing merged or deployed.
 
 ## Phase 10D — CLOSED
 
@@ -794,3 +794,16 @@ Luna independently reviewed exact target `87bfa2c781fb0b46651a1f7f060732846bd2c8
 **PASS — SOL-10F-C1…C3 CLOSED; PHASE 10F SLICE 7 READY FOR ASTRA FINAL CLOSURE RECHECK**
 
 The final gate is one narrow Astra C1…C3 closure recheck. On PASS, hand Slice 7 to Sol for closure adjudication. Phase 10F remains open.
+
+## Astra final C1…C3 recheck — REVISE / Sol D1-D2 adjudication — 2026-10-03
+
+Astra rechecked exact target `7173499e8a8c495393f00f82706fbd14f7cbfb12`. The original C1/C2/C3 reproductions are blocked and prior A/B closures remain intact, but Astra established two residual defects:
+
+- the shared Firebase compatibility helper omits the installed SDK's 10 MiB single-string-leaf size ceiling, allowing an ability result to commit locally and then fail SDK validation;
+- the protection-dependency stamp includes `sourceParticipant.nameAtTime`, so a display-only Effect source snapshot refresh unnecessarily invalidates an otherwise identical protection judgment.
+
+Sol accepts these as `SOL-10F-D1/D2` in `PHASE10F.md` §42. A stale current roadmap status is also corrected; historical records remain unchanged.
+
+## Immediate next task
+
+Claude Code remediates D1/D2 exactly as frozen in §42, preserves A/B/C closures, runs the full gate and returns one exact clean checkpoint to Luna for narrow D1/D2 verification. After Luna PASS, Astra performs one narrow D1/D2 closure recheck. Phase 10F remains open.
