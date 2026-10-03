@@ -189,10 +189,14 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     // changes character -- the source no longer HAS that ability (derived; the
     // stored Effect is never rewritten).
     if (sourceCharacter && sourcePlayer.actualRole !== sourceCharacter) return known(false);
+    // SOL-10F-A5: a KNOWN dead source no longer has its ability -- decisive
+    // before any impairment / functioning uncertainty is even consulted. (A
+    // departed / unseated source stays unknown, above.)
+    if (!sourcePlayer.alive) return known(false);
     const next = new Set(visiting).add(key);
     const functioning = functions(sourcePlayer, next);
     if (!functioning.known) return functioning;
-    return known(functioning.value && sourcePlayer.alive);
+    return known(functioning.value);
   };
 
   /** Impairment of `player`: any applicable impairment Effect -> impaired;

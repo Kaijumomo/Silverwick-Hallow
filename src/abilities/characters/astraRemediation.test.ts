@@ -5,6 +5,11 @@
 import { describe, expect, it } from "vitest";
 import { activeModifiers, prospectiveJinxes, type ModifierDefinition } from "@/abilities/modifiers";
 import { buildRegistry } from "@/data/roleRegistry";
+import { createRulesQuery } from "@/stores/rulesQuery";
+import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
+import { participantRoleStepEntries, participantStepKey, travelerArrivalStepKey } from "@/stores/nightProgress";
+import { applyRolePlan, correctRoleIntent, defaultRoleIds, planRoleTransaction, setPerceptionIntent } from "@/stores/roleResolution";
+import { proofScript } from "@/test/proofFixtures";
 import { homebrewScript } from "@/test/proofFixtures";
 import { abilityInputValueError } from "@/stores/abilityResolution";
 import { bind, impair, num, patchPlayer, pick, plan, planned, proofEnv, proofGame, proofRegistry, request, requirementIds, yes } from "@/test/proofFixtures";
@@ -229,5 +234,93 @@ describe("SOL-10F-A4 -- a Role change that creates a jinx endpoint is gated pros
     const registry = buildRegistry(homebrewScript("damsel"));
     expect(prospectiveJinxes(g, registry, [{ playerId: "p1", roleId: "damsel" }])).toEqual([]);
     expect(prospectiveJinxes(g, proofRegistry, [{ playerId: "p1", roleId: "damsel" }]).map((j) => j.id)).toEqual(["jinx:pithag+damsel"]);
+  });
+});
+
+describe("SOL-10F-A5 -- a known-dead source ends a whileSourceFunctions Effect before any functioning question", () => {
+  type Fx = StorytellerLobbyRecord["players"][string]["effects"][number];
+  const fx = (over: Partial<Fx>): Fx => ({ id: "fx", type: "x", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 }, ...over } as Fx);
+  const q = (g: StorytellerLobbyRecord) => createRulesQuery(g, { registry: proofRegistry, script: proofScript, semantics: CANONICAL_ABILITY_SEMANTICS, modifiers: [] });
+  const sourced = (g: StorytellerLobbyRecord, type: string, sourceCharacter: string) => fx({ id: `${type}-1`, type, sourceCharacter,
+    sourceParticipant: { kind: "participant", participantId: g.players.p0!.participantId!, playerId: "p0", nameAtTime: "Player 0" } });
+  const soberHealthy = fx({ id: "sh", type: "soberHealthy" }); // makes the source's functioning UNKNOWN
+  /** p0 = the source (Monk or Poisoner), p1 = the Effect's holder. */
+  const setup = (sourceRole: string, type: string, sourceOver: Partial<StorytellerLobbyRecord["players"][string]>) => {
+    const g0 = proofGame([sourceRole, "chef", "imp"]);
+    const effect = sourced(g0, type, sourceRole);
+    const g = patchPlayer(patchPlayer(g0, "p1", { effects: [effect] }), "p0", { effects: [soberHealthy], ...sourceOver });
+    return { g, effect, holder: bind(g, "p1") };
+  };
+
+  it("Astra's reproduction: dead Monk + functioning ambiguity -> the protection is known FALSE", () => {
+    const { g, holder } = setup("monk", "safeFromDemon", { alive: false });
+    expect(q(g).protectedFrom(holder, "demon")).toEqual({ known: true, value: false });
+  });
+
+  it("dead Poisoner + functioning ambiguity -> the poison is known false", () => {
+    const { g, effect, holder } = setup("poisoner", "poisoned", { alive: false });
+    expect(q(g).effectApplies(holder, effect)).toEqual({ known: true, value: false });
+  });
+
+  it("an ALIVE ambiguous source stays unknown; a Role-changed source is false; a departed source stays unknown", () => {
+    const alive = setup("monk", "safeFromDemon", {});
+    expect(q(alive.g).protectedFrom(alive.holder, "demon")).toMatchObject({ known: false });
+    const changed = setup("monk", "safeFromDemon", { actualRole: "chef" });
+    expect(q(changed.g).protectedFrom(changed.holder, "demon")).toEqual({ known: true, value: false });
+    const departed = setup("monk", "safeFromDemon", { alive: false });
+    const unseated = reseatSource(departed.g);
+    expect(q(unseated).protectedFrom(departed.holder, "demon")).toMatchObject({ known: false });
+  });
+  const reseatSource = (g: StorytellerLobbyRecord) => patchPlayer(g, "p0", { participantId: "someone-new", name: "Replacement", alive: true });
+});
+
+describe("SOL-10F-A7 -- participant Night-progress identity is exact", () => {
+  // p1 = participant "alpha" (Beggar), p2 = participant "alpha:beta" (Gunslinger): a textual prefix pair.
+  function prefixPair(): StorytellerLobbyRecord {
+    let g = proofGame(["imp", "beggar", "gunslinger", "chef", "monk", "empath", "saint"]);
+    for (const [id, pid] of [["p1", "alpha"], ["p2", "alpha:beta"]] as const) {
+      g = patchPlayer(g, id, { participantId: pid, isTraveler: true, actualAlignment: "good", travelerArrival: { demonInfoComplete: false, firstNightComplete: false } });
+    }
+    return { ...g, nightProgress: {
+      [`2:${participantStepKey("alpha", "beggar")}`]: { status: "done", notes: "" },
+      [`2:${travelerArrivalStepKey("alpha", "beggar")}`]: { status: "done", notes: "" },
+      [`2:${participantStepKey("alpha:beta", "gunslinger")}`]: { status: "done", notes: "" },
+      [`2:${travelerArrivalStepKey("alpha:beta", "gunslinger")}`]: { status: "done", notes: "" },
+      [`2:${participantStepKey("alpha:beta", "imp")}`]: { status: "skipped", notes: "" },
+    } };
+  }
+  const remaining = (g: StorytellerLobbyRecord, intents: Parameters<typeof planRoleTransaction>[1]["intents"]) => {
+    const result = planRoleTransaction(g, { intents }, { script: proofScript, ids: defaultRoleIds });
+    expect(result).toMatchObject({ ok: true, changed: true });
+    return result.ok && result.changed ? Object.keys(applyRolePlan(g, result.plan).nightProgress).sort() : [];
+  };
+
+  it("Astra's reproduction: an arrival restart for 'alpha' clears ONLY alpha's exact keys, never 'alpha:beta''s", () => {
+    const g = prefixPair();
+    expect(remaining(g, [correctRoleIntent(g.players.p1!, "beggar", "restart")])).toEqual([
+      `2:${participantStepKey("alpha:beta", "gunslinger")}`,
+      `2:${participantStepKey("alpha:beta", "imp")}`,
+      `2:${travelerArrivalStepKey("alpha:beta", "gunslinger")}`,
+    ].sort());
+  });
+
+  it("a Traveler -> ordinary transition clears its own old guided and arrival steps (and a shown-role step), nothing of the prefix participant", () => {
+    let g = prefixPair();
+    g = { ...g, nightProgress: { ...g.nightProgress, [`2:${participantStepKey("alpha", "chef")}`]: { status: "done", notes: "" } } };
+    const p = g.players.p1!;
+    const after = remaining(g, [{ kind: "changeActualRole", target: bind(g, "p1"), expectedActualRole: "beggar", expectedIsTraveler: true, actualRole: "chef" },
+      setPerceptionIntent(p, { shownRole: "chef", shownAlignment: null })]);
+    expect(after).not.toContain(`2:${participantStepKey("alpha", "beggar")}`);
+    expect(after).not.toContain(`2:${travelerArrivalStepKey("alpha", "beggar")}`);
+    expect(after).not.toContain(`2:${participantStepKey("alpha", "chef")}`);
+    for (const key of [participantStepKey("alpha:beta", "gunslinger"), travelerArrivalStepKey("alpha:beta", "gunslinger"), participantStepKey("alpha:beta", "imp")]) {
+      expect(after).toContain(`2:${key}`);
+    }
+  });
+
+  it("the exact-key builder never matches a prefix participant", () => {
+    const keys = participantRoleStepEntries(2, "alpha", ["beggar", "imp"]);
+    expect(keys.has(`2:${participantStepKey("alpha:beta", "imp")}`)).toBe(false);
+    expect(keys.has(`2:${participantStepKey("alpha", "imp")}`)).toBe(true);
   });
 });

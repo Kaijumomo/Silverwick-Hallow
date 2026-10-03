@@ -48,12 +48,27 @@ export function isParticipantScopedStepKey(stepKey: string): boolean {
   return stepKey.includes(":") && (PARTICIPANT_STEP_PREFIXES as readonly string[]).includes(prefix);
 }
 
-/** True when the full `nightProgress` key (`${day}:${stepKey}`) belongs to
- * `participantId` in the Traveler-arrival or guided-wake families -- the steps a
- * Role transition / arrival restart clears for that participation instance. */
-export function isParticipantRoleStepEntry(key: string, day: number, participantId: ParticipantId): boolean {
-  return key.startsWith(`${day}:${travelerArrivalStepKey(participantId, "")}`) ||
-    key.startsWith(`${day}:${participantStepKey(participantId, "")}`);
+/**
+ * SOL-10F-A7: the EXACT full `nightProgress` keys (`${day}:${stepKey}`) of the
+ * Traveler-arrival and guided-wake steps that THIS participation instance owns
+ * for the given Roles -- the steps a Role transition / arrival restart may
+ * clear. Callers name the Roles that can own such a step (observed / final
+ * Actual Role, a Shown Role that owns a simulated wake). Exact string identity
+ * only: a ParticipantId that is a textual prefix of another (`alpha` vs
+ * `alpha:beta`) can never match the other participant's progress.
+ */
+export function participantRoleStepEntries(
+  day: number,
+  participantId: ParticipantId,
+  roleIds: Iterable<RoleId | null | undefined>,
+): Set<string> {
+  const keys = new Set<string>();
+  for (const roleId of roleIds) {
+    if (typeof roleId !== "string" || !roleId) continue;
+    keys.add(`${day}:${participantStepKey(participantId, roleId)}`);
+    keys.add(`${day}:${travelerArrivalStepKey(participantId, roleId)}`);
+  }
+  return keys;
 }
 
 /**

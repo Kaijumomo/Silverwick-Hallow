@@ -46,7 +46,7 @@ import {
   type ReminderTransaction,
 } from "./reminderResolution";
 import { newParticipantId, participantIdAppearsIn } from "./participants";
-import { isParticipantRoleStepEntry, planNightStepStatus } from "./nightProgress";
+import { participantRoleStepEntries, planNightStepStatus } from "./nightProgress";
 import { planAbilityResolution, type AbilityRefusal, type AbilityResolutionRequest } from "./abilityResolution";
 import { CANONICAL_ABILITY_SEMANTICS, type AbilitySemanticsRegistry } from "@/abilities/semantics";
 import { detectLegacyGameVersion, migrateGameEntry } from "./gameMigration";
@@ -842,10 +842,12 @@ const CLEAN_STATE = { game: null, view: "home" as const, undoStack: [] as never[
 /** Phase 10F (v24): clears tonight's arrival / guided-wake steps of the
  * participation instance at `id` -- keyed by ParticipantId, never the seat. */
 const resetTravelerNightProgress = (game: StorytellerLobbyRecord, id: PlayerId) => {
-  const participantId = game.players[id]?.participantId;
-  if (!participantId) return game.nightProgress;
-  return Object.fromEntries(Object.entries(game.nightProgress).filter(([key]) =>
-    !isParticipantRoleStepEntry(key, game.day, participantId)));
+  const player = game.players[id];
+  const participantId = player?.participantId;
+  if (!player || !participantId) return game.nightProgress;
+  // SOL-10F-A7: exact keys of THIS participant's own Role steps only.
+  const exact = participantRoleStepEntries(game.day, participantId, [player.actualRole, player.shownRole, player.publicDisplayRole]);
+  return Object.fromEntries(Object.entries(game.nightProgress).filter(([key]) => !exact.has(key)));
 };
 
 /** Phase 9R.1 Astra remediation (Finding M2): `undoStack` is untrusted

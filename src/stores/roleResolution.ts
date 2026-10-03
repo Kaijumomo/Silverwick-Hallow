@@ -4,7 +4,7 @@ import { getTraveler } from "@/data/travelers";
 import { cloneOwned, durableProvenance, historyId, isLiveGamePhase, sameSnapshot, type MutationContext } from "./history";
 import { isInitialRevealComplete } from "./identity";
 import { currentLiveMoment } from "./lifeEvents";
-import { isParticipantRoleStepEntry } from "./nightProgress";
+import { participantRoleStepEntries } from "./nightProgress";
 import { participantRefOf } from "./participants";
 import { pruneInapplicablePrivateInfo } from "./privatePackets";
 import { BehaviorModeSchema, MutationContextInputSchema, ProvenanceSchema } from "./schemas";
@@ -667,12 +667,16 @@ export function planRoleTransaction(
     if (!finalOf.has(playerId) && !restarted.has(playerId)) continue;
     // Phase 10F (v24): tonight's arrival / guided-wake steps are keyed by the
     // participation instance (src/stores/nightProgress.ts), never the seat.
-    const participantId = game.players[playerId]?.participantId;
-    if (!participantId) continue;
+    const original = game.players[playerId];
+    const participantId = original?.participantId;
+    if (!original || !participantId) continue;
+    // SOL-10F-A7: only this participant's EXACT step keys, derived from the
+    // Roles that can own them (observed and final Actual / Shown Role).
+    const final = finalOf.get(playerId) ?? working.get(playerId);
+    const exact = participantRoleStepEntries(game.day, participantId,
+      [original.actualRole, original.shownRole, final?.actualRole, final?.shownRole]);
     for (const key of Object.keys(game.nightProgress)) {
-      if (isParticipantRoleStepEntry(key, game.day, participantId)) {
-        if (!nightProgressRemove.includes(key)) nightProgressRemove.push(key);
-      }
+      if (exact.has(key) && !nightProgressRemove.includes(key)) nightProgressRemove.push(key);
     }
   }
 
