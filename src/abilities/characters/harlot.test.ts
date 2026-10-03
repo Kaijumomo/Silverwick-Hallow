@@ -98,10 +98,10 @@ describe("Harlot -- consent", () => {
 });
 
 describe("Harlot -- targets, timing, impairment, identity", () => {
-  it("the target must be another LIVING participant", () => {
+  it("the target must be a LIVING participant (SOL-10F-S7-F1: the Harlot themself is legal)", () => {
     const g = patchPlayer(base(), "p1", { alive: false });
     expect(run(g, "p1")).toMatchObject({ ok: false, code: "illegal" });
-    expect(run(g, "p0")).toMatchObject({ ok: false, code: "illegal" });
+    expect(requirementIds(run(g, "p0"))).toEqual([CONSENT]);
   });
 
   it("Each night*: not the game's first Night; a late-arriving Harlot acts on a later Night by the GAME's Night number", () => {
@@ -190,5 +190,60 @@ describe("Harlot Information Action -- owner-authorized Silverwick metadata", ()
       recipient: expect.objectContaining({ participantId: g.players.p0!.participantId }),
       actualRole: "harlot", informationActionId: "harlot-other-night", values: told(g, "p1", "chef"),
     })]);
+  });
+});
+
+describe("SOL-10F-S7-F1 -- the Harlot may choose themself", () => {
+  const deathIntents = (result: ReturnType<typeof run>) => result.ok && result.changed
+    ? result.plan.outcome.operations.flatMap((o) => (o.domain === "life" ? o.intents.map((i) => `${i.kind}:${i.target.participantId}`) : [])) : [];
+
+  it("1. a living Harlot choosing themself is legal: their own consent is asked", () => {
+    const g = base();
+    expect(run(g, "p0")).toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: CONSENT, source: "player", label: "Player 0 agrees" }] });
+  });
+
+  it("2. self + consent No -> no delivery, no death", () => {
+    const g = base();
+    expect(run(g, "p0", { [CONSENT]: yes(false) })).toEqual({ ok: true, changed: false });
+    const step = planned(run(g, "p0", { [CONSENT]: yes(false) }, { withStep: true, completeStep: true }));
+    expect(step.informationDeliveries).toEqual([]);
+    expect(step.players).toBe(g.players);
+  });
+
+  it("3. self + consent Yes + no death consequence -> exactly one Harlot delivery (chosenPlayer = the Harlot, role = Harlot)", () => {
+    const g = base();
+    const next = planned(run(g, "p0", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes(false) }));
+    expect(next.informationDeliveries).toEqual([expect.objectContaining({ actualRole: "harlot", informationActionId: "harlot-other-night", values: told(g, "p0", "harlot") })]);
+    expect(next.players).toBe(g.players);
+  });
+
+  it("4. self + consent Yes + death consequence -> exactly ONE death attempt for that participant", () => {
+    const g = base();
+    const result = run(g, "p0", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() });
+    expect(deathIntents(result)).toEqual([`death:${g.players.p0!.participantId}`]);
+    const next = planned(result);
+    expect(next.players.p0!.alive).toBe(false);
+    expect(next.lifeEventWindow.events.filter((e) => e.subject.participantId === g.players.p0!.participantId)).toHaveLength(1);
+    expect(next.informationDeliveries).toHaveLength(1);
+  });
+
+  it("5. protection / judgment applies to that one attempt (known block, known clear, unknown -> one judgment)", () => {
+    const immune = patchPlayer(base(), "p0", { effects: [effect("cannotDie")] });
+    const blocked = run(immune, "p0", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() });
+    expect(deathIntents(blocked)).toEqual([]);
+    expect(planned(blocked).players.p0!.alive).toBe(true);
+    const monked = patchPlayer(base(), "p0", { effects: [effect("safeFromDemon")] }); // Demon-only: no block
+    expect(deathIntents(run(monked, "p0", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }))).toHaveLength(1);
+    const generic = patchPlayer(base(), "p0", { effects: [effect("protected")] });
+    const id = protectionJudgmentId("any", bind(generic, "p0"));
+    expect(requirementIds(run(generic, "p0", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }))).toEqual([id]);
+    expect(deathIntents(run(generic, "p0", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }, { judgments: { [id]: yes(false) } }))).toHaveLength(1);
+    expect(deathIntents(run(generic, "p0", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }, { judgments: { [id]: yes(true) } }))).toEqual([]);
+  });
+
+  it("6. stale ParticipantId safety: a self-choice captured before seat reuse is refused", () => {
+    const g = base();
+    const req = request(g, "p0", "harlot", { target: pick(g, "p0"), [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() });
+    expect(plan(reseat(g, "p0"), req)).toMatchObject({ ok: false, code: "stale" });
   });
 });

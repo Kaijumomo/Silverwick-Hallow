@@ -11,7 +11,8 @@ import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, n
  * character, but you both might die." Other Nights by the GAME's Night number
  * (a late-arriving Harlot is not on a "first night" of its own).
  *
- *  1. the Harlot chooses one living participant (another player);
+ *  1. the Harlot chooses one living participant (themself included --
+ *     SOL-10F-S7-F1);
  *  2. that participant answers Yes / No (their own Player choice);
  *     No -> no information, no death;
  *  3. Yes -> the character shown is their registration to the Harlot
@@ -47,7 +48,8 @@ export const HARLOT: AbilityDescriptor = {
   timing: ["otherNight"],
   invocation: "wake",
   usage: { kind: "unlimited" },
-  inputs: [{ id: "target", kind: "participant", source: "player", constraints: ["alive", "notSelf"], label: "The living player chosen" }],
+  // SOL-10F-S7-F1: any LIVING participant -- the Harlot may choose themself.
+  inputs: [{ id: "target", kind: "participant", source: "player", constraints: ["alive"], label: "The living player chosen" }],
   hooks: ["information", "registration", "death"],
   informationActions: ["harlot-other-night"],
   presentation: { complexity: "complex", action: "Choose a living player (they may agree)" },
@@ -81,14 +83,17 @@ export const HARLOT: AbilityDescriptor = {
       { id: DEATH_CONSEQUENCE, kind: "boolean", source: "storyteller", label: "The Harlot and the chosen player die (if not protected)" });
     if (!consequence.value) return inform(context, target, roleId);
 
-    const pair: ParticipantBinding[] = [context.actor.binding, target];
+    // "You both" -- the distinct participants involved: ONE death attempt per
+    // participant (a self-chosen Harlot is one participant, never two
+    // contradictory Life intents for the same ParticipantId).
+    const self = target.participantId === context.actor.binding.participantId;
+    const pair: ParticipantBinding[] = self ? [context.actor.binding] : [context.actor.binding, target];
     const deaths: { kind: "death"; target: ParticipantBinding }[] = [];
     for (const [index, who] of pair.entries()) {
-      const other = pair[1 - index]!;
       const alone = deathAttempt(context, who, "any");
-      const afterOther = deathAttempt(context, who, "any", context.query.assumingAlive(other, false));
       if (alone.kind === "ask") return ask(alone.message, alone.requirement);
-      if (afterOther.kind !== alone.kind) {
+      const other = pair[1 - index];
+      if (other && deathAttempt(context, who, "any", context.query.assumingAlive(other, false)).kind !== alone.kind) {
         return { kind: "unsupported", message: "Whether one of these deaths is prevented depends on the other death happening first -- the order matters, so resolve it manually." };
       }
       if (alone.kind === "dies") deaths.push({ kind: "death", target: who });
