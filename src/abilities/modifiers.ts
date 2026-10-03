@@ -178,14 +178,22 @@ export function activeModifiers(
  * verified rule.
  */
 /**
- * SOL-10F-A4: the PROSPECTIVE jinx query for proposed Actual Role changes.
- * Ordinary activation (above) reads CURRENT represented characters; a
+ * SOL-10F-A4 / B4: the PROSPECTIVE jinx query for proposed Actual Role
+ * changes. Ordinary activation (above) reads CURRENT represented characters; a
  * Role-changing ability can itself create a jinx endpoint (e.g. a Pit-Hag
- * creating a Damsel), so this derives, purely, the canonical jinxes that would
- * become ACTIVE only because of the proposed changes: both endpoints
- * represented after them (same canonical-ownership rule, never script
- * membership) and not both before. Each comes back as a jinx modifier (with its
- * verified hook when one exists).
+ * creating a Damsel), so this derives, purely, every canonical jinx that the
+ * proposed changes would bring INTO play.
+ *
+ * SOL-10F-B4: the changes are simulated ONE AT A TIME, in their declared
+ * operation + intent order, over a lightweight evolving Role assignment (no
+ * record is built or written). For each change it compares the represented
+ * canonical characters immediately before and immediately after THAT change
+ * (same canonical-ownership rule, never script membership) and records every
+ * pinned pair that turns inactive -> active there -- so a jinx created and
+ * later removed within the same outcome, or removed and later RE-created, is
+ * caught; comparing only the first and last states would miss both. Each
+ * jinx comes back once (with its verified hook when one exists), in the
+ * order it was first created.
  */
 export function prospectiveJinxes(
   game: Pick<StorytellerLobbyRecord, "players">,
@@ -193,19 +201,23 @@ export function prospectiveJinxes(
   changes: readonly { playerId: string; roleId: RoleId }[],
   verified: ReadonlyMap<string, ModifierDefinition["hook"]> = VERIFIED_MODIFIER_HOOKS,
 ): ModifierDefinition[] {
-  if (!changes.length) return [];
-  const proposed = new Map(changes.map((change) => [change.playerId, change.roleId]));
-  const before = representedCanonicalCharacters(game, registry);
-  const after = representedCanonicalCharacters(game, registry, (playerId) => proposed.get(playerId));
+  const assignment = new Map<string, RoleId>();
+  const roleOf = (playerId: string) => assignment.get(playerId);
   const out: ModifierDefinition[] = [];
   const seen = new Set<string>();
-  for (const [a, b] of JINX_PAIRS) {
-    if (!after.has(a) || !after.has(b) || (before.has(a) && before.has(b))) continue;
-    const key = `jinx:${a}+${b}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const hook = verified.get(key);
-    out.push({ id: key, source: "jinx", label: `${a} / ${b} jinx`, scopes: ["global"], characters: [a, b], ...(hook ? { hook } : {}) });
+  let before = representedCanonicalCharacters(game, registry, roleOf);
+  for (const change of changes) {
+    assignment.set(change.playerId, change.roleId);
+    const after = representedCanonicalCharacters(game, registry, roleOf);
+    for (const [a, b] of JINX_PAIRS) {
+      if (!after.has(a) || !after.has(b) || (before.has(a) && before.has(b))) continue;
+      const key = `jinx:${a}+${b}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const hook = verified.get(key);
+      out.push({ id: key, source: "jinx", label: `${a} / ${b} jinx`, scopes: ["global"], characters: [a, b], ...(hook ? { hook } : {}) });
+    }
+    before = after;
   }
   return out;
 }

@@ -13,9 +13,12 @@ import {
   participantStepKey,
   travelerArrivalStepKey,
 } from "@/stores/nightProgress";
-import { applyRolePlan, correctRoleIntent, defaultRoleIds, planRoleTransaction } from "@/stores/roleResolution";
+import { applyRolePlan, changeRoleIntent, correctRoleIntent, defaultRoleIds, planRoleTransaction } from "@/stores/roleResolution";
+import { prospectiveJinxes } from "@/abilities/modifiers";
+import { buildRegistry } from "@/data/roleRegistry";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
-import { bind, homebrewScript, openInStore, patchPlayer, pick, plan, planned, proofGame, proofScript, request, requirementIds } from "@/test/proofFixtures";
+import { bind, homebrewScript, openInStore, patchPlayer, pick, plan, planned, proofEnv, proofGame, proofRegistry, proofScript, request, requirementIds } from "@/test/proofFixtures";
+import type { AbilityDescriptor, AbilityInputValue } from "@/abilities/semantics";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
 const done = { status: "done" as const, notes: "" };
@@ -210,5 +213,82 @@ describe("SOL-10F-B3 -- answer maps are canonical own-property snapshots", () =>
     expect(id).toMatch(/^trigger:actorDiedTonight:i/);
     expect(requirementIds(trigger(Object.create({ [id!]: { kind: "boolean", value: true } })))).toEqual([id]);
     expect(trigger({ [id!]: { kind: "boolean", value: true } })).toMatchObject({ ok: true, changed: true });
+  });
+});
+
+describe("SOL-10F-B4 -- prospective jinxes follow the ordered Role transitions", () => {
+  // p0 pithag, p1 chef, p2 imp, p3 monk, p4 empath, p5 saint, p6 washerwoman (or damsel)
+  const PIT = ["pithag", "chef", "imp", "monk", "empath", "saint", "washerwoman"];
+  const WITH_DAMSEL = ["pithag", "chef", "imp", "monk", "empath", "saint", "damsel"];
+  type Change = [player: string, roleId: string];
+  const ids = (g: StorytellerLobbyRecord, changes: Change[], registry = proofRegistry) =>
+    prospectiveJinxes(g, registry, changes.map(([playerId, roleId]) => ({ playerId, roleId }))).map((jinx) => jinx.id);
+  /** A RULES-NEUTRAL guided descriptor (keyed to the canonical Pit-Hag id only to
+   * pass the ownership boundary) whose outcome is the given ordered Actual Role
+   * changes -- as one operation, or one operation per change. */
+  const changing = (changes: Change[], split = false): AbilityDescriptor => ({
+    roleId: "pithag", timing: ["otherNight"], invocation: "wake", usage: { kind: "unlimited" }, inputs: [], hooks: ["role"],
+    presentation: { complexity: "complex", action: "test" },
+    evaluator: ({ query }) => {
+      const intents = changes.map(([id, roleId]) => changeRoleIntent(query.participant(bind(query.game, id))!, roleId));
+      return { kind: "outcome", outcome: { operations: split ? intents.map((intent) => ({ domain: "role" as const, intents: [intent] })) : [{ domain: "role", intents }] } };
+    },
+  });
+  const run = (g: StorytellerLobbyRecord, changes: Change[], split = false, judgments: Record<string, AbilityInputValue> = {}) =>
+    plan(g, request(g, "p0", "pithag", {}, { judgments }), proofEnv({ semantics: new Map([["pithag", changing(changes, split)]]) }));
+
+  it("Astra's reproduction 1: Chef -> Damsel, then Pit-Hag -> Slayer: the transient Pit-Hag/Damsel creation is caught", () => {
+    const g = proofGame(PIT);
+    expect(ids(g, [["p1", "damsel"], ["p0", "slayer"]])).toEqual(["jinx:pithag+damsel"]);
+    for (const split of [false, true]) {
+      expect(run(g, [["p1", "damsel"], ["p0", "slayer"]], split)).toMatchObject({ ok: false, code: "unsupported", message: expect.stringMatching(/pithag \/ damsel jinx/) });
+    }
+  });
+
+  it("Astra's reproduction 2: an existing Damsel -> Slayer, then another player -> Damsel: the RE-creation is caught", () => {
+    const g = proofGame(WITH_DAMSEL);
+    expect(ids(g, [["p6", "slayer"], ["p1", "damsel"]])).toEqual(["jinx:pithag+damsel"]);
+    // B4 x current modifier gate: the CURRENT pithag/damsel jinx is asked first;
+    // confirming it never bypasses the prospective re-creation.
+    expect(requirementIds(run(g, [["p6", "slayer"], ["p1", "damsel"]]))).toEqual(["modifier:jinx:pithag+damsel"]);
+    expect(run(g, [["p6", "slayer"], ["p1", "damsel"]], true, { "modifier:jinx:pithag+damsel": { kind: "boolean", value: true } }))
+      .toMatchObject({ ok: false, code: "unsupported", message: expect.stringMatching(/pithag \/ damsel jinx/) });
+  });
+
+  it("order matters: Pit-Hag -> Slayer FIRST, then Chef -> Damsel never activates the pair (no false positive)", () => {
+    const g = proofGame(PIT);
+    expect(ids(g, [["p0", "slayer"], ["p1", "damsel"]])).toEqual([]);
+    expect(run(g, [["p0", "slayer"], ["p1", "damsel"]])).toMatchObject({ ok: true, changed: true });
+  });
+
+  it("the ordinary single Pit-Hag -> Damsel stays gated (the real evaluator)", () => {
+    const g = proofGame(PIT);
+    expect(ids(g, [["p1", "damsel"]])).toEqual(["jinx:pithag+damsel"]);
+    expect(plan(g, request(g, "p0", "pithag", { target: pick(g, "p1"), character: { kind: "character", roleIds: ["damsel"] } }))).toMatchObject({ ok: false, code: "unsupported" });
+  });
+
+  it("unrelated Role changes create nothing and stay guided", () => {
+    const g = proofGame(PIT);
+    expect(ids(g, [["p1", "slayer"], ["p4", "soldier"]])).toEqual([]);
+    expect(run(g, [["p1", "slayer"], ["p4", "soldier"]], true)).toMatchObject({ ok: true, changed: true });
+  });
+
+  it("homebrew lookalikes / a non-canonical owner of an official id create no canonical jinx", () => {
+    const g = proofGame(PIT);
+    expect(ids(g, [["p1", "damsel"], ["p0", "slayer"]], buildRegistry(homebrewScript("damsel")))).toEqual([]);
+    expect(ids(g, [["p1", "damsel"], ["p0", "slayer"]], buildRegistry(homebrewScript("pithag")))).toEqual([]);
+    expect(ids(proofGame(WITH_DAMSEL), [["p6", "slayer"], ["p1", "damsel"]], buildRegistry(homebrewScript("damsel")))).toEqual([]);
+  });
+
+  it("a pair created, removed and created again is reported once; two different creations are both reported", () => {
+    const g = proofGame(PIT);
+    expect(ids(g, [["p1", "damsel"], ["p1", "slayer"], ["p4", "damsel"]])).toEqual(["jinx:pithag+damsel"]);
+    const both = ids(proofGame(["pithag", "chef", "alhadikhia", "monk", "empath", "saint", "washerwoman"]), [["p1", "damsel"], ["p0", "scarletwoman"]]);
+    expect(both).toEqual(expect.arrayContaining(["jinx:pithag+damsel", "jinx:scarletwoman+alhadikhia"]));
+  });
+
+  it("checkOrdering's same-participant limitation is preserved (two Actual Role changes of one player are refused)", () => {
+    const g = proofGame(PIT);
+    expect(run(g, [["p1", "slayer"], ["p1", "soldier"]], true)).toMatchObject({ ok: false, code: "unsupported", message: expect.stringMatching(/more than once/) });
   });
 });

@@ -900,6 +900,8 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   // UNVERIFIED canonical jinx into play is never automated -- the WHOLE
   // resolution goes to Manual before any mutation (no generic "does not change
   // this resolution" confirmation can bypass a rule triggered by the creation).
+  // SOL-10F-B4: the changes are listed in declared operation + intent order and
+  // simulated one at a time, so a transient or re-created jinx is caught too.
   const roleChanges = outcome.operations.flatMap((operation) => operation.domain === "role"
     ? operation.intents.flatMap((intent) => isObject(intent) && intent.kind === "changeActualRole" && isBinding(intent.target) && typeof intent.actualRole === "string"
       ? [{ playerId: intent.target.playerId, roleId: intent.actualRole }] : []) : []);
