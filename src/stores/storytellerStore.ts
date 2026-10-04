@@ -1611,7 +1611,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       addToPendingQueue: (uid, name) => {
         const { game } = get();
-        if (!game) return;
+        // ASTRA-10G-002: the waiting queue is closed once the game has ended
+        // (membership and seat structure are part of the frozen snapshot).
+        if (!game || game.phase === "ended") return;
         const trimmed = name.trim().slice(0, 20);
         if (!trimmed) return;
         if (game.pendingPlayers[uid]) return; // already queued
@@ -1625,7 +1627,11 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       assignPendingToSeat: (uid, seatPlayerId, participantId) => {
         const { game } = get();
-        if (!game) return false;
+        // ASTRA-10G-002: never seats anyone into an ended game -- however the
+        // assignment arrived (a stale popup, an assignment begun before
+        // Finish game). Refused before any mutation, so a membership seating
+        // command sees false and rolls its remote binding back.
+        if (!game || game.phase === "ended") return false;
         const name = game.pendingPlayers[uid];
         if (!name) return false;
         const seat = ownPlayer(game, seatPlayerId);
@@ -1687,7 +1693,8 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const { game } = get();
         // Phase 9R.4 (B8): removing a uid that is not queued changes nothing
         // -- it must not replace the game or advance localSeq.
-        if (!game || !Object.prototype.hasOwnProperty.call(game.pendingPlayers, uid)) return;
+        // ASTRA-10G-002: an ended game's queue is frozen too.
+        if (!game || game.phase === "ended" || !Object.prototype.hasOwnProperty.call(game.pendingPlayers, uid)) return;
         const newPending = { ...game.pendingPlayers };
         delete newPending[uid];
         set({ game: { ...game, pendingPlayers: newPending } });

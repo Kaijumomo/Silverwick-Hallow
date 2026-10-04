@@ -67,6 +67,9 @@ export function GameScreen() {
   const [nightPanelOpen, setNightPanelOpen] = useState(false);
   const [setupPanelOpen, setSetupPanelOpen] = useState(false);
   const [queuePopupOpen, setQueuePopupOpen] = useState(false);
+  // ASTRA-10G-002: an open waiting queue never survives the game ending.
+  const gameEnded = useStorytellerStore((s) => s.game?.phase === "ended");
+  useEffect(() => { if (gameEnded) setQueuePopupOpen(false); }, [gameEnded]);
   // Which roles in the bag Silverwick most recently auto-filled (Fill/Re-roll
   // Bag) -- lifted above SetupPanel so the pinned/generated distinction
   // survives closing and reopening Setup within this Grimoire session. Not
@@ -389,7 +392,7 @@ export function GameScreen() {
               {presence === "ready" ? `${onlineCount}/${playerCount} online` : "Presence unknown"}
             </span>
           )}
-          {pendingQueueCount > 0 && (
+          {pendingQueueCount > 0 && !ended && (
             <button
               type="button"
               className="phase-pill queue-pill-btn"
@@ -719,7 +722,9 @@ export function GameScreen() {
         <GrimoireCircle online={onlineMap} backend={backend} code={lobby?.code ?? ""} />
       </div>
 
-      {queuePopupOpen && (
+      {/* ASTRA-10G-002: the ended review is read-only, membership included --
+          an open queue unmounts the moment the game ends. */}
+      {queuePopupOpen && !ended && (
         <SeatAssignPopup
           backend={backend}
           code={lobby?.code ?? ""}
