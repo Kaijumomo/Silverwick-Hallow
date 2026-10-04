@@ -290,7 +290,7 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 
 Phase 10 may increase Silverwick's mechanical intelligence, but routine Storyteller operation must remain fast, visually clear and low-friction. Complexity belongs under the interface; common table actions use progressive disclosure and should not ask the Storyteller for information Silverwick already knows.
 
-This requirement continues through 10C–10G.
+This requirement is inherited by Phase 10H and remains a hard constraint on the redesign.
 
 ## Phase 10E frozen implementation direction
 
