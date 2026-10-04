@@ -1,18 +1,19 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-04\
-**State:** Phase 10G is **CLOSED AND INTEGRATED** and **Phase 10 is COMPLETE**. `main` includes the complete Phase 10G implementation (schema/store v25; Firebase Rules unchanged). No Phase 11 implementation has started.
+**State:** Phase 10G is **CLOSED AND INTEGRATED**. The completed 10A–10G mechanical/state program remains closed. **Phase 10H — Storyteller UI/UX & Visual Design System is now the active planning phase** on `dev/phase-10h-ui`, branched from post-10G `main` at `e0ba539ae448eb494ca5739564a39c49d2e59467`. No Phase 10H production UI redesign or Phase 11 implementation has started.
 
 ## Current truth (read this first)
 
 ### Current state
 
 - **Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration: CLOSED AND INTEGRATED.** Sol final adjudication: APPROVE — PHASE 10G CLOSED AND INTEGRATED (`PHASE10G.md` §37).
-- **Phase 10: COMPLETE.** 10A–10G are all closed and integrated into `main`.
-- **Schema/store:** v25.
-- **Firebase Rules:** unchanged by Phase 10G; no rules deployment is needed for this integration.
-- **`main`** includes the complete Phase 10G implementation, integrated by fast-forward only.
-- **Phase 11:** no implementation has started.
+- **Phase 10A–10G mechanical/state program: COMPLETE.** Every prior slice remains closed and integrated; 10H does not reopen those verdicts.
+- **Phase 10H — Storyteller UI/UX & Visual Design System: ACTIVE — PLANNING / DESIGN CONTRACT PREPARATION.** Branch: `dev/phase-10h-ui`; start: `e0ba539ae448eb494ca5739564a39c49d2e59467`.
+- **Schema/store:** v25; no 10H schema or Firebase Rules change is currently authorized.
+- **Firebase Rules:** unchanged by Phase 10G; no rules deployment is needed for the 10H planning start.
+- **`main`** remains the completed post-10G baseline while 10H work is isolated on its branch.
+- **Phase 11:** canonical character coverage remains queued after 10H closure; no implementation has started.
 
 ### Important checkpoints
 
@@ -37,7 +38,7 @@
 
 ### Next
 
-**Next: Phase 11 architecture/scope challenge. No Phase 11 code yet.** It covers canonical character coverage on the completed Phase 10 authority/workflow foundation; the scope stays as the roadmap states (`docs/ai/MASTER_IMPLEMENTATION_PLAN.md`). Start from the exact final integrated `main`.
+**Next: Phase 10H design discovery and contract preparation.** Use `PHASE10H.md` as the phase-specific planning source. First establish a representative dense Storyteller-screen visual north star, audit the current design/component system, and freeze the 10H UX/design acceptance criteria before broad production UI implementation. Phase 11 canonical coverage waits until 10H closes.
 
 The sections below are the historical record, oldest phases first, then the Phase 10E–10G records in order.
 
@@ -282,7 +283,8 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 - **10D Role Transitions — CLOSED**
 - **10E Alignment Transitions — CLOSED AND INTEGRATED**
 - **10F Guided Ability Resolution / Night Actions — CLOSED AND INTEGRATED**
-- **10G Advanced Storyteller bookkeeping / final visual integration — CLOSED AND INTEGRATED** (Phase 10 complete)
+- **10G Advanced Storyteller bookkeeping / final visual integration — CLOSED AND INTEGRATED**
+- **10H Storyteller UI/UX & Visual Design System — ACTIVE: PLANNING / DESIGN CONTRACT PREPARATION** (newly inserted post-10G; prior 10A–10G closures remain intact)
 
 ## Standing Phase 10 UX invariant
 
@@ -956,4 +958,4 @@ Sol final adjudication: APPROVE — PHASE 10G CLOSED AND INTEGRATED. `main` was 
 
 ## Immediate next task
 
-Phase 11 architecture/scope challenge for canonical character coverage. No Phase 11 code yet.
+Phase 10H design discovery and contract preparation on `dev/phase-10h-ui`. Do not begin broad UI implementation until `PHASE10H.md` is frozen with the visual north star, scope boundaries, representative states, responsive/accessibility obligations and review evidence. Phase 11 canonical character coverage follows 10H.
