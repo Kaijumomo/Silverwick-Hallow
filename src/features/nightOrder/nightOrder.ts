@@ -5,6 +5,7 @@ import { wakeIdentity } from "@/stores/wakeIdentity";
 import { evilInformationPolicy, type NightContext } from "./nightRules";
 import { publicTravelerRole, travelerNeedsFirstNight } from "@/stores/travelers";
 import { hasEffect } from "@/stores/effects";
+import { TOYMAKER_DEMON_SKIP_OCCURRED } from "@/stores/gameRuleFacts";
 import { participantScopedStepKey, participantStepKey, stepParticipantOf, travelerArrivalStepKey } from "@/stores/nightProgress";
 
 export type NightStep =
@@ -110,7 +111,7 @@ export function computeNightOrder(
       continue;
     }
     const prompt = id === "toymaker" && isFirstNight
-      ? "Toymaker grants normal starting information even below 7 players. Follow the eligible information steps later in this sheet; other suppression (such as Poppy Grower or Tor) still applies. Track the required no-attack night manually."
+      ? "Toymaker grants normal starting information even below 7 players. Follow the eligible information steps later in this sheet; other suppression (such as Poppy Grower or Tor) still applies. Record the Demon's required no-attack skip under Game rule facts when it happens."
       : isFirstNight ? role.firstNightPrompt : role.otherNightPrompt;
     if (prompt) global("modifier:" + id, role.name + " — Storyteller check required",
       prompt + " Resolve selections and conditions manually; this assistant does not enforce the effect." +
@@ -204,7 +205,9 @@ export function computeNightOrder(
     if (COMPLEX_ABILITIES.has(player.actualRole))
       advisory += " Storyteller check required: gained/custom abilities need manual procedures; wake identity does not model them.";
     if (policy.toymaker && roleDef.type === "demon" && !isDeceived && !isFirstNight)
-      advisory += " Toymaker: check attack-skip history. Do not wake/allow a game-ending attack if the required skip has not occurred.";
+      advisory += (context.gameRuleFacts ?? []).some((fact) => fact.type === TOYMAKER_DEMON_SKIP_OCCURRED)
+        ? " Toymaker: the Demon's required no-attack skip is recorded (Game rule facts)."
+        : " Toymaker: the Demon's required no-attack skip is not recorded yet. Do not wake/allow a game-ending attack if the required skip has not occurred; record the skip when the Demon chooses not to attack.";
     steps.push({
       kind: "player", stepKey: participantStepKey(player.participantId, roleId), playerId: player.id,
       participantId: player.participantId,

@@ -1,6 +1,7 @@
 import { isCanonicalRole } from "@/data/canonical";
 import { needsShownIdentity } from "@/stores/identity";
 import { toldRoleChangeIntents } from "@/stores/roleResolution";
+import { PIT_HAG_ARBITRARY_DEATHS } from "@/stores/gameRuleFacts";
 import type { AbilityDescriptor } from "../semantics";
 import { answerOf, firstParticipant, nothing, outcome, requireLivingActor } from "./shared";
 
@@ -18,9 +19,13 @@ import { answerOf, firstParticipant, nothing, outcome, requireLivingActor } from
  *    (perception). The new character's square-bracket Setup text never runs;
  *    no extra wake is invented (the re-derived Night Order shows any row the
  *    new character has).
- *  - a Demon would be made -> VERIFIED-MANUAL: the WHOLE resolution goes to
- *    Manual (no partial Role change), because "deaths tonight are arbitrary"
- *    needs 10G's game-level Night state.
+ *  - a Demon would be made (Phase 10G, PHASE10G Section 9) -> GUIDED: the same
+ *    Role change (Actual Alignment preserved, the player told their new
+ *    character), THEN the game-scoped `pitHagArbitraryDeaths` Rule Fact, in ONE
+ *    declared-order resolution committed once by resolveAbility -- if either
+ *    refuses, neither commits. The fact expires on entering the following Day;
+ *    while it applies, every guided death attempt asks the Storyteller
+ *    (shared.ts deathAttempt). No automatic arbitrary-death chooser.
  *  - Traveller target or destination (an optional rule), a non-canonical
  *    destination, or a concealed identity on either side -> Manual.
  *  - impaired / simulated: the choices are simulated; nothing changes.
@@ -48,9 +53,6 @@ export const PIT_HAG: AbilityDescriptor = {
     const destination = context.query.roleOf(roleId);
     if (!destination) return { kind: "illegal", message: "That is not a character on this script." };
     if (context.query.inPlay(roleId).length > 0) return nothing(); // already in play: nothing happens
-    if (destination.type === "demon") {
-      return { kind: "unsupported", message: "A Demon would be made: \"deaths tonight are arbitrary\" needs game-level Night state Silverwick does not hold until Phase 10G. Resolve the whole Pit-Hag action manually." };
-    }
     if (destination.type === "traveler" || destination.type === "fabled" || destination.type === "loric") {
       return { kind: "unsupported", message: "Turning a player into a Traveller (an optional rule) or a non-character is not automated -- resolve manually." };
     }
@@ -65,6 +67,12 @@ export const PIT_HAG: AbilityDescriptor = {
     const defaultAlignment = destination.type === "townsfolk" || destination.type === "outsider" ? "good" : "evil";
     const shownAlignment = target.shownAlignment === null && target.actualAlignment && target.actualAlignment !== defaultAlignment
       ? target.actualAlignment : target.shownAlignment;
-    return outcome([{ domain: "role", intents: toldRoleChangeIntents(target, roleId, shownAlignment) }]);
+    const roleChange = { domain: "role" as const, intents: toldRoleChangeIntents(target, roleId, shownAlignment) };
+    if (destination.type === "demon") {
+      // "If a Demon is made, deaths tonight are arbitrary": the Role change
+      // first, then the game-level fact -- ONE ordered, atomic resolution.
+      return outcome([roleChange, { domain: "gameRuleFact", intents: [{ kind: "apply", type: PIT_HAG_ARBITRARY_DEATHS }] }], true);
+    }
+    return outcome([roleChange]);
   },
 };

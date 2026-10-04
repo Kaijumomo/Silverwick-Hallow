@@ -1,5 +1,6 @@
 import type { AbilityEvaluation, AbilityEvaluationContext, AbilityInputRequirement, AbilityInputs, AbilityInputValue } from "../semantics";
 import type { AbilityOperation, AbilityOutcome, ParticipantBinding } from "@/stores/abilityResolution";
+import { PIT_HAG_ARBITRARY_DEATHS } from "@/stores/gameRuleFacts";
 
 /**
  * Phase 10F Slice 7: small PURE helpers shared by the proof-character
@@ -121,6 +122,18 @@ export function protectionDiffers(a: AbilityEvaluationContext["query"], b: Abili
   return left.known !== right.known || (left.known && right.known && left.value !== right.value);
 }
 
+/**
+ * Phase 10G (PHASE10G Section 10): the judgment id asked for ONE death attempt
+ * while "deaths tonight are arbitrary" (the `pitHagArbitraryDeaths` Rule Fact)
+ * applies. Kept apart from protectionJudgmentId -- an arbitrary-death ruling
+ * never settles an ordinary protection question, or vice versa -- and bound to
+ * the same target / cause / attempt scope / protection-dependency stamp.
+ */
+export const arbitraryDeathJudgmentId = (cause: DeathCause, binding: ParticipantBinding, dependency: string, scope?: DeathAttemptScope) =>
+  scope === undefined
+    ? `arbitraryDeath:${cause}:${JSON.stringify([binding.participantId, dependency])}`
+    : `arbitraryDeath:${cause}@${JSON.stringify([scope.id, binding.participantId, dependency])}`;
+
 export type DeathDecision =
   | { kind: "dies" }
   | { kind: "survives" }
@@ -135,6 +148,13 @@ export type DeathDecision =
  * scopes the judgment to one particular death attempt, and the judgment id
  * always carries `query`'s protection-dependency stamp (SOL-10F-C2); known
  * answers are always recomputed from `query` and never read a judgment.
+ *
+ * Phase 10G (PHASE10G Section 10): THE one shared arbitrary-death gate. While
+ * the registered `pitHagArbitraryDeaths` Rule Fact applies in `query`'s Current
+ * State, no death result is mechanically forced -- not even an ordinarily
+ * deterministic one (known protected / unprotected): every attempt is an
+ * explicit Storyteller judgment. No character module checks for the Pit-Hag
+ * itself; Silverwick never chooses the deaths.
  */
 export function deathAttempt(
   context: AbilityEvaluationContext,
@@ -143,6 +163,18 @@ export function deathAttempt(
   query = context.query,
   attempt?: DeathAttemptScope,
 ): DeathDecision {
+  const arbitrary = query.gameRuleFact(PIT_HAG_ARBITRARY_DEATHS);
+  if (arbitrary.known && arbitrary.value) {
+    const id = arbitraryDeathJudgmentId(cause, target, query.protectionDependencyStamp(target, cause), attempt);
+    const judged = answerOf(context.judgments, id, "boolean");
+    if (judged) return judged.value ? { kind: "survives" } : { kind: "dies" };
+    return {
+      kind: "ask",
+      message: "Deaths tonight are arbitrary (a Pit-Hag made a Demon): you decide whether this death happens -- Silverwick does not treat any result as forced.",
+      requirement: { id, kind: "boolean", source: "judgment",
+        label: `${nameOf(context, target)} does not die from this${attempt?.label ? ` (${attempt.label})` : ""} -- deaths are arbitrary tonight (Yes: they do not die)` },
+    };
+  }
   const answer = query.protectedFrom(target, cause);
   if (answer.known) return answer.value ? { kind: "survives" } : { kind: "dies" };
   // SOL-10F-C2: the id binds the dependency stamp of the queried state.

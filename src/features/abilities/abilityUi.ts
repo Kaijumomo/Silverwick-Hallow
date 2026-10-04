@@ -3,6 +3,7 @@ import { invocationEligibility, nightTriggerStatus, type GameMoment, type Invoca
 import { resolveAbilitySemantics, type AbilityDescriptor, type AbilitySemanticsRegistry, type InputSource } from "@/abilities/semantics";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { effectDefinitionOf } from "@/stores/effectRegistry";
+import { gameRuleFactDefinition } from "@/stores/gameRuleFacts";
 import type { AbilityOperation, AbilityOutcome, ParticipantBinding } from "@/stores/abilityResolution";
 import { boundParticipant, type RulesQuery } from "@/stores/rulesQuery";
 import type { PlayerId, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
@@ -133,6 +134,11 @@ export function describeOperation(game: StorytellerLobbyRecord, operation: Abili
         : `${nameOf(game, intent.target)} becomes the ${roleName(intent.actualRole)}`);
     case "alignment":
       return operation.intents.map((intent) => `${nameOf(game, intent.target)} becomes ${intent.actualAlignment}`);
+    case "gameRuleFact":
+      return operation.intents.map((intent) => {
+        const label = gameRuleFactDefinition(intent.type)?.label ?? intent.type;
+        return intent.kind === "apply" ? `Game rule fact: ${label} (game-level)` : `Game rule fact removed: ${label}`;
+      });
     case "information": {
       // Presentation only: what is recorded as told (never re-derived).
       const told = (Array.isArray(operation.values) ? operation.values : []).map((value) => {

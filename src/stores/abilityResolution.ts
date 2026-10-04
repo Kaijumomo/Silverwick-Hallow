@@ -15,6 +15,7 @@ import { invocationEligibility, isInvocationPath, nightTriggerJudgmentId, nightT
 import { activeModifiers, prospectiveJinxes, type ModifierDefinition } from "@/abilities/modifiers";
 import { applyAlignmentPlan, defaultAlignmentIds, planAlignmentTransaction, type AlignmentIdSource, type AlignmentIntent } from "./alignmentResolution";
 import { applyEffectPlan, planEffectTransaction, type EffectIdSource, type EffectIntent } from "./effectResolution";
+import { applyGameRuleFactPlan, planGameRuleFactTransaction, type GameRuleFactIdSource, type GameRuleFactIntent } from "./gameRuleFacts";
 import { applyInformationDeliveryPlan, planInformationDelivery } from "./informationDelivery";
 import { applyLifePlan, planLifeTransaction, type LifeConfirmationToken, type LifeIdSource, type LifeIntent, type LifeStatusTarget } from "./lifeResolution";
 import { nightTriggerStepKey, participantStepKey, planNightStepStatus } from "./nightProgress";
@@ -92,11 +93,15 @@ export type AbilityOperation =
   | { domain: "reminder"; intents: readonly ReminderIntent[] }
   | { domain: "role"; intents: readonly RoleIntent[] }
   | { domain: "alignment"; intents: readonly AlignmentIntent[] }
+  /** Phase 10G: an authoritative game-scoped Rule Fact change, planned by the
+   * Rule Fact seam against the evolving working snapshot like every other
+   * mechanical domain -- never a post-commit writer. */
+  | { domain: "gameRuleFact"; intents: readonly GameRuleFactIntent[] }
   | { domain: "information"; recipient: ParticipantBinding; informationActionId: InformationActionId; values: readonly AbilityInformationValue[]; performedRole?: RoleId }
   | { domain: "nightStep"; day: number; stepKey: string; status: NightStepStatus };
 
 export type AbilityDomain = AbilityOperation["domain"];
-export const MECHANICAL_DOMAINS: readonly AbilityDomain[] = ["life", "effect", "role", "alignment"];
+export const MECHANICAL_DOMAINS: readonly AbilityDomain[] = ["life", "effect", "role", "alignment", "gameRuleFact"];
 export const isMechanical = (domain: AbilityDomain): boolean => MECHANICAL_DOMAINS.includes(domain);
 
 /** An already-resolved, ORDERED outcome built only from frozen primitives. */
@@ -202,6 +207,7 @@ export type AbilityIdSources = {
   reminder?: ReminderIdSource;
   role?: RoleIdSource;
   alignment?: AlignmentIdSource;
+  gameRuleFact?: GameRuleFactIdSource;
   deliveryId?: () => string;
   resolutionId?: () => string;
 };
@@ -318,7 +324,7 @@ export function outcomeNeedsConfirmation(outcome: AbilityOutcome, judgmentUsed: 
   if (judgmentUsed) return true;
   const participants = new Set<string>();
   for (const operation of outcome.operations) {
-    if (operation.domain === "role" || operation.domain === "alignment") return true;
+    if (operation.domain === "role" || operation.domain === "alignment" || operation.domain === "gameRuleFact") return true;
     if (operation.domain === "life" && operation.intents.some((intent) => intent.kind !== "useAbility")) return true;
     const targets: unknown[] = operation.domain === "life" ? operation.intents.map((i) => i.target)
       : operation.domain === "effect" || operation.domain === "reminder" ? operation.intents.map((i) => (i as { target?: unknown }).target)
@@ -423,7 +429,7 @@ export function composeAbilityOutcome(
   if (!isOutcome(outcome)) return refuse("invalid", "Malformed ability outcome.");
   if (outcome.operations.length > MAX_ABILITY_OPERATIONS) return refuse("invalid", `At most ${MAX_ABILITY_OPERATIONS} operations can be resolved at once.`);
   if (!outcome.operations.every((operation) => isObject(operation) && typeof operation.domain === "string" &&
-    ["life", "effect", "reminder", "role", "alignment", "information", "nightStep"].includes(operation.domain))) {
+    ["life", "effect", "reminder", "role", "alignment", "gameRuleFact", "information", "nightStep"].includes(operation.domain))) {
     return refuse("invalid", "Malformed ability operation.");
   }
   const ordering = checkOrdering(outcome);
@@ -489,6 +495,14 @@ export function composeAbilityOutcome(
           { ids: ids.alignment ?? defaultAlignmentIds });
         if (!result.ok) return domainRefusal("alignment", result);
         if (result.changed) working = applyAlignmentPlan(working, result.plan);
+        break;
+      }
+      case "gameRuleFact": {
+        // Phase 10G Section 8: the Rule Fact planner reads the WORKING snapshot
+        // (so a fact follows, e.g., the Role change ordered before it).
+        const result = planGameRuleFactTransaction(working, { intents: [...operation.intents], resolutionId, ...(context ? { context } : {}) }, ids.gameRuleFact);
+        if (!result.ok) return domainRefusal("gameRuleFact", result);
+        if (result.changed) working = applyGameRuleFactPlan(working, result.plan);
         break;
       }
       case "information": {

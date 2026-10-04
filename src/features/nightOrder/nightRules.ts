@@ -1,8 +1,10 @@
 import type { RoleRegistry } from "@/data/roleRegistry";
-import type { STPlayerRecord } from "@/stores/types";
+import type { GameRuleFactRecord, STPlayerRecord } from "@/stores/types";
 import { wakeIdentity } from "@/stores/wakeIdentity";
 
-export type NightContext = { fabled?: string[]; lorics?: string[]; day?: number };
+/** Phase 10G: `gameRuleFacts` (Current State) lets presentation say whether
+ * the Toymaker skip is recorded; it never gates a mechanic here. */
+export type NightContext = { fabled?: string[]; lorics?: string[]; day?: number; gameRuleFacts?: GameRuleFactRecord[] };
 
 export function evilInformationPolicy(players: STPlayerRecord[], registry: RoleRegistry, context: NightContext = {}) {
   const seated = players.filter(p => !p.isEmpty);
