@@ -19,7 +19,13 @@ This policy narrows how `webapp-testing` is used. It does not remove it from the
 
 As of this date, neither execution path is wired into the repository:
 
-- **Playwright MCP:** no project `.mcp.json`. It is available only if configured for the session or harness.
+- **Playwright MCP:** no project `.mcp.json`. It is available only if configured for the session or harness. Verified cloud-session registration (2026-10-04, `@playwright/mcp` 0.0.83, local scope, so it must be re-added per container):
+
+  ```sh
+  claude mcp add playwright -- npx @playwright/mcp@latest --headless --executable-path /opt/pw-browsers/chromium
+  ```
+
+  Both flags are required here. `--headless` is needed because the container has no display. `--executable-path` is needed because the MCP's bundled Playwright expects a newer Chromium build (1247) than the preinstalled one (1194). Without it, browser actions fail looking for a browser that is not installed. A newly added server's tools load only in the next session.
 - **Node Playwright:** not in `package.json`. Adding it as a devDependency, or adding a Playwright config or test suite, is a separate, explicit tooling change. Until then, use it ad hoc (`npx playwright@<version>` or a scratch install outside the repo) and commit nothing.
 - **Cloud sessions:** Chromium is preinstalled at `/opt/pw-browsers` (`PLAYWRIGHT_BROWSERS_PATH`). Do not run `playwright install`. If the Playwright version in use cannot find a matching browser, launch with `executablePath: '/opt/pw-browsers/chromium'`.
 
