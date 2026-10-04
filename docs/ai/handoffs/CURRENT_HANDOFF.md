@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
-**Date:** 2026-10-03\
-**State:** Phase 10F — Guided Ability Resolution / Night Actions is **CLOSED AND INTEGRATED** into `main`. `main` was fast-forwarded from `2252c5e76284fcd12d0e4d5debdfc34f66f86a17` to the closed Phase 10F branch head `6f51f8acb78a71f73ee704ffced636f6b4ea0300`; no merge commit and no unrelated production change. Final reviewed target: `a2d6d1b99242317269bf86f54e6d234e0644df33`; final production checkpoint: `c6a2938e4e3c5ef3b17013c833cd335fe623b6f8`. `PHASE10F.md` §50 records integration. Schema/store v24 is now integrated on `main`. Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration is next; no 10G code has started.
+**Date:** 2026-10-04\
+**State:** Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration has an **implementation checkpoint** on `dev/phase-10g` (started from `52e685b16e76df15154512a52a34831a6aeba399`, identical to `main`; code checkpoint `cf5efc5`, docs-only record on top). Schema/store v25 on the branch; Firebase Rules unchanged. Not closed: Luna verification is next. Phase 10F remains **CLOSED AND INTEGRATED** on `main` (v24); see the 10F integration record below and `PHASE10F.md` §50.
 
 ## Phase 10D — CLOSED
 
@@ -243,8 +243,8 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 - **10C Reminder Workflow + visual Reminder tokens — CLOSED**
 - **10D Role Transitions — CLOSED**
 - **10E Alignment Transitions — CLOSED AND INTEGRATED**
-- **10F Guided Ability Resolution / Night Actions — D1/D2/E1 REMEDIATED; LUNA NARROW VERIFICATION NEXT (not closed)**
-- 10G Advanced Storyteller bookkeeping / final visual integration
+- **10F Guided Ability Resolution / Night Actions — CLOSED AND INTEGRATED**
+- **10G Advanced Storyteller bookkeeping / final visual integration — IMPLEMENTATION CHECKPOINT; LUNA VERIFICATION NEXT (not closed)**
 
 ## Standing Phase 10 UX invariant
 
@@ -881,3 +881,17 @@ Deferred store-wide checkpoint-preflight hardening remains recorded for later wo
 ## Immediate next task
 
 Create `dev/phase-10g` from the exact final integrated `main`. Do not code 10G yet. First perform the architecture challenge and freeze the Phase 10G implementation contract.
+
+## Phase 10G — implementation checkpoint — 2026-10-04
+
+Contract: `PHASE10G.md` §§1–32 (Sol contract frozen 2026-10-03, recorded verbatim). Implementation record: §33. Gate: §34.
+
+- branch: `dev/phase-10g`, started from `52e685b16e76df15154512a52a34831a6aeba399` (identical to `main`, 0 ahead / 0 behind)
+- slices: `02f70ce` (Rule Facts, v25, migration) → `9645add` (Pit-Hag / arbitrary-death gate / Toymaker) → `3c2c7fc` (Manual Delivery, Activity) → `ab169ce` (Dawn Review) → `9f27622` (Grimoire markers, Rule-Fact strip) → `bb3c28f` (Finish Game, ended review, text caps) → `cf5efc5` (phone-width Grimoire target picking, a Section 24 finding that predates 10G)
+- schema/store: v24 → v25 (per-entry migration of Current State, Undo snapshots and recovered checkpoint games)
+- Firebase Rules: unchanged; no stop condition arose
+- deferred hardening (recorded, not reopened): store-wide E1 precommit generalization; localStorage quota transaction/recovery (Opus-reproduced quota failure recorded as evidence); dynamic Undo trimming; persistence-health monitoring; broader final-result/winner model
+
+## Immediate next task
+
+Luna mechanical verification of the exact `dev/phase-10g` HEAD against `PHASE10G.md`. Then Astra adversarial review, Sol adjudication, closure and integration. Nothing merged or deployed.

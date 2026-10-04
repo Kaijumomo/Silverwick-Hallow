@@ -1,7 +1,7 @@
 # Silverwick Hollow — Master Implementation Plan
 
 **Status:** Active canonical roadmap  
-**Updated:** 2026-10-03\
+**Updated:** 2026-10-04\
 **Integrated branch:** `main`  
 **Phase 10A closure checkpoint:** `d798266b988e49f904aa8f8658c917fd5b7e7abb`  
 **Pre-10B Firebase lifecycle hotfix checkpoint:** `38b10119544ce2c02590e9bc9c741aab995a91d1`  
@@ -9,8 +9,8 @@
 **Phase 10C final reviewed implementation checkpoint:** `ca808fa18e97d758750aad63ceacc2bea3d8f627` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
-**Schema:** v24 integrated on `main`\
-**Current phase:** Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration — architecture challenge / scope freeze next.
+**Schema:** v24 integrated on `main`; v25 on `dev/phase-10g`\
+**Current phase:** Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration — implementation checkpoint delivered on `dev/phase-10g`; Luna verification next (not closed).
 
 ## Product invariants
 
@@ -250,10 +250,15 @@ The architecture challenge and Sol adjudication found no contradiction requiring
 Implemented (see `docs/ai/handoffs/CURRENT_HANDOFF.md` for the lineage and gate): the reviewed-and-repaired pure Information Delivery plan; store v24 (strict deliveries with authorized `performedRole` / `resolutionId`, participant-scoped Night progress with v23 seat-keyed progress dropped, Night public-Life withholding); composable `useAbility` / `correctAbilityUsed` Life intents; the rules-neutral semantics contract, Rules Query, hook/modifier gating, pure coordinator and one-commit `resolveAbility`; the Manual / unmodeled path; the interactive Night Order, workspace, Grimoire target picker and Privacy Mode behavior; the generated coverage manifest and architecture guards. Slice 6 froze the proof-character rules matrix (`docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md`); Slice 7 implemented it (`PHASE10F.md` §26): eleven guided / support semantics, verified-Manual Tinker / Toymaker / Drunk, Setup-owned Baron, an explicit verified Night-trigger path (Ravenkeeper only), the authoritative Red Herring fact, star-pass suppression through participant-scoped Night progress, and the corrected coverage manifest.
 
 ### 10G — Advanced Storyteller Bookkeeping / Final Visual Integration
-**Status:** NOT STARTED — architecture challenge / scope freeze next.\
-**Starting point:** exact final integrated `main` after the Phase 10F documentation-only integration record.\
+**Status:** IMPLEMENTATION CHECKPOINT — Luna verification next (not closed).\
+**Contract:** `PHASE10G.md` §§1–32 (Sol contract frozen 2026-10-03); implementation record §33, gate §34.\
+**Starting checkpoint:** `52e685b16e76df15154512a52a34831a6aeba399` (identical to `main`).\
+**Implementation code checkpoint:** `cf5efc5` on `dev/phase-10g` (docs-only record commit on top).\
+**Schema/store:** v25 (on `dev/phase-10g`). Firebase Rules: unchanged.
 
-Ability-specific bookkeeping that does not belong in generic Life/Effect/Reminder/Role/Alignment primitives, final visual integration, and Phase 10 closure.
+Delivered: game-scoped Game Rule Facts (`pitHagArbitraryDeaths`, `toymakerDemonSkipOccurred`) as one Current-State primitive with a pure planner, one-commit `resolveGameRuleFacts` behind the persistence preflight, participant-less `gameRuleFact` History, atomic expiry inside the phase rollover and a Rules Query reader; the Pit-Hag Demon branch (Role change + fact in one resolution) and the shared arbitrary-death gate; Toymaker skip bookkeeping with a derived required/satisfied state; Manual Information Delivery (`kind: "manual"`, 4,000 characters) through Manual resolution, with structured v24 deliveries unchanged; the Storyteller-private Activity surface with honest grouping and delivery removal; Dawn Review over one shared unfinished-Night derivation (Night → Day disabled under Privacy Mode); Grimoire ability-used and Actual Alignment markers and the global Rule-Fact strip; terminal Finish Game (authoritative close first, retained ended snapshot, no Undo, lobby detached) with a read-only ended review; 4,000-character command caps on Storyteller and Night-step notes; and a fix for Grimoire target picking at phone width found by the Section 24 check.
+
+Deferred hardening (recorded, not reopened): store-wide E1 precommit generalization; localStorage quota transaction/recovery (Opus reproduced a quota failure; 10G closes the per-note vector only); dynamic Undo trimming; persistence-health monitoring; any broader final-result/winner model.
 
 ## Phase workflow
 
@@ -280,7 +285,8 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 - `dev/phase-10d` was created from the exact integrated `main` carrying the Phase 10C closure.
 - `dev/phase-10e` starts from the exact final `main` of the Phase 10D integration: the docs-only integration record directly on top of the Phase 10D closure commit `22dfd49e7220d642eec353c2ea83fa3a2547ce8b`.
 - `dev/phase-10f` starts from the exact final integrated `main` of the Phase 10E integration: the docs-only integration record directly on top of closure checkpoint `6129c7f4585da0e12aeea3a9a5007c88fb508ad7`.
+- `dev/phase-10g` starts from the exact final integrated `main` of the Phase 10F integration: `52e685b16e76df15154512a52a34831a6aeba399`.
 
 ## Immediate next action
 
-Create `dev/phase-10g` from the exact final integrated `main`. Before coding, review the current repository and canonical Phase 10 roadmap, inventory the remaining advanced Storyteller bookkeeping / visual-integration work, and run the Phase 10G architecture challenge. Freeze the smallest correct 10G contract before implementation.
+Luna mechanical verification of the Phase 10G implementation checkpoint on `dev/phase-10g` (verify the exact HEAD; contract `PHASE10G.md` §§1–32, record §§33–34). Then Astra adversarial review, Sol adjudication, closure and integration into `main`. Phase 11 (canonical character coverage) starts only after 10G closes.
