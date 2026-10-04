@@ -9,8 +9,10 @@
 **Phase 10C final reviewed implementation checkpoint:** `ca808fa18e97d758750aad63ceacc2bea3d8f627` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
-**Schema:** v24 integrated on `main`; v25 on `dev/phase-10g`\
-**Current phase:** Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration — final Astra cleanup-failure remediation (ASTRA-10G-R1-001) implemented on `dev/phase-10g`; targeted verification pending (not closed).
+**Phase 10G final reviewed checkpoint:** `2aabccbb925183c2359bef5d48a2ee5cca2dfd03` (final production `7add7c661e43349634e0b6717d7c05ee18a31957`); `main` fast-forwarded to it, with a docs-only closure commit directly on top\
+**Schema:** v25 integrated on `main`\
+**Phase 10:** COMPLETE (10A–10G closed and integrated)\
+**Current phase:** Phase 11 architecture/scope preparation (canonical character coverage). No Phase 11 code has started.
 
 ## Product invariants
 
@@ -250,15 +252,24 @@ The architecture challenge and Sol adjudication found no contradiction requiring
 Implemented (see `docs/ai/handoffs/CURRENT_HANDOFF.md` for the lineage and gate): the reviewed-and-repaired pure Information Delivery plan; store v24 (strict deliveries with authorized `performedRole` / `resolutionId`, participant-scoped Night progress with v23 seat-keyed progress dropped, Night public-Life withholding); composable `useAbility` / `correctAbilityUsed` Life intents; the rules-neutral semantics contract, Rules Query, hook/modifier gating, pure coordinator and one-commit `resolveAbility`; the Manual / unmodeled path; the interactive Night Order, workspace, Grimoire target picker and Privacy Mode behavior; the generated coverage manifest and architecture guards. Slice 6 froze the proof-character rules matrix (`docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md`); Slice 7 implemented it (`PHASE10F.md` §26): eleven guided / support semantics, verified-Manual Tinker / Toymaker / Drunk, Setup-owned Baron, an explicit verified Night-trigger path (Ravenkeeper only), the authoritative Red Herring fact, star-pass suppression through participant-scoped Night progress, and the corrected coverage manifest.
 
 ### 10G — Advanced Storyteller Bookkeeping / Final Visual Integration
-**Status:** FINAL ASTRA CLEANUP-FAILURE REMEDIATION IMPLEMENTED — targeted verification pending (not closed). `PHASE10G.md` §§35–36.\
-**Contract:** `PHASE10G.md` §§1–32 (Sol contract frozen 2026-10-03); implementation record §33, gate §34.\
-**Starting checkpoint:** `52e685b16e76df15154512a52a34831a6aeba399` (identical to `main`).\
-**Implementation code checkpoint:** `cf5efc5` on `dev/phase-10g` (docs-only record commit on top).\
-**Schema/store:** v25 (on `dev/phase-10g`). Firebase Rules: unchanged.
+**Status:** **CLOSED AND INTEGRATED.** Sol final adjudication: APPROVE — PHASE 10G CLOSED AND INTEGRATED. Closure and integration record: `PHASE10G.md` §37.\
+**Contract:** `PHASE10G.md` §§1–32 (Sol contract frozen 2026-10-03); implementation record §33, gate §34, Astra remediation §35, final Astra remediation (ASTRA-10G-R1-001) §36.\
+**Starting checkpoint:** `52e685b16e76df15154512a52a34831a6aeba399`.\
+**Final production checkpoint:** `7add7c661e43349634e0b6717d7c05ee18a31957`.\
+**Final reviewed branch checkpoint:** `2aabccbb925183c2359bef5d48a2ee5cca2dfd03` (`dev/phase-10g`, kept as the historical reference).\
+**Integration:** fast-forward only (15 ahead / 0 behind); `main` = `2aabccbb925183c2359bef5d48a2ee5cca2dfd03`, then one docs-only closure commit directly on top.\
+**Schema/store:** v25 on `main`. Firebase Rules: unchanged.\
+**Final evidence (Luna):** Vitest 4,190/4,190; Phase 10G tests 213/213; Firebase emulator 201/201, zero skipped; typecheck, build and diff checks PASS. **Astra:** PASS — READY FOR SOL CLOSURE ADJUDICATION; ASTRA-10G-001…004, the hypothetical-query coverage gap and ASTRA-10G-R1-001 all CLOSED.
 
 Delivered: game-scoped Game Rule Facts (`pitHagArbitraryDeaths`, `toymakerDemonSkipOccurred`) as one Current-State primitive with a pure planner, one-commit `resolveGameRuleFacts` behind the persistence preflight, participant-less `gameRuleFact` History, atomic expiry inside the phase rollover and a Rules Query reader; the Pit-Hag Demon branch (Role change + fact in one resolution) and the shared arbitrary-death gate; Toymaker skip bookkeeping with a derived required/satisfied state; Manual Information Delivery (`kind: "manual"`, 4,000 characters) through Manual resolution, with structured v24 deliveries unchanged; the Storyteller-private Activity surface with honest grouping and delivery removal; Dawn Review over one shared unfinished-Night derivation (Night → Day disabled under Privacy Mode); Grimoire ability-used and Actual Alignment markers and the global Rule-Fact strip; terminal Finish Game (authoritative close first, retained ended snapshot, no Undo, lobby detached) with a read-only ended review; 4,000-character command caps on Storyteller and Night-step notes; and a fix for Grimoire target picking at phone width found by the Section 24 check.
 
-Deferred hardening (recorded, not reopened): store-wide E1 precommit generalization; localStorage quota transaction/recovery (Opus reproduced a quota failure; 10G closes the per-note vector only); dynamic Undo trimming; persistence-health monitoring; any broader final-result/winner model.
+Deferred hardening (recorded, not Phase 10G blockers): store-wide E1 precommit generalization; localStorage quota transaction/recovery (Opus reproduced a quota failure; 10G closes the per-note vector only); dynamic Undo trimming; broader persistence-health monitoring; winner/result modeling, if ever separately authorized.
+
+**Phase 10 — COMPLETE.** With 10G closed and integrated, every Phase 10 slice (10A–10G) is closed and integrated into `main`.
+
+## Phase 11 — Canonical character coverage (roadmap unchanged)
+
+Phase 11 keeps its approved scope: full canonical Character / Traveler / Fabled / Loric semantic coverage (see 10F above and `PHASE10F.md` §18), added primarily through descriptors, evaluators, registered semantics and tests on the completed Phase 10 authority/workflow foundation (`PHASE10G.md` §29). Its architecture/scope challenge has not started.
 
 ## Phase workflow
 
@@ -286,7 +297,8 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 - `dev/phase-10e` starts from the exact final `main` of the Phase 10D integration: the docs-only integration record directly on top of the Phase 10D closure commit `22dfd49e7220d642eec353c2ea83fa3a2547ce8b`.
 - `dev/phase-10f` starts from the exact final integrated `main` of the Phase 10E integration: the docs-only integration record directly on top of closure checkpoint `6129c7f4585da0e12aeea3a9a5007c88fb508ad7`.
 - `dev/phase-10g` starts from the exact final integrated `main` of the Phase 10F integration: `52e685b16e76df15154512a52a34831a6aeba399`.
+- `dev/phase-10g` was fast-forwarded into `main` at `2aabccbb925183c2359bef5d48a2ee5cca2dfd03`; the branch is retained at that exact reviewed checkpoint.
 
 ## Immediate next action
 
-Luna targeted verification of ASTRA-10G-R1-001 on `dev/phase-10g` (verify the exact HEAD; record `PHASE10G.md` §36, earlier remediation §35). Then the remaining review, Sol closure and integration into `main`. Phase 11 (canonical character coverage) starts only after 10G closes.
+Phase 11 architecture/scope preparation for canonical character coverage, using the completed Phase 10 authority/workflow foundation. Start from the exact final integrated `main` (the Phase 10G docs-only closure commit). Do not code Phase 11 before its architecture challenge and Sol contract.

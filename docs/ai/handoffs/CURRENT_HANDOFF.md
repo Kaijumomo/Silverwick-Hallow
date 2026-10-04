@@ -1,7 +1,45 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-04\
-**State:** Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration: the final Astra cleanup-failure remediation (ASTRA-10G-R1-001) is implemented on `dev/phase-10g`; targeted verification pending (`PHASE10G.md` §36; earlier remediation §35). Not closed. Schema/store v25 on the branch; Firebase Rules unchanged. Phase 10F remains **CLOSED AND INTEGRATED** on `main` (v24); see the 10F integration record below and `PHASE10F.md` §50.
+**State:** Phase 10G is **CLOSED AND INTEGRATED** and **Phase 10 is COMPLETE**. `main` includes the complete Phase 10G implementation (schema/store v25; Firebase Rules unchanged). No Phase 11 implementation has started.
+
+## Current truth (read this first)
+
+### Current state
+
+- **Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration: CLOSED AND INTEGRATED.** Sol final adjudication: APPROVE — PHASE 10G CLOSED AND INTEGRATED (`PHASE10G.md` §37).
+- **Phase 10: COMPLETE.** 10A–10G are all closed and integrated into `main`.
+- **Schema/store:** v25.
+- **Firebase Rules:** unchanged by Phase 10G; no rules deployment is needed for this integration.
+- **`main`** includes the complete Phase 10G implementation, integrated by fast-forward only.
+- **Phase 11:** no implementation has started.
+
+### Important checkpoints
+
+- Phase 10G start: `52e685b16e76df15154512a52a34831a6aeba399`
+- Final production: `7add7c661e43349634e0b6717d7c05ee18a31957`
+- Final reviewed branch (`dev/phase-10g`, retained): `2aabccbb925183c2359bef5d48a2ee5cca2dfd03`
+- Fast-forward integration checkpoint: `2aabccbb925183c2359bef5d48a2ee5cca2dfd03` (`main` moved 52e685b → 2aabccb; 15 ahead / 0 behind; no merge commit)
+- Final documentation closure checkpoint: the single docs-only commit directly on top of `2aabccbb925183c2359bef5d48a2ee5cca2dfd03`, which added this handoff text. It is the tip of `main` at closure (a commit cannot record its own SHA here; read it with `git log -1 main` or from the closure report).
+
+### Final evidence
+
+- Luna: Vitest 4,190/4,190; Phase 10G tests 213/213; Firebase emulator 201/201, zero skipped; typecheck, production build and diff checks PASS.
+- Astra: PASS — READY FOR SOL CLOSURE ADJUDICATION. ASTRA-10G-001, -002, -003 and -004, the hypothetical-query coverage gap, and ASTRA-10G-R1-001 are all CLOSED.
+
+### Deferred for later work (not Phase 10G blockers)
+
+- store-wide E1 precommit generalization;
+- localStorage quota transaction/recovery;
+- dynamic Undo trimming;
+- broader persistence-health monitoring;
+- winner/result modeling, if ever separately authorized.
+
+### Next
+
+**Next: Phase 11 architecture/scope challenge. No Phase 11 code yet.** It covers canonical character coverage on the completed Phase 10 authority/workflow foundation; the scope stays as the roadmap states (`docs/ai/MASTER_IMPLEMENTATION_PLAN.md`). Start from the exact final integrated `main`.
+
+The sections below are the historical record, oldest phases first, then the Phase 10E–10G records in order.
 
 ## Phase 10D — CLOSED
 
@@ -244,7 +282,7 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 - **10D Role Transitions — CLOSED**
 - **10E Alignment Transitions — CLOSED AND INTEGRATED**
 - **10F Guided Ability Resolution / Night Actions — CLOSED AND INTEGRATED**
-- **10G Advanced Storyteller bookkeeping / final visual integration — FINAL ASTRA CLEANUP-FAILURE REMEDIATION IMPLEMENTED; TARGETED VERIFICATION PENDING (not closed)**
+- **10G Advanced Storyteller bookkeeping / final visual integration — CLOSED AND INTEGRATED** (Phase 10 complete)
 
 ## Standing Phase 10 UX invariant
 
@@ -911,3 +949,11 @@ Sol accepted ASTRA-10G-R1-001 (Medium): a failed cleanup of a superseded Go Live
 ## Immediate next task
 
 Luna targeted R1-001 verification of the exact `dev/phase-10g` HEAD. Phase 10G is not closed; nothing merged or deployed.
+
+## Phase 10G — CLOSED AND INTEGRATED — 2026-10-04
+
+Sol final adjudication: APPROVE — PHASE 10G CLOSED AND INTEGRATED. `main` was fast-forwarded from `52e685b16e76df15154512a52a34831a6aeba399` to the reviewed branch head `2aabccbb925183c2359bef5d48a2ee5cca2dfd03` (final production `7add7c661e43349634e0b6717d7c05ee18a31957`), with no merge commit. One docs-only closure commit sits directly on top. Record: `PHASE10G.md` §37. Phase 10 is complete.
+
+## Immediate next task
+
+Phase 11 architecture/scope challenge for canonical character coverage. No Phase 11 code yet.

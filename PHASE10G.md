@@ -1,6 +1,7 @@
 # Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration
 
-**Status:** SOL CONTRACT FROZEN — IMPLEMENTATION AUTHORIZED\
+**Current status:** CLOSED AND INTEGRATED (§37)\
+**Contract status (as frozen):** SOL CONTRACT FROZEN — IMPLEMENTATION AUTHORIZED\
 **Decision date:** 2026-10-03\
 **Starting branch:** dev/phase-10g\
 **Starting checkpoint:** 52e685b16e76df15154512a52a34831a6aeba399\
@@ -1480,3 +1481,71 @@ Run at `7add7c661e43349634e0b6717d7c05ee18a31957`, clean worktree.
 Diff scope `dab1091..7add7c6`: 5 files, +295 / −7. Production: `src/app/App.tsx`, `src/features/game/GameScreen.tsx`, `src/firebase/StorytellerSession.tsx`, `src/firebase/storytellerSync.ts`. Test: `src/app/phase10gUnattachedLobby.test.tsx`. No existing test was modified or weakened.
 
 **Status: FINAL ASTRA CLEANUP-FAILURE REMEDIATION IMPLEMENTED — targeted verification pending. Phase 10G is not closed.**
+
+
+## 37. Phase 10G closure and integration — CLOSED AND INTEGRATED — 2026-10-04
+
+### Final integration
+
+- Phase 10G starting checkpoint: `52e685b16e76df15154512a52a34831a6aeba399`
+- Final reviewed branch checkpoint: `2aabccbb925183c2359bef5d48a2ee5cca2dfd03` (`dev/phase-10g`)
+- Final production checkpoint: `7add7c661e43349634e0b6717d7c05ee18a31957`
+- Integration method: fast-forward only. `main` moved from `52e685b16e76df15154512a52a34831a6aeba399` to exactly `2aabccbb925183c2359bef5d48a2ee5cca2dfd03`, with no merge commit, squash, rebase or cherry-pick.
+- Pre-integration relationship: `dev/phase-10g` 15 ahead / 0 behind `main`, merge base exactly `52e685b16e76df15154512a52a34831a6aeba399`, clean worktree. Verified before the merge.
+- After the fast-forward: `main`, `origin/main`, `dev/phase-10g` and `origin/dev/phase-10g` all resolved to `2aabccbb925183c2359bef5d48a2ee5cca2dfd03`, the branch and `main` trees were identical, and `git diff --check` passed.
+- Closure record: this section, the roadmap and the handoff were added by one documentation-only commit directly on top of `2aabccbb925183c2359bef5d48a2ee5cca2dfd03`. The production tree at that commit is byte-identical to the reviewed tree. `dev/phase-10g` is kept at the reviewed checkpoint as a stable historical reference.
+- Schema/store: v25.
+- Firebase Rules: unchanged in Phase 10G, so no rules deployment is required for this integration.
+
+### Review chain
+
+1. Opus architecture challenge.
+2. Sol architecture adjudication and frozen implementation contract (§§1–32).
+3. Claude Code initial implementation (§§33–34).
+4. Luna mechanical verification — PASS.
+5. Astra adversarial review — four findings (§35).
+6. Claude bounded remediation (§35).
+7. Luna targeted remediation verification — PASS.
+8. Astra targeted closure review — one remaining finding, ASTRA-10G-R1-001 (§36).
+9. Claude final bounded remediation (§36).
+10. Luna R1-001 targeted verification — PASS.
+11. Astra final closure confirmation — PASS — READY FOR SOL CLOSURE ADJUDICATION.
+12. Sol final adjudication — APPROVE.
+
+### Luna final evidence
+
+- Full Vitest: **4,190 / 4,190**
+- Phase 10G tests: **213 / 213**
+- Firebase emulator: **201 / 201**, zero skipped
+- Typecheck: PASS
+- Production build: PASS
+- Diff checks: PASS
+
+### Astra final closure
+
+**PASS — READY FOR SOL CLOSURE ADJUDICATION**
+
+- ASTRA-10G-001 — CLOSED
+- ASTRA-10G-002 — CLOSED
+- ASTRA-10G-003 — CLOSED
+- ASTRA-10G-004 — CLOSED
+- Hypothetical-query coverage gap — CLOSED
+- ASTRA-10G-R1-001 — CLOSED
+
+### Sol verdict
+
+**APPROVE — PHASE 10G CLOSED AND INTEGRATED**
+
+No Phase 10G blockers remain. Phase 10G is the final Phase 10 slice, so **Phase 10 is complete**.
+
+### Deferred for later work (not Phase 10G blockers)
+
+- store-wide E1 precommit generalization;
+- localStorage quota transaction/recovery;
+- dynamic Undo trimming;
+- broader persistence-health monitoring;
+- winner/result modeling, if ever separately authorized.
+
+### Next
+
+Phase 11 architecture/scope challenge for canonical character coverage, built on the completed Phase 10 authority/workflow foundation. No Phase 11 code has been written.
