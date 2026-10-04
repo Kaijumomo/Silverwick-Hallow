@@ -9,5 +9,6 @@ dist-ssr
 coverage
 firebase-debug.log
 database-debug.log
-.claude/
+.claude/*
+!.claude/skills/
 .playwright-cli/
