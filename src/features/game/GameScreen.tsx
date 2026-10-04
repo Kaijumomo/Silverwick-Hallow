@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
+import { gameLifecycleToken, useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
 import { GrimoireCircle } from "@/features/grimoire/GrimoireCircle";
 import { PlayerDrawer } from "@/features/players/PlayerDrawer";
 import { Almanac } from "@/features/almanac/Almanac";
@@ -13,7 +13,7 @@ import { connectFirebase } from "@/firebase/session";
 import { isFirebaseConfigured } from "@/firebase/config";
 import { createLobby, formatCode } from "@/firebase/lobby";
 import { acceptLeaveRequest, rejectLeaveRequest, revokePlayerAndCommit, storytellerOccupancyCompletion, type OccupancyCompletion } from "@/firebase/membershipCommands";
-import { closeMultiplayerSession, useSessionRuntime } from "@/firebase/storytellerSync";
+import { closeMultiplayerSession, closeSupersededLobby, useSessionRuntime } from "@/firebase/storytellerSync";
 import { ConnectionStatus } from "@/firebase/StorytellerSession";
 import { ensurePublicDisplayAccess, rotatePublicDisplayAccess, buildPublicDisplayLink } from "@/firebase/publicDisplayAuth";
 import { FirebaseConfigDialog } from "@/features/firebase/FirebaseConfigDialog";
@@ -278,11 +278,32 @@ export function GameScreen() {
       setGoingLive(false);
       return;
     }
+    // ASTRA-10G-001: Go Live belongs to the game it started for. Every await
+    // below can outlive that game (Finish game, Discard setup, New game), so
+    // the continuation revalidates before creating and before adopting a
+    // lobby. A lobby created for a game that is gone is closed
+    // authoritatively (the fenced writer close), never attached or orphaned.
+    const lifecycle = gameLifecycleToken();
+    const stillEligible = () => {
+      const now = useStorytellerStore.getState();
+      return gameLifecycleToken() === lifecycle && !!now.game && now.game.phase !== "ended" && !now.lobby;
+    };
     try {
       const { backend: b, uid } = await connectFirebase();
+      if (!stillEligible()) return;
       const { code } = await createLobby(b, uid);
       const session = await requireActiveSession(b, code);
-      setLobby({ code, uid, sessionId: session.id, status: "live" });
+      const created = { code, uid, sessionId: session.id, status: "live" as const };
+      // setLobby itself also refuses an ended game (defense in depth).
+      if (!stillEligible() || !setLobby(created)) {
+        try { await closeSupersededLobby(b, created); }
+        catch (closeError) {
+          // eslint-disable-next-line no-console
+          console.error("[goLive] superseded lobby close", closeError instanceof Error ? closeError.message : closeError);
+          setGoLiveError({ title: "A lobby was left open",
+            message: `The game changed before lobby ${formatCode(code)} went live, and that lobby could not be closed. This game is not connected to it and nobody was seated in it.` });
+        }
+      }
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error("[goLive]", e instanceof Error ? e.message : e);

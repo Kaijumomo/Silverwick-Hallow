@@ -145,16 +145,41 @@ let failedStart: FailedStart | null = null;
 async function closeFailedStart(pending: FailedStart) {
   const { backend, lobby, writer } = pending;
   await writer.dispose().catch(() => {});
-  const closer = new SessionWriter(backend, lobby.code, lobby.sessionId ?? "");
-  try {
-    await closer.start();
-    await closer.close(useStorytellerStore.getState().game?.seatOrder ?? []);
-  } finally {
-    await closer.dispose().catch(() => {});
-  }
+  await closeScopeAuthoritatively(backend, lobby, useStorytellerStore.getState().game?.seatOrder ?? []);
   if (failedStart === pending) failedStart = null;
   if (sameScope(useStorytellerStore.getState().lobby, lobby)) useStorytellerStore.getState().setLobby(null);
 }
+
+/** The fenced authoritative close of one lobby scope by a fresh writer: the
+ * normal lease transaction (a foreign valid lease still wins: conflict), then
+ * SessionWriter.close(). Never a direct write. */
+async function closeScopeAuthoritatively(backend: RoomBackend, lobby: LobbyScope, seatOrder: string[]) {
+  const closer = new SessionWriter(backend, lobby.code, lobby.sessionId ?? "");
+  try {
+    await closer.start();
+    await closer.close(seatOrder);
+  } finally {
+    await closer.dispose().catch(() => {});
+  }
+}
+
+/**
+ * ASTRA-10G-001: authoritatively closes a lobby that Go Live created but that
+ * became obsolete before adoption (its game was finished, discarded or
+ * replaced meanwhile), through the same fenced close a failed start uses, so
+ * no active remote lobby is orphaned. It was never attached locally, so it
+ * seated nobody and nothing local changes. Rejects if the close cannot
+ * complete.
+ */
+export async function closeSupersededLobby(backend: RoomBackend, lobby: LobbyScope): Promise<void> {
+  await closeScopeAuthoritatively(backend, lobby, []);
+}
+
+/** ASTRA-10G-001: an ended game never becomes live multiplayer -- whether it
+ * arrived as local state (e.g. a persisted ended game plus a lobby) or would
+ * be adopted from a checkpoint. Refused before the writer is exposed; the
+ * failed start can still be closed authoritatively (End multiplayer). */
+const ENDED_GAME_NOT_LIVE = "This game is finished, so it cannot go live. End multiplayer to close the lobby.";
 
 /** Fail-closed proof (HOTFIX-RV-001) that this lobby's session never reached
  * live on ANY device, so leaving it locally abandons nothing that was
@@ -584,6 +609,8 @@ async function performMembershipRevocations(writer: SessionWriter, code: string,
 }
 
 export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConnection, writer: SessionWriter) {
+  // ASTRA-10G-001: refused before any lease, sync metadata or write.
+  if (useStorytellerStore.getState().game?.phase === "ended") throw new LifecycleError("invalid", ENDED_GAME_NOT_LIVE);
   const sameSession = () => {
     const current = useStorytellerStore.getState().lobby;
     return current?.code === lobby.code && current.sessionId === lobby.sessionId;
@@ -760,6 +787,9 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   // choice has been re-validated (Phase 9C.2A, section 8) — "no second
   // write path": both routes funnel through this exact same code.
   async function finishLive() {
+    // ASTRA-10G-001: the one place the writer goes live (automatic startup
+    // and resolved reconnect conflicts alike) never does so for an ended game.
+    if (useStorytellerStore.getState().game?.phase === "ended") throw new LifecycleError("invalid", ENDED_GAME_NOT_LIVE);
     watch("session", value => {
       const session = decodeSession(value);
       if (!session || session.id !== lobby.sessionId || session.state === "ended") {
@@ -1004,6 +1034,8 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   // content; for KEEP_LOCAL, the current local game, which nothing between
   // here and the gate below can change.
   const effectiveGame = willRestore ? restored!.game : useStorytellerStore.getState().game;
+  // ASTRA-10G-001: an ended checkpoint game is never adopted into a lobby.
+  if (effectiveGame?.phase === "ended") throw new LifecycleError("invalid", ENDED_GAME_NOT_LIVE);
   // Phase 9R.2 (Astra R1): only an automatic KEEP_LOCAL whose remote guard
   // proves no other writer has committed since this device's last
   // acknowledged commit may lean on write lineage; everything else needs a

@@ -118,6 +118,18 @@ import type {
 
 const UNDO_LIMIT = 20;
 
+/**
+ * ASTRA-10G-001: a page-local game-lifecycle token, advanced whenever the
+ * current game is replaced or ends (newGame, endGame, finishGame). An
+ * asynchronous workflow started for one game (Go Live) captures it and
+ * revalidates before adopting its result, so a continuation that outlives
+ * its game -- finished, discarded or replaced meanwhile -- never acts on the
+ * game now open. Not persisted: a reload already cancels every in-flight
+ * workflow.
+ */
+let gameLifecycle = 0;
+export const gameLifecycleToken = (): number => gameLifecycle;
+
 /** The persisted store's current schema version — also the single source
  * `merge` (Phase 9C.2B.2) passes to migrateStoreState when Zustand's own
  * persist middleware skips calling `migrate` outright, which it does
@@ -412,7 +424,13 @@ export type StorytellerStore = {
   selectPlayer: (id: PlayerId | null) => void;
   addCustomScript: (script: Script) => AddScriptResult;
   removeCustomScript: (id: string) => void;
-  setLobby: (lobby: LobbyConnection | null) => void;
+  /**
+   * Attaches (or, with null, detaches) the multiplayer lobby. ASTRA-10G-001:
+   * attaching is refused -- returns false, nothing changes -- while the
+   * current game is ended: a finished game can never acquire a lobby, however
+   * late an asynchronous Go Live continuation arrives. Detaching always works.
+   */
+  setLobby: (lobby: LobbyConnection | null) => boolean;
   setLobbyStatus: (status: LobbyConnection["status"]) => void;
   setPendingKnocks: (knocks: { uid: string; name: string }[]) => void;
   seatPlayerFromKnock: (uid: string, name: string) => PlayerId | null;
@@ -1237,6 +1255,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const script =
           BUILTIN_SCRIPTS[scriptId] ?? get().customScripts[scriptId];
         if (!script) throw new Error(`Unknown script id: ${scriptId}`);
+        gameLifecycle++;
         // Phase 9 Setup finalization (FINAL SETUP INTEGRATION REVISION,
         // Section 4): the store boundary enforces the supported total cap
         // independently of the UI stepper/table, so malformed UI or
@@ -1526,6 +1545,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
       },
 
       endGame: () => {
+        gameLifecycle++;
         usePrivacyStore.getState().reset();
         set({
           game: null,
@@ -1547,6 +1567,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (lobby) return { ok: false, message: "End the multiplayer lobby first -- the game stays live until its session has closed." };
         // Deliberately NOT setPhase("ended"): that path keeps an Undo entry
         // back into live play. Here the replacement is terminal.
+        gameLifecycle++;
         set({
           game: { ...game, phase: "ended", lifeEventWindow: pruneLifeEventWindow(game.lifeEventWindow, "ended", game.day) },
           undoStack: [],
@@ -1562,7 +1583,11 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       selectPlayer: (id) => set({ selectedPlayerId: id }),
 
-      setLobby: (lobby) => set(state => ({ lobby, game: state.game && lobby ? { ...state.game, code: lobby.code, storytellerUid: lobby.uid } : state.game, undoStack: [] })),
+      setLobby: (lobby) => {
+        if (lobby && get().game?.phase === "ended") return false;
+        set(state => ({ lobby, game: state.game && lobby ? { ...state.game, code: lobby.code, storytellerUid: lobby.uid } : state.game, undoStack: [] }));
+        return true;
+      },
 
       setLobbyStatus: (status) => {
         const { lobby } = get();
@@ -2678,7 +2703,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
           return get().advancePhase();
         // What remains is entering "ended" (from Setup or Live Play): the
         // window is frozen, the rollover is part of the same commit and Undo
-        // step.
+        // step. ASTRA-10G-001: never while a lobby is attached -- an ended
+        // game can never retain an active multiplayer scope (Finish Game
+        // closes the session authoritatively first).
+        if (get().lobby) return { ok: false, message: "Close the multiplayer lobby before ending this game (Finish game does this)." };
         set({
           undoStack: pushUndo(game, undoStack),
           game: { ...game, phase, lifeEventWindow: pruneLifeEventWindow(game.lifeEventWindow, phase, game.day) },
