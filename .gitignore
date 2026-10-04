@@ -12,6 +12,7 @@ database-debug.log
 .claude/*
 !.claude/skills/
 .playwright-cli/
+.playwright-mcp/
 
 # impeccable-ignore-start
 # Ephemeral output, runtime state, and per-dev overrides.
