@@ -1351,3 +1351,86 @@ Run at code checkpoint `cf5efc5f1717513acb8c2f7a7541bcad8919b97e` on `dev/phase-
 No test was weakened. Expectation changes in existing tests follow the v25 bump and the new union shapes (version 24 → 25, unsupported markers moved to 26, v24 fixtures stripped of v25-only keys). The one allowlist addition is the reviewed presentation entry for `EndedParticipantReview.tsx` in the 10C Reminder guard (§33).
 
 **Status: IMPLEMENTATION CHECKPOINT — not closed. Next: Luna mechanical verification of the exact HEAD.**
+
+
+## 35. Astra adversarial review — Sol-accepted findings and bounded remediation — 2026-10-04
+
+Astra's adversarial review of `681775d1726d5a6e9cc21480df1bff2f296af550` found four defects and one test-strength gap. Sol accepted all four findings and authorized a bounded remediation: no architecture change, no new feature, no schema bump above v25, no Firebase Rules change, no Phase 11 work. The remediation started from exactly `681775d` (8 ahead / 0 behind `main` `52e685b`, clean worktree, verified).
+
+### Accepted findings
+
+| ID | Severity | Contract | Defect |
+| --- | --- | --- | --- |
+| ASTRA-10G-001 | High | §§17.3, 17.5, 18; AC-35 | A Go Live continuation that outlived its game could `setLobby` onto an ended snapshot (ended + active lobby + writer); reload could restart the writer. `setLobby` did not refuse an ended game. |
+| ASTRA-10G-002 | High | §§17.4, 18; AC-34, AC-37 | An ended game with a waiting player and an empty seat still rendered the queue; assignment could mutate players, participant identity and localSeq in the terminal snapshot. |
+| ASTRA-10G-003 | Medium | §§4.2, 22; AC-01, AC-44 | `gameRuleFacts: z.array(...).default([])` silently repaired explicitly-v25 data missing the collection (History could say a fact applied while Current State denied it). |
+| ASTRA-10G-004 | Medium | §§4, 6, 9, 22; AC-01, AC-10 | Recovered registered facts were not constrained to their registry lifetimes (e.g. Pit-Hag without expiry stayed active indefinitely). |
+| Test gap | — | §§7, 10 | Dropping Rule Facts from hypothetical `assumingAlive` snapshots left the consumer suite green (no production defect). |
+
+### Remediation
+
+| Commit | Scope |
+| --- | --- |
+| `b7b77806b2c5fcda73ea14a6cb0aae7d4688ea78` | ASTRA-10G-003 and ASTRA-10G-004 (schema; shared registry module) |
+| `b4b010011e15659aea84c210b43455538977aa1b` | Test gap (test-only) |
+| `bd3b5c874dbf2b9c35f39441b83262eacaef921c` | ASTRA-10G-001 (Go Live, store, session startup) |
+| `3fc38919dabd5310d1bf35011c6498174bbd8d9f` | ASTRA-10G-002 (queue UI and queue commands) |
+
+**ASTRA-10G-001.** The invariant (an ended game never acquires or retains an active multiplayer scope) is enforced at each authority boundary:
+
+- *Go Live continuation* (`GameScreen.goLive`) captures a page-local game-lifecycle token (`gameLifecycleToken()`, advanced by `newGame`, `endGame`, `finishGame`; not persisted). It revalidates after `connectFirebase` (an obsolete Go Live creates nothing) and again before adoption.
+- *Superseded scope:* a lobby created for a game that is gone (finished, discarded or replaced) is closed through `closeSupersededLobby`. That uses the existing fenced `SessionWriter` start → close → dispose, now shared with the failed-start close (`closeScopeAuthoritatively`). It is never attached and never orphaned. A failed close is reported to the Storyteller.
+- *Store:* `setLobby(non-null)` returns false and changes nothing for an ended game (detaching always works). `setPhase("ended")` is refused while a lobby is attached; Finish game remains the terminal path.
+- *Writer startup:* `startStorytellerSession` refuses an ended local game before any lease, sync metadata or write. It never adopts an ended checkpoint game. `finishLive` (the single live transition, shared with reconnect-conflict resolution) refuses an ended game. A rehydrated ended game with a lobby therefore reports "Multiplayer is not live" (never silently live), and End multiplayer closes it authoritatively through the existing failed-start close.
+- No second writer protocol, no rules change.
+
+**ASTRA-10G-002.**
+- The queue control and popup are not rendered in an ended game. An open popup unmounts when the game ends, and its open state resets.
+- `assignPendingToSeat` refuses an ended game before any mutation. A stale popup, a captured action, or a multiplayer seating begun before Finish game therefore cannot complete locally, and `seatPlayerAndCommit` rolls its remote binding back as for any refused local commit.
+- The queue's intake (`addToPendingQueue`) and reject (`removePendingPlayer`) are frozen in an ended game.
+- No other legacy mutator was changed.
+
+**ASTRA-10G-003.**
+- `gameRuleFacts` is required (no default) in the persisted v25 game, covering Current State, every Undo snapshot and recovered checkpoints. A missing collection fails validation and is never reconstructed from History.
+- Explicit v24 data still receives `[]` from migration.
+- No production path decodes the sparse RTDB `storyteller` projection back into a game: recovery reads only the checkpoint, a JSON string leaf that preserves an empty array. So no wire normalization exists or was added, and local validation is not weakened.
+
+**ASTRA-10G-004.**
+- The registry (definitions plus the one expiry rule `registeredGameRuleFactExpiry`) moved to `src/stores/gameRuleFactRegistry.ts`. The planner and the persisted-game schema now share it.
+- A stored registered fact must have been recorded in an applicable phase, and its `expiresAt` must equal the boundary its definition resolves. `pitHagArbitraryDeaths`: Night N → exactly Day N. `toymakerDemonSkipOccurred`: Night or Day, no expiry.
+- This is checked in every phase, ended snapshots included: the ended moment is frozen, but a malformed lifetime is not made valid.
+- Unregistered types gain no lifetime semantics.
+- `gameRuleFacts.ts` re-exports the registry, so callers are unchanged.
+
+### Regression tests
+
+All new; each was run against the pre-remediation code.
+
+- `src/firebase/phase10gAstraPersistence.test.ts` (37) — ASTRA-10G-003/004 through the schema, current-version rehydration of Current State and an Undo snapshot (the persist `merge` validator), and real checkpoint recovery (`startStorytellerSession` / `readCheckpoint`). It covers the missing collection (Current State, Undo, checkpoint), v24 migration adding `[]`, malformed present collections, no History reconstruction, the checkpoint round-trip as the intended wire path, and no sparse `storyteller` decode. The five malformed lifetimes are each tested in the schema, an ended snapshot, Current State, Undo and checkpoint. It also covers valid live and ended facts, unregistered types, and planner-produced facts round-tripping through local persistence and checkpoint recovery and expiring on rollover. **30 of 37 fail before the fix**; the 7 that pass are controls, migration, malformed-present, wire-path, unregistered-type and round-trip checks that did not depend on the defect.
+- `src/abilities/characters/phase10gHypothetical.test.ts` (4) — the arbitrary-deaths fact survives alive, dead and nested `assumingAlive` overlays. A death attempt against a hypothetical working query still reaches the shared judgment, including Al-Hadikhia's second player after the first dies. A fact-less hypothetical snapshot makes the attempt deterministic (the discriminating contrast). **Mutation check:** with `assumingAlive` changed to drop `gameRuleFacts`, three of these fail while the existing consumer suite stays 18/18 green (Astra's observation reproduced). The mutation was then reverted.
+- `src/features/game/phase10gGoLiveRace.test.tsx` (10) — real `GameScreen` Go Live with a gated in-memory backend: delayed `connectFirebase` → Finish game → continuation (nothing created); delayed lobby creation and delayed session acquisition → Finish game (lobby closed authoritatively: session `ended`, public `ended`, writer lease released; never attached). A replaced game (discard, then new setup) never receives the old lobby, and normal Go Live still works. It also covers `setLobby` refusing an ended game and `setPhase("ended")` refused with a lobby. Rehydrated ended + lobby: startup refuses with zero writes, and the session hook reports "not live", after which End multiplayer closes the lobby. An ended checkpoint game is never adopted. **9 of 10 fail before the fix** (normal Go Live is the control).
+- `src/features/game/phase10gQueueFence.test.tsx` (7) — ordinary Day assignment is unchanged. The queue control is absent in ended. An open queue unmounts when Finish game lands. A direct or captured assignment, reject or intake after Finish changes nothing. A still-mounted popup's Assign click changes nothing. An in-flight multiplayer seating whose roster write is held open across Finish game cannot commit locally, and its binding is rolled back. After a successful live multiplayer Finish, no queued player can be seated. Each case checks players, participant identity, queue and localSeq. **6 of 7 fail before the fix** (ordinary assignment is the control).
+
+Browser verification (Chromium, 1280 and 390 px, fixture built with the real store commands):
+- Day game: the queue pill and popup work. With the popup open, Finish game unmounts it and removes the pill.
+- After reload, the ended snapshot keeps its empty seat and waiting player and shows no Assign or Go live control.
+- On a fresh live Day, Assign still seats the player.
+- Go Live itself cannot be driven in this environment (no Firebase project or network). Its race is covered by the jsdom tests above, which use the real store, writer and in-memory backend.
+
+### Gate
+
+Run at `3fc38919dabd5310d1bf35011c6498174bbd8d9f`, clean worktree.
+
+- Typecheck: PASS.
+- Complete Vitest suite: **4184/4184 across 175 files**.
+- All Phase 10G targeted tests (the eight implementation files plus the four Astra regression files): **207/207 across 12 files**. Astra regression alone: **58/58 across 4 files**.
+- Firebase emulator suite: **201/201 across 3 files, 0 skipped.**
+- Production build: PASS (main chunk 807.22 kB; the chunk-size warning predates 10G, §34).
+- Migration / checkpoint-recovery group: **1175/1175 across 41 files.**
+- Privacy group: **447/447 across 37 files.**
+- Session / writer lifecycle (every non-SDK `src/firebase` unit test file) plus the game-screen tests: **842/842 across 47 files.**
+- `git diff --check`: PASS for the worktree and `52e685b..HEAD`.
+
+Diff scope `681775d..3fc3891`: 10 files, +962 / −76. Production: `GameScreen.tsx`, `storytellerSync.ts`, `storytellerStore.ts`, `schemas.ts`, `gameRuleFacts.ts`, and the new `gameRuleFactRegistry.ts`. Tests: the four new files above. No change to Firebase Rules, dependencies, schema version, or any area Astra found sound. No existing test was modified or weakened.
+
+**Status: ASTRA REMEDIATION IMPLEMENTED — requires Luna targeted remediation verification. Phase 10G is not closed.**

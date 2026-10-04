@@ -10,7 +10,7 @@
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
 **Schema:** v24 integrated on `main`; v25 on `dev/phase-10g`\
-**Current phase:** Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration — implementation checkpoint delivered on `dev/phase-10g`; Luna verification next (not closed).
+**Current phase:** Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration — Astra remediation (ASTRA-10G-001…004 + test gap) implemented on `dev/phase-10g`; requires Luna targeted remediation verification (not closed).
 
 ## Product invariants
 
@@ -250,7 +250,7 @@ The architecture challenge and Sol adjudication found no contradiction requiring
 Implemented (see `docs/ai/handoffs/CURRENT_HANDOFF.md` for the lineage and gate): the reviewed-and-repaired pure Information Delivery plan; store v24 (strict deliveries with authorized `performedRole` / `resolutionId`, participant-scoped Night progress with v23 seat-keyed progress dropped, Night public-Life withholding); composable `useAbility` / `correctAbilityUsed` Life intents; the rules-neutral semantics contract, Rules Query, hook/modifier gating, pure coordinator and one-commit `resolveAbility`; the Manual / unmodeled path; the interactive Night Order, workspace, Grimoire target picker and Privacy Mode behavior; the generated coverage manifest and architecture guards. Slice 6 froze the proof-character rules matrix (`docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md`); Slice 7 implemented it (`PHASE10F.md` §26): eleven guided / support semantics, verified-Manual Tinker / Toymaker / Drunk, Setup-owned Baron, an explicit verified Night-trigger path (Ravenkeeper only), the authoritative Red Herring fact, star-pass suppression through participant-scoped Night progress, and the corrected coverage manifest.
 
 ### 10G — Advanced Storyteller Bookkeeping / Final Visual Integration
-**Status:** IMPLEMENTATION CHECKPOINT — Luna verification next (not closed).\
+**Status:** ASTRA REMEDIATION IMPLEMENTED — requires Luna targeted remediation verification (not closed). `PHASE10G.md` §35.\
 **Contract:** `PHASE10G.md` §§1–32 (Sol contract frozen 2026-10-03); implementation record §33, gate §34.\
 **Starting checkpoint:** `52e685b16e76df15154512a52a34831a6aeba399` (identical to `main`).\
 **Implementation code checkpoint:** `cf5efc5` on `dev/phase-10g` (docs-only record commit on top).\
@@ -289,4 +289,4 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Luna mechanical verification of the Phase 10G implementation checkpoint on `dev/phase-10g` (verify the exact HEAD; contract `PHASE10G.md` §§1–32, record §§33–34). Then Astra adversarial review, Sol adjudication, closure and integration into `main`. Phase 11 (canonical character coverage) starts only after 10G closes.
+Luna targeted verification of the Phase 10G Astra remediation on `dev/phase-10g` (verify the exact HEAD; findings and remediation record `PHASE10G.md` §35). Then the remaining review, Sol closure and integration into `main`. Phase 11 (canonical character coverage) starts only after 10G closes.

@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-04\
-**State:** Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration has an **implementation checkpoint** on `dev/phase-10g` (started from `52e685b16e76df15154512a52a34831a6aeba399`, identical to `main`; code checkpoint `cf5efc5`, docs-only record on top). Schema/store v25 on the branch; Firebase Rules unchanged. Not closed: Luna verification is next. Phase 10F remains **CLOSED AND INTEGRATED** on `main` (v24); see the 10F integration record below and `PHASE10F.md` §50.
+**State:** Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration: the Sol-accepted Astra remediation (ASTRA-10G-001…004 plus the hypothetical-query test gap) is implemented on `dev/phase-10g` and requires Luna targeted remediation verification (`PHASE10G.md` §35). Not closed. Schema/store v25 on the branch; Firebase Rules unchanged. Phase 10F remains **CLOSED AND INTEGRATED** on `main` (v24); see the 10F integration record below and `PHASE10F.md` §50.
 
 ## Phase 10D — CLOSED
 
@@ -244,7 +244,7 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 - **10D Role Transitions — CLOSED**
 - **10E Alignment Transitions — CLOSED AND INTEGRATED**
 - **10F Guided Ability Resolution / Night Actions — CLOSED AND INTEGRATED**
-- **10G Advanced Storyteller bookkeeping / final visual integration — IMPLEMENTATION CHECKPOINT; LUNA VERIFICATION NEXT (not closed)**
+- **10G Advanced Storyteller bookkeeping / final visual integration — ASTRA REMEDIATION IMPLEMENTED; LUNA TARGETED VERIFICATION NEXT (not closed)**
 
 ## Standing Phase 10 UX invariant
 
@@ -895,3 +895,11 @@ Contract: `PHASE10G.md` §§1–32 (Sol contract frozen 2026-10-03, recorded ver
 ## Immediate next task
 
 Luna mechanical verification of the exact `dev/phase-10g` HEAD against `PHASE10G.md`. Then Astra adversarial review, Sol adjudication, closure and integration. Nothing merged or deployed.
+
+## Phase 10G — Astra remediation implemented — 2026-10-04
+
+Sol accepted Astra's four findings on `681775d`: ASTRA-10G-001 (High, Go Live could attach a lobby after Finish game), ASTRA-10G-002 (High, the waiting queue could mutate an ended game), ASTRA-10G-003 (Medium, explicit v25 data could omit `gameRuleFacts`) and ASTRA-10G-004 (Medium, registered Rule Fact lifetimes not validated on recovery), plus a test-strength gap (hypothetical Rules Query overlays). The bounded remediation is `b7b7780` (003/004) → `b4b0100` (test gap, test-only) → `bd3b5c8` (001) → `3fc3891` (002), with this docs-only record on top. No schema bump, no Firebase Rules change, no architecture change. Record and gate: `PHASE10G.md` §35.
+
+## Immediate next task
+
+Luna targeted verification of the exact `dev/phase-10g` HEAD against `PHASE10G.md` §35. Phase 10G is not closed; nothing merged or deployed.
