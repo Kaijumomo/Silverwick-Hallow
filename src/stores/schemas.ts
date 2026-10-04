@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { gameRuleFactDefinition, registeredGameRuleFactExpiry } from "./gameRuleFactRegistry";
 
 export const AlignmentSchema = z.enum(["good", "evil"]);
 /** Phase 10E (v23): STORED player-facing alignment perception. `undisclosed`
@@ -707,6 +708,43 @@ export const GameRuleFactRecordSchema = z.object({
   }
 });
 
+/**
+ * ASTRA-10G-004: a REGISTERED fact's intrinsic lifetime, derived from the same
+ * registry definition the planner applies (gameRuleFactRegistry.ts): it was
+ * recorded in one of the definition's applicable phases, and its `expiresAt`
+ * is exactly the boundary the definition resolves from `recordedAt` (absent
+ * when the definition never expires). So pitHagArbitraryDeaths is recorded on
+ * Night N and expires exactly at Day N; toymakerDemonSkipOccurred carries no
+ * expiry. Rejected, never repaired. An unregistered type has no definition and
+ * acquires no lifetime semantics here.
+ */
+function checkRegisteredGameRuleFactLifetime(
+  fact: z.infer<typeof GameRuleFactRecordSchema>,
+  path: (string | number)[],
+  ctx: z.RefinementCtx,
+): void {
+  const definition = gameRuleFactDefinition(fact.type);
+  if (!definition) return;
+  if (!definition.applicablePhases.includes(fact.recordedAt.phase)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: `${fact.type} can only be recorded during ${definition.applicablePhases.join(" or ")}`, path: [...path, "recordedAt", "phase"] });
+    return;
+  }
+  const expected = registeredGameRuleFactExpiry(definition, fact.recordedAt);
+  const actual = fact.expiresAt;
+  const matches = expected === undefined
+    ? actual === undefined
+    : actual !== undefined && actual.phase === expected.phase && actual.day === expected.day;
+  if (!matches) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: expected === undefined
+        ? `${fact.type} never expires automatically, so it carries no expiresAt`
+        : `${fact.type} recorded on ${fact.recordedAt.phase} ${fact.recordedAt.day} must expire exactly at ${expected.phase} ${expected.day}`,
+      path: [...path, "expiresAt"],
+    });
+  }
+}
+
 export const GameRuleFactHistoryOperationSchema = z.enum(["apply", "remove", "expire"]);
 const RULE_FACT_OPERATION_CHANGE: Record<z.infer<typeof GameRuleFactHistoryOperationSchema>, "added" | "removed"> = {
   apply: "added",
@@ -1036,16 +1074,22 @@ export const StorytellerLobbyRecordSchema = z.object({
   // incomplete current-version data and fails here; genuine v18 data gets it
   // from migration (gameMigration.ts), never from this schema.
   lifeEventWindow: LifeEventWindowSchema,
-  // Phase 10G (v25): the game-scoped Rule Facts. Like `history` /
-  // `informationDeliveries`, only an ABSENT list defaults to [] (the Firebase
-  // RTDB `storyteller` projection drops an empty array); a present malformed
-  // one is rejected. v24 data receives it from migration. Singleton: at most
-  // one record per type.
-  gameRuleFacts: z.array(GameRuleFactRecordSchema).default([]).superRefine((facts, ctx) => {
+  // Phase 10G (v25): the game-scoped Rule Facts. REQUIRED, with NO default
+  // (ASTRA-10G-003): a current-version game missing the collection is
+  // malformed authoritative data and fails here -- never silently repaired to
+  // [] (History could then say a fact was applied while Current State denied
+  // it). v24 data receives [] from migration only. The persisted game never
+  // round-trips through the sparse RTDB `storyteller` projection: recovery
+  // reads the checkpoint, one JSON string leaf that keeps an empty array.
+  // Singleton: at most one record per type. A REGISTERED type must carry
+  // exactly the lifetime its registry definition gives (ASTRA-10G-004), in
+  // every phase -- an ended snapshot freezes the moment, not malformed facts.
+  gameRuleFacts: z.array(GameRuleFactRecordSchema).superRefine((facts, ctx) => {
     const seen = new Set<string>();
     facts.forEach((fact, index) => {
       if (seen.has(fact.type)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "duplicate Rule Fact type (Rule Facts are singletons)", path: [index, "type"] });
       seen.add(fact.type);
+      checkRegisteredGameRuleFactLifetime(fact, [index], ctx);
     });
   }),
 });

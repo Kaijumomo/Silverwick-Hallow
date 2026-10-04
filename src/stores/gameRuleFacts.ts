@@ -1,6 +1,7 @@
 import { cloneOwned, durableProvenance, historyId, isLiveGamePhase, type MutationContext } from "./history";
 import { currentLiveMoment, momentOrdinal } from "./lifeEvents";
 import { GAME_RULE_FACT_TYPE, MutationContextInputSchema, ProvenanceSchema } from "./schemas";
+import { gameRuleFactDefinition, registeredGameRuleFactExpiry, TOYMAKER_DEMON_SKIP_OCCURRED } from "./gameRuleFactRegistry";
 import type {
   GameRuleFactHistoryRecord,
   GameRuleFactRecord,
@@ -30,55 +31,18 @@ import type {
  * Query) -- never from History, Reminders or the Activity presentation.
  */
 
-/** When an applied fact expires, resolved ONCE at application. */
-export type GameRuleFactExpiryRule =
-  /** No automatic expiry -- the Storyteller removes it. */
-  | "none"
-  /** Recorded on Night N: expires on entering Day N (the following Day). */
-  | "followingDay";
-
-export type GameRuleFactDefinition = {
-  type: GameRuleFactType;
-  /** Short Storyteller-facing name. */
-  label: string;
-  /** What it means, in one sentence (presentation only). */
-  description: string;
-  /** The live phases in which the fact may be applied. */
-  applicablePhases: readonly ("night" | "day")[];
-  expiry: GameRuleFactExpiryRule;
-};
-
-export const PIT_HAG_ARBITRARY_DEATHS = "pitHagArbitraryDeaths";
-export const TOYMAKER_DEMON_SKIP_OCCURRED = "toymakerDemonSkipOccurred";
-
-/**
- * The registered Game Rule Fact types -- exactly the two PHASE10G approves.
- *  - pitHagArbitraryDeaths: a functioning Pit-Hag made a Demon tonight, so
- *    deaths tonight are arbitrary (matrix Section 12). Night only; expires on
- *    entering the following Day.
- *  - toymakerDemonSkipOccurred: the Demon has made the Toymaker's required
- *    no-attack skip (matrix Section 16). The POSITIVE fact only -- "skip still
- *    required" is derived, never stored. No automatic expiry.
- */
-export const GAME_RULE_FACT_REGISTRY: ReadonlyMap<GameRuleFactType, GameRuleFactDefinition> = new Map([
-  [PIT_HAG_ARBITRARY_DEATHS, {
-    type: PIT_HAG_ARBITRARY_DEATHS,
-    label: "Arbitrary deaths tonight",
-    description: "A Pit-Hag made a Demon tonight: deaths tonight are arbitrary -- the Storyteller decides each death.",
-    applicablePhases: ["night"],
-    expiry: "followingDay",
-  }],
-  [TOYMAKER_DEMON_SKIP_OCCURRED, {
-    type: TOYMAKER_DEMON_SKIP_OCCURRED,
-    label: "Toymaker skip made",
-    description: "The Demon has chosen not to attack at least once, satisfying the Toymaker's required skip.",
-    applicablePhases: ["night", "day"],
-    expiry: "none",
-  }],
-]);
-
-export const gameRuleFactDefinition = (type: unknown): GameRuleFactDefinition | undefined =>
-  typeof type === "string" && GAME_RULE_FACT_REGISTRY.has(type) ? GAME_RULE_FACT_REGISTRY.get(type) : undefined;
+// The registry itself (types, definitions, the intrinsic lifetime) lives in
+// gameRuleFactRegistry.ts so the persisted-game schema validates stored facts
+// against the SAME definitions the planner applies (ASTRA-10G-004).
+export {
+  GAME_RULE_FACT_REGISTRY,
+  PIT_HAG_ARBITRARY_DEATHS,
+  TOYMAKER_DEMON_SKIP_OCCURRED,
+  gameRuleFactDefinition,
+  registeredGameRuleFactExpiry,
+  type GameRuleFactDefinition,
+  type GameRuleFactExpiryRule,
+} from "./gameRuleFactRegistry";
 
 // ---------------------------------------------------------------------------
 // Pure queries (Current State only)
@@ -158,12 +122,6 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const INTENT_KEYS = new Set(["kind", "type"]);
 
-/** The exact expiry boundary of a fact recorded at `now` (resolved once). */
-function resolveExpiry(definition: GameRuleFactDefinition, now: LiveGameMoment): LiveGameMoment | undefined {
-  if (definition.expiry === "followingDay" && now.phase === "night") return { phase: "day", day: now.day };
-  return undefined;
-}
-
 /**
  * Plans one Game Rule Fact transaction against Current State. Pure, never
  * throws, never writes. Returns a structured refusal (nothing changes), a true
@@ -237,7 +195,7 @@ function plan(game: StorytellerLobbyRecord, transaction: GameRuleFactTransaction
         return refuse("phase", `${definition.label} can be recorded only during ${definition.applicablePhases.join(" or ")}.`, index);
       }
       if (existing) continue; // singleton already current: a true no-op
-      const expiresAt = resolveExpiry(definition, now);
+      const expiresAt = registeredGameRuleFactExpiry(definition, now);
       const fact: GameRuleFactRecord = cloneOwned({
         type,
         recordedAt: { ...now },
