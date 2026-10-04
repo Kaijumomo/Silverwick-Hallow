@@ -24,6 +24,7 @@ import { DayResolutionPanel, DuskReview } from "@/features/life/DayResolution";
 import { LifeEventsPanel } from "@/features/life/LifeEventsPanel";
 import { ActivityPanel } from "@/features/activity/ActivityPanel";
 import { DawnReview } from "@/features/nightOrder/DawnReview";
+import { RuleFactStrip } from "@/features/ruleFacts/RuleFactStrip";
 import { deriveNightWork, unfinishedNightWork } from "@/features/nightOrder/nightWork";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import { buildRegistry } from "@/data/roleRegistry";
@@ -608,6 +609,8 @@ export function GameScreen() {
           )}
         </div>
       )}
+
+      {!privacyMode && game.phase !== "setup" && <RuleFactStrip game={game} readOnly={game.phase === "ended"} />}
 
       {Object.keys(leaveRequests).length > 0 && (
         <div className="leave-requests-bar" role="region" aria-label="Leave requests">

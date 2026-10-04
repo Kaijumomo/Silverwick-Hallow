@@ -18,6 +18,7 @@ import { buildRegistry, ownedScriptCharacters } from "@/data/roleRegistry";
 import { effectAccessibleSummary, effectIndicatorLabel, effectIndicators, type EffectIndicatorSummary } from "@/stores/effectRegistry";
 import { lifeAccessibleLabel, lifeStatusOf } from "@/stores/lifeState";
 import { LifeShroud, LifeStateText, VoteToken } from "@/features/life/LifeMarks";
+import { abilityUsedMarker, actualAlignmentMarker } from "./tokenMarkers";
 import {
   cleanupStatusText,
   groupText,
@@ -177,6 +178,12 @@ function Token({
   const reminderSummary = privacyMode || !game ? "" : reminderAccessibleSummary(player, game);
 
   const needsCheck = needsCheckBase || perceptionCheck;
+  // Phase 10G: Storyteller-private markers -- ability used, and an Actual
+  // Alignment exception (or a resolved Traveler's alignment). Never rendered
+  // under Privacy Mode.
+  const markers = privacyMode ? [] : [abilityUsedMarker(player), script ? actualAlignmentMarker(player, buildRegistry(script)) : null]
+    .filter((marker): marker is NonNullable<typeof marker> => !!marker);
+  const markerSummary = markers.map((marker) => marker.spoken).join(", ");
 
   const classes = [
     "token",
@@ -226,7 +233,7 @@ function Token({
       style={{ left: `calc(50% + ${x}px)`, top: `calc(50% + ${y}px)` }}
       onClick={isGhost ? undefined : onClick}
       role="button"
-      aria-label={lifeAccessibleLabel(player.name, player.seat + 1, life.state, needsCheck) + (effectSummary ? `, ${effectSummary}` : "") + (reminderSummary ? `, ${reminderSummary}` : "")}
+      aria-label={lifeAccessibleLabel(player.name, player.seat + 1, life.state, needsCheck) + (markerSummary ? `, ${markerSummary}` : "") + (effectSummary ? `, ${effectSummary}` : "") + (reminderSummary ? `, ${reminderSummary}` : "")}
       tabIndex={isGhost ? -1 : 0}
       onKeyDown={(e) => {
         if (!isGhost && (e.key === "Enter" || e.key === " ")) {
@@ -278,6 +285,11 @@ function Token({
       )}
       {!player.alive && <LifeStateText state={life.state} className="token-ghost" />}
       {needsCheck && <div className="token-needs-check">Needs check</div>}
+      {markers.length > 0 && (
+        <div className="token-markers" aria-hidden="true">
+          {markers.map((marker) => <span key={marker.key} className={`token-marker token-marker-${marker.key}`} data-token-marker={marker.key}>{marker.text}</span>)}
+        </div>
+      )}
       {indicators.some((summary) => !summary.indicator.icon) && (
         <div className="token-effects">
           {indicators.filter((summary) => !summary.indicator.icon).map((summary) => (
