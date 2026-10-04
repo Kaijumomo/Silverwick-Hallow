@@ -23,6 +23,9 @@ import { usePrivacyStore } from "@/stores/privacyStore";
 import { DayResolutionPanel, DuskReview } from "@/features/life/DayResolution";
 import { LifeEventsPanel } from "@/features/life/LifeEventsPanel";
 import { ActivityPanel } from "@/features/activity/ActivityPanel";
+import { DawnReview } from "@/features/nightOrder/DawnReview";
+import { deriveNightWork, unfinishedNightWork } from "@/features/nightOrder/nightWork";
+import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import { buildRegistry } from "@/data/roleRegistry";
 import { useMediaQuery } from "@/components/useMediaQuery";
 import type { RoleId } from "@/stores/types";
@@ -78,6 +81,8 @@ export function GameScreen() {
   const [lifeEventsOpen, setLifeEventsOpen] = useState(false);
   // Phase 10G: the Storyteller-private Activity surface.
   const [activityOpen, setActivityOpen] = useState(false);
+  // Phase 10G: the Night -> Day review of unfinished Night work.
+  const [dawnReviewOpen, setDawnReviewOpen] = useState(false);
   // 10A-ASTRA-003: turning Privacy Mode on closes every Life Event-bearing
   // dialog at once (each also renders nothing private under Privacy Mode).
   useEffect(() => {
@@ -86,6 +91,7 @@ export function GameScreen() {
     setDuskReviewOpen(false);
     setLifeEventsOpen(false);
     setActivityOpen(false);
+    setDawnReviewOpen(false);
   }, [privacyMode]);
   // Phase 9C.6 (OPUS-002): the current Public Display capability token, held
   // only in this component's local/runtime state — never in
@@ -304,6 +310,9 @@ export function GameScreen() {
   const registry = useMemo(() => buildRegistry(script ?? { id: game?.scriptId ?? "", name: "", characters: [] }), [script, game?.scriptId]);
 
   if (!game) return null;
+  /** Phase 10G: tonight's unfinished work, from the ONE shared derivation the
+   * Night Order renders (never restated here). */
+  const nightUnfinished = () => unfinishedNightWork(game, deriveNightWork(game, { script: script ?? null, registry, semantics: CANONICAL_ABILITY_SEMANTICS }));
   const selected = selectedPlayerId ? game.players[selectedPlayerId] : null;
   const setupVisible = game.phase === "setup" && setupPanelOpen && !!script && !privacyMode;
   const seatedPlayers = Object.values(game.players).filter((p) => !p.isEmpty);
@@ -512,11 +521,20 @@ export function GameScreen() {
               // private Storyteller dialog -- unavailable under Privacy Mode
               // (10A-ASTRA-003); turn Privacy Mode off, then review.
               if (game.phase === "day") { if (!privacyMode) setDuskReviewOpen(true); return; }
+              // Phase 10G: Night -> Day passes through Dawn Review when
+              // tonight's work is unfinished (advisory -- the Storyteller may
+              // continue anyway); a clean Night advances directly. Like Dusk,
+              // it is private review: unavailable under Privacy Mode.
+              if (game.phase === "night") {
+                if (privacyMode) return;
+                if (nightUnfinished().total > 0) { setDawnReviewOpen(true); return; }
+              }
               const result = advancePhase();
               setPhaseError(result.ok ? null : "Setup changed. Open Setup to review what needs attention.");
             }}
-            disabled={game.phase === "ended" || (game.phase === "day" && privacyMode)}
-            title={game.phase === "day" && privacyMode ? "Turn off Privacy Mode to review the Day before continuing to Night" : undefined}
+            disabled={game.phase === "ended" || ((game.phase === "day" || game.phase === "night") && privacyMode)}
+            title={game.phase === "day" && privacyMode ? "Turn off Privacy Mode to review the Day before continuing to Night"
+              : game.phase === "night" && privacyMode ? "Turn off Privacy Mode to review the Night before continuing to Day" : undefined}
           >
             {advanceLabel}
           </button>}
@@ -662,6 +680,19 @@ export function GameScreen() {
           onRecord={() => { setDuskReviewOpen(false); setDayResolutionOpen(true); }}
           onContinue={() => {
             setDuskReviewOpen(false);
+            const result = advancePhase();
+            setPhaseError(result.ok ? null : "Setup changed. Open Setup to review what needs attention.");
+          }}
+        />
+      )}
+      {dawnReviewOpen && game.phase === "night" && !privacyMode && (
+        <DawnReview
+          game={game}
+          unfinished={nightUnfinished()}
+          onClose={() => setDawnReviewOpen(false)}
+          onReviewNight={() => { setDawnReviewOpen(false); setNightPanelOpen(true); }}
+          onContinue={() => {
+            setDawnReviewOpen(false);
             const result = advancePhase();
             setPhaseError(result.ok ? null : "Setup changed. Open Setup to review what needs attention.");
           }}

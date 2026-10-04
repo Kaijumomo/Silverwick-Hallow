@@ -3211,3 +3211,6 @@ fieldset.ability-field legend { padding: 0; margin-bottom: 4px; }
 .activity-resolution { border-left: 2px solid #b08a3a; padding-left: 8px; margin-bottom: 6px; }
 .activity-source { margin-bottom: 4px; }
 .activity-remove-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+/* Phase 10G: Dawn Review (PHASE10G Section 14). */
+.dawn-review-list { margin: 0 0 6px; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; font-size: 13px; overflow-wrap: anywhere; }

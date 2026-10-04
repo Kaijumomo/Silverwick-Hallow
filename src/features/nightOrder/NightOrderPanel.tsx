@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { computeNightOrder } from "./nightOrder";
 import type { NightStep } from "./nightOrder";
+import { deriveNightWork, stepResolved } from "./nightWork";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { PlayerInformation } from "@/features/players/PlayerInformation";
 import { TravelerArrival } from "@/features/players/TravelerArrival";
@@ -13,13 +13,10 @@ import type { NightStepRecord, NightStepStatus, Script, StorytellerLobbyRecord }
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { CANONICAL_ABILITY_SEMANTICS, type AbilityDescriptor, type AbilityInputValue, type AbilitySemanticsRegistry } from "@/abilities/semantics";
 import { captureFingerprint, planAbilityResolution, type ParticipantBinding } from "@/stores/abilityResolution";
-import { createRulesQuery } from "@/stores/rulesQuery";
 import { lifeEventsForParticipantAt } from "@/stores/lifeEvents";
 import { AbilityWorkspace, type WorkspaceTarget } from "@/features/abilities/AbilityWorkspace";
 import { ParticipantSelect, participantAllowed } from "@/features/abilities/RequirementInput";
 import { bindingOf, pathAbility, seatedParticipants, triggerAbility, useTargetPicker, type StepAbility } from "@/features/abilities/abilityUi";
-import { wakeIdentity } from "@/stores/wakeIdentity";
-import { participantStepKey } from "@/stores/nightProgress";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -328,18 +325,13 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
   // A pending Grimoire pick never outlives the dashboard (Privacy Mode, close).
   useEffect(() => () => useTargetPicker.getState().cancel(), []);
   const isFirstNight = game.day === 1;
-  const steps = computeNightOrder(game.players, game.seatOrder, script, isFirstNight, game);
-  for (const key of Object.keys(game.nightProgress ?? {})) {
-    const prefix = `${game.day}:manual:`;
-    if (key.startsWith(prefix)) steps.push({
-      kind: "global", stepKey: key.slice(String(game.day).length + 1),
-      label: "Custom night step", prompt: "Storyteller-defined procedure. Use the notes below; complete or skip manually.",
-      reminder: "", order: Number.MAX_SAFE_INTEGER,
-    });
-  }
   const registry = useMemo(() => buildRegistry(script), [script]);
+  // Phase 10G: the ONE shared derivation of tonight's work (rows, custom steps,
+  // open verified triggers) -- the same one Dawn Review reads -- with the
+  // ordinary active-modifier Rules Query (never a blanket empty modifier set).
+  const work = deriveNightWork(game, { script, registry, semantics });
+  const { steps, query } = work;
   const progress = game.nightProgress ?? {};
-  const query = createRulesQuery(game, { registry, script, semantics, modifiers: [] });
   const guided: GuidedContext = { game, script, registry, semantics, onResolved: setLastResolution };
   /** Storyteller-private state chips for a wake (derived; never stored). */
   const chipsFor = (step: NightStep): string[] => {
@@ -369,15 +361,7 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
   /** Slice 7: verified triggers that fired (or need a check) tonight and are
    * still open -- surfaced at the top of the dashboard immediately, not at
    * an arbitrary scheduled row. */
-  const triggered = seatedParticipants(game).flatMap((player) => {
-    const wake = wakeIdentity(player, registry);
-    if (!wake || !player.participantId) return [];
-    const ability = triggerAbility(wake.shownRoleId, registry, semantics, query, bindingOf(player));
-    // SOL-10F-A10: open = the trigger status (consumption is per trigger event).
-    if (!ability || ability.kind !== "guided" || !ability.trigger || ability.trigger.kind === "notTriggered") return [];
-    const stepKey = participantStepKey(player.participantId, wake.shownRoleId);
-    return [{ player, roleId: wake.shownRoleId, roleName: wake.role.name, stepKey, ability, eventId: ability.trigger.eventId }];
-  });
+  const triggered = work.triggered;
   const policy = evilInformationPolicy(game.seatOrder.map(id => game.players[id]!).filter(Boolean), registry, game);
   const setupPlayers = game.seatOrder.filter(id => {
     const p = game.players[id];
@@ -390,10 +374,7 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
     catch { return true; }
   });
 
-  const resolvedCount = steps.filter((s) => {
-    const rec = progress[`${game.day}:${s.stepKey}`];
-    return rec?.status === "done" || rec?.status === "skipped";
-  }).length;
+  const resolvedCount = steps.filter((s) => stepResolved(game, s)).length;
 
   const handleReset = () => {
     if (window.confirm(`Reset all night ${game.day} progress?`)) {
