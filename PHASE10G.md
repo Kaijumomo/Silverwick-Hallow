@@ -1549,3 +1549,7 @@ No Phase 10G blockers remain. Phase 10G is the final Phase 10 slice, so **Phase 
 ### Next
 
 Phase 11 architecture/scope challenge for canonical character coverage, built on the completed Phase 10 authority/workflow foundation. No Phase 11 code has been written.
+
+### Post-closure roadmap amendment — 2026-10-04
+
+After Phase 10G was already closed and integrated, the roadmap was amended to insert **Phase 10H — Storyteller UI/UX & Visual Design System** before Phase 11. This amendment does not reopen 10G or change any 10G acceptance evidence. Phase 11 canonical coverage remains unchanged in scope and is now sequenced after 10H closes. See `PHASE10H.md`, `docs/ai/MASTER_IMPLEMENTATION_PLAN.md`, and the current handoff.
