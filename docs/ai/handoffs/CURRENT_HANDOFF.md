@@ -1,7 +1,7 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-04\
-**State:** Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration: the Sol-accepted Astra remediation (ASTRA-10G-001…004 plus the hypothetical-query test gap) is implemented on `dev/phase-10g` and requires Luna targeted remediation verification (`PHASE10G.md` §35). Not closed. Schema/store v25 on the branch; Firebase Rules unchanged. Phase 10F remains **CLOSED AND INTEGRATED** on `main` (v24); see the 10F integration record below and `PHASE10F.md` §50.
+**State:** Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration: the final Astra cleanup-failure remediation (ASTRA-10G-R1-001) is implemented on `dev/phase-10g`; targeted verification pending (`PHASE10G.md` §36; earlier remediation §35). Not closed. Schema/store v25 on the branch; Firebase Rules unchanged. Phase 10F remains **CLOSED AND INTEGRATED** on `main` (v24); see the 10F integration record below and `PHASE10F.md` §50.
 
 ## Phase 10D — CLOSED
 
@@ -244,7 +244,7 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 - **10D Role Transitions — CLOSED**
 - **10E Alignment Transitions — CLOSED AND INTEGRATED**
 - **10F Guided Ability Resolution / Night Actions — CLOSED AND INTEGRATED**
-- **10G Advanced Storyteller bookkeeping / final visual integration — ASTRA REMEDIATION IMPLEMENTED; LUNA TARGETED VERIFICATION NEXT (not closed)**
+- **10G Advanced Storyteller bookkeeping / final visual integration — FINAL ASTRA CLEANUP-FAILURE REMEDIATION IMPLEMENTED; TARGETED VERIFICATION PENDING (not closed)**
 
 ## Standing Phase 10 UX invariant
 
@@ -903,3 +903,11 @@ Sol accepted Astra's four findings on `681775d`: ASTRA-10G-001 (High, Go Live co
 ## Immediate next task
 
 Luna targeted verification of the exact `dev/phase-10g` HEAD against `PHASE10G.md` §35. Phase 10G is not closed; nothing merged or deployed.
+
+## Phase 10G — final Astra cleanup-failure remediation implemented — 2026-10-04
+
+Sol accepted ASTRA-10G-R1-001 (Medium): a failed cleanup of a superseded Go Live lobby was reported only in GameScreen's own state and vanished after navigation. Remediation `7add7c6`: the failure is recorded in a dedicated, never-persisted runtime field (`useSessionRuntime.unattachedCleanupFailures`) and shown by the App shell on every Storyteller view until dismissed. The superseded lobby is still never attached and no writer starts. Record and gate: `PHASE10G.md` §36.
+
+## Immediate next task
+
+Luna targeted R1-001 verification of the exact `dev/phase-10g` HEAD. Phase 10G is not closed; nothing merged or deployed.

@@ -1434,3 +1434,49 @@ Run at `3fc38919dabd5310d1bf35011c6498174bbd8d9f`, clean worktree.
 Diff scope `681775d..3fc3891`: 10 files, +962 / −76. Production: `GameScreen.tsx`, `storytellerSync.ts`, `storytellerStore.ts`, `schemas.ts`, `gameRuleFacts.ts`, and the new `gameRuleFactRegistry.ts`. Tests: the four new files above. No change to Firebase Rules, dependencies, schema version, or any area Astra found sound. No existing test was modified or weakened.
 
 **Status: ASTRA REMEDIATION IMPLEMENTED — requires Luna targeted remediation verification. Phase 10G is not closed.**
+
+
+## 36. Final Astra closure remediation — ASTRA-10G-R1-001 — 2026-10-04
+
+Astra's closure review of the §35 remediation left one finding open; Sol accepted it. The remediation started from exactly `dab10913fc07a43f12aab3a353624a5b1085aa26` (13 ahead / 0 behind `main` `52e685b`, clean worktree, verified). No closed finding was reopened, and the ASTRA-10G-001 authority invariant is unchanged.
+
+### ASTRA-10G-R1-001 — Medium — cleanup failure invisible after GameScreen navigation/unmount
+
+If the authoritative close of a superseded Go Live lobby (ASTRA-10G-001) itself failed, the remote lobby could stay active while the local game correctly stayed detached. GameScreen reported the failure through its component-local `setGoLiveError`. When Finish game, Home or New Game had already unmounted GameScreen, that warning was never seen, leaving no visible trace of the open lobby or its room code.
+
+Reporting invariant (Sol): if cleanup of a superseded lobby fails, the Storyteller keeps a visible warning identifying that lobby across ordinary Storyteller navigation until it is explicitly dismissed. This is runtime/UI state only, never Current State, persisted, checkpoint or reconnect-authority state.
+
+### Remediation — `7add7c661e43349634e0b6717d7c05ee18a31957`
+
+- **Where the warning lives:** a dedicated field on the existing page-global multiplayer runtime, `useSessionRuntime.unattachedCleanupFailures` (`src/firebase/storytellerSync.ts`). Each entry holds `{ code, message }`: the lobby code and a fixed, bounded message with the formatted room code. It never holds an Error object. `useSessionRuntime` is a plain, unpersisted zustand store (it is not the persisted Storyteller store), so the entry is never written to localStorage, Firebase or a checkpoint. It is not the current lobby: it is never attached, never starts a StorytellerSession or writer, never enters reconnect state, and never sets lobby metadata.
+- **Capture:** `closeSupersededLobby` records the entry itself when the fenced close fails, then rethrows. The obsolete lobby is still never attached and no writer starts. GameScreen keeps only the console diagnostic and no longer reports this case in its own state.
+- **Why navigation cannot erase it:** the runtime outlives every screen, and every existing reset (the StorytellerSession no-lobby reset, `useStorytellerSync` startup and cleanup, and the per-source error ownership) is a partial `setState` of named fields that never includes this one. Starting a later valid session does not clear it. The only remover is `dismissUnattachedCleanupFailure(code)`.
+- **Where it renders:** `UnattachedLobbyWarnings` (`src/firebase/StorytellerSession.tsx`), rendered by the App shell (`src/app/App.tsx`) above the Storyteller views. It therefore spans Home, New Game and the game/review screen. It is a `role="alert"` naming the room code and stating that a lobby may still be open and the current game is not connected to it, with one Dismiss action that removes only that entry.
+- **Unchanged:** ordinary current-game Go Live errors keep the existing game-screen path. No change to Firebase Rules, schema, the Game Rule Fact model, membership, the session writer protocol, character semantics or projections.
+
+### Regression tests — `src/app/phase10gUnattachedLobby.test.tsx` (6, rendered through the real `App` shell)
+
+- **R1-001-A, Finish → Home:** Go Live; remote lobby created; session acquisition held before adoption; Finish game; ← Home (GameScreen gone); resume with the cleanup's lease acquisition failing. Proves the ended game stays detached (no lobby, code unchanged), no writer ever held a lease or projected, the remote session is still active (cleanup really failed), and Home shows the alert with the formatted room code. The alert survives returning to the review and Home again.
+- **R1-001-B, Home → New Game:** Go Live on Game A, held after remote creation; ← Home → New Game → Create setup (Game B); resume with cleanup failing. Proves Game B is untouched and has no lobby, no old writer ever held a lease, and the alert shows the old room code across Home and Game B. A later valid Go Live for Game B starts a real live session, and the old lobby's alert is still shown.
+- **Controls:** a successful superseded cleanup creates no warning. Dismiss removes only the dismissed lobby's entry and changes no game, lobby, localSeq or session status. An ordinary Go Live error creates no unattached-lobby warning. The warning is never persisted with the Storyteller state.
+- **Proof against regression:** restoring the component-local behavior (GameScreen `setGoLiveError` instead of the global capture) fails both navigation regressions. The pre-remediation production files (`dab1091`) fail R1-001-A, R1-001-B and the Dismiss control.
+- **Browser check** (Chromium, 390 and 1280 px; runtime state set by importing the same dev-server module instance): the alert is visible at the top of Home, the game screen and New Game, covers no control, causes no horizontal overflow, and Dismiss removes it. On the game screen (a fixed 100dvh layout) the page scrolls vertically by the alert's height (58 px desktop, 109 px phone) until it is dismissed.
+
+### Gate
+
+Run at `7add7c661e43349634e0b6717d7c05ee18a31957`, clean worktree.
+
+- Typecheck: PASS.
+- R1-001 regressions: **6/6**.
+- `phase10gGoLiveRace.test.tsx`: **10/10**.
+- The four earlier Astra regression files: **58/58** (ASTRA-10G-001…004 and the hypothetical-query test stay closed).
+- All Phase 10G tests (13 files): **213/213**.
+- App / GameScreen / session runtime (every non-SDK `src/firebase` unit test file, plus the `src/features/game`, `src/app` and New Game screen tests): **880/880 across 49 files**.
+- Complete Vitest suite: **4190/4190 across 176 files**.
+- Production build: PASS.
+- Firebase emulator suite: **201/201 across 3 files, 0 skipped**.
+- `git diff --check`: PASS for the worktree and `52e685b..HEAD`.
+
+Diff scope `dab1091..7add7c6`: 5 files, +295 / −7. Production: `src/app/App.tsx`, `src/features/game/GameScreen.tsx`, `src/firebase/StorytellerSession.tsx`, `src/firebase/storytellerSync.ts`. Test: `src/app/phase10gUnattachedLobby.test.tsx`. No existing test was modified or weakened.
+
+**Status: FINAL ASTRA CLEANUP-FAILURE REMEDIATION IMPLEMENTED — targeted verification pending. Phase 10G is not closed.**
