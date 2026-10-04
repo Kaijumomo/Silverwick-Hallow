@@ -1,6 +1,8 @@
 // Phase 10G, Slice 6: Finish Game UI, the read-only ended review and Home
 // (PHASE10G Sections 17-18, 24). Traceability: 10G-AC-33, AC-34, AC-37,
 // AC-38, AC-47; proof areas 10-11.
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
@@ -151,8 +153,19 @@ describe("10G-AC-47: narrow viewport -- new surfaces stay operable", () => {
     const Night = () => <NightOrderPanel game={store((s) => s.game)!} script={setupScript} onClose={() => {}} />;
     render(<><Night /><GrimoireCircle /></>);
     const monk = screen.getAllByText("Monk", { selector: ".step-role-name" })[0]!.closest(".step-card") as HTMLElement;
+    const sheet = screen.getByRole("complementary", { name: "Night 2 order" });
+    expect(sheet).not.toHaveClass("night-panel-picking");
     fireEvent.click(within(monk).getByRole("button", { name: "Pick on Grimoire" }));
+    // The phone bottom sheet steps aside while picking (CSS below) ...
+    expect(sheet).toHaveClass("night-panel-picking");
     fireEvent.click(screen.getByRole("button", { name: /^Carol, seat 3/ }));
     expect(within(monk).getByRole("combobox")).toHaveValue("p2");
+    // ... and returns, with the choice kept, once the pick ends.
+    expect(sheet).not.toHaveClass("night-panel-picking");
+  });
+
+  it("the collapse applies only at phone width, and hides (never unmounts) the sheet body", () => {
+    const css = readFileSync(resolve(__dirname, "../../styles/components.css"), "utf8");
+    expect(css).toMatch(/@media \(max-width: 760px\) \{\s*\.night-panel\.night-panel-picking \.night-panel-body \{ display: none; \}\s*\}/);
   });
 });

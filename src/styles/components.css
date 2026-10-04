@@ -3195,6 +3195,13 @@ fieldset.ability-field legend { padding: 0; margin-bottom: 4px; }
 .ability-field-hint { color: var(--text-faint); font-size: 11px; }
 .ability-choice { display: inline-flex; align-items: center; gap: 4px; margin-right: 12px; font-size: 13px; }
 
+/* Phase 10G (Section 24): while a Grimoire pick is active, the phone-width
+   Night bottom sheet collapses to its header so the seats beneath stay
+   tappable (the body stays mounted, keeping every choice). */
+@media (max-width: 760px) {
+  .night-panel.night-panel-picking .night-panel-body { display: none; }
+}
+
 /* Phase 10G: bounded-text feedback (PHASE10G Section 20). */
 .text-limit { display: block; font-size: 11px; color: var(--text-faint); }
 .text-limit[data-over] { color: #e0a0a0; }

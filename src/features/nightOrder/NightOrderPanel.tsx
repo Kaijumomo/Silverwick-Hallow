@@ -332,6 +332,10 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
   const [lastResolution, setLastResolution] = useState<LastResolution | null>(null);
   // A pending Grimoire pick never outlives the dashboard (Privacy Mode, close).
   useEffect(() => () => useTargetPicker.getState().cancel(), []);
+  // Phase 10G (Section 24): on a phone the dashboard is a bottom sheet over the
+  // Grimoire, so while a pick is active it collapses to its header (CSS) and
+  // the seats stay tappable; it returns, choices intact, once the pick ends.
+  const picking = useTargetPicker((s) => s.active);
   const isFirstNight = game.day === 1;
   const registry = useMemo(() => buildRegistry(script), [script]);
   // Phase 10G: the ONE shared derivation of tonight's work (rows, custom steps,
@@ -391,7 +395,7 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
   };
 
   return (
-    <aside className="night-panel" aria-label={`Night ${game.day} order`}>
+    <aside className={`night-panel${picking ? " night-panel-picking" : ""}`} aria-label={`Night ${game.day} order`}>
       <div className="night-panel-header">
         <h2 className="night-panel-title">Night {game.day}</h2>
         <span className="night-panel-progress">
