@@ -4,7 +4,7 @@ import { connectFirebase } from "./session";
 import type { RoomBackend } from "./backend";
 import { classifyStorytellerError, lifecycleMessage } from "./lifecycle";
 import { applyTravelerChoice, commitTravelerChoiceLocally, observeTravelerChoice, pendingTravelerChoiceParticipation } from "./membershipCommands";
-import { closeMultiplayerSession, initialConnectionStatus, leaveMultiplayerOffline, reportRuntimeError, retryStorytellerSession, scopeKey, useSessionRuntime, useStorytellerSync } from "./storytellerSync";
+import { closeMultiplayerSession, dismissUnattachedCleanupFailure, initialConnectionStatus, leaveMultiplayerOffline, reportRuntimeError, retryStorytellerSession, scopeKey, useSessionRuntime, useStorytellerSync } from "./storytellerSync";
 
 export function StorytellerSession() {
   const lobby = useStorytellerStore(s => s.lobby);
@@ -35,6 +35,28 @@ export function StorytellerSession() {
   useApplyTravelerChoices(lobby?.code);
   // The Grimoire renders its own status in-flow beneath its header.
   return view === "game" ? null : <ConnectionStatus />;
+}
+
+/**
+ * ASTRA-10G-R1-001: the Storyteller-level warning for superseded lobbies whose
+ * authoritative cleanup failed. Rendered by the App shell, so it spans Home,
+ * New Game and the game / review screen; it is not the current lobby's status
+ * (ConnectionStatus) and offers only Dismiss.
+ */
+export function UnattachedLobbyWarnings() {
+  const failures = useSessionRuntime(s => s.unattachedCleanupFailures);
+  if (!failures.length) return null;
+  return <>
+    {failures.map(failure => (
+      <div key={failure.code} className="connection-status" data-tone="error" role="alert" data-unattached-lobby={failure.code}>
+        <strong>A multiplayer lobby may still be open</strong>
+        <span className="connection-status-message">{failure.message}</span>
+        <span className="connection-status-actions">
+          <button type="button" className="btn btn-sm" onClick={() => dismissUnattachedCleanupFailure(failure.code)}>Dismiss</button>
+        </span>
+      </div>
+    ))}
+  </>;
 }
 
 const DEV = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV === true;

@@ -299,12 +299,13 @@ export function GameScreen() {
       const created = { code, uid, sessionId: session.id, status: "live" as const };
       // setLobby itself also refuses an ended game (defense in depth).
       if (!stillEligible() || !setLobby(created)) {
+        // A failed cleanup is reported by closeSupersededLobby itself into the
+        // page-global runtime (ASTRA-10G-R1-001): this screen may already be
+        // gone, so its own error state would never be seen.
         try { await closeSupersededLobby(b, created); }
         catch (closeError) {
           // eslint-disable-next-line no-console
           console.error("[goLive] superseded lobby close", closeError instanceof Error ? closeError.message : closeError);
-          setGoLiveError({ title: "A lobby was left open",
-            message: `The game changed before lobby ${formatCode(code)} went live, and that lobby could not be closed. This game is not connected to it and nobody was seated in it.` });
         }
       }
     } catch (e) {

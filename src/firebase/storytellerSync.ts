@@ -9,7 +9,7 @@ import type { GuardStamp, ParticipantId, PlayerId } from "@/stores/types";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import { buildRegistry } from "@/data/roleRegistry";
 import { writeProjections } from "./sync";
-import { revokePlayerMembership } from "./lobby";
+import { formatCode, revokePlayerMembership } from "./lobby";
 import type { RoomBackend } from "./backend";
 import type { OnlineMap } from "@/stores/projections";
 import { decodeMembershipRevocations, decodePresence, decodeRoster, decodeRosterParticipants, decodeJoinRequests, SnapshotValidationError, type MembershipRevocationRecord, type RosterParticipantRecord } from "./snapshots";
@@ -83,8 +83,23 @@ type Runtime = {
    * authoritative close could not complete, and which may therefore be left
    * locally only (leaveMultiplayerOffline). Null when Leave is not offered. */
   leaveOffer: string | null;
+  /** ASTRA-10G-R1-001: lobbies Go Live created for a game that was gone
+   * before adoption (ASTRA-10G-001) and whose authoritative cleanup then
+   * FAILED -- so they may still be open remotely, deliberately attached to
+   * nothing. Page-runtime warning state only: never Current State, never
+   * persisted or checkpointed, never reconnect evidence, and never the
+   * current lobby. Not part of any session reset: an entry stays until the
+   * Storyteller dismisses it (dismissUnattachedCleanupFailure). */
+  unattachedCleanupFailures: UnattachedCleanupFailure[];
 };
-export const useSessionRuntime = create<Runtime>(() => ({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, retry: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {}, status: "idle", failure: null, closeFailed: false, leaveOffer: null }));
+/** A superseded lobby whose authoritative cleanup failed (see above). */
+export type UnattachedCleanupFailure = { code: string; message: string };
+export const useSessionRuntime = create<Runtime>(() => ({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, retry: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {}, status: "idle", failure: null, closeFailed: false, leaveOffer: null, unattachedCleanupFailures: [] }));
+/** ASTRA-10G-R1-001: removes exactly this lobby's cleanup warning; changes no
+ * game, lobby or session state. */
+export function dismissUnattachedCleanupFailure(code: string) {
+  useSessionRuntime.setState(s => ({ unattachedCleanupFailures: s.unattachedCleanupFailures.filter(f => f.code !== code) }));
+}
 export const retryStorytellerSession = () => useSessionRuntime.setState(s => ({ retry: s.retry + 1 }));
 /** Central ownership for `useSessionRuntime.error`: each source may set or
  * clear only its own entry; the derived field is recomputed from the rest. */
@@ -172,7 +187,21 @@ async function closeScopeAuthoritatively(backend: RoomBackend, lobby: LobbyScope
  * complete.
  */
 export async function closeSupersededLobby(backend: RoomBackend, lobby: LobbyScope): Promise<void> {
-  await closeScopeAuthoritatively(backend, lobby, []);
+  try {
+    await closeScopeAuthoritatively(backend, lobby, []);
+  } catch (error) {
+    // ASTRA-10G-R1-001: the warning lives in the page-global runtime, so it
+    // outlives whichever screen started Go Live (Finish game, Home, New
+    // game). A fixed, bounded message -- never the raw error.
+    const failure: UnattachedCleanupFailure = {
+      code: lobby.code,
+      message: `Multiplayer lobby ${formatCode(lobby.code)} may still be open: it was created for a game that is no longer open, and closing it failed. Your current game is not connected to it.`,
+    };
+    useSessionRuntime.setState(s => ({
+      unattachedCleanupFailures: [...s.unattachedCleanupFailures.filter(f => f.code !== lobby.code), failure],
+    }));
+    throw error;
+  }
 }
 
 /** ASTRA-10G-001: an ended game never becomes live multiplayer -- whether it
