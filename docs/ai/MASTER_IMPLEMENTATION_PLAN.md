@@ -26,11 +26,11 @@
 - Nominations and ordinary voting remain out of scope.
 - Silverwick should automate deterministic BOTC mechanics while leaving judgment, discretion, ambiguity and optional choices to the Storyteller.
 
-### Standing Phase 10 UX invariant
+### Standing Storyteller UX invariant
 
 Phase 10 may increase Silverwick's mechanical intelligence, but routine Storyteller operation must remain fast, visually clear and low-friction. Complexity belongs under the interface; common table actions use progressive disclosure and should not ask the Storyteller for information Silverwick already knows.
 
-This requirement continues through 10C–10G.
+This requirement is inherited by Phase 10H and remains a hard constraint on the redesign.
 
 ## Completed foundation
 
