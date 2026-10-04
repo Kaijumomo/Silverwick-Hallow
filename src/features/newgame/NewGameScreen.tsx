@@ -78,7 +78,9 @@ export function NewGameScreen() {
     if (!activeScript) return;
     if (
       game &&
-      !window.confirm("Start a new game? The current game will be discarded.")
+      !window.confirm(game.phase === "ended"
+        ? "Start a new game? The finished game's review record will be replaced."
+        : "Start a new game? The current game will be discarded.")
     ) {
       return;
     }

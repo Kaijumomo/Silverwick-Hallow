@@ -847,6 +847,14 @@ export const StructuredInformationDeliveryRecordSchema = z.object({
   }
 });
 
+/** Phase 10G (PHASE10G Section 20): the COMMAND-boundary limits on
+ * Storyteller participant notes (`stNotes`) and Night-step notes. Changed text
+ * over the limit is refused, never truncated. Deliberately NOT a persisted
+ * schema rule: an already-saved longer legacy value stays loadable (and an
+ * unchanged one is a true no-op). */
+export const MAX_ST_NOTES = 4000;
+export const MAX_NIGHT_STEP_NOTES = 4000;
+
 /** Phase 10G (v25): the bound on a Manual Information Delivery's text --
  * oversized text is refused, never truncated. */
 export const MAX_MANUAL_DELIVERY_TEXT = 4000;

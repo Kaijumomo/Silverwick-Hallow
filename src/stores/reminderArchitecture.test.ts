@@ -101,6 +101,9 @@ const ALLOWED = new Set([
   // (planReminderTransaction / applyReminderPlan) -- never reads Reminders;
   // checked precisely below.
   "stores/abilityResolution.ts",
+  // Phase 10G: the read-only ended-game participant review (Storyteller-only
+  // presentation via reminderPresentation; it mounts no control at all).
+  "features/game/EndedParticipantReview.tsx",
 ]);
 
 function productionSources(dir = SRC): string[] {

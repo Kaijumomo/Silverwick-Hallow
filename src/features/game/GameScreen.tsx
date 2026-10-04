@@ -25,6 +25,7 @@ import { LifeEventsPanel } from "@/features/life/LifeEventsPanel";
 import { ActivityPanel } from "@/features/activity/ActivityPanel";
 import { DawnReview } from "@/features/nightOrder/DawnReview";
 import { RuleFactStrip } from "@/features/ruleFacts/RuleFactStrip";
+import { EndedParticipantReview } from "./EndedParticipantReview";
 import { deriveNightWork, unfinishedNightWork } from "@/features/nightOrder/nightWork";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import { buildRegistry } from "@/data/roleRegistry";
@@ -48,6 +49,7 @@ export function GameScreen() {
   const undo = useStorytellerStore((s) => s.undo);
   const advancePhase = useStorytellerStore((s) => s.advancePhase);
   const endGame = useStorytellerStore((s) => s.endGame);
+  const finishGame = useStorytellerStore((s) => s.finishGame);
   const setView = useStorytellerStore((s) => s.setView);
   const setLobby = useStorytellerStore((s) => s.setLobby);
   const selectedPlayerId = useStorytellerStore((s) => s.selectedPlayerId);
@@ -311,6 +313,9 @@ export function GameScreen() {
   const registry = useMemo(() => buildRegistry(script ?? { id: game?.scriptId ?? "", name: "", characters: [] }), [script, game?.scriptId]);
 
   if (!game) return null;
+  // Phase 10G (Section 18): a finished game is a read-only review -- no
+  // ordinary game-mutating control is mounted at all.
+  const ended = game.phase === "ended";
   /** Phase 10G: tonight's unfinished work, from the ONE shared derivation the
    * Night Order renders (never restated here). */
   const nightUnfinished = () => unfinishedNightWork(game, deriveNightWork(game, { script: script ?? null, registry, semantics: CANONICAL_ABILITY_SEMANTICS }));
@@ -447,7 +452,7 @@ export function GameScreen() {
               {nightPanelOpen ? "hide order" : "night order"}
             </button>
           )}
-          {!lobby && (
+          {!lobby && !ended && (
             <button className="btn btn-sm" disabled={goingLive} onClick={() => { closeOverflow(); void goLive(); }} title="Create a Firebase lobby and start syncing">
               Go live
             </button>
@@ -488,14 +493,14 @@ export function GameScreen() {
               Reset display link
             </button>
           )}
-          <button
+          {!ended && <button
             className="btn btn-sm"
             onClick={() => { closeOverflow(); undo(); }}
             disabled={undoStack.length === 0}
             title={`${undoStack.length} undo step${undoStack.length === 1 ? "" : "s"}`}
           >
             ↶ Undo
-          </button>
+          </button>}
           {game.phase === "day" && !privacyMode && (
             <button className="btn btn-sm" onClick={() => { closeOverflow(); setDayResolutionOpen(true); }}
               title="Record the Day's execution or a Traveler exile as it happens">
@@ -514,7 +519,7 @@ export function GameScreen() {
               Life events
             </button>
           )}
-          {game.phase !== "setup" && <button
+          {game.phase !== "setup" && !ended && <button
             className="btn btn-gold"
             onClick={() => {
               closeOverflow();
@@ -539,28 +544,59 @@ export function GameScreen() {
           >
             {advanceLabel}
           </button>}
-          <button
+          {(game.phase === "night" || game.phase === "day") && <button
             className="btn btn-sm btn-danger"
             disabled={ending}
             onClick={async () => {
               closeOverflow();
-              if (ending || !window.confirm("End this game and return to home?")) return;
+              if (ending || !window.confirm("Finish this game? It becomes a read-only record of the final state. This cannot be undone.")) return;
               setEnding(true);
-              // The local game ends only after the multiplayer lobby has
-              // closed authoritatively. A failed close leaves both the lobby
-              // and the game untouched; closeMultiplayerSession records the
-              // failure (and any recovery option) in the connection status.
+              // Phase 10G (Section 17.2): the local game becomes the retained
+              // ended snapshot only after the multiplayer session has closed
+              // authoritatively (closeMultiplayerSession clears the lobby only
+              // on success; finishGame refuses while one is attached). A failed
+              // close leaves the lobby and the live game untouched;
+              // closeMultiplayerSession records the failure in the connection
+              // status.
+              try {
+                await closeMultiplayerSession();
+                const result = finishGame();
+                setPhaseError(result.ok ? null : result.message);
+              }
+              catch { /* shown by ConnectionStatus */ }
+              finally { setEnding(false); }
+            }}
+          >
+            Finish game
+          </button>}
+          {game.phase === "setup" && <button
+            className="btn btn-sm btn-danger"
+            disabled={ending}
+            onClick={async () => {
+              closeOverflow();
+              if (ending || !window.confirm("Discard this setup and return to home?")) return;
+              setEnding(true);
+              // Setup discard is not Finish Game: nothing was played, so the
+              // setup is dropped (after any lobby closes authoritatively).
               try { await closeMultiplayerSession(); endGame(); }
               catch { /* shown by ConnectionStatus */ }
               finally { setEnding(false); }
             }}
           >
-            End game
-          </button>
+            Discard setup
+          </button>}
+          {ended && (
+            <button className="btn btn-sm" onClick={() => { closeOverflow(); setView("newgame"); }}>New game</button>
+          )}
         </div>
       </header>
 
       {lobby && <ConnectionStatus />}
+      {ended && (
+        <div className="ended-review-banner" role="status">
+          Finished game — read-only review of the final state.
+        </div>
+      )}
       {goLiveError && (
         <div className="connection-status" data-tone="error" role="alert">
           <strong>{goLiveError.title}</strong>
@@ -708,7 +744,10 @@ export function GameScreen() {
         <ActivityPanel game={game} registry={registry} readOnly={game.phase === "ended"} onClose={() => setActivityOpen(false)} />
       )}
 
-      {selected && (
+      {selected && ended && (
+        <EndedParticipantReview player={selected} game={game} registry={registry} onClose={() => useStorytellerStore.getState().selectPlayer(null)} />
+      )}
+      {selected && !ended && (
         <PlayerDrawer
           player={selected}
           onRemove={removeSelectedPlayer}

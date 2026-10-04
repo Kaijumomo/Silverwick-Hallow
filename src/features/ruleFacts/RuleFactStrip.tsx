@@ -49,19 +49,19 @@ export function RuleFactStrip({ game, readOnly = false }: { game: StorytellerLob
       <span className="fabled-strip-label">Game rule facts</span>
       {arbitrary && (
         <span className="rule-fact-item" data-rule-fact={PIT_HAG_ARBITRARY_DEATHS}>
-          Arbitrary deaths are active tonight{arbitrary.expiresAt ? ` (until ${momentLabel(arbitrary.expiresAt)})` : ""}
+          {readOnly ? "Arbitrary deaths were active when the game ended" : `Arbitrary deaths are active tonight${arbitrary.expiresAt ? ` (until ${momentLabel(arbitrary.expiresAt)})` : ""}`}
           {remove(PIT_HAG_ARBITRARY_DEATHS, "arbitrary deaths")}
         </span>
       )}
       {toymaker === "required" && (
         <span className="rule-fact-item" data-rule-fact="toymakerRequired">
-          Toymaker skip is still required
+          {readOnly ? "Toymaker skip was never recorded" : "Toymaker skip is still required"}
           {!readOnly && <button className="btn btn-sm" onClick={() => run([{ kind: "apply", type: TOYMAKER_DEMON_SKIP_OCCURRED }])}>Record Demon skip</button>}
         </span>
       )}
       {toymaker === "satisfied" && (
         <span className="rule-fact-item" data-rule-fact="toymakerSatisfied">
-          Toymaker skip has been satisfied
+          {readOnly ? "Toymaker skip was recorded" : "Toymaker skip has been satisfied"}
           {remove(TOYMAKER_DEMON_SKIP_OCCURRED, "the recorded Toymaker skip")}
         </span>
       )}

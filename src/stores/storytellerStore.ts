@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { BUILTIN_SCRIPTS, BUILTIN_SCRIPT_IDS } from "@/data/scripts";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
-import { StorytellerGamePersistedSchema, StorytellerStateSchema } from "./schemas";
+import { MAX_NIGHT_STEP_NOTES, MAX_ST_NOTES, StorytellerGamePersistedSchema, StorytellerStateSchema } from "./schemas";
 import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { manualEffectId } from "./effects";
@@ -392,6 +392,22 @@ export type StorytellerStore = {
   setPlannedPlayerCount: (count: number) => void;
   setRolePool: (roles: RoleId[]) => void;
   endGame: () => void;
+  /**
+   * Phase 10G (PHASE10G Section 17): the TERMINAL Finish Game of a game in
+   * live play (Night/Day). The game is retained as a read-only final snapshot
+   * (`phase: "ended"`, its final Life / Effect / Reminder / Role / Alignment /
+   * Rule Fact state frozen); Undo is cleared, so nothing can restore Night/Day;
+   * any lobby association (and its reconnect metadata) is detached, so a
+   * reload never reconnects the snapshot to its terminated session. No winner
+   * or result is inferred or stored.
+   *
+   * Refused (nothing changes) for Setup (discard/replacement is a separate
+   * concept), for an already-ended game, and while a multiplayer lobby is
+   * still attached: the caller closes the session authoritatively first
+   * (closeMultiplayerSession clears the lobby only on success), so a failed
+   * close always leaves the game live and unchanged.
+   */
+  finishGame: () => SetupCommandResult;
   setView: (view: "home" | "game" | "newgame") => void;
   selectPlayer: (id: PlayerId | null) => void;
   addCustomScript: (script: Script) => AddScriptResult;
@@ -653,7 +669,9 @@ export type StorytellerStore = {
    * correction is remove-then-recordInformationDelivery again; this never
    * touches unrelated Current State. */
   removeInformationDelivery: (deliveryId: InformationDeliveryId) => void;
-  setNotes: (id: PlayerId, notes: string) => void;
+  /** Phase 10G (Section 20.1): changed notes over MAX_ST_NOTES are refused
+   * (never truncated); an unchanged legacy value of any length is a no-op. */
+  setNotes: (id: PlayerId, notes: string) => SetupCommandResult;
 
   /** Setup -> Night/Day delegates to beginNightOne(); Night <-> Day
    * delegates to advancePhase() (live time is monotonic: Night N -> Day N,
@@ -663,7 +681,9 @@ export type StorytellerStore = {
   advancePhase: () => SetupCommandResult;
 
   setNightStepStatus: (day: number, stepKey: string, status: NightStepStatus) => void;
-  setNightStepNotes: (day: number, stepKey: string, notes: string) => void;
+  /** Phase 10G (Section 20.2): changed notes over MAX_NIGHT_STEP_NOTES are
+   * refused (never truncated); unchanged notes are a no-op. */
+  setNightStepNotes: (day: number, stepKey: string, notes: string) => SetupCommandResult;
   clearNightProgress: (day: number) => void;
 
   undo: () => void;
@@ -1515,6 +1535,27 @@ export const useStorytellerStore = create<StorytellerStore>()(
           lobby: null,
           pendingKnocks: [],
         });
+      },
+
+      finishGame: () => {
+        const { game, lobby } = get();
+        if (!game) return { ok: false, message: "No game is open." };
+        if (game.phase === "ended") return { ok: false, message: "This game is already finished." };
+        if (game.phase !== "night" && game.phase !== "day") {
+          return { ok: false, message: "Only a game in play (Night or Day) can be finished. Discard a Setup instead." };
+        }
+        if (lobby) return { ok: false, message: "End the multiplayer lobby first -- the game stays live until its session has closed." };
+        // Deliberately NOT setPhase("ended"): that path keeps an Undo entry
+        // back into live play. Here the replacement is terminal.
+        set({
+          game: { ...game, phase: "ended", lifeEventWindow: pruneLifeEventWindow(game.lifeEventWindow, "ended", game.day) },
+          undoStack: [],
+          lobby: null,
+          sync: null,
+          pendingKnocks: [],
+          selectedPlayerId: null,
+        });
+        return { ok: true };
       },
 
       setView: (view) => set({ view }),
@@ -2590,14 +2631,20 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       setNotes: (id, notes) => {
         const { game, undoStack } = get();
-        if (!game) return;
-        // Phase 9R.4 (B8): unknown player or already-current notes.
+        if (!game) return { ok: false, message: "No game is open." };
+        // Phase 9R.4 (B8): unknown player or already-current notes (a legacy
+        // value longer than the limit, unchanged, stays a true no-op).
         const existing = ownPlayer(game, id);
-        if (!existing || existing.stNotes === notes) return;
+        if (!existing) return { ok: false, message: "This player is not seated." };
+        if (existing.stNotes === notes) return { ok: true };
+        if (typeof notes !== "string" || notes.length > MAX_ST_NOTES) {
+          return { ok: false, message: `Notes can be at most ${MAX_ST_NOTES} characters -- shorten them; nothing is cut off automatically.` };
+        }
         set({
           undoStack: pushUndo(game, undoStack),
           game: patchPlayer(game, id, { stNotes: notes }),
         });
+        return { ok: true };
       },
 
       setPhase: (phase) => {
@@ -2700,7 +2747,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       setNightStepNotes: (day, stepKey, notes) => {
         const { game } = get();
-        if (!game) return;
+        if (!game) return { ok: false, message: "No game is open." };
         const key = `${day}:${stepKey}`;
         const np = game.nightProgress ?? {};
         const existing: NightStepRecord = np[key] ?? { status: "pending", notes: "" };
@@ -2708,7 +2755,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // here either way, but a new game still advanced localSeq). An
         // absent key is a real write -- "Add custom night step" creates its
         // step exactly this way, with empty notes.
-        if (np[key]?.notes === notes) return;
+        if (np[key]?.notes === notes) return { ok: true };
+        if (typeof notes !== "string" || notes.length > MAX_NIGHT_STEP_NOTES) {
+          return { ok: false, message: `Night-step notes can be at most ${MAX_NIGHT_STEP_NOTES} characters -- shorten them; nothing is cut off automatically.` };
+        }
         // No undo push — avoid polluting undo stack with every keystroke.
         set({
           game: {
@@ -2716,6 +2766,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
             nightProgress: { ...np, [key]: { ...existing, notes } },
           },
         });
+        return { ok: true };
       },
 
       clearNightProgress: (day) => {

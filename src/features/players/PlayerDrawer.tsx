@@ -1,5 +1,7 @@
 import { AbilityEntry } from "@/features/abilities/AbilityEntry";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { MAX_ST_NOTES } from "@/stores/schemas";
+import { TextLimit } from "@/components/TextLimit";
 import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
 import { TRAVELERS } from "@/data/travelers";
 import { isInitialRevealComplete, needsShownIdentity, shownRoleFilter } from "@/stores/identity";
@@ -647,11 +649,14 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
             <h3 className="drawer-section-title">ST notes</h3>
             <textarea
               className="textarea"
+              aria-label="ST notes"
               value={notesDraft}
+              maxLength={MAX_ST_NOTES}
               onChange={(e) => setNotesDraft(e.target.value)}
               onBlur={commitNotes}
               placeholder="Private notes for this seat…"
             />
+            <TextLimit length={notesDraft.length} max={MAX_ST_NOTES} />
           </section>
 
           <section className="drawer-section">

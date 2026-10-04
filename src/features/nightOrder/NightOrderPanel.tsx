@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { NightStep } from "./nightOrder";
+import { MAX_NIGHT_STEP_NOTES } from "@/stores/schemas";
+import { TextLimit } from "@/components/TextLimit";
 import { deriveNightWork, stepResolved } from "./nightWork";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { PlayerInformation } from "@/features/players/PlayerInformation";
@@ -129,6 +131,8 @@ function StepCard({ step, record, day, ability, chips = [], guided, lastResoluti
   const notes = record?.notes ?? "";
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const [reminderOpen, setReminderOpen] = useState(false);
+  const [notesLength, setNotesLength] = useState(notes.length);
+  useEffect(() => setNotesLength(notes.length), [notes]);
 
   const handleCycle = () => {
     useStorytellerStore.getState().setNightStepStatus(day, step.stepKey, NEXT_STATUS[status]);
@@ -272,14 +276,18 @@ function StepCard({ step, record, day, ability, chips = [], guided, lastResoluti
         defaultValue={notes}
         key={`${day}:${step.stepKey}:${notes}`}
         placeholder="ST notes…"
+        aria-label="Night step notes"
         rows={1}
+        maxLength={MAX_NIGHT_STEP_NOTES}
         onBlur={handleNoteBlur}
         onInput={(e) => {
           const el = e.currentTarget;
           el.style.height = "auto";
           el.style.height = `${el.scrollHeight}px`;
+          setNotesLength(el.value.length);
         }}
       />
+      <TextLimit length={notesLength} max={MAX_NIGHT_STEP_NOTES} />
     </div>
   );
 }

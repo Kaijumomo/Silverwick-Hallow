@@ -126,6 +126,8 @@ type TokenProps = {
   y: number;
   selected: boolean;
   mode: GrimoireMode;
+  /** Phase 10G: false for an ended game -- no ring drag-to-reorder. */
+  reorderable?: boolean;
   draggedId: string | null;
   onRingDragStart: (id: string) => void;
   onRingDragEnd: () => void;
@@ -141,7 +143,7 @@ type TokenProps = {
 
 function Token({
   player, role, shownRole, online, size, x, y, selected,
-  mode, draggedId, onRingDragStart, onRingDragEnd, onRingDropOn,
+  mode, reorderable = true, draggedId, onRingDragStart, onRingDragEnd, onRingDropOn,
   onFreeRoamPointerDown, onClick, isGhost = false, needsShownRole = false,
 }: TokenProps) {
   const privacyMode = usePrivacyStore((s) => s.enabled);
@@ -197,7 +199,7 @@ function Token({
     mode === "freeRoam" ? "free-roam" : "",
   ].filter(Boolean).join(" ");
 
-  const ringDragHandlers = mode === "ring" ? {
+  const ringDragHandlers = mode === "ring" && reorderable ? {
     draggable: true as const,
     onDragStart: (e: React.DragEvent) => {
       e.dataTransfer.effectAllowed = "move";
@@ -268,6 +270,13 @@ function Token({
         {indicators.filter((summary) => summary.indicator.icon).map((summary) => (
           <EffectChip key={summary.indicator.key} summary={summary} />
         ))}
+        {/* Phase 10G: overlaid on the disc frame so a marker never makes the
+            token taller (ring geometry is unchanged). */}
+        {markers.length > 0 && (
+          <div className="token-markers" aria-hidden="true">
+            {markers.map((marker) => <span key={marker.key} className={`token-marker token-marker-${marker.key}`} data-token-marker={marker.key}>{marker.text}</span>)}
+          </div>
+        )}
       </div>
       {privacyMode && !publicRole ? (
         <div className="token-role token-role-private">role hidden</div>
@@ -285,11 +294,7 @@ function Token({
       )}
       {!player.alive && <LifeStateText state={life.state} className="token-ghost" />}
       {needsCheck && <div className="token-needs-check">Needs check</div>}
-      {markers.length > 0 && (
-        <div className="token-markers" aria-hidden="true">
-          {markers.map((marker) => <span key={marker.key} className={`token-marker token-marker-${marker.key}`} data-token-marker={marker.key}>{marker.text}</span>)}
-        </div>
-      )}
+
       {indicators.some((summary) => !summary.indicator.icon) && (
         <div className="token-effects">
           {indicators.filter((summary) => !summary.indicator.icon).map((summary) => (
@@ -426,6 +431,10 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
     ? new Set(initialRevealReadiness(selectSetupContext(game, script)).pendingIds)
     : new Set<PlayerId>();
 
+  // Phase 10G (Section 18): an ended game's Grimoire is a read-only review --
+  // no seat reorder, seat assignment or seat creation is mounted. (Layout mode
+  // and free-roam positions are local-only and never touch the game.)
+  const readOnly = game.phase === "ended";
   const playerCount = game.seatOrder.length;
   const ringContainerSize = grimoireDiameter(canvasW, canvasH);
   const preferredTokenSize = Math.min(tokenSizeForCount(playerCount),
@@ -568,10 +577,12 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
           <button className="grimoire-mode-btn" onClick={() => useTargetPicker.getState().cancel()}>Cancel</button>
         </div>
       )}
-      <button className="grimoire-mode-btn" onClick={handleAddSeat} aria-label={arrivalsAreTravelers(game) ? "Add empty Traveler seat" : "Add empty planned seat"}>
-        + New {arrivalsAreTravelers(game) ? "Traveler seat" : "seat"}
-      </button>
-      <button className="grimoire-mode-btn" onClick={handleAddTraveler}>Add Traveler</button>
+      {!readOnly && <>
+        <button className="grimoire-mode-btn" onClick={handleAddSeat} aria-label={arrivalsAreTravelers(game) ? "Add empty Traveler seat" : "Add empty planned seat"}>
+          + New {arrivalsAreTravelers(game) ? "Traveler seat" : "seat"}
+        </button>
+        <button className="grimoire-mode-btn" onClick={handleAddTraveler}>Add Traveler</button>
+      </>}
       {grimoireMode === "ring" ? (
         <button className="grimoire-mode-btn" onClick={switchToFreeRoam} title="Switch to free-roam layout">
           ⊞ Free Roam
@@ -618,8 +629,8 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
 
         {playerCount === 0 ? (
           <div className="grimoire-empty">
-            <p>Add players to begin.</p>
-            <button className="btn btn-gold" onClick={handleAdd}>+ Add {arrivalsAreTravelers(game) ? "Traveler" : "player"}</button>
+            <p>{readOnly ? "No players." : "Add players to begin."}</p>
+            {!readOnly && <button className="btn btn-gold" onClick={handleAdd}>+ Add {arrivalsAreTravelers(game) ? "Traveler" : "player"}</button>}
           </div>
         ) : (
           game.seatOrder.map((id, i) => {
@@ -636,7 +647,7 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
                   size={tokenSize}
                   x={pos.x}
                   y={pos.y}
-                  onClick={() => setAssigningSeatId(id)}
+                  onClick={() => { if (!readOnly) setAssigningSeatId(id); }}
                 />
               );
             }
@@ -654,6 +665,7 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
                 y={isDragging && ghostPos ? ghostPos.y : pos.y}
                 selected={selectedPlayerId === id}
                 mode={grimoireMode}
+                reorderable={!readOnly}
                 draggedId={ringDraggedId}
                 onRingDragStart={(srcId) => setRingDraggedId(srcId)}
                 onRingDragEnd={() => setRingDraggedId(null)}
@@ -678,7 +690,7 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
           })
         )}
 
-        {playerCount > 0 && (
+        {playerCount > 0 && !readOnly && (
           <button
             className="add-player-btn"
             onClick={handleAdd}
@@ -694,7 +706,7 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
       {/* Mode controls live outside the grimoire canvas so they never overlap tokens */}
       {modeControls}
 
-      {assigningSeatId && (() => {
+      {assigningSeatId && !readOnly && (() => {
         const seat = game.players[assigningSeatId];
         if (!seat) return null;
         return (

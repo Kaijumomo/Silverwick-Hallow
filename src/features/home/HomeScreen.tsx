@@ -45,9 +45,16 @@ export function HomeScreen() {
       </p>
 
       <div className="home-actions">
-        {game && (
+        {game && game.phase !== "ended" && (
           <button className="btn btn-gold" onClick={() => setView("game")}>
             Continue current game ({Object.keys(game.players).length} players)
+          </button>
+        )}
+        {/* Phase 10G (Section 18): a finished game stays reviewable until
+            New Game explicitly replaces it. */}
+        {game && game.phase === "ended" && (
+          <button className="btn" onClick={() => setView("game")}>
+            Review finished game
           </button>
         )}
 
