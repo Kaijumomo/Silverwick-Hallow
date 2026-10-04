@@ -517,6 +517,10 @@ const HistoryRecordObjectSchema = z.object({
   effectOperation: EffectHistoryOperationSchema.optional(),
   resolutionId: z.string().min(1).max(200).optional(),
   reminderOperation: ReminderHistoryOperationSchema.optional(),
+  // Phase 10G (v25): game-scoped Rule Fact metadata never rides on a
+  // participant History Record -- rejected, never stripped.
+  ruleFactType: z.never().optional(),
+  ruleFactOperation: z.never().optional(),
 }).superRefine((record, ctx) => {
   // Phase 10A: meaningful content. Every non-life record keeps its required
   // Current State `change` and never carries Life Event fields; a life
@@ -666,7 +670,9 @@ const HistoryRecordObjectSchema = z.object({
   }
 });
 
-export const HistoryRecordSchema = z.preprocess((raw, ctx) => {
+/** Every participant-scoped History Record (the 9R/10A-10E categories),
+ * exactly as frozen: `participant` is REQUIRED. */
+export const ParticipantHistoryRecordSchema = z.preprocess((raw, ctx) => {
   const side = rawAlignmentSnapshotIssue(raw);
   if (side !== null) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["change", side],
@@ -674,6 +680,98 @@ export const HistoryRecordSchema = z.preprocess((raw, ctx) => {
   }
   return raw;
 }, HistoryRecordObjectSchema);
+
+/**
+ * Phase 10G (v25): a game-scoped Rule Fact type identifier -- short and
+ * Firebase-key-safe. Structural only: only a REGISTERED type
+ * (gameRuleFacts.ts) ever carries mechanics.
+ */
+export const GAME_RULE_FACT_TYPE = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+
+/**
+ * Phase 10G (v25): one authoritative Game Rule Fact (see GameRuleFactRecord in
+ * types.ts). STRICT: an unknown key -- including any participant attribution or
+ * a free-text note field -- is rejected, never stripped. An `expiresAt` is
+ * strictly after `recordedAt`. Temporal coherence with the game's own moment
+ * is judged at the game boundary (checkGameRuleFactTemporalCoherence).
+ */
+export const GameRuleFactRecordSchema = z.object({
+  type: z.string().regex(GAME_RULE_FACT_TYPE),
+  recordedAt: LiveGameMomentSchema,
+  expiresAt: LiveGameMomentSchema.optional(),
+  provenance: ProvenanceSchema.optional(),
+  resolutionId: z.string().min(1).max(200).optional(),
+}).strict().superRefine((fact, ctx) => {
+  if (fact.expiresAt && ordinalOf(fact.expiresAt) <= ordinalOf(fact.recordedAt)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a Rule Fact expires after the moment it was recorded", path: ["expiresAt"] });
+  }
+});
+
+export const GameRuleFactHistoryOperationSchema = z.enum(["apply", "remove", "expire"]);
+const RULE_FACT_OPERATION_CHANGE: Record<z.infer<typeof GameRuleFactHistoryOperationSchema>, "added" | "removed"> = {
+  apply: "added",
+  remove: "removed",
+  expire: "removed",
+};
+
+/**
+ * Phase 10G (v25): the ONE game-scoped History variant (category
+ * `gameRuleFact`). It has NO participant subject: a `participant` key -- a
+ * manufactured attribution -- is rejected outright. It names the Rule Fact
+ * type and operation and snapshots the complete fact added or removed; each
+ * operation has exactly one change shape; expiry is never a correction.
+ */
+const GameRuleFactHistoryObjectSchema = z.object({
+  id: z.string().min(1),
+  category: z.literal("gameRuleFact"),
+  moment: LiveGameMomentSchema,
+  ruleFactType: z.string().regex(GAME_RULE_FACT_TYPE),
+  ruleFactOperation: GameRuleFactHistoryOperationSchema,
+  change: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("added"), item: GameRuleFactRecordSchema }).strict(),
+    z.object({ kind: z.literal("removed"), item: GameRuleFactRecordSchema }).strict(),
+  ]),
+  provenance: ProvenanceSchema.optional(),
+  note: z.string().optional(),
+  resolutionId: z.string().min(1).max(200).optional(),
+  correction: z.literal(true).optional(),
+}).strict().superRefine((record, ctx) => {
+  if (record.change.kind !== RULE_FACT_OPERATION_CHANGE[record.ruleFactOperation]) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: `a Rule Fact ${record.ruleFactOperation} is recorded as ${RULE_FACT_OPERATION_CHANGE[record.ruleFactOperation]}`, path: ["change", "kind"] });
+  }
+  if (record.change.item.type !== record.ruleFactType) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a Rule Fact History snapshot names the record's own Rule Fact type", path: ["change", "item", "type"] });
+  }
+  if (record.ruleFactOperation === "expire" && record.correction !== undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Rule Fact expiry is never a correction", path: ["correction"] });
+  }
+});
+export const GameRuleFactHistoryRecordSchema = z.preprocess((raw, ctx) => {
+  if (isPlainRecord(raw) && hasOwn(raw, "participant")) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["participant"],
+      message: "a game-scoped Rule Fact History Record has no participant -- none is ever manufactured" });
+  }
+  return raw;
+}, GameRuleFactHistoryObjectSchema);
+
+/** Re-reports a nested parse's issues at the current location. */
+const forwardIssues = (ctx: z.RefinementCtx, issues: z.ZodIssue[]) => {
+  for (const issue of issues) ctx.addIssue(issue as z.IssueData);
+};
+
+/**
+ * Phase 10G (v25): every History Record a game can hold. Routed by the RAW
+ * category: exactly `gameRuleFact` is the game-scoped variant; everything else
+ * is judged by the unchanged participant contract (which requires
+ * `participant` and rejects rule-fact metadata).
+ */
+export const HistoryRecordSchema = z.unknown().transform((raw, ctx) => {
+  const schema: z.ZodTypeAny = isPlainRecord(raw) && raw.category === "gameRuleFact"
+    ? GameRuleFactHistoryRecordSchema : ParticipantHistoryRecordSchema;
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) { forwardIssues(ctx, parsed.error.issues); return z.NEVER; }
+  return parsed.data as z.infer<typeof ParticipantHistoryRecordSchema> | z.infer<typeof GameRuleFactHistoryRecordSchema>;
+});
 
 // The non-Player Information Value variants are shared verbatim by the
 // command-input (InformationValueSchema) and stored
@@ -731,7 +829,7 @@ export const MAX_RESOLUTION_ID_LENGTH = 200;
  * shared with the other records one ability resolution produced (not an
  * idempotency key; never invented by migration).
  */
-export const InformationDeliveryRecordSchema = z.object({
+export const StructuredInformationDeliveryRecordSchema = z.object({
   id: z.string().min(1),
   recipient: ParticipantRefSchema,
   recipientPlayerId: RetiredPlayerIdField,
@@ -747,6 +845,53 @@ export const InformationDeliveryRecordSchema = z.object({
   if (delivery.performedRole !== undefined && delivery.performedRole === delivery.actualRole) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "performedRole is recorded only when it differs from the Actual Role", path: ["performedRole"] });
   }
+});
+
+/** Phase 10G (v25): the bound on a Manual Information Delivery's text --
+ * oversized text is refused, never truncated. */
+export const MAX_MANUAL_DELIVERY_TEXT = 4000;
+
+/**
+ * Phase 10G (v25): a Manual Information Delivery (see
+ * ManualInformationDeliveryRecord in types.ts). STRICT, with the explicit
+ * `kind: "manual"` discriminator: it can never carry an `informationActionId`
+ * or structured `values` (it never impersonates a registered Information
+ * Action), its recipient is a durable current-kind ParticipantRef, its moment
+ * a Live Game Moment, and its text non-blank and bounded from the first
+ * schema version.
+ */
+export const ManualInformationDeliveryRecordSchema = z.object({
+  kind: z.literal("manual"),
+  id: z.string().min(1),
+  recipient: CurrentParticipantRefSchema,
+  actualRole: z.string().min(1),
+  performedRole: z.string().min(1).optional(),
+  moment: LiveGameMomentSchema,
+  text: z.string().min(1).max(MAX_MANUAL_DELIVERY_TEXT),
+  provenance: ProvenanceSchema.optional(),
+  note: z.string().optional(),
+  resolutionId: z.string().min(1).max(MAX_RESOLUTION_ID_LENGTH).optional(),
+}).strict().superRefine((delivery, ctx) => {
+  if (!delivery.text.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a Manual delivery records what was communicated", path: ["text"] });
+  }
+  if (delivery.performedRole !== undefined && delivery.performedRole === delivery.actualRole) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "performedRole is recorded only when it differs from the Actual Role", path: ["performedRole"] });
+  }
+});
+
+/**
+ * Phase 10G (v25): every Information Delivery a game can hold, routed by the
+ * RAW record: an own `kind` key names the Manual variant; a record without
+ * one is a structured delivery, validated exactly as in v24 (no discriminator
+ * is required or invented for it).
+ */
+export const InformationDeliveryRecordSchema = z.unknown().transform((raw, ctx) => {
+  const schema: z.ZodTypeAny = isPlainRecord(raw) && hasOwn(raw, "kind")
+    ? ManualInformationDeliveryRecordSchema : StructuredInformationDeliveryRecordSchema;
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) { forwardIssues(ctx, parsed.error.issues); return z.NEVER; }
+  return parsed.data as z.infer<typeof StructuredInformationDeliveryRecordSchema> | z.infer<typeof ManualInformationDeliveryRecordSchema>;
 });
 
 export const PlayerSelfRecordSchema = z.object({
@@ -841,19 +986,19 @@ export const NightStepRecordSchema = z.object({
 
 /** Phase 10B: the current game snapshot schema version (see
  * StorytellerLobbyRecord.gameSchemaVersion). Phase 10C: v21. Phase 10D: v22.
- * Phase 10E: v23. Phase 10F: v24. */
-export const GAME_SCHEMA_VERSION = 24 as const;
-/** Phase 10F: the explicit markers migration still accepts, routed PER ENTRY
- * (see migrateGameEntry): 20 receives v20 -> ... -> v24, 21 receives v21 ->
- * ... -> v24, 22 receives v22 -> v23 -> v24, 23 receives v23 -> v24, 24 is
- * current and receives nothing. Any other marker is never reinterpreted as
- * legacy -- the current schema rejects it. */
-export const MIGRATABLE_GAME_SCHEMA_VERSIONS = [20, 21, 22, 23] as const;
-/** The immediately previous explicit marker (v23 -> v24). */
-export const PREVIOUS_GAME_SCHEMA_VERSION = 23 as const;
+ * Phase 10E: v23. Phase 10F: v24. Phase 10G: v25. */
+export const GAME_SCHEMA_VERSION = 25 as const;
+/** Phase 10G: the explicit markers migration still accepts, routed PER ENTRY
+ * (see migrateGameEntry): 20 receives v20 -> ... -> v25, 21 receives v21 ->
+ * ... -> v25, 22 receives v22 -> ... -> v25, 23 receives v23 -> v24 -> v25,
+ * 24 receives v24 -> v25, 25 is current and receives nothing. Any other marker
+ * is never reinterpreted as legacy -- the current schema rejects it. */
+export const MIGRATABLE_GAME_SCHEMA_VERSIONS = [20, 21, 22, 23, 24] as const;
+/** The immediately previous explicit marker (v24 -> v25). */
+export const PREVIOUS_GAME_SCHEMA_VERSION = 24 as const;
 
 export const StorytellerLobbyRecordSchema = z.object({
-  // Phase 10B (v20) / 10C (v21) / 10D (v22) / 10E (v23) / 10F (v24): required explicit version evidence, NO
+  // Phase 10B (v20) / 10C (v21) / 10D (v22) / 10E (v23) / 10F (v24) / 10G (v25): required explicit version evidence, NO
   // default -- a current-version game missing it (or carrying any other
   // value, including a stale 20) is rejected; older data receives it only
   // from migration.
@@ -883,6 +1028,18 @@ export const StorytellerLobbyRecordSchema = z.object({
   // incomplete current-version data and fails here; genuine v18 data gets it
   // from migration (gameMigration.ts), never from this schema.
   lifeEventWindow: LifeEventWindowSchema,
+  // Phase 10G (v25): the game-scoped Rule Facts. Like `history` /
+  // `informationDeliveries`, only an ABSENT list defaults to [] (the Firebase
+  // RTDB `storyteller` projection drops an empty array); a present malformed
+  // one is rejected. v24 data receives it from migration. Singleton: at most
+  // one record per type.
+  gameRuleFacts: z.array(GameRuleFactRecordSchema).default([]).superRefine((facts, ctx) => {
+    const seen = new Set<string>();
+    facts.forEach((fact, index) => {
+      if (seen.has(fact.type)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "duplicate Rule Fact type (Rule Facts are singletons)", path: [index, "type"] });
+      seen.add(fact.type);
+    });
+  }),
 });
 
 export const PublicLobbyRecordSchema = z.object({
@@ -1054,6 +1211,39 @@ function checkCurrentParticipantIdentityUniqueness(
   }
 }
 
+/**
+ * Phase 10G (v25): Rule Fact temporal coherence against the game's own current
+ * moment -- the Effect rule (checkEffectTemporalCoherence), enforced at the
+ * persisted authoritative game boundary every Current State, Undo snapshot and
+ * recovered checkpoint passes. Never repaired.
+ *
+ *  - Setup: no Rule Fact at all (a fact is recorded only in Live Play).
+ *  - Night/Day: `recordedAt` is never after the current moment and an
+ *    `expiresAt` is strictly after it (phase rollover expires a fact on entry).
+ *  - Ended: the final snapshot is frozen; not judged.
+ */
+function checkGameRuleFactTemporalCoherence(
+  game: { phase: string; day: number; gameRuleFacts: { recordedAt: { phase: string; day: number }; expiresAt?: { phase: string; day: number } }[] },
+  ctx: z.RefinementCtx,
+): void {
+  if (game.phase === "ended") return;
+  const live = game.phase === "night" || game.phase === "day";
+  const current = ordinalOf(game);
+  game.gameRuleFacts.forEach((fact, index) => {
+    const path = ["gameRuleFacts", index];
+    if (!live) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a Setup game holds no Rule Facts", path });
+      return;
+    }
+    if (ordinalOf(fact.recordedAt) > current) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a Rule Fact cannot have been recorded after the current Game Moment", path: [...path, "recordedAt"] });
+    }
+    if (fact.expiresAt && ordinalOf(fact.expiresAt) <= current) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a Rule Fact's expiry must be after the current Game Moment", path: [...path, "expiresAt"] });
+    }
+  });
+}
+
 const hasOwn = (record: object, key: string): boolean => Object.prototype.hasOwnProperty.call(record, key);
 const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -1138,6 +1328,7 @@ export const StorytellerGamePersistedSchema = z.preprocess((raw, ctx) => {
   checkCurrentParticipantIdentityUniqueness(game, ctx);
   checkEffectTemporalCoherence(game, ctx);
   checkReminderTemporalCoherence(game, ctx);
+  checkGameRuleFactTemporalCoherence(game, ctx);
 }));
 
 export const GuardStampSchema = z.object({

@@ -233,11 +233,11 @@ describe("Phase 9R.2 core regression: Alice leaves, Bob fills her seat -- histor
 
     // Every historical record from step 3 still identifies A / "Alice" -- never Bob.
     const history = game().history.slice(0, historyBefore);
-    expect(history.filter((h) => h.participant.playerId === P).map((h) => h.participant)).toEqual([alice, alice]);
+    expect(history.filter((h) => h.participant!.playerId === P).map((h) => h.participant)).toEqual([alice, alice]);
     const deliveries = game().informationDeliveries.slice(0, deliveriesBefore);
     expect(deliveries[0]!.recipient).toEqual(alice);
     expect(deliveries[0]!.provenance?.sourceParticipant).toEqual(alice);
-    const fortune = deliveries[1]!.values.find((v) => v.kind === "player")!;
+    const fortune = deliveries[1]!.values!.find((v) => v.kind === "player")!;
     expect(fortune.kind === "player" && fortune.participants[0]).toEqual(alice);
     const daveDeath = history.find((h) => h.category === "life" && h.participant.playerId === dave)!;
     expect(daveDeath.provenance?.sourceParticipant).toEqual(alice);
@@ -438,7 +438,7 @@ describe("Phase 9R.2: stored snapshots are owned (Section 23)", () => {
     provenance.sourcePlayer = carol;
     playerIds[0] = carol;
     expect(game().history.at(-1)!.provenance!.sourceParticipant).toEqual(participantRefOf(game(), alice));
-    const value = game().informationDeliveries[0]!.values[0]!;
+    const value = game().informationDeliveries[0]!.values![0]!;
     expect(value.kind === "player" && value.participants.map((p) => p.kind === "participant" && p.nameAtTime)).toEqual(["Alice", "Dave"]);
   });
 
@@ -474,7 +474,7 @@ describe("Phase 9R.2: Traveler lifecycle", () => {
     state().addReminder(alice, { label: "Negative vote", sourceCharacter: "thief", sourcePlayer: T });
     expect(state().advancePhase().ok).toBe(true); // Phase 10A: exile is Day-only
     state().exileTraveler(T);
-    const tessHistory = game().history.filter((h) => h.participant.playerId === T);
+    const tessHistory = game().history.filter((h) => h.participant!.playerId === T);
     expect(tessHistory.map((h) => h.category)).toEqual(["role", "alignment", "life"]);
 
     // Traveler leaves; the seat keeps its Traveler reservation, same PlayerId.
@@ -535,7 +535,7 @@ describe("Phase 9R.2: local persistence / rehydrate", () => {
     state().setStatus(alice, "drunk", true);
     await new Promise((resolve) => setTimeout(resolve, 0));
     const raw = localStorage.getItem(STORAGE_KEY)!;
-    expect(JSON.parse(raw).version).toBe(24);
+    expect(JSON.parse(raw).version).toBe(25);
     const beforeGame = structuredClone(game());
     const beforeUndo = structuredClone(state().undoStack);
 

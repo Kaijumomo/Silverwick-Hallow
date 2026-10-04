@@ -10,13 +10,13 @@ import { HistoryRecordSchema, StorytellerGamePersistedSchema } from "./schemas";
 import { detectLegacyGameVersion, hasV21Evidence, hasV22Evidence, migrateGameEntry } from "./gameMigration";
 import { changeRoleIntent, correctRoleIntent } from "./roleResolution";
 import { setupScript, standardRoles } from "@/test/setupFixtures";
-import { asV20, asV21, asV22, withV21Reminders, withV22Roles, withV23Alignment, withV24Guided } from "@/test/v20Migration";
+import { asV20, asV21, asV22, withV21Reminders, withV22Roles, withV23Alignment, withV24ToCurrent } from "@/test/v20Migration";
 
 // Phase 10E: the ladder continues to v23 (see alignmentMigration.test.ts for
 // the v22 -> v23 step itself). Every v22 result below therefore also receives
 // v22 -> v23; these fixtures carry no Traveler explicit Shown Alignment, so it
 // is the marker advance only.
-const toCurrent = (v22: Raw): Raw => withV24Guided(withV23Alignment(v22));
+const toCurrent = (v22: Raw): Raw => withV24ToCurrent(withV23Alignment(v22));
 import { MemoryRoomBackend } from "@/firebase/memoryBackend";
 import { createLobby } from "@/firebase/lobby";
 import { requireActiveSession } from "@/firebase/lifecycle";
@@ -87,7 +87,7 @@ describe("v21 -> v22 is a stamp on every entry independently", () => {
     const copy = structuredClone(v21);
     migrateGameEntry(copy, 21, { kind: "canonical-only" });
     expect(roleRecords(copy)).toEqual(roleRecords(v21));
-    expect(copy.gameSchemaVersion).toBe(24);
+    expect(copy.gameSchemaVersion).toBe(25);
     // A legacy record with looser snapshot keys stays valid; only the v22-only
     // metadata demands the strict { actualRole } shape.
     const loose = { ...legacy, change: { kind: "value", from: { actualRole: "chef", legacyExtra: 1 }, to: { actualRole: "saint", legacyExtra: 2 } } };
@@ -98,10 +98,10 @@ describe("v21 -> v22 is a stamp on every entry independently", () => {
     localStorage.setItem("new-blood-st", JSON.stringify({ version: 21, state: { game: asV21(currentGame()), undoStack: [] } }));
     await store.persist.rehydrate();
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(game().gameSchemaVersion).toBe(24);
+    expect(game().gameSchemaVersion).toBe(25);
     state().setNotes(game().seatOrder[0]!, "x");
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(JSON.parse(localStorage.getItem("new-blood-st")!).version).toBe(24);
+    expect(JSON.parse(localStorage.getItem("new-blood-st")!).version).toBe(25);
   });
 });
 
@@ -136,7 +136,7 @@ describe("v20 -> v21 -> v22 (marker 20 keeps working)", () => {
     for (const p of Object.values(v19.players as Record<string, { effects?: Raw[] }>)) for (const e of p.effects ?? []) { delete e.state; delete e.expiry; }
     const result = migrateStoreState({ game: v19, undoStack: [] }, 19) as { game: Raw };
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(result.game.gameSchemaVersion).toBe(24);
+    expect(result.game.gameSchemaVersion).toBe(25);
   });
 });
 
@@ -149,7 +149,7 @@ describe("routing parity: the one shared per-entry routine serves local state, U
       migrateGameEntry(direct, detectLegacyGameVersion(direct)!, { kind: "canonical-only" });
       expect(takeMigrationResetFlag()).toBe(false);
       expect(direct).toEqual(local.game);
-      expect(direct.gameSchemaVersion).toBe(24);
+      expect(direct.gameSchemaVersion).toBe(25);
     });
 
   async function recoverFrom(entry: Raw) {
@@ -207,7 +207,7 @@ describe("v22 evidence fails closed: never stamped into validity", () => {
     delete g.gameSchemaVersion;
     inject(g);
     expect(hasV22Evidence(g)).toBe(true);
-    expect(detectLegacyGameVersion(g)).toBe(24); // reported as current: no legacy step
+    expect(detectLegacyGameVersion(g)).toBe(25); // reported as current: no legacy step
   });
 
   it.each(evidence)("marker-less %s: rejected as malformed current-version data -- no legacy step runs, never stamped", (_label, inject) => {
@@ -249,14 +249,14 @@ describe("v22 evidence fails closed: never stamped into validity", () => {
   });
 
   it("a malformed / unsupported marker is never reinterpreted as legacy: untouched, rejected", () => {
-    for (const marker of [25, "22", "21", null, { v: 22 }, 0, -1]) {
+    for (const marker of [26, "22", "21", null, { v: 22 }, 0, -1]) {
       const g = currentGame();
       g.gameSchemaVersion = marker;
-      expect(detectLegacyGameVersion(g)).toBe(24);
+      expect(detectLegacyGameVersion(g)).toBe(25);
       const copy = structuredClone(g);
       migrateGameEntry(copy, 13, { kind: "canonical-only" });
       expect(copy).toEqual(g);
-      for (const version of [24, 23, 22, 21, 20, 19]) {
+      for (const version of [25, 24, 23, 22, 21, 20, 19]) {
         migrateStoreState({ game: structuredClone(g), undoStack: [] }, version);
         expect(takeMigrationResetFlag()).toBe(true);
       }
@@ -300,7 +300,7 @@ describe("v22 evidence fails closed: never stamped into validity", () => {
       change: { kind: "value", from: { alive: false }, to: { alive: true } } });
     const copy = structuredClone(v21);
     migrateGameEntry(copy, 21, { kind: "canonical-only" });
-    expect(copy.gameSchemaVersion).toBe(24);
+    expect(copy.gameSchemaVersion).toBe(25);
   });
 });
 

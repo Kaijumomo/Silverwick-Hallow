@@ -241,7 +241,7 @@ describe("10E-AC-06 / AC-07 / AC-08: atomic multi-participant resolution, confli
     expectOneCommit(b);
     expect(player(chef.id).actualAlignment).toBe("evil");
     expect(player(imp.id).actualAlignment).toBe("good");
-    expect(alignmentHistory().map((h) => [h.participant.playerId, h.resolutionId])).toEqual([[chef.id, "swap-1"], [imp.id, "swap-1"]]);
+    expect(alignmentHistory().map((h) => [h.participant!.playerId, h.resolutionId])).toEqual([[chef.id, "swap-1"], [imp.id, "swap-1"]]);
     // Actual Roles are untouched: a Good Demon and an Evil Chef are legitimate.
     expect(player(chef.id).actualRole).toBe("chef");
     expect(player(imp.id).actualRole).toBe("imp");

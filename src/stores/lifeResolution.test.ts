@@ -456,7 +456,7 @@ describe("Phase 10A: future ability-engine seam (multi-intent transactions)", ()
     if (result.ok) expect(result.eventIds).toHaveLength(2);
     expectOneCommit(before);
     const records = game().history.slice(historyBefore);
-    expect(records.map((h) => h.participant.playerId)).toEqual([ids[0], ids[1]]);
+    expect(records.map((h) => h.participant!.playerId)).toEqual([ids[0], ids[1]]);
     expect(records.every((h) => addedIn(h)?.resolutionId === "night-2-demon")).toBe(true);
     state().undo();
     expect(game()).toEqual(before.game);
@@ -571,7 +571,7 @@ describe("Phase 10A: corrections", () => {
       { playerId: ids[0]!, target: { alive: true } },
     ]).ok).toBe(true);
     const records = game().history.slice(historyBefore);
-    expect(records.map((r) => r.participant.playerId).sort()).toEqual([ids[0], ids[1]].sort());
+    expect(records.map((r) => r.participant!.playerId).sort()).toEqual([ids[0], ids[1]].sort());
     expect(player(ids[0]!).alive).toBe(true);
     expect(player(ids[1]!).alive).toBe(false);
     expect(lifeEventsForParticipantAt(game(), player(ids[1]!).participantId!, DAY1)).toMatchObject({ status: "known", events: [{ kind: "execution" }] });

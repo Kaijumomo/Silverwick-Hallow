@@ -78,7 +78,7 @@ describe("Fortune Teller -- Night 1 Red Herring is chosen inside the same resolu
     expect(within(ws).getByText(/Player 3 gains Red Herring/)).toBeInTheDocument();
     fireEvent.click(within(ws).getByRole("button", { name: "Confirm and record" }));
     expect(game().players.p3!.effects).toEqual([expect.objectContaining({ type: "fortuneTellerRedHerring" })]);
-    expect(game().informationDeliveries.at(-1)!.values.at(-1)).toMatchObject({ kind: "boolean", value: true });
+    expect(game().informationDeliveries.at(-1)!.values!.at(-1)).toMatchObject({ kind: "boolean", value: true });
     expect(state().undoStack).toHaveLength(1);
   });
 });

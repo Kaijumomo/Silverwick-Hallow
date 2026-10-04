@@ -591,7 +591,70 @@ export type HistoryRecord = HistoryRecordCommon & {
    * record explains. Legacy (pre-v21) Reminder History has none and keeps its
    * original shape; it is never rewritten. */
   reminderOperation?: ReminderHistoryOperation;
+  /** Phase 10G (v25): game-scoped Rule Fact metadata never appears on
+   * participant History (schema-enforced). */
+  ruleFactType?: never;
+  ruleFactOperation?: never;
 };
+
+/**
+ * Phase 10G (v25): an authoritative, game-scoped mechanical fact -- state that
+ * applies to the game/table rather than to any participant (PHASE10G Section
+ * 4). Storyteller-private Current State, in `gameRuleFacts`. Never a
+ * Reminder, never a participant Effect, never reconstructed from History.
+ *
+ * Only a REGISTERED `type` (src/stores/gameRuleFacts.ts) is ever mechanically
+ * interpreted; an unknown/custom type acquires no rule. The two v25 types are
+ * singleton facts: at most one record per type exists, so `type` is the
+ * record's identity.
+ *
+ *  - `recordedAt`: the exact Live Game Moment it was recorded.
+ *  - `expiresAt`: when present, the fact expires when live play ENTERS this
+ *    moment (or a later one), inside the same atomic phase rollover (the
+ *    Effect expiry rule). Absent: no automatic expiry.
+ */
+export type GameRuleFactType = string;
+export type GameRuleFactRecord = {
+  type: GameRuleFactType;
+  recordedAt: LiveGameMoment;
+  expiresAt?: LiveGameMoment;
+  provenance?: Provenance;
+  resolutionId?: string;
+};
+
+/** Phase 10G (v25): the Rule Fact operation a "gameRuleFact" History Record
+ * explains. `apply` = added; `remove` / `expire` = removed. `expire` is the
+ * deterministic phase-rollover provenance (never a correction). */
+export type GameRuleFactHistoryOperation = "apply" | "remove" | "expire";
+
+/**
+ * Phase 10G (v25): the ONE game-scoped History variant. A Rule Fact has no
+ * truthful participant subject, so this record carries NONE -- it never
+ * manufactures one (schema-enforced: a `participant` key is rejected). Every
+ * participant History category keeps requiring its ParticipantRef exactly as
+ * before. Explanatory only, like all History.
+ */
+export type GameRuleFactHistoryRecord = {
+  id: HistoryId;
+  category: "gameRuleFact";
+  moment: LiveGameMoment;
+  ruleFactType: GameRuleFactType;
+  ruleFactOperation: GameRuleFactHistoryOperation;
+  change: { kind: "added"; item: GameRuleFactRecord } | { kind: "removed"; item: GameRuleFactRecord };
+  provenance?: Provenance;
+  note?: string;
+  resolutionId?: string;
+  correction?: true;
+  participant?: never;
+  lifeEvent?: never;
+  effectOperation?: never;
+  reminderOperation?: never;
+};
+
+/** Phase 10G (v25): every History Record a game can hold -- the participant
+ * categories plus the one game-scoped variant. */
+export type GameHistoryRecord = HistoryRecord | GameRuleFactHistoryRecord;
+export type GameHistoryCategory = GameHistoryRecord["category"];
 
 /** Phase 10C: the Reminder operation a v21 "reminder" History Record
  * explains. `place` = added, `remove` = removed, `amend` = value (full
@@ -672,7 +735,45 @@ export type InformationDeliveryRecord = {
    * resolution produced. Metadata only -- not an idempotency key, not
    * authority, not assumed globally unique. Never invented by migration. */
   resolutionId?: string;
+  /** Phase 10G (v25): a structured delivery carries no discriminator (its
+   * shape is frozen); only a Manual delivery has `kind`. */
+  kind?: never;
+  text?: never;
 };
+
+/**
+ * Phase 10G (v25): Storyteller-private record of information actually
+ * communicated through the Manual / unmodeled path -- for an unsupported or
+ * homebrew interaction that owns no registered Information Action. It records
+ * communication truth WITHOUT pretending a canonical Information Action
+ * produced it: it never carries an `informationActionId` or structured
+ * `values`, and is never mechanical input. Created only through a Manual
+ * ability resolution (resolveAbility).
+ *
+ *  - `recipient`: durable ParticipantRef of who was told.
+ *  - `actualRole`: the recipient's Actual Role when told (snapshot).
+ *  - `performedRole`: the workflow's simulated wake identity when it differs
+ *    from the Actual Role (authorized from the workflow context only).
+ *  - `text`: what was communicated (1..MAX_MANUAL_DELIVERY_TEXT -- schemas.ts --
+ *    characters, never truncated).
+ */
+export type ManualInformationDeliveryRecord = {
+  kind: "manual";
+  id: InformationDeliveryId;
+  recipient: CurrentParticipantRef;
+  actualRole: RoleId;
+  performedRole?: RoleId;
+  moment: LiveGameMoment;
+  text: string;
+  provenance?: Provenance;
+  note?: string;
+  resolutionId?: string;
+  informationActionId?: never;
+  values?: never;
+};
+
+/** Phase 10G (v25): every Information Delivery a game can hold. */
+export type GameInformationDeliveryRecord = InformationDeliveryRecord | ManualInformationDeliveryRecord;
 
 export type GrimoireMode = "ring" | "freeRoam";
 export type TokenPosition = { x: number; y: number };
@@ -807,8 +908,10 @@ export type StorytellerLobbyRecord = {
    * Traveler's inert explicit Shown Alignment is normalized to Normal).
    * Phase 10F: the current version is 24; marker 23 receives v23 -> v24
    * (participant-scoped Night progress; ambiguous seat-addressed progress is
-   * dropped, never reassigned). */
-  gameSchemaVersion: 24;
+   * dropped, never reassigned).
+   * Phase 10G: the current version is 25; marker 24 receives v24 -> v25 (an
+   * empty Game Rule Fact collection; nothing else is touched). */
+  gameSchemaVersion: 25;
   code: string;
   storytellerUid: string;
   scriptId: string;
@@ -855,20 +958,26 @@ export type StorytellerLobbyRecord = {
    * preparation never do. Current state alone remains gameplay truth: a
    * missing or stale history entry never changes it, and nothing is ever
    * reconstructed from this array. */
-  history: HistoryRecord[];
+  history: GameHistoryRecord[];
   /** Phase 9D.3: Storyteller-private bookkeeping of information actually
    * communicated through a Role's Information Actions. Distinct from
    * `history` -- recording an Information Delivery is not itself a
    * Mutation to Current State (see src/stores/informationDelivery.ts).
    * Never used to reconstruct Actual Role, Actual Alignment, Effects,
    * Reminders, or Life State; Current State alone remains authoritative. */
-  informationDeliveries: InformationDeliveryRecord[];
+  informationDeliveries: GameInformationDeliveryRecord[];
   /** Phase 10A (store v19): Storyteller-private, authoritative temporary
    * gameplay state -- recent Life Events of the current and immediately
    * previous phase, plus the coverage bound that says when their absence is
    * meaningful. Not History (see LifeEventWindow). Required from v19;
    * migration adds it with honest coverage and never backfills events. */
   lifeEventWindow: LifeEventWindow;
+  /** Phase 10G (store v25): Storyteller-private, authoritative GAME-SCOPED
+   * mechanical facts (see GameRuleFactRecord) -- one record per singleton
+   * type. Changed only by the Game Rule Fact seam (gameRuleFacts.ts), inside
+   * an ability resolution, or by deterministic expiry in the phase rollover.
+   * Never projected. */
+  gameRuleFacts: GameRuleFactRecord[];
 };
 
 /** Delivered identity at player/{id}; an absent record means unrevealed.

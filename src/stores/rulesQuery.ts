@@ -3,6 +3,7 @@ import type { RoleRegistry } from "@/data/roleRegistry";
 import { activeModifiers, gateEvaluation, type HookScope, type ModifierDefinition, type ModifierGate } from "@/abilities/modifiers";
 import { resolveAbilitySemantics, type AbilitySemanticsRegistry } from "@/abilities/semantics";
 import { currentLiveMoment, lifeEventsAt, type LifeEventQueryResult } from "./lifeEvents";
+import { gameRuleFactActive, gameRuleFactDefinition } from "./gameRuleFacts";
 import type { ParticipantBinding } from "./abilityResolution";
 import type { Alignment, EffectRecord, LifeEvent, LiveGameMoment, RoleDef, RoleId, STPlayerRecord, Script, StorytellerLobbyRecord } from "./types";
 
@@ -17,7 +18,9 @@ import type { Alignment, EffectRecord, LifeEvent, LiveGameMoment, RoleDef, RoleI
  *
  * Reminders are never read (architecture-guarded): they are notation, not
  * truth. History is never read: Current State and the Life Event Window are
- * the only mechanical sources.
+ * the only mechanical sources. Phase 10G: game-scoped Rule Facts are read from
+ * Current State (`gameRuleFacts`) the same way -- never from History, Reminders
+ * or the Activity presentation.
  */
 
 export type QueryAnswer<T> =
@@ -143,6 +146,11 @@ export type RulesQuery = {
   factHolders: (type: string) => QueryAnswer<{ holder: ParticipantBinding; effectId: string }[]>;
   /** Life Events at `moment` (with honest coverage). */
   lifeEvents: (moment: LiveGameMoment, test?: (event: LifeEvent) => boolean) => LifeEventQueryResult;
+  /** Phase 10G (PHASE10G Section 7): whether a REGISTERED game-scoped Rule
+   * Fact currently applies, from this query's Current State (inside an ability
+   * composition, the evolving working snapshot the query was built on). An
+   * unregistered / custom type is UNKNOWN -- it never acquires a rule by name. */
+  gameRuleFact: (type: string) => QueryAnswer<boolean>;
   /** The modifier gate for an evaluation of `roleId` touching `scopes`. */
   modifierGate: (roleId: RoleId, scopes: readonly HookScope[]) => ModifierGate;
   /** Phase 10F Slice 7: the same derived queries over a HYPOTHETICAL Life
@@ -356,6 +364,9 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
       ? unknown(`"${type}" is not an approved Storyteller fact.`)
       : known(seated().flatMap((p) => p.effects.filter((e) => e.type === type && e.state === "active").map((e) => ({ holder: bindingOf(p), effectId: e.id })))),
     lifeEvents: (moment, test) => lifeEventsAt(game, moment, test),
+    gameRuleFact: (type) => gameRuleFactDefinition(type)
+      ? known(gameRuleFactActive(game, type))
+      : unknown(`"${typeof type === "string" ? type : "?"}" is not a registered Rule Fact: Silverwick applies no rule to it.`),
     modifierGate: (roleId, scopes) => gateEvaluation(modifiers, roleId, scopes, game),
     assumingAlive: (binding, alive) => {
       const player = participant(binding);

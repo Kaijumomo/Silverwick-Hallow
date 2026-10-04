@@ -352,7 +352,7 @@ describe("SOL-10F-E1 -- resolveAbility proves checkpoint compatibility before it
     inert(() => store.getState().resolveAbility(manualText(g0, text(1))));
     // the refused plan's envelope is exactly one byte over, and the installed SDK rejects it
     const overGame = { ...accepted, informationDeliveries: accepted.informationDeliveries.map((d) => ({ ...d,
-      values: d.values.map((v) => ({ ...v, value: (v as { value: string }).value + "x" })) })) } as StorytellerLobbyRecord;
+      values: d.values!.map((v) => ({ ...v, value: (v as { value: string }).value + "x" })) })) } as StorytellerLobbyRecord;
     const overEnvelope = serializeCheckpointEnvelope(overGame, g0);
     expect(bytes(overEnvelope)).toBe(LIMIT + 1);
     expect(validateCheckpointEnvelope(overGame, g0).ok).toBe(false);

@@ -111,10 +111,47 @@ export function withV24Guided<T>(entry: T): T {
   return copy as unknown as T;
 }
 
+/**
+ * Phase 10G test helper: exactly what the v24 -> v25 migration step does to
+ * one v24 game-shaped entry (see migrateEntryV24ToV25 in
+ * src/stores/gameMigration.ts): an EMPTY `gameRuleFacts` collection is added
+ * (no fact is invented); History, every structured Information Delivery and
+ * all Current State are untouched; stamped `gameSchemaVersion: 25`. Returns a
+ * deep copy.
+ */
+export function withV25RuleFacts<T>(entry: T): T {
+  const copy = structuredClone(entry) as unknown as Record<string, unknown>;
+  if (copy.gameRuleFacts === undefined) copy.gameRuleFacts = [];
+  copy.gameSchemaVersion = 25;
+  return copy as unknown as T;
+}
+
+/** A v23-step result's expected CURRENT result: v23 -> v24, then v24 -> v25. */
+export function withV24ToCurrent<T>(entry: T): T {
+  return withV25RuleFacts(withV24Guided(entry));
+}
+
 /** A legacy (pre-v20) entry's expected CURRENT result: the v19 -> v20 step,
- * then v20 -> v21, v21 -> v22, v22 -> v23 and v23 -> v24. */
+ * then v20 -> v21, v21 -> v22, v22 -> v23, v23 -> v24 and v24 -> v25. */
 export function withCurrentMigration<T>(entry: T): T {
-  return withV24Guided(withV23Alignment(withV22Roles(withV21Reminders(withV20Lifecycle(entry)))));
+  return withV25RuleFacts(withV24Guided(withV23Alignment(withV22Roles(withV21Reminders(withV20Lifecycle(entry))))));
+}
+
+/**
+ * Phase 10G: the inverse used to build a v24 fixture from a current game --
+ * what a v24 writer stored: no `gameRuleFacts` collection, no game-scoped
+ * (`gameRuleFact`) History and no Manual Information Delivery (all v25-only),
+ * marker 24.
+ */
+export function asV24<T>(entry: T): T {
+  const copy = structuredClone(entry) as unknown as Record<string, unknown>;
+  delete copy.gameRuleFacts;
+  const history = copy.history as Record<string, unknown>[] | undefined;
+  if (history) copy.history = history.filter((record) => record.category !== "gameRuleFact");
+  const deliveries = copy.informationDeliveries as Record<string, unknown>[] | undefined;
+  if (deliveries) copy.informationDeliveries = deliveries.filter((delivery) => delivery.kind === undefined);
+  copy.gameSchemaVersion = 24;
+  return copy as unknown as T;
 }
 
 /**
@@ -122,10 +159,10 @@ export function withCurrentMigration<T>(entry: T): T {
  * what a v23 writer stored: no Information Delivery `performedRole` /
  * `resolutionId` (v24-only), marker 23. (A v24 participant-keyed Night step is
  * structurally indistinguishable from a v23 seat-keyed one; tests that need a
- * genuine v23 seat key build it explicitly.)
+ * genuine v23 seat key build it explicitly.) Phase 10G: built on asV24.
  */
 export function asV23<T>(entry: T): T {
-  const copy = structuredClone(entry) as unknown as Record<string, unknown>;
+  const copy = structuredClone(asV24(entry)) as unknown as Record<string, unknown>;
   const deliveries = copy.informationDeliveries as Record<string, unknown>[] | undefined;
   for (const delivery of deliveries ?? []) {
     delete delivery.performedRole;

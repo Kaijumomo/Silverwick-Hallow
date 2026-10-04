@@ -16,7 +16,7 @@ const ROLES = ["fortuneteller", "imp", "chef", "monk", "recluse", "poisoner", "e
 const herringOn = (g: StorytellerLobbyRecord, id: string, effectId = "rh-1"): StorytellerLobbyRecord =>
   patchPlayer(g, id, { effects: [...g.players[id]!.effects, { id: effectId, type: RED_HERRING, lifetime: { kind: "manual" }, state: "active",
     expiry: { kind: "none" }, appliedAt: { phase: "night", day: 1 } } as EffectRecord] });
-const answer = (g: StorytellerLobbyRecord) => g.informationDeliveries.at(-1)!.values.find((v) => v.requirementId === "isDemon");
+const answer = (g: StorytellerLobbyRecord) => g.informationDeliveries.at(-1)!.values!.find((v) => v.requirementId === "isDemon");
 /** SOL-10F-A1: the communicated answer is bound to the chosen pair. */
 const comm = (g: StorytellerLobbyRecord, a: string, b: string) => subjectId(COMMUNICATED, bind(g, a), bind(g, b));
 const pairBound = (g: StorytellerLobbyRecord, a: string, b: string, extra: Record<string, unknown>) =>

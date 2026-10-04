@@ -39,7 +39,7 @@ export function proofGame(roles: RoleId[], phase: "night" | "day" = "night", day
     return makeSTPlayer({ id: "p" + seat, name: "Player " + seat, seat, ...dealt });
   });
   return {
-    gameSchemaVersion: 24, code: "", storytellerUid: "local", scriptId: proofScript.id, phase, day,
+    gameSchemaVersion: 25, gameRuleFacts: [], code: "", storytellerUid: "local", scriptId: proofScript.id, phase, day,
     players: Object.fromEntries(players.map((p) => [p.id, p])), seatOrder: players.map((p) => p.id),
     plannedPlayerCount: roles.length, plannedTravelerCount: 0, rolePool: [], fabled: [], lorics: [], bluffs: [],
     notes: "", nightProgress: {}, pendingPlayers: {}, history: [], informationDeliveries: [],

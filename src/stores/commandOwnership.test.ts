@@ -3,7 +3,7 @@ import { useStorytellerStore as store } from "./storytellerStore";
 import { setupScript, standardRoles } from "@/test/setupFixtures";
 import { needsShownIdentity } from "./identity";
 import { participantRefOf, refersToParticipant } from "./participants";
-import type { HistoryRecord } from "./types";
+import type { GameHistoryRecord as HistoryRecord } from "./types";
 
 // Phase 9R.1 (Finding B4): once an Authoritative Mutation Command accepts
 // structured input, the store must own its own immutable snapshot of it --

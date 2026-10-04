@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { BUILTIN_SCRIPTS, BUILTIN_SCRIPT_IDS } from "@/data/scripts";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
-import { StorytellerStateSchema } from "./schemas";
+import { StorytellerGamePersistedSchema, StorytellerStateSchema } from "./schemas";
 import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { manualEffectId } from "./effects";
@@ -48,6 +48,13 @@ import {
 import { newParticipantId, participantIdAppearsIn } from "./participants";
 import { participantRoleStepEntries, planNightStepStatus } from "./nightProgress";
 import { planAbilityResolution, type AbilityRefusal, type AbilityResolutionRequest } from "./abilityResolution";
+import {
+  applyGameRuleFactPlan,
+  planGameRuleFactExpiry,
+  planGameRuleFactTransaction,
+  type GameRuleFactRefusal,
+  type GameRuleFactTransaction,
+} from "./gameRuleFacts";
 import { CANONICAL_ABILITY_SEMANTICS, type AbilitySemanticsRegistry } from "@/abilities/semantics";
 import { detectLegacyGameVersion, migrateGameEntry } from "./gameMigration";
 import { freshLifeEventWindow, pruneLifeEventWindow } from "./lifeEvents";
@@ -115,7 +122,7 @@ const UNDO_LIMIT = 20;
  * `merge` (Phase 9C.2B.2) passes to migrateStoreState when Zustand's own
  * persist middleware skips calling `migrate` outright, which it does
  * whenever the persisted version already equals this one. */
-const STORE_VERSION = 24;
+const STORE_VERSION = 25;
 
 let _migrationResetFlag = false;
 /** Returns true (once) when migrate() discarded incompatible persisted state. */
@@ -303,6 +310,13 @@ export type AbilityCommandResult =
   | { ok: true; changed: false }
   | { ok: true; changed: true; resolutionId: string }
   | AbilityRefusal;
+
+/** Phase 10G: result of resolveGameRuleFacts. `changed: false` is a true
+ * no-op (nothing committed, no Undo, no localSeq step); every refusal changes
+ * nothing. */
+export type GameRuleFactCommandResult =
+  | { ok: true; changed: boolean }
+  | GameRuleFactRefusal;
 
 export type LobbyConnection = {
   code: string;
@@ -496,6 +510,16 @@ export type StorytellerStore = {
    * another store command. `semantics` defaults to the canonical registry.
    */
   resolveAbility: (request: AbilityResolutionRequest, semantics?: AbilitySemanticsRegistry) => AbilityCommandResult;
+  /**
+   * Phase 10G: THE Storyteller-owned Game Rule Fact command (PHASE10G Section
+   * 4.4). Plans one ordered transaction with the pure planner
+   * (gameRuleFacts.ts), proves the result persistable (schema, Firebase write
+   * compatibility, recovery-checkpoint envelope -- Section 4.5) and commits a
+   * changed plan as exactly one game replacement, one Undo entry and one
+   * localSeq step. Refused in Setup and in an ended game. A fact produced by an
+   * ability resolution goes through resolveAbility instead, never here.
+   */
+  resolveGameRuleFacts: (transaction: GameRuleFactTransaction) => GameRuleFactCommandResult;
   /** Compatibility adapter: one gameplay Actual Alignment change of a
    * TRAVELER, bound to whoever occupies `id` right now (refused for an
    * ordinary participant). Routes through resolveAlignments; callers may
@@ -841,6 +865,30 @@ const freshAssignment = (existing: STPlayerRecord, role: RoleId, registry: RoleR
   return invalidatePrivatePacket(next);
 };
 
+/**
+ * PHASE10G Section 4.5 / Section 21: the persistence preflight of a NEW 10G
+ * authoritative command that can grow persisted state -- exactly the
+ * SOL-10F-C3 / E1 proofs resolveAbility performs inline (unchanged). A
+ * planned game becomes authoritative only if the production writer can
+ * project it: the SAME Firebase write-compatibility check checkpoint recovery
+ * uses, against the SAME Storyteller destination the writer writes (the live
+ * lobby's, or -- before a room exists -- the canonical maximum code shape),
+ * and the derived recovery checkpoint proven against the conservative
+ * supported-roster envelope with the writer's own serializer. Null when safe;
+ * otherwise the Storyteller-facing reason (nothing may be committed).
+ */
+const persistencePreflight = (planned: StorytellerLobbyRecord, current: StorytellerLobbyRecord, lobby: LobbyConnection | null): string | null => {
+  const writable = validateFirebaseWritableValue(planned, storytellerPathSegments(lobby?.code ?? MAX_ROOM_CODE_SHAPE));
+  if (!writable.ok) {
+    return `This result cannot be safely stored online (the resulting game ${writable.message.replace(/\.$/, "")}) -- nothing was recorded.`;
+  }
+  const checkpoint = validateCheckpointEnvelope(planned, current);
+  if (!checkpoint.ok) {
+    return `This result cannot be safely stored online (the game's recovery checkpoint ${checkpoint.message.replace(/\.$/, "")}) -- nothing was recorded.`;
+  }
+  return null;
+};
+
 const CLEAN_STATE = { game: null, view: "home" as const, undoStack: [] as never[], customScripts: {}, lobby: null };
 
 /** Phase 10F (v24): clears tonight's arrival / guided-wake steps of the
@@ -1073,7 +1121,14 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // Information Delivery is preserved exactly (no performedRole/resolutionId
   // is invented). Every older marker continues the chain through v24; an
   // older marker carrying v24 evidence receives nothing and is rejected.
-  if (fromVersion < 24) {
+  //
+  // v25 (Phase 10G): game-scoped Rule Facts -- the same shared per-entry
+  // migration: marker 24 -> v25 initializes an EMPTY `gameRuleFacts`
+  // collection and stamps 25 (no fact, History, delivery or participant state
+  // is invented or rewritten). Every older marker continues the chain through
+  // v25; an older marker carrying v25 evidence receives nothing and is
+  // rejected.
+  if (fromVersion < 25) {
     const customScripts = (s as { customScripts?: Record<string, Script> }).customScripts ?? {};
     // Phase 9R.1 Astra remediation (Finding A2): local persisted migration
     // uses "trusted" evidence -- this state's OWN saved customScripts,
@@ -1197,6 +1252,8 @@ export const useStorytellerStore = create<StorytellerStore>()(
           informationDeliveries: [],
           // Phase 10A: a fresh game observes every Life Event from Night 1.
           lifeEventWindow: freshLifeEventWindow(),
+          // Phase 10G: no game-scoped Rule Fact exists before Live Play.
+          gameRuleFacts: [],
         };
         usePrivacyStore.getState().reset();
         set({ game, lobby: null, pendingKnocks: [], view: "game", undoStack: [], selectedPlayerId: null });
@@ -1941,6 +1998,29 @@ export const useStorytellerStore = create<StorytellerStore>()(
         return { ok: true, changed: true };
       },
 
+      resolveGameRuleFacts: (transaction) => {
+        const { game, undoStack } = get();
+        if (!game) return { ok: false, code: "invalid", message: "No game is open." };
+        // guard -> plan (pure) -> persistence preflight -> one commit. An ended
+        // game, Setup, an unregistered type, a malformed request or an unsafe
+        // result is refused with NO change to the game, History, Undo or
+        // localSeq; a true no-op changes nothing either.
+        const result = planGameRuleFactTransaction(game, transaction);
+        if (!result.ok) return result;
+        if (!result.changed) return { ok: true, changed: false };
+        const planned = applyGameRuleFactPlan(game, result.plan);
+        // PHASE10G Section 4.5: a NEW authoritative mutation -- the persisted
+        // game/schema validation, then the Firebase-writable and recovery-
+        // checkpoint-envelope proofs, all before any replacement.
+        if (!StorytellerGamePersistedSchema.safeParse(planned).success) {
+          return { ok: false, code: "invalid", message: "The resulting game failed validation -- nothing was recorded." };
+        }
+        const unsafe = persistencePreflight(planned, game, get().lobby);
+        if (unsafe) return { ok: false, code: "invalid", message: unsafe };
+        set({ undoStack: pushUndo(game, undoStack), game: planned });
+        return { ok: true, changed: true };
+      },
+
       resolveAbility: (request, semantics) => {
         const { game, undoStack } = get();
         if (!game) return { ok: false, code: "invalid", message: "No game is open." };
@@ -2584,14 +2664,21 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // removed, with one "expire" History record each at the DESTINATION
         // moment. Never a second commit, never an intermediate state; Undo of
         // the advance restores the expired Effects with everything else.
+        //
+        // Phase 10G Section 6: in that SAME replacement, every Game Rule Fact
+        // whose exact expiry boundary is the destination moment (or earlier)
+        // expires, with one explanatory "expire" History record each -- never
+        // a separate commit; Undo of the advance restores it too.
         const destination = { phase, day } as { phase: "night" | "day"; day: number };
         const expired = planEffectExpiry(game, destination);
+        const expiredFacts = planGameRuleFactExpiry(game, destination);
         const advanced: StorytellerLobbyRecord = {
           ...game, phase, day, lifeEventWindow: pruneLifeEventWindow(game.lifeEventWindow, phase, day),
         };
+        const withEffects = expired ? applyEffectPlan(advanced, expired) : advanced;
         set({
           undoStack: pushUndo(game, undoStack),
-          game: expired ? applyEffectPlan(advanced, expired) : advanced,
+          game: expiredFacts ? applyGameRuleFactPlan(withEffects, expiredFacts) : withEffects,
         });
         return { ok: true };
       },

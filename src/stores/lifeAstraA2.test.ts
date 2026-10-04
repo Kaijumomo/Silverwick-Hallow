@@ -5,7 +5,7 @@ import { needsShownIdentity } from "./identity";
 import { deathsAt, resurrectionsAt } from "./lifeEvents";
 import { StorytellerGamePersistedSchema } from "./schemas";
 import { detectLegacyGameVersion } from "./gameMigration";
-import type { HistoryRecord, PlayerId, StorytellerLobbyRecord } from "./types";
+import type { GameHistoryRecord as HistoryRecord, PlayerId, StorytellerLobbyRecord } from "./types";
 import { asV19 } from "@/test/v20Migration";
 
 // Phase 10A Astra remediation, Package A2 (10A-ASTRA-004): one atomic
@@ -52,7 +52,7 @@ function nightTwoWithDeadC(): { a: PlayerId; b: PlayerId; c: PlayerId; ids: Play
 }
 
 const recordFor = (records: HistoryRecord[], id: PlayerId) =>
-  records.find((h) => h.participant.playerId === id)!;
+  records.find((h) => h.participant!.playerId === id)!;
 const opsOf = (h: HistoryRecord) => h.lifeEvent?.operations.map((o) => `${o.kind}:${o.event.kind}`);
 
 describe("10A-ASTRA-004: the Al-Hadikhia-shaped generic resolution", () => {
@@ -214,7 +214,7 @@ describe("10A-ASTRA-004: the revised v19 History mirror persists, recovers and i
     const before = structuredClone(game());
     await new Promise((resolve) => setTimeout(resolve, 0));
     const raw = localStorage.getItem(STORAGE_KEY)!;
-    expect(JSON.parse(raw).version).toBe(24);
+    expect(JSON.parse(raw).version).toBe(25);
     store.setState({ game: null, undoStack: [], localSeq: 0 });
     localStorage.setItem(STORAGE_KEY, raw);
     await store.persist.rehydrate();
@@ -227,7 +227,7 @@ describe("10A-ASTRA-004: the revised v19 History mirror persists, recovers and i
     const current = JSON.parse(JSON.stringify({ game: game(), undoStack: state().undoStack }));
     expect(migrateStoreState(current, 21)).toBe(current);
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(detectLegacyGameVersion(current.game)).toBe(24);
+    expect(detectLegacyGameVersion(current.game)).toBe(25);
     expect(detectLegacyGameVersion(asV19(current.game))).toBe(19);
   });
 

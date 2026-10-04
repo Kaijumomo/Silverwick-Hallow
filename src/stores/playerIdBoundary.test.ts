@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { useStorytellerStore as store } from "./storytellerStore";
 import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
-import type { HistoryRecord, PlayerId, StorytellerLobbyRecord } from "./types";
+import type { GameHistoryRecord as HistoryRecord, PlayerId, StorytellerLobbyRecord } from "./types";
 
 // Phase 9R.4 (B8 remediation): `game.players` is a plain object, so an
 // indexed lookup `game.players[id]` also "finds" inherited Object.prototype

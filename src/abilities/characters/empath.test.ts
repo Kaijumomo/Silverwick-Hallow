@@ -22,15 +22,15 @@ describe("Empath -- functioning actual Empath", () => {
     expect(two.players).toBe(g.players);
 
     const oneEvil = patchPlayer(g, "p6", { actualRole: "chef", actualAlignment: "good" });
-    expect(delivered(planned(plan(oneEvil, request(oneEvil, "p0", "empath")))).values[0]).toMatchObject({ value: 1 });
+    expect(delivered(planned(plan(oneEvil, request(oneEvil, "p0", "empath")))).values![0]).toMatchObject({ value: 1 });
     const noneEvil = patchPlayer(oneEvil, "p1", { actualRole: "monk", actualAlignment: "good" });
-    expect(delivered(planned(plan(noneEvil, request(noneEvil, "p0", "empath")))).values[0]).toMatchObject({ value: 0 });
+    expect(delivered(planned(plan(noneEvil, request(noneEvil, "p0", "empath")))).values![0]).toMatchObject({ value: 0 });
   });
 
   it("skips dead neighbours (the next living player counts)", () => {
     // p1 (imp) dead -> right neighbour is p2 (chef); left p6 (poisoner) evil.
     const g = patchPlayer(proofGame(ROLES), "p1", { alive: false });
-    expect(delivered(planned(plan(g, request(g, "p0", "empath")))).values[0]).toMatchObject({ value: 1 });
+    expect(delivered(planned(plan(g, request(g, "p0", "empath")))).values![0]).toMatchObject({ value: 1 });
   });
 
   it("Night 1 uses the first-night Information Action", () => {
@@ -43,7 +43,7 @@ describe("Empath -- functioning actual Empath", () => {
     const asked = plan(g, request(g, "p0", "empath"));
     expect(requirementIds(asked)).toEqual([EMPATH_JUDGMENT]);
     const judged = plan(g, request(g, "p0", "empath", {}, { judgments: { [EMPATH_JUDGMENT]: num(1) } }));
-    expect(delivered(planned(judged)).values[0]).toMatchObject({ value: 1 });
+    expect(delivered(planned(judged)).values![0]).toMatchObject({ value: 1 });
     expect(judged).toMatchObject({ plan: { needsConfirmation: true } });
     expect(plan(g, request(g, "p0", "empath", {}, { judgments: { [EMPATH_JUDGMENT]: num(3) } }))).toMatchObject({ ok: false, code: "illegal" });
   });
@@ -51,7 +51,7 @@ describe("Empath -- functioning actual Empath", () => {
   it("an impaired Empath: the Storyteller chooses the number shown (no calculation)", () => {
     const g = impair(proofGame(ROLES), "p0");
     expect(requirementIds(plan(g, request(g, "p0", "empath")))).toEqual([COMMUNICATED]);
-    expect(delivered(planned(plan(g, request(g, "p0", "empath", { [COMMUNICATED]: num(0) })))).values[0]).toMatchObject({ value: 0 });
+    expect(delivered(planned(plan(g, request(g, "p0", "empath", { [COMMUNICATED]: num(0) })))).values![0]).toMatchObject({ value: 0 });
   });
 
   it("a dead Empath has no ability", () => {

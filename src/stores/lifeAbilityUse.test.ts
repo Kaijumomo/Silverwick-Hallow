@@ -127,7 +127,7 @@ describe("10F-AC-15 / AC-16: composition in one Life transaction", () => {
     expect(game().lifeEventWindow.events).toHaveLength(1);
     expect(game().lifeEventWindow.events[0]).toMatchObject({ kind: "death", resolutionId: "res-slay" });
     // One record per affected participant, in first-touched order.
-    expect(game().history.slice(-2).map((h) => h.participant.playerId)).toEqual([slayer, chef]);
+    expect(game().history.slice(-2).map((h) => h.participant!.playerId)).toEqual([slayer, chef]);
   });
 
   it("plans purely against an evolving working snapshot (no store write; deterministic ids)", () => {

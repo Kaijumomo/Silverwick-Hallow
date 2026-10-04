@@ -47,8 +47,8 @@ function expectCoherent(game: StorytellerLobbyRecord) {
     expect(mirrors[0]!.lifeEvent!.operations.find((o) => o.event.id === event.id)).toEqual({ kind: "added", event });
     const subject = game.players[event.subject.playerId];
     if (isDeathEvent(event) && subject?.participantId === event.subject.participantId) {
-      const laterFix = game.history.some((h) => h.participant.kind === "participant" &&
-        h.participant.participantId === event.subject.participantId && game.history.indexOf(h) > game.history.indexOf(mirrors[0]!) &&
+      const laterFix = game.history.some((h) => h.participant?.kind === "participant" &&
+        h.participant!.participantId === event.subject.participantId && game.history.indexOf(h) > game.history.indexOf(mirrors[0]!) &&
         (h.correction || !!h.lifeEvent?.operations.some((o) => o.kind === "added" && o.event.kind === "resurrection")));
       if (!laterFix) expect(subject.alive, event.id).toBe(false);
     }

@@ -3,7 +3,7 @@ import { useStorytellerStore as store } from "./storytellerStore";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
 import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
-import type { HistoryRecord, PlayerId, STPlayerRecord, StorytellerLobbyRecord } from "./types";
+import type { GameHistoryRecord as HistoryRecord, PlayerId, STPlayerRecord, StorytellerLobbyRecord } from "./types";
 
 // Phase 9R.4 (B8): a rejected command, or one whose complete intended result
 // equals Current State, must leave EVERYTHING untouched -- the same game

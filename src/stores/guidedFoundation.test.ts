@@ -17,7 +17,7 @@ import { projectLobbyToPublic } from "./projections";
 import { publicLifeStateOf } from "./lifeState";
 import { buildRegistry } from "@/data/roleRegistry";
 import { setupGame, setupScript } from "@/test/setupFixtures";
-import { asV23, withV24Guided } from "@/test/v20Migration";
+import { asV23, withV24Guided, withV24ToCurrent } from "@/test/v20Migration";
 import { computeNightOrder } from "@/features/nightOrder/nightOrder";
 import { decodePublicSnapshot } from "@/firebase/snapshots";
 import { MemoryRoomBackend } from "@/firebase/memoryBackend";
@@ -83,7 +83,7 @@ describe("10F-AC-35: v23 -> v24 participant-scoped Night progress", () => {
     const v23 = v23Entry();
     const copy = structuredClone(v23);
     migrateGameEntry(copy, 23, { kind: "canonical-only" });
-    expect(copy.gameSchemaVersion).toBe(24);
+    expect(copy.gameSchemaVersion).toBe(25);
     expect(copy.nightProgress).toEqual({
       "2:demonInfo": done,
       "2:modifier:toymaker": { status: "skipped", notes: "kept" },
@@ -91,11 +91,12 @@ describe("10F-AC-35: v23 -> v24 participant-scoped Night progress", () => {
     });
     // Nothing else changes -- in particular Information Delivery is preserved
     // byte-for-byte: no performedRole, no resolutionId is invented.
-    const { nightProgress: _a, gameSchemaVersion: _b, ...rest } = copy;
+    expect(copy.gameRuleFacts).toEqual([]); // Phase 10G: v24 -> v25 invents no Rule Fact
+    const { nightProgress: _a, gameSchemaVersion: _b, gameRuleFacts: _g, ...rest } = copy;
     const { nightProgress: _c, gameSchemaVersion: _d, ...before } = v23;
     expect(rest).toEqual(before);
     expect(JSON.stringify(copy.informationDeliveries)).toBe(JSON.stringify(v23.informationDeliveries));
-    expect(copy).toEqual(withV24Guided(v23));
+    expect(copy).toEqual(withV24ToCurrent(v23));
     expect(StorytellerGamePersistedSchema.safeParse(copy).success).toBe(true);
   });
 
@@ -127,22 +128,22 @@ describe("10F-AC-35: v23 -> v24 participant-scoped Night progress", () => {
     const current = nightGame() as unknown as Raw;
     const result = migrateStoreState({ game: structuredClone(v23), undoStack: [structuredClone(v23), structuredClone(current), structuredClone(v23)] }, 23) as { game: Raw; undoStack: Raw[] };
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(result.game).toEqual(withV24Guided(v23));
-    expect(result.undoStack[0]).toEqual(withV24Guided(v23));
+    expect(result.game).toEqual(withV24ToCurrent(v23));
+    expect(result.undoStack[0]).toEqual(withV24ToCurrent(v23));
     expect(result.undoStack[1]).toEqual(current); // marker 24: untouched
-    expect(result.undoStack[2]).toEqual(withV24Guided(v23));
+    expect(result.undoStack[2]).toEqual(withV24ToCurrent(v23));
   });
 
   it("a genuine v23 localStorage blob rehydrates as v24 and is written back as v24", async () => {
     localStorage.setItem("new-blood-st", JSON.stringify({ version: 23, state: { game: v23Entry(), undoStack: [v23Entry()] } }));
     await store.persist.rehydrate();
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(game().gameSchemaVersion).toBe(24);
-    expect(state().undoStack[0]!.gameSchemaVersion).toBe(24);
+    expect(game().gameSchemaVersion).toBe(25);
+    expect(state().undoStack[0]!.gameSchemaVersion).toBe(25);
     expect(Object.keys(game().nightProgress).sort()).toEqual(["2:demonInfo", "2:manual:custom-1", "2:modifier:toymaker"]);
     state().setNotes(game().seatOrder[0]!, "x");
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(JSON.parse(localStorage.getItem("new-blood-st")!).version).toBe(24);
+    expect(JSON.parse(localStorage.getItem("new-blood-st")!).version).toBe(25);
   });
 
   async function recoverFrom(entry: Raw) {
@@ -165,7 +166,7 @@ describe("10F-AC-35: v23 -> v24 participant-scoped Night progress", () => {
     disposals.push(() => recovered.stop());
     expect(recovered.outcome).toBe("live");
     const once = structuredClone(game());
-    expect(once).toEqual(withV24Guided(entry));
+    expect(once).toEqual(withV24ToCurrent(entry));
     expect(JSON.parse(JSON.stringify(once))).toEqual(JSON.parse(JSON.stringify(local.game)));
     for (const dispose of disposals.splice(0).reverse()) await dispose();
     store.setState({ game: null, lobby: null, undoStack: [], localSeq: 0, sync: null });
@@ -195,7 +196,7 @@ describe("10F-AC-35: malformed current-version data fails closed", () => {
       // Marker-less, the same evidence is current data -- never treated as legacy.
       const markerless = structuredClone(g);
       delete markerless.gameSchemaVersion;
-      expect(detectLegacyGameVersion(markerless)).toBe(24);
+      expect(detectLegacyGameVersion(markerless)).toBe(25);
     }
   });
 
@@ -228,10 +229,10 @@ describe("10F-AC-35: malformed current-version data fails closed", () => {
   });
 
   it("unsupported / newer markers are never reinterpreted", () => {
-    for (const marker of [25, "24", null, { v: 24 }]) {
+    for (const marker of [26, "25", null, { v: 25 }]) {
       const g = nightGame() as unknown as Raw;
       g.gameSchemaVersion = marker;
-      expect(detectLegacyGameVersion(g)).toBe(24);
+      expect(detectLegacyGameVersion(g)).toBe(25);
       const copy = structuredClone(g);
       migrateGameEntry(copy, 13, { kind: "canonical-only" });
       expect(copy).toEqual(g);

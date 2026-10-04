@@ -818,6 +818,6 @@ describe("Phase 9R.1 Finding A1: malformed Information Value payloads are reject
     ]);
     expect(result.ok).toBe(true);
     expect(deliveries()[0]!.values).toEqual([{ requirementId: "pairs", kind: "number", value: 1 }]);
-    expect(Object.keys(deliveries()[0]!.values[0]!)).toEqual(["requirementId", "kind", "value"]);
+    expect(Object.keys(deliveries()[0]!.values![0]!)).toEqual(["requirementId", "kind", "value"]);
   });
 });

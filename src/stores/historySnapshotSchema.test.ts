@@ -103,7 +103,7 @@ describe("Section 6: the exact v17 regression -- a retired sourcePlayer inside a
     expect(StorytellerGamePersistedSchema.safeParse(base).success).toBe(true); // control: otherwise valid
     // This is already-current data (Phase 10B: its explicit gameSchemaVersion
     // is v20 evidence): remote recovery would never migrate it.
-    expect(detectLegacyGameVersion(base as unknown as Record<string, unknown>)).toBe(24);
+    expect(detectLegacyGameVersion(base as unknown as Record<string, unknown>)).toBe(25);
     const index = indexOf(base, category, kind);
     const bad = withItemField(base, index, "sourcePlayer", "a");
 
@@ -166,7 +166,7 @@ describe("Section 8: malformed sourceParticipant shapes are rejected by the cano
     const base = realV17Game();
     const copy = structuredClone(base);
     copy.history.push({
-      id: "life-1", category: "life", participant: copy.history[0]!.participant,
+      id: "life-1", category: "life", participant: copy.history[0]!.participant!,
       change: { kind: "added", item: { sourcePlayer: "a", anything: { goes: true } } },
     });
     expect(StorytellerGamePersistedSchema.safeParse(copy).success).toBe(true);
@@ -227,6 +227,7 @@ describe("Section 12: an all-empty, markerless v17 game is harmlessly detected a
     // the explicit version marker).
     delete (v17 as Partial<StorytellerLobbyRecord>).lifeEventWindow;
     delete (v17 as Partial<StorytellerLobbyRecord>).gameSchemaVersion;
+    delete (v17 as Partial<StorytellerLobbyRecord>).gameRuleFacts; // Phase 10G: v25-only
     // Genuinely markerless: every seat empty, no History, no deliveries.
     expect(Object.values(v17.players).every((p) => p.isEmpty && !("participantId" in p))).toBe(true);
     expect(v17.history).toEqual([]);
@@ -238,9 +239,11 @@ describe("Section 12: an all-empty, markerless v17 game is harmlessly detected a
     const entry = structuredClone(v17);
     migrateGameEntry(entry, 16, { kind: "canonical-only" });
     // Every identity/category step is a no-op; only the v19 window (and the
-    // v20 marker -- there are no Effects) is added.
-    const { lifeEventWindow, gameSchemaVersion, ...rest } = entry;
-    expect(gameSchemaVersion).toBe(24);
+    // v20 marker -- there are no Effects; Phase 10G: and the v25 EMPTY Rule
+    // Fact collection) is added.
+    const { lifeEventWindow, gameSchemaVersion, gameRuleFacts, ...rest } = entry;
+    expect(gameSchemaVersion).toBe(25);
+    expect(gameRuleFacts).toEqual([]);
     expect(lifeEventWindow).toEqual({ coverageFrom: { phase: "night", day: 1 }, events: [] });
     expect(JSON.stringify(rest)).toBe(before);
     expect(rest).toEqual(beforeDeep);

@@ -55,7 +55,7 @@ beforeEach(() => {
   const players = roles.map((actualRole, seat) => makeSTPlayer({ id: `p${seat}`, name: ["Ann", "Ben", "Cat", "Dan", "Eli"][seat]!, seat,
     actualRole, shownRole: actualRole, actualAlignment: registry.alignmentOf(actualRole), alive: seat !== 2 }));
   const g: StorytellerLobbyRecord = {
-    gameSchemaVersion: 24, code: "", storytellerUid: "local", scriptId: script.id, phase: "night", day: 1,
+    gameSchemaVersion: 25, gameRuleFacts: [], code: "", storytellerUid: "local", scriptId: script.id, phase: "night", day: 1,
     players: Object.fromEntries(players.map((p) => [p.id, p])), seatOrder: players.map((p) => p.id),
     plannedPlayerCount: 5, plannedTravelerCount: 0, rolePool: [], fabled: [], lorics: [], bluffs: [], notes: "", nightProgress: {}, pendingPlayers: {},
     history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] }, setupRolesDealt: true, setupRolesRevealed: true,

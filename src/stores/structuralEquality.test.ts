@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { useStorytellerStore as store } from "./storytellerStore";
 import { sameSnapshot } from "./history";
 import { setupScript, standardRoles } from "@/test/setupFixtures";
-import type { EffectRecord, HistoryRecord, PlayerId, StorytellerLobbyRecord } from "./types";
+import type { EffectRecord, GameHistoryRecord as HistoryRecord, PlayerId, StorytellerLobbyRecord } from "./types";
 
 // Phase 9R.4 (Astra B): sameSnapshot() decides true no-ops for the small
 // JSON-shaped records commands compare (Effects, Reminders, private info,
