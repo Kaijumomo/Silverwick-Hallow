@@ -3194,3 +3194,20 @@ fieldset.ability-field { border: 0; padding: 0; margin: 0; }
 fieldset.ability-field legend { padding: 0; margin-bottom: 4px; }
 .ability-field-hint { color: var(--text-faint); font-size: 11px; }
 .ability-choice { display: inline-flex; align-items: center; gap: 4px; margin-right: 12px; font-size: 13px; }
+
+/* Phase 10G: bounded-text feedback (PHASE10G Section 20). */
+.text-limit { display: block; font-size: 11px; color: var(--text-faint); }
+.text-limit[data-over] { color: #e0a0a0; }
+.manual-op-text { display: flex; flex-direction: column; gap: 4px; flex: 1 1 16em; min-width: 0; }
+.manual-op-text textarea { width: 100%; max-width: 100%; box-sizing: border-box; }
+
+/* Phase 10G: Storyteller Activity (PHASE10G Section 13). */
+.activity-body { display: flex; flex-direction: column; gap: 10px; }
+.activity-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.activity-filter { display: flex; flex-direction: column; gap: 2px; flex: 1 1 10em; min-width: 0; }
+.activity-filter select { max-width: 100%; }
+.activity-list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.activity-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; overflow-wrap: anywhere; }
+.activity-resolution { border-left: 2px solid #b08a3a; padding-left: 8px; margin-bottom: 6px; }
+.activity-source { margin-bottom: 4px; }
+.activity-remove-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }

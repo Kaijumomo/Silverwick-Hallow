@@ -154,6 +154,8 @@ export function describeOperation(game: StorytellerLobbyRecord, operation: Abili
       }).filter(Boolean);
       return [`Record what ${nameOf(game, operation.recipient)} was told${told.length ? `: ${told.join(" · ")}` : ""}`];
     }
+    case "manualInformation":
+      return [`Record what ${nameOf(game, operation.recipient)} was told (manual): "${operation.text}"${operation.performedRole ? ` -- as the ${roleName(operation.performedRole)}` : ""}`];
     case "nightStep":
       return [`Mark the step ${operation.status}`];
   }

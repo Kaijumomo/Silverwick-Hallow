@@ -17,6 +17,9 @@ import type { AbilityDescriptor, AbilityInputRequirement, AbilityInputValue, Abi
 import type { RoleRegistry } from "@/data/roleRegistry";
 import type { Alignment, Script, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 import { describeOutcome, seatedParticipants } from "./abilityUi";
+import { MAX_MANUAL_DELIVERY_TEXT } from "@/stores/schemas";
+import { wakeIdentity } from "@/stores/wakeIdentity";
+import { TextLimit } from "@/components/TextLimit";
 import { OriginTag, ParticipantSelect, RequirementInput } from "./RequirementInput";
 
 /**
@@ -71,7 +74,10 @@ type ManualDraft =
   | { kind: "effect"; target: PickedParticipant; type: string }
   | { kind: "reminder"; target: PickedParticipant; label: string }
   | { kind: "role"; target: PickedParticipant; roleId: string }
-  | { kind: "alignment"; target: PickedParticipant; alignment: Alignment };
+  | { kind: "alignment"; target: PickedParticipant; alignment: Alignment }
+  /** Phase 10G: "Information told" -- what was actually communicated, as
+   * bounded text (a Manual Information Delivery). */
+  | { kind: "information"; target: PickedParticipant; text: string };
 
 const MANUAL_KINDS: { kind: ManualDraft["kind"]; label: string }[] = [
   { kind: "death", label: "Death" },
@@ -81,6 +87,7 @@ const MANUAL_KINDS: { kind: ManualDraft["kind"]; label: string }[] = [
   { kind: "role", label: "Character change" },
   { kind: "alignment", label: "Alignment change" },
   { kind: "reminder", label: "Reminder" },
+  { kind: "information", label: "Information told" },
 ];
 
 
@@ -100,6 +107,14 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
   /** The binding captured by the slot, with the record observed at that moment. */
   const pickParticipant = (binding: ParticipantBinding | null): PickedParticipant =>
     binding ? { binding, observed: game.players[binding.playerId]! } : null;
+
+  /** The simulated wake performed when `who` is this workflow's actor shown a
+   * Role other than their Actual Role (e.g. a Drunk shown as the Empath). */
+  function performedRoleFor(who: ParticipantBinding, observed: STPlayerRecord): string | undefined {
+    if (!fingerprint || who.participantId !== fingerprint.actor.participantId || target.roleId === observed.actualRole) return undefined;
+    const wake = wakeIdentity(observed, registry);
+    return wake?.simulated && wake.shownRoleId === target.roleId ? target.roleId : undefined;
+  }
 
   /** The Manual outcome, or null while any step still has no player (a step
    * is never silently dropped). A stale picked player stays in the outcome so
@@ -122,6 +137,14 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
           operations.push({ domain: "role", intents: [changeRoleIntent(observed, draft.roleId)] }); break;
         case "alignment":
           operations.push({ domain: "alignment", intents: [changeAlignmentIntent(observed, draft.alignment)] }); break;
+        case "information": {
+          // Section 12.3: the performed Role is this workflow's own simulated
+          // wake for its own actor -- never chosen freely (the coordinator
+          // re-authorizes it).
+          const performed = performedRoleFor(who, observed);
+          operations.push({ domain: "manualInformation", recipient: who, text: draft.text, ...(performed ? { performedRole: performed } : {}) });
+          break;
+        }
       }
     }
     // The Storyteller's list order IS the declared order of this manual outcome.
@@ -257,6 +280,17 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
                       {ordinaryRoleChoices(script).map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
                     </select>
                   )}
+                  {draft.kind === "information" && (
+                    <span className="manual-op-text">
+                      <textarea aria-label={`Step ${index + 1} information told`} rows={2} maxLength={MAX_MANUAL_DELIVERY_TEXT} value={draft.text}
+                        placeholder="What was communicated…"
+                        onChange={(e) => setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, text: e.target.value } as ManualDraft : d)))} />
+                      <TextLimit length={draft.text.length} max={MAX_MANUAL_DELIVERY_TEXT} />
+                      {draft.target && performedRoleFor(draft.target.binding, draft.target.observed) && (
+                        <span className="behavior-help">Recorded as the {target.roleName} procedure performed (simulated wake).</span>
+                      )}
+                    </span>
+                  )}
                   {draft.kind === "alignment" && (
                     <select aria-label={`Step ${index + 1} alignment`} value={draft.alignment} onChange={(e) => setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, alignment: e.target.value as Alignment } as ManualDraft : d)))}>
                       <option value="good">Good</option>
@@ -276,7 +310,8 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
                     : kind === "reminder" ? { kind, target: null, label: "" }
                       : kind === "role" ? { kind, target: null, roleId: "" }
                         : kind === "alignment" ? { kind, target: null, alignment: "evil" }
-                          : { kind, target: null }])}>+ {label}</button>
+                          : kind === "information" ? { kind, target: fingerprint ? pickParticipant(fingerprint.actor) : null, text: "" }
+                            : { kind, target: null }])}>+ {label}</button>
               ))}
             </div>
           </section>

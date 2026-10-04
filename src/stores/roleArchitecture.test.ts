@@ -84,9 +84,11 @@ const ALLOWED_STORE_UNITS = new Set([
 
 /** SOL-10F-L7: the Phase 10F read-only snapshot modules above are admitted
  * ONLY at their reviewed unit and only as verbatim observed copies. */
-const SNAPSHOT_SITES: Record<string, string> = {
-  "stores/abilityResolution.ts": "captureFingerprint",
-  "stores/informationDelivery.ts": "planInformationDelivery",
+const SNAPSHOT_SITES: Record<string, readonly string[]> = {
+  "stores/abilityResolution.ts": ["captureFingerprint"],
+  // Phase 10G: the Manual delivery planner snapshots the recipient's Actual
+  // Role exactly like the structured one (an observed copy, never a write).
+  "stores/informationDelivery.ts": ["planInformationDelivery", "planManualInformationDelivery"],
 };
 
 /** Units whose only write shape is a perception spec handed to setPerception. */
@@ -111,10 +113,14 @@ describe("Phase 10D architecture guard: no writer bypasses the Role seam", () =>
   });
 
   it("SOL-10F-L7: the 10F snapshot modules write Role fields only as observed copies inside their reviewed unit", () => {
-    for (const [module, unit] of Object.entries(SNAPSHOT_SITES)) {
+    for (const [module, units] of Object.entries(SNAPSHOT_SITES)) {
       const text = readFileSync(join(SRC, module), "utf8");
       expect(writeLines(text).length, module).toBeGreaterThan(0);
-      expect(snapshotViolations(FIELDS, text, unit), module).toEqual([]);
+      // A line is allowed only as an observed copy inside one of the module's
+      // reviewed units: it is a violation unless SOME unit accepts it.
+      const violations = units.map((unit) => snapshotViolations(FIELDS, text, unit))
+        .reduce((left, right) => left.filter((line) => right.some((other) => other.slice(0, other.indexOf(" (")) === line.slice(0, line.indexOf(" (")))));
+      expect(violations, module).toEqual([]);
     }
     // Self-check: a planted writer inside the reviewed unit, or a copy outside it, is caught.
     const planted = 'function captureFingerprint(player) {\n  return { actualRole: player.actualRole,\n    shownRole: "imp" };\n}\nfunction other(player) {\n  return { actualRole: player.actualRole };\n}';

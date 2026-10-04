@@ -3,7 +3,8 @@ import type { RoleRegistry } from "@/data/roleRegistry";
 import { currentGameMoment } from "./effects";
 import { cloneOwned, durableProvenance, type MutationContext } from "./history";
 import { participantRefOf, recordedInformationValues } from "./participants";
-import { InformationValueSchema, MAX_RESOLUTION_ID_LENGTH } from "./schemas";
+import { InformationValueSchema, MAX_MANUAL_DELIVERY_TEXT, MAX_RESOLUTION_ID_LENGTH } from "./schemas";
+import { currentLiveMoment } from "./lifeEvents";
 import { wakeIdentity } from "./wakeIdentity";
 import type {
   InformationActionId,
@@ -12,6 +13,7 @@ import type {
   InformationRequirement,
   InformationTiming,
   InformationValue,
+  ManualInformationDeliveryRecord,
   PlayerId,
   RoleId,
   StorytellerLobbyRecord,
@@ -350,10 +352,97 @@ export function planInformationDelivery(
   return { ok: true, record };
 }
 
-/** Pure application of one accepted Information Delivery plan. */
+/**
+ * Phase 10G (PHASE10G Section 12.2-12.4): pure Manual Information Delivery
+ * planning -- what the Storyteller actually communicated through the Manual /
+ * unmodeled path, for an interaction that owns no registered Information
+ * Action. Composed ONLY inside a Manual ability resolution (resolveAbility);
+ * there is no standalone store command for it.
+ *
+ *  - Refused outside Night/Day (an ended game is final; Setup has no
+ *    communication to record).
+ *  - `text` must be non-blank and at most MAX_MANUAL_DELIVERY_TEXT characters;
+ *    oversized text is REFUSED, never truncated.
+ *  - `performedRole` is authorized, never trusted: it must be the workflow's own
+ *    Role (`workflowRole`) AND the recipient's current SIMULATED wake identity
+ *    (the same wakeIdentity safety the structured planner applies). Equal to
+ *    the Actual Role it is the ordinary case and is not stored.
+ *  - The record never carries an `informationActionId` or structured `values`:
+ *    it can never impersonate a registered Information Action, and it is never
+ *    mechanical input.
+ */
+export type ManualInformationDeliveryPlanRequest = {
+  recipientPlayerId: PlayerId;
+  text: unknown;
+  performedRole?: RoleId;
+  context?: MutationContext;
+  resolutionId?: string;
+};
+
+export type ManualInformationDeliveryPlanEnvironment = {
+  registry: RoleRegistry | null;
+  /** The Role of the Manual workflow (its wake identity), when it has one --
+   * the only performed Role a Manual delivery may name. */
+  workflowRole?: RoleId;
+  deliveryId?: () => InformationDeliveryId;
+};
+
+export type ManualInformationDeliveryPlanResult =
+  | { ok: true; record: ManualInformationDeliveryRecord }
+  | { ok: false; message: string };
+
+export function planManualInformationDelivery(
+  game: StorytellerLobbyRecord,
+  request: ManualInformationDeliveryPlanRequest,
+  environment: ManualInformationDeliveryPlanEnvironment,
+): ManualInformationDeliveryPlanResult {
+  if (game.phase === "ended") return { ok: false, message: "This game has ended: nothing more can be recorded as told." };
+  const moment = currentLiveMoment(game);
+  if (!moment) return { ok: false, message: "Information is recorded as told only during Night or Day." };
+  const recipient = participantRefOf(game, request.recipientPlayerId);
+  const player = recipient ? game.players[request.recipientPlayerId] : undefined;
+  if (!recipient || recipient.kind !== "participant" || !player) return { ok: false, message: "This player is not seated." };
+  if (!player.actualRole) return { ok: false, message: "This player has no Actual Role yet." };
+  const { text } = request;
+  if (typeof text !== "string" || !text.trim()) return { ok: false, message: "Say what was communicated." };
+  if (text.length > MAX_MANUAL_DELIVERY_TEXT) {
+    return { ok: false, message: `What was told can be at most ${MAX_MANUAL_DELIVERY_TEXT} characters (${text.length} given) -- shorten it; nothing is cut off automatically.` };
+  }
+  const { resolutionId } = request;
+  if (resolutionId !== undefined &&
+    (typeof resolutionId !== "string" || !resolutionId || resolutionId.length > MAX_RESOLUTION_ID_LENGTH)) {
+    return { ok: false, message: "Invalid resolution id." };
+  }
+  let performedRole: RoleId | undefined;
+  if (request.performedRole !== undefined && request.performedRole !== player.actualRole) {
+    if (typeof request.performedRole !== "string" || !request.performedRole) return { ok: false, message: "Invalid performed character." };
+    const wake = environment.registry ? wakeIdentity(player, environment.registry) : null;
+    if (request.performedRole !== environment.workflowRole || !wake || !wake.simulated || wake.shownRoleId !== request.performedRole) {
+      return { ok: false, message: "A Manual delivery can only record the performed character of this workflow's simulated wake for this player." };
+    }
+    performedRole = request.performedRole;
+  }
+  const provenance = durableProvenance(game, request.context?.provenance);
+  if (provenance === null) return { ok: false, message: "The Provenance source Player is not seated." };
+  const record: ManualInformationDeliveryRecord = cloneOwned({
+    kind: "manual" as const,
+    id: (environment.deliveryId ?? informationDeliveryId)(),
+    recipient,
+    actualRole: player.actualRole,
+    ...(performedRole ? { performedRole } : {}),
+    moment: { ...moment },
+    text,
+    ...(provenance ? { provenance } : {}),
+    ...(resolutionId ? { resolutionId } : {}),
+  });
+  return { ok: true, record };
+}
+
+/** Pure application of one accepted Information Delivery plan (structured or
+ * Manual). */
 export function applyInformationDeliveryPlan(
   game: StorytellerLobbyRecord,
-  record: InformationDeliveryRecord,
+  record: InformationDeliveryRecord | ManualInformationDeliveryRecord,
 ): StorytellerLobbyRecord {
   return {
     ...game,

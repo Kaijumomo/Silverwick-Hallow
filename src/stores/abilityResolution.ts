@@ -16,7 +16,7 @@ import { activeModifiers, prospectiveJinxes, type ModifierDefinition } from "@/a
 import { applyAlignmentPlan, defaultAlignmentIds, planAlignmentTransaction, type AlignmentIdSource, type AlignmentIntent } from "./alignmentResolution";
 import { applyEffectPlan, planEffectTransaction, type EffectIdSource, type EffectIntent } from "./effectResolution";
 import { applyGameRuleFactPlan, planGameRuleFactTransaction, type GameRuleFactIdSource, type GameRuleFactIntent } from "./gameRuleFacts";
-import { applyInformationDeliveryPlan, planInformationDelivery } from "./informationDelivery";
+import { applyInformationDeliveryPlan, planInformationDelivery, planManualInformationDelivery } from "./informationDelivery";
 import { applyLifePlan, planLifeTransaction, type LifeConfirmationToken, type LifeIdSource, type LifeIntent, type LifeStatusTarget } from "./lifeResolution";
 import { nightTriggerStepKey, participantStepKey, planNightStepStatus } from "./nightProgress";
 import { applyReminderPlan, planReminderTransaction, type ReminderIdSource, type ReminderIntent } from "./reminderResolution";
@@ -98,6 +98,12 @@ export type AbilityOperation =
    * mechanical domain -- never a post-commit writer. */
   | { domain: "gameRuleFact"; intents: readonly GameRuleFactIntent[] }
   | { domain: "information"; recipient: ParticipantBinding; informationActionId: InformationActionId; values: readonly AbilityInformationValue[]; performedRole?: RoleId }
+  /** Phase 10G (PHASE10G Section 12.4): "Information told" in a MANUAL
+   * resolution -- bounded text of what was actually communicated, with no
+   * registered Information Action. Bookkeeping, never mechanics; a guided
+   * evaluator never emits it. `performedRole` is admitted only as the
+   * workflow's own simulated wake for its actor. */
+  | { domain: "manualInformation"; recipient: ParticipantBinding; text: string; performedRole?: RoleId }
   | { domain: "nightStep"; day: number; stepKey: string; status: NightStepStatus };
 
 export type AbilityDomain = AbilityOperation["domain"];
@@ -235,7 +241,7 @@ const refuse = (code: AbilityRefusalCode, message: string, extra: Partial<Abilit
 const isObject = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const isOutcome = (value: unknown): value is AbilityOutcome =>
   isObject(value) && Array.isArray(value.operations) && value.operations.every((operation) => isObject(operation) && typeof operation.domain === "string" &&
-    (operation.domain === "information" || operation.domain === "nightStep" || Array.isArray(operation.intents)));
+    (operation.domain === "information" || operation.domain === "manualInformation" || operation.domain === "nightStep" || Array.isArray(operation.intents)));
 const isBinding = (value: unknown): value is ParticipantBinding =>
   isObject(value) && typeof value.playerId === "string" && typeof value.participantId === "string" && !!value.participantId;
 
@@ -328,7 +334,7 @@ export function outcomeNeedsConfirmation(outcome: AbilityOutcome, judgmentUsed: 
     if (operation.domain === "life" && operation.intents.some((intent) => intent.kind !== "useAbility")) return true;
     const targets: unknown[] = operation.domain === "life" ? operation.intents.map((i) => i.target)
       : operation.domain === "effect" || operation.domain === "reminder" ? operation.intents.map((i) => (i as { target?: unknown }).target)
-        : operation.domain === "information" ? [operation.recipient] : [];
+        : operation.domain === "information" || operation.domain === "manualInformation" ? [operation.recipient] : [];
     for (const target of targets) if (isBinding(target)) participants.add(target.participantId);
   }
   return participants.size > 1;
@@ -417,6 +423,10 @@ type ComposeOptions = {
   consumeTrigger?: { day: number; stepKey: string; status: "done" };
   /** A simulated wake has no ability: only bookkeeping may result. */
   simulated?: { performedRole: RoleId };
+  /** Phase 10G: a MANUAL resolution's workflow (its Role and actor) -- the
+   * only context a Manual delivery's performed Role may come from. Absent for
+   * a guided resolution, which never records a Manual delivery. */
+  manualWorkflow?: { roleId?: RoleId; actor?: ParticipantBinding };
 };
 
 /** Plans an ordered outcome against one evolving working snapshot. Pure. */
@@ -429,7 +439,7 @@ export function composeAbilityOutcome(
   if (!isOutcome(outcome)) return refuse("invalid", "Malformed ability outcome.");
   if (outcome.operations.length > MAX_ABILITY_OPERATIONS) return refuse("invalid", `At most ${MAX_ABILITY_OPERATIONS} operations can be resolved at once.`);
   if (!outcome.operations.every((operation) => isObject(operation) && typeof operation.domain === "string" &&
-    ["life", "effect", "reminder", "role", "alignment", "gameRuleFact", "information", "nightStep"].includes(operation.domain))) {
+    ["life", "effect", "reminder", "role", "alignment", "gameRuleFact", "information", "manualInformation", "nightStep"].includes(operation.domain))) {
     return refuse("invalid", "Malformed ability operation.");
   }
   const ordering = checkOrdering(outcome);
@@ -444,7 +454,7 @@ export function composeAbilityOutcome(
   for (const [operationIndex, operation] of outcome.operations.entries()) {
     const domainRefusal = (domain: AbilityDomain, result: { code: string; message: string; intentIndex?: number }): AbilityRefusal =>
       refuse("domain", result.message, { domain, domainCode: result.code, operationIndex, ...(result.intentIndex !== undefined ? { intentIndex: result.intentIndex } : {}) });
-    if (operation.domain !== "information" && operation.domain !== "nightStep" && !Array.isArray(operation.intents)) {
+    if (operation.domain !== "information" && operation.domain !== "manualInformation" && operation.domain !== "nightStep" && !Array.isArray(operation.intents)) {
       return refuse("invalid", "Malformed ability operation.", { operationIndex });
     }
     // SOL-10F-A2: a bound target that no longer occupies its seat in the
@@ -520,6 +530,25 @@ export function composeAbilityOutcome(
           ...(context ? { context } : {}),
         }, { registry: environment.registry, ...(ids.deliveryId ? { deliveryId: ids.deliveryId } : {}) });
         if (!result.ok) return domainRefusal("information", { code: "refused", message: result.message });
+        working = applyInformationDeliveryPlan(working, result.record);
+        break;
+      }
+      case "manualInformation": {
+        if (!options.manualWorkflow) return refuse("invalid", "Information without a registered Information Action is recorded only by a manual resolution.", { operationIndex });
+        if (!isBinding(operation.recipient)) return refuse("invalid", "The information recipient is not a bound participant.", { operationIndex });
+        if (!boundParticipant(working, operation.recipient)) return refuse("stale", "The information recipient is no longer in that seat.", { operationIndex });
+        const workflow = options.manualWorkflow;
+        // Section 12.3: a performed Role comes from the actual workflow -- its
+        // own Role, for its own actor -- never an arbitrary Role.
+        const workflowRole = workflow.actor && workflow.actor.participantId === operation.recipient.participantId ? workflow.roleId : undefined;
+        const result = planManualInformationDelivery(working, {
+          recipientPlayerId: operation.recipient.playerId,
+          text: operation.text,
+          resolutionId,
+          ...(operation.performedRole !== undefined ? { performedRole: operation.performedRole } : {}),
+          ...(context ? { context } : {}),
+        }, { registry: environment.registry, ...(workflowRole ? { workflowRole } : {}), ...(ids.deliveryId ? { deliveryId: ids.deliveryId } : {}) });
+        if (!result.ok) return domainRefusal("manualInformation", { code: "refused", message: result.message });
         working = applyInformationDeliveryPlan(working, result.record);
         break;
       }
@@ -821,7 +850,9 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
     }
     // The bypass is visible: every record of this resolution carries it.
     const provenance = { ...(request.context?.provenance ?? {}), reason: "manual", note: request.reason.trim() };
-    const result = composeAbilityOutcome(game, request.outcome, environment, { context: { ...(request.context ?? {}), provenance }, resolutionId, ...(completeStep ? { completeStep } : {}) });
+    const result = composeAbilityOutcome(game, request.outcome, environment, { context: { ...(request.context ?? {}), provenance }, resolutionId,
+      manualWorkflow: { ...(typeof request.roleId === "string" ? { roleId: request.roleId } : {}), ...(request.fingerprint ? { actor: request.fingerprint.actor } : {}) },
+      ...(completeStep ? { completeStep } : {}) });
     if (result.ok && result.changed) result.plan.needsConfirmation = true;
     return result;
   }

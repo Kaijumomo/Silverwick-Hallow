@@ -22,6 +22,8 @@ import { requireActiveSession } from "@/firebase/lifecycle";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { DayResolutionPanel, DuskReview } from "@/features/life/DayResolution";
 import { LifeEventsPanel } from "@/features/life/LifeEventsPanel";
+import { ActivityPanel } from "@/features/activity/ActivityPanel";
+import { buildRegistry } from "@/data/roleRegistry";
 import { useMediaQuery } from "@/components/useMediaQuery";
 import type { RoleId } from "@/stores/types";
 
@@ -74,6 +76,8 @@ export function GameScreen() {
   const [dayResolutionOpen, setDayResolutionOpen] = useState(false);
   const [duskReviewOpen, setDuskReviewOpen] = useState(false);
   const [lifeEventsOpen, setLifeEventsOpen] = useState(false);
+  // Phase 10G: the Storyteller-private Activity surface.
+  const [activityOpen, setActivityOpen] = useState(false);
   // 10A-ASTRA-003: turning Privacy Mode on closes every Life Event-bearing
   // dialog at once (each also renders nothing private under Privacy Mode).
   useEffect(() => {
@@ -81,6 +85,7 @@ export function GameScreen() {
     setDayResolutionOpen(false);
     setDuskReviewOpen(false);
     setLifeEventsOpen(false);
+    setActivityOpen(false);
   }, [privacyMode]);
   // Phase 9C.6 (OPUS-002): the current Public Display capability token, held
   // only in this component's local/runtime state — never in
@@ -296,6 +301,8 @@ export function GameScreen() {
     return roles;
   }, [script]);
 
+  const registry = useMemo(() => buildRegistry(script ?? { id: game?.scriptId ?? "", name: "", characters: [] }), [script, game?.scriptId]);
+
   if (!game) return null;
   const selected = selectedPlayerId ? game.players[selectedPlayerId] : null;
   const setupVisible = game.phase === "setup" && setupPanelOpen && !!script && !privacyMode;
@@ -485,6 +492,12 @@ export function GameScreen() {
               Day resolution
             </button>
           )}
+          {game.phase !== "setup" && !privacyMode && (
+            <button className="btn btn-sm" onClick={() => { closeOverflow(); setActivityOpen(true); }}
+              title="Review what changed and what was told this game">
+              Activity
+            </button>
+          )}
           {(game.phase === "night" || game.phase === "day") && !privacyMode && (
             <button className="btn btn-sm" onClick={() => { closeOverflow(); setLifeEventsOpen(true); }}
               title="Review and correct recent deaths, executions, exiles and resurrections">
@@ -656,6 +669,9 @@ export function GameScreen() {
       )}
       {lifeEventsOpen && (game.phase === "night" || game.phase === "day") && (
         <LifeEventsPanel onClose={() => setLifeEventsOpen(false)} />
+      )}
+      {activityOpen && !privacyMode && game.phase !== "setup" && (
+        <ActivityPanel game={game} registry={registry} readOnly={game.phase === "ended"} onClose={() => setActivityOpen(false)} />
       )}
 
       {selected && (
