@@ -11,8 +11,8 @@
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
 **Phase 10G final reviewed checkpoint:** `2aabccbb925183c2359bef5d48a2ee5cca2dfd03` (final production `7add7c661e43349634e0b6717d7c05ee18a31957`); `main` fast-forwarded to it, with a docs-only closure commit directly on top\
 **Schema:** v25 integrated on `main`\
-**Phase 10:** COMPLETE (10A–10G closed and integrated)\
-**Current phase:** Phase 11 architecture/scope preparation (canonical character coverage). No Phase 11 code has started.
+**Phase 10 mechanical/state program:** COMPLETE (10A–10G closed and integrated; 10H does not reopen their closure)\
+**Current phase:** Phase 10H — Storyteller UI/UX & Visual Design System — PLANNING. No Phase 10H production UI code has started.
 
 ## Product invariants
 
@@ -267,9 +267,47 @@ Deferred hardening (recorded, not Phase 10G blockers): store-wide E1 precommit g
 
 **Phase 10 — COMPLETE.** With 10G closed and integrated, every Phase 10 slice (10A–10G) is closed and integrated into `main`.
 
+## Phase 10H — Storyteller UI/UX & Visual Design System
+
+**Status:** PLANNING / DESIGN CONTRACT PREPARATION. No production UI redesign has started.\
+**Branch:** `dev/phase-10h-ui`\
+**Starting baseline:** `e0ba539ae448eb494ca5739564a39c49d2e59467` — the exact post-10G documentation-closure tip of `main`.\
+**Schema/store baseline:** v25; no schema or Firebase Rules change is authorized by creating this phase.\
+**Phase document:** `PHASE10H.md`.
+
+10H is a newly inserted post-10G product/design phase. It does **not** reopen Phase 10G, invalidate the Phase 10A–10G closure evidence, or change the frozen authority/workflow primitives. Its purpose is to overhaul the Storyteller-facing web UI around the now-stable mechanics before high-volume canonical character coverage expands the interface further.
+
+Planned scope:
+- establish a coherent Silverwick visual identity and reusable design-token/component system;
+- overhaul the Grimoire/player-seat hierarchy, Player Drawer/workspaces, navigation, dialogs, panels and responsive layout;
+- consolidate visual presentation of Life, Role, Alignment, Effects, Reminders, Rule Facts, Night progress and Storyteller Activity;
+- improve Setup/New Game, guided Night operation, Dawn Review, finished-game review and common table workflows;
+- define typography, spacing, surfaces, iconography, focus/selected/disabled/error/loading/empty states and motion rules;
+- make tablet/phone behavior intentional rather than a desktop layout compressed downward;
+- preserve Privacy Mode/hidden-information boundaries and accessible keyboard/touch/screen-reader operation;
+- create visual regression/reference states for dense real-game conditions, including 12–15 players, long names, multiple indicators and open workspaces.
+
+Out of scope unless Sol separately authorizes it:
+- new BOTC mechanical semantics, new ability automation or canonical character coverage;
+- changing Current State / History / Information Delivery authority boundaries;
+- schema, Firebase Rules, writer/fencing or projection redesign merely to support a visual preference;
+- nominations or ordinary voting.
+
+Design ownership for 10H:
+- **Project owner / Guillermo:** visual direction and final product taste decisions.
+- **ChatGPT / Sol:** product/UX contract, scope, acceptance criteria and adjudication.
+- **Claude Code / Sonnet:** default design-system and frontend implementation lead after the design contract is frozen.
+- **Claude Chat / Opus:** challenge interaction/architecture proposals where a design choice can affect state, privacy, workflow or maintainability.
+- **Luna:** independent mechanical/responsive/accessibility/visual acceptance verification.
+- **Astra:** adversarial review of hidden-information, Privacy Mode, stale/ended states and interaction edge cases.
+
+Recommended project-scoped Claude tooling for 10H may include Anthropic `frontend-design`, Vercel `web-design-guidelines` and `react-best-practices`, Impeccable, Anthropic `webapp-testing`, and Playwright MCP. Installation is tooling preparation only; it does not itself authorize production redesign or prove design quality.
+
+The first design deliverable should be one representative, dense Storyteller screen used as the visual north star: a populated Grimoire with realistic life/role/alignment/effect/reminder/rule-fact states, one selected participant/workspace, Night controls, and phone/tablet variants. Sol freezes the implementation contract only after the design direction and required states are clear.
+
 ## Phase 11 — Canonical character coverage (roadmap unchanged)
 
-Phase 11 keeps its approved scope: full canonical Character / Traveler / Fabled / Loric semantic coverage (see 10F above and `PHASE10F.md` §18), added primarily through descriptors, evaluators, registered semantics and tests on the completed Phase 10 authority/workflow foundation (`PHASE10G.md` §29). Its architecture/scope challenge has not started.
+Phase 11 keeps its approved scope: full canonical Character / Traveler / Fabled / Loric semantic coverage (see 10F above and `PHASE10F.md` §18), added primarily through descriptors, evaluators, registered semantics and tests on the completed Phase 10 authority/workflow foundation (`PHASE10G.md` §29). Its architecture/scope challenge has not started and is now sequenced **after Phase 10H closes**.
 
 ## Phase workflow
 
@@ -298,7 +336,8 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 - `dev/phase-10f` starts from the exact final integrated `main` of the Phase 10E integration: the docs-only integration record directly on top of closure checkpoint `6129c7f4585da0e12aeea3a9a5007c88fb508ad7`.
 - `dev/phase-10g` starts from the exact final integrated `main` of the Phase 10F integration: `52e685b16e76df15154512a52a34831a6aeba399`.
 - `dev/phase-10g` was fast-forwarded into `main` at `2aabccbb925183c2359bef5d48a2ee5cca2dfd03`; the branch is retained at that exact reviewed checkpoint.
+- `dev/phase-10h-ui` starts from the exact post-10G documentation-closure `main` checkpoint `e0ba539ae448eb494ca5739564a39c49d2e59467`. Keep 10H UI/design work isolated there until its own review and integration gate.
 
 ## Immediate next action
 
-Phase 11 architecture/scope preparation for canonical character coverage, using the completed Phase 10 authority/workflow foundation. Start from the exact final integrated `main` (the Phase 10G docs-only closure commit). Do not code Phase 11 before its architecture challenge and Sol contract.
+Phase 10H design discovery and contract preparation on `dev/phase-10h-ui`. First establish the representative Storyteller-screen visual north star, audit the current component/layout system, and freeze `PHASE10H.md` acceptance criteria before broad production UI implementation. Phase 11 canonical coverage remains queued after 10H closure.
