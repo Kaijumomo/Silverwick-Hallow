@@ -1,5 +1,5 @@
 import { AbilityEntry } from "@/features/abilities/AbilityEntry";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { MAX_ST_NOTES } from "@/stores/schemas";
 import { TextLimit } from "@/components/TextLimit";
 import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
@@ -17,29 +17,24 @@ import { getPrivateInfoApplicability } from "@/stores/privatePackets";
 import { roleAuthority } from "@/data/canonical";
 import { evilInformationPolicy } from "@/features/nightOrder/nightRules";
 import { buildRegistry, resolvedCharacters } from "@/data/roleRegistry";
-import { useModalBehavior } from "@/components/Modal";
 import { usePrivacyStore } from "@/stores/privacyStore";
+import { useShellStore, type InspectorDetent } from "@/stores/shellStore";
+import { useShellLayout } from "@/components/useShellLayout";
 import { EffectControls } from "@/features/effects/EffectControls";
 import { ReminderControls } from "@/features/reminders/ReminderControls";
 import { lifeStatusOf } from "@/stores/lifeState";
 import { LifeControls } from "@/features/life/LifeControls";
 import { LifeStateText } from "@/features/life/LifeMarks";
+import { RolePicker } from "@/components/RolePicker";
+import { ParticipantPicker } from "@/components/ParticipantPicker";
+import { Segmented } from "@/components/Segmented";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { TruthStrip } from "./TruthStrip";
 import type {
   BehaviorMode,
   RoleDef,
-  RoleType,
   STPlayerRecord,
 } from "@/stores/types";
-
-const TYPE_ORDER: RoleType[] = [
-  "townsfolk",
-  "outsider",
-  "minion",
-  "demon",
-  "traveler",
-  "fabled",
-  "loric",
-];
 
 const BEHAVIOR_MODES: { value: BehaviorMode; label: string; help: string }[] = [
   { value: "normal", label: "Normal", help: "Acts as their actual role." },
@@ -66,85 +61,123 @@ const BEHAVIOR_MODES: { value: BehaviorMode; label: string; help: string }[] = [
   { value: "custom", label: "Custom", help: "Track manually with notes." },
 ];
 
-function groupByType(roles: RoleDef[]) {
-  const out: Record<RoleType, RoleDef[]> = {
-    townsfolk: [],
-    outsider: [],
-    minion: [],
-    demon: [],
-    traveler: [],
-    fabled: [],
-    loric: [],
-  };
-  for (const r of roles) out[r.type].push(r);
-  return out;
-}
-
-function RolePickerGrid({
-  roles,
-  selectedRoleId,
-  onPick,
-  filter,
-}: {
-  roles: RoleDef[];
-  selectedRoleId: string | null;
-  onPick: (id: string) => void;
-  filter?: (r: RoleDef) => boolean;
-}) {
-  const filtered = filter ? roles.filter(filter) : roles;
-  const grouped = groupByType(filtered);
-  return (
-    <div className="role-picker">
-      {TYPE_ORDER.map((t) => {
-        const list = grouped[t];
-        if (!list.length) return null;
-        return (
-          <div key={t}>
-            <div className={`role-picker-group-title type-${t}`}>{t}</div>
-            <div className="role-picker-grid">
-              {list.map((r) => (
-                <button
-                  key={r.id}
-                  className={`role-card ${selectedRoleId === r.id ? "selected" : ""}`}
-                  onClick={() => onPick(r.id)}
-                  title={r.ability}
-                >
-                  <span className={`role-card-name type-${r.type}`}>{r.name}</span>
-                  <span className="role-card-type">{r.type}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 type PlayerDrawerProps = {
   player: STPlayerRecord;
   onRemove?: (id: string) => Promise<void> | void;
   onUnseat?: (id: string) => Promise<void> | void;
 };
 
-function DrawerShell({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
-  const drawerRef = useRef<HTMLElement>(null);
-  const layerRef = useRef<HTMLDivElement>(null);
-  useModalBehavior(drawerRef, layerRef, onClose);
-  return <div ref={layerRef}>
-    <div className="drawer-backdrop" onClick={onClose} aria-hidden="true" />
-    <aside ref={drawerRef} className="drawer" role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>
-      {children}
+/**
+ * Phase 10H (contract §§5, 7, 9; H4, I1): the participant workspace -- the
+ * Inspector. NON-MODAL: it never inerts the Table, traps focus or blocks the
+ * page; the Grimoire stays operable beside it. Its hierarchy is frozen:
+ * Truth -> Now -> Identity -> Records -> Admin. It supports the detents
+ * peek (Truth + Now) -> expanded (everything) -> hidden (a slim tab that keeps
+ * the selection); the detent is session-local UI state (shellStore).
+ *
+ * Focus: opening moves focus to the Inspector heading; Escape (from inside it)
+ * or Close returns focus to the invoker (normally the seat). Role pickers are
+ * searchable and loaded on demand -- never dumped into the default DOM.
+ *
+ * Notes (§9): the ST-notes draft commits on blur, on Close and on a seat
+ * change; Privacy Mode teardown DISCARDS an uncommitted draft rather than
+ * silently committing it.
+ */
+function InspectorShell({ title, playerId, onClose, detent, mode, children }: {
+  title: string;
+  playerId: string;
+  onClose: () => void;
+  detent: InspectorDetent;
+  /** "private" / "safe": a Privacy Mode switch replaces the contents. */
+  mode: "private" | "safe";
+  children: ReactNode;
+}) {
+  const asideRef = useRef<HTMLElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const invokerRef = useRef<HTMLElement | null>(null);
+  // On open and on every selection change: remember the invoker (when focus is
+  // outside the Inspector) and move focus to the Inspector heading.
+  useEffect(() => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active !== document.body && !asideRef.current?.contains(active)) invokerRef.current = active;
+    if (detent !== "hidden") headingRef.current?.focus({ preventScroll: true });
+  }, [playerId]);
+  // Focus is never left on a control that disappeared (Privacy Mode swapping
+  // the contents, a detent change): it lands on the Inspector heading.
+  useEffect(() => {
+    const active = document.activeElement;
+    if (!active || active === document.body || !active.isConnected) headingRef.current?.focus({ preventScroll: true });
+  }, [mode, detent]);
+  // Unmount (Close / Escape / deselection): focus returns predictably to the
+  // invoker, or to the participant's seat when the invoker is gone.
+  useEffect(() => () => {
+    const inside = asideRef.current?.contains(document.activeElement) || document.activeElement === document.body;
+    if (!inside) return;
+    const invoker = invokerRef.current;
+    const seat = document.querySelector<HTMLElement>(`.grimoire .token[data-player-id="${CSS.escape(playerId)}"]`);
+    const target = invoker?.isConnected && !invoker.closest("[inert]") ? invoker : seat;
+    target?.focus({ preventScroll: true });
+  }, [playerId]);
+  return (
+    <aside ref={asideRef} className="inspector" role="complementary" aria-label={title} data-detent={detent}
+      onKeyDown={(e) => {
+        if (e.key !== "Escape" || e.defaultPrevented) return;
+        e.preventDefault();
+        onClose();
+      }}>
+      <InspectorHeadingContext.Provider value={headingRef}>{children}</InspectorHeadingContext.Provider>
     </aside>
-  </div>;
+  );
 }
 
-function PrivacySafeContents({ player, onClose }: { player: STPlayerRecord; onClose: () => void }) {
-  return <>
-    <div className="drawer-header">
-      <span className="drawer-name privacy-safe-name">Player</span>
-      <button className="btn btn-sm" onClick={onClose} aria-label="Close">✕</button>
+const InspectorHeadingContext = createContext<RefObject<HTMLHeadingElement> | null>(null);
+
+/** The Inspector header: the participant, the detent controls and Close. */
+function InspectorHeader({ name, seat, detent, onDetent, onClose, expandable = true }: {
+  name: string;
+  seat: number | null;
+  detent: InspectorDetent;
+  onDetent: (detent: InspectorDetent) => void;
+  onClose: () => void;
+  expandable?: boolean;
+}) {
+  const headingRef = useContext(InspectorHeadingContext);
+  return (
+    <div className="drawer-header inspector-header">
+      <h2 ref={headingRef} tabIndex={-1} className="inspector-title">
+        <span className="inspector-name">{name}</span>
+        {seat !== null && <span className="inspector-seat"> · seat {seat + 1}</span>}
+      </h2>
+      <div className="inspector-detents">
+        {expandable && detent !== "hidden" && (
+          <button type="button" className="btn btn-sm" aria-pressed={detent === "expanded"}
+            onClick={() => onDetent(detent === "expanded" ? "peek" : "expanded")}>
+            {detent === "expanded" ? "Peek" : "Expand"}
+          </button>
+        )}
+        <button type="button" className="btn btn-sm" onClick={() => onDetent(detent === "hidden" ? "expanded" : "hidden")}
+          aria-label={detent === "hidden" ? `Show the Inspector for ${name}` : "Hide the Inspector"}>
+          {detent === "hidden" ? "Show" : "Hide"}
+        </button>
+        <button type="button" className="btn btn-sm" onClick={onClose} aria-label="Close">✕</button>
+      </div>
     </div>
+  );
+}
+
+/** One labelled group of the frozen hierarchy (Truth / Now / Identity / Records / Admin). */
+function InspectorGroup({ title, children }: { title: string; children: ReactNode }) {
+  const id = useId();
+  return (
+    <div className="inspector-group" role="group" aria-labelledby={id} data-inspector-group={title}>
+      <h3 id={id} className="inspector-group-title">{title}</h3>
+      {children}
+    </div>
+  );
+}
+
+function PrivacySafeContents({ player }: { player: STPlayerRecord }) {
+  return (
     <div className="drawer-body">
       <section className="drawer-section">
         <h3 className="drawer-section-title">Safe view</h3>
@@ -159,7 +192,7 @@ function PrivacySafeContents({ player, onClose }: { player: STPlayerRecord; onCl
         <p className="behavior-help">Storyteller details are hidden while Privacy Mode is on.</p>
       </section>
     </div>
-  </>;
+  );
 }
 
 export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) {
@@ -180,6 +213,12 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   const setAbilityUsed = useStorytellerStore((s) => s.setAbilityUsed);
   const setNotes = useStorytellerStore((s) => s.setNotes);
   const privacyMode = usePrivacyStore((s) => s.enabled);
+  const layout = useShellLayout();
+  const storedDetent = useShellStore((s) => s.inspectorDetent);
+  const setDetent = useShellStore((s) => s.setInspectorDetent);
+  const litActor = useShellStore((s) => s.litActor);
+  // The layout default: a phone opens at peek (thumb zone), wider layouts expanded.
+  const detent: InspectorDetent = storedDetent ?? (layout === "phone" ? "peek" : "expanded");
 
   const [nameDraft, setNameDraft] = useState(player.name);
   const [refinementError, setRefinementError] = useState<string | null>(null);
@@ -196,13 +235,33 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   const [travelerStatusError, setTravelerStatusError] = useState<string | null>(null);
   const [membershipBusy, setMembershipBusy] = useState(false);
   const [membershipError, setMembershipError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<"remove" | "unseat" | null>(null);
   const [notesDraft, setNotesDraft] = useState(player.stNotes);
+  // §9: the draft and the participant it belongs to, so a seat change commits
+  // it to the participant it was written for -- never to the next occupant.
+  const notesOwner = useRef({ playerId: player.id, participantId: player.participantId, draft: player.stNotes });
+  notesOwner.current.draft = notesDraft;
   useEffect(() => {
     setNameDraft(player.name);
   }, [player.id, player.name]);
   useEffect(() => {
+    const previous = notesOwner.current;
+    if (previous.playerId !== player.id) {
+      const latest = useStorytellerStore.getState().game?.players[previous.playerId];
+      if (latest && latest.participantId === previous.participantId && previous.draft !== latest.stNotes) {
+        setNotes(previous.playerId, previous.draft);
+      }
+    }
+    notesOwner.current = { playerId: player.id, participantId: player.participantId, draft: player.stNotes };
     setNotesDraft(player.stNotes);
   }, [player.id, player.stNotes]);
+  // §9: Privacy Mode teardown discards (never silently commits) a draft.
+  useEffect(() => {
+    if (!privacyMode) return;
+    const latest = useStorytellerStore.getState().game?.players[player.id];
+    setNotesDraft(latest?.stNotes ?? "");
+    setConfirming(null);
+  }, [privacyMode]);
 
   // SOL-10D-C03 / CLOSURE-03: every Role this drawer displays or names -- the
   // current and shown Role, a bluff -- is the ONE definition the registry
@@ -251,27 +310,32 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   );
 
   const commitNotes = () => {
+    if (usePrivacyStore.getState().enabled) return;
     const latest = useStorytellerStore.getState().game?.players[player.id];
     if (latest && notesDraft !== latest.stNotes) {
       setNotes(player.id, notesDraft);
     }
   };
 
-  // Shared by every dismissal path — normal close button/Escape/backdrop and
-  // the Privacy Mode safe-view shell alike — so a dirty notes draft is never
-  // silently discarded regardless of which shell is currently showing.
+  // Shared by every dismissal path (Close, Escape) -- a dirty notes draft is
+  // committed on an explicit dismissal; Privacy Mode has already discarded it.
   const close = () => {
     commitNotes();
     selectPlayer(null);
   };
 
   if (!game || !script) return null;
-  if (privacyMode) return <DrawerShell title={`Player ${player.name}`} onClose={close}>
-    <PrivacySafeContents player={player} onClose={close} />
-  </DrawerShell>;
+  if (privacyMode) return (
+    <InspectorShell title={`Player ${player.name}`} playerId={player.id} onClose={close} detent={detent} mode="safe">
+      <InspectorHeader name="Player" seat={null} detent={detent === "hidden" ? "hidden" : "peek"}
+        onDetent={setDetent} onClose={close} expandable={false} />
+      {detent !== "hidden" && <PrivacySafeContents player={player} />}
+    </InspectorShell>
+  );
   const role = player.actualRole ? roleById.get(player.actualRole) : undefined;
   const shownRoleDef = player.shownRole ? roleById.get(player.shownRole) : undefined;
   const displayRole = role;
+  const acting = game.phase === "night" && litActor?.playerId === player.id && litActor.participantId === player.participantId;
 
   const commitName = () => {
     if (nameDraft.trim() && nameDraft.trim() !== player.name) {
@@ -287,8 +351,10 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
     setMembershipBusy(true);
     try {
       await action();
+      setConfirming(null);
       selectPlayer(null);
     } catch (e) {
+      setConfirming(null);
       setMembershipError(e instanceof Error ? e.message : "Could not update this player's membership.");
     } finally {
       setMembershipBusy(false);
@@ -310,383 +376,369 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
   // Night/Day has begun. Traveler character assignment is deliberately
   // unaffected: Travelers are never part of the committed ordinary roster.
   const committedReadOnly = game.phase === "setup" && isInitialRevealComplete(game);
+  const expanded = detent === "expanded";
 
   return (
-    <DrawerShell title="Player editor" onClose={close}>
-        <div className="drawer-header">
-          <input
-            className="drawer-name"
-            aria-label="Player name"
-            value={nameDraft}
-            onChange={(e) => setNameDraft(e.target.value.slice(0, 20))}
-            onBlur={commitName}
-            maxLength={20}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-              if (e.key === "Escape") {
-                setNameDraft(player.name);
-                (e.target as HTMLInputElement).blur();
-              }
-            }}
-          />
-          <button className="btn btn-sm" onClick={close} aria-label="Close">
-            ✕
-          </button>
-        </div>
+    <InspectorShell title={`Participant: ${player.name || `seat ${player.seat + 1}`}`} playerId={player.id} onClose={close} detent={detent} mode="private">
+      <InspectorHeader name={player.name || "Unnamed player"} seat={player.seat} detent={detent} onDetent={setDetent} onClose={close} />
+      {detent !== "hidden" && (
+        <div className="drawer-body inspector-body">
+          {/* ---------------- 1. Truth ---------------- */}
+          <TruthStrip player={player} roleById={roleById} registry={registry} acting={acting} />
 
-        <div className="drawer-body">
-          {player.isTraveler && <TravelerArrival playerId={player.id} />}
-          <section className="drawer-section">
-            <h3 className="drawer-section-title">Seat</h3>
-            <div className="drawer-row">
-              <button
-                className="btn btn-sm"
-                onClick={() => movePlayer(player.id, "left")}
-              >
-                ← move
-              </button>
-              <span className="label">seat {player.seat + 1}</span>
-              <button
-                className="btn btn-sm"
-                onClick={() => movePlayer(player.id, "right")}
-              >
-                move →
-              </button>
-            </div>
-          </section>
+          {/* ---------------- 2. Now ---------------- */}
+          <InspectorGroup title="Now">
+            {/* Phase 10A: life changes are semantic commands (death, execution,
+                exile, resurrection, vote token, correction) -- never a bare
+                alive/dead toggle. */}
+            <LifeControls player={player} />
 
-          {/* Phase 10A: life changes are semantic commands (death, execution,
-              exile, resurrection, vote token, correction) -- never a bare
-              alive/dead toggle. */}
-          <LifeControls player={player} />
+            {/* Phase 10F (SOL-10F-L3): progressively disclosed ability entry --
+                the same workspace / coordinator / one-commit command as the
+                Night Order; keyed by participation so no draft carries over. */}
+            <AbilityEntry key={`ability:${player.participantId ?? player.id}`} player={player} />
 
-          {/* Phase 10F (SOL-10F-L3): progressively disclosed ability entry --
-              the same workspace / coordinator / one-commit command as the
-              Night Order; keyed by participation so no draft carries over. */}
-          <AbilityEntry key={player.participantId ?? player.id} player={player} />
-
-          <section className="drawer-section">
-            <h3 className="drawer-section-title">State</h3>
-            {/* Phase 10F: through the Life boundary -- marking used is a
-                gameplay use, clearing it a correction; Night/Day only. */}
-            <div className="drawer-row">
-              <button
-                className="toggle-pill"
-                aria-pressed={player.abilityUsed}
-                disabled={game?.phase !== "night" && game?.phase !== "day"}
-                title={game?.phase !== "night" && game?.phase !== "day" ? "Ability use is recorded during Night or Day." : undefined}
-                onClick={() => {
-                  const result = setAbilityUsed(player.id, !player.abilityUsed);
-                  setAbilityError(result.ok ? null : result.message);
-                }}
-              >
-                Ability used
-              </button>
-            </div>
-            {abilityError && <p className="behavior-help" role="alert">{abilityError}</p>}
-          </section>
-
-          {/* Phase 10B: Effects -- one-tap manual quick effects, the compact
-              aggregated active list, and the advanced workflow. Keyed by the
-              participation instance so no disclosure state carries over to
-              a different occupant of this seat. */}
-          <EffectControls key={player.participantId ?? player.id} player={player} />
-
-          <section className="drawer-section">
-            <h3 className="drawer-section-title">Travel status</h3>
-            {/* SOL-10E-A1: the Setup Traveler designation is actionable only
-                while the game is in Setup and before the initial Reveal. */}
-            {game.phase !== "setup" ? (
-              <p className="behavior-help">{player.isTraveler ? "Traveler" : "Not a traveler"} — Traveler status is set up only during Setup.</p>
-            ) : committedReadOnly ? (
-              <p className="behavior-help">Roles are revealed; Traveler status is locked in until this game ends or a new one starts.</p>
-            ) : (
+            <section className="drawer-section">
+              <h4 className="drawer-section-title">State</h4>
+              {/* Phase 10F: through the Life boundary -- marking used is a
+                  gameplay use, clearing it a correction; Night/Day only. */}
               <div className="drawer-row">
                 <button
                   className="toggle-pill"
-                  aria-pressed={player.isTraveler}
+                  aria-pressed={player.abilityUsed}
+                  disabled={game.phase !== "night" && game.phase !== "day"}
                   onClick={() => {
-                    setTravelerStatusError(null);
-                    const result = setIsTraveler(player.id, !player.isTraveler);
-                    if (!result.ok) setTravelerStatusError(result.message ?? "Could not change Traveler status.");
+                    const result = setAbilityUsed(player.id, !player.abilityUsed);
+                    setAbilityError(result.ok ? null : result.message);
                   }}
                 >
-                  {player.isTraveler ? "Traveler" : "Not a traveler"}
+                  Ability used
                 </button>
-                {player.isTraveler && (
-                  <span className="behavior-help">
-                    Role picker shows travelers only.
-                  </span>
-                )}
+                {game.phase !== "night" && game.phase !== "day" && <span className="disabled-reason">Ability use is recorded during Night or Day.</span>}
               </div>
-            )}
-            {travelerStatusError && <p role="alert" className="field-error">{travelerStatusError}</p>}
-          </section>
+              {abilityError && <p className="behavior-help" role="alert">{abilityError}</p>}
+            </section>
 
-          {!player.isTraveler && <section className="drawer-section">
-            <h3 className="drawer-section-title">Actual role (ST private)</h3>
-            {displayRole ? (
-              <div className="role-display">
-                <span className={`role-display-label type-${displayRole.type}`}>
-                  {displayRole.name}
-                </span>
-                <span className="label">{displayRole.type}</span>
-                {displayRole.ability && (
-                  <p className="role-display-ability">{displayRole.ability}</p>
+            {/* Phase 10B: Effects -- one-tap manual quick effects, the compact
+                aggregated active list, and the advanced workflow. Keyed by the
+                participation instance so no disclosure state carries over to
+                a different occupant of this seat. */}
+            <EffectControls key={`effects:${player.participantId ?? player.id}`} player={player} />
+          </InspectorGroup>
+
+          {!expanded ? (
+            <button type="button" className="btn btn-sm inspector-more" onClick={() => setDetent("expanded")}>
+              Identity, Records and Admin…
+            </button>
+          ) : <>
+          {/* ---------------- 3. Identity ---------------- */}
+          <InspectorGroup title="Identity">
+            {player.isTraveler && <TravelerArrival playerId={player.id} />}
+
+            {!player.isTraveler && <section className="drawer-section">
+              <h4 className="drawer-section-title">Actual role (ST private)</h4>
+              {displayRole ? (
+                <div className="role-display">
+                  <span className={`role-display-label type-${displayRole.type}`}>
+                    {displayRole.name}
+                  </span>
+                  <span className="label">{displayRole.type}</span>
+                  {displayRole.ability && (
+                    <p className="role-display-ability prose">{displayRole.ability}</p>
+                  )}
+                  <p className="behavior-help">{roleAuthority(displayRole)}</p>
+                </div>
+              ) : (
+                <p className="behavior-help">No role assigned yet.</p>
+              )}
+              {committedReadOnly ? (
+                <p className="behavior-help">Roles are revealed; the starting ordinary assignment is locked until Night 1 begins. Use a correction to repair it.</p>
+              ) : <>
+                <RolePicker
+                  label="Actual role"
+                  roles={rolePool}
+                  value={player.actualRole || null}
+                  triggerText={displayRole ? "Change actual role…" : "Choose actual role…"}
+                  onPick={(id) => {
+                    setRefinementError(null);
+                    setRoleError(null);
+                    if (refinementAvailable) {
+                      const result = replaceSetupRole(player.id, id);
+                      if (!result.ok) setRefinementError(result.message);
+                    } else {
+                      runRoles([
+                        changeRoleIntent(player, id),
+                        ...(alsoShowNewRole && !needsShownIdentity(id)
+                          ? [setPerceptionIntent(player, { shownRole: id, shownAlignment: null })] : []),
+                      ]);
+                    }
+                  }}
+                />
+                <p className="behavior-help">
+                  {refinementAvailable
+                    ? "Setup refinement: changing the actual role resets this player's shown identity for the new assignment."
+                    : "Changing the actual role keeps the player's shown identity unchanged unless you also show the new role."}
+                </p>
+                {!refinementAvailable && (
+                  <label className="drawer-row">
+                    <input type="checkbox" checked={alsoShowNewRole} onChange={(e) => setAlsoShowNewRole(e.target.checked)} />
+                    <span>Also show the player the new role</span>
+                  </label>
                 )}
-                <p className="behavior-help">{roleAuthority(displayRole)}</p>
-              </div>
-            ) : (
-              <p className="behavior-help">No role assigned yet.</p>
+                {displayRole && !needsShownIdentity(player.actualRole) && (
+                  <button className="btn btn-sm" onClick={() => {
+                    setRoleError(null);
+                    runRoles([setPerceptionIntent(player, {
+                      shownRole: player.actualRole,
+                      shownAlignment: player.shownRole === player.actualRole ? player.shownAlignment : null,
+                    })]);
+                  }}>
+                    Show assigned role
+                  </button>
+                )}
+                {refinementAvailable && otherOrdinaryPlayers.length > 0 && (
+                  /* Phase 10H (§10.3): the swap partner is chosen on the Table or Roster. */
+                  <ParticipantPicker game={game} label="Swap role with" value={null} candidates={otherOrdinaryPlayers}
+                    defaultOpen={false}
+                    onChange={(binding) => {
+                      if (!binding) return;
+                      setRefinementError(null);
+                      const result = swapSetupRoles(player.id, binding.playerId);
+                      if (!result.ok) setRefinementError(result.message);
+                    }} />
+                )}
+                {refinementError && <p role="alert" className="field-error">{refinementError}</p>}
+              </>}
+              {/* Advanced, progressively disclosed: a CORRECTION repairs a
+                  wrongly recorded Role. It is not a gameplay character change:
+                  the ability-used marker stays as it is and History marks it. */}
+              {(game.phase !== "setup" || committedReadOnly) && (
+                <details className="drawer-advanced" open={correctionOpen}
+                  onToggle={(e) => setCorrectionOpen((e.currentTarget as HTMLDetailsElement).open)}>
+                  <summary>Correct the recorded role…</summary>
+                  {correctionOpen && <>
+                    <RolePicker label="Corrected role" roles={rolePool} value={player.actualRole || null}
+                      triggerText="Choose the correct role…"
+                      onPick={(id) => { setRoleError(null); runRoles([correctRoleIntent(player, id)]); }} />
+                    <p className="behavior-help">Use this when the recorded role was wrong. It is not a character change: ability used stays, and History shows a correction.</p>
+                  </>}
+                </details>
+              )}
+              {roleError && <p role="alert" className="field-error">{roleError}</p>}
+            </section>}
+
+            {/* Phase 10E: Actual Alignment truth through the Alignment seam --
+                separate from the player-facing alignment (perception, below).
+                A Traveler's lives in their arrival section. Keyed by the
+                participation instance so no cue/disclosure state carries over
+                to a different occupant of this seat. */}
+            {!player.isTraveler && (
+              <section className="drawer-section">
+                <h4 className="drawer-section-title">Alignment (ST private)</h4>
+                <ActualAlignmentControls key={`alignment:${player.participantId ?? player.id}`} player={player} />
+              </section>
             )}
-            {committedReadOnly ? (
-              <p className="behavior-help">Roles are revealed; the starting ordinary assignment is locked until Night 1 begins. Use a correction to repair it.</p>
-            ) : <>
-              <RolePickerGrid
-                roles={rolePool}
-                selectedRoleId={player.actualRole || null}
-                onPick={(id) => {
-                  setRefinementError(null);
-                  setRoleError(null);
-                  if (refinementAvailable) {
-                    const result = replaceSetupRole(player.id, id);
-                    if (!result.ok) setRefinementError(result.message);
-                  } else {
-                    runRoles([
-                      changeRoleIntent(player, id),
-                      ...(alsoShowNewRole && !needsShownIdentity(id)
-                        ? [setPerceptionIntent(player, { shownRole: id, shownAlignment: null })] : []),
-                    ]);
+
+            {displayRole && !player.isTraveler && (
+              <section className="drawer-section">
+                <h4 className="drawer-section-title">
+                  Behavior &amp; deception
+                </h4>
+                <Segmented
+                  label="Mode"
+                  value={player.behaviorMode}
+                  options={BEHAVIOR_MODES.map(({ value, label }) => ({ value, label }))}
+                  onChange={(behaviorMode) => {
+                    runRoles([setPerceptionIntent(player, {
+                      shownRole: player.shownRole, shownAlignment: player.shownAlignment,
+                      behaviorMode,
+                    })], setPerceptionError);
+                  }}
+                />
+                <p className="behavior-help">
+                  {BEHAVIOR_MODES.find((m) => m.value === player.behaviorMode)?.help}
+                </p>
+
+                <div className="behavior-row">
+                  <span className="label">Shown role:</span>
+                  {shownRoleDef ? (
+                    <span className={`role-display-label type-${shownRoleDef.type}`}>
+                      {shownRoleDef.name}
+                    </span>
+                  ) : (
+                    <span className="behavior-help">Role not revealed yet</span>
+                  )}
+                </div>
+                <RolePicker
+                  label="Shown role"
+                  roles={ordinaryRoleChoices(script)}
+                  value={player.shownRole}
+                  triggerText={shownRoleDef ? "Change shown role…" : "Choose shown role…"}
+                  filter={shownRoleFilter(player.behaviorMode)}
+                  onPick={(id) => {
+                    // Re-selecting the identical shown role changes nothing; a
+                    // different one derives its alignment unless chosen below.
+                    runRoles([setPerceptionIntent(player, {
+                      shownRole: id,
+                      shownAlignment: id === player.shownRole ? player.shownAlignment : null,
+                    })], setPerceptionError);
+                  }}
+                  onClear={() => runRoles([setPerceptionIntent(player, { shownRole: null, shownAlignment: null })], setPerceptionError)}
+                />
+                <p className="behavior-help">Choosing a shown role sends that identity when connected. Clearing it returns the player to waiting. Previously delivered information cannot be unseen.</p>
+
+                {/* Phase 10E: player-facing alignment through the perception
+                    seam -- Normal (derived from the shown character) by
+                    default; explicit overrides progressively disclosed. */}
+                <PlayerFacingAlignmentControls key={`perceived:${player.participantId ?? player.id}`} player={player} />
+                {perceptionNeedsCheck && (
+                  <p role="alert" className="field-error">
+                    <strong>Needs check:</strong> the shown character cannot be sent to this player. Choose what they are shown.
+                  </p>
+                )}
+                {perceptionError && <p role="alert" className="field-error">{perceptionError}</p>}
+              </section>
+            )}
+          </InspectorGroup>
+
+          {/* ---------------- 4. Records ---------------- */}
+          <InspectorGroup title="Records">
+            {/* Phase 10C: Reminders -- non-authoritative notation. Keyed by the
+                participation instance so no draft or disclosure state carries
+                over to a different occupant of this seat. */}
+            <ReminderControls key={`reminders:${player.participantId ?? player.id}`} player={player} />
+
+            {role && applicability?.fakeMinions && (
+              <LunaticInfo
+                player={player}
+                roles={ordinaryChoices}
+                roleById={roleById}
+                otherPlayers={Object.values(game.players)
+                  .filter((p) => p.id !== player.id)
+                  .sort((a, b) => a.seat - b.seat)}
+                onSetBluffs={(b) => setBluffs(player.id, b)}
+                onSetFakeMinions={(ids) => setFakeMinions(player.id, ids)}
+              />
+            )}
+
+            {role?.type === "demon" && player.behaviorMode === "normal" && (
+              <DemonInfo
+                player={player}
+                roles={ordinaryChoices}
+                roleById={roleById}
+                inPlayRoles={registry && evilInformationPolicy(Object.values(game.players), registry, game).allowInPlayBluffs ? new Set() : inPlayRoles}
+                allowInPlay={!!registry && evilInformationPolicy(Object.values(game.players), registry, game).allowInPlayBluffs}
+                onSetBluffs={(b) => setBluffs(player.id, b)}
+              />
+            )}
+
+            <section className="drawer-section">
+              <h4 className="drawer-section-title">ST notes</h4>
+              <textarea
+                className="textarea"
+                aria-label="ST notes"
+                value={notesDraft}
+                maxLength={MAX_ST_NOTES}
+                onChange={(e) => setNotesDraft(e.target.value)}
+                onBlur={commitNotes}
+                placeholder="Private notes for this seat…"
+              />
+              <TextLimit length={notesDraft.length} max={MAX_ST_NOTES} />
+            </section>
+          </InspectorGroup>
+
+          {/* ---------------- 5. Admin ---------------- */}
+          <InspectorGroup title="Admin">
+            <section className="drawer-section">
+              <h4 className="drawer-section-title">Name and seat</h4>
+              <input
+                className="input drawer-name"
+                aria-label="Player name"
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value.slice(0, 20))}
+                onBlur={commitName}
+                maxLength={20}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setNameDraft(player.name);
+                    (e.target as HTMLInputElement).blur();
                   }
                 }}
               />
-              <p className="behavior-help">
-                {refinementAvailable
-                  ? "Setup refinement: changing the actual role resets this player's shown identity for the new assignment."
-                  : "Changing the actual role keeps the player's shown identity unchanged unless you also show the new role."}
-              </p>
-              {!refinementAvailable && (
-                <label className="drawer-row">
-                  <input type="checkbox" checked={alsoShowNewRole} onChange={(e) => setAlsoShowNewRole(e.target.checked)} />
-                  <span>Also show the player the new role</span>
-                </label>
-              )}
-              {displayRole && !needsShownIdentity(player.actualRole) && (
-                <button className="btn btn-sm" onClick={() => {
-                  setRoleError(null);
-                  runRoles([setPerceptionIntent(player, {
-                    shownRole: player.actualRole,
-                    shownAlignment: player.shownRole === player.actualRole ? player.shownAlignment : null,
-                  })]);
-                }}>
-                  Show assigned role
-                </button>
-              )}
-              {refinementAvailable && otherOrdinaryPlayers.length > 0 && (
+              <div className="drawer-row">
+                <button className="btn btn-sm" onClick={() => movePlayer(player.id, "left")}>← move</button>
+                <span className="label">seat {player.seat + 1}</span>
+                <button className="btn btn-sm" onClick={() => movePlayer(player.id, "right")}>move →</button>
+              </div>
+            </section>
+
+            <section className="drawer-section">
+              <h4 className="drawer-section-title">Travel status</h4>
+              {/* SOL-10E-A1: the Setup Traveler designation is actionable only
+                  while the game is in Setup and before the initial Reveal. */}
+              {game.phase !== "setup" ? (
+                <p className="behavior-help">{player.isTraveler ? "Traveler" : "Not a traveler"} — Traveler status is set up only during Setup.</p>
+              ) : committedReadOnly ? (
+                <p className="behavior-help">Roles are revealed; Traveler status is locked in until this game ends or a new one starts.</p>
+              ) : (
                 <div className="drawer-row">
-                  <label htmlFor="setup-swap-with">Swap role with…</label>
-                  <select
-                    id="setup-swap-with"
-                    className="select"
-                    value=""
-                    onChange={(e) => {
-                      const targetId = e.target.value;
-                      if (!targetId) return;
-                      setRefinementError(null);
-                      const result = swapSetupRoles(player.id, targetId);
-                      if (!result.ok) setRefinementError(result.message);
-                      e.target.value = "";
+                  <button
+                    className="toggle-pill"
+                    aria-pressed={player.isTraveler}
+                    onClick={() => {
+                      setTravelerStatusError(null);
+                      const result = setIsTraveler(player.id, !player.isTraveler);
+                      if (!result.ok) setTravelerStatusError(result.message ?? "Could not change Traveler status.");
                     }}
                   >
-                    <option value="">Choose a player</option>
-                    {otherOrdinaryPlayers.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
+                    {player.isTraveler ? "Traveler" : "Not a traveler"}
+                  </button>
+                  {player.isTraveler && (
+                    <span className="behavior-help">
+                      Role picker shows travelers only.
+                    </span>
+                  )}
                 </div>
               )}
-              {refinementError && <p role="alert" className="field-error">{refinementError}</p>}
-            </>}
-            {/* Advanced, progressively disclosed: a CORRECTION repairs a
-                wrongly recorded Role. It is not a gameplay character change:
-                the ability-used marker stays as it is and History marks it. */}
-            {(game.phase !== "setup" || committedReadOnly) && (
-              <details className="drawer-advanced" open={correctionOpen}
-                onToggle={(e) => setCorrectionOpen((e.currentTarget as HTMLDetailsElement).open)}>
-                <summary>Correct the recorded role…</summary>
-                {correctionOpen && <>
-                  <RolePickerGrid
-                    roles={rolePool}
-                    selectedRoleId={player.actualRole || null}
-                    onPick={(id) => { setRoleError(null); runRoles([correctRoleIntent(player, id)]); }}
-                  />
-                  <p className="behavior-help">Use this when the recorded role was wrong. It is not a character change: ability used stays, and History shows a correction.</p>
-                </>}
-              </details>
-            )}
-            {roleError && <p role="alert" className="field-error">{roleError}</p>}
-          </section>}
-
-          {/* Phase 10E: Actual Alignment truth through the Alignment seam --
-              separate from the player-facing alignment (perception, below).
-              A Traveler's lives in their arrival section. Keyed by the
-              participation instance so no cue/disclosure state carries over
-              to a different occupant of this seat. */}
-          {!player.isTraveler && (
-            <section className="drawer-section">
-              <h3 className="drawer-section-title">Alignment (ST private)</h3>
-              <ActualAlignmentControls key={`alignment:${player.participantId ?? player.id}`} player={player} />
+              {travelerStatusError && <p role="alert" className="field-error">{travelerStatusError}</p>}
             </section>
-          )}
 
-          {displayRole && !player.isTraveler && (
             <section className="drawer-section">
-              <h3 className="drawer-section-title">
-                Behavior &amp; deception
-              </h3>
-              <div className="behavior-row">
-                <label htmlFor="behavior-mode">Mode:</label>
-                <select
-                  id="behavior-mode"
-                  className="select"
-                  value={player.behaviorMode}
-                  onChange={(e) => {
-                    runRoles([setPerceptionIntent(player, {
-                      shownRole: player.shownRole, shownAlignment: player.shownAlignment,
-                      behaviorMode: e.target.value as BehaviorMode,
-                    })], setPerceptionError);
-                  }}
-                >
-                  {BEHAVIOR_MODES.map((m) => (
-                    <option key={m.value} value={m.value}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
+              <h4 className="drawer-section-title">Danger zone</h4>
+              <div className="drawer-row">
+                <button className="btn btn-sm btn-danger" onClick={() => setConfirming("remove")} disabled={membershipBusy}>
+                  {player.isTraveler ? "Traveler leaves game" : "Remove player"}
+                </button>
+                <button className="btn btn-sm" onClick={() => setConfirming("unseat")} disabled={membershipBusy}>
+                  Unseat player
+                </button>
               </div>
-              <p className="behavior-help">
-                {BEHAVIOR_MODES.find((m) => m.value === player.behaviorMode)?.help}
-              </p>
-
-              <div className="behavior-row">
-                <label>Shown role:</label>
-                {shownRoleDef ? (
-                  <span className={`role-display-label type-${shownRoleDef.type}`}>
-                    {shownRoleDef.name}
-                  </span>
-                ) : (
-                  <span className="behavior-help">Role not revealed yet</span>
-                )}
-                {shownRoleDef && (
-                  <button
-                    className="btn btn-sm btn-danger"
-                    onClick={() => {
-                      runRoles([setPerceptionIntent(player, { shownRole: null, shownAlignment: null })], setPerceptionError);
-                    }}
-                  >
-                    clear
-                  </button>
-                )}
-              </div>
-              <RolePickerGrid
-                roles={ordinaryRoleChoices(script)}
-                selectedRoleId={player.shownRole}
-                onPick={(id) => {
-                  // Re-selecting the identical shown role changes nothing; a
-                  // different one derives its alignment unless chosen below.
-                  runRoles([setPerceptionIntent(player, {
-                    shownRole: id,
-                    shownAlignment: id === player.shownRole ? player.shownAlignment : null,
-                  })], setPerceptionError);
-                }}
-                filter={shownRoleFilter(player.behaviorMode)}
-              />
-              <p className="behavior-help">Choosing a shown role sends that identity when connected. Clearing it returns the player to waiting. Previously delivered information cannot be unseen.</p>
-
-              {/* Phase 10E: player-facing alignment through the perception
-                  seam -- Normal (derived from the shown character) by
-                  default; explicit overrides progressively disclosed. */}
-              <PlayerFacingAlignmentControls key={`perceived:${player.participantId ?? player.id}`} player={player} />
-              {perceptionNeedsCheck && (
-                <p role="alert" className="field-error">
-                  <strong>Needs check:</strong> the shown character cannot be sent to this player. Choose what they are shown.
-                </p>
-              )}
-              {perceptionError && <p role="alert" className="field-error">{perceptionError}</p>}
+              {membershipError && <p className="field-error" role="alert">{membershipError}</p>}
             </section>
-          )}
-
-          {role && applicability?.fakeMinions && (
-            <LunaticInfo
-              player={player}
-              roles={ordinaryChoices}
-              roleById={roleById}
-              otherPlayers={Object.values(game.players)
-                .filter((p) => p.id !== player.id)
-                .sort((a, b) => a.seat - b.seat)}
-              onSetBluffs={(b) => setBluffs(player.id, b)}
-              onSetFakeMinions={(ids) => setFakeMinions(player.id, ids)}
-            />
-          )}
-
-          {role?.type === "demon" && player.behaviorMode === "normal" && (
-            <DemonInfo
-              player={player}
-              roles={ordinaryChoices}
-              roleById={roleById}
-              inPlayRoles={registry && evilInformationPolicy(Object.values(game.players), registry, game).allowInPlayBluffs ? new Set() : inPlayRoles}
-              allowInPlay={!!registry && evilInformationPolicy(Object.values(game.players), registry, game).allowInPlayBluffs}
-              onSetBluffs={(b) => setBluffs(player.id, b)}
-            />
-          )}
-
-          {/* Phase 10C: Reminders -- non-authoritative notation. Keyed by the
-              participation instance so no draft or disclosure state carries
-              over to a different occupant of this seat. */}
-          <ReminderControls key={`reminders:${player.participantId ?? player.id}`} player={player} />
-
-          <section className="drawer-section">
-            <h3 className="drawer-section-title">ST notes</h3>
-            <textarea
-              className="textarea"
-              aria-label="ST notes"
-              value={notesDraft}
-              maxLength={MAX_ST_NOTES}
-              onChange={(e) => setNotesDraft(e.target.value)}
-              onBlur={commitNotes}
-              placeholder="Private notes for this seat…"
-            />
-            <TextLimit length={notesDraft.length} max={MAX_ST_NOTES} />
-          </section>
-
-          <section className="drawer-section">
-            <h3 className="drawer-section-title">Danger zone</h3>
-            <div className="drawer-row">
-              <button
-                className="btn btn-sm btn-danger"
-                onClick={() => {
-                  if (!window.confirm(`Remove ${player.name}?`)) return;
-                  void runMembershipAction(() => onRemove ? onRemove(player.id) : void removePlayer(player.id));
-                }}
-                disabled={membershipBusy}
-              >
-                {player.isTraveler ? "Traveler leaves game" : "Remove player"}
-              </button>
-              <button
-                className="btn btn-sm"
-                onClick={() => {
-                  if (!window.confirm(`Unseat ${player.name}?`)) return;
-                  void runMembershipAction(() => onUnseat ? onUnseat(player.id) : void useStorytellerStore.getState().unseatPlayer(player.id));
-                }}
-                disabled={membershipBusy}
-              >
-                Unseat player
-              </button>
-            </div>
-            {membershipError && <p className="field-error" role="alert">{membershipError}</p>}
-          </section>
+          </InspectorGroup>
+          </>}
         </div>
-    </DrawerShell>
+      )}
+      {/* A TRUE confirmation stays modal (§9). */}
+      {confirming && (
+        <ConfirmDialog
+          title={confirming === "remove" ? `Remove ${player.name}?` : `Unseat ${player.name}?`}
+          confirmLabel={confirming === "remove" ? (player.isTraveler ? "Traveler leaves game" : `Remove ${player.name}`) : `Unseat ${player.name}`}
+          danger={confirming === "remove"}
+          busy={membershipBusy}
+          onCancel={() => setConfirming(null)}
+          onConfirm={() => void runMembershipAction(confirming === "remove"
+            ? () => onRemove ? onRemove(player.id) : void removePlayer(player.id)
+            : () => onUnseat ? onUnseat(player.id) : void useStorytellerStore.getState().unseatPlayer(player.id))}
+        >
+          <p>{confirming === "remove"
+            ? `${player.name} leaves the game and their seat is removed.`
+            : `${player.name} leaves their seat; the seat stays for someone else.`}</p>
+        </ConfirmDialog>
+      )}
+    </InspectorShell>
   );
 }
 
@@ -758,9 +810,13 @@ function BluffSlotPicker({
           );
         })}
       </div>
-      <RolePickerGrid
+      {/* Phase 10H (§7): the searchable role picker, loaded on demand. */}
+      <RolePicker
+        label="Add bluff"
         roles={rolePool}
-        selectedRoleId={null}
+        value={null}
+        triggerText={bluffs.length >= BLUFF_SLOT_COUNT ? "All bluffs chosen" : "+ Add bluff…"}
+        disabled={bluffs.length >= BLUFF_SLOT_COUNT}
         onPick={addBluff}
         filter={(r) => !bluffs.includes(r.id) && !(inPlayRoles?.has(r.id))}
       />
@@ -789,7 +845,7 @@ function DemonInfo({ player, roles, roleById, inPlayRoles, onSetBluffs, allowInP
 
   return (
     <section className="drawer-section">
-      <h3 className="drawer-section-title">Demon bluffs (ST private)</h3>
+      <h4 className="drawer-section-title">Demon bluffs (ST private)</h4>
       <p className="behavior-help">
         {allowInPlay ? "Pope: choose 3 good characters; in-play good characters may also be bluffs." : "Choose 3 good characters that are not in play."}
       </p>
@@ -849,7 +905,7 @@ function LunaticInfo({
 
   return (
     <section className="drawer-section">
-      <h3 className="drawer-section-title">Demon setup information</h3>
+      <h4 className="drawer-section-title">Demon setup information</h4>
       <p className="behavior-help">
         Choose the bluffs and players they will see as their Minions. Bluffs may be in play.
       </p>

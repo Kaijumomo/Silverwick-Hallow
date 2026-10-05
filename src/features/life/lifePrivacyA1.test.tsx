@@ -9,6 +9,7 @@ import { PlayerDrawer } from "@/features/players/PlayerDrawer";
 import { DayResolutionPanel, DuskReview } from "./DayResolution";
 import { LifeEventsPanel } from "./LifeEventsPanel";
 import type { PlayerId } from "@/stores/types";
+import { choose } from "@/test/pickers";
 
 // Phase 10A Astra remediation, Package A1:
 //  - 10A-ASTRA-003: Privacy Mode removes Storyteller-private Life Event
@@ -181,10 +182,10 @@ describe("10A-ASTRA-002 (UI defense in depth): pending confirmations are dropped
   it("Day resolution: switching the executee drops the pending confirmation", () => {
     const seat = travelerDay();
     render(<DayResolutionPanel onClose={() => {}} />);
-    fireEvent.change(screen.getByLabelText("Executee"), { target: { value: seat } });
+    choose("Executee", seat);
     fireEvent.click(screen.getByRole("button", { name: "Died" }));
     expect(screen.getByRole("button", { name: "Record anyway" })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Executee"), { target: { value: game().seatOrder[1]! } });
+    choose("Executee", game().seatOrder[1]!);
     expect(screen.queryByRole("button", { name: "Record anyway" })).toBeNull();
   });
 });

@@ -14,9 +14,11 @@ import { PlayerDrawer } from "@/features/players/PlayerDrawer";
 import { projectLobbyToPublic, projectLobbyToSelfMap } from "@/stores/projections";
 import { buildRegistry } from "@/data/roleRegistry";
 import { selectActiveFabled, selectActiveLorics } from "@/features/publicDisplay/presenters";
-import { MAX_VISIBLE_REMINDER_GROUPS, REMINDER_PRESETS } from "./reminderPresentation";
+import { REMINDER_PRESETS } from "./reminderPresentation";
 import type { ReminderParticipantBinding } from "@/stores/reminderResolution";
 import type { PlayerId, ReminderRecord } from "@/stores/types";
+import { choose, chosen } from "@/test/pickers";
+import { tierSpec, type DensityTier } from "@/features/grimoire/densityTiers";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -102,8 +104,8 @@ describe("Phase 10C Drawer fast path", () => {
   it("More options adds source, character (pre-filled from the source), a cleanup hint and a note -- progressively", () => {
     render(<SeatDrawer seat={idOf("Carol")} />);
     fireEvent.click(within(reminderSection()).getByRole("button", { name: "More options" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "From player" }), { target: { value: idOf("Alice") } });
-    expect((screen.getByRole("combobox", { name: "Character" }) as HTMLSelectElement).value).toBe(player(idOf("Alice")).actualRole);
+    choose("From player", idOf("Alice"));
+    expect(chosen("Character")).toBe(player(idOf("Alice")).actualRole);
     fireEvent.click(screen.getByRole("checkbox", { name: /Remind me to clean up as Day 1 begins/ }));
     fireEvent.change(screen.getByRole("textbox", { name: "Note" }), { target: { value: "context" } });
     const input = within(reminderSection()).getByRole("textbox", { name: "Reminder text" });
@@ -208,9 +210,14 @@ describe("Phase 10C Grimoire notation grammar", () => {
     for (const label of ["A", "B", "C", "D", "E", "F"]) place("Carol", { label });
     render(<GrimoireCircle />);
     const token = tokenOf("Carol");
+    // Phase 10H (H2): the Table draws as many labels as the seat's measured
+    // density tier permits (L: two) and an explicit "+N more" for every other
+    // Reminder instance -- still never silently hidden.
+    const labels = tierSpec(token.dataset.tier as DensityTier).reminderLabels;
+    expect(token.dataset.tier).toBe("L");
     const shown = token.querySelectorAll(".token-reminders .reminder-pip:not(.reminder-overflow)");
-    expect(shown).toHaveLength(MAX_VISIBLE_REMINDER_GROUPS - 1);
-    expect(token.querySelector(".reminder-overflow")!.textContent).toBe("+3 more");
+    expect(shown).toHaveLength(labels);
+    expect(token.querySelector(".reminder-overflow")!.textContent).toBe(`+${6 - labels} more`);
     expect(token).toHaveAccessibleName(/6 reminders: A, B, C, D, E, F$/);
   });
 

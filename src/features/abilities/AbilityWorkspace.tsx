@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Modal } from "@/components/Modal";
+import { useEffect, useId, useMemo, useState } from "react";
+import { ActionCard } from "@/components/ActionCard";
 import { KNOWN_EFFECT_TYPES } from "@/stores/effectRegistry";
 import { changeRoleIntent, ordinaryRoleChoices } from "@/stores/roleResolution";
 import { changeAlignmentIntent } from "@/stores/alignmentResolution";
@@ -21,6 +21,8 @@ import { MAX_MANUAL_DELIVERY_TEXT } from "@/stores/schemas";
 import { wakeIdentity } from "@/stores/wakeIdentity";
 import { TextLimit } from "@/components/TextLimit";
 import { OriginTag, ParticipantSelect, RequirementInput } from "./RequirementInput";
+import { Segmented } from "@/components/Segmented";
+import { RolePicker } from "@/components/RolePicker";
 
 /**
  * Phase 10F: the ability workspace (PHASE10F Section 15.2) -- progressive
@@ -61,6 +63,15 @@ type Props = {
   initialInputs?: Record<string, AbilityInputValue>;
   onClose: () => void;
   onResolved: (resolution: { resolutionId: string; game: StorytellerLobbyRecord; delivered: boolean }) => void;
+  /** Phase 10H: hidden (draft kept) -- the acting seat resumes it. */
+  hidden?: boolean;
+  /** Phase 10H: hide the card, keeping the draft. */
+  onHide?: () => void;
+  /** Phase 10H (§8.6): re-derive the workflow from current authoritative
+   * state (a fresh fingerprint, no stale inputs carried forward). */
+  onRefresh?: () => void;
+  /** Phase 10H (§8.5): the detailed Ability / Guidance, expandable inline. */
+  guidance?: { ability?: string; prompt?: string; reminder?: string };
 };
 
 /** SOL-10F-A2: a Manual step's player is the bound participation instance
@@ -91,7 +102,7 @@ const MANUAL_KINDS: { kind: ManualDraft["kind"]; label: string }[] = [
 ];
 
 
-export function AbilityWorkspace({ game, script, registry, semantics, target, descriptor, manualReason, initialInputs, onClose, onResolved }: Props) {
+export function AbilityWorkspace({ game, script, registry, semantics, target, descriptor, manualReason, initialInputs, onClose, onResolved, hidden, onHide, onRefresh, guidance }: Props) {
   // Captured ONCE, at open: the state the Storyteller is resolving against.
   const [fingerprint] = useState(() => captureFingerprint(game, target.actorId, target.step, target.trigger));
   const [mode, setMode] = useState<"guided" | "manual">(descriptor ? "guided" : "manual");
@@ -102,6 +113,8 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
   const [completeStep, setCompleteStep] = useState(!!target.step);
   const [commitError, setCommitError] = useState<string | null>(null);
   const participants = seatedParticipants(game);
+  const actorRecord = game.players[target.actorId];
+  const resolveReasonId = useId();
   const env = useMemo(() => ({ script, registry, semantics }), [script, registry, semantics]);
 
   /** The binding captured by the slot, with the record observed at that moment. */
@@ -216,13 +229,28 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
   );
 
   return (
-    <Modal title={`${target.roleName} — ${mode === "guided" ? "guided resolution" : "Resolve manually / unmodeled interaction"}`}
-      onClose={onClose} className="ability-workspace">
+    <ActionCard title={`${target.roleName} — ${mode === "guided" ? "guided resolution" : "Resolve manually / unmodeled interaction"}`}
+      subtitle={<>
+        <span className="action-card-actor">{actorRecord ? `${actorRecord.name || `Seat ${actorRecord.seat + 1}`} · seat ${actorRecord.seat + 1}` : "No longer seated"}</span>
+        {mode === "guided" && descriptor && <span className="action-card-instruction">{descriptor.presentation.action}</span>}
+      </>}
+      hidden={hidden} onHide={onHide} onClose={onClose} className="ability-workspace">
       <div className="ability-workspace-body">
+        {(guidance?.ability || guidance?.prompt || guidance?.reminder) && (
+          <details className="action-guidance">
+            <summary>Ability &amp; guidance</summary>
+            {guidance.ability && <p className="prose">{guidance.ability}</p>}
+            {guidance.prompt && <p className="behavior-help">{guidance.prompt}</p>}
+            {guidance.reminder && <p className="behavior-help">{guidance.reminder}</p>}
+          </details>
+        )}
         {stale ? (
           <div className="ability-stale" role="alert">
             <p>This workflow is out of date — the game changed since it opened. Nothing was recorded.</p>
-            <button className="btn btn-sm" onClick={onClose}>Close</button>
+            <div className="drawer-row">
+              {onRefresh && <button className="btn btn-sm btn-gold" onClick={onRefresh}>Refresh from the current game</button>}
+              <button className="btn btn-sm" onClick={onClose}>Close</button>
+            </div>
           </div>
         ) : mode === "guided" && descriptor ? (
           <>
@@ -267,18 +295,16 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
                   <span className="manual-op-kind">{MANUAL_KINDS.find((k) => k.kind === draft.kind)!.label}</span>
                   {participantSelect(draft.target?.binding ?? null, (binding) => setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, target: pickParticipant(binding) } : d))), `Step ${index + 1} player`)}
                   {draft.kind === "effect" && (
-                    <select aria-label={`Step ${index + 1} effect`} value={draft.type} onChange={(e) => setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, type: e.target.value } as ManualDraft : d)))}>
-                      {KNOWN_EFFECT_TYPES.map((definition) => <option key={definition.type} value={definition.type}>{definition.label}</option>)}
-                    </select>
+                    <Segmented label={`Step ${index + 1} effect`} value={draft.type}
+                      options={KNOWN_EFFECT_TYPES.map((definition) => ({ value: definition.type, label: definition.label }))}
+                      onChange={(type) => setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, type } as ManualDraft : d)))} />
                   )}
                   {draft.kind === "reminder" && (
                     <input aria-label={`Step ${index + 1} reminder label`} value={draft.label} onChange={(e) => setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, label: e.target.value } as ManualDraft : d)))} />
                   )}
                   {draft.kind === "role" && (
-                    <select aria-label={`Step ${index + 1} character`} value={draft.roleId} onChange={(e) => setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, roleId: e.target.value } as ManualDraft : d)))}>
-                      <option value="">Choose a character…</option>
-                      {ordinaryRoleChoices(script).map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
-                    </select>
+                    <RolePicker label={`Step ${index + 1} character`} roles={ordinaryRoleChoices(script)} value={draft.roleId || null}
+                      onPick={(roleId) => setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, roleId } as ManualDraft : d)))} />
                   )}
                   {draft.kind === "information" && (
                     <span className="manual-op-text">
@@ -292,10 +318,9 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
                     </span>
                   )}
                   {draft.kind === "alignment" && (
-                    <select aria-label={`Step ${index + 1} alignment`} value={draft.alignment} onChange={(e) => setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, alignment: e.target.value as Alignment } as ManualDraft : d)))}>
-                      <option value="good">Good</option>
-                      <option value="evil">Evil</option>
-                    </select>
+                    <Segmented<Alignment> label={`Step ${index + 1} alignment`} value={draft.alignment}
+                      options={[{ value: "good", label: "Good" }, { value: "evil", label: "Evil" }]}
+                      onChange={(alignment) => setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, alignment } as ManualDraft : d)))} />
                   )}
                   <button className="btn btn-sm" aria-label={`Move step ${index + 1} up`} disabled={index === 0}
                     onClick={() => setDrafts((prev) => { const next = [...prev]; [next[index - 1], next[index]] = [next[index]!, next[index - 1]!]; return next; })}>↑</button>
@@ -331,8 +356,14 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
               </label>
             )}
             {commitError && <p className="behavior-help" role="alert">{commitError}</p>}
+            {!(planned?.ok && planned.changed) && (
+              <span id={resolveReasonId} className="disabled-reason">
+                {planned?.ok ? "Nothing would change yet." : "Complete the choices above to resolve."}
+              </span>
+            )}
             <div className="ability-actions">
-              <button className="btn btn-gold" disabled={!(planned?.ok && planned.changed)} onClick={confirm}>
+              <button className="btn btn-gold" disabled={!(planned?.ok && planned.changed)} onClick={confirm}
+                aria-describedby={!(planned?.ok && planned.changed) ? resolveReasonId : undefined}>
                 {planned?.ok && planned.changed && planned.plan.needsConfirmation ? "Confirm and record" : "Resolve"}
               </button>
               {mode === "guided" && <button className="btn btn-sm" onClick={() => setMode("manual")}>Resolve manually / unmodeled interaction</button>}
@@ -341,6 +372,6 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
           </section>
         )}
       </div>
-    </Modal>
+    </ActionCard>
   );
 }

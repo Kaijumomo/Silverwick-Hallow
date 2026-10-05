@@ -75,6 +75,7 @@ import {
 } from "./informationDelivery";
 import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 import { invalidatePrivatePacket } from "./privatePackets";
+import { withRevealTokens } from "./revealTokens";
 import { usePrivacyStore } from "./privacyStore";
 import { analyzeSetup } from "@/features/setup/setupAnalyzer";
 import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
@@ -95,6 +96,7 @@ import type {
   EffectInput,
   ExecutionOutcome,
   ExileOutcome,
+  GameResult,
   GrimoireMode,
   GuardStamp,
   InformationActionId,
@@ -134,7 +136,7 @@ export const gameLifecycleToken = (): number => gameLifecycle;
  * `merge` (Phase 9C.2B.2) passes to migrateStoreState when Zustand's own
  * persist middleware skips calling `migrate` outright, which it does
  * whenever the persisted version already equals this one. */
-const STORE_VERSION = 25;
+const STORE_VERSION = 26;
 
 let _migrationResetFlag = false;
 /** Returns true (once) when migrate() discarded incompatible persisted state. */
@@ -347,8 +349,37 @@ export type NewGameOpts = {
   plannedLorics?: RoleId[];
 };
 
+/**
+ * Phase 10H (contract §14.2): the Storyteller's explicit terminal intent. The
+ * normal intents declare Good or Evil victory; End Without Result is the
+ * exceptional one. Never inferred -- there is no win-condition evaluation.
+ */
+export type TerminalIntent =
+  | { kind: "declare"; winner: Alignment }
+  | { kind: "noResult" };
+
+/**
+ * Phase 10H (contract §15): page-runtime state of an in-flight terminal close
+ * -- never persisted, never game state. While `closing`, gameplay mutation is
+ * locked at the store's central commit seam (a game/Undo change is dropped);
+ * a failed close moves to `failed`, which restores mutation (the game stays
+ * live and the same intent can be retried).
+ */
+export type TerminalCloseState = {
+  intent: TerminalIntent;
+  status: "closing" | "failed";
+  message: string | null;
+};
+
+/** Phase 10H: the result a successful remote terminal close actually
+ * published (read back for recovery), adopted locally so the retained ended
+ * game never disagrees with what players were given. */
+export type PublishedTerminalResult = GameResult | null;
+
 export type StorytellerStore = {
   game: StorytellerLobbyRecord | null;
+  /** Phase 10H: an in-flight / failed terminal close (runtime only). */
+  terminalClose: TerminalCloseState | null;
   view: "home" | "game" | "newgame";
   undoStack: StorytellerLobbyRecord[];
   selectedPlayerId: PlayerId | null;
@@ -418,8 +449,26 @@ export type StorytellerStore = {
    * still attached: the caller closes the session authoritatively first
    * (closeMultiplayerSession clears the lobby only on success), so a failed
    * close always leaves the game live and unchanged.
+   *
+   * Phase 10H (contract §§14-15; amends 10G §§17.2/19): the ONE terminal seam
+   * for every explicit terminal intent. Declare Good / Declare Evil store a
+   * Game Result `{ winner, declaredAt: <the live Game Moment> }` on the ended
+   * snapshot; End Without Result stores none. Nothing is inferred. When the
+   * remote close published a result (`published`, read back for recovery),
+   * that published result is what is retained, so the local record never
+   * disagrees with the players'. Clears any terminal-close lock in the same
+   * commit; Undo-free.
    */
-  finishGame: () => SetupCommandResult;
+  finishGame: (intent: TerminalIntent, published?: PublishedTerminalResult) => SetupCommandResult;
+  /** Phase 10H (contract §15 step 2-3): capture the terminal intent and lock
+   * gameplay mutation for the authoritative close. Refused (false) without a
+   * game in Night/Day or while another close is in flight. */
+  beginTerminalClose: (intent: TerminalIntent) => boolean;
+  /** Phase 10H (contract §15 step 12): the remote terminal close failed --
+   * release the mutation lock, keep the game live, keep the intent for retry. */
+  failTerminalClose: (message: string) => void;
+  /** Phase 10H: abandon a failed (not in-flight) terminal close. */
+  clearTerminalClose: () => void;
   setView: (view: "home" | "game" | "newgame") => void;
   selectPlayer: (id: PlayerId | null) => void;
   addCustomScript: (script: Script) => AddScriptResult;
@@ -1166,7 +1215,13 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // is invented or rewritten). Every older marker continues the chain through
   // v25; an older marker carrying v25 evidence receives nothing and is
   // rejected.
-  if (fromVersion < 25) {
+  //
+  // v26 (Phase 10H): reveal tokens and the declared Game Result -- the same
+  // shared per-entry migration: marker 25 -> v26 is a stamp (no reveal token,
+  // Game Result or winner is invented). Every older marker continues the chain
+  // through v26; an older marker carrying v26 evidence receives nothing and is
+  // rejected.
+  if (fromVersion < 26) {
     const customScripts = (s as { customScripts?: Record<string, Script> }).customScripts ?? {};
     // Phase 9R.1 Astra remediation (Finding A2): local persisted migration
     // uses "trusted" evidence -- this state's OWN saved customScripts,
@@ -1194,6 +1249,32 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   return state;
 }
 
+/** Phase 10H: the role registry of a game's script for the reveal-token
+ * seam, memoized per Script object (a custom script edit replaces the object).
+ * Null when the script cannot be resolved -- withRevealTokens then compares
+ * raw perception inputs (it can only rotate more often, never miss). */
+const registryCache = new WeakMap<Script, RoleRegistry>();
+const registryForGame = (state: StorytellerStore, game: StorytellerLobbyRecord): RoleRegistry | null => {
+  const script = selectScriptById(state, game.scriptId);
+  if (!script) return null;
+  let registry = registryCache.get(script);
+  if (!registry) { registry = buildRegistry(script); registryCache.set(script, registry); }
+  return registry;
+};
+
+/**
+ * Phase 10H: the Game Result a terminal intent declares on `game` (its current
+ * live Game Moment), null for End Without Result, or "invalid" for a malformed
+ * intent (an unknown kind or winner). Nothing is inferred from game state.
+ */
+export function declaredResult(intent: TerminalIntent, game: Pick<StorytellerLobbyRecord, "phase" | "day">): GameResult | null | "invalid" {
+  if (!intent || typeof intent !== "object") return "invalid";
+  if (intent.kind === "noResult") return null;
+  if (intent.kind !== "declare" || (intent.winner !== "good" && intent.winner !== "evil")) return "invalid";
+  if (game.phase !== "night" && game.phase !== "day") return "invalid";
+  return { winner: intent.winner, declaredAt: { phase: game.phase, day: game.day } };
+}
+
 const guardsEqual = (a: GuardStamp | null, b: GuardStamp | null): boolean =>
   a !== null && b !== null && a.token === b.token && a.revision === b.revision;
 
@@ -1203,9 +1284,12 @@ const guardsEqual = (a: GuardStamp | null, b: GuardStamp | null): boolean =>
  * content without declaring new local intent" mutation) uses it, and it is
  * stripped before the partial reaches zustand. */
 const SKIP_LOCAL_SEQ = Symbol("skipLocalSeq");
+/** Phase 10H: marks the one terminal commit (finishGame) that may pass the
+ * terminal-close mutation lock. Stripped before the partial reaches zustand. */
+const TERMINAL_COMMIT = Symbol("terminalCommit");
 type StorytellerPatch =
-  | (Partial<StorytellerStore> & { [SKIP_LOCAL_SEQ]?: boolean })
-  | ((state: StorytellerStore) => Partial<StorytellerStore> & { [SKIP_LOCAL_SEQ]?: boolean });
+  | (Partial<StorytellerStore> & { [SKIP_LOCAL_SEQ]?: boolean; [TERMINAL_COMMIT]?: boolean })
+  | ((state: StorytellerStore) => Partial<StorytellerStore> & { [SKIP_LOCAL_SEQ]?: boolean; [TERMINAL_COMMIT]?: boolean });
 
 export const useStorytellerStore = create<StorytellerStore>()(
   persist(
@@ -1228,18 +1312,37 @@ export const useStorytellerStore = create<StorytellerStore>()(
       // where this wrapper's own permissive parameter type meets zustand's
       // real (overloaded, middleware-augmented) setter type; every action
       // below type-checks against that exact original type, unchanged.
+      //
+      // Phase 10H (contract §12.2): the same seam maintains every
+      // participation's reveal token (withRevealTokens) relative to the
+      // Current State being replaced -- so every command AND Undo rotates it
+      // on a visible-identity change and mints one for a new participation,
+      // with no per-command bookkeeping. An adopted remote checkpoint
+      // (SKIP_LOCAL_SEQ) keeps the tokens it carries.
       const set = ((partial: StorytellerPatch, replace?: boolean) => {
         rawSet((state: StorytellerStore) => {
           const resolved = typeof partial === "function" ? partial(state) : partial;
-          const { [SKIP_LOCAL_SEQ]: skip, ...patch } = resolved;
+          const { [SKIP_LOCAL_SEQ]: skip, [TERMINAL_COMMIT]: terminal, ...patch } = resolved;
+          // Phase 10H (contract §15 step 3, 10H-AC-051): while a terminal close
+          // is in flight, gameplay mutation is locked HERE, at the one
+          // game-commit seam -- a game or Undo change is dropped (defense in
+          // depth behind the locked UI), so the retained ended snapshot is
+          // exactly the game the intent was captured on. Only the terminal
+          // commit itself passes. A failed close releases the lock.
+          if (state.terminalClose?.status === "closing" && !terminal && ("game" in patch || "undoStack" in patch)) {
+            delete patch.game;
+            delete patch.undoStack;
+          }
           if (!skip && "game" in patch && patch.game !== state.game && patch.game != null) {
-            return { ...patch, localSeq: state.localSeq + 1 };
+            const game = withRevealTokens(state.game, patch.game, registryForGame(state, patch.game));
+            return { ...patch, game, localSeq: state.localSeq + 1 };
           }
           return patch;
         }, replace as Parameters<typeof rawSet>[1]);
       }) as unknown as typeof rawSet;
       return {
       game: null,
+      terminalClose: null,
       view: "home",
       undoStack: [],
       selectedPlayerId: null,
@@ -1557,7 +1660,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
-      finishGame: () => {
+      finishGame: (intent, published) => {
         const { game, lobby } = get();
         if (!game) return { ok: false, message: "No game is open." };
         if (game.phase === "ended") return { ok: false, message: "This game is already finished." };
@@ -1565,18 +1668,48 @@ export const useStorytellerStore = create<StorytellerStore>()(
           return { ok: false, message: "Only a game in play (Night or Day) can be finished. Discard a Setup instead." };
         }
         if (lobby) return { ok: false, message: "End the multiplayer lobby first -- the game stays live until its session has closed." };
+        const declared = declaredResult(intent, game);
+        if (declared === "invalid") return { ok: false, message: "Choose Good victory, Evil victory or End Without Result." };
+        // Phase 10H: a result the remote close actually published wins (it is
+        // what players were given); otherwise the Storyteller's own intent.
+        const result = published !== undefined ? published : declared;
         // Deliberately NOT setPhase("ended"): that path keeps an Undo entry
         // back into live play. Here the replacement is terminal.
         gameLifecycle++;
-        set({
-          game: { ...game, phase: "ended", lifeEventWindow: pruneLifeEventWindow(game.lifeEventWindow, "ended", game.day) },
+        const ended: StorytellerLobbyRecord = { ...game, phase: "ended", lifeEventWindow: pruneLifeEventWindow(game.lifeEventWindow, "ended", game.day) };
+        delete ended.result;
+        if (result) ended.result = { winner: result.winner, declaredAt: { ...result.declaredAt } };
+        set(() => ({
+          game: ended,
           undoStack: [],
           lobby: null,
           sync: null,
           pendingKnocks: [],
           selectedPlayerId: null,
-        });
+          terminalClose: null,
+          [TERMINAL_COMMIT]: true,
+        }));
         return { ok: true };
+      },
+
+      beginTerminalClose: (intent) => {
+        const { game, terminalClose } = get();
+        if (!game || (game.phase !== "night" && game.phase !== "day")) return false;
+        if (terminalClose?.status === "closing") return false;
+        if (declaredResult(intent, game) === "invalid") return false;
+        set({ terminalClose: { intent, status: "closing", message: null } });
+        return true;
+      },
+
+      failTerminalClose: (message) => {
+        const { terminalClose } = get();
+        if (!terminalClose) return;
+        set({ terminalClose: { ...terminalClose, status: "failed", message } });
+      },
+
+      clearTerminalClose: () => {
+        if (get().terminalClose?.status === "closing") return;
+        set({ terminalClose: null });
       },
 
       setView: (view) => set({ view }),

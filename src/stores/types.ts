@@ -887,6 +887,19 @@ export type STPlayerRecord = {
    * plannedTravelerCount (Phase 9 Setup finalization, FINAL POPULATION
    * CLOSURE, Section 3). */
   plannedTravelerSeat?: boolean;
+  /** Phase 10H (v26): opaque, random reveal token of THIS participation's
+   * currently projected visible identity (projected Shown Role and
+   * player-facing Shown Alignment -- see projectIdentity). Never derived from
+   * the ParticipantId. A new participation instance gets a new token; the
+   * token is replaced on every visible-identity transition (A -> B -> A mints
+   * a new token each time) and never on a hidden Actual change. Maintained
+   * only by the store's central commit seam (withRevealTokens in
+   * revealTokens.ts). Delivered to this player alone, inside their self
+   * envelope, so they can acknowledge it; an acknowledgement is advisory
+   * runtime state only (revealAcks/{uid}), never game state. Absent for an
+   * empty seat and for a participation that existed before v26 until its
+   * visible identity next changes (migration invents none). */
+  revealToken?: string;
 };
 
 export type NightStepStatus = "pending" | "done" | "skipped";
@@ -894,6 +907,17 @@ export type NightStepStatus = "pending" | "done" | "skipped";
 export type NightStepRecord = {
   status: NightStepStatus;
   notes: string;
+};
+
+/** Phase 10H (v26): the Storyteller-DECLARED Game Result. Never inferred
+ * from Current State, never produced by win-condition evaluation (none exists
+ * in 10H). Present only on an ended game whose Storyteller declared Good or
+ * Evil victory; an ended game without it means "No recorded result" (End
+ * Without Result, or a legacy ended game). `declaredAt` is the live Game
+ * Moment the declaration was made in. No reason taxonomy. */
+export type GameResult = {
+  winner: Alignment;
+  declaredAt: LiveGameMoment;
 };
 
 export type StorytellerLobbyRecord = {
@@ -910,8 +934,10 @@ export type StorytellerLobbyRecord = {
    * (participant-scoped Night progress; ambiguous seat-addressed progress is
    * dropped, never reassigned).
    * Phase 10G: the current version is 25; marker 24 receives v24 -> v25 (an
-   * empty Game Rule Fact collection; nothing else is touched). */
-  gameSchemaVersion: 25;
+   * empty Game Rule Fact collection; nothing else is touched).
+   * Phase 10H: the current version is 26; marker 25 receives v25 -> v26 (a
+   * stamp: no reveal token and no Game Result is invented). */
+  gameSchemaVersion: 26;
   code: string;
   storytellerUid: string;
   scriptId: string;
@@ -978,6 +1004,11 @@ export type StorytellerLobbyRecord = {
    * an ability resolution, or by deterministic expiry in the phase rollover.
    * Never projected. */
   gameRuleFacts: GameRuleFactRecord[];
+  /** Phase 10H (v26): the Storyteller-declared Game Result -- valid ONLY
+   * while `phase === "ended"` (the persisted schema rejects it otherwise).
+   * Written only by the one terminal seam (finishGame), never by Undo or any
+   * other command. Absent: no recorded result. */
+  result?: GameResult;
 };
 
 /** Delivered identity at player/{id}; an absent record means unrevealed.
@@ -997,6 +1028,22 @@ export type PlayerSelfRecord = {
   /** Names/seats selected by the ST at publication time; no actual roles. */
   minions?: { id: PlayerId; name: string; seat: number }[];
   extraText?: string;
+};
+
+/** Phase 10H: the player's OWN current Life State, carried only in their
+ * private self envelope (never another player's, never a Life Event). Shape of
+ * the public Day projection (publicLifeOf); unlike public Life it is NOT
+ * withheld at Night -- the player privately sees their own state. */
+export type PlayerSelfLife = { alive: boolean; ghostVote: boolean; exiled?: true };
+
+/** Phase 10H: what is written at player/{id}. The allowlisted identity /
+ * published packet (PlayerSelfRecord, whose semantics and packet comparison
+ * are unchanged) plus envelope fields that are never part of a packet:
+ * the participation's current reveal token and the player's own Life. A
+ * pre-10H client's decoder strips the envelope keys. */
+export type PlayerSelfEnvelope = PlayerSelfRecord & {
+  revealToken?: string;
+  life?: PlayerSelfLife;
 };
 
 /** Phase 10F (v24): `alive` / `ghostVote` / `exiled` are public table

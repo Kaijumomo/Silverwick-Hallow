@@ -29,6 +29,7 @@ import { formatCode } from "@/firebase/lobby";
 import { buildRegistry } from "@/data/roleRegistry";
 import { setupGame, setupScript } from "@/test/setupFixtures";
 import type { StorytellerLobbyRecord } from "@/stores/types";
+import { finishGame } from "@/test/finishGame";
 
 const state = () => store.getState();
 const registry = buildRegistry(setupScript);
@@ -109,7 +110,7 @@ describe("ASTRA-10G-R1-001-A: Finish game -> Home, then the superseded cleanup f
     render(<App />);
     const held = await goLiveHeldBeforeAdoption(b);
     const code = held.code();
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Finish game" })); });
+    await finishGame();
     expect(state().game!.phase).toBe("ended");
     fireEvent.click(screen.getByRole("button", { name: "← Home" }));
     expect(screen.getByRole("button", { name: "Review finished game" })).toBeInTheDocument();
@@ -189,7 +190,7 @@ describe("ASTRA-10G-R1-001: controls", () => {
     render(<App />);
     const held = await goLiveHeldBeforeAdoption(b);
     const code = held.code();
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Finish game" })); });
+    await finishGame();
     fireEvent.click(screen.getByRole("button", { name: "← Home" }));
     await act(async () => { held.release(); });
     await waitFor(async () => expect(await b.get(`lobbies/${code}/session`)).toMatchObject({ state: "ended" }));

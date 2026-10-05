@@ -290,7 +290,7 @@ describe("C. local v17 -> v18 migration of every Undo snapshot", () => {
     expect(before.undoStack.some((entry) => categoriesOf(entry).includes("role"))).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 0));
     const current = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as { state: Raw; version: number };
-    expect(current.version).toBe(25);
+    expect(current.version).toBe(26);
 
     const v17Blob = {
       version: 17,
@@ -405,7 +405,7 @@ describe("migrateGameEntry v17 -> v18 step", () => {
     // (Phase 10B: and, to v20, only the version marker -- no Effects here;
     // Phase 10G: and, to v25, only an EMPTY Rule Fact collection).
     const { lifeEventWindow, gameSchemaVersion, gameRuleFacts, ...rest } = entry;
-    expect(gameSchemaVersion).toBe(25);
+    expect(gameSchemaVersion).toBe(26);
     expect(gameRuleFacts).toEqual([]);
     expect(JSON.stringify(rest)).toBe(before);
     expect(lifeEventWindow).toEqual({ coverageFrom: { phase: "day", day: 2 }, events: [] });

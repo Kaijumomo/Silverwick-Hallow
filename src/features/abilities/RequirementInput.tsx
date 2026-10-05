@@ -3,7 +3,9 @@ import { resolvedCharacters } from "@/data/roleRegistry";
 import type { AbilityInputRequirement, AbilityInputValue, InputConstraint } from "@/abilities/semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { Alignment, Script, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
-import { captureBinding, isCurrentBinding, ORIGIN_LABEL, seatedParticipants, type ValueOrigin } from "./abilityUi";
+import { isCurrentBinding, ORIGIN_LABEL, seatedParticipants, type ValueOrigin } from "./abilityUi";
+import { ParticipantPicker } from "@/components/ParticipantPicker";
+import { RolePicker } from "@/components/RolePicker";
 
 /**
  * Phase 10F (SOL-10F-L2): renders ONE AbilityInputRequirement faithfully --
@@ -37,9 +39,6 @@ export function participantAllowed(player: STPlayerRecord, requirement: Pick<Abi
   return true;
 }
 
-/** Never a PlayerId: PlayerIds are Firebase keys, which cannot hold U+0000. */
-const STALE_OPTION = "\u0000stale";
-
 /**
  * SOL-10F-B1: ONE participant slot. Its value is the ParticipantBinding
  * captured the instant the slot was chosen (captureBinding) -- never a
@@ -48,37 +47,34 @@ const STALE_OPTION = "\u0000stale";
  * -- never relabelled as the seat's replacement occupant -- until the
  * Storyteller explicitly chooses again (choosing that seat again captures the
  * NEW occupant's binding).
+ *
+ * Phase 10H (10H-AC-014 / AC-017): chosen on the Table or the Roster through
+ * ParticipantPicker -- never a dropdown. The candidates passed in are the one
+ * eligibility result both the Roster strip and the Table's pickable seats
+ * render.
  */
-export function ParticipantSelect({ game, value, candidates, label, placeholder = "Choose a player…", disabled, optionDisabled, onChange }: {
+export function ParticipantSelect({ game, value, candidates, label, disabled, optionDisabled, onChange, hint, collapsed }: {
   game: StorytellerLobbyRecord;
   value: ParticipantBinding | null;
   candidates: readonly STPlayerRecord[];
   label: string;
+  /** Kept for call-site compatibility; the picker shows "Not chosen". */
   placeholder?: string;
   disabled?: boolean;
   optionDisabled?: (player: STPlayerRecord) => boolean;
   onChange: (binding: ParticipantBinding | null) => void;
+  hint?: string;
+  /** Start with the Roster strip closed (a compact inline row). */
+  collapsed?: boolean;
 }) {
-  const stale = value !== null && !isCurrentBinding(game, value);
   // A CURRENT captured participant the filtered list no longer offers is
   // still shown as what it is (the coordinator enforces the constraints).
+  const stale = value !== null && !isCurrentBinding(game, value);
   const unlisted = value !== null && !stale && !candidates.some((p) => p.id === value.playerId) ? game.players[value.playerId] : undefined;
-  const name = (p: STPlayerRecord) => `${p.name || `Seat ${p.seat + 1}`} · seat ${p.seat + 1}`;
+  const offered = unlisted ? [unlisted, ...candidates] : candidates;
   return (
-    <>
-      <select aria-label={label} value={value === null ? "" : stale ? STALE_OPTION : value.playerId} disabled={disabled} aria-invalid={stale || undefined}
-        data-stale={stale || undefined}
-        onChange={(e) => {
-          if (e.target.value === STALE_OPTION) return;
-          onChange(e.target.value === "" ? null : captureBinding(game, e.target.value));
-        }}>
-        <option value="">{placeholder}</option>
-        {stale && <option value={STALE_OPTION} disabled>No longer in that seat — choose again</option>}
-        {unlisted && <option value={unlisted.id}>{name(unlisted)}</option>}
-        {candidates.map((p) => <option key={p.id} value={p.id} disabled={optionDisabled?.(p)}>{name(p)}</option>)}
-      </select>
-      {stale && <span className="behavior-help" role="status">The player chosen for {label} is no longer in that seat — choose again.</span>}
-    </>
+    <ParticipantPicker game={game} value={value} candidates={offered} label={label} disabled={disabled}
+      optionDisabled={optionDisabled} onChange={onChange} hint={hint} {...(collapsed ? { defaultOpen: false } : {})} />
   );
 }
 
@@ -180,11 +176,8 @@ export function RequirementInput({ requirement, game, script, actor, onChange, i
         <fieldset className="ability-field" data-requirement={requirement.id}>
           <legend>{header}</legend>
           {slots.map((slot, index) => (
-            <select key={index} aria-label={count > 1 ? `${label} ${index + 1}` : label} value={slot}
-              onChange={(e) => updateSlots(index, e.target.value, toValue)}>
-              <option value="">Choose a character…</option>
-              {characters.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
-            </select>
+            <RolePicker key={index} label={count > 1 ? `${label} ${index + 1}` : label} roles={characters} value={slot || null}
+              onPick={(roleId) => updateSlots(index, roleId, toValue)} />
           ))}
         </fieldset>
       );

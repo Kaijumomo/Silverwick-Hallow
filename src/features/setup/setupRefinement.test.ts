@@ -3,7 +3,7 @@ import { canRefineSetup, matchBagToAssignments } from "./setupRefinement";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
 const baseGame = (over: Partial<StorytellerLobbyRecord> = {}): StorytellerLobbyRecord => ({
-  gameSchemaVersion: 25, gameRuleFacts: [], code: "", storytellerUid: "local", scriptId: "tb", phase: "setup", day: 0,
+  gameSchemaVersion: 26, gameRuleFacts: [], code: "", storytellerUid: "local", scriptId: "tb", phase: "setup", day: 0,
   players: {}, seatOrder: [], rolePool: [], plannedPlayerCount: 5, plannedTravelerCount: 0,
   fabled: [], lorics: [], bluffs: [], notes: "", nightProgress: {}, pendingPlayers: {}, history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
   ...over,

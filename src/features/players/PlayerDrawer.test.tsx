@@ -6,6 +6,7 @@ import { roles } from "@/test/fixtures";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
+import { choose, chooseSegmentValue, hasChoice, pickRoleNamed } from "@/test/pickers";
 
 const qaScript = { ...troubleBrewing, id: "qa", characters: [...troubleBrewing.characters, roles.marionette!, roles.lunatic!] };
 
@@ -24,7 +25,7 @@ const current = () => Object.values(store.getState().game!.players)[0]!;
 
 it("manual actual assignment waits for the explicit show action", () => {
   render(<Drawer />);
-  fireEvent.click(screen.getByRole("button", { name: "Chef townsfolk" }));
+  pickRoleNamed("Actual role", "Chef townsfolk");
   expect(current().actualRole).toBe("chef");
   expect(current().shownRole).toBeNull();
   expect(screen.getByText("Role not revealed yet")).toBeInTheDocument();
@@ -36,22 +37,21 @@ it("manual actual assignment waits for the explicit show action", () => {
 
 it("Drunk has explicit shown-role controls even before a behavior mode is selected", () => {
   render(<Drawer />);
-  fireEvent.click(screen.getByRole("button", { name: "Drunk outsider" }));
+  pickRoleNamed("Actual role", "Drunk outsider");
   expect(screen.queryByRole("button", { name: "Show assigned role" })).toBeNull();
   const perception = within(screen.getByText("Behavior & deception").closest("section")!);
-  fireEvent.click(perception.getByRole("button", { name: "Chef townsfolk" }));
+  pickRoleNamed("Shown role", "Chef townsfolk");
   expect(current().actualRole).toBe("drunk");
   expect(current().shownRole).toBe("chef");
-  fireEvent.click(perception.getByRole("button", { name: "clear" }));
+  fireEvent.click(perception.getByRole("button", { name: "Clear Shown role" }));
   expect(current().shownRole).toBeNull();
   expect(screen.getByText("Role not revealed yet")).toBeInTheDocument();
 });
 
 it("Drunk shown as Empath gets simulated information, not Demon/Minion controls", () => {
   render(<Drawer />);
-  fireEvent.click(screen.getByRole("button", { name: "Drunk outsider" }));
-  const perception = within(screen.getByText("Behavior & deception").closest("section")!);
-  fireEvent.click(perception.getByRole("button", { name: "Empath townsfolk" }));
+  pickRoleNamed("Actual role", "Drunk outsider");
+  pickRoleNamed("Shown role", "Empath townsfolk");
   expect(screen.queryByLabelText("Information")).toBeNull();
   expect(screen.queryByText("Players shown as Minions:")).toBeNull();
   expect(screen.queryByText("Bluffs:")).toBeNull();
@@ -60,9 +60,8 @@ it("Drunk shown as Empath gets simulated information, not Demon/Minion controls"
 
 it("Marionette shown as Fortune Teller gets simulated information, not Demon/Minion controls", () => {
   render(<Drawer />);
-  fireEvent.click(screen.getByRole("button", { name: "Marionette minion" }));
-  const perception = within(screen.getByText("Behavior & deception").closest("section")!);
-  fireEvent.click(perception.getByRole("button", { name: "Fortune Teller townsfolk" }));
+  pickRoleNamed("Actual role", "Marionette minion");
+  pickRoleNamed("Shown role", "Fortune Teller townsfolk");
   expect(screen.queryByLabelText("Information")).toBeNull();
   expect(screen.queryByText("Players shown as Minions:")).toBeNull();
   expect(screen.queryByText("Bluffs:")).toBeNull();
@@ -70,10 +69,9 @@ it("Marionette shown as Fortune Teller gets simulated information, not Demon/Min
 
 it("Lunatic shown as Imp retains fake Demon controls", () => {
   render(<Drawer />);
-  fireEvent.click(screen.getByRole("button", { name: "Lunatic outsider" }));
-  const perception = within(screen.getByText("Behavior & deception").closest("section")!);
-  fireEvent.change(perception.getByLabelText("Mode:"), { target: { value: "fake_demon_behavior" } });
-  fireEvent.click(perception.getByRole("button", { name: "Imp demon" }));
+  pickRoleNamed("Actual role", "Lunatic outsider");
+  chooseSegmentValue("Mode", "fake_demon_behavior");
+  pickRoleNamed("Shown role", "Imp demon");
   expect(screen.getByText("Players shown as Minions:")).toBeInTheDocument();
   expect(screen.getByText("Bluffs:")).toBeInTheDocument();
   expect(screen.getByText("Demon setup information")).toBeInTheDocument();
@@ -81,7 +79,7 @@ it("Lunatic shown as Imp retains fake Demon controls", () => {
 
 it("normal players do not receive an unnecessary packet panel", () => {
   render(<Drawer />);
-  fireEvent.click(screen.getByRole("button", { name: "Chef townsfolk" }));
+  pickRoleNamed("Actual role", "Chef townsfolk");
   expect(screen.queryByText(/Simulated information ·/)).toBeNull();
   expect(screen.queryByText(/Demon bluff delivery ·/)).toBeNull();
   expect(screen.queryByText("Information to send")).toBeNull();
@@ -89,7 +87,7 @@ it("normal players do not receive an unnecessary packet panel", () => {
 
 it("normal Demon keeps the bluff editor without an extra freeform packet editor", () => {
   render(<Drawer />);
-  fireEvent.click(screen.getByRole("button", { name: "Imp demon" }));
+  pickRoleNamed("Actual role", "Imp demon");
   expect(screen.getByText("Demon bluffs (ST private)")).toBeInTheDocument();
   expect(screen.getAllByRole("button", { name: "Send bluffs" })).toHaveLength(1);
   expect(screen.queryByText("Information to send")).toBeNull();
@@ -97,10 +95,9 @@ it("normal Demon keeps the bluff editor without an extra freeform packet editor"
 
 it("changing Lunatic behavior to Drunk or Normal prunes incompatible packet fields", () => {
   render(<Drawer />);
-  fireEvent.click(screen.getByRole("button", { name: "Lunatic outsider" }));
-  const behavior = within(screen.getByText("Behavior & deception").closest("section")!);
-  fireEvent.change(behavior.getByLabelText("Mode:"), { target: { value: "fake_demon_behavior" } });
-  fireEvent.click(behavior.getByRole("button", { name: "Imp demon" }));
+  pickRoleNamed("Actual role", "Lunatic outsider");
+  chooseSegmentValue("Mode", "fake_demon_behavior");
+  pickRoleNamed("Shown role", "Imp demon");
   const selected = Object.values(store.getState().game!.players)[0]!.id;
   store.getState().setFakeMinions(selected, []);
   store.getState().setBluffs(selected, ["chef"]);
@@ -113,9 +110,8 @@ it("changing Lunatic behavior to Drunk or Normal prunes incompatible packet fiel
 
 it("privacy mode keeps the player drawer safe and restores it when disabled", () => {
   render(<Drawer />);
-  fireEvent.click(screen.getByRole("button", { name: "Drunk outsider" }));
-  const perception = within(screen.getByText("Behavior & deception").closest("section")!);
-  fireEvent.click(perception.getByRole("button", { name: "Empath townsfolk" }));
+  pickRoleNamed("Actual role", "Drunk outsider");
+  pickRoleNamed("Shown role", "Empath townsfolk");
   store.getState().addReminder(current().id, { id: "r1", label: "Poisoned" });
   store.getState().addReminder(current().id, { id: "r2", label: "Secret note" });
 
@@ -168,12 +164,16 @@ it("Lunatic bluff picker allows an in-play good character", () => {
   const bob = store.getState().game!.seatOrder[1]!;
   store.getState().assignRole(bob, "chef");
   render(<Drawer />);
-  const setup = within(screen.getByText("Demon setup information").closest("section")!);
-  fireEvent.click(setup.getByRole("button", { name: "Chef townsfolk" }));
+  pickRoleNamed("Add bluff", "Chef townsfolk", screen.getByText("Demon setup information").closest("section")!);
   expect(current().privateInfo?.bluffs).toEqual(["chef"]);
 });
 
-it("keeps drawer focus contained across privacy changes and restores the seat on Escape", () => {
+// Phase 10H (contract §§5.1, 9, I1): the participant workspace is NON-MODAL --
+// it never inerts the Table or traps focus. (Amends the Phase 9 modal-drawer
+// focus test: the Inspector is a complementary region beside the Grimoire.)
+// Focus moves to the Inspector heading on open, is never left on a control
+// that disappeared (Privacy Mode), and Escape returns it to the seat.
+it("Phase 10H: the Inspector is non-modal -- the seat stays operable, focus is predictable across Privacy Mode, Escape restores the seat", () => {
   function SelectedDrawer() {
     const selected = store(s => s.selectedPlayerId);
     const player = store(s => Object.values(s.game!.players)[0]!);
@@ -185,28 +185,27 @@ it("keeps drawer focus contained across privacy changes and restores the seat on
   render(<SelectedDrawer />);
   const seat = screen.getByRole("button", { name: "Alice seat" });
   seat.focus(); fireEvent.click(seat);
-  const name = screen.getByRole("textbox", { name: "Player name" });
-  expect(name).toHaveFocus();
-  fireEvent.change(name, { target: { value: "Alice edited" } });
-  expect(name).toHaveFocus();
-  fireEvent.keyDown(name, { key: "Tab", shiftKey: true });
-  expect(screen.getByRole("button", { name: "Unseat player" })).toHaveFocus();
-  fireEvent.keyDown(document.activeElement!, { key: "Tab" });
-  expect(name).toHaveFocus();
-  act(() => usePrivacyStore.getState().setEnabled(true));
-  const close = screen.getByRole("button", { name: "Close" });
-  expect(close).toHaveFocus();
-  fireEvent.keyDown(close, { key: "Tab" });
-  expect(close).toHaveFocus();
-  fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
-  expect(close).toHaveFocus();
-  expect(seat).toHaveAttribute("inert");
-  act(() => usePrivacyStore.getState().setEnabled(false));
-  expect(screen.getByRole("textbox", { name: "Player name" })).toHaveFocus();
-  fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+  const inspector = screen.getByRole("complementary", { name: "Participant: Alice" });
+  expect(inspector).not.toHaveAttribute("aria-modal");
   expect(screen.queryByRole("dialog")).toBeNull();
-  expect(seat).toHaveFocus();
+  expect(screen.getByRole("heading", { name: /Alice/ })).toHaveFocus();
+  // Non-modal: nothing outside is inert, the page does not lock, and focus may
+  // leave the Inspector for the Table and come back.
   expect(seat).not.toHaveAttribute("inert");
+  expect(document.body.style.overflow).not.toBe("hidden");
+  act(() => seat.focus());
+  expect(seat).toHaveFocus();
+  const name = screen.getByRole("textbox", { name: "Player name" });
+  act(() => name.focus());
+  act(() => usePrivacyStore.getState().setEnabled(true));
+  // The private control is gone (DOM absence); focus lands on the heading.
+  expect(screen.queryByRole("textbox", { name: "Player name" })).toBeNull();
+  expect(screen.getByRole("heading", { name: "Player" })).toHaveFocus();
+  expect(seat).not.toHaveAttribute("inert");
+  act(() => usePrivacyStore.getState().setEnabled(false));
+  fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+  expect(screen.queryByRole("complementary")).toBeNull();
+  expect(seat).toHaveFocus();
 });
 
 // Phase 9C.5 (OPUS-005): ST notes become component-local draft state.
@@ -289,11 +288,15 @@ describe("ST notes edit-session boundary (Phase 9C.5)", () => {
     expect(store.getState().undoStack.length).toBe(undoLengthBefore);
   });
 
-  it("switching to a different player resets the draft from that player's committed notes", () => {
+  // Phase 10H (contract §9) amends Phase 9C.5: a seat change COMMITS the draft
+  // to the participant it was written for (never to the next one), and the
+  // next participant's draft starts from their own committed notes.
+  it("Phase 10H: switching to a different player commits the draft to the player it was written for, then shows the next player's notes", () => {
     store.getState().setNotes(current().id, "Alice's notes");
     store.getState().addPlayer("Bob");
     const bobId = store.getState().game!.seatOrder[1]!;
     store.getState().setNotes(bobId, "Bob's notes");
+    const seqBefore = store.getState().localSeq;
 
     function TwoPlayerDrawer({ playerId }: { playerId: string }) {
       const p = store(s => s.game!.players[playerId]!);
@@ -302,19 +305,22 @@ describe("ST notes edit-session boundary (Phase 9C.5)", () => {
     const view = render(<TwoPlayerDrawer playerId={current().id} />);
     expect(notesField()).toHaveValue("Alice's notes");
     fireEvent.change(notesField(), { target: { value: "unsaved edit" } });
-    expect(notesField()).toHaveValue("unsaved edit");
+    expect(store.getState().localSeq).toBe(seqBefore); // typing stays local
 
     view.rerender(<TwoPlayerDrawer playerId={bobId} />);
     expect(notesField()).toHaveValue("Bob's notes");
-    // The abandoned draft for Alice never reached the store.
-    expect(store.getState().game!.players[current().id]!.stNotes).toBe("Alice's notes");
+    // Exactly one commit, to Alice -- Bob's notes are untouched.
+    expect(store.getState().game!.players[current().id]!.stNotes).toBe("unsaved edit");
+    expect(store.getState().game!.players[bobId]!.stNotes).toBe("Bob's notes");
+    expect(store.getState().localSeq).toBe(seqBefore + 1);
   });
 
-  // Luna High verification revision: the Privacy Mode safe-view shell must
-  // share the same close/commit boundary as the normal drawer, so switching
-  // to Privacy Mode mid-edit never silently discards a dirty draft.
-  describe("Privacy Mode dismissal commits a dirty notes draft (Luna High revision)", () => {
-    it("the privacy-safe Close button commits the dirty draft exactly once", () => {
+  // Phase 10H (contract §9: "Privacy/lifecycle teardown discards uncommitted
+  // drafts rather than silently committing") amends the Phase 9C.5 Luna High
+  // revision: turning Privacy Mode on DISCARDS a dirty draft -- it is never
+  // committed by the privacy-safe Close or Escape, and it never reappears.
+  describe("Phase 10H: Privacy Mode teardown discards a dirty notes draft", () => {
+    it("the privacy-safe Close commits nothing; the draft is gone when Privacy Mode ends", () => {
       const id = current().id;
       store.getState().setNotes(id, "A");
       const seqBefore = store.getState().localSeq;
@@ -325,36 +331,33 @@ describe("ST notes edit-session boundary (Phase 9C.5)", () => {
       expect(current().stNotes).toBe("A");
 
       act(() => usePrivacyStore.getState().setEnabled(true));
-      // Switching to the privacy-safe view must not itself commit or
-      // discard the still-dirty draft.
       expect(screen.getByText("Storyteller details are hidden while Privacy Mode is on.")).toBeInTheDocument();
-      expect(current().stNotes).toBe("A");
-      expect(store.getState().localSeq).toBe(seqBefore);
-      expect(store.getState().undoStack.length).toBe(undoLengthBefore);
+      expect(screen.queryByPlaceholderText("Private notes for this seat…")).toBeNull();
+      act(() => usePrivacyStore.getState().setEnabled(false));
+      expect(notesField()).toHaveValue("A");
+      act(() => usePrivacyStore.getState().setEnabled(true));
 
       fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
-      expect(current().stNotes).toBe("B");
-      expect(store.getState().localSeq).toBe(seqBefore + 1);
-      expect(store.getState().undoStack.length).toBe(undoLengthBefore + 1);
+      expect(current().stNotes).toBe("A");
+      expect(store.getState().localSeq).toBe(seqBefore);
+      expect(store.getState().undoStack.length).toBe(undoLengthBefore);
     });
 
-    it("dismissing the privacy-safe drawer with Escape commits the dirty draft exactly once", () => {
+    it("dismissing the privacy-safe Inspector with Escape commits nothing", () => {
       const id = current().id;
       store.getState().setNotes(id, "A");
       const seqBefore = store.getState().localSeq;
-      const undoLengthBefore = store.getState().undoStack.length;
       render(<Drawer />);
 
       fireEvent.change(notesField(), { target: { value: "B" } });
       act(() => usePrivacyStore.getState().setEnabled(true));
       expect(current().stNotes).toBe("A");
 
-      fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+      fireEvent.keyDown(screen.getByRole("button", { name: "Close" }), { key: "Escape" });
 
-      expect(current().stNotes).toBe("B");
-      expect(store.getState().localSeq).toBe(seqBefore + 1);
-      expect(store.getState().undoStack.length).toBe(undoLengthBefore + 1);
+      expect(current().stNotes).toBe("A");
+      expect(store.getState().localSeq).toBe(seqBefore);
     });
   });
 });
@@ -379,7 +382,7 @@ describe("Pre-Reveal Setup refinement (Phase 9 Setup finalization B3)", () => {
     )).toBeVisible();
 
     const actualRoleSection = screen.getByText("Actual role (ST private)").closest("section")!;
-    fireEvent.click(within(actualRoleSection).getByRole("button", { name: "Drunk outsider" }));
+    pickRoleNamed("Actual role", "Drunk outsider", actualRoleSection);
 
     expect(store.getState().game!.players[target]!.actualRole).toBe("drunk");
     expect(store.getState().game!.players[target]!.shownRole).toBeNull(); // reset, never preserved
@@ -392,7 +395,7 @@ describe("Pre-Reveal Setup refinement (Phase 9 Setup finalization B3)", () => {
     const roleBBefore = store.getState().game!.players[b]!.actualRole;
     const roleABefore = store.getState().game!.players[a]!.actualRole;
 
-    fireEvent.change(screen.getByLabelText("Swap role with…"), { target: { value: b } });
+    choose("Swap role with", b);
 
     expect(store.getState().game!.players[a]!.actualRole).toBe(roleBBefore);
     expect(store.getState().game!.players[b]!.actualRole).toBe(roleABefore);
@@ -403,7 +406,7 @@ describe("Pre-Reveal Setup refinement (Phase 9 Setup finalization B3)", () => {
     store.getState().revealRoles();
     render(<DrawerFor id={g.seatOrder[0]!} />);
 
-    expect(screen.queryByLabelText("Swap role with…")).toBeNull();
+    expect(hasChoice("Swap role with")).toBe(false);
     expect(screen.queryByText(/^Setup refinement:/)).toBeNull();
   });
 
@@ -416,7 +419,7 @@ describe("Pre-Reveal Setup refinement (Phase 9 Setup finalization B3)", () => {
 
     const actualRoleSection = screen.getByText("Actual role (ST private)").closest("section")!;
     expect(within(actualRoleSection).getByText(/locked until Night 1 begins/)).toBeInTheDocument();
-    expect(within(actualRoleSection).queryByRole("button", { name: "Drunk outsider" })).toBeNull();
+    expect(hasChoice("Actual role", actualRoleSection)).toBe(false);
     expect(screen.queryByRole("button", { name: "Clear role" })).toBeNull();
     expect(store.getState().game!.players[target]!.actualRole).toBe(before);
   });
@@ -440,7 +443,7 @@ describe("Pre-Reveal Setup refinement (Phase 9 Setup finalization B3)", () => {
 
     expect(screen.queryByText(/locked until Night 1 begins/)).toBeNull();
     const actualRoleSection = screen.getByText("Actual role (ST private)").closest("section")!;
-    fireEvent.click(within(actualRoleSection).getByRole("button", { name: "Drunk outsider" }));
+    pickRoleNamed("Actual role", "Drunk outsider", actualRoleSection);
     expect(store.getState().game!.players[target]!.actualRole).toBe("drunk");
     // PHASE10E.md 26 (SOL-10E-A1): the Setup Traveler designation is not
     // actionable in Live Play; the status is shown, never toggled here.
@@ -450,11 +453,11 @@ describe("Pre-Reveal Setup refinement (Phase 9 Setup finalization B3)", () => {
 
   it("outside the refinement window, the actual-role picker keeps the generic assignRole() behavior", () => {
     render(<Drawer />); // fresh, non-dealt game from the outer beforeEach
-    expect(screen.queryByLabelText("Swap role with…")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Chef townsfolk" }));
+    expect(hasChoice("Swap role with")).toBe(false);
+    pickRoleNamed("Actual role", "Chef townsfolk");
     expect(current().actualRole).toBe("chef");
     const actualRoleSection = screen.getByText("Actual role (ST private)").closest("section")!;
-    fireEvent.click(within(actualRoleSection).getByRole("button", { name: "Drunk outsider" }));
+    pickRoleNamed("Actual role", "Drunk outsider", actualRoleSection);
     // Generic assignRole() preserves whatever shown identity already existed
     // (here, still unrevealed) rather than resetting it for the new role.
     expect(current().shownRole).toBeNull();

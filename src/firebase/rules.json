@@ -164,6 +164,37 @@
           ".read": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid",
           ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('writer/expiresAt').val() > now && newData.parent().child('writeGuard/token').val() === root.child('lobbies').child($code).child('writer/token').val() && (!root.child('lobbies').child($code).child('writeGuard').exists() || newData.parent().child('writeGuard/revision').val() > root.child('lobbies').child($code).child('writeGuard/revision').val())",
           ".validate": "newData.isString()"
+        },
+        "revealAcks": {
+          ".read": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid",
+          ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('writer/expiresAt').val() > now && newData.parent().child('writeGuard/token').val() === root.child('lobbies').child($code).child('writer/token').val() && (!root.child('lobbies').child($code).child('writeGuard').exists() || newData.parent().child('writeGuard/revision').val() > root.child('lobbies').child($code).child('writeGuard/revision').val()) && !newData.exists()",
+          "$uid": {
+            ".read": "auth != null && $uid === auth.uid",
+            ".write": "(auth != null && $uid === auth.uid && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('roster').child(auth.uid).exists() && newData.exists()) || (auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('writer/expiresAt').val() > now && newData.parent().parent().child('writeGuard/token').val() === root.child('lobbies').child($code).child('writer/token').val() && (!root.child('lobbies').child($code).child('writeGuard').exists() || newData.parent().parent().child('writeGuard/revision').val() > root.child('lobbies').child($code).child('writeGuard/revision').val()) && !newData.exists())",
+            ".validate": "newData.isString() && newData.val().length >= 16 && newData.val().length <= 64 && newData.val().matches(/^[A-Za-z0-9_-]{16,64}$/)"
+          }
+        },
+        "results": {
+          ".read": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid",
+          "$uid": {
+            ".read": "auth != null && $uid === auth.uid && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'ended'",
+            ".write": "auth != null && root.child('lobbies').child($code).child('storytellerUid').val() === auth.uid && !data.exists() && newData.exists() && root.child('lobbies').child($code).child('session/version').val() === 2 && root.child('lobbies').child($code).child('session/state').val() === 'active' && root.child('lobbies').child($code).child('writer/expiresAt').val() > now && newData.parent().parent().child('writeGuard/token').val() === root.child('lobbies').child($code).child('writer/token').val() && (!root.child('lobbies').child($code).child('writeGuard').exists() || newData.parent().parent().child('writeGuard/revision').val() > root.child('lobbies').child($code).child('writeGuard/revision').val()) && newData.parent().parent().child('session/state').val() === 'ended' && newData.parent().parent().child('session/id').val() === root.child('lobbies').child($code).child('session/id').val()",
+            ".validate": "newData.hasChildren(['version','sessionId','winner','declaredAt']) && newData.child('version').val() === 1 && newData.child('sessionId').isString() && newData.child('sessionId').val() === root.child('lobbies').child($code).child('session/id').val() && (newData.child('winner').val() === 'good' || newData.child('winner').val() === 'evil')",
+            "version": {},
+            "sessionId": {},
+            "winner": {},
+            "declaredAt": {
+              ".validate": "newData.hasChildren(['phase','day']) && (newData.child('phase').val() === 'day' || newData.child('phase').val() === 'night') && newData.child('day').isNumber() && newData.child('day').val() % 1 === 0 && newData.child('day').val() >= 1",
+              "phase": {},
+              "day": {},
+              "$other": {
+                ".validate": false
+              }
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
         }
       }
     }

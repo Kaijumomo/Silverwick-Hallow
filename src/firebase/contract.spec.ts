@@ -44,6 +44,7 @@ import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { subscribeToPublicLobby } from "./publicSync";
 import { authorizePublicDisplay, ensurePublicDisplayAccess, rotatePublicDisplayAccess } from "./publicDisplayAuth";
 import type { PublicLobbyRecord } from "@/stores/types";
+import { withoutSelfEnvelope } from "@/test/revealTokens";
 
 let env: RulesTestEnvironment;
 beforeAll(async () => {
@@ -371,7 +372,7 @@ describe("OPUS-007 contract: real client pathways against enforced Firebase rule
     expect(await stBackend.get(`lobbies/${code}/roster/${alice}`)).toBe(id);
     expect(await stBackend.get(`lobbies/${code}/roster/${bob}`)).toBeUndefined();
     expect(await stBackend.get(`lobbies/${code}/public`)).toMatchObject({ code });
-    expect(await stBackend.get(`lobbies/${code}/player/${id}`)).toEqual({ shownRole: "chef", shownAlignment: "good" });
+    expect(withoutSelfEnvelope(await stBackend.get(`lobbies/${code}/player/${id}`))).toEqual({ shownRole: "chef", shownAlignment: "good" });
     expect(await stBackend.get(`lobbies/${code}/storyteller`)).toBeTruthy();
     expect(await stBackend.get(`lobbies/${code}/checkpoint`)).toBeTruthy();
   });
@@ -1401,7 +1402,9 @@ describe("OPUS-001-CONTRACT-H1-GAP2: valid-authority reconciliation that require
     // participant identity (unseatPlayer clears it; the v17 checkpoint
     // schema rejects an empty seat that still holds one), so the fixture
     // drops `participantId` exactly as a real vacated seat would.
-    const { participantId: _vacated, ...vacatedSeat } = useStorytellerStore.getState().game!.players[seatId]!;
+    // Phase 10H: and no reveal token (unseatPlayer clears it; the v26 schema
+    // rejects an empty seat that still holds one).
+    const { participantId: _vacated, revealToken: _vacatedToken, ...vacatedSeat } = useStorytellerStore.getState().game!.players[seatId]!;
     const foreignGame = {
       ...useStorytellerStore.getState().game!, day: 5,
       players: { ...useStorytellerStore.getState().game!.players,
@@ -1529,7 +1532,7 @@ describe("Phase 9R.2 R1-F: stale checkpoint + current membership, real enforced 
       expect(g.players[p1]!.participantId).toBe(PA);
       expect(g.history).toHaveLength(1);
     }, { timeout: 5000 });
-    expect(await device1.get(playerPath(code, p1))).toEqual({ shownRole: "washerwoman", shownAlignment: "good" });
+    expect(withoutSelfEnvelope(await device1.get(playerPath(code, p1)))).toEqual({ shownRole: "washerwoman", shownAlignment: "good" });
     const aliceHistory = structuredClone(store().game!.history);
     m1.stop();
     await w1.dispose();

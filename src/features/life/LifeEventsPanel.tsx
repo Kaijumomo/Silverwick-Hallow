@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
+import { ParticipantPicker } from "@/components/ParticipantPicker";
+import { Segmented } from "@/components/Segmented";
+import { captureBinding } from "@/features/abilities/abilityUi";
 import { useStorytellerStore, type RepairTarget } from "@/stores/storytellerStore";
 import { usePrivateDialog } from "./usePrivateDialog";
 import { currentLiveMoment, momentLabel, previousLiveMoment, sameMoment } from "@/stores/lifeEvents";
@@ -38,43 +41,29 @@ function specOf(kind: Kind, outcome: string, playerId?: string): LifeEventSpec {
 const repairOf = (player: STPlayerRecord | undefined, choice: StatusChoice): RepairTarget[] =>
   player && choice !== "keep" ? [{ playerId: player.id, target: statusTargetOf(choice as LifeState) }] : [];
 
-function StatusRepair({ id, label, player, value, onChange }: {
-  id: string; label: string; player: STPlayerRecord | undefined; value: StatusChoice; onChange: (v: StatusChoice) => void;
+function StatusRepair({ label, player, value, onChange }: {
+  label: string; player: STPlayerRecord | undefined; value: StatusChoice; onChange: (v: StatusChoice) => void;
 }) {
   if (!player) return <p className="behavior-help">{label}: no longer seated -- status cannot be changed here.</p>;
-  return (
-    <div className="drawer-row">
-      <label className="label" htmlFor={id}>{label}</label>
-      <select id={id} value={value} onChange={(e) => onChange(e.target.value as StatusChoice)}>
-        {statusChoicesFor().map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    </div>
-  );
+  return <Segmented label={label} value={value} options={statusChoicesFor()} onChange={onChange} />;
 }
 
 /** Kind/outcome pickers shared by amend and late record. */
-function EventSpecFields({ idPrefix, moment, kind, outcome, onKind, onOutcome }: {
-  idPrefix: string; moment: LiveGameMoment; kind: Kind; outcome: string;
+function EventSpecFields({ moment, kind, outcome, onKind, onOutcome }: {
+  moment: LiveGameMoment; kind: Kind; outcome: string;
   onKind: (k: Kind) => void; onOutcome: (o: string) => void;
 }) {
   const kinds: Kind[] = moment.phase === "day" ? ["death", "execution", "exile", "resurrection"] : ["death", "resurrection"];
   return (
-    <div className="drawer-row">
-      <label className="label" htmlFor={`${idPrefix}-kind`}>Event</label>
-      <select id={`${idPrefix}-kind`} value={kind} onChange={(e) => {
-        const next = e.target.value as Kind;
+    <>
+      <Segmented label="Event" value={kind} options={kinds.map((k) => ({ value: k, label: KIND_LABEL[k] }))} onChange={(next) => {
         onKind(next);
         if (next === "execution" || next === "exile") onOutcome("died");
-      }}>
-        {kinds.map((k) => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
-      </select>
-      {(kind === "execution" || kind === "exile") && <>
-        <label className="label" htmlFor={`${idPrefix}-outcome`}>Outcome</label>
-        <select id={`${idPrefix}-outcome`} value={outcome} onChange={(e) => onOutcome(e.target.value)}>
-          {OUTCOMES[kind].map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-      </>}
-    </div>
+      }} />
+      {(kind === "execution" || kind === "exile") && (
+        <Segmented label="Outcome" value={outcome} options={OUTCOMES[kind]} onChange={onOutcome} />
+      )}
+    </>
   );
 }
 
@@ -85,7 +74,7 @@ function RetractForm({ game, event, onDone }: { game: StorytellerLobbyRecord; ev
   return (
     <div className="life-correction-form">
       <p className="behavior-help">Retracting removes the event. Status changes only if you choose one here.</p>
-      <StatusRepair id={`retract-${event.id}`} label="Also set status" player={subject} value={repair} onChange={setRepair} />
+      <StatusRepair label="Also set status" player={subject} value={repair} onChange={setRepair} />
       <button className="btn btn-sm btn-danger" onClick={() => {
         if (attempt(() => useStorytellerStore.getState().retractLifeEvent(event.id, repairOf(subject, repair)))) onDone();
       }}>Retract event</button>
@@ -108,21 +97,17 @@ function AmendForm({ game, event, onDone }: { game: StorytellerLobbyRecord; even
   return (
     <div className="life-correction-form">
       <p className="behavior-help">Amending retracts this event and records a corrected one (a new event, same {momentLabel(event.moment)}).</p>
-      <EventSpecFields idPrefix={`amend-${event.id}`} moment={event.moment} kind={kind} outcome={outcome}
+      <EventSpecFields moment={event.moment} kind={kind} outcome={outcome}
         onKind={(k) => { setKind(k); setNewRepair(suggestedStatusForEvent(replacementPlayer, k, outcome)); }}
         onOutcome={(o) => { setOutcome(o); setNewRepair(suggestedStatusForEvent(replacementPlayer, kind, o)); }} />
-      <div className="drawer-row">
-        <label className="label" htmlFor={`amend-${event.id}-who`}>Player</label>
-        <select id={`amend-${event.id}-who`} value={who} onChange={(e) => setWho(e.target.value)}>
-          <option value="">{event.subject.nameAtTime || "Same player"} (same player)</option>
-          {players.filter((p) => p.participantId !== event.subject.participantId)
-            .map((p) => <option key={p.id} value={p.id}>{p.name} (seat {p.seat + 1})</option>)}
-        </select>
-      </div>
-      <StatusRepair id={`amend-${event.id}-status`} label={changedSubject ? "New player's status" : "Also set status"}
+      <ParticipantPicker game={game} label="Player" value={who ? captureBinding(game, who) : null}
+        candidates={players.filter((p) => p.participantId !== event.subject.participantId)}
+        hint={`Not chosen keeps ${event.subject.nameAtTime || "the same player"}`}
+        onChange={(binding) => setWho(binding?.playerId ?? "")} />
+      <StatusRepair label={changedSubject ? "New player's status" : "Also set status"}
         player={replacementPlayer} value={newRepair} onChange={setNewRepair} />
       {changedSubject && (
-        <StatusRepair id={`amend-${event.id}-old-status`} label={`${event.subject.nameAtTime}'s status`}
+        <StatusRepair label={`${event.subject.nameAtTime}'s status`}
           player={original} value={oldRepair} onChange={setOldRepair} />
       )}
       <button className="btn btn-sm btn-gold" onClick={() => {
@@ -150,20 +135,17 @@ function LateRecordForm({ game, previous }: { game: StorytellerLobbyRecord; prev
       <summary>Late record for {momentLabel(previous)}…</summary>
       <div className="life-correction-form">
         <p className="behavior-help">Record something that happened during {momentLabel(previous)} but was not recorded then.</p>
-        <EventSpecFields idPrefix="late" moment={previous} kind={kind} outcome={outcome}
+        <EventSpecFields moment={previous} kind={kind} outcome={outcome}
           onKind={(k) => { setKind(k); setRepair(suggestedStatusForEvent(player, k, outcome)); }}
           onOutcome={(o) => { setOutcome(o); setRepair(suggestedStatusForEvent(player, kind, o)); }} />
-        <div className="drawer-row">
-          <label className="label" htmlFor="late-who">Player</label>
-          <select id="late-who" value={who} onChange={(e) => {
-            setWho(e.target.value);
-            setRepair(suggestedStatusForEvent(game.players[e.target.value], kind, outcome));
-          }}>
-            <option value="">Choose a player…</option>
-            {players.map((p) => <option key={p.id} value={p.id}>{p.name} (seat {p.seat + 1})</option>)}
-          </select>
-        </div>
-        {player && <StatusRepair id="late-status" label="Also set status" player={player} value={repair} onChange={setRepair} />}
+        <ParticipantPicker game={game} label="Player" value={who ? captureBinding(game, who) : null} candidates={players}
+          onChange={(binding) => {
+            const next = binding?.playerId ?? "";
+            setWho(next);
+            setRepair(suggestedStatusForEvent(next ? game.players[next] : undefined, kind, outcome));
+          }} />
+        {player && <StatusRepair label="Also set status" player={player} value={repair} onChange={setRepair} />}
+        {!player && <span className="disabled-reason">Choose the player first.</span>}
         <button className="btn btn-sm btn-gold" disabled={!player} onClick={() => {
           if (!player) return;
           if (attempt(() => useStorytellerStore.getState().lateRecordLifeEvent(

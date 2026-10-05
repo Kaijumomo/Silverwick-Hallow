@@ -18,6 +18,7 @@ import { ActivityPanel } from "./ActivityPanel";
 import { buildActivity, describeHistoryRecord } from "./activity";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { GameHistoryRecord, GameInformationDeliveryRecord } from "@/stores/types";
+import { chosen } from "@/test/pickers";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -152,7 +153,7 @@ describe("10G-AC-20: the Manual workspace's Information told step", () => {
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Reason for manual resolution" }), { target: { value: "Spoken answer" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "+ Information told" }));
     // Defaults to the workflow's actor.
-    expect(within(dialog).getByRole("combobox", { name: "Step 1 player" })).toHaveValue("p6");
+    expect(chosen("Step 1 player", dialog)).toBe("p6");
     expect(dialog).toHaveTextContent("Recorded as the Empath procedure performed (simulated wake).");
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Step 1 information told" }), { target: { value: "You learn 2." } });
     expect(within(dialog).getByRole("region", { name: "Result" })).toHaveTextContent('Record what Gail was told (manual): "You learn 2." -- as the Empath');

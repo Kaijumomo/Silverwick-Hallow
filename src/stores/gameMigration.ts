@@ -649,6 +649,20 @@ function migrateEntryV24ToV25(e: Record<string, unknown>): void {
   e.gameSchemaVersion = 25;
 }
 
+/**
+ * v25 -> v26 (Phase 10H): a stamp. Reveal tokens and the Game Result are new
+ * optional fields, and NOTHING is invented for them: no existing participation
+ * receives a reveal token (it gets one only when its visible identity next
+ * changes), and no ended game receives a Game Result or winner (a legacy ended
+ * game means "No recorded result"). Deterministic and idempotent, applied
+ * independently per entry (Current State, every Undo snapshot, a remote
+ * checkpoint's game). The caller has already established that the entry
+ * carries marker 25 and no v26-only evidence.
+ */
+function migrateEntryV25ToV26(e: Record<string, unknown>): void {
+  e.gameSchemaVersion = 26;
+}
+
 export function migrateGameEntry(
   entry: unknown,
   fromVersion: number,
@@ -681,7 +695,9 @@ export function migrateGameEntry(
   // "below" an envelope that already claims the target version.
   const record = e as Record<string, unknown>;
   if (hasOwnKey(record, "gameSchemaVersion")) {
-    const v25 = hasV25Evidence(record);
+    // Phase 10H: v26-only evidence under any older marker is malformed
+    // current-version data -- no step runs, the v26 schema rejects it.
+    const v25 = hasV25Evidence(record) || hasV26Evidence(record);
     if (record.gameSchemaVersion === 20 && fromVersion < 21 && !v25 &&
       !hasV21Evidence(record) && !hasV22Evidence(record) && !hasV23Evidence(record) && !hasV24Evidence(record)) {
       migrateEntryV20ToV21(record);
@@ -700,8 +716,11 @@ export function migrateGameEntry(
     if (record.gameSchemaVersion === 23 && fromVersion < 24 && !v25 && !hasV24Evidence(record)) {
       migrateEntryV23ToV24(record);
     }
-    if (record.gameSchemaVersion === PREVIOUS_GAME_SCHEMA_VERSION && fromVersion < 25 && !v25) {
+    if (record.gameSchemaVersion === 24 && fromVersion < 25 && !v25) {
       migrateEntryV24ToV25(record);
+    }
+    if (record.gameSchemaVersion === PREVIOUS_GAME_SCHEMA_VERSION && fromVersion < 26 && !hasV26Evidence(record)) {
+      migrateEntryV25ToV26(record);
     }
     return;
   }
@@ -715,7 +734,7 @@ export function migrateGameEntry(
   // and an Alignment or Role resolutionId the generic `resolutionId` key (v20
   // evidence), so an older heuristic could otherwise claim it and stamp it
   // into validity.
-  if (hasV25Evidence(record) || hasV24Evidence(record) || hasV23Evidence(record) || hasV22Evidence(record) || hasV20Evidence(record) || hasV21Evidence(record)) return;
+  if (hasV26Evidence(record) || hasV25Evidence(record) || hasV24Evidence(record) || hasV23Evidence(record) || hasV22Evidence(record) || hasV20Evidence(record) || hasV21Evidence(record)) return;
 
   if (fromVersion < 14) {
     const players = e.players;
@@ -797,6 +816,7 @@ export function migrateGameEntry(
     if (record.gameSchemaVersion === 22) migrateEntryV22ToV23(record);
     if (record.gameSchemaVersion === 23) migrateEntryV23ToV24(record);
     if (record.gameSchemaVersion === 24) migrateEntryV24ToV25(record);
+    if (record.gameSchemaVersion === 25) migrateEntryV25ToV26(record);
   }
 }
 
@@ -880,7 +900,7 @@ export function detectLegacyGameVersion(game: Record<string, unknown>): number |
   // v23, then v22, evidence first: it must never be claimed by an older
   // heuristic (an Alignment/Role correction's `correction` key is also v19
   // Life evidence, and an Alignment/Role `resolutionId` is also v20 evidence).
-  if (hasV25Evidence(game) || hasV24Evidence(game) || hasV23Evidence(game) || hasV22Evidence(game) || hasV21Evidence(game)) return GAME_SCHEMA_VERSION;
+  if (hasV26Evidence(game) || hasV25Evidence(game) || hasV24Evidence(game) || hasV23Evidence(game) || hasV22Evidence(game) || hasV21Evidence(game)) return GAME_SCHEMA_VERSION;
   if (hasV20Evidence(game)) return 20;
   if (hasV19LifeEvidence(game)) return 19;
   if (hasV17IdentityEvidence(game)) return 17;
@@ -1100,4 +1120,21 @@ export function hasV25Evidence(game: Record<string, unknown>): boolean {
   if (someEntry(game.history, (h) => isObject(h) &&
     (h.category === "gameRuleFact" || hasOwnKey(h, "ruleFactType") || hasOwnKey(h, "ruleFactOperation")))) return true;
   return someEntry(game.informationDeliveries, (d) => hasOwnKey(d, "kind"));
+}
+
+/**
+ * Phase 10H: true when a game-shaped entry carries ANY v26-only evidence a v25
+ * writer never produced -- PRESENCE, not validity:
+ *
+ *  - players[*].revealToken   (a participation's reveal token)
+ *  - result                   (a declared Game Result)
+ *
+ * Under an older marker (20..25) such evidence means malformed current-version
+ * data: it is never migrated, repaired or stamped, and the v26 schema rejects
+ * the entry. Marker-less, it is likewise never treated as legacy.
+ */
+export function hasV26Evidence(game: Record<string, unknown>): boolean {
+  if (hasOwnKey(game, "result")) return true;
+  const players = isObject(game.players) ? Object.values(game.players) : [];
+  return players.some((p) => hasOwnKey(p, "revealToken"));
 }

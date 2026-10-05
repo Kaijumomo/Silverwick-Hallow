@@ -1,0 +1,338 @@
+// Phase 10H (10H-IMPLEMENTATION-CONTRACT-v1.0 §§12, 15-17): enforced-rules
+// proofs for the two authorized new RTDB paths -- revealAcks/{uid} and
+// results/{uid} -- against the real emulator. Required emulator tests: setup
+// failure fails the suite, never skips it.
+//
+// Traceability: 10H-AC-035 / AC-059 (revealAcks authorization), AC-053 /
+// AC-054 / AC-055 / AC-060 (results payload, read policy, immutability,
+// creation only inside the authoritative fenced terminal close), AC-061 (the
+// multi-path `newData` semantics those rules rely on, proven rather than
+// assumed), AC-048 / AC-052 (the real SessionWriter.close publishes results in
+// its one atomic commit, and none for End Without Result).
+import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import type { Database } from "firebase/database";
+import { FirebaseRoomBackend } from "./firebaseBackend";
+import { SessionWriter } from "./writer";
+import { terminalPublication } from "./terminalResults";
+import { revokePlayerMembership } from "./lobby";
+import { makeSTPlayer } from "@/test/fixtures";
+import type { StorytellerLobbyRecord } from "@/stores/types";
+
+let env: RulesTestEnvironment;
+beforeAll(async () => {
+  const address = process.env.FIREBASE_DATABASE_EMULATOR_HOST;
+  if (!address || !/^(127\.0\.0\.1|localhost):\d+$/.test(address)) {
+    throw new Error("A local RTDB emulator is required. Run npm run test:rules.");
+  }
+  const [host, port] = address.split(":");
+  env = await initializeTestEnvironment({
+    projectId: "demo-silverwick-rules",
+    database: { host, port: Number(port), rules: readFileSync(resolve(__dirname, "rules.json"), "utf8") },
+  });
+});
+afterAll(async () => { if (env) await env.cleanup(); });
+beforeEach(async () => { await env.clearDatabase(); });
+
+const code = "TENH2345";
+const st = "uid-storyteller";
+const alice = "uid-alice";
+const bob = "uid-bob";
+const carol = "uid-carol"; // a waiting join request, never seated
+const mallory = "uid-mallory"; // unrelated authenticated user
+const SESSION = "session-10h";
+const TOKEN_A = "AAAAAAAAAAAAAAAAAAAAAA";
+const TOKEN_B = "BBBBBBBBBBBBBBBBBBBBBB";
+const path = (suffix: string) => `lobbies/${code}/${suffix}`;
+const db = (uid: string) => env.authenticatedContext(uid).database();
+const ref = (uid: string, suffix: string) => db(uid).ref(path(suffix));
+const raw = (uid: string) => new FirebaseRoomBackend(db(uid) as unknown as Database);
+/** Server truth with rules disabled. (withSecurityRulesDisabled resolves to
+ * void, so the value is captured explicitly.) */
+async function val(suffix: string): Promise<unknown> {
+  let value: unknown;
+  await env.withSecurityRulesDisabled(async (ctx) => { value = (await ctx.database().ref(path(suffix)).once("value")).val(); });
+  return value;
+}
+const resultPayload = (over: Record<string, unknown> = {}) => ({
+  version: 1, sessionId: SESSION, winner: "good", declaredAt: { phase: "day", day: 3 }, ...over,
+});
+
+let revision = 0;
+async function seed(extra: Record<string, unknown> = {}) {
+  revision = 0;
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.database().ref(`lobbies/${code}`).set({
+      storytellerUid: st,
+      session: { version: 2, id: SESSION, state: "active" },
+      writer: { token: "fixture-writer", expiresAt: Date.now() + 30_000 },
+      writeGuard: { token: "fixture-writer", revision: 0 },
+      roster: { [alice]: "p-alice", [bob]: "p-bob" },
+      rosterParticipants: {
+        [alice]: { playerId: "p-alice", participantId: "pt-alice", name: "Alice" },
+        [bob]: { playerId: "p-bob", participantId: "pt-bob", name: "Bob" },
+      },
+      joinRequests: { [carol]: "Carol" },
+      public: { code, scriptId: "tb", phase: "day", day: 3 },
+      player: { "p-alice": { shownRole: "chef", shownAlignment: "good" } },
+      ...extra,
+    });
+  });
+}
+/** A Storyteller multi-path update carrying the fixture writer's next guard. */
+const fenced = (updates: Record<string, unknown>, token = "fixture-writer") =>
+  db(st).ref().update({ ...updates, [path("writeGuard")]: { token, revision: ++revision } });
+const endSession = { [path("session")]: { version: 2, id: SESSION, state: "ended" }, [path("public/status")]: "ended" };
+
+const finalGame = (): StorytellerLobbyRecord => ({
+  players: {
+    "p-alice": makeSTPlayer({ id: "p-alice", name: "Alice", seat: 0, participantId: "pt-alice" }),
+    "p-bob": makeSTPlayer({ id: "p-bob", name: "Bob", seat: 1, participantId: "pt-bob" }),
+  },
+} as unknown as StorytellerLobbyRecord);
+
+describe("10H-AC-035 / AC-059: revealAcks/{uid} authorization (enforced rules)", () => {
+  test("a seated (roster-bound) player writes ONLY their own bounded token in an active session", async () => {
+    await seed();
+    await assertSucceeds(ref(alice, `revealAcks/${alice}`).set(TOKEN_A));
+    expect(await val(`revealAcks/${alice}`)).toBe(TOKEN_A);
+    // Re-acknowledging a new token later is the same own-uid write.
+    await assertSucceeds(ref(alice, `revealAcks/${alice}`).set(TOKEN_B));
+    // Never another uid's acknowledgement -- not even another seated player's.
+    await assertFails(ref(alice, `revealAcks/${bob}`).set(TOKEN_A));
+    await assertFails(ref(mallory, `revealAcks/${alice}`).set(TOKEN_A));
+  });
+
+  test("not roster-bound: a waiting join request or an unrelated user cannot acknowledge", async () => {
+    await seed();
+    await assertFails(ref(carol, `revealAcks/${carol}`).set(TOKEN_A));
+    await assertFails(ref(mallory, `revealAcks/${mallory}`).set(TOKEN_A));
+  });
+
+  test("only an active session: an ended session refuses every acknowledgement", async () => {
+    await seed({ session: { version: 2, id: SESSION, state: "ended" } });
+    await assertFails(ref(alice, `revealAcks/${alice}`).set(TOKEN_A));
+  });
+
+  test("a revoked participation (binding removed) can no longer acknowledge", async () => {
+    await seed();
+    await assertSucceeds(ref(alice, `revealAcks/${alice}`).set(TOKEN_A));
+    await revokePlayerMembership(fencedBackend(), code, "p-alice");
+    expect(await val(`revealAcks/${alice}`)).toBeNull(); // cleared by the revocation (hygiene)
+    await assertFails(ref(alice, `revealAcks/${alice}`).set(TOKEN_B));
+  });
+
+  test("bounded string only: wrong type, too short, too long, illegal characters and deletion are refused", async () => {
+    await seed();
+    for (const bad of [42, true, { token: TOKEN_A }, "short", "x".repeat(65), "AAAAAAAAAAAAAAAAAAAA/A", "AAAAAAAAAAAAAAAAAAAA A"]) {
+      await assertFails(ref(alice, `revealAcks/${alice}`).set(bad));
+    }
+    await assertSucceeds(ref(alice, `revealAcks/${alice}`).set("x".repeat(64)));
+    await assertSucceeds(ref(alice, `revealAcks/${alice}`).set("y".repeat(16)));
+    // The player cannot delete it (a stale/absent ack is simply not viewed).
+    await assertFails(ref(alice, `revealAcks/${alice}`).remove());
+  });
+
+  test("read: the Storyteller reads every acknowledgement; a player only their own; nobody else", async () => {
+    await seed({ revealAcks: { [alice]: TOKEN_A, [bob]: TOKEN_B } });
+    await assertSucceeds(ref(st, "revealAcks").once("value"));
+    await assertSucceeds(ref(alice, `revealAcks/${alice}`).once("value"));
+    await assertFails(ref(alice, `revealAcks/${bob}`).once("value"));
+    await assertFails(ref(alice, "revealAcks").once("value"));
+    await assertFails(ref(mallory, `revealAcks/${alice}`).once("value"));
+  });
+
+  test("Storyteller cleanup: fenced deletes only -- never an unfenced write, never forging an acknowledgement", async () => {
+    await seed({ revealAcks: { [alice]: TOKEN_A, [bob]: TOKEN_B } });
+    // A stale/foreign writer token is fenced out.
+    await assertFails(fenced({ [path(`revealAcks/${alice}`)]: null }, "foreign-writer"));
+    // The Storyteller can never write an acknowledgement value.
+    await assertFails(fenced({ [path(`revealAcks/${alice}`)]: TOKEN_B }));
+    await assertFails(fenced({ [path("revealAcks")]: { [alice]: TOKEN_B } }));
+    // Fenced deletion of one entry, then of the whole node.
+    await assertSucceeds(fenced({ [path(`revealAcks/${alice}`)]: null }));
+    expect(await val("revealAcks")).toEqual({ [bob]: TOKEN_B });
+    await assertSucceeds(fenced({ [path("revealAcks")]: null }));
+    expect(await val("revealAcks")).toBeNull();
+  });
+});
+
+/** A RoomBackend whose updates carry the fixture writer's next guard. */
+function fencedBackend() {
+  const base = raw(st);
+  return Object.assign(Object.create(base) as FirebaseRoomBackend, {
+    update: (updates: Record<string, unknown>) => base.update({ ...updates, [path("writeGuard")]: { token: "fixture-writer", revision: ++revision } } as never),
+    set: (target: string, value: unknown) => base.update({ [target]: value, [path("writeGuard")]: { token: "fixture-writer", revision: ++revision } } as never),
+  });
+}
+
+describe("10H-AC-053 / AC-060 / AC-061: results/{uid} only inside the authoritative fenced terminal close", () => {
+  test("AC-061 multi-path: a result written in the SAME fenced update that ends the session is accepted", async () => {
+    await seed();
+    await assertSucceeds(fenced({ ...endSession, [path(`results/${alice}`)]: resultPayload(), [path(`results/${bob}`)]: resultPayload() }));
+    expect(await val(`results/${alice}`)).toEqual(resultPayload());
+    expect(await val("session/state")).toBe("ended");
+  });
+
+  test("AC-061 multi-path: a result in a fenced update that does NOT end the session is refused (the whole update)", async () => {
+    await seed();
+    await assertFails(fenced({ [path(`results/${alice}`)]: resultPayload() }));
+    await assertFails(fenced({ [path("public/status")]: "ended", [path(`results/${alice}`)]: resultPayload() }));
+    expect(await val("results")).toBeNull();
+    expect(await val("session/state")).toBe("active");
+  });
+
+  test("the existing writer fence applies: a stale/foreign guard or an expired lease refuses session end AND result together", async () => {
+    await seed();
+    await assertFails(fenced({ ...endSession, [path(`results/${alice}`)]: resultPayload() }, "foreign-writer"));
+    expect(await val("session/state")).toBe("active");
+    expect(await val("results")).toBeNull();
+    await env.withSecurityRulesDisabled(async (ctx) => { await ctx.database().ref(path("writer/expiresAt")).set(Date.now() - 1); });
+    await assertFails(fenced({ ...endSession, [path(`results/${alice}`)]: resultPayload() }));
+    expect(await val("session/state")).toBe("active");
+    expect(await val("results")).toBeNull();
+  });
+
+  test("Storyteller-authoritative only: no player and no unrelated user can create a result", async () => {
+    await seed();
+    await assertFails(db(alice).ref().update({ ...endSession, [path(`results/${alice}`)]: resultPayload(), [path("writeGuard")]: { token: "fixture-writer", revision: 1 } }));
+    await assertFails(ref(alice, `results/${alice}`).set(resultPayload()));
+    await assertFails(ref(mallory, `results/${mallory}`).set(resultPayload()));
+    expect(await val("results")).toBeNull();
+  });
+
+  test("AC-053 exact allowlist: sessionId must match; extra keys, bad winner, bad phase, bad day are refused atomically", async () => {
+    const bad: unknown[] = [
+      resultPayload({ sessionId: "another-session" }),
+      resultPayload({ version: 2 }),
+      resultPayload({ winner: "draw" }),
+      resultPayload({ winner: "storyteller" }),
+      resultPayload({ declaredAt: { phase: "setup", day: 3 } }),
+      resultPayload({ declaredAt: { phase: "day", day: 0 } }),
+      resultPayload({ declaredAt: { phase: "day", day: 1.5 } }),
+      resultPayload({ declaredAt: { phase: "day", day: "3" } }),
+      resultPayload({ declaredAt: { phase: "night" } }),
+      resultPayload({ declaredAt: { phase: "day", day: 3, reason: "x" } }),
+      resultPayload({ actualRole: "imp" }),
+      resultPayload({ participantId: "pt-alice" }),
+      resultPayload({ youWon: true }),
+      { version: 1, sessionId: SESSION, winner: "good" },
+      "good",
+    ];
+    for (const payload of bad) {
+      await seed();
+      await assertFails(fenced({ ...endSession, [path(`results/${alice}`)]: payload, [path(`results/${bob}`)]: resultPayload() }));
+      // Atomic: the session did not end and no valid sibling result landed.
+      expect(await val("session/state")).toBe("active");
+      expect(await val("results")).toBeNull();
+    }
+    await seed();
+    await assertSucceeds(fenced({ ...endSession, [path(`results/${alice}`)]: resultPayload({ winner: "evil", declaredAt: { phase: "night", day: 1 } }) }));
+  });
+
+  test("AC-054: after teardown a uid reads ONLY its own result; the Storyteller reads the collection", async () => {
+    await seed();
+    await assertSucceeds(fenced({ ...endSession, [path(`results/${alice}`)]: resultPayload(), [path(`results/${bob}`)]: resultPayload() }));
+    await assertSucceeds(ref(alice, `results/${alice}`).once("value"));
+    expect((await ref(alice, `results/${alice}`).once("value")).val()).toEqual(resultPayload());
+    await assertFails(ref(alice, `results/${bob}`).once("value"));
+    await assertFails(ref(alice, "results").once("value"));
+    await assertFails(ref(mallory, `results/${alice}`).once("value"));
+    await assertSucceeds(ref(st, "results").once("value"));
+    // A uid with no result (End Without Result / not a participant) reads an absent node, not a denial.
+    expect((await ref(carol, `results/${carol}`).once("value")).exists()).toBe(false);
+  });
+
+  test("AC-054: no player result read while the session is still active", async () => {
+    await seed();
+    await assertFails(ref(alice, `results/${alice}`).once("value"));
+  });
+
+  test("AC-055 immutable: after terminalization nobody can overwrite, add or delete a result", async () => {
+    await seed();
+    await assertSucceeds(fenced({ ...endSession, [path(`results/${alice}`)]: resultPayload() }));
+    await assertFails(fenced({ [path(`results/${alice}`)]: resultPayload({ winner: "evil" }) }));
+    await assertFails(fenced({ [path(`results/${alice}`)]: null }));
+    await assertFails(fenced({ [path(`results/${bob}`)]: resultPayload() }));
+    await assertFails(fenced({ [path("results")]: null }));
+    await assertFails(ref(alice, `results/${alice}`).remove());
+    await assertFails(ref(alice, `results/${alice}`).set(resultPayload({ winner: "evil" })));
+    expect(await val("results")).toEqual({ [alice]: resultPayload() });
+  });
+
+  test("a result can never be created twice: a replay of the terminal update is refused (the session ends once)", async () => {
+    await seed();
+    const update = { ...endSession, [path(`results/${alice}`)]: resultPayload() };
+    await assertSucceeds(fenced(update));
+    await assertFails(fenced(update));
+    expect(await val(`results/${alice}`)).toEqual(resultPayload());
+  });
+});
+
+describe("10H-AC-048 / AC-052: the real SessionWriter.close publishes in its one fenced atomic commit", () => {
+  async function closeWith(result: Parameters<typeof terminalPublication>[2], acks = true) {
+    await seed({
+      ...(acks ? { revealAcks: { [alice]: TOKEN_A, [bob]: TOKEN_B } } : {}),
+      writer: { token: "fixture-writer", expiresAt: 0 },
+    });
+    const backend = raw(st);
+    const writer = new SessionWriter(backend, code, SESSION);
+    try {
+      await writer.start();
+      await writer.close(["p-alice", "p-bob"], terminalPublication(code, SESSION, result, finalGame()));
+    } finally { await writer.dispose(); }
+  }
+
+  test("Declare Evil: results for every coherent seated participant, the session ends, acknowledgements are cleared", async () => {
+    await closeWith({ winner: "evil", declaredAt: { phase: "night", day: 2 } });
+    const expected = { version: 1, sessionId: SESSION, winner: "evil", declaredAt: { phase: "night", day: 2 } };
+    expect(await val("session/state")).toBe("ended");
+    expect(await val("results")).toEqual({ [alice]: expected, [bob]: expected });
+    expect(await val("revealAcks")).toBeNull();
+    expect(await val("roster")).toBeNull();
+    expect(await val("player")).toBeNull();
+    // The waiting join request (never seated) receives no result.
+    expect(await val(`results/${carol}`)).toBeNull();
+    expect((await ref(alice, `results/${alice}`).once("value")).val()).toEqual(expected);
+  });
+
+  test("AC-052 End Without Result: the same close publishes NO result for anyone", async () => {
+    await closeWith(null);
+    expect(await val("session/state")).toBe("ended");
+    expect(await val("results")).toBeNull();
+    expect(await val("revealAcks")).toBeNull();
+  });
+
+  test("an incoherent binding (record names another participation) receives no result; the rest do", async () => {
+    await seed({
+      writer: { token: "fixture-writer", expiresAt: 0 },
+      rosterParticipants: {
+        [alice]: { playerId: "p-alice", participantId: "pt-old-alice", name: "Alice" },
+        [bob]: { playerId: "p-bob", participantId: "pt-bob", name: "Bob" },
+      },
+    });
+    const writer = new SessionWriter(raw(st), code, SESSION);
+    try {
+      await writer.start();
+      await writer.close([], terminalPublication(code, SESSION, { winner: "good", declaredAt: { phase: "day", day: 4 } }, finalGame()));
+    } finally { await writer.dispose(); }
+    expect(Object.keys((await val("results")) ?? {})).toEqual([bob]);
+  });
+
+  test("AC-049: a close whose fence is lost publishes nothing and leaves the session active (retryable)", async () => {
+    await seed({ writer: { token: "fixture-writer", expiresAt: 0 } });
+    const writer = new SessionWriter(raw(st), code, SESSION);
+    try {
+      await writer.start();
+      // Another writer takes the lease before the terminal commit.
+      await env.withSecurityRulesDisabled(async (ctx) => {
+        await ctx.database().ref(path("writer")).set({ token: "usurper", expiresAt: Date.now() + 30_000 });
+      });
+      await expect(writer.close([], terminalPublication(code, SESSION, { winner: "good", declaredAt: { phase: "day", day: 3 } }, finalGame()))).rejects.toBeTruthy();
+    } finally { await writer.dispose().catch(() => {}); }
+    expect(await val("session/state")).toBe("active");
+    expect(await val("results")).toBeNull();
+  });
+});

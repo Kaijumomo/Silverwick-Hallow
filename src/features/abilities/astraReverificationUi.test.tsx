@@ -17,6 +17,7 @@ import { bind, patchPlayer, proofGame, proofScript, reseat } from "@/test/proofF
 import type { AbilityInputRequirement, AbilityInputValue } from "@/abilities/semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { StorytellerLobbyRecord } from "@/stores/types";
+import { chooseParticipant, chosenParticipant, offered, participantSlot } from "@/test/pickers";
 
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
@@ -39,14 +40,17 @@ function harness(requirement: AbilityInputRequirement, g0: StorytellerLobbyRecor
   const count = requirement.count ?? 1;
   return {
     onChange,
-    slot: (n: number) => screen.getByRole("combobox", { name: count > 1 ? `${requirement.label} ${n}` : requirement.label }) as HTMLSelectElement,
-    choose(n: number, playerId: string) { fireEvent.change(this.slot(n), { target: { value: playerId } }); },
+    slot: (n: number) => participantSlot(count > 1 ? `${requirement.label} ${n}` : requirement.label),
+    slotName: (n: number) => (count > 1 ? `${requirement.label} ${n}` : requirement.label),
+    choose(n: number, playerId: string) { chooseParticipant(this.slotName(n), playerId); },
     update(next: StorytellerLobbyRecord) { g = next; view.rerender(element()); },
     last: () => onChange.mock.calls.at(-1)?.[0],
     participants: () => { const value = onChange.mock.calls.at(-1)?.[0]; return value?.kind === "participant" ? value.participants : undefined; },
   };
 }
-const shown = (select: HTMLSelectElement) => select.selectedOptions[0]?.textContent ?? "";
+/** Phase 10H: what a participant slot DISPLAYS as its value (its chosen chip,
+ * stale notice or "Not chosen") -- never the Roster strip's other names. */
+const shown = (slot: HTMLElement) => slot.querySelector(".pick-slot-value")?.textContent ?? "";
 
 describe("SOL-10F-B1 -- RequirementInput binds each slot when it is selected", () => {
   for (const [name, descriptor, roles] of [["Al-Hadikhia", AL_HADIKHIA, AL], ["Fortune Teller", FORTUNE_TELLER, FT]] as const) {
@@ -106,6 +110,14 @@ describe("SOL-10F-B1 -- RequirementInput binds each slot when it is selected", (
     expect(h.participants()).toEqual([bind(g, "p1"), bind(g, "p2"), bind(g, "p4")]);
   });
 
+  it("distinctness guard: a duplicate participant (e.g. an initial answer) is flagged and never emitted", () => {
+    const g = proofGame(AL);
+    const h = harness(AL_HADIKHIA.inputs[0]!, g, { kind: "participant", participants: [bind(g, "p1"), bind(g, "p1"), bind(g, "p2")] });
+    expect(screen.getByRole("alert")).toHaveTextContent("Choose different players.");
+    h.choose(3, "p3"); // completing another slot still never emits the duplicate
+    expect(h.last()).toBeUndefined();
+  });
+
   it("colon / unusual ParticipantIds are emitted exactly", () => {
     let g = proofGame(AL);
     for (const [id, pid] of [["p1", "a:b"], ["p2", "%3A.x"], ["p3", "ünï/[$]"]] as const) g = patchPlayer(g, id, { participantId: pid });
@@ -118,11 +130,13 @@ describe("SOL-10F-B1 -- RequirementInput binds each slot when it is selected", (
     const g = proofGame(AL);
     const h = harness(AL_HADIKHIA.inputs[0]!, g);
     h.choose(1, "p1");
-    expect((within(h.slot(2)).getByRole("option", { name: /Player 1/ }) as HTMLOptionElement).disabled).toBe(true);
-    h.choose(2, "p1"); // forced (a disabled option): still never an answer
+    expect(offered(h.slotName(2)).find((o) => o.value === "p1")!.disabled).toBe(true);
+    // Phase 10H: a disabled Roster option cannot be chosen at all -- the slot
+    // stays empty, so the same participant twice can never become an answer.
+    h.choose(2, "p1");
+    expect(chosenParticipant(h.slotName(2))).toBe("");
     h.choose(3, "p2");
     expect(h.last()).toBeUndefined();
-    expect(screen.getByRole("alert")).toHaveTextContent("Choose different players.");
     // A replaced by B at the same seat: B is a DIFFERENT participant.
     const replaced = reseat(g, "p1");
     h.update(replaced);
@@ -149,8 +163,7 @@ const workspace = () => document.querySelector(".ability-workspace") as HTMLElem
 describe("SOL-10F-B1 -- workspace flows", () => {
   const AL_LABEL = AL_HADIKHIA.inputs[0]!.label;
   const FT_LABEL = FORTUNE_TELLER.inputs[0]!.label;
-  const choose = (label: string, n: number, id: string) =>
-    fireEvent.change(within(workspace()).getByRole("combobox", { name: `${label} ${n}` }), { target: { value: id } });
+  const choose = (label: string, n: number, id: string) => chooseParticipant(`${label} ${n}`, id, workspace());
 
   it("Al-Hadikhia: A chosen for slot 1, A's seat reused, slots 2/3 filled -> refused as stale; nothing recorded", () => {
     open(proofGame(AL));
@@ -211,15 +224,15 @@ describe("SOL-10F-B1 -- workspace flows", () => {
 describe("SOL-10F-B1 -- the inline flow shows a stale pick as stale", () => {
   const POISONER = ["poisoner", "empath", "chef", "monk", "imp", "saint", "spy"];
   const row = () => card("Poisoner", "Player 0");
-  const select = () => within(row()).getByRole("combobox", { name: "The player to poison" }) as HTMLSelectElement;
+  const select = () => participantSlot("The player to poison", row());
 
   it("select: a reused seat never displays the replacement; re-choosing it targets B", () => {
     open(proofGame(POISONER));
     render(<Night />);
-    fireEvent.change(select(), { target: { value: "p1" } });
+    chooseParticipant("The player to poison", "p1", row());
     reseatInStore("p1");
     expect(shown(select())).toMatch(/No longer in that seat/);
-    fireEvent.change(select(), { target: { value: "p1" } });
+    chooseParticipant("The player to poison", "p1", row());
     fireEvent.click(within(row()).getByRole("button", { name: "Resolve" }));
     expect(game().players.p1!.effects).toEqual([expect.objectContaining({ type: "poisoned" })]);
     expect(game().players.p1!.participantId).toMatch(/replacement/);
@@ -228,7 +241,7 @@ describe("SOL-10F-B1 -- the inline flow shows a stale pick as stale", () => {
   it("Grimoire picker: the picked instance is captured at the tap; a reused seat shows stale", () => {
     open(proofGame(POISONER));
     render(<Night />);
-    fireEvent.click(within(row()).getByRole("button", { name: "Pick on Grimoire" }));
+    fireEvent.click(within(row()).getByRole("button", { name: /^Choose .+ on the Table$/ }));
     act(() => { expect(pickSeatIfPicking(game(), "p2")).toBe(true); });
     expect(shown(select())).toMatch(/Player 2/);
     reseatInStore("p2");

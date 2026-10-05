@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { usePlayerStore } from "@/stores/playerStore";
 import { canonicalJoin, cancelJoinRequest, knockOnLobby, normaliseCode } from "./lobby";
-import { joinRequestPath, publicPath, rosterEntryPath, playerPath, presencePath } from "./paths";
+import { joinRequestPath, publicPath, rosterEntryPath, playerPath, presencePath, resultPath, revealAckPath } from "./paths";
 import type { RoomBackend } from "./backend";
-import { decodeJoinRequest, decodeLeaveRequest, decodeRosterEntry, decodeSelfSnapshot, decodePublicSnapshot, SnapshotValidationError } from "./snapshots";
+import { decodeJoinRequest, decodeLeaveRequest, decodePlayerResult, decodeRosterEntry, decodeSelfSnapshot, decodePublicSnapshot, reportSnapshotProblem, SnapshotValidationError } from "./snapshots";
+import { REVEAL_TOKEN_PATTERN } from "@/stores/schemas";
 import { decodeSession, isTransient, leavePath, lifecycleMessage, LifecycleError, outcomePath, requireActiveSession, retryTransient, sessionPath, travelerChoicePath } from "./lifecycle";
 import { TRAVELERS } from "@/data/travelers";
 import type { RoleId } from "@/stores/types";
@@ -101,6 +102,24 @@ export function useOwnTravelerChoice(backend: RoomBackend | null, enabled: boole
   return enabled ? choice : null;
 }
 
+/**
+ * Phase 10H (contract §12, F3): the player's explicit "I've Seen My Role" --
+ * stores the reveal token they are being shown NOW at their own
+ * revealAcks/{uid}. Advisory only: it is never game state and never gates
+ * anything; the Storyteller derives Viewed by equality with the CURRENT token,
+ * so a stale or delayed acknowledgement simply reads as not viewed. Refused
+ * when there is nothing current to acknowledge.
+ */
+export async function acknowledgeReveal(backend: RoomBackend): Promise<void> {
+  const ps = usePlayerStore.getState();
+  if (!ps.code || !ps.uid || ps.status !== "seated") throw new LifecycleError("cancelled", "Not seated in a live game.");
+  const token = ps.self?.revealToken;
+  if (!token || !REVEAL_TOKEN_PATTERN.test(token)) throw new Error("There is no role to acknowledge yet.");
+  await backend.set(revealAckPath(ps.code, ps.uid), token);
+  // Optimistic local view; the subscription confirms the stored value.
+  if (usePlayerStore.getState().self?.revealToken === token) usePlayerStore.getState().setOwnRevealAck(token);
+}
+
 export function usePlayerSync(backend: RoomBackend | null, retry = 0) {
   const code = usePlayerStore(s => s.code);
   const uid = usePlayerStore(s => s.uid);
@@ -126,27 +145,73 @@ export function startPlayerHandshake(backend: RoomBackend, code: string, uid: st
   const cleanups: (() => void)[] = [];
   const ps = () => usePlayerStore.getState();
   const current = () => active && ps().code === code && ps().uid === uid;
-  ps().setPlayerId(null); ps().setSelf(null); ps().setPublic(null);
+  /** Phase 10H: the terminal context outlives the live handshake. */
+  const sameContext = () => ps().code === code && ps().uid === uid;
+  // Phase 10H: public/status = ended was observed -- the terminal close is in
+  // flight. Context is preserved and later reads that the teardown denies are
+  // reconciled against the session rather than reported as errors.
+  let ending = false;
+  let ackOff = () => {};
+  // Phase 10H (F2): every handshake -- reload, reconnect, re-attach -- re-seals.
+  ps().setPlayerId(null); ps().setSelf(null); ps().setPublic(null); ps().setRevealed(false); ps().setOwnRevealAck(null);
+  ps().setTerminalResult(null);
   ps().setRemoteData({ membership: "ready", request: "ready", self: "waiting", public: "waiting" });
   ps().setStatus("reconnecting");
   const stop = () => {
     active = false; abort.abort();
     cleanups.splice(0).forEach(off => off());
-    privateOff(); publicOff(); clearInterval(heartbeat);
+    privateOff(); publicOff(); ackOff(); clearInterval(heartbeat);
     void (async () => {
       try { await cancelPresence?.(); await backend.set(presencePath(code, uid), { online: false, lastSeen: Date.now() }); }
       catch { /* Disconnect handler or server expiry marks the device stale. */ }
     })();
   };
-  const terminal = (kind: "ended" | "rejected" | "revoked" | "notFound", message: string) => {
+  const terminal = (kind: "rejected" | "revoked" | "notFound", message: string) => {
     if (!current()) return;
     ps().setSelf(null); ps().setPlayerId(null); ps().setPublic(null);
     ps().setRemoteData({ membership: "ready", request: "ready", self: "waiting", public: "waiting" });
-    if (kind === "ended") ps().setEnded(); else ps().setStatus(kind, message);
+    ps().setStatus(kind, message);
     stop();
+  };
+  /**
+   * Phase 10H (contract §16): the session ended. The live subscriptions stop,
+   * private identity is cleared, the terminal context (code, uid, seat,
+   * session id, public view, Town notes) is preserved, and this player's own
+   * results/{uid} is read and validated exactly:
+   *  - a valid record naming the joined session -> the result screen;
+   *  - absent (End Without Result, or not a participant) -> generic Game Ended;
+   *  - malformed or another session's record -> never shown (generic);
+   *  - a failed read -> retryable error, NEVER a false "no result".
+   */
+  const ended = (endedSessionId: string) => {
+    if (!current()) return;
+    stop();
+    ps().setEnded();
+    ps().setTerminalResult({ status: "pending" });
+    const expected = ps().sessionId ?? endedSessionId;
+    void (async () => {
+      try {
+        const raw = await retryTransient(() => backend.get(resultPath(code, uid)), new AbortController().signal);
+        if (!sameContext() || ps().status !== "ended") return;
+        if (expected !== endedSessionId) { ps().setTerminalResult({ status: "none" }); return; }
+        const decoded = decodePlayerResult(raw, expected);
+        if (decoded.status === "ready") {
+          ps().setTerminalResult({ status: "ready", result: { winner: decoded.data.winner, declaredAt: { ...decoded.data.declaredAt } } });
+        } else {
+          if (decoded.status === "invalid") reportSnapshotProblem("result", decoded.issues);
+          ps().setTerminalResult({ status: "none" });
+        }
+      } catch (error) {
+        if (!sameContext() || ps().status !== "ended") return;
+        ps().setTerminalResult({ status: "error", message: lifecycleMessage(error) });
+      }
+    })();
   };
   const fail = (error: unknown) => {
     if (!current()) return;
+    // Phase 10H: during the terminal close the teardown legitimately denies
+    // private/public reads; the session decides, never a transient error.
+    if (ending) { schedule(); return; }
     ps().setSelf(null); ps().setPublic(null);
     ps().setStatus("error", lifecycleMessage(error));
   };
@@ -179,11 +244,16 @@ export function startPlayerHandshake(backend: RoomBackend, code: string, uid: st
       heartbeat = setInterval(() => { void write().catch(fail); }, 15_000);
     } catch (error) { fail(error); }
   };
+  /** Status while bound/waiting -- held at "ending" once the close began. */
+  const live = (status: "seated" | "leaving" | "waiting" | "reconnecting") => ps().setStatus(ending ? "ending" : status);
   const reconcile = async () => {
     const session = decodeSession(await backend.get(sessionPath(code)));
     if (!current()) return;
     if (!session) { terminal("notFound", "This lobby does not exist or has expired."); return; }
-    if (session.state === "ended") { terminal("ended", "This game has ended."); return; }
+    if (session.state === "ended") { ended(session.id); return; }
+    // Phase 10H: remember which session this player is in (validated against
+    // the terminal result later; persisted with the terminal context).
+    if (ps().sessionId !== session.id) ps().setSessionId(session.id);
     const outcome = await backend.get(outcomePath(code, uid));
     if (!current()) return;
     if (outcome != null) {
@@ -201,6 +271,7 @@ export function startPlayerHandshake(backend: RoomBackend, code: string, uid: st
       // revocation; those outcomes are written explicitly above. Keep the
       // handshake alive so an accepted seat can recover when its binding
       // becomes visible, regardless of listener ordering.
+      if (ending) { live("reconnecting"); return; }
       if (ps().status !== "waiting" && ps().status !== "seated") ps().setStatus("reconnecting");
       return;
     }
@@ -219,27 +290,46 @@ export function startPlayerHandshake(backend: RoomBackend, code: string, uid: st
       const leaveRequest = decodeLeaveRequest(await backend.get(leavePath(code, uid)));
       if (!current()) return;
       if (leaveRequest.status !== "ready") throw new SnapshotValidationError();
-      ps().setStatus(leaveRequest.data ? "leaving" : "seated");
+      live(leaveRequest.data ? "leaving" : "seated");
       if (bound !== id) {
-        bound = id; privateOff(); ps().setSelf(null);
+        bound = id; privateOff(); ackOff(); ps().setSelf(null); ps().setRevealed(false); ps().setOwnRevealAck(null);
         privateOff = watch(playerPath(code, id), raw => {
           const self = decodeSelfSnapshot(raw);
-          ps().setSelf(self.status === "ready" ? self.data : null);
+          const next = self.status === "ready" ? self.data : null;
+          // Phase 10H (F2, 10H-AC-031): a new reveal token -- a visible
+          // identity change -- or a withdrawn identity re-seals the card.
+          const previous = ps().self;
+          if (!next || !previous || next.revealToken !== previous.revealToken) ps().setRevealed(false);
+          ps().setSelf(next);
           ps().setRemoteData({ self: self.status });
         });
+        // Phase 10H: this player's own advisory acknowledgement. Never a
+        // failure path: an unreadable/malformed value reads as "none".
+        ackOff = backend.subscribe(revealAckPath(code, uid), value => {
+          if (!current()) return;
+          ps().setOwnRevealAck(typeof value === "string" && REVEAL_TOKEN_PATTERN.test(value) ? value : null);
+        }, () => { if (current()) ps().setOwnRevealAck(null); });
       }
     } else {
       // A missing binding is also ambiguous until the Storyteller writes the
       // explicit revoked outcome. Keep reconnecting rather than converting a
       // stale roster snapshot into a terminal removal.
-      ps().setStatus(bound ? "reconnecting" : "waiting");
+      live(bound ? "reconnecting" : "waiting");
       if (request.status === "ready") usePlayerStore.setState({ requestedName: request.data });
     }
     if (!publicSubscribed) {
       publicSubscribed = true;
       publicOff = watch(publicPath(code), raw => {
         const decoded = decodePublicSnapshot(raw, code);
-        if (decoded.status === "ended" || (decoded.status === "ready" && decoded.data.status === "ended")) { terminal("ended", "This game has ended."); return; }
+        if (decoded.status === "ended" || (decoded.status === "ready" && decoded.data.status === "ended")) {
+          // Phase 10H (contract §16): the terminal close has begun. Show
+          // "Ending..." with context preserved; the session's own end (watched
+          // below) resolves to the result -- never a premature Game Ended.
+          ending = true;
+          if (ps().status !== "ended") ps().setStatus("ending");
+          schedule();
+          return;
+        }
         ps().setPublic(decoded.status === "ready" ? decoded.data : null);
         ps().setRemoteData({ public: decoded.status });
       });

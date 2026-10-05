@@ -7,6 +7,7 @@ import { selectScriptById, useStorytellerStore } from "@/stores/storytellerStore
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { publicTravelerRole, travelerDemonInformation, travelerGuidance, travelerNeedsFirstNight, travelerNeedsArrivalCheck } from "@/stores/travelers";
 import { PlayerInformation } from "./PlayerInformation";
+import { RolePicker } from "@/components/RolePicker";
 import { ActualAlignmentControls, PlayerFacingAlignmentControls } from "./AlignmentControls";
 
 export function TravelerArrival({ playerId, compact = false }: { playerId: string; compact?: boolean }) {
@@ -32,22 +33,17 @@ export function TravelerArrival({ playerId, compact = false }: { playerId: strin
   const info = travelerDemonInformation(p, game, buildRegistry(script));
   const needsProcedure = travelerNeedsFirstNight(p) && !p.travelerArrival?.firstNightComplete;
   return <section className="drawer-section traveler-arrival" aria-label={`Traveler arrival for ${p.name}`}>
-    <h3 className="drawer-section-title">{compact ? `${p.name} · Traveler` : "Traveler arrival"}</h3>
+    <h4 className="drawer-section-title">{compact ? `${p.name} · Traveler` : "Traveler arrival"}</h4>
     {compact ? <button className="btn btn-sm" onClick={() => state.selectPlayer(playerId)}>Edit Traveler</button> : <>
-      <label className="information-input">Public character
-        <select className="select" value={role?.id ?? ""} onChange={e => {
-          if (!e.target.value) return;
-          // Phase 10D: through the Role seam. Between the initial Reveal and
-          // Night 1 the committed starting assignment can only be CORRECTED;
-          // assigning a Traveler's first character (or any later change) is an
-          // ordinary Role change.
-          const committedSetup = game.phase === "setup" && isInitialRevealComplete(game) && !!p.actualRole;
-          runRoles([committedSetup ? correctRoleIntent(p, e.target.value) : changeRoleIntent(p, e.target.value)]);
-        }}>
-          <option value="" disabled>Choose Traveler</option>
-          {TRAVELERS.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-        </select>
-      </label>
+      {/* Phase 10H (§2.2): the searchable visual role picker, on demand. */}
+      <RolePicker label="Public character" roles={TRAVELERS} value={role?.id ?? null} onPick={(roleId) => {
+        // Phase 10D: through the Role seam. Between the initial Reveal and
+        // Night 1 the committed starting assignment can only be CORRECTED;
+        // assigning a Traveler's first character (or any later change) is an
+        // ordinary Role change.
+        const committedSetup = game.phase === "setup" && isInitialRevealComplete(game) && !!p.actualRole;
+        runRoles([committedSetup ? correctRoleIntent(p, roleId) : changeRoleIntent(p, roleId)]);
+      }} />
       {roleError && <p role="alert" className="field-error">{roleError}</p>}
       {/* Phase 10E: the same Alignment seam (Actual Alignment) and the same
           perception seam (player-facing alignment) as every participant --
@@ -64,6 +60,7 @@ export function TravelerArrival({ playerId, compact = false }: { playerId: strin
       <p className="behavior-help">{role?.ability}</p>
       <button className="btn btn-sm" disabled={!p.actualAlignment}
         onClick={() => state.completeTravelerArrivalCheck(playerId)}>Public starting information resolved</button>
+      {!p.actualAlignment && <span className="disabled-reason">Choose actual alignment first.</span>}
     </>}
     {p.alive && !p.exiled && p.actualAlignment === "evil" && !p.travelerArrival?.demonInfoComplete && role && <>
       {info.check ? <p className="behavior-help">{info.check}</p> : <>

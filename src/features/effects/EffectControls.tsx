@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { selectScriptById, useStorytellerStore, type EffectCommandResult } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { resolvedCharacters } from "@/data/roleRegistry";
+import { ParticipantPicker } from "@/components/ParticipantPicker";
+import { RolePicker } from "@/components/RolePicker";
+import { Segmented } from "@/components/Segmented";
 import { effectNeedsCheck, manualEffectId, manualEffectState } from "@/stores/effects";
 import {
   KNOWN_EFFECT_TYPES,
@@ -57,7 +60,7 @@ export function EffectControls({ player }: { player: STPlayerRecord }) {
 
   return (
     <section className="drawer-section effect-controls" aria-label="Effects">
-      <h3 className="drawer-section-title">Effects</h3>
+      <h4 className="drawer-section-title">Effects</h4>
       <div className="drawer-row" role="group" aria-label="Quick effects">
         {QUICK_EFFECT_TYPES.map((type) => {
           const state = manualEffectState(player, type);
@@ -294,11 +297,10 @@ function AddEffectForm({ game, target, onDone, onError }: {
   const preview = resolveEffectExpiry(lifetime, live ?? undefined);
   const chosenType = type === CUSTOM ? customType.trim() : type;
 
-  const chooseSource = (playerId: string) => {
-    const player = seated.find((p) => p.id === playerId);
-    setSource(player ? { playerId: player.id, participantId: player.participantId! } : null);
+  const chooseSource = (binding: EffectParticipantBinding | null) => {
+    setSource(binding);
     // Smart default: the source's current Actual Role, visible and editable.
-    setSourceCharacter(player?.actualRole ?? "");
+    setSourceCharacter(binding ? game.players[binding.playerId]?.actualRole ?? "" : "");
   };
 
   const submit = () => {
@@ -317,36 +319,22 @@ function AddEffectForm({ game, target, onDone, onError }: {
 
   return (
     <form className="effect-add-form" aria-label="Add effect" onSubmit={(e) => { e.preventDefault(); submit(); }}>
-      <label>Effect
-        <select value={type} onChange={(e) => setType(e.target.value)}>
-          {KNOWN_EFFECT_TYPES.map((d) => <option key={d.type} value={d.type}>{d.label} ({effectIndicatorOf(d.type).label})</option>)}
-          <option value={CUSTOM}>Custom…</option>
-        </select>
-      </label>
+      <Segmented label="Effect" value={type} onChange={setType} options={[
+        ...KNOWN_EFFECT_TYPES.map((d) => ({ value: d.type, label: `${d.label} (${effectIndicatorOf(d.type).label})` })),
+        { value: CUSTOM, label: "Custom…" },
+      ]} />
       {type === CUSTOM && (
         <label>Custom effect name
           <input value={customType} maxLength={64} onChange={(e) => setCustomType(e.target.value)} />
         </label>
       )}
-      <label>Caused by
-        <select value={source?.playerId ?? ""} onChange={(e) => chooseSource(e.target.value)}>
-          <option value="">No player (Storyteller)</option>
-          {seated.map((p) => <option key={p.id} value={p.id}>{p.name || `Seat ${p.seat + 1}`} (seat {p.seat + 1})</option>)}
-        </select>
-      </label>
-      <label>Character
-        <select value={sourceCharacter} onChange={(e) => setSourceCharacter(e.target.value)}>
-          <option value="">None</option>
-          {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-        </select>
-      </label>
-      <label>Lasts
-        <select value={lifetimeKind} onChange={(e) => setLifetimeKind(e.target.value as LifetimeChoice)}>
-          {LIFETIME_CHOICES.map((c) => (
-            <option key={c.value} value={c.value} disabled={!live && c.value !== "manual"}>{c.label}</option>
-          ))}
-        </select>
-      </label>
+      <ParticipantPicker game={game} label="Caused by" value={source} candidates={seated}
+        hint="Not chosen: no player (the Storyteller)" onChange={chooseSource} />
+      <RolePicker label="Character" roles={roles} value={sourceCharacter || null}
+        onPick={setSourceCharacter} onClear={() => setSourceCharacter("")} />
+      <Segmented label="Lasts" value={lifetimeKind} onChange={setLifetimeKind}
+        options={LIFETIME_CHOICES.map((c) => ({ ...c, disabled: !live && c.value !== "manual",
+          hint: !live && c.value !== "manual" ? "starts once live play begins" : undefined }))} />
       {(lifetimeKind === "nights" || lifetimeKind === "days") && (
         <label>How many
           <input type="number" min={1} max={100} value={count} onChange={(e) => setCount(Math.max(1, Math.min(100, Number(e.target.value) || 1)))} />
@@ -362,6 +350,8 @@ function AddEffectForm({ game, target, onDone, onError }: {
         <button type="submit" className="btn btn-sm btn-gold" disabled={!chosenType}>Add</button>
         <button type="button" className="btn btn-sm" onClick={() => { onError(null); onDone(); }}>Cancel</button>
       </div>
+      {/* 10H-AC-067: a disabled primary says why, adjacent and in words. */}
+      {!chosenType && <p className="disabled-reason">Name the custom effect first.</p>}
     </form>
   );
 }

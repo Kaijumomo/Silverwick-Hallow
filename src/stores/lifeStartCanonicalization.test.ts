@@ -152,6 +152,7 @@ describe("10A-LUNA-001: who is canonicalized", () => {
       actualRole: "", shownRole: null, shownAlignment: null, isEmpty: true, plannedTravelerSeat: true,
       alive: false, ghostVote: false, exiled: true };
     delete emptySeat.participantId;
+    delete emptySeat.revealToken;
     store.setState({ game: { ...game(), plannedPlayerCount: game().plannedPlayerCount + 1,
       plannedTravelerCount: game().plannedTravelerCount + 1,
       players: { ...game().players, [emptySeat.id]: emptySeat }, seatOrder: [...game().seatOrder, emptySeat.id] } });

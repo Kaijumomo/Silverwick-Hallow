@@ -3,6 +3,7 @@ import { ownedScriptCharacters } from "@/data/roleRegistry";
 import type { Script } from "@/stores/types";
 import { BAG_TYPES } from "./setupPolicies";
 import { TYPE_LABEL } from "./SetupFindings";
+import { RolePicker } from "@/components/RolePicker";
 
 export function RolePoolEditor({ script, pool, onChange }: { script: Script; pool: string[]; onChange: (pool: string[]) => void }) {
   // SOL-10D-C03: one entry per RoleId -- its first (owning) definition.
@@ -27,10 +28,9 @@ export function RolePoolEditor({ script, pool, onChange }: { script: Script; poo
           onChange(pool.filter((_, i) => i !== index));
         }}>Remove one</button>
       </div>)}
-      <label>Add another copy<select className="select" aria-label="Add another copy" value="" onChange={e => { if (e.target.value) onChange([...pool, e.target.value]); }}>
-        <option value="">Choose a selected character</option>
-        {roles.filter(r => pool.includes(r.id)).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-      </select></label>
+      {/* Phase 10H (§2.2): role choice is the searchable picker, never a dropdown. */}
+      <RolePicker label="Add another copy" roles={roles} value={null} filter={r => pool.includes(r.id)}
+        triggerText="+ Add another copy…" onPick={id => onChange([...pool, id])} />
     </details>
     {pool.filter(id => !roles.some(r => r.id === id && BAG_TYPES.some(t => t === r.type))).map((id, i) =>
       <button className="btn btn-sm" key={`${id}:${i}`} onClick={() => onChange(pool.filter(value => value !== id))}>Remove unavailable role: {id}</button>)}

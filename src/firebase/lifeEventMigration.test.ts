@@ -75,9 +75,9 @@ function v19Game(): Raw {
  * marker advances to 21), Phase 10D, v21 -> v22 (a stamp) and, Phase 10E,
  * v22 -> v23 (no Traveler perception to normalize here) and, Phase 10F,
  * v23 -> v24 (no participant Night progress here) and, Phase 10G, v24 -> v25
- * (an empty Rule Fact collection): the current marker is 25. */
+ * (an empty Rule Fact collection): the current marker is 26. */
 function v20Game(): Raw {
-  return { ...v19Game(), gameSchemaVersion: 25, gameRuleFacts: [] };
+  return { ...v19Game(), gameSchemaVersion: 26, gameRuleFacts: [] };
 }
 
 /** Strips exactly what v18 -> v19 -> v20 migration adds. */
@@ -233,7 +233,7 @@ describe("Phase 10A migration: malformed v19 evidence never falls back into v18 
       migrateGameEntry(copy, 18, { kind: "canonical-only" });
       // Migration never touches v19 evidence (Phase 10B/10C only stamp the
       // current version marker; Phase 10G adds the empty Rule Fact collection).
-      expect(copy).toEqual({ ...game, gameSchemaVersion: 25, gameRuleFacts: [] });
+      expect(copy).toEqual({ ...game, gameSchemaVersion: 26, gameRuleFacts: [] });
       const result = migrateStoreState({ game: structuredClone(game), undoStack: [] }, version) as { game: unknown };
       expect(takeMigrationResetFlag()).toBe(true);
       expect(result.game).toBeNull();

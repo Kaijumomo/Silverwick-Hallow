@@ -8,6 +8,7 @@ import { NightOrderPanel } from "@/features/nightOrder/NightOrderPanel";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { projectToSelf } from "@/stores/projections";
 import { buildRegistry } from "@/data/roleRegistry";
+import { pickRoleNamed } from "@/test/pickers";
 
 let id: string;
 beforeEach(() => {
@@ -29,7 +30,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 function Drawer() { const p = store(s => s.game!.players[id]!); return <PlayerDrawer player={p} />; }
 it("offers compact public character and distinct actual alignment choices", () => {
   render(<Drawer />);
-  fireEvent.change(screen.getByLabelText("Public character"), { target: { value: "scapegoat" } });
+  pickRoleNamed("Public character", "Scapegoat traveler");
   fireEvent.click(screen.getByRole("button", { name: "Good" }));
   expect(screen.getByText("Ready for play")).toBeInTheDocument();
   expect(screen.queryByText("Behavior & deception")).toBeNull();

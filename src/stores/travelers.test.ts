@@ -227,7 +227,7 @@ describe("Phase 9B persistence", () => {
     const expected = JSON.parse(JSON.stringify(p()));
     expect(expected).toMatchObject({ alive: false, exiled: true });
     const saved = localStorage.getItem("new-blood-st")!;
-    expect(JSON.parse(saved).version).toBe(25);
+    expect(JSON.parse(saved).version).toBe(26);
     store.setState({ game: null }); localStorage.setItem("new-blood-st", saved);
     await store.persist.rehydrate(); expect(p()).toEqual(expected);
   });
@@ -249,7 +249,7 @@ describe("Phase 9B persistence", () => {
     const asV10 = () => {
       const g = JSON.parse(JSON.stringify(game())) as Record<string, unknown> & { players: Record<string, Record<string, unknown>> };
       for (const key of ["gameSchemaVersion", "gameRuleFacts", "lifeEventWindow", "history", "informationDeliveries", "plannedTravelerCount"]) delete g[key];
-      for (const player of Object.values(g.players)) { delete player.participantId; delete player.effects; }
+      for (const player of Object.values(g.players)) { delete player.participantId; delete player.effects; delete player.revealToken; }
       return g;
     };
     const raw = { game: asV10(), undoStack: [asV10()] };

@@ -5,7 +5,7 @@ import { PrivateInformation } from "./PrivateInformation";
 import { usePlayerStore } from "@/stores/playerStore";
 import { connectFirebase } from "@/firebase/session";
 import { isFirebaseConfigured, getConfigSource } from "@/firebase/config";
-import { applyJoinIntent, chooseTraveler, joinLobby, leaveLobby, useOwnTravelerChoice, usePlayerSync } from "@/firebase/playerSync";
+import { acknowledgeReveal, applyJoinIntent, chooseTraveler, joinLobby, leaveLobby, useOwnTravelerChoice, usePlayerSync } from "@/firebase/playerSync";
 import { TRAVELERS } from "@/data/travelers";
 import { lifecycleMessage } from "@/firebase/lifecycle";
 import { FirebaseConfigDialog } from "@/features/firebase/FirebaseConfigDialog";
@@ -21,8 +21,9 @@ import { PlayerTabs } from "./PlayerTabs";
 import { AlmanacBody } from "@/features/almanac/AlmanacBody";
 import { RemoteScreenBoundary } from "@/features/remote/RemoteScreenBoundary";
 import { DATA_ERROR_MESSAGE, CONNECTION_ERROR_MESSAGE } from "@/firebase/snapshots";
+import { PlayerEnded, PlayerEnding } from "./PlayerTerminal";
 
-type PlayerTab = "role" | "town" | "almanac";
+type PlayerTab = "role" | "town" | "more";
 
 type Props = {
   initialCode?: string;
@@ -40,6 +41,8 @@ function PlayerScreenContent({ initialCode }: Props) {
   const self = usePlayerStore((s) => s.self);
   const publicLobby = usePlayerStore((s) => s.publicLobby);
   const revealed = usePlayerStore((s) => s.revealed);
+  const terminalResult = usePlayerStore((s) => s.terminalResult);
+  const ownRevealAck = usePlayerStore((s) => s.ownRevealAck);
   const error = usePlayerStore((s) => s.error);
   const remoteData = usePlayerStore((s) => s.remoteData);
 
@@ -54,6 +57,8 @@ function PlayerScreenContent({ initialCode }: Props) {
   const [activeTab, setActiveTab] = useState<PlayerTab>("role");
   const [travelerChoiceBusy, setTravelerChoiceBusy] = useState(false);
   const [travelerChoiceError, setTravelerChoiceError] = useState<string | null>(null);
+  const [ackBusy, setAckBusy] = useState(false);
+  const [ackError, setAckError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -170,18 +175,10 @@ function PlayerScreenContent({ initialCode }: Props) {
   }
 
   if (status === "ended") {
-    return (
-      <div className="player player-status">
-        <h2 className="title">Game ended</h2>
-        <p className="behavior-help">
-          The Storyteller has ended the game. Thanks for playing!
-        </p>
-        <button className="btn" onClick={() => reset()}>
-          Back to start
-        </button>
-      </div>
-    );
+    return <PlayerEnded result={terminalResult} onRetry={() => setRetry(value => value + 1)} onBack={() => reset()} />;
   }
+
+  if (status === "ending") return <PlayerEnding />;
 
   if (!code || status === "idle" || status === "configuring") {
     return (
@@ -222,19 +219,28 @@ function PlayerScreenContent({ initialCode }: Props) {
   }
 
   if (status === "waiting") {
+    // F6 (10H-AC-028): a waiting player sees the already-SEATED public
+    // participants only -- never the private waiting queue.
+    const seatedPublic = publicLobby ? publicLobby.seatOrder.map((id) => publicLobby.players[id]).filter((p) => !!p) : [];
     return (
-      <div className="player player-status">
-        <h2 className="title">Joined as {requestedName}</h2>
-        <p className="behavior-help">
-          Code: <strong>{code}</strong>. Waiting for the Storyteller to seat you.
-        </p>
-        <button
-          className="btn btn-sm btn-danger"
-          onClick={leave}
-          disabled={leaving}
-        >
-          Leave
-        </button>
+      <div className="player player-shell">
+        <header className="player-shell-header">
+          <span className="player-phase">Lobby</span>
+          <span className="player-name">{requestedName}</span>
+          <p className="player-status-line" role="status">Waiting — the Storyteller will seat you.</p>
+        </header>
+        <main className="player-main">
+          <p className="behavior-help">Code <strong>{code}</strong></p>
+          {seatedPublic.length > 0 && (
+            <section className="player-waiting-town" aria-label="Already seated">
+              <h3 className="drawer-section-title">Already seated</h3>
+              <ul className="town-list">
+                {seatedPublic.map((p) => <li key={p!.id} className="town-row"><span className="town-row-main"><span className="label town-row-seat">seat {p!.seat + 1}</span><span className="town-name">{p!.name}</span></span></li>)}
+              </ul>
+            </section>
+          )}
+          <button className="btn btn-sm btn-danger player-secondary" onClick={leave} disabled={leaving}>Leave</button>
+        </main>
       </div>
     );
   }
@@ -292,16 +298,83 @@ function PlayerScreenContent({ initialCode }: Props) {
     finally { setTravelerChoiceBusy(false); }
   };
 
-  // Seated
+  const acknowledge = async () => {
+    if (!backend || ackBusy) return;
+    setAckBusy(true);
+    setAckError(null);
+    try { await acknowledgeReveal(backend); }
+    catch (e) { setAckError(lifecycleMessage(e)); }
+    finally { setAckBusy(false); }
+  };
+  const token = self?.revealToken;
+  const mode = revealModeOf(token, ownRevealAck);
+  const acked = !!token && ownRevealAck === token;
+  const milestone = playerMilestone(publicLobby, !!self, acked);
+  const ownLife = self?.life ? lifeStateOfSelf(self.life) : null;
+
+  // Seated -- Phase 10H (§§11.1-11.2): a personal window -- phase, name, one
+  // short public-safe status line, the current view, and touch-safe bottom
+  // navigation. Leave is secondary (under More).
   return (
-    <div className="player player-seated">
-      <header className="player-header">
-        <span className="label">{requestedName}</span>
-        <span className="label">Code {code}</span>
-        <span className="label">{publicLobby?.phase ?? "—"}</span>
+    <div className="player player-shell player-seated">
+      <header className="player-shell-header">
+        <span className="player-phase">{milestone.phase}</span>
+        <span className="player-name">{requestedName}</span>
+        <p className="player-status-line" role="status">{milestone.line}</p>
       </header>
 
-      <button className="btn btn-sm" onClick={() => setConfirmLeaveOpen(true)} disabled={leaving}>Request to leave lobby</button>
+      <main className="player-main">
+        {needsTravelerChoice && (
+          <TravelerChoicePanel
+            busy={travelerChoiceBusy}
+            error={travelerChoiceError}
+            pending={pendingTravelerChoice}
+            onChoose={chooseTravelerRole}
+          />
+        )}
+
+        {activeTab === "role" && <>
+          {ownLife && (
+            // F7 (10H-AC-039): the player's OWN Life, privately -- also at Night.
+            <p className="player-own-life">You: <LifeStateText state={ownLife} /></p>
+          )}
+          <SealedCard
+            self={self}
+            revealed={revealed}
+            mode={mode}
+            onReveal={() => setRevealed(true)}
+            onHide={() => setRevealed(false)}
+            {...(token && backend ? { onAcknowledge: () => void acknowledge() } : {})}
+            ackState={acked ? "done" : ackBusy ? "busy" : "idle"}
+            ackError={ackError}
+          />
+        </>}
+
+        {activeTab === "town" && (
+          <TownView
+            publicLobby={publicLobby}
+            ownPlayerId={playerId}
+            code={code}
+            scriptCharacters={scriptCharacters}
+          />
+        )}
+
+        {activeTab === "more" && (
+          <div className="player-more">
+            <section className="player-reference" aria-label="Reference">
+              <h3 className="drawer-section-title">Reference</h3>
+              <div className="player-almanac-panel">
+                <AlmanacBody roles={playerAlmanacRoles} />
+              </div>
+            </section>
+            <section className="player-leave" aria-label="Leave">
+              <h3 className="drawer-section-title">Leave</h3>
+              <button className="btn btn-sm" onClick={() => setConfirmLeaveOpen(true)} disabled={leaving}>Request to leave lobby</button>
+            </section>
+          </div>
+        )}
+      </main>
+
       {confirmLeaveOpen && (
         <Modal title="Request to leave?" onClose={() => setConfirmLeaveOpen(false)}>
           <div className="dialog-body">
@@ -322,42 +395,27 @@ function PlayerScreenContent({ initialCode }: Props) {
         </Modal>
       )}
 
-      {needsTravelerChoice && (
-        <TravelerChoicePanel
-          busy={travelerChoiceBusy}
-          error={travelerChoiceError}
-          pending={pendingTravelerChoice}
-          onChoose={chooseTravelerRole}
-        />
-      )}
-
       <PlayerTabs active={activeTab} onChange={setActiveTab} />
-
-      {activeTab === "role" && (
-        <SealedCard
-          self={self}
-          revealed={revealed}
-          onReveal={() => setRevealed(true)}
-          onHide={() => setRevealed(false)}
-        />
-      )}
-
-      {activeTab === "town" && (
-        <TownView
-          publicLobby={publicLobby}
-          ownPlayerId={playerId}
-          code={code}
-          scriptCharacters={scriptCharacters}
-        />
-      )}
-
-      {activeTab === "almanac" && (
-        <div className="player-almanac-panel">
-          <AlmanacBody roles={playerAlmanacRoles} />
-        </div>
-      )}
     </div>
   );
+}
+
+/**
+ * Phase 10H (§11.3, F1; 10H-AC-028): the ONLY setup states a player phone
+ * shows -- Lobby/Waiting, Setting Up, Your Role Is Ready, Night N / Day N.
+ * Derived from the public phase and the player's OWN identity; it never says
+ * whether roles were dealt, the bag, special setup or who is unfinished.
+ */
+export function playerMilestone(publicLobby: PublicLobbyRecord, hasRole: boolean, acknowledged: boolean): { phase: string; line: string } {
+  if (publicLobby.phase === "night") return { phase: `Night ${publicLobby.day}`, line: "Night has fallen." };
+  if (publicLobby.phase === "day") return { phase: `Day ${publicLobby.day}`, line: "The town is awake." };
+  if (!hasRole) return { phase: "Setting up", line: "The Storyteller is setting up the game." };
+  return { phase: "Setting up", line: acknowledged ? "Your role is ready. Waiting for the game to begin." : "Your role is ready." };
+}
+
+/** The player's own Life State from their private self envelope. */
+function lifeStateOfSelf(life: { alive: boolean; ghostVote: boolean; exiled?: true }) {
+  return publicLifeStateOf({ alive: life.alive, ghostVote: life.ghostVote, ...(life.exiled ? { exiled: true } : {}) });
 }
 
 // ---------------------------------------------------------------------------
@@ -408,6 +466,8 @@ function TravelerChoicePanel({
           </button>
         ))}
       </div>
+      {/* 10H-AC-067: while the choice is sending, say so in words. */}
+      {busy && <p className="disabled-reason">Sending your choice…</p>}
       {error && <p className="field-error" role="alert">{error}</p>}
     </div>
   );
@@ -504,19 +564,42 @@ function wikiUrlFor(name: string): string {
 // SealedCard — role reveal + per-bluff tap-to-reveal
 // ---------------------------------------------------------------------------
 
+/** Phase 10H (§§11.4-11.6; E1, F2, F3, F5): which face the sealed card shows.
+ *  - first:   never acknowledged -- the ceremonial first reveal;
+ *  - updated: the visible identity changed since the player acknowledged --
+ *             ONLY the neutral "Your Role Was Updated" until revealed;
+ *  - seen:    the current identity was acknowledged -- the plain sealed card. */
+export type RevealMode = "first" | "updated" | "seen";
+
+export function revealModeOf(token: string | undefined, ownAck: string | null): RevealMode {
+  if (!ownAck) return "first";
+  return token && ownAck === token ? "seen" : "updated";
+}
+
 export function SealedCard({
   self,
   revealed,
   onReveal,
   onHide,
+  mode = "seen",
+  onAcknowledge,
+  ackState = "idle",
+  ackError = null,
 }: {
-  self: import("@/stores/types").PlayerSelfRecord | null;
+  self: import("@/stores/types").PlayerSelfEnvelope | null;
   revealed: boolean;
   onReveal: () => void;
   onHide: () => void;
+  mode?: RevealMode;
+  /** "I've Seen My Role" -- advisory only; absent when nothing to acknowledge. */
+  onAcknowledge?: () => void;
+  ackState?: "idle" | "busy" | "done";
+  ackError?: string | null;
 }) {
   const [waitedLong, setWaitedLong] = useState(false);
   const [revealedBluffs, setRevealedBluffs] = useState<Set<number>>(new Set());
+  // The ceremony plays once per reveal of a never-acknowledged identity.
+  const [ceremony, setCeremony] = useState(false);
 
   useEffect(() => {
     if (self !== null) { setWaitedLong(false); return; }
@@ -531,13 +614,13 @@ export function SealedCard({
 
   if (!self) {
     return (
-      <div className="sealed-card">
+      <div className="sealed-card sealed-card-waiting">
         <p className="behavior-help">
-          The Storyteller hasn't sent your role yet.
+          Your role isn't ready yet.
         </p>
         {waitedLong && (
-          <p className="behavior-help" style={{ marginTop: 8, opacity: 0.7 }}>
-            Still waiting — the Storyteller may still be setting up.
+          <p className="behavior-help sealed-card-wait-more">
+            The Storyteller is still setting up.
           </p>
         )}
       </div>
@@ -547,91 +630,117 @@ export function SealedCard({
   const role = lookupOfficialRole(self.shownRole);
   const roleName = role?.name ?? self.shownRole;
   const roleType = role?.type ?? "townsfolk";
+  const info = !!(self.demon || self.minions?.length || self.extraText);
+
+  if (!revealed) {
+    return (
+      <div className="sealed-card-wrap">
+        <button
+          type="button"
+          className={`sealed-card sealed-card-${mode}`}
+          onClick={() => { setCeremony(mode === "first"); onReveal(); }}
+          aria-label="Tap to reveal your role"
+        >
+          {mode === "updated" ? (
+            <span className="sealed-card-back">
+              <span className="sealed-card-notice">Your Role Was Updated</span>
+              <span className="sealed-card-hint">Tap to reveal it when no one can see your screen</span>
+            </span>
+          ) : mode === "first" ? (
+            <span className="sealed-card-back sealed-card-ceremonial">
+              <span className="sealed-card-ornament" aria-hidden="true">✦</span>
+              <span className="sealed-card-notice">Your Role Is Ready</span>
+              <span className="sealed-card-hint">Make sure no one can see your screen, then tap to reveal</span>
+            </span>
+          ) : (
+            <span className="sealed-card-back">Tap to reveal your role</span>
+          )}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="sealed-card-wrap">
-      <button
-        className={`sealed-card${revealed ? " revealed" : ""}`}
-        onClick={revealed ? onHide : onReveal}
-        aria-label={revealed ? "Tap to seal your role" : "Tap to reveal your role"}
-      >
-        {!revealed ? (
-          <span className="sealed-card-back">Tap to reveal your role</span>
-        ) : (
-          <>
-            <div className="sealed-card-art">
-              <img
-                src={iconUrlFor(role ?? self.shownRole)}
-                alt=""
-                loading="lazy"
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).style.display = "none";
-                }}
-              />
-            </div>
-            <div className="sealed-card-name">
-              {roleName}
-              <span className={`label type-${roleType}`}>{roleType}</span>
-              {self.shownAlignment && <span className={`label alignment-${self.shownAlignment}`}>
-                {self.shownAlignment}
-              </span>}
-            </div>
-            {role?.ability && <p className="sealed-card-ability">{role.ability}</p>}
-            {role?.flavor && <p className="sealed-card-flavor">{role.flavor}</p>}
-            <span className="sealed-card-seal-hint">tap to seal</span>
-          </>
-        )}
-      </button>
-
-      {revealed && (
-        <div className="sealed-card-extras">
-          <a
-            className="sealed-card-wiki"
-            href={wikiUrlFor(roleName)}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Wiki ↗
-          </a>
-          <PrivateInformation payload={self} />
-          {self.bluffs && self.bluffs.length > 0 && (
-            <div className="sealed-card-bluffs">
-              <span className="label">Demon bluffs — tap to reveal individually</span>
-              <div className="bluff-reveal-grid">
-                {self.bluffs.map((b, i) => {
-                  const r = lookupOfficialRole(b);
-                  const open = revealedBluffs.has(i);
-                  return (
-                    <button
-                      key={`${i}-${b}`}
-                      type="button"
-                      className={`bluff-reveal-card ${open ? "revealed" : ""}`}
-                      onClick={() => {
-                        setRevealedBluffs((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(i)) next.delete(i);
-                          else next.add(i);
-                          return next;
-                        });
-                      }}
-                      aria-label={`Bluff ${i + 1}${open ? "" : " — tap to reveal"}`}
-                    >
-                      {open ? (
-                        <span className="bluff-reveal-name">{r?.name ?? b}</span>
-                      ) : (
-                        <>
-                          <span className="bluff-reveal-q">?</span>
-                          <span className="bluff-reveal-hint">Bluff {i + 1}</span>
-                        </>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+      <article className={`sealed-card revealed${ceremony ? " ceremony" : ""}`} aria-label="Your role">
+        <div className="sealed-card-art">
+          <img
+            src={iconUrlFor(role ?? self.shownRole)}
+            alt=""
+            loading="lazy"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.display = "none";
+            }}
+          />
         </div>
-      )}
+        <h2 className="sealed-card-name">
+          {roleName}
+          <span className={`label type-${roleType}`}>{roleType}</span>
+          {self.shownAlignment && <span className={`label alignment-${self.shownAlignment}`}>
+            {self.shownAlignment}
+          </span>}
+        </h2>
+        {role?.ability && <p className="sealed-card-ability prose">{role.ability}</p>}
+        {role?.flavor && <p className="sealed-card-flavor prose">{role.flavor}</p>}
+        <div className="sealed-card-actions">
+          <button type="button" className="btn" onClick={() => { setCeremony(false); onHide(); }} aria-label="Tap to seal your role">Hide my role</button>
+          {onAcknowledge && ackState !== "done" && (
+            <button type="button" className="btn btn-gold" onClick={onAcknowledge} disabled={ackState === "busy"}>
+              {ackState === "busy" ? "Sending…" : "I've Seen My Role"}
+            </button>
+          )}
+          {ackState === "done" && <span className="sealed-card-acked" role="status">✓ The Storyteller knows you've seen your role</span>}
+        </div>
+        {ackError && <p className="field-error" role="alert">{ackError}</p>}
+      </article>
+
+      <div className="sealed-card-extras">
+        {info && (
+          <section className="from-storyteller" aria-label="From the Storyteller">
+            <h3 className="from-storyteller-title">From the Storyteller</h3>
+            <PrivateInformation payload={self} />
+          </section>
+        )}
+        {self.bluffs && self.bluffs.length > 0 && (
+          <div className="sealed-card-bluffs">
+            <span className="label">Demon bluffs — tap to reveal individually</span>
+            <div className="bluff-reveal-grid">
+              {self.bluffs.map((b, i) => {
+                const r = lookupOfficialRole(b);
+                const open = revealedBluffs.has(i);
+                return (
+                  <button
+                    key={`${i}-${b}`}
+                    type="button"
+                    className={`bluff-reveal-card ${open ? "revealed" : ""}`}
+                    onClick={() => {
+                      setRevealedBluffs((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(i)) next.delete(i);
+                        else next.add(i);
+                        return next;
+                      });
+                    }}
+                    aria-label={`Bluff ${i + 1}${open ? "" : " — tap to reveal"}`}
+                  >
+                    {open ? (
+                      <span className="bluff-reveal-name">{r?.name ?? b}</span>
+                    ) : (
+                      <>
+                        <span className="bluff-reveal-q">?</span>
+                        <span className="bluff-reveal-hint">Bluff {i + 1}</span>
+                      </>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        <a className="sealed-card-wiki" href={wikiUrlFor(roleName)} target="_blank" rel="noopener noreferrer">
+          {roleName} on the wiki ↗
+        </a>
+      </div>
     </div>
   );
 }

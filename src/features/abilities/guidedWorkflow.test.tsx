@@ -16,6 +16,7 @@ import { makeSTPlayer } from "@/test/fixtures";
 import { FIXTURE_SEMANTICS } from "@/test/abilityFixtures";
 import { pickSeatIfPicking, useTargetPicker } from "./abilityUi";
 import type { Script, StorytellerLobbyRecord } from "@/stores/types";
+import { choose, chosen } from "@/test/pickers";
 
 const script: Script = { id: "guided-test", name: "Guided test", characters: canonicalRoles(["monk", "imp", "empath", "drunk", "chef", "slayer", "washerwoman", "poisoner"]) };
 const registry = buildRegistry(script);
@@ -32,7 +33,7 @@ beforeEach(() => {
     actualRole, shownRole: actualRole === "drunk" ? "empath" : actualRole, behaviorMode: actualRole === "drunk" ? "drunk_fake_role_behavior" : "normal",
     actualAlignment: registry.alignmentOf(actualRole) }));
   const g: StorytellerLobbyRecord = {
-    gameSchemaVersion: 25, gameRuleFacts: [], code: "", storytellerUid: "local", scriptId: script.id, phase: "night", day: 2,
+    gameSchemaVersion: 26, gameRuleFacts: [], code: "", storytellerUid: "local", scriptId: script.id, phase: "night", day: 2,
     players: Object.fromEntries(players.map((p) => [p.id, p])), seatOrder: players.map((p) => p.id),
     plannedPlayerCount: 7, plannedTravelerCount: 0, rolePool: [], fabled: [], lorics: [], bluffs: [], notes: "", nightProgress: {}, pendingPlayers: {},
     history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
@@ -67,7 +68,7 @@ describe("10F-AC-30 / AC-31: the Night Order is an operating dashboard", () => {
     render(<Night />);
     const monk = card("Monk", "Alice");
     const before = { undo: state().undoStack.length, seq: state().localSeq };
-    fireEvent.change(within(monk).getByRole("combobox", { name: "the player to mark" }), { target: { value: "p2" } });
+    choose("the player to mark", "p2", monk);
     fireEvent.click(within(monk).getByRole("button", { name: "Resolve" }));
     expect(game().players.p2!.effects.map((e) => e.type)).toEqual(["marked"]);
     expect(state().undoStack).toHaveLength(before.undo + 1);
@@ -85,7 +86,7 @@ describe("10F-AC-30 / AC-31: the Night Order is an operating dashboard", () => {
   it("once a later action happens, the row offers a progressively disclosed Correct, not Undo", () => {
     render(<Night />);
     const monk = card("Monk", "Alice");
-    fireEvent.change(within(monk).getByRole("combobox", { name: "the player to mark" }), { target: { value: "p2" } });
+    choose("the player to mark", "p2", monk);
     fireEvent.click(within(monk).getByRole("button", { name: "Resolve" }));
     act(() => { state().setNotes("p4", "a later change"); });
     const done = card("Monk", "Alice");
@@ -96,11 +97,11 @@ describe("10F-AC-30 / AC-31: the Night Order is an operating dashboard", () => {
   it("the Grimoire can pick the target (ParticipantId captured at the tap) without opening the drawer", () => {
     render(<><Night /><GrimoireCircle /></>);
     const monk = card("Monk", "Alice");
-    fireEvent.click(within(monk).getByRole("button", { name: "Pick on Grimoire" }));
+    fireEvent.click(within(monk).getByRole("button", { name: /^Choose .+ on the Table$/ }));
     expect(screen.getByText(/Choosing the player to mark: tap a seat/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^Carol, seat 3/ }));
     expect(state().selectedPlayerId).toBeNull(); // consumed as a pick, not a selection
-    expect(within(card("Monk", "Alice")).getByRole("combobox", { name: "the player to mark" })).toHaveValue("p2");
+    expect(chosen("the player to mark", card("Monk", "Alice"))).toBe("p2");
     // With no pick active a tap is an ordinary selection again.
     fireEvent.click(screen.getByRole("button", { name: /^Carol, seat 3/ }));
     expect(state().selectedPlayerId).toBe("p2");
@@ -115,7 +116,7 @@ describe("10F-AC-32: complex resolutions preview, then confirm", () => {
     fireEvent.click(within(card("Imp", "Bob")).getByRole("button", { name: "Guide" }));
     const dialog = screen.getByRole("dialog", { name: /Imp — guided resolution/ });
     expect(within(dialog).getByText("Player choice")).toBeInTheDocument();
-    fireEvent.change(within(dialog).getByRole("combobox", { name: "the player" }), { target: { value: "p4" } });
+    choose("the player", "p4", dialog);
     const preview = within(dialog).getByRole("region", { name: "Result" });
     expect(preview).toHaveTextContent("Eve becomes the Monk");
     expect(preview).toHaveTextContent("Eve dies");
@@ -146,7 +147,7 @@ describe("10F-AC-11 / AC-19: Manual / unmodeled interaction", () => {
     expect(within(dialog).getAllByText("Manual / unmodeled").length).toBeGreaterThan(0);
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Reason for manual resolution" }), { target: { value: "Homebrew interaction" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "+ Effect" }));
-    fireEvent.change(within(dialog).getByRole("combobox", { name: "Step 1 player" }), { target: { value: "p4" } });
+    choose("Step 1 player", "p4", dialog);
     const preview = within(dialog).getByRole("region", { name: "Result" });
     expect(preview).toHaveTextContent("Eve gains Poisoned");
     fireEvent.click(within(dialog).getByRole("button", { name: "Confirm and record" }));
@@ -172,7 +173,7 @@ describe("10F-AC-28: Privacy Mode", () => {
   it("the workspace and every draft are absent under Privacy Mode and never reopen stale when it turns off", () => {
     render(<Night />);
     fireEvent.click(within(card("Imp", "Bob")).getByRole("button", { name: "Guide" }));
-    fireEvent.change(within(screen.getByRole("dialog")).getByRole("combobox", { name: "the player" }), { target: { value: "p4" } });
+    choose("the player", "p4", screen.getByRole("dialog"));
     act(() => usePrivacyStore.getState().setEnabled(true));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.body).not.toHaveTextContent(/Eve becomes|guided resolution|Player choice|Silverwick-computed|Imp/);
@@ -183,7 +184,7 @@ describe("10F-AC-28: Privacy Mode", () => {
 
   it("an active Grimoire pick is cancelled by Privacy Mode", () => {
     render(<Night />);
-    fireEvent.click(within(card("Monk", "Alice")).getByRole("button", { name: "Pick on Grimoire" }));
+    fireEvent.click(within(card("Monk", "Alice")).getByRole("button", { name: /^Choose .+ on the Table$/ }));
     expect(useTargetPicker.getState().active).not.toBeNull();
     act(() => usePrivacyStore.getState().setEnabled(true));
     expect(useTargetPicker.getState().active).toBeNull();

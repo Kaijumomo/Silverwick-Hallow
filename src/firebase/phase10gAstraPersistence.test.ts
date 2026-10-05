@@ -61,7 +61,7 @@ async function rehydrateCurrent(state: { game: unknown; undoStack?: unknown[] })
   store.setState({ game: null, undoStack: [] });
   localStorage.setItem(KEY, JSON.stringify({
     state: { game: state.game, undoStack: state.undoStack ?? [], customScripts: { [setupScript.id]: setupScript }, view: "game", lobby: null, localSeq: 1, sync: null },
-    version: 25,
+    version: 26,
   }));
   await store.persist.rehydrate();
   return takeMigrationResetFlag();

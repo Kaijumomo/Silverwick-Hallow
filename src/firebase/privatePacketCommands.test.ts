@@ -15,6 +15,7 @@ import { roles } from "@/test/fixtures";
 import { publishPrivatePacket } from "./privatePacketCommands";
 import { packetKey, usePacketDeliveryState } from "./packetDeliveryState";
 import { revokePlayerAndCommit, storytellerOccupancyCompletion } from "./membershipCommands";
+import { withoutSelfEnvelope } from "@/test/revealTokens";
 
 const code = "BCDF2345";
 const root = `lobbies/${code}`;
@@ -101,7 +102,7 @@ describe("explicit publication through the session writer", () => {
     await sending;
     expect(p().privateInfo!.extraText).toBe("Next draft");
     expect(p().publishedPacket!.payload.extraText).toBe("First information");
-    expect(await b.get(`${root}/player/${id}`)).toEqual(p().publishedPacket!.payload);
+    expect(withoutSelfEnvelope(await b.get(`${root}/player/${id}`))).toEqual(p().publishedPacket!.payload);
     expect(usePacketDeliveryState.getState().receipts[key]).toBe(p().publishedPacket!.id);
     expect(usePacketDeliveryState.getState().queued[key]).toBe(false);
   });
@@ -120,8 +121,8 @@ describe("explicit publication through the session writer", () => {
     };
     await publishPrivatePacket(id, review(), writer);
     expect(calls).toBe(failure === "before write" ? 2 : 1);
-    for (const payload of payloads) expect(payload).toEqual(p().publishedPacket!.payload);
-    expect(await b.get(`${root}/player/${id}`)).toEqual(p().publishedPacket!.payload);
+    for (const payload of payloads) expect(withoutSelfEnvelope(payload)).toEqual(p().publishedPacket!.payload);
+    expect(withoutSelfEnvelope(await b.get(`${root}/player/${id}`))).toEqual(p().publishedPacket!.payload);
     expect(usePacketDeliveryState.getState().receipts[packetKey(code, id)]).toBe(p().publishedPacket!.id);
   });
 
@@ -145,12 +146,12 @@ describe("explicit publication through the session writer", () => {
     const off = listen();
     await publishPrivatePacket(id, review(), writer);
     const published = p().publishedPacket!;
-    await waitFor(() => expect(usePlayerStore.getState().self).toEqual(published.payload));
+    await waitFor(() => expect(withoutSelfEnvelope(usePlayerStore.getState().self)).toEqual(published.payload));
     store.getState().setPrivateText(id, "Unpublished second packet");
     store.getState().setView("home");
     await waitFor(async () => expect(await b.get(`${root}/storyteller/players/${id}/privateInfo/extraText`)).toBe("Unpublished second packet"));
     off(); usePlayerStore.getState().reset(); listen();
-    await waitFor(() => expect(usePlayerStore.getState().self).toEqual(published.payload));
+    await waitFor(() => expect(withoutSelfEnvelope(usePlayerStore.getState().self)).toEqual(published.payload));
     manager!.stop(); await writer.dispose();
     usePacketDeliveryState.setState({ receipts: {} });
     const replacement = new SessionWriter(b, code, session.id);
@@ -158,7 +159,7 @@ describe("explicit publication through the session writer", () => {
     disposals.push(async () => { recovered.stop(); await replacement.dispose(); });
     expect(p().publishedPacket).toEqual(published);
     expect(p().privateInfo!.extraText).toBe("Unpublished second packet");
-    expect(await b.get(`${root}/player/${id}`)).toEqual(published.payload);
+    expect(withoutSelfEnvelope(await b.get(`${root}/player/${id}`))).toEqual(published.payload);
     expect(usePacketDeliveryState.getState().receipts[packetKey(code, id)]).toBe(published.id);
     await revokePlayerAndCommit(replacement, code, id, storytellerOccupancyCompletion("unseat", id));
     await waitFor(() => expect(usePlayerStore.getState().self).toBeNull());
@@ -175,7 +176,7 @@ describe("explicit publication through the session writer", () => {
     disposals.push(async () => { recovered.stop(); await replacement.dispose(); });
     expect(p().privateInfo).toBeDefined();
     expect(p().publishedPacket).toBeUndefined();
-    expect(await b.get(`${root}/player/${id}`)).toEqual({ shownRole: "imp", shownAlignment: "evil" });
+    expect(withoutSelfEnvelope(await b.get(`${root}/player/${id}`))).toEqual({ shownRole: "imp", shownAlignment: "evil" });
   });
 
   it("identity changes during delivery never restore the old packet into the new perception", async () => {
@@ -196,7 +197,7 @@ describe("explicit publication through the session writer", () => {
     await rejected;
     expect(p().shownRole).toBe("chef");
     expect(p().publishedPacket).toBeUndefined();
-    await waitFor(async () => expect(await b.get(`${root}/player/${id}`)).toEqual({ shownRole: "chef", shownAlignment: "good" }));
+    await waitFor(async () => expect(withoutSelfEnvelope(await b.get(`${root}/player/${id}`))).toEqual({ shownRole: "chef", shownAlignment: "good" }));
     expect(usePacketDeliveryState.getState().receipts[packetKey(code, id)]).toBeUndefined();
   });
 });
@@ -218,7 +219,7 @@ describe("Phase 9C.4 (OPUS-004) — setup publication barrier preflight", () => 
     const { b, id, writer, review, p } = await setup();
     await publishPrivatePacket(id, review(), writer);
     expect(p().publishedPacket).toBeDefined();
-    expect(await b.get(`${root}/player/${id}`)).toEqual(p().publishedPacket!.payload);
+    expect(withoutSelfEnvelope(await b.get(`${root}/player/${id}`))).toEqual(p().publishedPacket!.payload);
   });
 
   it("C: a valid Traveler packet publishes while ordinary setup identity remains barred", async () => {
@@ -246,6 +247,6 @@ describe("Phase 9C.4 (OPUS-004) — setup publication barrier preflight", () => 
     store.setState({ game: { ...store.getState().game!, phase: "night", day: 1 } });
     await publishPrivatePacket(id, review(), writer);
     expect(p().publishedPacket).toBeDefined();
-    expect(await b.get(`${root}/player/${id}`)).toEqual(p().publishedPacket!.payload);
+    expect(withoutSelfEnvelope(await b.get(`${root}/player/${id}`))).toEqual(p().publishedPacket!.payload);
   });
 });

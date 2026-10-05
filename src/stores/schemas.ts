@@ -951,6 +951,48 @@ export const PlayerSelfRecordSchema = z.object({
   extraText: z.string().optional(),
 });
 
+/** Phase 10H: a reveal token is an opaque random string (newRevealToken in
+ * revealTokens.ts mints 22 base64url characters). The same bound is enforced
+ * by the Firebase rule on revealAcks/{uid}. */
+export const REVEAL_TOKEN_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
+export const RevealTokenSchema = z.string().regex(REVEAL_TOKEN_PATTERN);
+
+/** Phase 10H: the player's own Life in their private self envelope. */
+export const PlayerSelfLifeSchema = z.object({
+  alive: z.boolean(),
+  ghostVote: z.boolean(),
+  exiled: z.literal(true).optional(),
+}).strict();
+
+/** Phase 10H: player/{id} = the unchanged PlayerSelfRecord allowlist plus the
+ * envelope (reveal token, own Life). Non-strict like PlayerSelfRecordSchema. */
+export const PlayerSelfEnvelopeSchema = PlayerSelfRecordSchema.extend({
+  revealToken: RevealTokenSchema.optional(),
+  life: PlayerSelfLifeSchema.optional(),
+});
+
+/** Phase 10H (v26): the Storyteller-declared Game Result. `.strict()`: exactly
+ * the winner and the live Game Moment of the declaration -- no reason
+ * taxonomy, no participant data. */
+export const GameResultSchema = z.object({
+  winner: AlignmentSchema,
+  declaredAt: z.object({
+    phase: z.enum(["day", "night"]),
+    day: z.number().int().positive(),
+  }).strict(),
+}).strict();
+
+/** Phase 10H: results/{uid} -- the immutable player-safe terminal result.
+ * Exactly these keys (the Firebase rule allowlists the same): no Role,
+ * Alignment, ParticipantId, Effect, Reminder, History, delivery, notes, and
+ * no "you won/lost" derivation. */
+export const PlayerResultRecordSchema = z.object({
+  version: z.literal(1),
+  sessionId: z.string().min(1),
+  winner: AlignmentSchema,
+  declaredAt: GameResultSchema.shape.declaredAt,
+}).strict();
+
 export const PrivatePacketSchema = z.object({
   id: z.string().min(1),
   payload: PlayerSelfRecordSchema,
@@ -1004,6 +1046,7 @@ export const STPlayerRecordSchema = z.object({
   publishedPacket: PrivatePacketSchema.optional(),
   packetEpoch: z.string().optional(),
   participantId: z.string().min(1).optional(),
+  revealToken: RevealTokenSchema.optional(),
 });
 
 /** Phase 10F (v24): a public player record. Life State (`alive`, `ghostVote`,
@@ -1032,16 +1075,16 @@ export const NightStepRecordSchema = z.object({
 
 /** Phase 10B: the current game snapshot schema version (see
  * StorytellerLobbyRecord.gameSchemaVersion). Phase 10C: v21. Phase 10D: v22.
- * Phase 10E: v23. Phase 10F: v24. Phase 10G: v25. */
-export const GAME_SCHEMA_VERSION = 25 as const;
-/** Phase 10G: the explicit markers migration still accepts, routed PER ENTRY
- * (see migrateGameEntry): 20 receives v20 -> ... -> v25, 21 receives v21 ->
- * ... -> v25, 22 receives v22 -> ... -> v25, 23 receives v23 -> v24 -> v25,
- * 24 receives v24 -> v25, 25 is current and receives nothing. Any other marker
- * is never reinterpreted as legacy -- the current schema rejects it. */
-export const MIGRATABLE_GAME_SCHEMA_VERSIONS = [20, 21, 22, 23, 24] as const;
-/** The immediately previous explicit marker (v24 -> v25). */
-export const PREVIOUS_GAME_SCHEMA_VERSION = 24 as const;
+ * Phase 10E: v23. Phase 10F: v24. Phase 10G: v25. Phase 10H: v26. */
+export const GAME_SCHEMA_VERSION = 26 as const;
+/** Phase 10H: the explicit markers migration still accepts, routed PER ENTRY
+ * (see migrateGameEntry): 20 receives v20 -> ... -> v26, ..., 24 receives
+ * v24 -> v25 -> v26, 25 receives v25 -> v26, 26 is current and receives
+ * nothing. Any other marker is never reinterpreted as legacy -- the current
+ * schema rejects it. */
+export const MIGRATABLE_GAME_SCHEMA_VERSIONS = [20, 21, 22, 23, 24, 25] as const;
+/** The immediately previous explicit marker (v25 -> v26). */
+export const PREVIOUS_GAME_SCHEMA_VERSION = 25 as const;
 
 export const StorytellerLobbyRecordSchema = z.object({
   // Phase 10B (v20) / 10C (v21) / 10D (v22) / 10E (v23) / 10F (v24) / 10G (v25): required explicit version evidence, NO
@@ -1092,6 +1135,9 @@ export const StorytellerLobbyRecordSchema = z.object({
       checkRegisteredGameRuleFactLifetime(fact, [index], ctx);
     });
   }),
+  // Phase 10H (v26): optional; valid only on an ended game (checked below and
+  // in StorytellerGamePersistedSchema).
+  result: GameResultSchema.optional(),
 });
 
 export const PublicLobbyRecordSchema = z.object({
@@ -1140,6 +1186,11 @@ const STPlayerRecordPersistedSchema = STPlayerRecordSchema.extend({
   // v21 migration step drops legacy empty-seat Reminders).
   if (player.isEmpty === true && player.reminders.length > 0) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "an empty seat cannot own Reminders", path: ["reminders"] });
+  }
+  // Phase 10H: a reveal token belongs to a participation instance, so an
+  // empty seat never carries one. Rejected, never repaired.
+  if (player.isEmpty === true && player.revealToken !== undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "an empty seat cannot carry a reveal token", path: ["revealToken"] });
   }
 });
 
@@ -1375,6 +1426,17 @@ export const StorytellerGamePersistedSchema = z.preprocess((raw, ctx) => {
   // day it ended at. Rejected, never repaired.
   if ((game.phase === "night" || game.phase === "day") && game.day < 1) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a Night/Day game must be on day 1 or later", path: ["day"] });
+  }
+  // Phase 10H (v26): a Game Result exists only on an ended game, declared no
+  // later than the day the game ended (a result adopted from an earlier
+  // published terminal commit -- lost-response recovery -- may predate a later
+  // local day). Rejected, never repaired or inferred.
+  if (game.result !== undefined) {
+    if (game.phase !== "ended") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a Game Result is valid only on an ended game", path: ["result"] });
+    } else if (game.result.declaredAt.day > game.day) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "a Game Result cannot be declared after the day the game ended", path: ["result", "declaredAt", "day"] });
+    }
   }
   checkSeatGeometry(game, ctx);
   checkCurrentParticipantIdentityUniqueness(game, ctx);

@@ -16,6 +16,7 @@ import { buildRegistry, resolvedCharacters } from "@/data/roleRegistry";
 import { PlayerDrawer } from "./PlayerDrawer";
 import { TravelerArrival } from "./TravelerArrival";
 import type { PlayerId } from "@/stores/types";
+import { choose, chooseSegmentValue, chosen, hasChoice, offered, pickRoleNamed, rolePickerField } from "@/test/pickers";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -57,7 +58,7 @@ describe("no 'Clear role', and pickers offer only what the seam accepts", () => 
   it("the ordinary live Drawer has no Clear role action (before assignment, before Reveal, and in live play)", () => {
     const { unmount } = render(<SeatDrawer seat={idOf("Alice")} />);
     expect(screen.queryByRole("button", { name: /clear role/i })).toBeNull();
-    fireEvent.click(within(screen.getByText("Actual role (ST private)").closest("section")!).getByRole("button", { name: "Chef townsfolk" }));
+    pickRoleNamed("Actual role", "Chef townsfolk");
     expect(screen.queryByRole("button", { name: /clear role/i })).toBeNull();
     unmount();
     goLive();
@@ -68,10 +69,12 @@ describe("no 'Clear role', and pickers offer only what the seam accepts", () => 
   it("the Actual and Shown pickers never offer a Traveler, Fabled or Loric character (an ordinary player)", () => {
     goLive();
     render(<SeatDrawer seat={holder("chef")} />);
-    for (const section of [actualSection(), behaviorSection()]) {
-      const titles = section.getAllByText(/^(townsfolk|outsider|minion|demon|traveler|fabled|loric)$/, { selector: ".role-picker-group-title" }).map((el) => el.textContent);
+    // Phase 10H: the pickers are searchable and loaded on demand -- open each.
+    for (const label of ["Actual role", "Shown role"]) {
+      offered(label);
+      const titles = Array.from(rolePickerField(label).querySelectorAll(".role-picker-group-title")).map((el) => el.textContent);
       expect(titles.length).toBeGreaterThan(0);
-      expect(titles.every((t) => ["townsfolk", "outsider", "minion", "demon"].includes(t!))).toBe(true);
+      expect(titles.every((t) => ["Townsfolk", "Outsiders", "Minions", "Demons"].includes(t!))).toBe(true);
     }
     expect(screen.queryByRole("button", { name: /Thief traveler/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /Djinn/ })).toBeNull();
@@ -86,7 +89,7 @@ describe("routine operation goes through the Role seam", () => {
     const before = player(id);
     render(<SeatDrawer seat={id} />);
     const seq = state().localSeq;
-    fireEvent.click(actualSection().getByRole("button", { name: "Saint outsider" }));
+    pickRoleNamed("Actual role", "Saint outsider");
     expect(state().localSeq).toBe(seq + 1);
     expect(state().undoStack).toHaveLength(1);
     expect(player(id)).toMatchObject({ actualRole: "saint", shownRole: before.shownRole, shownAlignment: before.shownAlignment });
@@ -100,7 +103,7 @@ describe("routine operation goes through the Role seam", () => {
     render(<SeatDrawer seat={id} />);
     fireEvent.click(screen.getByRole("checkbox", { name: "Also show the player the new role" }));
     const seq = state().localSeq;
-    fireEvent.click(actualSection().getByRole("button", { name: "Monk townsfolk" }));
+    pickRoleNamed("Actual role", "Monk townsfolk");
     expect(state().localSeq).toBe(seq + 1);
     expect(state().undoStack).toHaveLength(1);
     expect(player(id)).toMatchObject({ actualRole: "monk", shownRole: "monk", shownAlignment: null });
@@ -118,7 +121,7 @@ describe("routine operation goes through the Role seam", () => {
     render(<SeatDrawer seat={id} />);
     const undo = state().undoStack.length; const seq = state().localSeq;
     fireEvent.click(screen.getByRole("button", { name: "Show assigned role" }));
-    fireEvent.click(behaviorSection().getByRole("button", { name: "Chef townsfolk" }));
+    pickRoleNamed("Shown role", "Chef townsfolk");
     expect(state().undoStack).toHaveLength(undo);
     expect(state().localSeq).toBe(seq);
     expect(player(id)).toMatchObject({ shownRole: "chef", shownAlignment: "evil", privateInfo: { extraText: "draft" } });
@@ -134,9 +137,9 @@ describe("routine operation goes through the Role seam", () => {
     fireEvent.click(behaviorSection().getByText("Override what they are told…"));
     fireEvent.click(await behaviorSection().findByRole("button", { name: "Shown Evil" }));
     expect(player(id).shownAlignment).toBe("evil");
-    fireEvent.change(behaviorSection().getByLabelText("Mode:"), { target: { value: "custom" } });
+    chooseSegmentValue("Mode", "custom");
     expect(player(id).behaviorMode).toBe("custom");
-    fireEvent.click(behaviorSection().getByRole("button", { name: "clear" }));
+    fireEvent.click(behaviorSection().getByRole("button", { name: "Clear Shown role" }));
     expect(player(id)).toMatchObject({ shownRole: null, shownAlignment: null });
     // No alignment without a character: refused, explained, nothing changed.
     const before = player(id);
@@ -157,7 +160,7 @@ describe("participation-bound and stale-safe", () => {
     expect(state().assignPendingToSeat("uid-new", seat)).toBe(true);
     const replacement = player(seat);
     const seq = state().localSeq;
-    fireEvent.click(actualSection().getByRole("button", { name: "Saint outsider" }));
+    pickRoleNamed("Actual role", "Saint outsider");
     expect(player(seat)).toBe(replacement);
     expect(state().localSeq).toBe(seq);
     expect(screen.getByRole("alert")).toHaveTextContent(/nothing was changed/i);
@@ -176,12 +179,13 @@ describe("advanced correction is progressively disclosed", () => {
     state().setAbilityUsed(id, true);
     render(<SeatDrawer seat={id} />);
     const summary = screen.getByText("Correct the recorded role…");
-    const picker = () => actualSection().queryAllByRole("button", { name: "Saint outsider" });
-    expect(picker()).toHaveLength(1); // only the ordinary Actual picker: the correction picker is closed
+    // Phase 10H (§7): no role list is in the default DOM -- the ordinary picker
+    // is a closed trigger and the correction picker is not mounted at all.
+    expect(actualSection().queryAllByRole("button", { name: "Saint outsider" })).toHaveLength(0);
+    expect(hasChoice("Corrected role")).toBe(false);
     fireEvent.click(summary);
-    await waitFor(() => expect(picker()).toHaveLength(2));
-    const correctionPicker = within(summary.closest("details")!);
-    fireEvent.click(correctionPicker.getByRole("button", { name: "Saint outsider" }));
+    await waitFor(() => expect(hasChoice("Corrected role")).toBe(true));
+    pickRoleNamed("Corrected role", "Saint outsider", summary.closest("details")!);
     expect(player(id)).toMatchObject({ actualRole: "saint", abilityUsed: true });
     expect(roleHistory()).toHaveLength(1);
     expect(roleHistory()[0]!.correction).toBe(true);
@@ -195,9 +199,10 @@ describe("advanced correction is progressively disclosed", () => {
     const id = holder("chef");
     render(<SeatDrawer seat={id} />);
     expect(screen.getByText(/starting ordinary assignment is locked/)).toBeInTheDocument();
+    expect(hasChoice("Actual role")).toBe(false); // the ordinary picker is read-only
     fireEvent.click(screen.getByText("Correct the recorded role…"));
-    const disclosure = within(screen.getByText("Correct the recorded role…").closest("details")!);
-    fireEvent.click(await disclosure.findByRole("button", { name: "Saint outsider" }));
+    await waitFor(() => expect(hasChoice("Corrected role")).toBe(true));
+    pickRoleNamed("Corrected role", "Saint outsider");
     expect(player(id).actualRole).toBe("saint");
     expect(game().history).toHaveLength(0);
     expect(game().phase).toBe("setup");
@@ -213,19 +218,22 @@ describe("Traveler public character", () => {
   it("choosing a Traveler character goes through the seam; the placeholder is not a selectable 'clear'", () => {
     const zed = travelerSeat();
     render(<SeatDrawer seat={zed} />);
-    const select = screen.getByLabelText("Public character") as HTMLSelectElement;
-    expect(within(select).getByRole("option", { name: "Choose Traveler" })).toBeDisabled();
-    fireEvent.change(select, { target: { value: "thief" } });
+    expect(chosen("Public character")).toBe("");
+    pickRoleNamed("Public character", "Thief traveler");
     expect(player(zed)).toMatchObject({ actualRole: "thief", shownRole: "thief", publicDisplayRole: "thief" });
     expect(roleHistory()).toHaveLength(1);
-    fireEvent.change(select, { target: { value: "" } });
+    // Phase 10H: the searchable picker has no "none" choice and no Clear for a
+    // Traveler's public character -- there is nothing that could clear it.
+    expect(screen.queryByRole("button", { name: "Clear Public character" })).toBeNull();
+    expect(offered("Public character").map((o) => o.value)).not.toContain("");
     expect(player(zed).actualRole).toBe("thief");
   });
 
   it("the Traveler picker lists the canonical catalogue (including Cacklejack)", () => {
     const zed = travelerSeat();
     render(<TravelerArrival playerId={zed} />);
-    expect(screen.getByRole("option", { name: "Cacklejack" })).toBeInTheDocument();
+    expect(offered("Public character").map((o) => o.value)).toEqual(expect.arrayContaining(TRAVELERS.map((r) => r.id)));
+    expect(screen.getByRole("button", { name: "Cacklejack traveler" })).toBeInTheDocument();
   });
 });
 
@@ -243,19 +251,23 @@ describe("ASTRA-10D-003: Traveler Role actions are bound to the rendered Travele
     store.setState({ undoStack: [] });
     return zed;
   }
-  const select = () => screen.getByLabelText("Public character") as HTMLSelectElement;
+  /** Opens the (on-demand) Traveler picker so a later stale press lands on the
+   * already-rendered card, exactly as the former selector did. */
+  const openPicker = () => { offered("Public character"); };
+  const press = (roleName: string) => pickRoleNamed("Public character", roleName);
 
   it("stale same participant: rendered Thief, underlying becomes Gunslinger, the stale selector choosing Scapegoat is refused -- Gunslinger remains", () => {
     const zed = liveTraveler("thief");
     render(<TravelerArrival playerId={zed} />);
-    expect(select().value).toBe("thief");
+    expect(chosen("Public character")).toBe("thief");
+    openPicker();
     let afterGunslinger = game();
     let seq = state().localSeq;
     act(() => {
       expect(state().assignRole(zed, "gunslinger")).toMatchObject({ ok: true, changed: true });
       afterGunslinger = game();
       seq = state().localSeq;
-      fireEvent.change(select(), { target: { value: "scapegoat" } });
+      press("Scapegoat traveler");
     });
     expect(player(zed)).toMatchObject({ actualRole: "gunslinger", shownRole: "gunslinger", publicDisplayRole: "gunslinger" });
     expect(game()).toBe(afterGunslinger); // the stale click changed nothing
@@ -273,6 +285,7 @@ describe("ASTRA-10D-003: Traveler Role actions are bound to the rendered Travele
   it("replacement: A's rendered selector never mutates participation B now occupying the same PlayerId", () => {
     const zed = liveTraveler("thief");
     render(<TravelerArrival playerId={zed} />);
+    openPicker();
     const a = player(zed).participantId;
     let replacement = player(zed);
     act(() => {
@@ -280,7 +293,7 @@ describe("ASTRA-10D-003: Traveler Role actions are bound to the rendered Travele
       state().addToPendingQueue("uid-new", "Newbie");
       expect(state().assignPendingToSeat("uid-new", zed)).toBe(true);
       replacement = player(zed);
-      fireEvent.change(select(), { target: { value: "scapegoat" } });
+      press("Scapegoat traveler");
     });
     expect(replacement.participantId).not.toBe(a);
     expect(replacement).toMatchObject({ isTraveler: true, actualRole: "" });
@@ -314,7 +327,7 @@ describe("ASTRA-10D-003: Traveler Role actions are bound to the rendered Travele
     store.setState({ undoStack: [] });
     render(<TravelerArrival playerId={zed} />);
     const seq = state().localSeq;
-    fireEvent.change(select(), { target: { value: "gunslinger" } });
+    press("Gunslinger traveler");
     expect(player(zed)).toMatchObject({ actualRole: "gunslinger", shownRole: "gunslinger", publicDisplayRole: "gunslinger", abilityUsed: false });
     expect(state().undoStack).toHaveLength(1);
     expect(state().localSeq).toBe(seq + 1);
@@ -331,11 +344,11 @@ describe("ASTRA-10D-003: Traveler Role actions are bound to the rendered Travele
     state().addPlayer("Zed");
     const zed = idOf("Zed");
     render(<TravelerArrival playerId={zed} />);
-    fireEvent.change(select(), { target: { value: "thief" } });
+    press("Thief traveler");
     expect(player(zed)).toMatchObject({ actualRole: "thief", shownRole: "thief" });
     // Fixture staging only (Phase 10F: Life refuses ability use in Setup).
     store.setState({ game: { ...game(), players: { ...game().players, [zed]: { ...player(zed), abilityUsed: true } } } });
-    fireEvent.change(select(), { target: { value: "gunslinger" } });
+    press("Gunslinger traveler");
     expect(player(zed)).toMatchObject({ actualRole: "gunslinger", shownRole: "gunslinger", abilityUsed: true });
     expect(game().phase).toBe("setup");
     expect(game().history).toHaveLength(0);
@@ -347,7 +360,7 @@ describe("ASTRA-10D-003: Traveler Role actions are bound to the rendered Travele
     usePrivacyStore.setState({ enabled: true });
     render(<TravelerArrival playerId={zed} />);
     expect(screen.getByText("Traveler: Thief")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Public character")).toBeNull();
+    expect(hasChoice("Public character")).toBe(false);
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
   });
@@ -370,6 +383,8 @@ describe("SOL-10D-C03: the Drawer resolves a legacy duplicate RoleId to its firs
     expect(card.getByText("Chef")).toBeInTheDocument();
     expect(card.getByText("townsfolk")).toBeInTheDocument();
     expect(screen.queryByText("Evil Chef")).toBeNull();
+    offered("Actual role");
+    offered("Shown role");
     expect(actualSection().getAllByRole("button", { name: "Chef townsfolk" })).toHaveLength(1);
     expect(behaviorSection().getAllByRole("button", { name: "Chef townsfolk" })).toHaveLength(1);
     expect(behaviorSection().getByRole("button", { name: "Normal (Good)" })).toBeInTheDocument();
@@ -398,8 +413,11 @@ describe("CLOSURE-03: the Drawer, private information, Effect/Reminder source an
     store.setState({ undoStack: [] });
     return { legacy, zed };
   }
-  const characterOptions = (select: HTMLElement, id: string) =>
-    Array.from((select as HTMLSelectElement).options).filter((o) => o.value === id).map((o) => o.textContent);
+  /** The names a searchable character picker offers for one RoleId. */
+  const characterOptions = (container: HTMLElement, id: string) => {
+    offered("Character", container);
+    return Array.from(rolePickerField("Character", container).querySelectorAll<HTMLElement>(`[data-role-id="${id}"] .role-card-name`)).map((n) => n.textContent);
+  };
   const addEffectForm = () => {
     fireEvent.click(screen.getByRole("button", { name: "+ Add effect" }));
     return within(screen.getByRole("form", { name: "Add effect" }));
@@ -413,7 +431,8 @@ describe("CLOSURE-03: the Drawer, private information, Effect/Reminder source an
     expect(screen.queryByText("Bluffs:")).toBeNull();
     expect(screen.queryByText(/Homebrew/)).toBeNull();
     const arrival = within(screen.getByRole("region", { name: "Traveler arrival for Zed" }));
-    expect((arrival.getByLabelText("Public character") as HTMLSelectElement).value).toBe("thief");
+    expect(arrival.getByRole("button", { name: /^Public character: Thief\./ })).toBeInTheDocument();
+    expect(chosen("Public character")).toBe("thief");
     expect(player(zed).privateInfo?.bluffs).toBeUndefined();
   });
 
@@ -427,7 +446,9 @@ describe("CLOSURE-03: the Drawer, private information, Effect/Reminder source an
     cleanup();
     const imp = holder("imp");
     render(<SeatDrawer seat={imp} />);
-    const bluffs = within(screen.getByText("Demon bluffs (ST private)").closest("section")!);
+    const bluffSection = screen.getByText("Demon bluffs (ST private)").closest("section")!;
+    offered("Add bluff", bluffSection);
+    const bluffs = within(bluffSection);
     expect(bluffs.queryByRole("button", { name: /Gunslinger/ })).toBeNull();
     expect(bluffs.queryByRole("button", { name: /Thief/ })).toBeNull();
     fireEvent.click(bluffs.getByRole("button", { name: "Monk townsfolk" }));
@@ -438,23 +459,22 @@ describe("CLOSURE-03: the Drawer, private information, Effect/Reminder source an
     const { zed } = astraSequence();
     const target = holder("chef");
     render(<SeatDrawer seat={target} />);
-    const form = addEffectForm();
-    const character = form.getByLabelText("Character") as HTMLSelectElement;
-    expect(characterOptions(character, "thief")).toEqual(["Thief"]);
-    const values = Array.from(character.options).map((o) => o.value);
+    addEffectForm();
+    const form = screen.getByRole("form", { name: "Add effect" });
+    expect(characterOptions(form, "thief")).toEqual(["Thief"]);
+    const values = offered("Character", form).map((o) => o.value);
     expect(new Set(values).size).toBe(values.length); // one option per RoleId
     // Choosing Zed as the source defaults to Zed's Actual Role: the canonical Thief.
-    fireEvent.change(form.getByLabelText("Caused by"), { target: { value: zed } });
-    expect(character.value).toBe("thief");
-    expect(character.selectedOptions[0]!.textContent).toBe("Thief");
-    fireEvent.click(form.getByRole("button", { name: "Add" }));
+    choose("Caused by", zed, form);
+    expect(chosen("Character", form)).toBe("thief");
+    expect(within(rolePickerField("Character", form)).getByRole("button", { name: /^Character: Thief\./ })).toHaveTextContent("Character: Thief");
+    fireEvent.click(within(form).getByRole("button", { name: "Add" }));
     expect(player(target).effects.some((e) => e.sourceCharacter === "thief")).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: /Show details/ }));
     expect(screen.getByText("Zed · Thief")).toBeInTheDocument();
     expect(screen.queryByText(/Homebrew/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "More options" }));
-    const reminderOptions = within(screen.getByRole("group", { name: "Reminder options" }));
-    expect(characterOptions(reminderOptions.getByLabelText("Character"), "thief")).toEqual(["Thief"]);
+    expect(characterOptions(screen.getByRole("group", { name: "Reminder options" }), "thief")).toEqual(["Thief"]);
   });
 
   it("OWNER-4: registry, Grimoire, Drawer and Effect source all resolve the SAME definition of thief", () => {
@@ -469,7 +489,8 @@ describe("CLOSURE-03: the Drawer, private information, Effect/Reminder source an
     render(<SeatDrawer seat={zed} />);
     expect(screen.queryByText(/Homebrew/)).toBeNull();
     expect(screen.queryByText("Demon bluffs (ST private)")).toBeNull();
-    expect(characterOptions(addEffectForm().getByLabelText("Character"), "thief")).toEqual([canonicalThief.name]);
+    addEffectForm();
+    expect(characterOptions(screen.getByRole("form", { name: "Add effect" }), "thief")).toEqual([canonicalThief.name]);
   });
 
   it("OWNER-5: a homebrew ordinary Role with a non-Traveler id is unchanged -- its own card, its Demon bluff controls and one source-character option", () => {
@@ -483,11 +504,13 @@ describe("CLOSURE-03: the Drawer, private information, Effect/Reminder source an
     const card = within(document.querySelector(".role-display") as HTMLElement);
     expect(card.getByText("Hollow King")).toBeInTheDocument();
     expect(card.getByText("demon")).toBeInTheDocument();
-    const bluffs = within(screen.getByText("Demon bluffs (ST private)").closest("section")!);
-    expect(bluffs.getByRole("button", { name: "Lampwright townsfolk" })).toBeInTheDocument();
-    const character = addEffectForm().getByLabelText("Character");
-    expect(characterOptions(character, "hollowking")).toEqual(["Hollow King"]);
-    expect(characterOptions(character, "lampwright")).toEqual(["Lampwright"]);
+    const bluffSection = screen.getByText("Demon bluffs (ST private)").closest("section")!;
+    offered("Add bluff", bluffSection);
+    expect(within(bluffSection).getByRole("button", { name: "Lampwright townsfolk" })).toBeInTheDocument();
+    addEffectForm();
+    const form = screen.getByRole("form", { name: "Add effect" });
+    expect(characterOptions(form, "hollowking")).toEqual(["Hollow King"]);
+    expect(characterOptions(form, "lampwright")).toEqual(["Lampwright"]);
   });
 });
 
@@ -521,7 +544,7 @@ describe("Needs check for an unsafe Shown Role (Storyteller-only)", () => {
     const id = plantUnsafe();
     render(<SeatDrawer seat={id} />);
     expect(screen.getByText(/the shown character cannot be sent/i)).toBeInTheDocument();
-    fireEvent.click(behaviorSection().getByRole("button", { name: "Librarian townsfolk" }));
+    pickRoleNamed("Shown role", "Librarian townsfolk");
     expect(player(id).shownRole).toBe("librarian");
     expect(screen.queryByText(/the shown character cannot be sent/i)).toBeNull();
   });

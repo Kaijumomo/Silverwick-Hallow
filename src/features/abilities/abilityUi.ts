@@ -172,25 +172,54 @@ export function describeOutcome(game: StorytellerLobbyRecord, outcome: AbilityOu
  * (GrimoireCircle routes only its tap-to-select path here). The accessible
  * list picker remains the primary fallback.
  */
+/*
+ * Phase 10H (10H-AC-017): `eligible` is the SAME eligibility result the slot's
+ * Roster pick-strip renders (ParticipantPicker computes it once). The Table
+ * marks exactly those seats pickable and refuses a tap on any other seat --
+ * it is not consumed as a pick and does not fall through to inspection. An
+ * absent `eligible` means every occupied seat (legacy callers). `owner`
+ * identifies the slot that started the pick.
+ */
+export type TargetPick = {
+  label: string;
+  onPick: (binding: ParticipantBinding) => void;
+  owner?: string;
+  eligible?: ReadonlySet<string>;
+};
 type TargetPickerState = {
-  active: { label: string; onPick: (binding: ParticipantBinding) => void } | null;
-  start: (label: string, onPick: (binding: ParticipantBinding) => void) => void;
+  active: TargetPick | null;
+  /** Last refused Table tap (an ineligible seat), for an adjacent reason. */
+  refused: string | null;
+  start: (label: string, onPick: (binding: ParticipantBinding) => void, options?: { owner?: string; eligible?: ReadonlySet<string> }) => void;
   cancel: () => void;
 };
 export const useTargetPicker = create<TargetPickerState>((set) => ({
   active: null,
-  start: (label, onPick) => set({ active: { label, onPick } }),
-  cancel: () => set({ active: null }),
+  refused: null,
+  start: (label, onPick, options = {}) => set({ active: { label, onPick, ...options }, refused: null }),
+  cancel: () => set({ active: null, refused: null }),
 }));
 
+/** Whether the current pick admits this seat's CURRENT occupant. */
+export function seatPickable(game: StorytellerLobbyRecord | null, playerId: PlayerId, pick: TargetPick | null = useTargetPicker.getState().active): boolean {
+  if (!pick || !game) return false;
+  const binding = captureBinding(game, playerId);
+  return !!binding && (!pick.eligible || pick.eligible.has(binding.participantId));
+}
+
 /** GrimoireCircle's tap-to-select: a pick while a picker is active, otherwise
- * the ordinary selection. Returns true when the tap was consumed as a pick. */
+ * the ordinary selection. Returns true when the tap was consumed (as a pick,
+ * or refused as ineligible while picking). */
 export function pickSeatIfPicking(game: StorytellerLobbyRecord | null, playerId: PlayerId): boolean {
   const active = useTargetPicker.getState().active;
   if (!active || !game) return false;
   const binding = captureBinding(game, playerId);
-  if (!binding) return false;
-  useTargetPicker.setState({ active: null });
+  if (!binding || (active.eligible && !active.eligible.has(binding.participantId))) {
+    const player = game.players[playerId];
+    useTargetPicker.setState({ refused: `${player?.name || "That seat"} can't be chosen for ${active.label}.` });
+    return true;
+  }
+  useTargetPicker.setState({ active: null, refused: null });
   active.onPick(binding);
   return true;
 }

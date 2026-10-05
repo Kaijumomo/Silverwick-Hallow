@@ -10,6 +10,7 @@ import { reportRuntimeError, startStorytellerSession, useSessionRuntime, useStor
 import { lifecycleMessage, requireActiveSession, retryTransient, sessionPath } from "./lifecycle";
 import { acceptLeaveRequest, rejectLeaveRequest, revokePlayerAndCommit, seatPlayerAndCommit, storytellerOccupancyCompletion } from "./membershipCommands";
 import { tbScript } from "@/test/fixtures";
+import { withoutSelfEnvelope } from "@/test/revealTokens";
 
 const code = "BCDF2345";
 const root = `lobbies/${code}`;
@@ -79,15 +80,15 @@ describe("multiplayer lifecycle", () => {
     };
     store.getState().setShownRole(id, shown!);
     store.getState().setView("home");
-    await waitFor(() => expect(usePlayerStore.getState().self).toEqual({ shownRole: shown, shownAlignment: alignment }), { timeout: 3000 });
+    await waitFor(() => expect(withoutSelfEnvelope(usePlayerStore.getState().self)).toEqual({ shownRole: shown, shownAlignment: alignment }), { timeout: 3000 });
     expect(attempts.length).toBeGreaterThanOrEqual(2);
-    for (const self of attempts) expect(self).toEqual({ shownRole: shown, shownAlignment: alignment });
+    for (const self of attempts) expect(withoutSelfEnvelope(self)).toEqual({ shownRole: shown, shownAlignment: alignment });
     b.update = update;
     off();
     usePlayerStore.getState().reset();
     usePlayerStore.getState().setSession({ code, uid: "alice", requestedName: "Alice" });
     player(b);
-    await waitFor(() => expect(usePlayerStore.getState().self).toEqual({ shownRole: shown, shownAlignment: alignment }));
+    await waitFor(() => expect(withoutSelfEnvelope(usePlayerStore.getState().self)).toEqual({ shownRole: shown, shownAlignment: alignment }));
     manager.stop();
     await writer.dispose();
     // Phase 9C.2A (OPUS-001) reproduction: this edit is made AFTER the
@@ -103,7 +104,7 @@ describe("multiplayer lifecycle", () => {
     disposals.push(async () => { recovered.stop(); await replacement.dispose(); });
     expect(store.getState().game!.players[id]!.shownRole).toBe("saint");
     expect(store.getState().game!.players[id]!.actualRole).toBe(actual);
-    expect(await b.get(`${root}/player/${id}`)).toEqual({ shownRole: "saint", shownAlignment: "good" });
+    expect(withoutSelfEnvelope(await b.get(`${root}/player/${id}`))).toEqual({ shownRole: "saint", shownAlignment: "good" });
     store.getState().setShownRole(id, null);
     await waitFor(() => expect(usePlayerStore.getState().self).toBeNull());
     expect(await b.get(`${root}/player/${id}`)).toBeUndefined();
@@ -197,7 +198,7 @@ describe("multiplayer lifecycle", () => {
 
     expect(await b.get(`${root}/leaveRequests/alice`)).toBe(true);
     expect(await b.get(`${root}/roster/alice`)).toBe(id);
-    expect(await b.get(`${root}/player/${id}`)).toEqual({ shownRole: "chef", shownAlignment: "good" });
+    expect(withoutSelfEnvelope(await b.get(`${root}/player/${id}`))).toEqual({ shownRole: "chef", shownAlignment: "good" });
     expect(await b.get(`${root}/outcomes/alice`)).toBeUndefined();
     expect(useStorytellerStore.getState().game!.players[id]!.isEmpty).toBe(false);
   });
@@ -599,11 +600,11 @@ describe("multiplayer lifecycle", () => {
 
     expect(await b.get(`${root}/leaveRequests/alice`)).toBeUndefined();
     expect(await b.get(`${root}/roster/alice`)).toBe(id);
-    expect(await b.get(`${root}/player/${id}`)).toEqual({ shownRole: "chef", shownAlignment: "good" });
+    expect(withoutSelfEnvelope(await b.get(`${root}/player/${id}`))).toEqual({ shownRole: "chef", shownAlignment: "good" });
     expect(await b.get(`${root}/outcomes/alice`)).toBeUndefined();
     expect(useStorytellerStore.getState().game!.players[id]!.isEmpty).toBe(false);
     await waitFor(() => expect(usePlayerStore.getState().status).toBe("seated"));
-    expect(usePlayerStore.getState().self).toEqual({ shownRole: "chef", shownAlignment: "good" });
+    expect(withoutSelfEnvelope(usePlayerStore.getState().self)).toEqual({ shownRole: "chef", shownAlignment: "good" });
   });
 
   it("revocation remains terminal after reconnect and cannot be undone locally", async () => {

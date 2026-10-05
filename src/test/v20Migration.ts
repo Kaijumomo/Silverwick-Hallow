@@ -126,15 +126,47 @@ export function withV25RuleFacts<T>(entry: T): T {
   return copy as unknown as T;
 }
 
-/** A v23-step result's expected CURRENT result: v23 -> v24, then v24 -> v25. */
+/**
+ * Phase 10H test helper: exactly what the v25 -> v26 migration step does to
+ * one v25 game-shaped entry (see migrateEntryV25ToV26 in
+ * src/stores/gameMigration.ts): a stamp -- no reveal token and no Game Result
+ * is invented. Returns a deep copy.
+ */
+export function withV26Stamp<T>(entry: T): T {
+  const copy = structuredClone(entry) as unknown as Record<string, unknown>;
+  copy.gameSchemaVersion = 26;
+  return copy as unknown as T;
+}
+
+/** A v24 entry's expected CURRENT result: v24 -> v25, then v25 -> v26. */
+export function withV25ToCurrent<T>(entry: T): T {
+  return withV26Stamp(withV25RuleFacts(entry));
+}
+
+/** A v23-step result's expected CURRENT result: v23 -> v24, then v24 -> v25
+ * and v25 -> v26. */
 export function withV24ToCurrent<T>(entry: T): T {
-  return withV25RuleFacts(withV24Guided(entry));
+  return withV25ToCurrent(withV24Guided(entry));
 }
 
 /** A legacy (pre-v20) entry's expected CURRENT result: the v19 -> v20 step,
- * then v20 -> v21, v21 -> v22, v22 -> v23, v23 -> v24 and v24 -> v25. */
+ * then v20 -> v21, v21 -> v22, v22 -> v23, v23 -> v24, v24 -> v25 and
+ * v25 -> v26. */
 export function withCurrentMigration<T>(entry: T): T {
-  return withV25RuleFacts(withV24Guided(withV23Alignment(withV22Roles(withV21Reminders(withV20Lifecycle(entry))))));
+  return withV25ToCurrent(withV24Guided(withV23Alignment(withV22Roles(withV21Reminders(withV20Lifecycle(entry))))));
+}
+
+/**
+ * Phase 10H: the inverse used to build a v25 fixture from a current game --
+ * what a v25 writer stored: no reveal tokens and no Game Result (both
+ * v26-only), marker 25.
+ */
+export function asV25<T>(entry: T): T {
+  const copy = structuredClone(entry) as unknown as Record<string, unknown>;
+  delete copy.result;
+  for (const player of Object.values((copy.players ?? {}) as Record<string, Record<string, unknown>>)) delete player.revealToken;
+  copy.gameSchemaVersion = 25;
+  return copy as unknown as T;
 }
 
 /**
@@ -144,7 +176,7 @@ export function withCurrentMigration<T>(entry: T): T {
  * marker 24.
  */
 export function asV24<T>(entry: T): T {
-  const copy = structuredClone(entry) as unknown as Record<string, unknown>;
+  const copy = structuredClone(asV25(entry)) as unknown as Record<string, unknown>;
   delete copy.gameRuleFacts;
   const history = copy.history as Record<string, unknown>[] | undefined;
   if (history) copy.history = history.filter((record) => record.category !== "gameRuleFact");

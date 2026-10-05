@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { Json } from "@/firebase/backend";
 
-const close = vi.fn<() => Promise<void>>();
+const close = vi.fn<() => Promise<{ alreadyEnded: boolean }>>();
 vi.mock("@/firebase/storytellerSync", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/firebase/storytellerSync")>();
   return { ...actual, closeMultiplayerSession: () => close() };
@@ -23,6 +23,7 @@ import { MemoryRoomBackend } from "@/firebase/memoryBackend";
 import { buildRegistry } from "@/data/roleRegistry";
 import { setupGame, setupScript } from "@/test/setupFixtures";
 import type { StorytellerLobbyRecord } from "@/stores/types";
+import { finishGame } from "@/test/finishGame";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -78,7 +79,7 @@ beforeEach(() => {
   vi.stubGlobal("matchMedia", vi.fn((query: string) => ({ media: query, matches: false, addEventListener() {}, removeEventListener() {} })));
   vi.spyOn(window, "confirm").mockReturnValue(true);
   close.mockReset();
-  close.mockResolvedValue(undefined);
+  close.mockResolvedValue({ alreadyEnded: false });
   usePrivacyStore.setState({ enabled: false });
   useSessionRuntime.setState({ backend: null });
   store.setState({ customScripts: { [setupScript.id]: setupScript }, selectedPlayerId: null, view: "game" });
@@ -105,7 +106,7 @@ describe("ASTRA-10G-002: the ended review mounts no queue mutation", () => {
     const view = render(<GameScreen />);
     expect(queueButton()).not.toBeNull();
     view.unmount();
-    expect(state().finishGame()).toEqual({ ok: true });
+    expect(state().finishGame({ kind: "noResult" })).toEqual({ ok: true });
     render(<GameScreen />);
     expect(queueButton()).toBeNull();
     expect(screen.queryByRole("dialog", { name: "Waiting queue" })).toBeNull();
@@ -115,7 +116,7 @@ describe("ASTRA-10G-002: the ended review mounts no queue mutation", () => {
     render(<GameScreen />);
     fireEvent.click(queueButton()!);
     expect(screen.getByRole("dialog", { name: "Waiting queue" })).toBeInTheDocument();
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Finish game" })); });
+    await finishGame();
     expect(game().phase).toBe("ended");
     expect(screen.queryByRole("dialog", { name: "Waiting queue" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Assign" })).toBeNull();
@@ -127,7 +128,7 @@ describe("ASTRA-10G-002: the ended review mounts no queue mutation", () => {
 describe("ASTRA-10G-002: the assignment boundary refuses an ended game", () => {
   it("a direct / stale local assignment after Finish is refused with nothing changed; reject and intake are frozen too", () => {
     const { assignPendingToSeat, removePendingPlayer, addToPendingQueue } = state(); // captured while live
-    state().finishGame();
+    state().finishGame({ kind: "noResult" });
     const before = snapshot();
     expect(assignPendingToSeat(UID, SEAT)).toBe(false);
     expect(assignPendingToSeat(UID, SEAT, "fresh-participant")).toBe(false);
@@ -138,7 +139,7 @@ describe("ASTRA-10G-002: the assignment boundary refuses an ended game", () => {
 
   it("a popup still mounted when the game ends cannot assign (stale UI action)", async () => {
     render(<SeatAssignPopup backend={null} code="" onClose={() => {}} />);
-    act(() => { state().finishGame(); });
+    act(() => { state().finishGame({ kind: "noResult" }); });
     const before = snapshot();
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Assign" })); });
     expectUntouched(before);
@@ -151,7 +152,7 @@ describe("ASTRA-10G-002: the assignment boundary refuses an ended game", () => {
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Assign" })); });
     // The roster write is in flight; the session then closes authoritatively
     // and the game is finished.
-    act(() => { expect(state().finishGame()).toEqual({ ok: true }); });
+    act(() => { expect(state().finishGame({ kind: "noResult" })).toEqual({ ok: true }); });
     const before = snapshot();
     await act(async () => { release(); });
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
@@ -164,9 +165,9 @@ describe("ASTRA-10G-002: the assignment boundary refuses an ended game", () => {
 
   it("after a successful live multiplayer Finish, no queued player can be seated", async () => {
     store.setState({ lobby: { code: "ROOM1234", uid: "st", sessionId: "s1", status: "live" } });
-    close.mockImplementation(async () => { state().setLobby(null); });
+    close.mockImplementation(async () => { state().setLobby(null); return { alreadyEnded: false }; });
     render(<GameScreen />);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Finish game" })); });
+    await finishGame();
     expect(close).toHaveBeenCalledTimes(1);
     expect(game().phase).toBe("ended");
     expect(state().lobby).toBeNull();

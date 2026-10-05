@@ -15,6 +15,7 @@ import { publishPrivatePacket } from "./privatePacketCommands";
 import { usePacketDeliveryState } from "./packetDeliveryState";
 import { revokePlayerAndCommit, storytellerOccupancyCompletion } from "./membershipCommands";
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
+import { withoutSelfEnvelope } from "@/test/revealTokens";
 
 const code = "BCDF2345", root = `lobbies/${code}`;
 const disposals: (() => void | Promise<void>)[] = [];
@@ -78,9 +79,9 @@ describe("Phase 9B membership and private delivery", () => {
     await knockOnLobby(b, code, "bob", "Demon"); await seatPlayer(writer, code, "bob", other, null);
     usePlayerStore.getState().setSession({ code, uid: "bob", requestedName: "Demon" });
     disposals.push(startPlayerHandshake(b, code, "bob"));
-    await waitFor(() => expect(usePlayerStore.getState().self).toEqual({ shownRole: "imp" }));
-    await waitFor(async () => expect(await b.get(`${root}/player/${other}`)).toEqual({ shownRole: "imp" }));
-    expect(await b.get(`${root}/player/${id}`)).toEqual({ shownRole: "thief" }); // the Traveler too
+    await waitFor(() => expect(withoutSelfEnvelope(usePlayerStore.getState().self)).toEqual({ shownRole: "imp" }));
+    await waitFor(async () => expect(withoutSelfEnvelope(await b.get(`${root}/player/${other}`))).toEqual({ shownRole: "imp" }));
+    expect(withoutSelfEnvelope(await b.get(`${root}/player/${id}`))).toEqual({ shownRole: "thief" }); // the Traveler too
     const written = JSON.stringify([await b.get(`${root}/player`), await b.get(`${root}/public`)]);
     expect(written).not.toContain("undisclosed");
     expect(written).not.toContain("evil");
@@ -113,7 +114,7 @@ describe("Phase 9B membership and private delivery", () => {
   it("delivers only to the Traveler and persists ACK completion in the private checkpoint", async () => {
     const { b, id, other, writer, p, review } = await setup();
     await publishPrivatePacket(id, review(), writer);
-    expect(await b.get(`${root}/player/${id}`)).toEqual({ shownRole: "thief", shownAlignment: "evil", demon: { id: other, name: "Demon", seat: 1 } });
+    expect(withoutSelfEnvelope(await b.get(`${root}/player/${id}`))).toEqual({ shownRole: "thief", shownAlignment: "evil", demon: { id: other, name: "Demon", seat: 1 } });
     expect(await b.get(`${root}/player/${other}`)).toBeUndefined();
     expect(p().travelerArrival!.demonInfoComplete).toBe(true);
     const checkpoint = JSON.parse(await b.get(`${root}/checkpoint`) as string);

@@ -49,6 +49,17 @@ function isPermissionDenied(error: unknown): boolean {
   return /permission[_-]denied/i.test(code) || /permission[_-]denied/i.test(message);
 }
 
+/**
+ * Phase 10H (contract §15 steps 7-8): builds the terminal publication that
+ * joins the ONE fenced atomic close commit -- `results/{uid}` for each
+ * coherent participant of a declared result (nothing for End Without
+ * Result). It is invoked by close() only AFTER the queue drained and the lease
+ * was renewed, with the raw backend so it can freshly read authoritative
+ * roster/binding data under the held lease. Every returned path must lie
+ * inside this lobby (commit() refuses anything else).
+ */
+export type TerminalPublicationBuilder = (raw: RoomBackend) => Promise<Record<string, Json>>;
+
 /** One tab owns one lease. Every data write carries its token and revision;
  * Firebase rules fence delayed writes from expired or replaced writers. */
 export class SessionWriter implements RoomBackend {
@@ -317,7 +328,7 @@ export class SessionWriter implements RoomBackend {
     this.tail = result.catch(() => {});
     return result;
   }
-  async close(_playerIds: string[]) {
+  async close(_playerIds: string[], terminal?: TerminalPublicationBuilder) {
     this.closing = true;
     this.abort.abort(); // Cancel pending retries before draining the queue.
     clearInterval(this.renewal);
@@ -335,7 +346,15 @@ export class SessionWriter implements RoomBackend {
       await this.tail;
       if (this.stopped) throw new LifecycleError("cancelled", "Reconnect before closing this lobby.");
       await this.renew();
+      // Phase 10H: the terminal publication is computed from a FRESH
+      // authoritative read, after the drain and the renewal, and joins the
+      // same single fenced commit as the session end -- never a separate
+      // result-published state. A failure here aborts the close (the session
+      // stays active; the caller keeps the game live and retryable).
+      const publication = terminal ? await terminal(this.raw) : {};
+      if (this.stopped) throw new LifecycleError("cancelled", "Reconnect before closing this lobby.");
       const cleanup: Record<string, Json> = {
+        ...publication,
         [sessionPath(this.code)]: { version: 2, id: this.sessionId, state: "ended" },
         [`${this.root}/public/status`]: "ended",
         [`${this.root}/roster`]: null, [`${this.root}/rosterParticipants`]: null, [`${this.root}/joinRequests`]: null,
@@ -344,6 +363,8 @@ export class SessionWriter implements RoomBackend {
         [`${this.root}/membershipRevocations`]: null,
         [`${this.root}/leaveRequests`]: null, [`${this.root}/player`]: null,
         [`${this.root}/storyteller`]: null, [`${this.root}/checkpoint`]: null,
+        // Phase 10H: advisory reveal acknowledgements end with the session.
+        [`${this.root}/revealAcks`]: null,
       };
       await this.commit(cleanup);
       this.stop();

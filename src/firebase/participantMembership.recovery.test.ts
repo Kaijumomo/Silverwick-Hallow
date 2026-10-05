@@ -33,6 +33,7 @@ import { writeProjections } from "./sync";
 import { buildRegistry } from "@/data/roleRegistry";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import type { RoomBackend } from "./backend";
+import { withoutSelfEnvelope } from "@/test/revealTokens";
 
 const code = "MEMB2345";
 const root = `lobbies/${code}`;
@@ -128,7 +129,7 @@ async function device1WithAlice(b: MemoryRoomBackend, sessionId: string, lobby: 
     { requirementId: "role", kind: "role", roleId: "chef" },
   ], { provenance: { sourcePlayer: p1 } }).ok).toBe(true);
   await waitForCheckpoint(b, (g) => g.informationDeliveries.length === 1 && g.players[p1]!.participantId === PA);
-  expect(await b.get(`${root}/player/${p1}`)).toEqual({ shownRole: "washerwoman", shownAlignment: "good" });
+  expect(withoutSelfEnvelope(await b.get(`${root}/player/${p1}`))).toEqual({ shownRole: "washerwoman", shownAlignment: "good" });
   const aliceHistory = structuredClone(game().history);
   const aliceDelivery = structuredClone(game().informationDeliveries[0]!);
   manager.stop();
@@ -495,7 +496,7 @@ describe("R1 recovery matrix: an unchanged, production-seated member keeps ONE p
     const reload = async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
       const raw = localStorage.getItem(STORAGE_KEY)!;
-      expect(JSON.parse(raw).version).toBe(25);
+      expect(JSON.parse(raw).version).toBe(26);
       resetStore();
       localStorage.setItem(STORAGE_KEY, raw);
       await useStorytellerStore.persist.rehydrate();
@@ -523,6 +524,6 @@ describe("R1 recovery matrix: an unchanged, production-seated member keeps ONE p
     await freshDeviceRecovery(b, lobby, sessionId); // RESTORE, proven by Alice's record
     expectAlice("after fresh-device restore");
     expect(await b.get(`${root}/roster`)).toEqual({ "uid-alice": p1 });
-    expect(await b.get(`${root}/player/${p1}`)).toEqual({ shownRole: "washerwoman", shownAlignment: "good" });
+    expect(withoutSelfEnvelope(await b.get(`${root}/player/${p1}`))).toEqual({ shownRole: "washerwoman", shownAlignment: "good" });
   });
 });

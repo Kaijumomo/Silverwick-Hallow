@@ -7,11 +7,20 @@ import type { PlayerPublicRecord } from "@/stores/types";
 type Props = {
   player: PlayerPublicRecord;
   size: number;
+  /** The DISC centre, relative to the display centre (Phase 10H: the text
+   * stack hangs below the disc, as on the Storyteller Table). */
   x: number;
   y: number;
+  /** The seat footprint's width (its text stack wraps within it). */
+  width?: number;
+  /** Phase 10H density tiers (publicLayout.ts): a compact display drops the
+   * "Traveler" pill (the public Traveler character stays), and a minimal one
+   * the Life TEXT line (the shroud and vote token stay). */
+  travelerPill?: boolean;
+  lifeText?: boolean;
 };
 
-export function PublicSeat({ player, size, x, y }: Props) {
+export function PublicSeat({ player, size, x, y, width, travelerPill = true, lifeText = true }: Props) {
   const role = player.publicDisplayRole
     ? lookupOfficialRole(player.publicDisplayRole)
     : null;
@@ -44,7 +53,8 @@ export function PublicSeat({ player, size, x, y }: Props) {
       className={`public-seat ${life === null ? "life-withheld" : `${dead ? "dead" : "alive"} life-${life}`} ${player.online ? "" : "offline"}`}
       style={{
         left: `calc(50% + ${x}px)`,
-        top: `calc(50% + ${y}px)`,
+        top: `calc(50% + ${y - size / 2}px)`,
+        ...(width ? { width } : {}),
       }}
       role="group"
       aria-label={lifeAccessibleLabel(player.name, player.seat + 1, life)}
@@ -75,9 +85,11 @@ export function PublicSeat({ player, size, x, y }: Props) {
         {life && <VoteToken state={life} />}
       </div>
       <div className="public-seat-name">{player.name}</div>
-      {dead && life && <LifeStateText state={life} className="public-seat-ghost" />}
+      {dead && life && lifeText && <LifeStateText state={life} className="public-seat-ghost" />}
       {role && <div className="public-seat-role">{role.name}</div>}
-      {player.isTraveler && <div className="public-seat-traveler">traveler</div>}
+      {player.isTraveler && (travelerPill
+        ? <div className="public-seat-traveler">traveler</div>
+        : !role && <div className="public-seat-role">Traveler</div>)}
     </div>
   );
 }

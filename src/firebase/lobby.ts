@@ -10,6 +10,7 @@ import {
   playerPath,
   rosterEntryPath,
   rosterParticipantPath,
+  revealAckPath,
   rosterPath,
   storytellerPath,
   storytellerUidPath,
@@ -108,6 +109,9 @@ export async function revokeMembership(backend: RoomBackend, code: string, uid: 
     // Phase 10D: a pending Traveler character choice belongs to the
     // participation being revoked -- cleared in the same fenced update.
     [travelerChoicePath(code, uid)]: null,
+    // Phase 10H: so does its advisory reveal acknowledgement (hygiene; a
+    // later participation's fresh reveal token could never match it anyway).
+    [revealAckPath(code, uid)]: null,
   });
 }
 
@@ -246,6 +250,9 @@ export async function revokePlayerMembership(
     // choice goes with it, in this same fenced multi-path update -- a choice
     // an earlier participation left can never apply to a replacement.
     updates[travelerChoicePath(code, uid)] = null;
+    // Phase 10H: the revoked participation's advisory reveal acknowledgement
+    // goes with it (hygiene only -- never game state).
+    updates[revealAckPath(code, uid)] = null;
     if (completion) {
       const record = decodeRosterParticipant(await backend.get(rosterParticipantPath(code, uid)));
       if (record.status === "invalid") {

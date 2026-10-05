@@ -23,6 +23,7 @@ import { requireActiveSession } from "@/firebase/lifecycle";
 import { SessionWriter } from "@/firebase/writer";
 import { startStorytellerSession } from "@/firebase/storytellerSync";
 import type { PlayerId, StorytellerLobbyRecord, STPlayerRecord } from "./types";
+import { withoutRevealTokens } from "@/test/revealTokens";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -156,10 +157,16 @@ describe("ASTRA-10D-C01: an exile-death survives every Role transition", () => {
     expect(state().undoStack).toHaveLength(2);
 
     state().undo();
-    expect(game()).toEqual(s1);
+    // Phase 10H: every field is restored exactly; reverting the visible
+    // identity is itself a transition, so a FRESH reveal token is minted.
+    expect(withoutRevealTokens(game())).toEqual(withoutRevealTokens(s1));
+    expect(player(tess).revealToken).toBeDefined();
+    expect(player(tess).revealToken).not.toBe(s1.players[tess]!.revealToken);
     expectExileDeath(tess, life);
     state().undo();
-    expect(game()).toEqual(s0);
+    expect(withoutRevealTokens(game())).toEqual(withoutRevealTokens(s0));
+    expect(player(tess).revealToken).toBeDefined();
+    expect(player(tess).revealToken).not.toBe(s0.players[tess]!.revealToken);
     expectExileDeath(tess, life);
     expect(state().undoStack).toHaveLength(0);
   });
@@ -206,7 +213,7 @@ describe("ASTRA-10D-C01: an exile-death survives every Role transition", () => {
     const { tess } = exiledTraveler();
     expect(state().resolveRoles({ intents: toOrdinary(player(tess), "chef") })).toEqual({ ok: true, changed: true });
     const current = JSON.parse(JSON.stringify(game())) as StorytellerLobbyRecord;
-    expect(current.gameSchemaVersion).toBe(25);
+    expect(current.gameSchemaVersion).toBe(26);
     expect(StorytellerGamePersistedSchema.parse(structuredClone(current))).toEqual(current);
     // The persisted-store migration at the current marker is a no-op.
     const migrated = migrateStoreState({ game: structuredClone(current), undoStack: [structuredClone(current)] }, 22) as { game: StorytellerLobbyRecord };

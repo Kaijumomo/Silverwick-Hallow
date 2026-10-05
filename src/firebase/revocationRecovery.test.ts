@@ -46,6 +46,7 @@ import {
 import { decideReconnect } from "./reconnectDecision";
 import { membershipRevocationPath, rosterParticipantPath } from "./paths";
 import { startPlayerHandshake } from "./playerSync";
+import { withoutSelfEnvelope } from "@/test/revealTokens";
 
 const code = "RVKE2345";
 const root = `lobbies/${code}`;
@@ -153,7 +154,7 @@ async function liveDeviceWithAlice(b: MemoryRoomBackend, lobby: Lobby, sessionId
       { requirementId: "role", kind: "role", roleId: "chef" },
     ], { provenance: { sourcePlayer: p1 } }).ok).toBe(true);
     await waitForAckedCheckpoint(b, (g) => g.informationDeliveries.length === 1 && g.players[p1]!.participantId === PA);
-    expect(await b.get(`${root}/player/${p1}`)).toEqual({ shownRole: "washerwoman", shownAlignment: "good" });
+    expect(withoutSelfEnvelope(await b.get(`${root}/player/${p1}`))).toEqual({ shownRole: "washerwoman", shownAlignment: "good" });
   } else {
     await waitForAckedCheckpoint(b, (g) => g.players[p1]!.participantId === PA
       && Object.values(g.players).filter((p) => !p.isEmpty).length === 5);
@@ -170,7 +171,7 @@ async function liveDeviceWithAlice(b: MemoryRoomBackend, lobby: Lobby, sessionId
 async function reloadLocalImage() {
   await new Promise((resolve) => setTimeout(resolve, 0));
   const raw = localStorage.getItem(STORAGE_KEY)!;
-  expect(JSON.parse(raw).version).toBe(25);
+  expect(JSON.parse(raw).version).toBe(26);
   resetStore();
   localStorage.setItem(STORAGE_KEY, raw);
   await useStorytellerStore.persist.rehydrate();

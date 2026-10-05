@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { selectScriptById, useStorytellerStore, type ReminderCommandResult } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { resolvedCharacters } from "@/data/roleRegistry";
+import { ParticipantPicker } from "@/components/ParticipantPicker";
+import { RolePicker } from "@/components/RolePicker";
 import { momentLabel } from "@/stores/lifeEvents";
 import {
   MAX_REMINDER_LABEL_LENGTH,
@@ -86,7 +88,7 @@ export function ReminderControls({ player }: { player: STPlayerRecord }) {
 
   return (
     <section className="drawer-section reminder-controls" aria-label="Reminders">
-      <h3 className="drawer-section-title">Reminders</h3>
+      <h4 className="drawer-section-title">Reminders</h4>
       <p className="behavior-help reminder-help">Storyteller notation only -- never a rule.</p>
       {player.reminders.length > 0 ? (
         <ul className="reminder-list" aria-label="Current reminders">
@@ -294,23 +296,12 @@ function ReminderOptions({ game, source, onSource, sourceCharacter, onSourceChar
   return (
     <fieldset className="effect-add-form reminder-options">
       <legend className="sr-only">Reminder options</legend>
-      <label>From player
-        <select value={source?.playerId ?? ""} onChange={(e) => {
-          // Bound to the participation instance at the moment it is chosen;
-          // a seat replaced before "Add" is refused as stale.
-          const player = seated.find((p) => p.id === e.target.value);
-          onSource(player ? { playerId: player.id, participantId: player.participantId! } : null, player?.actualRole ?? "");
-        }}>
-          <option value="">None</option>
-          {seated.map((p) => <option key={p.id} value={p.id}>{p.name || `Seat ${p.seat + 1}`} (seat {p.seat + 1})</option>)}
-        </select>
-      </label>
-      <label>Character
-        <select value={sourceCharacter} onChange={(e) => onSourceCharacter(e.target.value)}>
-          <option value="">None</option>
-          {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-        </select>
-      </label>
+      {/* Bound to the participation instance at the moment it is chosen;
+          a seat replaced before "Add" is refused as stale. */}
+      <ParticipantPicker game={game} label="From player" value={source} candidates={seated} hint="Not chosen: none"
+        onChange={(binding) => onSource(binding, binding ? game.players[binding.playerId]?.actualRole ?? "" : "")} />
+      <RolePicker label="Character" roles={roles} value={sourceCharacter || null}
+        onPick={onSourceCharacter} onClear={() => onSourceCharacter("")} />
       {next && (
         <label className="reminder-option-check">
           <input type="checkbox" checked={cleanupNextPhase} onChange={(e) => onCleanupNextPhase(e.target.checked)} />

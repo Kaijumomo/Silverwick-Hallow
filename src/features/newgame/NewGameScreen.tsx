@@ -160,6 +160,9 @@ export function NewGameScreen() {
       {/* Bottom action bar */}
       <footer className="ng-footer">
         {startError && <p role="alert">{startError}</p>}
+        {/* 10H-AC-067: a disabled primary says why, adjacent and in words. */}
+        {!activeScript && <p className="disabled-reason">Import or choose a script first.</p>}
+        {starting && <p className="disabled-reason" role="status">Creating the setup…</p>}
         <button className="btn" onClick={() => setView("home")}>
           Cancel
         </button>

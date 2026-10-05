@@ -4,6 +4,7 @@ import { LIFE_ANOMALY_LABEL, lifeStatusOf, type LifeState } from "@/stores/lifeS
 import type { LifeConfirmationToken } from "@/stores/lifeResolution";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import type { STPlayerRecord } from "@/stores/types";
+import { Segmented } from "@/components/Segmented";
 import { LifeStateText } from "./LifeMarks";
 import { statusChoicesFor, statusTargetOf, type StatusChoice } from "./lifeEventText";
 
@@ -72,7 +73,7 @@ export function LifeControls({ player }: { player: STPlayerRecord }) {
 
   return (
     <section className="drawer-section life-controls" aria-label="Life">
-      <h3 className="drawer-section-title">Life</h3>
+      <h4 className="drawer-section-title">Life</h4>
       <div className="drawer-row">
         <LifeStateText state={status.state} className="life-headline" />
       </div>
@@ -125,15 +126,10 @@ export function LifeControls({ player }: { player: STPlayerRecord }) {
             <p className="behavior-help">
               A correction fixes Current State without recording a death or resurrection, and never restores a used ability.
             </p>
+            <Segmented label="Correct to" value={correction} options={statusChoicesFor()} onChange={setCorrection} />
             <div className="drawer-row">
-              <label className="label" htmlFor={`life-correct-${player.id}`}>Correct to</label>
-              <select id={`life-correct-${player.id}`} value={correction}
-                onChange={(e) => setCorrection(e.target.value as StatusChoice)}>
-                {statusChoicesFor().map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
               <button className="btn btn-sm" disabled={correction === "keep"} onClick={applyCorrection}>Apply correction</button>
+              {correction === "keep" && <span className="disabled-reason">Choose the corrected status first.</span>}
             </div>
           </details>
         </>

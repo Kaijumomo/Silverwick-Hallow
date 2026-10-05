@@ -413,8 +413,15 @@ describe("usePlayerSync — real-time ended detection", () => {
     await endLobby(b, "ABCD");
     off();
     expect(usePlayerStore.getState().status).toBe("ended");
-    // setEnded() clears the session — code/uid/playerId should all be null.
+    // Phase 10H (contract §16; amends the 10G behavior): setEnded() RETAINS
+    // the terminal context so the player can read their result after
+    // teardown and recover it on reload; only Back to Start clears it.
+    expect(usePlayerStore.getState().code).toBe("ABCD");
+    expect(usePlayerStore.getState().uid).toBe("uid-bob");
+    expect(usePlayerStore.getState().self).toBeNull();
+    usePlayerStore.getState().reset();
     expect(usePlayerStore.getState().code).toBeNull();
+    expect(usePlayerStore.getState().uid).toBeNull();
   });
 
   it("roster callback guard prevents 'ended' being clobbered by a concurrent roster fire", async () => {
@@ -471,7 +478,8 @@ describe("usePlayerSync — real-time ended detection", () => {
 
     // The guard must have blocked the clobber.
     expect(usePlayerStore.getState().status).toBe("ended");
-    expect(usePlayerStore.getState().code).toBeNull();
+    // Phase 10H: the terminal context is retained until Back to Start.
+    expect(usePlayerStore.getState().code).toBe("ABCD");
 
     publicOff();
     rosterOff();

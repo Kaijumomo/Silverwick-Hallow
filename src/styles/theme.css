@@ -1,4 +1,5 @@
-@import url("https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Cormorant+Garamond:wght@500;600;700&family=IM+Fell+English:ital@0;1&display=swap");
+/* Phase 10H (contract §4.2): fonts are self-hosted (src/styles/fonts.css,
+ * imported first by main.tsx) -- no third-party font CDN. */
 
 :root {
   /* Background */
@@ -40,9 +41,65 @@
   --radius-md: 8px;
   --radius-lg: 14px;
 
-  /* Fonts */
+  /* Fonts -- Phase 10H typography roles (contract §4.2; owner-approved
+   * operational face: Source Sans 3).
+   *  --font-op       dense operational UI: controls, counts, names in dense
+   *                  surfaces, Roster, labels, warnings, Effect/Reminder text;
+   *  --font-display  Cormorant Garamond: role names, phase titles, headings;
+   *  --font-body     IM Fell English: prose, ability, atmospheric copy;
+   *  --font-ceremony Cinzel Decorative: logo / ceremonial display only. */
+  --font-op: "Source Sans 3", "Segoe UI", system-ui, -apple-system, sans-serif;
   --font-body: "IM Fell English", "Iowan Old Style", Georgia, serif;
+  --font-prose: var(--font-body);
   --font-display: "Cormorant Garamond", "Iowan Old Style", Georgia, serif;
+  --font-ceremony: "Cinzel Decorative", "Cormorant Garamond", Georgia, serif;
+
+  /* Operational type scale. No operational text below 11px (contract §4.2,
+   * 10H-AC-008) without an explicit Sol waiver. */
+  --text-min: 11px;
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 19px;
+  --text-role: 18px;
+  --text-title: 24px;
+
+  /* Lit Table semantic states (contract §§4.1, 6.4, 8.1): acting (the Night
+   * actor's lit seat), selected (inspection), focus (keyboard) are three
+   * distinct treatments, never colour alone. */
+  --acting: #f2cf7e;
+  --acting-glow: rgba(242, 207, 126, 0.5);
+  --acting-wash: rgba(242, 207, 126, 0.1);
+  --selected: #9fc3e8;
+  --selected-wash: rgba(159, 195, 232, 0.12);
+  --focus: #ffe9b0;
+  --danger: #e88a7a;
+  --warn: #e7a35b;
+  --ok: #8fcf95;
+  --divergence: #e7a35b;
+  --effect-ink: #cdb3ec;
+  --reminder-ink: #c9b48c;
+
+  /* Surfaces: Canvas (the Table), Dock (non-modal workspaces), Overlay
+   * (true confirmations only). */
+  --canvas: #0a0804;
+  --dock: rgba(18, 14, 9, 0.97);
+  --dock-border: rgba(196, 158, 80, 0.32);
+  --overlay: rgba(14, 10, 6, 0.98);
+  --scrim: rgba(0, 0, 0, 0.6);
+
+  /* Safe areas (contract §20): fixed surfaces respect device insets. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+
+  /* Touch target minimum. */
+  --target: 44px;
+
+  color-scheme: dark;
 }
 
 *,
@@ -58,7 +115,9 @@ body,
   padding: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font-body);
+  font-family: var(--font-op);
+  /* Lining, tabular figures for counts and seats (contract §4.2). */
+  font-variant-numeric: lining-nums tabular-nums;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -70,8 +129,46 @@ body {
     var(--bg);
 }
 
-button {
+button,
+input,
+select,
+textarea {
   font-family: inherit;
+}
+
+/* Contract §20: no double-tap zoom delay on controls. */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"],
+summary {
+  touch-action: manipulation;
+}
+
+/* One visible keyboard-focus treatment, distinct from selected and acting. */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Prose roles: ability text, flavor and atmospheric copy keep IM Fell. */
+.prose {
+  font-family: var(--font-prose);
+  font-variant-numeric: normal;
+}
+
+/* Contract §20 / 10H-AC-065: reduced motion removes nonessential animation. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 ::-webkit-scrollbar {
@@ -88,7 +185,7 @@ button {
 
 /* Typography */
 .label {
-  font-family: var(--font-display);
+  font-family: var(--font-op);
   text-transform: uppercase;
   letter-spacing: 0.18em;
   font-weight: 600;
@@ -106,7 +203,7 @@ button {
 
 /* Buttons */
 .btn {
-  font-family: var(--font-body);
+  font-family: var(--font-op);
   font-size: 14px;
   letter-spacing: 0.04em;
   background: transparent;
@@ -153,7 +250,7 @@ button {
 .input,
 .textarea,
 .select {
-  font-family: var(--font-body);
+  font-family: var(--font-op);
   font-size: 14px;
   background: rgba(0, 0, 0, 0.4);
   color: var(--text);

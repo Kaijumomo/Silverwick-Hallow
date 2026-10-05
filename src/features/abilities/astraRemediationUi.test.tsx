@@ -11,6 +11,7 @@ import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { pickSeatIfPicking, useTargetPicker } from "./abilityUi";
 import { patchPlayer, proofGame, proofScript, reseat } from "@/test/proofFixtures";
 import type { StorytellerLobbyRecord } from "@/stores/types";
+import { choose as pickChoice } from "@/test/pickers";
 
 const game = () => store.getState().game!;
 const open = (g: StorytellerLobbyRecord) =>
@@ -40,7 +41,7 @@ describe("SOL-10F-A2 -- selections are bound at selection time", () => {
     open(proofGame(POISONER_GAME));
     render(<Night />);
     const row = () => card("Poisoner", "Player 0");
-    fireEvent.change(within(row()).getByRole("combobox", { name: "The player to poison" }), { target: { value: "p1" } });
+    pickChoice("The player to poison", "p1", row());
     reseatInStore("p1");
     fireEvent.click(within(row()).getByRole("button", { name: "Resolve" }));
     expect(within(row()).getByRole("alert")).toHaveTextContent(/no longer in that seat/);
@@ -52,7 +53,7 @@ describe("SOL-10F-A2 -- selections are bound at selection time", () => {
     open(proofGame(POISONER_GAME));
     render(<Night />);
     const row = () => card("Poisoner", "Player 0");
-    fireEvent.click(within(row()).getByRole("button", { name: "Pick on Grimoire" }));
+    fireEvent.click(within(row()).getByRole("button", { name: /^Choose .+ on the Table$/ }));
     act(() => { expect(pickSeatIfPicking(game(), "p2")).toBe(true); });
     reseatInStore("p2");
     fireEvent.click(within(row()).getByRole("button", { name: "Resolve" }));
@@ -63,7 +64,7 @@ describe("SOL-10F-A2 -- selections are bound at selection time", () => {
   it("an unchanged participant still resolves (inline)", () => {
     open(proofGame(POISONER_GAME));
     render(<Night />);
-    fireEvent.change(within(card("Poisoner", "Player 0")).getByRole("combobox", { name: "The player to poison" }), { target: { value: "p1" } });
+    pickChoice("The player to poison", "p1", card("Poisoner", "Player 0"));
     reseatInStore("p3"); // an unrelated seat changes
     fireEvent.click(within(card("Poisoner", "Player 0")).getByRole("button", { name: "Resolve" }));
     expect(game().players.p1!.effects).toEqual([expect.objectContaining({ type: "poisoned" })]);
@@ -76,14 +77,14 @@ describe("SOL-10F-A2 -- selections are bound at selection time", () => {
     fireEvent.click(within(workspace()).getByRole("button", { name: "Resolve manually / unmodeled interaction" }));
     fireEvent.change(within(workspace()).getByRole("textbox", { name: "Reason for manual resolution" }), { target: { value: "test" } });
     fireEvent.click(within(workspace()).getByRole("button", { name: `+ ${kind}` }));
-    fireEvent.change(within(workspace()).getByRole("combobox", { name: "Step 1 player" }), { target: { value: "p1" } });
+    pickChoice("Step 1 player", "p1", workspace());
     configure?.(workspace());
   }
 
   it.each([
     ["Death", undefined],
     ["Effect", undefined],
-    ["Character change", (ws: HTMLElement) => fireEvent.change(within(ws).getByRole("combobox", { name: "Step 1 character" }), { target: { value: "slayer" } })],
+    ["Character change", (ws: HTMLElement) => pickChoice("Step 1 character", "slayer", ws)],
     ["Alignment change", undefined],
   ] as const)("Manual %s: seat reuse after choosing the player -> stale; the replacement is untouched", (kind, configure) => {
     manualStep(kind, configure);
@@ -121,10 +122,10 @@ describe("SOL-10F-A1 -- follow-up answers stay with their prerequisites (workspa
     render(<Night />);
     fireEvent.click(within(card("Harlot", "Player 0")).getByRole("button", { name: "Guide" }));
     const ws = workspace();
-    fireEvent.change(within(ws).getByRole("combobox", { name: "The living player chosen" }), { target: { value: "p1" } });
+    pickChoice("The living player chosen", "p1", ws);
     fireEvent.click(within(within(ws).getByRole("radiogroup", { name: "Player 1 agrees" })).getByRole("radio", { name: "Yes" }));
     expect(within(ws).getByRole("radiogroup", { name: /The Harlot and the chosen player die/ })).toBeInTheDocument();
-    fireEvent.change(within(ws).getByRole("combobox", { name: "The living player chosen" }), { target: { value: "p2" } });
+    pickChoice("The living player chosen", "p2", ws);
     expect(within(ws).queryByRole("radiogroup", { name: "Player 1 agrees" })).toBeNull();
     expect(within(ws).queryByRole("radiogroup", { name: /The Harlot and the chosen player die/ })).toBeNull();
     const consent = within(ws).getByRole("radiogroup", { name: "Player 2 agrees" });
@@ -134,8 +135,7 @@ describe("SOL-10F-A1 -- follow-up answers stay with their prerequisites (workspa
 
   const AL = ["alhadikhia", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"];
   const label = "The 3 players chosen, in order (or nobody)";
-  const choose = (ws: HTMLElement, ids: string[]) => ids.forEach((id, index) =>
-    fireEvent.change(within(ws).getByRole("combobox", { name: `${label} ${index + 1}` }), { target: { value: id } }));
+  const choose = (ws: HTMLElement, ids: string[]) => ids.forEach((id, index) => pickChoice(`${label} ${index + 1}`, id, ws));
   const answer = (ws: HTMLElement, name: string | RegExp, live: boolean) =>
     fireEvent.click(within(within(ws).getByRole("radiogroup", { name })).getByRole("radio", { name: live ? "Yes" : "No" }));
 

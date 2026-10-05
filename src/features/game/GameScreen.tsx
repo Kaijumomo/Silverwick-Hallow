@@ -29,7 +29,13 @@ import { EndedParticipantReview } from "./EndedParticipantReview";
 import { deriveNightWork, unfinishedNightWork } from "@/features/nightOrder/nightWork";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import { buildRegistry } from "@/data/roleRegistry";
-import { useMediaQuery } from "@/components/useMediaQuery";
+import { useShellLayout } from "@/components/useShellLayout";
+import { Segmented } from "@/components/Segmented";
+import { useShellStore, type TableLens } from "@/stores/shellStore";
+import { LabelsView, RosterView } from "@/features/grimoire/RosterView";
+import { ACTION_CARD_DOCK_HOST, ACTION_CARD_STAGE_HOST } from "@/components/ActionCard";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { FinishGameDialog, GameResultSummary } from "./ResultDeclaration";
 import type { RoleId } from "@/stores/types";
 
 const PHASE_LABEL: Record<string, string> = {
@@ -49,7 +55,6 @@ export function GameScreen() {
   const undo = useStorytellerStore((s) => s.undo);
   const advancePhase = useStorytellerStore((s) => s.advancePhase);
   const endGame = useStorytellerStore((s) => s.endGame);
-  const finishGame = useStorytellerStore((s) => s.finishGame);
   const setView = useStorytellerStore((s) => s.setView);
   const setLobby = useStorytellerStore((s) => s.setLobby);
   const selectedPlayerId = useStorytellerStore((s) => s.selectedPlayerId);
@@ -63,6 +68,11 @@ export function GameScreen() {
   const [leaveInFlight, setLeaveInFlight] = useState<Set<string>>(new Set());
   const [leaveErrors, setLeaveErrors] = useState<Record<string, string>>({});
   const [ending, setEnding] = useState(false);
+  // Phase 10H: result declaration and the post-game summary (session-local UI).
+  const [finishOpen, setFinishOpen] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const terminalClosing = useStorytellerStore((s) => s.terminalClose?.status === "closing");
   const [goingLive, setGoingLive] = useState(false);
   const [nightPanelOpen, setNightPanelOpen] = useState(false);
   const [setupPanelOpen, setSetupPanelOpen] = useState(false);
@@ -75,7 +85,18 @@ export function GameScreen() {
   // survives closing and reopening Setup within this Grimoire session. Not
   // part of game/Firebase state: purely local UI provenance, never authority.
   const [generatedRoleIds, setGeneratedRoleIds] = useState<RoleId[]>([]);
-  const narrowScreen = useMediaQuery("(max-width: 760px)");
+  // Phase 10H (contract §5): desktop coordinated regions; tablet ONE dock;
+  // phone ONE bottom workspace. All shell state is session-local (shellStore).
+  const layout = useShellLayout();
+  const docked = layout !== "desktop";
+  const dockTab = useShellStore((s) => s.dockTab);
+  const setDockTab = useShellStore((s) => s.setDockTab);
+  const lens = useShellStore((s) => s.lens);
+  const actionOpen = useShellStore((s) => s.actionOpen);
+  // A Night action opened (or resumed) on a docked layout brings the Night
+  // surface -- where its card lives -- forward.
+  useEffect(() => { if (actionOpen && docked) { setDockTab("night"); setNightPanelOpen(true); } }, [actionOpen, docked]);
+  const setLens = useShellStore((s) => s.setLens);
   const moreActionsRef = useRef<HTMLButtonElement>(null);
   const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
   const [copyToast, setCopyToast] = useState<string | null>(null);
@@ -191,8 +212,11 @@ export function GameScreen() {
 
   // Auto-open night panel whenever phase transitions to "night".
   useEffect(() => {
-    if (game?.phase === "night") setNightPanelOpen(true);
+    if (game?.phase === "night") { setNightPanelOpen(true); setDockTab("night"); }
   }, [game?.phase]);
+  // Selecting a participant brings the Seat workspace forward in the one dock;
+  // clearing the selection returns the dock to Night.
+  useEffect(() => { setDockTab(selectedPlayerId ? "seat" : "night"); }, [selectedPlayerId]);
 
   // Setup is deliberately never auto-opened: Go Live and Setup are
   // independent, parallel actions the Storyteller chooses between, and
@@ -355,6 +379,13 @@ export function GameScreen() {
   const aliveCount = seatedPlayers.filter((p) => p.alive).length;
   const pendingQueueCount = Object.keys(game.pendingPlayers ?? {}).length;
 
+  const nightRail = game.phase === "night" && !!script;
+  const inspectorVisible = !!selected && !ended;
+  // H3: on a phone at RS-20 density the Roster replaces the Table.
+  const rosterReplacesTable = layout === "phone" && game.seatOrder.length > 15;
+  const effectiveLens: TableLens = rosterReplacesTable && lens === "table" ? "roster"
+    : privacyMode && lens === "labels" ? "table" : lens;
+
   const advanceLabel =
     game.phase === "setup"
       ? "Begin night 1"
@@ -365,7 +396,7 @@ export function GameScreen() {
           : "Game ended";
 
   return (
-    <div className="game" data-phase={game.phase} data-setup-foreground={setupVisible && narrowScreen || undefined}>
+    <div className="game" data-phase={game.phase}>
       <header className="phase-bar">
         <div className="phase-bar-left">
           <span className="phase-pill" data-phase={game.phase}>
@@ -436,7 +467,7 @@ export function GameScreen() {
             onClick={togglePrivacyMode}
             title={privacyMode ? "Show Storyteller details" : "Hide Storyteller details"}
           >
-            {privacyMode ? "Privacy Mode On" : "Privacy Mode"}
+            Privacy<span className="privacy-toggle-word"> Mode</span>{privacyMode ? " On" : ""}
           </button>
         </div>
         {/* ⋮ toggle: visible only on narrow viewports via CSS */}
@@ -544,76 +575,73 @@ export function GameScreen() {
               Life events
             </button>
           )}
-          {game.phase !== "setup" && !ended && <button
-            className="btn btn-gold"
-            onClick={() => {
-              closeOverflow();
-              // Phase 10A: Day -> Night passes through the dusk review, a
-              // private Storyteller dialog -- unavailable under Privacy Mode
-              // (10A-ASTRA-003); turn Privacy Mode off, then review.
-              if (game.phase === "day") { if (!privacyMode) setDuskReviewOpen(true); return; }
-              // Phase 10G: Night -> Day passes through Dawn Review when
-              // tonight's work is unfinished (advisory -- the Storyteller may
-              // continue anyway); a clean Night advances directly. Like Dusk,
-              // it is private review: unavailable under Privacy Mode.
-              if (game.phase === "night") {
-                if (privacyMode) return;
-                if (nightUnfinished().total > 0) { setDawnReviewOpen(true); return; }
-              }
-              const result = advancePhase();
-              setPhaseError(result.ok ? null : "Setup changed. Open Setup to review what needs attention.");
-            }}
-            disabled={game.phase === "ended" || ((game.phase === "day" || game.phase === "night") && privacyMode)}
-            title={game.phase === "day" && privacyMode ? "Turn off Privacy Mode to review the Day before continuing to Night"
-              : game.phase === "night" && privacyMode ? "Turn off Privacy Mode to review the Night before continuing to Day" : undefined}
-          >
-            {advanceLabel}
-          </button>}
+
           {(game.phase === "night" || game.phase === "day") && <button
             className="btn btn-sm btn-danger"
-            disabled={ending}
-            onClick={async () => {
+            disabled={ending || terminalClosing}
+            onClick={() => {
               closeOverflow();
-              if (ending || !window.confirm("Finish this game? It becomes a read-only record of the final state. This cannot be undone.")) return;
-              setEnding(true);
-              // Phase 10G (Section 17.2): the local game becomes the retained
-              // ended snapshot only after the multiplayer session has closed
-              // authoritatively (closeMultiplayerSession clears the lobby only
-              // on success; finishGame refuses while one is attached). A failed
-              // close leaves the lobby and the live game untouched;
-              // closeMultiplayerSession records the failure in the connection
-              // status.
-              try {
-                await closeMultiplayerSession();
-                const result = finishGame();
-                setPhaseError(result.ok ? null : result.message);
-              }
-              catch { /* shown by ConnectionStatus */ }
-              finally { setEnding(false); }
+              // Phase 10H (§14): the Storyteller DECLARES the result (Good /
+              // Evil / End Without Result) in a true confirmation; every
+              // terminal intent goes through the one terminal seam.
+              setFinishOpen(true);
             }}
           >
-            Finish game
+            {terminalClosing ? "Ending…" : "Finish game"}
           </button>}
           {game.phase === "setup" && <button
             className="btn btn-sm btn-danger"
             disabled={ending}
-            onClick={async () => {
-              closeOverflow();
-              if (ending || !window.confirm("Discard this setup and return to home?")) return;
-              setEnding(true);
-              // Setup discard is not Finish Game: nothing was played, so the
-              // setup is dropped (after any lobby closes authoritatively).
-              try { await closeMultiplayerSession(); endGame(); }
-              catch { /* shown by ConnectionStatus */ }
-              finally { setEnding(false); }
-            }}
+            onClick={() => { closeOverflow(); setDiscardOpen(true); }}
           >
             Discard setup
           </button>}
+          {ended && !summaryOpen && !privacyMode && (
+            <button className="btn btn-sm btn-gold" onClick={() => { closeOverflow(); setSummaryOpen(true); }}>Game summary</button>
+          )}
           {ended && (
             <button className="btn btn-sm" onClick={() => { closeOverflow(); setView("newgame"); }}>New game</button>
           )}
         </div>
+        {/* Phase 10H (Forward rule): the current phase-advance action is the
+            Storyteller's primary control and stays directly visible at every
+            width -- never inside the generic overflow menu. A disabled advance
+            says why, adjacent and in words (10H-AC-067). */}
+        {game.phase !== "setup" && !ended && (
+          <div className="phase-primary">
+            <button
+              className="btn btn-gold phase-advance"
+              onClick={() => {
+                closeOverflow();
+                // Phase 10A: Day -> Night passes through the dusk review, a
+                // private Storyteller dialog -- unavailable under Privacy Mode
+                // (10A-ASTRA-003); turn Privacy Mode off, then review.
+                if (game.phase === "day") { if (!privacyMode) setDuskReviewOpen(true); return; }
+                // Phase 10G: Night -> Day passes through Dawn Review when
+                // tonight's work is unfinished (advisory -- the Storyteller may
+                // continue anyway); a clean Night advances directly. Like Dusk,
+                // it is private review: unavailable under Privacy Mode.
+                if (game.phase === "night") {
+                  if (privacyMode) return;
+                  if (nightUnfinished().total > 0) { setDawnReviewOpen(true); return; }
+                }
+                const result = advancePhase();
+                setPhaseError(result.ok ? null : "Setup changed. Open Setup to review what needs attention.");
+              }}
+              disabled={privacyMode}
+              title={game.phase === "day" && privacyMode ? "Turn off Privacy Mode to review the Day before continuing to Night"
+                : game.phase === "night" && privacyMode ? "Turn off Privacy Mode to review the Night before continuing to Day" : undefined}
+              aria-describedby={privacyMode ? "phase-advance-reason" : undefined}
+            >
+              {advanceLabel}
+            </button>
+            {privacyMode && (
+              <span id="phase-advance-reason" className="disabled-reason phase-advance-reason">
+                Turn off Privacy Mode first
+              </span>
+            )}
+          </div>
+        )}
       </header>
 
       {lobby && <ConnectionStatus />}
@@ -690,6 +718,7 @@ export function GameScreen() {
                 <button className="btn btn-sm btn-danger" disabled={busy} onClick={() => void acceptLeave(uid)}>
                   Accept leave
                 </button>
+                {busy && <span className="disabled-reason" role="status">Updating…</span>}
                 {rowError && (
                   <div className="error-list leave-request-error" role="alert">
                     <p>{rowError}</p>
@@ -701,27 +730,98 @@ export function GameScreen() {
         </div>
       )}
 
-      <div className="game-body">
+      {ended && summaryOpen && !privacyMode && script ? (
+        <GameResultSummary game={game} registry={registry}
+          onReview={() => setSummaryOpen(false)}
+          onActivity={() => { setSummaryOpen(false); setActivityOpen(true); }}
+          onNewGame={() => setView("newgame")}
+          onHome={() => setView("home")} />
+      ) : (
+      <div className="game-body" data-layout={layout} data-dock={docked ? dockTab : undefined}>
         {setupVisible && script && (
           <SetupPanel
             game={game}
             script={script}
             onClose={() => setSetupPanelOpen(false)}
-            foreground={narrowScreen}
+            // Phase 10H (§10; 10H-AC-025): Setup is a Grimoire-centred stage
+            // workspace on every layout -- on a phone the ONE bottom workspace
+            // -- never a modal takeover page.
+            foreground={false}
             returnFocusRef={moreActionsRef}
             generatedRoleIds={generatedRoleIds}
             onGeneratedRoleIdsChange={setGeneratedRoleIds}
           />
         )}
-        {game.phase === "night" && nightPanelOpen && script && (
-          <NightOrderPanel
-            game={game}
-            script={script}
-            onClose={() => setNightPanelOpen(false)}
-          />
+        {/* Phase 10H (§§5.1, 5.4, 8.1): the Night task rail exists only at
+            Night. It stays MOUNTED for the whole Night (hidden, not unmounted,
+            when the Storyteller hides it or the dock shows another surface),
+            so the current step keeps owning the action context and an open
+            action card can be resumed. Privacy Mode unmounts its contents. */}
+        {nightRail && (
+          <div className="shell-pane shell-rail" hidden={docked ? dockTab !== "night" : !nightPanelOpen}>
+            {/* Docked layouts: the action card renders here, in the ONE dock. */}
+            {docked && <div id={ACTION_CARD_DOCK_HOST} className="action-card-dock-host" />}
+            <NightOrderPanel
+              game={game}
+              script={script!}
+              onClose={() => setNightPanelOpen(false)}
+            />
+          </div>
         )}
-        <GrimoireCircle online={onlineMap} backend={backend} code={lobby?.code ?? ""} />
+        <div className="shell-stage" role="region" aria-label="Grimoire">
+          <div className="stage-toolbar">
+            <Segmented<TableLens> label="View" className="lens-switch" value={effectiveLens} onChange={setLens} options={[
+              { value: "table", label: "Table", disabled: rosterReplacesTable, hint: rosterReplacesTable ? "too many seats for the phone Table — the Roster replaces it" : undefined },
+              { value: "roster", label: "Roster" },
+              { value: "labels", label: "Labels", disabled: privacyMode, hint: privacyMode ? "hidden while Privacy Mode is on" : undefined },
+            ]} />
+          </div>
+          {/* Desktop: the action card takes its own column beside the Table. */}
+          {!docked && <div id={ACTION_CARD_STAGE_HOST} className="action-card-stage-host" />}
+          {effectiveLens === "table"
+            ? <GrimoireCircle online={onlineMap} backend={backend} code={lobby?.code ?? ""} />
+            : effectiveLens === "roster" ? <RosterView /> : <LabelsView />}
+        </div>
+        {inspectorVisible && (
+          <div className="shell-pane shell-inspector" hidden={docked && nightRail && dockTab !== "seat"}>
+            <PlayerDrawer
+              player={selected!}
+              onRemove={removeSelectedPlayer}
+              onUnseat={unseatSelectedPlayer}
+            />
+          </div>
+        )}
+        {docked && nightRail && inspectorVisible && (
+          <div className="dock-tabs" role="tablist" aria-label="Workspace">
+            <button type="button" role="tab" aria-selected={dockTab === "night"} className="dock-tab" onClick={() => setDockTab("night")}>
+              Night {game.day}
+            </button>
+            <button type="button" role="tab" aria-selected={dockTab === "seat"} className="dock-tab" onClick={() => setDockTab("seat")}>
+              {selected!.name || `Seat ${selected!.seat + 1}`}
+            </button>
+          </div>
+        )}
       </div>
+      )}
+      {finishOpen && !ended && (
+        <FinishGameDialog multiplayer={!!lobby} onClose={() => setFinishOpen(false)}
+          onEnded={() => { setFinishOpen(false); setSummaryOpen(true); useStorytellerStore.getState().selectPlayer(null); }} />
+      )}
+      {discardOpen && game.phase === "setup" && (
+        <ConfirmDialog title="Discard this setup?" confirmLabel="Discard setup" danger busy={ending}
+          onCancel={() => setDiscardOpen(false)}
+          onConfirm={async () => {
+            if (ending) return;
+            setEnding(true);
+            // Setup discard is not Finish Game: nothing was played, so the
+            // setup is dropped (after any lobby closes authoritatively).
+            try { await closeMultiplayerSession(); setDiscardOpen(false); endGame(); }
+            catch { setDiscardOpen(false); /* shown by ConnectionStatus */ }
+            finally { setEnding(false); }
+          }}>
+          <p>Nothing has been played yet. The setup is dropped and you return Home.</p>
+        </ConfirmDialog>
+      )}
 
       {/* ASTRA-10G-002: the ended review is read-only, membership included --
           an open queue unmounts the moment the game ends. */}
@@ -773,13 +873,6 @@ export function GameScreen() {
 
       {selected && ended && (
         <EndedParticipantReview player={selected} game={game} registry={registry} onClose={() => useStorytellerStore.getState().selectPlayer(null)} />
-      )}
-      {selected && !ended && (
-        <PlayerDrawer
-          player={selected}
-          onRemove={removeSelectedPlayer}
-          onUnseat={unseatSelectedPlayer}
-        />
       )}
       {almanacOpen && !privacyMode && (
         <Almanac

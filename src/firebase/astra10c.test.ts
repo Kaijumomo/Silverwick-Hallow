@@ -156,7 +156,7 @@ describe("ASTRA-10C-001: every occupied participant has a unique current Partici
     const legacy = persisted();
     // A v16-shaped game: no marker/window/history/deliveries or identity yet.
     for (const key of ["gameSchemaVersion", "gameRuleFacts", "lifeEventWindow", "history", "informationDeliveries"]) delete legacy[key];
-    for (const p of Object.values(legacy.players)) { delete p.participantId; for (const e of p.effects as Raw[]) { delete e.state; delete e.expiry; } }
+    for (const p of Object.values(legacy.players)) { delete p.participantId; delete p.revealToken; for (const e of p.effects as Raw[]) { delete e.state; delete e.expiry; } }
     const result = migrateStoreState({ game: legacy, undoStack: [] }, 16) as { game: RawGame };
     expect(takeMigrationResetFlag()).toBe(false);
     const ids = Object.values(result.game.players).filter((p) => p.isEmpty !== true).map((p) => p.participantId);
@@ -232,7 +232,7 @@ describe("ASTRA-10C-002: legacy Reminder History cannot smuggle value records or
   it("marker-less + a nested History cleanupCue is current evidence: never migrated as older legacy", () => {
     const g = marker20WithNestedCue();
     delete g.gameSchemaVersion;
-    expect(detectLegacyGameVersion(g)).toBe(25);
+    expect(detectLegacyGameVersion(g)).toBe(26);
     const copy = structuredClone(g);
     migrateGameEntry(copy, 13, { kind: "canonical-only" });
     expect(copy).toEqual(g);
@@ -283,14 +283,14 @@ describe("ASTRA-10C-003: an entry's own version routes old store migrations", ()
     const current = persisted();
     const v13 = persisted() as RawGame;
     for (const key of ["gameSchemaVersion", "gameRuleFacts", "lifeEventWindow", "history", "informationDeliveries", "startingNonTravelerCount"]) delete v13[key];
-    for (const p of Object.values(v13.players)) { delete p.participantId; delete p.effects; delete p.actualAlignment; }
+    for (const p of Object.values(v13.players)) { delete p.participantId; delete p.revealToken; delete p.effects; delete p.actualAlignment; }
     const v20 = asV20(persisted());
     const result = migrateStoreState({ game: structuredClone(current), undoStack: [v13, structuredClone(v20)],
       customScripts: { [setupScript.id]: setupScript } }, 13) as { game: Raw; undoStack: RawGame[] };
     expect(takeMigrationResetFlag()).toBe(false);
     expect(result.game).toEqual(current); // no legacy repair
     const [migrated13, migrated20] = result.undoStack;
-    expect(migrated13!.gameSchemaVersion).toBe(25);
+    expect(migrated13!.gameSchemaVersion).toBe(26);
     for (const p of Object.values(migrated13!.players).filter((p) => p.isEmpty !== true)) {
       expect(p.participantId).toBe(`legacy-current:${p.id}`); // the v13+ path ran
       expect(p.actualAlignment).toBeDefined(); // v13 -> v14 derivation ran
@@ -303,10 +303,10 @@ describe("ASTRA-10C-003: an entry's own version routes old store migrations", ()
     const old = persisted();
     for (const key of ["gameSchemaVersion", "gameRuleFacts", "lifeEventWindow", "history", "informationDeliveries", "plannedTravelerCount",
       "startingNonTravelerCount", "nightProgress", "fabled", "bluffs", "lorics", "rolePool", "plannedPlayerCount", "pendingPlayers"]) delete old[key];
-    for (const p of Object.values(old.players)) { delete p.participantId; delete p.effects; delete p.isEmpty; }
+    for (const p of Object.values(old.players)) { delete p.participantId; delete p.revealToken; delete p.effects; delete p.isEmpty; }
     const result = migrateStoreState({ game: old, undoStack: [] }, 1) as { game: Raw };
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(result.game).toMatchObject({ gameSchemaVersion: 25, fabled: [], lorics: [], rolePool: [], plannedTravelerCount: 0, pendingPlayers: {} });
+    expect(result.game).toMatchObject({ gameSchemaVersion: 26, fabled: [], lorics: [], rolePool: [], plannedTravelerCount: 0, pendingPlayers: {} });
   });
 
   it("a pre-v8 envelope with a lobby cannot drop/rewrite a newer game entry: it fails closed", () => {

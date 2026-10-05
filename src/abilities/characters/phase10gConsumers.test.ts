@@ -16,6 +16,7 @@ import { choiceId } from "./alhadikhia";
 import { TOYMAKER_ATTACK_MESSAGE } from "./modifierHooks";
 import type { AbilityInputValue } from "@/abilities/semantics";
 import type { GameRuleFactRecord, StorytellerLobbyRecord } from "@/stores/types";
+import { withoutRevealTokens } from "@/test/revealTokens";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -74,8 +75,14 @@ describe("10G-AC-09: Pit-Hag Demon creation is atomic (proof area 3)", () => {
     const resolutionId = (result as { resolutionId: string }).resolutionId;
     expect(game().history.map((h) => [h.category, h.resolutionId])).toEqual([["role", resolutionId], ["gameRuleFact", resolutionId]]);
     expect(game().history[1]).not.toHaveProperty("participant");
+    const told = game().players.p1!.revealToken;
+    expect(told).toBeDefined(); // the player is told: a visible-identity transition
     state().undo();
-    expect(game()).toEqual(g);
+    // Phase 10H: every field restored exactly; the reverted identity gets a
+    // FRESH reveal token (never the pre-Pit-Hag one, never the Demon one).
+    expect(withoutRevealTokens(game())).toEqual(withoutRevealTokens(g));
+    expect(game().players.p1!.revealToken).toBeDefined();
+    expect(game().players.p1!.revealToken).not.toBe(told);
   });
 
   it("if the Rule-Fact operation refuses, the Role change is not committed either", () => {

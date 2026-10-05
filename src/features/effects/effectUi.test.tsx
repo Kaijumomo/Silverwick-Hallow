@@ -12,6 +12,7 @@ import { GameScreen } from "@/features/game/GameScreen";
 import { PlayerDrawer } from "@/features/players/PlayerDrawer";
 import type { EffectParticipantBinding } from "@/stores/effectResolution";
 import type { PlayerId } from "@/stores/types";
+import { choose, chooseSegmentValue, chosen } from "@/test/pickers";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -129,10 +130,10 @@ describe("Phase 10B aggregation and progressive disclosure", () => {
     render(<Drawer name="Carol" />);
     fireEvent.click(screen.getByRole("button", { name: "+ Add effect" }));
     const form = screen.getByRole("form", { name: "Add effect" });
-    fireEvent.change(within(form).getByLabelText("Effect"), { target: { value: "safeFromDemon" } });
-    fireEvent.change(within(form).getByLabelText("Caused by"), { target: { value: idOf("Bob") } });
-    expect((within(form).getByLabelText("Character") as HTMLSelectElement).value).toBe(game().players[idOf("Bob")]!.actualRole);
-    fireEvent.change(within(form).getByLabelText("Lasts"), { target: { value: "untilDawn" } });
+    chooseSegmentValue("Effect", "safeFromDemon", form);
+    choose("Caused by", idOf("Bob"), form);
+    expect(chosen("Character", form)).toBe(game().players[idOf("Bob")]!.actualRole);
+    chooseSegmentValue("Lasts", "untilDawn", form);
     expect(within(form).getByText("Ends as Day 1 begins")).toBeInTheDocument();
     fireEvent.click(within(form).getByRole("button", { name: "Add" }));
     expect(screen.queryByRole("form", { name: "Add effect" })).toBeNull();

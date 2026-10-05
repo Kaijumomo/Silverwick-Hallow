@@ -11,6 +11,7 @@ import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { useTargetPicker } from "./abilityUi";
 import { patchPlayer, proofGame, proofScript } from "@/test/proofFixtures";
 import type { RoleId, StorytellerLobbyRecord } from "@/stores/types";
+import { choose } from "@/test/pickers";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -41,7 +42,7 @@ describe("Poisoner -- inline simple flow (target + Resolve)", () => {
     open(named(["poisoner", "empath", "chef", "monk", "imp", "saint", "spy"]));
     render(<Night />);
     const row = card("Poisoner", "Player 0");
-    fireEvent.change(within(row).getByRole("combobox", { name: "The player to poison" }), { target: { value: "p1" } });
+    choose("The player to poison", "p1", row);
     fireEvent.click(within(row).getByRole("button", { name: "Resolve" }));
     expect(game().players.p1!.effects).toEqual([expect.objectContaining({ type: "poisoned", sourceCharacter: "poisoner" })]);
     expect(state().undoStack).toHaveLength(1);
@@ -71,10 +72,10 @@ describe("Fortune Teller -- Night 1 Red Herring is chosen inside the same resolu
     render(<Night />);
     fireEvent.click(within(card("Fortune Teller", "Player 0")).getByRole("button", { name: "Guide" }));
     const ws = workspace();
-    fireEvent.change(within(ws).getByRole("combobox", { name: "The two players chosen 1" }), { target: { value: "p2" } });
-    fireEvent.change(within(ws).getByRole("combobox", { name: "The two players chosen 2" }), { target: { value: "p3" } });
+    choose("The two players chosen 1", "p2", ws);
+    choose("The two players chosen 2", "p3", ws);
     const choices = within(ws).getByRole("region", { name: "Further choices" });
-    fireEvent.change(within(choices).getByRole("combobox", { name: "The Red Herring (a good player)" }), { target: { value: "p3" } });
+    choose("The Red Herring (a good player)", "p3", choices);
     expect(within(ws).getByText(/Player 3 gains Red Herring/)).toBeInTheDocument();
     fireEvent.click(within(ws).getByRole("button", { name: "Confirm and record" }));
     expect(game().players.p3!.effects).toEqual([expect.objectContaining({ type: "fortuneTellerRedHerring" })]);
@@ -94,7 +95,7 @@ describe("Slayer -- the Day entry", () => {
     render(<Entry id="p0" />);
     fireEvent.click(screen.getByRole("button", { name: "Use ability… (Slayer)" }));
     const dialog = screen.getByRole("dialog", { name: /Slayer — guided resolution/ });
-    fireEvent.change(within(dialog).getByRole("combobox", { name: "The player publicly chosen" }), { target: { value: "p1" } });
+    choose("The player publicly chosen", "p1", dialog);
     const preview = within(dialog).getByRole("region", { name: "Result" });
     expect(within(preview).getByText("Player 0's ability is used")).toBeInTheDocument();
     expect(within(preview).getByText("Player 1 dies")).toBeInTheDocument();
@@ -126,9 +127,9 @@ describe("Al-Hadikhia -- ordered choices in the workspace", () => {
     fireEvent.click(within(card("Al-Hadikhia", "Player 0")).getByRole("button", { name: "Guide" }));
     const ws = workspace();
     const label = "The 3 players chosen, in order (or nobody)";
-    fireEvent.change(within(ws).getByRole("combobox", { name: `${label} 1` }), { target: { value: "p3" } });
-    fireEvent.change(within(ws).getByRole("combobox", { name: `${label} 2` }), { target: { value: "p1" } });
-    fireEvent.change(within(ws).getByRole("combobox", { name: `${label} 3` }), { target: { value: "p4" } });
+    choose(`${label} 1`, "p3", ws);
+    choose(`${label} 2`, "p1", ws);
+    choose(`${label} 3`, "p4", ws);
     const live = (name: string) => within(within(ws).getByRole("radiogroup", { name })).getByRole("radio", { name: "Yes" });
     expect(within(ws).queryByRole("radiogroup", { name: /^2\./ })).toBeNull();
     fireEvent.click(live("1. Player 3 chooses to LIVE (No: chooses to die)"));
@@ -158,12 +159,12 @@ describe("Ravenkeeper -- the trigger surfaces immediately after the death", () =
     expect(screen.queryByRole("region", { name: "Triggered now" })).toBeNull();
     expect(within(card("Ravenkeeper", "Player 0")).getByText(/Not triggered/)).toBeInTheDocument();
     fireEvent.click(within(card("Imp", "Player 1")).getByRole("button", { name: "Guide" }));
-    fireEvent.change(within(workspace()).getByRole("combobox", { name: "The player to kill" }), { target: { value: "p0" } });
+    choose("The player to kill", "p0", workspace());
     fireEvent.click(within(workspace()).getByRole("button", { name: "Confirm and record" }));
     expect(game().players.p0!.alive).toBe(false);
     const strip = screen.getByRole("region", { name: "Triggered now" });
     fireEvent.click(within(strip).getByRole("button", { name: "Guide" }));
-    fireEvent.change(within(workspace()).getByRole("combobox", { name: "The player chosen" }), { target: { value: "p2" } });
+    choose("The player chosen", "p2", workspace());
     expect(within(workspace()).getByText(/Record what Player 0 was told: Player 2 · Chef/)).toBeInTheDocument();
     fireEvent.click(within(workspace()).getByRole("button", { name: "Resolve" }));
     expect(game().informationDeliveries.at(-1)).toMatchObject({ informationActionId: "ravenkeeper-triggered" });

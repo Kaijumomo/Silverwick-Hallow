@@ -13,6 +13,7 @@ import { makeSTPlayer } from "@/test/fixtures";
 import type { AbilityDescriptor, AbilityEvaluationContext, AbilitySemanticsRegistry } from "@/abilities/semantics";
 import type { AbilityResolutionRequest } from "@/stores/abilityResolution";
 import type { Script, StorytellerLobbyRecord } from "@/stores/types";
+import { choose, hasChoice, offered } from "@/test/pickers";
 
 const script: Script = { id: "typed-test", name: "Typed test", characters: canonicalRoles(["washerwoman", "chef", "empath", "imp", "librarian", "monk"]) };
 const registry = buildRegistry(script);
@@ -55,7 +56,7 @@ beforeEach(() => {
   const players = roles.map((actualRole, seat) => makeSTPlayer({ id: `p${seat}`, name: ["Ann", "Ben", "Cat", "Dan", "Eli"][seat]!, seat,
     actualRole, shownRole: actualRole, actualAlignment: registry.alignmentOf(actualRole), alive: seat !== 2 }));
   const g: StorytellerLobbyRecord = {
-    gameSchemaVersion: 25, gameRuleFacts: [], code: "", storytellerUid: "local", scriptId: script.id, phase: "night", day: 1,
+    gameSchemaVersion: 26, gameRuleFacts: [], code: "", storytellerUid: "local", scriptId: script.id, phase: "night", day: 1,
     players: Object.fromEntries(players.map((p) => [p.id, p])), seatOrder: players.map((p) => p.id),
     plannedPlayerCount: 5, plannedTravelerCount: 0, rolePool: [], fabled: [], lorics: [], bluffs: [], notes: "", nightProgress: {}, pendingPlayers: {},
     history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] }, setupRolesDealt: true, setupRolesRevealed: true,
@@ -73,7 +74,6 @@ function open(descriptor: AbilityDescriptor, actorId: string) {
   render(<Host />);
   return screen.getByRole("dialog");
 }
-const options = (select: HTMLElement) => [...(select as HTMLSelectElement).options].filter((o) => o.value).map((o) => ({ value: o.value, disabled: o.disabled }));
 
 describe("SOL-10F-L2: every input kind, cardinality and constraint", () => {
   it("renders each kind faithfully and passes exactly the declared typed payload to the coordinator", () => {
@@ -86,23 +86,20 @@ describe("SOL-10F-L2: every input kind, cardinality and constraint", () => {
 
     // participant, count 2, distinct + notSelf + alive: exactly two pickers;
     // the actor (p0) and the dead p2 are not offered.
-    const pair1 = within(dialog).getByRole("combobox", { name: "the pair 1" });
-    const pair2 = within(dialog).getByRole("combobox", { name: "the pair 2" });
-    expect(within(dialog).queryByRole("combobox", { name: "the pair 3" })).toBeNull();
-    expect(options(pair1).map((o) => o.value)).toEqual(["p1", "p3", "p4"]);
+    expect(hasChoice("the pair 1", dialog) && hasChoice("the pair 2", dialog)).toBe(true);
+    expect(hasChoice("the pair 3", dialog)).toBe(false);
+    expect(offered("the pair 1", dialog).map((o) => o.value)).toEqual(["p1", "p3", "p4"]);
     expect(within(dialog).getByText(/choose 2 \(all different, not themself, living players only\)/)).toBeInTheDocument();
-    fireEvent.change(pair1, { target: { value: "p1" } });
-    expect(options(pair2).find((o) => o.value === "p1")!.disabled).toBe(true); // distinct
-    fireEvent.change(pair2, { target: { value: "p3" } });
+    choose("the pair 1", "p1", dialog);
+    expect(offered("the pair 2", dialog).find((o) => o.value === "p1")!.disabled).toBe(true); // distinct
+    choose("the pair 2", "p3", dialog);
     // participant, dead only.
-    const deadOne = within(dialog).getByRole("combobox", { name: "a dead player" });
-    expect(options(deadOne).map((o) => o.value)).toEqual(["p2"]);
-    fireEvent.change(deadOne, { target: { value: "p2" } });
-    // character, count 2: a real character picker from the active script.
-    const char1 = within(dialog).getByRole("combobox", { name: "the characters 1" });
-    expect(options(char1).map((o) => o.value)).toEqual(expect.arrayContaining(["washerwoman", "chef", "imp", "monk"]));
-    fireEvent.change(char1, { target: { value: "chef" } });
-    fireEvent.change(within(dialog).getByRole("combobox", { name: "the characters 2" }), { target: { value: "imp" } });
+    expect(offered("a dead player", dialog).map((o) => o.value)).toEqual(["p2"]);
+    choose("a dead player", "p2", dialog);
+    // character, count 2: a real (searchable) character picker from the active script.
+    expect(offered("the characters 1", dialog).map((o) => o.value)).toEqual(expect.arrayContaining(["washerwoman", "chef", "imp", "monk"]));
+    choose("the characters 1", "chef", dialog);
+    choose("the characters 2", "imp", dialog);
     // alignment: typed choice.
     fireEvent.click(within(within(dialog).getByRole("radiogroup", { name: "the alignment" })).getByLabelText("Evil"));
     // number: empty is NOT 0.
@@ -146,11 +143,9 @@ describe("SOL-10F-L2: every input kind, cardinality and constraint", () => {
     const judgment = within(dialog).getByRole("region", { name: "Storyteller judgment" });
     expect(within(judgment).queryByRole("checkbox")).toBeNull();
     expect(within(judgment).getByText("Storyteller judgment", { selector: ".origin-tag" })).toBeInTheDocument();
-    const first = within(judgment).getByRole("combobox", { name: "the judged pair 1" });
-    const second = within(judgment).getByRole("combobox", { name: "the judged pair 2" });
-    fireEvent.change(first, { target: { value: "p0" } });
-    expect(options(second).find((o) => o.value === "p0")!.disabled).toBe(true);
-    fireEvent.change(second, { target: { value: "p1" } });
+    choose("the judged pair 1", "p0", judgment);
+    expect(offered("the judged pair 2", judgment).find((o) => o.value === "p0")!.disabled).toBe(true);
+    choose("the judged pair 2", "p1", judgment);
     expect(seen.at(-1)!.judgments.judged).toEqual({ kind: "participant",
       participants: [{ playerId: "p0", participantId: game().players.p0!.participantId }, { playerId: "p1", participantId: game().players.p1!.participantId }] });
     // The asked field stays visible once answered, so it can be changed.

@@ -4,9 +4,9 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
-const close = vi.fn<() => Promise<void>>();
+const close = vi.fn<() => Promise<{ alreadyEnded: boolean }>>();
 vi.mock("@/firebase/storytellerSync", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/firebase/storytellerSync")>();
   return { ...actual, closeMultiplayerSession: () => close() };
@@ -23,6 +23,7 @@ import { buildRegistry } from "@/data/roleRegistry";
 import { setupGame, setupScript } from "@/test/setupFixtures";
 import { useTargetPicker } from "@/features/abilities/abilityUi";
 import type { StorytellerLobbyRecord } from "@/stores/types";
+import { finishGame } from "@/test/finishGame";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -42,7 +43,7 @@ beforeEach(() => {
   vi.stubGlobal("matchMedia", vi.fn((query: string) => ({ media: query, get matches() { return narrow; }, addEventListener() {}, removeEventListener() {} })));
   vi.spyOn(window, "confirm").mockReturnValue(true);
   close.mockReset();
-  close.mockResolvedValue(undefined);
+  close.mockResolvedValue({ alreadyEnded: false });
   usePrivacyStore.setState({ enabled: false });
   useSessionRuntime.setState({ backend: null });
   useTargetPicker.setState({ active: null });
@@ -65,7 +66,7 @@ describe("Finish Game is terminal and distinct from Setup discard", () => {
   it("offline: Finish game retains the read-only ended snapshot (no Undo, no live controls)", async () => {
     state().setAbilityUsed("p0", true);
     render(<GameScreen />);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Finish game" })); });
+    await finishGame();
     expect(game().phase).toBe("ended");
     expect(game().players.p0!.abilityUsed).toBe(true);
     expect(state().undoStack).toEqual([]);
@@ -81,7 +82,7 @@ describe("Finish Game is terminal and distinct from Setup discard", () => {
     close.mockRejectedValue(new Error("close failed"));
     const before = game();
     render(<GameScreen />);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Finish game" })); });
+    await finishGame();
     expect(game()).toBe(before);
     expect(state().lobby).not.toBeNull();
     expect(screen.getByRole("button", { name: "Finish game" })).toBeInTheDocument();
@@ -89,9 +90,9 @@ describe("Finish Game is terminal and distinct from Setup discard", () => {
 
   it("a successful authoritative close (which detaches the lobby) is followed by the terminal finish", async () => {
     store.setState({ lobby: { code: "ABCD", uid: "st", sessionId: "s1", status: "live" } });
-    close.mockImplementation(async () => { store.getState().setLobby(null); });
+    close.mockImplementation(async () => { store.getState().setLobby(null); return { alreadyEnded: false }; });
     render(<GameScreen />);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Finish game" })); });
+    await finishGame();
     expect(close).toHaveBeenCalledTimes(1);
     expect(game().phase).toBe("ended");
     expect(state().lobby).toBeNull();
@@ -103,7 +104,7 @@ describe("10G-AC-37: the ended review is inspectable and read-only", () => {
     state().recordDeath("p2");
     state().addReminder("p2", { label: "Knows" });
     state().addReminder("p2", { label: "Knows" });
-    state().finishGame();
+    state().finishGame({ kind: "noResult" });
   });
 
   it("a participant opens a read-only final-state view (no drawer controls)", () => {
@@ -114,6 +115,7 @@ describe("10G-AC-37: the ended review is inspectable and read-only", () => {
     expect(dialog).toHaveTextContent("Knows ×2");
     expect(within(dialog).queryByRole("textbox")).toBeNull();
     expect(within(dialog).queryByRole("combobox")).toBeNull();
+    expect(dialog.querySelector("[data-pick-slot], [data-role-picker]")).toBeNull();
     expect(screen.queryByText("Danger zone")).toBeNull();
   });
 
@@ -155,11 +157,11 @@ describe("10G-AC-47: narrow viewport -- new surfaces stay operable", () => {
     const monk = screen.getAllByText("Monk", { selector: ".step-role-name" })[0]!.closest(".step-card") as HTMLElement;
     const sheet = screen.getByRole("complementary", { name: "Night 2 order" });
     expect(sheet).not.toHaveClass("night-panel-picking");
-    fireEvent.click(within(monk).getByRole("button", { name: "Pick on Grimoire" }));
+    fireEvent.click(within(monk).getByRole("button", { name: /^Choose .+ on the Table$/ }));
     // The phone bottom sheet steps aside while picking (CSS below) ...
     expect(sheet).toHaveClass("night-panel-picking");
     fireEvent.click(screen.getByRole("button", { name: /^Carol, seat 3/ }));
-    expect(within(monk).getByRole("combobox")).toHaveValue("p2");
+    expect(monk.querySelector("[data-pick-slot]")!.getAttribute("data-chosen-player")).toBe("p2");
     // ... and returns, with the choice kept, once the pick ends.
     expect(sheet).not.toHaveClass("night-panel-picking");
   });

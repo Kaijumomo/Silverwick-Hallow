@@ -4,7 +4,7 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import type { PlayerSelfRecord, PublicLobbyRecord, RoleId } from "./types";
+import type { GameResult, PlayerSelfEnvelope, PublicLobbyRecord, RoleId } from "./types";
 
 export type PlayerStatus =
   | "idle"
@@ -19,7 +19,24 @@ export type PlayerStatus =
   | "rejected"
   | "revoked"
   | "notFound"
-  | "leaving";
+  | "leaving"
+  /** Phase 10H (contract §16): the Storyteller has begun the terminal close
+   * (public/status = ended) but the session has not ended yet. Context is
+   * preserved; the session's end resolves it. */
+  | "ending";
+
+/**
+ * Phase 10H (contract §16): the player-safe terminal result of the finished
+ * session, read from this player's own results/{uid} after the session ended.
+ * Runtime only (re-read after a reload). "none": no recorded result (End
+ * Without Result, or not a participant) -- the generic Game Ended screen;
+ * "error": the read failed -- retryable, never shown as "none".
+ */
+export type PlayerTerminalResult =
+  | { status: "pending" }
+  | { status: "ready"; result: GameResult }
+  | { status: "none" }
+  | { status: "error"; message: string };
 
 export type TownNoteConfidence = "suspect" | "likely" | "confirm";
 
@@ -46,21 +63,43 @@ export type PlayerStore = {
   requestedName: string | null;
   status: PlayerStatus;
   error: string | null;
-  self: PlayerSelfRecord | null;
+  self: PlayerSelfEnvelope | null;
   publicLobby: PublicLobbyRecord | null;
   // UX flag — has the player tapped to reveal their sealed-card role yet?
+  // Phase 10H (F2, 10H-AC-030): runtime only -- never persisted, reset by
+  // every handshake (reload, reconnect, re-attach) and by a reveal-token
+  // change, so the card always re-seals.
   revealed: boolean;
   townNotes: TownNoteMap;
+  /** Phase 10H: the id of the session this player joined, captured from the
+   * active session record; the terminal result must name it (10H-AC-056).
+   * Persisted with the rest of the terminal context until Back to Start. */
+  sessionId: string | null;
+  /** Phase 10H: this player's own advisory acknowledgement (the reveal token
+   * stored at revealAcks/{uid}); null when none or unreadable. Runtime only. */
+  ownRevealAck: string | null;
+  /** Phase 10H: runtime terminal result state (see PlayerTerminalResult). */
+  terminalResult: PlayerTerminalResult | null;
 
   setStatus: (status: PlayerStatus, error?: string | null) => void;
   setSession: (s: { code: string; uid: string; requestedName: string }) => void;
   setPlayerId: (id: string | null) => void;
-  setSelf: (self: PlayerSelfRecord | null) => void;
+  setSelf: (self: PlayerSelfEnvelope | null) => void;
   setPublic: (p: PublicLobbyRecord | null) => void;
   setRevealed: (revealed: boolean) => void;
   setTownNote: (code: string, seatId: string, note: TownNote | null) => void;
-  /** Called when the live lobby ends. Clears session so localStorage is clean; sets status="ended". */
+  setSessionId: (sessionId: string | null) => void;
+  setOwnRevealAck: (token: string | null) => void;
+  setTerminalResult: (result: PlayerTerminalResult | null) => void;
+  /** Called when the live session ends. Phase 10H (contract §16; amends the
+   * 10G "clear the session" behavior): the terminal context -- lobby code,
+   * uid, seat, session id and Town notes -- is RETAINED so the player can read
+   * their result and review their notes after teardown, and so a reload
+   * recovers the result. Private identity is cleared. Only Back to Start
+   * (reset) clears the context. */
   setEnded: () => void;
+  /** Back to Start: clears the session/terminal context and the finished
+   * game's local Town notes (10H-AC-058). */
   reset: () => void;
 };
 
@@ -70,7 +109,7 @@ const isEmpty = (note: TownNote): boolean =>
   note.confidence === null && note.roles.length === 0 && note.text.trim().length === 0;
 
 export function migratePlayerState(state: unknown, fromVersion: number): unknown {
-  const s = state as { townNotes?: Record<string, unknown> };
+  const s = state as { townNotes?: Record<string, unknown>; revealed?: unknown };
   if (fromVersion < 3) {
     // Convert old { text, tag } notes to new { confidence, roles, text } shape.
     // Old "good"/"evil"/"unsure" tags have no direct mapping; drop them.
@@ -87,6 +126,9 @@ export function migratePlayerState(state: unknown, fromVersion: number): unknown
       s.townNotes = converted;
     }
   }
+  // Phase 10H (F2, 10H-AC-030): the reveal UX flag is no longer persisted --
+  // a stored "revealed" from v3 must never re-open the card after a reload.
+  if (fromVersion < 4) delete s.revealed;
   return state;
 }
 
@@ -105,10 +147,14 @@ export const usePlayerStore = create<PlayerStore>()(
       publicLobby: null,
       revealed: false,
       townNotes: {},
+      sessionId: null,
+      ownRevealAck: null,
+      terminalResult: null,
 
       setStatus: (status, error = null) => set({ status, error }),
       setSession: ({ code, uid, requestedName }) =>
         set({ code, uid, requestedName, playerId: null, error: null, self: null, publicLobby: null,
+          sessionId: null, ownRevealAck: null, terminalResult: null, revealed: false,
           remoteData: { public: "waiting", self: "waiting", membership: "ready", request: "ready" } }),
       setPlayerId: (id) => set({ playerId: id }),
       setSelf: (self) => set({ self }),
@@ -129,44 +175,56 @@ export const usePlayerStore = create<PlayerStore>()(
           }
           return { townNotes: next };
         }),
+      setSessionId: (sessionId) => set({ sessionId }),
+      setOwnRevealAck: (ownRevealAck) => set({ ownRevealAck }),
+      setTerminalResult: (terminalResult) => set({ terminalResult }),
       setEnded: () =>
         set({
           remoteData: { public: "waiting", self: "waiting", membership: "ready", request: "ready" },
-          code: null,
-          uid: null,
-          playerId: null,
-          requestedName: null,
           status: "ended",
           error: null,
           self: null,
-          publicLobby: null,
           revealed: false,
+          ownRevealAck: null,
         }),
       reset: () =>
-        set({
-          remoteData: { public: "waiting", self: "waiting", membership: "ready", request: "ready" },
-          code: null,
-          uid: null,
-          playerId: null,
-          requestedName: null,
-          status: "idle",
-          error: null,
-          self: null,
-          publicLobby: null,
-          revealed: false,
+        set((s) => {
+          const prefix = s.code ? `${s.code}:` : null;
+          const townNotes = prefix
+            ? Object.fromEntries(Object.entries(s.townNotes).filter(([key]) => !key.startsWith(prefix)))
+            : s.townNotes;
+          return {
+            remoteData: { public: "waiting", self: "waiting", membership: "ready", request: "ready" },
+            code: null,
+            uid: null,
+            playerId: null,
+            requestedName: null,
+            status: "idle",
+            error: null,
+            self: null,
+            publicLobby: null,
+            revealed: false,
+            sessionId: null,
+            ownRevealAck: null,
+            terminalResult: null,
+            townNotes,
+          };
         }),
     }),
     {
       name: "new-blood-player",
-      version: 3,
+      version: 4,
       storage: createJSONStorage(() => localStorage),
       migrate: migratePlayerState,
+      // Phase 10H: `revealed` is deliberately absent (always re-seal), and the
+      // terminal context (code, uid, seat, session id, Town notes) persists
+      // until Back to Start.
       partialize: (s) => ({
         code: s.code,
         uid: s.uid,
         playerId: s.playerId,
         requestedName: s.requestedName,
-        revealed: s.revealed,
+        sessionId: s.sessionId,
         townNotes: s.townNotes,
       }),
     }

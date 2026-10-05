@@ -8,6 +8,7 @@ import { computeNightOrder } from "@/features/nightOrder/nightOrder";
 import { participantStepKey } from "@/stores/nightProgress";
 import { buildRegistry } from "@/data/roleRegistry";
 import type { EffectRecord, StorytellerLobbyRecord } from "@/stores/types";
+import { withoutRevealTokens } from "@/test/revealTokens";
 
 // p0 imp, p1 poisoner, p2 scarletwoman, p3 monk, p4 chef, p5 empath, p6 saint  (7 alive non-Travellers)
 const ROLES = ["imp", "poisoner", "scarletwoman", "monk", "chef", "empath", "saint"];
@@ -165,6 +166,8 @@ describe("Imp -- one commit and Undo", () => {
     expect(store.getState().undoStack).toHaveLength(1);
     expect(store.getState().localSeq).toBe(6);
     store.getState().undo();
-    expect(store.getState().game).toEqual(g);
+    // Phase 10H: every field restored exactly; a reverted visible identity
+    // carries a freshly minted reveal token (contract §12.2).
+    expect(withoutRevealTokens(store.getState().game)).toEqual(withoutRevealTokens(g));
   });
 });

@@ -16,7 +16,7 @@ import { createRulesQuery } from "./rulesQuery";
 import { detectLegacyGameVersion, hasV25Evidence, migrateGameEntry } from "./gameMigration";
 import { GameRuleFactHistoryRecordSchema, HistoryRecordSchema, StorytellerGamePersistedSchema } from "./schemas";
 import { setupGame, setupScript } from "@/test/setupFixtures";
-import { asV24, withV25RuleFacts } from "@/test/v20Migration";
+import { asV24, withV25ToCurrent } from "@/test/v20Migration";
 import { buildRegistry } from "@/data/roleRegistry";
 import type { GameRuleFactRecord, StorytellerLobbyRecord } from "./types";
 
@@ -55,7 +55,7 @@ describe("10G-AC-01 / AC-02: the registry and v25 authoritative state", () => {
   it("a new game starts with an empty, validated collection", () => {
     state().newGame(setupScript.id, { plannedPlayerCount: 5 });
     expect(game().gameRuleFacts).toEqual([]);
-    expect(game().gameSchemaVersion).toBe(25);
+    expect(game().gameSchemaVersion).toBe(26);
     expect(StorytellerGamePersistedSchema.safeParse(game()).success).toBe(true);
   });
 
@@ -351,7 +351,7 @@ describe("10G-AC-44: v24 -> v25 migration (Current State, Undo, checkpoint recov
     expect(detectLegacyGameVersion(v24)).toBe(24);
     const copy = structuredClone(v24);
     migrateGameEntry(copy, 24, { kind: "canonical-only" });
-    expect(copy).toEqual(withV25RuleFacts(v24));
+    expect(copy).toEqual(withV25ToCurrent(v24));
     expect(copy.history).toEqual(v24.history);
     expect(copy.informationDeliveries).toEqual(v24.informationDeliveries);
     expect((copy.informationDeliveries as Raw[])[0]).not.toHaveProperty("kind");
@@ -367,8 +367,8 @@ describe("10G-AC-44: v24 -> v25 migration (Current State, Undo, checkpoint recov
     const v24 = asV24(current) as unknown as Raw;
     const result = migrateStoreState({ game: structuredClone(v24), undoStack: [structuredClone(v24), structuredClone(v24)] }, 24) as { game: Raw; undoStack: Raw[] };
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(result.game).toEqual(withV25RuleFacts(v24));
-    for (const entry of result.undoStack) expect(entry).toEqual(withV25RuleFacts(v24));
+    expect(result.game).toEqual(withV25ToCurrent(v24));
+    for (const entry of result.undoStack) expect(entry).toEqual(withV25ToCurrent(v24));
     const checkpoint = structuredClone(v24);
     migrateGameEntry(checkpoint, detectLegacyGameVersion(checkpoint)!, { kind: "canonical-only" });
     expect(checkpoint).toEqual(result.game);

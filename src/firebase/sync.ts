@@ -1,6 +1,7 @@
 import {
   projectLobbyToPublic,
   projectLobbyToSelfMap,
+  selfEnvelopeOf,
   type OnlineMap,
 } from "@/stores/projections";
 import type { RoleRegistry } from "@/data/roleRegistry";
@@ -54,7 +55,10 @@ export async function writeProjections(ctx: WriteContext): Promise<void> {
 
   const selfMap = projectLobbyToSelfMap(stState, registry);
   for (const [playerId, self] of Object.entries(selfMap)) {
-    updates[playerPath(code, playerId)] = self as unknown as Json;
+    // Phase 10H: the delivered record carries the self envelope (this
+    // participation's reveal token and the player's own Life); the packet
+    // acknowledgement below still compares the bare allowlisted record.
+    updates[playerPath(code, playerId)] = selfEnvelopeOf(stState.players[playerId]!, self) as unknown as Json;
   }
   // Withdraw stale records when shown identity is cleared, even if actual
   // identity still exists. The player returns to the neutral waiting state.

@@ -38,6 +38,7 @@ import { startStorytellerSession } from "./storytellerSync";
 import { SnapshotValidationError } from "./snapshots";
 import { validateFirebaseWritableValue } from "./firebaseWriteCompatibility";
 import { asV19 } from "@/test/v20Migration";
+import { withoutSelfEnvelope } from "@/test/revealTokens";
 
 let env: RulesTestEnvironment;
 beforeAll(async () => {
@@ -442,7 +443,7 @@ describe("Firebase RTDB membership authorization", () => {
 
     expect((await ref(st, "leaveRequests/" + alice).once("value")).exists()).toBe(false);
     expect((await ref(st, "roster/" + alice).once("value")).val()).toBe("p-alice");
-    expect((await ref(alice, "player/p-alice").once("value")).val()).toEqual({ shownRole: "chef", shownAlignment: "good" });
+    expect(withoutSelfEnvelope((await ref(alice, "player/p-alice").once("value")).val())).toEqual({ shownRole: "chef", shownAlignment: "good" });
     expect((await ref(st, "outcomes/" + alice).once("value")).exists()).toBe(false);
   });
 
@@ -959,7 +960,7 @@ describe("Firebase RTDB membership authorization", () => {
     const metadata = (await ref(st, "session").once("value")).val();
     const writer = new SessionWriter(raw, code, metadata.id);
     const game: StorytellerLobbyRecord = {
-      gameSchemaVersion: 25, gameRuleFacts: [], code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
+      gameSchemaVersion: 26, gameRuleFacts: [], code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
       notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {}, history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       rolePool: [], plannedPlayerCount: 1, plannedTravelerCount: 0, pendingPlayers: {}, seatOrder: ["p-alice"],
       // This test isolates identity delivery through the real writer/rules,
@@ -983,7 +984,7 @@ describe("Firebase RTDB membership authorization", () => {
       game.players["p-alice"]!.shownAlignment = null;
       await publish();
       const self = (await ref(alice, "player/p-alice").once("value")).val();
-      expect(self).toEqual({ shownRole: shown, shownAlignment: alignment });
+      expect(withoutSelfEnvelope(self)).toEqual({ shownRole: shown, shownAlignment: alignment });
       expect(JSON.stringify(self)).not.toContain(actual);
       await assertFails(ref(bob, "player/p-alice").once("value"));
       await assertFails(ref(alice, "storyteller").once("value"));
@@ -1003,7 +1004,7 @@ describe("Firebase RTDB membership authorization", () => {
     const metadata = (await ref(st, "session").once("value")).val();
     const writer = new SessionWriter(raw, code, metadata.id);
     const game: StorytellerLobbyRecord = {
-      gameSchemaVersion: 25, gameRuleFacts: [], code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
+      gameSchemaVersion: 26, gameRuleFacts: [], code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
       notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {}, history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       rolePool: [], plannedPlayerCount: 2, plannedTravelerCount: 0, pendingPlayers: {}, seatOrder: ["p-alice", "p-bob"],
       // This test isolates the completeness barrier, not Setup deal/reveal
@@ -1061,8 +1062,8 @@ describe("Firebase RTDB membership authorization", () => {
 
       const aliceSelf = { shownRole: "imp", shownAlignment: "evil" };
       const bobSelf = { shownRole: "chef", shownAlignment: "good" };
-      expect((await ref(alice, "player/p-alice").once("value")).val()).toEqual(aliceSelf);
-      expect((await ref(bob, "player/p-bob").once("value")).val()).toEqual(bobSelf);
+      expect(withoutSelfEnvelope((await ref(alice, "player/p-alice").once("value")).val())).toEqual(aliceSelf);
+      expect(withoutSelfEnvelope((await ref(bob, "player/p-bob").once("value")).val())).toEqual(bobSelf);
       await assertFails(ref(alice, "player/p-bob").once("value"));
       await assertFails(ref(bob, "player/p-alice").once("value"));
 
@@ -1072,8 +1073,8 @@ describe("Firebase RTDB membership authorization", () => {
       // player had a published identity while the other stayed withheld.
       await vi.waitFor(() => { if (!aliceValues.length || aliceValues.at(-1) === null) throw new Error("Alice's live listener has not converged yet"); });
       await vi.waitFor(() => { if (!bobValues.length || bobValues.at(-1) === null) throw new Error("Bob's live listener has not converged yet"); });
-      expect(aliceValues.at(-1)).toEqual(aliceSelf);
-      expect(bobValues.at(-1)).toEqual(bobSelf);
+      expect(withoutSelfEnvelope(aliceValues.at(-1))).toEqual(aliceSelf);
+      expect(withoutSelfEnvelope(bobValues.at(-1))).toEqual(bobSelf);
     } finally {
       aliceRecord.off();
       bobRecord.off();
@@ -1119,12 +1120,12 @@ describe("Firebase RTDB membership authorization", () => {
       await seatPlayer(writer, code, bob, other, null);
       await writeProjections({ backend: writer, code, stState: store.getState().game!,
         registry: buildRegistry(tbScript), online: {}, membership: { [alice]: id, [bob]: other } });
-      expect((await ref(alice, `player/${id}`).once("value")).val()).toEqual({ shownRole: "imp", shownAlignment: "evil" });
+      expect(withoutSelfEnvelope((await ref(alice, `player/${id}`).once("value")).val())).toEqual({ shownRole: "imp", shownAlignment: "evil" });
       await assertFails(ref(alice, `storyteller/players/${id}/privateInfo`).once("value"));
       await assertFails(ref(alice, "checkpoint").once("value"));
       await publishPrivatePacket(id, reviewed, writer);
       const payload = (await ref(alice, `player/${id}`).once("value")).val();
-      expect(payload).toEqual(preview);
+      expect(withoutSelfEnvelope(payload)).toEqual(preview);
       expect(payload.minions).toEqual([{ id: other, name: "Bob", seat: 1 }]);
       for (const secret of ["actualRole", "actualAlignment", "lunatic", "behaviorMode", "stNotes", "packetPreview", "publishedPacket"])
         expect(JSON.stringify(payload)).not.toContain(secret);
@@ -1171,7 +1172,7 @@ describe("Firebase RTDB membership authorization", () => {
       await flush();
       const pub = (await ref(bob, `public/players/${id}`).once("value")).val();
       expect(pub.publicDisplayRole).toBe("thief"); expect(pub.actualAlignment).toBeUndefined();
-      expect((await ref(alice, `player/${id}`).once("value")).val()).toEqual({ shownRole: "thief", shownAlignment: "evil" });
+      expect(withoutSelfEnvelope((await ref(alice, `player/${id}`).once("value")).val())).toEqual({ shownRole: "thief", shownAlignment: "evil" });
       await assertFails(ref(alice, `storyteller/players/${id}/actualAlignment`).once("value"));
       await assertFails(ref(alice, "checkpoint").once("value"));
       await assertFails(ref(alice, `storyteller/players/${id}/actualAlignment`).set("good"));

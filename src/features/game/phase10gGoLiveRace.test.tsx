@@ -29,6 +29,7 @@ import { SessionWriter } from "@/firebase/writer";
 import { buildRegistry } from "@/data/roleRegistry";
 import { setupGame, setupScript } from "@/test/setupFixtures";
 import type { StorytellerLobbyRecord } from "@/stores/types";
+import { finishGame } from "@/test/finishGame";
 
 const state = () => store.getState();
 const registry = buildRegistry(setupScript);
@@ -85,7 +86,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 const clickGoLive = () => fireEvent.click(screen.getByRole("button", { name: "Go live" }));
-const clickFinish = async () => { await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Finish game" })); }); };
+const clickFinish = async () => { await finishGame(); };
 const settle = async () => { await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 
 describe("ASTRA-10G-001: the Go Live continuation revalidates its game", () => {
@@ -167,7 +168,7 @@ describe("ASTRA-10G-001: the Go Live continuation revalidates its game", () => {
 
 describe("ASTRA-10G-001: store boundaries refuse an ended game's multiplayer scope", () => {
   it("setLobby refuses to attach a lobby to an ended game (nothing changes); detaching still works", () => {
-    state().finishGame();
+    state().finishGame({ kind: "noResult" });
     const before = { game: state().game, undo: state().undoStack, seq: state().localSeq };
     expect(state().setLobby({ code: "LATE1234", uid: UID, sessionId: "s1", status: "live" })).toBe(false);
     expect(state().lobby).toBeNull();
@@ -199,7 +200,7 @@ describe("ASTRA-10G-001: an ended game can never start a Storyteller writer", ()
     const lobby = await liveLobby(b);
     const ended = liveGame({ phase: "ended", code: lobby.code, storytellerUid: UID });
     store.setState({ game: null, lobby: null });
-    localStorage.setItem(KEY, JSON.stringify({ state: { game: ended, undoStack: [], customScripts: { [setupScript.id]: setupScript }, view: "game", lobby, localSeq: 1, sync: null }, version: 25 }));
+    localStorage.setItem(KEY, JSON.stringify({ state: { game: ended, undoStack: [], customScripts: { [setupScript.id]: setupScript }, view: "game", lobby, localSeq: 1, sync: null }, version: 26 }));
     await store.persist.rehydrate();
     expect(takeMigrationResetFlag()).toBe(false);
     expect(state().game!.phase).toBe("ended");

@@ -10,6 +10,7 @@ import { BagEditor } from "./BagEditor";
 import { EditBagPanel } from "./EditBagPanel";
 import { currentDealtBag } from "./setupRefinement";
 import { FABLED } from "@/data/fabled";
+import { PreparationRows, PrivateRevealReadiness, SetupStageIndicator, setupStageOf } from "./SetupStages";
 import { LORICS } from "@/data/lorics";
 import type { RoleId, Script, StorytellerLobbyRecord } from "@/stores/types";
 
@@ -83,8 +84,11 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
     deal: "Deal roles", reveal: "Reveal Roles", begin: "Begin Night 1",
   }[view.next];
   const primaryDisabled = view.next === "reveal" && !view.revealReadiness?.ready;
+  const pendingReveal = view.revealReadiness?.pendingIds.length ?? 0;
   const messageReady = view.next === "reveal" ? !!view.revealReadiness?.ready : view.ready.ok;
+  const stage = setupStageOf(view.next, !!game.setupRolesRevealed);
   const body = <div className={`setup-panel-body setup-refined${editing ? " setup-editing" : ""}`}>
+    <SetupStageIndicator stage={stage} />
     <div className="setup-overview">
       <div className="setup-player-heading">
         {/* FINAL SEAT & TRAVELLER RESERVATION CLOSURE, Section 1: display
@@ -112,10 +116,17 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
         <span>{view.checks.some(f => f.severity === "check") ? "Storyteller check" : "Review roles"}</span>
         {findingSummary(view.checks[0]!)}
       </button>}
-      <button ref={primary} className="btn btn-gold setup-primary" aria-describedby="setup-next-step"
+      <button ref={primary} className="btn btn-gold setup-primary"
+        aria-describedby={primaryDisabled ? "setup-next-step setup-primary-reason" : "setup-next-step"}
         disabled={primaryDisabled} onClick={run}>{actionLabel}</button>
+      {/* 10H-AC-067: a disabled primary says why, adjacent and in words. */}
+      {primaryDisabled && <p id="setup-primary-reason" className="disabled-reason">
+        {pendingReveal === 1 ? "1 player still needs" : `${pendingReveal} players still need`} a shown role before Reveal Roles.
+      </p>}
       {error && <p role="alert" className="field-error">{error}</p>}
     </div>
+    {stage === "prepare" && !editingBag && <PreparationRows game={game} pendingIds={view.revealReadiness?.pendingIds ?? []} />}
+    {stage === "reveal" && <PrivateRevealReadiness game={game} live={!!store.lobby} />}
     {view.next === "reveal" && !editingBag && (
       <div className="setup-refine-toolbar">
         <button className="btn btn-sm" onClick={shuffleRoles}>Shuffle Roles</button>
@@ -153,7 +164,7 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
   return foreground ? <Modal title="Setup" closeLabel="Close setup panel" onClose={onClose}
     className="setup-workspace" returnFocusRef={returnFocusRef}>{body}</Modal> : <aside className="setup-panel" aria-label="Setup helper">
     <div className="setup-panel-header"><h2 className="setup-panel-title">Setup</h2>
-      <button className="btn btn-sm" onClick={onClose} aria-label="Close setup panel">✕</button>
+      <button className="btn btn-sm" onClick={() => { onClose(); returnFocusRef?.current?.focus({ preventScroll: true }); }} aria-label="Close setup panel">✕</button>
     </div>{body}
   </aside>;
 }

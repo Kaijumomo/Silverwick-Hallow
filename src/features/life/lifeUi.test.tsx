@@ -11,6 +11,7 @@ import { projectLobbyToPublic } from "@/stores/projections";
 import { DayResolutionPanel, DuskReview } from "./DayResolution";
 import { LifeEventsPanel } from "./LifeEventsPanel";
 import type { PlayerId } from "@/stores/types";
+import { choose, chooseSegmentValue, offered, segmentGroup, segmentValue } from "@/test/pickers";
 
 // Phase 10A: the visual life grammar, its textual/accessible equivalents,
 // Privacy Mode, and the Day Resolution / correction workflows.
@@ -130,10 +131,10 @@ describe("Phase 10A: drawer life controls", () => {
     expect(player(carol).isTraveler).toBe(false);
     render(<Drawer id={carol} />);
     expect(screen.getByText(/Alive without a vote token/)).toBeInTheDocument();
-    const select = screen.getByLabelText("Correct to");
-    expect(within(select).getByText("Exiled — vote available")).toBeInTheDocument();
-    expect(within(select).getByText("Exiled — vote used")).toBeInTheDocument();
-    fireEvent.change(select, { target: { value: "alive" } });
+    const correctTo = segmentGroup("Correct to");
+    expect(within(correctTo).getByRole("radio", { name: "Exiled — vote available" })).toBeInTheDocument();
+    expect(within(correctTo).getByRole("radio", { name: "Exiled — vote used" })).toBeInTheDocument();
+    chooseSegmentValue("Correct to", "alive");
     fireEvent.click(screen.getByRole("button", { name: "Apply correction" }));
     expect(player(carol).ghostVote).toBe(true);
     expect(game().history.at(-1)).toMatchObject({ correction: true });
@@ -153,11 +154,11 @@ describe("Phase 10A: Day Resolution and the dusk review", () => {
     const { ids } = liveGame();
     state().advancePhase();
     render(<DayResolutionPanel onClose={() => {}} />);
-    fireEvent.change(screen.getByLabelText("Executee"), { target: { value: ids[0]! } });
+    choose("Executee", ids[0]!);
     fireEvent.click(within(screen.getByRole("group", { name: "Execution outcome" })).getByRole("button", { name: "Died" }));
     expect(game().lifeEventWindow.events).toMatchObject([{ kind: "execution", outcome: "died" }]);
     expect(screen.getByText("Alice — executed — died")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Executee"), { target: { value: ids[1]! } });
+    choose("Executee", ids[1]!);
     fireEvent.click(within(screen.getByRole("group", { name: "Execution outcome" })).getByRole("button", { name: "Survived" }));
     expect(game().lifeEventWindow.events).toHaveLength(1);
     expect(screen.getByText(/already recorded for Day 1/)).toBeInTheDocument();
@@ -169,8 +170,13 @@ describe("Phase 10A: Day Resolution and the dusk review", () => {
     const { traveler } = liveGame();
     state().advancePhase();
     render(<DayResolutionPanel onClose={() => {}} />);
-    expect(within(screen.getByLabelText("Executee")).getByRole("group", { name: "Travelers (exceptional executee)" })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Traveler"), { target: { value: traveler } });
+    // Travelers stay offered as executees, but separately: flagged as the
+    // exceptional case and listed after every ordinary participant.
+    expect(screen.getByText("Travelers (listed last) are an exceptional executee")).toBeInTheDocument();
+    const executees = offered("Executee").map((o) => o.value);
+    expect(executees.at(-1)).toBe(traveler);
+    expect(executees.filter((id) => player(id).isTraveler)).toEqual([traveler]);
+    choose("Traveler", traveler);
     fireEvent.click(within(screen.getByRole("group", { name: "Exile outcome" })).getByRole("button", { name: "Survived" }));
     expect(player(traveler).alive).toBe(true);
     expect(game().lifeEventWindow.events).toMatchObject([{ kind: "exile", outcome: "survived" }]);
@@ -221,7 +227,7 @@ describe("Phase 10A: Life events corrections panel", () => {
     const gameBefore = game();
     render(<LifeEventsPanel onClose={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: "Retract…" }));
-    expect(screen.getByLabelText("Also set status")).toHaveValue("alive");
+    expect(segmentValue("Also set status")).toBe("alive");
     fireEvent.click(screen.getByRole("button", { name: "Retract event" }));
     expect(game().lifeEventWindow.events).toEqual([]);
     expect(player(ids[0]!).alive).toBe(true);
@@ -265,8 +271,7 @@ describe("Phase 10D: exile-death is independent of the current Role (correction 
     render(<Drawer id={traveler} />);
     expect(lifeSection().getByText("Exiled · vote available")).toBeInTheDocument();
     expect(lifeSection().queryByText(/Needs check/)).toBeNull();
-    const select = lifeSection().getByLabelText("Correct to");
-    fireEvent.change(select, { target: { value: "exiledVoteUsed" } });
+    chooseSegmentValue("Correct to", "exiledVoteUsed", screen.getByRole("region", { name: "Life" }));
     fireEvent.click(lifeSection().getByRole("button", { name: "Apply correction" }));
     expect(player(traveler)).toMatchObject({ isTraveler: false, alive: false, ghostVote: false, exiled: true });
     expect(lifeSection().getByText("Exiled · vote used")).toBeInTheDocument();
@@ -283,7 +288,7 @@ describe("Phase 10D: exile-death is independent of the current Role (correction 
     expect(lifeSection().queryByRole("button", { name: /Exiled —/ })).toBeNull();
     // The correction is progressively disclosed and explicit.
     expect(lifeSection().getByText("Correct status…").closest("details")).not.toHaveAttribute("open");
-    fireEvent.change(lifeSection().getByLabelText("Correct to"), { target: { value: "exiledVote" } });
+    chooseSegmentValue("Correct to", "exiledVote", screen.getByRole("region", { name: "Life" }));
     fireEvent.click(lifeSection().getByRole("button", { name: "Apply correction" }));
     expect(player(bob)).toMatchObject({ isTraveler: false, alive: false, ghostVote: true, exiled: true });
     expect(lifeSection().getByText("Exiled · vote available")).toBeInTheDocument();
@@ -299,11 +304,10 @@ describe("Phase 10D: exile-death is independent of the current Role (correction 
     expect(player(carol).isTraveler).toBe(false);
     render(<LifeEventsPanel onClose={() => {}} />);
     fireEvent.click(screen.getByText("Late record for Day 1…"));
-    fireEvent.change(screen.getByLabelText("Event"), { target: { value: "exile" } });
-    const who = screen.getByLabelText("Player");
-    expect(within(who).getByRole("option", { name: new RegExp(`^${player(carol).name} `) })).toBeInTheDocument();
-    fireEvent.change(who, { target: { value: carol } });
-    fireEvent.change(screen.getByLabelText("Also set status"), { target: { value: "exiledVote" } });
+    chooseSegmentValue("Event", "exile");
+    expect(offered("Player").map((o) => o.value)).toContain(carol);
+    choose("Player", carol);
+    chooseSegmentValue("Also set status", "exiledVote");
     fireEvent.click(screen.getByRole("button", { name: "Record for Day 1" }));
     expect(game().lifeEventWindow.events.at(-1)).toMatchObject({ kind: "exile", outcome: "died",
       moment: { phase: "day", day: 1 }, subject: { playerId: carol } });

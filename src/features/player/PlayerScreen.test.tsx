@@ -73,6 +73,12 @@ function seedSeatedTraveler(publicDisplayRole?: string) {
   }));
 }
 
+/** Phase 10H: Reference and Leave live under the bottom-navigation More tab. */
+async function openMore() {
+  fireEvent.click(await screen.findByRole("button", { name: "More" }));
+  await screen.findByText("Request to leave lobby");
+}
+
 let memory: MemoryRoomBackend;
 beforeEach(() => {
   memory = new MemoryRoomBackend();
@@ -94,8 +100,8 @@ afterEach(() => {
 describe("PlayerScreen leave confirmation (Phase 9C.3, OPUS-003)", () => {
   it("requires explicit confirmation, and a cancelled confirmation invokes no leave command", async () => {
     render(<PlayerScreen />);
-    await screen.findByText("Request to leave lobby");
-
+    // Phase 10H (§11.2): Leave is secondary -- under More.
+    await openMore();
     fireEvent.click(screen.getByText("Request to leave lobby"));
     expect(await screen.findByText("Request to leave?")).toBeInTheDocument();
     expect(screen.getByText(/You will remain seated in the game/)).toBeInTheDocument();
@@ -109,8 +115,7 @@ describe("PlayerScreen leave confirmation (Phase 9C.3, OPUS-003)", () => {
 
   it("only the affirmative action calls the existing leave-request command", async () => {
     render(<PlayerScreen />);
-    await screen.findByText("Request to leave lobby");
-
+    await openMore();
     fireEvent.click(screen.getByText("Request to leave lobby"));
     fireEvent.click(await screen.findByRole("button", { name: "Request to leave" }));
 
@@ -123,7 +128,7 @@ describe("PlayerScreen leave confirmation (Phase 9C.3, OPUS-003)", () => {
 describe("PlayerScreen Traveler choice (Phase 9 Setup finalization B4)", () => {
   it("an ordinary player never sees the Traveler picker", async () => {
     render(<PlayerScreen />);
-    await screen.findByText("Request to leave lobby");
+    await screen.findByRole("button", { name: "More" });
     expect(screen.queryByText("Choose your Traveler")).toBeNull();
   });
 
@@ -159,7 +164,7 @@ describe("PlayerScreen Traveler choice (Phase 9 Setup finalization B4)", () => {
   it("once a character is publicly assigned, the picker no longer shows (Storyteller override or applied choice alike)", async () => {
     seedSeatedTraveler("thief");
     render(<PlayerScreen />);
-    await screen.findByText("Request to leave lobby");
+    await screen.findByRole("button", { name: "More" });
     expect(screen.queryByText("Choose your Traveler")).toBeNull();
   });
 });
@@ -208,7 +213,7 @@ describe("PlayerScreen: identity without an alignment (Phase 10E undisclosed)", 
   it("an ordinary identity with no alignment renders the character and no alignment label", async () => {
     usePlayerStore.setState({ self: { shownRole: "chef" }, revealed: true });
     const { container } = render(<PlayerScreen />);
-    await screen.findByText("Request to leave lobby");
+    await screen.findByRole("button", { name: "More" });
     expect(container.querySelector(".sealed-card-name")).toHaveTextContent("Chef");
     expect(container.querySelector("[class*='alignment-']")).toBeNull();
     expect(screen.queryByText(/Still waiting/)).toBeNull();
@@ -217,7 +222,7 @@ describe("PlayerScreen: identity without an alignment (Phase 10E undisclosed)", 
   it("a told alignment still renders its label (control)", async () => {
     usePlayerStore.setState({ self: { shownRole: "chef", shownAlignment: "evil" }, revealed: true });
     const { container } = render(<PlayerScreen />);
-    await screen.findByText("Request to leave lobby");
+    await screen.findByRole("button", { name: "More" });
     expect(container.querySelector(".label.alignment-evil")).toHaveTextContent("evil");
   });
 });

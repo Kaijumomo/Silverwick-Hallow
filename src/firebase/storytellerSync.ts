@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { create } from "zustand";
 import { z } from "zod";
 import { selectScriptById, useStorytellerStore, type LobbyConnection } from "@/stores/storytellerStore";
-import { StorytellerGamePersistedSchema } from "@/stores/schemas";
+import { REVEAL_TOKEN_PATTERN, StorytellerGamePersistedSchema } from "@/stores/schemas";
 import { detectLegacyGameVersion, migrateGameEntry } from "@/stores/gameMigration";
 import { validateFirebaseWritableValue } from "./firebaseWriteCompatibility";
 import type { GuardStamp, ParticipantId, PlayerId } from "@/stores/types";
@@ -15,7 +15,10 @@ import type { OnlineMap } from "@/stores/projections";
 import { decodeMembershipRevocations, decodePresence, decodeRoster, decodeRosterParticipants, decodeJoinRequests, SnapshotValidationError, type MembershipRevocationRecord, type RosterParticipantRecord } from "./snapshots";
 import { membershipRevocationsPath, rosterParticipantsPath, storytellerPathSegments } from "./paths";
 import type { RevocationAction } from "./lobby";
-import { SessionWriter, FENCE_MARGIN_MS, type AuthorityHandle } from "./writer";
+import { SessionWriter, FENCE_MARGIN_MS, type AuthorityHandle, type TerminalPublicationBuilder } from "./writer";
+import { readPublishedResult } from "./terminalResults";
+import { revealAcksPath } from "./paths";
+import type { GameResult } from "@/stores/types";
 import { classifyStorytellerError, decodeSession, guardSchema, isTransient, leaseSchema, LifecycleError, sessionPath, type SessionFailure } from "./lifecycle";
 import { TRAVELERS } from "@/data/travelers";
 import { connectFirebase } from "./session";
@@ -73,6 +76,13 @@ type Runtime = {
    * re-resolves the uid->playerId binding fresh (see applyTravelerChoice)
    * rather than trusting this map. */
   travelerChoices: Record<string, { playerId: string | null; roleId: string }>;
+  /** Phase 10H (contract §12): observational-only view of revealAcks, keyed
+   * by the PlayerId the live roster currently binds the acknowledging uid to,
+   * valued with the acknowledged token. Advisory runtime state: never
+   * persisted, never checkpointed, never History/Undo/Information Delivery,
+   * never a mechanic or a Begin Night gate. Viewed is derived only as
+   * `revealViewed(player, revealAcks[player.id])` (current-token equality). */
+  revealAcks: Record<string, string>;
   status: SessionStatus;
   /** The classified cause of the current non-live status (or of the latest
    * reported runtime failure); null while nothing has failed. */
@@ -94,7 +104,7 @@ type Runtime = {
 };
 /** A superseded lobby whose authoritative cleanup failed (see above). */
 export type UnattachedCleanupFailure = { code: string; message: string };
-export const useSessionRuntime = create<Runtime>(() => ({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, retry: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {}, status: "idle", failure: null, closeFailed: false, leaveOffer: null, unattachedCleanupFailures: [] }));
+export const useSessionRuntime = create<Runtime>(() => ({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, retry: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {}, revealAcks: {}, status: "idle", failure: null, closeFailed: false, leaveOffer: null, unattachedCleanupFailures: [] }));
 /** ASTRA-10G-R1-001: removes exactly this lobby's cleanup warning; changes no
  * game, lobby or session state. */
 export function dismissUnattachedCleanupFailure(code: string) {
@@ -111,7 +121,7 @@ export function reportRuntimeError(source: string, message: string | null) {
   const values = [...new Set(Object.values(errors).filter((value): value is string => !!value))];
   useSessionRuntime.setState({ errors, error: values.length ? values.join(" ") : null });
 }
-let closeCurrent: (() => Promise<void>) | null = null;
+let closeCurrent: ((terminal?: TerminalPublicationBuilder) => Promise<void>) | null = null;
 
 type LobbyScope = { code: string; sessionId?: string };
 export const scopeKey = (lobby: LobbyScope) => `${lobby.code}|${lobby.sessionId ?? ""}`;
@@ -157,10 +167,10 @@ let failedStart: FailedStart | null = null;
  * with the disposal barrier's later dispose), then a fresh writer acquires the
  * lease through the normal transaction (a foreign valid lease still wins:
  * conflict) and closes. */
-async function closeFailedStart(pending: FailedStart) {
+async function closeFailedStart(pending: FailedStart, terminal?: TerminalPublicationBuilder) {
   const { backend, lobby, writer } = pending;
   await writer.dispose().catch(() => {});
-  await closeScopeAuthoritatively(backend, lobby, useStorytellerStore.getState().game?.seatOrder ?? []);
+  await closeScopeAuthoritatively(backend, lobby, useStorytellerStore.getState().game?.seatOrder ?? [], terminal);
   if (failedStart === pending) failedStart = null;
   if (sameScope(useStorytellerStore.getState().lobby, lobby)) useStorytellerStore.getState().setLobby(null);
 }
@@ -168,11 +178,11 @@ async function closeFailedStart(pending: FailedStart) {
 /** The fenced authoritative close of one lobby scope by a fresh writer: the
  * normal lease transaction (a foreign valid lease still wins: conflict), then
  * SessionWriter.close(). Never a direct write. */
-async function closeScopeAuthoritatively(backend: RoomBackend, lobby: LobbyScope, seatOrder: string[]) {
+async function closeScopeAuthoritatively(backend: RoomBackend, lobby: LobbyScope, seatOrder: string[], terminal?: TerminalPublicationBuilder) {
   const closer = new SessionWriter(backend, lobby.code, lobby.sessionId ?? "");
   try {
     await closer.start();
-    await closer.close(seatOrder);
+    await closer.close(seatOrder, terminal);
   } finally {
     await closer.dispose().catch(() => {});
   }
@@ -256,21 +266,41 @@ async function provenNeverReachedLive(lobby: LobbyConnection): Promise<boolean> 
  *   (closeFailedStart). If that cannot complete either, Leave (local-only) is
  *   offered only when the server proves the lobby never reached live
  *   (provenNeverReachedLive).
+ *
+ * Phase 10H (contract §15): `options.terminal` is the terminal publication
+ * (results/{uid} of a declared result) that joins the one fenced atomic close
+ * commit on either path. When the session turns out to be ALREADY ended (a
+ * previous attempt whose response was lost, 10H-AC-050) and
+ * `options.readBackPublished` is set, the result that close actually published
+ * for this session is read back so the caller can retain exactly it.
  */
-export async function closeMultiplayerSession() {
+export type CloseMultiplayerOutcome = {
+  /** The session was already ended (or missing) when this close began. */
+  alreadyEnded: boolean;
+  /** Read back only for an already-ended session when requested: the result
+   * this session's terminal close published, or null when none. */
+  published?: GameResult | null;
+};
+export async function closeMultiplayerSession(
+  options: { terminal?: TerminalPublicationBuilder; readBackPublished?: boolean } = {},
+): Promise<CloseMultiplayerOutcome> {
   const lobby = useStorytellerStore.getState().lobby;
-  if (!lobby) return;
+  if (!lobby) return { alreadyEnded: false };
   const pending = failedStart && sameScope(failedStart.lobby, lobby) ? failedStart : null;
   try {
     const { backend } = await connectFirebase();
     const session = decodeSession(await backend.get(sessionPath(lobby.code)));
     if (!session || session.state === "ended") {
+      const published = options.readBackPublished && session && session.id === lobby.sessionId
+        ? await readPublishedResult(backend, lobby.code, session.id)
+        : options.readBackPublished ? null : undefined;
       useStorytellerStore.getState().setLobby(null);
-      return;
+      return published === undefined ? { alreadyEnded: true } : { alreadyEnded: true, published };
     }
-    if (closeCurrent) { await closeCurrent(); return; }
+    if (closeCurrent) { await closeCurrent(options.terminal); return { alreadyEnded: false }; }
     if (!pending) throw new LifecycleError("conflict", "Reconnect to the lobby before ending it or starting another game.");
-    await closeFailedStart(pending);
+    await closeFailedStart(pending, options.terminal);
+    return { alreadyEnded: false };
   } catch (error) {
     const failure = noteFailure(error, scopeReachedLive(lobby) ? "live" : "startup");
     // Leave is never offered for a lobby that reached live (anywhere this
@@ -338,7 +368,7 @@ export function useStorytellerSync(backend: RoomBackend | null) {
     let stop: (() => void) | undefined;
     const writer = new SessionWriter(backend, lobby.code, lobby.sessionId ?? "", error =>
       reportRuntimeError("write", error ? noteFailure(error, liveWriters.has(writer) ? "live" : "startup").message : null));
-    useSessionRuntime.setState({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {}, status: initialConnectionStatus(lobby), failure: null, closeFailed: false, leaveOffer: null });
+    useSessionRuntime.setState({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {}, revealAcks: {}, status: initialConnectionStatus(lobby), failure: null, closeFailed: false, leaveOffer: null });
     // Resume hardening: a backgrounded tab's throttled timers can skip lease
     // renewals. When the tab resumes (or the network returns) and this live
     // writer's own bookkeeping can no longer prove its lease, revalidate
@@ -414,7 +444,7 @@ export function useStorytellerSync(backend: RoomBackend | null) {
           reportRuntimeError("write", classifyStorytellerError(error, "startup").message);
         })
       );
-      useSessionRuntime.setState({ backend: null, presence: "unknown", online: {}, pending: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {} });
+      useSessionRuntime.setState({ backend: null, presence: "unknown", online: {}, pending: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {}, revealAcks: {} });
     };
   }, [backend, lobby?.code, lobby?.sessionId, retry]);
 }
@@ -694,6 +724,9 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   // separately (StorytellerSession's auto-apply effect) — this watch only
   // maintains the runtime view, exactly like leaveRequests above.
   let travelerChoiceUids: Record<string, string> = {};
+  // Phase 10H: raw acknowledging uid -> acknowledged token at revealAcks.
+  // Observational only (see updateRevealAcks below).
+  let revealAckUids: Record<string, string> = {};
   const cleanups: (() => void)[] = [];
   const report = (source: string, error?: unknown, access?: "read" | "write") =>
     reportRuntimeError(source, error ? noteFailure(error, liveWriters.has(writer) ? "live" : "startup", access).message : null);
@@ -703,7 +736,7 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
     clearTimeout(timer);
     cleanups.splice(0).forEach(off => off());
     writer.stop();
-    useSessionRuntime.setState({ backend: null, presence: "unknown", online: {}, leaveRequests: {}, travelerChoices: {},
+    useSessionRuntime.setState({ backend: null, presence: "unknown", online: {}, leaveRequests: {}, travelerChoices: {}, revealAcks: {},
       ...(liveWriters.has(writer) && !closing && useSessionRuntime.getState().status === "live" ? { status: "stopped" as const } : {}) });
   }
   // Wired here — before the checkpoint read/restore/reconcile window below,
@@ -741,6 +774,19 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
     const travelerChoices: Record<string, { playerId: string | null; roleId: string }> = {};
     for (const [uid, roleId] of Object.entries(travelerChoiceUids)) travelerChoices[uid] = { playerId: roster[uid] ?? null, roleId };
     useSessionRuntime.setState({ travelerChoices });
+  };
+  // Phase 10H (contract §12.3): the acknowledgement view, re-keyed by the
+  // PlayerId the live roster binds each uid to RIGHT NOW. Recomputed from both
+  // snapshots whenever either changes (independent subscriptions arrive in
+  // either order). A uid no longer bound contributes nothing; a token is kept
+  // only as a bounded string -- any other value confers nothing.
+  const updateRevealAcks = () => {
+    const revealAcks: Record<string, string> = {};
+    for (const [uid, token] of Object.entries(revealAckUids)) {
+      const playerId = roster[uid];
+      if (playerId) revealAcks[playerId] = token;
+    }
+    useSessionRuntime.setState({ revealAcks });
   };
   const flush = (initial = false) => {
     // Captured the same moment the flushed game snapshot is captured, inside
@@ -845,7 +891,7 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
     watch("roster", value => {
       const decoded = decodeRoster(value);
       if (decoded.status !== "ready") throw new SnapshotValidationError();
-      roster = decoded.data; updateOnline(); updateLeaveRequests(); updateTravelerChoices(); schedule();
+      roster = decoded.data; updateOnline(); updateLeaveRequests(); updateTravelerChoices(); updateRevealAcks(); schedule();
     });
     watch("joinRequests", value => {
       const decoded = decodeJoinRequests(value);
@@ -888,6 +934,29 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
       travelerChoiceUids = z.record(z.enum(TRAVELERS.map(t => t.id) as [string, ...string[]])).parse(value ?? {});
       updateTravelerChoices();
     });
+    // Phase 10H: reveal acknowledgements are ADVISORY. Their subscription is
+    // deliberately not a watch(): a denied/failed read (e.g. rules that
+    // predate this path) or a malformed entry must never block Go Live, stop
+    // the writer or raise a session error -- the view simply stays empty, so
+    // nothing reads as Viewed. Malformed entries are dropped one by one.
+    if (!stopped) {
+      const offAcks = raw.subscribe(revealAcksPath(lobby.code), value => {
+        if (stopped) return;
+        const next: Record<string, string> = {};
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+          for (const [uid, token] of Object.entries(value as Record<string, unknown>)) {
+            if (typeof token === "string" && REVEAL_TOKEN_PATTERN.test(token)) next[uid] = token;
+          }
+        }
+        revealAckUids = next;
+        updateRevealAcks();
+      }, () => {
+        if (stopped) return;
+        revealAckUids = {};
+        updateRevealAcks();
+      });
+      cleanups.push(offAcks);
+    }
     // A stop occurring specifically during the seven watch() installations
     // just above (e.g. an immediately-observed ended session) is caught
     // here, before unsubStore/stalePresence go live and before the initial
@@ -911,10 +980,10 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
     return {
       outcome: "live" as const,
       stop,
-      close: async () => {
+      close: async (terminal?: TerminalPublicationBuilder) => {
         closing = true; clearTimeout(timer);
         try {
-          await writer.close(useStorytellerStore.getState().game?.seatOrder ?? []);
+          await writer.close(useStorytellerStore.getState().game?.seatOrder ?? [], terminal);
           stop();
           if (sameSession()) useStorytellerStore.getState().setLobby(null);
         } catch (error) { report("close", error); throw error; }
@@ -1024,7 +1093,7 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
     return {
       outcome: decision.type === "CONFLICT" ? "conflict" as const : "incoherent" as const,
       stop: () => { if (currentConflict?.writer === writer) currentConflict = null; stop(); },
-      close: async () => { throw new LifecycleError("conflict", "Resolve the reconnect conflict before ending this lobby."); },
+      close: async (_terminal?: TerminalPublicationBuilder) => { throw new LifecycleError("conflict", "Resolve the reconnect conflict before ending this lobby."); },
     };
   }
 
@@ -1148,7 +1217,7 @@ type PendingConflict = {
    * which could report a semantically-unchanged checkpoint as stale
    * indefinitely. */
   snapshotGuard: GuardStamp;
-  finishLive: () => Promise<{ outcome: "live"; stop: () => void; close: () => Promise<void> }>;
+  finishLive: () => Promise<{ outcome: "live"; stop: () => void; close: (terminal?: TerminalPublicationBuilder) => Promise<void> }>;
 };
 let currentConflict: PendingConflict | null = null;
 

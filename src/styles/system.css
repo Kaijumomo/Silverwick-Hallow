@@ -1,0 +1,1027 @@
+/*
+ * Phase 10H design system layer (10H-IMPLEMENTATION-CONTRACT-v1.0 §§4, 20).
+ * Loaded after components.css. Primitives: Segmented, ParticipantPicker
+ * (pick slot + Roster pick-strip), RolePicker, ConfirmDialog, disabled
+ * reasons. Shell / Grimoire / Night / Setup / Result surfaces extend it below.
+ * Operational text uses --font-op; nothing operational is smaller than
+ * --text-min (11px).
+ */
+
+/* ---------- Disabled-primary reasons (contract §20, 10H-AC-067) ---------- */
+.disabled-reason {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+/* ---------- Segmented: finite choices as explicit buttons ---------- */
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.segmented-label {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+}
+.segmented-options {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.segmented-option {
+  min-height: var(--target);
+  min-width: var(--target);
+  padding: 0 12px;
+  font: 600 var(--text-sm)/1 var(--font-op);
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.segmented-option.checked {
+  color: #1a1206;
+  background: var(--gold);
+  border-color: var(--gold);
+}
+.segmented-option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.segmented-reasons {
+  flex-basis: 100%;
+}
+
+/* ---------- ParticipantPicker: Table or Roster, never a dropdown ---------- */
+.pick-slot {
+  display: grid;
+  gap: 6px;
+  padding: 8px 0;
+}
+.pick-slot-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+.pick-slot-label {
+  font: 600 var(--text-sm)/1.2 var(--font-op);
+  color: var(--text);
+}
+.pick-slot-hint {
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+}
+.pick-slot-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.pick-slot-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pick-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--acting);
+  background: var(--acting-wash);
+  color: var(--acting);
+  font: 600 var(--text-md)/1.2 var(--font-op);
+}
+.pick-chip-seat {
+  font-weight: 400;
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+}
+.pick-chip-stale {
+  border-color: var(--warn);
+  background: rgba(231, 163, 91, 0.12);
+  color: var(--warn);
+}
+.pick-empty {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+}
+.pick-strip {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 4px;
+}
+.pick-option {
+  width: 100%;
+  min-height: var(--target);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  text-align: left;
+  font: 600 var(--text-md)/1.2 var(--font-op);
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.pick-option-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pick-option-seat {
+  flex: none;
+  font-weight: 400;
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+}
+.pick-option:hover:not(:disabled) {
+  border-color: var(--gold);
+}
+.pick-option.chosen {
+  border-color: var(--acting);
+  background: var(--acting-wash);
+  color: var(--acting);
+}
+.pick-option:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---------- RolePicker: searchable, on demand ---------- */
+.role-picker-field {
+  display: grid;
+  gap: 6px;
+}
+.role-picker-trigger {
+  justify-self: start;
+  min-height: var(--target);
+}
+.role-picker-panel {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.35);
+  max-height: min(60vh, 460px);
+  overflow: auto;
+}
+.role-picker-search {
+  width: 100%;
+  min-height: var(--target);
+}
+.role-picker-group-title {
+  font: 600 var(--text-xs)/1.2 var(--font-op);
+  margin: 4px 0;
+}
+.role-picker-panel .role-card {
+  min-height: var(--target);
+}
+.role-picker-panel .role-card-name {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+.role-picker-panel .role-card-type {
+  font-size: var(--text-2xs);
+}
+
+/* ---------- ConfirmDialog ---------- */
+.confirm-dialog {
+  max-width: min(440px, calc(100vw - 32px));
+}
+.confirm-dialog-body {
+  padding: 4px 16px 8px;
+  font-size: var(--text-md);
+  line-height: 1.45;
+}
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 16px 16px;
+}
+
+/* =====================================================================
+ * Grimoire seat grammar (contract §§6, 20; 10H-AC-009/010/021/024)
+ * Every seat has its tier's FIXED footprint (inline width/height); text is
+ * ellipsized inside it and every flag is an overlay on the seat's own disc,
+ * so no content can move a seat, reflow the ring or overprint a neighbour.
+ * ===================================================================== */
+.grimoire .token {
+  justify-content: flex-start;
+  gap: 2px;
+  overflow: visible;
+}
+.grimoire .token > .token-role,
+.grimoire .token > .token-name,
+.grimoire .token > .token-effects,
+.grimoire .token > .token-reminders {
+  max-width: 100%;
+  min-width: 0;
+}
+.grimoire .token-name {
+  font: 600 var(--text-sm)/1.2 var(--font-op);
+  overflow-wrap: normal;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.grimoire .token-role {
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  line-height: 1.15;
+  max-width: 100%;
+}
+.grimoire .token[data-tier="M"] .token-role { font-size: var(--text-sm); }
+.grimoire .token[data-tier="M2"] .token-role {
+  font: 600 var(--text-xs)/1.2 var(--font-op);
+  letter-spacing: 0;
+}
+.grimoire .token[data-tier="M2"] .token-name { font-size: var(--text-xs); }
+.grimoire .token-effects,
+.grimoire .token-reminders {
+  flex-wrap: nowrap;
+  overflow: hidden;
+  margin-top: 0;
+  justify-content: center;
+}
+.grimoire .token-reminders .reminder-pip,
+.grimoire .token-effects .effect-pill {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.grimoire .token-reminders .reminder-overflow,
+.grimoire .token-effects .effect-overflow {
+  flex: none;
+}
+.grimoire .token-disc-frame { --disc: 1px; }
+.grimoire .status-chip {
+  width: 34%;
+  height: 34%;
+  min-width: 16px;
+  min-height: 16px;
+}
+.grimoire .status-chip-poisoned { top: 0; transform: translate(-50%, 0); }
+.grimoire .status-chip-drunk { top: 8%; left: 0; transform: none; }
+.grimoire .status-chip-protected { top: 8%; left: auto; right: 0; transform: none; }
+
+/* Flags overlay: anchored to the disc bottom, growing upward over the seat's
+   own disc and never wider than the seat footprint. */
+.grimoire .token-markers {
+  bottom: 2px;
+  flex-wrap: wrap-reverse;
+  justify-content: center;
+  align-content: flex-start;
+}
+.grimoire .token-marker {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-op);
+  font-weight: 600;
+}
+.token-marker-divergence {
+  border-color: var(--divergence);
+  color: var(--divergence);
+  border-style: double;
+  border-width: 3px;
+}
+.grimoire .token-marker.token-needs-check,
+.grimoire .token-marker.token-needs-reveal {
+  margin: 0;
+  padding: 0 3px;
+  letter-spacing: 0.02em;
+  background: var(--bg-elev, #14121c);
+}
+.grimoire .token-marker.token-ghost {
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+.token-reminder-count {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  z-index: 3;
+  padding: 0 4px;
+  border-radius: 2px 999px 999px 2px;
+  border: 1px dashed var(--reminder-ink);
+  background: var(--bg-elev, #14121c);
+  color: var(--reminder-ink);
+  font: 600 var(--text-min)/1.4 var(--font-op);
+}
+
+/* Acting (lit Night actor) -- static warm light + "Acting now" words;
+   Selected -- a cool silver-blue ring; Focus -- the pale-gold outline.
+   Three distinct, simultaneously legible states (§§6.4, 8.1). */
+.grimoire .token.acting .token-disc {
+  border-color: var(--acting);
+  box-shadow: 0 0 0 3px var(--acting-wash), 0 0 22px 6px var(--acting-glow);
+}
+.token-acting {
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  transform: translate(-50%, 0);
+  z-index: 4;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--acting);
+  color: #1a1206;
+  font: 700 var(--text-min)/1.3 var(--font-op);
+  white-space: nowrap;
+}
+.grimoire .token.selected .token-disc {
+  border-color: var(--selected);
+  box-shadow: 0 0 0 3px var(--selected-wash);
+  transform: none;
+}
+.grimoire .token.acting.selected .token-disc {
+  box-shadow: 0 0 0 3px var(--selected), 0 0 22px 6px var(--acting-glow);
+}
+.grimoire .token:hover .token-disc { transform: none; }
+.grimoire .token:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-md);
+}
+/* Target picking: eligible seats are framed; ineligible ones are dimmed and
+   say so in their accessible description. */
+.grimoire .token.pickable .token-disc { outline: 2px dashed var(--acting); outline-offset: 3px; }
+.grimoire .token.unpickable { opacity: 0.45; }
+
+/* Fixed-footprint empty seats */
+.grimoire .token.empty-seat { min-width: 0; min-height: 0; }
+.grimoire .token.empty-seat[data-tier="S"] .empty-seat-icon,
+.grimoire .token.empty-seat[data-tier="XS"] .empty-seat-icon { font-size: 20px; }
+
+/* =====================================================================
+ * Storyteller shell (contract §5; I1, H3)
+ *  desktop: [Night rail] [dominant Table] [Inspector] -- regions adapt
+ *           around the Table, never fixed permanent takeovers;
+ *  tablet : the Table plus ONE secondary dock (side in landscape, bottom in
+ *           portrait), one surface at a time (Night / Seat tabs);
+ *  phone  : the Table as locator plus ONE bottom workspace (thumb zone) --
+ *           in normal flow, so no sheet ever covers a seat or stacks.
+ * ===================================================================== */
+.game-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "rail stage inspector";
+  align-items: stretch;
+}
+.game-body > .setup-panel { grid-area: rail; }
+.shell-pane[hidden] { display: none !important; }
+.shell-rail { grid-area: rail; display: flex; min-height: 0; min-width: 0; }
+.shell-stage { grid-area: stage; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.shell-inspector { grid-area: inspector; display: flex; min-height: 0; min-width: 0; }
+.shell-rail .night-panel {
+  position: static;
+  width: clamp(260px, 22vw, 320px);
+  max-height: none;
+  height: 100%;
+  border-radius: 0;
+  box-shadow: none;
+}
+.stage-toolbar {
+  display: flex;
+  justify-content: center;
+  padding: 8px max(12px, var(--safe-left)) 0 max(12px, var(--safe-right));
+}
+.lens-switch .segmented-option { min-height: 36px; }
+.shell-stage > .grimoire-wrap { flex: 1; }
+
+/* ---------- Inspector (non-modal participant workspace) ---------- */
+.inspector {
+  display: flex;
+  flex-direction: column;
+  width: clamp(340px, 28vw, 440px);
+  min-height: 0;
+  background: var(--dock);
+  border-left: 1px solid var(--dock-border);
+}
+.inspector[data-detent="peek"] { width: clamp(300px, 22vw, 340px); }
+.inspector[data-detent="hidden"] { width: auto; }
+.inspector[data-detent="hidden"] .inspector-title { writing-mode: horizontal-tb; }
+.inspector-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--dock-border);
+}
+.inspector-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font: 600 var(--text-xl)/1.2 var(--font-display);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.inspector-title:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.inspector-seat { font: 400 var(--text-sm)/1 var(--font-op); color: var(--text-dim); }
+.inspector-detents { display: flex; gap: 4px; flex: none; }
+.inspector-detents .btn { min-height: var(--target); min-width: var(--target); }
+.inspector-body { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 14px; }
+.inspector-group { display: flex; flex-direction: column; gap: 12px; }
+.inspector-group-title {
+  margin: 4px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--dock-border);
+  font: 700 var(--text-xs)/1.2 var(--font-op);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold-soft);
+}
+.inspector-more { align-self: flex-start; }
+.inspector .drawer-section-title { font-family: var(--font-op); font-weight: 700; letter-spacing: 0.08em; }
+
+/* ---------- TruthStrip ---------- */
+.truth-strip {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--dock-border);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.25);
+}
+.truth-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; margin: 0; }
+.truth-grid > div { min-width: 0; }
+.truth-grid dt { font: 600 var(--text-min)/1.3 var(--font-op); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); }
+.truth-grid dd { margin: 0; font: 600 var(--text-md)/1.3 var(--font-op); overflow-wrap: anywhere; }
+.truth-diverges dd { color: var(--divergence); }
+.truth-marker { font-weight: 700; }
+.truth-dim { color: var(--text-faint); font-weight: 400; }
+.truth-acting {
+  justify-self: start;
+  margin: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--acting);
+  color: #1a1206;
+  font: 700 var(--text-xs)/1.3 var(--font-op);
+}
+.truth-check { margin: 0; font-size: var(--text-sm); color: var(--warn); }
+
+/* ---------- Roster / Labels ---------- */
+.roster, .labels-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px max(12px, var(--safe-left)) max(12px, var(--safe-bottom)) max(12px, var(--safe-right));
+}
+.roster-list, .labels-list { list-style: none; margin: 0 auto; padding: 0; max-width: 760px; display: grid; gap: 4px; }
+.roster-row-empty { display: flex; gap: 10px; align-items: center; padding: 8px 10px; }
+.roster-button {
+  width: 100%;
+  min-height: var(--target);
+  display: grid;
+  grid-template-columns: 2.2em minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  text-align: left;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.roster-row.selected .roster-button { border-color: var(--selected); background: var(--selected-wash); }
+.roster-row.acting .roster-button { border-color: var(--acting); box-shadow: inset 4px 0 0 var(--acting); }
+.roster-row.unpickable .roster-button { opacity: 0.5; }
+.roster-seat { font: 700 var(--text-sm)/1 var(--font-op); color: var(--text-dim); text-align: right; }
+.roster-main { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.roster-name { font: 600 var(--text-lg)/1.2 var(--font-op); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roster-role { font-size: var(--text-sm); display: flex; flex-wrap: wrap; gap: 0 8px; }
+.roster-shown { font-family: var(--font-display); font-weight: 700; font-size: var(--text-md); }
+.roster-diverge { color: var(--divergence); font-weight: 600; }
+.roster-dim { color: var(--text-faint); }
+.roster-state { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 8px; font-size: var(--text-xs); max-width: 22em; }
+.roster-acting { padding: 0 6px; border-radius: 999px; background: var(--acting); color: #1a1206; font-weight: 700; }
+.roster-flag { border: 1px solid var(--text-faint); border-radius: 3px; padding: 0 4px; }
+.roster-check { color: var(--warn); border-color: var(--warn); border-style: dashed; }
+.roster-effects { color: var(--effect-ink); }
+.roster-reminders { color: var(--reminder-ink); }
+.roster-picking { text-align: center; color: var(--acting); margin: 0 0 6px; }
+.labels-seat { padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: rgba(0, 0, 0, 0.25); }
+.labels-seat-title { margin: 0 0 6px; font: 600 var(--text-md)/1.2 var(--font-op); }
+.labels-columns { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.labels-family { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.labels-family ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.labels-family-title { font: 700 var(--text-min)/1.2 var(--font-op); letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); }
+.labels-family .reminder-pip, .labels-family .effect-pill { white-space: normal; overflow-wrap: anywhere; }
+
+/* ---------- Dock tabs (tablet / phone: one surface at a time) ---------- */
+.dock-tabs { grid-area: tabs; display: flex; gap: 4px; padding: 6px 8px 0; background: var(--dock); border-top: 1px solid var(--dock-border); }
+.dock-tab {
+  flex: 1;
+  min-height: var(--target);
+  font: 600 var(--text-sm)/1 var(--font-op);
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--dock-border);
+  border-bottom: 0;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dock-tab[aria-selected="true"] { color: var(--text); background: rgba(255, 255, 255, 0.06); border-color: var(--gold-soft); }
+
+@media (max-width: 1100px) and (orientation: landscape) and (min-width: 761px) {
+  .game-body[data-layout="tablet"] {
+    grid-template-columns: minmax(0, 1fr) clamp(320px, 38vw, 400px);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "stage tabs" "stage dock";
+  }
+}
+@media (max-width: 1100px) and (orientation: portrait), (max-width: 760px) {
+  .game-body[data-layout="tablet"],
+  .game-body[data-layout="phone"] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    grid-template-areas: "stage" "tabs" "dock";
+  }
+}
+.game-body[data-layout="tablet"] > .shell-rail,
+.game-body[data-layout="tablet"] > .shell-inspector,
+.game-body[data-layout="phone"] > .shell-rail,
+.game-body[data-layout="phone"] > .shell-inspector { grid-area: dock; }
+.game-body[data-layout="tablet"] .night-panel,
+.game-body[data-layout="phone"] .night-panel,
+.game-body[data-layout="tablet"] .inspector,
+.game-body[data-layout="phone"] .inspector {
+  position: static;
+  width: 100%;
+  border-left: 0;
+  border-right: 0;
+  border-top: 1px solid var(--dock-border);
+  border-radius: 0;
+  box-shadow: none;
+}
+@media (max-width: 1100px) and (orientation: portrait), (max-width: 760px) {
+  .game-body[data-layout] .shell-rail,
+  .game-body[data-layout] .shell-inspector { max-height: 46dvh; }
+  .game-body[data-layout] .inspector[data-detent="expanded"] { max-height: 62dvh; }
+  .game-body[data-layout] .shell-inspector:has(.inspector[data-detent="expanded"]) { max-height: 62dvh; }
+  .game-body[data-layout] .night-panel,
+  .game-body[data-layout] .inspector {
+    max-height: inherit;
+    padding-bottom: var(--safe-bottom);
+  }
+}
+.game-body[data-layout="phone"] .inspector[data-detent="peek"],
+.game-body[data-layout="phone"] .inspector[data-detent="expanded"] { width: 100%; }
+.game-body[data-layout="tablet"] > .setup-panel,
+.game-body[data-layout="phone"] > .setup-panel { grid-area: dock; }
+.game-body[data-layout="tablet"] .night-panel { height: auto; max-height: none; }
+
+/* Overlay slots on a seat's own disc (no two overlays share a slot):
+   top-centre poisoned / acting; top-left drunk; top-right protected;
+   upper-right vote token; bottom-right Reminder count; bottom flags row. */
+.grimoire .vote-token { top: 28%; bottom: auto; right: -2px; width: 26%; height: 26%; min-width: 14px; min-height: 14px; }
+.grimoire .token-reminder-count { right: -6px; bottom: auto; top: 52%; }
+
+/* Desktop: the side regions adapt around the dominant Table (§5.1). The lens
+   switch and the Table's mode controls share ONE toolbar row, so the Table
+   keeps the stage height. */
+.game-body[data-layout="desktop"] .shell-rail .night-panel { width: clamp(240px, 18vw, 300px); }
+.game-body[data-layout="desktop"] .inspector { width: clamp(320px, 24vw, 420px); }
+.game-body[data-layout="desktop"] .inspector[data-detent="peek"] { width: clamp(280px, 19vw, 320px); }
+.shell-stage {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  column-gap: 12px;
+}
+.shell-stage > .stage-toolbar { grid-row: 1; grid-column: 1; justify-content: flex-start; padding-bottom: 8px; }
+.shell-stage > .grimoire-wrap { display: contents; }
+.shell-stage .grimoire-mode-controls {
+  grid-row: 1;
+  grid-column: 2;
+  justify-content: flex-end;
+  align-self: center;
+  padding: 8px max(12px, var(--safe-right)) 8px 0;
+}
+.shell-stage .grimoire-stage { grid-row: 2; grid-column: 1 / -1; padding: 0 12px max(12px, var(--safe-bottom)); position: relative; }
+.shell-stage > .roster,
+.shell-stage > .labels-view { grid-row: 2; grid-column: 1 / -1; }
+.grimoire-mode-btn { min-height: 36px; }
+
+/* The Roster replacing the Table inside the measured stage (H3). */
+.table-replaced { align-self: stretch; justify-self: stretch; display: flex; flex-direction: column; min-height: 0; overflow: hidden; width: 100%; }
+.table-replaced > .roster { padding-inline: 0; }
+.table-replaced-note { margin: 0 0 6px; text-align: center; font-size: var(--text-sm); color: var(--text-dim); }
+
+@media (max-width: 760px) {
+  .shell-stage { grid-template-columns: minmax(0, 1fr); }
+  .shell-stage > .stage-toolbar { grid-row: 1; grid-column: 1; padding-bottom: 4px; }
+  .shell-stage .grimoire-mode-controls {
+    grid-row: 2;
+    grid-column: 1;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    justify-content: flex-start;
+    padding: 0 12px 4px;
+  }
+  .shell-stage .grimoire-mode-btn { white-space: nowrap; flex: none; }
+  .shell-stage .grimoire-stage { grid-row: 3; }
+  .shell-stage { grid-template-rows: auto auto minmax(0, 1fr); }
+  .shell-stage > .roster, .shell-stage > .labels-view { grid-row: 2 / 4; }
+  .game-body[data-layout] .shell-rail,
+  .game-body[data-layout] .shell-inspector { max-height: 42dvh; }
+}
+/* A text-less seat is exactly its disc: drawn AND hit-tested as a circle, the
+   shape the density tiers' collision check uses. */
+.grimoire .token[data-tier="S"],
+.grimoire .token[data-tier="XS"] { border-radius: 50%; }
+
+/* =====================================================================
+ * Floating modular action card (contract §8.2; I2; 10H-AC-016/018)
+ * ===================================================================== */
+.action-card-stage-host,
+.action-card-dock-host { display: none; min-height: 0; min-width: 0; }
+.action-card-stage-host:has(> .action-card:not([hidden])),
+.action-card-dock-host:has(> .action-card:not([hidden])) { display: flex; flex-direction: column; }
+.shell-stage:has(> .action-card-stage-host > .action-card:not([hidden])) {
+  grid-template-columns: clamp(300px, 28vw, 400px) minmax(0, 1fr);
+}
+.action-card-stage-host { grid-row: 2; grid-column: 1; padding: 0 0 12px 12px; }
+.shell-stage:has(> .action-card-stage-host > .action-card:not([hidden])) .grimoire-stage,
+.shell-stage:has(> .action-card-stage-host > .action-card:not([hidden])) > .roster,
+.shell-stage:has(> .action-card-stage-host > .action-card:not([hidden])) > .labels-view { grid-column: 2; }
+.action-card[hidden] { display: none !important; }
+.action-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+  background: var(--overlay);
+  border: 1px solid var(--acting);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 12px 32px rgba(0, 0, 0, 0.55), 0 0 26px var(--acting-glow);
+}
+.action-card-dock-host .action-card { border-radius: 0; border-width: 0 0 1px; box-shadow: none; max-height: none; }
+.action-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--dock-border);
+}
+.action-card-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.action-card-title { margin: 0; font: 600 var(--text-xl)/1.2 var(--font-display); }
+.action-card-title:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.action-card-subtitle { display: flex; flex-direction: column; gap: 2px; font-size: var(--text-sm); }
+.action-card-actor { color: var(--acting); font-weight: 700; }
+.action-card-instruction { color: var(--text); font-size: var(--text-md); }
+.action-card-controls { display: flex; gap: 4px; flex: none; }
+.action-card-controls .btn { min-height: var(--target); min-width: var(--target); }
+.action-card .ability-workspace-body { overflow-y: auto; padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 12px; }
+.action-guidance summary { cursor: pointer; font-weight: 600; color: var(--text-dim); min-height: 32px; }
+.action-guidance .prose { margin: 6px 0; }
+
+/* Night rail: the current step (owns the action context). */
+.step-card.step-current { border-color: var(--acting); border-left-color: var(--acting); box-shadow: inset 0 0 0 1px var(--acting-wash); }
+.step-now {
+  align-self: flex-start;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--acting);
+  color: #1a1206;
+  font: 700 var(--text-min)/1.5 var(--font-op);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.step-make-current { align-self: flex-start; }
+
+/* =====================================================================
+ * Result declaration + cinematic post-game summary (§§2.3, 14, 19; S4)
+ * ===================================================================== */
+.finish-game-dialog { max-width: min(520px, calc(100vw - 32px)); }
+.finish-game-body { display: flex; flex-direction: column; gap: 12px; }
+.result-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.result-choice {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  min-height: 96px; padding: 12px; cursor: pointer;
+  border-radius: var(--radius-md); border: 1px solid var(--border-strong); background: rgba(0, 0, 0, 0.35); color: var(--text);
+}
+.result-choice-title { font: 700 var(--text-title)/1.1 var(--font-display); }
+.result-choice-help { font-size: var(--text-sm); color: var(--text-dim); }
+.result-good .result-choice-title { color: var(--type-townsfolk); }
+.result-evil .result-choice-title { color: var(--type-demon); }
+.result-choice:hover, .result-choice:focus-visible { border-color: var(--gold); }
+.result-exceptional { display: flex; align-items: center; gap: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+.result-exceptional-label { font: 700 var(--text-min)/1 var(--font-op); letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); }
+.finish-game-status { color: var(--acting); margin: 0; }
+
+.result-summary {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  padding: max(24px, var(--safe-top)) max(16px, var(--safe-right)) max(24px, var(--safe-bottom)) max(16px, var(--safe-left));
+}
+.result-cinematic {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 20%, rgba(242, 207, 126, 0.16), transparent 60%);
+}
+.result-summary[data-winner="good"] .result-cinematic { background: radial-gradient(ellipse at 50% 18%, rgba(116, 168, 230, 0.22), transparent 62%); }
+.result-summary[data-winner="evil"] .result-cinematic { background: radial-gradient(ellipse at 50% 18%, rgba(196, 58, 58, 0.24), transparent 62%); }
+.result-summary-inner { position: relative; width: min(860px, 100%); display: flex; flex-direction: column; gap: 18px; text-align: center; }
+.result-eyebrow { margin: 0; font: 700 var(--text-xs)/1 var(--font-op); letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-dim); }
+.result-headline { margin: 0; font: 700 clamp(40px, 8vw, 76px)/1.05 var(--font-ceremony); color: var(--gold-bright); }
+.result-summary[data-winner="good"] .result-headline { color: #bcd6f5; }
+.result-summary[data-winner="evil"] .result-headline { color: #f0a0a0; }
+.result-stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 28px; margin: 0; }
+.result-stats dt { font: 600 var(--text-min)/1.3 var(--font-op); letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); }
+.result-stats dd { margin: 0; font: 700 var(--text-title)/1.1 var(--font-op); }
+.result-teams { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; text-align: left; }
+.result-team { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: rgba(0, 0, 0, 0.3); }
+.result-team-title { margin: 0 0 8px; font: 700 var(--text-lg)/1.2 var(--font-display); }
+.summary-players { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.summary-player { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 10px; font-size: var(--text-sm); }
+.summary-player-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.summary-player-role { grid-column: 1; color: var(--text-dim); }
+.summary-player-life { grid-column: 2; grid-row: 1 / 3; align-self: center; font-size: var(--text-xs); }
+.result-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.result-actions .btn { min-height: var(--target); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .result-headline { animation: result-reveal 900ms cubic-bezier(.2, .7, .2, 1) both; }
+  .result-cinematic { animation: result-light 1400ms ease-out both; }
+  .result-stats, .result-teams, .result-actions { animation: result-rise 600ms 500ms ease-out both; }
+}
+@keyframes result-reveal { from { opacity: 0; transform: scale(0.92); letter-spacing: 0.2em; } to { opacity: 1; transform: none; } }
+@keyframes result-light { from { opacity: 0; } to { opacity: 1; } }
+@keyframes result-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* =====================================================================
+ * Staged Setup (§10; S2) -- inside the Grimoire-centred Setup workspace
+ * ===================================================================== */
+.game-body[data-layout="desktop"] > .setup-panel { width: clamp(300px, 24vw, 360px); }
+.game-body[data-layout="tablet"] > .setup-panel,
+.game-body[data-layout="phone"] > .setup-panel { width: 100%; max-height: 50dvh; border-right: 0; border-top: 1px solid var(--dock-border); }
+.setup-stages { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.setup-stage { display: inline-flex; align-items: center; gap: 4px; font: 600 var(--text-xs)/1.2 var(--font-op); color: var(--text-faint); }
+.setup-stage-num {
+  display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+  border: 1px solid var(--border-strong); font-size: var(--text-min);
+}
+.setup-stage.done { color: var(--text-dim); }
+.setup-stage.done .setup-stage-num { border-color: var(--ok); color: var(--ok); }
+.setup-stage.current { color: var(--text); }
+.setup-stage.current .setup-stage-num { background: var(--gold); border-color: var(--gold); color: #1a1206; }
+.setup-stage + .setup-stage::before { content: "›"; color: var(--text-faint); margin-right: 2px; }
+.setup-prep-rows, .reveal-readiness-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.setup-prep-row, .reveal-readiness-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: rgba(0, 0, 0, 0.25); font-size: var(--text-sm);
+}
+.setup-prep-name, .reveal-readiness-name { flex: 1; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.setup-prep-seat { font-weight: 400; color: var(--text-dim); font-size: var(--text-xs); }
+.setup-prep-need { color: var(--warn); font-size: var(--text-xs); }
+.reveal-readiness-state { font-size: var(--text-xs); color: var(--text-dim); }
+.reveal-readiness-row.seen .reveal-readiness-state { color: var(--ok); font-weight: 700; }
+.reveal-readiness-summary { margin: 0 0 6px; }
+
+/* =====================================================================
+ * Player phone (contract §11; E1, F1-F10): a personal window -- lower
+ * density, larger text, one idea at a time; bottom navigation in the thumb
+ * zone with safe-area insets, never overlapping the primary action.
+ * ===================================================================== */
+.player.player-shell {
+  width: 100%;
+  min-height: 100dvh;
+  padding: 0;
+  gap: 0;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+.player-shell-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  gap: 2px 12px;
+  padding: max(12px, var(--safe-top)) max(16px, var(--safe-right)) 10px max(16px, var(--safe-left));
+  background: var(--dock);
+  border-bottom: 1px solid var(--dock-border);
+}
+.player-phase { font: 700 var(--text-lg)/1.2 var(--font-display); color: var(--gold-bright); }
+.player-name { justify-self: end; font: 600 var(--text-md)/1.2 var(--font-op); color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.player-status-line { grid-column: 1 / -1; margin: 0; font: 400 var(--text-md)/1.35 var(--font-op); color: var(--text); }
+.player-main {
+  flex: 1;
+  width: min(560px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px max(16px, var(--safe-right)) calc(88px + var(--safe-bottom)) max(16px, var(--safe-left));
+  font-size: var(--text-lg);
+}
+.player-bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  display: flex;
+  gap: 4px;
+  padding: 6px max(8px, var(--safe-right)) max(8px, var(--safe-bottom)) max(8px, var(--safe-left));
+  background: var(--dock);
+  border-top: 1px solid var(--dock-border);
+  border-bottom: 0;
+}
+.player-bottom-nav .player-tab {
+  min-height: 52px;
+  border-radius: var(--radius-md);
+  border-bottom: 0;
+  font-size: var(--text-md);
+  font-weight: 700;
+}
+.player-bottom-nav .player-tab[aria-pressed="true"] { background: var(--acting-wash); color: var(--gold-bright); }
+.player-own-life { margin: 0; font: 600 var(--text-lg)/1.3 var(--font-op); }
+.player-secondary { align-self: flex-start; }
+.player-more { display: flex; flex-direction: column; gap: 18px; }
+
+/* The role card: ceremonial first reveal, readable ongoing card */
+.player-main .sealed-card { min-height: 220px; }
+.sealed-card-notice { display: block; font: 700 clamp(22px, 6vw, 30px)/1.2 var(--font-ceremony); letter-spacing: 0.04em; text-transform: none; color: var(--gold-bright); }
+.sealed-card-hint { display: block; margin-top: 10px; font: 400 var(--text-md)/1.4 var(--font-op); letter-spacing: 0; text-transform: none; color: var(--text-dim); }
+.sealed-card-ornament { display: block; font-size: 28px; color: var(--gold); margin-bottom: 6px; }
+.sealed-card-ceremonial { padding: 12px 0; }
+.sealed-card.sealed-card-first { border-width: 2px; box-shadow: 0 0 32px var(--acting-glow); }
+.sealed-card.revealed { cursor: default; text-align: left; }
+.sealed-card.revealed .sealed-card-name { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font: 700 clamp(26px, 7vw, 34px)/1.15 var(--font-display); }
+.sealed-card.revealed .sealed-card-ability { font-size: var(--text-xl); line-height: 1.45; margin: 0; }
+.sealed-card.revealed .sealed-card-flavor { font-size: var(--text-md); color: var(--text-dim); margin: 0; }
+.sealed-card-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sealed-card-actions .btn { min-height: var(--target); }
+.sealed-card-acked { font-size: var(--text-sm); color: var(--ok); }
+.from-storyteller { padding: 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: rgba(0, 0, 0, 0.25); }
+.from-storyteller-title { margin: 0 0 6px; font: 700 var(--text-xs)/1.2 var(--font-op); letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-soft); }
+@media (prefers-reduced-motion: no-preference) {
+  .sealed-card.revealed.ceremony { animation: ceremony-reveal 1100ms cubic-bezier(.2, .7, .2, 1) both; }
+  .sealed-card.revealed.ceremony .sealed-card-art { animation: ceremony-art 1400ms ease-out both; }
+}
+@keyframes ceremony-reveal { from { opacity: 0; transform: perspective(800px) rotateY(-70deg) scale(0.94); } to { opacity: 1; transform: none; } }
+@keyframes ceremony-art { from { opacity: 0; filter: blur(6px); } to { opacity: 1; filter: none; } }
+
+/* Player result (cinematic, reduced-motion safe) */
+.player-result { position: relative; overflow: hidden; padding-bottom: max(28px, var(--safe-bottom)); }
+.player-result-light { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 25%, rgba(242, 207, 126, 0.18), transparent 60%); }
+.player-result-good .player-result-light { background: radial-gradient(ellipse at 50% 25%, rgba(116, 168, 230, 0.26), transparent 60%); }
+.player-result-evil .player-result-light { background: radial-gradient(ellipse at 50% 25%, rgba(196, 58, 58, 0.28), transparent 60%); }
+.player-result-eyebrow { position: relative; margin: 0; font: 700 var(--text-xs)/1 var(--font-op); letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-dim); }
+.player-result-title { position: relative; font: 700 clamp(40px, 12vw, 64px)/1.05 var(--font-ceremony); }
+.player-result-good .player-result-title { color: #bcd6f5; }
+.player-result-evil .player-result-title { color: #f0a0a0; }
+.player-notes-review { position: relative; width: min(480px, 100%); text-align: left; }
+.player-notes-review ul { padding-left: 18px; }
+@media (prefers-reduced-motion: no-preference) {
+  .player-result-title { animation: result-reveal 900ms cubic-bezier(.2, .7, .2, 1) both; }
+}
+
+/* 10H-AC (targets): disclosure toggles in the rail and fact strip meet the
+   44px touch target. */
+.step-reminder-toggle {
+  align-self: flex-start;
+  min-height: var(--target);
+  padding: 0 8px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font: 600 var(--text-xs)/1 var(--font-op);
+  color: var(--text-dim);
+  text-align: left;
+}
+.rule-fact-more summary { min-height: var(--target); display: inline-flex; align-items: center; }
+
+/* AC-008: the shroud label never drops below the operational minimum. */
+.life-shroud-label { font-size: clamp(var(--text-min), 1.4vmin, 13px); letter-spacing: 0.12em; }
+.public-seat .life-shroud-label { font-size: clamp(var(--text-min), 1.3vmin, 16px); }
+
+/* Compact command bar (§5.1): up to tablet width the secondary actions live
+   in "More actions", so the bar is one row and the Table keeps its height. */
+@media (max-width: 1100px) {
+  .phase-bar { padding: 8px 12px; gap: 8px; flex-wrap: nowrap; }
+  .phase-bar-left { flex: 1; min-width: 0; gap: 8px; flex-wrap: nowrap; overflow: hidden; }
+  .phase-bar-overflow-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; }
+  .phase-bar-right {
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+    position: fixed;
+    top: 62px;
+    right: 8px;
+    min-width: min(260px, calc(100vw - 16px));
+    max-height: calc(100dvh - 80px);
+    overflow-y: auto;
+    padding: 8px;
+    gap: 6px;
+    z-index: 55;
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: -4px 8px 30px rgba(0,0,0,.7);
+  }
+  .phase-bar-right.open { display: flex; }
+  .phase-bar-right .btn { width: 100%; justify-content: flex-start; text-align: left; min-height: var(--target); }
+  .phase-overflow-backdrop { display: block; position: fixed; inset: 0; z-index: 54; }
+}
+.player-main .sealed-card-wrap .sealed-card-extras { padding: 0; margin: 12px 0 0; gap: 12px; display: flex; flex-direction: column; }
+.sealed-card-wiki { display: inline-flex; align-items: center; min-height: var(--target); align-self: flex-start; }
+.player-result .behavior-help { position: relative; color: var(--text); font-style: normal; font-size: var(--text-md); }
+
+/* Forward rule: the phase-advance primary is always directly visible -- on
+   desktop at the end of the command bar, at tablet/phone width beside the
+   "More actions" toggle (secondary actions collapse; this never does). */
+.phase-primary { display: flex; align-items: center; gap: 6px; flex: none; }
+.phase-primary .phase-advance { min-height: var(--target); white-space: nowrap; }
+.phase-advance-reason { margin: 0; max-width: 11em; line-height: 1.2; }
+@media (max-width: 1100px) {
+  .phase-primary { order: 1; }
+  .phase-bar-overflow-btn { order: 2; }
+}
+/* Nothing in the bar may squeeze the Privacy Mode toggle or the advance
+   action: the counts give way first. */
+.phase-bar-left .privacy-toggle,
+.phase-bar-left .phase-pill { flex: none; }
+.phase-bar-left > .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 520px) {
+  .phase-advance-reason { max-width: 6.5em; font-size: var(--text-min); }
+  .phase-bar-left .privacy-toggle { padding-inline: 8px; }
+  .phase-bar-left > .label { display: none; }
+  /* Visible text only; the accessible name stays "Enable/Disable Privacy Mode". */
+  .privacy-toggle-word { display: none; }
+}
+@media (max-width: 400px) {
+  .phase-bar { padding-inline: 8px; gap: 6px; }
+  .phase-bar-left { gap: 6px; }
+  .phase-bar-left .phase-pill { padding-inline: 8px; letter-spacing: 0.08em; }
+  .phase-primary { gap: 4px; }
+  .phase-primary .phase-advance { padding-inline: 10px; }
+  .phase-advance-reason { max-width: 5.5em; }
+}
+
+/* ---------- Public Display seats (10H-AC-069) ----------
+   Each seat's DISC centre sits on the Table's oval (publicLayout.ts); its
+   text stack hangs below in FIXED rows mirrored by the PUBLIC_* constants
+   there, so the fitted footprint is a real bound and no seat overprints a
+   neighbour. The Life grammar (shroud, vote token, life text) is unchanged. */
+.public-display-circle { width: 100%; height: 100%; align-self: stretch; }
+.public-seat { transform: translateX(-50%); gap: 4px; justify-content: flex-start; }
+.public-seat-name {
+  width: 100%;
+  font-size: 16px;
+  line-height: 20px;
+  max-height: 40px;
+  text-align: center;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.public-display-circle[data-name-lines="1"] .public-seat-name { -webkit-line-clamp: 1; max-height: 20px; }
+/* No tracking: the longest Life line ("Exiled · vote available", 116px) fits
+   the narrowest label that shows it (120px). */
+.public-seat-ghost { font-size: var(--text-min); line-height: 14px; height: 14px; margin-top: 0; letter-spacing: 0; color: var(--text-dim); }
+.public-seat-role {
+  max-width: 100%;
+  font-size: var(--text-min);
+  line-height: 14px;
+  margin-top: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.public-seat-traveler { box-sizing: border-box; height: 20px; font-size: var(--text-min); line-height: 14px; padding: 2px 10px; }
+.public-display-footer { font-size: clamp(var(--text-min), 1.2vmin, 16px); }

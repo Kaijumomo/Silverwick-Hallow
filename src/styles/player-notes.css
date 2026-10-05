@@ -38,7 +38,7 @@
 }
 
 .sn-preview-confidence {
-  font-size: 10px;
+  font-size: var(--text-min);
   font-weight: 700;
   letter-spacing: 0.1em;
   padding: 2px 7px;
@@ -235,7 +235,7 @@
 }
 
 .sn-char-name {
-  font-size: 10px;
+  font-size: var(--text-min);
   line-height: 1.2;
   text-align: center;
   max-width: 64px;

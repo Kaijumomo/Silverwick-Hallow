@@ -65,20 +65,18 @@ export function reminderTokenGroups(
   return [...ordered.filter(attention), ...ordered.filter((group) => !attention(group))];
 }
 
-/** The Grimoire shows at most this many aggregated Reminder chips; the rest
- * collapse into an explicit "+N more" -- never silently hidden. */
-export const MAX_VISIBLE_REMINDER_GROUPS = 4;
-
-/** The chips to draw and how many Reminder INSTANCES the overflow stands for. */
-export function visibleReminderGroups(groups: ReminderTokenGroup[]): { shown: ReminderTokenGroup[]; hiddenCount: number } {
-  if (groups.length <= MAX_VISIBLE_REMINDER_GROUPS) return { shown: groups, hiddenCount: 0 };
-  const shown = groups.slice(0, MAX_VISIBLE_REMINDER_GROUPS - 1);
-  const hiddenCount = groups.slice(MAX_VISIBLE_REMINDER_GROUPS - 1).reduce((sum, group) => sum + group.instances.length, 0);
-  return { shown, hiddenCount };
-}
-
 export const groupText = (group: Pick<ReminderTokenGroup, "label" | "instances">): string =>
   `${group.label}${group.instances.length > 1 ? ` ×${group.instances.length}` : ""}`;
+
+/** Phase 10H (contract §6.3, H2): the Reminder labels a density tier draws on
+ * the Table -- the first `labels` groups (attention first) and an explicit
+ * "+N more" for every remaining INSTANCE; 0 labels means count-only. The
+ * Labels view and the Inspector always keep the full detail. */
+export function tierReminderGroups(groups: ReminderTokenGroup[], labels: number): { shown: ReminderTokenGroup[]; hiddenCount: number } {
+  const shown = groups.slice(0, Math.max(0, labels));
+  const hiddenCount = groups.slice(shown.length).reduce((sum, group) => sum + group.instances.length, 0);
+  return { shown, hiddenCount };
+}
 
 /** Words for a derived cleanup status (never color alone). */
 export function cleanupStatusText(status: ReminderCleanupStatus): string | null {

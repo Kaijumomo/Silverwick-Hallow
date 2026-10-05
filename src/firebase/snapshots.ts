@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { PlayerSelfRecordSchema, PublicLobbyRecordSchema } from "@/stores/schemas";
-import type { PlayerSelfRecord, PublicLobbyRecord } from "@/stores/types";
+import { PlayerResultRecordSchema, PlayerSelfEnvelopeSchema, PlayerSelfRecordSchema, PublicLobbyRecordSchema } from "@/stores/schemas";
+import type { PlayerSelfEnvelope, PublicLobbyRecord } from "@/stores/types";
 import { publicLifeWithheld } from "@/stores/lifeState";
 import type { RoomBackend, Unsubscribe } from "./backend";
 
@@ -36,12 +36,17 @@ const publicShape = PublicLobbyRecordSchema.extend({
   winner: optionalNode(PublicLobbyRecordSchema.shape.winner.unwrap()),
   status: optionalNode(z.literal("ended")),
 });
-const selfShape = PlayerSelfRecordSchema.extend({
+// Phase 10H: the self record arrives inside its envelope (reveal token, own
+// Life). Both envelope fields are optional: a pre-10H Storyteller writes
+// neither, and the identity is still complete without them.
+const selfShape = PlayerSelfEnvelopeSchema.extend({
   shownRole: id,
   bluffs: optionalNode(list),
   minions: optionalNode(PlayerSelfRecordSchema.shape.minions.unwrap()),
   extraText: optionalNode(z.string()),
   demon: optionalNode(PlayerSelfRecordSchema.shape.demon.unwrap()),
+  revealToken: optionalNode(PlayerSelfEnvelopeSchema.shape.revealToken.unwrap()),
+  life: optionalNode(PlayerSelfEnvelopeSchema.shape.life.unwrap()),
 });
 const request = z.string().min(1).max(20).refine((value) =>
   value.trim().length > 0 && !value.startsWith(" ") && !value.endsWith(" ") && !/[\r\n\t]/.test(value));
@@ -111,12 +116,28 @@ export function decodePublicSnapshot(raw: unknown, expectedCode?: string): Publi
  * self node is written whole by the Storyteller (writeProjections), so a
  * missing alignment is never a half-arrived write.
  */
-export function decodeSelfSnapshot(raw: unknown): Snapshot<PlayerSelfRecord> {
+export function decodeSelfSnapshot(raw: unknown): Snapshot<PlayerSelfEnvelope> {
   if (raw == null) return WAITING;
   const partial = selfShape.partial().safeParse(raw);
   if (!partial.success) return invalid(partial.error);
   if (partial.data.shownRole === undefined) return WAITING;
   return parse(selfShape, raw);
+}
+/**
+ * Phase 10H: this player's own results/{uid} -- the immutable player-safe
+ * terminal result. Exact schema (strict: an unknown key is invalid, never
+ * stripped into validity), and the record must name `expectedSessionId`
+ * (10H-AC-056): a result from any other session is invalid, never shown.
+ * Absent is "waiting" (the caller treats a confirmed absence after the session
+ * ended as "no recorded result").
+ */
+export type PlayerResultRecord = z.infer<typeof PlayerResultRecordSchema>;
+export function decodePlayerResult(raw: unknown, expectedSessionId: string): Snapshot<PlayerResultRecord> {
+  if (raw == null) return WAITING;
+  const parsed = parse(PlayerResultRecordSchema, raw);
+  if (parsed.status !== "ready") return parsed;
+  if (parsed.data.sessionId !== expectedSessionId) return invalidField("sessionId", "session_mismatch");
+  return parsed;
 }
 export const decodeRosterEntry = (raw: unknown): Snapshot<string> => raw == null ? WAITING : parse(id, raw);
 export const decodeJoinRequest = (raw: unknown): Snapshot<string> => raw == null ? WAITING : parse(request, raw);

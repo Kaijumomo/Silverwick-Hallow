@@ -6,12 +6,11 @@ import { currentLiveMoment, executionsAt, exilesAt, type LifeEventQueryResult } 
 import type { LifeEvent, LiveGameMoment, StorytellerLobbyRecord, STPlayerRecord } from "@/stores/types";
 import { useLifeRunner, executionOptions } from "./LifeControls";
 import { describeLifeEvent } from "./lifeEventText";
+import { ParticipantPicker } from "@/components/ParticipantPicker";
+import { captureBinding } from "@/features/abilities/abilityUi";
 
 const seatedPlayers = (game: StorytellerLobbyRecord): STPlayerRecord[] =>
   game.seatOrder.map((id) => game.players[id]).filter((p): p is STPlayerRecord => !!p && !p.isEmpty && !!p.participantId);
-
-const playerOption = (p: STPlayerRecord) =>
-  `${p.name || "Unnamed player"} (seat ${p.seat + 1}${p.alive ? "" : ", dead"})`;
 
 /** Lists a query result honestly: "none" only when coverage is known. */
 export function LifeEventList({ result, emptyText, unknownText }: {
@@ -76,18 +75,12 @@ export function DayResolutionPanel({ onClose }: { onClose: () => void }) {
         <section className="drawer-section">
           <h3 className="drawer-section-title">Executions</h3>
           <LifeEventList result={executionsAt(game, moment)} emptyText="No execution recorded yet today." unknownText={UNKNOWN_DAY} />
-          <div className="drawer-row">
-            <label className="label" htmlFor="day-executee">Executee</label>
-            <select id="day-executee" value={executee} onChange={(e) => { clear(); setExecutee(e.target.value); }}>
-              <option value="">Choose the executed player…</option>
-              {ordinary.map((p) => <option key={p.id} value={p.id}>{playerOption(p)}</option>)}
-              {travelers.length > 0 && (
-                <optgroup label="Travelers (exceptional executee)">
-                  {travelers.map((p) => <option key={p.id} value={p.id}>{playerOption(p)}</option>)}
-                </optgroup>
-              )}
-            </select>
-          </div>
+          {/* Phase 10H: chosen on the Table or the Roster -- never a dropdown.
+              Travelers are listed last, as the exceptional executee. */}
+          <ParticipantPicker game={game} label="Executee" value={executee ? captureBinding(game, executee) : null}
+            candidates={[...ordinary, ...travelers]}
+            hint={travelers.length > 0 ? "Travelers (listed last) are an exceptional executee" : undefined}
+            onChange={(binding) => { clear(); setExecutee(binding?.playerId ?? ""); }} />
           {chosen && (
             <div className="drawer-row" role="group" aria-label="Execution outcome">
               {chosen.alive ? <>
@@ -105,13 +98,9 @@ export function DayResolutionPanel({ onClose }: { onClose: () => void }) {
           {livingTravelers.length === 0 ? (
             <p className="behavior-help">No living Traveler to exile.</p>
           ) : <>
-            <div className="drawer-row">
-              <label className="label" htmlFor="day-exilee">Traveler</label>
-              <select id="day-exilee" value={exilee} onChange={(e) => { clear(); setExilee(e.target.value); }}>
-                <option value="">Choose the exiled Traveler…</option>
-                {livingTravelers.map((p) => <option key={p.id} value={p.id}>{playerOption(p)}</option>)}
-              </select>
-            </div>
+            <ParticipantPicker game={game} label="Traveler" value={exilee ? captureBinding(game, exilee) : null}
+              candidates={livingTravelers}
+              onChange={(binding) => { clear(); setExilee(binding?.playerId ?? ""); }} />
             {chosenExilee && (
               <div className="drawer-row" role="group" aria-label="Exile outcome">
                 <button className="btn btn-sm" onClick={() => recordExile("died")}>Died</button>
@@ -164,10 +153,15 @@ export function DuskReview({ onClose, onRecord, onContinue }: {
         )}
         <div className="drawer-row dialog-actions">
           <button className="btn btn-sm" onClick={onRecord}>Record execution or exile…</button>
-          <button className="btn btn-gold" disabled={noExecutionRecorded && !confirmedNone} onClick={onContinue}>
+          <button className="btn btn-gold" disabled={noExecutionRecorded && !confirmedNone} onClick={onContinue}
+            aria-describedby={noExecutionRecorded && !confirmedNone ? "day-resolution-continue-reason" : undefined}>
             Continue to Night {moment.day + 1}
           </button>
         </div>
+        {/* 10H-AC-067: a disabled primary says why, adjacent and in words. */}
+        {noExecutionRecorded && !confirmedNone && <p id="day-resolution-continue-reason" className="disabled-reason">
+          Record an execution, or confirm that no execution happened today.
+        </p>}
       </div>
     </Modal>
   );

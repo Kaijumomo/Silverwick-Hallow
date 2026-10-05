@@ -37,6 +37,7 @@ import { makeSTPlayer } from "@/test/fixtures";
 import { isCanonicalRole } from "@/data/canonical";
 import { parseClocktowerScript } from "@/data/customScript";
 import type { PlayerId, RoleDef, Script, StorytellerLobbyRecord, STPlayerRecord } from "./types";
+import { withoutRevealTokens } from "@/test/revealTokens";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -1269,7 +1270,13 @@ describe("ASTRA-10D-002: perception invalidation follows original vs FINAL perce
     expect(player(id)).toBe(b.game.players[id]); // the round-tripped participant is untouched
     expect(player(other).shownRole).toBe("investigator");
     state().undo();
-    expect(game()).toEqual(snapshot);
+    // Phase 10H: every field restored exactly. The round-tripped participant's
+    // visible identity never changed, so it keeps its reveal token; the other
+    // participant's reverted identity is a new transition with a FRESH token.
+    expect(withoutRevealTokens(game())).toEqual(withoutRevealTokens(snapshot));
+    expect(player(id).revealToken).toBe(snapshot.players[id]!.revealToken);
+    expect(player(other).revealToken).toBeDefined();
+    expect(player(other).revealToken).not.toBe(snapshot.players[other]!.revealToken);
     expect(state().undoStack).toHaveLength(0);
   });
 });
@@ -1629,8 +1636,23 @@ describe("resolveRoles: one commit, Undo and persistence", () => {
     ].filter((i) => i.kind !== "correctActualRole"));
     expect(result).toMatchObject({ ok: true, changed: true });
     expectOneCommit(b);
+    const after = structuredClone(game());
     state().undo();
-    expect(game()).toEqual(snapshot);
+    // Phase 10H: every field restored exactly; each reverted visible identity
+    // receives a FRESH reveal token (never the older one).
+    expect(withoutRevealTokens(game())).toEqual(withoutRevealTokens(snapshot));
+    // `a` was visibly changed (shown chef -> empath) and reverted: two
+    // transitions, each a fresh token. `b2` (hidden Actual change, still shown
+    // empath) and `zed` (a correction with the same Shown Role) were never
+    // visibly changed: their tokens never rotated (10H-AC-032).
+    expect(after.players[a]!.revealToken).not.toBe(snapshot.players[a]!.revealToken);
+    expect(player(a).revealToken).toBeDefined();
+    expect([snapshot.players[a]!.revealToken, after.players[a]!.revealToken]).not.toContain(player(a).revealToken);
+    for (const hidden of [b2, zed]) {
+      expect(after.players[hidden]!.shownRole).toBe(snapshot.players[hidden]!.shownRole);
+      expect(after.players[hidden]!.revealToken).toBe(snapshot.players[hidden]!.revealToken);
+      expect(player(hidden).revealToken).toBe(snapshot.players[hidden]!.revealToken);
+    }
     expect(state().undoStack).toHaveLength(0);
   });
 
@@ -1641,7 +1663,9 @@ describe("resolveRoles: one commit, Undo and persistence", () => {
     expect(resolve([changeRoleIntent(player(id), "thief")])).toMatchObject({ ok: true });
     expect(roleHistory()).toHaveLength(1);
     state().undo();
-    expect(game()).toEqual(snapshot);
+    expect(withoutRevealTokens(game())).toEqual(withoutRevealTokens(snapshot));
+    expect(player(id).revealToken).toBeDefined();
+    expect(player(id).revealToken).not.toBe(snapshot.players[id]!.revealToken);
     expect(game().history).toHaveLength(0);
   });
 
@@ -1652,7 +1676,7 @@ describe("resolveRoles: one commit, Undo and persistence", () => {
     expect(state().correctRole(holder("empath"), "monk")).toMatchObject({ ok: true });
     const round = StorytellerGamePersistedSchema.parse(JSON.parse(JSON.stringify(game())));
     expect(round).toEqual(JSON.parse(JSON.stringify(game())));
-    expect(round.gameSchemaVersion).toBe(25);
+    expect(round.gameSchemaVersion).toBe(26);
     // Current State never comes from History: dropping the History leaves it.
     expect(StorytellerGamePersistedSchema.safeParse({ ...JSON.parse(JSON.stringify(game())), history: [] }).success).toBe(true);
   });

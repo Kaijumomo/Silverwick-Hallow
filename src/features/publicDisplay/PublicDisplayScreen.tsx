@@ -5,9 +5,11 @@ import { friendlyFirebaseError } from "@/firebase/errors";
 import { usePublicLobby } from "@/firebase/publicSync";
 import { CONNECTION_ERROR_MESSAGE } from "@/firebase/snapshots";
 import { authorizePublicDisplay, parseDisplayTokenFromFragment } from "@/firebase/publicDisplayAuth";
-import { ringRadius, seatPosition, tokenSizeForCount } from "@/features/grimoire/layout";
+import { seatCentre } from "@/features/grimoire/densityTiers";
 import type { RoomBackend } from "@/firebase/backend";
 import { PublicSeat } from "./PublicSeat";
+import { publicSeatLayout } from "./publicLayout";
+import { lookupOfficialRole } from "@/data/officialRoles";
 import { PHASE_LABEL, selectActiveFabled, selectActiveLorics } from "./presenters";
 import { RemoteScreenBoundary } from "@/features/remote/RemoteScreenBoundary";
 
@@ -42,7 +44,7 @@ export function PublicDisplayScreen({ code }: Props) {
 function PublicDisplayContent({ code }: Props) {
   const [backend, setBackend] = useState<RoomBackend | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
-  const [size, setSize] = useState(800);
+  const [stage, setStage] = useState({ width: 800, height: 800 });
   const wrapRef = useRef<HTMLDivElement>(null);
 
   // Firebase connect, then (Phase 9C.6, OPUS-002) attempt fragment-token
@@ -77,10 +79,7 @@ function PublicDisplayContent({ code }: Props) {
     if (!wrapRef.current) return;
     const el = wrapRef.current;
     const ro = new ResizeObserver(([entry]) => {
-      if (entry) {
-        const s = Math.min(entry.contentRect.width, entry.contentRect.height);
-        setSize(s);
-      }
+      if (entry) setStage({ width: Math.round(entry.contentRect.width), height: Math.round(entry.contentRect.height) });
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -141,13 +140,12 @@ function PublicDisplayContent({ code }: Props) {
   }
 
   const playerCount = publicLobby.seatOrder.length;
-  // Scale token size with the container so the ring radius and visual size stay
-  // in sync. The CSS transform:scale was removed; scaling happens here instead.
-  const baseTokenSize = tokenSizeForCount(playerCount);
-  const tokenSize = Math.round(
-    Math.min(baseTokenSize * 2.4, Math.max(baseTokenSize, baseTokenSize * (size / 600)))
-  );
-  const radius = ringRadius(size, tokenSize);
+  // Phase 10H (10H-AC-069): the Table's oval geometry, fitted to the measured
+  // display so no seat's disc or text overprints a neighbour's.
+  const { spec, label, table } = publicSeatLayout(stage, publicLobby.seatOrder.map((id) => {
+    const p = publicLobby.players[id];
+    return { role: !!(p?.publicDisplayRole && lookupOfficialRole(p.publicDisplayRole)), traveler: !!p?.isTraveler };
+  }));
   const fabled = selectActiveFabled(publicLobby);
   const lorics = selectActiveLorics(publicLobby);
   // Public display only knows the roles it sees publicly. Use fabled+lorics
@@ -192,18 +190,21 @@ function PublicDisplayContent({ code }: Props) {
             <p>Waiting for the storyteller to seat players…</p>
           </div>
         ) : (
-          <div className="public-display-circle">
+          <div className="public-display-circle" data-name-lines={label.nameLines} data-density={label.tier}>
             {publicLobby.seatOrder.map((id, i) => {
               const p = publicLobby.players[id];
               if (!p) return null;
-              const pos = seatPosition(i, playerCount, radius);
+              const pos = seatCentre(i, playerCount, table);
               return (
                 <PublicSeat
                   key={id}
                   player={p}
-                  size={tokenSize}
+                  size={spec.disc}
                   x={pos.x}
                   y={pos.y}
+                  width={spec.width}
+                  travelerPill={label.travelerPill}
+                  lifeText={label.lifeText}
                 />
               );
             })}

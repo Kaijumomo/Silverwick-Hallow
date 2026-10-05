@@ -16,6 +16,7 @@ import { makeSTPlayer } from "@/test/fixtures";
 import { FIXTURE_SEMANTICS } from "@/test/abilityFixtures";
 import { stripCommentsForGuard as stripComments } from "@/test/writerGuard";
 import type { Script, StorytellerLobbyRecord } from "@/stores/types";
+import { choose } from "@/test/pickers";
 
 const script: Script = { id: "day-test", name: "Day test", characters: canonicalRoles(["slayer", "chef", "monk", "imp", "empath"]) };
 const registry = buildRegistry(script);
@@ -29,7 +30,7 @@ beforeEach(() => {
   const players = roles.map((actualRole, seat) => makeSTPlayer({ id: `p${seat}`, name: ["Ann", "Ben", "Cat", "Dan", "Eli"][seat]!, seat,
     actualRole, shownRole: actualRole, actualAlignment: registry.alignmentOf(actualRole) }));
   const g: StorytellerLobbyRecord = {
-    gameSchemaVersion: 25, gameRuleFacts: [], code: "", storytellerUid: "local", scriptId: script.id, phase: "day", day: 2,
+    gameSchemaVersion: 26, gameRuleFacts: [], code: "", storytellerUid: "local", scriptId: script.id, phase: "day", day: 2,
     players: Object.fromEntries(players.map((p) => [p.id, p])), seatOrder: players.map((p) => p.id),
     plannedPlayerCount: 5, plannedTravelerCount: 0, rolePool: [], fabled: [], lorics: [], bluffs: [], notes: "", nightProgress: {}, pendingPlayers: {},
     history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] }, setupRolesDealt: true, setupRolesRevealed: true,
@@ -56,7 +57,7 @@ describe("SOL-10F-L3: Day ability entry through the same workspace / coordinator
     openAbilities();
     fireEvent.click(screen.getByRole("button", { name: "Use ability… (Slayer)" }));
     const dialog = screen.getByRole("dialog", { name: /Slayer — guided resolution/ });
-    fireEvent.change(within(dialog).getByRole("combobox", { name: "the chosen player" }), { target: { value: "p3" } });
+    choose("the chosen player", "p3", dialog);
     const preview = within(dialog).getByRole("region", { name: "Result" });
     expect(preview).toHaveTextContent("Ann's ability is used");
     expect(preview).toHaveTextContent("Dan dies");
@@ -87,7 +88,7 @@ describe("SOL-10F-L3: Day ability entry through the same workspace / coordinator
     const dialog = screen.getByRole("dialog", { name: /Resolve manually \/ unmodeled interaction/ });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Reason for manual resolution" }), { target: { value: "Public claim, unmodeled" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "+ Death" }));
-    fireEvent.change(within(dialog).getByRole("combobox", { name: "Step 1 player" }), { target: { value: "p4" } });
+    choose("Step 1 player", "p4", dialog);
     fireEvent.click(within(dialog).getByRole("button", { name: "Confirm and record" }));
     expect(game().players.p4!.alive).toBe(false);
     expect(game().history.at(-1)!.provenance).toMatchObject({ reason: "manual", note: "Public claim, unmodeled" });

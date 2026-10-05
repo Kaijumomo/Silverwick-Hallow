@@ -7,6 +7,8 @@ import type {
   Alignment,
   PlayerId,
   PlayerPublicRecord,
+  PlayerSelfEnvelope,
+  PlayerSelfLife,
   PlayerSelfRecord,
   PublicLobbyRecord,
   STPlayerRecord,
@@ -188,4 +190,43 @@ export function projectLobbyToSelfMap(
     }
   }
   return out;
+}
+
+/**
+ * Phase 10H (contract §11.7, F7): the player's OWN current Life State for their
+ * private self envelope -- the same normalization the public Day projection
+ * uses (publicLifeOf: one Life grammar, anomalies normalized away), but NOT
+ * withheld at Night. Only ever attached to the player's own record; never a
+ * Life Event, never anyone else's Life. Public Night withholding
+ * (projectToPublic / publicLifeWithheld) is unchanged.
+ */
+export function ownLifeOf(p: STPlayerRecord): PlayerSelfLife {
+  const life = publicLifeOf(p);
+  return { alive: life.alive!, ghostVote: life.ghostVote!, ...(life.exiled ? { exiled: true as const } : {}) };
+}
+
+/**
+ * Phase 10H: the record written at player/{id} -- the allowlisted self record
+ * (identity or matching published packet, exactly as projectToSelf returns
+ * it) plus envelope fields that are never part of a packet: this
+ * participation's current reveal token and the player's own Life. Packet
+ * delivery comparison keeps using the bare self record.
+ */
+export function selfEnvelopeOf(p: STPlayerRecord, self: PlayerSelfRecord): PlayerSelfEnvelope {
+  return {
+    ...self,
+    ...(p.revealToken ? { revealToken: p.revealToken } : {}),
+    life: ownLifeOf(p),
+  };
+}
+
+/** Phase 10H: projectLobbyToSelfMap (unchanged gating, including the Setup
+ * all-or-none barrier) with each delivered record wrapped in its envelope.
+ * A withheld identity carries no envelope either. */
+export function projectLobbyToSelfEnvelopeMap(
+  st: StorytellerLobbyRecord,
+  registry: RoleRegistry
+): Record<PlayerId, PlayerSelfEnvelope> {
+  const selfMap = projectLobbyToSelfMap(st, registry);
+  return Object.fromEntries(Object.entries(selfMap).map(([id, self]) => [id, selfEnvelopeOf(st.players[id]!, self)]));
 }

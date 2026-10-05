@@ -6,6 +6,7 @@ import { tbScript, makePublishedSTPlayer } from "@/test/fixtures";
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
 import { participantRefOf } from "@/stores/participants";
 import type { StorytellerLobbyRecord } from "@/stores/types";
+import { withoutSelfEnvelope } from "@/test/revealTokens";
 
 // `public/` is the town view: NO role data of any kind, ever.
 const FORBIDDEN_ON_PUBLIC = [
@@ -43,7 +44,7 @@ const registry = buildRegistry(tbScript);
 
 function makeLobby(): StorytellerLobbyRecord {
   return {
-    gameSchemaVersion: 25, gameRuleFacts: [],
+    gameSchemaVersion: 26, gameRuleFacts: [],
     code: "ABCD",
     storytellerUid: "uid-st",
     scriptId: "tb",
@@ -396,7 +397,7 @@ describe("writeProjections — privacy chokepoint", () => {
 describe("writeProjections — Phase 9C.4 setup barrier atomicity", () => {
   function setupLobby(p2ShownRole: string | null, revealed = false): StorytellerLobbyRecord {
     return {
-      gameSchemaVersion: 25, gameRuleFacts: [], code: "SETP", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
+      gameSchemaVersion: 26, gameRuleFacts: [], code: "SETP", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
       bluffs: [], fabled: [], lorics: [], notes: "", setupRolesRevealed: revealed,
       seatOrder: ["p1", "p2", "t1"], nightProgress: {}, rolePool: [], history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       plannedPlayerCount: 2, plannedTravelerCount: 0, pendingPlayers: {},
@@ -430,7 +431,7 @@ describe("writeProjections — Phase 9C.4 setup barrier atomicity", () => {
     const update = calls[0]!;
     expect(update["lobbies/SETP/player/p1"]).toBeNull();
     expect(update["lobbies/SETP/player/p2"]).toBeNull();
-    expect(update["lobbies/SETP/player/t1"]).toEqual({ shownRole: "thief" });
+    expect(withoutSelfEnvelope(update["lobbies/SETP/player/t1"])).toEqual({ shownRole: "thief" });
     expect(update["lobbies/SETP/public"]).toBeDefined();
     expect(update["lobbies/SETP/storyteller"]).toBeDefined();
     expect(update["lobbies/SETP/checkpoint"]).toBeDefined();
@@ -452,7 +453,7 @@ describe("writeProjections — Phase 9C.4 setup barrier atomicity", () => {
     const update = calls[0]!;
     expect(update["lobbies/SETP/player/p1"]).toBeNull();
     expect(update["lobbies/SETP/player/p2"]).toBeNull();
-    expect(update["lobbies/SETP/player/t1"]).toEqual({ shownRole: "thief" });
+    expect(withoutSelfEnvelope(update["lobbies/SETP/player/t1"])).toEqual({ shownRole: "thief" });
 
     expect(await backend.get("lobbies/SETP/player/p1")).toBeUndefined();
     expect(await backend.get("lobbies/SETP/player/p2")).toBeUndefined();
@@ -468,12 +469,12 @@ describe("writeProjections — Phase 9C.4 setup barrier atomicity", () => {
 
     expect(calls).toHaveLength(1);
     const update = calls[0]!;
-    expect(update["lobbies/SETP/player/p1"]).toEqual({ shownRole: "chef", shownAlignment: "good" });
-    expect(update["lobbies/SETP/player/p2"]).toEqual({ shownRole: "washerwoman", shownAlignment: "good" });
-    expect(update["lobbies/SETP/player/t1"]).toEqual({ shownRole: "thief" });
+    expect(withoutSelfEnvelope(update["lobbies/SETP/player/p1"])).toEqual({ shownRole: "chef", shownAlignment: "good" });
+    expect(withoutSelfEnvelope(update["lobbies/SETP/player/p2"])).toEqual({ shownRole: "washerwoman", shownAlignment: "good" });
+    expect(withoutSelfEnvelope(update["lobbies/SETP/player/t1"])).toEqual({ shownRole: "thief" });
 
-    expect(await backend.get("lobbies/SETP/player/p1")).toEqual({ shownRole: "chef", shownAlignment: "good" });
-    expect(await backend.get("lobbies/SETP/player/p2")).toEqual({ shownRole: "washerwoman", shownAlignment: "good" });
+    expect(withoutSelfEnvelope(await backend.get("lobbies/SETP/player/p1"))).toEqual({ shownRole: "chef", shownAlignment: "good" });
+    expect(withoutSelfEnvelope(await backend.get("lobbies/SETP/player/p2"))).toEqual({ shownRole: "washerwoman", shownAlignment: "good" });
   });
 });
 

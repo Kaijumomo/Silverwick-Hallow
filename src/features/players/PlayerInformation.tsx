@@ -113,6 +113,10 @@ export function PlayerInformation({ playerId, purpose, pendingExtraText }: {
       }}>{sendLabel}</button>
     {queued ? <p role="status">Sending…</p> : sent ? <p role="status">Sent to player view</p> : null}
     {!backend && <p className="behavior-help">Connect the lobby to send digitally. You can still give information in person.</p>}
+    {/* 10H-AC-067: say why Send is unavailable when there is nothing to send. */}
+    {backend && !preview && !invalid && purpose !== "setup" && <p className="disabled-reason">
+      {purpose === "result" ? "Write the information first." : "Nothing to send yet."}
+    </p>}
     {(error || invalid) && <p className="field-error" role="alert">{error || invalid}</p>}
     {current && <details className="information-review">
       <summary>Currently shown to player</summary>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { NightStep } from "./nightOrder";
 import { MAX_NIGHT_STEP_NOTES } from "@/stores/schemas";
 import { TextLimit } from "@/components/TextLimit";
@@ -19,6 +19,8 @@ import { lifeEventsForParticipantAt } from "@/stores/lifeEvents";
 import { AbilityWorkspace, type WorkspaceTarget } from "@/features/abilities/AbilityWorkspace";
 import { ParticipantSelect, participantAllowed } from "@/features/abilities/RequirementInput";
 import { bindingOf, pathAbility, seatedParticipants, triggerAbility, useTargetPicker, type StepAbility } from "@/features/abilities/abilityUi";
+import { useShellStore } from "@/stores/shellStore";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -61,6 +63,9 @@ type StepCardProps = {
   guided?: GuidedContext;
   lastResolution?: LastResolution | null;
   onOpenWorkspace?: (initialInputs?: Record<string, AbilityInputValue>, manual?: boolean) => void;
+  /** Phase 10H (§8.1): the step that owns the action context right now. */
+  current?: boolean;
+  onMakeCurrent?: () => void;
 };
 
 type GuidedContext = {
@@ -85,7 +90,6 @@ function InlineSimpleAbility({ step, day, descriptor, guided, onEscalate }: {
   // was selected -- never a seat id re-bound to whoever sits there at Resolve.
   const [target, setTarget] = useState<ParticipantBinding | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const picking = useTargetPicker((s) => s.active);
   const input = descriptor.inputs[0]!;
   const { game } = guided;
   const actor = game.players[step.playerId];
@@ -112,24 +116,23 @@ function InlineSimpleAbility({ step, day, descriptor, guided, onEscalate }: {
   };
   return (
     <div className="ability-inline" role="group" aria-label={`${descriptor.presentation.action} (inline)`}>
-      {/* SOL-10F-B1: the shared slot -- a stale pick shows as stale, never as the seat's new occupant. */}
+      {/* SOL-10F-B1: the shared slot -- a stale pick shows as stale, never as the seat's new occupant.
+          Phase 10H (10H-AC-017): its "On Table" pick and its Roster strip render the SAME eligible list. */}
       <ParticipantSelect game={game} value={target} label={input.label} placeholder={`${input.label}…`}
-        candidates={seatedParticipants(game).filter((p) => participantAllowed(p, input, actorBinding))} onChange={select} />
-      <button className="btn btn-sm" aria-pressed={!!picking} onClick={() => picking ? useTargetPicker.getState().cancel()
-        : useTargetPicker.getState().start(input.label, select)}>
-        {picking ? "Cancel pick" : "Pick on Grimoire"}
-      </button>
+        candidates={seatedParticipants(game).filter((p) => participantAllowed(p, input, actorBinding))} onChange={select} collapsed />
       <button className="btn btn-sm btn-gold" disabled={!target} onClick={resolve}>Resolve</button>
+      {!target && <span className="disabled-reason">Choose {input.label.toLowerCase()} first.</span>}
       {error && <p className="behavior-help" role="alert">{error}</p>}
     </div>
   );
 }
 
-function StepCard({ step, record, day, ability, chips = [], guided, lastResolution, onOpenWorkspace }: StepCardProps) {
+function StepCard({ step, record, day, ability, chips = [], guided, lastResolution, onOpenWorkspace, current = false, onMakeCurrent }: StepCardProps) {
   const players = useStorytellerStore(s => s.game?.players);
   const status = record?.status ?? "pending";
   const notes = record?.notes ?? "";
   const notesRef = useRef<HTMLTextAreaElement>(null);
+  const doneReasonId = useId();
   const [reminderOpen, setReminderOpen] = useState(false);
   const [notesLength, setNotesLength] = useState(notes.length);
   useEffect(() => setNotesLength(notes.length), [notes]);
@@ -149,7 +152,9 @@ function StepCard({ step, record, day, ability, chips = [], guided, lastResoluti
       : "#a5b4dc";
 
   return (
-    <div className="step-card" data-status={status}>
+    <div className={`step-card${current ? " step-current" : ""}`} data-status={status} data-current={current || undefined}
+      aria-current={current ? "step" : undefined}>
+      {current && <span className="step-now">Now</span>}
       {/* Header row: status toggle + role name + badges */}
       <div className="step-card-header">
         <button
@@ -173,6 +178,10 @@ function StepCard({ step, record, day, ability, chips = [], guided, lastResoluti
         )}
       </div>
 
+      {!current && onMakeCurrent && status === "pending" && (
+        <button type="button" className="btn btn-sm step-make-current" onClick={onMakeCurrent}
+          aria-label={`Make ${step.kind === "global" ? step.label : step.effectiveRoleName} the current step`}>Go to this step</button>
+      )}
       {/* Player name + seat — player steps only */}
       {step.kind === "player" && (
         <div className="step-player-name">
@@ -247,17 +256,17 @@ function StepCard({ step, record, day, ability, chips = [], guided, lastResoluti
         <PlayerInformation playerId={step.playerId} purpose="result" />
       </details>}
       <button className="btn btn-sm" disabled={status === "done"}
+        aria-describedby={status === "done" ? doneReasonId : undefined}
         onClick={() => useStorytellerStore.getState().setNightStepStatus(day, step.stepKey, "done")}>Done</button>
+      {/* 10H-AC-067: say in words why Done is unavailable (the status icon alone is not enough). */}
+      {status === "done" && <span id={doneReasonId} className="disabled-reason">This step is already done.</span>}
 
       {/* Expandable reminder */}
       {step.reminder && (
         <>
           <button
-            style={{
-              background: "none", border: "none", cursor: "pointer",
-              fontSize: "11px", color: "var(--text-faint)", textAlign: "left",
-              padding: "0 0 0 24px", fontFamily: "var(--font-body)",
-            }}
+            type="button"
+            className="step-reminder-toggle"
             onClick={() => setReminderOpen((o) => !o)}
             aria-expanded={reminderOpen}
           >
@@ -327,8 +336,19 @@ export function NightOrderPanel({ game, script, onClose, semantics = CANONICAL_A
   return <NightDashboard game={game} script={script} onClose={onClose} semantics={semantics} />;
 }
 
+type OpenWorkspace = { target: WorkspaceTarget; ability: StepAbility; initialInputs?: Record<string, AbilityInputValue>; key: number };
+
 function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
-  const [workspace, setWorkspace] = useState<{ target: WorkspaceTarget; ability: StepAbility; initialInputs?: Record<string, AbilityInputValue> } | null>(null);
+  const [workspace, setWorkspaceState] = useState<OpenWorkspace | null>(null);
+  const workspaceSeq = useRef(0);
+  const setWorkspace = (next: Omit<OpenWorkspace, "key"> | null) => {
+    workspaceSeq.current += 1;
+    setWorkspaceState(next ? { ...next, key: workspaceSeq.current } : null);
+  };
+  // Phase 10H (§§8.1-8.2): the current Night step owns the action context.
+  const cursor = useShellStore((s) => s.nightCursor);
+  const actionOpen = useShellStore((s) => s.actionOpen);
+  const actionRequest = useShellStore((s) => s.actionRequest);
   const [lastResolution, setLastResolution] = useState<LastResolution | null>(null);
   // A pending Grimoire pick never outlives the dashboard (Privacy Mode, close).
   useEffect(() => () => useTargetPicker.getState().cancel(), []);
@@ -388,11 +408,47 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
 
   const resolvedCount = steps.filter((s) => stepResolved(game, s)).length;
 
-  const handleReset = () => {
-    if (window.confirm(`Reset all night ${game.day} progress?`)) {
-      useStorytellerStore.getState().clearNightProgress(game.day);
-    }
+  // The step the Storyteller is on: the explicit cursor while it is still
+  // open, otherwise the first unresolved step. UI state only (shellStore).
+  const currentStep = (cursor && cursor.day === game.day
+    ? steps.find((st) => st.stepKey === cursor.stepKey && !stepResolved(game, st)) : undefined)
+    ?? steps.find((st) => !stepResolved(game, st)) ?? null;
+  const actor = currentStep?.kind === "player" ? game.players[currentStep.playerId] : undefined;
+  const lit = actor && !actor.isEmpty && actor.participantId && currentStep
+    ? { playerId: actor.id, participantId: actor.participantId, stepKey: currentStep.stepKey } : null;
+  // Publish the lit actor while this dashboard is mounted; withdraw it on
+  // unmount (Day, Privacy Mode, game end) together with any open action.
+  useEffect(() => { useShellStore.getState().setLitActor(lit); }, [lit?.playerId, lit?.participantId, lit?.stepKey]);
+  useEffect(() => () => { useShellStore.getState().setLitActor(null); useShellStore.getState().setActionOpen(false); }, []);
+
+  /** Opens (or replaces) the action card for one player step. */
+  const openStep = (step: NightStep, initialInputs?: Record<string, AbilityInputValue>, manual?: boolean) => {
+    if (step.kind !== "player") return;
+    const ability = abilityOf(step)!;
+    const path = ability.kind === "guided" ? ability.invocationPath ?? "nightOrder" : "nightOrder";
+    setWorkspace({
+      target: { actorId: step.playerId, roleId: step.effectiveRoleId, roleName: step.effectiveRoleName, invocationPath: path, step: { day: game.day, stepKey: step.stepKey },
+        ...(ability.kind === "guided" && ability.trigger && ability.trigger.kind !== "notTriggered" ? { trigger: { eventId: ability.trigger.eventId } } : {}) },
+      ability: manual && ability.kind === "guided" && ability.trigger?.kind === "notTriggered" ? { kind: "manual", reason: ability.trigger.reason } : ability,
+      ...(initialInputs ? { initialInputs } : {}),
+    });
+    useShellStore.getState().setNightCursor({ day: game.day, stepKey: step.stepKey });
+    useShellStore.getState().setActionOpen(true);
   };
+  // Tapping the acting seat (I2): RESUME the card for the current step when
+  // it exists, otherwise open it.
+  const lastRequest = useRef(actionRequest);
+  useEffect(() => {
+    if (actionRequest === lastRequest.current) return;
+    lastRequest.current = actionRequest;
+    if (!currentStep || currentStep.kind !== "player") return;
+    if (workspace && workspace.target.step?.stepKey === currentStep.stepKey) { useShellStore.getState().setActionOpen(true); return; }
+    openStep(currentStep);
+  }, [actionRequest]);
+  const closeWorkspace = () => { setWorkspace(null); useShellStore.getState().setActionOpen(false); };
+
+  const [confirmReset, setConfirmReset] = useState(false);
+  const handleReset = () => setConfirmReset(true);
 
   return (
     <aside className={`night-panel${picking ? " night-panel-picking" : ""}`} aria-label={`Night ${game.day} order`}>
@@ -417,8 +473,10 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
               <div key={stepKey} className="step-card" data-status="pending">
                 <span className="step-role-name">{roleName}</span>
                 <span className="step-player-name">{player.name || `Seat ${player.seat + 1}`} · {ability.kind === "guided" && ability.trigger?.kind === "unknown" ? "trigger needs a check" : "died tonight"}</span>
-                <button className="btn btn-sm btn-gold" onClick={() => setWorkspace({
-                  target: { actorId: player.id, roleId, roleName, invocationPath: "nightTrigger", step: { day: game.day, stepKey }, trigger: { eventId } }, ability })}>Guide</button>
+                <button className="btn btn-sm btn-gold" onClick={() => {
+                  setWorkspace({ target: { actorId: player.id, roleId, roleName, invocationPath: "nightTrigger", step: { day: game.day, stepKey }, trigger: { eventId } }, ability });
+                  useShellStore.getState().setActionOpen(true);
+                }}>Guide</button>
               </div>
             ))}
           </section>
@@ -436,16 +494,9 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
             <div key={step.stepKey}>
               <StepCard step={step} record={progress[`${game.day}:${step.stepKey}`]} day={game.day}
                 ability={abilityOf(step)} chips={chipsFor(step)} guided={guided} lastResolution={lastResolution}
-                onOpenWorkspace={step.kind === "player" ? (initialInputs, manual) => {
-                  const ability = abilityOf(step)!;
-                  const path = ability.kind === "guided" ? ability.invocationPath ?? "nightOrder" : "nightOrder";
-                  setWorkspace({
-                    target: { actorId: step.playerId, roleId: step.effectiveRoleId, roleName: step.effectiveRoleName, invocationPath: path, step: { day: game.day, stepKey: step.stepKey },
-                      ...(ability.kind === "guided" && ability.trigger && ability.trigger.kind !== "notTriggered" ? { trigger: { eventId: ability.trigger.eventId } } : {}) },
-                    ability: manual && ability.kind === "guided" && ability.trigger?.kind === "notTriggered" ? { kind: "manual", reason: ability.trigger.reason } : ability,
-                    ...(initialInputs ? { initialInputs } : {}),
-                  });
-                } : undefined} />
+                current={currentStep?.stepKey === step.stepKey}
+                onMakeCurrent={() => useShellStore.getState().setNightCursor({ day: game.day, stepKey: step.stepKey })}
+                onOpenWorkspace={step.kind === "player" ? (initialInputs, manual) => openStep(step, initialInputs, manual) : undefined} />
               {step.kind === "global" && step.setupRecipientIds?.filter(id => setupPlayers.includes(id)).map(id => <details className="information-review" key={id}>
                 <summary>Setup information — {game.players[id]!.name}</summary>
                 <button className="btn btn-sm" onClick={() => useStorytellerStore.getState().selectPlayer(id)}>Edit setup information</button>
@@ -465,16 +516,34 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
         <p className="behavior-help">New or changed characters, gained abilities and past events may need a custom step.
           Verify these conditions manually; this sheet does not reconstruct game history.</p>
       </div>
-      {workspace && (
-        <AbilityWorkspace game={game} script={script} registry={registry} semantics={semantics} target={workspace.target}
-          descriptor={workspace.ability.kind === "guided" ? workspace.ability.descriptor : null}
-          manualReason={workspace.ability.kind === "manual" ? workspace.ability.reason : ""}
-          {...(workspace.initialInputs ? { initialInputs: workspace.initialInputs } : {})}
-          onClose={() => setWorkspace(null)}
-          onResolved={({ game: committed, delivered }) => {
-            setLastResolution({ stepKey: workspace.target.step?.stepKey ?? "", game: committed, delivered });
-            setWorkspace(null);
-          }} />
+      {workspace && (() => {
+        const stepOf = steps.find((st) => st.stepKey === workspace.target.step?.stepKey);
+        const roleDef = registry.get(workspace.target.roleId);
+        return (
+          <AbilityWorkspace key={workspace.key} game={game} script={script} registry={registry} semantics={semantics} target={workspace.target}
+            descriptor={workspace.ability.kind === "guided" ? workspace.ability.descriptor : null}
+            manualReason={workspace.ability.kind === "manual" ? workspace.ability.reason : ""}
+            {...(workspace.initialInputs ? { initialInputs: workspace.initialInputs } : {})}
+            hidden={!actionOpen}
+            onHide={() => useShellStore.getState().setActionOpen(false)}
+            onClose={closeWorkspace}
+            // §8.6: Refresh re-derives from current authoritative state -- a
+            // fresh workflow (new fingerprint), no stale inputs carried forward.
+            onRefresh={() => setWorkspace({ target: workspace.target, ability: workspace.ability })}
+            guidance={{ ability: roleDef?.ability, prompt: stepOf?.prompt, reminder: stepOf?.reminder }}
+            onResolved={({ game: committed, delivered }) => {
+              setLastResolution({ stepKey: workspace.target.step?.stepKey ?? "", game: committed, delivered });
+              closeWorkspace();
+              useShellStore.getState().setNightCursor(null);
+            }} />
+        );
+      })()}
+      {confirmReset && (
+        <ConfirmDialog title={`Reset Night ${game.day} progress?`} confirmLabel="Reset progress" danger
+          onCancel={() => setConfirmReset(false)}
+          onConfirm={() => { useStorytellerStore.getState().clearNightProgress(game.day); setConfirmReset(false); }}>
+          <p>Every step of Night {game.day} returns to not done. Nothing else in the game changes.</p>
+        </ConfirmDialog>
       )}
     </aside>
   );

@@ -35,7 +35,7 @@ describe("10G-AC-34 / AC-36: Finish Game retains a terminal snapshot (proof area
     state().resolveGameRuleFacts({ intents: [{ kind: "apply", type: PIT_HAG_ARBITRARY_DEATHS }] });
     const before = game();
     expect(state().undoStack.length).toBeGreaterThan(0);
-    expect(state().finishGame()).toEqual({ ok: true });
+    expect(state().finishGame({ kind: "noResult" })).toEqual({ ok: true });
     expect(game()).toEqual({ ...before, phase: "ended" });
     expect(state().undoStack).toEqual([]);
     expect(state().localSeq).toBeGreaterThan(3);
@@ -52,16 +52,16 @@ describe("10G-AC-34 / AC-36: Finish Game retains a terminal snapshot (proof area
   it("is refused for Setup and for an already-ended game (nothing changes)", () => {
     store.setState({ game: liveGame({ phase: "setup", day: 0 }) });
     const setup = game();
-    expect(state().finishGame()).toMatchObject({ ok: false });
+    expect(state().finishGame({ kind: "noResult" })).toMatchObject({ ok: false });
     expect(game()).toBe(setup);
     store.setState({ game: liveGame({ phase: "ended" }) });
     const ended = game();
-    expect(state().finishGame()).toMatchObject({ ok: false });
+    expect(state().finishGame({ kind: "noResult" })).toMatchObject({ ok: false });
     expect(game()).toBe(ended);
   });
 
   it("10G-AC-39: no winner / result is created", () => {
-    state().finishGame();
+    state().finishGame({ kind: "noResult" });
     expect(game()).not.toHaveProperty("winner");
     expect(projectLobbyToPublic(game(), {})).not.toHaveProperty("winner");
   });
@@ -71,7 +71,7 @@ describe("10G-AC-33 / AC-35: multiplayer detachment (proof areas 11-12)", () => 
   it("while a lobby is still attached (its close has not succeeded), the game stays live and unchanged", () => {
     store.setState({ lobby: { code: "ABCD", uid: "st", sessionId: "s1", status: "live" }, undoStack: [liveGame()] });
     const before = { game: game(), undo: state().undoStack, seq: state().localSeq };
-    expect(state().finishGame()).toMatchObject({ ok: false, message: expect.stringMatching(/multiplayer lobby/) });
+    expect(state().finishGame({ kind: "noResult" })).toMatchObject({ ok: false, message: expect.stringMatching(/multiplayer lobby/) });
     expect(game()).toBe(before.game);
     expect(state().undoStack).toBe(before.undo);
     expect(state().localSeq).toBe(before.seq);
@@ -81,7 +81,7 @@ describe("10G-AC-33 / AC-35: multiplayer detachment (proof areas 11-12)", () => 
   it("after the close succeeded, the retained snapshot carries no active lobby or reconnect metadata -- even after a reload", async () => {
     store.setState({ game: liveGame({ code: "ABCD", storytellerUid: "st" }), lobby: null,
       sync: { code: "ABCD", sessionId: "s1", ackedGuard: null, ackedGameSeq: 0, lastAttempt: null } });
-    expect(state().finishGame()).toEqual({ ok: true });
+    expect(state().finishGame({ kind: "noResult" })).toEqual({ ok: true });
     expect(state().lobby).toBeNull();
     expect(state().sync).toBeNull();
     expect(game().code).toBe("ABCD"); // historical record fidelity only

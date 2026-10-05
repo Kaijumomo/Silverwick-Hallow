@@ -104,6 +104,9 @@ const ALLOWED = new Set([
   // Phase 10G: the read-only ended-game participant review (Storyteller-only
   // presentation via reminderPresentation; it mounts no control at all).
   "features/game/EndedParticipantReview.tsx",
+  // Phase 10H: the Roster / Labels readers of the Table (Storyteller-only
+  // presentation via reminderPresentation; DOM-absent under Privacy Mode).
+  "features/grimoire/RosterView.tsx",
 ]);
 
 function productionSources(dir = SRC): string[] {

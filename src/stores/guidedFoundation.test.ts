@@ -83,7 +83,7 @@ describe("10F-AC-35: v23 -> v24 participant-scoped Night progress", () => {
     const v23 = v23Entry();
     const copy = structuredClone(v23);
     migrateGameEntry(copy, 23, { kind: "canonical-only" });
-    expect(copy.gameSchemaVersion).toBe(25);
+    expect(copy.gameSchemaVersion).toBe(26);
     expect(copy.nightProgress).toEqual({
       "2:demonInfo": done,
       "2:modifier:toymaker": { status: "skipped", notes: "kept" },
@@ -138,12 +138,12 @@ describe("10F-AC-35: v23 -> v24 participant-scoped Night progress", () => {
     localStorage.setItem("new-blood-st", JSON.stringify({ version: 23, state: { game: v23Entry(), undoStack: [v23Entry()] } }));
     await store.persist.rehydrate();
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(game().gameSchemaVersion).toBe(25);
-    expect(state().undoStack[0]!.gameSchemaVersion).toBe(25);
+    expect(game().gameSchemaVersion).toBe(26);
+    expect(state().undoStack[0]!.gameSchemaVersion).toBe(26);
     expect(Object.keys(game().nightProgress).sort()).toEqual(["2:demonInfo", "2:manual:custom-1", "2:modifier:toymaker"]);
     state().setNotes(game().seatOrder[0]!, "x");
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(JSON.parse(localStorage.getItem("new-blood-st")!).version).toBe(25);
+    expect(JSON.parse(localStorage.getItem("new-blood-st")!).version).toBe(26);
   });
 
   async function recoverFrom(entry: Raw) {
@@ -196,7 +196,7 @@ describe("10F-AC-35: malformed current-version data fails closed", () => {
       // Marker-less, the same evidence is current data -- never treated as legacy.
       const markerless = structuredClone(g);
       delete markerless.gameSchemaVersion;
-      expect(detectLegacyGameVersion(markerless)).toBe(25);
+      expect(detectLegacyGameVersion(markerless)).toBe(26);
     }
   });
 
@@ -229,10 +229,10 @@ describe("10F-AC-35: malformed current-version data fails closed", () => {
   });
 
   it("unsupported / newer markers are never reinterpreted", () => {
-    for (const marker of [26, "25", null, { v: 25 }]) {
+    for (const marker of [27, "26", null, { v: 26 }]) {
       const g = nightGame() as unknown as Raw;
       g.gameSchemaVersion = marker;
-      expect(detectLegacyGameVersion(g)).toBe(25);
+      expect(detectLegacyGameVersion(g)).toBe(26);
       const copy = structuredClone(g);
       migrateGameEntry(copy, 13, { kind: "canonical-only" });
       expect(copy).toEqual(g);
