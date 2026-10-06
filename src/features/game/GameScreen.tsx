@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { gameLifecycleToken, useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
 import { GrimoireCircle } from "@/features/grimoire/GrimoireCircle";
 import { PlayerDrawer } from "@/features/players/PlayerDrawer";
@@ -110,6 +110,31 @@ export function GameScreen() {
   const [activityOpen, setActivityOpen] = useState(false);
   // Phase 10G: the Night -> Day review of unfinished Night work.
   const [dawnReviewOpen, setDawnReviewOpen] = useState(false);
+  // ASTRA-10H-005: Privacy Mode removes private DOM WITHOUT moving the Table.
+  // The shell tracks private content occupied at the instant Privacy turns on
+  // -- the desktop action-card column, the docked Night workspace's height --
+  // are measured synchronously inside that state change (before React
+  // unmounts anything; never during render) and held by empty, non-private
+  // structural placeholders while Privacy is on.
+  const railRef = useRef<HTMLDivElement>(null);
+  const ruleFactsRef = useRef<HTMLDivElement>(null);
+  type PrivacyShell = { actionColumn: boolean; railHeight: number | null; ruleFactsHeight: number };
+  const shellBeforePrivacy = useRef<PrivacyShell>({ actionColumn: false, railHeight: null, ruleFactsHeight: 0 });
+  const [privacyShell, setPrivacyShell] = useState<PrivacyShell | null>(null);
+  useEffect(() => usePrivacyStore.subscribe((next, prev) => {
+    if (!next.enabled || prev.enabled) return;
+    const cardShown = !!document.querySelector(`#${ACTION_CARD_STAGE_HOST} > .action-card:not([hidden])`);
+    const rail = railRef.current;
+    shellBeforePrivacy.current = {
+      actionColumn: !docked && cardShown,
+      railHeight: docked && rail && !rail.hidden ? rail.getBoundingClientRect().height : null,
+      ruleFactsHeight: ruleFactsRef.current?.getBoundingClientRect().height ?? 0,
+    };
+  }), [docked]);
+  useLayoutEffect(() => {
+    setPrivacyShell(privacyMode ? shellBeforePrivacy.current : null);
+    if (!privacyMode) shellBeforePrivacy.current = { actionColumn: false, railHeight: null, ruleFactsHeight: 0 };
+  }, [privacyMode]);
   // 10A-ASTRA-003: turning Privacy Mode on closes every Life Event-bearing
   // dialog at once (each also renders nothing private under Privacy Mode).
   useEffect(() => {
@@ -699,7 +724,14 @@ export function GameScreen() {
         </div>
       )}
 
-      {!privacyMode && game.phase !== "setup" && <RuleFactStrip game={game} readOnly={game.phase === "ended"} />}
+      {/* ASTRA-10H-005: under Privacy the (private) rule facts are unmounted and
+          an EMPTY slot of their pre-Privacy height keeps the Table in place. */}
+      {!privacyMode && game.phase !== "setup" && (
+        <div ref={ruleFactsRef} className="rule-fact-slot"><RuleFactStrip game={game} readOnly={game.phase === "ended"} /></div>
+      )}
+      {privacyMode && !!privacyShell?.ruleFactsHeight && (
+        <div className="rule-fact-slot" aria-hidden="true" style={{ height: privacyShell.ruleFactsHeight, flex: "none" }} />
+      )}
 
       {Object.keys(leaveRequests).length > 0 && (
         <div className="leave-requests-bar" role="region" aria-label="Leave requests">
@@ -758,8 +790,14 @@ export function GameScreen() {
             so the current step keeps owning the action context and an open
             action card can be resumed. Privacy Mode unmounts its contents. */}
         {nightRail && (
-          <div className="shell-pane shell-rail" hidden={docked ? dockTab !== "night" : !nightPanelOpen}>
-            {/* Docked layouts: the action card renders here, in the ONE dock. */}
+          // ASTRA-10H-008: on a docked layout the Night dock shows only while
+          // its tab is active AND the Storyteller has not closed it -- the same
+          // nightPanelOpen the Close control and the reopen toggle change.
+          <div ref={railRef} className="shell-pane shell-rail" hidden={docked ? dockTab !== "night" || !nightPanelOpen : !nightPanelOpen}
+            style={privacyShell?.railHeight ? { height: privacyShell.railHeight, maxHeight: "none" } : undefined}>
+            {/* Docked layouts (ASTRA-10H-002): the action card renders here as
+                the dock's ACTIVE content -- the Night list steps aside while it
+                shows (CSS), and its Night-list control / Resume swap back. */}
             {docked && <div id={ACTION_CARD_DOCK_HOST} className="action-card-dock-host" />}
             <NightOrderPanel
               game={game}
@@ -768,12 +806,15 @@ export function GameScreen() {
             />
           </div>
         )}
-        <div className="shell-stage" role="region" aria-label="Grimoire">
+        <div className="shell-stage" role="region" aria-label="Grimoire" data-action-column={privacyShell?.actionColumn ? "privacy" : undefined}>
           <div className="stage-toolbar">
             <Segmented<TableLens> label="View" className="lens-switch" value={effectiveLens} onChange={setLens} options={[
               { value: "table", label: "Table", disabled: rosterReplacesTable, hint: rosterReplacesTable ? "too many seats for the phone Table — the Roster replaces it" : undefined },
               { value: "roster", label: "Roster" },
-              { value: "labels", label: "Labels", disabled: privacyMode, hint: privacyMode ? "hidden while Privacy Mode is on" : undefined },
+              // ASTRA-10H-005: under Privacy the Labels lens (full Effect /
+              // Reminder detail) is withheld rather than shown disabled with a
+              // reason line, so the toolbar -- and the Table -- never move.
+              ...(privacyMode ? [] : [{ value: "labels" as const, label: "Labels" }]),
             ]} />
           </div>
           {/* Desktop: the action card takes its own column beside the Table. */}
@@ -793,7 +834,7 @@ export function GameScreen() {
         )}
         {docked && nightRail && inspectorVisible && (
           <div className="dock-tabs" role="tablist" aria-label="Workspace">
-            <button type="button" role="tab" aria-selected={dockTab === "night"} className="dock-tab" onClick={() => setDockTab("night")}>
+            <button type="button" role="tab" aria-selected={dockTab === "night"} className="dock-tab" onClick={() => { setDockTab("night"); setNightPanelOpen(true); }}>
               Night {game.day}
             </button>
             <button type="button" role="tab" aria-selected={dockTab === "seat"} className="dock-tab" onClick={() => setDockTab("seat")}>

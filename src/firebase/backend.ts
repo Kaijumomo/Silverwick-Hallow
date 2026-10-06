@@ -62,4 +62,13 @@ export interface RoomBackend {
    * MemoryRoomBackend implements this as a no-op (testing only).
    */
   onDisconnectSet(path: string, value: Json): Promise<() => Promise<void>>;
+
+  /**
+   * Phase 10H (ASTRA-10H-001): this client's REAL connection state -- the
+   * Firebase SDK's `.info/connected` (false until the socket connects, then
+   * true/false as it drops and reconnects). Optional: only a backend with a
+   * real connection implements it; MemoryRoomBackend deliberately does not
+   * (it has no socket, so it reports nothing rather than invent semantics).
+   */
+  subscribeConnection?(cb: (connected: boolean) => void): Unsubscribe;
 }

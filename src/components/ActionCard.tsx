@@ -86,7 +86,10 @@ export function ActionCard({ title, subtitle, hidden = false, onHide, onClose, c
           {subtitle && <div className="action-card-subtitle">{subtitle}</div>}
         </div>
         <div className="action-card-controls">
-          {onHide && <button type="button" className="btn btn-sm" onClick={onHide} aria-label="Hide the action card (keeps your choices)">Hide</button>}
+          {onHide && (layout === "desktop"
+            ? <button type="button" className="btn btn-sm" onClick={onHide} aria-label="Hide the action card (keeps your choices)">Hide</button>
+            // ASTRA-10H-002: in the one dock, Hide is the way back to the Night list.
+            : <button type="button" className="btn btn-sm" onClick={onHide} aria-label="Back to the Night list (keeps your choices)">← Night list</button>)}
           <button type="button" className="btn btn-sm" onClick={onClose} aria-label="Close">✕</button>
         </div>
       </header>

@@ -1,4 +1,4 @@
-import { declaredResult, useStorytellerStore, type TerminalIntent } from "@/stores/storytellerStore";
+import { declaredResult, useStorytellerStore, type TerminalIntent, type TerminalRecovery } from "@/stores/storytellerStore";
 import type { SetupCommandResult } from "@/features/setup/setupReadiness";
 import { lifecycleMessage } from "./lifecycle";
 import { closeMultiplayerSession } from "./storytellerSync";
@@ -26,11 +26,14 @@ import { terminalPublication } from "./terminalResults";
  *       the lock and keeps the intent for retry.
  *
  * A retry that finds the session already ended (an earlier attempt's commit
- * landed but its response was lost -- 10H-AC-050) retains exactly the result
- * that commit published, read back from the results collection, so the local
- * record and the players' results never disagree and nothing is published
- * twice (the session can end only once; results are written only in that
- * commit).
+ * landed but its response was lost -- 10H-AC-050) retains exactly that
+ * commit's CONFIRMED outcome (ASTRA-10H-004), as an explicit tri-state: a
+ * declared result read back from the Storyteller's result receipt, or a
+ * confirmed absence of one (End Without Result). Either overrides this retry's
+ * intent, so a different selection never rewrites the local history, the
+ * local record and the players' results never disagree, and nothing is
+ * published twice (the session can end only once; results are written only
+ * in that commit). An outcome that cannot be confirmed fails closed.
  */
 export async function endGameWithIntent(intent: TerminalIntent): Promise<SetupCommandResult> {
   const store = useStorytellerStore.getState();
@@ -46,16 +49,21 @@ export async function endGameWithIntent(intent: TerminalIntent): Promise<SetupCo
     return { ok: false, message: "This game is already being ended." };
   }
   try {
-    let published: ReturnType<typeof readBack> = undefined;
+    let recovery: TerminalRecovery = { kind: "fresh" };
     const lobby = useStorytellerStore.getState().lobby;
     if (lobby) {
       const outcome = await closeMultiplayerSession({
         terminal: terminalPublication(lobby.code, lobby.sessionId ?? "", declared, game),
         readBackPublished: true,
       });
-      published = readBack(outcome);
+      if (outcome.alreadyEnded) {
+        // Read-back was requested, so an already-ended outcome always carries
+        // its confirmed recovery; refuse rather than fall back to the intent.
+        if (!outcome.recovery) throw new Error("The ended lobby's result could not be confirmed.");
+        recovery = outcome.recovery;
+      }
     }
-    const result = useStorytellerStore.getState().finishGame(intent, published);
+    const result = useStorytellerStore.getState().finishGame(intent, recovery);
     if (!result.ok) useStorytellerStore.getState().failTerminalClose(result.message);
     return result;
   } catch (error) {
@@ -63,11 +71,4 @@ export async function endGameWithIntent(intent: TerminalIntent): Promise<SetupCo
     useStorytellerStore.getState().failTerminalClose(message);
     return { ok: false, message };
   }
-}
-
-/** The published result to retain: only from an already-ended session that
- * actually published one; otherwise undefined (the intent itself is what the
- * successful close just published). */
-function readBack(outcome: Awaited<ReturnType<typeof closeMultiplayerSession>>) {
-  return outcome.alreadyEnded && outcome.published ? outcome.published : undefined;
 }

@@ -353,8 +353,14 @@ describe("10H-AC-045..047: one terminal seam, explicit intents, Undo-free, nothi
   });
 
   it("a result published by the remote close wins over the intent (recovery keeps local = published)", () => {
-    state().finishGame({ kind: "noResult" }, { winner: "evil", declaredAt: { phase: "night", day: 2 } });
+    state().finishGame({ kind: "noResult" }, { kind: "endedWithResult", result: { winner: "evil", declaredAt: { phase: "night", day: 2 } } });
     expect(game().result).toEqual({ winner: "evil", declaredAt: { phase: "night", day: 2 } });
+  });
+
+  it("ASTRA-10H-004: a CONFIRMED no-result outcome also wins over a declared retry intent", () => {
+    state().finishGame({ kind: "declare", winner: "evil" }, { kind: "endedWithoutResult" });
+    expect(game().phase).toBe("ended");
+    expect(game()).not.toHaveProperty("result");
   });
 
   it("AC-047: nothing in the store evaluates a win condition or ends a game automatically", async () => {

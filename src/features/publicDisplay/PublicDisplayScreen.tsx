@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { connectFirebase } from "@/firebase/session";
 import { isFirebaseConfigured } from "@/firebase/config";
 import { friendlyFirebaseError } from "@/firebase/errors";
@@ -45,7 +45,11 @@ function PublicDisplayContent({ code }: Props) {
   const [backend, setBackend] = useState<RoomBackend | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [stage, setStage] = useState({ width: 800, height: 800 });
-  const wrapRef = useRef<HTMLDivElement>(null);
+  // ASTRA-10H-003: the stage wrapper only exists once the asynchronous connect
+  // and subscription produce a lobby, so it is held as STATE through a
+  // callback ref -- the observer attaches when the real node mounts, and
+  // detaches / rebinds if React replaces it.
+  const [stageNode, setStageNode] = useState<HTMLDivElement | null>(null);
 
   // Firebase connect, then (Phase 9C.6, OPUS-002) attempt fragment-token
   // enrollment BEFORE exposing `backend` to the public subscription below —
@@ -74,16 +78,15 @@ function PublicDisplayContent({ code }: Props) {
     };
   }, [code]);
 
-  // Resize observer for the seating circle container.
+  // Resize observer for the mounted seating stage.
   useEffect(() => {
-    if (!wrapRef.current) return;
-    const el = wrapRef.current;
+    if (!stageNode) return;
     const ro = new ResizeObserver(([entry]) => {
       if (entry) setStage({ width: Math.round(entry.contentRect.width), height: Math.round(entry.contentRect.height) });
     });
-    ro.observe(el);
+    ro.observe(stageNode);
     return () => ro.disconnect();
-  }, []);
+  }, [stageNode]);
 
   const { publicLobby, ended, loading, error } = usePublicLobby(backend, code);
 
@@ -184,7 +187,7 @@ function PublicDisplayContent({ code }: Props) {
         )}
       </header>
 
-      <div className="public-display-circle-wrap" ref={wrapRef}>
+      <div className="public-display-circle-wrap" ref={setStageNode} data-stage={`${stage.width}x${stage.height}`}>
         {playerCount === 0 ? (
           <div className="public-display-empty-center">
             <p>Waiting for the storyteller to seat players…</p>

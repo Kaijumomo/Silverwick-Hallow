@@ -29,7 +29,7 @@ import { FirebaseRoomBackend } from "./firebaseBackend";
 import { SessionWriter, LEASE_MS, FENCE_MARGIN_MS } from "./writer";
 import { writeProjections } from "./sync";
 import { createLobby, knockOnLobby, readRosterBindings, revokePlayerMembership, seatPlayer } from "./lobby";
-import { joinLobby, leaveLobby, startPlayerHandshake } from "./playerSync";
+import { acknowledgeReveal, joinLobby, leaveLobby, startPlayerHandshake } from "./playerSync";
 import { acceptLeaveRequest, rejectLeaveRequest, revokePlayerAndCommit, seatPlayerAndCommit, storytellerOccupancyCompletion, type OccupancyCompletion } from "./membershipCommands";
 import { newParticipantId } from "@/stores/participants";
 import { membershipRevocationPath, playerPath, publicPath } from "./paths";
@@ -2316,5 +2316,66 @@ describe("Phase 9C.6 (OPUS-002): real separate-device Public Display contract", 
     await writer.close([]);
 
     await expect(displayBackend.get(`lobbies/${code}/public`)).rejects.toThrow(/permission[_ ]denied/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ASTRA-10H-001: a REAL Firebase connection interruption re-seals the
+// player's private Role card. Driven with the client SDK's own connectivity
+// controls on the player's own Database instance (goOffline/goOnline), which
+// move the SDK-maintained .info/connected false -> true. The re-seal must come
+// from that connection lifecycle -- not from a rerender, a handshake retry or
+// a backend replacement (the handshake is proven NOT to rerun) -- and the
+// player's advisory acknowledgement must survive it unchanged.
+describe("ASTRA-10H-001: a real Firebase reconnect re-seals the Role card without revoking the acknowledgement", () => {
+  async function seatedRevealedPlayer(code: string, st: string, alice: string) {
+    const { writer, id } = await establishSeatedPlayer(code, st, alice, d => { disposals.push(d); });
+    const aliceDb = env.authenticatedContext(alice).database() as unknown as Database;
+    const aliceBackend = new FirebaseRoomBackend(aliceDb);
+    disposals.push(() => { goOnline(aliceDb); });
+    disposals.push(startPlayerHandshake(aliceBackend, code, alice));
+    await waitForPlayer(s => s.status === "seated" && s.playerId === id && !!s.self?.revealToken && s.error === null,
+      "seated with a current reveal token");
+    const token = usePlayerStore.getState().self!.revealToken!;
+    await acknowledgeReveal(aliceBackend);
+    await vi.waitFor(() => expect(usePlayerStore.getState().ownRevealAck).toBe(token));
+    usePlayerStore.getState().setRevealed(true);
+    await vi.waitFor(async () => expect(await aliceBackend.get(".info/connected")).toBe(true));
+    return { writer, aliceDb, aliceBackend, token };
+  }
+
+  test("goOffline -> .info/connected false -> goOnline -> true: revealed === false, still seated, acknowledgement intact", async () => {
+    const code = "CTRSEAL1", st = "rs1-storyteller", alice = "rs1-alice";
+    const { writer, aliceDb, aliceBackend, token } = await seatedRevealedPlayer(code, st, alice);
+    const statuses: string[] = [];
+    const unsubscribe = usePlayerStore.subscribe((s) => { statuses.push(s.status); });
+    disposals.push(unsubscribe);
+
+    goOffline(aliceDb);
+    await vi.waitFor(async () => expect(await aliceBackend.get(".info/connected")).toBe(false));
+    await vi.waitFor(() => expect(usePlayerStore.getState().revealed).toBe(false));
+
+    goOnline(aliceDb);
+    await vi.waitFor(async () => expect(await aliceBackend.get(".info/connected")).toBe(true), { timeout: 10_000 });
+    // Reconnected: the card stays sealed until the player explicitly reveals.
+    expect(usePlayerStore.getState().revealed).toBe(false);
+    expect(usePlayerStore.getState().status).toBe("seated");
+    // The re-seal came from the connection, not a handshake rerun.
+    expect(statuses).not.toContain("reconnecting");
+    // The advisory acknowledgement is untouched: an unchanged token stays Viewed.
+    expect(usePlayerStore.getState().self?.revealToken).toBe(token);
+    expect(usePlayerStore.getState().ownRevealAck).toBe(token);
+    expect(await writer.get(`lobbies/${code}/revealAcks/${alice}`)).toBe(token);
+    // The player can reveal again, explicitly.
+    usePlayerStore.getState().setRevealed(true);
+    expect(usePlayerStore.getState().revealed).toBe(true);
+  });
+
+  test("control: with no connection drop, a revealed card is not spuriously re-sealed", async () => {
+    const code = "CTRSEAL2", st = "rs2-storyteller", alice = "rs2-alice";
+    const { aliceBackend } = await seatedRevealedPlayer(code, st, alice);
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    expect(await aliceBackend.get(".info/connected")).toBe(true);
+    expect(usePlayerStore.getState().revealed).toBe(true);
   });
 });

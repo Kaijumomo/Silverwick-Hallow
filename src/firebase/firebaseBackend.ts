@@ -150,4 +150,9 @@ export class FirebaseRoomBackend implements RoomBackend {
       await od.cancel();
     };
   }
+
+  /** ASTRA-10H-001: the SDK-maintained `.info/connected` flag. */
+  subscribeConnection(cb: (connected: boolean) => void): Unsubscribe {
+    return onValue(ref(this.db, ".info/connected"), (snap) => cb(snap.val() === true));
+  }
 }

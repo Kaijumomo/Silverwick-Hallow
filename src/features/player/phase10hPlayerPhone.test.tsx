@@ -17,6 +17,8 @@ vi.mock("@/firebase/session", async (importOriginal) => {
 
 import { acknowledgeReveal } from "@/firebase/playerSync";
 import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { createLobby } from "@/firebase/lobby";
+import { requireActiveSession, sessionPath } from "@/firebase/lifecycle";
 import { PlayerScreen, playerMilestone, revealModeOf } from "./PlayerScreen";
 import { PlayerEnded } from "./PlayerTerminal";
 import type { PublicLobbyRecord } from "@/stores/types";
@@ -157,5 +159,37 @@ describe("10H-AC-058 (F10): Town notes survive the post-game review until Back t
     expect(screen.getByText(/Bob seemed nervous/)).toBeInTheDocument();
     act(() => { fireEvent.click(screen.getByRole("button", { name: "Back to start" })); });
     expect(usePlayerStore.getState().townNotes).toEqual({});
+  });
+});
+
+describe("ASTRA-10H-007: joining an already-ended lobby is a completed generic Game Ended", () => {
+  it("the stale-ended-lobby join path shows Game ended with Back to Start -- never an endless 'Reading the final result'", async () => {
+    // A real lobby whose session has already ended (e.g. a stale code).
+    const backend = connection.backend as MemoryRoomBackend;
+    await createLobby(backend, "st-host", { codeGenerator: () => "ENDD2345" });
+    const session = await requireActiveSession(backend, "ENDD2345");
+    await backend.set(sessionPath("ENDD2345"), { version: 2, id: session.id, state: "ended" });
+    usePlayerStore.getState().reset();
+    render(<PlayerScreen />);
+    // The real join form and the real joinLobby.
+    fireEvent.change(await screen.findByPlaceholderText("XXXX-XXXX"), { target: { value: "ENDD-2345" } });
+    fireEvent.change(screen.getByPlaceholderText("Bob"), { target: { value: "Zed" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Knock to join" })); });
+    expect(await screen.findByRole("heading", { name: "Game ended" })).toBeInTheDocument();
+    expect(usePlayerStore.getState()).toMatchObject({ status: "ended", terminalResult: { status: "none" } });
+    expect(screen.queryByText(/Reading the final result/)).toBeNull();
+    // Accessible way out.
+    const back = screen.getByRole("button", { name: "Back to start" });
+    act(() => { fireEvent.click(back); });
+    expect(usePlayerStore.getState().status).toBe("idle");
+  });
+
+  it("an ended state whose result is genuinely being read still says so (explicit pending only)", () => {
+    render(<PlayerEnded result={{ status: "pending" }} onRetry={() => {}} onBack={() => {}} />);
+    expect(screen.getByText(/Reading the final result/)).toBeInTheDocument();
+    cleanup();
+    render(<PlayerEnded result={null} onRetry={() => {}} onBack={() => {}} />);
+    expect(screen.queryByText(/Reading the final result/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Back to start" })).toBeInTheDocument();
   });
 });

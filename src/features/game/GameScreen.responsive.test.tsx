@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GameScreen } from "./GameScreen";
 import { useStorytellerStore as storyteller } from "@/stores/storytellerStore";
@@ -183,5 +183,83 @@ describe("Phase 10H: the phase-advance primary is never collapsed into the overf
     act(() => usePrivacyStore.setState({ enabled: false }));
     expect(advance).toBeEnabled();
     expect(document.getElementById(reasonId)).toBeNull();
+  });
+});
+
+// ASTRA-10H-002 / ASTRA-10H-008: the ONE Night dock on tablet / phone. (The
+// dock's visual layout -- card width, Night list stepping aside -- is proven
+// in a real browser; jsdom has no :has(). These prove the state wiring.)
+describe("ASTRA-10H-002 / 008: the docked Night workspace", () => {
+  function night() {
+    narrow = true;
+    const g = setupGame(["monk", "imp", "empath", "chef", "washerwoman"], { phase: "night", day: 2, setupRolesDealt: true, setupRolesRevealed: true });
+    storyteller.setState({ game: g, customScripts: { [setupScript.id]: setupScript } });
+    return render(<GameScreen />);
+  }
+  const rail = (c: HTMLElement) => c.querySelector<HTMLElement>(".shell-rail")!;
+
+  it("008: Close hides the docked Night panel; the reopen toggle and the Night tab restore it", () => {
+    const view = night();
+    expect(rail(view.container)).not.toHaveAttribute("hidden");
+    fireEvent.click(screen.getByRole("button", { name: "Close night panel" }));
+    expect(rail(view.container)).toHaveAttribute("hidden");
+    // The Table is still there to reclaim the space.
+    expect(view.container.querySelector(".shell-stage")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "night order" }));
+    expect(rail(view.container)).not.toHaveAttribute("hidden");
+    // Closing again, then choosing the Night tab while a seat is inspected, reopens it too.
+    fireEvent.click(screen.getByRole("button", { name: "Close night panel" }));
+    act(() => storyteller.getState().selectPlayer(storyteller.getState().game!.seatOrder[3]!));
+    fireEvent.click(screen.getByRole("tab", { name: "Night 2" }));
+    expect(rail(view.container)).not.toHaveAttribute("hidden");
+  });
+
+  it("002: the action card is the dock's own content, with a Night-list control and a Resume that keeps the draft", () => {
+    const view = night();
+    const monk = view.container.querySelector<HTMLElement>(".grimoire .token.acting")!;
+    expect(monk).toBeTruthy();
+    fireEvent.click(monk);
+    const card = screen.getByRole("dialog", { name: /^Monk/ });
+    expect(card.parentElement).toHaveClass("action-card-dock-host");
+    expect(card.closest(".shell-rail")).toBe(rail(view.container));
+    fireEvent.click(within(card).getByRole("button", { name: "Back to the Night list (keeps your choices)" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Resume Monk action" }));
+    expect(screen.getByRole("dialog", { name: /^Monk/ }).parentElement).toHaveClass("action-card-dock-host");
+  });
+});
+
+// ASTRA-10H-005: Privacy removes the private action card (and the private
+// rule facts) WITHOUT moving the Table -- their tracks are held by EMPTY,
+// non-private placeholders. (The seat-rectangle equality itself is proven in
+// a real browser; jsdom has no layout.)
+describe("ASTRA-10H-005: Privacy holds the shell geometry with empty placeholders", () => {
+  it("desktop: an open Night action's column and the rule facts' slot stay as empty structure; nothing private remains", () => {
+    narrow = false;
+    const g = setupGame(["monk", "imp", "empath", "chef", "washerwoman"], { phase: "night", day: 2, setupRolesDealt: true, setupRolesRevealed: true });
+    storyteller.setState({ game: g, customScripts: { [setupScript.id]: setupScript } });
+    const view = render(<GameScreen />);
+    fireEvent.click(view.container.querySelector<HTMLElement>(".grimoire .token.acting")!);
+    const card = screen.getByRole("dialog", { name: /^Monk/ });
+    expect(card.parentElement).toHaveAttribute("id", "action-card-stage-host");
+    // jsdom has no layout: give the rule facts a measurable height.
+    const slot = view.container.querySelector<HTMLElement>(".rule-fact-slot")!;
+    slot.getBoundingClientRect = () => ({ height: 57, width: 800, x: 0, y: 0, top: 0, left: 0, right: 800, bottom: 57, toJSON: () => ({}) }) as DOMRect;
+    act(() => usePrivacyStore.getState().setEnabled(true));
+    const stage = view.container.querySelector<HTMLElement>(".shell-stage")!;
+    expect(stage).toHaveAttribute("data-action-column", "privacy");
+    const host = view.container.querySelector<HTMLElement>("#action-card-stage-host")!;
+    expect(host.childElementCount).toBe(0);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(view.container.querySelector(".token.acting")).toBeNull();
+    const placeholder = view.container.querySelector<HTMLElement>(".rule-fact-slot")!;
+    expect(placeholder).toHaveAttribute("aria-hidden", "true");
+    expect(placeholder.childElementCount).toBe(0);
+    expect(placeholder.style.height).toBe("57px");
+    expect(document.body).not.toHaveTextContent(/Monk|guided resolution|Game rule facts/i);
+    // Privacy off: the placeholders go and nothing private reopens by itself.
+    act(() => usePrivacyStore.getState().setEnabled(false));
+    expect(stage).not.toHaveAttribute("data-action-column");
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

@@ -93,7 +93,9 @@ describe("10H-AC-048 / AC-052: one terminal seam through the real live close", (
     expect(outcome).toEqual({ ok: true });
     const expected = { version: 1, sessionId: session.id, winner: "good", declaredAt: { phase: "day", day: 3 } };
     expect(await b.get(`${root}/session`)).toEqual({ version: 2, id: session.id, state: "ended" });
-    expect(await b.get(`${root}/results`)).toEqual({ "uid-alice": expected, "uid-bob": expected });
+    // ASTRA-10H-004: plus the Storyteller's own receipt ("host" is the lobby's
+    // storytellerUid here) -- the identical player-safe payload.
+    expect(await b.get(`${root}/results`)).toEqual({ host: expected, "uid-alice": expected, "uid-bob": expected });
     expect(await b.get(`${root}/revealAcks`)).toBeUndefined();
     expect(st().lobby).toBeNull();
     expect(game().phase).toBe("ended");
@@ -216,7 +218,99 @@ describe("10H-AC-050: lost-response recovery never duplicates or contradicts the
     useStorytellerStore.setState({ lobby: { code, uid: "host", sessionId: session.id, status: "live" } });
     let outcome: Awaited<ReturnType<typeof closeMultiplayerSession>> | undefined;
     await act(async () => { outcome = await closeMultiplayerSession({ readBackPublished: true }); });
-    expect(outcome).toEqual({ alreadyEnded: true, published: null });
+    expect(outcome).toEqual({ alreadyEnded: true, recovery: { kind: "endedWithoutResult" } });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ASTRA-10H-004: tri-state terminal recovery and the durable Storyteller
+// result receipt. A commit lands, its response is lost, and the Storyteller
+// retries with a DIFFERENT intent: the confirmed outcome always wins.
+describe("ASTRA-10H-004: an already-ended session's confirmed outcome overrides a different retry intent", () => {
+  /** The first attempt's commit lands on the server but its response is lost. */
+  function loseFirstTerminalResponse(b: MemoryRoomBackend) {
+    const update = b.update.bind(b);
+    let lose = true;
+    b.update = async (updates) => {
+      await update(updates);
+      if (lose && Object.keys(updates).includes(`${root}/session`)) { lose = false; throw new Error("unexpected response failure"); }
+    };
+  }
+
+  it("A. End Without Result lands, response lost, retry Evil: the final local game remains NO RESULT", async () => {
+    const b = new MemoryRoomBackend();
+    await goLive(b);
+    loseFirstTerminalResponse(b);
+    await act(async () => { expect(await endGameWithIntent({ kind: "noResult" })).toMatchObject({ ok: false }); });
+    expect((await b.get(`${root}/session`) as { state: string }).state).toBe("ended");
+    expect(await b.get(`${root}/results`)).toBeUndefined();
+    expect(game().phase).toBe("day");
+    await act(async () => { expect(await endGameWithIntent({ kind: "declare", winner: "evil" })).toEqual({ ok: true }); });
+    expect(game().phase).toBe("ended");
+    expect(game()).not.toHaveProperty("result");
+    expect(await b.get(`${root}/results`)).toBeUndefined(); // the retry publishes nothing
+  });
+
+  it("B. Good lands with ZERO phone recipients, response lost, retry Evil: the receipt alone keeps the final game GOOD", async () => {
+    const b = new MemoryRoomBackend();
+    const { session } = await goLive(b);
+    // No roster-bound phones at the close.
+    await b.update({ [`${root}/roster`]: null, [`${root}/rosterParticipants`]: null });
+    loseFirstTerminalResponse(b);
+    await act(async () => { expect(await endGameWithIntent({ kind: "declare", winner: "good" })).toMatchObject({ ok: false }); });
+    const receipt = { version: 1, sessionId: session.id, winner: "good", declaredAt: { phase: "day", day: 3 } };
+    expect(await b.get(`${root}/results`)).toEqual({ host: receipt });
+    await act(async () => { expect(await endGameWithIntent({ kind: "declare", winner: "evil" })).toEqual({ ok: true }); });
+    expect(game().result).toEqual({ winner: "good", declaredAt: { phase: "day", day: 3 } });
+    expect(await b.get(`${root}/results`)).toEqual({ host: receipt });
+  });
+
+  it("C. Evil lands, response lost, retry Good: the final game remains EVIL", async () => {
+    const b = new MemoryRoomBackend();
+    await goLive(b);
+    loseFirstTerminalResponse(b);
+    await act(async () => { expect(await endGameWithIntent({ kind: "declare", winner: "evil" })).toMatchObject({ ok: false }); });
+    await act(async () => { expect(await endGameWithIntent({ kind: "declare", winner: "good" })).toEqual({ ok: true }); });
+    expect(game().result?.winner).toBe("evil");
+    expect((await b.get(`${root}/results/uid-alice`) as { winner: string }).winner).toBe("evil");
+  });
+
+  it("D. an ordinary declared result still gives each phone recipient exactly the existing player-safe payload", async () => {
+    const b = new MemoryRoomBackend();
+    const { session } = await goLive(b);
+    await act(async () => { expect(await endGameWithIntent({ kind: "declare", winner: "evil" })).toEqual({ ok: true }); });
+    for (const uid of ["uid-alice", "uid-bob", "host"]) {
+      const record = await b.get(`${root}/results/${uid}`);
+      expect(record).toEqual({ version: 1, sessionId: session.id, winner: "evil", declaredAt: { phase: "day", day: 3 } });
+      expect(Object.keys(record as object).sort()).toEqual(["declaredAt", "sessionId", "version", "winner"]);
+    }
+    expect(await b.get(`${root}/results/uid-carol`)).toBeUndefined(); // a waiting request is never a recipient
+  });
+
+  it("F. fails closed: a result record of another session makes the outcome unconfirmable -- the game stays live", async () => {
+    const b = new MemoryRoomBackend();
+    await goLive(b);
+    loseFirstTerminalResponse(b);
+    await act(async () => { await endGameWithIntent({ kind: "declare", winner: "good" }); });
+    await b.set(`${root}/results/host`, { version: 1, sessionId: "another-session", winner: "evil", declaredAt: { phase: "day", day: 3 } });
+    let outcome: Awaited<ReturnType<typeof endGameWithIntent>> | undefined;
+    await act(async () => { outcome = await endGameWithIntent({ kind: "declare", winner: "evil" }); });
+    expect(outcome).toMatchObject({ ok: false });
+    expect(game().phase).toBe("day");
+    expect(st().lobby).not.toBeNull();
+  });
+
+  it("F. fails closed: an ended session that is not this lobby's session is never read as 'no result'", async () => {
+    const b = new MemoryRoomBackend();
+    const { session } = await goLive(b);
+    loseFirstTerminalResponse(b);
+    await act(async () => { await endGameWithIntent({ kind: "noResult" }); });
+    useStorytellerStore.setState({ lobby: { code, uid: "host", sessionId: `${session.id}-other`, status: "live" } });
+    let outcome: Awaited<ReturnType<typeof endGameWithIntent>> | undefined;
+    await act(async () => { outcome = await endGameWithIntent({ kind: "declare", winner: "good" }); });
+    expect(outcome).toMatchObject({ ok: false, message: expect.stringMatching(/could not be confirmed/) });
+    expect(game().phase).toBe("day");
+    expect(st().lobby).not.toBeNull();
   });
 });
 

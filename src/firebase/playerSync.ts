@@ -38,7 +38,10 @@ export async function joinLobby(backend: RoomBackend, code: string, uid: string,
     ps.setStatus("waiting");
   } catch (error) {
     ps.setStatus(error instanceof LifecycleError && ["notFound", "rejected", "revoked"].includes(error.kind) ? error.kind as "notFound" | "rejected" | "revoked" : "error", lifecycleMessage(error));
-    if (error instanceof LifecycleError && error.kind === "ended") ps.setEnded();
+    // ASTRA-10H-007: joining an already-ended lobby has no seat or session
+    // context to read a result with -- a completed, generic Game Ended, never
+    // an endless "Reading the final result...".
+    if (error instanceof LifecycleError && error.kind === "ended") ps.setEnded({ status: "none" });
   }
 }
 
@@ -154,6 +157,20 @@ export function startPlayerHandshake(backend: RoomBackend, code: string, uid: st
   let ackOff = () => {};
   // Phase 10H (F2): every handshake -- reload, reconnect, re-attach -- re-seals.
   ps().setPlayerId(null); ps().setSelf(null); ps().setPublic(null); ps().setRevealed(false); ps().setOwnRevealAck(null);
+  // ASTRA-10H-001: a REAL connection interruption also re-seals. A socket
+  // reconnect does not rerun this handshake, so the backend's own connection
+  // state is watched: once the connection has been established, a drop to
+  // offline seals the card, and reconnecting leaves it sealed until the player
+  // reveals again. The initial "not yet connected" is not a drop. The
+  // acknowledgement is untouched -- an unchanged reveal token stays Viewed.
+  if (backend.subscribeConnection) {
+    let established = false;
+    cleanups.push(backend.subscribeConnection((connected) => {
+      if (!current()) return;
+      if (connected) { established = true; return; }
+      if (established) ps().setRevealed(false);
+    }));
+  }
   ps().setTerminalResult(null);
   ps().setRemoteData({ membership: "ready", request: "ready", self: "waiting", public: "waiting" });
   ps().setStatus("reconnecting");
@@ -186,8 +203,7 @@ export function startPlayerHandshake(backend: RoomBackend, code: string, uid: st
   const ended = (endedSessionId: string) => {
     if (!current()) return;
     stop();
-    ps().setEnded();
-    ps().setTerminalResult({ status: "pending" });
+    ps().setEnded({ status: "pending" });
     const expected = ps().sessionId ?? endedSessionId;
     void (async () => {
       try {

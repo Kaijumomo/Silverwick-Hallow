@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { create } from "zustand";
 import { z } from "zod";
-import { selectScriptById, useStorytellerStore, type LobbyConnection } from "@/stores/storytellerStore";
+import { selectScriptById, useStorytellerStore, type LobbyConnection, type TerminalRecovery } from "@/stores/storytellerStore";
 import { REVEAL_TOKEN_PATTERN, StorytellerGamePersistedSchema } from "@/stores/schemas";
 import { detectLegacyGameVersion, migrateGameEntry } from "@/stores/gameMigration";
 import { validateFirebaseWritableValue } from "./firebaseWriteCompatibility";
@@ -18,7 +18,6 @@ import type { RevocationAction } from "./lobby";
 import { SessionWriter, FENCE_MARGIN_MS, type AuthorityHandle, type TerminalPublicationBuilder } from "./writer";
 import { readPublishedResult } from "./terminalResults";
 import { revealAcksPath } from "./paths";
-import type { GameResult } from "@/stores/types";
 import { classifyStorytellerError, decodeSession, guardSchema, isTransient, leaseSchema, LifecycleError, sessionPath, type SessionFailure } from "./lifecycle";
 import { TRAVELERS } from "@/data/travelers";
 import { connectFirebase } from "./session";
@@ -271,15 +270,18 @@ async function provenNeverReachedLive(lobby: LobbyConnection): Promise<boolean> 
  * (results/{uid} of a declared result) that joins the one fenced atomic close
  * commit on either path. When the session turns out to be ALREADY ended (a
  * previous attempt whose response was lost, 10H-AC-050) and
- * `options.readBackPublished` is set, the result that close actually published
- * for this session is read back so the caller can retain exactly it.
+ * `options.readBackPublished` is set, that close's CONFIRMED outcome is read
+ * back as an explicit tri-state (ASTRA-10H-004) so the caller retains exactly
+ * it -- a declared result, or a confirmed absence of one. When the outcome
+ * cannot be confirmed (the session is missing, or is not this lobby's
+ * session), the read-back fails closed: nothing is detached or finished.
  */
 export type CloseMultiplayerOutcome = {
   /** The session was already ended (or missing) when this close began. */
   alreadyEnded: boolean;
-  /** Read back only for an already-ended session when requested: the result
-   * this session's terminal close published, or null when none. */
-  published?: GameResult | null;
+  /** Only for an already-ended session when read-back was requested: its
+   * confirmed terminal outcome. Absent for a fresh close. */
+  recovery?: Exclude<TerminalRecovery, { kind: "fresh" }>;
 };
 export async function closeMultiplayerSession(
   options: { terminal?: TerminalPublicationBuilder; readBackPublished?: boolean } = {},
@@ -291,11 +293,20 @@ export async function closeMultiplayerSession(
     const { backend } = await connectFirebase();
     const session = decodeSession(await backend.get(sessionPath(lobby.code)));
     if (!session || session.state === "ended") {
-      const published = options.readBackPublished && session && session.id === lobby.sessionId
-        ? await readPublishedResult(backend, lobby.code, session.id)
-        : options.readBackPublished ? null : undefined;
+      if (!options.readBackPublished) {
+        useStorytellerStore.getState().setLobby(null);
+        return { alreadyEnded: true };
+      }
+      // Fail closed: an outcome is only CONFIRMED for this lobby's own session.
+      if (!session || session.id !== lobby.sessionId) {
+        throw new LifecycleError("invalid", "This lobby's final result could not be confirmed.");
+      }
+      const published = await readPublishedResult(backend, lobby.code, session.id);
       useStorytellerStore.getState().setLobby(null);
-      return published === undefined ? { alreadyEnded: true } : { alreadyEnded: true, published };
+      return {
+        alreadyEnded: true,
+        recovery: published ? { kind: "endedWithResult", result: published } : { kind: "endedWithoutResult" },
+      };
     }
     if (closeCurrent) { await closeCurrent(options.terminal); return { alreadyEnded: false }; }
     if (!pending) throw new LifecycleError("conflict", "Reconnect to the lobby before ending it or starting another game.");

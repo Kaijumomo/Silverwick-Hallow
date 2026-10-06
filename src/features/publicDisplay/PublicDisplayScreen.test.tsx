@@ -192,3 +192,72 @@ describe("PublicDisplayScreen device connection flow (Phase 9C.6, OPUS-002)", ()
     expect(await screen.findByText("This lobby does not exist or has expired.")).toBeInTheDocument();
   });
 });
+
+// ASTRA-10H-003: the stage observer attaches to the ACTUAL stage wrapper,
+// which only mounts after the asynchronous connect + subscription produce a
+// lobby -- and detaches / rebinds if that node is replaced.
+describe("ASTRA-10H-003: the Public Display stage observer follows the mounted stage", () => {
+  type Observer = { callback: ResizeObserverCallback; targets: Element[]; disconnected: boolean };
+  let observers: Observer[];
+  beforeEach(() => {
+    observers = [];
+    vi.stubGlobal("ResizeObserver", class {
+      record: Observer;
+      constructor(callback: ResizeObserverCallback) { this.record = { callback, targets: [], disconnected: false }; observers.push(this.record); }
+      observe(target: Element) { this.record.targets.push(target); }
+      disconnect() { this.record.disconnected = true; }
+    });
+  });
+  const rs20 = (): PublicLobbyRecord => {
+    const ids = Array.from({ length: 20 }, (_, i) => `p${i}`);
+    return {
+      code: CODE, scriptId: "tb", phase: "day", day: 2, fabled: [], lorics: [], seatOrder: ids,
+      players: Object.fromEntries(ids.map((id, i) => [id, { id, name: `Player ${i + 1}`, seat: i, online: true, joinedAt: 0,
+        isTraveler: i >= 15, ...(i >= 15 ? { publicDisplayRole: "thief" } : {}), alive: true, ghostVote: true }])),
+    };
+  };
+  const live = (o: Observer) => !o.disconnected && o.targets.length > 0;
+  const resize = (o: Observer, width: number, height: number) =>
+    act(() => o.callback([{ target: o.targets[0]!, contentRect: { width, height } } as ResizeObserverEntry], {} as ResizeObserver));
+
+  it("no observer while connecting; once the lobby mounts, the mounted stage is observed and its real size drives the tiers", async () => {
+    let release!: () => void;
+    connectFirebaseMock.mockImplementation(() => new Promise((resolve) => { release = () => resolve({ backend: {} as never, uid: UID }); }));
+    usePublicLobbyMock.mockImplementation((backend) => (backend ? { publicLobby: rs20(), ended: false, loading: false, error: null } : WAITING_RESULT));
+    render(<PublicDisplayScreen code={CODE} />);
+    expect(screen.getByText("Connecting…")).toBeInTheDocument();
+    expect(observers.filter(live)).toHaveLength(0);
+    await act(async () => { release(); });
+    const wrap = document.querySelector<HTMLElement>(".public-display-circle-wrap")!;
+    expect(wrap).toBeTruthy();
+    const active = observers.filter(live);
+    expect(active).toHaveLength(1);
+    expect(active[0]!.targets).toEqual([wrap]);
+    // The MEASURED stage drives the layout: a 1280x720 projector stage.
+    resize(active[0]!, 1237, 589);
+    expect(wrap).toHaveAttribute("data-stage", "1237x589");
+    expect(document.querySelector(".public-display-circle")).toHaveAttribute("data-density", "minimal");
+    resize(active[0]!, 1856, 940);
+    expect(document.querySelector(".public-display-circle")).toHaveAttribute("data-density", "full");
+  });
+
+  it("a replaced stage node is unobserved and the new node observed (no stale binding)", async () => {
+    let mode: "ready" | "error" = "ready";
+    usePublicLobbyMock.mockImplementation((backend) => !backend ? WAITING_RESULT
+      : mode === "ready" ? { publicLobby: rs20(), ended: false, loading: false, error: null }
+      : { publicLobby: null, ended: false, loading: false, error: CONNECTION_ERROR_MESSAGE });
+    const view = render(<PublicDisplayScreen code={CODE} />);
+    await act(async () => {});
+    const first = document.querySelector(".public-display-circle-wrap")!;
+    expect(observers.filter(live).flatMap((o) => o.targets)).toEqual([first]);
+    mode = "error";
+    view.rerender(<PublicDisplayScreen code={CODE} />);
+    expect(document.querySelector(".public-display-circle-wrap")).toBeNull();
+    expect(observers.filter(live)).toHaveLength(0); // the old node's observer disconnected
+    mode = "ready";
+    view.rerender(<PublicDisplayScreen code={CODE} />);
+    const second = document.querySelector(".public-display-circle-wrap")!;
+    expect(second).not.toBe(first);
+    expect(observers.filter(live).flatMap((o) => o.targets)).toEqual([second]);
+  });
+});

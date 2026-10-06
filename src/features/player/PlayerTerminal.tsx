@@ -27,7 +27,9 @@ export function PlayerEnded({ result, onRetry, onBack }: {
   onRetry: () => void;
   onBack: () => void;
 }) {
-  if (!result || result.status === "pending") {
+  // ASTRA-10H-007: only an explicit pending read shows "Reading..."; an ended
+  // state with no result state at all is the generic Game Ended below.
+  if (result?.status === "pending") {
     return (
       <div className="player player-status" role="status" aria-live="polite">
         <h2 className="title">Game ended</h2>
@@ -35,7 +37,7 @@ export function PlayerEnded({ result, onRetry, onBack }: {
       </div>
     );
   }
-  if (result.status === "error") {
+  if (result?.status === "error") {
     return (
       <div className="player player-status" role="alert">
         <h2 className="title">Game ended</h2>
@@ -45,7 +47,7 @@ export function PlayerEnded({ result, onRetry, onBack }: {
       </div>
     );
   }
-  if (result.status === "ready") {
+  if (result?.status === "ready") {
     const { winner, declaredAt } = result.result;
     return (
       <div className={`player player-status player-result player-result-${winner}`} role="status">

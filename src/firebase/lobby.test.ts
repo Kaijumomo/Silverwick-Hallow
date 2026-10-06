@@ -407,7 +407,7 @@ describe("usePlayerSync — real-time ended detection", () => {
       const ps = usePlayerStore.getState();
       if (value === undefined || value === null) { ps.setPublic(null); return; }
       const pub = value as unknown as PublicLobbyRecord;
-      if (pub.status === "ended") { ps.setEnded(); return; }
+      if (pub.status === "ended") { ps.setEnded({ status: "none" }); return; }
       ps.setPublic(pub);
     });
     await endLobby(b, "ABCD");
@@ -448,7 +448,7 @@ describe("usePlayerSync — real-time ended detection", () => {
       const ps = usePlayerStore.getState();
       if (value === undefined || value === null) { ps.setPublic(null); return; }
       const pub = value as unknown as PublicLobbyRecord;
-      if (pub.status === "ended") { ps.setEnded(); return; }
+      if (pub.status === "ended") { ps.setEnded({ status: "none" }); return; }
       ps.setPublic(pub);
     });
 

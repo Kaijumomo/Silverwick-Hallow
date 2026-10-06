@@ -78,7 +78,10 @@ export type PlayerStore = {
   /** Phase 10H: this player's own advisory acknowledgement (the reveal token
    * stored at revealAcks/{uid}); null when none or unreadable. Runtime only. */
   ownRevealAck: string | null;
-  /** Phase 10H: runtime terminal result state (see PlayerTerminalResult). */
+  /** Phase 10H: runtime terminal result state (see PlayerTerminalResult).
+   * ASTRA-10H-007: `null` means only "not in a terminal state" -- never
+   * "reading". Entering the ended state always names its result state
+   * explicitly (setEnded), so a pending read is `{ status: "pending" }`. */
   terminalResult: PlayerTerminalResult | null;
 
   setStatus: (status: PlayerStatus, error?: string | null) => void;
@@ -97,7 +100,10 @@ export type PlayerStore = {
    * their result and review their notes after teardown, and so a reload
    * recovers the result. Private identity is cleared. Only Back to Start
    * (reset) clears the context. */
-  setEnded: () => void;
+  /** Enter the ended state with an EXPLICIT terminal result state (ASTRA-10H-007):
+   * `pending` while this player's own result is being read, `none` when there
+   * is no result to read (or no context to read it with). */
+  setEnded: (terminalResult: PlayerTerminalResult) => void;
   /** Back to Start: clears the session/terminal context and the finished
    * game's local Town notes (10H-AC-058). */
   reset: () => void;
@@ -178,8 +184,9 @@ export const usePlayerStore = create<PlayerStore>()(
       setSessionId: (sessionId) => set({ sessionId }),
       setOwnRevealAck: (ownRevealAck) => set({ ownRevealAck }),
       setTerminalResult: (terminalResult) => set({ terminalResult }),
-      setEnded: () =>
+      setEnded: (terminalResult) =>
         set({
+          terminalResult,
           remoteData: { public: "waiting", self: "waiting", membership: "ready", request: "ready" },
           status: "ended",
           error: null,

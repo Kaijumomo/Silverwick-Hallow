@@ -336,7 +336,10 @@ export function NightOrderPanel({ game, script, onClose, semantics = CANONICAL_A
   return <NightDashboard game={game} script={script} onClose={onClose} semantics={semantics} />;
 }
 
-type OpenWorkspace = { target: WorkspaceTarget; ability: StepAbility; initialInputs?: Record<string, AbilityInputValue>; key: number };
+/** `ownerKey`: the current Night step that owns this workspace (ASTRA-10H-006)
+ * -- the step it was opened for, or (a triggered ability, which has no row)
+ * the step that was current when it opened. */
+type OpenWorkspace = { target: WorkspaceTarget; ability: StepAbility; initialInputs?: Record<string, AbilityInputValue>; ownerKey: string | null; key: number };
 
 function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
   const [workspace, setWorkspaceState] = useState<OpenWorkspace | null>(null);
@@ -427,6 +430,7 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
     const ability = abilityOf(step)!;
     const path = ability.kind === "guided" ? ability.invocationPath ?? "nightOrder" : "nightOrder";
     setWorkspace({
+      ownerKey: step.stepKey,
       target: { actorId: step.playerId, roleId: step.effectiveRoleId, roleName: step.effectiveRoleName, invocationPath: path, step: { day: game.day, stepKey: step.stepKey },
         ...(ability.kind === "guided" && ability.trigger && ability.trigger.kind !== "notTriggered" ? { trigger: { eventId: ability.trigger.eventId } } : {}) },
       ability: manual && ability.kind === "guided" && ability.trigger?.kind === "notTriggered" ? { kind: "manual", reason: ability.trigger.reason } : ability,
@@ -446,6 +450,20 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
     openStep(currentStep);
   }, [actionRequest]);
   const closeWorkspace = () => { setWorkspace(null); useShellStore.getState().setActionOpen(false); };
+  // ASTRA-10H-006: the current step owns the action. When the current Night
+  // step moves away from the (still existing) step that owns a workspace,
+  // that workspace is no longer actionable: it is not rendered (its Resolve
+  // can never be pressed against the new step) and its draft is discarded --
+  // nothing carries over, and returning to that step opens a newly validated
+  // workspace. Merely inspecting another participant never moves the current
+  // step. When the owner step itself no longer exists (the game changed under
+  // it -- a reseat, a new shown character), the workspace keeps its owner and
+  // the existing stale-workflow guard applies (10H-AC-019 / 10F-AC-26).
+  const currentKey = currentStep?.stepKey ?? null;
+  const supersededWorkspace = !!workspace && workspace.ownerKey !== currentKey
+    && workspace.ownerKey !== null && steps.some((st) => st.stepKey === workspace.ownerKey);
+  const ownedWorkspace = workspace && !supersededWorkspace ? workspace : null;
+  useEffect(() => { if (supersededWorkspace) closeWorkspace(); }, [supersededWorkspace, workspace?.key]);
 
   const [confirmReset, setConfirmReset] = useState(false);
   const handleReset = () => setConfirmReset(true);
@@ -466,6 +484,13 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
       </div>
 
       <div className="night-panel-body">
+        {/* ASTRA-10H-002: a hidden action keeps its draft; Resume brings the
+            card back (the same as tapping the acting seat). */}
+        {ownedWorkspace && !actionOpen && (
+          <button type="button" className="btn btn-sm btn-gold night-resume-action" onClick={() => useShellStore.getState().setActionOpen(true)}>
+            Resume {ownedWorkspace.target.roleName} action
+          </button>
+        )}
         {triggered.length > 0 && (
           <section className="triggered-now" aria-label="Triggered now">
             <h3 className="drawer-section-title">Triggered now</h3>
@@ -474,7 +499,7 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
                 <span className="step-role-name">{roleName}</span>
                 <span className="step-player-name">{player.name || `Seat ${player.seat + 1}`} · {ability.kind === "guided" && ability.trigger?.kind === "unknown" ? "trigger needs a check" : "died tonight"}</span>
                 <button className="btn btn-sm btn-gold" onClick={() => {
-                  setWorkspace({ target: { actorId: player.id, roleId, roleName, invocationPath: "nightTrigger", step: { day: game.day, stepKey }, trigger: { eventId } }, ability });
+                  setWorkspace({ ownerKey: currentKey, target: { actorId: player.id, roleId, roleName, invocationPath: "nightTrigger", step: { day: game.day, stepKey }, trigger: { eventId } }, ability });
                   useShellStore.getState().setActionOpen(true);
                 }}>Guide</button>
               </div>
@@ -516,7 +541,7 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
         <p className="behavior-help">New or changed characters, gained abilities and past events may need a custom step.
           Verify these conditions manually; this sheet does not reconstruct game history.</p>
       </div>
-      {workspace && (() => {
+      {ownedWorkspace && ((workspace: OpenWorkspace) => {
         const stepOf = steps.find((st) => st.stepKey === workspace.target.step?.stepKey);
         const roleDef = registry.get(workspace.target.roleId);
         return (
@@ -529,7 +554,7 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
             onClose={closeWorkspace}
             // §8.6: Refresh re-derives from current authoritative state -- a
             // fresh workflow (new fingerprint), no stale inputs carried forward.
-            onRefresh={() => setWorkspace({ target: workspace.target, ability: workspace.ability })}
+            onRefresh={() => setWorkspace({ ownerKey: workspace.ownerKey, target: workspace.target, ability: workspace.ability })}
             guidance={{ ability: roleDef?.ability, prompt: stepOf?.prompt, reminder: stepOf?.reminder }}
             onResolved={({ game: committed, delivered }) => {
               setLastResolution({ stepKey: workspace.target.step?.stepKey ?? "", game: committed, delivered });
@@ -537,7 +562,7 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
               useShellStore.getState().setNightCursor(null);
             }} />
         );
-      })()}
+      })(ownedWorkspace)}
       {confirmReset && (
         <ConfirmDialog title={`Reset Night ${game.day} progress?`} confirmLabel="Reset progress" danger
           onCancel={() => setConfirmReset(false)}

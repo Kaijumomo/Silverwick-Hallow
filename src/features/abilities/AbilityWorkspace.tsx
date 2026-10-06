@@ -16,7 +16,7 @@ import type { InvocationPath } from "@/abilities/invocation";
 import type { AbilityDescriptor, AbilityInputRequirement, AbilityInputValue, AbilitySemanticsRegistry } from "@/abilities/semantics";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import type { Alignment, Script, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
-import { describeOutcome, seatedParticipants } from "./abilityUi";
+import { describeOutcome, seatedParticipants, useTargetPicker } from "./abilityUi";
 import { MAX_MANUAL_DELIVERY_TEXT } from "@/stores/schemas";
 import { wakeIdentity } from "@/stores/wakeIdentity";
 import { TextLimit } from "@/components/TextLimit";
@@ -228,13 +228,17 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
     <ParticipantSelect game={game} value={value} candidates={participants} label={label} onChange={onChange} />
   );
 
+  // ASTRA-10H-002: while a Table pick is active, a bottom-docked card collapses
+  // to its header (CSS) so the seats stay tappable -- the same rule as the
+  // Phase 10G Night sheet; every choice stays mounted.
+  const picking = useTargetPicker((s) => !!s.active);
   return (
     <ActionCard title={`${target.roleName} — ${mode === "guided" ? "guided resolution" : "Resolve manually / unmodeled interaction"}`}
       subtitle={<>
         <span className="action-card-actor">{actorRecord ? `${actorRecord.name || `Seat ${actorRecord.seat + 1}`} · seat ${actorRecord.seat + 1}` : "No longer seated"}</span>
         {mode === "guided" && descriptor && <span className="action-card-instruction">{descriptor.presentation.action}</span>}
       </>}
-      hidden={hidden} onHide={onHide} onClose={onClose} className="ability-workspace">
+      hidden={hidden} onHide={onHide} onClose={onClose} className={`ability-workspace${picking ? " action-card-picking" : ""}`}>
       <div className="ability-workspace-body">
         {(guidance?.ability || guidance?.prompt || guidance?.reminder) && (
           <details className="action-guidance">

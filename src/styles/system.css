@@ -1025,3 +1025,51 @@
 }
 .public-seat-traveler { box-sizing: border-box; height: 20px; font-size: var(--text-min); line-height: 14px; padding: 2px 10px; }
 .public-display-footer { font-size: clamp(var(--text-min), 1.2vmin, 16px); }
+
+/* ---------- Docked Night workspace (ASTRA-10H-002 / ASTRA-10H-008) ----------
+   Tablet and phone have ONE secondary dock. The Night rail is a column there,
+   and while the modular action card is showing it IS the dock's content: the
+   card takes the full dock width and the Night list steps aside (it stays
+   mounted -- the current step keeps owning the action). The card's
+   "Night list" control hides it again; "Resume" or the acting seat brings it
+   back. Never a zero-width sibling of a 100%-wide Night panel. */
+.game-body[data-layout="tablet"] > .shell-rail,
+.game-body[data-layout="phone"] > .shell-rail { flex-direction: column; }
+.game-body[data-layout="tablet"] .action-card-dock-host:has(> .action-card:not([hidden])),
+.game-body[data-layout="phone"] .action-card-dock-host:has(> .action-card:not([hidden])) {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  overflow: auto;
+}
+.game-body[data-layout="tablet"] .shell-rail:has(> .action-card-dock-host > .action-card:not([hidden])) > .night-panel,
+.game-body[data-layout="phone"] .shell-rail:has(> .action-card-dock-host > .action-card:not([hidden])) > .night-panel { display: none; }
+.night-resume-action { width: 100%; margin-bottom: 8px; }
+/* A closed dock gives its space back to the Table (landscape tablet keeps a
+   dock column only while something is docked). */
+@media (max-width: 1100px) and (orientation: landscape) and (min-width: 761px) {
+  .game-body[data-layout="tablet"]:not(:has(> .shell-pane:not([hidden]), > .setup-panel, > .dock-tabs)) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "stage";
+  }
+}
+
+/* ---------- Privacy geometry (ASTRA-10H-005) ----------
+   While Privacy Mode is on, the action-card column the Table sat beside
+   before Privacy stays as an EMPTY structural track (the card and its draft
+   are unmounted), so no seat moves in the viewport. */
+.shell-stage[data-action-column="privacy"] { grid-template-columns: clamp(300px, 28vw, 400px) minmax(0, 1fr); }
+.shell-stage[data-action-column="privacy"] > .action-card-stage-host { display: block; }
+.shell-stage[data-action-column="privacy"] .grimoire-stage,
+.shell-stage[data-action-column="privacy"] > .roster,
+.shell-stage[data-action-column="privacy"] > .labels-view { grid-column: 2; }
+/* While a Table pick is active, a docked card BELOW the Table collapses to its
+   header so the seats stay tappable (as the Phase 10G Night sheet does); the
+   body stays mounted, keeping every choice. */
+@media (max-width: 1100px) and (orientation: portrait), (max-width: 760px) {
+  .action-card-dock-host .action-card.action-card-picking > :not(.action-card-header) { display: none; }
+}
+/* ASTRA-10H-005: the Game Rule Facts slot (holds the strip, or under Privacy
+   an empty placeholder of the strip's height). */
+.rule-fact-slot { flex: none; }

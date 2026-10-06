@@ -16,7 +16,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from "vitest"
 import type { Database } from "firebase/database";
 import { FirebaseRoomBackend } from "./firebaseBackend";
 import { SessionWriter } from "./writer";
-import { terminalPublication } from "./terminalResults";
+import { readPublishedResult, terminalPublication } from "./terminalResults";
 import { revokePlayerMembership } from "./lobby";
 import { makeSTPlayer } from "@/test/fixtures";
 import type { StorytellerLobbyRecord } from "@/stores/types";
@@ -289,7 +289,8 @@ describe("10H-AC-048 / AC-052: the real SessionWriter.close publishes in its one
     await closeWith({ winner: "evil", declaredAt: { phase: "night", day: 2 } });
     const expected = { version: 1, sessionId: SESSION, winner: "evil", declaredAt: { phase: "night", day: 2 } };
     expect(await val("session/state")).toBe("ended");
-    expect(await val("results")).toEqual({ [alice]: expected, [bob]: expected });
+    // ASTRA-10H-004: plus the Storyteller's durable receipt (identical payload).
+    expect(await val("results")).toEqual({ [alice]: expected, [bob]: expected, [st]: expected });
     expect(await val("revealAcks")).toBeNull();
     expect(await val("roster")).toBeNull();
     expect(await val("player")).toBeNull();
@@ -318,7 +319,7 @@ describe("10H-AC-048 / AC-052: the real SessionWriter.close publishes in its one
       await writer.start();
       await writer.close([], terminalPublication(code, SESSION, { winner: "good", declaredAt: { phase: "day", day: 4 } }, finalGame()));
     } finally { await writer.dispose(); }
-    expect(Object.keys((await val("results")) ?? {})).toEqual([bob]);
+    expect(Object.keys((await val("results")) ?? {}).sort()).toEqual([bob, st].sort()); // + the Storyteller receipt
   });
 
   test("AC-049: a close whose fence is lost publishes nothing and leaves the session active (retryable)", async () => {
@@ -334,5 +335,73 @@ describe("10H-AC-048 / AC-052: the real SessionWriter.close publishes in its one
     } finally { await writer.dispose().catch(() => {}); }
     expect(await val("session/state")).toBe("active");
     expect(await val("results")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ASTRA-10H-004 (Sol amendment): the durable Storyteller result receipt lives
+// at results/{storytellerUid} under the SAME results Rules -- no Rules change,
+// no new path. These prove, against the enforced rules and the real writer,
+// that it exists with zero phone recipients, is player-safe and private to the
+// Storyteller, is fenced/create-only/session-bound, and that the recovery read
+// distinguishes a declared result from a CONFIRMED absence and fails closed.
+describe("ASTRA-10H-004: the durable Storyteller result receipt (enforced rules + real SessionWriter.close)", () => {
+  async function closeWithRoster(result: Parameters<typeof terminalPublication>[2], extra: Record<string, unknown> = {}) {
+    await seed({ writer: { token: "fixture-writer", expiresAt: 0 }, ...extra });
+    const writer = new SessionWriter(raw(st), code, SESSION);
+    try {
+      await writer.start();
+      await writer.close([], terminalPublication(code, SESSION, result, finalGame()));
+    } finally { await writer.dispose(); }
+  }
+  const good = { winner: "good" as const, declaredAt: { phase: "day" as const, day: 3 } };
+
+  test("B. a declared Good close with ZERO roster-bound phones still persists exactly one receipt in the same commit", async () => {
+    await closeWithRoster(good, { roster: null, rosterParticipants: null });
+    expect(await val("session/state")).toBe("ended");
+    expect(await val("results")).toEqual({ [st]: resultPayload() });
+    expect(Object.keys((await val(`results/${st}`)) as object).sort()).toEqual(["declaredAt", "sessionId", "version", "winner"]);
+    // The recovery read finds it: a CONFIRMED declared result.
+    expect(await readPublishedResult(raw(st), code, SESSION)).toEqual(good);
+  });
+
+  test("A. End Without Result writes no receipt -- the recovery read is a CONFIRMED absence (null), not an error", async () => {
+    await closeWithRoster(null);
+    expect(await val("results")).toBeNull();
+    expect(await readPublishedResult(raw(st), code, SESSION)).toBeNull();
+  });
+
+  test("the receipt is Storyteller-private: no player and no unrelated user can read it", async () => {
+    await closeWithRoster(good);
+    await assertSucceeds(ref(st, `results/${st}`).once("value"));
+    await assertFails(ref(alice, `results/${st}`).once("value"));
+    await assertFails(ref(mallory, `results/${st}`).once("value"));
+    await assertFails(ref(alice, "results").once("value"));
+  });
+
+  test("E. a stale or foreign writer can neither create the receipt in a terminal commit nor alter it afterwards", async () => {
+    await seed();
+    await assertFails(fenced({ ...endSession, [path(`results/${st}`)]: resultPayload() }, "foreign-writer"));
+    expect(await val("session/state")).toBe("active");
+    expect(await val("results")).toBeNull();
+    await assertSucceeds(fenced({ ...endSession, [path(`results/${st}`)]: resultPayload() }));
+    await assertFails(fenced({ [path(`results/${st}`)]: resultPayload({ winner: "evil" }) }));
+    await assertFails(fenced({ [path(`results/${st}`)]: resultPayload({ winner: "evil" }) }, "foreign-writer"));
+    await assertFails(fenced({ [path(`results/${st}`)]: null }));
+    await assertFails(ref(st, `results/${st}`).set(resultPayload({ winner: "evil" })));
+    expect(await val(`results/${st}`)).toEqual(resultPayload());
+  });
+
+  test("F. a receipt naming another session is refused by the rules, and a mismatched record makes the recovery read fail closed", async () => {
+    await seed();
+    await assertFails(fenced({ ...endSession, [path(`results/${st}`)]: resultPayload({ sessionId: "another-session" }) }));
+    expect(await val("session/state")).toBe("active");
+    expect(await val("results")).toBeNull();
+    // Even if such a record existed (rules bypassed), recovery refuses it rather than skip it.
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.database().ref(path("session/state")).set("ended");
+      await ctx.database().ref(path(`results/${st}`)).set(resultPayload({ sessionId: "another-session" }));
+    });
+    await expect(readPublishedResult(raw(st), code, SESSION)).rejects.toBeTruthy();
   });
 });

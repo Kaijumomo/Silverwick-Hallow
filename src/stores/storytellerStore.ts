@@ -371,10 +371,20 @@ export type TerminalCloseState = {
   message: string | null;
 };
 
-/** Phase 10H: the result a successful remote terminal close actually
- * published (read back for recovery), adopted locally so the retained ended
- * game never disagrees with what players were given. */
-export type PublishedTerminalResult = GameResult | null;
+/** Phase 10H (ASTRA-10H-004): what the terminal flow knows about the remote
+ * outcome, as an explicit tri-state -- never inferred from truthiness:
+ *  - `fresh`: this close itself just committed (or there is no lobby), so the
+ *    Storyteller's own intent is the result;
+ *  - `endedWithResult`: the session was ALREADY ended by an earlier attempt
+ *    whose response was lost, and that commit's declared result was read
+ *    back -- it overrides any new retry intent;
+ *  - `endedWithoutResult`: the session was already ended and it is CONFIRMED
+ *    that no result was declared (End Without Result) -- this also overrides
+ *    any new retry intent. */
+export type TerminalRecovery =
+  | { kind: "fresh" }
+  | { kind: "endedWithResult"; result: GameResult }
+  | { kind: "endedWithoutResult" };
 
 export type StorytellerStore = {
   game: StorytellerLobbyRecord | null;
@@ -454,12 +464,13 @@ export type StorytellerStore = {
    * for every explicit terminal intent. Declare Good / Declare Evil store a
    * Game Result `{ winner, declaredAt: <the live Game Moment> }` on the ended
    * snapshot; End Without Result stores none. Nothing is inferred. When the
-   * remote close published a result (`published`, read back for recovery),
-   * that published result is what is retained, so the local record never
-   * disagrees with the players'. Clears any terminal-close lock in the same
-   * commit; Undo-free.
+   * session was already ended (`recovery`, read back after a lost response),
+   * its confirmed outcome -- a declared result OR a confirmed absence of one
+   * -- is what is retained, whatever this retry's intent, so the local record
+   * never disagrees with the players'. Clears any terminal-close lock in the
+   * same commit; Undo-free.
    */
-  finishGame: (intent: TerminalIntent, published?: PublishedTerminalResult) => SetupCommandResult;
+  finishGame: (intent: TerminalIntent, recovery?: TerminalRecovery) => SetupCommandResult;
   /** Phase 10H (contract §15 step 2-3): capture the terminal intent and lock
    * gameplay mutation for the authoritative close. Refused (false) without a
    * game in Night/Day or while another close is in flight. */
@@ -1660,7 +1671,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
-      finishGame: (intent, published) => {
+      finishGame: (intent, recovery = { kind: "fresh" }) => {
         const { game, lobby } = get();
         if (!game) return { ok: false, message: "No game is open." };
         if (game.phase === "ended") return { ok: false, message: "This game is already finished." };
@@ -1670,9 +1681,12 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (lobby) return { ok: false, message: "End the multiplayer lobby first -- the game stays live until its session has closed." };
         const declared = declaredResult(intent, game);
         if (declared === "invalid") return { ok: false, message: "Choose Good victory, Evil victory or End Without Result." };
-        // Phase 10H: a result the remote close actually published wins (it is
-        // what players were given); otherwise the Storyteller's own intent.
-        const result = published !== undefined ? published : declared;
+        // Phase 10H (ASTRA-10H-004): an already-ended session's confirmed
+        // outcome wins over this retry's intent -- a declared result AND a
+        // confirmed "no result" alike; only a fresh close uses the intent.
+        const result = recovery.kind === "endedWithResult" ? recovery.result
+          : recovery.kind === "endedWithoutResult" ? null
+          : declared;
         // Deliberately NOT setPhase("ended"): that path keeps an Undo entry
         // back into live play. Here the replacement is terminal.
         gameLifecycle++;

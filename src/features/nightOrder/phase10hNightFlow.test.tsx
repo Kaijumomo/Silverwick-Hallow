@@ -222,3 +222,54 @@ describe("10H-AC-063 (unit side): the Night step is keyboard-completable", () =>
     expect(alice).toHaveFocus();
   });
 });
+
+describe("ASTRA-10H-006: changing the current Night step invalidates the old action workspace", () => {
+  it("Monk/Alice current -> open -> target -> make Imp/Bob current: the Monk workspace is gone and Bob is the sole actor", () => {
+    render(<Shell />);
+    goToMonk();
+    fireEvent.click(seat("Alice"));
+    choose("the player to mark", "p2", actionCard()!);
+    expect(within(actionCard()!).getByRole("button", { name: /^(Resolve|Confirm and record)$/ })).toBeEnabled();
+    const seq = state().localSeq;
+    // The Storyteller moves the current step to the Imp (Bob).
+    const imp = stepCard("Imp", "Bob");
+    fireEvent.click(within(imp).getByRole("button", { name: "Make Imp the current step" }));
+    // The Monk workspace is no longer visible or actionable: no card, no Resolve.
+    expect(actionCard()).toBeNull();
+    expect(document.querySelector(".action-card")).toBeNull(); // no Monk Resolve anywhere
+    expect(useShellStore.getState().actionOpen).toBe(false);
+    expect(state().localSeq).toBe(seq); // nothing was recorded
+    // Bob is the sole current actor.
+    expect(currentCard()).toBe(stepCard("Imp", "Bob"));
+    expect(useShellStore.getState().litActor?.playerId).toBe("p1");
+    expect(seat("Bob")).toHaveClass("acting");
+    expect(document.querySelectorAll(".grimoire .token.acting")).toHaveLength(1);
+    // Tapping the lit seat opens the IMP's card -- the Monk's choices do not transfer.
+    fireEvent.click(seat("Bob"));
+    expect(within(actionCard()!).getByRole("heading", { name: /^Imp/ })).toBeInTheDocument();
+  });
+
+  it("returning to the old step goes through a newly validated workspace (the old draft is gone)", () => {
+    render(<Shell />);
+    goToMonk();
+    fireEvent.click(seat("Alice"));
+    choose("the player to mark", "p2", actionCard()!);
+    fireEvent.click(within(stepCard("Imp", "Bob")).getByRole("button", { name: "Make Imp the current step" }));
+    goToMonk();
+    expect(actionCard()).toBeNull();
+    fireEvent.click(seat("Alice"));
+    expect(chosen("the player to mark", actionCard()!)).toBe("");
+  });
+
+  it("merely inspecting another participant keeps the current step's workspace actionable", () => {
+    render(<Shell />);
+    goToMonk();
+    fireEvent.click(seat("Alice"));
+    choose("the player to mark", "p2", actionCard()!);
+    fireEvent.click(seat("Dave"));
+    expect(state().selectedPlayerId).toBe("p3");
+    expect(useShellStore.getState().litActor?.playerId).toBe("p0");
+    expect(within(actionCard()!).getByRole("button", { name: /^(Resolve|Confirm and record)$/ })).toBeEnabled();
+    expect(chosen("the player to mark", actionCard()!)).toBe("p2");
+  });
+});
