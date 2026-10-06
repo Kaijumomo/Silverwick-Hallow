@@ -405,3 +405,146 @@ describe("ASTRA-10H-004: the durable Storyteller result receipt (enforced rules 
     await expect(readPublishedResult(raw(st), code, SESSION)).rejects.toBeTruthy();
   });
 });
+
+// ---------------------------------------------------------------------------
+// PR-10H-001 (Sol R3): a declared-result close completes ALL terminal
+// publication reads and validation (storytellerUid, roster, rosterParticipants)
+// BEFORE the irreversible public/status = "ended" signal. Against the enforced
+// rules and the real SessionWriter: a preflight failure writes nothing
+// terminal, the same writer keeps writing under the unchanged fence, and a
+// repaired retry closes exactly once.
+describe("PR-10H-001: terminal preflight before the irreversible public signal (enforced rules + real SessionWriter.close)", () => {
+  type Op = { kind: "get" | "update"; paths: string[] };
+  /** The Storyteller's real backend, logging every get/update in issue order,
+   * with an optional injected read failure for one path. */
+  function recordingBackend(failPath: { current: string | null }) {
+    const base = raw(st);
+    const ops: Op[] = [];
+    const backend = Object.assign(Object.create(base) as FirebaseRoomBackend, {
+      get: async (target: string) => {
+        ops.push({ kind: "get", paths: [target] });
+        if (failPath.current === target) throw Object.assign(new Error("PERMISSION_DENIED: injected read failure"), { code: "PERMISSION_DENIED" });
+        return base.get(target);
+      },
+      update: async (updates: Record<string, unknown>) => {
+        ops.push({ kind: "update", paths: Object.keys(updates) });
+        return base.update(updates as never);
+      },
+    });
+    return { backend, ops };
+  }
+  const good = { winner: "good" as const, declaredAt: { phase: "day" as const, day: 3 } };
+  const seededRoster = { [alice]: "p-alice", [bob]: "p-bob" };
+  const seededParticipants = {
+    [alice]: { playerId: "p-alice", participantId: "pt-alice", name: "Alice" },
+    [bob]: { playerId: "p-bob", participantId: "pt-bob", name: "Bob" },
+  };
+  async function expectNothingTerminal() {
+    expect(await val("session")).toEqual({ version: 2, id: SESSION, state: "active" });
+    expect(await val("public/status")).not.toBe("ended");
+    expect(await val("results")).toBeNull();
+    expect(await val("player")).not.toBeNull();
+    expect(await val(`joinRequests/${carol}`)).toBe("Carol");
+    expect(await val("revealAcks")).toEqual({ [alice]: TOKEN_A, [bob]: TOKEN_B });
+  }
+
+  const CASES: { name: string; seed: Record<string, unknown>; fail: string | null; repair: Record<string, unknown> }[] = [
+    { name: "storytellerUid read fails", seed: {}, fail: path("storytellerUid"), repair: {} },
+    { name: "roster decodes invalid (real server data)", seed: { roster: { [alice]: 7 } }, fail: null, repair: { roster: seededRoster } },
+    { name: "roster read fails", seed: {}, fail: path("roster"), repair: {} },
+    { name: "rosterParticipants decodes invalid (real server data)", seed: { rosterParticipants: { [alice]: { playerId: 3 } } }, fail: null, repair: { rosterParticipants: seededParticipants } },
+    { name: "rosterParticipants read fails", seed: {}, fail: path("rosterParticipants"), repair: {} },
+  ];
+
+  test.each(CASES)("$name: no ended signal, session active, no results, no teardown; the writer stays fenced and live; a repaired retry closes once", async ({ seed: extra, fail, repair }) => {
+    await seed({ writer: { token: "fixture-writer", expiresAt: 0 }, revealAcks: { [alice]: TOKEN_A, [bob]: TOKEN_B }, ...extra });
+    const failPath = { current: fail };
+    const { backend, ops } = recordingBackend(failPath);
+    const writer = new SessionWriter(backend, code, SESSION);
+    try {
+      await writer.start();
+      const start = ops.length;
+      await expect(writer.close([], terminalPublication(code, SESSION, good, finalGame()))).rejects.toBeTruthy();
+      // Not one write left the failed close.
+      expect(ops.slice(start).filter(op => op.kind === "update")).toEqual([]);
+      await expectNothingTerminal();
+      expect(writer.isClosing()).toBe(false);
+      expect(writer.isStopped()).toBe(false);
+      // The same writer still writes, under the unchanged lease/guard/revision fence.
+      await writer.update({ [path("public/phase")]: "night" });
+      expect(await val("public/phase")).toBe("night");
+      expect((await val("writeGuard")) as { token: string }).toMatchObject({ token: writer.token });
+      expect(await val("public/status")).not.toBe("ended");
+      // Repair the failure, retry: the declared result closes exactly once.
+      failPath.current = null;
+      if (Object.keys(repair).length) {
+        await env.withSecurityRulesDisabled(async (ctx) => {
+          for (const [key, value] of Object.entries(repair)) await ctx.database().ref(path(key)).set(value);
+        });
+      }
+      await writer.close([], terminalPublication(code, SESSION, good, finalGame()));
+    } finally { await writer.dispose().catch(() => {}); }
+    expect(await val("session")).toEqual({ version: 2, id: SESSION, state: "ended" });
+    expect(await val("public/status")).toBe("ended");
+    expect(await val("results")).toEqual({ [alice]: resultPayload(), [bob]: resultPayload(), [st]: resultPayload() });
+    for (const torn of ["roster", "rosterParticipants", "joinRequests", "player", "storyteller", "checkpoint", "revealAcks"]) {
+      expect(await val(torn)).toBeNull();
+    }
+    expect(ops.filter(op => op.kind === "update" && op.paths.includes(path("session")))).toHaveLength(1);
+    expect(ops.filter(op => op.kind === "update" && op.paths.length === 2 && op.paths.includes(path("public/status")))).toHaveLength(1);
+  });
+
+  test("ordering on the real server: every builder read precedes the signal, which is followed directly by the one final commit", async () => {
+    await seed({ writer: { token: "fixture-writer", expiresAt: 0 } });
+    const { backend, ops } = recordingBackend({ current: null });
+    const writer = new SessionWriter(backend, code, SESSION);
+    try {
+      await writer.start();
+      const start = ops.length;
+      await writer.close([], terminalPublication(code, SESSION, good, finalGame()));
+      const log = ops.slice(start);
+      const lastRead = Math.max(...["storytellerUid", "roster", "rosterParticipants"].map(suffix => log.findIndex(op => op.kind === "get" && op.paths[0] === path(suffix))));
+      const signal = log.findIndex(op => op.kind === "update" && op.paths.length === 2 && op.paths.includes(path("public/status")));
+      const final = log.findIndex(op => op.kind === "update" && op.paths.includes(path("session")));
+      expect(lastRead).toBeGreaterThanOrEqual(0);
+      expect(signal).toBeGreaterThan(lastRead);
+      expect(final).toBeGreaterThan(signal);
+      expect(log.slice(signal + 1, final)).toEqual([{ kind: "get", paths: [path("writeGuard")] }]);
+    } finally { await writer.dispose().catch(() => {}); }
+    expect(await val("session/state")).toBe("ended");
+  });
+
+  test("counterfactual (previous ordering): an ended signal before a failed preflight strands the active session -- the Rules refuse every later projection that lacks the ended mark", async () => {
+    await seed();
+    // The old close published this first, then its terminal builder failed.
+    await assertSucceeds(fenced({ [path("public/status")]: "ended" }));
+    expect(await val("session/state")).toBe("active");
+    // The still-active game can no longer project its ordinary public state.
+    await assertFails(fenced({ [path("public")]: { code, scriptId: "tb", phase: "night", day: 3 } }));
+    await assertFails(fenced({ [path("public/status")]: "day" }));
+    expect(await val("public/status")).toBe("ended");
+  });
+
+  test("no delayed projection can overwrite the terminal state (older or newer revision, writer's own token)", async () => {
+    await seed({ writer: { token: "fixture-writer", expiresAt: 0 } });
+    const writer = new SessionWriter(raw(st), code, SESSION);
+    try {
+      await writer.start();
+      await writer.close([], terminalPublication(code, SESSION, good, finalGame()));
+    } finally { await writer.dispose().catch(() => {}); }
+    const guard = (await val("writeGuard")) as { token: string; revision: number };
+    expect(guard.token).toBe(writer.token);
+    for (const revision of [1, guard.revision - 1, guard.revision + 1]) {
+      await assertFails(db(st).ref().update({
+        [path("public")]: { code, scriptId: "tb", phase: "night", day: 4 },
+        [path("player/p-alice")]: { shownRole: "imp", shownAlignment: "evil" },
+        [path("writeGuard")]: { token: writer.token, revision },
+      }));
+      await assertFails(db(st).ref().update({ [path("public/status")]: "ended", [path("writeGuard")]: { token: writer.token, revision } }));
+    }
+    expect(await val("session/state")).toBe("ended");
+    expect(await val("public/status")).toBe("ended");
+    expect(await val("player")).toBeNull();
+    expect(await val("results")).toEqual({ [alice]: resultPayload(), [bob]: resultPayload(), [st]: resultPayload() });
+  });
+});

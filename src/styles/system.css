@@ -905,6 +905,9 @@
 .player-result-evil .player-result-title { color: #f0a0a0; }
 .player-notes-review { position: relative; width: min(480px, 100%); text-align: left; }
 .player-notes-review ul { padding-left: 18px; }
+.player-notes-review-item { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.player-notes-review-line { overflow-wrap: anywhere; }
+.player-notes-review .sn-preview-confidence { text-transform: uppercase; }
 @media (prefers-reduced-motion: no-preference) {
   .player-result-title { animation: result-reveal 900ms cubic-bezier(.2, .7, .2, 1) both; }
 }

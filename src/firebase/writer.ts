@@ -57,6 +57,10 @@ function isPermissionDenied(error: unknown): boolean {
  * was renewed, with the raw backend so it can freshly read authoritative
  * roster/binding data under the held lease. Every returned path must lie
  * inside this lobby (commit() refuses anything else).
+ *
+ * PR-10H-001: it is a PREFLIGHT. All of its fallible reads and validation
+ * complete before the irreversible public/status = "ended" signal is written;
+ * if it rejects, nothing terminal was written and the writer resumes live.
  */
 export type TerminalPublicationBuilder = (raw: RoomBackend) => Promise<Record<string, Json>>;
 
@@ -173,10 +177,13 @@ export class SessionWriter implements RoomBackend {
     }
     const observed = guard != null ? guardSchema.parse(guard) : null;
     if (observed) this.revision = observed.revision;
+    this.startRenewal();
+    return { observedGuard: observed, authorityHandle };
+  }
+  private startRenewal() {
     this.renewal = setInterval(() => {
       void retryTransient(() => this.renew(), this.abort.signal).catch(error => { this.stop(); this.report(error); });
     }, LEASE_MS / 3);
-    return { observedGuard: observed, authorityHandle };
   }
   private async renew() {
     if (this.stopped) throw new LifecycleError("cancelled", "Session closed.");
@@ -328,31 +335,53 @@ export class SessionWriter implements RoomBackend {
     this.tail = result.catch(() => {});
     return result;
   }
+  /** Whether close() is in progress or has passed its irreversible public
+   * signal. False again after a declared-result close failed in its preflight
+   * (PR-10H-001): that writer is live, not closing. */
+  isClosing() {
+    return this.closing;
+  }
   async close(_playerIds: string[], terminal?: TerminalPublicationBuilder) {
     this.closing = true;
     this.abort.abort(); // Cancel pending retries before draining the queue.
     clearInterval(this.renewal);
     this.abort = new AbortController();
-    try {
-      if (this.stopped) throw new LifecycleError("cancelled", "Reconnect before closing this lobby.");
-      // Publish the terminal public signal before waiting on an in-flight
-      // projection. Join rules reject new requests as soon as this arrives;
-      // the guard also fences a delayed projection that lacks the ended mark.
+    // The fenced public terminal signal. Join rules reject new requests as
+    // soon as it arrives, and public/status may never leave "ended" again, so
+    // once it has been attempted (its response may be lost even when it
+    // landed) this close stays fail-closed and retry-oriented.
+    let signalled = false;
+    const signalEnded = async () => {
+      signalled = true;
       const signalRevision = ++this.revision;
       await retryTransient(() => this.raw.update({
         [`${this.root}/public/status`]: "ended",
         [`${this.root}/writeGuard`]: { token: this.token, revision: signalRevision },
       }), this.abort.signal);
+    };
+    try {
+      if (this.stopped) throw new LifecycleError("cancelled", "Reconnect before closing this lobby.");
+      // A close without a terminal publication has no fallible preflight: it
+      // publishes the signal before waiting on an in-flight projection
+      // (unchanged). Its guard revision exceeds every revision allocated
+      // before it, so a delayed projection that lacks the ended mark is
+      // fenced out.
+      if (!terminal) await signalEnded();
       await this.tail;
       if (this.stopped) throw new LifecycleError("cancelled", "Reconnect before closing this lobby.");
       await this.renew();
       // Phase 10H: the terminal publication is computed from a FRESH
       // authoritative read, after the drain and the renewal, and joins the
       // same single fenced commit as the session end -- never a separate
-      // result-published state. A failure here aborts the close (the session
-      // stays active; the caller keeps the game live and retryable).
+      // result-published state. PR-10H-001: for a declared result these
+      // fallible reads are a preflight that completes BEFORE the irreversible
+      // signal; a failure here leaves public/status, the session, results and
+      // teardown untouched, and the writer resumes live (catch below).
       const publication = terminal ? await terminal(this.raw) : {};
       if (this.stopped) throw new LifecycleError("cancelled", "Reconnect before closing this lobby.");
+      // The queue is drained and closing refuses new writes, so the signal is
+      // immediately followed by the final commit.
+      if (terminal) await signalEnded();
       const cleanup: Record<string, Json> = {
         ...publication,
         [sessionPath(this.code)]: { version: 2, id: this.sessionId, state: "ended" },
@@ -368,7 +397,21 @@ export class SessionWriter implements RoomBackend {
       };
       await this.commit(cleanup);
       this.stop();
-    } catch (error) { this.report(error); throw error; }
+    } catch (error) {
+      if (!signalled) this.resumeAfterPreflightFailure();
+      this.report(error);
+      throw error;
+    }
+  }
+  /** PR-10H-001: a close that failed before its public signal was attempted
+   * wrote nothing terminal. Leave closing mode so queued writes and a later
+   * close are accepted again, and restore the renewal cadence close()
+   * suspended. A stopped writer stays stopped. */
+  private resumeAfterPreflightFailure() {
+    this.closing = false;
+    if (this.stopped) return;
+    clearInterval(this.renewal);
+    this.startRenewal();
   }
   private async commit(updates: Record<string, Json>) {
     if (this.stopped) throw new LifecycleError("cancelled", "Session stopped.");

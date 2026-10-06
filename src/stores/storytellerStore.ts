@@ -77,6 +77,7 @@ import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 import { invalidatePrivatePacket } from "./privatePackets";
 import { withRevealTokens } from "./revealTokens";
 import { usePrivacyStore } from "./privacyStore";
+import { useShellStore } from "./shellStore";
 import { analyzeSetup } from "@/features/setup/setupAnalyzer";
 import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
 import { assignedBagIsCoherent, canRefineSetup, matchBagToAssignments } from "@/features/setup/setupRefinement";
@@ -1278,6 +1279,11 @@ const registryForGame = (state: StorytellerStore, game: StorytellerLobbyRecord):
  * live Game Moment), null for End Without Result, or "invalid" for a malformed
  * intent (an unknown kind or winner). Nothing is inferred from game state.
  */
+/** PR-10H-004: replacing or discarding the game drops a FAILED terminal
+ * intent with it (an in-flight close is never touched here). */
+const endedTerminalIntent = (state: { terminalClose: TerminalCloseState | null }): { terminalClose?: null } =>
+  state.terminalClose && state.terminalClose.status !== "closing" ? { terminalClose: null } : {};
+
 export function declaredResult(intent: TerminalIntent, game: Pick<StorytellerLobbyRecord, "phase" | "day">): GameResult | null | "invalid" {
   if (!intent || typeof intent !== "object") return "invalid";
   if (intent.kind === "noResult") return null;
@@ -1409,7 +1415,12 @@ export const useStorytellerStore = create<StorytellerStore>()(
           gameRuleFacts: [],
         };
         usePrivacyStore.getState().reset();
-        set({ game, lobby: null, pendingKnocks: [], view: "game", undoStack: [], selectedPlayerId: null });
+        // PR-10H-003: the previous game's Night cursor (its step keys repeat
+        // across games) never reaches this game's Night.
+        useShellStore.getState().resetGameScope();
+        // PR-10H-004: a failed terminal intent belongs to the game it was
+        // declared on and is never retried against a new one.
+        set({ game, lobby: null, pendingKnocks: [], view: "game", undoStack: [], selectedPlayerId: null, ...endedTerminalIntent(get()) });
       },
 
       dealRolePool: () => {
@@ -1661,7 +1672,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
       endGame: () => {
         gameLifecycle++;
         usePrivacyStore.getState().reset();
+        useShellStore.getState().resetGameScope();
         set({
+          ...endedTerminalIntent(get()),
           game: null,
           view: "home",
           undoStack: [],

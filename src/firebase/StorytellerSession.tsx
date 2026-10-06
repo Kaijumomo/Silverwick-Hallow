@@ -4,6 +4,7 @@ import { connectFirebase } from "./session";
 import type { RoomBackend } from "./backend";
 import { classifyStorytellerError, lifecycleMessage } from "./lifecycle";
 import { applyTravelerChoice, commitTravelerChoiceLocally, observeTravelerChoice, pendingTravelerChoiceParticipation } from "./membershipCommands";
+import { endGameWithIntent } from "./terminal";
 import { closeMultiplayerSession, dismissUnattachedCleanupFailure, initialConnectionStatus, leaveMultiplayerOffline, reportRuntimeError, retryStorytellerSession, scopeKey, useSessionRuntime, useStorytellerSync } from "./storytellerSync";
 
 export function StorytellerSession() {
@@ -85,6 +86,10 @@ function sanitizedTechnicalDetails(failure: { category: string; diagnostic: stri
  * - that close also failed: Try ending again, plus -- only when offered for a
  *   lobby the server proved never reached live -- Leave multiplayer, keeping
  *   the game offline (local only; re-proven when clicked).
+ * PR-10H-004: while a Finish Game intent is outstanding, every one of those
+ * end-the-lobby actions is instead "Retry finishing game", which retries that
+ * exact retained intent through the one terminal seam (endGameWithIntent) --
+ * never a generic close without the result and its read-back.
  * Messages are plain language. A sanitized category/code/operation diagnostic
  * is available behind Technical details in every build; raw SDK error text is
  * appended only in development builds.
@@ -92,6 +97,7 @@ function sanitizedTechnicalDetails(failure: { category: string; diagnostic: stri
 export function ConnectionStatus() {
   const lobby = useStorytellerStore(s => s.lobby);
   const { status, error, errors, failure, closeFailed, leaveOffer } = useSessionRuntime();
+  const terminalIntent = useStorytellerStore(s => s.terminalClose?.intent ?? null);
   const [busy, setBusy] = useState(false);
   if (!lobby || status === "idle") return null;
   const run = (action: () => Promise<unknown>) => async () => {
@@ -99,7 +105,8 @@ export function ConnectionStatus() {
     setBusy(true);
     try { await action(); } catch { /* recorded in the runtime status */ } finally { setBusy(false); }
   };
-  const endMultiplayer = run(closeMultiplayerSession);
+  const endMultiplayer = terminalIntent ? run(() => endGameWithIntent(terminalIntent)) : run(closeMultiplayerSession);
+  const endLabel = (generic: string) => terminalIntent ? "Retry finishing game" : generic;
   if ((status === "connecting" || status === "reconnecting") && !error) {
     return <div className="connection-status" data-tone="info" role="status" aria-live="polite">
       {status === "connecting" ? "Connecting to the lobby…" : "Reconnecting to the lobby…"}
@@ -113,15 +120,15 @@ export function ConnectionStatus() {
   if (closeFailed) {
     title = "The lobby could not be ended";
     message = errors.close ?? message;
-    actions.push({ label: "Try ending again", onClick: endMultiplayer });
+    actions.push({ label: endLabel("Try ending again"), onClick: endMultiplayer });
     if (leaveOffer === scopeKey(lobby)) actions.push({ label: "Leave multiplayer — keep game offline", onClick: run(leaveMultiplayerOffline), danger: true });
   } else if (failure?.category === "ended" && status !== "live") {
     title = "This lobby has ended";
-    actions.push({ label: "Leave lobby", onClick: endMultiplayer });
+    actions.push({ label: endLabel("Leave lobby"), onClick: endMultiplayer });
   } else if (status === "failed") {
     title = "Multiplayer is not live";
     actions.push({ label: "Retry", onClick: retryStorytellerSession });
-    actions.push({ label: "End multiplayer", onClick: endMultiplayer });
+    actions.push({ label: endLabel("End multiplayer"), onClick: endMultiplayer });
   } else if (status === "blocked") {
     title = "Reconnect needs attention";
     actions.push({ label: "Retry", onClick: retryStorytellerSession });

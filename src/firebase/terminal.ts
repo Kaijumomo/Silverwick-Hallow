@@ -14,8 +14,12 @@ import { terminalPublication } from "./terminalResults";
  *  1-3. the caller has confirmed; the intent is captured and gameplay mutation
  *       is locked at the store's commit seam (beginTerminalClose);
  *  4-9. with multiplayer attached, the existing authoritative close runs --
- *       fenced public/status=ended first (players show "Ending..."), drain,
- *       lease renewal, a fresh roster read, then ONE fenced atomic commit that
+ *       drain, lease renewal and, for a declared result, the fresh
+ *       Storyteller uid / roster / participant reads as a preflight
+ *       (PR-10H-001: a failure there writes nothing terminal and leaves the
+ *       session live); only then the fenced public/status=ended signal
+ *       (players show "Ending..."; End Without Result, having no preflight,
+ *       still sends it before the drain), then ONE fenced atomic commit that
  *       ends the session, performs the existing teardown, clears reveal
  *       acknowledgements and writes results/{uid} for coherent participants of
  *       a declared result; the writer stops;
@@ -55,6 +59,7 @@ export async function endGameWithIntent(intent: TerminalIntent): Promise<SetupCo
       const outcome = await closeMultiplayerSession({
         terminal: terminalPublication(lobby.code, lobby.sessionId ?? "", declared, game),
         readBackPublished: true,
+        finishGame: true,
       });
       if (outcome.alreadyEnded) {
         // Read-back was requested, so an already-ended outcome always carries

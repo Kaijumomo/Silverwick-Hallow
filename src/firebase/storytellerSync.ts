@@ -275,7 +275,12 @@ async function provenNeverReachedLive(lobby: LobbyConnection): Promise<boolean> 
  * it -- a declared result, or a confirmed absence of one. When the outcome
  * cannot be confirmed (the session is missing, or is not this lobby's
  * session), the read-back fails closed: nothing is detached or finished.
+ *
+ * PR-10H-004: `options.finishGame` marks the call as the terminal seam's own
+ * (endGameWithIntent). Without it, the close is refused while a Finish Game
+ * intent is outstanding.
  */
+export const FINISH_GAME_PENDING = "This game is being finished. Retry finishing the game to end the lobby with the chosen outcome.";
 export type CloseMultiplayerOutcome = {
   /** The session was already ended (or missing) when this close began. */
   alreadyEnded: boolean;
@@ -284,10 +289,18 @@ export type CloseMultiplayerOutcome = {
   recovery?: Exclude<TerminalRecovery, { kind: "fresh" }>;
 };
 export async function closeMultiplayerSession(
-  options: { terminal?: TerminalPublicationBuilder; readBackPublished?: boolean } = {},
+  options: { terminal?: TerminalPublicationBuilder; readBackPublished?: boolean; finishGame?: true } = {},
 ): Promise<CloseMultiplayerOutcome> {
   const lobby = useStorytellerStore.getState().lobby;
   if (!lobby) return { alreadyEnded: false };
+  // PR-10H-004: while a Finish Game intent is outstanding (in flight or
+  // failed), only the terminal seam itself (endGameWithIntent, `finishGame`)
+  // may close this lobby. A generic close would end the session without the
+  // declared result and its read-back. Refused before anything is read,
+  // written, reported or detached.
+  if (useStorytellerStore.getState().terminalClose && !options.finishGame) {
+    throw new LifecycleError("conflict", FINISH_GAME_PENDING);
+  }
   const pending = failedStart && sameScope(failedStart.lobby, lobby) ? failedStart : null;
   try {
     const { backend } = await connectFirebase();
@@ -723,6 +736,10 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   // a stale restore or leaking watchers installed after the writer died.
   let stopped = false;
   let closing = false;
+  // PR-10H-001: join requests refused while a close was in flight, to re-apply
+  // once that close failed before its public signal and the store's terminal
+  // lock (which drops game mutations while a close is in flight) is released.
+  let resyncRequests = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let roster: Record<string, string> = {};
   let presence: Record<string, { online: boolean; lastSeen: number }> = {};
@@ -840,6 +857,21 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
     if (stopped || closing || timer) return;
     timer = setTimeout(() => { timer = undefined; void flush(); }, 200);
   };
+  // Local queue removal is delayed by the writer queue until seating's
+  // local commit finishes; a server ACK must not erase its input first.
+  const syncPendingQueue = () => writer.runExclusive(async () => {
+    if (!sameSession()) return;
+    const s = useStorytellerStore.getState();
+    for (const uid of Object.keys(s.game?.pendingPlayers ?? {})) if (!requests[uid]) s.removePendingPlayer(uid);
+    for (const [uid, name] of Object.entries(requests)) s.addToPendingQueue(uid, name);
+  });
+  const resyncPendingQueue = () => {
+    const state = useStorytellerStore.getState();
+    if (stopped || closing || state.terminalClose?.status === "closing") return;
+    resyncRequests = false;
+    if (!sameSession() || !state.game) return;
+    void syncPendingQueue().then(() => report("requests"), error => report("requests", error));
+  };
   const watch = (suffix: string, receive: (value: unknown) => void) => {
     if (stopped) return;
     let off = () => {};
@@ -910,14 +942,7 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
       requests = decoded.data;
       const state = useStorytellerStore.getState();
       if (!sameSession() || !state.game) return;
-      // Local queue removal is delayed by the writer queue until seating's
-      // local commit finishes; a server ACK must not erase its input first.
-      void writer.runExclusive(async () => {
-        if (!sameSession()) return;
-        const s = useStorytellerStore.getState();
-        for (const uid of Object.keys(s.game?.pendingPlayers ?? {})) if (!requests[uid]) s.removePendingPlayer(uid);
-        for (const [uid, name] of Object.entries(requests)) s.addToPendingQueue(uid, name);
-      }).catch(error => report("requests", error));
+      void syncPendingQueue().catch(error => report("requests", error));
       updateOnline();
     });
     // Phase 9C.3 (OPUS-003): observational only. Earlier code treated every
@@ -976,6 +1001,7 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
     const unsubStore = useStorytellerStore.subscribe((state, previous) => {
       if (!sameSession()) { stop(); return; }
       if (state.game !== previous.game || state.customScripts !== previous.customScripts) schedule();
+      if (resyncRequests) resyncPendingQueue();
     });
     cleanups.push(unsubStore);
     const stalePresence = setInterval(updateOnline, 15_000);
@@ -997,7 +1023,23 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
           await writer.close(useStorytellerStore.getState().game?.seatOrder ?? [], terminal);
           stop();
           if (sameSession()) useStorytellerStore.getState().setLobby(null);
-        } catch (error) { report("close", error); throw error; }
+        } catch (error) {
+          // PR-10H-001: a declared-result close whose preflight failed never
+          // attempted the irreversible public signal; the writer left closing
+          // mode and is live again. Reopen this gate too, flush what the
+          // cleared timer dropped, and re-apply join requests the closing
+          // writer refused (deferred past the store's terminal lock). Past
+          // the signal the gate stays closed (retry only).
+          if (!stopped && !writer.isStopped() && !writer.isClosing()) {
+            closing = false;
+            timer = undefined;
+            schedule();
+            resyncRequests = true;
+            resyncPendingQueue();
+          }
+          report("close", error);
+          throw error;
+        }
       },
     };
   }

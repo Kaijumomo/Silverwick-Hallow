@@ -1,4 +1,8 @@
-import { usePlayerStore, type PlayerTerminalResult } from "@/stores/playerStore";
+import { useMemo } from "react";
+import { usePlayerStore, type PlayerTerminalResult, type TownNote, type TownNoteConfidence } from "@/stores/playerStore";
+import { lookupOfficialRole } from "@/data/officialRoles";
+import { getBuiltinScript } from "@/data/scripts";
+import { CONFIDENCE_CLASS } from "./SeatNotePreview";
 
 /**
  * Phase 10H (contract §16): the player's terminal states.
@@ -77,23 +81,65 @@ export function PlayerEnded({ result, onRetry, onBack }: {
   );
 }
 
+const CONFIDENCE_TEXT: Record<TownNoteConfidence, string> = { suspect: "Suspect", likely: "Likely", confirm: "Confirm" };
+
+/** PR-10H-002: a saved note is reviewable when ANY of its three dimensions
+ * holds content -- a confidence, a role guess, or non-whitespace text. */
+const hasContent = (note: TownNote): boolean =>
+  note.confidence !== null || note.roles.length > 0 || note.text.trim().length > 0;
+
 /** F10 (10H-AC-058): this game's Town notes stay readable through the
- * post-game review and are cleared by Back to Start. Local only. */
+ * post-game review and are cleared by Back to Start. Local only.
+ *
+ * PR-10H-002: every non-empty note is listed with everything the player
+ * recorded -- confidence, role guesses (named from the player-side script /
+ * official catalogue, with a readable fallback for an unknown id) and text.
+ * These are the player's own guesses: nothing here reads Storyteller state. */
 function TownNotesReview() {
   const code = usePlayerStore((s) => s.code);
   const notes = usePlayerStore((s) => s.townNotes);
   const publicLobby = usePlayerStore((s) => s.publicLobby);
+  const scriptId = publicLobby?.scriptId;
+  const roleName = useMemo(() => {
+    const names = new Map((scriptId ? getBuiltinScript(scriptId)?.characters ?? [] : []).map((role) => [role.id, role.name]));
+    return (id: string) => names.get(id) ?? lookupOfficialRole(id)?.name ?? `Unrecognized character (${id})`;
+  }, [scriptId]);
   const prefix = code ? `${code}:` : null;
-  const mine = prefix ? Object.entries(notes).filter(([key, note]) => key.startsWith(prefix) && note.text.trim()) : [];
+  const seatOf = (seatId: string) => publicLobby?.players[seatId]?.seat ?? Number.POSITIVE_INFINITY;
+  const mine = prefix
+    ? Object.entries(notes)
+      .filter(([key, note]) => key.startsWith(prefix) && hasContent(note))
+      .sort(([a], [b]) => seatOf(a.slice(prefix.length)) - seatOf(b.slice(prefix.length)))
+    : [];
   if (mine.length === 0) return null;
   return (
     <details className="player-notes-review">
       <summary>Your Town notes ({mine.length})</summary>
+      <p className="behavior-help">Your own notes and guesses, not confirmed game information.</p>
       <ul>
         {mine.map(([key, note]) => {
-          const seatId = key.slice(prefix!.length);
-          const name = publicLobby?.players[seatId]?.name;
-          return <li key={key}><strong>{name ?? "A seat"}</strong>: {note.text}</li>;
+          const player = publicLobby?.players[key.slice(prefix!.length)];
+          const text = note.text.trim() ? note.text : null;
+          return (
+            <li key={key} className="player-notes-review-item">
+              <span className="player-notes-review-seat">
+                <strong>{player?.name ?? "A seat"}</strong>
+                {player && <span className="label"> seat {player.seat + 1}</span>}
+              </span>
+              {note.confidence && (
+                <span className="player-notes-review-line">
+                  Your confidence:{" "}
+                  <span className={`sn-preview-confidence ${CONFIDENCE_CLASS[note.confidence]}`}>{CONFIDENCE_TEXT[note.confidence]}</span>
+                </span>
+              )}
+              {note.roles.length > 0 && (
+                <span className="player-notes-review-line">
+                  Your role {note.roles.length === 1 ? "guess" : "guesses"}: {note.roles.map(roleName).join(", ")}
+                </span>
+              )}
+              {text && <span className="player-notes-review-line player-notes-review-text">{text}</span>}
+            </li>
+          );
         })}
       </ul>
       <p className="behavior-help">These notes stay on this phone until you go Back to start.</p>

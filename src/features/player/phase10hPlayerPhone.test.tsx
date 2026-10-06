@@ -162,6 +162,75 @@ describe("10H-AC-058 (F10): Town notes survive the post-game review until Back t
   });
 });
 
+// PR-10H-002 (Sol R3): the post-game review shows EVERY non-empty Town note --
+// confidence-only, role-only and text notes alike -- with all of its recorded
+// content, named from the player-side catalogue, as the player's own guesses.
+describe("PR-10H-002: the post-game Town notes review keeps every non-empty note and all of its content", () => {
+  const town = (): PublicLobbyRecord => {
+    const base = lobby("day", 4);
+    const extra = ["p-carol", "p-dave", "p-erin", "p-frank"].map((id, index) => [id, { id, name: id.slice(2, 3).toUpperCase() + id.slice(3), seat: index + 2, online: true, joinedAt: 0, isTraveler: false, alive: true, ghostVote: true }] as const);
+    return { ...base, seatOrder: [...base.seatOrder, ...extra.map(([id]) => id)], players: { ...base.players, ...Object.fromEntries(extra) } };
+  };
+  const NOTES = {
+    "ABCD2345:p-bob": { confidence: "suspect" as const, roles: [], text: "" }, // A. confidence only
+    "ABCD2345:p-carol": { confidence: null, roles: ["imp", "spy"], text: "" }, // B. role guesses only
+    "ABCD2345:p-dave": { confidence: null, roles: [], text: "Claimed Chef, 1 pair" }, // C. text only
+    "ABCD2345:p-erin": { confidence: "likely" as const, roles: ["poisoner"], text: "Odd vote" }, // D. all three
+    "ABCD2345:p-frank": { confidence: null, roles: [], text: "   " }, // E. truly empty (whitespace)
+    "OTHERGAME:p-bob": { confidence: "confirm" as const, roles: ["imp"], text: "other game" }, // H. unrelated game
+  };
+  function ended(notes: Record<string, unknown> = NOTES) {
+    seat({ status: "ended", publicLobby: town(), townNotes: notes as never });
+    const onBack = () => usePlayerStore.getState().reset();
+    render(<PlayerEnded result={{ status: "ready", result: { winner: "evil", declaredAt: { phase: "day", day: 4 } } }} onRetry={() => {}} onBack={onBack} />);
+    fireEvent.click(screen.getByText("Your Town notes (4)"));
+    return screen.getAllByRole("listitem");
+  }
+
+  it("A-F: confidence-only, role-only, text-only and full notes are all listed in seat order; an empty note is absent", () => {
+    const items = ended();
+    // F. multiple seats, each identified by name and seat number, in seat order.
+    expect(items.map(item => within(item).getByText(/^(Bob|Carol|Dave|Erin)$/).textContent)).toEqual(["Bob", "Carol", "Dave", "Erin"]);
+    const [bob, carol, dave, erin] = items as [HTMLElement, HTMLElement, HTMLElement, HTMLElement];
+    // A. confidence only.
+    expect(bob).toHaveTextContent(/^Bob seat 2Your confidence: Suspect$/);
+    // B. role guesses only, by human-readable name.
+    expect(carol).toHaveTextContent(/^Carol seat 3Your role guesses: Imp, Spy$/);
+    // C. text only.
+    expect(dave).toHaveTextContent(/^Dave seat 4Claimed Chef, 1 pair$/);
+    // D. confidence + role + text.
+    expect(erin).toHaveTextContent(/^Erin seat 5Your confidence: LikelyYour role guess: PoisonerOdd vote$/);
+    // E. the whitespace-only note is not listed (and not counted).
+    expect(screen.queryByText(/Frank/)).toBeNull();
+    // H. another game's note is never shown here.
+    expect(screen.queryByText(/other game/)).toBeNull();
+  });
+
+  it("accessible text, not icons: every value is real text; the review is labelled as the player's own guesses", () => {
+    ended();
+    const review = screen.getByText("Your Town notes (4)").closest("details")!;
+    expect(review.querySelectorAll("img")).toHaveLength(0);
+    expect(within(review).getByText("Suspect")).toBeVisible();
+    expect(within(review).getByText("Your own notes and guesses, not confirmed game information.")).toBeInTheDocument();
+    // Never the player's own character (Chef): the one "Chef" is Dave's note text.
+    expect(review.textContent!.match(/Chef/g)).toHaveLength(1);
+    expect(review).not.toHaveTextContent(/actual|alignment|reminder|effect/i);
+  });
+
+  it("an unknown saved RoleId stays understandable; without the public lobby the seat falls back to a generic label", () => {
+    seat({ status: "ended", publicLobby: null, townNotes: { "ABCD2345:p-zed": { confidence: null, roles: ["notarole", "imp"], text: "" } } });
+    render(<PlayerEnded result={{ status: "none" }} onRetry={() => {}} onBack={() => {}} />);
+    fireEvent.click(screen.getByText("Your Town notes (1)"));
+    expect(screen.getByRole("listitem")).toHaveTextContent(/^A seatYour role guesses: Unrecognized character \(notarole\), Imp$/);
+  });
+
+  it("G-H: Back to start clears this game's notes -- including confidence/role-only ones -- and keeps another game's", () => {
+    ended();
+    act(() => { fireEvent.click(screen.getByRole("button", { name: "Back to start" })); });
+    expect(usePlayerStore.getState().townNotes).toEqual({ "OTHERGAME:p-bob": NOTES["OTHERGAME:p-bob"] });
+  });
+});
+
 describe("ASTRA-10H-007: joining an already-ended lobby is a completed generic Game Ended", () => {
   it("the stale-ended-lobby join path shows Game ended with Back to Start -- never an endless 'Reading the final result'", async () => {
     // A real lobby whose session has already ended (e.g. a stale code).

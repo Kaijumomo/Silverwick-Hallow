@@ -12,7 +12,9 @@ import type { ParticipantId, PlayerId } from "./types";
  *    hidden); null means "the layout's default" (phone peek, wider expanded);
  *  - dockTab: which ONE secondary surface the tablet dock / phone sheet shows;
  *  - nightCursor: the Night step the Storyteller is on (null = the first
- *    unresolved step); the step owns the action context (§8.1);
+ *    unresolved step); the step owns the action context (§8.1). It is
+ *    GAME-SCOPED: step keys repeat across games, so it is cleared at the
+ *    new-game / end-game boundary (resetGameScope, PR-10H-003);
  *  - litActor: the derived actor of that step, published by the Night
  *    dashboard while it is mounted (absent at Day and under Privacy Mode);
  *  - actionOpen: whether the floating action card is showing (its draft is
@@ -40,6 +42,10 @@ type ShellState = {
   setLitActor: (actor: LitActor | null) => void;
   setActionOpen: (open: boolean) => void;
   requestAction: () => void;
+  /** PR-10H-003: ends the game-scoped part of this state -- the Night cursor
+   * and the action context it owns -- with its game. View preferences (lens,
+   * dock tab, workspace detent) are kept. */
+  resetGameScope: () => void;
   reset: () => void;
 };
 
@@ -62,6 +68,7 @@ export const useShellStore = create<ShellState>()((set) => ({
   setLitActor: (litActor) => set((s) => (sameActor(s.litActor, litActor) ? s : { litActor })),
   setActionOpen: (actionOpen) => set({ actionOpen }),
   requestAction: () => set((s) => ({ actionOpen: true, actionRequest: s.actionRequest + 1 })),
+  resetGameScope: () => set({ nightCursor: null, litActor: null, actionOpen: false }),
   reset: () => set(INITIAL),
 }));
 
