@@ -2,10 +2,10 @@
 
 **Status:** **CLOSED — READY FOR RULES-FIRST INTEGRATION** (Sol status decision; software implementation and review complete)\
 **Phase created:** 2026-10-04\
-**Closure recorded:** 2026-10-06 (this documentation closure checkpoint)\
+**Closure recorded:** 2026-10-06. Initial documentation closure `a15dcbc5e5fcb6f46abcc3b02b4919c18539ee1d`. Reconciled after the post-closure review R3–R3.2 by this documentation checkpoint (§17).\
 **Branch:** `dev/phase-10h-ui`\
 **Start:** `e0ba539ae448eb494ca5739564a39c49d2e59467` (post-10G `main`)\
-**Final reviewed implementation:** `668dc3dff4930d42e79e2fcc52b0877812f2abee`\
+**Final reviewed implementation:** `9263fc79ed4ce20b9eee85a616038266cbb3ae58` (R3.2). It supersedes `668dc3dff4930d42e79e2fcc52b0877812f2abee` (R2), the final reviewed implementation in the initial closure record.\
 **Store/schema:** v26 on `dev/phase-10h-ui` (v25 on `main` until integration)\
 **Firebase RTDB Rules:** Phase 10H adds the narrowly authorized `revealAcks/{uid}` and `results/{uid}` paths (§15). They are **not yet deployed to production**.\
 **Integration:** **not yet performed.** `main` remains `e0ba539ae448eb494ca5739564a39c49d2e59467`. Production release is Rules first, then client/`main` (§19).
@@ -18,9 +18,11 @@ Phase 10H software implementation and review are complete. Sol's status decision
 
 Phase 10H is **not** yet integrated. The production RTDB Rules have not been deployed, and `main` has not moved. The phase is recorded as closed and integrated only after the Rules-first release (§19) and the integration verification.
 
-- Final reviewed implementation: `668dc3dff4930d42e79e2fcc52b0877812f2abee`. Review lineage, evidence and findings: §17.
-- Luna final targeted verification: **PASS**. Astra final targeted closure: **PASS**. ASTRA-10H-001 through ASTRA-10H-009: **CLOSED**.
-- Full unit/integration suite: **4346/4346 across 188 files**. Typecheck, production build and the final targeted diff check: **PASS**. The final reviewed worktree was clean.
+- Final reviewed implementation: `9263fc79ed4ce20b9eee85a616038266cbb3ae58` (R3.2). Review lineage, evidence and findings: §17.
+- Opening PR #1 triggered an additional independent Codex review after the initial closure record (`a15dcbc`, at R2 `668dc3d`). Its accepted findings caused a narrow software-review reopening (R3, R3.1, R3.2), not a reopening of the Phase 10H design. That review chain is now complete.
+- Original Astra findings ASTRA-10H-001 through ASTRA-10H-009: **CLOSED**. Post-closure findings PR-10H-001 through PR-10H-004, R3-ADJ-001 and R3-CLOSURE-001: **CLOSED**.
+- Luna final R3.2 targeted verification: **PASS**. Astra final R3-CLOSURE-001 re-closure: **PASS**, with no new findings.
+- Final independent normal suite: **4392/4392 across 192 files**. Firebase Rules emulator: **240/240, 0 skipped**. Typecheck, production build and diff check: **PASS**. The final review worktrees were clean.
 - Hardware acceptance: **AC-064 WAIVED** and **AC-066 WAIVED** for phase closure. Both are waived, **not passed** (§18).
 - Remaining software closure blockers: **none**.
 
@@ -398,10 +400,17 @@ Phase 10H moves the store and game schema from v25 to **v26**. The v25 → v26 m
 - **Terminal `results/{uid}`.** The player-safe terminal snapshot is exactly `{ version: 1, sessionId, winner, declaredAt }`. It carries no Role, Alignment, ParticipantId, Effect, Reminder, History, delivery or Storyteller notes, and no "you won/lost" derivation.
   - It is published only inside the one fenced atomic terminal close, only for a declared Good or Evil victory, and only to coherent current participants.
   - End Without Result publishes nothing.
-- **Terminal recovery/receipt.** The same terminal commit also writes the Storyteller's own result receipt, the identical player-safe payload, at `results/{storytellerUid}`. A declared result is therefore durably recoverable even with zero phone recipients.
-  - A retry that finds the session already ended keeps exactly that commit's confirmed outcome: either the declared result read back from the receipt, or a confirmed absence (End Without Result). A different retry selection never rewrites it, and an outcome that cannot be confirmed fails closed.
-  - Any remote failure leaves the local game live and unchanged, with the intent kept for retry.
-  - The terminal close also clears reveal acknowledgements.
+- **Terminal recovery/receipt.** The same terminal commit also writes the Storyteller's own result receipt, the identical player-safe payload, at `results/{storytellerUid}`. A declared result is therefore durably recoverable even with zero phone recipients. The terminal close also clears reveal acknowledgements.
+- **Terminal lifecycle boundary (final architecture after R3–R3.2).**
+  - A declared-result terminal publication **preflights** its fallible authoritative reads (Storyteller uid, roster, participant records) **before** the irreversible public `ended` signal. End Without Result has no preflight.
+  - A first-ever failure before any signal attempt wrote nothing terminal. It may safely restore the live writer (renewal cadence, accepting writes) and the deferred join resync.
+  - Once a `SessionWriter` has **ever** attempted the irreversible ended signal, that fact is monotonic for the writer's lifetime (`terminalSignalAttempted`). This latch is **writer-runtime state only**, never persisted: not in the game record, store, checkpoints or projections. A lost response can hide a signal that landed, so an attempt is treated as possibly landed.
+  - After that, a later retry failure cannot reopen ordinary gameplay, projection or join resync; it stays fail-closed and retry-oriented. Retries may still re-attempt the ended signal.
+  - Lost-response / already-ended recovery keeps exactly the committed outcome: the declared result read back from the receipt, or a confirmed absence (End Without Result). A different retry selection never rewrites it, and an outcome that cannot be confirmed fails closed.
+  - Any remote failure leaves the local game unchanged (it becomes the ended snapshot only after a successful close) and keeps the intent for retry.
+  - A generic close cannot bypass an outstanding Finish Game intent. While one is outstanding (in flight or failed), only the terminal seam may close the lobby, and the end-the-lobby actions become "Retry finishing game".
+  - `newGame` / `endGame` are total no-ops while a terminal close is actively `closing`.
+  - A failed terminal intent may still be deliberately replaced or discarded. It is cleared together with its old game and is never retried against a new one.
 
 ---
 
@@ -417,6 +426,8 @@ Phase 10H adds two narrowly authorized paths under `lobbies/{code}` in `src/fire
   - Only the fenced Storyteller writer may create an entry. It must not already exist, and it must be written in the same commit that moves the session from `active` to `ended`, with the same session id.
   - The value has exactly the schema in §14: `version` 1, `sessionId` bound to the session, `winner` `good` or `evil`, and `declaredAt` with phase `day`/`night` and an integer day ≥ 1. No other keys are allowed.
   - A player may read only their own entry, and only once the session has ended. The Storyteller reads all entries.
+
+`src/firebase/rules.json` changed only in the initial implementation `6f31259`. R3, R3.1 and R3.2 did **not** change it, so the SHA-256 above is unchanged at the final reviewed implementation `9263fc79`.
 
 These Rules exist on `dev/phase-10h-ui` only. **They have not been deployed to production.** The production release order is in §19.
 
@@ -443,28 +454,60 @@ The v26 additions (§14) and the Rules paths (§15) were authorized by the froze
 
 ## 17. Closure review and evidence
 
+### 17.1 Review lineage
+
 Review lineage on top of `e0ba539ae448eb494ca5739564a39c49d2e59467`:
 
 | Step | Checkpoint |
 |---|---|
 | Initial implementation | `6f312591b495e53ff888384f0d733116209c6959` |
 | Astra remediation R1 | `f2abdf832a894cc8751212284c2e1e11da1eee11` |
-| Astra remediation R2 / **final reviewed implementation** | `668dc3dff4930d42e79e2fcc52b0877812f2abee` |
+| Astra remediation R2 (final reviewed implementation of the initial closure record; now historical) | `668dc3dff4930d42e79e2fcc52b0877812f2abee` |
+| Initial documentation closure checkpoint (docs only) | `a15dcbc5e5fcb6f46abcc3b02b4919c18539ee1d` |
+| Post-closure PR review remediation R3 | `938e10d55b6363dcb7e2109e3eba2799e6a1b7a0` |
+| R3.1 lifecycle-fence remediation | `05c4fd51d0a592ca480bde36c74cced306a6fdee` |
+| R3.2 irreversible terminal-boundary remediation / **final reviewed implementation** | `9263fc79ed4ce20b9eee85a616038266cbb3ae58` |
 
-Final evidence at `668dc3dff4930d42e79e2fcc52b0877812f2abee`:
+### 17.2 Original review findings
 
-- Luna final targeted verification: **PASS**;
-- Astra final targeted closure: **PASS**;
+ASTRA-10H-001 through ASTRA-10H-009 were raised and closed through R1 and R2. They remain **CLOSED**, and are not renumbered or reopened by the post-closure review.
+
+### 17.3 Post-closure review (PR #1)
+
+Opening PR #1 triggered an additional independent Codex review after the initial closure record (`a15dcbc`, at R2). Its accepted findings caused a **narrow software-review reopening** of the terminal lifecycle and game-scoped UI state. This was not a reopening of the Phase 10H design, product decisions or contract. Remediation landed as R3, R3.1 and R3.2.
+
+| Finding | Defect | Status |
+|---|---|---|
+| **PR-10H-001** | Terminal result preflight originally happened after the irreversible ended signal. | **CLOSED** |
+| **PR-10H-002** | Structured Town Note content was incomplete in post-game review. | **CLOSED** |
+| **PR-10H-003** | The Night cursor could cross game identity. | **CLOSED** |
+| **PR-10H-004** | A failed Finish Game could be retried through a generic result-less close. | **CLOSED** |
+| **R3-ADJ-001** | A direct `newGame` / `endGame` during an in-flight terminal close could partially transition local lifecycle state. | **CLOSED** |
+| **R3-CLOSURE-001** | A later close retry forgot that the same writer had already attempted the irreversible ended signal. | **CLOSED**, via the writer-lifetime monotonic `terminalSignalAttempted` latch (writer-runtime only, never persisted) |
+
+The resulting final terminal-lifecycle architecture is recorded in §14.
+
+### 17.4 Final evidence at `9263fc79ed4ce20b9eee85a616038266cbb3ae58`
+
+- Luna final R3.2 targeted verification: **PASS**; required coverage complete;
+- Astra final R3-CLOSURE-001 re-closure: **PASS**; required coverage complete; new findings: none;
 - ASTRA-10H-001 through ASTRA-10H-009: **CLOSED**;
-- full unit/integration suite: **4346/4346 across 188 files**;
+- PR-10H-001 through PR-10H-004, R3-ADJ-001 and R3-CLOSURE-001: **CLOSED**;
+- final independent normal suite: **4392/4392 across 192 files**;
+- final Firebase Rules emulator: **240/240, 0 skipped**;
 - typecheck: **PASS**;
 - production build: **PASS**;
-- final targeted diff check: **PASS**;
-- final reviewed worktree: clean.
-
-Firebase Rules emulator evidence: **228/228, zero skipped**, recorded at the last Rules-affecting checkpoint. `src/firebase/rules.json` itself changed only in the initial implementation `6f31259`. R2 (`f2abdf8` → `668dc3d`) changed no Firebase/Rules production source and no emulator spec file; its only Firebase-directory change is the normal-suite test `src/firebase/phase10hTerminal.test.ts`. The emulator suite was therefore not rerun for R2.
+- diff check: **PASS**;
+- final review worktrees: clean.
 
 Remaining software closure blockers: **none**.
+
+### 17.5 Historical evidence (superseded; not the final gate)
+
+At R2 `668dc3dff4930d42e79e2fcc52b0877812f2abee`, the initial closure record reported the following. It is retained as history only and superseded by §17.4.
+- Luna final targeted verification PASS and Astra final targeted closure PASS for ASTRA-10H-001..009;
+- full suite 4346/4346 across 188 files; typecheck, build and targeted diff check PASS;
+- Firebase Rules emulator 228/228, zero skipped, from the last Rules-affecting checkpoint before R3. R2 changed no Firebase/Rules production source, so the emulator suite was not rerun for R2.
 
 ---
 
@@ -478,6 +521,7 @@ Remaining software closure blockers: **none**.
 These criteria are **WAIVED, not passed.**
 
 - Real physical-device access to the exact reviewed build was unavailable at closure time, so no real-device evidence exists for either criterion.
+- No physical-device evidence was performed after the initial closure record either: not for R2, not for the post-closure R3–R3.2 remediation, and not for the final reviewed implementation `9263fc79`. Both criteria remain WAIVED, not passed.
 - Extensive rendered phone and tablet browser evidence passed through Luna and Astra. That browser evidence does not substitute for, and is not recorded as, a physical-device PASS.
 - If a genuine physical-device defect is later observed (iPhone Safari touch or notched-device safe-area), it is valid follow-up work: a normal defect/hotfix. It is never grounds to rewrite this record or to record either criterion as passed retroactively.
 
@@ -487,9 +531,10 @@ These criteria are **WAIVED, not passed.**
 
 Phase 10H changes `src/firebase/rules.json`. The web client ships from `main` automatically, but Rules change only through `npm run rules:deploy`. A v26 client running against pre-10H production Rules would be denied the new `revealAcks` and `results` paths. Therefore:
 
-1. **Deploy the RTDB Rules** from the Phase 10H closure checkpoint: `npx firebase use <PROJECT_ID>`, then `npm run rules:deploy` (Realtime Database Rules only).
+1. **Deploy the RTDB Rules** from the final Phase 10H closure checkpoint (the documentation checkpoint on top of the final reviewed implementation `9263fc79`): `npx firebase use <PROJECT_ID>`, then `npm run rules:deploy` (Realtime Database Rules only).
 2. **Verify the deployed Rules equal the repository Rules:** `npm run rules:verify -- --project <PROJECT_ID>` (add `--instance <DB_INSTANCE>` for a non-default instance). It must exit 0, with the deployed Rules identical to `src/firebase/rules.json` (SHA-256 `2ec0aa37…`, §15).
-3. **Only then integrate the client/`main`** to the Phase 10H closure checkpoint, and verify the integration.
+3. **Only then integrate the client/`main`** to the final Phase 10H closure checkpoint, and verify the integration.
+4. **Only after the integration verification**, record Phase 10H as CLOSED AND INTEGRATED.
 
 Stop point: do not move `main` until steps 1 and 2 have both succeeded. **No Rules deployment, client deployment or `main` integration has occurred as of this record.**
 
@@ -497,8 +542,8 @@ Stop point: do not move `main` until steps 1 and 2 have both succeeded. **No Rul
 
 ## 20. Next
 
-1. This documentation closure checkpoint on `dev/phase-10h-ui`.
+1. The documentation closure checkpoints on `dev/phase-10h-ui`: the initial record `a15dcbc` (at R2), then this post-R3 reconciliation on top of the final reviewed implementation `9263fc79`.
 2. Production RTDB Rules deploy and verification (§19 steps 1–2).
-3. Integrate the final Phase 10H checkpoint into `main` (§19 step 3).
-4. Record Phase 10H as CLOSED AND INTEGRATED only after the integration verification.
+3. Integrate the final Phase 10H closure checkpoint into `main` (§19 step 3).
+4. Record Phase 10H as CLOSED AND INTEGRATED only after the integration verification (§19 step 4).
 5. Phase 11 (canonical character coverage) remains the next implementation phase. It must not begin until the Phase 10H integration completes.
