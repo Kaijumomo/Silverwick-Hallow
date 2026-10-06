@@ -1372,6 +1372,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
       tokenPositions: {},
 
       newGame: (scriptId: string, opts: NewGameOpts = {}) => {
+        // A terminal completion owns the current game's lifecycle until it
+        // commits or fails. Refuse at the action boundary before advancing
+        // the lifecycle token, clearing UI state, or detaching its lobby.
+        if (get().terminalClose?.status === "closing") return;
         const script =
           BUILTIN_SCRIPTS[scriptId] ?? get().customScripts[scriptId];
         if (!script) throw new Error(`Unknown script id: ${scriptId}`);
@@ -1670,6 +1674,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
       },
 
       endGame: () => {
+        // Do not partially discard a game while its terminal close is in
+        // flight. Failed intents remain deliberately discardable below.
+        if (get().terminalClose?.status === "closing") return;
         gameLifecycle++;
         usePrivacyStore.getState().reset();
         useShellStore.getState().resetGameScope();

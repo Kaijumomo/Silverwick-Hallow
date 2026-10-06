@@ -8,7 +8,9 @@
 // the real SessionWriter and the real player handshake (MemoryRoomBackend).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
-import { useStorytellerStore, type TerminalIntent } from "@/stores/storytellerStore";
+import { gameLifecycleToken, useStorytellerStore, type TerminalIntent } from "@/stores/storytellerStore";
+import { usePrivacyStore } from "@/stores/privacyStore";
+import { useShellStore } from "@/stores/shellStore";
 import { usePlayerStore } from "@/stores/playerStore";
 import { withRevealTokens } from "@/stores/revealTokens";
 import type { RoomBackend } from "./backend";
@@ -194,6 +196,55 @@ describe("PR-10H-004: lost-response recovery through the ConnectionStatus retry"
 });
 
 describe("PR-10H-004: generic closes and the defense-in-depth boundary", () => {
+  it.each(["New Game", "End Game"] as const)("a direct %s call during a closing terminal intent is refused before lifecycle side effects", (action) => {
+    const live = liveGame();
+    const lobby = { code, uid: "host", sessionId: "in-flight", status: "live" as const };
+    const undoStack = [{ ...live }];
+    const pendingKnocks = [{ id: "pending-knock" }] as never;
+    useStorytellerStore.setState({
+      game: live, lobby, view: "newgame", undoStack, pendingKnocks,
+      selectedPlayerId: live.seatOrder[0]!, localSeq: 17, sync: null,
+      terminalClose: { status: "closing", intent: { kind: "declare", winner: "good" }, message: null },
+    });
+    usePrivacyStore.setState({ enabled: true });
+    useShellStore.setState({
+      lens: "labels", inspectorDetent: "peek", dockTab: "seat",
+      nightCursor: { day: 1, stepKey: "demonInfo" },
+      litActor: { playerId: live.seatOrder[0]!, participantId: live.players[live.seatOrder[0]!]!.participantId!, stepKey: "demonInfo" },
+      actionOpen: true,
+    });
+    const resetPrivacy = vi.spyOn(usePrivacyStore.getState(), "reset");
+    const resetShell = vi.spyOn(useShellStore.getState(), "resetGameScope");
+    const lifecycle = gameLifecycleToken();
+    const before = {
+      game: st().game, lobby: st().lobby, view: st().view, undoStack: st().undoStack,
+      pendingKnocks: st().pendingKnocks, selectedPlayerId: st().selectedPlayerId,
+      localSeq: st().localSeq, sync: st().sync, terminalClose: st().terminalClose,
+      privacy: usePrivacyStore.getState().enabled, shell: {
+        lens: useShellStore.getState().lens, inspectorDetent: useShellStore.getState().inspectorDetent,
+        dockTab: useShellStore.getState().dockTab, nightCursor: useShellStore.getState().nightCursor,
+        litActor: useShellStore.getState().litActor, actionOpen: useShellStore.getState().actionOpen,
+      },
+    };
+
+    if (action === "New Game") st().newGame(setupScript.id);
+    else st().endGame();
+
+    expect({
+      game: st().game, lobby: st().lobby, view: st().view, undoStack: st().undoStack,
+      pendingKnocks: st().pendingKnocks, selectedPlayerId: st().selectedPlayerId,
+      localSeq: st().localSeq, sync: st().sync, terminalClose: st().terminalClose,
+      privacy: usePrivacyStore.getState().enabled, shell: {
+        lens: useShellStore.getState().lens, inspectorDetent: useShellStore.getState().inspectorDetent,
+        dockTab: useShellStore.getState().dockTab, nightCursor: useShellStore.getState().nightCursor,
+        litActor: useShellStore.getState().litActor, actionOpen: useShellStore.getState().actionOpen,
+      },
+    }).toEqual(before);
+    expect(gameLifecycleToken()).toBe(lifecycle);
+    expect(resetPrivacy).not.toHaveBeenCalled();
+    expect(resetShell).not.toHaveBeenCalled();
+  });
+
   it("a non-terminal close failure (no Finish Game intent) keeps the generic Try ending again -> closeMultiplayerSession", async () => {
     const { get, fail } = await goLive();
     fail.finalCommit = true;
