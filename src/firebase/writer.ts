@@ -83,6 +83,13 @@ export class SessionWriter implements RoomBackend {
   private offset = 0;
   private stopped = false;
   private closing = false;
+  /** R3-CLOSURE-001: writer-lifetime and monotonic. Set immediately before
+   * EVERY attempt to write the irreversible public/status = "ended" signal
+   * and never cleared, so a later close() retry that fails in its preflight
+   * still knows this writer crossed the irreversible boundary. "Attempted",
+   * not "confirmed": a lost response can hide a signal that landed. It decides
+   * recovery only -- a retry still re-sends the signal. Never persisted. */
+  private terminalSignalAttempted = false;
   private renewal: ReturnType<typeof setInterval> | undefined;
   /** The exact expiry this writer most recently, successfully wrote to the
    * server for its own lease (Finding H1). Updated on every successful
@@ -336,8 +343,9 @@ export class SessionWriter implements RoomBackend {
     return result;
   }
   /** Whether close() is in progress or has passed its irreversible public
-   * signal. False again after a declared-result close failed in its preflight
-   * (PR-10H-001): that writer is live, not closing. */
+   * signal. False again only after a close failed before this writer EVER
+   * attempted that signal (PR-10H-001, R3-CLOSURE-001): that writer is live,
+   * not closing. */
   isClosing() {
     return this.closing;
   }
@@ -348,11 +356,11 @@ export class SessionWriter implements RoomBackend {
     this.abort = new AbortController();
     // The fenced public terminal signal. Join rules reject new requests as
     // soon as it arrives, and public/status may never leave "ended" again, so
-    // once it has been attempted (its response may be lost even when it
-    // landed) this close stays fail-closed and retry-oriented.
-    let signalled = false;
+    // once this writer has attempted it in ANY close() call (its response may
+    // be lost even when it landed) every later failure stays fail-closed and
+    // retry-oriented (terminalSignalAttempted, R3-CLOSURE-001).
     const signalEnded = async () => {
-      signalled = true;
+      this.terminalSignalAttempted = true;
       const signalRevision = ++this.revision;
       await retryTransient(() => this.raw.update({
         [`${this.root}/public/status`]: "ended",
@@ -398,15 +406,15 @@ export class SessionWriter implements RoomBackend {
       await this.commit(cleanup);
       this.stop();
     } catch (error) {
-      if (!signalled) this.resumeAfterPreflightFailure();
+      if (!this.terminalSignalAttempted) this.resumeAfterPreflightFailure();
       this.report(error);
       throw error;
     }
   }
-  /** PR-10H-001: a close that failed before its public signal was attempted
-   * wrote nothing terminal. Leave closing mode so queued writes and a later
-   * close are accepted again, and restore the renewal cadence close()
-   * suspended. A stopped writer stays stopped. */
+  /** PR-10H-001: a close that failed before this writer ever attempted its
+   * public signal wrote nothing terminal. Leave closing mode so queued writes
+   * and a later close are accepted again, and restore the renewal cadence
+   * close() suspended. A stopped writer stays stopped. */
   private resumeAfterPreflightFailure() {
     this.closing = false;
     if (this.stopped) return;
