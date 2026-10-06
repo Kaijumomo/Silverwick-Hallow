@@ -1,22 +1,26 @@
 # Phase 10H — Storyteller UI/UX & Visual Design System
 
-**Status:** **CLOSED — READY FOR RULES-FIRST INTEGRATION** (Sol status decision; software implementation and review complete)\
+**Status:** **CLOSED AND INTEGRATED** (2026-10-06 UTC). Production RTDB Rules were deployed and verified first; only then was `main` fast-forwarded (§19).\
 **Phase created:** 2026-10-04\
-**Closure recorded:** 2026-10-06. Initial documentation closure `a15dcbc5e5fcb6f46abcc3b02b4919c18539ee1d`. Reconciled after the post-closure review R3–R3.2 by this documentation checkpoint (§17).\
+**Closure recorded:** 2026-10-06. Initial documentation closure `a15dcbc5e5fcb6f46abcc3b02b4919c18539ee1d`. Reconciled after the post-closure review R3–R3.2 by `2007f8ca058f472c961b4594e15960acdc4d50e9` (§17). Final integration recorded by the docs-only commit directly on top of `2007f8c` on `main` (§19).\
 **Branch:** `dev/phase-10h-ui`\
 **Start:** `e0ba539ae448eb494ca5739564a39c49d2e59467` (post-10G `main`)\
 **Final reviewed implementation:** `9263fc79ed4ce20b9eee85a616038266cbb3ae58` (R3.2). It supersedes `668dc3dff4930d42e79e2fcc52b0877812f2abee` (R2), the final reviewed implementation in the initial closure record.\
-**Store/schema:** v26 on `dev/phase-10h-ui` (v25 on `main` until integration)\
-**Firebase RTDB Rules:** Phase 10H adds the narrowly authorized `revealAcks/{uid}` and `results/{uid}` paths (§15). They are **not yet deployed to production**.\
-**Integration:** **not yet performed.** `main` remains `e0ba539ae448eb494ca5739564a39c49d2e59467`. Production release is Rules first, then client/`main` (§19).
+**Store/schema:** v26, integrated on `main`\
+**Firebase RTDB Rules:** Phase 10H adds the narrowly authorized `revealAcks/{uid}` and `results/{uid}` paths (§15). **Deployed to production and verified:** project `mobile-botc`, instance `mobile-botc-default-rtdb`, Rules SHA-256 `2ec0aa3795f6a82148273d8cbcd41fb3a6ab56ec37e55d8bca9900bfb454d92e`.\
+**Integration:** **complete.** `main` was fast-forwarded (no merge commit) from `e0ba539ae448eb494ca5739564a39c49d2e59467` to the integration checkpoint `2007f8ca058f472c961b4594e15960acdc4d50e9`, after the Rules release was verified. The final closure-doc commit sits directly on top (§19).
 
 ---
 
 ## 0. Closure record (read this first)
 
-Phase 10H software implementation and review are complete. Sol's status decision is **CLOSED — READY FOR RULES-FIRST INTEGRATION**.
+**Phase 10H is CLOSED AND INTEGRATED.** Software implementation and review are complete.
 
-Phase 10H is **not** yet integrated. The production RTDB Rules have not been deployed, and `main` has not moved. The phase is recorded as closed and integrated only after the Rules-first release (§19) and the integration verification.
+- Production RTDB Rules were deployed to project `mobile-botc` (instance `mobile-botc-default-rtdb`) and verified **before** `main` integration.
+- `main` was then fast-forwarded to `2007f8ca058f472c961b4594e15960acdc4d50e9`, and the integration was verified.
+- Phase 11 is now unblocked. The release record is in §19.
+
+History: the status was **CLOSED — READY FOR RULES-FIRST INTEGRATION** from the initial closure record until this integration.
 
 - Final reviewed implementation: `9263fc79ed4ce20b9eee85a616038266cbb3ae58` (R3.2). Review lineage, evidence and findings: §17.
 - Opening PR #1 triggered an additional independent Codex review after the initial closure record (`a15dcbc`, at R2 `668dc3d`). Its accepted findings caused a narrow software-review reopening (R3, R3.1, R3.2), not a reopening of the Phase 10H design. That review chain is now complete.
@@ -429,7 +433,7 @@ Phase 10H adds two narrowly authorized paths under `lobbies/{code}` in `src/fire
 
 `src/firebase/rules.json` changed only in the initial implementation `6f31259`. R3, R3.1 and R3.2 did **not** change it, so the SHA-256 above is unchanged at the final reviewed implementation `9263fc79`.
 
-These Rules exist on `dev/phase-10h-ui` only. **They have not been deployed to production.** The production release order is in §19.
+These Rules are **deployed to production and verified** (project `mobile-botc`, instance `mobile-botc-default-rtdb`) and are on `main`. The release record is in §19.
 
 ---
 
@@ -536,14 +540,28 @@ Phase 10H changes `src/firebase/rules.json`. The web client ships from `main` au
 3. **Only then integrate the client/`main`** to the final Phase 10H closure checkpoint, and verify the integration.
 4. **Only after the integration verification**, record Phase 10H as CLOSED AND INTEGRATED.
 
-Stop point: do not move `main` until steps 1 and 2 have both succeeded. **No Rules deployment, client deployment or `main` integration has occurred as of this record.**
+Stop point: do not move `main` until steps 1 and 2 have both succeeded.
+
+### 19.1 Release record — 2026-10-06 (UTC)
+
+The release followed the order above.
+
+1. **Rules deployment: SUCCESS.** The project owner ran `npm run rules:deploy`, deploying `src/firebase/rules.json` from `2007f8ca058f472c961b4594e15960acdc4d50e9`.
+   - Firebase project: `mobile-botc`.
+   - RTDB instance: `mobile-botc-default-rtdb`.
+   - Rules SHA-256: `2ec0aa3795f6a82148273d8cbcd41fb3a6ab56ec37e55d8bca9900bfb454d92e`.
+2. **Rules verification: SUCCESS.** The read-only `npm run rules:verify` reported: "Deployed Realtime Database rules for project \"mobile-botc\" match src/firebase/rules.json."
+3. **`main` integration** happened only after that verification. `main` was fast-forwarded from `e0ba539ae448eb494ca5739564a39c49d2e59467` to `2007f8ca058f472c961b4594e15960acdc4d50e9`: 24 commits ahead / 0 behind, merge base exactly the previous `main`, no merge commit, squash, rebase or force push. After the push, `origin/main` = `origin/dev/phase-10h-ui` = `2007f8c` (0 ahead / 0 behind).
+4. **Recorded CLOSED AND INTEGRATED** by the docs-only closure commit directly on top of `2007f8c` on `main`. It changes documentation only, so the deployed Rules still match `main`.
+
+Steps 1–2 were owner-run and owner-reported; the integration session did not observe them directly. The client ships from `main` automatically, but that production client deployment was **not** independently observed from the integration session.
 
 ---
 
 ## 20. Next
 
-1. The documentation closure checkpoints on `dev/phase-10h-ui`: the initial record `a15dcbc` (at R2), then this post-R3 reconciliation on top of the final reviewed implementation `9263fc79`.
-2. Production RTDB Rules deploy and verification (§19 steps 1–2).
-3. Integrate the final Phase 10H closure checkpoint into `main` (§19 step 3).
-4. Record Phase 10H as CLOSED AND INTEGRATED only after the integration verification (§19 step 4).
-5. Phase 11 (canonical character coverage) remains the next implementation phase. It must not begin until the Phase 10H integration completes.
+Phase 10H is **CLOSED AND INTEGRATED**. Every step of §19 is complete: documentation closure (`a15dcbc`, then `2007f8c`), Rules deploy and verify, `main` fast-forward, and this closure record.
+
+**Phase 11 (canonical character coverage) is now unblocked** and is the next implementation phase.
+
+If a genuine physical-device defect is observed later (AC-064 / AC-066, §18), it is ordinary follow-up defect/hotfix work.

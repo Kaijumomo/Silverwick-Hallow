@@ -10,10 +10,10 @@
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
 **Phase 10G final reviewed checkpoint:** `2aabccbb925183c2359bef5d48a2ee5cca2dfd03` (final production `7add7c661e43349634e0b6717d7c05ee18a31957`); `main` fast-forwarded to it, with a docs-only closure commit directly on top\
-**Schema:** v25 integrated on `main`. v26 exists on `dev/phase-10h-ui` only; `main` remains pre-10H until the Phase 10H integration.\
+**Schema:** v26 integrated on `main` (Phase 10H; v25 was the post-10G baseline)\
 **Phase 10 mechanical/state program:** COMPLETE (10A–10G closed and integrated; 10H does not reopen their closure)\
-**Phase 10H final reviewed implementation checkpoint:** `9263fc79ed4ce20b9eee85a616038266cbb3ae58` (R3.2) on `dev/phase-10h-ui`. It supersedes R2 `668dc3dff4930d42e79e2fcc52b0877812f2abee`. Not yet integrated; `main` remains `e0ba539ae448eb494ca5739564a39c49d2e59467`.\
-**Current phase:** Phase 10H — Storyteller UI/UX & Visual Design System — **CLOSED — READY FOR RULES-FIRST INTEGRATION**. Software implementation and the full review chain, including the post-closure R3–R3.2 review, are complete. Production RTDB Rules deployment/verification and `main` integration have not yet occurred. Phase 11 is queued after the 10H integration.
+**Phase 10H final reviewed implementation checkpoint:** `9263fc79ed4ce20b9eee85a616038266cbb3ae58` (R3.2; supersedes R2 `668dc3dff4930d42e79e2fcc52b0877812f2abee`). Integration checkpoint: `2007f8ca058f472c961b4594e15960acdc4d50e9`. `main` was fast-forwarded to it from `e0ba539ae448eb494ca5739564a39c49d2e59467` after the production Rules were deployed and verified, and a docs-only closure commit sits directly on top.\
+**Current phase:** Phase 10H — Storyteller UI/UX & Visual Design System — **CLOSED AND INTEGRATED** (2026-10-06 UTC). **Phase 11 — canonical character coverage — is now unblocked** and is the next implementation phase.
 
 ## Product invariants
 
@@ -270,17 +270,17 @@ Deferred hardening (recorded, not Phase 10G blockers): store-wide E1 precommit g
 
 ## Phase 10H — Storyteller UI/UX & Visual Design System
 
-**Status:** **CLOSED — READY FOR RULES-FIRST INTEGRATION** (Sol status decision). Software implementation and review are complete. It is **not yet integrated**: production RTDB Rules deployment/verification and `main` integration have not occurred.\
+**Status:** **CLOSED AND INTEGRATED** (2026-10-06 UTC). Production RTDB Rules were deployed and verified **before** `main` integration. `main` was then fast-forwarded to `2007f8ca058f472c961b4594e15960acdc4d50e9`, with a docs-only closure commit directly on top. See `PHASE10H.md` §19.\
 **Branch:** `dev/phase-10h-ui`\
 **Starting baseline:** `e0ba539ae448eb494ca5739564a39c49d2e59467` — the exact post-10G documentation-closure tip of `main`.\
 **Final reviewed implementation checkpoint:** `9263fc79ed4ce20b9eee85a616038266cbb3ae58` (R3.2; supersedes R2 `668dc3dff4930d42e79e2fcc52b0877812f2abee`).\
-**Schema/store:** v26 on `dev/phase-10h-ui` (v25 baseline). `main` remains pre-10H (v25) until integration.\
-**Firebase RTDB Rules:** new `revealAcks/{uid}` and `results/{uid}` Rules exist on `dev/phase-10h-ui` (repository `rules.json` SHA-256 `2ec0aa3795f6a82148273d8cbcd41fb3a6ab56ec37e55d8bca9900bfb454d92e`; unchanged by R3–R3.2). They require a **Rules-first production release** (deploy, then verify the deployed Rules equal the repository Rules) **before** client/`main` integration. They are not yet deployed.\
+**Schema/store:** v26, integrated on `main` (v25 baseline).\
+**Firebase RTDB Rules:** new `revealAcks/{uid}` and `results/{uid}` Rules (repository `rules.json` SHA-256 `2ec0aa3795f6a82148273d8cbcd41fb3a6ab56ec37e55d8bca9900bfb454d92e`; unchanged by R3–R3.2). Released Rules-first: **deployed to production and verified** (project `mobile-botc`, instance `mobile-botc-default-rtdb`) before client/`main` integration.\
 **Phase document:** `PHASE10H.md` (closure record §0; final record §§13–20).
 
 10H is a newly inserted post-10G product/design phase. It does **not** reopen Phase 10G, invalidate the Phase 10A–10G closure evidence, or change the frozen authority/workflow primitives. Its purpose is to overhaul the Storyteller-facing web UI around the now-stable mechanics before high-volume canonical character coverage expands the interface further.
 
-### Phase 10H closure (not yet integrated)
+### Phase 10H closure and integration
 
 Delivered UX architecture (full record: `PHASE10H.md` §§13–16):
 - hybrid cinematic visual language; Source Sans 3 operational typography alongside the identity fonts;
@@ -312,7 +312,14 @@ Release order (`PHASE10H.md` §19):
 3. only then integrate the client/`main`;
 4. only after integration verification, record CLOSED AND INTEGRATED.
 
-Phase 10H is recorded as CLOSED AND INTEGRATED only after that integration is verified.
+Release record (2026-10-06 UTC; `PHASE10H.md` §19.1). All four steps are complete, in order:
+- **Rules deployment: SUCCESS.** The project owner ran `npm run rules:deploy` from `2007f8ca058f472c961b4594e15960acdc4d50e9` to project `mobile-botc`, instance `mobile-botc-default-rtdb` (Rules SHA-256 `2ec0aa3795f6a82148273d8cbcd41fb3a6ab56ec37e55d8bca9900bfb454d92e`).
+- **Rules verification: SUCCESS.** `npm run rules:verify` reported "Deployed Realtime Database rules for project \"mobile-botc\" match src/firebase/rules.json."
+- **Fast-forward:** only after that verification, `main` was fast-forwarded `e0ba539` → `2007f8c` (24 ahead / 0 behind, no merge commit). After the push, `main` = `dev/phase-10h-ui` = `2007f8c`.
+- **Closure record:** this docs-only closure commit sits directly on top of `2007f8c` on `main`.
+- Steps 1–2 were owner-run and owner-reported. The production client deployment from `main` was not independently observed by the integration session.
+
+**Phase 10H — CLOSED AND INTEGRATED.**
 
 Original planned scope (planning record, 2026-10-04):
 - establish a coherent Silverwick visual identity and reusable design-token/component system;
@@ -344,7 +351,7 @@ Planning record (2026-10-04): the first design deliverable should be one represe
 
 ## Phase 11 — Canonical character coverage (roadmap unchanged)
 
-Phase 11 keeps its approved scope: full canonical Character / Traveler / Fabled / Loric semantic coverage (see 10F above and `PHASE10F.md` §18), added primarily through descriptors, evaluators, registered semantics and tests on the completed Phase 10 authority/workflow foundation (`PHASE10G.md` §29). Its architecture/scope challenge has not started. It is sequenced **after Phase 10H is integrated into `main`**: 10H is closed but not yet integrated, so Phase 11 must not begin yet.
+Phase 11 keeps its approved scope: full canonical Character / Traveler / Fabled / Loric semantic coverage (see 10F above and `PHASE10F.md` §18), added primarily through descriptors, evaluators, registered semantics and tests on the completed Phase 10 authority/workflow foundation (`PHASE10G.md` §29). Its architecture/scope challenge has not started. It was sequenced after the Phase 10H integration, which is now complete. **Phase 11 is unblocked.**
 
 ## Phase workflow
 
@@ -373,15 +380,13 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 - `dev/phase-10f` starts from the exact final integrated `main` of the Phase 10E integration: the docs-only integration record directly on top of closure checkpoint `6129c7f4585da0e12aeea3a9a5007c88fb508ad7`.
 - `dev/phase-10g` starts from the exact final integrated `main` of the Phase 10F integration: `52e685b16e76df15154512a52a34831a6aeba399`.
 - `dev/phase-10g` was fast-forwarded into `main` at `2aabccbb925183c2359bef5d48a2ee5cca2dfd03`; the branch is retained at that exact reviewed checkpoint.
-- `dev/phase-10h-ui` starts from the exact post-10G documentation-closure `main` checkpoint `e0ba539ae448eb494ca5739564a39c49d2e59467`. Keep 10H UI/design work isolated there until its own review and integration gate.
+- `dev/phase-10h-ui` starts from the exact post-10G documentation-closure `main` checkpoint `e0ba539ae448eb494ca5739564a39c49d2e59467`. 10H work stayed isolated there until its review and integration gate. `main` was fast-forwarded to `dev/phase-10h-ui` at `2007f8ca058f472c961b4594e15960acdc4d50e9`. The next phase branch starts from the exact final `main` carrying the Phase 10H closure record.
 
 ## Immediate next action
 
-Phase 10H is **CLOSED — READY FOR RULES-FIRST INTEGRATION** at final reviewed implementation `9263fc79ed4ce20b9eee85a616038266cbb3ae58` (R3.2), with the post-R3 documentation reconciliation checkpoint on top on `dev/phase-10h-ui`. Next:
+**Phase 10H is CLOSED AND INTEGRATED.**
+- Final reviewed implementation: `9263fc79ed4ce20b9eee85a616038266cbb3ae58`.
+- Integration checkpoint: `2007f8ca058f472c961b4594e15960acdc4d50e9`, with this docs-only closure commit on top on `main`.
+- Production RTDB Rules (`mobile-botc` / `mobile-botc-default-rtdb`) were deployed and verified before integration.
 
-1. Production RTDB Rules deployment from the final Phase 10H closure checkpoint (`npm run rules:deploy`).
-2. Verify the deployed Rules equal `src/firebase/rules.json` (`npm run rules:verify -- --project <PROJECT_ID>`, exit 0).
-3. Only then integrate the final Phase 10H closure checkpoint into `main` and verify the integration.
-4. Only after that verification, record Phase 10H as CLOSED AND INTEGRATED.
-
-Stop point: `main` stays at `e0ba539ae448eb494ca5739564a39c49d2e59467` until steps 1–2 succeed. No Rules deployment, client deployment or `main` integration has occurred yet. Phase 11 canonical coverage remains queued and starts only after the 10H integration completes.
+**Next: Phase 11 — canonical character coverage (unblocked).** Begin with its architecture/scope challenge and Sol contract on a fresh branch from the exact final `main` carrying this closure record, per the phase workflow above.

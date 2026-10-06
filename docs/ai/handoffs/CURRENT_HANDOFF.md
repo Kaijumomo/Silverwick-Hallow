@@ -1,58 +1,56 @@
 # Silverwick Hollow — Current Handoff
 
 **Date:** 2026-10-06\
-**State:** **Phase 10H — Storyteller UI/UX & Visual Design System is CLOSED — READY FOR RULES-FIRST INTEGRATION.** The software implementation and the full review chain are **COMPLETE**, including the post-closure R3–R3.2 review. The final reviewed implementation is `9263fc79ed4ce20b9eee85a616038266cbb3ae58` on `dev/phase-10h-ui`. It is **not yet integrated**. The next required operational step is the production RTDB Rules deploy + verification. `main` is still `e0ba539ae448eb494ca5739564a39c49d2e59467`, and no merge or deployment has occurred. Phase 11 must not begin until the 10H integration completes.
+**State:** **Phase 10H — Storyteller UI/UX & Visual Design System is CLOSED AND INTEGRATED** (2026-10-06 UTC).
+- Production RTDB Rules were deployed to `mobile-botc` (instance `mobile-botc-default-rtdb`) and verified **before** `main` integration.
+- `main` was then fast-forwarded to `2007f8ca058f472c961b4594e15960acdc4d50e9`, and a docs-only closure commit sits directly on top.
+
+**Phase 11 — canonical character coverage — is now unblocked.**
 
 ## Current truth (read this first)
 
 ### Current state
 
-- **Phase 10H — Storyteller UI/UX & Visual Design System: CLOSED — READY FOR RULES-FIRST INTEGRATION** (Sol status decision). Full record: `PHASE10H.md` (§0 closure record, §§13–20; review history §17).
-  - Branch: `dev/phase-10h-ui`. Start: `e0ba539ae448eb494ca5739564a39c49d2e59467`.
-  - **Final reviewed implementation: `9263fc79ed4ce20b9eee85a616038266cbb3ae58` (R3.2).** It supersedes R2 `668dc3dff4930d42e79e2fcc52b0877812f2abee`, which was the final reviewed implementation of the initial closure record and is now a historical checkpoint. The final documentation closure checkpoint is the docs-only post-R3 reconciliation commit directly on top of `9263fc79`. It cannot record its own SHA here; read it with `git log -1 origin/dev/phase-10h-ui` or from the closure report.
-  - Software review chain: **COMPLETE**. Opening PR #1 triggered an additional independent Codex review after the initial closure record (`a15dcbc`). It caused a narrow software-review reopening (R3, R3.1, R3.2), not a 10H design reopening, and that reopening is now closed.
-  - Original Astra findings **ASTRA-10H-001 through ASTRA-10H-009: CLOSED**.
-  - Post-closure findings **PR-10H-001 through PR-10H-004, R3-ADJ-001 and R3-CLOSURE-001: CLOSED**.
-  - Luna final R3.2 targeted verification: **PASS**. Astra final R3-CLOSURE-001 re-closure: **PASS**, with no new findings. Remaining software closure blockers: **none**.
-  - **AC-064** (real-iPhone Safari touch) and **AC-066** (notched-device safe-area): **WAIVED FOR PHASE CLOSURE — not passed** (`PHASE10H.md` §18). No physical-device evidence has been performed since.
-- **Not yet integrated.** Phase 10H is **not** CLOSED AND INTEGRATED: production RTDB Rules deployment/verification and `main` integration have not occurred.
-- **`main`** is still `e0ba539ae448eb494ca5739564a39c49d2e59467` (post-10G, v25). No merge, Rules deployment or client deployment has occurred for 10H.
-- **Schema/store:** v26 on `dev/phase-10h-ui`. `main` remains v25 (pre-10H) until integration.
-- **Firebase RTDB Rules:** `dev/phase-10h-ui` adds `revealAcks/{uid}` and `results/{uid}` (`PHASE10H.md` §15). They are **not yet deployed to production**. Repository `src/firebase/rules.json` SHA-256: `2ec0aa3795f6a82148273d8cbcd41fb3a6ab56ec37e55d8bca9900bfb454d92e` on the 10H branch (unchanged by R3–R3.2), versus `9cccdc7f474d4948007f5e3b62fa485d0e20e6e06b50194258f348e01e0db076` on `main`.
-- **Phase 10A–10G mechanical/state program: COMPLETE.** Every slice remains closed and integrated; 10H does not reopen those verdicts.
-- **Phase 11:** canonical character coverage is the next implementation phase. It is **blocked** until the Phase 10H integration completes.
+- **Phase 10H — Storyteller UI/UX & Visual Design System: CLOSED AND INTEGRATED.** Full record: `PHASE10H.md` (§0 closure record, §§13–20; review history §17; release record §19.1).
+  - Start: `e0ba539ae448eb494ca5739564a39c49d2e59467`.
+  - Final reviewed implementation: **`9263fc79ed4ce20b9eee85a616038266cbb3ae58` (R3.2)**. It supersedes R2 `668dc3dff4930d42e79e2fcc52b0877812f2abee`, which is now historical.
+  - Integration checkpoint: **`2007f8ca058f472c961b4594e15960acdc4d50e9`**, the post-R3 docs reconciliation on top of `9263fc79`. `main` was fast-forwarded to it from `e0ba539` (24 ahead / 0 behind, no merge commit).
+  - Final closure record: the single docs-only commit directly on top of `2007f8c` on `main`. It cannot record its own SHA here; read it with `git log -1 origin/main` or from the integration report.
+  - `dev/phase-10h-ui` is retained at `2007f8c` as the historical reference.
+- **Software evidence (final, at `9263fc79`):**
+  - Luna final R3.2 targeted verification **PASS**; Astra final R3-CLOSURE-001 re-closure **PASS**, with no new findings.
+  - **4392/4392** normal tests across 192 files; Rules emulator **240/240, zero skipped**; typecheck **PASS**; production build **PASS**; diff check **PASS**.
+  - ASTRA-10H-001…009, PR-10H-001…004, R3-ADJ-001 and R3-CLOSURE-001 are all **CLOSED**. No software findings remain.
+- **Hardware acceptance:** **AC-064** (real-iPhone Safari touch) and **AC-066** (notched-device safe-area) are **WAIVED, not passed** (`PHASE10H.md` §18). A genuine physical-device defect found later is ordinary follow-up defect/hotfix work.
+- **Schema/store:** v26, integrated on `main`.
+- **Firebase RTDB Rules:** `revealAcks/{uid}` and `results/{uid}` (`PHASE10H.md` §15). **Deployed to production and verified.** Repository `src/firebase/rules.json` SHA-256: `2ec0aa3795f6a82148273d8cbcd41fb3a6ab56ec37e55d8bca9900bfb454d92e`.
+- **Phase 10A–10G mechanical/state program: COMPLETE**, and 10H is now integrated on top of it.
+- **Phase 11:** canonical character coverage is **unblocked** and is the next implementation phase. Its architecture/scope challenge has not started.
 
-### Phase 10H final evidence (at `9263fc79ed4ce20b9eee85a616038266cbb3ae58`)
+### Phase 10H release record — Rules first (2026-10-06 UTC)
 
-- Review lineage: initial implementation `6f312591b495e53ff888384f0d733116209c6959` → Astra remediation R1 `f2abdf832a894cc8751212284c2e1e11da1eee11` → Astra remediation R2 `668dc3dff4930d42e79e2fcc52b0877812f2abee` → initial docs closure `a15dcbc5e5fcb6f46abcc3b02b4919c18539ee1d` → post-closure PR review remediation R3 `938e10d55b6363dcb7e2109e3eba2799e6a1b7a0` → R3.1 lifecycle-fence remediation `05c4fd51d0a592ca480bde36c74cced306a6fdee` → R3.2 irreversible terminal-boundary remediation / **final reviewed implementation** `9263fc79ed4ce20b9eee85a616038266cbb3ae58`.
-- Luna final R3.2 targeted verification: **PASS**; required coverage complete.
-- Astra final R3-CLOSURE-001 re-closure: **PASS**; required coverage complete; new findings: none.
-- Final independent normal suite **4392/4392 across 192 files**; final Firebase Rules emulator **240/240, 0 skipped**; typecheck **PASS**; production build **PASS**; diff check **PASS**; final review worktrees clean.
-- Post-closure findings (all CLOSED):
-  - PR-10H-001: terminal result preflight ran after the irreversible ended signal.
-  - PR-10H-002: structured Town Note content was incomplete in post-game review.
-  - PR-10H-003: the Night cursor could cross game identity.
-  - PR-10H-004: a failed Finish Game could be retried through a generic result-less close.
-  - R3-ADJ-001: a direct `newGame` / `endGame` during an in-flight terminal close could partially transition local lifecycle state.
-  - R3-CLOSURE-001: a later close retry forgot an earlier ended-signal attempt by the same writer. It was closed by the writer-lifetime monotonic `terminalSignalAttempted` latch, which is writer-runtime only and never persisted.
-- Final terminal-lifecycle architecture: `PHASE10H.md` §14.
-- Hardware waivers: real physical-device access to the exact reviewed build was unavailable, and none was performed afterwards. Extensive rendered phone/tablet browser evidence passed through Luna and Astra. A genuine physical-device defect observed later is a normal follow-up defect/hotfix, never a retroactive PASS.
-- Historical only (superseded; not the final gate): at R2 `668dc3d`, the initial closure record reported 4346/4346 across 188 files and 228/228 emulator tests.
+1. **Rules deployment: SUCCESS.** The project owner ran `npm run rules:deploy` from `2007f8ca058f472c961b4594e15960acdc4d50e9`.
+   - Firebase project: `mobile-botc`.
+   - RTDB instance: `mobile-botc-default-rtdb`.
+   - Rules SHA-256: `2ec0aa3795f6a82148273d8cbcd41fb3a6ab56ec37e55d8bca9900bfb454d92e`.
+2. **Rules verification: SUCCESS.** `npm run rules:verify` reported: "Deployed Realtime Database rules for project \"mobile-botc\" match src/firebase/rules.json."
+3. **`main` integration**, only after that verification: fast-forward only, `e0ba539ae448eb494ca5739564a39c49d2e59467` → `2007f8ca058f472c961b4594e15960acdc4d50e9`.
+   - The merge base was exactly the previous `main`.
+   - There was no merge commit, squash, rebase or force push.
+   - After the push, `origin/main` = `origin/dev/phase-10h-ui` = `2007f8c` (0 ahead / 0 behind).
+4. **Closure record:** this docs-only commit directly on top of `2007f8c` on `main`. It is documentation only, so the deployed Rules still match `main`.
 
-### Release order and stop point — Rules first
+Steps 1–2 were owner-run and owner-reported; the integration session did not observe them directly. The web client ships from `main` automatically, but that production client deployment was **not** independently observed from the integration session.
 
-The web client ships from `main` automatically; Rules change only through `npm run rules:deploy`. Therefore:
+### Phase 10H review lineage
 
-1. `npx firebase use <PROJECT_ID>`, then `npm run rules:deploy` (Realtime Database Rules only), from the final Phase 10H closure checkpoint.
-2. `npm run rules:verify -- --project <PROJECT_ID>` (add `--instance <DB_INSTANCE>` for a non-default instance) must exit 0, with the deployed Rules exactly identical to `src/firebase/rules.json`.
-3. Only then integrate the final Phase 10H closure checkpoint into `main` and verify the integration.
-4. Only after that integration verification, record Phase 10H as CLOSED AND INTEGRATED.
+`6f312591b495e53ff888384f0d733116209c6959` (initial implementation) → R1 `f2abdf832a894cc8751212284c2e1e11da1eee11` → R2 `668dc3dff4930d42e79e2fcc52b0877812f2abee` → initial docs closure `a15dcbc5e5fcb6f46abcc3b02b4919c18539ee1d` → R3 `938e10d55b6363dcb7e2109e3eba2799e6a1b7a0` → R3.1 `05c4fd51d0a592ca480bde36c74cced306a6fdee` → R3.2 / **final reviewed implementation** `9263fc79ed4ce20b9eee85a616038266cbb3ae58` → post-R3 docs reconciliation / **integration checkpoint** `2007f8ca058f472c961b4594e15960acdc4d50e9` → docs-only closure record (final `main`).
 
-**Stop point:** do not move `main` until steps 1 and 2 have both succeeded. As of this handoff, **none of steps 1–4 has occurred**.
+Historical only (superseded): the initial closure record at R2 reported 4346/4346 tests across 188 files and 228/228 emulator tests.
 
 ### Next
 
-**Next: production RTDB Rules deployment + verification** (steps 1–2 above), **before** `main` integration. After that, integrate and verify, then record CLOSED AND INTEGRATED. Phase 11 waits until then.
+**Next: Phase 11 — canonical character coverage (unblocked).** Start with its architecture/scope challenge and Sol implementation contract on a fresh branch from the exact final `main` carrying the Phase 10H closure record. Verify exact SHAs rather than branch names.
 
 ### Previous phase — Phase 10G (CLOSED AND INTEGRATED)
 
@@ -78,13 +76,13 @@ The web client ships from `main` automatically; Rules change only through `npm r
 - localStorage quota transaction/recovery;
 - dynamic Undo trimming;
 - broader persistence-health monitoring;
-- winner/result modeling, if ever separately authorized. (Phase 10H later added a Storyteller-declared `GameResult`: Good/Evil or End Without Result, with no win-condition evaluation. It is on `dev/phase-10h-ui` and not yet integrated.)
+- winner/result modeling, if ever separately authorized. (Phase 10H later added a Storyteller-declared `GameResult`: Good/Evil or End Without Result, with no win-condition evaluation. It is integrated on `main` with Phase 10H.)
 
 #### Next after Phase 10G (historical; completed)
 
 At the 10G closure the next step was Phase 10H design discovery and contract preparation. That work, the frozen contract, implementation and review are now complete. The current next step is in **Next** above.
 
-The sections below are the historical record, oldest phases first, then the Phase 10E–10G records in order, ending with the Phase 10H closure records (the initial R2-era record, then the post-R3 reconciliation).
+The sections below are the historical record, oldest phases first, then the Phase 10E–10G records in order, ending with the Phase 10H closure records (the initial R2-era record, the post-R3 reconciliation, then the final integration).
 
 ## Phase 10D — CLOSED
 
@@ -328,7 +326,7 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 - **10E Alignment Transitions — CLOSED AND INTEGRATED**
 - **10F Guided Ability Resolution / Night Actions — CLOSED AND INTEGRATED**
 - **10G Advanced Storyteller bookkeeping / final visual integration — CLOSED AND INTEGRATED**
-- **10H Storyteller UI/UX & Visual Design System — CLOSED — READY FOR RULES-FIRST INTEGRATION** (final reviewed implementation `9263fc79ed4ce20b9eee85a616038266cbb3ae58` on `dev/phase-10h-ui`, after the post-closure R3–R3.2 review; not yet integrated; newly inserted post-10G; prior 10A–10G closures remain intact)
+- **10H Storyteller UI/UX & Visual Design System — CLOSED AND INTEGRATED** (final reviewed implementation `9263fc79ed4ce20b9eee85a616038266cbb3ae58`; integration checkpoint `2007f8ca058f472c961b4594e15960acdc4d50e9`; Rules deployed and verified first; newly inserted post-10G; prior 10A–10G closures remain intact)
 
 ## Standing Phase 10 UX invariant
 
@@ -1021,7 +1019,7 @@ Sol status decision: Phase 10H software implementation and review are **COMPLETE
 
 Production RTDB Rules deploy from the Phase 10H closure checkpoint, then `npm run rules:verify` confirming the deployed Rules equal `src/firebase/rules.json`. Only after both succeed, integrate the closure checkpoint into `main` and verify the integration, then record Phase 10H as CLOSED AND INTEGRATED. `main` stays at `e0ba539ae448eb494ca5739564a39c49d2e59467` until then. Phase 11 does not begin before the 10H integration completes.
 
-## Phase 10H — post-closure review R3–R3.2 / final reconciliation — 2026-10-06
+## Phase 10H — post-closure review R3–R3.2 / final reconciliation — 2026-10-06 (pre-integration; superseded by the integration record below)
 
 The initial closure record above named R2 `668dc3dff4930d42e79e2fcc52b0877812f2abee` as the final reviewed implementation. That is superseded. Opening PR #1 triggered an additional independent Codex review after that record. Its accepted findings caused a narrow software-review reopening (terminal lifecycle and game-scoped UI state), not a 10H design reopening.
 
@@ -1037,3 +1035,26 @@ The initial closure record above named R2 `668dc3dff4930d42e79e2fcc52b0877812f2a
 ## Immediate next task
 
 Production RTDB Rules deploy from the final Phase 10H closure checkpoint (the post-R3 docs reconciliation on top of `9263fc79`), then `npm run rules:verify` confirming the deployed Rules exactly equal `src/firebase/rules.json`. Only after both succeed, integrate that checkpoint into `main` and verify the integration, then record Phase 10H as CLOSED AND INTEGRATED. `main` stays at `e0ba539ae448eb494ca5739564a39c49d2e59467` until then. Phase 11 does not begin before the 10H integration completes.
+
+## Phase 10H — CLOSED AND INTEGRATED — 2026-10-06 (UTC)
+
+Rules first, then client:
+- Production RTDB Rules were deployed (SUCCESS) and verified (SUCCESS) **before** `main` moved: project `mobile-botc`, instance `mobile-botc-default-rtdb`, Rules SHA-256 `2ec0aa3795f6a82148273d8cbcd41fb3a6ab56ec37e55d8bca9900bfb454d92e`.
+- The verifier reported: "Deployed Realtime Database rules for project \"mobile-botc\" match src/firebase/rules.json."
+- Deploy and verify were owner-run and owner-reported.
+
+Integration:
+- Only after verification, `main` was fast-forwarded `e0ba539ae448eb494ca5739564a39c49d2e59467` → `2007f8ca058f472c961b4594e15960acdc4d50e9` (24 ahead / 0 behind, no merge commit).
+- After the push, `origin/main` = `origin/dev/phase-10h-ui` = `2007f8c`.
+- This docs-only closure commit sits directly on top.
+
+Final state:
+- Final reviewed implementation: `9263fc79ed4ce20b9eee85a616038266cbb3ae58`. Luna PASS; Astra PASS; 4392/4392 across 192 files; Rules emulator 240/240, zero skipped; typecheck and build PASS; no remaining software findings.
+- AC-064 and AC-066: WAIVED, not passed.
+- The production client deployment from `main` was not independently observed by the integration session.
+
+**Phase 10H: CLOSED AND INTEGRATED. Phase 11: unblocked.**
+
+## Immediate next task
+
+Phase 11 — canonical character coverage. Create its branch from the exact final `main` carrying this Phase 10H closure record, verifying the exact SHA. Then perform the architecture/scope challenge and have Sol freeze the Phase 11 implementation contract before any implementation.
