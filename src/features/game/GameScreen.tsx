@@ -93,9 +93,14 @@ export function GameScreen() {
   const setDockTab = useShellStore((s) => s.setDockTab);
   const lens = useShellStore((s) => s.lens);
   const actionOpen = useShellStore((s) => s.actionOpen);
+  const actionRequest = useShellStore((s) => s.actionRequest);
   // A Night action opened (or resumed) on a docked layout brings the Night
-  // surface -- where its card lives -- forward.
-  useEffect(() => { if (actionOpen && docked) { setDockTab("night"); setNightPanelOpen(true); } }, [actionOpen, docked]);
+  // surface -- where its card lives -- forward. ASTRA-10H-009: EVERY tap on
+  // the lit actor (actionRequest) does so too, even when the action was
+  // already open (actionOpen true -> true) but the Storyteller had hidden the
+  // dock. Only the actor tap bumps actionRequest; inspecting a participant
+  // never does, so inspection never reopens the Night dock.
+  useEffect(() => { if (actionOpen && docked) { setDockTab("night"); setNightPanelOpen(true); } }, [actionOpen, docked, actionRequest]);
   const setLens = useShellStore((s) => s.setLens);
   const moreActionsRef = useRef<HTMLButtonElement>(null);
   const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);

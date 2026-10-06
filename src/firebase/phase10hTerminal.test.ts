@@ -437,6 +437,40 @@ describe("10H-AC-030 / AC-031 / AC-056..058: player reveal, acknowledgement and 
     expect(Object.keys(ps.townNotes)).toEqual(["OTHERGAME:p-y"]);
   });
 
+  it("ASTRA-10H-007: Back to Start DURING a held result read clears the context; the late answer never resurrects the ended state", async () => {
+    const { b, stop } = await seatedPlayer();
+    usePlayerStore.getState().setTownNote(code, "p-x", { confidence: "suspect", roles: [], text: "hmm" });
+    usePlayerStore.getState().setTownNote("OTHERGAME", "p-y", { confidence: null, roles: [], text: "keep" });
+    // Hold the player's own result read open.
+    const get = b.get.bind(b);
+    let releaseRead!: () => void;
+    const held = new Promise<void>((resolve) => { releaseRead = resolve; });
+    let heldReads = 0;
+    b.get = async (path) => {
+      if (path === `${root}/results/uid-alice`) { heldReads++; await held; }
+      return get(path);
+    };
+    await act(async () => { expect(await endGameWithIntent({ kind: "declare", winner: "good" })).toEqual({ ok: true }); });
+    // 1. The terminal result read is pending (a real, valid result exists on the server).
+    await waitFor(() => expect(usePlayerStore.getState().terminalResult).toEqual({ status: "pending" }));
+    expect(usePlayerStore.getState().status).toBe("ended");
+    expect(heldReads).toBe(1);
+    expect((await get(`${root}/results/uid-alice`) as { winner: string }).winner).toBe("good");
+    // 2-3. Back to Start (PlayerScreen's onBack) before the read resolves: context cleared.
+    act(() => usePlayerStore.getState().reset());
+    const cleared = usePlayerStore.getState();
+    expect([cleared.status, cleared.code, cleared.uid, cleared.sessionId, cleared.terminalResult]).toEqual(["idle", null, null, null, null]);
+    expect(Object.keys(cleared.townNotes)).toEqual(["OTHERGAME:p-y"]);
+    // 4. The delayed backend read now resolves with the real result...
+    releaseRead();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+    // 5. ...and the old ended / result state does NOT reappear.
+    const after = usePlayerStore.getState();
+    expect([after.status, after.code, after.uid, after.terminalResult]).toEqual(["idle", null, null, null]);
+    expect(Object.keys(after.townNotes)).toEqual(["OTHERGAME:p-y"]);
+    stop();
+  });
+
   it("End Without Result -> generic Game Ended (none); a failed result read is a retryable error, never a false none", async () => {
     const { b, stop } = await seatedPlayer();
     await act(async () => { await endGameWithIntent({ kind: "noResult" }); });

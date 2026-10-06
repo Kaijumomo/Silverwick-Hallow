@@ -193,3 +193,35 @@ describe("ASTRA-10H-007: joining an already-ended lobby is a completed generic G
     expect(screen.getByRole("button", { name: "Back to start" })).toBeInTheDocument();
   });
 });
+
+describe("ASTRA-10H-007 (residual): a pending result read always offers Back to Start", () => {
+  it("the real PlayerScreen, ended with the result read pending, shows Back to start; it clears the terminal context", async () => {
+    seat({ status: "ended", terminalResult: { status: "pending" }, self: null,
+      townNotes: { "ABCD2345:p-bob": { confidence: null, roles: [], text: "Bob seemed nervous" }, "OTHER:p-z": { confidence: null, roles: [], text: "keep" } } });
+    render(<PlayerScreen />);
+    expect(await screen.findByText(/Reading the final result/)).toBeInTheDocument();
+    const back = screen.getByRole("button", { name: "Back to start" });
+    act(() => { fireEvent.click(back); });
+    const ps = usePlayerStore.getState();
+    expect([ps.status, ps.code, ps.uid, ps.terminalResult]).toEqual(["idle", null, null, null]);
+    expect(Object.keys(ps.townNotes)).toEqual(["OTHER:p-z"]);
+  });
+
+  it("pending never becomes 'no result': the other terminal screens are unchanged", () => {
+    const { unmount } = render(<PlayerEnded result={{ status: "pending" }} onRetry={() => {}} onBack={() => {}} />);
+    expect(screen.queryByText(/Thanks for playing/)).toBeNull();
+    expect(screen.queryByText(/wins/)).toBeNull();
+    unmount();
+    render(<PlayerEnded result={{ status: "ready", result: { winner: "good", declaredAt: { phase: "day", day: 3 } } }} onRetry={() => {}} onBack={() => {}} />);
+    expect(screen.getByRole("heading", { name: "Good wins" })).toBeInTheDocument();
+    cleanup();
+    render(<PlayerEnded result={{ status: "none" }} onRetry={() => {}} onBack={() => {}} />);
+    expect(screen.getByText(/Thanks for playing/)).toBeInTheDocument();
+    cleanup();
+    const retry = vi.fn();
+    render(<PlayerEnded result={{ status: "error", message: "Network down." }} onRetry={retry} onBack={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(retry).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Back to start" })).toBeInTheDocument();
+  });
+});

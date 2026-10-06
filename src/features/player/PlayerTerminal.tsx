@@ -34,6 +34,10 @@ export function PlayerEnded({ result, onRetry, onBack }: {
       <div className="player player-status" role="status" aria-live="polite">
         <h2 className="title">Game ended</h2>
         <p className="behavior-help">Reading the final result…</p>
+        {/* ASTRA-10H-007: leaving never waits on the read. Back to Start clears
+            the terminal context; the read's own context guard (playerSync)
+            then discards its late answer, so nothing old reappears. */}
+        <button className="btn" onClick={onBack}>Back to start</button>
       </div>
     );
   }
