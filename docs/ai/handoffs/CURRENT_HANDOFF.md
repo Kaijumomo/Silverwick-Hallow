@@ -1,46 +1,78 @@
 # Silverwick Hollow — Current Handoff
 
-**Date:** 2026-10-04\
-**State:** Phase 10G is **CLOSED AND INTEGRATED**. The completed 10A–10G mechanical/state program remains closed. **Phase 10H — Storyteller UI/UX & Visual Design System is now the active planning phase** on `dev/phase-10h-ui`, branched from post-10G `main` at `e0ba539ae448eb494ca5739564a39c49d2e59467`. No Phase 10H production UI redesign or Phase 11 implementation has started.
+**Date:** 2026-10-06\
+**State:** **Phase 10H — Storyteller UI/UX & Visual Design System is CLOSED — READY FOR RULES-FIRST INTEGRATION.** Software implementation and review are complete on `dev/phase-10h-ui` at final reviewed implementation `668dc3dff4930d42e79e2fcc52b0877812f2abee`. It is **not yet integrated**. The next required operational step is the production RTDB Rules deploy + verification. `main` is still `e0ba539ae448eb494ca5739564a39c49d2e59467`, and no merge or deployment has occurred. Phase 11 must not begin until the 10H integration completes.
 
 ## Current truth (read this first)
 
 ### Current state
 
-- **Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration: CLOSED AND INTEGRATED.** Sol final adjudication: APPROVE — PHASE 10G CLOSED AND INTEGRATED (`PHASE10G.md` §37).
-- **Phase 10A–10G mechanical/state program: COMPLETE.** Every prior slice remains closed and integrated; 10H does not reopen those verdicts.
-- **Phase 10H — Storyteller UI/UX & Visual Design System: ACTIVE — PLANNING / DESIGN CONTRACT PREPARATION.** Branch: `dev/phase-10h-ui`; start: `e0ba539ae448eb494ca5739564a39c49d2e59467`.
-- **Schema/store:** v25; no 10H schema or Firebase Rules change is currently authorized.
-- **Firebase Rules:** unchanged by Phase 10G; no rules deployment is needed for the 10H planning start.
-- **`main`** remains the completed post-10G baseline while 10H work is isolated on its branch.
-- **Phase 11:** canonical character coverage remains queued after 10H closure; no implementation has started.
+- **Phase 10H — Storyteller UI/UX & Visual Design System: CLOSED — READY FOR RULES-FIRST INTEGRATION** (Sol status decision). Full record: `PHASE10H.md` (§0 closure record, §§13–20).
+  - Branch: `dev/phase-10h-ui`. Start: `e0ba539ae448eb494ca5739564a39c49d2e59467`.
+  - Final reviewed implementation: `668dc3dff4930d42e79e2fcc52b0877812f2abee`. The documentation closure checkpoint is the docs-only commit directly on top of it on `dev/phase-10h-ui`. It cannot record its own SHA here; read it with `git log -1 origin/dev/phase-10h-ui` or from the closure report.
+  - Software implementation and review: **complete**.
+  - Luna final targeted verification: **PASS**. Astra final targeted closure: **PASS**.
+  - **ASTRA-10H-001 through ASTRA-10H-009: CLOSED.** Remaining software closure blockers: **none**.
+  - **AC-064** (real-iPhone Safari touch) and **AC-066** (notched-device safe-area): **WAIVED FOR PHASE CLOSURE — not passed** (`PHASE10H.md` §18).
+- **Not yet integrated.** Phase 10H is **not** CLOSED AND INTEGRATED: production RTDB Rules deployment/verification and `main` integration have not occurred.
+- **`main`** is still `e0ba539ae448eb494ca5739564a39c49d2e59467` (post-10G, v25). No merge, Rules deployment or client deployment has occurred for 10H.
+- **Schema/store:** v26 on `dev/phase-10h-ui`. `main` remains v25 (pre-10H) until integration.
+- **Firebase RTDB Rules:** `dev/phase-10h-ui` adds `revealAcks/{uid}` and `results/{uid}` (`PHASE10H.md` §15). They are **not yet deployed to production**. Repository `src/firebase/rules.json` SHA-256: `2ec0aa3795f6a82148273d8cbcd41fb3a6ab56ec37e55d8bca9900bfb454d92e` on the 10H branch, versus `9cccdc7f474d4948007f5e3b62fa485d0e20e6e06b50194258f348e01e0db076` on `main`.
+- **Phase 10A–10G mechanical/state program: COMPLETE.** Every slice remains closed and integrated; 10H does not reopen those verdicts.
+- **Phase 11:** canonical character coverage is the next implementation phase. It **must not begin** until the Phase 10H integration completes.
 
-### Important checkpoints
+### Phase 10H final evidence (at `668dc3dff4930d42e79e2fcc52b0877812f2abee`)
+
+- Review lineage: initial implementation `6f312591b495e53ff888384f0d733116209c6959` → Astra remediation R1 `f2abdf832a894cc8751212284c2e1e11da1eee11` → Astra remediation R2 / final reviewed implementation `668dc3dff4930d42e79e2fcc52b0877812f2abee`.
+- Full unit/integration suite **4346/4346 across 188 files**; typecheck **PASS**; production build **PASS**; final targeted diff check **PASS**; final reviewed worktree clean.
+- Firebase Rules emulator suite **228/228, zero skipped**, at the last Rules-affecting checkpoint. R2 changed no Firebase/Rules production source, so it was not rerun for R2.
+- Hardware waivers: real physical-device access to the exact reviewed build was unavailable. Extensive rendered phone/tablet browser evidence passed through Luna and Astra. A genuine physical-device defect observed later is a normal follow-up defect/hotfix, never a retroactive PASS.
+
+### Release order and stop point — Rules first
+
+The web client ships from `main` automatically; Rules change only through `npm run rules:deploy`. Therefore:
+
+1. `npx firebase use <PROJECT_ID>`, then `npm run rules:deploy` (Realtime Database Rules only), from the Phase 10H closure checkpoint.
+2. `npm run rules:verify -- --project <PROJECT_ID>` (add `--instance <DB_INSTANCE>` for a non-default instance) must exit 0, with the deployed Rules identical to `src/firebase/rules.json`.
+3. Only then integrate the Phase 10H closure checkpoint into `main`, verify the integration, and record Phase 10H as CLOSED AND INTEGRATED.
+
+**Stop point:** do not move `main` until steps 1 and 2 have both succeeded. As of this handoff, **none of steps 1–3 has occurred**.
+
+### Next
+
+**Next: production RTDB Rules deployment + verification** (steps 1–2 above), **before** `main` integration. After that, integrate and verify, then record CLOSED AND INTEGRATED. Phase 11 waits until then.
+
+### Previous phase — Phase 10G (CLOSED AND INTEGRATED)
+
+- **Phase 10G — Advanced Storyteller Bookkeeping / Final Visual Integration: CLOSED AND INTEGRATED.** Sol final adjudication: APPROVE — PHASE 10G CLOSED AND INTEGRATED (`PHASE10G.md` §37).
+- **Firebase Rules:** unchanged by Phase 10G.
+
+#### Important checkpoints
 
 - Phase 10G start: `52e685b16e76df15154512a52a34831a6aeba399`
 - Final production: `7add7c661e43349634e0b6717d7c05ee18a31957`
 - Final reviewed branch (`dev/phase-10g`, retained): `2aabccbb925183c2359bef5d48a2ee5cca2dfd03`
 - Fast-forward integration checkpoint: `2aabccbb925183c2359bef5d48a2ee5cca2dfd03` (`main` moved 52e685b → 2aabccb; 15 ahead / 0 behind; no merge commit)
-- Final documentation closure checkpoint: the single docs-only commit directly on top of `2aabccbb925183c2359bef5d48a2ee5cca2dfd03`, which added this handoff text. It is the tip of `main` at closure (a commit cannot record its own SHA here; read it with `git log -1 main` or from the closure report).
+- Final documentation closure checkpoint: the single docs-only commit directly on top of `2aabccbb925183c2359bef5d48a2ee5cca2dfd03`, which added this handoff text. It is the tip of `main` at closure (a commit cannot record its own SHA here; read it with `git log -1 main` or from the closure report). That commit is `e0ba539ae448eb494ca5739564a39c49d2e59467`, the Phase 10H starting point and still the tip of `main`.
 
-### Final evidence
+#### Phase 10G final evidence
 
 - Luna: Vitest 4,190/4,190; Phase 10G tests 213/213; Firebase emulator 201/201, zero skipped; typecheck, production build and diff checks PASS.
 - Astra: PASS — READY FOR SOL CLOSURE ADJUDICATION. ASTRA-10G-001, -002, -003 and -004, the hypothetical-query coverage gap, and ASTRA-10G-R1-001 are all CLOSED.
 
-### Deferred for later work (not Phase 10G blockers)
+#### Deferred for later work (not Phase 10G blockers)
 
 - store-wide E1 precommit generalization;
 - localStorage quota transaction/recovery;
 - dynamic Undo trimming;
 - broader persistence-health monitoring;
-- winner/result modeling, if ever separately authorized.
+- winner/result modeling, if ever separately authorized. (Phase 10H later added a Storyteller-declared `GameResult`: Good/Evil or End Without Result, with no win-condition evaluation. It is on `dev/phase-10h-ui` and not yet integrated.)
 
-### Next
+#### Next after Phase 10G (historical; completed)
 
-**Next: Phase 10H design discovery and contract preparation.** Use `PHASE10H.md` as the phase-specific planning source. First establish a representative dense Storyteller-screen visual north star, audit the current design/component system, and freeze the 10H UX/design acceptance criteria before broad production UI implementation. Phase 11 canonical coverage waits until 10H closes.
+At the 10G closure the next step was Phase 10H design discovery and contract preparation. That work, the frozen contract, implementation and review are now complete. The current next step is in **Next** above.
 
-The sections below are the historical record, oldest phases first, then the Phase 10E–10G records in order.
+The sections below are the historical record, oldest phases first, then the Phase 10E–10G records in order, ending with the Phase 10H closure record.
 
 ## Phase 10D — CLOSED
 
@@ -284,7 +316,7 @@ Update 2026-10-01: as part of the Phase 10D integration, the project owner deplo
 - **10E Alignment Transitions — CLOSED AND INTEGRATED**
 - **10F Guided Ability Resolution / Night Actions — CLOSED AND INTEGRATED**
 - **10G Advanced Storyteller bookkeeping / final visual integration — CLOSED AND INTEGRATED**
-- **10H Storyteller UI/UX & Visual Design System — ACTIVE: PLANNING / DESIGN CONTRACT PREPARATION** (newly inserted post-10G; prior 10A–10G closures remain intact)
+- **10H Storyteller UI/UX & Visual Design System — CLOSED — READY FOR RULES-FIRST INTEGRATION** (final reviewed implementation `668dc3dff4930d42e79e2fcc52b0877812f2abee` on `dev/phase-10h-ui`; not yet integrated; newly inserted post-10G; prior 10A–10G closures remain intact)
 
 ## Standing Phase 10 UX invariant
 
@@ -959,3 +991,20 @@ Sol final adjudication: APPROVE — PHASE 10G CLOSED AND INTEGRATED. `main` was 
 ## Immediate next task
 
 Phase 10H design discovery and contract preparation on `dev/phase-10h-ui`. Do not begin broad UI implementation until `PHASE10H.md` is frozen with the visual north star, scope boundaries, representative states, responsive/accessibility obligations and review evidence. Phase 11 canonical character coverage follows 10H.
+
+## Phase 10H — CLOSED — READY FOR RULES-FIRST INTEGRATION — 2026-10-06
+
+Sol status decision: Phase 10H software implementation and review are **COMPLETE**. Status: **CLOSED — READY FOR RULES-FIRST INTEGRATION**. This is not yet CLOSED AND INTEGRATED, because production RTDB Rules deployment and `main` integration have not occurred. Record: `PHASE10H.md` §0 and §§13–20.
+
+- start: `e0ba539ae448eb494ca5739564a39c49d2e59467`; branch: `dev/phase-10h-ui`
+- lineage: initial implementation `6f312591b495e53ff888384f0d733116209c6959` → Astra remediation R1 `f2abdf832a894cc8751212284c2e1e11da1eee11` → Astra remediation R2 / final reviewed implementation `668dc3dff4930d42e79e2fcc52b0877812f2abee`
+- Luna final targeted verification PASS; Astra final targeted closure PASS; ASTRA-10H-001…009 CLOSED
+- full suite 4346/4346 across 188 files; typecheck, production build and final targeted diff check PASS; final reviewed worktree clean
+- Rules emulator 228/228, zero skipped, at the last Rules-affecting checkpoint (not rerun for R2, which changed no Firebase/Rules production source)
+- store/schema v26; new RTDB Rules paths `revealAcks/{uid}` and `results/{uid}`
+- AC-064 and AC-066 WAIVED FOR PHASE CLOSURE — not passed
+- this record is documentation only: no production source, tests, packages, Firebase Rules/config, vendored tooling, design assets or generated files changed; nothing merged or deployed
+
+## Immediate next task
+
+Production RTDB Rules deploy from the Phase 10H closure checkpoint, then `npm run rules:verify` confirming the deployed Rules equal `src/firebase/rules.json`. Only after both succeed, integrate the closure checkpoint into `main` and verify the integration, then record Phase 10H as CLOSED AND INTEGRATED. `main` stays at `e0ba539ae448eb494ca5739564a39c49d2e59467` until then. Phase 11 does not begin before the 10H integration completes.

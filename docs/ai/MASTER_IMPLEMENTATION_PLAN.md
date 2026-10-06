@@ -1,7 +1,7 @@
 # Silverwick Hollow — Master Implementation Plan
 
 **Status:** Active canonical roadmap  
-**Updated:** 2026-10-04\
+**Updated:** 2026-10-06\
 **Integrated branch:** `main`  
 **Phase 10A closure checkpoint:** `d798266b988e49f904aa8f8658c917fd5b7e7abb`  
 **Pre-10B Firebase lifecycle hotfix checkpoint:** `38b10119544ce2c02590e9bc9c741aab995a91d1`  
@@ -10,9 +10,10 @@
 **Phase 10D final reviewed implementation checkpoint:** `62055408e75ba33a9b1900e19b1d4bcd3cbf93aa` (integrated into `main` with the docs-only closure commit on top)\
 **Phase 10D docs/integration checkpoint:** `22dfd49e7220d642eec353c2ea83fa3a2547ce8b` (the docs-only closure commit; `main` fast-forwarded to it after the rules-first release step, with a docs-only integration record directly on top)\
 **Phase 10G final reviewed checkpoint:** `2aabccbb925183c2359bef5d48a2ee5cca2dfd03` (final production `7add7c661e43349634e0b6717d7c05ee18a31957`); `main` fast-forwarded to it, with a docs-only closure commit directly on top\
-**Schema:** v25 integrated on `main`\
+**Schema:** v25 integrated on `main`. v26 exists on `dev/phase-10h-ui` only; `main` remains pre-10H until the Phase 10H integration.\
 **Phase 10 mechanical/state program:** COMPLETE (10A–10G closed and integrated; 10H does not reopen their closure)\
-**Current phase:** Phase 10H — Storyteller UI/UX & Visual Design System — PLANNING. No Phase 10H production UI code has started.
+**Phase 10H final reviewed implementation checkpoint:** `668dc3dff4930d42e79e2fcc52b0877812f2abee` on `dev/phase-10h-ui` (not yet integrated; `main` remains `e0ba539ae448eb494ca5739564a39c49d2e59467`)\
+**Current phase:** Phase 10H — Storyteller UI/UX & Visual Design System — **CLOSED — READY FOR RULES-FIRST INTEGRATION**. Software implementation and review are complete. Production RTDB Rules deployment/verification and `main` integration have not yet occurred. Phase 11 is queued after the 10H integration.
 
 ## Product invariants
 
@@ -269,15 +270,49 @@ Deferred hardening (recorded, not Phase 10G blockers): store-wide E1 precommit g
 
 ## Phase 10H — Storyteller UI/UX & Visual Design System
 
-**Status:** PLANNING / DESIGN CONTRACT PREPARATION. No production UI redesign has started.\
+**Status:** **CLOSED — READY FOR RULES-FIRST INTEGRATION** (Sol status decision). Software implementation and review are complete. It is **not yet integrated**: production RTDB Rules deployment/verification and `main` integration have not occurred.\
 **Branch:** `dev/phase-10h-ui`\
 **Starting baseline:** `e0ba539ae448eb494ca5739564a39c49d2e59467` — the exact post-10G documentation-closure tip of `main`.\
-**Schema/store baseline:** v25; no schema or Firebase Rules change is authorized by creating this phase.\
-**Phase document:** `PHASE10H.md`.
+**Final reviewed implementation checkpoint:** `668dc3dff4930d42e79e2fcc52b0877812f2abee`.\
+**Schema/store:** v26 on `dev/phase-10h-ui` (v25 baseline). `main` remains pre-10H (v25) until integration.\
+**Firebase RTDB Rules:** new `revealAcks/{uid}` and `results/{uid}` Rules exist on `dev/phase-10h-ui`. They require a **Rules-first production release** (deploy, then verify the deployed Rules equal the repository Rules) **before** client/`main` integration. They are not yet deployed.\
+**Phase document:** `PHASE10H.md` (closure record §0; final record §§13–20).
 
 10H is a newly inserted post-10G product/design phase. It does **not** reopen Phase 10G, invalidate the Phase 10A–10G closure evidence, or change the frozen authority/workflow primitives. Its purpose is to overhaul the Storyteller-facing web UI around the now-stable mechanics before high-volume canonical character coverage expands the interface further.
 
-Planned scope:
+### Phase 10H closure (not yet integrated)
+
+Delivered UX architecture (full record: `PHASE10H.md` §§13–16):
+- hybrid cinematic visual language; Source Sans 3 operational typography alongside the identity fonts;
+- an oval, fitted, Grimoire-centred Storyteller interaction model (Free Roam retained), with Shown Role as the primary presentation while Actual Role stays explicit and authoritative, and density-tiered Reminders;
+- desktop / tablet-dock / phone-sheet shell. On phone, the spatial Table acts as a locator alongside the Roster, and the Roster replaces it when required. Participant workspace order: Truth → Now → Identity → Records → Admin;
+- current Night actor + modular action card; staged Grimoire-centred Setup; calm Day presentation;
+- Storyteller-declared Good/Evil result or End Without Result (no win inference);
+- player role reveal/reseal/acknowledgement, a player-safe result snapshot, latest-only Information Delivery, player own-Life visibility, and Town notes retained through post-game review;
+- store/schema v26: the `revealToken` participation token, advisory `revealAcks/{uid}` acknowledgement, private self Night Life projection, `GameResult`, terminal `results/{uid}` and terminal recovery/receipt behavior;
+- every frozen authority/privacy invariant from earlier phases preserved.
+
+Final review gate at `668dc3dff4930d42e79e2fcc52b0877812f2abee`:
+- lineage: initial implementation `6f312591b495e53ff888384f0d733116209c6959` → Astra remediation R1 `f2abdf832a894cc8751212284c2e1e11da1eee11` → Astra remediation R2 / final reviewed implementation `668dc3dff4930d42e79e2fcc52b0877812f2abee`;
+- Luna final targeted verification: **PASS**; Astra final targeted closure: **PASS**;
+- **ASTRA-10H-001 through ASTRA-10H-009: all CLOSED**;
+- full unit/integration suite **4346/4346 across 188 files**; typecheck **PASS**; production build **PASS**; final targeted diff check **PASS**; final reviewed worktree clean;
+- Firebase Rules emulator suite **228/228, zero skipped** at the last Rules-affecting checkpoint. R2 changed no Firebase/Rules production source, so it was not rerun for R2.
+
+Hardware acceptance: **AC-064** (real-iPhone Safari touch) and **AC-066** (notched-device safe-area) are **WAIVED FOR PHASE CLOSURE — not passed**.
+- Real physical-device access to the exact reviewed build was unavailable. Extensive rendered phone/tablet browser evidence passed through Luna and Astra.
+- A genuine physical-device defect observed later is ordinary follow-up defect/hotfix work. The waivers are never recorded retroactively as passes. See `PHASE10H.md` §18.
+
+Remaining software closure blockers: **none**.
+
+Release order (`PHASE10H.md` §19):
+1. deploy the RTDB Rules;
+2. verify the deployed Rules equal the repository Rules (`npm run rules:verify`);
+3. only then integrate the client/`main`.
+
+Phase 10H is recorded as CLOSED AND INTEGRATED only after that integration is verified.
+
+Original planned scope (planning record, 2026-10-04):
 - establish a coherent Silverwick visual identity and reusable design-token/component system;
 - overhaul the Grimoire/player-seat hierarchy, Player Drawer/workspaces, navigation, dialogs, panels and responsive layout;
 - consolidate visual presentation of Life, Role, Alignment, Effects, Reminders, Rule Facts, Night progress and Storyteller Activity;
@@ -303,11 +338,11 @@ Design ownership for 10H:
 
 Recommended project-scoped Claude tooling for 10H may include Anthropic `frontend-design`, Vercel `web-design-guidelines` and `react-best-practices`, Impeccable, Anthropic `webapp-testing`, and Playwright MCP. Installation is tooling preparation only; it does not itself authorize production redesign or prove design quality.
 
-The first design deliverable should be one representative, dense Storyteller screen used as the visual north star: a populated Grimoire with realistic life/role/alignment/effect/reminder/rule-fact states, one selected participant/workspace, Night controls, and phone/tablet variants. Sol freezes the implementation contract only after the design direction and required states are clear.
+Planning record (2026-10-04): the first design deliverable should be one representative, dense Storyteller screen used as the visual north star: a populated Grimoire with realistic life/role/alignment/effect/reminder/rule-fact states, one selected participant/workspace, Night controls, and phone/tablet variants. Sol freezes the implementation contract only after the design direction and required states are clear.
 
 ## Phase 11 — Canonical character coverage (roadmap unchanged)
 
-Phase 11 keeps its approved scope: full canonical Character / Traveler / Fabled / Loric semantic coverage (see 10F above and `PHASE10F.md` §18), added primarily through descriptors, evaluators, registered semantics and tests on the completed Phase 10 authority/workflow foundation (`PHASE10G.md` §29). Its architecture/scope challenge has not started and is now sequenced **after Phase 10H closes**.
+Phase 11 keeps its approved scope: full canonical Character / Traveler / Fabled / Loric semantic coverage (see 10F above and `PHASE10F.md` §18), added primarily through descriptors, evaluators, registered semantics and tests on the completed Phase 10 authority/workflow foundation (`PHASE10G.md` §29). Its architecture/scope challenge has not started. It is sequenced **after Phase 10H is integrated into `main`**: 10H is closed but not yet integrated, so Phase 11 must not begin yet.
 
 ## Phase workflow
 
@@ -340,4 +375,10 @@ A subphase closes only when approved scope is complete, accepted Blocker/High fi
 
 ## Immediate next action
 
-Phase 10H design discovery and contract preparation on `dev/phase-10h-ui`. First establish the representative Storyteller-screen visual north star, audit the current component/layout system, and freeze `PHASE10H.md` acceptance criteria before broad production UI implementation. Phase 11 canonical coverage remains queued after 10H closure.
+Phase 10H is **CLOSED — READY FOR RULES-FIRST INTEGRATION** at final reviewed implementation `668dc3dff4930d42e79e2fcc52b0877812f2abee`, with this documentation closure checkpoint on top on `dev/phase-10h-ui`. Next:
+
+1. Production RTDB Rules deployment from the Phase 10H closure checkpoint (`npm run rules:deploy`).
+2. Verify the deployed Rules equal `src/firebase/rules.json` (`npm run rules:verify -- --project <PROJECT_ID>`, exit 0).
+3. Only then integrate the Phase 10H closure checkpoint into `main`, verify the integration, and record Phase 10H as CLOSED AND INTEGRATED.
+
+Stop point: `main` stays at `e0ba539ae448eb494ca5739564a39c49d2e59467` until steps 1–2 succeed. No Rules deployment, client deployment or `main` integration has occurred yet. Phase 11 canonical coverage remains queued and starts only after the 10H integration completes.
