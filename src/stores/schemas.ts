@@ -1458,10 +1458,21 @@ export const SyncMetaSchema = z.object({
   lastAttempt: GuardStampSchema.nullable(),
 });
 
+const SeatSwapLayoutPlayerSchema = z.object({
+  playerId: z.string().min(1), participantId: z.string().min(1),
+  seat: z.number().int().nonnegative(),
+  x: z.number().finite(), y: z.number().finite(),
+}).strict();
+// Optional local layout history. A malformed value is discarded without
+// invalidating the authoritative game or its ordinary Undo history.
+export const SeatSwapUndoSchema = z.array(z.tuple([SeatSwapLayoutPlayerSchema, SeatSwapLayoutPlayerSchema]).nullable()).max(20).catch([]);
+export type SeatSwapUndo = z.infer<typeof SeatSwapUndoSchema>;
+
 export const StorytellerStateSchema = z.object({
   game: StorytellerGamePersistedSchema.nullable().optional(),
   view: z.enum(["home", "game", "newgame"]).optional(),
   undoStack: z.array(StorytellerGamePersistedSchema).optional(),
+  seatSwapUndo: SeatSwapUndoSchema.optional(),
   customScripts: z.record(z.string(), ScriptSchema).optional(),
   lobby: z
     .object({

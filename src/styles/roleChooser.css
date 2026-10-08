@@ -1,0 +1,81 @@
+.dialog.role-chooser {
+  width: min(1320px, calc(100vw - 48px));
+  height: calc(100dvh - 48px);
+  max-height: calc(100dvh - 48px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(145deg, #241c21, #120e11);
+  border-color: rgba(196, 158, 80, .28);
+  border-radius: 12px;
+}
+.role-chooser .dialog-header { flex: none; border-bottom: 0; padding: 16px 14px 10px 22px; }
+.role-chooser .dialog-title { min-width: 0; overflow-wrap: anywhere; font: 700 28px/1.15 var(--font-display); letter-spacing: 0; }
+.role-chooser .dialog-close { min-width: 44px; min-height: 44px; }
+.role-chooser-intro { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 22px 12px; }
+.role-chooser-intro p { margin: 0; color: var(--text-dim); font: 600 12px var(--font-op); letter-spacing: .1em; }
+.role-chooser-intro input { min-height: 44px; width: min(300px, 40%); }
+/* Preview text must never move a target between pointer-down and click. */
+.role-chooser-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.role-chooser-groups { display: grid; grid-template-columns: 4fr 4fr 1.3fr; gap: 10px; padding: 2px 22px 14px; }
+.role-chooser-findings { padding: 0 22px 14px; }
+.role-chooser [data-team="townsfolk"] { --chooser-team: #81b6d0; }
+.role-chooser [data-team="outsider"] { --chooser-team: #92ba97; }
+.role-chooser [data-team="minion"] { --chooser-team: #d17b6f; }
+.role-chooser [data-team="demon"] { --chooser-team: #dc8b4d; }
+.role-chooser [data-team="traveler"] { --chooser-team: #b993d0; }
+.role-chooser-group { min-width: 0; padding: 10px 10px 8px; border: 1px solid rgba(196, 158, 80, .08); border-radius: 8px; background: rgba(12, 9, 11, .46); }
+.role-chooser-group[data-team="townsfolk"], .role-chooser-group[data-team="traveler"] { grid-column: 1 / -1; }
+.role-chooser-group > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--chooser-team); margin-bottom: 8px; }
+.role-chooser-group h3, .role-chooser-reminders h4 { margin: 0; font: 700 11px var(--font-op); text-transform: uppercase; letter-spacing: .18em; }
+.role-chooser-group > header > span { font: 600 18px var(--font-display); white-space: nowrap; }
+.role-chooser-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 8px 2px; }
+.role-chooser-tile { border: 0; padding: 14px 2px 2px; min-width: 0; min-height: 84px; color: var(--text); background: transparent; display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; touch-action: manipulation; border-radius: 8px; }
+.role-chooser-disc, .role-chooser-detail-disc { position: relative; flex-shrink: 0; display: inline-grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: radial-gradient(circle at 38% 32%, #f3e8bd, #d6c59b 67%, #9b855c); box-shadow: inset 0 -5px 10px #74532d66, 0 5px 12px #0005; }
+.role-chooser-disc img, .role-chooser-detail-disc img { width: 79%; height: 79%; object-fit: contain; }
+.role-chooser-tile[data-state="selected"] .role-chooser-disc, .role-chooser-tile[data-state="current"] .role-chooser-disc { outline: 2px solid var(--chooser-team); outline-offset: 4px; }
+.role-chooser-tile[data-state="used"] .role-chooser-disc, .role-chooser-tile:disabled .role-chooser-disc { filter: grayscale(.7); }
+.role-chooser-tile[data-state="unselected"] .role-chooser-disc { filter: grayscale(.7) brightness(.65); }
+.role-chooser-tile:disabled { opacity: .5; cursor: default; }
+.role-chooser-tile:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.role-chooser-tile:not(:disabled):hover { background: #c49e500d; }
+.role-chooser-holder { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); box-sizing: border-box; width: 68px; padding: 3px 5px; border-radius: 12px; border: 1px solid #c49e5059; background: #191316; color: var(--gold-soft); font: 600 11px/1.25 var(--font-op); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.role-chooser-name { width: 100%; min-width: 0; font: 600 13px/1.2 var(--font-op); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.role-chooser-footer { flex: none; border-top: 1px solid #c49e5024; background: #100c0ed9; padding: 12px 22px; }
+.role-chooser-detail { height: 132px; display: flex; align-items: flex-start; gap: 16px; overflow: hidden; }
+.role-chooser-detail-disc { width: 60px; height: 60px; margin-top: 4px; }
+.role-chooser-detail > div { min-width: 0; flex: 1; max-height: 100%; overflow-y: auto; overscroll-behavior: contain; }
+.role-chooser-detail-copy:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+.role-chooser-detail h3 { margin: 0; font: 700 24px/1.2 var(--font-display); }
+.role-chooser-detail h3 small { color: var(--chooser-team); font: 600 11px var(--font-op); text-transform: uppercase; letter-spacing: .15em; }
+.role-chooser-detail p { margin: 4px 0; font: 15px/1.4 var(--font-body); overflow-wrap: anywhere; }
+.role-chooser-detail a { min-height: 44px; display: inline-flex; align-items: center; color: var(--gold-soft); font-size: 13px; }
+.role-chooser-reminders { max-width: 280px; }
+.role-chooser-reminders h4 { color: var(--text-dim); }
+.role-chooser-reminders ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
+.role-chooser-reminders li { display: flex; flex-direction: column; align-items: center; gap: 4px; font: 12px var(--font-op); }
+.role-chooser-reminders img { width: 36px; height: 36px; padding: 3px; border-radius: 50%; object-fit: contain; background: #e3d3a5; }
+.role-chooser-actions { height: 64px; display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.role-chooser-status { flex: 1; min-width: 0; max-height: 64px; overflow-y: auto; }
+.role-chooser-actions p { margin: 0; font-size: 14px; }
+.role-chooser-actions .btn { min-height: 44px; }
+.role-chooser-choice-status { height: 64px; overflow-y: auto; }
+.role-chooser-note, .role-chooser-hint { font: 14px/1.4 var(--font-op); color: var(--text-dim); }
+.role-chooser-error { color: #efa08e; }
+@media (min-width: 1600px) and (pointer: fine) {
+  .role-chooser .dialog-title { font-size: 32px; }
+  .role-chooser-disc { width: 60px; height: 60px; }
+  .role-chooser-grid { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }
+  .role-chooser-holder { width: 82px; }
+}
+@media (max-width: 899px) {
+  .role-chooser-groups { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .role-chooser-intro { flex-wrap: wrap; }
+  .role-chooser-intro input { width: 100%; }
+  .role-chooser-actions { flex-wrap: wrap; height: 100px; gap: 4px; }
+  .role-chooser-status { flex-basis: 100%; max-height: 40px; }
+  .role-chooser-detail .role-chooser-reminders { flex: .5; }
+}
+

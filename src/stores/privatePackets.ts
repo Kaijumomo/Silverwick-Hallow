@@ -4,6 +4,7 @@ import { PlayerSelfRecordSchema } from "./schemas";
 import { projectIdentity } from "./projections";
 import { needsShownIdentity } from "./identity";
 import { newTravelerArrival, travelerDemonInformation } from "./travelers";
+import { secureUuid } from "./secureUuid";
 
 export type PrivateInfoApplicability = {
   simulatedInfo: boolean;
@@ -107,7 +108,7 @@ export function previewPrivatePacket(player: STPlayerRecord, game: StorytellerLo
 
 /** Identity changes invalidate queued previews and previously published extras. */
 export function invalidatePrivatePacket<T extends STPlayerRecord>(player: T): T {
-  const next = { ...player, packetEpoch: crypto.randomUUID() };
+  const next = { ...player, packetEpoch: secureUuid() };
   if (player.isTraveler && player.publishedPacket?.payload.demon) {
     next.travelerArrival = { ...(player.travelerArrival ?? newTravelerArrival()), demonInfoComplete: false };
   }

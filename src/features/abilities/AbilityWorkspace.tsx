@@ -65,6 +65,7 @@ type Props = {
   onResolved: (resolution: { resolutionId: string; game: StorytellerLobbyRecord; delivered: boolean }) => void;
   /** Phase 10H: hidden (draft kept) -- the acting seat resumes it. */
   hidden?: boolean;
+  dockHostId?: string;
   /** Phase 10H: hide the card, keeping the draft. */
   onHide?: () => void;
   /** Phase 10H (§8.6): re-derive the workflow from current authoritative
@@ -102,7 +103,7 @@ const MANUAL_KINDS: { kind: ManualDraft["kind"]; label: string }[] = [
 ];
 
 
-export function AbilityWorkspace({ game, script, registry, semantics, target, descriptor, manualReason, initialInputs, onClose, onResolved, hidden, onHide, onRefresh, guidance }: Props) {
+export function AbilityWorkspace({ game, script, registry, semantics, target, descriptor, manualReason, initialInputs, onClose, onResolved, hidden, onHide, onRefresh, guidance, dockHostId }: Props) {
   // Captured ONCE, at open: the state the Storyteller is resolving against.
   const [fingerprint] = useState(() => captureFingerprint(game, target.actorId, target.step, target.trigger));
   const [mode, setMode] = useState<"guided" | "manual">(descriptor ? "guided" : "manual");
@@ -233,7 +234,7 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
   // Phase 10G Night sheet; every choice stays mounted.
   const picking = useTargetPicker((s) => !!s.active);
   return (
-    <ActionCard title={`${target.roleName} — ${mode === "guided" ? "guided resolution" : "Resolve manually / unmodeled interaction"}`}
+    <ActionCard dockHostId={dockHostId} title={`${target.roleName} — ${mode === "guided" ? "guided resolution" : "Resolve manually / unmodeled interaction"}`}
       subtitle={<>
         <span className="action-card-actor">{actorRecord ? `${actorRecord.name || `Seat ${actorRecord.seat + 1}`} · seat ${actorRecord.seat + 1}` : "No longer seated"}</span>
         {mode === "guided" && descriptor && <span className="action-card-instruction">{descriptor.presentation.action}</span>}

@@ -113,14 +113,29 @@ describe("10G-AC-24 / AC-25 / AC-26: Night -> Day", () => {
     expect(state().undoStack).toHaveLength(1);
   });
 
-  it("Review Night closes the review and shows the Night Order", () => {
+  it("Review Night closes the review and reopens the modern Night guide", () => {
+    render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "Close Night panel" }));
+    expect(screen.queryByRole("region", { name: "Night 2 guide" })).toBeNull();
+    fireEvent.click(advanceButton());
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Review Night" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("region", { name: "Night 2 guide" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Night" })).toHaveAttribute("aria-expanded", "true");
+    expect(game().phase).toBe("night");
+  });
+
+  it("Review Night still opens the existing phone Night dock", () => {
+    vi.stubGlobal("matchMedia", vi.fn((query: string) => ({ media: query, matches: true,
+      addEventListener() {}, removeEventListener() {} })));
     render(<GameScreen />);
     fireEvent.click(screen.getByRole("button", { name: "Close night panel" }));
     expect(screen.queryByRole("complementary", { name: "Night 2 order" })).toBeNull();
     fireEvent.click(advanceButton());
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Review Night" }));
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.getByRole("complementary", { name: "Night 2 order" })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Night 2 order" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Night 2 guide" })).toBeNull();
     expect(game().phase).toBe("night");
   });
 

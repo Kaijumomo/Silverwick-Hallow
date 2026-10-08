@@ -4,6 +4,7 @@ import { MAX_NIGHT_STEP_NOTES } from "@/stores/schemas";
 import { TextLimit } from "@/components/TextLimit";
 import { deriveNightWork, stepResolved } from "./nightWork";
 import { useStorytellerStore } from "@/stores/storytellerStore";
+import { secureUuid } from "@/stores/secureUuid";
 import { PlayerInformation } from "@/features/players/PlayerInformation";
 import { TravelerArrival } from "@/features/players/TravelerArrival";
 import { travelerGuidance } from "@/stores/travelers";
@@ -127,7 +128,7 @@ function InlineSimpleAbility({ step, day, descriptor, guided, onEscalate }: {
   );
 }
 
-function StepCard({ step, record, day, ability, chips = [], guided, lastResolution, onOpenWorkspace, current = false, onMakeCurrent }: StepCardProps) {
+export function StepCard({ step, record, day, ability, chips = [], guided, lastResolution, onOpenWorkspace, current = false, onMakeCurrent }: StepCardProps) {
   const players = useStorytellerStore(s => s.game?.players);
   const status = record?.status ?? "pending";
   const notes = record?.notes ?? "";
@@ -536,7 +537,7 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
           <PlayerInformation playerId={id} purpose="setup" />
         </details>)}
         <button className="btn btn-sm" onClick={() => useStorytellerStore.getState().setNightStepNotes(
-          game.day, `manual:${crypto.randomUUID()}`, ""
+          game.day, `manual:${secureUuid()}`, ""
         )}>Add custom night step</button>
         <p className="behavior-help">New or changed characters, gained abilities and past events may need a custom step.
           Verify these conditions manually; this sheet does not reconstruct game history.</p>

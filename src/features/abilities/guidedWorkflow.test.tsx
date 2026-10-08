@@ -98,7 +98,7 @@ describe("10F-AC-30 / AC-31: the Night Order is an operating dashboard", () => {
     render(<><Night /><GrimoireCircle /></>);
     const monk = card("Monk", "Alice");
     fireEvent.click(within(monk).getByRole("button", { name: /^Choose .+ on the Table$/ }));
-    expect(screen.getByText(/Choosing the player to mark: tap a seat/)).toBeInTheDocument();
+    expect(screen.getByText(/the player to mark · Tap a player/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^Carol, seat 3/ }));
     expect(state().selectedPlayerId).toBeNull(); // consumed as a pick, not a selection
     expect(chosen("the player to mark", card("Monk", "Alice"))).toBe("p2");

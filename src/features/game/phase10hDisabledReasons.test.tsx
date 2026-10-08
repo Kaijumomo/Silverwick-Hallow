@@ -55,15 +55,16 @@ describe("10H-AC-067: disabled primaries explain themselves", () => {
     for (let i = 0; i < 6; i++) state().addPlayerToSeat("Player " + i);
     act(() => { state().dealRolePool(); });
     render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: "setup" }));
-    const reveal = screen.getByRole("button", { name: "Reveal Roles" });
+    fireEvent.click(screen.getByRole("button", { name: "Players" }));
+    fireEvent.click(screen.getByRole("button", { name: "Setup details & modifiers" }));
+    const reveal = within(screen.getByRole("dialog", { name: "Setup details" })).getByRole("button", { name: "Reveal Roles" });
     expect(reveal).toBeDisabled();
     const reason = reasonOf(reveal);
     expect(reason).toHaveTextContent("1 player still needs a shown role before Reveal Roles.");
     expect(reason.parentElement).toBe(reveal.parentElement);
     const drunk = Object.values(game().players).find((p) => p.actualRole === "drunk")!;
     act(() => { state().setShownRole(drunk.id, "chef"); });
-    expect(screen.getByRole("button", { name: "Reveal Roles" })).toBeEnabled();
+    expect(within(screen.getByRole("dialog", { name: "Setup details" })).getByRole("button", { name: "Reveal Roles" })).toBeEnabled();
     expect(document.getElementById("setup-primary-reason")).toBeNull();
   });
 

@@ -88,19 +88,28 @@ describe("Phase 10B quick Effects: player -> Effect -> done", () => {
 });
 
 describe("Phase 10B aggregation and progressive disclosure", () => {
-  it("three Poisoned instances show ONE Grimoire indicator with multiplicity and a spoken label; the drawer lists 'Poisoned ×3' and reveals instances on demand", () => {
+  it("three Poisoned instances keep source-aware official and manual indicators, an aggregate spoken label, and all drawer instances", () => {
     abilityPoison("Carol", "p1");
     abilityPoison("Carol", "p2");
     state().setManualEffect(bind(idOf("Carol")), "poisoned", true);
     render(<GameScreen />);
-    const indicators = document.querySelectorAll('[data-effect-indicator="poisoned"]');
-    expect(indicators).toHaveLength(1);
-    expect(indicators[0]!.textContent).toContain("×3");
-    expect(indicators[0]).toHaveAttribute("aria-hidden", "true");
-    expect(indicators[0]!.querySelector("img")).toHaveAttribute("alt", "");
+    // The modern board groups official Poisoner effects separately from manual
+    // bookkeeping, without attributing a manual condition to a character.
+    const official = document.querySelectorAll('.grimoire [data-official-reminder="poisoner"][data-reminder-kind="effect"]');
+    const manual = document.querySelectorAll('.grimoire [data-effect-indicator="poisoned"]');
+    expect(official).toHaveLength(1);
+    expect(official[0]).toHaveTextContent("Poisoned ×2");
+    expect(official[0]).toHaveAttribute("aria-hidden", "true");
+    expect(official[0]!.querySelector("img")).toHaveAttribute("alt", "");
+    expect(manual).toHaveLength(1);
+    expect(manual[0]).toHaveTextContent(/^Poisoned$/);
+    expect(manual[0]).toHaveAttribute("aria-hidden", "true");
+    expect(document.querySelector('.grimoire img[src="/status/poisoned.png"]')).toBeNull();
+    expect(game().players[idOf("Carol")]!.effects).toHaveLength(3);
     expect(screen.getByRole("button", { name: /^Carol, seat 3, .*Poisoned, 3 active effects$/ })).toBeInTheDocument();
 
     act(() => { state().selectPlayer(idOf("Carol")); });
+    fireEvent.click(screen.getByRole("button", { name: "Edit effects" }));
     const group = screen.getByRole("button", { name: /^Poisoned, 3 active effects\. Show details/ });
     expect(group).toHaveAttribute("aria-expanded", "false");
     expect(group).toHaveTextContent("Poisoned ×3");
@@ -116,14 +125,17 @@ describe("Phase 10B aggregation and progressive disclosure", () => {
     abilityPoison("Carol", "p1");
     render(<GameScreen />);
     act(() => { state().selectPlayer(idOf("Carol")); });
+    fireEvent.click(screen.getByRole("button", { name: "Edit effects" }));
     fireEvent.click(screen.getByRole("button", { name: /^Poisoned\. Show details/ }));
     fireEvent.click(screen.getByRole("button", { name: "Suppress" }));
     expect(game().players[idOf("Carol")]!.effects[0]!.state).toBe("suppressed");
     expect(document.querySelector('[data-effect-indicator="poisoned"]')).toBeNull();
+    expect(document.querySelector('[data-official-reminder="poisoner"][data-reminder-kind="effect"]')).toBeNull();
     expect(screen.getByText(/1 suppressed/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
     expect(game().players[idOf("Carol")]!.effects[0]!.state).toBe("active");
-    expect(document.querySelector('[data-effect-indicator="poisoned"]')).not.toBeNull();
+    expect(document.querySelectorAll('.grimoire [data-official-reminder="poisoner"][data-reminder-kind="effect"]')).toHaveLength(1);
+    expect(game().players[idOf("Carol")]!.effects).toHaveLength(1);
   });
 
   it("the advanced workflow adds a sourced, timed Effect with smart defaults (source character pre-filled, expiry previewed)", () => {
@@ -151,6 +163,7 @@ describe("Phase 10B aggregation and progressive disclosure", () => {
     render(<GameScreen />);
     expect(screen.getByRole("button", { name: /^Carol, seat 3, alive, needs check, Poisoned$/ })).toBeInTheDocument();
     act(() => { state().selectPlayer(carol); });
+    fireEvent.click(screen.getByRole("button", { name: "Edit effects" }));
     fireEvent.click(screen.getByRole("button", { name: /^Poisoned, needs check\. Show details/ }));
     expect(screen.getByText(/Exact end not recorded/)).toBeInTheDocument();
     expect(screen.queryByText(/Lifetime unknown/)).toBeNull();
@@ -187,6 +200,7 @@ describe("Phase 10B Privacy Mode", () => {
     abilityPoison("Carol", "p1");
     render(<GameScreen />);
     act(() => { state().selectPlayer(idOf("Carol")); });
+    fireEvent.click(screen.getByRole("button", { name: "Edit effects" }));
     fireEvent.click(screen.getByRole("button", { name: /^Poisoned\. Show details/ }));
     fireEvent.click(screen.getByRole("button", { name: "+ Add effect" }));
     expect(screen.getByText("Ends as Night 2 begins")).toBeInTheDocument();
@@ -194,6 +208,7 @@ describe("Phase 10B Privacy Mode", () => {
 
     act(() => { usePrivacyStore.setState({ enabled: true }); });
     expect(document.querySelector("[data-effect-indicator]")).toBeNull();
+    expect(document.querySelector("[data-official-reminder]")).toBeNull();
     expect(screen.queryByRole("group", { name: "Quick effects" })).toBeNull();
     expect(screen.queryByRole("form", { name: "Add effect" })).toBeNull();
     expect(screen.queryByText("Ends as Night 2 begins")).toBeNull();
@@ -201,7 +216,12 @@ describe("Phase 10B Privacy Mode", () => {
 
     act(() => { usePrivacyStore.setState({ enabled: false }); });
     // Glanceable state returns; private details stay closed until reopened.
-    expect(document.querySelector('[data-effect-indicator="poisoned"]')).not.toBeNull();
+    expect(document.querySelectorAll('.grimoire [data-official-reminder="poisoner"][data-reminder-kind="effect"]')).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /^Poisoned\. Show details/ })).toBeNull();
+    expect(screen.queryByText("Ends as Night 2 begins")).toBeNull();
+    expect(screen.queryByRole("form", { name: "Add effect" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Carol, seat 3,/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit effects" }));
     expect(screen.getByRole("button", { name: /^Poisoned\. Show details/ })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Ends as Night 2 begins")).toBeNull();
     expect(screen.queryByRole("form", { name: "Add effect" })).toBeNull();

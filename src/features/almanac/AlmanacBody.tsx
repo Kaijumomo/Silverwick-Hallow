@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { RoleDef, RoleType } from "@/stores/types";
 import { iconUrlFor } from "@/data/iconUrl";
 import { isCanonicalRole, roleAuthority } from "@/data/canonical";
+import { wikiUrlFor } from "./wikiUrl";
 
 const TYPES: RoleType[] = [
   "townsfolk",
@@ -24,17 +25,6 @@ const TYPE_ORDER: Partial<Record<RoleType, number>> = {
 };
 
 const VISIBLE_EDITIONS = new Set(["tb", "snv", "bmr"]);
-
-function wikiUrlFor(name: string): string {
-  const slug = name
-    .trim()
-    .replace(/['']/g, "")
-    .replace(/[^A-Za-z0-9 _-]/g, "")
-    .split(/\s+/)
-    .filter(Boolean)
-    .join("_");
-  return `https://wiki.bloodontheclocktower.com/${slug}`;
-}
 
 type AlmanacBodyProps = {
   roles: RoleDef[];
