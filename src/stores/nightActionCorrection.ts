@@ -23,9 +23,19 @@ export type NightActionTargetCorrection = { day: number; stepKey: string; target
 
 export function clearNightActionCorrections(): void { receipts.clear(); }
 
-export function invalidateNightActionCorrections(game: StorytellerLobbyRecord): void {
+export function invalidateNightActionCorrections(
+  game: StorytellerLobbyRecord, remainingUndo: readonly StorytellerLobbyRecord[] = [],
+): void {
+  if (receipts.size === 0) return;
+  // An intermediate Undo can still have later actions ahead of this receipt.
+  // Retain it only while its exact post-action dependencies remain reachable
+  // in this local Undo lineage. Eligibility still requires Current State to
+  // match; the stored snapshots never authorize a correction themselves.
+  // Undoing the original action or its correction removes that post-state
+  // from the lineage, so those receipts are discarded rather than revived.
+  const reachable = [game, ...remainingUndo].map(dependencyState);
   for (const [key, receipt] of receipts) {
-    if (!sameSnapshot(dependencyState(game), receipt.after)) receipts.delete(key);
+    if (!reachable.some((snapshot) => sameSnapshot(snapshot, receipt.after))) receipts.delete(key);
   }
 }
 

@@ -509,7 +509,12 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
   // and free-roam positions are local-only and never touch the game.)
   const readOnly = game.phase === "ended";
   const litActorId = litActorIdOf(game, privacyMode, litActor);
-  const tapSeat = (id: PlayerId) => { if (!playersInteraction?.tap(id)) tapSeatShared(game, id, litActorId); };
+  const tapSeat = (id: PlayerId) => {
+    const layout = playersInteraction?.swapping
+      ? { game, positions: Object.fromEntries(game.seatOrder.map((seatId, index) => [seatId, getPos(seatId, index)])) }
+      : undefined;
+    if (!playersInteraction?.tap(id, layout)) tapSeatShared(game, id, litActorId);
+  };
   const playerCount = game.seatOrder.length;
   // Phase 10H (§§5.1, 6.1; 10H-AC-009/010): the Table is an oval fitted to the
   // MEASURED stage rectangle (ResizeObserver state, never a layout read during

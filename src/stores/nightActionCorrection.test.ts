@@ -137,4 +137,65 @@ describe("bounded Night target correction", () => {
     expect(getNightActionCorrection(game(), 2, stepKey())?.canCorrect).toBe(true);
     expect(state().correctNightActionTarget(correction())).toMatchObject({ ok: true });
   });
+
+  it.each(["poisoner", "monk"])("keeps %s correction blocked until all later actions are undone", (role) => {
+    start(role);
+    expect(act()).toMatchObject({ ok: true, changed: true });
+    const resolved = game();
+    state().setNightStepStatus(2, "later-1", "done");
+    state().setNightStepStatus(2, "later-2", "done");
+    state().undo();
+    const intermediate = game();
+    const intermediateUndo = state().undoStack;
+    const intermediateSeq = state().localSeq;
+    expect(getNightActionCorrection(game(), 2, stepKey())?.canCorrect).toBe(false);
+    expect(state().correctNightActionTarget(correction())).toMatchObject({ ok: false, code: "stale" });
+    expect(game()).toBe(intermediate);
+    expect(state().undoStack).toBe(intermediateUndo);
+    expect(state().localSeq).toBe(intermediateSeq);
+
+    state().undo();
+    expect(game()).toEqual(resolved);
+    expect(getNightActionCorrection(game(), 2, stepKey())?.canCorrect).toBe(true);
+    expect(state().correctNightActionTarget(correction())).toMatchObject({ ok: true, changed: true });
+    expect(game().players.p1!.effects).toHaveLength(0);
+    expect(game().players.p2!.effects).toHaveLength(1);
+    state().undo();
+    expect(game()).toEqual(resolved);
+    expect(getNightActionCorrection(game(), 2, stepKey())).toBeNull();
+  });
+
+  it("discards the receipt when Undo passes the original action", () => {
+    const before = game();
+    expect(act()).toMatchObject({ ok: true, changed: true });
+    state().setNightStepStatus(2, "later-1", "done");
+    state().setNightStepStatus(2, "later-2", "done");
+    state().undo();
+    state().undo();
+    expect(getNightActionCorrection(game(), 2, stepKey())?.canCorrect).toBe(true);
+    state().undo();
+    expect(game()).toEqual(before);
+    expect(getNightActionCorrection(game(), 2, stepKey())).toBeNull();
+    expect(state().correctNightActionTarget(correction())).toMatchObject({ ok: false, code: "stale" });
+    expect(game()).toEqual(before);
+  });
+
+  it("retains the earlier Poisoner receipt while discarding an undone Monk action", () => {
+    store.setState({ game: proofGame(["poisoner", "monk", "empath", "imp", "saint"]) });
+    expect(act("p4")).toMatchObject({ ok: true, changed: true });
+    const poisonResolved = game();
+    const monkStep = participantStepKey(game().players.p1!.participantId!, "monk");
+    expect(state().resolveAbility({ mode: "guided", invocationPath: "nightOrder", roleId: "monk",
+      fingerprint: captureFingerprint(game(), "p1", { day: 2, stepKey: monkStep })!,
+      inputs: { target: pick(game(), "p2") }, completeStep: true,
+    })).toMatchObject({ ok: true, changed: true });
+    state().setNightStepStatus(2, "later", "done");
+    state().undo();
+    expect(getNightActionCorrection(game(), 2, monkStep)?.canCorrect).toBe(true);
+    expect(getNightActionCorrection(game(), 2, stepKey())?.canCorrect).toBe(false);
+    state().undo();
+    expect(game()).toEqual(poisonResolved);
+    expect(getNightActionCorrection(game(), 2, monkStep)).toBeNull();
+    expect(getNightActionCorrection(game(), 2, stepKey())?.canCorrect).toBe(true);
+  });
 });

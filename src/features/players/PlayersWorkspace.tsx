@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ReferenceWorkspace } from "@/features/almanac/ReferenceWorkspace";
-import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
+import { useStorytellerStore, selectScriptById, type SeatSwapLayout } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { iconUrlFor } from "@/data/iconUrl";
 import { resolvedCharacters } from "@/data/roleRegistry";
@@ -107,7 +107,7 @@ export function PlayersWorkspace({ children, enabled, roles, onMore, advancedPla
     report(result);
     if (result.ok) { setChooser(null); setNotice("Roles distributed privately. Review preparation before revealing."); }
   };
-  const tap = (id: string) => {
+  const tap = (id: string, layout?: SeatSwapLayout) => {
     if (!swap) return false;
     setSwap(null);
     const latest = useStorytellerStore.getState();
@@ -116,7 +116,7 @@ export function PlayersWorkspace({ children, enabled, roles, onMore, advancedPla
       setNotice("The roster changed. Select the player again to swap seats."); return true;
     }
     if (id === swap.id) return true;
-    const result = latest.swapPlayerSeats({ playerId: swap.id, participantId: swap.participantId! }, { playerId: id, participantId: current.players[id]!.participantId! });
+    const result = latest.swapPlayerSeats({ playerId: swap.id, participantId: swap.participantId! }, { playerId: id, participantId: current.players[id]!.participantId! }, layout);
     setNotice(result.ok ? `${swap.name} and ${current.players[id]!.name} swapped seats.` : result.message);
     return true;
   };

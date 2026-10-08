@@ -21,6 +21,45 @@ beforeEach(() => {
 });
 
 describe("positional seat swap", () => {
+  it("uses a measured fallback only for the missing position and records the complete inverse atomically", () => {
+    store.setState({ tokenPositions: { p0: initialPositions.p0, p2: initialPositions.p2 } });
+    const before = structuredClone(game());
+    const updates: unknown[] = [];
+    const unsubscribe = store.subscribe(next => updates.push(next));
+    try {
+      expect(state().swapPlayerSeats(binding("p0"), binding("p1"), { game: game(), positions: {
+        p0: { x: -99, y: -99 }, p1: initialPositions.p1,
+      } }).ok).toBe(true);
+    } finally { unsubscribe(); }
+    expect(updates).toHaveLength(1);
+    expect(state().tokenPositions).toEqual({ p0: initialPositions.p1, p1: initialPositions.p0, p2: initialPositions.p2 });
+    state().undo();
+    expect(game()).toEqual(before);
+    expect(state().tokenPositions).toEqual(initialPositions);
+  });
+
+  it.each(["stale", "nonfinite", "missing"])("rejects %s measured fallback without any mutation", problem => {
+    store.setState({ tokenPositions: {} });
+    const layout = { game: game(), positions: { p0: initialPositions.p0, p1: initialPositions.p1 } };
+    if (problem === "stale") layout.game = structuredClone(game());
+    if (problem === "nonfinite") layout.positions.p1 = { x: NaN, y: 0 };
+    if (problem === "missing") delete (layout.positions as Partial<typeof layout.positions>).p1;
+    const before = state();
+    expect(state().swapPlayerSeats(binding("p0"), binding("p1"), layout).ok).toBe(false);
+    expect(state()).toBe(before);
+  });
+
+  it.each(["privacy", "closing", "stale participant"])("never materializes measured fallback while %s", blocked => {
+    store.setState({ tokenPositions: {} });
+    const source = binding("p0");
+    if (blocked === "privacy") usePrivacyStore.getState().setEnabled(true);
+    if (blocked === "closing") expect(state().beginTerminalClose({ kind: "noResult" })).toBe(true);
+    if (blocked === "stale participant") source.participantId = "replaced";
+    const before = state();
+    expect(state().swapPlayerSeats(source, binding("p1"), { game: game(), positions: initialPositions }).ok).toBe(false);
+    expect(state()).toBe(before);
+  });
+
   it("atomically swaps seat order and free-roam coordinates, preserving all player state, with one complete Undo", () => {
     const before = structuredClone(game());
     const updates: unknown[] = [];

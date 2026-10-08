@@ -534,7 +534,7 @@ export type StorytellerStore = {
   renamePlayer: (id: PlayerId, name: string) => void;
   setSeatOrder: (order: PlayerId[]) => void;
   /** Positional exchange only; identities and character state stay with players. */
-  swapPlayerSeats: (source: SeatSwapBinding, target: SeatSwapBinding) => SetupCommandResult;
+  swapPlayerSeats: (source: SeatSwapBinding, target: SeatSwapBinding, layout?: SeatSwapLayout) => SetupCommandResult;
   movePlayer: (id: PlayerId, direction: "left" | "right") => void;
 
   // --- Phase 10D: Roles and perception ----------------------------------------
@@ -844,6 +844,8 @@ const REMINDER_INPUT_KEYS: ReadonlySet<string> = new Set(["id", "label", "source
 export type RepairTarget = { playerId: PlayerId; target: LifeStatusTarget };
 
 export type SeatSwapBinding = { playerId: PlayerId; participantId: ParticipantId };
+/** Measured board fallback positions, valid only for the rendered game. */
+export type SeatSwapLayout = { game: StorytellerLobbyRecord; positions: Record<PlayerId, TokenPosition> };
 
 /** Only explicit, correctly bound local swap metadata can restore coordinates.
  * An ordinary two-seat reorder is not evidence that coordinates were swapped. */
@@ -2250,7 +2252,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
-      swapPlayerSeats: (source, target) => {
+      swapPlayerSeats: (source, target, layout) => {
         const { game, undoStack, tokenPositions, grimoireMode, terminalClose } = get();
         if (!game || game.phase === "ended" || terminalClose?.status === "closing")
           return { ok: false, message: "Seat swapping is unavailable for this game." };
@@ -2262,7 +2264,19 @@ export const useStorytellerStore = create<StorytellerStore>()(
           !isSeatPermutation(game, game.seatOrder))
           return { ok: false, message: "The roster changed. Select the players again to swap seats." };
         if (a.id === b.id) return { ok: true };
-        const pa = tokenPositions[a.id], pb = tokenPositions[b.id];
+        // The board supplies its current rendered fallback for newly added or
+        // never-dragged tokens. Materialize only this pair, atomically with its
+        // identity-bound Undo inverse; never freeze an entire Ring layout.
+        const needsFallback = !tokenPositions[a.id] || !tokenPositions[b.id];
+        if (needsFallback && layout && layout.game !== game)
+          return { ok: false, message: "The board changed. Select the players again to swap seats." };
+        const pa = tokenPositions[a.id] ?? layout?.positions[a.id];
+        const pb = tokenPositions[b.id] ?? layout?.positions[b.id];
+        if (needsFallback && layout && (!pa || !pb))
+          return { ok: false, message: "Both players need a board position before swapping." };
+        if ((pa && (!Number.isFinite(pa.x) || !Number.isFinite(pa.y))) ||
+          (pb && (!Number.isFinite(pb.x) || !Number.isFinite(pb.y))))
+          return { ok: false, message: "The board positions are unavailable. Select the players again." };
         if (grimoireMode === "freeRoam" && (!pa || !pb))
           return { ok: false, message: "Wait for both token positions to be ready, then try swapping seats again." };
         const order = [...game.seatOrder];
@@ -3118,7 +3132,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           if (!analyzeSetup(context).readiness.begin.ok) return;
         }
         const layout = seatSwapLayout(get().seatSwapUndo[undoStack.length - 1], previous);
-        invalidateNightActionCorrections(previous);
+        invalidateNightActionCorrections(previous, undoStack.slice(0, -1));
         set({
           game: clone(previous),
           undoStack: undoStack.slice(0, -1),
