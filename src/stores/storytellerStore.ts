@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { BUILTIN_SCRIPTS, BUILTIN_SCRIPT_IDS } from "@/data/scripts";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
-import { MAX_NIGHT_STEP_NOTES, MAX_ST_NOTES, StorytellerGamePersistedSchema, StorytellerStateSchema } from "./schemas";
+import { MAX_NIGHT_STEP_NOTES, MAX_ST_NOTES, StorytellerGamePersistedSchema, StorytellerStateSchema, type SeatSwapUndo } from "./schemas";
 import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { manualEffectId } from "./effects";
@@ -48,6 +48,7 @@ import {
 import { newParticipantId, participantIdAppearsIn } from "./participants";
 import { participantRoleStepEntries, planNightStepStatus } from "./nightProgress";
 import { planAbilityResolution, type AbilityRefusal, type AbilityResolutionRequest } from "./abilityResolution";
+import { clearNightActionCorrections, invalidateNightActionCorrections, planNightActionTargetCorrection, rememberCorrectedNightAction, rememberNightAction, type NightActionTargetCorrection } from "./nightActionCorrection";
 import {
   applyGameRuleFactPlan,
   planGameRuleFactExpiry,
@@ -401,6 +402,8 @@ export type StorytellerStore = {
   // grimoire layout (localStorage-only, never Firebase-synced)
   grimoireMode: GrimoireMode;
   tokenPositions: Record<PlayerId, TokenPosition>;
+  /** Local-only coordinate inverses aligned with undoStack, never Firebase data. */
+  seatSwapUndo: SeatSwapUndo;
 
   // --- Phase 9C.2A (OPUS-001) reconnect/acknowledgement watermarks -------
   /** Local game-content mutation counter. Increases exactly once per game
@@ -414,7 +417,7 @@ export type StorytellerStore = {
   sync: SyncMeta | null;
 
   newGame: (scriptId: string, opts?: NewGameOpts) => void;
-  dealRolePool: () => SetupCommandResult;
+  dealRolePool: (stagedPool?: RoleId[]) => SetupCommandResult;
   /** Explicitly publishes the private Deal to players. Never required to be
    * online: a local/offline game still records that the Storyteller
    * completed the initial reveal step. See revealReadiness.ts. */
@@ -516,7 +519,7 @@ export type StorytellerStore = {
 
   addPlayer: (name: string) => void;
   /** Fill the first planned empty seat, falling back to a new seat when none exist. */
-  addPlayerToSeat: (name: string) => void;
+  addPlayerToSeat: (name: string, seatId?: PlayerId) => void;
   /** Add one deliberate empty planned seat. */
   addEmptySeat: () => void;
   /** Add planned Traveler capacity: an ordinary-neutral empty seat plus the
@@ -530,6 +533,8 @@ export type StorytellerStore = {
   unseatPlayer: (id: PlayerId) => boolean;
   renamePlayer: (id: PlayerId, name: string) => void;
   setSeatOrder: (order: PlayerId[]) => void;
+  /** Positional exchange only; identities and character state stay with players. */
+  swapPlayerSeats: (source: SeatSwapBinding, target: SeatSwapBinding) => SetupCommandResult;
   movePlayer: (id: PlayerId, direction: "left" | "right") => void;
 
   // --- Phase 10D: Roles and perception ----------------------------------------
@@ -605,6 +610,7 @@ export type StorytellerStore = {
    * another store command. `semantics` defaults to the canonical registry.
    */
   resolveAbility: (request: AbilityResolutionRequest, semantics?: AbilitySemanticsRegistry) => AbilityCommandResult;
+  correctNightActionTarget: (request: NightActionTargetCorrection) => AbilityCommandResult;
   /**
    * Phase 10G: THE Storyteller-owned Game Rule Fact command (PHASE10G Section
    * 4.4). Plans one ordered transaction with the pure planner
@@ -836,6 +842,29 @@ const REMINDER_INPUT_KEYS: ReadonlySet<string> = new Set(["id", "label", "source
 
 /** A status-only repair committed alongside an event correction. */
 export type RepairTarget = { playerId: PlayerId; target: LifeStatusTarget };
+
+export type SeatSwapBinding = { playerId: PlayerId; participantId: ParticipantId };
+
+/** Only explicit, correctly bound local swap metadata can restore coordinates.
+ * An ordinary two-seat reorder is not evidence that coordinates were swapped. */
+const seatSwapLayout = (
+  entry: SeatSwapUndo[number] | undefined,
+  previous: StorytellerLobbyRecord,
+): Record<PlayerId, TokenPosition> | undefined => {
+  if (!entry || entry[0].playerId === entry[1].playerId) return;
+  for (const saved of entry) {
+    const player = Object.hasOwn(previous.players, saved.playerId) ? previous.players[saved.playerId] : undefined;
+    if (!player || player.isEmpty || player.participantId !== saved.participantId || player.seat !== saved.seat ||
+      previous.seatOrder[saved.seat] !== saved.playerId || !Number.isFinite(saved.x) || !Number.isFinite(saved.y)) return;
+  }
+  return Object.fromEntries(entry.map(({ playerId, x, y }) => [playerId, { x, y }]));
+};
+
+const reindexSeatSwapUndo = (before: StorytellerLobbyRecord[], next: StorytellerLobbyRecord[], entries: SeatSwapUndo): SeatSwapUndo =>
+  next.map(snapshot => {
+    const index = before.indexOf(snapshot);
+    return index < 0 ? null : entries[index] ?? null;
+  });
 
 const repairIntents = (repair: RepairTarget[] | undefined): LifeIntent[] =>
   (repair ?? []).map(({ playerId, target }) => ({ kind: "correctStatus", playerId, target }));
@@ -1258,6 +1287,14 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // v9 drops obsolete saved previews through the schema allowlist, including
   // undo snapshots. Drafts, sent information and the active session survive.
   Object.assign(s, check.data);
+  // Preserve absent metadata in old saves: migration must not change an
+  // otherwise current valid save. The store merge supplies the runtime default.
+  // Present entries must bind to their corresponding validated snapshot.
+  const layoutEntries = check.data.seatSwapUndo;
+  if (layoutEntries !== undefined) Object.assign(s, { seatSwapUndo: (check.data.undoStack ?? []).map((snapshot, index) => {
+    const entry = layoutEntries[index];
+    return seatSwapLayout(entry, snapshot) ? entry : null;
+  }) });
   return state;
 }
 
@@ -1349,7 +1386,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
           if (state.terminalClose?.status === "closing" && !terminal && ("game" in patch || "undoStack" in patch)) {
             delete patch.game;
             delete patch.undoStack;
+            delete patch.seatSwapUndo;
           }
+          if (patch.undoStack && patch.seatSwapUndo === undefined)
+            patch.seatSwapUndo = reindexSeatSwapUndo(state.undoStack, patch.undoStack, state.seatSwapUndo);
           if (!skip && "game" in patch && patch.game !== state.game && patch.game != null) {
             const game = withRevealTokens(state.game, patch.game, registryForGame(state, patch.game));
             return { ...patch, game, localSeq: state.localSeq + 1 };
@@ -1370,6 +1410,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
       pendingKnocks: [],
       grimoireMode: "ring",
       tokenPositions: {},
+      seatSwapUndo: [],
 
       newGame: (scriptId: string, opts: NewGameOpts = {}) => {
         // A terminal completion owns the current game's lifecycle until it
@@ -1421,20 +1462,26 @@ export const useStorytellerStore = create<StorytellerStore>()(
         usePrivacyStore.getState().reset();
         // PR-10H-003: the previous game's Night cursor (its step keys repeat
         // across games) never reaches this game's Night.
+        clearNightActionCorrections();
         useShellStore.getState().resetGameScope();
         // PR-10H-004: a failed terminal intent belongs to the game it was
         // declared on and is never retried against a new one.
         set({ game, lobby: null, pendingKnocks: [], view: "game", undoStack: [], selectedPlayerId: null, ...endedTerminalIntent(get()) });
       },
 
-      dealRolePool: () => {
+      dealRolePool: (stagedPool) => {
         const { game, undoStack } = get();
         if (!game) return { ok: false, message: "No game is open." };
+        // The centered chooser stages its draft locally. Validate and deal it
+        // in one commit so Cancel is inert and Undo restores the whole deal.
+        if (stagedPool && (game.phase !== "setup" || isInitialRevealComplete(game)))
+          return { ok: false, message: "Role distribution is only available during private setup." };
+        const proposed = stagedPool ? { ...game, rolePool: [...stagedPool] } : game;
         const script = selectScriptById(get(), game.scriptId);
-        const context = selectSetupContext(game, script);
+        const context = selectSetupContext(proposed, script);
         const ready = analyzeSetup(context).readiness.deal;
         if (!ready.ok) return ready;
-        const pool = game.rolePool ?? [];
+        const pool = proposed.rolePool ?? [];
         const nonTravelerSeats = context.ordinary.map(p => p.id);
 
         // Fisher-Yates shuffle
@@ -1679,6 +1726,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (get().terminalClose?.status === "closing") return;
         gameLifecycle++;
         usePrivacyStore.getState().reset();
+        clearNightActionCorrections();
         useShellStore.getState().resetGameScope();
         set({
           ...endedTerminalIntent(get()),
@@ -1752,6 +1800,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       setLobby: (lobby) => {
         if (lobby && get().game?.phase === "ended") return false;
+        if (lobby?.code !== get().lobby?.code || lobby?.sessionId !== get().lobby?.sessionId) clearNightActionCorrections();
         set(state => ({ lobby, game: state.game && lobby ? { ...state.game, code: lobby.code, storytellerUid: lobby.uid } : state.game, undoStack: [] }));
         return true;
       },
@@ -1947,12 +1996,15 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
-      addPlayerToSeat: (name) => {
+      addPlayerToSeat: (name, seatId) => {
         const { game } = get();
         if (!game) return;
         const trimmed = name.trim();
         if (!trimmed) return;
-        const emptyId = game.seatOrder.find((id) => game.players[id]?.isEmpty);
+        // A roster row may target an exact empty seat. Never fall back to a
+        // different seat if that reservation was filled while its form was open.
+        if (seatId && (!ownPlayer(game, seatId)?.isEmpty || !game.seatOrder.includes(seatId))) return;
+        const emptyId = seatId ?? game.seatOrder.find((id) => game.players[id]?.isEmpty);
         if (!emptyId) {
           get().addPlayer(trimmed);
           return;
@@ -2198,6 +2250,44 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
+      swapPlayerSeats: (source, target) => {
+        const { game, undoStack, tokenPositions, grimoireMode, terminalClose } = get();
+        if (!game || game.phase === "ended" || terminalClose?.status === "closing")
+          return { ok: false, message: "Seat swapping is unavailable for this game." };
+        if (usePrivacyStore.getState().enabled)
+          return { ok: false, message: "Leave privacy mode before swapping seats." };
+        const a = ownPlayer(game, source.playerId), b = ownPlayer(game, target.playerId);
+        if (!a || !b || a.isEmpty || b.isEmpty || !source.participantId || !target.participantId ||
+          a.participantId !== source.participantId || b.participantId !== target.participantId ||
+          !isSeatPermutation(game, game.seatOrder))
+          return { ok: false, message: "The roster changed. Select the players again to swap seats." };
+        if (a.id === b.id) return { ok: true };
+        const pa = tokenPositions[a.id], pb = tokenPositions[b.id];
+        if (grimoireMode === "freeRoam" && (!pa || !pb))
+          return { ok: false, message: "Wait for both token positions to be ready, then try swapping seats again." };
+        const order = [...game.seatOrder];
+        const first = order.indexOf(a.id), second = order.indexOf(b.id);
+        if (first < 0 || second < 0)
+          return { ok: false, message: "Both players need a seat before swapping." };
+        [order[first], order[second]] = [order[second]!, order[first]!];
+        const players = { ...game.players };
+        order.forEach((id, seat) => { players[id] = { ...game.players[id]!, seat }; });
+        const nextUndo = pushUndo(game, undoStack);
+        const layoutUndo = reindexSeatSwapUndo(undoStack, nextUndo, get().seatSwapUndo);
+        let layoutPatch: { tokenPositions?: Record<PlayerId, TokenPosition> } = {};
+        // Keep saved free-roam locations associated with the exchanged seats
+        // even while ring mode is displayed; switching modes remains coherent.
+        if (pa && pb) {
+          layoutUndo[layoutUndo.length - 1] = [
+            { playerId: a.id, participantId: source.participantId, seat: a.seat, ...pa },
+            { playerId: b.id, participantId: target.participantId, seat: b.seat, ...pb },
+          ];
+          layoutPatch = { tokenPositions: { ...tokenPositions, [a.id]: { ...pb }, [b.id]: { ...pa } } };
+        }
+        set({ game: { ...game, players, seatOrder: order }, undoStack: nextUndo, seatSwapUndo: layoutUndo, ...layoutPatch });
+        return { ok: true };
+      },
+
       movePlayer: (id, direction) => {
         const { game, undoStack } = get();
         if (!game) return;
@@ -2261,6 +2351,23 @@ export const useStorytellerStore = create<StorytellerStore>()(
         return { ok: true, changed: true };
       },
 
+      correctNightActionTarget: (request) => {
+        const { game, undoStack } = get();
+        if (!game) return { ok: false, code: "invalid", message: "No game is open." };
+        if (get().terminalClose?.status === "closing") return { ok: false, code: "notApplicable", message: "The game is closing." };
+        const script = selectScriptById(get(), game.scriptId) ?? null;
+        const result = planNightActionTargetCorrection(game, request, {
+          script, registry: buildRegistry(script ?? { id: game.scriptId, name: "", characters: [] }),
+          semantics: CANONICAL_ABILITY_SEMANTICS,
+        });
+        if (!result.ok || !result.changed) return result;
+        const unsafe = persistencePreflight(result.plan.game, game, get().lobby);
+        if (unsafe) return { ok: false, code: "invalidComposition", message: unsafe };
+        set({ undoStack: pushUndo(game, undoStack), game: result.plan.game });
+        if (get().game === result.plan.game) rememberCorrectedNightAction(game, request, result.plan);
+        return { ok: true, changed: true, resolutionId: result.plan.resolutionId };
+      },
+
       resolveAbility: (request, semantics) => {
         const { game, undoStack } = get();
         if (!game) return { ok: false, code: "invalid", message: "No game is open." };
@@ -2296,6 +2403,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
             message: `This result cannot be safely stored online (the game's recovery checkpoint ${checkpoint.message.replace(/\.$/, "")}) -- nothing was recorded. Resolve it another way.` };
         }
         set({ undoStack: pushUndo(game, undoStack), game: result.plan.game });
+        if (get().game === result.plan.game && !semantics) rememberNightAction(game, request, result.plan);
         return { ok: true, changed: true, resolutionId: result.plan.resolutionId };
       },
 
@@ -2999,6 +3107,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
       undo: () => {
         const { undoStack } = get();
         if (undoStack.length === 0) return;
+        // The commit wrapper already rejects game/Undo changes during closure;
+        // also prevent a seat swap's local layout inverse escaping that lock.
+        if (get().terminalClose?.status === "closing") return;
         const previous = undoStack[undoStack.length - 1]!;
         // Undo can restore a pre-existing live snapshot after returning to Setup.
         // Validate that snapshot too; never use Undo as an unguarded first start.
@@ -3006,9 +3117,12 @@ export const useStorytellerStore = create<StorytellerStore>()(
           const context = selectSetupContext({ ...previous, phase: "setup" }, selectScriptById(get(), previous.scriptId));
           if (!analyzeSetup(context).readiness.begin.ok) return;
         }
+        const layout = seatSwapLayout(get().seatSwapUndo[undoStack.length - 1], previous);
+        invalidateNightActionCorrections(previous);
         set({
           game: clone(previous),
           undoStack: undoStack.slice(0, -1),
+          ...(layout ? { tokenPositions: { ...get().tokenPositions, ...clone(layout) } } : {}),
         });
       },
 
@@ -3023,6 +3137,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       ensureSyncScope: (code, sessionId) => set(state => {
         if (state.sync && state.sync.code === code && state.sync.sessionId === sessionId) return {};
+        clearNightActionCorrections();
         return { sync: { code, sessionId, ackedGuard: null, ackedGameSeq: 0, lastAttempt: null } };
       }),
 
@@ -3065,7 +3180,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
         };
       }),
 
-      restoreRemoteCheckpoint: (game, guard) => set(state => ({
+      restoreRemoteCheckpoint: (game, guard) => {
+        clearNightActionCorrections();
+        set(state => ({
         game,
         undoStack: [],
         selectedPlayerId: null,
@@ -3081,7 +3198,8 @@ export const useStorytellerStore = create<StorytellerStore>()(
           ? { ...state.sync, ackedGuard: guard, ackedGameSeq: state.localSeq, lastAttempt: null }
           : { code: game.code, sessionId: state.sync?.sessionId ?? state.lobby?.sessionId ?? "", ackedGuard: guard, ackedGameSeq: state.localSeq, lastAttempt: null },
         [SKIP_LOCAL_SEQ]: true,
-      })),
+        }));
+      },
       };
     },
     {
@@ -3102,8 +3220,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
       // still round-trips unchanged (migrateStoreState is a no-op once
       // fromVersion is no longer less than any of its own thresholds).
       merge: (persistedState, currentState) => {
+        clearNightActionCorrections();
         if (persistedState == null) return currentState;
-        return { ...currentState, ...(migrateStoreState(persistedState, STORE_VERSION) as Partial<StorytellerStore>) };
+        const migrated = migrateStoreState(persistedState, STORE_VERSION) as Partial<StorytellerStore>;
+        return { ...currentState, ...migrated, seatSwapUndo: migrated.seatSwapUndo ?? [] };
       },
       partialize: (s) => ({
         game: s.game,
@@ -3113,6 +3233,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         lobby: s.lobby,
         grimoireMode: s.grimoireMode,
         tokenPositions: s.tokenPositions,
+        seatSwapUndo: s.seatSwapUndo,
         localSeq: s.localSeq,
         sync: s.sync,
       }),

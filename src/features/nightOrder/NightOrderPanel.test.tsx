@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { NightOrderPanel } from "./NightOrderPanel";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
@@ -13,7 +13,7 @@ beforeEach(() => {
   usePrivacyStore.setState({ enabled: false });
   useSessionRuntime.setState({ backend: null });
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 function Night() {
   const game = store(s => s.game)!;
   return <NightOrderPanel game={game} script={troubleBrewing} onClose={() => {}} />;
@@ -33,6 +33,8 @@ function setup() {
 }
 it("custom steps can be added, edited, completed, and restored across remount without sending information", () => {
   setup();
+  // A tablet opening the LAN HTTP preview has secure randomness but no randomUUID.
+  vi.stubGlobal("crypto", { getRandomValues: crypto.getRandomValues.bind(crypto) });
   const players = store.getState().game!.players;
   const view = render(<Night />);
   fireEvent.click(screen.getByRole("button", { name: "Add custom night step" }));

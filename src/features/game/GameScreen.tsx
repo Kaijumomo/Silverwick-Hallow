@@ -3,9 +3,12 @@ import { gameLifecycleToken, useStorytellerStore, selectScriptById } from "@/sto
 import { GrimoireCircle } from "@/features/grimoire/GrimoireCircle";
 import { PlayerDrawer } from "@/features/players/PlayerDrawer";
 import { Almanac } from "@/features/almanac/Almanac";
+import { PlayersWorkspace } from "@/features/players/PlayersWorkspace";
 import { NightOrderPanel } from "@/features/nightOrder/NightOrderPanel";
+import { ModernNightPanel } from "@/features/nightOrder/ModernNightPanel";
 import { SetupPanel } from "@/features/setup/SetupPanel";
 import { SeatAssignPopup } from "@/features/grimoire/SeatAssignPopup";
+import { iconUrlFor } from "@/data/iconUrl";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
 import { resolvedCharacters } from "@/data/roleRegistry";
@@ -75,7 +78,10 @@ export function GameScreen() {
   const terminalClosing = useStorytellerStore((s) => s.terminalClose?.status === "closing");
   const [goingLive, setGoingLive] = useState(false);
   const [nightPanelOpen, setNightPanelOpen] = useState(false);
+  const [nightOpenRequest, setNightOpenRequest] = useState(0);
   const [setupPanelOpen, setSetupPanelOpen] = useState(false);
+  const [advancedPlayerId, setAdvancedPlayerId] = useState<string | null>(null);
+  useEffect(() => { setAdvancedPlayerId(current => current === selectedPlayerId ? current : null); }, [selectedPlayerId]);
   const [queuePopupOpen, setQueuePopupOpen] = useState(false);
   // ASTRA-10G-002: an open waiting queue never survives the game ending.
   const gameEnded = useStorytellerStore((s) => s.game?.phase === "ended");
@@ -100,7 +106,7 @@ export function GameScreen() {
   // already open (actionOpen true -> true) but the Storyteller had hidden the
   // dock. Only the actor tap bumps actionRequest; inspecting a participant
   // never does, so inspection never reopens the Night dock.
-  useEffect(() => { if (actionOpen && docked) { setDockTab("night"); setNightPanelOpen(true); } }, [actionOpen, docked, actionRequest]);
+  useEffect(() => { if (actionOpen && layout === "phone") { setDockTab("night"); setNightPanelOpen(true); } }, [actionOpen, layout, actionRequest]);
   const setLens = useShellStore((s) => s.setLens);
   const moreActionsRef = useRef<HTMLButtonElement>(null);
   const [overflowMenuOpen, setOverflowMenuOpen] = useState(false);
@@ -395,11 +401,12 @@ export function GameScreen() {
   // Phase 10G (Section 18): a finished game is a read-only review -- no
   // ordinary game-mutating control is mounted at all.
   const ended = game.phase === "ended";
+  const modernReference = layout !== "phone";
   /** Phase 10G: tonight's unfinished work, from the ONE shared derivation the
    * Night Order renders (never restated here). */
   const nightUnfinished = () => unfinishedNightWork(game, deriveNightWork(game, { script: script ?? null, registry, semantics: CANONICAL_ABILITY_SEMANTICS }));
   const selected = selectedPlayerId ? game.players[selectedPlayerId] : null;
-  const setupVisible = game.phase === "setup" && setupPanelOpen && !!script && !privacyMode;
+  const setupVisible = !modernReference && game.phase === "setup" && setupPanelOpen && !!script && !privacyMode;
   const seatedPlayers = Object.values(game.players).filter((p) => !p.isEmpty);
   const playerCount = seatedPlayers.length;
   const setupTravelerCount = game.phase === "setup" ? seatedPlayers.filter(p => p.isTraveler).length : 0;
@@ -409,8 +416,8 @@ export function GameScreen() {
   const aliveCount = seatedPlayers.filter((p) => p.alive).length;
   const pendingQueueCount = Object.keys(game.pendingPlayers ?? {}).length;
 
-  const nightRail = game.phase === "night" && !!script;
-  const inspectorVisible = !!selected && !ended;
+  const nightRail = !modernReference && game.phase === "night" && !!script;
+  const inspectorVisible = !!selected && !ended && (!modernReference || advancedPlayerId === selected.id);
   // H3: on a phone at RS-20 density the Roster replaces the Table.
   const rosterReplacesTable = layout === "phone" && game.seatOrder.length > 15;
   const effectiveLens: TableLens = rosterReplacesTable && lens === "table" ? "roster"
@@ -425,10 +432,53 @@ export function GameScreen() {
           ? "→ Night"
           : "Game ended";
 
+  const scriptEmblem = script?.characters.find(role => role.type === "demon");
+
+  const phasePrimary = game.phase !== "setup" && !ended ? (
+    <div className="phase-primary">
+      {modernReference && <span className="grimoire-phase-label">{PHASE_LABEL[game.phase]} {game.day}</span>}
+      <button
+        className="btn btn-gold phase-advance"
+        onClick={() => {
+          closeOverflow();
+          // Phase 10A: Day -> Night passes through the dusk review, a
+          // private Storyteller dialog -- unavailable under Privacy Mode
+          // (10A-ASTRA-003); turn Privacy Mode off, then review.
+          if (game.phase === "day") { if (!privacyMode) setDuskReviewOpen(true); return; }
+          // Phase 10G: Night -> Day passes through Dawn Review when
+          // tonight's work is unfinished (advisory -- the Storyteller may
+          // continue anyway); a clean Night advances directly. Like Dusk,
+          // it is private review: unavailable under Privacy Mode.
+          if (game.phase === "night") {
+            if (privacyMode) return;
+            if (nightUnfinished().total > 0) { setDawnReviewOpen(true); return; }
+          }
+          const result = advancePhase();
+          setPhaseError(result.ok ? null : "Setup changed. Open Players to review what needs attention.");
+        }}
+        disabled={privacyMode}
+        title={game.phase === "day" && privacyMode ? "Turn off Privacy Mode to review the Day before continuing to Night"
+          : game.phase === "night" && privacyMode ? "Turn off Privacy Mode to review the Night before continuing to Day" : undefined}
+        aria-describedby={privacyMode ? "phase-advance-reason" : undefined}
+      >
+        {advanceLabel}
+      </button>
+      {privacyMode && (
+        <span id="phase-advance-reason" className="disabled-reason phase-advance-reason">
+          Turn off Privacy Mode first
+        </span>
+      )}
+    </div>
+  ) : null;
+
   return (
-    <div className="game" data-phase={game.phase}>
+    <div className="game" data-phase={game.phase} data-grimoire-modern={modernReference || undefined}>
       <header className="phase-bar">
         <div className="phase-bar-left">
+          {modernReference && <div className="grimoire-script-heading">
+            <span className="grimoire-script-art" aria-hidden="true">{scriptEmblem ? <img src={iconUrlFor(scriptEmblem)} alt="" /> : "✧"}</span>
+            <h1>{script?.name ?? "Grimoire"}</h1>
+          </div>}
           <span className="phase-pill" data-phase={game.phase}>
             {PHASE_LABEL[game.phase] ?? game.phase}
           </span>
@@ -517,10 +567,10 @@ export function GameScreen() {
           <button className="btn btn-sm" onClick={() => { closeOverflow(); setView("home"); }}>
             ← Home
           </button>
-          <button className="btn btn-sm" onClick={() => { closeOverflow(); setAlmanacOpen(true); }}>
+          {!modernReference && <button className="btn btn-sm" onClick={() => { closeOverflow(); setAlmanacOpen(true); }}>
             Almanac
-          </button>
-          {game.phase === "setup" && (
+          </button>}
+          {game.phase === "setup" && !modernReference && (
             <button
               className={`btn ${setupPanelOpen ? "btn-sm" : "btn-gold"}`}
               onClick={() => { closeOverflow(); setSetupPanelOpen((o) => !o); }}
@@ -529,7 +579,7 @@ export function GameScreen() {
               {setupPanelOpen ? "hide setup" : "setup"}
             </button>
           )}
-          {game.phase === "night" && (
+          {!modernReference && game.phase === "night" && (
             <button
               className="btn btn-sm"
               onClick={() => { closeOverflow(); setNightPanelOpen((o) => !o); }}
@@ -637,41 +687,7 @@ export function GameScreen() {
             Storyteller's primary control and stays directly visible at every
             width -- never inside the generic overflow menu. A disabled advance
             says why, adjacent and in words (10H-AC-067). */}
-        {game.phase !== "setup" && !ended && (
-          <div className="phase-primary">
-            <button
-              className="btn btn-gold phase-advance"
-              onClick={() => {
-                closeOverflow();
-                // Phase 10A: Day -> Night passes through the dusk review, a
-                // private Storyteller dialog -- unavailable under Privacy Mode
-                // (10A-ASTRA-003); turn Privacy Mode off, then review.
-                if (game.phase === "day") { if (!privacyMode) setDuskReviewOpen(true); return; }
-                // Phase 10G: Night -> Day passes through Dawn Review when
-                // tonight's work is unfinished (advisory -- the Storyteller may
-                // continue anyway); a clean Night advances directly. Like Dusk,
-                // it is private review: unavailable under Privacy Mode.
-                if (game.phase === "night") {
-                  if (privacyMode) return;
-                  if (nightUnfinished().total > 0) { setDawnReviewOpen(true); return; }
-                }
-                const result = advancePhase();
-                setPhaseError(result.ok ? null : "Setup changed. Open Setup to review what needs attention.");
-              }}
-              disabled={privacyMode}
-              title={game.phase === "day" && privacyMode ? "Turn off Privacy Mode to review the Day before continuing to Night"
-                : game.phase === "night" && privacyMode ? "Turn off Privacy Mode to review the Night before continuing to Day" : undefined}
-              aria-describedby={privacyMode ? "phase-advance-reason" : undefined}
-            >
-              {advanceLabel}
-            </button>
-            {privacyMode && (
-              <span id="phase-advance-reason" className="disabled-reason phase-advance-reason">
-                Turn off Privacy Mode first
-              </span>
-            )}
-          </div>
-        )}
+        {!modernReference && phasePrimary}
       </header>
 
       {lobby && <ConnectionStatus />}
@@ -774,6 +790,11 @@ export function GameScreen() {
           onNewGame={() => setView("newgame")}
           onHome={() => setView("home")} />
       ) : (
+      <PlayersWorkspace key={gameLifecycleToken()} enabled={modernReference}
+        nightOpenRequest={nightOpenRequest}
+        nightKey={modernReference && game.phase === "night" && script ? `${gameLifecycleToken()}:${game.day}` : undefined}
+        night={modernReference && game.phase === "night" && script ? (visible, close) => <ModernNightPanel game={game} script={script} visible={visible} onClose={close} /> : undefined}
+        roles={almanacRoles} onMore={setAdvancedPlayerId} advancedPlayerId={advancedPlayerId}>
       <div className="game-body" data-layout={layout} data-dock={docked ? dockTab : undefined}>
         {setupVisible && script && (
           <SetupPanel
@@ -848,6 +869,8 @@ export function GameScreen() {
           </div>
         )}
       </div>
+      {modernReference && phasePrimary && <div className="grimoire-phase-dock">{phasePrimary}</div>}
+      </PlayersWorkspace>
       )}
       {finishOpen && !ended && (
         <FinishGameDialog multiplayer={!!lobby} onClose={() => setFinishOpen(false)}
@@ -893,7 +916,7 @@ export function GameScreen() {
           onContinue={() => {
             setDuskReviewOpen(false);
             const result = advancePhase();
-            setPhaseError(result.ok ? null : "Setup changed. Open Setup to review what needs attention.");
+            setPhaseError(result.ok ? null : "Setup changed. Open Players to review what needs attention.");
           }}
         />
       )}
@@ -902,11 +925,15 @@ export function GameScreen() {
           game={game}
           unfinished={nightUnfinished()}
           onClose={() => setDawnReviewOpen(false)}
-          onReviewNight={() => { setDawnReviewOpen(false); setNightPanelOpen(true); }}
+          onReviewNight={() => {
+            setDawnReviewOpen(false);
+            if (modernReference) setNightOpenRequest(value => value + 1);
+            else { setNightPanelOpen(true); setDockTab("night"); }
+          }}
           onContinue={() => {
             setDawnReviewOpen(false);
             const result = advancePhase();
-            setPhaseError(result.ok ? null : "Setup changed. Open Setup to review what needs attention.");
+            setPhaseError(result.ok ? null : "Setup changed. Open Players to review what needs attention.");
           }}
         />
       )}

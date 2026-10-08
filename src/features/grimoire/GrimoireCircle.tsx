@@ -1,3 +1,4 @@
+import { usePlayersInteraction } from "@/features/players/PlayersInteraction";
 import { useTargetPicker } from "@/features/abilities/abilityUi";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
@@ -22,6 +23,8 @@ import { effectAccessibleSummary, effectIndicatorLabel, effectIndicators, type E
 import { lifeAccessibleLabel, lifeStatusOf } from "@/stores/lifeState";
 import { LifeShroud, LifeStateText, VoteToken } from "@/features/life/LifeMarks";
 import { abilityUsedMarker, actualAlignmentMarker } from "./tokenMarkers";
+import { OfficialReminderToken } from "@/features/reminders/OfficialReminderToken";
+import { officialEffectPresentation } from "@/features/reminders/officialReminderPresentation";
 import {
   cleanupStatusText,
   groupText,
@@ -159,8 +162,10 @@ function Token({
   mode, reorderable = true, draggedId, onRingDragStart, onRingDragEnd, onRingDropOn,
   onFreeRoamPointerDown, onClick, isGhost = false, needsShownRole = false,
 }: TokenProps) {
+  const modern = usePlayersInteraction()?.active;
   const privacyMode = usePrivacyStore((s) => s.enabled);
   const descriptionId = React.useId();
+  const arcId = `character-arc-${descriptionId.replace(/:/g, "")}`;
   const publicRole = publicTravelerRole(player);
   // Phase 10H (§6.2, H1): the Shown Role is primary on the Storyteller Table;
   // the Actual Role stays authoritative and is spelled out in the accessible
@@ -182,6 +187,7 @@ function Token({
   // hidden with CSS). A legacy Effect with an unresolved lifetime is a
   // concise Storyteller-only "Needs check".
   const indicators = privacyMode ? [] : effectIndicators(player);
+  const officialEffects = modern && !privacyMode ? officialEffectPresentation(player) : null;
   const needsCheckBase = !privacyMode && (life.anomalies.length > 0 || effectsNeedingCheck(player).length > 0);
   const effectSummary = privacyMode ? "" : effectAccessibleSummary(player);
   // Phase 10C: Reminders are Storyteller-private notation -- under Privacy
@@ -217,7 +223,7 @@ function Token({
     acting ? "Acting now" : "",
     pickable === true ? "Eligible target" : pickable === false ? "Not an eligible target" : "",
   ].filter(Boolean).join(". ");
-  const nonIconEffects = indicators.filter((summary) => !summary.indicator.icon);
+  const nonIconEffects = officialEffects?.fallback ?? indicators.filter((summary) => !summary.indicator.icon);
   const flagCount = (diverges ? 1 : 0) + markers.length + (!privacyMode && needsShownRole ? 1 : 0) + (needsCheck ? 1 : 0)
     + (spec.reminderLabels === 0 && nonIconEffects.length > 0 ? 1 : 0) + (spec.text && !player.alive ? 1 : 0);
 
@@ -270,6 +276,7 @@ function Token({
       className={classes}
       data-tier={spec.tier}
       data-player-id={player.id}
+      data-team={displayRole?.type}
       style={{ left: `calc(50% + ${x}px)`, top: `calc(50% + ${y}px)`, width: spec.width, height: spec.height }}
       onClick={isGhost ? undefined : onClick}
       role="button"
@@ -302,15 +309,24 @@ function Token({
               }}
             />
           ) : null}
+          {modern && displayRole && (!privacyMode || publicRole) && spec.text && <svg className="token-character-arc" viewBox="0 0 100 100" aria-hidden="true">
+            <defs><path id={arcId} d="M 10,56 A 41,41 0 0 0 90,56" /></defs>
+            <text><textPath href={`#${arcId}`} startOffset="50%" textAnchor="middle">{displayRole.name}</textPath></text>
+          </svg>}
           {online === false && (
             <span className="token-presence offline" title="Offline" aria-label="Offline" />
           )}
           <LifeShroud state={life.state} />
         </div>
         <VoteToken state={life.state} />
-        {spec.tier !== "XS" && indicators.filter((summary) => summary.indicator.icon).map((summary) => (
+        {spec.tier !== "XS" && !modern && indicators.filter((summary) => summary.indicator.icon).map((summary) => (
           <EffectChip key={summary.indicator.key} summary={summary} />
         ))}
+        {spec.tier !== "XS" && !!officialEffects?.tokens.length && <span className="token-official-effects" aria-hidden="true"
+          style={{ width: spec.width, left: (spec.disc - spec.width) / 2 }}>
+          {officialEffects.tokens.map(token => <OfficialReminderToken key={token.key} role={token.role} label={token.label}
+            count={token.instances.length} decorative />)}
+        </span>}
         {/* Phase 10H (§6.4): the lit Night actor -- a static treatment plus
             the words "Acting now", distinct from selection and focus. */}
         {acting && <span className="token-acting" aria-hidden="true">{spec.text ? "Acting now" : "Acting"}</span>}
@@ -338,11 +354,11 @@ function Token({
         {privacyMode && !publicRole ? (
           <div className="token-role token-role-private">role hidden</div>
         ) : displayRole ? (
-          <div className={`token-role type-${displayRole.type}`}>{displayRole.name}</div>
+          <div className={`token-role type-${displayRole.type}${modern ? " sr-only" : ""}`}>{displayRole.name}</div>
         ) : (
           <div className="token-role unassigned">unassigned</div>
         )}
-        <div className="token-name">{player.name}</div>
+        <div className="token-name" title={player.name}>{modern && <span className="token-seat-label" aria-hidden="true">{player.seat + 1}</span>}<span>{player.name}</span></div>
         {spec.reminderLabels > 0 && nonIconEffects.length > 0 && (
           <div className="token-effects">
             {nonIconEffects.slice(0, spec.reminderLabels).map((summary) => (
@@ -419,6 +435,7 @@ type Props = {
 };
 
 export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}) {
+  const playersInteraction = usePlayersInteraction();
   const game = useStorytellerStore((s) => s.game);
   const script = useStorytellerStore((s) =>
     game ? selectScriptById(s, game.scriptId) : undefined
@@ -492,7 +509,7 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
   // and free-roam positions are local-only and never touch the game.)
   const readOnly = game.phase === "ended";
   const litActorId = litActorIdOf(game, privacyMode, litActor);
-  const tapSeat = (id: PlayerId) => tapSeatShared(game, id, litActorId);
+  const tapSeat = (id: PlayerId) => { if (!playersInteraction?.tap(id)) tapSeatShared(game, id, litActorId); };
   const playerCount = game.seatOrder.length;
   // Phase 10H (§§5.1, 6.1; 10H-AC-009/010): the Table is an oval fitted to the
   // MEASURED stage rectangle (ResizeObserver state, never a layout read during
@@ -641,11 +658,11 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
     <div className="grimoire-mode-controls">
       {picking && (
         <div className="grimoire-picking" role="status">
-          Choosing {picking.label}: tap a seat
+          {picking.label} · Tap a player
           <button className="grimoire-mode-btn" onClick={() => useTargetPicker.getState().cancel()}>Cancel</button>
         </div>
       )}
-      {!readOnly && <>
+      {!readOnly && !playersInteraction?.active && <>
         {/* Phase 10H (10H-AC-068): Add player lives in the toolbar row -- never
             a floating control over the seats or the phone action zone. */}
         {playerCount > 0 && !arrivalsAreTravelers(game) && (
@@ -669,13 +686,13 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
           >
             ⊙ Ring
           </button>
-          <button
+          {!playersInteraction?.active && <button
             className="grimoire-mode-btn grimoire-snap-btn"
             onClick={() => { clearTokenPositions(); setGrimoireMode("ring"); }}
             title="Reset all token positions to ring"
           >
             ↺ Snap to ring
-          </button>
+          </button>}
         </>
       )}
     </div>
@@ -706,6 +723,11 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
             <div className="grimoire-ring inner" />
           </>
         )}
+        {playersInteraction?.active && playerCount > 0 && <div className="grimoire-watermark" aria-hidden="true">
+          <span>{game.phase === "setup" ? "Setup" : `${game.phase} ${game.day}`}</span>
+          <strong>Silverwick Hollow</strong>
+          <em>{game.phase === "night" ? "The town sleeps" : game.phase === "day" ? "The town awakens" : game.phase === "ended" ? "The story is complete" : "Prepare your town"}</em>
+        </div>}
 
         {playerCount === 0 ? (
           <div className="grimoire-empty">
@@ -743,11 +765,11 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
                 spec={spec}
                 x={isDragging && ghostPos ? ghostPos.x : pos.x}
                 y={isDragging && ghostPos ? ghostPos.y : pos.y}
-                selected={selectedPlayerId === id}
+                selected={selectedPlayerId === id || playersInteraction?.swappingPlayerId === id}
                 acting={litActorId === id}
                 pickable={picking ? seatPickable(game, id, picking) : null}
                 mode={grimoireMode}
-                reorderable={!readOnly}
+                reorderable={!readOnly && !playersInteraction?.swapping}
                 draggedId={ringDraggedId}
                 onRingDragStart={(srcId) => setRingDraggedId(srcId)}
                 onRingDragEnd={() => setRingDraggedId(null)}
@@ -765,7 +787,7 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
                   order.splice(insertAt, 0, src);
                   setSeatOrder(order);
                 }}
-                onFreeRoamPointerDown={handleTokenPointerDown}
+                onFreeRoamPointerDown={playersInteraction?.swapping ? () => {} : handleTokenPointerDown}
                 onClick={() => tapSeat(id)}
               />
             );

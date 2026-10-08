@@ -55,7 +55,7 @@ afterEach(() => {
 describe("responsive Storyteller workspace", () => {
   it("recalculates from stage width and height and caps large workspaces", () => {
     const view = render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: "setup" })); // deliberately open Setup
+    fireEvent.click(screen.getByRole("button", { name: "Players" })); // deliberately open Setup
     const stage = view.container.querySelector(".grimoire-stage")!;
     const canvas = view.container.querySelector(".grimoire")!;
     // Phase 10H (§§5.1, 6.1): the Table is an oval fitted to the measured
@@ -65,14 +65,14 @@ describe("responsive Storyteller workspace", () => {
     expect(canvas).toHaveStyle({ width: "1040px", height: "540px" });
     resizeStage(stage, 472, 980);
     expect(canvas).toHaveStyle({ width: "472px", height: "900px" });
-    fireEvent.click(screen.getByRole("button", { name: "Close setup panel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close Players panel" }));
     resizeStage(stage, 1800, 1200);
     expect(canvas).toHaveStyle({ width: "1735px", height: "900px" });
   });
 
   it("preserves the practical diameter as seat count changes from 5 through 15", () => {
     const view = render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: "setup" })); // deliberately open Setup
+    fireEvent.click(screen.getByRole("button", { name: "Players" })); // deliberately open Setup
     const stage = view.container.querySelector(".grimoire-stage")!;
     const canvas = view.container.querySelector(".grimoire")!;
     resizeStage(stage, 1000, 650);
@@ -114,16 +114,18 @@ describe("responsive Storyteller workspace", () => {
     expect(document.body.style.overflow).not.toBe("hidden");
   });
 
-  it("Phase 10H: an open Setup stays the same non-modal workspace across a desktop / phone resize", () => {
+  it("desktop Players and legacy phone Setup remain separate across a resize", () => {
     const view = render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: "setup" })); // deliberately open Setup
-    expect(screen.getByRole("complementary", { name: "Setup helper" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Players" }));
+    expect(screen.getByRole("complementary", { name: "Players" })).toBeVisible();
     setNarrow(true);
-    expect(screen.getByRole("complementary", { name: "Setup helper" })).toBeInTheDocument();
-    expect(screen.queryByRole("dialog", { name: "Setup" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Players" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "setup" }));
+    expect(screen.getByRole("complementary", { name: "Setup helper" })).toBeVisible();
     expect(view.container.querySelector(".grimoire-wrap")!.closest("[inert]")).toBeNull();
     setNarrow(false);
-    expect(screen.getByRole("complementary", { name: "Setup helper" })).toBeInTheDocument();
+    expect(screen.queryByRole("complementary", { name: "Setup helper" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Players" })).toHaveAttribute("aria-expanded", "false");
     expect(document.body.style.overflow).not.toBe("hidden");
   });
 
@@ -241,6 +243,8 @@ describe("ASTRA-10H-005: Privacy holds the shell geometry with empty placeholder
     const g = setupGame(["monk", "imp", "empath", "chef", "washerwoman"], { phase: "night", day: 2, setupRolesDealt: true, setupRolesRevealed: true });
     storyteller.setState({ game: g, customScripts: { [setupScript.id]: setupScript } });
     const view = render(<GameScreen />);
+    // The detailed action workspace remains available behind the compact guide.
+    fireEvent.click(screen.getByRole("button", { name: "Additional night controls" }));
     fireEvent.click(view.container.querySelector<HTMLElement>(".grimoire .token.acting")!);
     const card = screen.getByRole("dialog", { name: /^Monk/ });
     expect(card.parentElement).toHaveAttribute("id", "action-card-stage-host");

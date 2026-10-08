@@ -93,9 +93,21 @@ const ALLOWED = new Set([
   "stores/history.ts",
   "stores/reminderResolution.ts",
   "stores/storytellerStore.ts",
+  // Correction eligibility deliberately EXCLUDES notation from its comparison;
+  // it never reads labels or uses reminders to calculate an effect.
+  "stores/nightActionCorrection.ts",
   "features/reminders/reminderPresentation.ts",
+  // Read-only canonical token metadata and sourced Effect presentation;
+  // player notation never supplies rules or mechanical state.
+  "features/reminders/officialReminderPresentation.ts",
   "features/reminders/ReminderControls.tsx",
   "features/players/PlayerDrawer.tsx",
+  // Storyteller-only notation summary and the existing ReminderControls
+  // editor; privacy removes the entire popover. No rules use these labels.
+  "features/players/PlayerPopover.tsx",
+  // Definition-only RoleDef.reminders catalogue in the chooser footer;
+  // receives no player ReminderRecord or authoritative mechanics state.
+  "features/players/RoleChooser.tsx",
   "features/grimoire/GrimoireCircle.tsx",
   // Phase 10F: the ability coordinator WRITES notation through the 10C seam
   // (planReminderTransaction / applyReminderPlan) -- never reads Reminders;
