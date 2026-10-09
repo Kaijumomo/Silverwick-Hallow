@@ -10,7 +10,8 @@ import { Modal } from "@/components/Modal";
 import { GrimoireIcon, type GrimoireIconName } from "@/components/GrimoireIcon";
 import { RoleChooser } from "@/features/players/RoleChooser";
 import type { RoleDef } from "@/stores/types";
-import { PlayerPresentation, type PresentationPayload } from "./PlayerPresentation";
+import type { PresentationPayload } from "./PlayerPresentation";
+import { useInfoPresentation } from "./InfoPresentationBoundary";
 import { characterCard, infoRecipients, infoStatistics, seatedPlayers, setupPayload, type SetupView } from "./infoModel";
 import { captureInfoContext, changeInfoBluff, infoContextCurrent, type InfoContext } from "./infoCommands";
 import "./info.css";
@@ -36,7 +37,7 @@ export function InfoPanel() {
   const panelRef = useRef<HTMLDivElement>(null);
   const [recipientId, setRecipientId] = useState("");
   const [chooser, setChooser] = useState<Choice | null>(null);
-  const [presentation, setPresentation] = useState<{ context: InfoContext; payload: PresentationPayload } | null>(null);
+  const setPresentation = useInfoPresentation();
   const [recipientView, setRecipientView] = useState<{ view: SetupView; context: InfoContext } | null>(null);
   const [detail, setDetail] = useState<RoleDef | null>(null);
   const [error, setError] = useState("");
@@ -52,7 +53,7 @@ export function InfoPanel() {
   const current = captureInfoContext(), canEdit = game.phase !== "ended" && infoContextCurrent(current);
   const show = (payload: PresentationPayload, context = captureInfoContext()) => {
     if (!infoContextCurrent(context)) { setError("The game or connection changed. Review the information again."); return; }
-    setError(""); setSetupNotice(null); setChooser(null); setRecipientView(null); setDetail(null); setPresentation({ context, payload });
+    setError(""); setSetupNotice(null); setChooser(null); setRecipientView(null); setDetail(null); setPresentation({ context, payload, returnFocusRef: panelRef });
   };
   const showSetup = (view: SetupView, id: string) => {
     try {
@@ -122,6 +123,5 @@ export function InfoPanel() {
       onChoose={choose} onClear={chooser.recipient ? () => choose() : undefined} onClose={() => { setChooser(null); setError(""); }} error={error || undefined} />}
     {recipientView && <Modal title="Who is this information for?" onClose={() => setRecipientView(null)}><div className="info-recipient-list">{infoContextCurrent(recipientView.context) ? infoRecipients(game, script, recipientView.view).map(p => <button className="btn" key={p.id} onClick={() => showSetup(recipientView.view, p.id)}>{p.name}{p.behaviorMode === "fake_demon_behavior" ? " · apparent Demon" : ""}</button>) : <p>The game changed. Close and reopen Setup Info.</p>}{error && <p role="alert" className="info-error">{error}</p>}</div></Modal>}
     {detail && <Modal title={detail.name} onClose={() => setDetail(null)}><div className="info-modifier-detail"><img src={iconUrlFor(detail)} alt=""/><p>{detail.ability}</p><small>Selected during initial setup.</small></div></Modal>}
-    {presentation && (infoContextCurrent(presentation.context) ? <PlayerPresentation returnFocusRef={panelRef} payload={presentation.payload} onClose={() => setPresentation(null)} /> : <PlayerPresentation returnFocusRef={panelRef} payload={{ kind: "setup", groups: [{ heading: "Information changed", names: ["Return to review the current information."] }] }} onClose={() => setPresentation(null)} />)}
   </div>;
 }

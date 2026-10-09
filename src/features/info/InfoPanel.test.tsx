@@ -6,6 +6,7 @@ import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { ReferenceWorkspace } from "@/features/almanac/ReferenceWorkspace";
 import { InfoPanel } from "./InfoPanel";
+import { InfoPresentationBoundary } from "./InfoPresentationBoundary";
 
 beforeEach(() => {
   usePrivacyStore.setState({ enabled: false });
@@ -15,7 +16,7 @@ beforeEach(() => {
 afterEach(cleanup);
 function Workspace() {
   const privacy = usePrivacyStore(s => s.enabled);
-  return <ReferenceWorkspace enabled privacyMode={privacy} roles={setupScript.characters} scriptName="Test" info={<InfoPanel />}><div data-testid="private-board">Private grimoire</div></ReferenceWorkspace>;
+  return <InfoPresentationBoundary><ReferenceWorkspace enabled privacyMode={privacy} roles={setupScript.characters} scriptName="Test" info={<InfoPanel />}><div data-testid="private-board">Private grimoire</div></ReferenceWorkspace></InfoPresentationBoundary>;
 }
 function open() { render(<Workspace/>); fireEvent.click(screen.getByRole("button", { name: "Info" })); }
 

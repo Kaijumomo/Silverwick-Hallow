@@ -1,4 +1,5 @@
 import { lifeStatusOf, hasVoteAvailable } from "@/stores/lifeState";
+import { isInitialRevealComplete } from "@/stores/identity";
 import { iconUrlFor } from "@/data/iconUrl";
 import { isCanonicalRole } from "@/data/canonical";
 import { buildRegistry } from "@/data/roleRegistry";
@@ -38,7 +39,7 @@ export function bluffChoiceError(game: StorytellerLobbyRecord, script: Script, p
   if (!player || player.isEmpty || !seatedPlayers(game).includes(player) || !getPrivateInfoApplicability(player, registry).bluffs) return "Choose a current Demon information recipient.";
   if (!role || !["townsfolk", "outsider"].includes(role.type)) return "Choose a Townsfolk or Outsider character.";
   const policy = evilInformationPolicy(seatedPlayers(game), registry, game);
-  if (!policy.allowInPlayBluffs && seatedPlayers(game).some(p => p.actualRole === roleId)) return `${role.name} is in play. Choose an out-of-play character.`;
+  if (player.behaviorMode !== "fake_demon_behavior" && !policy.allowInPlayBluffs && seatedPlayers(game).some(p => p.actualRole === roleId)) return `${role.name} is in play. Choose an out-of-play character.`;
   return undefined;
 }
 
@@ -52,6 +53,12 @@ export function setupPayload(game: StorytellerLobbyRecord, script: Script, view:
   const bluffs = (player.privateInfo?.bluffs ?? []).map(id => {
     const role = registry.get(id);
     if (!role) throw new Error("Review the bluff characters before showing them.");
+    // Setup edits retain private drafts. Recheck their current availability at
+    // presentation time without deleting them or reinterpreting midgame bluffs.
+    if ((view === "bluffs" || view === "demon") && game.phase === "setup" && !isInitialRevealComplete(game)) {
+      const error = bluffChoiceError(game, script, recipientId, id);
+      if (error) throw new Error(`Review the bluff characters before showing them. ${error}`);
+    }
     return characterCard(role);
   });
   if (view === "traveler") {

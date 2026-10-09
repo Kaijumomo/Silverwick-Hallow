@@ -37,6 +37,29 @@ describe("Info bluff command boundaries", () => {
     expect(bluffChoiceError(game(), setupScript, id, "scarletwoman")).toMatch(/Townsfolk/);
     expect(bluffChoiceError({ ...game(), lorics: ["pope"] }, setupScript, id, "washerwoman")).toBeUndefined();
   });
+  it.each(["apparent Demon", "Pope"])("allows an in-play good bluff for %s through the command with reversible private-only state", exception => {
+    const id = demon(), original = game();
+    store.setState({ game: exception === "Pope" ? { ...original, lorics: ["pope"] } : {
+      ...original, players: { ...original.players, [id]: { ...original.players[id]!, actualRole: "lunatic", shownRole: "imp", behaviorMode: "fake_demon_behavior" } },
+    } });
+    const before = game(), undo = store.getState().undoStack.length;
+    expect(changeInfoBluff(captureInfoContext(), id, 0, "washerwoman")).toBeUndefined();
+    expect(game().players[id]!.privateInfo?.bluffs).toEqual(["washerwoman"]);
+    expect(store.getState().undoStack).toHaveLength(undo + 1);
+    expect(game().players[id]!.publishedPacket).toEqual(before.players[id]!.publishedPacket);
+    expect(game().informationDeliveries).toEqual(before.informationDeliveries);
+    expect(game().nightProgress).toEqual(before.nightProgress);
+    expect(changeInfoBluff(captureInfoContext(), id, 1, "imp")).toMatch(/Townsfolk or Outsider/);
+    expect(store.getState().undoStack).toHaveLength(undo + 1);
+    store.getState().undo();
+    expect(game().players[id]!.privateInfo?.bluffs).toEqual(before.players[id]!.privateInfo?.bluffs);
+  });
+  it("refuses an ordinary in-play bluff through the command without changing state or Undo", () => {
+    const before = game(), undo = store.getState().undoStack;
+    expect(changeInfoBluff(captureInfoContext(), demon(), 0, "washerwoman")).toMatch(/in play/);
+    expect(game()).toBe(before);
+    expect(store.getState().undoStack).toBe(undo);
+  });
   it.each(["changed", "ended", "closing", "privacy", "connection"])("refuses %s callbacks without Undo or data change", condition => {
     const context = captureInfoContext(), id = demon();
     if (condition === "changed") store.setState({ game: { ...game(), notes: "changed" } });
@@ -61,6 +84,36 @@ describe("Info bluff command boundaries", () => {
 });
 
 describe("Recipient-safe local information", () => {
+  it.each(["bluffs", "demon"] as const)("requires review of stale pre-reveal bluffs in the %s view without discarding drafts or Undo", view => {
+    store.setState({ game: setupGame(undefined, { setupRolesDealt: true, setupRolesRevealed: false }) });
+    const id = demon();
+    expect(changeInfoBluff(captureInfoContext(), id, 0, "monk")).toBeUndefined();
+    expect(store.getState().replaceSetupRole("p0", "monk").ok).toBe(true);
+    const before = game(), snapshot = JSON.stringify(before), undo = store.getState().undoStack;
+    expect(before.players[id]!.privateInfo?.bluffs).toEqual(["monk"]);
+    expect(() => setupPayload(before, setupScript, view, id)).toThrow(/Review the bluff characters.*Monk is in play/);
+    expect(game()).toBe(before);
+    expect(JSON.stringify(game())).toBe(snapshot);
+    expect(store.getState().undoStack).toBe(undo);
+    store.getState().undo();
+    expect(game().players.p0!.actualRole).toBe("washerwoman");
+    expect(JSON.stringify(setupPayload(game(), setupScript, view, id))).toContain("Monk");
+  });
+  it.each(["bluffs", "demon"] as const)("preserves apparent-Demon and Pope in-play exceptions in pre-reveal %s presentations", view => {
+    const base = setupGame(undefined, { setupRolesDealt: true, setupRolesRevealed: false });
+    const player = { ...base.players.p6!, privateInfo: { bluffs: ["washerwoman"], fakeMinions: ["p0"] } };
+    const apparent = { ...base, players: { ...base.players, p6: { ...player, actualRole: "lunatic", shownRole: "imp", behaviorMode: "fake_demon_behavior" as const } } };
+    const pope = { ...base, lorics: ["pope"], players: { ...base.players, p6: player } };
+    expect(JSON.stringify(setupPayload(apparent, setupScript, view, "p6"))).toContain("Washerwoman");
+    expect(JSON.stringify(setupPayload(pope, setupScript, view, "p6"))).toContain("Washerwoman");
+  });
+  it.each(["bluffs", "demon"] as const)("preserves already-revealed and midgame historical bluff semantics in the %s view", view => {
+    const base = setupGame(undefined, { setupRolesDealt: true, setupRolesRevealed: true });
+    base.players.p6 = { ...base.players.p6!, privateInfo: { bluffs: ["washerwoman"] } };
+    expect(JSON.stringify(setupPayload(base, setupScript, view, "p6"))).toContain("Washerwoman");
+    expect(JSON.stringify(setupPayload({ ...base, phase: "night", day: 2, setupRolesRevealed: undefined }, setupScript, view, "p6"))).toContain("Washerwoman");
+    expect(JSON.stringify(setupPayload({ ...base, phase: "setup", day: 1, setupRolesRevealed: undefined }, setupScript, view, "p6"))).toContain("Washerwoman");
+  });
   it("does not infer actual teammates for an apparent Demon", () => {
     const id = demon();
     const apparent = { ...game().players[id]!, actualRole: "lunatic", shownRole: "imp", behaviorMode: "fake_demon_behavior" as const, privateInfo: { bluffs: ["monk"], fakeMinions: ["p0"] } };
