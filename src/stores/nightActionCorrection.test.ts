@@ -54,11 +54,13 @@ describe("bounded Night target correction", () => {
     expect(getNightActionCorrection(game(), 2, stepKey())?.target.playerId).toBe("p3");
   });
 
-  it("removes the old self-poison before determining whether the actor functions", () => {
-    expect(act("p0")).toMatchObject({ ok: true });
-    expect(state().correctNightActionTarget(correction())).toMatchObject({ ok: true, changed: true });
+  it("unmodeled self-poison stays Manual and creates no automated correction receipt", () => {
+    const before = game();
+    expect(act("p0")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(state().correctNightActionTarget(correction())).toMatchObject({ ok: false });
+    expect(game()).toBe(before);
     expect(game().players.p0!.effects).toHaveLength(0);
-    expect(game().players.p2!.effects).toEqual([expect.objectContaining({ type: "poisoned" })]);
+    expect(game().players.p2!.effects).toEqual([]);
   });
 
   it("keeps unrelated notes and reminder notation", () => {

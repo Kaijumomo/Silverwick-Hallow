@@ -1,7 +1,7 @@
 import { canonicalRoles } from "@/data/canonical";
 import { buildRegistry } from "@/data/roleRegistry";
 import { isTabletTrial } from "@/config/trial";
-import { captureVotingContext, useStorytellerStore } from "@/stores/storytellerStore";
+import { useStorytellerStore } from "@/stores/storytellerStore";
 import { changeAlignmentIntent } from "@/stores/alignmentResolution";
 import type { PlayerId } from "@/stores/types";
 
@@ -51,10 +51,13 @@ export function seedTabletTrial(size: TrialSize): void {
   accepted(state().spendGhostVote(ids[8]!), "Use Ignatius's dead vote");
   accepted(state().advancePhase(), "Day 2");
   const bind = (id: PlayerId) => ({ playerId: id, participantId: state().game!.players[id]!.participantId! });
-  const game = state().game!;
-  accepted(state().resolveVoting({ kind: "bureaucrat", code: game.code, day: game.day,
-    expectedRevision: game.voting?.revision ?? 0, modifierId: "trial-bureaucrat-day-2",
-    source: bind(ids[ordinaryCount]!), target: bind(ids[2]!) }, captureVotingContext()), "Give Cass three votes");
+  // This mixed-script practice table contains unreviewed interactions. Record
+  // the Storyteller's sample selection as notation; its vote contribution is
+  // entered with the existing explicit voting adjustment during practice.
+  accepted(state().resolveReminders({ intents: [{ kind: "place", target: bind(ids[2]!), reminder: {
+    label: "3 Votes", source: bind(ids[ordinaryCount]!), sourceCharacter: "bureaucrat",
+    note: "Sample selection: enter the vote contribution manually after adjudicating the ability.",
+  } }] }), "Record Cass's sample Bureaucrat selection");
   state().selectPlayer(null);
   state().setView("game");
   // Seed construction is not a review action. Keep Undo for actions the user takes.

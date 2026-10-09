@@ -13,6 +13,29 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("local token-layout Undo in chronological order", () => {
+  it("keeps a character commit and layout inverses aligned in storage, across reload and Undo", async () => {
+    state().moveToken("p0", 100, 200);
+    const beforeCharacter = state().game!;
+    expect(state().resolveReminders({ intents: [{ kind: "place", target: {
+      playerId: "p1", participantId: beforeCharacter.players.p1!.participantId!,
+    }, reminder: { label: "Selected" } }] })).toMatchObject({ ok: true, changed: true });
+    const afterCharacter = state().game!;
+    state().resetTokenPositions();
+    const saved = localStorage.getItem(key)!;
+    expect(JSON.parse(saved).state.localLayoutUndo).toEqual(state().localLayoutUndo);
+    store.setState({ game: null, undoStack: [], localLayoutUndo: [], tokenPositions: {} });
+    localStorage.setItem(key, saved);
+    await store.persist.rehydrate();
+    state().undo();
+    expect(state().tokenPositions.p0).toEqual({ x: 100, y: 200 });
+    expect(state().game).toEqual(afterCharacter);
+    state().undo();
+    expect(state().game).toEqual(beforeCharacter);
+    state().undo();
+    expect(state().tokenPositions).toEqual({});
+    expect(state().game).toEqual(beforeCharacter);
+  });
+
   it("one completed move and its Undo preserve the authoritative game reference and writer sequence", () => {
     const game = state().game;
     expect(state().moveToken("p0", 100, 200)).toEqual({ ok: true });

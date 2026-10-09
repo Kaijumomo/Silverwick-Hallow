@@ -38,14 +38,14 @@ describe("Empath -- functioning actual Empath", () => {
     expect(delivered(planned(plan(g, request(g, "p0", "empath")))).informationActionId).toBe("empath-first-night");
   });
 
-  it("an ambiguous neighbour registration asks the Storyteller for the final 0/1/2", () => {
+  it("ambiguous neighbour registration makes the whole action Manual, even with a legacy judgment", () => {
     const g = patchPlayer(proofGame(ROLES), "p6", { actualRole: "spy" }); // may misregister
     const asked = plan(g, request(g, "p0", "empath"));
-    expect(requirementIds(asked)).toEqual([EMPATH_JUDGMENT]);
+    expect(asked).toMatchObject({ ok: false, code: "unsupported" });
     const judged = plan(g, request(g, "p0", "empath", {}, { judgments: { [EMPATH_JUDGMENT]: num(1) } }));
-    expect(delivered(planned(judged)).values![0]).toMatchObject({ value: 1 });
-    expect(judged).toMatchObject({ plan: { needsConfirmation: true } });
-    expect(plan(g, request(g, "p0", "empath", {}, { judgments: { [EMPATH_JUDGMENT]: num(3) } }))).toMatchObject({ ok: false, code: "illegal" });
+    expect(judged).toMatchObject({ ok: false, code: "unsupported" });
+    expect(plan(g, request(g, "p0", "empath", {}, { judgments: { [EMPATH_JUDGMENT]: num(3) } }))).toMatchObject({ ok: false, code: "unsupported" });
+    expect(g.informationDeliveries).toEqual([]);
   });
 
   it("an impaired Empath: the Storyteller chooses the number shown (no calculation)", () => {

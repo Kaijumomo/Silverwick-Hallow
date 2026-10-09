@@ -19,8 +19,8 @@ function resize(stage: Element, width: number, height: number) {
 }
 const geometry = (container: HTMLElement) => [...container.querySelectorAll<HTMLElement>(".grimoire .token")]
   .map(token => [token.style.left, token.style.top, token.style.width, token.style.height]);
-function playing(phase: "day" | "night" = "night") {
-  storyteller.setState({ game: setupGame(["monk", "imp", "empath", "chef", "washerwoman"],
+function playing(phase: "day" | "night" = "night", roles = ["monk", "imp", "empath", "chef", "washerwoman"]) {
+  storyteller.setState({ game: setupGame(roles,
     { phase, day: 2, setupRolesDealt: true, setupRolesRevealed: true }),
     customScripts: { [setupScript.id]: setupScript } });
   return render(<GameScreen />);
@@ -31,11 +31,15 @@ const openNight = () => fireEvent.click(screen.getByRole("button", { name: "Nigh
 const card = () => screen.getByRole("dialog", { name: /^Imp/ });
 const slot = () => card().querySelector<HTMLElement>("[data-pick-slot]")!.dataset.pickSlot!;
 function impDraft() {
-  const view = playing();
+  // A complete authorized choice resolves immediately in strict gameplay.
+  // This star-pass still needs a successor, so it is a genuine partial draft.
+  const view = playing("night", ["monk", "imp", "poisoner", "baron", "chef"]);
   fireEvent.click(screen.getByRole("button", { name: /^Imp Player 1/ }));
   fireEvent.click(screen.getByRole("button", { name: "Continue action" }));
   const pick = slot();
-  choose(pick, "p2", card());
+  choose(pick, "p1", card());
+  expect(screen.getByRole("region", { name: "Further choices" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Resolve" })).toBeNull();
   return { view, pick };
 }
 
@@ -168,7 +172,7 @@ describe("Night navigation and recovery in the single shell", () => {
     for (let repeat = 0; repeat < 3; repeat++) {
       hideNight(); expect(screen.queryByRole("dialog", { name: /^Imp/ })).toBeNull();
       fireEvent.click(actor(view.container));
-      expect(chosen(pick, card())).toBe("p2");
+      expect(chosen(pick, card())).toBe("p1");
     }
     expect(state().game).toBe(before);
   });
@@ -180,7 +184,7 @@ describe("Night navigation and recovery in the single shell", () => {
     expect(state().selectedPlayerId).toBe("p3");
     expect(screen.queryByRole("region", { name: "Night 2 guide" })).toBeNull();
     fireEvent.click(actor(view.container));
-    expect(chosen(pick, card())).toBe("p2");
+    expect(chosen(pick, card())).toBe("p1");
     expect(state().selectedPlayerId).toBeNull();
   });
 

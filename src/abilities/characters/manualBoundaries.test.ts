@@ -11,7 +11,7 @@ import { evilInformationPolicy } from "@/features/nightOrder/nightRules";
 import { INVOCATION_PATHS } from "@/abilities/invocation";
 import { TOYMAKER_ATTACK_MESSAGE } from "./modifierHooks";
 import { choiceId } from "./alhadikhia";
-import { bind, homebrewScript, patchPlayer, pick, plan, planned, proofEnv, proofGame, proofRegistry, proofScript, request, requirementIds, yes } from "@/test/proofFixtures";
+import { bind, homebrewScript, patchPlayer, pick, plan, planned, proofEnv, proofGame, proofRegistry, proofScript, request, yes } from "@/test/proofFixtures";
 import { buildRegistry } from "@/data/roleRegistry";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
@@ -52,18 +52,19 @@ describe("Toymaker -- verified hook; skip history is never claimed", () => {
   const g = withToymaker(proofGame(["imp", "poisoner", "monk", "chef", "empath", "fortuneteller", "saint"], "night", 2));
   const env = () => proofEnv({ modifiers: activeModifiers(g, proofRegistry) });
 
-  it("the Demon's attack asks the Storyteller (Silverwick does not know whether the required skip happened)", () => {
+  it("the Demon's whole attack stays Manual while the required skip is unknown", () => {
     const result = plan(g, request(g, "p0", "imp", { target: pick(g, "p3") }), env());
-    expect(result).toMatchObject({ ok: false, code: "needsInput", message: TOYMAKER_ATTACK_MESSAGE, requirements: [{ id: "modifier:fabled:toymaker" }] });
+    expect(result).toMatchObject({ ok: false, code: "unsupported", message: TOYMAKER_ATTACK_MESSAGE });
     const allowed = plan(g, request(g, "p0", "imp", { target: pick(g, "p3") }, { judgments: { "modifier:fabled:toymaker": yes(true) } }), env());
-    expect(planned(allowed).players.p3!.alive).toBe(false);
+    expect(allowed).toMatchObject({ ok: false, code: "unsupported" });
+    expect(g.players.p3!.alive).toBe(true);
   });
 
   it("every Demon attack evaluation is gated (Al-Hadikhia too)", () => {
     const al = withToymaker(proofGame(["alhadikhia", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"], "night", 2));
     const req = request(al, "p0", "alhadikhia", { chosen: pick(al, "p1", "p2", "p3"),
       ...Object.fromEntries(["p1", "p2", "p3"].map((id, index) => [choiceId(index, bind(al, id)), yes(false)])) });
-    expect(requirementIds(plan(al, req, proofEnv({ modifiers: activeModifiers(al, proofRegistry) })))).toEqual(["modifier:fabled:toymaker"]);
+    expect(plan(al, req, proofEnv({ modifiers: activeModifiers(al, proofRegistry) }))).toMatchObject({ ok: false, code: "unsupported" });
   });
 
   it("unrelated ability scopes are unaffected (no blanket gate)", () => {
@@ -75,7 +76,7 @@ describe("Toymaker -- verified hook; skip history is never claimed", () => {
   it("no Reminder is read as skip-history truth", () => {
     const noted = patchPlayer(g, "p0", { reminders: [{ id: "rm", label: "Demon has skipped an attack", sourceCharacter: "toymaker" }] });
     expect(plan(noted, request(noted, "p0", "imp", { target: pick(noted, "p3") }), proofEnv({ modifiers: activeModifiers(noted, proofRegistry) })))
-      .toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: "modifier:fabled:toymaker" }] });
+      .toMatchObject({ ok: false, code: "unsupported" });
   });
 
   it("below-7 normal evil starting information is not regressed", () => {

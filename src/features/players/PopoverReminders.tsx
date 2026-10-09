@@ -7,16 +7,20 @@ import { officialEffectPresentation } from "@/features/reminders/officialReminde
 import { currentVotingState } from "@/stores/voting";
 import type { ReminderIntent } from "@/stores/reminderResolution";
 import type { RoleDef, STPlayerRecord } from "@/stores/types";
+import { useReminderRemoval } from "@/features/reminders/useReminderRemoval";
+import { createRulesQuery } from "@/stores/rulesQuery";
 
 /** The palette is notation only. Its source character controls artwork and
  * ownership, never inferred mechanics. The full editor retains ability actions. */
 export function PopoverReminders({ player }: { player: STPlayerRecord }) {
   const game = useStorytellerStore(s => s.game);
+  const privacy = usePrivacyStore(s => s.enabled);
+  const removal = useReminderRemoval(game, privacy);
   const script = useStorytellerStore(s => game ? selectScriptById(s, game.scriptId) : undefined);
   const [all, setAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const notationHelpId = useId();
-  if (!game || !script || !player.participantId || player.isEmpty) return null;
+  if (!game || !script || !player.participantId || player.isEmpty || privacy) return null;
   const registry = buildRegistry(script);
   const inPlay = new Set(Object.values(game.players).filter(p => !p.isEmpty).map(p => p.actualRole));
   // All means this script plus the Travelers actually seated at this table,
@@ -31,7 +35,7 @@ export function PopoverReminders({ player }: { player: STPlayerRecord }) {
   const target = { playerId: player.id, participantId: player.participantId };
   const ended = game.phase === "ended";
   const context = captureVotingContext();
-  const effects = officialEffectPresentation(player);
+  const effects = officialEffectPresentation(player, { query: createRulesQuery(game, { script, registry }), target });
   const linkedModifier = (reminderId: string) => currentVotingState(game).modifiers.some(m =>
     m.target.playerId === player.id && m.target.participantId === player.participantId && `voting-${m.id}` === reminderId);
   const resolve = (intent: ReminderIntent) => {
@@ -48,24 +52,25 @@ export function PopoverReminders({ player }: { player: STPlayerRecord }) {
     const result = modifier
       ? current.resolveVoting({ kind: "removeModifier", modifierId: modifier.id, code: game.code, day: game.day,
         expectedRevision: currentVotingState(game).revision }, context)
-      : current.resolveReminders({ intents: [intent] });
+      : current.resolveReminders({ intents: [intent] }, context);
     setError(result.ok ? null : result.message);
   };
   return <section className="player-popover-markers popover-token-reminders" aria-label="On this player">
     <h4>On this player</h4>
     {effects.fallback.length > 0 && <p className="player-popover-effects">{effects.fallback.map(effect => `${effect.indicator.label}${effect.suppressedCount ? " (suppressed)" : ""}`).join(" · ")}</p>}
     {(player.reminders.length > 0 || effects.tokens.length > 0) ? <div className="popover-reminder-grid" aria-label="Placed reminders">
-      {effects.tokens.map(token => <div key={token.key} className="popover-reminder-choice" data-reminder-kind="effect" title={`${token.label} effect; edit in More settings`}>
+      {effects.tokens.map(token => <div key={token.key} className="popover-reminder-choice" data-reminder-kind="effect" title={token.detail}>
         <ReminderDisc role={token.role} /><span>{token.label}{token.instances.length > 1 ? ` ×${token.instances.length}` : ""}</span>
-        <span className="sr-only">Effect</span>
+        <span className="sr-only">{token.detail}</span>
       </div>)}
       {player.reminders.map(reminder => <button type="button" key={reminder.id} className="popover-reminder-choice popover-placed-reminder"
+        data-removal-armed={removal.armedId === reminder.id || undefined}
         data-reminder-kind={linkedModifier(reminder.id) ? "effect" : "notation"}
         aria-describedby={`${notationHelpId}-${reminder.id}${linkedModifier(reminder.id) ? "" : ` ${notationHelpId}`}`}
         disabled={ended} aria-label={`Remove ${reminder.label} reminder`} title={`Remove ${reminder.label} reminder`}
-        onClick={() => resolve({ kind: "remove", target, reminderId: reminder.id })}>
+        onClick={() => removal.tap(reminder.id, () => resolve({ kind: "remove", target, reminderId: reminder.id }))}>
         <ReminderDisc role={reminder.sourceCharacter ? registry.get(reminder.sourceCharacter) : undefined} />
-        {!ended && <span className="popover-reminder-remove" aria-hidden="true">×</span>}<span>{reminder.label}</span>
+        {!ended && <span className="popover-reminder-remove" aria-hidden="true">×</span>}<span>{removal.armedId === reminder.id ? "Tap to remove" : reminder.label}</span>
         <span id={`${notationHelpId}-${reminder.id}`} className="sr-only">{linkedModifier(reminder.id) ? "Effect" : "Note"}</span>
       </button>)}
     </div> : <p className="player-popover-empty">No reminders yet. Tap a token below to place it.</p>}

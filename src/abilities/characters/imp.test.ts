@@ -28,12 +28,13 @@ describe("Imp -- killing another player", () => {
     expect(domains(result)).toEqual(["life"]);
   });
 
-  it("a Monk-protected target does not die; generic Protected -> judgment", () => {
+  it("a Monk-protected target does not die; generic Protected makes the whole action Manual", () => {
     expect(kill(monkSafe(base(), "p4"), "p4")).toEqual({ ok: true, changed: false });
     const generic = patchPlayer(base(), "p4", { effects: [{ id: "gp", type: "protected", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as EffectRecord] });
     const id = protectionId(generic, "demon", "p4");
-    expect(requirementIds(kill(generic, "p4"))).toEqual([id]);
-    expect(planned(kill(generic, "p4", { judgments: { [id]: yes(false) } })).players.p4!.alive).toBe(false);
+    expect(kill(generic, "p4")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(kill(generic, "p4", { judgments: { [id]: yes(false) } })).toMatchObject({ ok: false, code: "unsupported" });
+    expect(generic.players.p4!.alive).toBe(true);
   });
 
   it("the Monk's protection stops if the Monk lost the ability first", () => {
@@ -81,11 +82,12 @@ describe("Imp -- star-pass", () => {
     expect(kill(g, "p0", { inputs: { target: pick(g, "p0"), [SUCCESSOR]: pick(g, "p4") } })).toMatchObject({ ok: false, code: "illegal" }); // dead, not a Minion
   });
 
-  it("the threshold counts only NON-Traveller living players", () => {
+  it("unreviewed Traveller interactions keep the whole star-pass Manual", () => {
     // 4 ordinary alive + 2 alive Travellers = 6 alive, but only 4 count.
     let g = killAll(proofGame([...ROLES, "beggar", "gunslinger"]), ["p4", "p5", "p6"]);
     for (const id of ["p7", "p8"]) g = patchPlayer(g, id, { isTraveler: true, actualAlignment: "good" });
-    expect(requirementIds(kill(g, "p0"))).toEqual([SUCCESSOR]);
+    expect(kill(g, "p0")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(g.players.p0!.alive).toBe(true);
   });
 
   it("an impaired Scarlet Woman has no priority: ordinary candidate", () => {
@@ -94,12 +96,13 @@ describe("Imp -- star-pass", () => {
     expect(planned(kill(g, "p0", { inputs: { target: pick(g, "p0"), [SUCCESSOR]: pick(g, "p2") } })).players.p2!.actualRole).toBe("imp");
   });
 
-  it("unknown Scarlet Woman functioning -> judgment", () => {
+  it("unknown Scarlet Woman functioning keeps the whole star-pass Manual", () => {
     const g = patchPlayer(base(), "p2", { effects: [{ id: "c", type: "customThing", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as EffectRecord,
       { id: "sh", type: "soberHealthy", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as EffectRecord] });
     const id = swFunctionsJudgment(g.players.p2!.participantId!);
-    expect(requirementIds(kill(g, "p0"))).toEqual([id]);
-    expect(planned(kill(g, "p0", { judgments: { [id]: yes(true) } })).players.p2!.actualRole).toBe("imp");
+    expect(kill(g, "p0")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(kill(g, "p0", { judgments: { [id]: yes(true) } })).toMatchObject({ ok: false, code: "unsupported" });
+    expect(g.players.p0!.alive).toBe(true);
   });
 
   it("exactly one living Minion -> deterministic", () => {
@@ -115,7 +118,7 @@ describe("Imp -- star-pass", () => {
   });
 
   it("several living Minions -> the Storyteller's choice (stale successor refused)", () => {
-    const g = proofGame(["imp", "poisoner", "spy", "chef", "empath", "saint", "washerwoman"]);
+    const g = proofGame(["imp", "poisoner", "baron", "chef", "empath", "saint", "washerwoman"]);
     expect(requirementIds(kill(g, "p0"))).toEqual([SUCCESSOR]);
     const req = request(g, "p0", "imp", { target: pick(g, "p0"), [SUCCESSOR]: pick(g, "p2") });
     expect(plan(reseat(g, "p2"), req)).toMatchObject({ ok: false, code: "stale" });
@@ -138,7 +141,7 @@ describe("Imp -- star-pass", () => {
     const script = homebrewScript("scarletwoman");
     const env = proofEnv({ script, registry: buildRegistry(script) });
     const g = base();
-    expect(requirementIds(plan(g, request(g, "p0", "imp", { target: pick(g, "p0") }), env))).toEqual([SUCCESSOR]);
+    expect(plan(g, request(g, "p0", "imp", { target: pick(g, "p0") }), env)).toMatchObject({ ok: false, code: "unsupported" });
   });
 
   it("a homebrew Imp reusing the official id inherits no semantics", () => {

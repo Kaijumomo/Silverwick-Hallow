@@ -11,7 +11,8 @@ import {
   type InformationConstraint,
   type InformationConstraintValue,
 } from "@/abilities/semantics";
-import { invocationEligibility, isInvocationPath, nightTriggerJudgmentId, nightTriggerStatus, type InvocationPath } from "@/abilities/invocation";
+import { invocationEligibility, isInvocationPath, nightTriggerStatus, type InvocationPath } from "@/abilities/invocation";
+import { automationEligibility } from "@/abilities/automationEligibility";
 import { activeModifiers, prospectiveJinxes, type ModifierDefinition } from "@/abilities/modifiers";
 import { applyAlignmentPlan, defaultAlignmentIds, planAlignmentTransaction, type AlignmentIdSource, type AlignmentIntent } from "./alignmentResolution";
 import { applyEffectPlan, planEffectTransaction, type EffectIdSource, type EffectIntent } from "./effectResolution";
@@ -476,7 +477,7 @@ export function composeAbilityOutcome(
           if ("ok" in translated) return { ...translated, operationIndex, intentIndex };
           intents.push(translated);
         }
-        const result = planLifeTransaction(working, { intents, resolutionId, ...(context ? { context } : {}) }, ids.life);
+        const result = planLifeTransaction(working, { intents, resolutionId, ...(context ? { context } : {}) }, ids.life, environment);
         if (!result.ok) return domainRefusal("life", result);
         if (result.changed) working = applyLifePlan(working, result.plan);
         break;
@@ -906,6 +907,8 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
 
   const query = createRulesQuery(game, { registry: environment.registry, script: environment.script, ...(environment.semantics ? { semantics: environment.semantics } : {}),
     modifiers: environment.modifiers ?? activeModifiers(game, environment.registry) });
+  const automation = automationEligibility({ query, descriptor, actor: actorBinding, roleId: request.roleId, simulated, inputs });
+  if (automation.kind === "manual") return refuse("unsupported", automation.reason);
   let judgmentUsed = false;
   // 10F-AC-12: impairment is derived, never guessed. Unknown -> an explicit
   // Storyteller judgment; a simulated wake never functions.
@@ -913,15 +916,7 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   if (!simulated) {
     const answer = query.abilityFunctions(actorBinding);
     if (answer.known) functioning = answer.value;
-    else {
-      const judged = judgments[FUNCTIONING_JUDGMENT];
-      if (!isObject(judged) || judged.kind !== "boolean") {
-        return refuse("needsInput", answer.reason, { requirements: [{ id: FUNCTIONING_JUDGMENT, kind: "boolean", source: "judgment",
-          label: `${actor.name || "This player"}'s ability is functioning` }] });
-      }
-      functioning = judged.value;
-      judgmentUsed = true;
-    }
+    else return refuse("unsupported", answer.reason);
   }
   // Slice 7: the verified trigger must be established from authoritative state
   // (Life Event Window with coverage); unknown is an explicit Storyteller
@@ -937,15 +932,7 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
       return refuse("stale", "The trigger this workflow was opened for is no longer open -- review and resolve again.");
     }
     consumeTrigger = { day: game.day, stepKey: nightTriggerStepKey(actorBinding.participantId, request.roleId, trigger.eventId), status: "done" };
-    if (trigger.kind === "unknown") {
-      const id = nightTriggerJudgmentId(descriptor.nightTrigger!, trigger.eventId);
-      const judged = judgments[id];
-      if (!isObject(judged) || judged.kind !== "boolean") {
-        return refuse("needsInput", trigger.reason, { requirements: [{ id, kind: "boolean", source: "judgment", label: "This ability triggered tonight" }] });
-      }
-      if (!judged.value) return refuse("notApplicable", "The Storyteller judged that this ability did not trigger.");
-      judgmentUsed = true;
-    }
+    if (trigger.kind === "unknown") return refuse("unsupported", trigger.reason);
   }
   // SOL-10F-A3: the gate carries BOTH the reaching unverified modifiers and
   // every reaching verified hook result; all of them are enforced together --
@@ -978,7 +965,9 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   const evaluation = descriptor.evaluator({ actor: { binding: actorBinding, player: actor }, roleId: request.roleId, simulated, functioning,
     inputs, judgments, query, constraints });
   switch (evaluation.kind) {
-    case "needsInput": return refuse("needsInput", evaluation.message, { requirements: evaluation.requirements });
+    case "needsInput": return evaluation.requirements.some(requirement => requirement.source === "judgment")
+      ? refuse("unsupported", evaluation.message)
+      : refuse("needsInput", evaluation.message, { requirements: evaluation.requirements });
     case "notApplicable": return refuse("notApplicable", evaluation.message);
     case "unsupported": return refuse("unsupported", evaluation.message);
     case "illegal": return refuse("illegal", evaluation.message);
@@ -1050,6 +1039,22 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
     ...(consumeTrigger ? { consumeTrigger } : {}),
     ...(simulated ? { simulated: { performedRole: request.roleId } } : {}),
   });
+  // A modeled choice must not create an unresolved dependency cycle. Check
+  // newly produced sourced effects against the tentative authoritative state
+  // before returning ANY part of the action for commitment.
+  if (result.ok && result.changed) {
+    const after = createRulesQuery(result.plan.game, environment);
+    for (const player of Object.values(result.plan.game.players)) {
+      if (!player.participantId || player.isEmpty) continue;
+      const previous = game.players[player.id];
+      for (const effect of player.effects) {
+        if (!effect.sourceParticipant || previous?.effects.some(old => old.id === effect.id) ||
+            !descriptor.sourcedEffects?.some(declaration => declaration.type === effect.type)) continue;
+        const applies = after.effectApplies({ playerId: player.id, participantId: player.participantId }, effect);
+        if (!applies.known) return refuse("unsupported", applies.reason);
+      }
+    }
+  }
   if (result.ok && result.changed) result.plan.needsConfirmation = outcomeNeedsConfirmation(outcome, judgmentAnswered);
   return result;
 }

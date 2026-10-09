@@ -38,8 +38,8 @@ describe("playable tablet fixtures", () => {
     expect(players[13]).toMatchObject({ actualRole: "imp", actualAlignment: "evil" });
     expect(players[7]).toMatchObject({ alive: false, ghostVote: true });
     expect(players[8]).toMatchObject({ alive: false, ghostVote: false });
-    expect(game.voting?.modifiers).toHaveLength(1);
-    expect(game.voting?.modifiers[0]?.target.participantId).toBe(players[2]!.participantId);
+    expect(game.voting?.modifiers ?? []).toHaveLength(0);
+    expect(players[2]!.reminders).toContainEqual(expect.objectContaining({ label: "3 Votes", sourceCharacter: "bureaucrat" }));
     expect(initial.lobby).toBeNull();
     expect(initial.undoStack).toEqual([]);
     expect(localStorage.getItem("new-blood-st")).toBe("preserve-the-real-save");

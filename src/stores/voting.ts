@@ -1,9 +1,11 @@
 import { applyLifePlan, planLifeTransaction, type LifeIntent, type LifeRefusal } from "./lifeResolution";
 import { participantRefOf } from "./participants";
-import { boundParticipant, createRulesQuery, type RulesQueryEnvironment } from "./rulesQuery";
+import { boundParticipant, createRulesQuery, type QueryAnswer, type RulesQueryEnvironment } from "./rulesQuery";
 import type { CurrentParticipantRef, StorytellerLobbyRecord } from "./types";
 import type { VoteResponse, VotingBinding, VotingDayState, VotingIntent, VotingRound } from "./votingTypes";
 import { isCanonicalRole } from "@/data/canonical";
+import { invalidateVotingLifeEvidence, planRemovedVotingReminders } from "./sourceAbilityLifecycle";
+import { interactionCoverageEligibility } from "@/abilities/automationEligibility";
 export type { VotingDayState, VotingIntent, VotingRound } from "./votingTypes";
 
 export type VotingPlanResult = { ok: true; changed: boolean; game: StorytellerLobbyRecord } | LifeRefusal;
@@ -13,6 +15,21 @@ const canonical = (id: string, environment?: RulesQueryEnvironment): boolean => 
   const role = environment?.registry.get(id);
   return !!role && isCanonicalRole(role);
 };
+
+/** Shared preflight for the Night UI, selection planner and live vote weight.
+ * Known false means an impaired invocation with no modifier; unknown requires
+ * the entire character action to remain Manual. */
+export function bureaucratActionEligibility(game: StorytellerLobbyRecord, source: VotingBinding, environment?: RulesQueryEnvironment): QueryAnswer<boolean> {
+  const player = boundParticipant(game, source);
+  if (!player || !player.alive || player.actualRole !== "bureaucrat" || !environment || !canonical("bureaucrat", environment))
+    return { known: false, reason: "This Bureaucrat action is not verified." };
+  const query = createRulesQuery(game, environment);
+  const coverage = interactionCoverageEligibility(query, ["bureaucrat"]);
+  if (coverage.kind === "manual") return { known: false, reason: coverage.reason };
+  if (query.modifierGate("bureaucrat", ["targeting", "voting"]).kind !== "clear")
+    return { known: false, reason: "Run this Bureaucrat action manually, then continue to the next character." };
+  return query.abilityFunctions(source);
+}
 
 export function freshVotingDay(day: number, coverage: "known" | "unknown" = "known"): VotingDayState {
   return { day, revision: 0, coverage, rounds: [], activeRoundId: null, block: null, modifiers: [] };
@@ -38,24 +55,20 @@ export function currentVoter(game: StorytellerLobbyRecord): CurrentParticipantRe
  * (Undo/remote recovery) keeps that snapshot's matching evidence. */
 export function reconcileVotingDependencies(previous: StorytellerLobbyRecord | null, next: StorytellerLobbyRecord): StorytellerLobbyRecord {
   if (!previous?.voting || previous.voting !== next.voting) return next;
-  const lifeStamp = (g: StorytellerLobbyRecord, ref: CurrentParticipantRef) => {
-    const p = boundParticipant(g, ref);
-    return JSON.stringify([p?.alive, p?.ghostVote, p?.exiled, g.lifeEventWindow.events.filter(e => e.subject.participantId === ref.participantId)]);
-  };
   const voting = next.voting!;
   const modifiers = voting.modifiers.filter(m => {
     const source = boundParticipant(next, m.source);
-    return source?.alive && source.actualRole === "bureaucrat" && !!boundParticipant(next, m.target);
+    return m.appliesDay >= next.day && source?.alive && source.actualRole === "bureaucrat" && !!boundParticipant(next, m.target);
   });
-  let changed = modifiers.length !== voting.modifiers.length;
-  const rounds = voting.rounds.map(round => {
-    const responses = round.responses.map(response => {
-      if (!response.lifeSafe || lifeStamp(previous, response.voter) === lifeStamp(next, response.voter)) return response;
-      changed = true; return { ...response, refundSafe: false, lifeSafe: false };
-    });
-    return responses.some((r, i) => r !== round.responses[i]) ? { ...round, responses } : round;
-  });
-  return changed ? { ...next, voting: { ...voting, rounds, modifiers, revision: voting.revision + 1 } } : next;
+  const rounds = invalidateVotingLifeEvidence(previous, next, voting.rounds);
+  const changed = modifiers.length !== voting.modifiers.length || rounds.some((round, i) => round !== voting.rounds[i]);
+  if (!changed) return next;
+  const removed = voting.modifiers.filter(m => !modifiers.some(kept => kept.id === m.id));
+  const cleanup = planRemovedVotingReminders(next, removed);
+  // Validated live records produce only bound remove intents. Preserve the
+  // original dependency state together if an invalid snapshot is supplied.
+  if (!cleanup.ok) return next;
+  return { ...cleanup.game, voting: { ...voting, rounds, modifiers, revision: voting.revision + 1 } };
 }
 
 function tableStamp(game: StorytellerLobbyRecord, round: VotingRound): string {
@@ -75,7 +88,7 @@ export function voteWeight(game: StorytellerLobbyRecord, voter: VotingBinding, e
     if (!source || !source.alive || source.actualRole !== "bureaucrat") continue;
     if (!environment) return { known: false, reason: "Review the Bureaucrat's ability before counting this vote." };
     if (!canonical("bureaucrat", environment)) return { known: false, reason: "This Bureaucrat definition is not verified. Choose the vote contribution explicitly." };
-    const functions = createRulesQuery(game, environment).abilityFunctions({ playerId: source.id, participantId: source.participantId! });
+    const functions = bureaucratActionEligibility(game, { playerId: source.id, participantId: source.participantId! }, environment);
     if (!functions.known) return functions;
     if (functions.value) return { known: true, value: 3 };
   }
@@ -87,9 +100,9 @@ function snapshot(game: StorytellerLobbyRecord, binding: VotingBinding): Current
   const ref = participantRefOf(game, binding.playerId);
   return ref?.kind === "participant" ? ref : null;
 }
-function life(game: StorytellerLobbyRecord, intents: LifeIntent[]): VotingPlanResult {
+function life(game: StorytellerLobbyRecord, intents: LifeIntent[], environment?: RulesQueryEnvironment): VotingPlanResult {
   if (!intents.length) return { ok: true, changed: false, game };
-  const result = planLifeTransaction(game, { intents });
+  const result = planLifeTransaction(game, { intents }, undefined, environment);
   return !result.ok ? result : { ok: true, changed: result.changed, game: result.changed ? applyLifePlan(game, result.plan) : game };
 }
 function recompute(state: VotingDayState): void {
@@ -141,11 +154,14 @@ export function planVoting(game: StorytellerLobbyRecord, intent: VotingIntent, e
     }
     state.modifiers = state.modifiers.filter(m => {
       const source = boundParticipant(next, m.source);
-      return !!source && source.alive && source.actualRole === "bureaucrat" && !!boundParticipant(next, m.target);
+      return m.appliesDay >= game.day && !!source && source.alive && source.actualRole === "bureaucrat" && !!boundParticipant(next, m.target);
     });
     recompute(state);
     state.revision++;
-    return { ok: true, changed: true, game: { ...next, voting: state } };
+    const removed = (game.voting?.modifiers ?? []).filter(m => !state.modifiers.some(kept => kept.id === m.id));
+    const cleanup = planRemovedVotingReminders(next, removed);
+    if (!cleanup.ok) return refuse(cleanup.message);
+    return { ok: true, changed: true, game: { ...cleanup.game, voting: state } };
   };
   if (intent.kind === "bureaucrat") {
     const source = snapshot(game, intent.source); const target = snapshot(game, intent.target);
@@ -154,11 +170,14 @@ export function planVoting(game: StorytellerLobbyRecord, intent: VotingIntent, e
     if (source.participantId === target.participantId) return refuse("The Bureaucrat must choose another player.");
     if (player?.actualRole !== "bureaucrat" || !player.alive) return refuse("Choose a living current Bureaucrat as the source.");
     if (!canonical("bureaucrat", environment)) return refuse("This character is not the verified Bureaucrat. Use an explicit voting adjustment instead.");
+    const functioning = bureaucratActionEligibility(game, intent.source, environment);
+    if (!functioning.known)
+      return refuse("Run this Bureaucrat action manually, then continue to the next character.");
     if (!intent.modifierId || intent.modifierId.length > 200) return refuse("Invalid modifier identity.");
     if (state.modifiers.some(m => m.id === intent.modifierId)) return refuse("That modifier already exists.");
     state.modifiers = state.modifiers.filter(m => m.source.participantId !== source.participantId || m.appliesDay !== game.day);
     if (state.modifiers.length >= 20) return refuse("At most 20 voting modifiers can be recorded.");
-    state.modifiers.push({ id: intent.modifierId, kind: "bureaucrat", source, target, appliesDay: game.day });
+    if (functioning.value) state.modifiers.push({ id: intent.modifierId, kind: "bureaucrat", source, target, appliesDay: game.day });
     return commit();
   }
   if (intent.kind === "removeModifier") {
@@ -171,7 +190,7 @@ export function planVoting(game: StorytellerLobbyRecord, intent: VotingIntent, e
     if (active && (active.status !== "outcome" || active.mode !== "nomination")) return refuse("Finish the current vote before recording an execution.");
     if (active && votingContextChanged(game, active)) return stale();
     if (!snapshot(game, intent.target)) return stale();
-    const planned = life(game, [{ kind: "execution", playerId: intent.target.playerId, outcome: intent.outcome, confirmations: intent.confirmations }]);
+    const planned = life(game, [{ kind: "execution", playerId: intent.target.playerId, outcome: intent.outcome, confirmations: intent.confirmations }], environment);
     if (!planned.ok) return planned;
     next = planned.game;
     if (active) { active.status = "acknowledged"; state.activeRoundId = null; }
@@ -212,7 +231,7 @@ export function planVoting(game: StorytellerLobbyRecord, intent: VotingIntent, e
     // The first legal nomination uses the Virgin even when impaired or the
     // nominator does not register as Townsfolk. Resolution stays ST-owned.
     if (round.virginPending) {
-      const planned = life(next, [{ kind: "useAbility", playerId: to.id }]);
+      const planned = life(next, [{ kind: "useAbility", playerId: to.id }], environment);
       if (!planned.ok) return planned;
       next = planned.game;
     }
@@ -257,7 +276,7 @@ export function planVoting(game: StorytellerLobbyRecord, intent: VotingIntent, e
       if (!intent.outcome) return refuse("Choose the actual execution outcome.");
       intents.push({ kind: "execution", playerId: round.nominator.playerId, outcome: intent.outcome, confirmations: intent.confirmations });
     }
-    const planned = life(game, intents); if (!planned.ok) return planned;
+    const planned = life(game, intents, environment); if (!planned.ok) return planned;
     next = planned.game; round.virginPending = false;
     if (intent.execute) { round.status = "outcome"; round.result = "virgin"; }
     else advanceCursor(next, round);
@@ -267,7 +286,7 @@ export function planVoting(game: StorytellerLobbyRecord, intent: VotingIntent, e
   if (intent.kind === "exileOutcome") {
     if (round.mode !== "exile" || round.status !== "outcome" || round.result !== "exilePassed") return refuse("This exile has not passed.");
     if (!snapshot(game, round.nominee)) return stale();
-    const planned = life(game, [{ kind: "exile", playerId: round.nominee.playerId, outcome: intent.outcome }]);
+    const planned = life(game, [{ kind: "exile", playerId: round.nominee.playerId, outcome: intent.outcome }], environment);
     if (!planned.ok) return planned;
     next = planned.game; round.status = "acknowledged"; state.activeRoundId = null;
     return commit();
@@ -281,7 +300,7 @@ export function planVoting(game: StorytellerLobbyRecord, intent: VotingIntent, e
     if (response.spentGhostVote) {
       if (!response.refundSafe) return refuse("This player's Life changed after the vote. Correct the token separately before changing this response.");
       if (!snapshot(game, response.voter)) return stale();
-      const planned = life(game, [{ kind: "restoreGhostVote", playerId: response.voter.playerId }]);
+      const planned = life(game, [{ kind: "restoreGhostVote", playerId: response.voter.playerId }], environment);
       if (!planned.ok) return planned; next = planned.game;
     }
     round.responses = round.responses.slice(0, index); round.status = "voting"; round.result = null;
@@ -314,7 +333,7 @@ export function planVoting(game: StorytellerLobbyRecord, intent: VotingIntent, e
   const intents: LifeIntent[] = [];
   if (old?.spentGhostVote && !spend) intents.push({ kind: "restoreGhostVote", playerId: player.id });
   if (spend && !old?.spentGhostVote) intents.push({ kind: "spendGhostVote", playerId: player.id });
-  const planned = life(game, intents); if (!planned.ok) return planned; next = planned.game;
+  const planned = life(game, intents, environment); if (!planned.ok) return planned; next = planned.game;
   const response: VoteResponse = { voter: old?.voter ?? voter, choice: intent.choice, weight, spentGhostVote: spend, refundSafe: spend && (old?.spentGhostVote ? old.refundSafe : true), lifeSafe: true };
   if (old && JSON.stringify(old) === JSON.stringify(response)) return { ok: true, changed: false, game };
   round.responses[index] = response;

@@ -59,6 +59,12 @@ describe("Storyteller privacy mode", () => {
       storyteller.getState().removeReminder(seat, "r1");
       storyteller.getState().addReminder(seat, { id: "r2", label: "Updated while hidden" });
     });
+    // Local character commands refuse Privacy Mode. Incoming authoritative
+    // state can still change while its presentation remains hidden.
+    expect(storyteller.getState().game).toEqual(before);
+    const hiddenGame = storyteller.getState().game!;
+    act(() => storyteller.setState({ game: { ...hiddenGame, players: { ...hiddenGame.players,
+      [seat]: { ...hiddenGame.players[seat]!, reminders: [{ id: "r2", label: "Updated while hidden" }] } } } }));
     expect(screen.queryByText("Updated while hidden")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Disable Privacy Mode" }));
     expect(screen.getAllByText("Updated while hidden").length).toBeGreaterThan(0);

@@ -90,16 +90,18 @@ it("invalid Monk self-target neither resolves nor advances", () => {
   expect(current()).toBe(key("p1"));
 });
 
-it("judgment and information actions keep the existing workspace and never resolve merely by tapping", () => {
+it("a verified information action resolves through its action interaction without another confirmation", () => {
   useShellStore.getState().setNightCursor({ day: 2, stepKey: key("p3") });
   render(<Guide />);
   expect(useTargetPicker.getState().active).toBeNull();
   const before = game();
   fireEvent.click(screen.getByRole("button", { name: "Continue action" }));
-  expect(screen.getByRole("dialog").parentElement).toHaveAttribute("id", "action-card-dock-host");
+  expect(screen.queryByRole("dialog")).toBeNull();
   expect(screen.queryByRole("button", { name: "Continue action" })).toBeNull();
-  act(() => vi.advanceTimersByTime(5000));
-  expect(game()).toBe(before); expect(current()).toBe(key("p3"));
+  expect(game()).not.toBe(before);
+  expect(game().informationDeliveries).toHaveLength(1);
+  expect(game().nightProgress[`2:${key("p3")}`]?.status).toBe("done");
+  expect(screen.queryByRole("button", { name: "Resolve" })).toBeNull();
 });
 
 it("manual navigation and privacy cancel delayed advancement and pending picks", () => {
@@ -199,4 +201,31 @@ it("a later Bureaucrat arrival uses its participant-bound action and leaves othe
   expect(game().players.p0!.travelerArrival?.firstNightComplete).toBe(false);
   expect(game().players.p3!.reminders).toEqual([]);
   expect(useTargetPicker.getState().active).not.toBeNull();
+});
+
+it("Vortox and Empath remain wholly manual: official text and Next complete only the step with Undo", () => {
+  store.setState({ game: proofGame(["empath", "vortox", "chef"]) });
+  useShellStore.getState().setNightCursor({ day: 2, stepKey: key("p0") });
+  render(<Guide />); const before = game();
+  expect(useTargetPicker.getState().active).toBeNull();
+  expect(screen.queryByRole("button", { name: "Continue action" })).toBeNull();
+  expect(screen.getByText(proofScript.characters.find(role => role.id === "empath")!.ability!)).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Next ›" }));
+  expect(game().nightProgress[`2:${key("p0")}`]?.status).toBe("done");
+  expect(game().players).toEqual(before.players); expect(game().informationDeliveries).toEqual([]);
+  expect(store.getState().undoStack).toHaveLength(1);
+  act(() => store.getState().undo()); expect(game().nightProgress).toEqual(before.nightProgress);
+});
+
+it("an unsupported selected interaction becomes manual with no partial effects", () => {
+  render(<Guide />); const before = game(); tap("p0");
+  expect(game()).toBe(before); expect(useTargetPicker.getState().active).toBeNull();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  act(() => { store.getState().resolveReminders({ intents: [{ kind: "place", target: { playerId: "p0", participantId: game().players.p0!.participantId! },
+    reminder: { label: "Chosen" } }] }); });
+  expect(useTargetPicker.getState().active).toBeNull();
+  const manuallyAdjusted = game();
+  fireEvent.click(screen.getByRole("button", { name: "Next ›" }));
+  expect(game().players).toEqual(manuallyAdjusted.players);
+  expect(game().nightProgress[`2:${key("p0")}`]?.status).toBe("done");
 });

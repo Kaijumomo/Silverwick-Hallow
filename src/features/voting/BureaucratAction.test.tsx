@@ -57,6 +57,7 @@ it("removing the linked official token stops its voting adjustment in the same U
   fireEvent.click(screen.getByRole("button", { name: "Apply 3 Votes from Player 0" }));
   const before = game(); const count = store.getState().undoStack.length;
   fireEvent.click(screen.getByRole("button", { name: "Remove 3 Votes reminder" }));
+  fireEvent.click(screen.getByRole("button", { name: "Remove 3 Votes reminder" }));
   expect(game().voting!.modifiers).toEqual([]); expect(game().players.p1!.reminders).toEqual([]);
   expect(store.getState().undoStack).toHaveLength(count + 1);
   act(() => store.getState().undo()); expect(game().voting).toEqual(before.voting); expect(game().players.p1!.reminders).toEqual(before.players.p1!.reminders);

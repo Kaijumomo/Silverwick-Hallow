@@ -67,11 +67,11 @@ describe("Ravenkeeper -- the verified trigger", () => {
     const g = proofGame(ROLES, "night", 2);
     const migrated = { ...patchPlayer(g, "p0", { alive: false }), lifeEventWindow: { coverageFrom: { phase: "day" as const, day: 2 }, events: [] } };
     const id = nightTriggerJudgmentId("actorDiedTonight", null);
-    expect(requirementIds(trigger(migrated, "p2"))).toEqual([id]);
-    expect(trigger(migrated, "p2", {}, { judgments: { [id]: yes(false) } })).toMatchObject({ ok: false, code: "notApplicable" });
+    expect(trigger(migrated, "p2")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(trigger(migrated, "p2", {}, { judgments: { [id]: yes(false) } })).toMatchObject({ ok: false, code: "unsupported" });
     const judged = trigger(migrated, "p2", {}, { judgments: { [id]: yes(true) } });
-    expect(planned(judged).informationDeliveries).toHaveLength(1);
-    expect(judged).toMatchObject({ plan: { needsConfirmation: true } });
+    expect(judged).toMatchObject({ ok: false, code: "unsupported" });
+    expect(migrated.informationDeliveries).toEqual([]);
   });
 
   it("no duplicate execution: once the trigger step is done, a repeated / stale workflow is refused", () => {
@@ -79,7 +79,7 @@ describe("Ravenkeeper -- the verified trigger", () => {
     const req = request(g, "p0", "ravenkeeper", { target: pick(g, "p2") }, { invocationPath: "nightTrigger", withStep: true, completeStep: true });
     const next = planned(plan(g, req));
     expect(plan(next, req)).toMatchObject({ ok: false, code: "stale" }); // the captured step changed
-    expect(plan(next, request(next, "p0", "ravenkeeper", { target: pick(next, "p3") }, { invocationPath: "nightTrigger", withStep: true }))).toMatchObject({ ok: false, code: "notApplicable" });
+    expect(plan(next, request(next, "p0", "ravenkeeper", { target: pick(next, "p2") }, { invocationPath: "nightTrigger", withStep: true }))).toMatchObject({ ok: false, code: "notApplicable" });
   });
 
   it("SOL-10F-A10: a trigger request must name the trigger event it resolves (no event binding -> invalid)", () => {
@@ -114,9 +114,9 @@ describe("Ravenkeeper -- information", () => {
   it("any participant (alive or dead); registration ambiguity -> the Storyteller's judgment", () => {
     const g = killedTonight();
     expect(planned(trigger(g, "p0")).informationDeliveries.at(-1)!.values![1]).toEqual({ requirementId: "role", kind: "role", roleId: "ravenkeeper" });
-    expect(requirementIds(trigger(g, "p3"))).toEqual([sid(g, "p3", CHARACTER_JUDGMENT)]);
-    const shown = planned(trigger(g, "p3", {}, { judgments: { [CHARACTER_JUDGMENT]: character("scarletwoman") } }));
-    expect(shown.informationDeliveries.at(-1)!.values![1]).toEqual({ requirementId: "role", kind: "role", roleId: "scarletwoman" });
+    expect(trigger(g, "p3")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(trigger(g, "p3", {}, { judgments: { [CHARACTER_JUDGMENT]: character("scarletwoman") } })).toMatchObject({ ok: false, code: "unsupported" });
+    expect(g.informationDeliveries).toEqual([]);
   });
 
   it("an impaired Ravenkeeper: the wake and choice are simulated; the Storyteller shows any character", () => {

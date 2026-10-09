@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // OPUS-007 contract suite. rules.spec.ts already proves the Storyteller
 // projection/writer/membership-write path against enforced rules.json. This
 // file proves the remaining half: the real PLAYER read handshake
@@ -1651,10 +1652,9 @@ describe("Phase 9R.6 P1: interrupted revocation recovery, real client + enforced
     return { stBackend, session, lobby, writer, manager, p1, PA, unbound, displayBackend, history: structuredClone(store().game!.history) };
   }
 
-  /** The crashed tab reopening: exactly the fields the store persists (its
-   * persist partialization; this node environment has no localStorage, so
-   * the image is round-tripped through JSON here -- the jsdom suite
-   * revocationRecovery.test.ts covers the real localStorage reload). */
+  /** The crashed tab reopening: the store's persisted fields round-tripped
+   * through JSON. revocationRecovery.test.ts separately exercises the
+   * middleware's actual browser-storage reload. */
   function reloadPersistedImage() {
     const { game, view, undoStack, customScripts, lobby, grimoireMode, tokenPositions, localSeq, sync } = store();
     const image = JSON.stringify({ game, view, undoStack, customScripts, lobby, grimoireMode, tokenPositions, localSeq, sync });

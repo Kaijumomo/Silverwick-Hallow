@@ -1,11 +1,31 @@
 import { describe, expect, it } from "vitest";
 import type { EffectRecord } from "@/stores/types";
 import { officialEffectPresentation, officialNotationRole } from "./officialReminderPresentation";
+import { bind, impair, proofGame, proofRegistry, proofScript, reseat } from "@/test/proofFixtures";
+import { createRulesQuery } from "@/stores/rulesQuery";
 
 const effect = (id: string, type: string, sourceCharacter?: string, state: EffectRecord["state"] = "active"): EffectRecord =>
   ({ id, type, sourceCharacter, state, lifetime: { kind: "manual" }, expiry: { kind: "none" } });
 
 describe("official reminder presentation", () => {
+  it("derives applicability from the bound source, including impairment, suppression, death and seat replacement", () => {
+    const original = proofGame(["poisoner", "chef"]);
+    original.players.p1!.effects = [{ ...effect("poison", "poisoned", "poisoner"), sourceParticipant: {
+      kind: "participant", ...bind(original, "p0"), nameAtTime: "Player 0" } }];
+    const details = (game: typeof original) => officialEffectPresentation(game.players.p1!, {
+      query: createRulesQuery(game, { registry: proofRegistry, script: proofScript }), target: bind(game, "p1"),
+    }).tokens[0]!.detail;
+    expect(details(original)).toContain("Currently affecting");
+    expect(details(impair(original, "p0"))).toContain("Not currently affecting");
+    expect(details(original)).toContain("Currently affecting");
+    const dead = { ...original, players: { ...original.players, p0: { ...original.players.p0!, alive: false } } };
+    expect(details(dead)).toContain("Not currently affecting");
+    expect(details(reseat(original, "p0"))).not.toContain(": Currently affecting");
+    const suppressed = { ...original, players: { ...original.players, p1: { ...original.players.p1!,
+      effects: [{ ...original.players.p1!.effects[0]!, state: "suppressed" as const }] } } };
+    expect(details(suppressed)).toContain("Not currently affecting");
+    expect(original.players.p1!.effects[0]!.state).toBe("active");
+  });
   it("uses the canonical Poisoner and Monk token labels for their exact effect types", () => {
     const view = officialEffectPresentation({ effects: [effect("p", "poisoned", "poisoner"), effect("m", "safeFromDemon", "monk")] });
     expect(view.tokens.map(token => [token.role.id, token.label])).toEqual([["poisoner", "Poisoned"], ["monk", "Safe"]]);

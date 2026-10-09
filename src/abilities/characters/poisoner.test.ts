@@ -28,10 +28,26 @@ describe("Poisoner -- functioning", () => {
       .toEqual({ kind: "at", moment: { phase: "night", day: 4 } });
   });
 
-  it("self and a dead player are legal targets (no constraint)", () => {
+  it("self-poisoning remains legal but wholly Manual because its sourced cycle is unmodeled; a dead target is modeled", () => {
     const g = patchPlayer(proofGame(ROLES), "p2", { alive: false });
-    expect(poisonOf(planned(plan(g, request(g, "p0", "poisoner", { target: pick(g, "p0") }))), "p0")).toBeDefined();
+    expect(plan(g, request(g, "p0", "poisoner", { target: pick(g, "p0") }))).toMatchObject({ ok: false, code: "unsupported" });
+    expect(g.players.p0!.effects).toEqual([]);
     expect(poisonOf(planned(plan(g, request(g, "p0", "poisoner", { target: pick(g, "p2") }))), "p2")).toBeDefined();
+  });
+
+  it("mutual sourced-poison uncertainty refuses the whole action without history or Night changes", () => {
+    let g = proofGame(["poisoner", "poisoner", "chef", "imp"]);
+    const effect = (sourceId: string) => ({ id: "mutual-" + sourceId, type: "poisoned", state: "active" as const,
+      sourceCharacter: "poisoner", sourceParticipant: { kind: "participant" as const, playerId: sourceId, participantId: g.players[sourceId]!.participantId!, nameAtTime: "Source" },
+      lifetime: { kind: "throughFollowingDay" as const }, expiry: { kind: "at" as const, moment: { phase: "night" as const, day: 3 } }, appliedAt: { phase: "night" as const, day: 2 } });
+    g = patchPlayer(g, "p0", { effects: [effect("p1")] });
+    g = patchPlayer(g, "p1", { effects: [effect("p0")] });
+    const before = JSON.stringify(g);
+    expect(plan(g, request(g, "p0", "poisoner", { target: pick(g, "p2") }, { withStep: true, completeStep: true }))).toMatchObject({ ok: false, code: "unsupported" });
+    expect(JSON.stringify(g)).toBe(before);
+    expect(g.history).toEqual([]);
+    expect(g.nightProgress).toEqual({});
+    expect(g.players.p0!.abilityUsed).toBe(false);
   });
 
   it("is a simple one-participant resolution (no confirmation) and records the step in the same snapshot", () => {

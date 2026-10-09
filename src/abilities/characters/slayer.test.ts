@@ -1,7 +1,7 @@
 // Phase 10F Slice 7 -- Slayer (matrix Section 10). Production semantics.
 import { beforeEach, describe, expect, it } from "vitest";
 import { registersAsDemonJudgment } from "./slayer";
-import { bind, protectionId, homebrewEnv, impair, openInStore, patchPlayer, pick, plan, planned, proofGame, request, requirementIds, reseat, yes } from "@/test/proofFixtures";
+import { bind, protectionId, homebrewEnv, impair, openInStore, patchPlayer, pick, plan, planned, proofGame, request, reseat, yes } from "@/test/proofFixtures";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import type { EffectRecord, StorytellerLobbyRecord } from "@/stores/types";
 
@@ -44,9 +44,11 @@ describe("Slayer -- functioning", () => {
   it("Recluse registration is the Storyteller's judgment (a Recluse may die to the Slayer)", () => {
     const g = day();
     const id = registersAsDemonJudgment(g.players.p3!.participantId!);
-    expect(requirementIds(shoot(g, "p3"))).toEqual([id]);
-    expect(planned(shoot(g, "p3", { judgments: { [id]: yes(true) } })).players.p3!.alive).toBe(false);
-    expect(planned(shoot(g, "p3", { judgments: { [id]: yes(false) } })).players.p3!.alive).toBe(true);
+    expect(shoot(g, "p3")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(shoot(g, "p3", { judgments: { [id]: yes(true) } })).toMatchObject({ ok: false, code: "unsupported" });
+    expect(shoot(g, "p3", { judgments: { [id]: yes(false) } })).toMatchObject({ ok: false, code: "unsupported" });
+    expect(g.players.p0!.abilityUsed).toBe(false);
+    expect(g.players.p3!.alive).toBe(true);
   });
 
   it("protection is queried for ANY death: known clear / known block / unknown -> judgment", () => {
@@ -60,9 +62,10 @@ describe("Slayer -- functioning", () => {
     // Generic Protected -> explicit judgment.
     const generic = patchPlayer(day(), "p1", { effects: [effect("protected")] });
     const id = protectionId(generic, "any", "p1");
-    expect(requirementIds(shoot(generic, "p1"))).toEqual([id]);
-    expect(planned(shoot(generic, "p1", { judgments: { [id]: yes(true) } })).players.p1!.alive).toBe(true);
-    expect(planned(shoot(generic, "p1", { judgments: { [id]: yes(false) } })).players.p1!.alive).toBe(false);
+    expect(shoot(generic, "p1")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(shoot(generic, "p1", { judgments: { [id]: yes(true) } })).toMatchObject({ ok: false, code: "unsupported" });
+    expect(shoot(generic, "p1", { judgments: { [id]: yes(false) } })).toMatchObject({ ok: false, code: "unsupported" });
+    expect(generic.players.p0!.abilityUsed).toBe(false);
   });
 });
 

@@ -29,6 +29,7 @@ import { LifeShroud, LifeStateText, VoteToken } from "@/features/life/LifeMarks"
 import { abilityUsedMarker, actualAlignmentMarker } from "./tokenMarkers";
 import { OfficialReminderToken } from "@/features/reminders/OfficialReminderToken";
 import { officialEffectPresentation, officialNotationRole } from "@/features/reminders/officialReminderPresentation";
+import { createRulesQuery } from "@/stores/rulesQuery";
 import {
   cleanupStatusText,
   groupText,
@@ -184,7 +185,6 @@ function Token({
   // hidden with CSS). A legacy Effect with an unresolved lifetime is a
   // concise Storyteller-only "Needs check".
   const indicators = privacyMode ? [] : effectIndicators(player);
-  const officialEffects = modern && !privacyMode ? officialEffectPresentation(player) : null;
   const officialNotes = new Map<string, { role: RoleDef; label: string; count: number }>();
   if (modern && !privacyMode) for (const reminder of player.reminders) {
     const reminderRole = officialNotationRole(reminder.sourceCharacter, reminder.label);
@@ -196,7 +196,6 @@ function Token({
   }
   const inwardAngle = Math.atan2(boardCentre.y - (y - spec.height / 2 + spec.disc / 2), boardCentre.x - x);
   const needsCheckBase = !privacyMode && (life.anomalies.length > 0 || effectsNeedingCheck(player).length > 0);
-  const effectSummary = privacyMode ? "" : effectAccessibleSummary(player);
   // Phase 10C: Reminders are Storyteller-private notation -- under Privacy
   // Mode no chip, label, count, overflow, cleanup state or accessible text is
   // rendered at all (DOM absence, not CSS). Game is read here, not threaded,
@@ -205,15 +204,21 @@ function Token({
   // Phase 10D: a Shown Role that cannot be projected safely is a
   // Storyteller-private "Needs check" (never shown under Privacy Mode).
   const script = useStorytellerStore((s) => (game ? selectScriptById(s, game.scriptId) : undefined));
+  const query = useMemo(() => !privacyMode && game && script ? createRulesQuery(game, { script, registry: buildRegistry(script) }) : null, [game, script, privacyMode]);
+  const officialEffects = modern && query && player.participantId
+    ? officialEffectPresentation(player, { query, target: { playerId: player.id, participantId: player.participantId } }) : null;
+  const effectSummary = privacyMode ? "" : officialEffects
+    ? [...officialEffects.tokens.map(token => token.detail), ...officialEffects.fallback.map(summary => summary.indicator.label)].join("; ")
+    : effectAccessibleSummary(player);
   const perceptionCheck = !privacyMode && !!script && identityNeedsCheck(player, buildRegistry(script));
   const listedReminders = modern && spec.tier !== "XS"
     ? player.reminders.filter(reminder => !officialNotationRole(reminder.sourceCharacter, reminder.label)) : player.reminders;
   const reminderGroups = privacyMode || !game ? [] : reminderTokenGroups({ reminders: listedReminders }, game);
   const customSatellites = modern && spec.tier !== "XS" ? reminderGroups.slice(0, 3) : [];
   const satellites = [
-    ...(officialEffects?.tokens ?? []).map(token => ({ key: `effect:${token.key}`, role: token.role as RoleDef | null, label: token.label, count: token.instances.length, notation: false, status: null as string | null })),
-    ...[...officialNotes.entries()].map(([key, token]) => ({ key: `notation:${key}`, ...token, notation: true, status: null as string | null })),
-    ...customSatellites.map(group => ({ key: `custom:${group.label}`, role: null, label: group.label, count: group.instances.length, notation: true, status: cleanupStatusText(group.status) })),
+    ...(officialEffects?.tokens ?? []).map(token => ({ key: `effect:${token.key}`, role: token.role as RoleDef | null, label: token.label, count: token.instances.length, notation: false, status: null as string | null, detail: token.detail })),
+    ...[...officialNotes.entries()].map(([key, token]) => ({ key: `notation:${key}`, ...token, notation: true, status: null as string | null, detail: undefined })),
+    ...customSatellites.map(group => ({ key: `custom:${group.label}`, role: null, label: group.label, count: group.instances.length, notation: true, status: cleanupStatusText(group.status), detail: undefined })),
   ];
   const reminderCount = modern && spec.tier !== "XS"
     ? reminderGroups.slice(customSatellites.length).reduce((count, group) => count + group.instances.length, 0)
@@ -329,7 +334,7 @@ function Token({
             const distance = radius + 22 * Math.max(0, Math.sin(angle)) + 12 * Math.max(0, -Math.sin(angle));
             return <span className="token-official-satellite" key={token.key}
               style={{ left: `calc(50% + ${Math.round(Math.cos(angle) * distance)}px)`, top: `calc(50% + ${Math.round(Math.sin(angle) * distance)}px)` }}>
-              {token.role ? <OfficialReminderToken role={token.role} label={token.label} count={token.count} notation={token.notation} decorative />
+              {token.role ? <OfficialReminderToken role={token.role} label={token.label} count={token.count} notation={token.notation} title={token.detail} decorative />
                 : <span className="official-reminder-token official-reminder-notation token-custom-reminder" data-reminder-kind="notation" title={`${token.label} (notation only)`}>
                   <span className="official-reminder-disc"><span className="token-custom-reminder-pen">✎</span></span>
                   <span className="official-reminder-label">{token.label}{token.count > 1 ? ` ×${token.count}` : ""}{token.status && <span className="token-custom-reminder-status">{token.status}</span>}</span>

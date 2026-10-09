@@ -1,0 +1,12 @@
+[data-removal-armed="true"] {
+  opacity: .68;
+}
+[data-removal-armed="true"] .popover-reminder-disc,
+[data-removal-armed="true"] .official-reminder-disc,
+.reminder-tag[data-removal-armed="true"] {
+  box-shadow: 0 0 0 2px rgba(202, 82, 87, .55), 0 0 12px rgba(202, 82, 87, .18);
+}
+[data-removal-armed="true"] .popover-reminder-remove,
+[data-removal-armed="true"] .reminder-tag-remove {
+  color: #ed8589;
+}

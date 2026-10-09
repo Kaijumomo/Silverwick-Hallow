@@ -138,18 +138,11 @@ describe("SOL-10F-L2: every input kind, cardinality and constraint", () => {
     expect(within(dialog).getByRole("region", { name: "Result" })).toHaveTextContent("the number");
   });
 
-  it("a NON-boolean judgment renders by its own kind and cardinality (two distinct participants), labelled as judgment", () => {
+  it("an unsupported judgment refuses the whole action rather than rendering a guided fallback", () => {
     const dialog = open(JUDGED, "p4");
-    const judgment = within(dialog).getByRole("region", { name: "Storyteller judgment" });
-    expect(within(judgment).queryByRole("checkbox")).toBeNull();
-    expect(within(judgment).getByText("Storyteller judgment", { selector: ".origin-tag" })).toBeInTheDocument();
-    choose("the judged pair 1", "p0", judgment);
-    expect(offered("the judged pair 2", judgment).find((o) => o.value === "p0")!.disabled).toBe(true);
-    choose("the judged pair 2", "p1", judgment);
-    expect(seen.at(-1)!.judgments.judged).toEqual({ kind: "participant",
-      participants: [{ playerId: "p0", participantId: game().players.p0!.participantId }, { playerId: "p1", participantId: game().players.p1!.participantId }] });
-    // The asked field stays visible once answered, so it can be changed.
-    expect(within(dialog).getByRole("region", { name: "Storyteller judgment" })).toBeInTheDocument();
-    expect(within(dialog).getByRole("button", { name: /^(Confirm and record|Resolve)$/ })).toBeEnabled();
+    expect(within(dialog).queryByRole("region", { name: "Storyteller judgment" })).toBeNull();
+    expect(within(dialog).getByRole("button", { name: "Resolve" })).toBeDisabled();
+    expect(store.getState().undoStack).toHaveLength(0);
+    expect(game().history).toEqual([]);
   });
 });

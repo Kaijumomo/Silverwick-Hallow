@@ -495,19 +495,25 @@ describe("Phase 10B identity binding", () => {
     expectInert(b);
   });
 
-  it("the source ParticipantRef survives the source's departure; source character never rewrites; a replacement never inherits", () => {
+  it("the source ParticipantRef survives in History after source-loss cleanup; a replacement never inherits", () => {
     liveGame();
     const alice = idOf("Alice");
     const carol = idOf("Carol");
     const aliceRef = participantRefOf(game(), alice);
     resolve(apply("Carol", { id: "p", type: "poisoned", source: bind(alice), sourceCharacter: "poisoner", lifetime: { kind: "manual" } }),
       apply("Alice", { id: "own", type: "drunk", lifetime: { kind: "manual" } }));
+    expect(player(carol).effects[0]).toMatchObject({ sourceParticipant: aliceRef, sourceCharacter: "poisoner" });
     state().assignRole(alice, "chef");
     state().unseatPlayer(alice);
     state().addPlayerToSeat("Mallory");
-    const effect = player(carol).effects[0]!;
-    expect(effect.sourceParticipant).toEqual(aliceRef);
-    expect(effect.sourceCharacter).toBe("poisoner");
+    // Verified Poisoner effects now terminate on source loss, but their durable
+    // provenance remains in History and never points at the replacement.
+    expect(player(carol).effects).toEqual([]);
+    expect(effectHistory()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ change: expect.objectContaining({
+        kind: "added", item: expect.objectContaining({ id: "p", sourceParticipant: aliceRef, sourceCharacter: "poisoner" }),
+      }) }),
+    ]));
     // The replacement occupant of Alice's seat has none of Alice's Effects.
     expect(player(alice).effects).toEqual([]);
     expect(player(alice).name).toBe("Mallory");

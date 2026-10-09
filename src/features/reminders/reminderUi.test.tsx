@@ -79,12 +79,14 @@ describe("Phase 10C Drawer fast path", () => {
     expect(player(idOf("Carol")).reminders.map((r) => r.label)).toEqual(["Knows"]);
   });
 
-  it("fast remove: one tap on the instance's remove control removes exactly that instance", () => {
+  it("two taps on the instance's remove control remove exactly that instance", () => {
     place("Carol", { id: "a", label: "Chosen" });
     place("Carol", { id: "b", label: "Chosen" });
     render(<SeatDrawer seat={idOf("Carol")} />);
     const removes = within(reminderSection()).getAllByRole("button", { name: "Remove Chosen reminder" });
     expect(removes).toHaveLength(2);
+    fireEvent.click(removes[0]!);
+    expect(player(idOf("Carol")).reminders.map((r) => r.id)).toEqual(["a", "b"]);
     fireEvent.click(removes[0]!);
     expect(player(idOf("Carol")).reminders.map((r) => r.id)).toEqual(["b"]);
   });

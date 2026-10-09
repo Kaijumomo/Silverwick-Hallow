@@ -94,12 +94,8 @@ describe("Slayer -- the Day entry", () => {
     open(named(["slayer", "imp", "chef", "monk", "saint", "poisoner", "empath"], "day", 2));
     render(<Entry id="p0" />);
     fireEvent.click(screen.getByRole("button", { name: "Use ability… (Slayer)" }));
-    const dialog = screen.getByRole("dialog", { name: /Slayer — guided resolution/ });
+    const dialog = screen.getByRole("dialog", { name: "Slayer" });
     choose("The player publicly chosen", "p1", dialog);
-    const preview = within(dialog).getByRole("region", { name: "Result" });
-    expect(within(preview).getByText("Player 0's ability is used")).toBeInTheDocument();
-    expect(within(preview).getByText("Player 1 dies")).toBeInTheDocument();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Confirm and record" }));
     expect(game().players.p1!.alive).toBe(false);
     expect(game().players.p0!.abilityUsed).toBe(true);
     expect(state().undoStack).toHaveLength(1);
@@ -109,14 +105,16 @@ describe("Slayer -- the Day entry", () => {
     open(named(["poisoner", "imp", "chef", "monk", "saint", "spy", "empath"], "night", 2));
     render(<Entry id="p0" />);
     expect(screen.queryByRole("button", { name: /Use ability/ })).toBeNull();
-    expect(screen.getByRole("button", { name: "Resolve manually / unmodeled interaction" })).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Advanced corrections"));
+    expect(screen.getByRole("button", { name: "Record outcome…" })).toBeInTheDocument();
   });
 
   it("the Cult Leader's Day portion is Manual-only in the Day entry", () => {
     open(named(["cultleader", "imp", "chef", "monk", "saint", "spy", "empath"], "day", 2));
     render(<Entry id="p0" />);
     expect(screen.queryByRole("button", { name: /Use ability/ })).toBeNull();
-    expect(screen.getByRole("button", { name: "Resolve manually / unmodeled interaction" })).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Advanced corrections"));
+    expect(screen.getByRole("button", { name: "Record outcome…" })).toBeInTheDocument();
   });
 });
 
@@ -178,7 +176,8 @@ describe("Tinker -- verified Manual reference in the Player Drawer", () => {
     open(named(["tinker", "imp", "chef", "monk", "saint", "spy", "empath"], "day", 2));
     render(<Entry id="p0" />);
     expect(screen.queryByRole("button", { name: /Use ability/ })).toBeNull();
-    expect(screen.getByText(/Storyteller discretion IS the Tinker's mechanic/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Resolve manually / unmodeled interaction" })).toBeInTheDocument();
+    expect(screen.getByText(proofScript.characters.find(role => role.id === "tinker")!.ability!)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Advanced corrections"));
+    expect(screen.getByRole("button", { name: "Record outcome…" })).toBeInTheDocument();
   });
 });

@@ -103,13 +103,14 @@ describe("Fortune Teller -- the answer", () => {
     expect(answer(planned(ask(dead, "p1", "p2")))).toMatchObject({ value: true });
   });
 
-  it("Recluse registration is the Storyteller's judgment -- asked only when it could change the answer", () => {
-    expect(requirementIds(ask(g, "p4", "p2"))).toEqual([registersAsDemonJudgment(bind(g, "p4"))]);
+  it("uncertain Recluse registration keeps the whole action Manual; a decisive Demon remains known", () => {
+    const before = JSON.stringify(g);
+    expect(ask(g, "p4", "p2")).toMatchObject({ ok: false, code: "unsupported" });
     const judged = (value: boolean) =>
       plan(g, request(g, "p0", "fortuneteller", { targets: pick(g, "p4", "p2") }, { judgments: { [registersAsDemonJudgment(bind(g, "p4"))]: yes(value) } }));
-    expect(answer(planned(judged(true)))).toMatchObject({ value: true });
-    expect(answer(planned(judged(false)))).toMatchObject({ value: false });
-    expect(judged(true)).toMatchObject({ plan: { needsConfirmation: true } });
+    expect(judged(true)).toMatchObject({ ok: false, code: "unsupported" });
+    expect(judged(false)).toMatchObject({ ok: false, code: "unsupported" });
+    expect(JSON.stringify(g)).toBe(before);
     // Already Yes from the actual Demon: no question.
     expect(answer(planned(ask(g, "p4", "p1")))).toMatchObject({ value: true });
   });
