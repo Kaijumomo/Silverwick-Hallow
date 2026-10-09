@@ -13,6 +13,7 @@ import {
 } from "@/abilities/semantics";
 import { invocationEligibility, isInvocationPath, nightTriggerStatus, type InvocationPath } from "@/abilities/invocation";
 import { automationEligibility } from "@/abilities/automationEligibility";
+import { incompleteSuccessionReason } from "@/abilities/completeActionSafety";
 import { activeModifiers, prospectiveJinxes, type ModifierDefinition } from "@/abilities/modifiers";
 import { applyAlignmentPlan, defaultAlignmentIds, planAlignmentTransaction, type AlignmentIdSource, type AlignmentIntent } from "./alignmentResolution";
 import { applyEffectPlan, planEffectTransaction, type EffectIdSource, type EffectIntent } from "./effectResolution";
@@ -416,6 +417,7 @@ function checkOrdering(outcome: AbilityOutcome): AbilityRefusal | null {
 }
 
 type ComposeOptions = {
+  automaticAction?: { actor: ParticipantBinding; roleId: RoleId };
   context?: MutationContext;
   resolutionId: string;
   completeStep?: AbilityWorkflowFingerprint["step"];
@@ -479,7 +481,13 @@ export function composeAbilityOutcome(
         }
         const result = planLifeTransaction(working, { intents, resolutionId, ...(context ? { context } : {}) }, ids.life, environment);
         if (!result.ok) return domainRefusal("life", result);
-        if (result.changed) working = applyLifePlan(working, result.plan);
+        const next = result.changed ? applyLifePlan(working, result.plan) : working;
+        if (options.automaticAction) {
+          const incomplete = incompleteSuccessionReason(createRulesQuery(working, environment), outcome,
+            options.automaticAction, operation.intents, createRulesQuery(next, environment));
+          if (incomplete) return refuse("unsupported", incomplete, { operationIndex });
+        }
+        working = next;
         break;
       }
       case "effect": {
@@ -1033,6 +1041,7 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   }
   const judgmentAnswered = judgmentUsed || descriptor.inputs.some((requirement) => requirement.source === "judgment") || Object.keys(judgments).length > 0;
   const result = composeAbilityOutcome(game, outcome, environment, {
+    automaticAction: { actor: actorBinding, roleId: request.roleId },
     resolutionId,
     ...(request.context ? { context: request.context } : {}),
     ...(completeStep ? { completeStep } : {}),

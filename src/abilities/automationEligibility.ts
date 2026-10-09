@@ -4,6 +4,7 @@ import type { AbilityDescriptor, AbilityInputs, InformationConstraint } from "./
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
 import { effectSemanticsOf } from "@/stores/rulesQuery";
+import { incompleteSuccessionReason } from "./completeActionSafety";
 
 export type AutomationEligibility = { kind: "automated" } | { kind: "manual"; reason: string };
 export type AutomationContext = {
@@ -75,5 +76,9 @@ export function automationEligibility({ query, descriptor, actor, roleId, simula
     functioning: !simulated && functions.known && functions.value, inputs, judgments: {}, query, constraints });
   if (evaluation.kind === "unsupported") return manual(evaluation.message);
   if (evaluation.kind === "needsInput" && evaluation.requirements.some(requirement => requirement.source === "judgment")) return manual(evaluation.message);
+  if (evaluation.kind === "outcome") {
+    const incomplete = incompleteSuccessionReason(query, evaluation.outcome, { actor, roleId });
+    if (incomplete) return manual(incomplete);
+  }
   return { kind: "automated" };
 }
