@@ -499,11 +499,16 @@ describe("Phase 10B identity binding", () => {
     liveGame();
     const alice = idOf("Alice");
     const carol = idOf("Carol");
+    // Dealing is randomized: bind this source to a real Poisoner before
+    // testing ability loss. An already-Chef source makes the later edit a no-op.
+    state().assignRole(alice, "poisoner");
+    expect(player(alice).actualRole).toBe("poisoner");
     const aliceRef = participantRefOf(game(), alice);
-    resolve(apply("Carol", { id: "p", type: "poisoned", source: bind(alice), sourceCharacter: "poisoner", lifetime: { kind: "manual" } }),
-      apply("Alice", { id: "own", type: "drunk", lifetime: { kind: "manual" } }));
+    expect(resolve(apply("Carol", { id: "p", type: "poisoned", source: bind(alice), sourceCharacter: "poisoner", lifetime: { kind: "manual" } }),
+      apply("Alice", { id: "own", type: "drunk", lifetime: { kind: "manual" } }))).toMatchObject({ ok: true, changed: true });
     expect(player(carol).effects[0]).toMatchObject({ sourceParticipant: aliceRef, sourceCharacter: "poisoner" });
     state().assignRole(alice, "chef");
+    expect(player(alice).actualRole).toBe("chef");
     state().unseatPlayer(alice);
     state().addPlayerToSeat("Mallory");
     // Verified Poisoner effects now terminate on source loss, but their durable

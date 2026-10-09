@@ -2,6 +2,20 @@ import { isCanonicalRole } from "@/data/canonical";
 import type { ModifierDefinition } from "../modifiers";
 import type { RulesQuery, QueryAnswer } from "@/stores/rulesQuery";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
+import type { Alignment, RoleId, RoleType } from "@/stores/types";
+
+/** Official Spy/Recluse almanacs: optional registration per interaction,
+ * including while dead. These are possible forms, never an identity choice.
+ * https://wiki.bloodontheclocktower.com/Spy
+ * https://wiki.bloodontheclocktower.com/Recluse
+ * The caller must verify canonical ownership and current ability functioning.
+ */
+const OPTIONAL_REGISTRATION: Readonly<Record<RoleId, { alignment: Alignment; types: readonly RoleType[]; whileDead: boolean }>> = {
+  spy: { alignment: "good", types: ["townsfolk", "outsider"], whileDead: true },
+  recluse: { alignment: "evil", types: ["minion", "demon"], whileDead: true },
+};
+export const passiveRegistrationOptions = (roleId: RoleId) =>
+  Object.prototype.hasOwnProperty.call(OPTIONAL_REGISTRATION, roleId) ? OPTIONAL_REGISTRATION[roleId] : undefined;
 
 /** Character Intelligence 1a/1b extends matrix Section 3 of
  * PHASE10F_CHARACTER_RULES_MATRIX.md. Official rule references:

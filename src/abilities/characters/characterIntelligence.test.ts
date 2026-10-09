@@ -122,7 +122,9 @@ describe("Character Intelligence bounded automation", () => {
   it("ordinary Empath stays automatic while ambiguous registration and modifiers are wholly Manual", () => {
     const game = proofGame(["empath", "imp", "chef"]);
     expect(eligible(game, "empath").kind).toBe("automated");
-    expect(eligible(patchPlayer(game, "p2", { actualRole: "spy" }), "empath").kind).toBe("manual");
+    // A normal evil Spy may register good; an actually good Spy cannot alter
+    // this alignment answer merely by using its own registration ability.
+    expect(eligible(patchPlayer(game, "p2", { actualRole: "spy", actualAlignment: "evil" }), "empath").kind).toBe("manual");
     expect(eligible({ ...game, fabled: ["fibbin"] }, "empath").kind).toBe("manual");
   });
 

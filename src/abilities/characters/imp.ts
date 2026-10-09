@@ -52,7 +52,7 @@ function successor(context: AbilityEvaluationContext): { binding: ParticipantBin
   const binding = (p: (typeof seated)[number]): ParticipantBinding => ({ playerId: p!.id, participantId: p!.participantId! });
   const minions = seated.filter((p) => p!.alive && !p!.isTraveler && p!.participantId !== context.actor.binding.participantId &&
     query.roleOf(p!.actualRole)?.type === "minion").map(binding);
-  let candidates = minions;
+  let candidates: ParticipantBinding[] | undefined;
   const scarletWoman = query.roleOf("scarletwoman");
   if (aliveNonTravellers >= SCARLET_WOMAN_THRESHOLD && scarletWoman && isCanonicalRole(scarletWoman)) {
     const priority: ParticipantBinding[] = [];
@@ -66,15 +66,36 @@ function successor(context: AbilityEvaluationContext): { binding: ParticipantBin
     }
     if (priority.length) candidates = priority;
   }
+  // Only an actual, unprevented self-death reaches here. A functioning
+  // Scarlet Woman has mandatory priority; otherwise optional Minion
+  // registration can change the eligible set and remains wholly Manual.
+  if (!candidates) {
+    candidates = [];
+    const chosen = followUpParticipant(context, context.inputs, SUCCESSOR);
+    if (chosen && "refusal" in chosen) return { evaluation: chosen.refusal };
+    const possible = seated.filter(player => player!.alive && !player!.isTraveler && player!.participantId !== context.actor.binding.participantId);
+    // An existing explicit Storyteller choice of a definite Minion does not
+    // depend on how an unchosen Spy/Recluse registers. With no such choice,
+    // every possible candidate matters to the automatic selection.
+    const relevant = chosen ? possible.filter(player => player!.participantId === chosen.binding.participantId) : possible;
+    if (chosen && !relevant.length) return { evaluation: { kind: "illegal", message: "The new Imp must be an eligible living Minion." } };
+    for (const player of relevant) {
+      const target = binding(player);
+      const registered = query.registersAsType(target, "minion", "imp");
+      if (!registered.known) return { evaluation: { kind: "unsupported", message: registered.reason } };
+      if (registered.value) candidates.push(target);
+    }
+    if (chosen && !candidates.length) return { evaluation: { kind: "illegal", message: "The new Imp must be an eligible living Minion." } };
+  }
   if (!candidates.length) return null;
-  if (candidates.length === 1) return { binding: candidates[0]! };
   const chosen = followUpParticipant(context, context.inputs, SUCCESSOR);
-  if (!chosen) return { evaluation: ask("The Imp died by its own ability: the Storyteller chooses which living Minion becomes the Imp.",
-    { id: SUCCESSOR, kind: "participant", source: "storyteller", label: "The Minion who becomes the Imp" }) };
-  if ("refusal" in chosen) return { evaluation: chosen.refusal };
-  if (!candidates.some((c) => c.participantId === chosen.binding.participantId)) {
+  if (chosen && "refusal" in chosen) return { evaluation: chosen.refusal };
+  if (chosen && !candidates.some(c => c.participantId === chosen.binding.participantId)) {
     return { evaluation: { kind: "illegal", message: "The new Imp must be one of the eligible living Minions (a functioning Scarlet Woman first)." } };
   }
+  if (candidates.length === 1) return { binding: candidates[0]! };
+  if (!chosen) return { evaluation: ask("The Imp died by its own ability: the Storyteller chooses which living Minion becomes the Imp.",
+    { id: SUCCESSOR, kind: "participant", source: "storyteller", label: "The Minion who becomes the Imp" }) };
   return { binding: chosen.binding };
 }
 

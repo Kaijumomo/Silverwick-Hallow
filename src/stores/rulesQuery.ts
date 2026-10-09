@@ -1,12 +1,12 @@
 import { isCanonicalRole } from "@/data/canonical";
-import { passiveProtection, passiveInformationModifiers } from "@/abilities/characters/passiveRules";
+import { passiveProtection, passiveInformationModifiers, passiveRegistrationOptions } from "@/abilities/characters/passiveRules";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { activeModifiers, gateEvaluation, type HookScope, type ModifierDefinition, type ModifierGate } from "@/abilities/modifiers";
 import { resolveAbilitySemantics, type AbilitySemanticsRegistry } from "@/abilities/semantics";
 import { currentLiveMoment, lifeEventsAt, type LifeEventQueryResult } from "./lifeEvents";
 import { gameRuleFactActive, gameRuleFactDefinition } from "./gameRuleFacts";
 import type { ParticipantBinding } from "./abilityResolution";
-import type { Alignment, EffectRecord, LifeEvent, LiveGameMoment, RoleDef, RoleId, STPlayerRecord, Script, StorytellerLobbyRecord } from "./types";
+import type { Alignment, EffectRecord, LifeEvent, LiveGameMoment, RoleDef, RoleId, RoleType, STPlayerRecord, Script, StorytellerLobbyRecord } from "./types";
 
 /**
  * Phase 10F: the Rules Query layer (PHASE10F Section 3.2) -- pure, DERIVED
@@ -131,6 +131,9 @@ export type RulesQuery = {
   protectionDependencyStamp: (binding: ParticipantBinding, cause: "demon" | "any") => string;
   /** What the participant registers as, to an `observer` character. */
   registration: (binding: ParticipantBinding, observer?: RoleId) => RegistrationAnswer;
+  /** Whether every possible registration gives the same answer to THIS type
+   * question. Optional registration is never selected or stored here. */
+  registersAsType: (binding: ParticipantBinding, type: RoleType, observer?: RoleId) => QueryAnswer<boolean>;
   /** The nearest living participants on each side (skipping empty seats and
    * the dead), or null when there is none. */
   aliveNeighbours: (binding: ParticipantBinding) => QueryAnswer<{ left: ParticipantBinding | null; right: ParticipantBinding | null }>;
@@ -293,6 +296,42 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     return player ? run(player) : unknown("That participant is no longer in this seat.");
   };
 
+  // Spy/Recluse registration is optional per interaction, including while
+  // dead (official almanacs). Known impairment removes that ability. Possible
+  // types are internal derived bounds, not a selected identity or saved state.
+  const registrationAnswers = (binding: ParticipantBinding, observer?: RoleId): RegistrationAnswer & { types: QueryAnswer<readonly RoleType[]> } => {
+    const judgment = (reason: string) => ({ character: unknown<RoleId>(reason), alignment: unknown<Alignment>(reason), types: unknown<readonly RoleType[]>(reason) });
+    const player = participant(binding);
+    if (!player) return judgment("That participant is no longer in this seat.");
+    const role = environment.registry.get(player.actualRole);
+    if (!role || !isCanonicalRole(role)) return judgment("Registration of a non-canonical character is the Storyteller's decision.");
+    if (player.effects.some(effect => effect.state === "active" && effect.type === "registersFalsely")) {
+      return judgment("A Registers falsely Effect applies: the Storyteller decides.");
+    }
+    const good = player.actualAlignment === "good";
+    for (const other of seated()) {
+      const scope = REGISTRATION_ALTERING[other.actualRole];
+      if (scope === "anyGood" && good) return judgment(`The ${environment.registry.get(other.actualRole)?.name ?? other.actualRole} may make a good player register falsely: the Storyteller decides.`);
+      if (scope === "observerGood" && good && observer === other.actualRole) return judgment("A good player may register falsely to this character: the Storyteller decides.");
+    }
+    const gate = gateEvaluation(modifiers, observer ?? player.actualRole, ["registration"], game);
+    if (gate.kind !== "clear") return judgment("A modifier may change registration: the Storyteller decides.");
+    const actual = { character: known(player.actualRole), alignment: player.actualAlignment ? known(player.actualAlignment) : unknown<Alignment>("The Actual Alignment is unresolved."), types: known<readonly RoleType[]>([role.type]) };
+    const optional = passiveRegistrationOptions(player.actualRole);
+    if (optional && (player.alive || optional.whileDead)) {
+      const functioning = functions(player, new Set());
+      if (functioning.known && !functioning.value) return actual;
+      const reason = functioning.known ? `The ${role.name} may register falsely: the Storyteller decides.` : functioning.reason;
+      return {
+        character: unknown(reason),
+        alignment: player.actualAlignment === optional.alignment ? known(optional.alignment) : unknown(reason),
+        types: known([role.type, ...optional.types]),
+      };
+    }
+    if (REGISTRATION_ALTERING[player.actualRole] === "self") return judgment(`The ${role.name} may register falsely: the Storyteller decides.`);
+    return actual;
+  };
+
   const self: RulesQuery = {
     game,
     moment: () => currentLiveMoment(game),
@@ -322,31 +361,15 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     }),
     protectionDependencyStamp: () => protectionDependencies(),
     registration: (binding, observer) => {
-      const player = participant(binding);
-      if (!player) {
-        const stale = unknown<never>("That participant is no longer in this seat.");
-        return { character: stale, alignment: stale };
-      }
-      const judgment = (reason: string): RegistrationAnswer => ({ character: unknown(reason), alignment: unknown(reason) });
-      const role = environment.registry.get(player.actualRole);
-      if (!role || !isCanonicalRole(role)) return judgment("Registration of a non-canonical character is the Storyteller's decision.");
-      if (player.effects.some((effect) => effect.state === "active" && effect.type === "registersFalsely")) {
-        return judgment("A Registers falsely Effect applies: the Storyteller decides.");
-      }
-      if (REGISTRATION_ALTERING[player.actualRole] === "self") return judgment(`The ${role.name} may register falsely: the Storyteller decides.`);
-      const good = player.actualAlignment === "good";
-      for (const other of seated()) {
-        const scope = REGISTRATION_ALTERING[other.actualRole];
-        if (!scope || scope === "self") continue;
-        if (scope === "anyGood" && good) return judgment(`The ${environment.registry.get(other.actualRole)?.name ?? other.actualRole} may make a good player register falsely: the Storyteller decides.`);
-        if (scope === "observerGood" && good && observer === other.actualRole) return judgment("A good player may register falsely to this character: the Storyteller decides.");
-      }
-      const gate = gateEvaluation(modifiers, observer ?? player.actualRole, ["registration"], game);
-      if (gate.kind !== "clear") return judgment("A modifier may change registration: the Storyteller decides.");
-      return {
-        character: known(player.actualRole),
-        alignment: player.actualAlignment ? known(player.actualAlignment) : unknown("The Actual Alignment is unresolved."),
-      };
+      const { character, alignment } = registrationAnswers(binding, observer);
+      return { character, alignment };
+    },
+    registersAsType: (binding, type, observer) => {
+      const answers = registrationAnswers(binding, observer);
+      if (!answers.types.known) return answers.types;
+      if (answers.types.value.every(value => value === type)) return known(true);
+      if (answers.types.value.every(value => value !== type)) return known(false);
+      return unknown(answers.character.known ? "The Storyteller decides this registration." : answers.character.reason);
     },
     aliveNeighbours: (binding) => require(binding, (player) => {
       const ring = seated();

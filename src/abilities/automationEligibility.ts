@@ -45,16 +45,6 @@ export function automationEligibility({ query, descriptor, actor, roleId, simula
   if (coverage.kind === "manual") return coverage;
   if (descriptor.hooks.includes("death") && Object.values(query.game.players).filter(p => !p.isEmpty && p.alive && query.roleOf(p.actualRole)?.type === "demon").length > 1) return manual("Death interactions with multiple living Demons are not fully modeled.");
   for (const value of Object.values(inputs)) if (value.kind === "character" && value.roleIds.some(id => !REVIEWED_INTERACTION_ROLES.has(id))) return manual("The chosen character has interactions outside verified coverage.");
-  // A self-killing role transition can depend on who registers as an eligible
-  // successor. The existing successor evaluator only models actual types;
-  // uncertain registration must not silently narrow that candidate set.
-  if (descriptor.hooks.includes("death") && descriptor.hooks.includes("role") && Object.values(inputs).some(value => value.kind === "participant" && value.participants.some(target => target.participantId === actor.participantId))) {
-    for (const candidate of Object.values(query.game.players)) {
-      if (candidate.isEmpty || !candidate.alive || !candidate.participantId || candidate.participantId === actor.participantId) continue;
-      const registration = query.registration({ playerId: candidate.id, participantId: candidate.participantId }, roleId).character;
-      if (!registration.known) return manual(registration.reason);
-    }
-  }
   const functions = query.abilityFunctions(actor);
   if (!simulated && !functions.known) return manual(functions.reason);
   const gate = query.modifierGate(roleId, descriptor.hooks);

@@ -39,12 +39,16 @@ export const SLAYER: AbilityDescriptor = {
     const target = firstParticipant(context.inputs, "target");
     const alive = context.query.isAlive(target);
     if (!alive.known || !alive.value) return spent();
-    const character = context.query.registration(target, "slayer").character;
+    const registration = context.query.registersAsType(target, "demon", "slayer");
     let demon: boolean;
-    if (character.known) demon = context.query.roleOf(character.value)?.type === "demon";
+    if (registration.known) demon = registration.value;
     else {
+      // When death is certainly prevented, either optional registration has
+      // the same result. Reuse the death query without accepting judgments:
+      // arbitrary-death facts must still leave the whole action Manual.
+      if (deathAttempt({ ...context, judgments: {} }, target, "any").kind === "survives") return spent();
       const judged = answerOf(context.judgments, registersAsDemonJudgment(target.participantId), "boolean");
-      if (!judged) return ask(character.reason, { id: registersAsDemonJudgment(target.participantId), kind: "boolean", source: "judgment",
+      if (!judged) return ask(registration.reason, { id: registersAsDemonJudgment(target.participantId), kind: "boolean", source: "judgment",
         label: `${nameOf(context, target)} registers as the Demon to the Slayer` });
       demon = judged.value;
     }

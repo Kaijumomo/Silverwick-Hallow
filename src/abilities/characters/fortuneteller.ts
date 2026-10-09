@@ -123,8 +123,8 @@ function evaluate(context: AbilityEvaluationContext): AbilityEvaluation {
   let yes = false;
   for (const target of targets) {
     if (target.participantId === herring.participantId) { yes = true; continue; }
-    const character = context.query.registration(target, "fortuneteller").character;
-    if (character.known) { if (context.query.roleOf(character.value)?.type === "demon") yes = true; continue; }
+    const demon = context.query.registersAsType(target, "demon", "fortuneteller");
+    if (demon.known) { if (demon.value) yes = true; continue; }
     ambiguous.push(target);
   }
   if (!yes) {
