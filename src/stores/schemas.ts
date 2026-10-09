@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { gameRuleFactDefinition, registeredGameRuleFactExpiry } from "./gameRuleFactRegistry";
+import { VotingDayStateSchema } from "./votingSchema";
 
 export const AlignmentSchema = z.enum(["good", "evil"]);
 /** Phase 10E (v23): STORED player-facing alignment perception. `undisclosed`
@@ -803,12 +804,19 @@ const forwardIssues = (ctx: z.RefinementCtx, issues: z.ZodIssue[]) => {
  * is judged by the unchanged participant contract (which requires
  * `participant` and rejects rule-fact metadata).
  */
+export const VotingHistoryRecordSchema = z.object({
+  id: z.string().min(1), category: z.literal("voting"), moment: LiveGameMomentSchema,
+  operation: z.enum(["begin", "respond", "undoLast", "correctResponse", "abandon", "acknowledge", "acknowledgeContext", "bureaucrat", "removeModifier", "virgin", "execution", "exileOutcome"]),
+  summary: z.string().min(1).max(1000), roundId: z.string().min(1).max(200).optional(),
+  participant: ParticipantRefSchema.optional(), correction: z.literal(true).optional(),
+  change: z.never().optional(),
+}).strict();
 export const HistoryRecordSchema = z.unknown().transform((raw, ctx) => {
-  const schema: z.ZodTypeAny = isPlainRecord(raw) && raw.category === "gameRuleFact"
-    ? GameRuleFactHistoryRecordSchema : ParticipantHistoryRecordSchema;
+  const schema: z.ZodTypeAny = isPlainRecord(raw) && raw.category === "voting" ? VotingHistoryRecordSchema :
+    isPlainRecord(raw) && raw.category === "gameRuleFact" ? GameRuleFactHistoryRecordSchema : ParticipantHistoryRecordSchema;
   const parsed = schema.safeParse(raw);
   if (!parsed.success) { forwardIssues(ctx, parsed.error.issues); return z.NEVER; }
-  return parsed.data as z.infer<typeof ParticipantHistoryRecordSchema> | z.infer<typeof GameRuleFactHistoryRecordSchema>;
+  return parsed.data as z.infer<typeof ParticipantHistoryRecordSchema> | z.infer<typeof GameRuleFactHistoryRecordSchema> | z.infer<typeof VotingHistoryRecordSchema>;
 });
 
 // The non-Player Information Value variants are shared verbatim by the
@@ -1075,16 +1083,16 @@ export const NightStepRecordSchema = z.object({
 
 /** Phase 10B: the current game snapshot schema version (see
  * StorytellerLobbyRecord.gameSchemaVersion). Phase 10C: v21. Phase 10D: v22.
- * Phase 10E: v23. Phase 10F: v24. Phase 10G: v25. Phase 10H: v26. */
-export const GAME_SCHEMA_VERSION = 26 as const;
-/** Phase 10H: the explicit markers migration still accepts, routed PER ENTRY
- * (see migrateGameEntry): 20 receives v20 -> ... -> v26, ..., 24 receives
- * v24 -> v25 -> v26, 25 receives v25 -> v26, 26 is current and receives
+ * Phase 10E: v23. Phase 10F: v24. Phase 10G: v25. Phase 10H: v26. Voting: v27. */
+export const GAME_SCHEMA_VERSION = 27 as const;
+/** Explicit markers migration still accepts, routed PER ENTRY
+ * (see migrateGameEntry): 20 receives v20 -> ... -> v27, ..., 26 receives
+ * v26 -> v27. 27 is current and receives
  * nothing. Any other marker is never reinterpreted as legacy -- the current
  * schema rejects it. */
-export const MIGRATABLE_GAME_SCHEMA_VERSIONS = [20, 21, 22, 23, 24, 25] as const;
-/** The immediately previous explicit marker (v25 -> v26). */
-export const PREVIOUS_GAME_SCHEMA_VERSION = 25 as const;
+export const MIGRATABLE_GAME_SCHEMA_VERSIONS = [20, 21, 22, 23, 24, 25, 26] as const;
+/** The immediately previous explicit marker (v26 -> v27). */
+export const PREVIOUS_GAME_SCHEMA_VERSION = 26 as const;
 
 export const StorytellerLobbyRecordSchema = z.object({
   // Phase 10B (v20) / 10C (v21) / 10D (v22) / 10E (v23) / 10F (v24) / 10G (v25): required explicit version evidence, NO
@@ -1138,6 +1146,7 @@ export const StorytellerLobbyRecordSchema = z.object({
   // Phase 10H (v26): optional; valid only on an ended game (checked below and
   // in StorytellerGamePersistedSchema).
   result: GameResultSchema.optional(),
+  voting: VotingDayStateSchema.optional(),
 });
 
 export const PublicLobbyRecordSchema = z.object({
@@ -1421,6 +1430,8 @@ export const StorytellerGamePersistedSchema = z.preprocess((raw, ctx) => {
   players: z.record(z.string(), STPlayerRecordPersistedSchema),
   pendingPlayers: z.record(z.string(), z.string()).default({}),
 }).superRefine((game, ctx) => {
+  if (game.voting && (game.voting.day > game.day || (game.phase === "day" && game.voting.day !== game.day)))
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Voting must belong to the current Day or an earlier retained Night result.", path: ["voting", "day"] });
   // SOL-10E-A3 (ASTRA-10E-003): Live Play has a valid live Game Moment --
   // Night/Day are day >= 1. Setup may be day 0; an ended snapshot keeps the
   // day it ended at. Rejected, never repaired.

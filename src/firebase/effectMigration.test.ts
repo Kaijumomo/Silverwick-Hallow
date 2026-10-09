@@ -136,9 +136,9 @@ describe("Phase 10B migration: v19 -> v20", () => {
     await useStorytellerStore.persist.rehydrate();
     expect(takeMigrationResetFlag()).toBe(false);
     const game = useStorytellerStore.getState().game!;
-    expect(game.gameSchemaVersion).toBe(26);
+    expect(game.gameSchemaVersion).toBe(27);
     expect(game.players.b!.effects[1]!.expiry).toEqual({ kind: "unresolved" });
-    expect(useStorytellerStore.getState().undoStack[0]!.gameSchemaVersion).toBe(26);
+    expect(useStorytellerStore.getState().undoStack[0]!.gameSchemaVersion).toBe(27);
   });
 });
 
@@ -200,7 +200,7 @@ describe("SOL-10B-RC1: legacy appliedAt made untrustworthy by old non-monotonic 
     await useStorytellerStore.persist.rehydrate();
     expect(takeMigrationResetFlag()).toBe(false);
     const store = useStorytellerStore.getState();
-    expect(store.game).toMatchObject({ phase: "setup", day: 1, gameSchemaVersion: 26 });
+    expect(store.game).toMatchObject({ phase: "setup", day: 1, gameSchemaVersion: 27 });
     const bob = store.game!.players.b!;
     expect(store.setManualEffect({ playerId: "b", participantId: bob.participantId! }, "drunk", true)).toMatchObject({ ok: true, changed: true });
     const after = useStorytellerStore.getState();
@@ -251,7 +251,7 @@ describe("Phase 10B/10C: explicit current-version evidence is never 'repaired' b
     ["a retired sourcePlayer on an Effect", (g) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[0]!.sourcePlayer = "a"; }],
     ["a legacy ParticipantRef inside a parameter", (g) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[0]!.parameters = { chosen: { kind: "participant", participants: [{ kind: "legacy", playerId: "a" }] } }; }],
     ["an empty parameter map", (g) => { (g.players as Record<string, { effects: Raw[] }>).b!.effects[0]!.parameters = {}; }],
-    ["a wrong version marker", (g) => { g.gameSchemaVersion = 27; }],
+    ["a wrong version marker", (g) => { g.gameSchemaVersion = 28; }],
     ["a string version marker", (g) => { g.gameSchemaVersion = "21"; }],
     ["an effect correction without its operation", (g) => { (g.history as Raw[]).push({ id: "h9", category: "effect", participant: alice, correction: true, change: { kind: "added", item: manualV19 } }); }],
     ["a v20 update snapshot with a malformed lifecycle", (g) => { (g.history as Raw[]).push({ id: "h9", category: "effect", participant: alice, effectOperation: "update",
@@ -260,21 +260,21 @@ describe("Phase 10B/10C: explicit current-version evidence is never 'repaired' b
 
   it.each(malformed)("%s: rejected locally (reset) whether labelled v26, v25, v24, v23, v22, v21, v20 or v19 -- migration never repairs it", (label, corrupt) => {
     const markerCase = label.includes("version marker");
-    for (const marker of markerCase ? [undefined] : [26, 25, 24, 23, 22, 21, 20]) {
-      for (const version of [26, 25, 24, 23, 22, 21, 20, 19]) {
+    for (const marker of markerCase ? [undefined] : [27, 26, 25, 24, 23, 22, 21, 20]) {
+      for (const version of [27, 26, 25, 24, 23, 22, 21, 20, 19]) {
         const game = v20();
         // Phase 10G: an entry labelled 20..24 holds no v25-only collection.
         if (marker !== undefined && marker < 25) delete game.gameRuleFacts;
         if (marker !== undefined) game.gameSchemaVersion = marker;
         corrupt(game);
         expect(hasV20Evidence(game)).toBe(true);
-        const migratable = marker === 20 || marker === 21 || marker === 22 || marker === 23 || marker === 24 || marker === 25;
-        expect(detectLegacyGameVersion(game)).toBe(migratable ? marker : 26);
+        const migratable = marker === 20 || marker === 21 || marker === 22 || marker === 23 || marker === 24 || marker === 25 || marker === 26;
+        expect(detectLegacyGameVersion(game)).toBe(migratable ? marker : 27);
         const copy = structuredClone(game);
         migrateGameEntry(copy, 13, { kind: "canonical-only" });
         // Marker 20..25: exactly the version steps (the marker, plus v25's empty
         // Rule Fact collection and the v26 stamp); otherwise nothing.
-        expect(copy).toEqual(migratable ? { ...game, gameSchemaVersion: 26, gameRuleFacts: [] } : game);
+        expect(copy).toEqual(migratable ? { ...game, gameSchemaVersion: 27, gameRuleFacts: [] } : game);
         const result = migrateStoreState({ game: structuredClone(game), undoStack: [] }, version) as { game: unknown };
         expect(takeMigrationResetFlag()).toBe(true);
         expect(result.game).toBeNull();

@@ -156,7 +156,7 @@ describe("Phase 10H: the phase-advance primary is never collapsed into the overf
     });
   }
 
-  it.each([["night", "→ Day"], ["day", "→ Night"]] as const)("%s at compact width: %s sits in the bar, outside More actions", (phase, label) => {
+  it.each([["night", "→ Day"], ["day", "Begin Night 2"]] as const)("%s at compact width: %s sits in the bar, outside More actions", (phase, label) => {
     narrow = true;
     playing(phase);
     const view = render(<GameScreen />);

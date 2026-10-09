@@ -56,10 +56,24 @@
 .game[data-grimoire-modern] .grimoire[data-mode="freeRoam"] { background: none; box-shadow: none; }
 .grimoire-phase-dock { position: absolute; left: 0; right: 0; bottom: max(14px, var(--safe-bottom)); display: flex; justify-content: center; pointer-events: none; z-index: 20; }
 .reference-workspace[data-reference-pinned] .grimoire-phase-dock { right: calc(var(--reference-width) + var(--reference-rail-width)); }
-.grimoire-phase-dock .phase-primary { display: flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: calc(100% - 24px); min-height: 44px; padding: 3px 4px 3px 16px; border: 1px solid var(--border); border-radius: 26px; background: rgba(18,13,16,.96); pointer-events: auto; }
-.grimoire-phase-label { color: #eadcb8; font: 600 14px var(--font-op); white-space: nowrap; }
-.grimoire-phase-dock .phase-advance { border-radius: 22px; min-height: 44px; border-color: transparent; background: rgba(196,158,80,.12); color: var(--gold-bright); }
+.grimoire-phase-dock .phase-primary { display: flex; align-items: center; flex-wrap: nowrap; justify-content: center; gap: 4px; max-width: calc(100% - 24px); height: 40px; padding: 0 4px 0 14px; border: 1px solid rgba(196,158,80,.16); border-radius: 20px; background: rgba(18,13,16,.78); backdrop-filter: blur(8px); pointer-events: auto; }
+.grimoire-phase-label { display: inline-flex; align-items: center; gap: 8px; padding-right: 8px; color: #eadcb8; font: 600 13px var(--font-op); white-space: nowrap; }
+.grimoire-phase-label svg { flex: none; color: #e0b96a; }
+.game[data-phase="night"] .grimoire-phase-label svg { color: #cdb3ec; }
+/* Claude's 40px pill and 32px visual controls retain 44px touch targets. */
+.grimoire-phase-dock .phase-primary > .btn { position: relative; isolation: isolate; height: 44px; min-height: 44px; padding: 0 12px; border: 0; border-radius: 16px; background: transparent; box-shadow: none; font: 400 13px/1.2 var(--font-op); letter-spacing: 0; color: rgba(216,201,164,.7); }
+.grimoire-phase-dock .phase-primary > .btn::before { content: ""; position: absolute; inset: 6px 0; z-index: -1; pointer-events: none; }
+.grimoire-phase-dock .voting-nominate::before { border-left: 1px solid rgba(196,158,80,.14); }
+.grimoire-phase-dock .phase-primary > .btn:hover:not(:disabled) { background: transparent; color: #f2cf7e; }
+.grimoire-phase-dock .phase-primary > .phase-advance { padding-inline: 14px; color: #e0b96a; font-weight: 600; }
+.grimoire-phase-dock .phase-advance::before { border-radius: 16px; background: rgba(196,158,80,.1); }
+.grimoire-phase-dock .phase-advance:hover:not(:disabled)::before { background: rgba(196,158,80,.2); }
+.grimoire-phase-dock .phase-primary:has(.phase-advance-reason) { flex-wrap: wrap; height: auto; min-height: 40px; }
 .grimoire-phase-dock .phase-advance-reason { padding: 0 8px 4px; }
+.player-popover .life-controls-compact { margin-block: 8px; padding-inline: 18px; border-block: 1px solid rgba(196,158,80,.1); }
+.player-popover .life-compact-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; color: #d8c9a4; font: 14px var(--font-op); }
+.player-popover .life-quiet-action { min-height: 44px; padding: 0; border: 0; background: transparent; color: rgba(216,201,164,.65); font: 13px var(--font-op); cursor: pointer; }
+.player-popover .life-quiet-action:hover { color: #e0b96a; }
 .grimoire-watermark { position: absolute; left: 50%; top: 50%; width: 70%; transform: translate(-50%,-50%); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 10px; pointer-events: none; text-align: center; color: rgba(210,195,235,.5); }
 .grimoire-watermark > span { text-transform: uppercase; font: 600 11px var(--font-op); letter-spacing: .4em; }
 .grimoire-watermark > strong { font: 700 clamp(18px,2.1vw,30px)/1.35 var(--font-ceremony); letter-spacing: .06em; color: rgba(232,210,160,.55); text-shadow: 0 0 24px rgba(160,120,220,.35); }

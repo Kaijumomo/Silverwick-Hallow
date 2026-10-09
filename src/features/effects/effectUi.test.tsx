@@ -109,7 +109,7 @@ describe("Phase 10B aggregation and progressive disclosure", () => {
     expect(screen.getByRole("button", { name: /^Carol, seat 3, .*Poisoned, 3 active effects$/ })).toBeInTheDocument();
 
     act(() => { state().selectPlayer(idOf("Carol")); });
-    fireEvent.click(screen.getByRole("button", { name: "Edit effects" }));
+    fireEvent.click(screen.getByRole("button", { name: "More settings" }));
     const group = screen.getByRole("button", { name: /^Poisoned, 3 active effects\. Show details/ });
     expect(group).toHaveAttribute("aria-expanded", "false");
     expect(group).toHaveTextContent("Poisoned ×3");
@@ -125,7 +125,7 @@ describe("Phase 10B aggregation and progressive disclosure", () => {
     abilityPoison("Carol", "p1");
     render(<GameScreen />);
     act(() => { state().selectPlayer(idOf("Carol")); });
-    fireEvent.click(screen.getByRole("button", { name: "Edit effects" }));
+    fireEvent.click(screen.getByRole("button", { name: "More settings" }));
     fireEvent.click(screen.getByRole("button", { name: /^Poisoned\. Show details/ }));
     fireEvent.click(screen.getByRole("button", { name: "Suppress" }));
     expect(game().players[idOf("Carol")]!.effects[0]!.state).toBe("suppressed");
@@ -163,7 +163,7 @@ describe("Phase 10B aggregation and progressive disclosure", () => {
     render(<GameScreen />);
     expect(screen.getByRole("button", { name: /^Carol, seat 3, alive, needs check, Poisoned$/ })).toBeInTheDocument();
     act(() => { state().selectPlayer(carol); });
-    fireEvent.click(screen.getByRole("button", { name: "Edit effects" }));
+    fireEvent.click(screen.getByRole("button", { name: "More settings" }));
     fireEvent.click(screen.getByRole("button", { name: /^Poisoned, needs check\. Show details/ }));
     expect(screen.getByText(/Exact end not recorded/)).toBeInTheDocument();
     expect(screen.queryByText(/Lifetime unknown/)).toBeNull();
@@ -200,7 +200,7 @@ describe("Phase 10B Privacy Mode", () => {
     abilityPoison("Carol", "p1");
     render(<GameScreen />);
     act(() => { state().selectPlayer(idOf("Carol")); });
-    fireEvent.click(screen.getByRole("button", { name: "Edit effects" }));
+    fireEvent.click(screen.getByRole("button", { name: "More settings" }));
     fireEvent.click(screen.getByRole("button", { name: /^Poisoned\. Show details/ }));
     fireEvent.click(screen.getByRole("button", { name: "+ Add effect" }));
     expect(screen.getByText("Ends as Night 2 begins")).toBeInTheDocument();
@@ -221,7 +221,7 @@ describe("Phase 10B Privacy Mode", () => {
     expect(screen.queryByText("Ends as Night 2 begins")).toBeNull();
     expect(screen.queryByRole("form", { name: "Add effect" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /^Carol, seat 3,/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Edit effects" }));
+    fireEvent.click(screen.getByRole("button", { name: "More settings" }));
     expect(screen.getByRole("button", { name: /^Poisoned\. Show details/ })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Ends as Night 2 begins")).toBeNull();
     expect(screen.queryByRole("form", { name: "Add effect" })).toBeNull();

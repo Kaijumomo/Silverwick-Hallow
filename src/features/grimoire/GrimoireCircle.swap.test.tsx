@@ -14,7 +14,7 @@ const position = (id: string) => {
 const board = () => render(<PlayersWorkspace enabled roles={setupScript.characters} onMore={vi.fn()} advancedPlayerId={null}><GrimoireCircle /></PlayersWorkspace>);
 const swapWith = (id: string) => {
   act(() => state().selectPlayer("p0"));
-  fireEvent.click(screen.getByRole("button", { name: "Swap seats" }));
+  fireEvent.click(screen.getByRole("button", { name: "Swap seat" }));
   fireEvent.click(screen.getByRole("button", { name: new RegExp(state().game!.players[id]!.name) }));
 };
 beforeEach(() => {

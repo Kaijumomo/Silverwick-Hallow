@@ -16,8 +16,8 @@ import { characterCard, infoRecipients, infoStatistics, seatedPlayers, setupPayl
 import { captureInfoContext, changeInfoBluff, infoContextCurrent, type InfoContext } from "./infoCommands";
 import "./info.css";
 
-const characterActions = ["You Are", "This Player Is", "Selected You"];
-const characterSymbols: Record<string, GrimoireIconName> = { "You Are": "person", "This Player Is": "identify", "Selected You": "selected" };
+const characterActions = ["You Are", "This Player Is", "Selected You", "Reveal a Token"];
+const characterSymbols: Record<string, GrimoireIconName> = { "You Are": "person", "This Player Is": "identify", "Selected You": "selected", "Reveal a Token": "reveal" };
 const directActions = [
   { heading: "Did You Vote Today?", symbol: "vote" }, { heading: "Did You Nominate Today?", symbol: "nominate" },
   { heading: "You Are Good", symbol: "good", tone: "good" }, { heading: "You Are Evil", symbol: "evil", tone: "evil" },
@@ -90,7 +90,7 @@ export function InfoPanel() {
       setChooser(null); setPresentation(null); setError("");
     } else if (roleId) {
       const role = roles.find(r => r.id === roleId); if (!role) return;
-      show({ kind: "character", heading: chooser.heading, character: characterCard(role) }, chooser.context); setChooser(null);
+      show({ kind: "character", heading: chooser.heading === "Reveal a Token" ? "This Character" : chooser.heading, character: characterCard(role) }, chooser.context); setChooser(null);
     }
   };
   const modifierSection = (label: string, ids: string[], lookup: (id: string) => RoleDef | undefined) => <section><h3>{label}</h3>
@@ -111,13 +111,13 @@ export function InfoPanel() {
         <span className="info-bluff-disc">{role ? <img src={iconUrlFor(role)} alt=""/> : "+"}</span><span>{role?.name ?? "Add bluff"}</span></button>; })}</div>
     </section>
     <div className="info-modifier-sections">{modifierSection("Fabled", game.fabled, getFabled)}{modifierSection("Loric", game.lorics, getLoric)}</div>
-    <section><h3>Information tokens</h3><div className="info-actions">{characterActions.map(heading => <button type="button" key={heading} className={heading === "Selected You" ? "info-wide" : ""} onClick={() => { setChooser({ context: captureInfoContext(), heading }); setError(""); }}><span aria-hidden="true"><GrimoireIcon name={characterSymbols[heading]!} /></span>{heading}</button>)}
+    <section><h3>Information tokens</h3><div className="info-actions">{characterActions.map(heading => <button type="button" key={heading} onClick={() => { setChooser({ context: captureInfoContext(), heading }); setError(""); }}><span aria-hidden="true"><GrimoireIcon name={characterSymbols[heading]!} /></span>{heading}</button>)}
       {directActions.map(action => <button type="button" key={action.heading} data-tone={"tone" in action ? action.tone : undefined} onClick={() => show({ kind: "message", ...action })}><span aria-hidden="true"><GrimoireIcon name={action.symbol} /></span>{action.heading}</button>)}
     </div></section>
     <section><h3>Setup info</h3><div className="info-setup-actions">{setupActions.map(({ view, label }) => <button key={view} type="button" onClick={() => openSetup(view)}><GrimoireIcon name={view === "minion" ? "players" : view === "bluffs" ? "book" : "crown"} /><span>{label}<small>{view === "bluffs" ? `${bluffs.length} of 3 bluffs set` : view === "demon" ? "Minions and selected bluffs" : view === "minion" ? "Demon and fellow Minions" : "Demon only"}</small></span><span aria-hidden="true">›</span></button>)}</div></section>
     {error && !recipientView && <p role="alert" className="info-error">{error}</p>}
     {setupNotice && <Modal title={setupNotice.title} onClose={() => setSetupNotice(null)}><div className="info-setup-notice"><p role="alert">{setupNotice.message}</p><button className="btn" type="button" onClick={() => setSetupNotice(null)}>Return to Info</button></div></Modal>}
-    {chooser && <RoleChooser mode="select" roles={roles} scriptName={script.name} title={chooser.heading}
+    {chooser && <RoleChooser mode="select" roles={roles} scriptName={script.name} title={chooser.heading === "Reveal a Token" ? "This Character" : chooser.heading}
       instruction={chooser.recipient ? "Choose a Townsfolk or Outsider bluff. In-play characters are marked; supported setup exceptions still apply." : "Choose a character to show. This does not change anyone's character."}
       selected={chooser.recipient ? bluffs : undefined} holders={chooser.recipient ? holders : undefined}
       onChoose={choose} onClear={chooser.recipient ? () => choose() : undefined} onClose={() => { setChooser(null); setError(""); }} error={error || undefined} />}

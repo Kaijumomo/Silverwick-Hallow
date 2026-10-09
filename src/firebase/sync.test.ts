@@ -44,7 +44,7 @@ const registry = buildRegistry(tbScript);
 
 function makeLobby(): StorytellerLobbyRecord {
   return {
-    gameSchemaVersion: 26, gameRuleFacts: [],
+    gameSchemaVersion: 27, gameRuleFacts: [],
     code: "ABCD",
     storytellerUid: "uid-st",
     scriptId: "tb",
@@ -397,7 +397,7 @@ describe("writeProjections — privacy chokepoint", () => {
 describe("writeProjections — Phase 9C.4 setup barrier atomicity", () => {
   function setupLobby(p2ShownRole: string | null, revealed = false): StorytellerLobbyRecord {
     return {
-      gameSchemaVersion: 26, gameRuleFacts: [], code: "SETP", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
+      gameSchemaVersion: 27, gameRuleFacts: [], code: "SETP", storytellerUid: "uid-st", scriptId: "tb", phase: "setup", day: 0,
       bluffs: [], fabled: [], lorics: [], notes: "", setupRolesRevealed: revealed,
       seatOrder: ["p1", "p2", "t1"], nightProgress: {}, rolePool: [], history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       plannedPlayerCount: 2, plannedTravelerCount: 0, pendingPlayers: {},

@@ -7,6 +7,7 @@ import { useShellStore } from "@/stores/shellStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { captureFingerprint, planAbilityResolution, type ParticipantBinding } from "@/stores/abilityResolution";
 import { getNightActionCorrection } from "@/stores/nightActionCorrection";
+import { travelerArrivalStepKey } from "@/stores/nightProgress";
 import type { Script, StorytellerLobbyRecord } from "@/stores/types";
 import { AbilityWorkspace, type WorkspaceTarget } from "@/features/abilities/AbilityWorkspace";
 import { ACTION_CARD_DOCK_HOST } from "@/components/ActionCard";
@@ -16,6 +17,7 @@ import { NightOrderPanel, StepCard } from "./NightOrderPanel";
 import { deriveNightWork, stepResolved } from "./nightWork";
 import type { NightStep } from "./nightOrder";
 import "@/styles/modern-night.css";
+import { BureaucratAction } from "@/features/voting/BureaucratAction";
 
 type Props = { game: StorytellerLobbyRecord; script: Script; visible: boolean; onClose: () => void };
 type Workspace = { target: WorkspaceTarget; ability: StepAbility; inputs?: Record<string, AbilityInputValue>; key: number };
@@ -51,7 +53,8 @@ function NightGuide({ game, script, visible, onClose }: Props) {
     ?? steps.find(s => !stepResolved(game, s)) ?? steps.at(-1);
   const currentIndex = current ? steps.indexOf(current) : -1;
   const resolved = current ? stepResolved(game, current) : false;
-  const actor = current?.kind === "player" ? game.players[current.playerId] : undefined;
+  const actor = current?.kind === "player" ? game.players[current.playerId]
+    : current?.travelerArrivalId ? game.players[current.travelerArrivalId] : undefined;
   const abilityOf = (step: NightStep): StepAbility | null => {
     if (step.kind !== "player") return null;
     const ordinary = pathAbility(step.effectiveRoleId, registry, semantics, "nightOrder", game);
@@ -63,7 +66,11 @@ function NightGuide({ game, script, visible, onClose }: Props) {
   const direct = ability?.kind === "guided" && !ability.invocationPath && simpleTarget(ability.descriptor);
   const correction = current && resolved ? getNightActionCorrection(game, game.day, current.stepKey) : null;
   const canTarget = direct && (!resolved || !!correction?.canCorrect);
-  const role = current?.kind === "player" ? registry.get(current.effectiveRoleId) : undefined;
+  const role = current?.kind === "player" ? registry.get(current.effectiveRoleId) : actor?.actualRole ? registry.get(actor.actualRole) : undefined;
+  const bureaucrat = actor?.actualRole === "bureaucrat" && !!actor.participantId && actor.alive
+    && current?.participantId === actor.participantId
+    && (current.kind === "player" ? current.effectiveRoleId === "bureaucrat"
+      : current.stepKey === travelerArrivalStepKey(actor.participantId, "bureaucrat"));
   useLayoutEffect(() => {
     if (scroll.current) scroll.current.scrollTop = 0;
   }, [current?.stepKey, workspace?.key]);
@@ -175,7 +182,7 @@ function NightGuide({ game, script, visible, onClose }: Props) {
     if (lastRequest.current === actionRequest) return;
     lastRequest.current = actionRequest;
     if (!visible || details || resolved) return;
-    if (direct) setPaused(false); else if (!workspace) openWorkspace();
+    if (direct || bureaucrat) setPaused(false); else if (!workspace) openWorkspace();
   }, [actionRequest]);
 
   if (details) return <div className="modern-night-extra"><button className="btn" onClick={() => setDetails(false)}>Back to guided night</button>
@@ -206,6 +213,8 @@ function NightGuide({ game, script, visible, onClose }: Props) {
           {success?.key === current.stepKey && success.game === game ? <p className="modern-night-result" role="status">{steps.slice(currentIndex + 1).some(s => !stepResolved(game, s)) ? "Resolved. Continuing…" : "Resolved."}</p>
             : resolved ? <><p className="modern-night-result">Completed{correction?.target ? ` · ${game.players[correction.target.playerId]?.name ?? "Chosen player"}` : ""}</p>
               {canTarget ? <p className="behavior-help">Tap another player to correct this action.</p> : <p className="behavior-help">{correction?.message ?? "This action cannot be safely retargeted here. Open the player’s settings to correct its result."}</p>}</>
+            : bureaucrat ? <BureaucratAction key={`${actor!.participantId}:${current.stepKey}`} source={{ playerId: actor!.id, participantId: actor!.participantId! }}
+                visible={visible} completeStep={{ day: game.day, stepKey: current.stepKey }} onResolved={finish} />
             : canTarget ? null
             : <button className="btn btn-gold" onClick={() => openWorkspace()}>Continue action</button>}
           {canTarget && !success && <div className="modern-night-pick-controls"><p className="modern-night-pick">Tap a player on the board</p><button onClick={() => { if (picker?.owner === owner) { useTargetPicker.getState().cancel(); setPaused(true); } else setPaused(false); }}>
@@ -217,6 +226,14 @@ function NightGuide({ game, script, visible, onClose }: Props) {
                   {p.name || `Seat ${p.seat + 1}`}</button>)}
             </div></>}
             {!resolved && <StepCard step={current} record={game.nightProgress?.[`${game.day}:${current.stepKey}`]} day={game.day} />}</details>}
+        </> : bureaucrat ? <>
+          <p className="modern-night-instruction">{current.prompt}</p>
+          {current.advisory && <p className="behavior-help">{current.advisory}</p>}
+          {resolved ? <p className="modern-night-result" role="status">{success?.game === game ? "Resolved. Continuing…" : "Completed"}</p>
+            : <BureaucratAction key={`${actor!.participantId}:${current.stepKey}`} source={{ playerId: actor!.id, participantId: actor!.participantId! }}
+              visible={visible} completeStep={{ day: game.day, stepKey: current.stepKey }} onResolved={finish} />}
+          {!resolved && <details className="modern-night-guidance"><summary>More options</summary>
+            <StepCard step={current} record={game.nightProgress?.[`${game.day}:${current.stepKey}`]} day={game.day} /></details>}
         </> : <StepCard step={current} record={game.nightProgress?.[`${game.day}:${current.stepKey}`]} day={game.day} />}
         {error && <p role="alert" className="behavior-help">{error}</p>}{refused && <p role="alert" className="behavior-help">{refused}</p>}
       </article>}

@@ -105,6 +105,7 @@ const ALLOWED = new Set([
   // Storyteller-only notation summary and the existing ReminderControls
   // editor; privacy removes the entire popover. No rules use these labels.
   "features/players/PlayerPopover.tsx",
+  "features/players/PopoverReminders.tsx", // presentation and participant-bound notation commands only
   // Definition-only RoleDef.reminders catalogue in the chooser footer;
   // receives no player ReminderRecord or authoritative mechanics state.
   "features/players/RoleChooser.tsx",

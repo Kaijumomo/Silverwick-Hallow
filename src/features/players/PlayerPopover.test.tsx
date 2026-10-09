@@ -1,18 +1,21 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { setupGame, setupScript } from "@/test/setupFixtures";
 import { PlayerPopover } from "./PlayerPopover";
 import { TRAVELERS } from "@/data/travelers";
 import { iconUrlFor } from "@/data/iconUrl";
+import { registerVotingAuthorityReader } from "@/firebase/votingAuthority";
+import { captureVotingContext } from "@/stores/storytellerStore";
+import { currentVotingState } from "@/stores/voting";
 
 beforeEach(() => {
   usePrivacyStore.setState({ enabled: false });
   store.setState({ game: setupGame(["chef", "imp"]), lobby: null, undoStack: [], customScripts: { [setupScript.id]: setupScript } });
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
-const callbacks = () => ({ onChangeCharacter: vi.fn(), onSwapSeats: vi.fn(), onMore: vi.fn(), onClose: vi.fn() });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); registerVotingAuthorityReader(() => null); });
+const callbacks = () => ({ onChangeCharacter: vi.fn(), onSwapSeats: vi.fn(), onShowPlayer: vi.fn(), onMore: vi.fn(), onClose: vi.fn() });
 function View(props: ReturnType<typeof callbacks>) {
   const player = store(s => s.game!.players.p0!);
   return <PlayerPopover player={player} {...props} />;
@@ -25,24 +28,26 @@ it("shows the canonical identity and delegates character/seat actions without mu
   expect(screen.getByRole("heading", { name: "Chef" })).toBeInTheDocument();
   expect(screen.getByText(/You start knowing how many pairs/)).toBeInTheDocument();
   fireEvent.click(screen.getAllByRole("button", { name: "Change character" })[0]!);
-  fireEvent.click(screen.getByRole("button", { name: "Swap seats" }));
+  fireEvent.click(screen.getByRole("button", { name: "Swap seat" }));
+  fireEvent.click(screen.getByRole("button", { name: "Show player" }));
   fireEvent.click(screen.getByRole("button", { name: "More settings" }));
   expect(actions.onChangeCharacter).toHaveBeenCalledOnce();
   expect(actions.onSwapSeats).toHaveBeenCalledOnce();
+  expect(actions.onShowPlayer).toHaveBeenCalledOnce();
   expect(actions.onMore).toHaveBeenCalledOnce();
   expect(store.getState().game).toBe(game);
   expect(store.getState().undoStack).toHaveLength(0);
 });
 
-it("removes all private content and editor drafts under privacy", () => {
+it("removes all private content and resets the palette filter under privacy", () => {
   render(<View {...callbacks()} />);
-  fireEvent.click(screen.getByRole("button", { name: "Edit reminders" }));
-  fireEvent.change(screen.getByLabelText("Reminder text"), { target: { value: "Private draft" } });
+  fireEvent.click(screen.getByRole("button", { name: /^All \d/ }));
+  expect(screen.getByRole("button", { name: "Add Townsfolk reminder from Washerwoman" })).toBeInTheDocument();
   act(() => usePrivacyStore.setState({ enabled: true }));
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(document.body.textContent).not.toContain("Chef");
   act(() => usePrivacyStore.setState({ enabled: false }));
-  expect(screen.queryByLabelText("Reminder text")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Add Townsfolk reminder from Washerwoman" })).toBeNull();
   expect(store.getState().game!.players.p0!.reminders).toHaveLength(0);
 });
 
@@ -51,22 +56,31 @@ it("ended games expose no mutation controls", () => {
   render(<View {...callbacks()} />);
   expect(screen.getByText(/Game ended/)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Change character" })).toBeDisabled();
-  expect(screen.queryByRole("button", { name: "Swap seats" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Swap seat" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Edit effects" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Record death" })).toBeNull();
 });
 
-it("reuses semantic life commands and existing notation editor", () => {
-  store.setState({ game: { ...store.getState().game!, phase: "day", day: 1 } });
+it("uses semantic Life and ghost-vote commands with no redundant same-state mutation", () => {
+  store.setState({ game: setupGame(["washerwoman", "imp"], { phase: "day", day: 1 }) });
   render(<View {...callbacks()} />);
-  fireEvent.click(screen.getByRole("button", { name: "Record death" }));
+  expect(screen.queryByRole("button", { name: /Executed|Exiled/ })).toBeNull();
+  expect(screen.queryByText("Correct status…")).toBeNull();
+  expect(screen.getByRole("button", { name: "Alive" })).toBeDisabled();
+  expect(screen.queryByRole("button", { name: "Ghost vote" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Dead" }));
   expect(store.getState().game!.players.p0!.alive).toBe(false);
   expect(store.getState().game!.players.p1!.alive).toBe(true);
-  fireEvent.click(screen.getByRole("button", { name: "Edit reminders" }));
-  fireEvent.change(screen.getByLabelText("Reminder text"), { target: { value: "Watch this player" } });
-  fireEvent.submit(screen.getByRole("form", { name: "Add reminder" }));
-  expect(store.getState().game!.players.p0!.reminders[0]!.label).toBe("Watch this player");
-  expect(store.getState().game!.players.p1!.reminders).toHaveLength(0);
+  expect(store.getState().game!.lifeEventWindow.events.at(-1)?.kind).toBe("death");
+  expect(screen.getByRole("button", { name: "Dead" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Ghost vote" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(screen.getByRole("button", { name: "Ghost vote" }));
+  expect(store.getState().game!.players.p0!.ghostVote).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "Ghost vote" }));
+  expect(store.getState().game!.players.p0!.ghostVote).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Alive" }));
+  expect(store.getState().game!.players.p0!.alive).toBe(true);
+  expect(store.getState().game!.lifeEventWindow.events.at(-1)?.kind).toBe("resurrection");
 });
 
 it("focuses its heading and Escape requests close", () => {
@@ -75,6 +89,105 @@ it("focuses its heading and Escape requests close", () => {
   expect(screen.getByRole("heading", { name: /Player 0/ })).toHaveFocus();
   fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
   expect(actions.onClose).toHaveBeenCalledOnce();
+});
+
+it("filters script reminder tokens by assigned roles including dead players, places and removes notation with Undo", () => {
+  const game = setupGame(["washerwoman", "imp"], { phase: "day", day: 1 });
+  game.players.p0!.alive = false;
+  const characters = setupScript.characters.filter(r => ["washerwoman", "poisoner", "imp"].includes(r.id));
+  store.setState({ game, customScripts: { [setupScript.id]: { ...setupScript, characters } } });
+  render(<View {...callbacks()} />);
+  expect(screen.getByRole("button", { name: "Add Townsfolk reminder from Washerwoman" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Add Poisoned reminder from Poisoner" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /^All \d/ }));
+  expect(screen.queryByRole("button", { name: /Add 3 Votes reminder/ })).toBeNull();
+  expect(screen.getByRole("button", { name: "Add Poisoned reminder from Poisoner" })).toHaveAccessibleDescription("Notes do not apply effects.");
+  fireEvent.click(screen.getByRole("button", { name: "Add Poisoned reminder from Poisoner" }));
+  const placed = store.getState().game!.players.p0!;
+  expect(placed.reminders).toEqual([expect.objectContaining({ label: "Poisoned", sourceCharacter: "poisoner" })]);
+  expect(placed.effects).toHaveLength(0);
+  expect(store.getState().game!.players.p1!.reminders).toHaveLength(0);
+  expect(store.getState().undoStack).toHaveLength(1);
+  expect(screen.getByRole("button", { name: "Remove Poisoned reminder" })).toHaveAccessibleDescription("Note Notes do not apply effects.");
+  expect(within(screen.getByRole("button", { name: "Remove Poisoned reminder" })).getByText("Note")).toHaveClass("sr-only");
+  fireEvent.click(screen.getByRole("button", { name: "Remove Poisoned reminder" }));
+  expect(store.getState().game!.players.p0!.reminders).toHaveLength(0);
+  act(() => store.getState().undo());
+  expect(store.getState().game!.players.p0!.reminders[0]?.label).toBe("Poisoned");
+});
+
+it("uses custom script ownership and deduplicates reminder labels without importing canonical role mechanics", () => {
+  const role = { ...setupScript.characters.find(r => r.id === "washerwoman")!, name: "Custom washer", reminders: ["Custom clue", "Custom clue"], remindersGlobal: ["Everywhere"], ability: "Custom rules", iconUrl: "https://example.test/custom.png" };
+  store.setState({ game: setupGame(["washerwoman"]), customScripts: { [setupScript.id]: { ...setupScript, characters: [role] } } });
+  render(<View {...callbacks()} />);
+  expect(screen.getByRole("button", { name: "All 2" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Add Townsfolk/ })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Add Custom clue reminder from Custom washer" }));
+  expect(store.getState().game!.players.p0!.reminders[0]?.label).toBe("Custom clue");
+});
+
+it("refuses stale participant and game snapshots without touching the replacement occupant", () => {
+  const game = setupGame(["washerwoman"], { phase: "day", day: 1 });
+  store.setState({ game });
+  render(<PlayerPopover player={game.players.p0!} {...callbacks()} />);
+  act(() => store.setState({ game: { ...game, players: { p0: { ...game.players.p0!, participantId: "replacement" } } } }));
+  fireEvent.click(screen.getByRole("button", { name: "Dead" }));
+  fireEvent.click(screen.getByRole("button", { name: "Add Townsfolk reminder from Washerwoman" }));
+  expect(store.getState().game!.players.p0!.alive).toBe(true);
+  expect(store.getState().game!.players.p0!.reminders).toHaveLength(0);
+  expect(store.getState().undoStack).toHaveLength(0);
+});
+
+it("refuses Life and reminder changes when the captured online writer loses authority", () => {
+  const game = setupGame(["washerwoman"], { phase: "day", day: 1 });
+  const lobby = { code: "ABCDEF", uid: "local", sessionId: "writer", status: "live" as const };
+  let writer: string | null = "writer-token";
+  registerVotingAuthorityReader(() => writer);
+  store.setState({ game, lobby });
+  render(<View {...callbacks()} />);
+  writer = null;
+  fireEvent.click(screen.getByRole("button", { name: "Dead" }));
+  fireEvent.click(screen.getByRole("button", { name: "Add Townsfolk reminder from Washerwoman" }));
+  expect(store.getState().game).toBe(game);
+  expect(store.getState().undoStack).toHaveLength(0);
+});
+
+it("removes an official Bureaucrat reminder and its linked modifier together", () => {
+  const game = setupGame(["washerwoman", "bureaucrat"], { phase: "night", day: 1 });
+  game.players.p1!.isTraveler = true;
+  store.setState({ game });
+  const binding = (id: string) => ({ playerId: id, participantId: game.players[id]!.participantId! });
+  const result = store.getState().resolveVoting({ kind: "bureaucrat", modifierId: "bureau-popover", source: binding("p1"), target: binding("p0"), code: game.code, day: game.day, expectedRevision: currentVotingState(game).revision }, captureVotingContext());
+  expect(result.ok).toBe(true);
+  render(<View {...callbacks()} />);
+  expect(screen.getByRole("button", { name: "Remove 3 Votes reminder" })).toHaveAccessibleDescription("Effect");
+  expect(within(screen.getByRole("button", { name: "Remove 3 Votes reminder" })).getByText("Effect")).toHaveClass("sr-only");
+  fireEvent.click(screen.getByRole("button", { name: "Remove 3 Votes reminder" }));
+  expect(store.getState().game!.players.p0!.reminders).toHaveLength(0);
+  expect(currentVotingState(store.getState().game!).modifiers).toHaveLength(0);
+});
+
+it("distinguishes a Poisoned note from an existing authoritative Poisoner effect without altering either", () => {
+  const game = setupGame(["washerwoman", "poisoner"], { phase: "day", day: 1 });
+  store.setState({ game });
+  const target = { playerId: "p0", participantId: game.players.p0!.participantId! };
+  const source = { playerId: "p1", participantId: game.players.p1!.participantId! };
+  expect(store.getState().resolveEffects({ intents: [{ kind: "apply", target,
+    effect: { id: "real-poison", type: "poisoned", source, sourceCharacter: "poisoner", lifetime: { kind: "throughFollowingDay" } } }] }).ok).toBe(true);
+  const existingEffect = store.getState().game!.players.p0!.effects[0];
+  render(<View {...callbacks()} />);
+  fireEvent.click(screen.getByRole("button", { name: "Add Poisoned reminder from Poisoner" }));
+  const placed = screen.getByLabelText("Placed reminders");
+  expect(within(placed).getByText("Effect")).toHaveClass("sr-only");
+  expect(within(placed).getByText("Note")).toHaveClass("sr-only");
+  expect(screen.getByText("Notes do not apply effects.")).toHaveClass("sr-only");
+  expect(store.getState().game!.players.p0!.effects).toEqual([existingEffect]);
+  fireEvent.click(screen.getByRole("button", { name: "Remove Poisoned reminder" }));
+  expect(store.getState().game!.players.p0!.effects).toEqual([existingEffect]);
+  expect(store.getState().game!.players.p0!.reminders).toHaveLength(0);
+  act(() => store.getState().undo());
+  expect(store.getState().game!.players.p0!.effects).toEqual([existingEffect]);
+  expect(store.getState().game!.players.p0!.reminders[0]?.label).toBe("Poisoned");
 });
 
 it("uses canonical Traveler artwork despite a colliding script definition", () => {
@@ -113,6 +226,6 @@ it.each([
   expect(Number.parseFloat(dialog.style.left) + 316).toBeLessThanOrEqual(bounds.left + bounds.width - 16);
   expect(Number.parseFloat(dialog.style.top)).toBeGreaterThanOrEqual(bounds.top + 16);
   expect(Number.parseFloat(dialog.style.top) + Math.min(640, bounds.expectedHeight)).toBeLessThanOrEqual(bounds.top + bounds.height - 16);
-  expect(dialog.querySelector(".player-popover-scroll")?.contains(screen.getByRole("button", { name: "Swap seats" }))).toBe(false);
+  expect(dialog.querySelector(".player-popover-scroll")?.contains(screen.getByRole("button", { name: "Swap seat" }))).toBe(false);
   expect(store.getState().game).toBe(game);
 });

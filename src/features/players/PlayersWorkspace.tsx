@@ -1,6 +1,6 @@
 import { InfoPanel } from "@/features/info/InfoPanel";
-import { InfoPresentationBoundary } from "@/features/info/InfoPresentationBoundary";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { InfoPresentationBoundary, useShowPlayerPresentation } from "@/features/info/InfoPresentationBoundary";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ReferenceWorkspace } from "@/features/almanac/ReferenceWorkspace";
 import { useStorytellerStore, selectScriptById, type SeatSwapLayout } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
@@ -57,6 +57,8 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
   const [name, setName] = useState("");
   const [swap, setSwap] = useState<STPlayerRecord | null>(null);
   const [notice, setNotice] = useState("");
+  const showPlayer = useShowPlayerPresentation();
+  const showPlayerReturn = useRef<HTMLElement | null>(null);
   const definitions = useMemo(() => script ? resolvedCharacters(script) : [], [script]);
   useEffect(() => {
     if (privacy || !enabled || game?.phase === "ended") {
@@ -176,6 +178,10 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
       {!privacy && swap && <div className="players-swap-prompt" role="status">Tap another token to swap seats with {swap.name}<button className="btn btn-sm" onClick={() => setSwap(null)}>Cancel</button></div>}
       {!privacy && !ended && selected && !selected.isEmpty && advancedPlayerId !== selected.id && !swap && !chooser && <PlayerPopover player={selected}
         onClose={() => state.selectPlayer(null)} onMore={() => onMore(selected.id)} onChangeCharacter={() => openChoose(selected)}
+        onShowPlayer={() => {
+          showPlayerReturn.current = document.querySelector<HTMLElement>(`.grimoire .token[data-player-id="${CSS.escape(selected.id)}"]`);
+          const refusal = showPlayer(selected, showPlayerReturn); if (refusal) setNotice(refusal); else state.selectPlayer(null);
+        }}
         onSwapSeats={() => { useTargetPicker.getState().cancel(); setSwap(selected); state.selectPlayer(null); }} />}
       {!privacy && notice && <div className="players-notice" role="status">{notice}<button aria-label="Dismiss message" onClick={() => setNotice("")}>×</button></div>}
     </ReferenceWorkspace>

@@ -6,7 +6,8 @@ import { useShellStore } from "@/stores/shellStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { clearNightActionCorrections } from "@/stores/nightActionCorrection";
-import { participantStepKey } from "@/stores/nightProgress";
+import { participantStepKey, travelerArrivalStepKey } from "@/stores/nightProgress";
+import { newTravelerArrival } from "@/stores/travelers";
 import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
 import { proofGame, proofScript } from "@/test/proofFixtures";
 
@@ -155,4 +156,47 @@ it.each(["privacy", "unmount"])("a captured target callback cannot commit after 
   expect(game()).toBe(before);
   expect(store.getState().undoStack).toBe(undo);
   expect(useTargetPicker.getState().active).toBeNull();
+});
+
+it("Bureaucrat board selection records its official token and completes the Night step in one action", () => {
+  store.setState({ game: proofGame(["bureaucrat", "monk", "imp", "empath", "chef"]) });
+  useShellStore.getState().setNightCursor({ day: 2, stepKey: key("p0") });
+  render(<Guide />);
+  expect(screen.getByLabelText("Bureaucrat voting ability")).toBeVisible();
+  expect(useTargetPicker.getState().active?.eligible?.has(game().players.p0!.participantId!)).toBe(false);
+  tap("p4");
+  expect(game().voting?.modifiers[0]).toMatchObject({ source: { playerId: "p0" }, target: { playerId: "p4" }, appliesDay: 2 });
+  expect(game().players.p4!.reminders).toEqual([expect.objectContaining({ label: "3 Votes", sourceCharacter: "bureaucrat" })]);
+  expect(game().nightProgress?.[`2:${key("p0")}`]?.status).toBe("done");
+  expect(store.getState().undoStack).toHaveLength(1);
+  act(() => store.getState().undo());
+  expect(game().voting).toBeUndefined(); expect(game().nightProgress?.[`2:${key("p0")}`]).toBeUndefined();
+  expect(useTargetPicker.getState().active).not.toBeNull();
+});
+
+it("a later Bureaucrat arrival uses its participant-bound action and leaves other arrivals pending", () => {
+  const arrived = proofGame(["bureaucrat", "monk", "imp", "empath", "bureaucrat"]);
+  arrived.day = 3;
+  for (const id of ["p0", "p4"]) Object.assign(arrived.players[id]!, { isTraveler: true, travelerArrival: newTravelerArrival() });
+  store.setState({ game: arrived });
+  const arrivalKey = travelerArrivalStepKey(arrived.players.p0!.participantId!, "bureaucrat");
+  const otherKey = travelerArrivalStepKey(arrived.players.p4!.participantId!, "bureaucrat");
+  useShellStore.getState().setNightCursor({ day: 3, stepKey: arrivalKey });
+  render(<Guide />);
+  expect(screen.getByLabelText("Bureaucrat voting ability")).toBeVisible();
+  expect(useShellStore.getState().litActor?.participantId).toBe(arrived.players.p0!.participantId);
+  expect(useTargetPicker.getState().active?.eligible?.has(arrived.players.p0!.participantId!)).toBe(false);
+  tap("p3");
+  expect(game().voting?.modifiers[0]).toMatchObject({ source: { playerId: "p0" }, target: { playerId: "p3" }, appliesDay: 3 });
+  expect(game().players.p3!.reminders).toEqual([expect.objectContaining({ label: "3 Votes", sourceCharacter: "bureaucrat" })]);
+  expect(game().nightProgress?.[`3:${arrivalKey}`]?.status).toBe("done");
+  expect(game().players.p0!.travelerArrival).toMatchObject({ firstNightComplete: true, completedAtNight: 3 });
+  expect(game().players.p4!.travelerArrival?.firstNightComplete).toBe(false);
+  expect(game().nightProgress?.[`3:${otherKey}`]).toBeUndefined();
+  expect(store.getState().undoStack).toHaveLength(1);
+  act(() => store.getState().undo());
+  expect(game().voting).toBeUndefined();
+  expect(game().players.p0!.travelerArrival?.firstNightComplete).toBe(false);
+  expect(game().players.p3!.reminders).toEqual([]);
+  expect(useTargetPicker.getState().active).not.toBeNull();
 });

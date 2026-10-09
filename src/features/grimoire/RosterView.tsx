@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useVotingInteraction } from "@/features/voting/VotingWorkspace";
 import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useShellStore } from "@/stores/shellStore";
@@ -44,6 +45,7 @@ function useTableContext() {
 }
 
 export function RosterView() {
+  const voting = useVotingInteraction();
   const { game, privacyMode, litActor, selectedPlayerId, picking, roleById, registry } = useTableContext();
   if (!game) return null;
   const litActorId = litActorIdOf(game, privacyMode, litActor);
@@ -67,7 +69,7 @@ export function RosterView() {
           return (
             <RosterRow key={id} player={p} privacyMode={privacyMode} acting={litActorId === id}
               selected={selectedPlayerId === id} pickable={picking ? seatPickable(game, id, picking) : null}
-              roleById={roleById} registry={registry} onTap={() => tapSeat(game, id, litActorId)} />
+              roleById={roleById} registry={registry} onTap={() => { if (!voting?.tap(id)) tapSeat(game, id, litActorId); }} />
           );
         })}
       </ol>

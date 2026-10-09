@@ -1,6 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { gameLifecycleToken, useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
 import { GrimoireCircle } from "@/features/grimoire/GrimoireCircle";
+import { VotingProvider, VotingDayControls, VotingCard, useVotingInteraction } from "@/features/voting/VotingWorkspace";
+import { isTabletTrial } from "@/config/trial";
+import { GrimoireIcon } from "@/components/GrimoireIcon";
 import { PlayerDrawer } from "@/features/players/PlayerDrawer";
 import { Almanac } from "@/features/almanac/Almanac";
 import { PlayersWorkspace } from "@/features/players/PlayersWorkspace";
@@ -23,7 +26,6 @@ import { FirebaseConfigDialog } from "@/features/firebase/FirebaseConfigDialog";
 import { friendlyFirebaseError, type FriendlyError } from "@/firebase/errors";
 import { requireActiveSession } from "@/firebase/lifecycle";
 import { usePrivacyStore } from "@/stores/privacyStore";
-import { DayResolutionPanel, DuskReview } from "@/features/life/DayResolution";
 import { LifeEventsPanel } from "@/features/life/LifeEventsPanel";
 import { ActivityPanel } from "@/features/activity/ActivityPanel";
 import { DawnReview } from "@/features/nightOrder/DawnReview";
@@ -49,6 +51,11 @@ const PHASE_LABEL: Record<string, string> = {
 };
 
 export function GameScreen() {
+  return <VotingProvider><GameScreenContent /></VotingProvider>;
+}
+
+function GameScreenContent() {
+  const voting = useVotingInteraction();
   const game = useStorytellerStore((s) => s.game);
   const script = useStorytellerStore((s) =>
     game ? selectScriptById(s, game.scriptId) : undefined
@@ -114,8 +121,6 @@ export function GameScreen() {
   const [phaseError, setPhaseError] = useState<string | null>(null);
   // Phase 10A: Day Resolution, the dusk safety check, and the bounded
   // recent Life Events (corrections) panel.
-  const [dayResolutionOpen, setDayResolutionOpen] = useState(false);
-  const [duskReviewOpen, setDuskReviewOpen] = useState(false);
   const [lifeEventsOpen, setLifeEventsOpen] = useState(false);
   // Phase 10G: the Storyteller-private Activity surface.
   const [activityOpen, setActivityOpen] = useState(false);
@@ -150,8 +155,6 @@ export function GameScreen() {
   // dialog at once (each also renders nothing private under Privacy Mode).
   useEffect(() => {
     if (!privacyMode) return;
-    setDayResolutionOpen(false);
-    setDuskReviewOpen(false);
     setLifeEventsOpen(false);
     setActivityOpen(false);
     setDawnReviewOpen(false);
@@ -436,7 +439,8 @@ export function GameScreen() {
 
   const phasePrimary = game.phase !== "setup" && !ended ? (
     <div className="phase-primary">
-      {modernReference && <span className="grimoire-phase-label">{PHASE_LABEL[game.phase]} {game.day}</span>}
+      {modernReference && <span className="grimoire-phase-label"><GrimoireIcon name={game.phase === "night" ? "night" : "day"} size={15} strokeWidth={1.7} />{PHASE_LABEL[game.phase]} {game.day}</span>}
+      <VotingDayControls />
       <button
         className="btn btn-gold phase-advance"
         onClick={() => {
@@ -444,7 +448,7 @@ export function GameScreen() {
           // Phase 10A: Day -> Night passes through the dusk review, a
           // private Storyteller dialog -- unavailable under Privacy Mode
           // (10A-ASTRA-003); turn Privacy Mode off, then review.
-          if (game.phase === "day") { if (!privacyMode) setDuskReviewOpen(true); return; }
+          if (game.phase === "day") { if (!privacyMode) voting?.show("finish"); return; }
           // Phase 10G: Night -> Day passes through Dawn Review when
           // tonight's work is unfinished (advisory -- the Storyteller may
           // continue anyway); a clean Night advances directly. Like Dusk,
@@ -461,7 +465,7 @@ export function GameScreen() {
           : game.phase === "night" && privacyMode ? "Turn off Privacy Mode to review the Night before continuing to Day" : undefined}
         aria-describedby={privacyMode ? "phase-advance-reason" : undefined}
       >
-        {advanceLabel}
+        {game.phase === "day" ? `Begin Night ${game.day + 1}` : advanceLabel}
       </button>
       {privacyMode && (
         <span id="phase-advance-reason" className="disabled-reason phase-advance-reason">
@@ -588,7 +592,7 @@ export function GameScreen() {
               {nightPanelOpen ? "hide order" : "night order"}
             </button>
           )}
-          {!lobby && !ended && (
+          {!lobby && !ended && !isTabletTrial && (
             <button className="btn btn-sm" disabled={goingLive} onClick={() => { closeOverflow(); void goLive(); }} title="Create a Firebase lobby and start syncing">
               Go live
             </button>
@@ -638,9 +642,9 @@ export function GameScreen() {
             ↶ Undo
           </button>}
           {game.phase === "day" && !privacyMode && (
-            <button className="btn btn-sm" onClick={() => { closeOverflow(); setDayResolutionOpen(true); }}
-              title="Record the Day's execution or a Traveler exile as it happens">
-              Day resolution
+            <button className="btn btn-sm" onClick={() => { closeOverflow(); voting?.show("history"); }}
+              title="Review and correct today's recorded votes">
+              Nominations
             </button>
           )}
           {game.phase !== "setup" && !privacyMode && (
@@ -848,6 +852,7 @@ export function GameScreen() {
           {effectiveLens === "table"
             ? <GrimoireCircle online={onlineMap} backend={backend} code={lobby?.code ?? ""} />
             : effectiveLens === "roster" ? <RosterView /> : <LabelsView />}
+          {effectiveLens !== "table" && <VotingCard inline />}
         </div>
         {inspectorVisible && (
           <div className="shell-pane shell-inspector" hidden={docked && nightRail && dockTab !== "seat"}>
@@ -869,7 +874,7 @@ export function GameScreen() {
           </div>
         )}
       </div>
-      {modernReference && phasePrimary && <div className="grimoire-phase-dock">{phasePrimary}</div>}
+      {modernReference && phasePrimary && !voting?.open && <div className="grimoire-phase-dock">{phasePrimary}</div>}
       </PlayersWorkspace>
       )}
       {finishOpen && !ended && (
@@ -902,24 +907,6 @@ export function GameScreen() {
         />
       )}
 
-      {/* 10A-ASTRA-003: the Life Event dialogs mount whenever their open
-          state is set -- under Privacy Mode each renders nothing and closes
-          itself (usePrivateDialog), so no stale open state can survive to
-          reveal private content when Privacy Mode ends. */}
-      {dayResolutionOpen && game.phase === "day" && (
-        <DayResolutionPanel onClose={() => setDayResolutionOpen(false)} />
-      )}
-      {duskReviewOpen && game.phase === "day" && (
-        <DuskReview
-          onClose={() => setDuskReviewOpen(false)}
-          onRecord={() => { setDuskReviewOpen(false); setDayResolutionOpen(true); }}
-          onContinue={() => {
-            setDuskReviewOpen(false);
-            const result = advancePhase();
-            setPhaseError(result.ok ? null : "Setup changed. Open Players to review what needs attention.");
-          }}
-        />
-      )}
       {dawnReviewOpen && game.phase === "night" && !privacyMode && (
         <DawnReview
           game={game}

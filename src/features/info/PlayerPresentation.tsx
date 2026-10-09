@@ -35,16 +35,16 @@ export function PlayerPresentation({ payload, onClose, returnFocusRef }: { paylo
   const title = payload.kind === "setup" ? payload.groups.map(group => group.heading).join(". ") : payload.heading;
   const tone = payload.kind === "message" ? payload.tone ?? "neutral" : "neutral";
 
-  return createPortal(<div ref={layerRef} className={`player-presentation-layer player-presentation-tone-${tone}`}>
+  return createPortal(<div ref={layerRef} className={`player-presentation-layer player-presentation-tone-${tone} player-presentation-kind-${payload.kind}`}>
     <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className="player-presentation">
       <h1 id={titleId} className="player-presentation-accessible-title">{title}</h1>
       <div className="player-presentation-corners" aria-hidden="true"><i /><i /><i /><i /></div>
       <div className={`player-presentation-content player-presentation-content-${payload.kind}`}>
         {payload.kind === "character" && <section className="player-presentation-character">
-          <h2>{payload.heading}</h2><Ornament />
+          <div className="player-presentation-character-heading"><h2>{payload.heading}</h2><Ornament /></div>
           <CharacterArt character={payload.character} />
-          <h3>{payload.character.name}</h3>
-          <p className={`player-presentation-type player-presentation-type-${payload.character.type.toLowerCase().replace(/[^a-z]/g, "")}`}><span aria-hidden="true">◇ </span>{payload.character.type}<span aria-hidden="true"> ◇</span></p>
+          <div className="player-presentation-character-name"><h3>{payload.character.name}</h3>
+          <p className={`player-presentation-type player-presentation-type-${payload.character.type.toLowerCase().replace(/[^a-z]/g, "")}`}><span aria-hidden="true">◆ </span>{payload.character.type}<span aria-hidden="true"> ◆</span></p></div>
           <Ornament />
           {payload.character.ability && <p className="player-presentation-ability">{payload.character.ability}</p>}
         </section>}

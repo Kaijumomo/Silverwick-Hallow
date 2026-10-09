@@ -89,6 +89,38 @@ describe("Info integration", () => {
     expect(screen.queryByText("Return to review the current information.")).toBeNull();
     expect(screen.getByRole("button", { name: "Demon bluff 1: Monk" })).toBeVisible();
   });
+  it("reveals a selected script token without ownership badges, assignment, or delivery", () => {
+    open(); const before = store.getState().game, undo = store.getState().undoStack;
+    fireEvent.click(screen.getByRole("button", { name: "Reveal a Token" }));
+    const chooser = screen.getByRole("dialog", { name: "This Character" });
+    fireEvent.change(within(chooser).getByRole("searchbox"), { target: { value: "Baron" } });
+    fireEvent.click(within(chooser).getByRole("button", { name: "Baron" }));
+    const presentation = screen.getByRole("dialog", { name: "This Character" });
+    expect(within(presentation).getByRole("heading", { name: "Baron" })).toBeVisible();
+    expect(within(presentation).getByText(/There are extra Outsiders in play/)).toBeVisible();
+    expect(within(presentation).queryByText(/Player \d|assign|owner/i)).toBeNull();
+    expect(screen.getByTestId("private-board").closest("[inert]")).toBeTruthy();
+    expect(store.getState().game).toBe(before); expect(store.getState().undoStack).toBe(undo);
+    fireEvent.click(within(presentation).getByRole("button", { name: "Return to Grimoire" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+  it("refuses a stale Reveal a Token chooser and masks an open reveal after privacy changes", () => {
+    open(); fireEvent.click(screen.getByRole("button", { name: "Reveal a Token" }));
+    act(() => store.setState({ game: { ...store.getState().game!, notes: "changed" } }));
+    let chooser = screen.getByRole("dialog", { name: "This Character" });
+    fireEvent.change(within(chooser).getByRole("searchbox"), { target: { value: "Baron" } });
+    fireEvent.click(within(chooser).getByRole("button", { name: "Baron" }));
+    expect(within(chooser).getByRole("alert")).toHaveTextContent(/game changed/i);
+    fireEvent.click(within(chooser).getByRole("button", { name: /close/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Reveal a Token" }));
+    chooser = screen.getByRole("dialog", { name: "This Character" });
+    fireEvent.change(within(chooser).getByRole("searchbox"), { target: { value: "Baron" } });
+    fireEvent.click(within(chooser).getByRole("button", { name: "Baron" }));
+    act(() => usePrivacyStore.setState({ enabled: true }));
+    expect(screen.getByRole("dialog", { name: "Information changed" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Baron" })).toBeNull();
+    expect(screen.getByTestId("private-board").closest("[inert]")).toBeTruthy();
+  });
   it("editing a bluff stays private and does not open a presentation", () => {
     open(); fireEvent.click(screen.getByRole("button", { name: "Demon bluff 1: add" }));
     const chooser = screen.getByRole("dialog", { name: "Demon bluff 1 of 3" });

@@ -91,8 +91,8 @@ describe("10A-ASTRA-003: event-bearing dialogs opened under Privacy Mode render 
     expect(screen.queryByRole("button", { name: "Day resolution" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Life events" })).toBeNull();
     // The dusk review is private: Day -> Night waits for Privacy Mode to end.
-    expect(screen.getByRole("button", { name: "→ Night" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "→ Night" }));
+    expect(screen.getByRole("button", { name: "Begin Night 2" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Begin Night 2" }));
     expectNoPrivateEventData();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
@@ -100,9 +100,8 @@ describe("10A-ASTRA-003: event-bearing dialogs opened under Privacy Mode render 
 
 describe("10A-ASTRA-003: turning Privacy Mode on while a dialog is open removes it", () => {
   it.each([
-    ["Day resolution", "Day resolution"],
     ["Life events", "Life events"],
-    ["Dusk Review", "→ Night"],
+    ["Finish day card", "Begin Night 2"],
   ])("%s", (_label, opener) => {
     dayWithRenamedExecutee();
     render(<GameScreen />);
@@ -111,9 +110,11 @@ describe("10A-ASTRA-003: turning Privacy Mode on while a dialog is open removes 
     act(() => { usePrivacyStore.setState({ enabled: true }); });
     expectNoPrivateEventData();
     expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Nomination card" })).toBeNull();
     // It does not come back with stale content when Privacy Mode ends.
     act(() => { usePrivacyStore.setState({ enabled: false }); });
     expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Nomination card" })).toBeNull();
     expect(document.body.textContent ?? "").not.toContain(HISTORIC);
   });
 

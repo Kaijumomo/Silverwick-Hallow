@@ -162,7 +162,7 @@ describe("Players workspace integration", () => {
     const before = store.getState().game!;
     workspace();
     act(() => store.getState().selectPlayer("p0"));
-    fireEvent.click(screen.getByRole("button", { name: "Swap seats" }));
+    fireEvent.click(screen.getByRole("button", { name: "Swap seat" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByText(/Tap another token to swap seats with Player 0/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Tap second token" }));
@@ -182,7 +182,7 @@ describe("Players workspace integration", () => {
     const before = store.getState().game;
     workspace();
     act(() => store.getState().selectPlayer("p0"));
-    fireEvent.click(screen.getByRole("button", { name: "Swap seats" }));
+    fireEvent.click(screen.getByRole("button", { name: "Swap seat" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.queryByText(/Tap another token to swap seats/)).not.toBeInTheDocument();
     expect(store.getState().game).toBe(before);

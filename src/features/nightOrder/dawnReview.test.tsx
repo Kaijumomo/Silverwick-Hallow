@@ -109,7 +109,8 @@ describe("10G-AC-24 / AC-25 / AC-26: Night -> Day", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(game()).toMatchObject({ phase: "day", day: 2 });
     expect(game().nightProgress).toEqual(before.nightProgress);
-    expect(Object.keys(game()).sort()).toEqual(Object.keys(before).sort());
+    expect(Object.keys(game()).sort()).toEqual([...new Set([...Object.keys(before), "voting"])].sort());
+    expect(game().voting).toMatchObject({ day: 2, coverage: "known", rounds: [], activeRoundId: null, block: null });
     expect(state().undoStack).toHaveLength(1);
   });
 

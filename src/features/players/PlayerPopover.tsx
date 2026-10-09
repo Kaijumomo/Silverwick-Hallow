@@ -4,20 +4,18 @@ import { iconUrlFor } from "@/data/iconUrl";
 import { resolvedCharacters } from "@/data/roleRegistry";
 import { selectScriptById, useStorytellerStore } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
-import { effectAccessibleSummary } from "@/stores/effectRegistry";
 import { lifeStatusOf } from "@/stores/lifeState";
 import type { STPlayerRecord } from "@/stores/types";
 import { LifeControls } from "@/features/life/LifeControls";
 import { LifeStateText } from "@/features/life/LifeMarks";
-import { ReminderControls } from "@/features/reminders/ReminderControls";
-import { EffectControls } from "@/features/effects/EffectControls";
-import { OfficialReminderToken } from "@/features/reminders/OfficialReminderToken";
-import { officialEffectPresentation, officialNotationRole } from "@/features/reminders/officialReminderPresentation";
+import { PopoverReminders } from "./PopoverReminders";
+import "./player-popover-refinement.css";
 
 export type PlayerPopoverProps = {
   player: STPlayerRecord;
   onChangeCharacter: () => void;
   onSwapSeats: () => void;
+  onShowPlayer?: () => void;
   onMore: () => void;
   onClose: () => void;
 };
@@ -30,7 +28,7 @@ export function PlayerPopover(props: PlayerPopoverProps) {
   return <PopoverContents key={props.player.participantId ?? props.player.id} {...props} />;
 }
 
-function PopoverContents({ player, onChangeCharacter, onSwapSeats, onMore, onClose }: PlayerPopoverProps) {
+function PopoverContents({ player, onChangeCharacter, onSwapSeats, onShowPlayer, onMore, onClose }: PlayerPopoverProps) {
   const game = useStorytellerStore(s => s.game);
   const script = useStorytellerStore(s => game ? selectScriptById(s, game.scriptId) : undefined);
   const roles = resolvedCharacters(script);
@@ -41,8 +39,6 @@ function PopoverContents({ player, onChangeCharacter, onSwapSeats, onMore, onClo
   const card = useRef<HTMLElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const [position, setPosition] = useState({ left: 16, top: 76, width: 316, maxHeight: 660 });
-  const [remindersOpen, setRemindersOpen] = useState(false);
-  const [effectsOpen, setEffectsOpen] = useState(false);
 
   useLayoutEffect(() => {
     const invoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -88,8 +84,6 @@ function PopoverContents({ player, onChangeCharacter, onSwapSeats, onMore, onClo
   }, [player.id]);
 
   if (!game || player.isEmpty) return null;
-  const effects = effectAccessibleSummary(player);
-  const officialEffects = officialEffectPresentation(player);
   return createPortal(<aside ref={card} className="player-popover" role="dialog" aria-modal="false" aria-labelledby={titleId}
     style={position} onKeyDown={event => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
@@ -108,31 +102,13 @@ function PopoverContents({ player, onChangeCharacter, onSwapSeats, onMore, onClo
         <div><h3>{role?.name ?? "Unassigned"}</h3><p className={role ? `type-${role.type}` : undefined}>{role?.type ?? (player.isTraveler ? "Traveler" : "Resident")}</p></div>
       </div>
       {role?.ability && <p className="player-popover-ability">{role.ability}</p>}
-      <p className="player-popover-identity">Shown to player: <strong>{shown?.name ?? "Not revealed"}</strong>{player.isTraveler && <span> · Traveler</span>}</p>
-      {ended ? <p className="player-popover-readonly"><LifeStateText state={lifeStatusOf(player).state} /> · Game ended</p> : <LifeControls player={player} />}
-      <section className="player-popover-markers" aria-label="On this player">
-        <h4>On this player</h4>
-        {effects && <p className="player-popover-effects">Effects: {effects}</p>}
-        {!!officialEffects.tokens.length && <div className="player-popover-official-effects">{officialEffects.tokens.map(token =>
-          <OfficialReminderToken key={token.key} role={token.role} label={token.label} count={token.instances.length} />
-        )}</div>}
-        {player.reminders.length ? <ul className="player-popover-reminders">{player.reminders.map(reminder => {
-          const sourceRole = officialNotationRole(reminder.sourceCharacter, reminder.label);
-          return <li key={reminder.id}>{sourceRole
-            ? <OfficialReminderToken role={sourceRole} label={reminder.label} notation />
-            : <span>✎ {reminder.label}</span>}</li>;
-        })}</ul> : <p className="player-popover-empty">No reminders.</p>}
-        {!ended && <>
-          <button type="button" className="player-popover-disclosure" aria-expanded={remindersOpen} onClick={() => setRemindersOpen(value => !value)}>Edit reminders</button>
-          {remindersOpen && <ReminderControls player={player} />}
-          <button type="button" className="player-popover-disclosure" aria-expanded={effectsOpen} onClick={() => setEffectsOpen(value => !value)}>Edit effects</button>
-          {effectsOpen && <EffectControls player={player} />}
-        </>}
-      </section>
+      {player.shownRole !== player.actualRole && <p className="player-popover-identity">Shown to player: <strong>{shown?.name ?? "Not revealed"}</strong></p>}
+      {ended ? <p className="player-popover-readonly"><LifeStateText state={lifeStatusOf(player).state} /> · Game ended</p> : <LifeControls player={player} compact />}
+      <PopoverReminders player={player} />
     </div>
     {!ended && <footer className="player-popover-actions">
-      <button type="button" onClick={onChangeCharacter}>Change character</button>
-      <button type="button" onClick={onSwapSeats}>Swap seats</button>
+      <button type="button" onClick={onSwapSeats}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7" /></svg>Swap seat</button>
+      {onShowPlayer && <button type="button" onClick={onShowPlayer}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8M12 17v4" /></svg>Show player</button>}
       <button type="button" className="player-popover-more" onClick={onMore}>More settings</button>
     </footer>}
   </aside>, document.body);

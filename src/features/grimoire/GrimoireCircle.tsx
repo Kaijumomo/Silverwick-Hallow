@@ -1,4 +1,7 @@
 import { usePlayersInteraction } from "@/features/players/PlayersInteraction";
+import { VotingCard, useVotingInteraction, hasDayExecution } from "@/features/voting/VotingWorkspace";
+import { VotingBoardArt } from "@/features/voting/VotingBoardArt";
+import { currentVotingState } from "@/stores/voting";
 import { useTargetPicker } from "@/features/abilities/abilityUi";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
@@ -156,14 +159,18 @@ type TokenProps = {
    * configuration before Reveal Roles can complete. Never shown to players;
    * never color-only. */
   needsShownRole?: boolean;
+  votingRole?: string;
+  votingLabel?: string;
 };
 
 function Token({
   player, role, shownRole, online, spec, x, y, selected, acting, pickable,
   mode, reorderable = true, draggedId, onRingDragStart, onRingDragEnd, onRingDropOn,
   onFreeRoamPointerDown, onClick, isGhost = false, needsShownRole = false,
+  votingRole, votingLabel,
 }: TokenProps) {
   const modern = usePlayersInteraction()?.active;
+  const votingOpen = !!useVotingInteraction()?.open;
   const privacyMode = usePrivacyStore((s) => s.enabled);
   const descriptionId = React.useId();
   const arcId = `character-arc-${descriptionId.replace(/:/g, "")}`;
@@ -277,18 +284,20 @@ function Token({
       className={classes}
       data-tier={spec.tier}
       data-player-id={player.id}
+      data-voting={votingRole}
+      data-voting-active={votingOpen || undefined}
       data-team={displayRole?.type}
       style={{ left: `calc(50% + ${x}px)`, top: `calc(50% + ${y}px)`, width: spec.width, height: spec.height }}
       onClick={isGhost ? undefined : onClick}
       role="button"
-      aria-label={lifeAccessibleLabel(player.name, player.seat + 1, life.state, needsCheck) + (markerSummary ? `, ${markerSummary}` : "") + (effectSummary ? `, ${effectSummary}` : "") + (reminderSummary ? `, ${reminderSummary}` : "")}
+      aria-label={lifeAccessibleLabel(player.name, player.seat + 1, life.state, needsCheck) + (votingLabel ? `, ${votingLabel}` : "") + (votingRole === "now" ? ", Now voting" : "") + (markerSummary ? `, ${markerSummary}` : "") + (effectSummary ? `, ${effectSummary}` : "") + (reminderSummary ? `, ${reminderSummary}` : "")}
       aria-describedby={description ? descriptionId : undefined}
       aria-pressed={selected}
       tabIndex={isGhost ? -1 : 0}
       onKeyDown={(e) => {
         if (!isGhost && (e.key === "Enter" || e.key === " ")) {
           e.preventDefault();
-          onClick();
+          if (!e.repeat) onClick();
         }
       }}
       {...ringDragHandlers}
@@ -296,6 +305,7 @@ function Token({
     >
       {description && <span id={descriptionId} className="sr-only">{description}</span>}
       <div className="token-disc-frame" style={{ width: spec.disc, height: spec.disc }}>
+        {votingLabel && <span className="voting-seat-tag" aria-hidden="true">{votingLabel}</span>}
         <div className="token-disc" style={{ width: spec.disc, height: spec.disc }}>
           {privacyMode && !publicRole ? (
             <span className="token-private-mark" aria-hidden="true">•</span>
@@ -351,6 +361,7 @@ function Token({
           <span className="token-reminder-count" aria-hidden="true" data-reminder-count={player.reminders.length}>✎{player.reminders.length}</span>
         )}
       </div>
+      {votingOpen && !spec.text && <div className="voting-compact-name" title={player.name}><span>{player.seat + 1} {player.name}</span>{!player.alive && <small>{player.ghostVote ? "Vote available" : "Vote used"}</small>}</div>}
       {spec.text && <>
         {privacyMode && !publicRole ? (
           <div className="token-role token-role-private">role hidden</div>
@@ -436,6 +447,7 @@ type Props = {
 };
 
 export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}) {
+  const voting = useVotingInteraction();
   const playersInteraction = usePlayersInteraction();
   const game = useStorytellerStore((s) => s.game);
   const script = useStorytellerStore((s) =>
@@ -511,6 +523,7 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
   const readOnly = game.phase === "ended";
   const litActorId = litActorIdOf(game, privacyMode, litActor);
   const tapSeat = (id: PlayerId) => {
+    if (voting?.tap(id)) return;
     const layout = playersInteraction?.swapping
       ? { game, positions: Object.fromEntries(game.seatOrder.map((seatId, index) => [seatId, getPos(seatId, index)])) }
       : undefined;
@@ -710,6 +723,7 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
       {!tableFits ? (
         <div className="table-replaced">
           <p className="table-replaced-note" role="status">Too many seats to draw the Table here — the Roster replaces it.</p>
+          <VotingCard inline />
           <RosterView />
         </div>
       ) : (
@@ -733,12 +747,16 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
           diameter={Math.max(0, Math.min(placement.rx, placement.ry) * 1.3)}
           offsetY={placement.cy}
         />}
-        {playersInteraction?.active && playerCount > 0 && <div className="grimoire-watermark" aria-hidden="true" style={{ marginTop: placement.cy }}>
+        {playersInteraction?.active && playerCount > 0 && !voting?.open && <div className="grimoire-watermark" aria-hidden="true" style={{ marginTop: placement.cy }}>
           <span>{game.phase === "setup" ? "Setup" : `${game.phase} ${game.day}`}</span>
           <strong>Silverwick Hollow</strong>
           <em>{game.phase === "night" ? "The town sleeps" : game.phase === "day" ? "The town awakens" : game.phase === "ended" ? "The story is complete" : "Prepare your town"}</em>
         </div>}
 
+        {voting?.open && <>
+          <VotingBoardArt positions={Object.fromEntries(game.seatOrder.map((id, index) => { const pos = getPos(id, index); return [id, { x: pos.x, y: pos.y - spec.height / 2 + spec.disc / 2 }]; }))} width={table.width} height={table.height} rx={placement.rx} ry={placement.ry} cy={placement.cy} disc={spec.disc} />
+          <VotingCard width={Math.min(560, Math.max(380, (placement.rx - spec.disc / 2 - 30) * 2), table.width - 40)} offsetY={placement.cy} />
+        </>}
         {playerCount === 0 ? (
           <div className="grimoire-empty">
             <p>{readOnly ? "No players." : "Add players to begin."}</p>
@@ -750,6 +768,14 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
             if (!p) return null;
             const pos = getPos(id, i);
             const isDragging = drag?.id === id;
+            const nominator = voting?.open ? voting.round?.nominator ?? voting.draft?.nominator : null;
+            const nominee = voting?.open ? voting.round?.nominee ?? voting.draft?.nominee : null;
+            const block = !privacyMode && game.phase === "day" && !hasDayExecution(game) ? currentVotingState(game).block : null;
+            const isBlock = !!p.participantId && block?.nominee?.participantId === p.participantId;
+            const isNominee = !!p.participantId && nominee?.participantId === p.participantId;
+            const isNominator = !!p.participantId && nominator?.participantId === p.participantId;
+            const voteRole = !!p.participantId && voting?.open && voting.voter?.participantId === p.participantId ? "now" : isNominee ? "nominee" : isNominator ? "nominator" : isBlock ? "block" : undefined;
+            const voteLabel = isBlock ? `On the block · ${block!.tally}` : isNominee ? (p.isTraveler ? "Exile" : "On trial") : isNominator ? "Nominator" : undefined;
 
             if (p.isEmpty) {
               return (
@@ -768,6 +794,8 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
               <Token
                 key={id}
                 player={p}
+                votingRole={voteRole}
+                votingLabel={voteLabel}
                 role={p.actualRole ? roleById.get(p.actualRole) : undefined}
                 shownRole={p.shownRole ? roleById.get(p.shownRole) : undefined}
                 needsShownRole={pendingRevealIds.has(id)}
@@ -779,7 +807,7 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
                 acting={litActorId === id}
                 pickable={picking ? seatPickable(game, id, picking) : null}
                 mode={grimoireMode}
-                reorderable={!readOnly && !playersInteraction?.swapping}
+                reorderable={!readOnly && !playersInteraction?.swapping && !voting?.open}
                 draggedId={ringDraggedId}
                 onRingDragStart={(srcId) => setRingDraggedId(srcId)}
                 onRingDragEnd={() => setRingDraggedId(null)}
@@ -797,7 +825,7 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
                   order.splice(insertAt, 0, src);
                   setSeatOrder(order);
                 }}
-                onFreeRoamPointerDown={playersInteraction?.swapping ? () => {} : handleTokenPointerDown}
+                onFreeRoamPointerDown={playersInteraction?.swapping || voting?.open ? () => {} : handleTokenPointerDown}
                 onClick={() => tapSeat(id)}
               />
             );

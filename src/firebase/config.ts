@@ -11,6 +11,8 @@
 // The apiKey is public by Firebase design; the auth boundary is the security
 // rules at src/firebase/rules.json. Do NOT put service account keys in env.
 
+import { isTabletTrial, TABLET_TRIAL_OFFLINE_MESSAGE } from "@/config/trial";
+
 const STORAGE_KEY = "new-blood-fb-config";
 
 export type FirebaseAppConfig = {
@@ -33,18 +35,21 @@ export function __setEnvOverrideForTests(env: EnvBag | null): void {
 }
 
 export function loadFirebaseConfig(): FirebaseAppConfig | null {
+  if (isTabletTrial) return null;
   const envCfg = readFromEnv();
   if (envCfg) return envCfg;
   return readFromStorage();
 }
 
 export function getConfigSource(): ConfigSource {
+  if (isTabletTrial) return "none";
   if (readFromEnv()) return "env";
   if (readFromStorage()) return "localStorage";
   return "none";
 }
 
 export function saveFirebaseConfig(cfg: FirebaseAppConfig): void {
+  if (isTabletTrial) throw new Error(TABLET_TRIAL_OFFLINE_MESSAGE);
   if (!isValidConfig(cfg)) {
     throw new Error(
       "Invalid Firebase config: apiKey, databaseURL, and projectId are required."
@@ -54,6 +59,7 @@ export function saveFirebaseConfig(cfg: FirebaseAppConfig): void {
 }
 
 export function clearFirebaseConfig(): void {
+  if (isTabletTrial) return;
   localStorage.removeItem(STORAGE_KEY);
 }
 

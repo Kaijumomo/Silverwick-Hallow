@@ -1676,7 +1676,7 @@ describe("resolveRoles: one commit, Undo and persistence", () => {
     expect(state().correctRole(holder("empath"), "monk")).toMatchObject({ ok: true });
     const round = StorytellerGamePersistedSchema.parse(JSON.parse(JSON.stringify(game())));
     expect(round).toEqual(JSON.parse(JSON.stringify(game())));
-    expect(round.gameSchemaVersion).toBe(26);
+    expect(round.gameSchemaVersion).toBe(27);
     // Current State never comes from History: dropping the History leaves it.
     expect(StorytellerGamePersistedSchema.safeParse({ ...JSON.parse(JSON.stringify(game())), history: [] }).success).toBe(true);
   });

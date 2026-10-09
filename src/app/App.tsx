@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { isTabletTrial } from "@/config/trial";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { takeMigrationResetFlag } from "@/stores/storytellerStore";
 import { HomeScreen } from "@/features/home/HomeScreen";
@@ -26,7 +27,15 @@ function readPublicDisplayCodeFromUrl(): string | null {
   return code.length > 0 ? code : null;
 }
 
+const TabletTrial = lazy(() => import("@/trial/TabletTrial"));
+
 export function App() {
+  return isTabletTrial
+    ? <Suspense fallback={<p role="status">Opening the local tablet trial…</p>}><TabletTrial /></Suspense>
+    : <NormalApp />;
+}
+
+function NormalApp() {
   const publicCode = readPublicDisplayCodeFromUrl();
   const joinCode = readJoinCodeFromUrl();
   const view = useStorytellerStore((s) => s.view);

@@ -9,7 +9,7 @@ import { detectLegacyGameVersion, hasV26Evidence, migrateGameEntry } from "./gam
 import { newRevealToken, revealViewed, visibleIdentityKey, withRevealTokens } from "./revealTokens";
 import { ownLifeOf, projectLobbyToPublic, projectLobbyToSelfEnvelopeMap, projectLobbyToSelfMap, selfEnvelopeOf } from "./projections";
 import { setupGame, setupScript } from "@/test/setupFixtures";
-import { asV25, withV26Stamp } from "@/test/v20Migration";
+import { asV25, withV26ToCurrent } from "@/test/v20Migration";
 import { withoutRevealTokens } from "@/test/revealTokens";
 import { buildRegistry } from "@/data/roleRegistry";
 import type { StorytellerLobbyRecord } from "./types";
@@ -46,9 +46,9 @@ beforeEach(() => {
 
 // ---------------------------------------------------------------------------
 describe("10H-AC-003 / AC-043: v26 schema", () => {
-  it("the current version is 26 and the game carries no result until it ends", () => {
-    expect(GAME_SCHEMA_VERSION).toBe(26);
-    expect(game().gameSchemaVersion).toBe(26);
+  it("the current game carries no result until it ends", () => {
+    expect(GAME_SCHEMA_VERSION).toBe(27);
+    expect(game().gameSchemaVersion).toBe(27);
     expect(game()).not.toHaveProperty("result");
     expect(StorytellerGamePersistedSchema.safeParse(game()).success).toBe(true);
   });
@@ -106,7 +106,7 @@ describe("10H-AC-034 / AC-044: v25 -> v26 migration invents nothing", () => {
       expect(detectLegacyGameVersion(v25)).toBe(25);
       const copy = structuredClone(v25);
       migrateGameEntry(copy, 25, { kind: "canonical-only" });
-      expect(copy).toEqual(withV26Stamp(v25));
+      expect(copy).toEqual(withV26ToCurrent(v25));
       expect(copy).not.toHaveProperty("result");
       for (const p of Object.values(copy.players as Record<string, Raw>)) expect(p).not.toHaveProperty("revealToken");
       expect(StorytellerGamePersistedSchema.safeParse(copy).success).toBe(true);
@@ -116,10 +116,10 @@ describe("10H-AC-034 / AC-044: v25 -> v26 migration invents nothing", () => {
     }
     const result = migrateStoreState({ game: structuredClone(ended), undoStack: [structuredClone(live), structuredClone(live)] }, 25) as { game: Raw; undoStack: Raw[] };
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(result.game).toEqual(withV26Stamp(ended));
+    expect(result.game).toEqual(withV26ToCurrent(ended));
     expect((result.game as unknown as StorytellerLobbyRecord).phase).toBe("ended");
     expect(result.game).not.toHaveProperty("result"); // a legacy ended game: No recorded result
-    for (const entry of result.undoStack) expect(entry).toEqual(withV26Stamp(live));
+    for (const entry of result.undoStack) expect(entry).toEqual(withV26ToCurrent(live));
   });
 
   it("v26-only evidence under marker 25 (or marker-less) is malformed current data: never stamped, rejected", () => {
@@ -134,7 +134,7 @@ describe("10H-AC-034 / AC-044: v25 -> v26 migration invents nothing", () => {
       expect(StorytellerGamePersistedSchema.safeParse(copy).success).toBe(false);
       const markerless = structuredClone(bad) as Raw;
       delete markerless.gameSchemaVersion;
-      expect(detectLegacyGameVersion(markerless)).toBe(26);
+      expect(detectLegacyGameVersion(markerless)).toBe(27);
     }
   });
 });
@@ -151,11 +151,15 @@ describe("10H-AC-031..033: reveal-token lifecycle at the one commit seam", () =>
   });
 
   it("every occupied participation has an opaque, random token never derived from its ParticipantId; empty seats have none", () => {
+    const independentlyOpened = withRevealTokens(null, game(), registry);
     for (const id of game().seatOrder) {
       const p = player(id);
       expect(p.revealToken).toMatch(REVEAL_TOKEN_PATTERN);
       expect(p.revealToken).not.toContain(p.participantId!);
-      expect(p.revealToken).not.toContain(p.id);
+      // A random token can coincidentally contain a two-character fixture
+      // seat id. Equal identities reopened independently must get new tokens.
+      expect(p.revealToken).not.toBe(p.id);
+      expect(p.revealToken).not.toBe(independentlyOpened.players[id]!.revealToken);
     }
     expect(new Set(game().seatOrder.map((id) => player(id).revealToken)).size).toBe(game().seatOrder.length);
   });

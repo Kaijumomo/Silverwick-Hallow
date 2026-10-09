@@ -7,7 +7,7 @@ import { MAX_NIGHT_STEP_NOTES, MAX_ST_NOTES, StorytellerGamePersistedSchema, Sto
 import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { manualEffectId } from "./effects";
-import { cloneOwned, type MutationContext, sameSnapshot } from "./history";
+import { cloneOwned, historyId, type MutationContext, sameSnapshot } from "./history";
 import {
   applyEffectPlan,
   effectApplicationMoment,
@@ -46,7 +46,7 @@ import {
   type ReminderTransaction,
 } from "./reminderResolution";
 import { newParticipantId, participantIdAppearsIn } from "./participants";
-import { participantRoleStepEntries, planNightStepStatus } from "./nightProgress";
+import { participantRoleStepEntries, participantStepKey, travelerArrivalStepKey, planNightStepStatus } from "./nightProgress";
 import { planAbilityResolution, type AbilityRefusal, type AbilityResolutionRequest } from "./abilityResolution";
 import { clearNightActionCorrections, invalidateNightActionCorrections, planNightActionTargetCorrection, rememberCorrectedNightAction, rememberNightAction, type NightActionTargetCorrection } from "./nightActionCorrection";
 import {
@@ -78,6 +78,11 @@ import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 import { invalidatePrivatePacket } from "./privatePackets";
 import { withRevealTokens } from "./revealTokens";
 import { usePrivacyStore } from "./privacyStore";
+import { votingAuthorityToken } from "@/firebase/votingAuthority";
+import { planVoting, currentVotingState, reconcileVotingDependencies } from "./voting";
+import type { VotingIntent } from "./votingTypes";
+import type { VotingHistoryRecord } from "./types";
+import { isTabletTrial } from "@/config/trial";
 import { useShellStore } from "./shellStore";
 import { analyzeSetup } from "@/features/setup/setupAnalyzer";
 import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
@@ -138,7 +143,9 @@ export const gameLifecycleToken = (): number => gameLifecycle;
  * `merge` (Phase 9C.2B.2) passes to migrateStoreState when Zustand's own
  * persist middleware skips calling `migrate` outright, which it does
  * whenever the persisted version already equals this one. */
-const STORE_VERSION = 26;
+const STORE_VERSION = 27;
+const STORE_KEY = isTabletTrial ? "silverwick-voting-tablet-trial" : "new-blood-st";
+let prewrittenVotingSave: { name: string; value: string } | null = null;
 
 let _migrationResetFlag = false;
 /** Returns true (once) when migrate() discarded incompatible persisted state. */
@@ -340,6 +347,18 @@ export type LobbyConnection = {
   sessionId?: string;
   status: "live" | "reconnecting";
 };
+
+/** A pending visible voting action belongs to this exact game and writer. */
+export type VotingCommandContext = {
+  game: StorytellerLobbyRecord | null;
+  lobby: LobbyConnection | null;
+  lifecycle: number;
+  writerToken: string | null;
+};
+export function captureVotingContext(): VotingCommandContext {
+  const state = useStorytellerStore.getState();
+  return { game: state.game, lobby: state.lobby, lifecycle: gameLifecycleToken(), writerToken: votingAuthorityToken(state.lobby) };
+}
 
 export type NewGameOpts = {
   plannedPlayerCount?: number;
@@ -650,6 +669,7 @@ export type StorytellerStore = {
    * Life command below is a one-intent wrapper around this; a future
    * ability engine submits its resolved intents here too. */
   resolveLife: (transaction: LifeTransaction) => LifeCommandResult;
+  resolveVoting: (intent: VotingIntent, context: VotingCommandContext) => ReturnType<typeof planVoting>;
   /** A death not represented by an execution/exile. Night or Day. */
   recordDeath: (id: PlayerId, context?: MutationContext) => LifeCommandResult;
   /** The actual executee's execution (Day only). Extra executions and a
@@ -763,7 +783,7 @@ export type StorytellerStore = {
    * Day N -> Night N+1); Night/Day -> Setup is refused (Setup is pre-game
    * only); leaving "ended" is refused. */
   setPhase: (phase: StorytellerLobbyRecord["phase"]) => SetupCommandResult;
-  advancePhase: () => SetupCommandResult;
+  advancePhase: (context?: VotingCommandContext) => SetupCommandResult;
 
   setNightStepStatus: (day: number, stepKey: string, status: NightStepStatus) => void;
   /** Phase 10G (Section 20.2): changed notes over MAX_NIGHT_STEP_NOTES are
@@ -1264,7 +1284,7 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // Game Result or winner is invented). Every older marker continues the chain
   // through v26; an older marker carrying v26 evidence receives nothing and is
   // rejected.
-  if (fromVersion < 26) {
+  if (fromVersion < 27) {
     const customScripts = (s as { customScripts?: Record<string, Script> }).customScripts ?? {};
     // Phase 9R.1 Astra remediation (Finding A2): local persisted migration
     // uses "trusted" evidence -- this state's OWN saved customScripts,
@@ -1393,12 +1413,39 @@ export const useStorytellerStore = create<StorytellerStore>()(
           if (patch.undoStack && patch.seatSwapUndo === undefined)
             patch.seatSwapUndo = reindexSeatSwapUndo(state.undoStack, patch.undoStack, state.seatSwapUndo);
           if (!skip && "game" in patch && patch.game !== state.game && patch.game != null) {
-            const game = withRevealTokens(state.game, patch.game, registryForGame(state, patch.game));
+            const revealed = withRevealTokens(state.game, patch.game, registryForGame(state, patch.game));
+            const game = state.game ? reconcileVotingDependencies(state.game, revealed) : revealed;
             return { ...patch, game, localSeq: state.localSeq + 1 };
           }
           return patch;
         }, replace as Parameters<typeof rawSet>[1]);
       }) as unknown as typeof rawSet;
+      /** Save this bounded voting result before publishing it to subscribers.
+       * The ordinary persist middleware consumes the exact prewritten bytes.
+       * A refused browser write changes no game, token, history or Undo. */
+      const commitVotingState = (planned: StorytellerLobbyRecord, state: StorytellerStore, authority: string): string | null => {
+        const current = state.game!;
+        const prepared = reconcileVotingDependencies(current, withRevealTokens(current, planned, registryForGame(state, planned)));
+        if (!StorytellerGamePersistedSchema.safeParse(prepared).success) return "This result could not be safely saved. Nothing was recorded.";
+        const failure = persistencePreflight(prepared, current, state.lobby);
+        if (failure) return failure;
+        const undoStack = pushUndo(current, state.undoStack);
+        const seatSwapUndo = reindexSeatSwapUndo(state.undoStack, undoStack, state.seatSwapUndo);
+        const candidate = { ...state, game: prepared, undoStack, seatSwapUndo, localSeq: state.localSeq + 1 };
+        const options = useStorytellerStore.persist.getOptions();
+        if (votingAuthorityToken(state.lobby) !== authority) return "The connection changed. Nothing was recorded.";
+        let value: string;
+        try {
+          value = JSON.stringify({ state: options.partialize ? options.partialize(candidate) : candidate, version: STORE_VERSION });
+          localStorage.setItem(STORE_KEY, value);
+        } catch {
+          return "This device could not save the change. Free browser storage or allow site storage, then try again. Nothing was recorded.";
+        }
+        prewrittenVotingSave = { name: STORE_KEY, value };
+        try { set({ game: prepared, undoStack, seatSwapUndo }); }
+        finally { prewrittenVotingSave = null; }
+        return null;
+      };
       return {
       game: null,
       terminalClose: null,
@@ -2722,6 +2769,79 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
+      resolveVoting: (intent, context) => {
+        const state = get();
+        const { game, lobby } = state;
+        const refused = (message: string) => ({ ok: false as const, code: "refused" as const, message });
+        if (!game || game.phase === "ended") return refused("Open a live game before recording votes.");
+        if (state.terminalClose?.status === "closing") return refused("The game is closing. Nothing was recorded.");
+        if (usePrivacyStore.getState().enabled) return refused("Leave Privacy Mode and reopen voting.");
+        if (!context || context.game !== game || context.lobby !== lobby || context.lifecycle !== gameLifecycleToken())
+          return refused("The game changed. Review voting before continuing.");
+        const authority = votingAuthorityToken(lobby);
+        if (!authority || authority !== context.writerToken || (lobby && (game.code !== lobby.code || game.storytellerUid !== lobby.uid)))
+          return refused("The connection changed. Reconnect before recording votes.");
+        const script = selectScriptById(state, game.scriptId);
+        const registry = registryForGame(state, game);
+        let result = planVoting(game, intent, script && registry ? { script, registry } : undefined);
+        if (!result.ok || !result.changed) return result;
+        // Only the exact notation linked to a removed authoritative modifier
+        // follows it. Freeform reminders with the same label remain notation.
+        if (intent.kind === "bureaucrat" || intent.kind === "removeModifier") {
+          for (const old of game.voting?.modifiers ?? []) {
+            if (result.game.voting?.modifiers.some(m => m.id === old.id)) continue;
+            const target = result.game.players[old.target.playerId];
+            const reminderId = `voting-${old.id}`;
+            if (target?.participantId !== old.target.participantId || !target.reminders.some(r => r.id === reminderId)) continue;
+            const removed = planReminderTransaction(result.game, { intents: [{ kind: "remove", target: { playerId: old.target.playerId, participantId: old.target.participantId }, reminderId }] });
+            if (!removed.ok) return refused(removed.message);
+            if (removed.changed) result = { ...result, game: applyReminderPlan(result.game, removed.plan) };
+          }
+        }
+        if (intent.kind === "bureaucrat") {
+          const reminder = planReminderTransaction(result.game, { intents: [{ kind: "place", target: intent.target,
+            reminder: { id: `voting-${intent.modifierId}`, label: "3 Votes", source: intent.source, sourceCharacter: "bureaucrat", note: `Day ${game.day} only.` } }] });
+          if (!reminder.ok) return refused(reminder.message);
+          if (reminder.changed) result = { ...result, game: applyReminderPlan(result.game, reminder.plan) };
+          if (intent.completeStep) {
+            const { day, stepKey } = intent.completeStep;
+            if (game.phase !== "night" || day !== game.day ||
+              ![participantStepKey(intent.source.participantId, "bureaucrat"), travelerArrivalStepKey(intent.source.participantId, "bureaucrat")].includes(stepKey))
+              return refused("The Bureaucrat's Night step changed. Reopen the current action.");
+            const completed = planNightStepStatus(result.game, day, stepKey, "done");
+            if (completed) result = { ...result, game: completed };
+          }
+        }
+        const roundId = "roundId" in intent ? intent.roundId : undefined;
+        const round = result.game.voting?.rounds.find(r => r.id === roundId);
+        if (intent.kind === "begin" && round?.virginPending) {
+          const reminder = planReminderTransaction(result.game, { intents: [{ kind: "place", target: intent.nominee,
+            reminder: { label: "No Ability", source: intent.nominee, sourceCharacter: "virgin" } }] });
+          if (!reminder.ok) return refused(reminder.message);
+          if (reminder.changed) result = { ...result, game: applyReminderPlan(result.game, reminder.plan) };
+        }
+        const participant = "voter" in intent ? round?.order.find(p => p.participantId === intent.voter.participantId) : round?.nominee;
+        const summary = intent.kind === "begin" && round ? `${round.nominator.nameAtTime} nominated ${round.nominee.nameAtTime}${round.mode === "exile" ? " for exile" : ""}.`
+          : intent.kind === "respond" ? `${participant?.nameAtTime ?? "Voter"}: ${intent.choice}. Total: ${round?.tally ?? 0}.`
+          : intent.kind === "bureaucrat" ? "Recorded the Bureaucrat's selected player for this day."
+          : intent.kind === "removeModifier" ? "Removed a voting adjustment."
+          : intent.kind === "execution" ? `Recorded execution: ${intent.outcome}.`
+          : intent.kind === "exileOutcome" ? `Recorded exile: ${intent.outcome}.`
+          : intent.kind === "virgin" ? `Resolved the Virgin nomination${intent.execute ? " with an execution" : " without an execution"}.`
+          : intent.kind === "undoLast" ? "Undid the last vote and its dependent changes."
+          : intent.kind === "correctResponse" ? `Corrected ${participant?.nameAtTime ?? "a voter"}'s response to ${intent.choice}; total ${round?.tally ?? 0}.`
+          : intent.kind === "abandon" ? "Abandoned the round; accepted responses and spent dead votes remain recorded."
+          : intent.kind === "acknowledgeContext" ? "Reviewed the changed table before continuing this vote."
+          : "Acknowledged the voting result.";
+        const record: VotingHistoryRecord = { id: historyId(), category: "voting", moment: { phase: game.phase as "day" | "night", day: game.day }, operation: intent.kind, summary,
+          ...(roundId ? { roundId } : {}), ...(participant ? { participant } : {}),
+          ...(["undoLast", "correctResponse", "abandon", "removeModifier"].includes(intent.kind) ? { correction: true as const } : {}) };
+        result = { ...result, game: { ...result.game, history: [...result.game.history, record] } };
+        const failure = commitVotingState(result.game, state, authority);
+        if (failure) return refused(failure);
+        return result;
+      },
+
       resolveLife: (transaction) => {
         const { game, undoStack } = get();
         if (!game) return { ok: false, code: "refused", message: "No game is open." };
@@ -3010,14 +3130,25 @@ export const useStorytellerStore = create<StorytellerStore>()(
         return { ok: true };
       },
 
-      advancePhase: () => {
+      advancePhase: (context) => {
         const { game, undoStack } = get();
         if (!game) return { ok: false, message: "No game is open." };
+        if (context) {
+          const state = get();
+          const authority = votingAuthorityToken(state.lobby);
+          if (context.game !== game || context.lobby !== state.lobby || context.lifecycle !== gameLifecycleToken() ||
+            !authority || authority !== context.writerToken || usePrivacyStore.getState().enabled || state.terminalClose?.status === "closing")
+            return { ok: false, message: "The game or connection changed. Review the day before continuing." };
+          if (state.lobby && (game.code !== state.lobby.code || game.storytellerUid !== state.lobby.uid))
+            return { ok: false, message: "The game and connection no longer match. Reconnect before continuing." };
+        }
         if (game.phase === "setup") return get().beginNightOne();
         // Phase 9R.4 (B8): an ended game has no next phase -- this used to
         // commit an identical game. Same refusal setPhase already gives.
         if (game.phase === "ended")
           return { ok: false, message: "This game has ended. Create a new setup to play again." };
+        if (game.phase === "day" && game.voting?.activeRoundId)
+          return { ok: false, message: "Finish or deliberately abandon the current vote before entering Night." };
         let { phase, day } = game;
         if (phase === "night") {
           phase = "day";
@@ -3046,10 +3177,16 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const advanced: StorytellerLobbyRecord = {
           ...game, phase, day, lifeEventWindow: pruneLifeEventWindow(game.lifeEventWindow, phase, day),
         };
+        if (phase === "day") advanced.voting = { ...currentVotingState(advanced), coverage: "known" };
         const withEffects = expired ? applyEffectPlan(advanced, expired) : advanced;
+        const finalGame = expiredFacts ? applyGameRuleFactPlan(withEffects, expiredFacts) : withEffects;
+        if (context) {
+          const failure = commitVotingState(finalGame, get(), context.writerToken!);
+          return failure ? { ok: false, message: failure } : { ok: true };
+        }
         set({
           undoStack: pushUndo(game, undoStack),
-          game: expiredFacts ? applyGameRuleFactPlan(withEffects, expiredFacts) : withEffects,
+          game: finalGame,
         });
         return { ok: true };
       },
@@ -3217,9 +3354,21 @@ export const useStorytellerStore = create<StorytellerStore>()(
       };
     },
     {
-      name: "new-blood-st",
+      name: STORE_KEY,
       version: STORE_VERSION,
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => {
+        // Preserve Zustand's unavailable-storage behavior in non-browser
+        // environments by resolving storage while its getter is guarded.
+        const storage = localStorage;
+        return {
+        getItem: name => storage.getItem(name),
+        removeItem: name => storage.removeItem(name),
+        setItem: (name, value) => {
+          if (prewrittenVotingSave?.name === name && prewrittenVotingSave.value === value) { prewrittenVotingSave = null; return; }
+          storage.setItem(name, value);
+        },
+        };
+      }),
       migrate: migrateStoreState,
       // Phase 9C.2B.2 (hardening): Zustand only invokes `migrate` above when
       // the persisted version differs from STORE_VERSION — a persisted blob

@@ -9,7 +9,7 @@ const empath = { id: "empath", name: "Empath", type: "Townsfolk", ability: "Each
 const characterPayload: PresentationPayload = { kind: "character", heading: "You Are", character: empath };
 
 describe("local player presentation", () => {
-  it.each(["You Are", "This Player Is", "Selected You"])("presents only the selected character for %s", heading => {
+  it.each(["You Are", "This Player Is", "Selected You", "This Character"])("presents only the selected character for %s", heading => {
     render(<PlayerPresentation payload={{ ...characterPayload, heading }} onClose={vi.fn()} />);
     const dialog = screen.getByRole("dialog", { name: heading });
     expect(within(dialog).getByRole("heading", { name: empath.name })).toBeInTheDocument();

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useStorytellerStore, type LifeCommandResult } from "@/stores/storytellerStore";
+import { captureVotingContext, useStorytellerStore, type LifeCommandResult } from "@/stores/storytellerStore";
 import { LIFE_ANOMALY_LABEL, lifeStatusOf, type LifeState } from "@/stores/lifeState";
 import type { LifeConfirmationToken } from "@/stores/lifeResolution";
 import { usePrivacyStore } from "@/stores/privacyStore";
@@ -51,9 +51,9 @@ export function useLifeRunner(contextKey = "") {
   return { attempt, confirmation, errorNode, clear: () => { setError(null); setPending(null); } };
 }
 
-/** Phase 10A: the drawer's Life section. Every action is a labelled
- * semantic command -- there is no one-click alive/dead toggle. */
-export function LifeControls({ player }: { player: STPlayerRecord }) {
+/** Every action, including the compact Life switch, submits a semantic
+ * command. Selecting Alive means resurrection, not a raw status correction. */
+export function LifeControls({ player, compact = false }: { player: STPlayerRecord; compact?: boolean }) {
   const game = useStorytellerStore((s) => s.game);
   const store = useStorytellerStore.getState;
   const { attempt, confirmation, errorNode } = useLifeRunner(
@@ -70,6 +70,37 @@ export function LifeControls({ player }: { player: STPlayerRecord }) {
     if (correction === "keep") return;
     if (attempt(() => store().correctLifeStatus(player.id, statusTargetOf(correction as LifeState)))) setCorrection("keep");
   };
+
+  // The token popup presents only immediate Life actions. Execution/exile
+  // outcomes belong to voting; the existing full editor remains in More settings.
+  if (compact) {
+    const context = captureVotingContext();
+    const act = (run: Runner) => attempt(confirmed => {
+      const current = store().game;
+      const latest = captureVotingContext();
+      if (usePrivacyStore.getState().enabled || current !== game || current.players[player.id]?.participantId !== player.participantId ||
+        latest.lobby !== context.lobby || latest.lifecycle !== context.lifecycle || !latest.writerToken || latest.writerToken !== context.writerToken || store().terminalClose?.status === "closing")
+        return { ok: false, code: "stale", message: "The player changed. Reopen their details before continuing." };
+      return run(confirmed);
+    });
+    return <section className="life-controls-compact" aria-label="Life">
+      <div className="life-compact-row">
+        <div className="popover-segmented life-compact-switch" role="group" aria-label="Life status">
+          <button type="button" aria-pressed={!dead} disabled={!live || !dead} title={dead ? "Resurrect this player" : "This player is alive"}
+            onClick={() => act(() => store().resurrect(player.id))}>Alive</button>
+          <button type="button" aria-pressed={dead} disabled={!live || dead} title={dead ? "This player is dead" : "Record this player's death"}
+            onClick={() => act(() => store().recordDeath(player.id))}>Dead</button>
+        </div>
+        {live && dead && <button type="button" className="life-ghost-switch" aria-pressed={voteAvailable}
+          title={voteAvailable ? "Mark ghost vote used" : "Restore ghost vote"}
+          onClick={() => act(() => voteAvailable ? store().spendGhostVote(player.id) : store().restoreGhostVote(player.id))}>
+          <span className="life-ghost-dot" aria-hidden="true" />Ghost vote
+        </button>}
+      </div>
+      {status.anomalies.length > 0 && <p className="life-needs-check" role="note">Life status needs review in More settings.</p>}
+      {confirmation}{errorNode}
+    </section>;
+  }
 
   return (
     <section className="drawer-section life-controls" aria-label="Life">

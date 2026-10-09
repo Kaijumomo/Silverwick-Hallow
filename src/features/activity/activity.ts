@@ -50,6 +50,7 @@ export type ActivityGroup = {
 export type ActivityCategory = GameHistoryRecord["category"] | "information";
 export const ACTIVITY_CATEGORIES: readonly { value: ActivityCategory; label: string }[] = [
   { value: "life", label: "Life" },
+  { value: "voting", label: "Nominations and voting" },
   { value: "role", label: "Character" },
   { value: "alignment", label: "Alignment" },
   { value: "effect", label: "Effects" },
@@ -75,7 +76,7 @@ export const participantLabel = (ref: ParticipantRef): string =>
   ref.kind === "participant" ? (ref.nameAtTime || `Seat ${ref.playerId}`) : `Unknown participant (seat ${ref.playerId}, before identity tracking)`;
 
 const historyParticipant = (record: GameHistoryRecord): ParticipantRef | null =>
-  record.category === "gameRuleFact" ? null : record.participant;
+  record.category === "gameRuleFact" ? null : record.participant ?? null;
 
 /** Every participant any Activity record is about, for the filter. */
 export function activityParticipants(game: Pick<StorytellerLobbyRecord, "history" | "informationDeliveries">): { key: string; label: string }[] {
@@ -165,6 +166,7 @@ const str = (value: unknown): string => (typeof value === "string" ? value : val
 
 /** One line describing what a History Record says changed. */
 export function describeHistoryRecord(record: GameHistoryRecord, registry: RoleRegistry): string {
+  if (record.category === "voting") return record.summary;
   const correction = record.correction ? " (correction)" : "";
   if (record.category === "gameRuleFact") {
     const label = gameRuleFactDefinition(record.ruleFactType)?.label ?? `Unregistered fact "${record.ruleFactType}"`;
