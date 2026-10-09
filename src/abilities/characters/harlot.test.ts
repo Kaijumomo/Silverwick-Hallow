@@ -82,8 +82,9 @@ describe("Harlot -- consent", () => {
     expect(planned(run(monked, "p1", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() })).players.p1!.alive).toBe(false);
     const generic = patchPlayer(base(), "p1", { effects: [effect("protected")] });
     const id = protectionId(generic, "any", "p1");
-    expect(requirementIds(run(generic, "p1", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }))).toEqual([id]);
-    expect(planned(run(generic, "p1", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }, { judgments: { [id]: yes(true) } })).players.p1!.alive).toBe(true);
+    expect(run(generic, "p1", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() })).toMatchObject({ ok: false, code: "unsupported" });
+    expect(run(generic, "p1", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }, { judgments: { [id]: yes(true) } })).toMatchObject({ ok: false, code: "unsupported" });
+    expect(generic.players.p0!.alive && generic.players.p1!.alive).toBe(true);
   });
 
   it("when one death would change whether the other is prevented, no order is invented -> Manual", () => {
@@ -96,11 +97,12 @@ describe("Harlot -- consent", () => {
       .toMatchObject({ ok: false, code: "unsupported", message: expect.stringMatching(/order matters/) });
   });
 
-  it("registration ambiguity: the Storyteller decides the character shown", () => {
+  it("registration ambiguity leaves the entire action Manual even with a supplied legacy judgment", () => {
     const g = base();
-    expect(requirementIds(run(g, "p2", { [CONSENT]: yes() }))).toEqual([sid(g, "p2", CHARACTER_JUDGMENT)]);
-    const next = planned(run(g, "p2", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes(false) }, { judgments: { [CHARACTER_JUDGMENT]: character("chef") } }));
-    expect(next.informationDeliveries[0]!.values).toEqual(told(g, "p2", "chef"));
+    const before = JSON.stringify(g);
+    expect(run(g, "p2", { [CONSENT]: yes() })).toMatchObject({ ok: false, code: "unsupported" });
+    expect(run(g, "p2", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes(false) }, { judgments: { [CHARACTER_JUDGMENT]: character("chef") } })).toMatchObject({ ok: false, code: "unsupported" });
+    expect(JSON.stringify(g)).toBe(before);
   });
 });
 
@@ -243,9 +245,9 @@ describe("SOL-10F-S7-F1 -- the Harlot may choose themself", () => {
     expect(deathIntents(run(monked, "p0", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }))).toHaveLength(1);
     const generic = patchPlayer(base(), "p0", { effects: [effect("protected")] });
     const id = protectionId(generic, "any", "p0");
-    expect(requirementIds(run(generic, "p0", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }))).toEqual([id]);
-    expect(deathIntents(run(generic, "p0", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }, { judgments: { [id]: yes(false) } }))).toHaveLength(1);
-    expect(deathIntents(run(generic, "p0", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }, { judgments: { [id]: yes(true) } }))).toEqual([]);
+    expect(run(generic, "p0", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() })).toMatchObject({ ok: false, code: "unsupported" });
+    for (const value of [false, true]) expect(run(generic, "p0", { [CONSENT]: yes(), [DEATH_CONSEQUENCE]: yes() }, { judgments: { [id]: yes(value) } })).toMatchObject({ ok: false, code: "unsupported" });
+    expect(generic.players.p0!.alive).toBe(true);
   });
 
   it("6. stale ParticipantId safety: a self-choice captured before seat reuse is refused", () => {

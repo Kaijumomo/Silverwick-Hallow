@@ -143,18 +143,18 @@ describe("10F-AC-08 / AC-26: synchronous final stale revalidation", () => {
     expect(game().players.p2!.effects).toHaveLength(1);
   });
 
-  it("SOL-10F-L1 through the store: a REPRESENTED jinx partner gates; an explicit judgment clears it", () => {
+  it("a represented unverified jinx keeps the entire action manual despite a legacy judgment", () => {
     live();
     // Seat p5 now holds the canonical Leviathan: the Leviathan / Monk jinx is active.
     store.setState({ game: { ...game(), players: { ...game().players, p5: { ...game().players.p5!, actualRole: "leviathan" } } } });
     const request = () => ({ mode: "guided" as const, invocationPath: "nightOrder" as const, fingerprint: captureFingerprint(game(), "p0")!, roleId: "monk",
       inputs: { target: { kind: "participant" as const, participants: [bind("p2")] } } });
     const b = baseline();
-    expect(state().resolveAbility(request(), FIXTURE_SEMANTICS)).toMatchObject({ ok: false, code: "needsInput",
-      requirements: [expect.objectContaining({ id: "modifier:jinx:leviathan+monk", source: "judgment" })] });
+    expect(state().resolveAbility(request(), FIXTURE_SEMANTICS)).toMatchObject({ ok: false, code: "unsupported" });
     expectInert(b);
     expect(state().resolveAbility({ ...request(), judgments: { "modifier:jinx:leviathan+monk": { kind: "boolean", value: true } } }, FIXTURE_SEMANTICS))
-      .toMatchObject({ ok: true, changed: true });
+      .toMatchObject({ ok: false, code: "unsupported" });
+    expectInert(b);
   });
 
   it("a canonical character without verified production semantics: a guided request is unsupported and points to Manual", () => {
@@ -183,8 +183,13 @@ describe("architecture: one commit seam, no nested store commands (10F-AC-02, AC
     const start = storeCode.search(/^ {6}resolveAbility: \(/m);
     const body = storeCode.slice(start, storeCode.indexOf("\n      assignRole:", start));
     expect(body).toMatch(/planAbilityResolution\(/);
-    expect(body.match(/\bset\(/g)).toHaveLength(1);
-    expect(body.match(/pushUndo\(/g)).toHaveLength(1);
+    expect(body.match(/commitAuthoritativeState\(/g)).toHaveLength(1);
+    expect(body).not.toMatch(/\bset\(|pushUndo\(/);
+    const commitStart = storeCode.indexOf("const commitAuthoritativeState =");
+    const commit = storeCode.slice(commitStart, storeCode.indexOf("\n      return {", commitStart));
+    expect(commit.match(/\bset\(/g)).toHaveLength(1);
+    expect(commit.match(/pushUndo\(/g)).toHaveLength(1);
+    expect(commit.indexOf("localStorage.setItem")).toBeLessThan(commit.indexOf("set({ game:"));
     expect(body).not.toMatch(/get\(\)\.(resolve|record|set)\w+\(/);
   });
 });

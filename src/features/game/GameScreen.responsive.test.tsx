@@ -4,7 +4,8 @@ import { GameScreen } from "./GameScreen";
 import { useStorytellerStore as storyteller } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
-import { choose, chosen } from "@/test/pickers";
+import { useTargetPicker } from "@/features/abilities/abilityUi";
+import { participantStepKey } from "@/stores/nightProgress";
 import { useShellStore } from "@/stores/shellStore";
 
 let narrow = false;
@@ -218,18 +219,19 @@ describe("ASTRA-10H-002 / 008: the docked Night workspace", () => {
     expect(rail(view.container)).not.toHaveAttribute("hidden");
   });
 
-  it("002: the action card is the dock's own content, with a Night-list control and a Resume that keeps the draft", () => {
+  it("002: a simple action stays in the dock and selects directly without another completion dialog", () => {
     const view = night();
     const monk = view.container.querySelector<HTMLElement>(".grimoire .token.acting")!;
     expect(monk).toBeTruthy();
-    fireEvent.click(monk);
-    const card = screen.getByRole("dialog", { name: /^Monk/ });
-    expect(card.parentElement).toHaveClass("action-card-dock-host");
-    expect(card.closest(".shell-rail")).toBe(rail(view.container));
-    fireEvent.click(within(card).getByRole("button", { name: "Back to the Night list (keeps your choices)" }));
+    const guide = screen.getByRole("region", { name: "Night 2 guide" });
+    expect(guide.closest(".shell-rail")).toBe(rail(view.container));
     expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Resume Monk action" }));
-    expect(screen.getByRole("dialog", { name: /^Monk/ }).parentElement).toHaveClass("action-card-dock-host");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel selection" }));
+    fireEvent.click(monk);
+    expect(useTargetPicker.getState().active).not.toBeNull();
+    fireEvent.click(view.container.querySelector<HTMLElement>('[data-player-id="p2"]')!);
+    expect(storyteller.getState().game!.players.p2!.effects[0]?.type).toBe("safeFromDemon");
+    expect(storyteller.getState().undoStack).toHaveLength(1);
   });
 });
 
@@ -283,31 +285,28 @@ describe("ASTRA-10H-009: the actor tap reopens a hidden Night dock", () => {
   }
   const rail = (c: HTMLElement) => c.querySelector<HTMLElement>(".shell-rail")!;
   const actor = (c: HTMLElement) => c.querySelector<HTMLElement>(".grimoire .token.acting")!;
-  const card = () => screen.queryByRole("dialog");
-  const slotOf = (el: HTMLElement) => el.querySelector<HTMLElement>("[data-pick-slot]")!.dataset.pickSlot!;
+  const guide = () => screen.getByRole("region", { name: "Night 2 guide" });
   // The command-bar Night toggle: the control that hides the dock while an
   // action card is showing (the Night list's own Close is behind the card).
   const hideDock = () => fireEvent.click(screen.getByRole("button", { name: "hide order" }));
 
-  it("A. open -> valid draft -> hide the dock -> tap the lit actor: the dock reopens with the SAME draft", () => {
+  it("A. hiding a pending action cancels targeting; the actor reopens the same step without a commit", () => {
     const view = night();
-    fireEvent.click(actor(view.container));
-    const slot = slotOf(card()!);
-    const target = storyteller.getState().game!.seatOrder[2]!;
-    choose(slot, target, card()!);
+    const before = storyteller.getState().game;
+    const cursor = useShellStore.getState().nightCursor;
     hideDock();
     expect(rail(view.container)).toHaveAttribute("hidden");
-    expect(useShellStore.getState().actionOpen).toBe(true); // still open, only the dock is hidden
+    expect(useTargetPicker.getState().active).toBeNull();
     fireEvent.click(actor(view.container));
     expect(rail(view.container)).not.toHaveAttribute("hidden");
     expect(useShellStore.getState().dockTab).toBe("night");
-    expect(card()).toHaveAccessibleName(/^Monk/);
-    expect(chosen(slot, card()!)).toBe(target);
+    expect(guide()).toBeVisible();
+    expect(useShellStore.getState().nightCursor).toEqual(cursor);
+    expect(storyteller.getState().game).toBe(before);
   });
 
   it("B. hide the dock -> inspect another participant: the Night dock stays hidden; the actor tap reopens it", () => {
     const view = night();
-    fireEvent.click(actor(view.container));
     hideDock();
     const other = storyteller.getState().game!.seatOrder[3]!;
     fireEvent.click(view.container.querySelector<HTMLElement>(`.grimoire .token[data-player-id="${other}"]`) ?? screen.getAllByRole("button", { name: /^Player 3, seat/ })[0]!);
@@ -316,61 +315,55 @@ describe("ASTRA-10H-009: the actor tap reopens a hidden Night dock", () => {
     fireEvent.click(actor(view.container));
     expect(rail(view.container)).not.toHaveAttribute("hidden");
     expect(useShellStore.getState().dockTab).toBe("night");
-    expect(card()).toHaveAccessibleName(/^Monk/);
+    expect(guide()).toBeVisible();
   });
 
   it("C. hide the dock -> the current step moves to a NEW actor -> tapping the new lit actor opens the NEW action, not the old draft", () => {
     const view = night();
-    fireEvent.click(actor(view.container));
-    choose(slotOf(card()!), storyteller.getState().game!.seatOrder[2]!, card()!);
     hideDock();
     // The legitimate current-step flow (the rail's "Go to this step") moves to the Imp.
     const imp = storyteller.getState().game!.seatOrder[1]!;
-    const impStep = view.container.querySelector<HTMLElement>(`.step-card button[aria-label="Make Imp the current step"]`)!;
-    fireEvent.click(impStep);
+    act(() => useShellStore.getState().setNightCursor({ day: 2, stepKey: participantStepKey(storyteller.getState().game!.players[imp]!.participantId!, "imp") }));
     expect(useShellStore.getState().litActor?.playerId).toBe(imp);
-    expect(card()).toBeNull(); // the Monk workspace was invalidated (ASTRA-10H-006)
+    expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(actor(view.container));
     expect(rail(view.container)).not.toHaveAttribute("hidden");
-    expect(card()).toHaveAccessibleName(/^Imp/);
+    expect(guide()).toBeVisible();
+    expect(within(guide()).getByRole("article", { name: "Current action: Imp" })).toBeVisible();
     expect(screen.queryByRole("dialog", { name: /^Monk/ })).toBeNull();
   });
 
   it("D. hide -> actor tap -> reopen works repeatedly (no one-shot effect)", () => {
     const view = night();
-    fireEvent.click(actor(view.container));
-    const slot = slotOf(card()!);
-    const target = storyteller.getState().game!.seatOrder[3]!;
-    choose(slot, target, card()!);
+    const before = storyteller.getState().game;
     for (let round = 0; round < 3; round++) {
       hideDock();
       expect(rail(view.container)).toHaveAttribute("hidden");
       fireEvent.click(actor(view.container));
       expect(rail(view.container)).not.toHaveAttribute("hidden");
-      expect(chosen(slot, card()!)).toBe(target);
+      expect(guide()).toBeVisible();
+      expect(storyteller.getState().game).toBe(before);
     }
   });
 
   it("008 still holds with an action open: the command-bar toggle and the Night tab reopen; the actor tap is an ADDITIONAL path; Close still hides", () => {
     const view = night();
-    fireEvent.click(actor(view.container));
     hideDock();
     expect(rail(view.container)).toHaveAttribute("hidden");
     fireEvent.click(screen.getByRole("button", { name: "night order" }));
     expect(rail(view.container)).not.toHaveAttribute("hidden");
-    expect(card()).toHaveAccessibleName(/^Monk/);
+    expect(guide()).toBeVisible();
     hideDock();
     act(() => storyteller.getState().selectPlayer(storyteller.getState().game!.seatOrder[3]!));
     expect(rail(view.container)).toHaveAttribute("hidden");
     fireEvent.click(screen.getByRole("tab", { name: "Night 2" }));
     expect(rail(view.container)).not.toHaveAttribute("hidden");
-    expect(card()).toHaveAccessibleName(/^Monk/);
+    expect(guide()).toBeVisible();
     hideDock();
     fireEvent.click(actor(view.container));
     expect(rail(view.container)).not.toHaveAttribute("hidden");
-    expect(card()).toHaveAccessibleName(/^Monk/);
+    expect(guide()).toBeVisible();
     // The Night list's explicit Close still hides the dock.
-    fireEvent.click(within(card()!).getByRole("button", { name: "Back to the Night list (keeps your choices)" }));
     fireEvent.click(screen.getByRole("button", { name: "Close night panel" }));
     expect(rail(view.container)).toHaveAttribute("hidden");
   });

@@ -360,6 +360,26 @@ export function captureVotingContext(): VotingCommandContext {
   return { game: state.game, lobby: state.lobby, lifecycle: gameLifecycleToken(), writerToken: votingAuthorityToken(state.lobby) };
 }
 
+/** Runtime-only context for a visible character action. Never persisted.
+ * Delayed UI callbacks retain this snapshot; synchronous compatibility
+ * controls may omit it and still undergo current writer checks. */
+export type CharacterActionContext = VotingCommandContext;
+export const captureCharacterActionContext = captureVotingContext;
+
+function characterActionRefusal(state: StorytellerStore, context?: CharacterActionContext): string | null {
+  const { game, lobby } = state;
+  if (!game) return "Open a game before recording this change.";
+  if (state.terminalClose?.status === "closing") return "The game is closing. Nothing was recorded.";
+  if (usePrivacyStore.getState().enabled) return "Leave Privacy Mode before recording this change.";
+  if (context && (context.game !== game || context.lobby !== lobby || context.lifecycle !== gameLifecycleToken()))
+    return "The game changed. Reopen the current action.";
+  const authority = votingAuthorityToken(lobby);
+  if (!authority || (context && authority !== context.writerToken) ||
+      (lobby && (game.code !== lobby.code || game.storytellerUid !== lobby.uid)))
+    return "The connection changed. Reconnect before recording this change.";
+  return null;
+}
+
 export type NewGameOpts = {
   plannedPlayerCount?: number;
   /** Intended Traveler count out of plannedPlayerCount. Never derives the
@@ -628,8 +648,8 @@ export type StorytellerStore = {
    * any internal stage, or a true no-op, commits nothing. It never calls
    * another store command. `semantics` defaults to the canonical registry.
    */
-  resolveAbility: (request: AbilityResolutionRequest, semantics?: AbilitySemanticsRegistry) => AbilityCommandResult;
-  correctNightActionTarget: (request: NightActionTargetCorrection) => AbilityCommandResult;
+  resolveAbility: (request: AbilityResolutionRequest, semantics?: AbilitySemanticsRegistry, actionContext?: CharacterActionContext) => AbilityCommandResult;
+  correctNightActionTarget: (request: NightActionTargetCorrection, actionContext?: CharacterActionContext) => AbilityCommandResult;
   /**
    * Phase 10G: THE Storyteller-owned Game Rule Fact command (PHASE10G Section
    * 4.4). Plans one ordered transaction with the pure planner
@@ -717,7 +737,7 @@ export type StorytellerStore = {
    * Undo entry, one localSeq step. A refusal or true no-op changes nothing.
    * Every other Effect command below wraps this; a future ability engine
    * submits its resolved intents here too. */
-  resolveEffects: (transaction: EffectTransaction) => EffectCommandResult;
+  resolveEffects: (transaction: EffectTransaction, actionContext?: CharacterActionContext) => EffectCommandResult;
   /** The Storyteller quick control: turns exactly the deterministic manual
    * Effect `manual:<type>` of the bound participant on or off -- never any
    * other Effect of the same type. `on` for a suppressed manual Effect
@@ -744,7 +764,7 @@ export type StorytellerStore = {
    * affected participant's reminders[] plus History, one Undo entry, one
    * localSeq step. A refusal or true no-op changes nothing. Reminders are
    * non-authoritative notation: nothing mechanical ever reads them. */
-  resolveReminders: (transaction: ReminderTransaction) => ReminderCommandResult;
+  resolveReminders: (transaction: ReminderTransaction, actionContext?: CharacterActionContext) => ReminderCommandResult;
   /** Compatibility adapter over one Place intent, bound to whoever occupies
    * `id` now (and, for `sourcePlayer`, the current source occupant). Place
    * semantics: returns the id when placed or when an identical Reminder
@@ -785,7 +805,7 @@ export type StorytellerStore = {
   setPhase: (phase: StorytellerLobbyRecord["phase"]) => SetupCommandResult;
   advancePhase: (context?: VotingCommandContext) => SetupCommandResult;
 
-  setNightStepStatus: (day: number, stepKey: string, status: NightStepStatus) => void;
+  setNightStepStatus: (day: number, stepKey: string, status: NightStepStatus, actionContext?: CharacterActionContext) => { ok: true; changed: boolean } | AbilityRefusal;
   /** Phase 10G (Section 20.2): changed notes over MAX_NIGHT_STEP_NOTES are
    * refused (never truncated); unchanged notes are a no-op. */
   setNightStepNotes: (day: number, stepKey: string, notes: string) => SetupCommandResult;
@@ -1420,10 +1440,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
           return patch;
         }, replace as Parameters<typeof rawSet>[1]);
       }) as unknown as typeof rawSet;
-      /** Save this bounded voting result before publishing it to subscribers.
+      /** Save a bounded authoritative result before publishing to subscribers.
        * The ordinary persist middleware consumes the exact prewritten bytes.
        * A refused browser write changes no game, token, history or Undo. */
-      const commitVotingState = (planned: StorytellerLobbyRecord, state: StorytellerStore, authority: string): string | null => {
+      const commitAuthoritativeState = (planned: StorytellerLobbyRecord, state: StorytellerStore, authority: string): string | null => {
         const current = state.game!;
         const prepared = reconcileVotingDependencies(current, withRevealTokens(current, planned, registryForGame(state, planned)));
         if (!StorytellerGamePersistedSchema.safeParse(prepared).success) return "This result could not be safely saved. Nothing was recorded.";
@@ -1432,10 +1452,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const undoStack = pushUndo(current, state.undoStack);
         const seatSwapUndo = reindexSeatSwapUndo(state.undoStack, undoStack, state.seatSwapUndo);
         const candidate = { ...state, game: prepared, undoStack, seatSwapUndo, localSeq: state.localSeq + 1 };
-        const options = useStorytellerStore.persist.getOptions();
         if (votingAuthorityToken(state.lobby) !== authority) return "The connection changed. Nothing was recorded.";
         let value: string;
         try {
+          const options = useStorytellerStore.persist.getOptions();
           value = JSON.stringify({ state: options.partialize ? options.partialize(candidate) : candidate, version: STORE_VERSION });
           localStorage.setItem(STORE_KEY, value);
         } catch {
@@ -2412,26 +2432,32 @@ export const useStorytellerStore = create<StorytellerStore>()(
         return { ok: true, changed: true };
       },
 
-      correctNightActionTarget: (request) => {
-        const { game, undoStack } = get();
+      correctNightActionTarget: (request, actionContext) => {
+        const state = get();
+        const { game } = state;
         if (!game) return { ok: false, code: "invalid", message: "No game is open." };
-        if (get().terminalClose?.status === "closing") return { ok: false, code: "notApplicable", message: "The game is closing." };
+        const refusal = characterActionRefusal(state, actionContext);
+        if (refusal) return { ok: false, code: "stale", message: refusal };
+        const authority = votingAuthorityToken(state.lobby)!;
         const script = selectScriptById(get(), game.scriptId) ?? null;
         const result = planNightActionTargetCorrection(game, request, {
           script, registry: buildRegistry(script ?? { id: game.scriptId, name: "", characters: [] }),
           semantics: CANONICAL_ABILITY_SEMANTICS,
         });
         if (!result.ok || !result.changed) return result;
-        const unsafe = persistencePreflight(result.plan.game, game, get().lobby);
+        const unsafe = commitAuthoritativeState(result.plan.game, state, authority);
         if (unsafe) return { ok: false, code: "invalidComposition", message: unsafe };
-        set({ undoStack: pushUndo(game, undoStack), game: result.plan.game });
-        if (get().game === result.plan.game) rememberCorrectedNightAction(game, request, result.plan);
+        rememberCorrectedNightAction(game, request, { ...result.plan, game: get().game! });
         return { ok: true, changed: true, resolutionId: result.plan.resolutionId };
       },
 
-      resolveAbility: (request, semantics) => {
-        const { game, undoStack } = get();
+      resolveAbility: (request, semantics, actionContext) => {
+        const state = get();
+        const { game } = state;
         if (!game) return { ok: false, code: "invalid", message: "No game is open." };
+        const refusal = characterActionRefusal(state, actionContext);
+        if (refusal) return { ok: false, code: "stale", message: refusal };
+        const authority = votingAuthorityToken(state.lobby)!;
         const script = selectScriptById(get(), game.scriptId) ?? null;
         // plan (pure, against Current State as it is NOW) -> one commit.
         const result = planAbilityResolution(game, request, {
@@ -2441,30 +2467,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
         if (!result.ok) return result;
         if (!result.changed) return { ok: true, changed: false };
-        // SOL-10F-C3: an accepted plan becomes authoritative only if the
-        // production writer can project it. The SAME compatibility check the
-        // checkpoint recovery uses, against the SAME Storyteller destination
-        // the writer writes -- the live lobby's, or (before a room exists) the
-        // canonical maximum supported code shape. Refused -> nothing committed
-        // (no game, Undo, localSeq, History, delivery or Night progress); the
-        // pure coordinator stays storage-agnostic.
-        const writable = validateFirebaseWritableValue(result.plan.game, storytellerPathSegments(get().lobby?.code ?? MAX_ROOM_CODE_SHAPE));
-        if (!writable.ok) {
-          return { ok: false, code: "invalidComposition",
-            message: `This result cannot be safely stored online (the resulting game ${writable.message.replace(/\.$/, "")}) -- nothing was recorded. Resolve it another way.` };
-        }
-        // SOL-10F-E1: the writer also persists the whole game as ONE derived
-        // checkpoint string beside the live roster this store does not own.
-        // Proven against the conservative supported-roster envelope (every
-        // seat bound to a maximum-length UID, under any room) with the SAME
-        // serializer and validator the writer uses -- never an empty roster.
-        const checkpoint = validateCheckpointEnvelope(result.plan.game, game);
-        if (!checkpoint.ok) {
-          return { ok: false, code: "invalidComposition",
-            message: `This result cannot be safely stored online (the game's recovery checkpoint ${checkpoint.message.replace(/\.$/, "")}) -- nothing was recorded. Resolve it another way.` };
-        }
-        set({ undoStack: pushUndo(game, undoStack), game: result.plan.game });
-        if (get().game === result.plan.game && !semantics) rememberNightAction(game, request, result.plan);
+        // Reuse Voting's schema, remote-envelope and save-before-publish seam.
+        const unsafe = commitAuthoritativeState(result.plan.game, state, authority);
+        if (unsafe) return { ok: false, code: "invalidComposition", message: unsafe };
+        if (!semantics || semantics === CANONICAL_ABILITY_SEMANTICS) rememberNightAction(game, request, { ...result.plan, game: get().game! });
         return { ok: true, changed: true, resolutionId: result.plan.resolutionId };
       },
 
@@ -2799,10 +2805,12 @@ export const useStorytellerStore = create<StorytellerStore>()(
           }
         }
         if (intent.kind === "bureaucrat") {
-          const reminder = planReminderTransaction(result.game, { intents: [{ kind: "place", target: intent.target,
+          if (result.game.voting?.modifiers.some(modifier => modifier.id === intent.modifierId)) {
+            const reminder = planReminderTransaction(result.game, { intents: [{ kind: "place", target: intent.target,
             reminder: { id: `voting-${intent.modifierId}`, label: "3 Votes", source: intent.source, sourceCharacter: "bureaucrat", note: `Day ${game.day} only.` } }] });
-          if (!reminder.ok) return refused(reminder.message);
-          if (reminder.changed) result = { ...result, game: applyReminderPlan(result.game, reminder.plan) };
+            if (!reminder.ok) return refused(reminder.message);
+            if (reminder.changed) result = { ...result, game: applyReminderPlan(result.game, reminder.plan) };
+          }
           if (intent.completeStep) {
             const { day, stepKey } = intent.completeStep;
             if (game.phase !== "night" || day !== game.day ||
@@ -2823,7 +2831,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const participant = "voter" in intent ? round?.order.find(p => p.participantId === intent.voter.participantId) : round?.nominee;
         const summary = intent.kind === "begin" && round ? `${round.nominator.nameAtTime} nominated ${round.nominee.nameAtTime}${round.mode === "exile" ? " for exile" : ""}.`
           : intent.kind === "respond" ? `${participant?.nameAtTime ?? "Voter"}: ${intent.choice}. Total: ${round?.tally ?? 0}.`
-          : intent.kind === "bureaucrat" ? "Recorded the Bureaucrat's selected player for this day."
+          : intent.kind === "bureaucrat" ? "Recorded the Bureaucrat action."
           : intent.kind === "removeModifier" ? "Removed a voting adjustment."
           : intent.kind === "execution" ? `Recorded execution: ${intent.outcome}.`
           : intent.kind === "exileOutcome" ? `Recorded exile: ${intent.outcome}.`
@@ -2837,7 +2845,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           ...(roundId ? { roundId } : {}), ...(participant ? { participant } : {}),
           ...(["undoLast", "correctResponse", "abandon", "removeModifier"].includes(intent.kind) ? { correction: true as const } : {}) };
         result = { ...result, game: { ...result.game, history: [...result.game.history, record] } };
-        const failure = commitVotingState(result.game, state, authority);
+        const failure = commitAuthoritativeState(result.game, state, authority);
         if (failure) return refused(failure);
         return result;
       },
@@ -2848,7 +2856,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // guard -> plan (pure) -> one commit. The planner validates every
         // intent against Current State and returns a refusal, a true no-op,
         // or the complete Current State + Life Event Window + History plan.
-        const result = planLifeTransaction(game, transaction);
+        const script = selectScriptById(get(), game.scriptId);
+        const registry = registryForGame(get(), game);
+        const result = planLifeTransaction(game, transaction, undefined, registry ? { registry, script: script ?? null } : undefined);
         if (!result.ok) return result;
         if (!result.changed) return { ok: true, changed: false, eventIds: [] };
         set({ undoStack: pushUndo(game, undoStack), game: applyLifePlan(game, result.plan) });
@@ -2913,9 +2923,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
-      resolveEffects: (transaction) => {
-        const { game, undoStack } = get();
+      resolveEffects: (transaction, actionContext) => {
+        const state = get();
+        const { game } = state;
         if (!game) return { ok: false, code: "invalid", message: "No game is open." };
+        const refusal = characterActionRefusal(state, actionContext);
+        if (refusal) return { ok: false, code: "stale", message: refusal };
+        const authority = votingAuthorityToken(state.lobby)!;
         // guard -> plan (pure) -> one commit. The planner binds every target,
         // source and participant parameter to the participation instance the
         // caller observed, validates each intent in order against the
@@ -2924,7 +2938,8 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const result = planEffectTransaction(game, transaction);
         if (!result.ok) return result;
         if (!result.changed) return { ok: true, changed: false, effectIds: [] };
-        set({ undoStack: pushUndo(game, undoStack), game: applyEffectPlan(game, result.plan) });
+        const unsafe = commitAuthoritativeState(applyEffectPlan(game, result.plan), state, authority);
+        if (unsafe) return { ok: false, code: "invalid", message: unsafe };
         return { ok: true, changed: true, effectIds: result.plan.appliedEffectIds };
       },
 
@@ -2983,9 +2998,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
         get().resolveEffects({ intents: [{ kind: "remove", target, effectId }] });
       },
 
-      resolveReminders: (transaction) => {
-        const { game, undoStack } = get();
+      resolveReminders: (transaction, actionContext) => {
+        const state = get();
+        const { game } = state;
         if (!game) return { ok: false, code: "invalid", message: "No game is open." };
+        const refusal = characterActionRefusal(state, actionContext);
+        if (refusal) return { ok: false, code: "stale", message: refusal };
+        const authority = votingAuthorityToken(state.lobby)!;
         // guard -> plan (pure) -> one commit. The planner binds every target
         // and source to the participation instance the caller observed,
         // validates each intent in order against the evolving working state,
@@ -2994,7 +3013,8 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const result = planReminderTransaction(game, transaction);
         if (!result.ok) return result;
         if (!result.changed) return { ok: true, changed: false, reminderIds: [] };
-        set({ undoStack: pushUndo(game, undoStack), game: applyReminderPlan(game, result.plan) });
+        const unsafe = commitAuthoritativeState(applyReminderPlan(game, result.plan), state, authority);
+        if (unsafe) return { ok: false, code: "invalid", message: unsafe };
         return { ok: true, changed: true, reminderIds: result.plan.placedReminderIds };
       },
 
@@ -3181,7 +3201,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const withEffects = expired ? applyEffectPlan(advanced, expired) : advanced;
         const finalGame = expiredFacts ? applyGameRuleFactPlan(withEffects, expiredFacts) : withEffects;
         if (context) {
-          const failure = commitVotingState(finalGame, get(), context.writerToken!);
+          const failure = commitAuthoritativeState(finalGame, get(), context.writerToken!);
           return failure ? { ok: false, message: failure } : { ok: true };
         }
         set({
@@ -3191,9 +3211,14 @@ export const useStorytellerStore = create<StorytellerStore>()(
         return { ok: true };
       },
 
-      setNightStepStatus: (day, stepKey, status) => {
-        const { game, undoStack } = get();
-        if (!game) return;
+      setNightStepStatus: (day, stepKey, status, actionContext) => {
+        const state = get();
+        const { game } = state;
+        if (!game) return { ok: false, code: "invalid", message: "No game is open." };
+        const refusal = characterActionRefusal(state, actionContext);
+        if (refusal) return { ok: false, code: "stale", message: refusal };
+        if (game.phase === "ended") return { ok: false, code: "notApplicable", message: "This game has ended." };
+        const authority = votingAuthorityToken(state.lobby)!;
         // Phase 10F: the pure step plan (nightProgress.ts) -- the same rule an
         // ability resolution composes into its one final snapshot. The
         // Traveler-arrival coupling is participation-bound (v24): a step key
@@ -3202,8 +3227,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // (B8): null is a true no-op (an absent key is never "already
         // current": storing it is real -- it is how a custom step exists).
         const next = planNightStepStatus(game, day, stepKey, status);
-        if (!next) return;
-        set({ undoStack: pushUndo(game, undoStack), game: next });
+        if (!next) return { ok: true, changed: false };
+        const unsafe = commitAuthoritativeState(next, state, authority);
+        if (unsafe) return { ok: false, code: "invalidComposition", message: unsafe };
+        return { ok: true, changed: true };
       },
 
       setNightStepNotes: (day, stepKey, notes) => {

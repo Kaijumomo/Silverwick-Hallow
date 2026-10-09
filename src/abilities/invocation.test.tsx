@@ -168,6 +168,7 @@ describe("SOL-10F-L3-R1: rendered entry points use the same contract", () => {
     store.setState({ game: g, undoStack: [], localSeq: 0, customScripts: { [script.id]: script } });
     render(<AbilityEntry player={g.players.p0!} semantics={semanticsOf(d)} />);
     fireEvent.click(screen.getByText("Abilities"));
+    fireEvent.click(screen.getByText("Advanced corrections"));
   }
 
   it.each(TIMINGS.flatMap((timing) => INVOCATIONS.map((invocation) => [timing, invocation] as const)))(
@@ -178,7 +179,7 @@ describe("SOL-10F-L3-R1: rendered entry points use the same contract", () => {
       expect(offered).toBe(plan(gameAt(DAY2), d, "dayEntry").ok);
       expect(offered).toBe(timing === "day" && (invocation === "publicClaim" || invocation === "procedure"));
       // 11: the Manual path remains wherever the Day entry exists.
-      expect(screen.getByRole("button", { name: "Resolve manually / unmodeled interaction" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Record outcome…" })).toBeInTheDocument();
     });
 
   it("the Day entry offers no guided action at Night (the Night Order owns Night invocations); Manual remains", () => {
@@ -187,8 +188,9 @@ describe("SOL-10F-L3-R1: rendered entry points use the same contract", () => {
     render(<AbilityEntry player={g.players.p0!} semantics={semanticsOf(descriptor("monk", ["otherNight"], "wake"))} />);
     fireEvent.click(screen.getByText("Abilities"));
     expect(screen.queryByRole("button", { name: /Use ability/ })).toBeNull();
-    expect(screen.getByText("Monk: The Day entry acts only during the Day; Night abilities are resolved from the Night Order.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Resolve manually / unmodeled interaction" })).toBeInTheDocument();
+    expect(screen.getByText(registry.get("monk")!.ability!)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Advanced corrections"));
+    expect(screen.getByRole("button", { name: "Record outcome…" })).toBeInTheDocument();
   });
 
   it.each([

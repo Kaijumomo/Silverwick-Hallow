@@ -1,4 +1,5 @@
-// @vitest-environment node
+// @vitest-environment jsdom
+// @vitest-environment-options {"storageQuota":100000000}
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -19,6 +20,7 @@ import { captureFingerprint, type ManualAbilityRequest } from "@/stores/abilityR
 import { participantStepKey } from "@/stores/nightProgress";
 import { bind, openInStore, patchPlayer, proofGame, proofScript } from "@/test/proofFixtures";
 import type { RoleDef, Script, StorytellerLobbyRecord } from "@/stores/types";
+import { registerVotingAuthorityReader } from "./votingAuthority";
 
 // Phase 10F -- SOL-10F-E1 (PHASE10F Section 44): the production writer also
 // writes `lobbies/{code}/checkpoint` = JSON.stringify({ game, roster }) as ONE
@@ -129,8 +131,12 @@ describe("SOL-10F-E1 -- one shared checkpoint serializer, used byte-for-byte by 
     const storeCode = readFileSync(resolve(__dirname, "../stores/storytellerStore.ts"), "utf8");
     const start = storeCode.search(/^ {6}resolveAbility: \(/m);
     const body = storeCode.slice(start, storeCode.indexOf("\n      assignRole:", start));
-    expect(body.indexOf("validateCheckpointEnvelope(result.plan.game, game)")).toBeGreaterThan(0);
-    expect(body.indexOf("validateCheckpointEnvelope(result.plan.game, game)")).toBeLessThan(body.indexOf("set({"));
+    expect(body).toContain("commitAuthoritativeState(result.plan.game, state, authority)");
+    const commitStart = storeCode.indexOf("const commitAuthoritativeState =");
+    const commit = storeCode.slice(commitStart, storeCode.indexOf("\n      return {", commitStart));
+    expect(commit.indexOf("persistencePreflight(prepared, current, state.lobby)")).toBeGreaterThan(0);
+    expect(commit.indexOf("persistencePreflight(prepared, current, state.lobby)")).toBeLessThan(commit.indexOf("localStorage.setItem"));
+    expect(storeCode).toContain("validateCheckpointEnvelope(planned, current)");
   });
 });
 
@@ -275,7 +281,12 @@ describe("SOL-10F-E1 -- resolveAbility proves checkpoint compatibility before it
     const g = lobby ? liveGame() : liveGame({ code: "", storytellerUid: "local" });
     openInStore(g);
     store.setState({ customScripts: { [script.id]: script } });
-    if (lobby) store.setState({ lobby: { code, uid: ST_UID, sessionId: "session", status: "live" } });
+    if (lobby) {
+      // This test isolates the SDK envelope; real writer ownership has its
+      // own command tests and enforced-emulator contract proof.
+      registerVotingAuthorityReader(() => "sdk-checkpoint-writer");
+      store.setState({ lobby: { code, uid: ST_UID, sessionId: "session", status: "live" } });
+    }
     return store.getState().game!;
   }
   const snapshot = () => ({ game: store.getState().game, undo: store.getState().undoStack.length, localSeq: store.getState().localSeq });

@@ -106,7 +106,7 @@ describe("Phase 10B aggregation and progressive disclosure", () => {
     expect(manual[0]).toHaveAttribute("aria-hidden", "true");
     expect(document.querySelector('.grimoire img[src="/status/poisoned.png"]')).toBeNull();
     expect(game().players[idOf("Carol")]!.effects).toHaveLength(3);
-    expect(screen.getByRole("button", { name: /^Carol, seat 3, .*Poisoned, 3 active effects$/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Carol, seat 3, .*Poisoned: .*; Poisoned$/ })).toBeInTheDocument();
 
     act(() => { state().selectPlayer(idOf("Carol")); });
     fireEvent.click(screen.getByRole("button", { name: "More settings" }));
@@ -121,7 +121,7 @@ describe("Phase 10B aggregation and progressive disclosure", () => {
     expect(screen.getAllByText("Ends as Night 2 begins")).toHaveLength(2);
   });
 
-  it("suppress/resume from the details keeps the instance; a suppressed Effect leaves the Grimoire indicator", () => {
+  it("suppress/resume keeps the official token and changes its applicability detail", () => {
     abilityPoison("Carol", "p1");
     render(<GameScreen />);
     act(() => { state().selectPlayer(idOf("Carol")); });
@@ -130,7 +130,7 @@ describe("Phase 10B aggregation and progressive disclosure", () => {
     fireEvent.click(screen.getByRole("button", { name: "Suppress" }));
     expect(game().players[idOf("Carol")]!.effects[0]!.state).toBe("suppressed");
     expect(document.querySelector('[data-effect-indicator="poisoned"]')).toBeNull();
-    expect(document.querySelector('[data-official-reminder="poisoner"][data-reminder-kind="effect"]')).toBeNull();
+    expect(document.querySelector('[data-official-reminder="poisoner"][data-reminder-kind="effect"]')).toHaveAttribute("title", "Poisoned: Not currently affecting this player");
     expect(screen.getByText(/1 suppressed/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
     expect(game().players[idOf("Carol")]!.effects[0]!.state).toBe("active");

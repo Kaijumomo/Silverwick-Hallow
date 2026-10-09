@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // Required emulator tests: setup failure fails the suite, never skips it.
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { readFileSync } from "node:fs";

@@ -275,27 +275,27 @@ describe("10F-AC-12 / AC-14: impairment and protection are derived, never guesse
     expect(planAbilityResolution(g, guided(g, "p4", "imp", { target: pick(g, "p5") }), env())).toMatchObject({ ok: false, code: "illegal" });
   });
 
-  it("a sourced impairment of undeclared persistence asks the Storyteller; the judgment is honored and forces confirmation", () => {
+  it("undeclared sourced impairment leaves the whole action manual even with a legacy judgment", () => {
     const g = game("day");
     const source = { kind: "participant" as const, participantId: g.players.p3!.participantId!, playerId: "p3", nameAtTime: "Player 3" };
     g.players.p1 = { ...g.players.p1!, effects: [{ id: "fx-src", type: "poisoned", sourceParticipant: source, sourceCharacter: "pithag", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }] };
     const ask = planAbilityResolution(g, guided(g, "p1", "slayer", { target: pick(g, "p4") }), env());
-    expect(ask).toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: "actor:functioning", source: "judgment" }] });
+    expect(ask).toMatchObject({ ok: false, code: "unsupported" });
     const judged = planAbilityResolution(g, guided(g, "p1", "slayer", { target: pick(g, "p4") }, { judgments: { "actor:functioning": { kind: "boolean", value: true } } }), env());
-    expect(judged).toMatchObject({ ok: true, changed: true, plan: { needsConfirmation: true } });
-    // The stored Effect is never rewritten by the derivation (10F-AC-13).
-    if (judged.ok && judged.changed) expect(judged.plan.game.players.p1!.effects).toEqual(g.players.p1!.effects);
+    expect(judged).toMatchObject({ ok: false, code: "unsupported" });
+    expect(g.players.p4!.alive).toBe(true);
   });
 
-  it("a suppressed impairment never applies; a custom Effect type acquires no rule by name", () => {
+  it("a suppressed impairment never applies; an active custom Effect leaves automation manual", () => {
     const g = game("day");
     g.players.p1 = { ...g.players.p1!, effects: [
       { id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" }, state: "suppressed", expiry: { kind: "none" } },
       { id: "fx-c", type: "poisonedish", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } },
     ] };
     const result = planAbilityResolution(g, guided(g, "p1", "slayer", { target: pick(g, "p4") }), env());
-    expect(result).toMatchObject({ ok: true, changed: true });
-    if (result.ok && result.changed) expect(result.plan.game.players.p4!.alive).toBe(false);
+    expect(result).toMatchObject({ ok: false, code: "unsupported" });
+    g.players.p1.effects = g.players.p1.effects.filter(effect => effect.id !== "fx-c");
+    expect(planAbilityResolution(g, guided(g, "p1", "slayer", { target: pick(g, "p4") }), env())).toMatchObject({ ok: true, changed: true });
   });
 });
 
@@ -322,10 +322,10 @@ describe("10F-AC-23: modifiers gate only what they could affect", () => {
     // (Slice 7: Toymaker now has a VERIFIED hook; Angel stays unverified with a death scope.)
     const toymaker = game("day", 2, { fabled: ["angel"] }); // death
     const ask = planAbilityResolution(toymaker, guided(toymaker, "p1", "slayer", { target: pick(toymaker, "p4") }), fabledOf(toymaker));
-    expect(ask).toMatchObject({ ok: false, code: "needsInput", requirements: [{ id: "modifier:fabled:angel" }] });
+    expect(ask).toMatchObject({ ok: false, code: "unsupported" });
     const cleared = planAbilityResolution(toymaker, guided(toymaker, "p1", "slayer", { target: pick(toymaker, "p4") },
       { judgments: { "modifier:fabled:angel": { kind: "boolean", value: true } } }), fabledOf(toymaker));
-    expect(cleared).toMatchObject({ ok: true, changed: true, plan: { needsConfirmation: true } });
+    expect(cleared).toMatchObject({ ok: false, code: "unsupported" });
     const ferryman = game("day", 2, { fabled: ["ferryman"] }); // voting only
     expect(planAbilityResolution(ferryman, guided(ferryman, "p1", "slayer", { target: pick(ferryman, "p4") }), fabledOf(ferryman))).toMatchObject({ ok: true, changed: true });
   });
@@ -333,20 +333,20 @@ describe("10F-AC-23: modifiers gate only what they could affect", () => {
   it("Bootlegger-style global rules and an unknown custom Fabled gate everything", () => {
     for (const over of [{ lorics: ["bootlegger"] }, { fabled: ["homebrew-fabled"] }]) {
       const g = game("night", 2, over);
-      expect(planAbilityResolution(g, guided(g, "p0", "monk", { target: pick(g, "p2") }), fabledOf(g))).toMatchObject({ ok: false, code: "needsInput" });
+      expect(planAbilityResolution(g, guided(g, "p0", "monk", { target: pick(g, "p2") }), fabledOf(g))).toMatchObject({ ok: false, code: "unsupported" });
     }
   });
 
-  it("a jinx gates only its own two characters", () => {
+  it("jinx discovery stays scoped while unreviewed represented characters keep automation manual", () => {
     const g = withRole(game(), "p5", "leviathan");
     const modifiers = activeModifiers(g, registry);
     // Both Leviathan jinxes whose partners are seated (Monk, Pit-Hag) -- and only those.
     expect(modifiers.filter((m) => m.source === "jinx").map((m) => m.id).sort()).toEqual(["jinx:leviathan+monk", "jinx:leviathan+pithag"]);
     expect(planAbilityResolution(g, guided(g, "p0", "monk", { target: pick(g, "p2") }), env({ modifiers })))
-      .toMatchObject({ ok: false, code: "needsInput", requirements: [expect.objectContaining({ id: "modifier:jinx:leviathan+monk" })] });
-    // The Slayer is not an endpoint: never gated by it.
+      .toMatchObject({ ok: false, code: "unsupported" });
+    // The Slayer is not a jinx endpoint, but Leviathan is outside the reviewed envelope.
     const day = withRole(game("day"), "p5", "leviathan");
-    expect(planAbilityResolution(day, guided(day, "p1", "slayer", { target: pick(day, "p4") }), fabledOf(day))).toMatchObject({ ok: true, changed: true });
+    expect(planAbilityResolution(day, guided(day, "p1", "slayer", { target: pick(day, "p4") }), fabledOf(day))).toMatchObject({ ok: false, code: "unsupported" });
   });
   it("rules-neutral: a VERIFIED information modifier constrains another evaluator's delivered value", () => {
     const constrain: ModifierDefinition = { id: "fixture:information-constraint", source: "custom", label: "Fixture constraint", scopes: ["information"],
@@ -426,7 +426,7 @@ describe("SOL-10F-L1: jinx activation uses authoritative REPRESENTED canonical c
   it("3. both canonical endpoints represented -> gate", () => {
     const g = withRole(game(), "p5", "leviathan");
     expect(jinxIds(g)).toContain("jinx:leviathan+monk");
-    expect(planAbilityResolution(g, guided(g, "p0", "monk", { target: pick(g, "p2") }), fabledOf(g))).toMatchObject({ ok: false, code: "needsInput" });
+    expect(planAbilityResolution(g, guided(g, "p0", "monk", { target: pick(g, "p2") }), fabledOf(g))).toMatchObject({ ok: false, code: "unsupported" });
   });
 
   it("4. a dead participant still represents their current character", () => {

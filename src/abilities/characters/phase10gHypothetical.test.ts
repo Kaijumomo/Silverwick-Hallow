@@ -10,6 +10,7 @@ import { bind, pick, plan, proofGame, proofQuery, proofRegistry, proofScript, re
 import { deathAttempt } from "./shared";
 import { choiceId } from "./alhadikhia";
 import type { GameRuleFactRecord, StorytellerLobbyRecord } from "@/stores/types";
+import { evaluateFixture } from "@/test/evaluatorFixture";
 
 const arbitrary = (g: StorytellerLobbyRecord): StorytellerLobbyRecord => ({ ...g, gameRuleFacts: [
   { type: PIT_HAG_ARBITRARY_DEATHS, recordedAt: { phase: "night", day: g.day }, expiresAt: { phase: "day", day: g.day } } as GameRuleFactRecord] });
@@ -46,11 +47,12 @@ describe("hypothetical Rules Query overlays preserve Game Rule Facts", () => {
     const die = { ...Object.fromEntries(["p1", "p2", "p3"].map((id, index) => [choiceId(index, bind(al, id)), yes(false)])) };
     const req = (judgments: Record<string, ReturnType<typeof yes>> = {}) =>
       request(al, "p0", "alhadikhia", { chosen: pick(al, "p1", "p2", "p3"), ...die }, { judgments });
-    const [first] = requirementIds(plan(al, req()));
+    expect(plan(al, req())).toMatchObject({ ok: false, code: "unsupported" });
+    const [first] = requirementIds(evaluateFixture(al, req()));
     expect(first).toMatch(/^arbitraryDeath:demon[:@]/);
     // Storyteller rules player 1 dies; the evaluator moves on with
     // query.assumingAlive(p1, false) -- player 2's attempt must still ask.
-    const [second] = requirementIds(plan(al, req({ [first!]: yes(false) })));
+    const [second] = requirementIds(evaluateFixture(al, req({ [first!]: yes(false) })));
     expect(second).toMatch(/^arbitraryDeath:demon[:@]/);
     expect(second).not.toBe(first);
   });

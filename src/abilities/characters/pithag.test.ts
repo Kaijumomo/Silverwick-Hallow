@@ -54,9 +54,10 @@ describe("Pit-Hag -- ordinary transformation", () => {
 describe("Pit-Hag -- Manual boundaries", () => {
   it("Phase 10G (PHASE10G Section 9, superseding the 10F Manual gate): a Demon destination resolves the Role change AND the arbitrary-deaths fact together", () => {
     const g = base();
-    const next = planned(hag(g, "p1", "vigormortis"));
-    expect(next.players.p1).toMatchObject({ actualRole: "vigormortis", actualAlignment: "good" });
+    const next = planned(hag(g, "p1", "vortox"));
+    expect(next.players.p1).toMatchObject({ actualRole: "vortox", actualAlignment: "good" });
     expect(next.gameRuleFacts).toEqual([expect.objectContaining({ type: "pitHagArbitraryDeaths", expiresAt: { phase: "day", day: 2 } })]);
+    expect(hag(g, "p1", "vigormortis")).toMatchObject({ ok: false, code: "unsupported" });
   });
 
   it("Traveller destination or target (optional rule) -> Manual", () => {

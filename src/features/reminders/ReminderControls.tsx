@@ -18,6 +18,7 @@ import { REMINDER_PRESETS, authoritativeLabelHint, cleanupStatusText } from "./r
 import type { ParticipantRef, ReminderRecord, RoleDef, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 import { BureaucratAction } from "@/features/voting/BureaucratAction";
 import { currentVotingState } from "@/stores/voting";
+import { useReminderRemoval } from "./useReminderRemoval";
 
 /**
  * Phase 10C: the Player Drawer's Reminder section -- progressive disclosure:
@@ -43,6 +44,7 @@ import { currentVotingState } from "@/stores/voting";
 export function ReminderControls({ player }: { player: STPlayerRecord }) {
   const game = useStorytellerStore((s) => s.game);
   const privacyMode = usePrivacyStore((s) => s.enabled);
+  const removal = useReminderRemoval(game, privacyMode);
   const [draft, setDraft] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [advanced, setAdvanced] = useState(false);
@@ -82,7 +84,7 @@ export function ReminderControls({ player }: { player: STPlayerRecord }) {
         return result.ok;
       }
     }
-    return run(useStorytellerStore.getState().resolveReminders({ intents }));
+    return run(useStorytellerStore.getState().resolveReminders({ intents }, votingContext));
   };
   const resetAdvanced = () => {
     setSource(null);
@@ -124,7 +126,7 @@ export function ReminderControls({ player }: { player: STPlayerRecord }) {
             const status = cleanupStatusText(reminderCleanupStatus(reminder, game));
             return (
               <li key={reminder.id} className="reminder-row">
-                <span className={`reminder-tag ${status ? "reminder-attention" : ""}`}>
+                <span className={`reminder-tag ${status ? "reminder-attention" : ""}`} data-removal-armed={removal.armedId === reminder.id || undefined}>
                   <button
                     type="button"
                     className="reminder-tag-label"
@@ -133,7 +135,7 @@ export function ReminderControls({ player }: { player: STPlayerRecord }) {
                     onClick={() => setExpanded(open ? null : reminder.id)}
                   >
                     <span className="reminder-glyph" aria-hidden="true">✎</span>
-                    {reminder.label}
+                    {removal.armedId === reminder.id ? "Tap to remove" : reminder.label}
                     {status && <span className="reminder-status"> · {status}</span>}
                   </button>
                   <button
@@ -141,7 +143,7 @@ export function ReminderControls({ player }: { player: STPlayerRecord }) {
                     className="reminder-tag-remove"
                     aria-label={`Remove ${reminder.label} reminder`}
                     disabled={ended}
-                    onClick={() => { if (resolve([{ kind: "remove", target, reminderId: reminder.id }]) && open) setExpanded(null); }}
+                    onClick={() => removal.tap(reminder.id, () => { if (resolve([{ kind: "remove", target, reminderId: reminder.id }]) && open) setExpanded(null); })}
                   >
                     ×
                   </button>

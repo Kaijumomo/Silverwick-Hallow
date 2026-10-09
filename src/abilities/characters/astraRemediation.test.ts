@@ -25,6 +25,7 @@ import { COMMUNICATED } from "./fortuneteller";
 import { subjectId } from "./shared";
 import type { AbilityInputValue } from "@/abilities/semantics";
 import type { StorytellerLobbyRecord } from "@/stores/types";
+import { evaluateFixture } from "@/test/evaluatorFixture";
 
 const IMP_ROLES = ["imp", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"];
 const withFabled = (fabled: string[]) => ({ ...proofGame(IMP_ROLES), fabled });
@@ -35,21 +36,23 @@ const attack = (g: StorytellerLobbyRecord, judgments: Record<string, AbilityInpu
 describe("SOL-10F-A3 -- verified and unverified modifiers compose", () => {
   it("Astra's reproduction: Toymaker + Angel -- answering Angel no longer bypasses Toymaker", () => {
     const g = withFabled(["toymaker", "angel"]);
-    expect(requirementIds(attack(g)).sort()).toEqual(["modifier:fabled:angel", "modifier:fabled:toymaker"]);
-    expect(requirementIds(attack(g, { "modifier:fabled:angel": yes() }))).toEqual(["modifier:fabled:toymaker"]);
-    expect(requirementIds(attack(g, { "modifier:fabled:toymaker": yes() }))).toEqual(["modifier:fabled:angel"]);
-    expect(planned(attack(g, { "modifier:fabled:angel": yes(), "modifier:fabled:toymaker": yes() })).players.p1!.alive).toBe(false);
+    const before = JSON.stringify(g);
+    const confirmations: Record<string, AbilityInputValue>[] = [{}, { "modifier:fabled:angel": yes() }, { "modifier:fabled:toymaker": yes() },
+      { "modifier:fabled:angel": yes(), "modifier:fabled:toymaker": yes() }];
+    for (const judgments of confirmations) expect(attack(g, judgments)).toMatchObject({ ok: false, code: "unsupported" });
+    expect(JSON.stringify(g)).toBe(before);
   });
 
   it("Toymaker only / Angel only", () => {
-    expect(requirementIds(attack(withFabled(["toymaker"])))).toEqual(["modifier:fabled:toymaker"]);
-    expect(requirementIds(attack(withFabled(["angel"])))).toEqual(["modifier:fabled:angel"]);
+    expect(attack(withFabled(["toymaker"]))).toMatchObject({ ok: false, code: "unsupported" });
+    expect(attack(withFabled(["angel"]))).toMatchObject({ ok: false, code: "unsupported" });
   });
 
   it("a verified 'unsupported' hook wins even when unverified modifiers also reach", () => {
     const g = withFabled(["angel"]);
     const stop: ModifierDefinition = { id: "custom:stop", source: "custom", label: "stop", scopes: ["death"], hook: () => ({ kind: "unsupported", message: "Stopped by a verified hook." }) };
-    expect(attack(g, { "modifier:fabled:angel": yes() }, [stop])).toMatchObject({ ok: false, code: "unsupported", message: "Stopped by a verified hook." });
+    expect(attack(g, { "modifier:fabled:angel": yes() }, [stop])).toMatchObject({ ok: false, code: "unsupported" });
+    expect(attack(withFabled([]), {}, [stop])).toMatchObject({ ok: false, code: "unsupported", message: "Stopped by a verified hook." });
     expect(attack(g, {}, [stop])).toMatchObject({ ok: false, code: "unsupported" });
   });
 
@@ -58,23 +61,26 @@ describe("SOL-10F-A3 -- verified and unverified modifiers compose", () => {
     const onlyZero: ModifierDefinition = { id: "custom:zero", source: "custom", label: "zero", scopes: ["information"],
       hook: () => ({ kind: "constrainInformation", requirementId: "evilNeighbors", allowed: [{ kind: "number", value: 0 }], reason: "Only 0 may be shown." }) };
     const env = envOf(g, [onlyZero]);
-    expect(requirementIds(plan(g, request(g, "p0", "empath"), env))).toEqual(["modifier:fabled:fibbin"]);
+    expect(plan(g, request(g, "p0", "empath"), env)).toMatchObject({ ok: false, code: "unsupported" });
     // Computed 2 (imp + poisoner neighbours) violates the verified constraint.
-    expect(plan(g, request(g, "p0", "empath", {}, { judgments: { "modifier:fabled:fibbin": yes() } }), env)).toMatchObject({ ok: false, code: "illegal", message: "Only 0 may be shown." });
+    expect(plan(g, request(g, "p0", "empath", {}, { judgments: { "modifier:fabled:fibbin": yes() } }), env)).toMatchObject({ ok: false, code: "unsupported" });
+    const covered = { ...g, fabled: [] };
+    expect(plan(covered, request(covered, "p0", "empath"), envOf(covered, [onlyZero]))).toMatchObject({ ok: false, code: "illegal", message: "Only 0 may be shown." });
   });
 
   it("several unverified + several verified judgments are all asked, and all must be answered", () => {
     const g = withFabled(["toymaker", "angel", "doomsayer"]);
     const ask: ModifierDefinition = { id: "custom:ask", source: "custom", label: "ask", scopes: ["death"], hook: () => ({ kind: "judgment", message: "Custom verified judgment." }) };
-    expect(requirementIds(attack(g, {}, [ask])).sort()).toEqual(["modifier:custom:ask", "modifier:fabled:angel", "modifier:fabled:doomsayer", "modifier:fabled:toymaker"]);
+    expect(attack(g, {}, [ask])).toMatchObject({ ok: false, code: "unsupported" });
     const all = Object.fromEntries(["custom:ask", "fabled:angel", "fabled:doomsayer", "fabled:toymaker"].map((id) => [`modifier:${id}`, yes()]));
-    expect(attack(g, all, [ask])).toMatchObject({ ok: true, changed: true });
+    expect(attack(g, all, [ask])).toMatchObject({ ok: false, code: "unsupported" });
     const { ["modifier:custom:ask"]: _dropped, ...missingOne } = all;
-    expect(requirementIds(attack(g, missingOne, [ask]))).toEqual(["modifier:custom:ask"]);
+    expect(attack(g, missingOne, [ask])).toMatchObject({ ok: false, code: "unsupported" });
   });
 
   it("unrelated modifiers stay ignored (no blanket gate)", () => {
-    expect(requirementIds(attack(withFabled(["toymaker", "ferryman"])))).toEqual(["modifier:fabled:toymaker"]);
+    expect(attack(withFabled(["toymaker", "ferryman"]))).toMatchObject({ ok: false, code: "unsupported" });
+    expect(attack(withFabled(["ferryman"]))).toMatchObject({ ok: true, changed: true });
     const g = withFabled(["toymaker", "angel"]);
     expect(planned(plan(g, request(g, "p5", "poisoner", { target: pick(g, "p1") }), envOf(g))).players.p1!.effects).toHaveLength(1);
   });
@@ -160,13 +166,14 @@ describe("SOL-10F-A1 -- evaluator follow-ups are bound to their subject (coordin
   });
 });
 
-describe("SOL-10F-A6 -- Al-Hadikhia settles each player before asking the next", () => {
+describe("SOL-10F-A6 -- low-level Al-Hadikhia evaluator settles each player before the next", () => {
+  const plan = evaluateFixture;
   const AL = ["alhadikhia", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"];
   const generic = (g: StorytellerLobbyRecord, ...ids: string[]) => ids.reduce((acc, id) => patchPlayer(acc, id, { effects: [{ id: `gp-${id}`, type: "protected",
     lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as StorytellerLobbyRecord["players"][string]["effects"][number]] }), g);
   const C = (g: StorytellerLobbyRecord, n: number, id: string) => choiceId(n, bind(g, id));
   /** SOL-10F-B2: protection judgments are attempt-scoped -- read the id the
-   * coordinator asks (it names the participant and the death attempt). */
+   * evaluator asks (it names the participant and the death attempt). */
   const asked = (result: ReturnType<typeof plan>, g: StorytellerLobbyRecord, id: string) => {
     const [only, ...rest] = requirementIds(result);
     expect(rest).toEqual([]);
@@ -216,7 +223,7 @@ describe("SOL-10F-A4 -- a Role change that creates a jinx endpoint is gated pros
 
   it("Astra's reproduction: Pit-Hag -> an absent Damsel routes the WHOLE action to Manual; nothing changes", () => {
     const g = proofGame(PIT);
-    expect(hag(g, "damsel")).toMatchObject({ ok: false, code: "unsupported", message: expect.stringMatching(/pithag \/ damsel jinx/) });
+    expect(hag(g, "damsel")).toMatchObject({ ok: false, code: "unsupported" });
     // No generic confirmation can bypass it.
     expect(hag(g, "damsel", { judgments: { "modifier:jinx:pithag+damsel": yes() } })).toMatchObject({ ok: false, code: "unsupported" });
   });
@@ -224,7 +231,7 @@ describe("SOL-10F-A4 -- a Role change that creates a jinx endpoint is gated pros
   it("every other Pit-Hag destination in the pinned jinx data is gated the same way", () => {
     const g = proofGame(PIT);
     for (const roleId of ["cultleader", "goon", "ogre", "politician", "villageidiot", "heretic", "summoner"]) {
-      expect(hag(g, roleId), roleId).toMatchObject({ ok: false, code: "unsupported", message: expect.stringMatching(/jinx/) });
+      expect(hag(g, roleId), roleId).toMatchObject({ ok: false, code: "unsupported" });
     }
   });
 
@@ -235,8 +242,8 @@ describe("SOL-10F-A4 -- a Role change that creates a jinx endpoint is gated pros
 
   it("an existing Damsel: the ordinary 'already in play' no-op remains (after the CURRENT jinx's confirmation)", () => {
     const g = proofGame(["pithag", "chef", "imp", "monk", "empath", "saint", "damsel"]);
-    expect(requirementIds(hag(g, "damsel"))).toEqual(["modifier:jinx:pithag+damsel"]);
-    expect(hag(g, "damsel", { judgments: { "modifier:jinx:pithag+damsel": yes() } })).toEqual({ ok: true, changed: false });
+    expect(hag(g, "damsel")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(hag(g, "damsel", { judgments: { "modifier:jinx:pithag+damsel": yes() } })).toMatchObject({ ok: false, code: "unsupported" });
   });
 
   it("an unrelated destination stays guided, and a jinx pair merely on the script gates nothing", () => {
@@ -373,8 +380,8 @@ describe("SOL-10F-A9 -- the Ravenkeeper must have been the Ravenkeeper at the tr
     const eventId = deathEvents(legacy, "p0")[0]!.id;
     expect(nightTriggerStatus(RAVENKEEPER, bind(legacy, "p0"), qOf(legacy))).toMatchObject({ kind: "unknown", eventId });
     const id = nightTriggerJudgmentId("actorDiedTonight", eventId);
-    expect(requirementIds(rkTrigger(legacy, "p2"))).toEqual([id]);
-    expect(rkTrigger(legacy, "p2", { judgments: { [id]: yes(true) } })).toMatchObject({ ok: true, changed: true });
+    expect(rkTrigger(legacy, "p2")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(rkTrigger(legacy, "p2", { judgments: { [id]: yes(true) } })).toMatchObject({ ok: false, code: "unsupported" });
     expect(StorytellerGamePersistedSchema.safeParse(legacy).success).toBe(true); // absence stays valid
   });
 

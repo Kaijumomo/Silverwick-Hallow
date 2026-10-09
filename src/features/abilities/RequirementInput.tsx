@@ -87,9 +87,10 @@ type Props = {
   onChange: (value: AbilityInputValue | undefined) => void;
   /** Optional initial answer (e.g. a choice made inline before escalating). */
   initial?: AbilityInputValue;
+  showOrigin?: boolean;
 };
 
-export function RequirementInput({ requirement, game, script, actor, onChange, initial }: Props) {
+export function RequirementInput({ requirement, game, script, actor, onChange, initial, showOrigin = true }: Props) {
   const count = Math.max(1, requirement.count ?? 1);
   const groupId = useId();
   const constraints = requirement.constraints ?? [];
@@ -110,7 +111,7 @@ export function RequirementInput({ requirement, game, script, actor, onChange, i
 
   const header = (
     <span className="ability-field-label">
-      {label} <OriginTag origin={requirement.source} />
+      {label} {showOrigin && <OriginTag origin={requirement.source} />}
       {requirement.kind === "participant" && (count > 1 || constraints.length > 0) && (
         <span className="ability-field-hint">
           {count > 1 ? ` — choose ${count}` : ""}{constraints.length ? ` (${constraints.map((c) => CONSTRAINT_TEXT[c]).join(", ")})` : ""}

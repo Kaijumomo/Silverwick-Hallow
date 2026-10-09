@@ -1643,12 +1643,12 @@ describe("Phase 9D.5 Proof C: same-lineage reconnect integrity for a rich Phase 
     const b = new MemoryRoomBackend();
     const { handles, writer, manager, lobby, session } = await hostRich(b);
     await waitFor(() => expect(useStorytellerStore.getState().sync?.ackedGameSeq).toBe(useStorytellerStore.getState().localSeq));
-    manager.stop(); await writer.dispose();
-
-    // Made after the writer stopped: never flushed, never acknowledged.
-    useStorytellerStore.getState().addReminder(handles.investigatorId, {
+    // Accept while this tab owns the live writer, then stop before the
+    // scheduled projection flush. Commands after writer loss now refuse.
+    expect(useStorytellerStore.getState().addReminder(handles.investigatorId, {
       label: "Dirty edit reminder",
-    });
+    })).not.toBeNull();
+    manager.stop(); await writer.dispose();
     const dirtyGame = useStorytellerStore.getState().game!;
     expect(useStorytellerStore.getState().localSeq).toBeGreaterThan(useStorytellerStore.getState().sync!.ackedGameSeq);
 

@@ -29,6 +29,7 @@ import { LifeShroud, LifeStateText, VoteToken } from "@/features/life/LifeMarks"
 import { abilityUsedMarker, actualAlignmentMarker } from "./tokenMarkers";
 import { OfficialReminderToken } from "@/features/reminders/OfficialReminderToken";
 import { officialEffectPresentation } from "@/features/reminders/officialReminderPresentation";
+import { createRulesQuery } from "@/stores/rulesQuery";
 import {
   cleanupStatusText,
   groupText,
@@ -195,9 +196,7 @@ function Token({
   // hidden with CSS). A legacy Effect with an unresolved lifetime is a
   // concise Storyteller-only "Needs check".
   const indicators = privacyMode ? [] : effectIndicators(player);
-  const officialEffects = modern && !privacyMode ? officialEffectPresentation(player) : null;
   const needsCheckBase = !privacyMode && (life.anomalies.length > 0 || effectsNeedingCheck(player).length > 0);
-  const effectSummary = privacyMode ? "" : effectAccessibleSummary(player);
   // Phase 10C: Reminders are Storyteller-private notation -- under Privacy
   // Mode no chip, label, count, overflow, cleanup state or accessible text is
   // rendered at all (DOM absence, not CSS). Game is read here, not threaded,
@@ -206,6 +205,12 @@ function Token({
   // Phase 10D: a Shown Role that cannot be projected safely is a
   // Storyteller-private "Needs check" (never shown under Privacy Mode).
   const script = useStorytellerStore((s) => (game ? selectScriptById(s, game.scriptId) : undefined));
+  const query = useMemo(() => !privacyMode && game && script ? createRulesQuery(game, { script, registry: buildRegistry(script) }) : null, [game, script, privacyMode]);
+  const officialEffects = modern && query && player.participantId
+    ? officialEffectPresentation(player, { query, target: { playerId: player.id, participantId: player.participantId } }) : null;
+  const effectSummary = privacyMode ? "" : officialEffects
+    ? [...officialEffects.tokens.map(token => token.detail), ...officialEffects.fallback.map(summary => summary.indicator.label)].join("; ")
+    : effectAccessibleSummary(player);
   const perceptionCheck = !privacyMode && !!script && identityNeedsCheck(player, buildRegistry(script));
   const reminderGroups = privacyMode || !game ? [] : reminderTokenGroups(player, game);
   // Phase 10H (H2): Reminder labels collapse progressively with density --
@@ -336,7 +341,7 @@ function Token({
         {spec.tier !== "XS" && !!officialEffects?.tokens.length && <span className="token-official-effects" aria-hidden="true"
           style={{ width: spec.width, left: (spec.disc - spec.width) / 2 }}>
           {officialEffects.tokens.map(token => <OfficialReminderToken key={token.key} role={token.role} label={token.label}
-            count={token.instances.length} decorative />)}
+            count={token.instances.length} title={token.detail} decorative />)}
         </span>}
         {/* Phase 10H (§6.4): the lit Night actor -- a static treatment plus
             the words "Acting now", distinct from selection and focus. */}

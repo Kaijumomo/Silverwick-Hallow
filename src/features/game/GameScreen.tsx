@@ -7,7 +7,6 @@ import { GrimoireIcon } from "@/components/GrimoireIcon";
 import { PlayerDrawer } from "@/features/players/PlayerDrawer";
 import { Almanac } from "@/features/almanac/Almanac";
 import { PlayersWorkspace } from "@/features/players/PlayersWorkspace";
-import { NightOrderPanel } from "@/features/nightOrder/NightOrderPanel";
 import { ModernNightPanel } from "@/features/nightOrder/ModernNightPanel";
 import { SetupPanel } from "@/features/setup/SetupPanel";
 import { SeatAssignPopup } from "@/features/grimoire/SeatAssignPopup";
@@ -38,7 +37,7 @@ import { useShellLayout } from "@/components/useShellLayout";
 import { Segmented } from "@/components/Segmented";
 import { useShellStore, type TableLens } from "@/stores/shellStore";
 import { LabelsView, RosterView } from "@/features/grimoire/RosterView";
-import { ACTION_CARD_DOCK_HOST, ACTION_CARD_STAGE_HOST } from "@/components/ActionCard";
+import { ACTION_CARD_STAGE_HOST } from "@/components/ActionCard";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { FinishGameDialog, GameResultSummary } from "./ResultDeclaration";
 import type { RoleId } from "@/stores/types";
@@ -828,10 +827,11 @@ function GameScreenContent() {
             {/* Docked layouts (ASTRA-10H-002): the action card renders here as
                 the dock's ACTIVE content -- the Night list steps aside while it
                 shows (CSS), and its Night-list control / Resume swap back. */}
-            {docked && <div id={ACTION_CARD_DOCK_HOST} className="action-card-dock-host" />}
-            <NightOrderPanel
+            <ModernNightPanel
               game={game}
               script={script!}
+              showClose
+              visible={docked ? dockTab === "night" && nightPanelOpen : nightPanelOpen}
               onClose={() => setNightPanelOpen(false)}
             />
           </div>

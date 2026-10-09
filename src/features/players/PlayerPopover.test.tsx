@@ -111,6 +111,7 @@ it("filters script reminder tokens by assigned roles including dead players, pla
   expect(screen.getByRole("button", { name: "Remove Poisoned reminder" })).toHaveAccessibleDescription("Note Notes do not apply effects.");
   expect(within(screen.getByRole("button", { name: "Remove Poisoned reminder" })).getByText("Note")).toHaveClass("sr-only");
   fireEvent.click(screen.getByRole("button", { name: "Remove Poisoned reminder" }));
+  fireEvent.click(screen.getByRole("button", { name: "Remove Poisoned reminder" }));
   expect(store.getState().game!.players.p0!.reminders).toHaveLength(0);
   act(() => store.getState().undo());
   expect(store.getState().game!.players.p0!.reminders[0]?.label).toBe("Poisoned");
@@ -163,6 +164,7 @@ it("removes an official Bureaucrat reminder and its linked modifier together", (
   expect(screen.getByRole("button", { name: "Remove 3 Votes reminder" })).toHaveAccessibleDescription("Effect");
   expect(within(screen.getByRole("button", { name: "Remove 3 Votes reminder" })).getByText("Effect")).toHaveClass("sr-only");
   fireEvent.click(screen.getByRole("button", { name: "Remove 3 Votes reminder" }));
+  fireEvent.click(screen.getByRole("button", { name: "Remove 3 Votes reminder" }));
   expect(store.getState().game!.players.p0!.reminders).toHaveLength(0);
   expect(currentVotingState(store.getState().game!).modifiers).toHaveLength(0);
 });
@@ -178,10 +180,11 @@ it("distinguishes a Poisoned note from an existing authoritative Poisoner effect
   render(<View {...callbacks()} />);
   fireEvent.click(screen.getByRole("button", { name: "Add Poisoned reminder from Poisoner" }));
   const placed = screen.getByLabelText("Placed reminders");
-  expect(within(placed).getByText("Effect")).toHaveClass("sr-only");
+  expect(within(placed).getByText(/Poisoned: Currently affecting/)).toHaveClass("sr-only");
   expect(within(placed).getByText("Note")).toHaveClass("sr-only");
   expect(screen.getByText("Notes do not apply effects.")).toHaveClass("sr-only");
   expect(store.getState().game!.players.p0!.effects).toEqual([existingEffect]);
+  fireEvent.click(screen.getByRole("button", { name: "Remove Poisoned reminder" }));
   fireEvent.click(screen.getByRole("button", { name: "Remove Poisoned reminder" }));
   expect(store.getState().game!.players.p0!.effects).toEqual([existingEffect]);
   expect(store.getState().game!.players.p0!.reminders).toHaveLength(0);

@@ -93,6 +93,9 @@ const ALLOWED = new Set([
   "stores/history.ts",
   "stores/reminderResolution.ts",
   "stores/storytellerStore.ts",
+  // Source-loss cleanup removes exactly voting-linked notation after its
+  // authoritative modifier ends; notation never determines a game effect.
+  "stores/sourceAbilityLifecycle.ts",
   // Correction eligibility deliberately EXCLUDES notation from its comparison;
   // it never reads labels or uses reminders to calculate an effect.
   "stores/nightActionCorrection.ts",

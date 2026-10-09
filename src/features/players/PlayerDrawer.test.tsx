@@ -142,6 +142,7 @@ it("Phase 9R.4 (B9) / 10C: the drawer's Reminder controls go through the Reminde
   fireEvent.click(screen.getByRole("button", { name: "Add" }));
   expect(current().reminders).toMatchObject([{ label: "Setup mark", createdAt: { phase: "setup", day: 0 } }]);
   fireEvent.click(screen.getByRole("button", { name: "Remove Setup mark reminder" }));
+  fireEvent.click(screen.getByRole("button", { name: "Remove Setup mark reminder" }));
   expect(current().reminders).toEqual([]);
   expect(history()).toEqual([]);
 
@@ -149,6 +150,7 @@ it("Phase 9R.4 (B9) / 10C: the drawer's Reminder controls go through the Reminde
   fireEvent.change(input, { target: { value: "Live mark" } });
   fireEvent.click(screen.getByRole("button", { name: "Add" }));
   expect(history().at(-1)).toMatchObject({ category: "reminder", reminderOperation: "place", change: { kind: "added", item: { label: "Live mark" } } });
+  fireEvent.click(screen.getByRole("button", { name: "Remove Live mark reminder" }));
   fireEvent.click(screen.getByRole("button", { name: "Remove Live mark reminder" }));
   expect(current().reminders).toEqual([]);
   expect(history().at(-1)).toMatchObject({ category: "reminder", reminderOperation: "remove", change: { kind: "removed", item: { label: "Live mark" } } });

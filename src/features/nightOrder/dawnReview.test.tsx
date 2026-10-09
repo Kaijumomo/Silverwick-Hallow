@@ -131,12 +131,11 @@ describe("10G-AC-24 / AC-25 / AC-26: Night -> Day", () => {
       addEventListener() {}, removeEventListener() {} })));
     render(<GameScreen />);
     fireEvent.click(screen.getByRole("button", { name: "Close night panel" }));
-    expect(screen.queryByRole("complementary", { name: "Night 2 order" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Night 2 guide" })).toBeNull();
     fireEvent.click(advanceButton());
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Review Night" }));
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.getByRole("complementary", { name: "Night 2 order" })).toBeVisible();
-    expect(screen.queryByRole("region", { name: "Night 2 guide" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Night 2 guide" })).toBeVisible();
     expect(game().phase).toBe("night");
   });
 

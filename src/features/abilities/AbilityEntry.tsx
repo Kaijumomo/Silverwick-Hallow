@@ -6,6 +6,8 @@ import { wakeIdentity } from "@/stores/wakeIdentity";
 import type { STPlayerRecord } from "@/stores/types";
 import { AbilityWorkspace } from "./AbilityWorkspace";
 import { pathAbility } from "./abilityUi";
+import { automationEligibility } from "@/abilities/automationEligibility";
+import { createRulesQuery } from "@/stores/rulesQuery";
 
 /**
  * Phase 10F (SOL-10F-L3): the Storyteller-private ability entry point for a
@@ -37,6 +39,7 @@ export function AbilityEntry({ player, semantics = CANONICAL_ABILITY_SEMANTICS }
   const script = useStorytellerStore((s) => (game ? selectScriptById(s, game.scriptId) : undefined));
   const registry = useMemo(() => (script ? buildRegistry(script) : null), [script]);
   const [open, setOpen] = useState<"guided" | "manual" | null>(null);
+  const [manualAction, setManualAction] = useState<string | null>(null);
   if (!game || !script || !registry || (game.phase !== "night" && game.phase !== "day")) return null;
   if (player.isEmpty || !player.participantId || !player.actualRole) return null;
 
@@ -45,7 +48,11 @@ export function AbilityEntry({ player, semantics = CANONICAL_ABILITY_SEMANTICS }
   const roleId = wake?.simulated ? wake.shownRoleId : player.actualRole;
   const roleName = registry.get(roleId)?.name ?? roleId;
   const ability = pathAbility(roleId, registry, semantics, "dayEntry", game);
-  const descriptor = ability.kind === "guided" ? ability.descriptor : null;
+  const actionKey = `${game.code}:${game.day}:${game.phase}:${player.participantId}:${roleId}`;
+  const descriptor = ability.kind === "guided" && manualAction !== actionKey && automationEligibility({
+    query: createRulesQuery(game, { script, registry, semantics }), descriptor: ability.descriptor,
+    actor: { playerId: player.id, participantId: player.participantId }, roleId, simulated: wake?.simulated,
+  }).kind === "automated" ? ability.descriptor : null;
   const unavailable = ability.kind === "manual" ? `${roleName}: ${ability.reason}` : null;
 
   return (
@@ -56,9 +63,11 @@ export function AbilityEntry({ player, semantics = CANONICAL_ABILITY_SEMANTICS }
           {descriptor ? (
             <button className="btn btn-sm btn-gold" onClick={() => setOpen("guided")}>Use ability… ({roleName})</button>
           ) : (
-            <p className="behavior-help">{unavailable}</p>
+            <p className="behavior-help">{registry.get(roleId)?.ability}</p>
           )}
-          <button className="btn btn-sm" onClick={() => setOpen("manual")}>Resolve manually / unmodeled interaction</button>
+          <details><summary>Advanced corrections</summary>
+            <button className="btn btn-sm" onClick={() => setOpen("manual")}>Record outcome…</button>
+          </details>
         </div>
       </details>
       {open && (
@@ -66,6 +75,7 @@ export function AbilityEntry({ player, semantics = CANONICAL_ABILITY_SEMANTICS }
           target={{ actorId: player.id, roleId, roleName, invocationPath: "dayEntry" }}
           descriptor={open === "guided" ? descriptor : null}
           manualReason={open === "manual" ? (unavailable ?? "") : ""}
+          strictGameplay={open === "guided"} onManualRequired={() => { setManualAction(actionKey); setOpen(null); }}
           onClose={() => setOpen(null)}
           onResolved={() => setOpen(null)} />
       )}

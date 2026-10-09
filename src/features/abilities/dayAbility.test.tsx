@@ -56,13 +56,9 @@ describe("SOL-10F-L3: Day ability entry through the same workspace / coordinator
     expect(screen.queryByRole("button", { name: /Use ability/ })).not.toBeVisible();
     openAbilities();
     fireEvent.click(screen.getByRole("button", { name: "Use ability… (Slayer)" }));
-    const dialog = screen.getByRole("dialog", { name: /Slayer — guided resolution/ });
-    choose("the chosen player", "p3", dialog);
-    const preview = within(dialog).getByRole("region", { name: "Result" });
-    expect(preview).toHaveTextContent("Ann's ability is used");
-    expect(preview).toHaveTextContent("Dan dies");
+    const dialog = screen.getByRole("dialog", { name: "Slayer" });
     const before = { undo: state().undoStack.length, seq: state().localSeq };
-    fireEvent.click(within(dialog).getByRole("button", { name: "Confirm and record" }));
+    choose("the chosen player", "p3", dialog);
     expect(resolveSpy).toHaveBeenCalledTimes(1);
     expect(resolveSpy.mock.calls[0]![0]).toMatchObject({ mode: "guided", roleId: "slayer", fingerprint: { actor: { playerId: "p0" }, phase: "day", day: 2 } });
     for (const spy of otherCommands) expect(spy).not.toHaveBeenCalled();
@@ -77,14 +73,16 @@ describe("SOL-10F-L3: Day ability entry through the same workspace / coordinator
     render(<Entry id="p2" />); // the Monk fixture is otherNight-only
     openAbilities();
     expect(screen.queryByRole("button", { name: /Use ability/ })).toBeNull();
-    expect(screen.getByText("Monk: This ability does not act during the Day.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Resolve manually / unmodeled interaction" })).toBeInTheDocument();
+    expect(screen.getByText(registry.get("monk")!.ability!)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Advanced corrections"));
+    expect(screen.getByRole("button", { name: "Record outcome…" })).toBeInTheDocument();
   });
 
   it("an unsupported Role reaches the explicit Manual flow and commits once", () => {
     render(<Entry id="p1" />); // Chef: canonical, descriptor-only in fixtures (no Day timing)
     openAbilities();
-    fireEvent.click(screen.getByRole("button", { name: "Resolve manually / unmodeled interaction" }));
+    fireEvent.click(screen.getByText("Advanced corrections"));
+    fireEvent.click(screen.getByRole("button", { name: "Record outcome…" }));
     const dialog = screen.getByRole("dialog", { name: /Resolve manually \/ unmodeled interaction/ });
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Reason for manual resolution" }), { target: { value: "Public claim, unmodeled" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "+ Death" }));
@@ -111,7 +109,8 @@ describe("SOL-10F-L3: Day ability entry through the same workspace / coordinator
     }
     render(<Drawer />);
     openAbilities();
-    fireEvent.click(screen.getByRole("button", { name: "Resolve manually / unmodeled interaction" }));
+    fireEvent.click(screen.getByText("Advanced corrections"));
+    fireEvent.click(screen.getByRole("button", { name: "Record outcome…" }));
     expect(screen.getByRole("dialog", { name: /Resolve manually/ })).toBeInTheDocument();
     act(() => usePrivacyStore.getState().setEnabled(true));
     expect(screen.queryByRole("dialog", { name: /Resolve manually/ })).toBeNull();
@@ -140,7 +139,7 @@ describe("architecture: no second Day ability engine", () => {
   }
   it("only the coordinator runs evaluators; the entry point only opens the shared workspace", () => {
     const runners = productionSources().filter((m) => /\.evaluator\s*\(|\bevaluator\s*\(\s*\{/.test(stripComments(readFileSync(join(SRC, m), "utf8"))));
-    expect(runners).toEqual(["stores/abilityResolution.ts"]);
+    expect(runners).toEqual(["abilities/automationEligibility.ts", "stores/abilityResolution.ts"]);
     const entry = stripComments(readFileSync(join(SRC, "features/abilities/AbilityEntry.tsx"), "utf8"));
     expect(entry).toMatch(/<AbilityWorkspace\b/);
     for (const forbidden of [/planAbilityResolution/, /composeAbilityOutcome/, /plan(Life|Effect|Reminder|Role|Alignment)Transaction/, /resolve(Life|Effects|Reminders|Roles|Alignments)\b/, /\bset\(/]) {

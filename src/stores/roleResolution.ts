@@ -6,6 +6,7 @@ import { isInitialRevealComplete } from "./identity";
 import { currentLiveMoment } from "./lifeEvents";
 import { participantRoleStepEntries } from "./nightProgress";
 import { participantRefOf } from "./participants";
+import { applySourceAbilityLossPlan, planSourceAbilityLoss, type SourceAbilityLossPlan } from "./sourceAbilityLifecycle";
 import { pruneInapplicablePrivateInfo } from "./privatePackets";
 import { BehaviorModeSchema, MutationContextInputSchema, ProvenanceSchema } from "./schemas";
 import { newTravelerArrival } from "./travelers";
@@ -229,6 +230,7 @@ export type RolePlayerPatch = { set: RolePlayerSet; remove: RoleRemovableField[]
 
 /** What an accepted transaction changes -- nothing is applied yet. */
 export type RolePlan = {
+  sourceAbilityLoss?: SourceAbilityLossPlan;
   /** Field patches of exactly the participants whose Role/perception state
    * changes. */
   players: Record<PlayerId, RolePlayerPatch>;
@@ -278,13 +280,13 @@ type RolePlanField = (typeof ROLE_PLAN_FIELDS)[number];
 /**
  * Applies an accepted plan: the one Current State + History replacement the
  * store commits. Pure -- returns a new snapshot and mutates nothing. Only the
- * planned fields of the planned participants change; everything else in
- * `game` (including Life/Effect/Reminder state a previous plan already
- * applied to it) is carried through untouched.
+ * planned fields of the planned participants change, with the existing
+ * Effect/Reminder plans for supported abilities lost by the Role change.
+ * Unrelated Life/Effect/Reminder state is carried through untouched.
  */
 export function applyRolePlan(
   game: StorytellerLobbyRecord,
-  plan: Pick<RolePlan, "players" | "nightProgressRemove" | "history">,
+  plan: Pick<RolePlan, "players" | "nightProgressRemove" | "history" | "sourceAbilityLoss">,
 ): StorytellerLobbyRecord {
   const players = { ...game.players };
   for (const [playerId, patch] of Object.entries(plan.players)) {
@@ -296,12 +298,12 @@ export function applyRolePlan(
   const nightProgress = plan.nightProgressRemove.length
     ? Object.fromEntries(Object.entries(game.nightProgress).filter(([key]) => !plan.nightProgressRemove.includes(key)))
     : game.nightProgress;
-  return {
+  return applySourceAbilityLossPlan({
     ...game,
     players,
     nightProgress,
     history: plan.history.length ? [...game.history, ...plan.history] : game.history,
-  };
+  }, plan.sourceAbilityLoss);
 }
 
 // ---------------------------------------------------------------------------
@@ -704,7 +706,10 @@ export function planRoleTransaction(
       }));
     }
   }
-  return { ok: true, changed: true, plan: { players, nightProgressRemove, history, actualRoleChanges } };
+  const lost = new Set(actualRoleChanges.map(c => game.players[c.playerId]!.participantId!));
+  const loss = planSourceAbilityLoss(game, lost, script ? { registry, script } : undefined, ids.historyId, resolutionId);
+  if (!loss.ok) return refuse("invalid", loss.message);
+  return { ok: true, changed: true, plan: { players, nightProgressRemove, history, actualRoleChanges, sourceAbilityLoss: loss.plan } };
 }
 
 // ---------------------------------------------------------------------------

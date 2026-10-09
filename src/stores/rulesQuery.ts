@@ -1,4 +1,5 @@
 import { isCanonicalRole } from "@/data/canonical";
+import { passiveProtection, passiveInformationModifiers } from "@/abilities/characters/passiveRules";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { activeModifiers, gateEvaluation, type HookScope, type ModifierDefinition, type ModifierGate } from "@/abilities/modifiers";
 import { resolveAbilitySemantics, type AbilitySemanticsRegistry } from "@/abilities/semantics";
@@ -301,6 +302,8 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     impaired: (binding) => require(binding, (player) => impairedOf(player, new Set(), ["impairment"])),
     abilityFunctions: (binding) => require(binding, (player) => functions(player, new Set())),
     protectedFrom: (binding, cause) => require(binding, (player) => {
+      const passive = passiveProtection(self, binding, cause);
+      if (!passive.known || passive.value) return passive;
       let undetermined: string | null = null;
       for (const effect of player.effects) {
         const semantics = effectSemanticsOf(effect.type);
@@ -367,7 +370,7 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     gameRuleFact: (type) => gameRuleFactDefinition(type)
       ? known(gameRuleFactActive(game, type))
       : unknown(`"${typeof type === "string" ? type : "?"}" is not a registered Rule Fact: Silverwick applies no rule to it.`),
-    modifierGate: (roleId, scopes) => gateEvaluation(modifiers, roleId, scopes, game),
+    modifierGate: (roleId, scopes) => gateEvaluation([...modifiers, ...passiveInformationModifiers(self, roleId)], roleId, scopes, game),
     assumingAlive: (binding, alive) => {
       const player = participant(binding);
       if (!player) return self;
