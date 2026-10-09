@@ -1,3 +1,5 @@
+import { InfoPanel } from "@/features/info/InfoPanel";
+import { InfoPresentationBoundary } from "@/features/info/InfoPresentationBoundary";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ReferenceWorkspace } from "@/features/almanac/ReferenceWorkspace";
 import { useStorytellerStore, selectScriptById, type SeatSwapLayout } from "@/stores/storytellerStore";
@@ -29,7 +31,11 @@ type Chooser = { kind: "distribute"; game: StorytellerLobbyRecord } |
   { kind: "choose"; game: StorytellerLobbyRecord; player: STPlayerRecord };
 
 /** Coordinates presentation only; mutations use the existing store commands. */
-export function PlayersWorkspace({ children, enabled, roles, onMore, advancedPlayerId, night, nightKey, nightOpenRequest }: {
+export function PlayersWorkspace(props: Parameters<typeof PlayersWorkspaceContent>[0]) {
+  return <InfoPresentationBoundary><PlayersWorkspaceContent {...props} /></InfoPresentationBoundary>;
+}
+
+function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPlayerId, night, nightKey, nightOpenRequest }: {
   children: ReactNode; enabled: boolean; roles: RoleDef[];
   onMore: (id: string) => void; advancedPlayerId: string | null;
   night?: (visible: boolean, close: () => void) => ReactNode; nightKey?: string;
@@ -135,7 +141,7 @@ export function PlayersWorkspace({ children, enabled, roles, onMore, advancedPla
   const holderNames: Record<string, string[]> = {};
   for (const p of context.occupied) if (p.actualRole) (holderNames[p.actualRole] ??= []).push(p.name || `Seat ${p.seat + 1}`);
   return <PlayersInteraction.Provider value={{ active: true, swapping: !!swap, swappingPlayerId: swap?.id, tap }}>
-    <ReferenceWorkspace enabled privacyMode={privacy} roles={roles} scriptName={script.name} night={night} nightKey={nightKey} nightOpenRequest={nightOpenRequest}
+    <ReferenceWorkspace info={<InfoPanel />} enabled privacyMode={privacy} roles={roles} scriptName={script.name} night={night} nightKey={nightKey} nightOpenRequest={nightOpenRequest}
       onPanelOpen={() => { state.selectPlayer(null); setSwap(null); }}
       players={dismiss => <>
         <div className="players-summary"><p>{context.ordinary.length} residents · {context.travelers.length} travelers · {context.occupied.filter(p => p.alive).length} alive</p>

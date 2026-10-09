@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
 import { pickDensityTier, placeTable, seatCentre, tableStage, tierFits, tierSpec, type DensityTier, type TierSpec } from "./densityTiers";
 import { RosterView } from "./RosterView";
+import { RitualCircle } from "./RitualCircle";
 import { useShellStore } from "@/stores/shellStore";
 import { seatPickable } from "@/features/abilities/abilityUi";
 import { litActorIdOf, tapSeat as tapSeatShared } from "./seatTap";
@@ -728,7 +729,11 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
             <div className="grimoire-ring inner" />
           </>
         )}
-        {playersInteraction?.active && playerCount > 0 && <div className="grimoire-watermark" aria-hidden="true">
+        {playersInteraction?.active && playerCount > 0 && <RitualCircle
+          diameter={Math.max(0, Math.min(placement.rx, placement.ry) * 1.3)}
+          offsetY={placement.cy}
+        />}
+        {playersInteraction?.active && playerCount > 0 && <div className="grimoire-watermark" aria-hidden="true" style={{ marginTop: placement.cy }}>
           <span>{game.phase === "setup" ? "Setup" : `${game.phase} ${game.day}`}</span>
           <strong>Silverwick Hollow</strong>
           <em>{game.phase === "night" ? "The town sleeps" : game.phase === "day" ? "The town awakens" : game.phase === "ended" ? "The story is complete" : "Prepare your town"}</em>

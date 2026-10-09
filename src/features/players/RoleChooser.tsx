@@ -34,6 +34,14 @@ export type RoleChooserProps = Common & ({
   onRandom: () => void;
   onDistribute: () => void;
 } | {
+  mode: "select";
+  title: string;
+  instruction: string;
+  selected?: RoleId[];
+  holders?: Record<RoleId, string[]>;
+  onChoose: (id: RoleId) => void;
+  onClear?: () => void;
+} | {
   mode: "choose";
   player: { id: string; name: string; seat: number; roleId?: RoleId };
   holders?: Record<RoleId, string[]>;
@@ -47,17 +55,17 @@ export function RoleChooser(props: RoleChooserProps) {
   const [query, setQuery] = useState("");
   const hintId = useId();
   const detail = props.roles.find(role => role.id === previewId)
-    ?? props.roles.find(role => role.id === (props.mode === "choose" ? props.player.roleId : props.selected[0]))
+    ?? props.roles.find(role => role.id === (props.mode === "choose" ? props.player.roleId : props.selected?.[0]))
     ?? props.roles[0];
   const normalizedQuery = query.trim().toLowerCase();
   const visible = props.roles.filter(role => `${role.name} ${role.ability ?? ""}`.toLowerCase().includes(normalizedQuery));
-  const title = props.mode === "distribute" ? "Distribute Roles" : `Choose a character for ${props.player.name}`;
+  const title = props.mode === "select" ? props.title : props.mode === "distribute" ? "Distribute Roles" : `Choose a character for ${props.player.name}`;
   const count = (type: RoleType) => props.mode === "distribute"
     ? props.selected.filter(id => props.roles.some(role => role.id === id && role.type === type)).length : 0;
 
   return <Modal title={title} onClose={props.onClose} className="role-chooser" closeLabel="Close character chooser">
     <div className="role-chooser-intro">
-      <p>{props.mode === "distribute"
+      <p>{props.mode === "select" ? props.instruction : props.mode === "distribute"
         ? `${props.scriptName} · ${props.residents} residents · ${props.travelers} travelers`
         : `Seat ${props.player.seat} · ${props.roles.find(role => role.id === props.player.roleId)?.name ?? "Unassigned"}`}</p>
       <input className="input" type="search" aria-label="Search chooser characters" placeholder="Search characters or abilities…"
@@ -75,13 +83,13 @@ export function RoleChooser(props: RoleChooserProps) {
               <p className="role-chooser-note">Add a Traveler seat to select Traveler characters.</p>}
             <div className="role-chooser-grid">{group.map(role => {
               const current = props.mode === "choose" && props.player.roleId === role.id;
-              const selected = props.mode === "distribute" && props.selected.includes(role.id);
-              const holders = props.mode === "choose" ? props.holders?.[role.id] ?? [] : [];
+              const selected = props.mode !== "choose" && !!props.selected?.includes(role.id);
+              const holders = props.mode !== "distribute" ? props.holders?.[role.id] ?? [] : [];
               const unavailable = !!props.pending || (props.mode === "distribute" && type === "traveler" && props.travelers === 0);
-              const annotation = current ? "Current" : holders.join(", ");
+              const annotation = current ? "Current" : holders.join(", ") || (props.mode === "select" && selected ? "Bluff" : "");
               return <button key={role.id} type="button" className="role-chooser-tile"
                 data-state={current ? "current" : selected ? "selected" : props.mode === "distribute" ? "unselected" : holders.length ? "used" : "available"}
-                aria-pressed={current || selected} aria-describedby={props.mode === "choose" ? hintId : undefined}
+                aria-pressed={current || selected} aria-describedby={props.mode !== "distribute" ? hintId : undefined}
                 aria-label={`${role.name}${current ? ", current" : holders.length ? `, in use by ${holders.join(", ")}` : ""}`}
                 disabled={unavailable} onMouseEnter={() => setPreviewId(role.id)} onFocus={() => setPreviewId(role.id)}
                 onClick={() => { setPreviewId(role.id); if (props.mode === "distribute") props.onToggle(role.id); else props.onChoose(role.id); }}>
@@ -114,6 +122,9 @@ export function RoleChooser(props: RoleChooserProps) {
           <button type="button" className="btn" disabled={props.pending} onClick={props.onRandom}>Random setup</button>
           <button type="button" className="btn btn-gold" disabled={props.pending || !props.canDistribute} onClick={props.onDistribute}>
             {props.pending ? "Distributing…" : props.distributionLabel ?? `Distribute to ${props.residents + props.travelers} players`}</button>
+        </div> : props.mode === "select" ? <div className="role-chooser-choice-status"><p id={hintId}>{props.instruction}</p>
+          {props.error && <p role="alert">{props.error}</p>}
+          {props.onClear && <button type="button" className="btn" disabled={props.pending} onClick={props.onClear}>Clear slot</button>}
         </div> : <div className="role-chooser-choice-status"><p id={hintId} className="role-chooser-hint">{props.allowSwap
           ? "Private setup: choosing an occupied character exchanges characters with that player. Seats stay unchanged."
           : `Only ${props.player.name}’s character will change. Other players keep their characters and seats.`}</p>
