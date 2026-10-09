@@ -25,14 +25,16 @@ import {
  * (an ended game's review) mounts no removal control at all. Closes itself
  * under Privacy Mode and never reappears on its own (usePrivateDialog).
  */
-export function ActivityPanel({ game, registry, readOnly = false, onClose }: {
+export function ActivityPanel({ game, registry, readOnly = false, onClose, initialFilter, title }: {
   game: StorytellerLobbyRecord;
   registry: RoleRegistry;
   readOnly?: boolean;
   onClose: () => void;
+  initialFilter?: ActivityFilter;
+  title?: string;
 }) {
   const suppressed = usePrivateDialog(onClose);
-  const [filter, setFilter] = useState<ActivityFilter>({});
+  const [filter, setFilter] = useState<ActivityFilter>(initialFilter ?? {});
   const [confirming, setConfirming] = useState<string | null>(null);
   const participants = useMemo(() => activityParticipants(game), [game]);
   const moments = useMemo(() => activityMoments(game), [game]);
@@ -74,7 +76,7 @@ export function ActivityPanel({ game, registry, readOnly = false, onClose }: {
   const rows = (items: ActivityItem[]) => items.map((item) => (item.source === "history" ? historyRow(item) : deliveryRow(item)));
 
   return (
-    <Modal title={readOnly ? "Activity (final)" : "Activity"} onClose={onClose} className="activity-panel">
+    <Modal title={title ?? (readOnly ? "Activity (final)" : "Activity")} onClose={onClose} className="activity-panel">
       <div className="dialog-body activity-body">
         <div className="activity-filters" role="group" aria-label="Filter activity">
           <label className="activity-filter">

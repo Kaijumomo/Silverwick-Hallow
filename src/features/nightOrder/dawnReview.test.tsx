@@ -41,7 +41,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 function finishNight() {
   for (const step of deriveNightWork(game(), env()).steps) state().setNightStepStatus(game().day, step.stepKey, "done");
 }
-const advanceButton = () => screen.getByRole("button", { name: "→ Day" });
+const advanceButton = () => screen.getByRole("button", { name: "Begin Day" });
 
 describe("10G-AC-23 / proof area 8: one shared derivation", () => {
   it("unfinished work is exactly the derived rows the Night Order shows as not resolved", () => {
@@ -126,17 +126,16 @@ describe("10G-AC-24 / AC-25 / AC-26: Night -> Day", () => {
     expect(game().phase).toBe("night");
   });
 
-  it("Review Night still opens the existing phone Night dock", () => {
+  it("Review Night opens the same modern guide on a phone", () => {
     vi.stubGlobal("matchMedia", vi.fn((query: string) => ({ media: query, matches: true,
       addEventListener() {}, removeEventListener() {} })));
     render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: "Close night panel" }));
-    expect(screen.queryByRole("complementary", { name: "Night 2 order" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Close Night panel" }));
+    expect(screen.queryByRole("region", { name: "Night 2 guide" })).toBeNull();
     fireEvent.click(advanceButton());
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Review Night" }));
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.getByRole("complementary", { name: "Night 2 order" })).toBeVisible();
-    expect(screen.queryByRole("region", { name: "Night 2 guide" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Night 2 guide" })).toBeVisible();
     expect(game().phase).toBe("night");
   });
 
@@ -163,7 +162,7 @@ describe("10G-AC-27 / proof area 9: Privacy Mode", () => {
     render(<GameScreen />);
     const button = advanceButton();
     expect(button).toBeDisabled();
-    expect(button).toHaveAttribute("title", "Turn off Privacy Mode to review the Night before continuing to Day");
+    expect(button).toHaveAttribute("title", "Turn off Privacy Mode before continuing");
     fireEvent.click(button);
     expect(game().phase).toBe("night");
     expect(screen.queryByRole("dialog")).toBeNull();

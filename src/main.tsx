@@ -12,6 +12,8 @@ import "@/styles/players.css";
 import "@/styles/roleChooser.css";
 import "@/styles/player-popover.css";
 import "@/styles/tablet-grimoire.css";
+import "@/styles/storyteller-shell.css";
+import "@/styles/shell-ending.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

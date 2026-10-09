@@ -1,5 +1,5 @@
 /** Decorative only: shares the measured board centre without changing seats. */
-export function RitualCircle({ diameter, offsetY }: { diameter: number; offsetY: number }) {
+export function RitualCircle({ diameter, offsetY, offsetX = 0 }: { diameter: number; offsetY: number; offsetX?: number }) {
   const point = (index: number, radius: number, count: number, start = 0) => {
     const angle = start + index * Math.PI * 2 / count;
     return { x: 100 + Math.cos(angle) * radius, y: 100 + Math.sin(angle) * radius };
@@ -8,7 +8,7 @@ export function RitualCircle({ diameter, offsetY }: { diameter: number; offsetY:
     const p = point(i * 3, 78, 7, -Math.PI / 2);
     return `${p.x},${p.y}`;
   }).join(" ");
-  return <div className="ritual-circle" aria-hidden="true" style={{ width: diameter, height: diameter, marginTop: offsetY }}>
+  return <div className="ritual-circle" aria-hidden="true" style={{ width: diameter, height: diameter, marginTop: offsetY, marginLeft: offsetX }}>
     <div className="ritual-circle-glow" />
     <svg className="ritual-circle-dial" viewBox="0 0 200 200" focusable="false">
       <g fill="none" stroke="rgba(232,199,122,.32)" strokeWidth=".35">

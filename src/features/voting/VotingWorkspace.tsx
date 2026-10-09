@@ -132,7 +132,7 @@ export function VotingDayControls() {
 const suppressRepeat = (e: React.KeyboardEvent) => { if (e.repeat && (e.key === " " || e.key === "Enter")) e.preventDefault(); };
 
 /** Dimensions, typography, colours and ordinary stages follow the exported Claude Card. */
-export function VotingCard({ width = 560, offsetY = 0, inline = false }: { width?: number; offsetY?: number; inline?: boolean }) {
+export function VotingCard({ width = 560, offsetY = 0, offsetX = 0, inline = false }: { width?: number; offsetY?: number; offsetX?: number; inline?: boolean }) {
   const ui = useVotingInteraction(); const game = useStorytellerStore(s => s.game);
   const [more, setMore] = useState(false);
   useEffect(() => setMore(false), [ui?.round?.id, ui?.surface, ui?.open]);
@@ -148,7 +148,7 @@ export function VotingCard({ width = 560, offsetY = 0, inline = false }: { width
   const need = round ? isExile ? round.threshold : Math.max(round.threshold, (state.block?.tally ?? -1) + 1) : 0;
   const vote = (choice: "yes" | "no") => round && voter && ui.run({ kind: "respond", roundId: round.id, voter, choice });
   const ordinal = round ? state.rounds.filter(r => r.mode === round.mode).findIndex(r => r.id === round.id) + 1 : state.rounds.filter(r => r.mode === (isExile ? "exile" : "nomination")).length + 1;
-  return <section className={`voting-card-anchor${inline ? " voting-card-inline" : ""}`} style={{ width, marginTop: offsetY }} aria-label="Nomination card">
+  return <section className={`voting-card-anchor${inline ? " voting-card-inline" : ""}`} style={{ width, marginTop: offsetY, marginLeft: offsetX }} aria-label="Nomination card">
     <div className="voting-card">
       <header className="voting-card-header"><span className="voting-kicker"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11v3a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1M15 9a4 4 0 0 1 0 6M18 6a8 8 0 0 1 0 12" /></svg>
         Day {game.day} · {mode === "finish" ? "Finish day" : mode === "history" ? "Nominations" : `${isExile ? "Exile" : "Nomination"} ${ordinal}`}</span>

@@ -5,6 +5,7 @@ import type { LifeConfirmationToken } from "@/stores/lifeResolution";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import type { STPlayerRecord } from "@/stores/types";
 import { Segmented } from "@/components/Segmented";
+import { DragChoice } from "@/components/DragChoice";
 import { LifeStateText } from "./LifeMarks";
 import { statusChoicesFor, statusTargetOf, type StatusChoice } from "./lifeEventText";
 
@@ -55,6 +56,7 @@ export function useLifeRunner(contextKey = "") {
  * command. Selecting Alive means resurrection, not a raw status correction. */
 export function LifeControls({ player, compact = false }: { player: STPlayerRecord; compact?: boolean }) {
   const game = useStorytellerStore((s) => s.game);
+  const terminalClose = useStorytellerStore((s) => s.terminalClose);
   const store = useStorytellerStore.getState;
   const { attempt, confirmation, errorNode } = useLifeRunner(
     `${player.participantId ?? ""}|${game?.phase ?? ""}|${game?.day ?? ""}`);
@@ -62,6 +64,7 @@ export function LifeControls({ player, compact = false }: { player: STPlayerReco
   if (!game) return null;
   const status = lifeStatusOf(player);
   const live = game.phase === "night" || game.phase === "day";
+  const locked = !live || terminalClose?.status === "closing" || !!terminalClose?.confirmedRecovery || !!terminalClose?.recoveryPending;
   const day = game.phase === "day";
   const dead = !player.alive;
   const voteAvailable = dead && player.ghostVote;
@@ -85,13 +88,11 @@ export function LifeControls({ player, compact = false }: { player: STPlayerReco
     });
     return <section className="life-controls-compact" aria-label="Life">
       <div className="life-compact-row">
-        <div className="popover-segmented life-compact-switch" role="group" aria-label="Life status">
-          <button type="button" aria-pressed={!dead} disabled={!live || !dead} title={dead ? "Resurrect this player" : "This player is alive"}
-            onClick={() => act(() => store().resurrect(player.id))}>Alive</button>
-          <button type="button" aria-pressed={dead} disabled={!live || dead} title={dead ? "This player is dead" : "Record this player's death"}
-            onClick={() => act(() => store().recordDeath(player.id))}>Dead</button>
-        </div>
-        {live && dead && <button type="button" className="life-ghost-switch" aria-pressed={voteAvailable}
+        <DragChoice label="Life status" hideLabel className="life-compact-switch" value={dead ? "dead" : "alive"}
+          disabled={locked} contextKey={game}
+          options={[{ value: "alive", label: "Alive", hint: "Tap or slide left to resurrect this player" }, { value: "dead", label: "Dead", hint: "Tap or slide right to record this player's death" }]}
+          onChange={value => act(() => value === "alive" ? store().resurrect(player.id) : store().recordDeath(player.id))} />
+        {live && dead && <button type="button" className="life-ghost-switch" aria-pressed={voteAvailable} disabled={locked}
           title={voteAvailable ? "Mark ghost vote used" : "Restore ghost vote"}
           onClick={() => act(() => voteAvailable ? store().spendGhostVote(player.id) : store().restoreGhostVote(player.id))}>
           <span className="life-ghost-dot" aria-hidden="true" />Ghost vote

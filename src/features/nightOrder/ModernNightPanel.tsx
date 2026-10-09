@@ -138,7 +138,7 @@ function NightGuide({ game, script, visible, onClose }: Props) {
   }, [current?.stepKey, cursor?.stepKey, cursor?.day, game.day]);
   useEffect(() => {
     if (details) return;
-    useShellStore.getState().setLitActor(visible && actor?.participantId && current
+    useShellStore.getState().setLitActor(actor?.participantId && current
       ? { playerId: actor.id, participantId: actor.participantId, stepKey: current.stepKey } : null);
   }, [visible, details, actor?.id, actor?.participantId, current?.stepKey]);
   useEffect(() => {
@@ -180,10 +180,13 @@ function NightGuide({ game, script, visible, onClose }: Props) {
   const lastRequest = useRef(actionRequest);
   useEffect(() => {
     if (lastRequest.current === actionRequest) return;
+    // The actor tap first opens the enclosing panel. Consume the request only
+    // once that panel is visible, so a hidden draft can actually resume.
+    if (!visible) return;
     lastRequest.current = actionRequest;
-    if (!visible || details || resolved) return;
+    if (details || resolved) return;
     if (direct || bureaucrat) setPaused(false); else if (!workspace) openWorkspace();
-  }, [actionRequest]);
+  }, [actionRequest, visible]);
 
   if (details) return <div className="modern-night-extra"><button className="btn" onClick={() => setDetails(false)}>Back to guided night</button>
     {visible && <NightOrderPanel game={game} script={script} onClose={() => setDetails(false)} />}</div>;

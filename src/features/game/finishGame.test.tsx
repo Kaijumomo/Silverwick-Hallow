@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 
 const close = vi.fn<() => Promise<{ alreadyEnded: boolean }>>();
 vi.mock("@/firebase/storytellerSync", async (importOriginal) => {
@@ -47,23 +47,24 @@ beforeEach(() => {
   usePrivacyStore.setState({ enabled: false });
   useSessionRuntime.setState({ backend: null });
   useTargetPicker.setState({ active: null });
-  store.setState({ game: liveGame(), lobby: null, undoStack: [], localSeq: 0, sync: null, customScripts: { [setupScript.id]: setupScript }, selectedPlayerId: null, view: "game" });
+  store.setState({ game: liveGame(), lobby: null, undoStack: [], localSeq: 0, sync: null, terminalClose: null, finishedGameUndo: null, canUndoFinishedGame: false, customScripts: { [setupScript.id]: setupScript }, selectedPlayerId: null, view: "game" });
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("Finish Game is terminal and distinct from Setup discard", () => {
   it("live play offers Finish game; Setup offers Discard setup instead", () => {
     const view = render(<GameScreen />);
-    expect(screen.getByRole("button", { name: "Finish game" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "End game" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Discard setup" })).toBeNull();
     view.unmount();
-    store.setState({ game: liveGame({ phase: "setup", day: 0 }) });
+    store.setState({ game: liveGame({ phase: "setup", day: 0, setupRolesRevealed: false }) });
     render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "Players" }));
     expect(screen.getByRole("button", { name: "Discard setup" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Finish game" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "End game" })).toBeNull();
   });
 
-  it("offline: Finish game retains the read-only ended snapshot (no Undo, no live controls)", async () => {
+  it("offline: End retains the read-only snapshot with explicit ending recovery and no live controls", async () => {
     state().setAbilityUsed("p0", true);
     render(<GameScreen />);
     await finishGame();
@@ -71,10 +72,29 @@ describe("Finish Game is terminal and distinct from Setup discard", () => {
     expect(game().players.p0!.abilityUsed).toBe(true);
     expect(state().undoStack).toEqual([]);
     expect(screen.getByRole("status")).toHaveTextContent("Finished game — read-only review of the final state.");
-    for (const name of ["↶ Undo", "Finish game", "Go live", "Day resolution", "Life events", "→ Night", "Game ended"]) {
+    expect(screen.getByRole("button", { name: "Undo ending" })).toBeEnabled();
+    for (const name of ["Undo last change", "End game", "Go live", "Day resolution", "Life events", "→ Night", "Game ended"]) {
       expect(screen.queryByRole("button", { name })).toBeNull();
     }
     expect(screen.queryByRole("button", { name: /Add player|Add Traveler|New seat/ })).toBeNull();
+  });
+
+  it("revealed setup remains discardable with confirmation until Night 1 begins", async () => {
+    store.setState({ game: liveGame({ phase: "setup", day: 0, setupRolesRevealed: true }) });
+    const before = game(); render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "Players" }));
+    expect(screen.getByRole("button", { name: "Begin Night 1" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Discard setup" }));
+    let dialog = screen.getByRole("dialog", { name: "Discard this setup?" });
+    expect(game()).toBe(before); expect(close).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(game()).toBe(before);
+    fireEvent.click(screen.getByRole("button", { name: "Discard setup" }));
+    dialog = screen.getByRole("dialog", { name: "Discard this setup?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Discard setup" }));
+    await waitFor(() => expect(state().game).toBeNull());
+    expect(close).toHaveBeenCalledTimes(1); expect(state().view).toBe("home");
+    expect(state().finishedGameUndo).toBeNull();
   });
 
   it("proof area 11: a failed authoritative close leaves the local game live and unchanged", async () => {
@@ -85,7 +105,8 @@ describe("Finish Game is terminal and distinct from Setup discard", () => {
     await finishGame();
     expect(game()).toBe(before);
     expect(state().lobby).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Finish game" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "End the game" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "End without a result" })).toBeEnabled();
   });
 
   it("a successful authoritative close (which detaches the lobby) is followed by the terminal finish", async () => {
@@ -121,7 +142,8 @@ describe("10G-AC-37: the ended review is inspectable and read-only", () => {
 
   it("Activity is available as the final, read-only record", () => {
     render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: "Activity" }));
+    fireEvent.click(screen.getByRole("button", { name: "Info" }));
+    fireEvent.click(screen.getByRole("button", { name: "History & activity" }));
     const dialog = screen.getByRole("dialog", { name: "Activity (final)" });
     expect(dialog).toHaveTextContent("Carol: died");
     expect(within(dialog).queryByRole("button", { name: /Remove/ })).toBeNull();
@@ -137,16 +159,17 @@ describe("10G-AC-37: the ended review is inspectable and read-only", () => {
 });
 
 describe("10G-AC-47: narrow viewport -- new surfaces stay operable", () => {
-  it("Activity, Finish game and the Rule-Fact strip are reachable from the narrow overflow menu", async () => {
+  it("End and rule facts remain reachable on the narrow single-board shell", async () => {
     narrow = true;
     store.setState({ game: { ...game(), fabled: ["toymaker"] } });
     render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: "More actions" }));
-    expect(screen.getByRole("button", { name: "Activity" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Finish game" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "End game" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Info" }));
+    fireEvent.click(screen.getByText("Game rules & modifiers"));
     expect(within(screen.getByRole("region", { name: "Game rule facts" })).getByRole("button", { name: "Record Demon skip" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Activity" }));
-    expect(screen.getByRole("dialog", { name: "Activity" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "End game" }));
+    expect(screen.getByRole("dialog", { name: "End the game" })).toBeInTheDocument();
   });
 
   it("Night Order + Grimoire target picking still works at narrow width", () => {

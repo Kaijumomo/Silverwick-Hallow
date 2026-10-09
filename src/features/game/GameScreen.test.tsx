@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { GameScreen } from "./GameScreen";
 import { useStorytellerStore as storyteller } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
@@ -37,12 +37,12 @@ describe("Storyteller privacy mode", () => {
     // accessible name states the Effect in words.
     expect(document.querySelector('[data-effect-indicator="poisoned"]')).not.toBeNull();
     expect(screen.getByRole("button", { name: /Alice, seat 1, .*Poisoned/ })).toBeInTheDocument();
-    expect(screen.getByText("Secret reminder")).toBeInTheDocument();
+    expect(screen.getAllByText("Secret reminder").length).toBeGreaterThan(0);
     const before = structuredClone(storyteller.getState().game);
 
     fireEvent.click(screen.getByRole("button", { name: "Enable Privacy Mode" }));
 
-    expect(screen.getByRole("button", { name: "Disable Privacy Mode" })).toHaveTextContent("Privacy Mode On");
+    expect(screen.getByRole("button", { name: "Disable Privacy Mode" })).toHaveTextContent("Show tokens");
     expect(screen.queryByText("Chef")).toBeNull();
     expect(document.querySelector("[data-effect-indicator]")).toBeNull();
     expect(screen.queryByRole("button", { name: /Poisoned/ })).toBeNull();
@@ -55,11 +55,13 @@ describe("Storyteller privacy mode", () => {
     expect(screen.getByRole("button", { name: "Disable Privacy Mode" })).toBeInTheDocument();
 
     const seat = storyteller.getState().game!.seatOrder[0]!;
-    storyteller.getState().removeReminder(seat, "r1");
-    storyteller.getState().addReminder(seat, { id: "r2", label: "Updated while hidden" });
+    act(() => {
+      storyteller.getState().removeReminder(seat, "r1");
+      storyteller.getState().addReminder(seat, { id: "r2", label: "Updated while hidden" });
+    });
     expect(screen.queryByText("Updated while hidden")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Disable Privacy Mode" }));
-    expect(screen.getByText("Updated while hidden")).toBeInTheDocument();
+    expect(screen.getAllByText("Updated while hidden").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Chef").length).toBeGreaterThan(0);
   });
 });

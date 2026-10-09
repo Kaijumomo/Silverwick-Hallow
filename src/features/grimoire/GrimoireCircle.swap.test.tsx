@@ -26,9 +26,9 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-it("allows swapping a newly added, visible Free Roam player and undoing it", () => {
+it("allows swapping a newly added freely movable player and undoing it", () => {
+  act(() => state().setTokenPosition("p0", 100, 100));
   board();
-  fireEvent.click(screen.getByRole("button", { name: /Free Roam/ }));
   act(() => state().addPlayer("New arrival"));
   const id = state().game!.seatOrder.at(-1)!;
   expect(screen.getByRole("button", { name: /New arrival/ })).toBeInTheDocument();
@@ -49,11 +49,10 @@ it("allows swapping a newly added, visible Free Roam player and undoing it", () 
   expect(position(id)).toEqual(beforeVisual.added);
 });
 
-it("restores visible coordinates on Undo after a Ring swap and first Free Roam entry", () => {
+it("restores visible coordinates on Undo after swapping untouched canonical positions", () => {
   board();
   expect(state().tokenPositions).toEqual({});
   swapWith("p1");
-  fireEvent.click(screen.getByRole("button", { name: /Free Roam/ }));
   const swapped = structuredClone(state().tokenPositions);
   const swappedVisual = { first: position("p0"), second: position("p1") };
   expect(swapped.p0).not.toEqual(swapped.p1);
@@ -65,10 +64,9 @@ it("restores visible coordinates on Undo after a Ring swap and first Free Roam e
   expect(position("p1")).toEqual(swappedVisual.first);
 });
 
-it("keeps the first-entry swap inverse through reload and a later ordinary Undo", async () => {
+it("keeps the canonical swap inverse through reload and a later ordinary Undo", async () => {
   const view = board();
   swapWith("p1");
-  fireEvent.click(screen.getByRole("button", { name: /Free Roam/ }));
   const swapped = structuredClone(state().tokenPositions);
   act(() => state().renamePlayer("p2", "Later edit"));
   const saved = localStorage.getItem("new-blood-st")!;
@@ -85,15 +83,14 @@ it("keeps the first-entry swap inverse through reload and a later ordinary Undo"
   expect(state().tokenPositions.p1).toEqual(swapped.p0);
 });
 
-it("supports the same Ring-to-Free Roam inverse after resetting saved positions", () => {
+it("preserves the swap inverse after resetting saved positions without a layout mode switch", () => {
   board();
-  fireEvent.click(screen.getByRole("button", { name: /Free Roam/ }));
   fireEvent.click(screen.getByRole("button", { name: "Players" }));
   fireEvent.click(screen.getByRole("button", { name: "Reset Token Positions" }));
   fireEvent.click(screen.getByRole("button", { name: "Close Players panel" }));
   expect(state().tokenPositions).toEqual({});
   swapWith("p1");
-  fireEvent.click(screen.getByRole("button", { name: /Free Roam/ }));
+  expect(state().grimoireMode).toBe("freeRoam");
   const swapped = structuredClone(state().tokenPositions);
   act(() => state().undo());
   expect(state().tokenPositions.p0).toEqual(swapped.p1);

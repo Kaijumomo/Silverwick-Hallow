@@ -5,7 +5,7 @@
 // continuation, the store's setLobby / setPhase boundary, the Storyteller
 // writer startup, and rehydration (PHASE10G Sections 17.3, 17.5, 18; AC-35).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import type { Json, RoomBackend } from "@/firebase/backend";
 
 const connect = vi.fn<() => Promise<{ backend: RoomBackend; uid: string }>>();
@@ -85,7 +85,11 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-const clickGoLive = () => fireEvent.click(screen.getByRole("button", { name: "Go live" }));
+const clickGoLive = () => {
+  fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Go live" }));
+  fireEvent.click(within(screen.getByRole("dialog", { name: "Invite players" })).getByRole("button", { name: "Close" }));
+};
 const clickFinish = async () => { await finishGame(); };
 const settle = async () => { await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 

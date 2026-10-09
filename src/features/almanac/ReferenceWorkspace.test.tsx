@@ -9,6 +9,7 @@ import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useShellStore } from "@/stores/shellStore";
 import { setupGame } from "@/test/setupFixtures";
+import { VotingCard, VotingProvider } from "@/features/voting/VotingWorkspace";
 
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
@@ -25,6 +26,50 @@ function workspace(extra?: React.ReactNode) {
 function open() { fireEvent.click(screen.getByRole("button", { name: "Reference" })); }
 
 describe("Reference presentation", () => {
+  it("End closes a pinned panel without changing the game, and privacy disables the action", () => {
+    const onEnd = vi.fn();
+    const props = { enabled: true, roles: [], scriptName: "Script", onEnd, children: <div>Board</div> };
+    const view = render(<ReferenceWorkspace {...props} privacyMode={false} />);
+    open(); fireEvent.click(screen.getByRole("button", { name: "Pin Reference panel" }));
+    const game = store.getState().game;
+    fireEvent.click(screen.getByRole("button", { name: "End game" }));
+    expect(onEnd).toHaveBeenCalledTimes(1);
+    expect(view.container.querySelector(".reference-workspace")).not.toHaveAttribute("data-reference-pinned");
+    expect(screen.queryByRole("complementary")).toBeNull();
+    expect(store.getState().game).toBe(game);
+    view.rerender(<ReferenceWorkspace {...props} privacyMode />);
+    expect(screen.getByRole("button", { name: "End game" })).toBeDisabled();
+    view.rerender(<ReferenceWorkspace {...props} privacyMode={false} endDisabled />);
+    expect(screen.getByRole("button", { name: "End game" })).toBeDisabled();
+  });
+
+  it("Day opens the recorded nomination workflow while Night stays available in its phase", () => {
+    store.setState({ game: setupGame(undefined, { phase: "day", day: 1 }), lobby: null });
+    render(<VotingProvider><ReferenceWorkspace enabled privacyMode={false} roles={[]} scriptName="Script"
+      night={() => <p>Night guide</p>}><VotingCard inline /></ReferenceWorkspace></VotingProvider>);
+    const before = store.getState().game;
+    expect(screen.queryByRole("button", { name: "Night" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Day" }));
+    expect(screen.getByText("No nominations recorded today.")).toBeInTheDocument();
+    expect(store.getState().game).toBe(before);
+    act(() => store.setState({ game: { ...before!, phase: "night" } }));
+    expect(screen.queryByRole("button", { name: "Day" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Night" }));
+    expect(screen.getByText("Night guide")).toBeVisible();
+  });
+
+  it("offers retained history inside ended-game Info and never as a permanent rail item", () => {
+    store.setState({ game: setupGame(undefined, { phase: "ended" }) });
+    const onReviewHistory = vi.fn();
+    render(<ReferenceWorkspace enabled privacyMode={false} roles={[]} scriptName="Script" info={<p>Game information</p>}
+      onReviewHistory={onReviewHistory}><div>Board</div></ReferenceWorkspace>);
+    expect(screen.queryByRole("button", { name: "History & activity" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Info" }));
+    fireEvent.click(screen.getByRole("button", { name: "History & activity" }));
+    expect(onReviewHistory).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("complementary")).toBeNull();
+  });
+
   it("explicit Review Night navigation opens the guide from another tab without reopening after privacy", () => {
     const props = { enabled: true, roles: [], scriptName: "Script", children: <div>Board</div>,
       nightKey: "game:2", night: (visible: boolean) => <p>{visible ? "Night active" : "Night paused"}</p> };

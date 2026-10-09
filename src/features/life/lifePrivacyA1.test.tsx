@@ -100,11 +100,15 @@ describe("10A-ASTRA-003: event-bearing dialogs opened under Privacy Mode render 
 
 describe("10A-ASTRA-003: turning Privacy Mode on while a dialog is open removes it", () => {
   it.each([
-    ["Life events", "Life events"],
+    ["Life events", "Correct recorded outcome"],
     ["Finish day card", "Begin Night 2"],
   ])("%s", (_label, opener) => {
     dayWithRenamedExecutee();
     render(<GameScreen />);
+    if (opener === "Correct recorded outcome") {
+      fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${CURRENT}, seat`) }));
+      fireEvent.click(screen.getByRole("button", { name: "More settings" }));
+    }
     fireEvent.click(screen.getByRole("button", { name: opener }));
     expect(document.body.textContent).toContain(HISTORIC);
     act(() => { usePrivacyStore.setState({ enabled: true }); });

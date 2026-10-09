@@ -65,6 +65,7 @@ type PlayerDrawerProps = {
   player: STPlayerRecord;
   onRemove?: (id: string) => Promise<void> | void;
   onUnseat?: (id: string) => Promise<void> | void;
+  onCorrectOutcome?: () => void;
 };
 
 /**
@@ -195,7 +196,7 @@ function PrivacySafeContents({ player }: { player: STPlayerRecord }) {
   );
 }
 
-export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) {
+export function PlayerDrawer({ player, onRemove, onUnseat, onCorrectOutcome }: PlayerDrawerProps) {
   const game = useStorytellerStore((s) => s.game);
   const script = useStorytellerStore((s) =>
     game ? selectScriptById(s, game.scriptId) : undefined
@@ -392,6 +393,7 @@ export function PlayerDrawer({ player, onRemove, onUnseat }: PlayerDrawerProps) 
                 exile, resurrection, vote token, correction) -- never a bare
                 alive/dead toggle. */}
             <LifeControls player={player} />
+            {onCorrectOutcome && <button type="button" className="btn btn-sm" onClick={onCorrectOutcome}>Correct recorded outcome</button>}
 
             {/* Phase 10F (SOL-10F-L3): progressively disclosed ability entry --
                 the same workspace / coordinator / one-commit command as the

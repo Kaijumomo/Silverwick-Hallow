@@ -60,12 +60,14 @@ afterEach(() => {
 describe("GameScreen Public Display link controls (Phase 9C.6, OPUS-002)", () => {
   it("does not attempt to ensure a capability while there is no lobby", () => {
     render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
     expect(ensurePublicDisplayAccess).not.toHaveBeenCalled();
   });
 
   it("does not attempt to ensure a capability while the runtime backend is missing", () => {
     storyteller.setState({ lobby });
     render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
     expect(ensurePublicDisplayAccess).not.toHaveBeenCalled();
   });
 
@@ -76,6 +78,7 @@ describe("GameScreen Public Display link controls (Phase 9C.6, OPUS-002)", () =>
     useSessionRuntime.setState({ backend: fakeBackend });
 
     render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
     await act(async () => {});
 
     expect(ensurePublicDisplayAccess).toHaveBeenCalledWith(fakeBackend, lobby.code, lobby.sessionId);
@@ -106,6 +109,7 @@ describe("GameScreen Public Display link controls (Phase 9C.6, OPUS-002)", () =>
     useSessionRuntime.setState({ backend: {} as never });
 
     render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
     await act(async () => {});
     await waitFor(() => expect(openDisplayButton()).not.toBeDisabled());
 
@@ -121,6 +125,7 @@ describe("GameScreen Public Display link controls (Phase 9C.6, OPUS-002)", () =>
     useSessionRuntime.setState({ backend: fakeBackend });
 
     render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
     await act(async () => {});
     await waitFor(() => expect(openDisplayButton()).not.toBeDisabled());
 
@@ -141,6 +146,7 @@ describe("GameScreen Public Display link controls (Phase 9C.6, OPUS-002)", () =>
     useSessionRuntime.setState({ backend: null });
 
     render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
 
     expect(openDisplayButton()).toBeDisabled();
     expect(copyDisplayButton()).toBeDisabled();
@@ -157,6 +163,7 @@ describe("GameScreen Public Display link controls (Phase 9C.6, OPUS-002)", () =>
     useSessionRuntime.setState({ backend: {} as never });
 
     render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
     await act(async () => {});
     await waitFor(() => expect(openDisplayButton()).not.toBeDisabled());
 
@@ -185,6 +192,7 @@ describe("GameScreen Public Display link controls (Phase 9C.6, OPUS-002)", () =>
     useSessionRuntime.setState({ backend: {} as never });
 
     render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
     await act(async () => {});
     await waitFor(() => expect(openDisplayButton()).not.toBeDisabled());
     expect(copyDisplayButton()).not.toBeDisabled();
@@ -222,6 +230,7 @@ describe("GameScreen Public Display link controls (Phase 9C.6, OPUS-002)", () =>
     useSessionRuntime.setState({ backend: {} as never });
 
     render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
     await act(async () => {});
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
@@ -243,6 +252,7 @@ describe("GameScreen Public Display link controls (Phase 9C.6, OPUS-002)", () =>
     useSessionRuntime.setState({ backend: backendA });
 
     render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
     await act(async () => {});
 
     // 1-4: the first ensure attempt failed — a stale error is visible and

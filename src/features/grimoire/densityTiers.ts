@@ -87,15 +87,15 @@ export function placeTable(stage: Stage, count: number, spec: TierSpec): TablePl
  * angles on a circle): an oval's seats are then evenly spread instead of
  * crowding at the ends of its short axis. Seat 1 is at the top; clockwise. */
 const angleCache = new Map<string, number[]>();
-function seatAngles(count: number, rx: number, ry: number): number[] {
-  const key = `${count}:${rx.toFixed(2)}:${ry.toFixed(2)}`;
+function seatAngles(count: number, rx: number, ry: number, offset = 0): number[] {
+  const key = `${count}:${rx.toFixed(2)}:${ry.toFixed(2)}:${offset}`;
   const cached = angleCache.get(key);
   if (cached) return cached;
   const start = -Math.PI / 2;
   let angles: number[];
   if (count <= 0) angles = [];
   else if (Math.abs(rx - ry) < 1e-6 || rx <= 0 || ry <= 0) {
-    angles = Array.from({ length: count }, (_, i) => start + (2 * Math.PI * i) / count);
+    angles = Array.from({ length: count }, (_, i) => start + (2 * Math.PI * (i + offset)) / count);
   } else {
     const steps = 720;
     const cumulative = [0];
@@ -108,7 +108,7 @@ function seatAngles(count: number, rx: number, ry: number): number[] {
     }
     const perimeter = cumulative[steps]!;
     angles = Array.from({ length: count }, (_, i) => {
-      const target = (perimeter * i) / count;
+      const target = (perimeter * (i + offset)) / count;
       let k = 0;
       while (k < steps && cumulative[k + 1]! < target) k++;
       const span = cumulative[k + 1]! - cumulative[k]!;
@@ -122,9 +122,9 @@ function seatAngles(count: number, rx: number, ry: number): number[] {
 }
 
 /** The disc centre of seat `index` of `count` (relative to the stage centre). */
-export function seatCentre(index: number, count: number, table: TablePlacement): { x: number; y: number } {
+export function seatCentre(index: number, count: number, table: TablePlacement, offset = 0): { x: number; y: number } {
   if (count <= 0) return { x: 0, y: table.cy };
-  const angle = seatAngles(count, table.rx, table.ry)[index] ?? -Math.PI / 2;
+  const angle = seatAngles(count, table.rx, table.ry, offset)[index] ?? -Math.PI / 2;
   return { x: table.rx * Math.cos(angle), y: table.cy + table.ry * Math.sin(angle) };
 }
 

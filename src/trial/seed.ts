@@ -60,3 +60,40 @@ export function seedTabletTrial(size: TrialSize): void {
   // Seed construction is not a review action. Keep Undo for actions the user takes.
   useStorytellerStore.setState({ undoStack: [], seatSwapUndo: [] });
 }
+
+/** Same participants as the approved Claude reference; isolated trial data only. */
+export function seedShellDesignTrial(): void {
+  if (!isTabletTrial || state().lobby) throw new Error("The design table requires an offline trial.");
+  const names = ["Ada", "Bram", "Cleo", "Dmitri", "Elspeth", "Felix", "Greta", "Hollis", "Iris", "Jonah", "Kestrel", "Lior", "Mara", "Nico", "Odette", "Pim", "Quill", "Rosa", "Silas", "Tamsin"];
+  const roles = ["washerwoman", "empath", "fortuneteller", "butler", "poisoner", "monk", "undertaker", "imp", "virgin", "spy", "slayer", "gunslinger", "investigator", "chef", "thief", "recluse", "scarletwoman", "bureaucrat", "scapegoat", "beggar"];
+  const id = "silverwick-shell-design-trial";
+  if (!state().customScripts[id]) accepted(state().addCustomScript({ id, name: "Trouble Brewing", author: "Shell design reference", characters: canonicalRoles(roles) }), "Prepare design table");
+  state().newGame(id, { plannedPlayerCount: 20, plannedTravelerCount: 5 });
+  names.forEach(name => state().addPlayerToSeat(name));
+  const ids = [...state().game!.seatOrder];
+  const travelers = new Set([11, 14, 17, 18, 19]);
+  for (let i = 0; i < ids.length; i++) {
+    const traveler = travelers.has(i);
+    if (state().game!.players[ids[i]!]!.isTraveler !== traveler) accepted(state().setIsTraveler(ids[i]!, traveler), "Set design seat type");
+    if (traveler) accepted(state().assignRole(ids[i]!, roles[i]!), "Assign design Traveler");
+  }
+  state().setRolePool(roles.filter((_, i) => !travelers.has(i)));
+  accepted(state().dealRolePool(), "Deal design roles");
+  for (let i = 0; i < ids.length; i++) if (!travelers.has(i)) accepted(state().assignRole(ids[i]!, roles[i]!), "Assign design role");
+  const registry = buildRegistry(state().customScripts[id]!);
+  accepted(state().resolveAlignments({ intents: ids.map((playerId, i) => changeAlignmentIntent(state().game!.players[playerId]!, travelers.has(i) ? "good" : registry.alignmentOf(roles[i]!))) }), "Set design alignments");
+  for (const playerId of ids) accepted(state().showAssignedRole(playerId), "Show design role");
+  accepted(state().revealRoles(), "Reveal design roles");
+  accepted(state().beginNightOne(), "Begin design game");
+  accepted(state().advancePhase(), "Design Day 1");
+  accepted(state().recordDeath(ids[3]!), "Record Dmitri death");
+  accepted(state().recordDeath(ids[15]!), "Record Pim death");
+  accepted(state().spendGhostVote(ids[15]!), "Spend Pim vote");
+  accepted(state().advancePhase(), "Design Night 2");
+  for (const [index, label, sourceCharacter] of [[1, "Townsfolk", "washerwoman"], [2, "Wrong", "washerwoman"], [10, "Red Herring", "fortuneteller"], [5, "Master", "butler"], [3, "Executed", "undertaker"], [9, "Minion", "investigator"], [13, "Wrong", "investigator"]] as const) {
+    if (!state().addReminder(ids[index]!, { label, sourceCharacter })) throw new Error("Design reminder could not be added.");
+  }
+  state().selectPlayer(null);
+  state().setView("game");
+  useStorytellerStore.setState({ undoStack: [], seatSwapUndo: [] });
+}

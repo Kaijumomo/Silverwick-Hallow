@@ -2,10 +2,26 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/config/trial", () => ({ isTabletTrial: true, TABLET_TRIAL_OFFLINE_MESSAGE: "Local tablet trial" }));
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
-import { seedTabletTrial } from "./seed";
+import { seedTabletTrial, seedShellDesignTrial } from "./seed";
 
 beforeEach(() => { localStorage.clear(); useStorytellerStore.setState({ game: null, lobby: null, sync: null, undoStack: [], customScripts: {} }); });
 describe("playable tablet fixtures", () => {
+  it("builds the approved design table with valid roles, identities, reminders, and life state", () => {
+    seedShellDesignTrial();
+    const state = useStorytellerStore.getState();
+    const game = state.game!;
+    expect(StorytellerGamePersistedSchema.safeParse(game).success).toBe(true);
+    expect(game).toMatchObject({ phase: "night", day: 2 });
+    expect(game.seatOrder).toHaveLength(20);
+    const players = game.seatOrder.map(id => game.players[id]!);
+    expect(players[0]).toMatchObject({ name: "Ada", actualRole: "washerwoman" });
+    expect(players[4]).toMatchObject({ name: "Elspeth", actualRole: "poisoner", actualAlignment: "evil" });
+    expect(players.filter(p => p.alive)).toHaveLength(18);
+    expect(players.filter(p => p.alive || p.ghostVote)).toHaveLength(19);
+    expect(players.filter(p => p.isTraveler)).toHaveLength(5);
+    expect(state.lobby).toBeNull();
+    expect(state.undoStack).toEqual([]);
+  });
   it.each([15, 20] as const)("builds and resumes a valid %s-player Day 2 through commands", async size => {
     localStorage.setItem("new-blood-st", "preserve-the-real-save");
     seedTabletTrial(size);

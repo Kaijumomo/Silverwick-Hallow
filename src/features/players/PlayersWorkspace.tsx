@@ -35,11 +35,14 @@ export function PlayersWorkspace(props: Parameters<typeof PlayersWorkspaceConten
   return <InfoPresentationBoundary><PlayersWorkspaceContent {...props} /></InfoPresentationBoundary>;
 }
 
-function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPlayerId, night, nightKey, nightOpenRequest }: {
+function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPlayerId, night, nightKey, nightOpenRequest,
+  onEnd, endDisabled, onReviewHistory, supplementalInfo, onDiscardSetup }: {
   children: ReactNode; enabled: boolean; roles: RoleDef[];
   onMore: (id: string) => void; advancedPlayerId: string | null;
   night?: (visible: boolean, close: () => void) => ReactNode; nightKey?: string;
   nightOpenRequest?: number;
+  onEnd?: () => void; endDisabled?: boolean; onReviewHistory?: () => void;
+  supplementalInfo?: ReactNode; onDiscardSetup?: () => void;
 }) {
   const state = useStorytellerStore();
   const game = state.game;
@@ -143,7 +146,8 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
   const holderNames: Record<string, string[]> = {};
   for (const p of context.occupied) if (p.actualRole) (holderNames[p.actualRole] ??= []).push(p.name || `Seat ${p.seat + 1}`);
   return <PlayersInteraction.Provider value={{ active: true, swapping: !!swap, swappingPlayerId: swap?.id, tap }}>
-    <ReferenceWorkspace info={<InfoPanel />} enabled privacyMode={privacy} roles={roles} scriptName={script.name} night={night} nightKey={nightKey} nightOpenRequest={nightOpenRequest}
+    <ReferenceWorkspace info={<><InfoPanel />{supplementalInfo}</>} enabled privacyMode={privacy} roles={roles} scriptName={script.name} night={night} nightKey={nightKey} nightOpenRequest={nightOpenRequest}
+      onEnd={onEnd} endDisabled={endDisabled} onReviewHistory={onReviewHistory}
       onPanelOpen={() => { state.selectPlayer(null); setSwap(null); }}
       players={dismiss => <>
         <div className="players-summary"><p>{context.ordinary.length} residents · {context.travelers.length} travelers · {context.occupied.filter(p => p.alive).length} alive</p>
@@ -172,7 +176,8 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
         </div>
         {!ended && <footer className="players-footer"><div><button className="btn" onClick={() => { setAddingSeat(game.seatOrder.find(id => game.players[id]?.isEmpty)); setAdding(true); setError(null); }}>Add Player</button>
           {privateSetup && <button className="btn btn-gold" onClick={openDistribute}>Distribute Roles</button>}</div>
-          <button className="players-text-button" onClick={() => { state.clearTokenPositions(); state.setGrimoireMode("ring"); }}>Reset Token Positions</button></footer>}
+          <button className="players-text-button" onClick={() => report(state.resetTokenPositions())}>Reset Token Positions</button>
+          {game.phase === "setup" && onDiscardSetup && <button className="players-text-button" onClick={onDiscardSetup}>Discard setup</button>}</footer>}
       </>}>
       {children}
       {!privacy && swap && <div className="players-swap-prompt" role="status">Tap another token to swap seats with {swap.name}<button className="btn btn-sm" onClick={() => setSwap(null)}>Cancel</button></div>}

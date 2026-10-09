@@ -10,6 +10,14 @@
 .player-popover .popover-segmented > button[aria-pressed="true"]::before { background: rgba(196,158,80,.2); }
 .player-popover .life-compact-switch > button:last-child[aria-pressed="true"] { color: #eeaea3; }
 .player-popover .life-compact-switch > button:last-child[aria-pressed="true"]::before { background: rgba(180,100,100,.22); }
+/* Keep the original compact Life switch; only its highlight now slides. */
+.player-popover .life-compact-switch.drag-choice .drag-choice-track { min-width: 0; width: 116px; }
+.player-popover .life-compact-switch.drag-choice .drag-choice-track::before { inset: 2px 0; border-radius: 10px; border-color: rgba(196,158,80,.12); background: rgba(0,0,0,.35); }
+.player-popover .life-compact-switch.drag-choice .drag-choice-thumb { inset-block: 6px; left: 3px; width: calc(50% - 3px); border: 0; border-radius: 7px; background: rgba(196,158,80,.2); box-shadow: none; }
+.player-popover .life-compact-switch.drag-choice .drag-choice-option { padding: 0 10px; border-radius: 7px; font-size: 13px; color: rgba(216,201,164,.5); }
+.player-popover .life-compact-switch.drag-choice [aria-checked="true"] { color: #e8c778; }
+.player-popover .life-compact-switch.drag-choice:has([data-value="dead"][aria-checked="true"]) .drag-choice-thumb { background: rgba(180,100,100,.22); }
+.player-popover .life-compact-switch.drag-choice [data-value="dead"][aria-checked="true"] { color: #eeaea3; }
 .player-popover .life-ghost-switch { display: inline-flex; align-items: center; gap: 6px; border: 0; padding: 0 8px; background: transparent; color: rgba(216,201,164,.7); font: 12px var(--font-op); }
 .life-ghost-dot { width: 12px; height: 12px; border: 1px solid rgba(216,201,164,.6); border-radius: 50%; display: grid; place-items: center; }
 .life-ghost-switch[aria-pressed="true"] .life-ghost-dot::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #d8c9a4; }

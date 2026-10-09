@@ -3,16 +3,16 @@ import { VotingCard, useVotingInteraction, hasDayExecution } from "@/features/vo
 import { VotingBoardArt } from "@/features/voting/VotingBoardArt";
 import { currentVotingState } from "@/stores/voting";
 import { useTargetPicker } from "@/features/abilities/abilityUi";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
-import { pickDensityTier, placeTable, seatCentre, tableStage, tierFits, tierSpec, type DensityTier, type TierSpec } from "./densityTiers";
-import { RosterView } from "./RosterView";
+import { pickDensityTier, placeTable, seatCentre, tableStage, tierSpec, type DensityTier, type TierSpec } from "./densityTiers";
 import { RitualCircle } from "./RitualCircle";
+import { storytellerGeometry } from "./storytellerGeometry";
 import { useShellStore } from "@/stores/shellStore";
 import { seatPickable } from "@/features/abilities/abilityUi";
 import { litActorIdOf, tapSeat as tapSeatShared } from "./seatTap";
 import { iconUrlFor } from "@/data/iconUrl";
-import type { GrimoireMode, PlayerId, RoleDef, STPlayerRecord } from "@/stores/types";
+import type { PlayerId, RoleDef, STPlayerRecord } from "@/stores/types";
 import { SeatAssignPopup } from "./SeatAssignPopup";
 import type { RoomBackend } from "@/firebase/backend";
 import { usePrivacyStore } from "@/stores/privacyStore";
@@ -28,7 +28,7 @@ import { lifeAccessibleLabel, lifeStatusOf } from "@/stores/lifeState";
 import { LifeShroud, LifeStateText, VoteToken } from "@/features/life/LifeMarks";
 import { abilityUsedMarker, actualAlignmentMarker } from "./tokenMarkers";
 import { OfficialReminderToken } from "@/features/reminders/OfficialReminderToken";
-import { officialEffectPresentation } from "@/features/reminders/officialReminderPresentation";
+import { officialEffectPresentation, officialNotationRole } from "@/features/reminders/officialReminderPresentation";
 import {
   cleanupStatusText,
   groupText,
@@ -112,9 +112,7 @@ function shortMarker(key: string, player: STPlayerRecord): string {
   return "•";
 }
 
-const DRAG_MIME = "application/x-new-blood-seat";
 const TAP_MAX_PX = 6;
-const TAP_MAX_MS = 200;
 
 type DragState = {
   id: PlayerId;
@@ -122,7 +120,7 @@ type DragState = {
   offsetY: number;
   startClientX: number;
   startClientY: number;
-  startTime: number;
+  pointerId: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -138,6 +136,7 @@ type TokenProps = {
   spec: TierSpec;
   x: number;
   y: number;
+  boardCentre: { x: number; y: number };
   selected: boolean;
   /** Phase 10H (§6.4, V3): the current Night actor -- the lit seat. The caller
    * passes false at Day and under Privacy Mode. */
@@ -145,13 +144,6 @@ type TokenProps = {
   /** Phase 10H (§8.3): while a target pick is active, whether this seat is an
    * eligible target (null when no pick is active). */
   pickable: boolean | null;
-  mode: GrimoireMode;
-  /** Phase 10G: false for an ended game -- no ring drag-to-reorder. */
-  reorderable?: boolean;
-  draggedId: string | null;
-  onRingDragStart: (id: string) => void;
-  onRingDragEnd: () => void;
-  onRingDropOn: (targetId: string) => void;
   onFreeRoamPointerDown: (e: React.PointerEvent, id: string, x: number, y: number) => void;
   onClick: () => void;
   isGhost?: boolean;
@@ -164,8 +156,7 @@ type TokenProps = {
 };
 
 function Token({
-  player, role, shownRole, online, spec, x, y, selected, acting, pickable,
-  mode, reorderable = true, draggedId, onRingDragStart, onRingDragEnd, onRingDropOn,
+  player, role, shownRole, online, spec, x, y, boardCentre, selected, acting, pickable,
   onFreeRoamPointerDown, onClick, isGhost = false, needsShownRole = false,
   votingRole, votingLabel,
 }: TokenProps) {
@@ -184,8 +175,6 @@ function Token({
     player.behaviorMode !== "normal" ||
     (!!player.shownRole && player.shownRole !== player.actualRole)
   );
-  const isDragSource = draggedId === player.id;
-  const isDragTarget = draggedId !== null && draggedId !== player.id;
   // Phase 10A: the one derived life state (lifeState.ts). Life, the vote
   // token and exile are public table information, so Privacy Mode never
   // hides them; "Needs check" is Storyteller-only and hidden there.
@@ -196,6 +185,16 @@ function Token({
   // concise Storyteller-only "Needs check".
   const indicators = privacyMode ? [] : effectIndicators(player);
   const officialEffects = modern && !privacyMode ? officialEffectPresentation(player) : null;
+  const officialNotes = new Map<string, { role: RoleDef; label: string; count: number }>();
+  if (modern && !privacyMode) for (const reminder of player.reminders) {
+    const reminderRole = officialNotationRole(reminder.sourceCharacter, reminder.label);
+    if (!reminderRole) continue;
+    const key = `${reminderRole.id}:${reminder.label}`;
+    const note = officialNotes.get(key);
+    if (note) note.count++;
+    else officialNotes.set(key, { role: reminderRole, label: reminder.label, count: 1 });
+  }
+  const inwardAngle = Math.atan2(boardCentre.y - (y - spec.height / 2 + spec.disc / 2), boardCentre.x - x);
   const needsCheckBase = !privacyMode && (life.anomalies.length > 0 || effectsNeedingCheck(player).length > 0);
   const effectSummary = privacyMode ? "" : effectAccessibleSummary(player);
   // Phase 10C: Reminders are Storyteller-private notation -- under Privacy
@@ -207,7 +206,18 @@ function Token({
   // Storyteller-private "Needs check" (never shown under Privacy Mode).
   const script = useStorytellerStore((s) => (game ? selectScriptById(s, game.scriptId) : undefined));
   const perceptionCheck = !privacyMode && !!script && identityNeedsCheck(player, buildRegistry(script));
-  const reminderGroups = privacyMode || !game ? [] : reminderTokenGroups(player, game);
+  const listedReminders = modern && spec.tier !== "XS"
+    ? player.reminders.filter(reminder => !officialNotationRole(reminder.sourceCharacter, reminder.label)) : player.reminders;
+  const reminderGroups = privacyMode || !game ? [] : reminderTokenGroups({ reminders: listedReminders }, game);
+  const customSatellites = modern && spec.tier !== "XS" ? reminderGroups.slice(0, 3) : [];
+  const satellites = [
+    ...(officialEffects?.tokens ?? []).map(token => ({ key: `effect:${token.key}`, role: token.role as RoleDef | null, label: token.label, count: token.instances.length, notation: false, status: null as string | null })),
+    ...[...officialNotes.entries()].map(([key, token]) => ({ key: `notation:${key}`, ...token, notation: true, status: null as string | null })),
+    ...customSatellites.map(group => ({ key: `custom:${group.label}`, role: null, label: group.label, count: group.instances.length, notation: true, status: cleanupStatusText(group.status) })),
+  ];
+  const reminderCount = modern && spec.tier !== "XS"
+    ? reminderGroups.slice(customSatellites.length).reduce((count, group) => count + group.instances.length, 0)
+    : player.reminders.length;
   // Phase 10H (H2): Reminder labels collapse progressively with density --
   // labels where the footprint permits, a count when dense.
   const { shown: shownReminders, hiddenCount: hiddenReminders } = tierReminderGroups(reminderGroups, spec.reminderLabels);
@@ -243,36 +253,11 @@ function Token({
     selected ? "selected" : "",
     acting ? "acting" : "",
     pickable === true ? "pickable" : pickable === false ? "unpickable" : "",
-    isDragSource ? "dragging" : "",
-    isDragTarget ? "drag-target" : "",
     isGhost ? "ghost" : "",
-    mode === "freeRoam" ? "free-roam" : "",
+    "free-roam",
   ].filter(Boolean).join(" ");
 
-  const ringDragHandlers = mode === "ring" && reorderable ? {
-    draggable: true as const,
-    onDragStart: (e: React.DragEvent) => {
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData(DRAG_MIME, player.id);
-      onRingDragStart(player.id);
-    },
-    onDragEnd: () => onRingDragEnd(),
-    onDragOver: (e: React.DragEvent) => {
-      if (draggedId && draggedId !== player.id) {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
-      }
-    },
-    onDrop: (e: React.DragEvent) => {
-      const sourceId = e.dataTransfer.getData(DRAG_MIME) || draggedId;
-      if (sourceId && sourceId !== player.id) {
-        e.preventDefault();
-        onRingDropOn(player.id);
-      }
-    },
-  } : {};
-
-  const freeRoamHandlers = mode === "freeRoam" && !isGhost ? {
+  const freeRoamHandlers = !isGhost ? {
     onPointerDown: (e: React.PointerEvent) => {
       e.stopPropagation();
       onFreeRoamPointerDown(e, player.id, x, y);
@@ -287,6 +272,7 @@ function Token({
       data-voting={votingRole}
       data-voting-active={votingOpen || undefined}
       data-team={displayRole?.type}
+      data-alignment={!privacyMode ? player.actualAlignment : undefined}
       style={{ left: `calc(50% + ${x}px)`, top: `calc(50% + ${y}px)`, width: spec.width, height: spec.height }}
       onClick={isGhost ? undefined : onClick}
       role="button"
@@ -300,7 +286,6 @@ function Token({
           if (!e.repeat) onClick();
         }
       }}
-      {...ringDragHandlers}
       {...freeRoamHandlers}
     >
       {description && <span id={descriptionId} className="sr-only">{description}</span>}
@@ -333,10 +318,24 @@ function Token({
         {spec.tier !== "XS" && !modern && indicators.filter((summary) => summary.indicator.icon).map((summary) => (
           <EffectChip key={summary.indicator.key} summary={summary} />
         ))}
-        {spec.tier !== "XS" && !!officialEffects?.tokens.length && <span className="token-official-effects" aria-hidden="true"
-          style={{ width: spec.width, left: (spec.disc - spec.width) / 2 }}>
-          {officialEffects.tokens.map(token => <OfficialReminderToken key={token.key} role={token.role} label={token.label}
-            count={token.instances.length} decorative />)}
+        {spec.tier !== "XS" && satellites.length > 0 && <span className="token-official-satellites" aria-hidden="true">
+          {satellites.map((token, index) => {
+            // Claude's inward reminder orbit. Additional rows keep every
+            // official label visible rather than replacing them with a count.
+            const row = Math.floor(index / 3);
+            const inRow = Math.min(3, satellites.length - row * 3);
+            const radius = spec.disc / 2 + 40 + row * 62;
+            const angle = inwardAngle + ((index % 3) - (inRow - 1) / 2) * 48 / radius;
+            const distance = radius + 22 * Math.max(0, Math.sin(angle)) + 12 * Math.max(0, -Math.sin(angle));
+            return <span className="token-official-satellite" key={token.key}
+              style={{ left: `calc(50% + ${Math.round(Math.cos(angle) * distance)}px)`, top: `calc(50% + ${Math.round(Math.sin(angle) * distance)}px)` }}>
+              {token.role ? <OfficialReminderToken role={token.role} label={token.label} count={token.count} notation={token.notation} decorative />
+                : <span className="official-reminder-token official-reminder-notation token-custom-reminder" data-reminder-kind="notation" title={`${token.label} (notation only)`}>
+                  <span className="official-reminder-disc"><span className="token-custom-reminder-pen">✎</span></span>
+                  <span className="official-reminder-label">{token.label}{token.count > 1 ? ` ×${token.count}` : ""}{token.status && <span className="token-custom-reminder-status">{token.status}</span>}</span>
+                </span>}
+            </span>;
+          })}
         </span>}
         {/* Phase 10H (§6.4): the lit Night actor -- a static treatment plus
             the words "Acting now", distinct from selection and focus. */}
@@ -357,8 +356,8 @@ function Token({
           </div>
         )}
         {/* Count-only Reminders (M2 / S): the notation family's pen mark and a number. */}
-        {spec.reminderLabels === 0 && spec.reminderCount && player.reminders.length > 0 && !privacyMode && (
-          <span className="token-reminder-count" aria-hidden="true" data-reminder-count={player.reminders.length}>✎{player.reminders.length}</span>
+        {spec.reminderLabels === 0 && spec.reminderCount && reminderCount > 0 && !privacyMode && (
+          <span className="token-reminder-count" aria-hidden="true" data-reminder-count={reminderCount}>✎{reminderCount}</span>
         )}
       </div>
       {votingOpen && !spec.text && <div className="voting-compact-name" title={player.name}><span>{player.seat + 1} {player.name}</span>{!player.alive && <small>{player.ghostVote ? "Vote available" : "Vote used"}</small>}</div>}
@@ -460,22 +459,29 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
   const addPlayerToSeat = useStorytellerStore((s) => s.addPlayerToSeat);
   const addEmptySeat = useStorytellerStore((s) => s.addEmptySeat);
   const removePlayer = useStorytellerStore((s) => s.removePlayer);
-  const setSeatOrder = useStorytellerStore((s) => s.setSeatOrder);
   const grimoireMode = useStorytellerStore((s) => s.grimoireMode);
   const tokenPositions = useStorytellerStore((s) => s.tokenPositions);
   const setGrimoireMode = useStorytellerStore((s) => s.setGrimoireMode);
-  const setTokenPosition = useStorytellerStore((s) => s.setTokenPosition);
-  const clearTokenPositions = useStorytellerStore((s) => s.clearTokenPositions);
+  const setTokenPosition = useStorytellerStore((s) => s.moveToken);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   // Track width + height separately so free-roam uses the full rectangle.
   const [canvasW, setCanvasW] = useState(680);
   const [canvasH, setCanvasH] = useState(680);
-  const [ringDraggedId, setRingDraggedId] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [ghostPos, setGhostPos] = useState<{ x: number; y: number } | null>(null);
+  const [movementError, setMovementError] = useState<string | null>(null);
   const [assigningSeatId, setAssigningSeatId] = useState<PlayerId | null>(null);
+  const suppressPointerClick = useRef(false);
+  const dragExceededTap = useRef(false);
+
+  // Older saved games can still carry the old Ring setting. There is now one
+  // board; keep its stored layout contract compatible without discarding any
+  // saved positions or introducing a gameplay/Undo transaction.
+  useEffect(() => {
+    if (game && grimoireMode !== "freeRoam") setGrimoireMode("freeRoam");
+  }, [game, grimoireMode, setGrimoireMode]);
 
   // Phase 10H (10H-AC-024): while Privacy Mode is on the Table keeps the
   // geometry it had when Privacy Mode began -- a private surface closing (the
@@ -517,9 +523,8 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
     ? new Set(initialRevealReadiness(selectSetupContext(game, script)).pendingIds)
     : new Set<PlayerId>();
 
-  // Phase 10G (Section 18): an ended game's Grimoire is a read-only review --
-  // no seat reorder, seat assignment or seat creation is mounted. (Layout mode
-  // and free-roam positions are local-only and never touch the game.)
+  // An ended game's Grimoire is a read-only review: no seat assignment or
+  // creation. Local token arrangement never changes the authoritative game.
   const readOnly = game.phase === "ended";
   const litActorId = litActorIdOf(game, privacyMode, litActor);
   const tapSeat = (id: PlayerId) => {
@@ -535,44 +540,27 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
   // render) -- dominant on a wide desktop, a circle on a square stage -- with
   // the largest collision-free density tier. Every seat shares the tier's
   // fixed footprint, so content (and Privacy Mode) can never move a seat.
-  const table = tableStage(canvasW, canvasH);
-  const tier: DensityTier = pickDensityTier(grimoireMode === "freeRoam" ? { width: canvasW, height: canvasH } : table, playerCount);
-  const spec = tierSpec(tier);
-  const placement = placeTable(table, playerCount, spec);
-  // Phase 10H (H3; 10H-AC-012): when even the last-resort disc cannot be
-  // placed without overprint in the measured stage, the Roster REPLACES the
-  // Table (the stage stays mounted and measured, so the Table returns as soon
-  // as there is room).
-  const tableFits = grimoireMode === "freeRoam" || tier !== "XS" || tierFits(table, playerCount, spec);
+  const designed = playersInteraction?.active ? storytellerGeometry(canvasW, canvasH, playerCount) : null;
+  const table = designed ? { width: canvasW, height: canvasH } : tableStage(canvasW, canvasH);
+  const tier: DensityTier = designed?.spec.tier ?? pickDensityTier(table, playerCount);
+  const spec = designed?.spec ?? tierSpec(tier);
+  const placement = designed?.placement ?? placeTable(table, playerCount, spec);
+  const offsetX = designed?.offsetX ?? 0;
   /** A seat's box centre (the token is centred on its own footprint). */
   const seatBoxCentre = (seatIndex: number) => {
-    const centre = seatCentre(seatIndex, playerCount, placement);
+    const centre = designed?.positions[seatIndex] ?? seatCentre(seatIndex, playerCount, placement);
     return { x: centre.x, y: centre.y - spec.disc / 2 + spec.height / 2 };
   };
 
   // Rectangular clamp — each axis bounded independently by the full canvas.
-  const maxX = Math.max(0, (canvasW - spec.width) / 2 - 16);
-  const maxY = Math.max(0, (canvasH - spec.height) / 2 - 16);
+  const maxX = Math.max(0, (canvasW - spec.width) / 2);
+  const maxY = Math.max(0, (canvasH - spec.height) / 2);
   const clampX = (v: number) => Math.max(-maxX, Math.min(maxX, v));
   const clampY = (v: number) => Math.max(-maxY, Math.min(maxY, v));
 
   const getPos = (id: PlayerId, seatIndex: number) => {
-    const point = seatBoxCentre(seatIndex);
-    if (grimoireMode === "freeRoam") {
-      const saved = tokenPositions[id] ?? point;
-      return { x: clampX(saved.x), y: clampY(saved.y) };
-    }
-    return point;
-  };
-
-  const switchToFreeRoam = () => {
-    game.seatOrder.forEach((id, i) => {
-      if (!tokenPositions[id]) {
-        const pos = seatBoxCentre(i);
-        setTokenPosition(id, pos.x, pos.y);
-      }
-    });
-    setGrimoireMode("freeRoam");
+    const saved = tokenPositions[id] ?? seatBoxCentre(seatIndex);
+    return { x: clampX(saved.x), y: clampY(saved.y) };
   };
 
   const handleAdd = () => {
@@ -623,29 +611,30 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
 
   // ── Free-roam pointer drag ────────────────────────────────────────────────
 
-  const handleTokenPointerDown = useCallback(
-    (e: React.PointerEvent, id: PlayerId, tokenX: number, tokenY: number) => {
-      if (e.button !== 0 && e.pointerType === "mouse") return;
-      e.preventDefault();
-      canvasRef.current?.setPointerCapture(e.pointerId);
-      const rect = canvasRef.current!.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      setDrag({
-        id,
-        offsetX: e.clientX - cx - tokenX,
-        offsetY: e.clientY - cy - tokenY,
-        startClientX: e.clientX,
-        startClientY: e.clientY,
-        startTime: Date.now(),
-      });
-      setGhostPos({ x: tokenX, y: tokenY });
-    },
-    []
-  );
+  const handleTokenPointerDown = (e: React.PointerEvent, id: PlayerId, tokenX: number, tokenY: number) => {
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    if (drag || e.isPrimary === false) return;
+    e.preventDefault();
+    suppressPointerClick.current = false;
+    dragExceededTap.current = false;
+    canvasRef.current?.setPointerCapture?.(e.pointerId);
+    const rect = canvasRef.current!.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    setDrag({
+      id,
+      offsetX: e.clientX - cx - tokenX,
+      offsetY: e.clientY - cy - tokenY,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      pointerId: e.pointerId,
+    });
+    setGhostPos({ x: tokenX, y: tokenY });
+  };
 
   const handleCanvasPointerMove = (e: React.PointerEvent) => {
-    if (!drag || grimoireMode !== "freeRoam") return;
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    if (Math.hypot(e.clientX - drag.startClientX, e.clientY - drag.startClientY) >= TAP_MAX_PX) dragExceededTap.current = true;
     const rect = canvasRef.current!.getBoundingClientRect();
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
@@ -656,17 +645,24 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
   };
 
   const handleCanvasPointerUp = (e: React.PointerEvent) => {
-    if (!drag || grimoireMode !== "freeRoam") return;
+    if (!drag || e.pointerId !== drag.pointerId) return;
     const dx = e.clientX - drag.startClientX;
     const dy = e.clientY - drag.startClientY;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const elapsed = Date.now() - drag.startTime;
-    if (dist < TAP_MAX_PX && elapsed < TAP_MAX_MS) {
+    suppressPointerClick.current = true;
+    if (dist < TAP_MAX_PX && !dragExceededTap.current) {
       // Phase 10F: a tap may be a guided-ability target pick; a drag never is.
       tapSeat(drag.id);
-    } else if (ghostPos) {
-      setTokenPosition(drag.id, ghostPos.x, ghostPos.y);
+    } else {
+      // Use the release coordinates as well: a fast drag need not dispatch
+      // a final pointermove before pointerup.
+      const rect = canvasRef.current!.getBoundingClientRect();
+      const result = setTokenPosition(drag.id,
+        clampX(e.clientX - rect.left - rect.width / 2 - drag.offsetX),
+        clampY(e.clientY - rect.top - rect.height / 2 - drag.offsetY));
+      setMovementError(result.ok ? null : result.message ?? "The token position could not be saved.");
     }
+    canvasRef.current?.releasePointerCapture?.(e.pointerId);
     setDrag(null);
     setGhostPos(null);
   };
@@ -692,70 +688,48 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
         </button>
         <button className="grimoire-mode-btn" onClick={handleAddTraveler}>Add Traveler</button>
       </>}
-      {grimoireMode === "ring" ? (
-        <button className="grimoire-mode-btn" onClick={switchToFreeRoam} title="Switch to free-roam layout">
-          ⊞ Free Roam
-        </button>
-      ) : (
-        <>
-          <button
-            className="grimoire-mode-btn"
-            onClick={() => setGrimoireMode("ring")}
-            title="Switch back to ring layout"
-          >
-            ⊙ Ring
-          </button>
-          {!playersInteraction?.active && <button
-            className="grimoire-mode-btn grimoire-snap-btn"
-            onClick={() => { clearTokenPositions(); setGrimoireMode("ring"); }}
-            title="Reset all token positions to ring"
-          >
-            ↺ Snap to ring
-          </button>}
-        </>
-      )}
     </div>
   );
 
   return (
     <div className="grimoire-wrap">
-      <div className="grimoire-stage" ref={stageRef} data-table-fits={tableFits}>
-      {!tableFits ? (
-        <div className="table-replaced">
-          <p className="table-replaced-note" role="status">Too many seats to draw the Table here — the Roster replaces it.</p>
-          <VotingCard inline />
-          <RosterView />
-        </div>
-      ) : (
+      {movementError && <p className="grimoire-movement-error" role="alert">{movementError}</p>}
+      <div className="grimoire-stage" ref={stageRef} data-table-fits="true">
       <div
         className="grimoire"
-        data-mode={grimoireMode}
+        data-mode="freeRoam"
         data-tier={tier}
-        style={grimoireMode === "ring" ? { width: table.width, height: table.height } : undefined}
         ref={canvasRef}
+        onPointerDownCapture={() => { suppressPointerClick.current = false; }}
         onPointerMove={handleCanvasPointerMove}
         onPointerUp={handleCanvasPointerUp}
-        onPointerCancel={() => { setDrag(null); setGhostPos(null); }}
+        onPointerCancel={() => { setDrag(null); setGhostPos(null); suppressPointerClick.current = true; }}
+        onLostPointerCapture={() => { setDrag(null); setGhostPos(null); }}
+        onClickCapture={event => {
+          // Pointerup handles a captured token tap exactly once; the browser's
+          // subsequent click must not open it again (or target after dragging).
+          // Keyboard and programmatic activation retain their ordinary click.
+          if (event.detail > 0 && suppressPointerClick.current) {
+            suppressPointerClick.current = false;
+            event.preventDefault(); event.stopPropagation();
+          }
+        }}
       >
-        {grimoireMode === "ring" && (
-          <>
-            <div className="grimoire-ring outer" />
-            <div className="grimoire-ring inner" />
-          </>
-        )}
+        <div className="grimoire-ring outer" style={{ inset: "auto", left: `calc(50% + ${offsetX - placement.rx}px)`, top: `calc(50% + ${placement.cy - placement.ry}px)`, width: placement.rx * 2, height: placement.ry * 2 }} />
         {playersInteraction?.active && playerCount > 0 && <RitualCircle
           diameter={Math.max(0, Math.min(placement.rx, placement.ry) * 1.3)}
           offsetY={placement.cy}
+          offsetX={offsetX}
         />}
-        {playersInteraction?.active && playerCount > 0 && !voting?.open && <div className="grimoire-watermark" aria-hidden="true" style={{ marginTop: placement.cy }}>
+        {playersInteraction?.active && playerCount > 0 && !voting?.open && <div className="grimoire-watermark" aria-hidden="true" style={{ marginTop: placement.cy, marginLeft: offsetX }}>
           <span>{game.phase === "setup" ? "Setup" : `${game.phase} ${game.day}`}</span>
           <strong>Silverwick Hollow</strong>
           <em>{game.phase === "night" ? "The town sleeps" : game.phase === "day" ? "The town awakens" : game.phase === "ended" ? "The story is complete" : "Prepare your town"}</em>
         </div>}
 
         {voting?.open && <>
-          <VotingBoardArt positions={Object.fromEntries(game.seatOrder.map((id, index) => { const pos = getPos(id, index); return [id, { x: pos.x, y: pos.y - spec.height / 2 + spec.disc / 2 }]; }))} width={table.width} height={table.height} rx={placement.rx} ry={placement.ry} cy={placement.cy} disc={spec.disc} />
-          <VotingCard width={Math.min(560, Math.max(380, (placement.rx - spec.disc / 2 - 30) * 2), table.width - 40)} offsetY={placement.cy} />
+          <VotingBoardArt positions={Object.fromEntries(game.seatOrder.map((id, index) => { const pos = getPos(id, index); return [id, { x: pos.x, y: pos.y - spec.height / 2 + spec.disc / 2 }]; }))} width={table.width} height={table.height} rx={placement.rx} ry={placement.ry} cy={placement.cy} cx={offsetX} disc={spec.disc} />
+          <VotingCard width={Math.min(560, Math.max(380, (placement.rx - spec.disc / 2 - 30) * 2), table.width - 40)} offsetY={placement.cy} offsetX={offsetX} />
         </>}
         {playerCount === 0 ? (
           <div className="grimoire-empty">
@@ -803,29 +777,11 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
                 spec={spec}
                 x={isDragging && ghostPos ? ghostPos.x : pos.x}
                 y={isDragging && ghostPos ? ghostPos.y : pos.y}
+                boardCentre={{ x: offsetX, y: placement.cy }}
                 selected={selectedPlayerId === id || playersInteraction?.swappingPlayerId === id}
                 acting={litActorId === id}
                 pickable={picking ? seatPickable(game, id, picking) : null}
-                mode={grimoireMode}
-                reorderable={!readOnly && !playersInteraction?.swapping && !voting?.open}
-                draggedId={ringDraggedId}
-                onRingDragStart={(srcId) => setRingDraggedId(srcId)}
-                onRingDragEnd={() => setRingDraggedId(null)}
-                onRingDropOn={(targetId) => {
-                  const src = ringDraggedId;
-                  setRingDraggedId(null);
-                  if (!src || src === targetId) return;
-                  const order = [...game.seatOrder];
-                  const si = order.indexOf(src);
-                  const ti = order.indexOf(targetId);
-                  if (si < 0 || ti < 0) return;
-                  order.splice(si, 1);
-                  const insertAt = order.indexOf(targetId);
-                  if (insertAt < 0) return;
-                  order.splice(insertAt, 0, src);
-                  setSeatOrder(order);
-                }}
-                onFreeRoamPointerDown={playersInteraction?.swapping || voting?.open ? () => {} : handleTokenPointerDown}
+                onFreeRoamPointerDown={playersInteraction?.swapping ? () => {} : handleTokenPointerDown}
                 onClick={() => tapSeat(id)}
               />
             );
@@ -833,7 +789,6 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
         )}
 
       </div>
-      )}
       </div>
 
       {/* Mode controls live outside the grimoire canvas so they never overlap tokens */}

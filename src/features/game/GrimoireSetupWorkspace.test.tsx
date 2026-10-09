@@ -27,6 +27,7 @@ describe("D. Setup does not auto-open", () => {
     expect(screen.queryByRole("complementary", { name: "Setup helper" })).toBeNull();
     expect(screen.queryByRole("dialog", { name: "Setup" })).toBeNull();
     expect(screen.getByRole("button", { name: "Players" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
     expect(screen.getByRole("button", { name: "Go live" })).toBeVisible();
   });
 });
@@ -45,7 +46,9 @@ describe("E/F. Setup and Go Live work in either order, neither a prerequisite fo
   it("Go Live remains available with an empty, unbuilt bag, and Setup can still be opened afterward", () => {
     render(<GameScreen />);
     expect(store.getState().game!.rolePool).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
     expect(screen.getByRole("button", { name: "Go live" })).toBeEnabled();
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Invite players" })).getByRole("button", { name: "Close" }));
     // The createLobby/Firebase session plumbing is covered by its own tests;
     // GameScreen's Setup state reads only `game` and `script`, never
     // `lobby`, so establishing a live lobby directly proves the same

@@ -38,7 +38,11 @@ it("moves display to the current target while keeping old-target inert notation 
   act(() => store.setState({ game: { ...game, players: { ...game.players,
     p0: { ...game.players.p0!, effects: [] }, p2: { ...game.players.p2!, effects: [poison] },
   } } }));
-  expect(document.querySelector('[data-player-id="p0"] [data-official-reminder]')).toBeNull();
+  expect(document.querySelector('[data-player-id="p0"] [data-official-reminder="poisoner"]')).toHaveAttribute("data-reminder-kind", "notation");
+  expect(document.querySelector('[data-player-id="p0"] [data-reminder-kind="effect"]')).toBeNull();
   expect(document.querySelector('[data-player-id="p2"] [data-official-reminder="poisoner"]')).toHaveTextContent("Poisoned");
+  expect(document.querySelector('[data-player-id="p2"] [data-official-reminder="poisoner"]')).toHaveAttribute("data-reminder-kind", "effect");
   expect(store.getState().game!.players.p0!.reminders).toHaveLength(1);
+  expect(store.getState().game!.players.p0!.effects).toEqual([]);
+  expect(store.getState().game!.players.p2!.effects).toEqual([poison]);
 });
