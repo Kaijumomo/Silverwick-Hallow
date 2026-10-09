@@ -1,12 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { RoleDef } from "@/stores/types";
 import { ReferenceBody } from "./ReferenceBody";
-
-function BookIcon() {
-  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-    <path d="M12 5c-3-2-6-2-9-1v15c3-1 6-1 9 1 3-2 6-2 9-1V4c-3-1-6-1-9 1Zm0 0v15" />
-  </svg>;
-}
+import { GrimoireIcon } from "@/components/GrimoireIcon";
 
 function PinIcon() {
   return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
@@ -15,8 +10,9 @@ function PinIcon() {
 }
 
 /** A local presentation boundary. Pinning changes available space, never game state. */
-export function ReferenceWorkspace({ children, enabled, privacyMode, roles, scriptName, players, night, nightKey, nightOpenRequest = 0, onPanelOpen }: {
+export function ReferenceWorkspace({ children, enabled, privacyMode, roles, scriptName, players, info, night, nightKey, nightOpenRequest = 0, onPanelOpen }: {
   children: ReactNode; enabled: boolean; privacyMode: boolean; roles: RoleDef[]; scriptName: string;
+  info?: ReactNode;
   players?: (dismiss: () => void) => ReactNode;
   night?: (visible: boolean, close: () => void) => ReactNode;
   nightKey?: string;
@@ -25,11 +21,12 @@ export function ReferenceWorkspace({ children, enabled, privacyMode, roles, scri
   onPanelOpen?: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"Reference" | "Players" | "Night">("Reference");
+  const [tab, setTab] = useState<"Reference" | "Players" | "Night" | "Info">("Reference");
   const [pinned, setPinned] = useState(false);
   const [search, setSearch] = useState("");
   const trigger = useRef<HTMLButtonElement>(null);
   const playersTrigger = useRef<HTMLButtonElement>(null);
+  const infoTrigger = useRef<HTMLButtonElement>(null);
   const nightTrigger = useRef<HTMLButtonElement>(null);
   const openedNight = useRef<string | undefined>();
   const handledNightRequest = useRef(nightOpenRequest);
@@ -39,7 +36,7 @@ export function ReferenceWorkspace({ children, enabled, privacyMode, roles, scri
   const close = () => {
     setOpen(false);
     setPinned(false);
-    (tab === "Players" ? playersTrigger : tab === "Night" ? nightTrigger : trigger).current?.focus({ preventScroll: true });
+    (tab === "Players" ? playersTrigger : tab === "Night" ? nightTrigger : tab === "Info" ? infoTrigger : trigger).current?.focus({ preventScroll: true });
   };
 
   // Each new Night opens once. Closing/switching tabs is a lasting choice for
@@ -96,31 +93,37 @@ export function ReferenceWorkspace({ children, enabled, privacyMode, roles, scri
       {players && <button ref={playersTrigger} type="button" className="reference-edge-button" aria-label="Players"
         aria-expanded={open && tab === "Players" && !privacyMode} aria-controls={panelId} disabled={privacyMode}
         onClick={() => { if (open && tab === "Players") close(); else { setTab("Players"); setOpen(true); onPanelOpen?.(); } }}>
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 21v-4a6 6 0 0 1 12 0v4M17 4a3 3 0 0 1 0 6m1 4a5 5 0 0 1 3 5v2"/></svg><span>Players</span>
+        <GrimoireIcon name="players" size={20} /><span>Players</span>
       </button>}
       {night && <button ref={nightTrigger} type="button" className="reference-edge-button" aria-label="Night"
         aria-expanded={open && tab === "Night" && !privacyMode} aria-controls={panelId} disabled={privacyMode}
         onClick={() => { if (open && tab === "Night") close(); else { setTab("Night"); setOpen(true); onPanelOpen?.(); } }}>
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5Z" /></svg><span>Night</span>
+        <GrimoireIcon name="night" size={20} /><span>Night</span>
+      </button>}
+      {info && <button ref={infoTrigger} type="button" className="reference-edge-button" aria-label="Info"
+        aria-expanded={open && tab === "Info" && !privacyMode} aria-controls={panelId} disabled={privacyMode}
+        onClick={() => { if (open && tab === "Info") close(); else { setTab("Info"); setOpen(true); onPanelOpen?.(); } }}>
+        <GrimoireIcon name="info" size={20} /><span>Info</span>
       </button>}
       <button ref={trigger} type="button" className="reference-edge-button" aria-label="Reference"
         aria-expanded={open && tab === "Reference" && !privacyMode} aria-controls={panelId} disabled={privacyMode}
         title={privacyMode ? "Reference is hidden in Privacy Mode" : "Character reference"}
         onClick={() => { if (open && tab === "Reference") close(); else { setTab("Reference"); setOpen(true); onPanelOpen?.(); } }}>
-        <BookIcon /><span>Reference</span>
+        <GrimoireIcon name="book" size={20} /><span>Reference</span>
       </button>
     </div>
     {!privacyMode && <aside id={panelId} className="reference-panel" aria-labelledby={titleId} hidden={!open}>
       <header className="reference-header">
         <div className="reference-title">
-          <h2 id={titleId} ref={heading} tabIndex={-1}>{tab}</h2>
+          <h2 id={titleId} ref={heading} tabIndex={-1}>{tab === "Info" ? "Game" : tab}</h2>
           {tab !== "Night" && <p>{scriptName}{tab === "Reference" ? ` · ${roles.length} characters` : ""}</p>}
         </div>
         <button type="button" className="reference-icon-button" aria-label={pinned ? `Unpin ${tab} panel` : `Pin ${tab} panel`}
           aria-pressed={pinned} title={pinned ? "Unpin to overlay the board" : "Pin to make room beside the board"}
           onClick={() => setPinned(value => !value)}><PinIcon /></button>
-        <button type="button" className="reference-icon-button" aria-label={`Close ${tab} panel`} onClick={close}>×</button>
+        <button type="button" className="reference-icon-button" aria-label={`Close ${tab} panel`} onClick={close}><GrimoireIcon name="close" size={16} strokeWidth={1.8} /></button>
       </header>
+      {tab === "Info" && open && info}
       {tab === "Reference" && <ReferenceBody roles={roles} search={search} onSearch={setSearch} />}
       {tab === "Players" && players?.(() => { if (!pinned) close(); })}
       {night && <div className="reference-night-content" hidden={tab !== "Night"}>

@@ -3,9 +3,17 @@
 .game[data-grimoire-modern] {
   --type-townsfolk: #86b7d4; --type-outsider: #94c29a; --type-minion: #d97a6c; --type-demon: #e3894c; --type-traveler: #b994d4;
   position: relative;
-  background: radial-gradient(ellipse 70% 62% at 50% 50%, #241821 0%, #151013 55%, #0b0909 100%);
+  background: radial-gradient(ellipse 58% 54% at 50% 48%,rgba(220,160,80,.16),rgba(120,80,40,.08) 45%,transparent 75%),radial-gradient(ellipse 72% 64%,#1d1726,#120e18 50%,#08070b);
 }
-.game[data-grimoire-modern][data-phase="night"] { background: radial-gradient(ellipse at 50% 50%, rgba(86,52,92,.34), rgba(40,26,52,.18) 45%, transparent 75%), radial-gradient(ellipse 70% 62% at 50% 50%, #241821, #151013 55%, #0b0909); }
+.game[data-grimoire-modern][data-phase="night"] { background: radial-gradient(ellipse 58% 54% at 50% 48%,rgba(120,80,170,.26),rgba(60,36,90,.12) 45%,transparent 75%),radial-gradient(ellipse 72% 64%,#1d1726,#120e18 50%,#08070b); }
+.game[data-grimoire-modern] .shell-stage { background-image: radial-gradient(1px 1px at 12% 18%,#f0e1be60,transparent),radial-gradient(1px 1px at 27% 72%,#f0e1be40,transparent),radial-gradient(1.5px 1.5px at 41% 9%,#f0e1be50,transparent),radial-gradient(1px 1px at 63% 88%,#f0e1be40,transparent),radial-gradient(1px 1px at 78% 14%,#f0e1be60,transparent),radial-gradient(1.5px 1.5px at 91% 61%,#f0e1be40,transparent),radial-gradient(1px 1px at 6% 52%,#f0e1be40,transparent),radial-gradient(1px 1px at 86% 37%,#f0e1be30,transparent); }
+.ritual-circle { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); pointer-events: none; }
+.ritual-circle > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.ritual-circle-dial { animation: ritual-orbit 240s linear infinite; }
+.ritual-circle-star { animation: ritual-orbit 360s linear infinite reverse; }
+.ritual-circle-glow { position: absolute; inset: 5%; border-radius: 50%; background: radial-gradient(closest-side,rgba(150,110,220,.12),transparent); }
+@keyframes ritual-orbit { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ritual-circle > svg { animation: none; } }
 .game[data-grimoire-modern] .phase-bar { min-height: 80px; padding: 12px max(20px, var(--safe-right)) 8px max(24px, var(--safe-left)); background: transparent; border-bottom: 0; align-items: flex-start; flex-wrap: nowrap; }
 .game[data-grimoire-modern] .phase-bar-left { position: relative; display: flex; align-items: center; gap: 2px 10px; flex: 1; flex-wrap: wrap; padding-left: 66px; min-width: 0; }
 .grimoire-script-heading { flex: 0 0 100%; min-width: 0; }
@@ -26,16 +34,36 @@
 .game[data-grimoire-modern] .grimoire-mode-btn { min-height: 44px; letter-spacing: 0; }
 .game[data-grimoire-modern] .reference-workspace { padding-bottom: 64px; }
 .game[data-grimoire-modern] .reference-panel { bottom: 0; }
+/* Free roam uses the whole available board, including the space under the
+   floating controls. Pinning still reserves the panel's width. The measured
+   stage and the drag canvas share exactly the same rectangle. Advanced action
+   cards retain their existing reserved column, including its privacy freeze. */
+.game[data-grimoire-modern] .reference-workspace:has(.grimoire[data-mode="freeRoam"]):not(:has([data-action-column="privacy"], .action-card-stage-host > .action-card:not([hidden]))) { padding-bottom: 0; }
+.game[data-grimoire-modern] .shell-stage:has(.grimoire[data-mode="freeRoam"]):not([data-action-column="privacy"]):not(:has(> .action-card-stage-host > .action-card:not([hidden]))) { position: relative; }
+.game[data-grimoire-modern] .shell-stage:has(.grimoire[data-mode="freeRoam"]):not([data-action-column="privacy"]):not(:has(> .action-card-stage-host > .action-card:not([hidden]))) .grimoire-stage {
+  position: absolute;
+  grid-area: auto;
+  inset: 0;
+  padding: 0;
+}
+.game[data-grimoire-modern] .shell-stage:has(.grimoire[data-mode="freeRoam"]):not([data-action-column="privacy"]):not(:has(> .action-card-stage-host > .action-card:not([hidden]))) :is(.stage-toolbar, .grimoire-mode-controls) {
+  position: relative;
+  z-index: 2;
+  align-self: start;
+  pointer-events: none;
+}
+.game[data-grimoire-modern] .shell-stage:has(.grimoire[data-mode="freeRoam"]) :is(.stage-toolbar, .grimoire-mode-controls) :is(button, .segmented-option) { pointer-events: auto; }
+.game[data-grimoire-modern] .grimoire[data-mode="freeRoam"] { background: none; box-shadow: none; }
 .grimoire-phase-dock { position: absolute; left: 0; right: 0; bottom: max(14px, var(--safe-bottom)); display: flex; justify-content: center; pointer-events: none; z-index: 20; }
 .reference-workspace[data-reference-pinned] .grimoire-phase-dock { right: calc(var(--reference-width) + var(--reference-rail-width)); }
 .grimoire-phase-dock .phase-primary { display: flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: calc(100% - 24px); min-height: 44px; padding: 3px 4px 3px 16px; border: 1px solid var(--border); border-radius: 26px; background: rgba(18,13,16,.96); pointer-events: auto; }
 .grimoire-phase-label { color: #eadcb8; font: 600 14px var(--font-op); white-space: nowrap; }
 .grimoire-phase-dock .phase-advance { border-radius: 22px; min-height: 44px; border-color: transparent; background: rgba(196,158,80,.12); color: var(--gold-bright); }
 .grimoire-phase-dock .phase-advance-reason { padding: 0 8px 4px; }
-.grimoire-watermark { position: absolute; inset: 30% 20%; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 14px; pointer-events: none; text-align: center; color: rgba(224,185,106,.32); }
+.grimoire-watermark { position: absolute; left: 50%; top: 50%; width: 70%; transform: translate(-50%,-50%); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 10px; pointer-events: none; text-align: center; color: rgba(210,195,235,.5); }
 .grimoire-watermark > span { text-transform: uppercase; font: 600 11px var(--font-op); letter-spacing: .4em; }
-.grimoire-watermark > strong { font: 400 clamp(18px,2.1vw,30px)/1.35 var(--font-ceremony); }
-.grimoire-watermark > em { font: italic 15px var(--font-body); }
+.grimoire-watermark > strong { font: 700 clamp(18px,2.1vw,30px)/1.35 var(--font-ceremony); letter-spacing: .06em; color: rgba(232,210,160,.55); text-shadow: 0 0 24px rgba(160,120,220,.35); }
+.grimoire-watermark > em { font: italic 16px var(--font-body); color: rgba(216,201,224,.48); }
 .game[data-grimoire-modern] .grimoire .token-disc { padding: 0; background: radial-gradient(circle at 38% 30%,#f1e6c9,#dccaa0 48%,#b09566); border: 1px solid rgba(255,240,210,.45); box-shadow: 0 12px 24px #0007,0 2px 4px #0008,inset 0 -8px 16px rgba(90,60,25,.38); }
 .game[data-grimoire-modern] .grimoire .token-disc::after { content: ""; position: absolute; inset: 4px; border: 1.5px solid var(--token-team,var(--gold)); opacity: .5; border-radius: 50%; pointer-events: none; }
 .game[data-grimoire-modern] .token[data-team="townsfolk"] { --token-team: var(--type-townsfolk); }
@@ -56,8 +84,8 @@
 .game[data-grimoire-modern] .grimoire .token.pickable:focus-visible .token-disc { outline: 2px solid var(--focus); }
 .game[data-grimoire-modern] .grimoire .token.dead .token-disc { filter: grayscale(.85) brightness(.67); }
 .game[data-grimoire-modern] .grimoire .token-private-mark { color: #594c36; }
-.game[data-grimoire-modern] .grimoire-ring.outer { border-color: rgba(196,158,80,.09); }
-.game[data-grimoire-modern] .grimoire-ring.inner { inset: 19%; border-color: rgba(196,158,80,.05); }
+.game[data-grimoire-modern] .grimoire-ring.outer { border-color: rgba(200,180,240,.12); }
+.game[data-grimoire-modern] .grimoire-ring.inner { display: none; }
 @media (hover: none) { .game[data-grimoire-modern] .grimoire .token:hover .token-disc { transform: none; } }
 @media (max-width: 1100px) {
   .game[data-grimoire-modern] .phase-bar { padding-inline: 14px; }
