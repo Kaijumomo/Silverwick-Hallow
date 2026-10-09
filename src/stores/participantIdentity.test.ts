@@ -535,7 +535,7 @@ describe("Phase 9R.2: local persistence / rehydrate", () => {
     state().setStatus(alice, "drunk", true);
     await new Promise((resolve) => setTimeout(resolve, 0));
     const raw = localStorage.getItem(STORAGE_KEY)!;
-    expect(JSON.parse(raw).version).toBe(26);
+    expect(JSON.parse(raw).version).toBe(27);
     const beforeGame = structuredClone(game());
     const beforeUndo = structuredClone(state().undoStack);
 

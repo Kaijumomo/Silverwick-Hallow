@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { useStorytellerStore, type LifeCommandResult } from "@/stores/storytellerStore";
+import { captureVotingContext, useStorytellerStore, type LifeCommandResult } from "@/stores/storytellerStore";
 import { LIFE_ANOMALY_LABEL, lifeStatusOf, type LifeState } from "@/stores/lifeState";
 import type { LifeConfirmationToken } from "@/stores/lifeResolution";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import type { STPlayerRecord } from "@/stores/types";
 import { Segmented } from "@/components/Segmented";
+import { DragChoice } from "@/components/DragChoice";
 import { LifeStateText } from "./LifeMarks";
 import { statusChoicesFor, statusTargetOf, type StatusChoice } from "./lifeEventText";
 
@@ -51,10 +52,11 @@ export function useLifeRunner(contextKey = "") {
   return { attempt, confirmation, errorNode, clear: () => { setError(null); setPending(null); } };
 }
 
-/** Phase 10A: the drawer's Life section. Every action is a labelled
- * semantic command -- there is no one-click alive/dead toggle. */
-export function LifeControls({ player }: { player: STPlayerRecord }) {
+/** Every action, including the compact Life switch, submits a semantic
+ * command. Selecting Alive means resurrection, not a raw status correction. */
+export function LifeControls({ player, compact = false }: { player: STPlayerRecord; compact?: boolean }) {
   const game = useStorytellerStore((s) => s.game);
+  const terminalClose = useStorytellerStore((s) => s.terminalClose);
   const store = useStorytellerStore.getState;
   const { attempt, confirmation, errorNode } = useLifeRunner(
     `${player.participantId ?? ""}|${game?.phase ?? ""}|${game?.day ?? ""}`);
@@ -62,6 +64,7 @@ export function LifeControls({ player }: { player: STPlayerRecord }) {
   if (!game) return null;
   const status = lifeStatusOf(player);
   const live = game.phase === "night" || game.phase === "day";
+  const locked = !live || terminalClose?.status === "closing" || !!terminalClose?.confirmedRecovery || !!terminalClose?.recoveryPending;
   const day = game.phase === "day";
   const dead = !player.alive;
   const voteAvailable = dead && player.ghostVote;
@@ -70,6 +73,35 @@ export function LifeControls({ player }: { player: STPlayerRecord }) {
     if (correction === "keep") return;
     if (attempt(() => store().correctLifeStatus(player.id, statusTargetOf(correction as LifeState)))) setCorrection("keep");
   };
+
+  // The token popup presents only immediate Life actions. Execution/exile
+  // outcomes belong to voting; the existing full editor remains in More settings.
+  if (compact) {
+    const context = captureVotingContext();
+    const act = (run: Runner) => attempt(confirmed => {
+      const current = store().game;
+      const latest = captureVotingContext();
+      if (usePrivacyStore.getState().enabled || current !== game || current.players[player.id]?.participantId !== player.participantId ||
+        latest.lobby !== context.lobby || latest.lifecycle !== context.lifecycle || !latest.writerToken || latest.writerToken !== context.writerToken || store().terminalClose?.status === "closing")
+        return { ok: false, code: "stale", message: "The player changed. Reopen their details before continuing." };
+      return run(confirmed);
+    });
+    return <section className="life-controls-compact" aria-label="Life">
+      <div className="life-compact-row">
+        <DragChoice label="Life status" hideLabel className="life-compact-switch" value={dead ? "dead" : "alive"}
+          disabled={locked} contextKey={game}
+          options={[{ value: "alive", label: "Alive", hint: "Tap or slide left to resurrect this player" }, { value: "dead", label: "Dead", hint: "Tap or slide right to record this player's death" }]}
+          onChange={value => act(() => value === "alive" ? store().resurrect(player.id) : store().recordDeath(player.id))} />
+        {live && dead && <button type="button" className="life-ghost-switch" aria-pressed={voteAvailable} disabled={locked}
+          title={voteAvailable ? "Mark ghost vote used" : "Restore ghost vote"}
+          onClick={() => act(() => voteAvailable ? store().spendGhostVote(player.id) : store().restoreGhostVote(player.id))}>
+          <span className="life-ghost-dot" aria-hidden="true" />Ghost vote
+        </button>}
+      </div>
+      {status.anomalies.length > 0 && <p className="life-needs-check" role="note">Life status needs review in More settings.</p>}
+      {confirmation}{errorNode}
+    </section>;
+  }
 
   return (
     <section className="drawer-section life-controls" aria-label="Life">

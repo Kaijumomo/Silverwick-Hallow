@@ -3,11 +3,11 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { BUILTIN_SCRIPTS, BUILTIN_SCRIPT_IDS } from "@/data/scripts";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
-import { MAX_NIGHT_STEP_NOTES, MAX_ST_NOTES, StorytellerGamePersistedSchema, StorytellerStateSchema } from "./schemas";
+import { MAX_NIGHT_STEP_NOTES, MAX_ST_NOTES, StorytellerGamePersistedSchema, StorytellerStateSchema, type SeatSwapUndo } from "./schemas";
 import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { manualEffectId } from "./effects";
-import { cloneOwned, type MutationContext, sameSnapshot } from "./history";
+import { cloneOwned, historyId, type MutationContext, sameSnapshot } from "./history";
 import {
   applyEffectPlan,
   effectApplicationMoment,
@@ -46,8 +46,9 @@ import {
   type ReminderTransaction,
 } from "./reminderResolution";
 import { newParticipantId, participantIdAppearsIn } from "./participants";
-import { participantRoleStepEntries, planNightStepStatus } from "./nightProgress";
+import { participantRoleStepEntries, participantStepKey, travelerArrivalStepKey, planNightStepStatus } from "./nightProgress";
 import { planAbilityResolution, type AbilityRefusal, type AbilityResolutionRequest } from "./abilityResolution";
+import { clearNightActionCorrections, invalidateNightActionCorrections, planNightActionTargetCorrection, rememberCorrectedNightAction, rememberNightAction, type NightActionTargetCorrection } from "./nightActionCorrection";
 import {
   applyGameRuleFactPlan,
   planGameRuleFactExpiry,
@@ -77,7 +78,13 @@ import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 import { invalidatePrivatePacket } from "./privatePackets";
 import { withRevealTokens } from "./revealTokens";
 import { usePrivacyStore } from "./privacyStore";
-import { useShellStore } from "./shellStore";
+import { votingAuthorityToken } from "@/firebase/votingAuthority";
+import { planVoting, currentVotingState, reconcileVotingDependencies } from "./voting";
+import type { VotingIntent } from "./votingTypes";
+import type { VotingHistoryRecord } from "./types";
+import { isTabletTrial } from "@/config/trial";
+import { useShellStore, type NightCursor } from "./shellStore";
+import { computeNightOrder } from "@/features/nightOrder/nightOrder";
 import { analyzeSetup } from "@/features/setup/setupAnalyzer";
 import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
 import { assignedBagIsCoherent, canRefineSetup, matchBagToAssignments } from "@/features/setup/setupRefinement";
@@ -137,7 +144,10 @@ export const gameLifecycleToken = (): number => gameLifecycle;
  * `merge` (Phase 9C.2B.2) passes to migrateStoreState when Zustand's own
  * persist middleware skips calling `migrate` outright, which it does
  * whenever the persisted version already equals this one. */
-const STORE_VERSION = 26;
+const STORE_VERSION = 27;
+const STORE_KEY = isTabletTrial ? "silverwick-voting-tablet-trial" : "new-blood-st";
+const TERMINAL_JOURNAL_KEY = `${STORE_KEY}-ending`;
+let prewrittenVotingSave: { name: string; value: string } | null = null;
 
 let _migrationResetFlag = false;
 /** Returns true (once) when migrate() discarded incompatible persisted state. */
@@ -340,6 +350,39 @@ export type LobbyConnection = {
   status: "live" | "reconnecting";
 };
 
+/** A pending visible voting action belongs to this exact game and writer. */
+export type VotingCommandContext = {
+  game: StorytellerLobbyRecord | null;
+  lobby: LobbyConnection | null;
+  lifecycle: number;
+  writerToken: string | null;
+};
+export function captureVotingContext(): VotingCommandContext {
+  const state = useStorytellerStore.getState();
+  return { game: state.game, lobby: state.lobby, lifecycle: gameLifecycleToken(), writerToken: votingAuthorityToken(state.lobby) };
+}
+
+/** Runtime-only context for a visible character action. Never persisted.
+ * Delayed UI callbacks retain this snapshot; synchronous compatibility
+ * controls may omit it and still undergo current writer checks. */
+export type CharacterActionContext = VotingCommandContext;
+export const captureCharacterActionContext = captureVotingContext;
+
+function characterActionRefusal(state: StorytellerStore, context?: CharacterActionContext): string | null {
+  const { game, lobby } = state;
+  if (!game) return "Open a game before recording this change.";
+  if (state.terminalClose?.status === "closing" || state.terminalClose?.confirmedRecovery || state.terminalClose?.recoveryPending)
+    return "The game is closing. Nothing was recorded.";
+  if (usePrivacyStore.getState().enabled) return "Leave Privacy Mode before recording this change.";
+  if (context && (context.game !== game || context.lobby !== lobby || context.lifecycle !== gameLifecycleToken()))
+    return "The game changed. Reopen the current action.";
+  const authority = votingAuthorityToken(lobby);
+  if (!authority || (context && authority !== context.writerToken) ||
+      (lobby && (game.code !== lobby.code || game.storytellerUid !== lobby.uid)))
+    return "The connection changed. Reconnect before recording this change.";
+  return null;
+}
+
 export type NewGameOpts = {
   plannedPlayerCount?: number;
   /** Intended Traveler count out of plannedPlayerCount. Never derives the
@@ -370,6 +413,12 @@ export type TerminalCloseState = {
   intent: TerminalIntent;
   status: "closing" | "failed";
   message: string | null;
+  /** Remote closure succeeded, but the local final snapshot still needs saving.
+   * Runtime only: keep gameplay locked and retry the confirmed outcome. */
+  confirmedRecovery?: Exclude<TerminalRecovery, { kind: "fresh" }>;
+  /** Reload found a durable close intent; re-read the original server session
+   * before allowing play. This does not assert any winner or remote outcome. */
+  recoveryPending?: true;
 };
 
 /** Phase 10H (ASTRA-10H-004): what the terminal flow knows about the remote
@@ -389,6 +438,10 @@ export type TerminalRecovery =
 
 export type StorytellerStore = {
   game: StorytellerLobbyRecord | null;
+  /** Local recovery only; never sent to the session/checkpoint writer. */
+  finishedGameUndo: FinishedGameUndo | null;
+  canUndoFinishedGame: boolean;
+  undoFinishedGame: () => { ok: true; message?: string } | { ok: false; message: string };
   /** Phase 10H: an in-flight / failed terminal close (runtime only). */
   terminalClose: TerminalCloseState | null;
   view: "home" | "game" | "newgame";
@@ -401,6 +454,12 @@ export type StorytellerStore = {
   // grimoire layout (localStorage-only, never Firebase-synced)
   grimoireMode: GrimoireMode;
   tokenPositions: Record<PlayerId, TokenPosition>;
+  /** Local-only coordinate inverses aligned with undoStack, never Firebase data. */
+  seatSwapUndo: SeatSwapUndo;
+  /** Local-only move/reset inverses, aligned with the same chronological stack. */
+  localLayoutUndo: LocalLayoutUndo;
+  moveToken: (id: PlayerId, x: number, y: number) => SetupCommandResult;
+  resetTokenPositions: () => SetupCommandResult;
 
   // --- Phase 9C.2A (OPUS-001) reconnect/acknowledgement watermarks -------
   /** Local game-content mutation counter. Increases exactly once per game
@@ -414,7 +473,7 @@ export type StorytellerStore = {
   sync: SyncMeta | null;
 
   newGame: (scriptId: string, opts?: NewGameOpts) => void;
-  dealRolePool: () => SetupCommandResult;
+  dealRolePool: (stagedPool?: RoleId[]) => SetupCommandResult;
   /** Explicitly publishes the private Deal to players. Never required to be
    * online: a local/offline game still records that the Storyteller
    * completed the initial reveal step. See revealReadiness.ts. */
@@ -469,7 +528,8 @@ export type StorytellerStore = {
    * its confirmed outcome -- a declared result OR a confirmed absence of one
    * -- is what is retained, whatever this retry's intent, so the local record
    * never disagrees with the players'. Clears any terminal-close lock in the
-   * same commit; Undo-free.
+   * same commit. Ordinary Undo remains empty; an explicit local recovery
+   * envelope permits undoFinishedGame without reviving the closed session.
    */
   finishGame: (intent: TerminalIntent, recovery?: TerminalRecovery) => SetupCommandResult;
   /** Phase 10H (contract §15 step 2-3): capture the terminal intent and lock
@@ -477,8 +537,9 @@ export type StorytellerStore = {
    * game in Night/Day or while another close is in flight. */
   beginTerminalClose: (intent: TerminalIntent) => boolean;
   /** Phase 10H (contract §15 step 12): the remote terminal close failed --
-   * release the mutation lock, keep the game live, keep the intent for retry. */
-  failTerminalClose: (message: string) => void;
+   * release the mutation lock, keep the game live, keep the intent for retry.
+   * A confirmed remote close instead keeps gameplay locked until local save. */
+  failTerminalClose: (message: string, confirmedRecovery?: Exclude<TerminalRecovery, { kind: "fresh" }>, recoveryLobby?: LobbyConnection) => void;
   /** Phase 10H: abandon a failed (not in-flight) terminal close. */
   clearTerminalClose: () => void;
   setView: (view: "home" | "game" | "newgame") => void;
@@ -516,7 +577,7 @@ export type StorytellerStore = {
 
   addPlayer: (name: string) => void;
   /** Fill the first planned empty seat, falling back to a new seat when none exist. */
-  addPlayerToSeat: (name: string) => void;
+  addPlayerToSeat: (name: string, seatId?: PlayerId) => void;
   /** Add one deliberate empty planned seat. */
   addEmptySeat: () => void;
   /** Add planned Traveler capacity: an ordinary-neutral empty seat plus the
@@ -530,6 +591,8 @@ export type StorytellerStore = {
   unseatPlayer: (id: PlayerId) => boolean;
   renamePlayer: (id: PlayerId, name: string) => void;
   setSeatOrder: (order: PlayerId[]) => void;
+  /** Positional exchange only; identities and character state stay with players. */
+  swapPlayerSeats: (source: SeatSwapBinding, target: SeatSwapBinding, layout?: SeatSwapLayout) => SetupCommandResult;
   movePlayer: (id: PlayerId, direction: "left" | "right") => void;
 
   // --- Phase 10D: Roles and perception ----------------------------------------
@@ -604,7 +667,8 @@ export type StorytellerStore = {
    * any internal stage, or a true no-op, commits nothing. It never calls
    * another store command. `semantics` defaults to the canonical registry.
    */
-  resolveAbility: (request: AbilityResolutionRequest, semantics?: AbilitySemanticsRegistry) => AbilityCommandResult;
+  resolveAbility: (request: AbilityResolutionRequest, semantics?: AbilitySemanticsRegistry, actionContext?: CharacterActionContext) => AbilityCommandResult;
+  correctNightActionTarget: (request: NightActionTargetCorrection, actionContext?: CharacterActionContext) => AbilityCommandResult;
   /**
    * Phase 10G: THE Storyteller-owned Game Rule Fact command (PHASE10G Section
    * 4.4). Plans one ordered transaction with the pure planner
@@ -644,6 +708,7 @@ export type StorytellerStore = {
    * Life command below is a one-intent wrapper around this; a future
    * ability engine submits its resolved intents here too. */
   resolveLife: (transaction: LifeTransaction) => LifeCommandResult;
+  resolveVoting: (intent: VotingIntent, context: VotingCommandContext) => ReturnType<typeof planVoting>;
   /** A death not represented by an execution/exile. Night or Day. */
   recordDeath: (id: PlayerId, context?: MutationContext) => LifeCommandResult;
   /** The actual executee's execution (Day only). Extra executions and a
@@ -691,7 +756,7 @@ export type StorytellerStore = {
    * Undo entry, one localSeq step. A refusal or true no-op changes nothing.
    * Every other Effect command below wraps this; a future ability engine
    * submits its resolved intents here too. */
-  resolveEffects: (transaction: EffectTransaction) => EffectCommandResult;
+  resolveEffects: (transaction: EffectTransaction, actionContext?: CharacterActionContext) => EffectCommandResult;
   /** The Storyteller quick control: turns exactly the deterministic manual
    * Effect `manual:<type>` of the bound participant on or off -- never any
    * other Effect of the same type. `on` for a suppressed manual Effect
@@ -718,7 +783,7 @@ export type StorytellerStore = {
    * affected participant's reminders[] plus History, one Undo entry, one
    * localSeq step. A refusal or true no-op changes nothing. Reminders are
    * non-authoritative notation: nothing mechanical ever reads them. */
-  resolveReminders: (transaction: ReminderTransaction) => ReminderCommandResult;
+  resolveReminders: (transaction: ReminderTransaction, actionContext?: CharacterActionContext) => ReminderCommandResult;
   /** Compatibility adapter over one Place intent, bound to whoever occupies
    * `id` now (and, for `sourcePlayer`, the current source occupant). Place
    * semantics: returns the id when placed or when an identical Reminder
@@ -757,15 +822,15 @@ export type StorytellerStore = {
    * Day N -> Night N+1); Night/Day -> Setup is refused (Setup is pre-game
    * only); leaving "ended" is refused. */
   setPhase: (phase: StorytellerLobbyRecord["phase"]) => SetupCommandResult;
-  advancePhase: () => SetupCommandResult;
+  advancePhase: (context?: VotingCommandContext) => SetupCommandResult;
 
-  setNightStepStatus: (day: number, stepKey: string, status: NightStepStatus) => void;
+  setNightStepStatus: (day: number, stepKey: string, status: NightStepStatus, actionContext?: CharacterActionContext) => { ok: true; changed: boolean } | AbilityRefusal;
   /** Phase 10G (Section 20.2): changed notes over MAX_NIGHT_STEP_NOTES are
    * refused (never truncated); unchanged notes are a no-op. */
   setNightStepNotes: (day: number, stepKey: string, notes: string) => SetupCommandResult;
   clearNightProgress: (day: number) => void;
 
-  undo: () => void;
+  undo: () => void | SetupCommandResult;
 
   setGrimoireMode: (mode: GrimoireMode) => void;
   setTokenPosition: (id: PlayerId, x: number, y: number) => void;
@@ -836,6 +901,51 @@ const REMINDER_INPUT_KEYS: ReadonlySet<string> = new Set(["id", "label", "source
 
 /** A status-only repair committed alongside an event correction. */
 export type RepairTarget = { playerId: PlayerId; target: LifeStatusTarget };
+
+export type SeatSwapBinding = { playerId: PlayerId; participantId: ParticipantId };
+/** Measured board fallback positions, valid only for the rendered game. */
+export type SeatSwapLayout = { game: StorytellerLobbyRecord; positions: Record<PlayerId, TokenPosition> };
+
+/** Only explicit, correctly bound local swap metadata can restore coordinates.
+ * An ordinary two-seat reorder is not evidence that coordinates were swapped. */
+const seatSwapLayout = (
+  entry: SeatSwapUndo[number] | undefined,
+  previous: StorytellerLobbyRecord,
+): Record<PlayerId, TokenPosition> | undefined => {
+  if (!entry || entry[0].playerId === entry[1].playerId) return;
+  for (const saved of entry) {
+    const player = Object.hasOwn(previous.players, saved.playerId) ? previous.players[saved.playerId] : undefined;
+    if (!player || player.isEmpty || player.participantId !== saved.participantId || player.seat !== saved.seat ||
+      previous.seatOrder[saved.seat] !== saved.playerId || !Number.isFinite(saved.x) || !Number.isFinite(saved.y)) return;
+  }
+  return Object.fromEntries(entry.map(({ playerId, x, y }) => [playerId, { x, y }]));
+};
+
+const reindexSeatSwapUndo = (before: StorytellerLobbyRecord[], next: StorytellerLobbyRecord[], entries: SeatSwapUndo): SeatSwapUndo =>
+  next.map(snapshot => {
+    const index = before.indexOf(snapshot);
+    return index < 0 ? null : entries[index] ?? null;
+  });
+
+type LocalLayoutEntry = { positions: Record<PlayerId, TokenPosition>; seats: { id: string; participantId: string | null }[] };
+type LocalLayoutUndo = (LocalLayoutEntry | null)[];
+const reindexLocalLayoutUndo = (before: StorytellerLobbyRecord[], next: StorytellerLobbyRecord[], entries: LocalLayoutUndo): LocalLayoutUndo =>
+  next.map(snapshot => { const index = before.indexOf(snapshot); return index < 0 ? null : entries[index] ?? null; });
+
+function validateLocalLayoutUndo(value: unknown, stack: StorytellerLobbyRecord[]): LocalLayoutUndo {
+  const entries = Array.isArray(value) && value.length <= UNDO_LIMIT ? value : [];
+  return stack.map((snapshot, index) => {
+    const entry = entries[index] as LocalLayoutEntry | null | undefined;
+    if (!entry || typeof entry !== "object" || !Array.isArray(entry.seats) || entry.seats.length !== snapshot.seatOrder.length ||
+      !entry.positions || typeof entry.positions !== "object" || Array.isArray(entry.positions)) return null;
+    if (!entry.seats.every((seat, i) => seat && typeof seat === "object" && seat.id === snapshot.seatOrder[i] &&
+      seat.participantId === (snapshot.players[seat.id]?.participantId ?? null))) return null;
+    if (Object.entries(entry.positions).some(([id, position]) => !Object.hasOwn(snapshot.players, id) || !position ||
+      typeof position !== "object" || !Number.isFinite(position.x) || !Number.isFinite(position.y))) return null;
+    return { seats: entry.seats.map(({ id, participantId }) => ({ id, participantId })),
+      positions: Object.fromEntries(Object.entries(entry.positions).map(([id, { x, y }]) => [id, { x, y }])) };
+  });
+}
 
 const repairIntents = (repair: RepairTarget[] | undefined): LifeIntent[] =>
   (repair ?? []).map(({ playerId, target }) => ({ kind: "correctStatus", playerId, target }));
@@ -1233,7 +1343,7 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // Game Result or winner is invented). Every older marker continues the chain
   // through v26; an older marker carrying v26 evidence receives nothing and is
   // rejected.
-  if (fromVersion < 26) {
+  if (fromVersion < 27) {
     const customScripts = (s as { customScripts?: Record<string, Script> }).customScripts ?? {};
     // Phase 9R.1 Astra remediation (Finding A2): local persisted migration
     // uses "trusted" evidence -- this state's OWN saved customScripts,
@@ -1258,6 +1368,14 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // v9 drops obsolete saved previews through the schema allowlist, including
   // undo snapshots. Drafts, sent information and the active session survive.
   Object.assign(s, check.data);
+  // Preserve absent metadata in old saves: migration must not change an
+  // otherwise current valid save. The store merge supplies the runtime default.
+  // Present entries must bind to their corresponding validated snapshot.
+  const layoutEntries = check.data.seatSwapUndo;
+  if (layoutEntries !== undefined) Object.assign(s, { seatSwapUndo: (check.data.undoStack ?? []).map((snapshot, index) => {
+    const entry = layoutEntries[index];
+    return seatSwapLayout(entry, snapshot) ? entry : null;
+  }) });
   return state;
 }
 
@@ -1304,6 +1422,69 @@ const SKIP_LOCAL_SEQ = Symbol("skipLocalSeq");
 /** Phase 10H: marks the one terminal commit (finishGame) that may pass the
  * terminal-close mutation lock. Stripped before the partial reaches zustand. */
 const TERMINAL_COMMIT = Symbol("terminalCommit");
+
+type TerminalJournal = { game: StorytellerLobbyRecord; lobby: LobbyConnection; intent: TerminalIntent };
+function readTerminalJournal(game: StorytellerLobbyRecord | null | undefined): TerminalJournal | null {
+  if (!game || (game.phase !== "night" && game.phase !== "day")) return null;
+  try {
+    const value = JSON.parse(localStorage.getItem(TERMINAL_JOURNAL_KEY) ?? "null") as TerminalJournal | null;
+    if (!value || typeof value !== "object") return null;
+    const parsed = StorytellerStateSchema.safeParse({ game: value.game, lobby: value.lobby });
+    if (!parsed.success || !parsed.data.game || !parsed.data.lobby?.sessionId ||
+      !sameSnapshot(parsed.data.game, game) || parsed.data.lobby.code !== game.code || parsed.data.lobby.uid !== game.storytellerUid ||
+      declaredResult(value.intent, game) === "invalid") return null;
+    return { game: parsed.data.game, lobby: parsed.data.lobby,
+      intent: value.intent.kind === "declare" ? { kind: "declare", winner: value.intent.winner } : { kind: "noResult" } };
+  } catch { return null; }
+}
+function clearTerminalJournal(): void {
+  try { localStorage.removeItem(TERMINAL_JOURNAL_KEY); } catch { /* an ended/new game never matches a stale journal */ }
+}
+
+type FinishedGameUndo = {
+  ended: StorytellerLobbyRecord;
+  live: StorytellerLobbyRecord;
+  undoStack: StorytellerLobbyRecord[];
+  seatSwapUndo: SeatSwapUndo;
+  localLayoutUndo?: LocalLayoutUndo;
+  /** UI-only context associated with the ending, never authoritative state. */
+  nightCursor?: NightCursor | null;
+};
+
+function validateRecoveryNightCursor(value: unknown, game: StorytellerLobbyRecord, customScripts: Record<string, Script>): NightCursor | null {
+  if (game.phase !== "night" || !value || typeof value !== "object") return null;
+  const { day, stepKey } = value as NightCursor;
+  if (day !== game.day || typeof stepKey !== "string" || !stepKey) return null;
+  const script = Object.prototype.hasOwnProperty.call(BUILTIN_SCRIPTS, game.scriptId) ? BUILTIN_SCRIPTS[game.scriptId]
+    : Object.prototype.hasOwnProperty.call(customScripts, game.scriptId) ? customScripts[game.scriptId] : undefined;
+  if (!script) return null;
+  const known = computeNightOrder(game.players, game.seatOrder, script, game.day === 1, game).some(step => step.stepKey === stepKey)
+    || (stepKey.startsWith("manual:") && Object.prototype.hasOwnProperty.call(game.nightProgress, `${day}:${stepKey}`));
+  return known ? { day, stepKey } : null;
+}
+
+/** A local recovery envelope is optional. Invalid or mismatched recovery is
+ * discarded without discarding the final game that the user can still review. */
+function validateFinishedGameUndo(value: unknown, game: StorytellerLobbyRecord | null | undefined, customScripts: Record<string, Script> = {}): FinishedGameUndo | null {
+  if (!value || typeof value !== "object" || game?.phase !== "ended") return null;
+  const recovery = value as FinishedGameUndo;
+  if (!Array.isArray(recovery.undoStack) || recovery.undoStack.length > UNDO_LIMIT) return null;
+  const parsed = StorytellerStateSchema.safeParse({ game: recovery.live, undoStack: recovery.undoStack, seatSwapUndo: recovery.seatSwapUndo });
+  const ended = StorytellerGamePersistedSchema.safeParse(recovery.ended);
+  if (!parsed.success || !ended.success || !parsed.data.game || !sameSnapshot(ended.data, game)) return null;
+  const live = parsed.data.game;
+  if (live.phase !== "night" && live.phase !== "day") return null;
+  // Prove that this snapshot differs only by the finishing operation. This
+  // binds recovery to this exact final game, including participant identities.
+  const expected = { ...live, phase: "ended" as const, lifeEventWindow: pruneLifeEventWindow(live.lifeEventWindow, "ended", live.day) };
+  if (game.result) Object.assign(expected, { result: game.result });
+  if (!sameSnapshot(expected, game)) return null;
+  return { ended: ended.data, live, nightCursor: validateRecoveryNightCursor(recovery.nightCursor, live, customScripts), undoStack: parsed.data.undoStack ?? [],
+    localLayoutUndo: validateLocalLayoutUndo(recovery.localLayoutUndo, parsed.data.undoStack ?? []), seatSwapUndo: (parsed.data.undoStack ?? []).map((snapshot, index) => {
+    const layout = parsed.data.seatSwapUndo?.[index];
+    return seatSwapLayout(layout, snapshot) ? layout! : null;
+  }) };
+}
 type StorytellerPatch =
   | (Partial<StorytellerStore> & { [SKIP_LOCAL_SEQ]?: boolean; [TERMINAL_COMMIT]?: boolean })
   | ((state: StorytellerStore) => Partial<StorytellerStore> & { [SKIP_LOCAL_SEQ]?: boolean; [TERMINAL_COMMIT]?: boolean });
@@ -1345,20 +1526,114 @@ export const useStorytellerStore = create<StorytellerStore>()(
           // game-commit seam -- a game or Undo change is dropped (defense in
           // depth behind the locked UI), so the retained ended snapshot is
           // exactly the game the intent was captured on. Only the terminal
-          // commit itself passes. A failed close releases the lock.
-          if (state.terminalClose?.status === "closing" && !terminal && ("game" in patch || "undoStack" in patch)) {
+          // commit itself passes. An unconfirmed failure releases the lock;
+          // a confirmed closure or pending recovery keeps it until resolved.
+          if ((state.terminalClose?.status === "closing" || state.terminalClose?.confirmedRecovery || state.terminalClose?.recoveryPending) && !terminal && ("game" in patch || "undoStack" in patch)) {
             delete patch.game;
             delete patch.undoStack;
+            delete patch.seatSwapUndo;
+            delete patch.localLayoutUndo;
+          }
+          if (patch.undoStack && patch.seatSwapUndo === undefined)
+            patch.seatSwapUndo = reindexSeatSwapUndo(state.undoStack, patch.undoStack, state.seatSwapUndo);
+          if (patch.undoStack && patch.localLayoutUndo === undefined)
+            patch.localLayoutUndo = reindexLocalLayoutUndo(state.undoStack, patch.undoStack, state.localLayoutUndo);
+          if ("game" in patch && patch.game !== state.game && !("finishedGameUndo" in patch)) {
+            patch.finishedGameUndo = null;
+            patch.canUndoFinishedGame = false;
+            if (!terminal) clearTerminalJournal();
           }
           if (!skip && "game" in patch && patch.game !== state.game && patch.game != null) {
-            const game = withRevealTokens(state.game, patch.game, registryForGame(state, patch.game));
+            const revealed = withRevealTokens(state.game, patch.game, registryForGame(state, patch.game));
+            const game = state.game ? reconcileVotingDependencies(state.game, revealed) : revealed;
             return { ...patch, game, localSeq: state.localSeq + 1 };
           }
           return patch;
         }, replace as Parameters<typeof rawSet>[1]);
       }) as unknown as typeof rawSet;
+      /** Save a bounded authoritative result before publishing to subscribers.
+       * The ordinary persist middleware consumes the exact prewritten bytes.
+       * A refused browser write changes no game, token, history or Undo. */
+      const commitAuthoritativeState = (planned: StorytellerLobbyRecord, state: StorytellerStore, authority: string): string | null => {
+        if (state.terminalClose?.status === "closing" || state.terminalClose?.confirmedRecovery || state.terminalClose?.recoveryPending)
+          return "The game is closing. Nothing was recorded.";
+        const current = state.game!;
+        const prepared = reconcileVotingDependencies(current, withRevealTokens(current, planned, registryForGame(state, planned)));
+        if (!StorytellerGamePersistedSchema.safeParse(prepared).success) return "This result could not be safely saved. Nothing was recorded.";
+        const failure = persistencePreflight(prepared, current, state.lobby);
+        if (failure) return failure;
+        const undoStack = pushUndo(current, state.undoStack);
+        const seatSwapUndo = reindexSeatSwapUndo(state.undoStack, undoStack, state.seatSwapUndo);
+        const localLayoutUndo = reindexLocalLayoutUndo(state.undoStack, undoStack, state.localLayoutUndo);
+        const candidate = { ...state, game: prepared, undoStack, seatSwapUndo, localLayoutUndo,
+          finishedGameUndo: null, canUndoFinishedGame: false, localSeq: state.localSeq + 1 };
+        if (votingAuthorityToken(state.lobby) !== authority) return "The connection changed. Nothing was recorded.";
+        let value: string;
+        try {
+          const options = useStorytellerStore.persist.getOptions();
+          value = JSON.stringify({ state: options.partialize ? options.partialize(candidate) : candidate, version: STORE_VERSION });
+          localStorage.setItem(STORE_KEY, value);
+        } catch {
+          return "This device could not save the change. Free browser storage or allow site storage, then try again. Nothing was recorded.";
+        }
+        prewrittenVotingSave = { name: STORE_KEY, value };
+        try { set({ game: prepared, undoStack, seatSwapUndo, localLayoutUndo }); }
+        finally { prewrittenVotingSave = null; }
+        return null;
+      };
+      /** Ending/reopening must be durable before any subscriber sees success. */
+      const commitTerminalState = (patch: Partial<StorytellerStore>): string | null => {
+        const state = get();
+        if (!patch.game || !StorytellerGamePersistedSchema.safeParse(patch.game).success)
+          return "This game could not be safely saved. Nothing was changed.";
+        const candidate = { ...state, ...patch, localSeq: state.localSeq + 1 };
+        const options = useStorytellerStore.persist.getOptions();
+        let value: string;
+        try {
+          value = JSON.stringify({ state: options.partialize ? options.partialize(candidate) : candidate, version: STORE_VERSION });
+          localStorage.setItem(STORE_KEY, value);
+        } catch {
+          return "This device could not save the change. Allow site storage or free browser storage, then try again.";
+        }
+        prewrittenVotingSave = { name: STORE_KEY, value };
+        gameLifecycle++;
+        clearNightActionCorrections();
+        try { set(() => ({ ...patch, [TERMINAL_COMMIT]: true, [SKIP_LOCAL_SEQ]: true, localSeq: candidate.localSeq })); }
+        finally { prewrittenVotingSave = null; }
+        return null;
+      };
+      /** The board writes one local inverse on release/reset, never a game
+       * mutation or writer sequence. A layout Undo cannot rewind rules state. */
+      const commitLayoutState = (patch: Partial<StorytellerStore>): SetupCommandResult => {
+        const state = get();
+        const options = useStorytellerStore.persist.getOptions();
+        const candidate = { ...state, ...patch };
+        let value: string;
+        try {
+          value = JSON.stringify({ state: options.partialize ? options.partialize(candidate) : candidate, version: STORE_VERSION });
+          localStorage.setItem(STORE_KEY, value);
+        } catch { return { ok: false, message: "This device could not save the token layout. Nothing was changed." }; }
+        prewrittenVotingSave = { name: STORE_KEY, value };
+        try { set(patch); } finally { prewrittenVotingSave = null; }
+        return { ok: true };
+      };
+      const changeTokenLayout = (positions: Record<PlayerId, TokenPosition>): SetupCommandResult => {
+        const state = get();
+        const game = state.game;
+        if (!game || game.phase === "ended" || state.terminalClose?.status === "closing" || state.terminalClose?.confirmedRecovery || state.terminalClose?.recoveryPending)
+          return { ok: false, message: "The token layout cannot be changed while the game is finished or closing." };
+        if (sameSnapshot(positions, state.tokenPositions)) return { ok: true };
+        const undoStack = pushUndo(game, state.undoStack);
+        const localLayoutUndo = reindexLocalLayoutUndo(state.undoStack, undoStack, state.localLayoutUndo);
+        localLayoutUndo[localLayoutUndo.length - 1] = { seats: game.seatOrder.map(id => ({ id, participantId: game.players[id]?.participantId ?? null })),
+          positions: Object.fromEntries(Object.entries(state.tokenPositions).filter(([id]) => Object.hasOwn(game.players, id)).map(([id, position]) => [id, { ...position }])) };
+        return commitLayoutState({ tokenPositions: positions, undoStack, localLayoutUndo,
+          seatSwapUndo: reindexSeatSwapUndo(state.undoStack, undoStack, state.seatSwapUndo) });
+      };
       return {
       game: null,
+      finishedGameUndo: null,
+      canUndoFinishedGame: false,
       terminalClose: null,
       view: "home",
       undoStack: [],
@@ -1370,12 +1645,14 @@ export const useStorytellerStore = create<StorytellerStore>()(
       pendingKnocks: [],
       grimoireMode: "ring",
       tokenPositions: {},
+      seatSwapUndo: [],
+      localLayoutUndo: [],
 
       newGame: (scriptId: string, opts: NewGameOpts = {}) => {
         // A terminal completion owns the current game's lifecycle until it
         // commits or fails. Refuse at the action boundary before advancing
         // the lifecycle token, clearing UI state, or detaching its lobby.
-        if (get().terminalClose?.status === "closing") return;
+        if (get().terminalClose?.status === "closing" || get().terminalClose?.confirmedRecovery || get().terminalClose?.recoveryPending) return;
         const script =
           BUILTIN_SCRIPTS[scriptId] ?? get().customScripts[scriptId];
         if (!script) throw new Error(`Unknown script id: ${scriptId}`);
@@ -1421,20 +1698,26 @@ export const useStorytellerStore = create<StorytellerStore>()(
         usePrivacyStore.getState().reset();
         // PR-10H-003: the previous game's Night cursor (its step keys repeat
         // across games) never reaches this game's Night.
+        clearNightActionCorrections();
         useShellStore.getState().resetGameScope();
         // PR-10H-004: a failed terminal intent belongs to the game it was
         // declared on and is never retried against a new one.
         set({ game, lobby: null, pendingKnocks: [], view: "game", undoStack: [], selectedPlayerId: null, ...endedTerminalIntent(get()) });
       },
 
-      dealRolePool: () => {
+      dealRolePool: (stagedPool) => {
         const { game, undoStack } = get();
         if (!game) return { ok: false, message: "No game is open." };
+        // The centered chooser stages its draft locally. Validate and deal it
+        // in one commit so Cancel is inert and Undo restores the whole deal.
+        if (stagedPool && (game.phase !== "setup" || isInitialRevealComplete(game)))
+          return { ok: false, message: "Role distribution is only available during private setup." };
+        const proposed = stagedPool ? { ...game, rolePool: [...stagedPool] } : game;
         const script = selectScriptById(get(), game.scriptId);
-        const context = selectSetupContext(game, script);
+        const context = selectSetupContext(proposed, script);
         const ready = analyzeSetup(context).readiness.deal;
         if (!ready.ok) return ready;
-        const pool = game.rolePool ?? [];
+        const pool = proposed.rolePool ?? [];
         const nonTravelerSeats = context.ordinary.map(p => p.id);
 
         // Fisher-Yates shuffle
@@ -1676,9 +1959,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
       endGame: () => {
         // Do not partially discard a game while its terminal close is in
         // flight. Failed intents remain deliberately discardable below.
-        if (get().terminalClose?.status === "closing") return;
+        if (get().terminalClose?.status === "closing" || get().terminalClose?.confirmedRecovery || get().terminalClose?.recoveryPending) return;
         gameLifecycle++;
         usePrivacyStore.getState().reset();
+        clearNightActionCorrections();
         useShellStore.getState().resetGameScope();
         set({
           ...endedTerminalIntent(get()),
@@ -1707,42 +1991,81 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const result = recovery.kind === "endedWithResult" ? recovery.result
           : recovery.kind === "endedWithoutResult" ? null
           : declared;
-        // Deliberately NOT setPhase("ended"): that path keeps an Undo entry
-        // back into live play. Here the replacement is terminal.
-        gameLifecycle++;
+        // The session remains terminal. Its optional Undo restores only the
+        // local in-person game and can never reopen the closed server session.
         const ended: StorytellerLobbyRecord = { ...game, phase: "ended", lifeEventWindow: pruneLifeEventWindow(game.lifeEventWindow, "ended", game.day) };
         delete ended.result;
         if (result) ended.result = { winner: result.winner, declaredAt: { ...result.declaredAt } };
-        set(() => ({
+        const finishedGameUndo = validateFinishedGameUndo({ ended, live: game, undoStack: get().undoStack, seatSwapUndo: get().seatSwapUndo, localLayoutUndo: get().localLayoutUndo, nightCursor: useShellStore.getState().nightCursor }, ended, get().customScripts);
+        const failure = commitTerminalState({
           game: ended,
           undoStack: [],
+          seatSwapUndo: [],
+          localLayoutUndo: [],
+          finishedGameUndo,
+          canUndoFinishedGame: finishedGameUndo !== null,
           lobby: null,
           sync: null,
           pendingKnocks: [],
           selectedPlayerId: null,
           terminalClose: null,
-          [TERMINAL_COMMIT]: true,
-        }));
+        });
+        if (failure) return { ok: false, message: failure };
+        clearTerminalJournal();
         return { ok: true };
       },
 
+      undoFinishedGame: () => {
+        const state = get();
+        if (state.terminalClose?.status === "closing" || state.lobby)
+          return { ok: false, message: "Wait until the session has finished closing." };
+        const recovery = validateFinishedGameUndo(state.finishedGameUndo, state.game, state.customScripts);
+        if (!recovery) return { ok: false, message: "There is no saved ending to undo for this game." };
+        const detach = (snapshot: StorytellerLobbyRecord): StorytellerLobbyRecord => ({ ...clone(snapshot), code: "", storytellerUid: "local", pendingPlayers: {} });
+        const wasOnline = recovery.live.code !== "";
+        const restored = detach(recovery.live);
+        const failure = commitTerminalState({
+          game: restored, undoStack: recovery.undoStack.map(detach), seatSwapUndo: recovery.seatSwapUndo, localLayoutUndo: recovery.localLayoutUndo ?? [],
+          finishedGameUndo: null, canUndoFinishedGame: false,
+          lobby: null, sync: null, pendingKnocks: [], selectedPlayerId: null, terminalClose: null, view: "game",
+        });
+        if (failure) return { ok: false, message: failure };
+        useShellStore.getState().resetGameScope();
+        useShellStore.getState().setNightCursor(recovery.nightCursor ?? null);
+        return { ok: true, ...(wasOnline ? { message: "Game restored for local in-person play. The former online session and its published result remain closed." } : {}) };
+      },
+
       beginTerminalClose: (intent) => {
-        const { game, terminalClose } = get();
+        const { game, terminalClose, lobby } = get();
         if (!game || (game.phase !== "night" && game.phase !== "day")) return false;
         if (terminalClose?.status === "closing") return false;
         if (declaredResult(intent, game) === "invalid") return false;
-        set({ terminalClose: { intent, status: "closing", message: null } });
+        // Durable before any remote write: if the final local save later
+        // fails, reload can still query this exact session's actual result.
+        if (lobby) {
+          const journal: TerminalJournal = { game, lobby, intent };
+          try { localStorage.setItem(TERMINAL_JOURNAL_KEY, JSON.stringify(journal)); }
+          catch {
+            try { set({ terminalClose: { ...terminalClose, intent, status: "failed", message: "This device could not save ending recovery. Allow browser storage and retry." } }); } catch { /* runtime message survives failed persistence */ }
+            return false;
+          }
+        }
+        // This lock is deliberately runtime only; a storage failure must not
+        // prevent the failure/retry UI from representing a confirmed closure.
+        try { set({ terminalClose: { intent, status: "closing", message: null, ...(terminalClose?.confirmedRecovery ? { confirmedRecovery: terminalClose.confirmedRecovery } : {}), ...(terminalClose?.recoveryPending ? { recoveryPending: true } : {}) } }); } catch { /* runtime state was set before persist */ }
         return true;
       },
 
-      failTerminalClose: (message) => {
+      failTerminalClose: (message, confirmedRecovery, recoveryLobby) => {
         const { terminalClose } = get();
         if (!terminalClose) return;
-        set({ terminalClose: { ...terminalClose, status: "failed", message } });
+        try { set({ ...(recoveryLobby ? { lobby: recoveryLobby } : {}), terminalClose: { ...terminalClose, status: "failed", message,
+          ...(confirmedRecovery ? { confirmedRecovery } : {}), ...(recoveryLobby ? { recoveryPending: true as const } : {}) } }); } catch { /* runtime state was set before persist */ }
       },
 
       clearTerminalClose: () => {
-        if (get().terminalClose?.status === "closing") return;
+        if (get().terminalClose?.status === "closing" || get().terminalClose?.confirmedRecovery || get().terminalClose?.recoveryPending) return;
+        clearTerminalJournal();
         set({ terminalClose: null });
       },
 
@@ -1751,7 +2074,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
       selectPlayer: (id) => set({ selectedPlayerId: id }),
 
       setLobby: (lobby) => {
+        if (lobby && (get().terminalClose?.confirmedRecovery || get().terminalClose?.recoveryPending)) return false;
         if (lobby && get().game?.phase === "ended") return false;
+        if (lobby?.code !== get().lobby?.code || lobby?.sessionId !== get().lobby?.sessionId) clearNightActionCorrections();
         set(state => ({ lobby, game: state.game && lobby ? { ...state.game, code: lobby.code, storytellerUid: lobby.uid } : state.game, undoStack: [] }));
         return true;
       },
@@ -1947,12 +2272,15 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
-      addPlayerToSeat: (name) => {
+      addPlayerToSeat: (name, seatId) => {
         const { game } = get();
         if (!game) return;
         const trimmed = name.trim();
         if (!trimmed) return;
-        const emptyId = game.seatOrder.find((id) => game.players[id]?.isEmpty);
+        // A roster row may target an exact empty seat. Never fall back to a
+        // different seat if that reservation was filled while its form was open.
+        if (seatId && (!ownPlayer(game, seatId)?.isEmpty || !game.seatOrder.includes(seatId))) return;
+        const emptyId = seatId ?? game.seatOrder.find((id) => game.players[id]?.isEmpty);
         if (!emptyId) {
           get().addPlayer(trimmed);
           return;
@@ -2198,6 +2526,56 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
+      swapPlayerSeats: (source, target, layout) => {
+        const { game, undoStack, tokenPositions, grimoireMode, terminalClose } = get();
+        if (!game || game.phase === "ended" || terminalClose?.status === "closing" || terminalClose?.confirmedRecovery || terminalClose?.recoveryPending)
+          return { ok: false, message: "Seat swapping is unavailable for this game." };
+        if (usePrivacyStore.getState().enabled)
+          return { ok: false, message: "Leave privacy mode before swapping seats." };
+        const a = ownPlayer(game, source.playerId), b = ownPlayer(game, target.playerId);
+        if (!a || !b || a.isEmpty || b.isEmpty || !source.participantId || !target.participantId ||
+          a.participantId !== source.participantId || b.participantId !== target.participantId ||
+          !isSeatPermutation(game, game.seatOrder))
+          return { ok: false, message: "The roster changed. Select the players again to swap seats." };
+        if (a.id === b.id) return { ok: true };
+        // The board supplies its current rendered fallback for newly added or
+        // never-dragged tokens. Materialize only this pair, atomically with its
+        // identity-bound Undo inverse; never freeze an entire Ring layout.
+        const needsFallback = !tokenPositions[a.id] || !tokenPositions[b.id];
+        if (needsFallback && layout && layout.game !== game)
+          return { ok: false, message: "The board changed. Select the players again to swap seats." };
+        const pa = tokenPositions[a.id] ?? layout?.positions[a.id];
+        const pb = tokenPositions[b.id] ?? layout?.positions[b.id];
+        if (needsFallback && layout && (!pa || !pb))
+          return { ok: false, message: "Both players need a board position before swapping." };
+        if ((pa && (!Number.isFinite(pa.x) || !Number.isFinite(pa.y))) ||
+          (pb && (!Number.isFinite(pb.x) || !Number.isFinite(pb.y))))
+          return { ok: false, message: "The board positions are unavailable. Select the players again." };
+        if (grimoireMode === "freeRoam" && (!pa || !pb))
+          return { ok: false, message: "Wait for both token positions to be ready, then try swapping seats again." };
+        const order = [...game.seatOrder];
+        const first = order.indexOf(a.id), second = order.indexOf(b.id);
+        if (first < 0 || second < 0)
+          return { ok: false, message: "Both players need a seat before swapping." };
+        [order[first], order[second]] = [order[second]!, order[first]!];
+        const players = { ...game.players };
+        order.forEach((id, seat) => { players[id] = { ...game.players[id]!, seat }; });
+        const nextUndo = pushUndo(game, undoStack);
+        const layoutUndo = reindexSeatSwapUndo(undoStack, nextUndo, get().seatSwapUndo);
+        let layoutPatch: { tokenPositions?: Record<PlayerId, TokenPosition> } = {};
+        // Keep saved free-roam locations associated with the exchanged seats
+        // even while ring mode is displayed; switching modes remains coherent.
+        if (pa && pb) {
+          layoutUndo[layoutUndo.length - 1] = [
+            { playerId: a.id, participantId: source.participantId, seat: a.seat, ...pa },
+            { playerId: b.id, participantId: target.participantId, seat: b.seat, ...pb },
+          ];
+          layoutPatch = { tokenPositions: { ...tokenPositions, [a.id]: { ...pb }, [b.id]: { ...pa } } };
+        }
+        set({ game: { ...game, players, seatOrder: order }, undoStack: nextUndo, seatSwapUndo: layoutUndo, ...layoutPatch });
+        return { ok: true };
+      },
+
       movePlayer: (id, direction) => {
         const { game, undoStack } = get();
         if (!game) return;
@@ -2261,9 +2639,32 @@ export const useStorytellerStore = create<StorytellerStore>()(
         return { ok: true, changed: true };
       },
 
-      resolveAbility: (request, semantics) => {
-        const { game, undoStack } = get();
+      correctNightActionTarget: (request, actionContext) => {
+        const state = get();
+        const { game } = state;
         if (!game) return { ok: false, code: "invalid", message: "No game is open." };
+        const refusal = characterActionRefusal(state, actionContext);
+        if (refusal) return { ok: false, code: "stale", message: refusal };
+        const authority = votingAuthorityToken(state.lobby)!;
+        const script = selectScriptById(get(), game.scriptId) ?? null;
+        const result = planNightActionTargetCorrection(game, request, {
+          script, registry: buildRegistry(script ?? { id: game.scriptId, name: "", characters: [] }),
+          semantics: CANONICAL_ABILITY_SEMANTICS,
+        });
+        if (!result.ok || !result.changed) return result;
+        const unsafe = commitAuthoritativeState(result.plan.game, state, authority);
+        if (unsafe) return { ok: false, code: "invalidComposition", message: unsafe };
+        rememberCorrectedNightAction(game, request, { ...result.plan, game: get().game! });
+        return { ok: true, changed: true, resolutionId: result.plan.resolutionId };
+      },
+
+      resolveAbility: (request, semantics, actionContext) => {
+        const state = get();
+        const { game } = state;
+        if (!game) return { ok: false, code: "invalid", message: "No game is open." };
+        const refusal = characterActionRefusal(state, actionContext);
+        if (refusal) return { ok: false, code: "stale", message: refusal };
+        const authority = votingAuthorityToken(state.lobby)!;
         const script = selectScriptById(get(), game.scriptId) ?? null;
         // plan (pure, against Current State as it is NOW) -> one commit.
         const result = planAbilityResolution(game, request, {
@@ -2273,29 +2674,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
         if (!result.ok) return result;
         if (!result.changed) return { ok: true, changed: false };
-        // SOL-10F-C3: an accepted plan becomes authoritative only if the
-        // production writer can project it. The SAME compatibility check the
-        // checkpoint recovery uses, against the SAME Storyteller destination
-        // the writer writes -- the live lobby's, or (before a room exists) the
-        // canonical maximum supported code shape. Refused -> nothing committed
-        // (no game, Undo, localSeq, History, delivery or Night progress); the
-        // pure coordinator stays storage-agnostic.
-        const writable = validateFirebaseWritableValue(result.plan.game, storytellerPathSegments(get().lobby?.code ?? MAX_ROOM_CODE_SHAPE));
-        if (!writable.ok) {
-          return { ok: false, code: "invalidComposition",
-            message: `This result cannot be safely stored online (the resulting game ${writable.message.replace(/\.$/, "")}) -- nothing was recorded. Resolve it another way.` };
-        }
-        // SOL-10F-E1: the writer also persists the whole game as ONE derived
-        // checkpoint string beside the live roster this store does not own.
-        // Proven against the conservative supported-roster envelope (every
-        // seat bound to a maximum-length UID, under any room) with the SAME
-        // serializer and validator the writer uses -- never an empty roster.
-        const checkpoint = validateCheckpointEnvelope(result.plan.game, game);
-        if (!checkpoint.ok) {
-          return { ok: false, code: "invalidComposition",
-            message: `This result cannot be safely stored online (the game's recovery checkpoint ${checkpoint.message.replace(/\.$/, "")}) -- nothing was recorded. Resolve it another way.` };
-        }
-        set({ undoStack: pushUndo(game, undoStack), game: result.plan.game });
+        // Reuse Voting's schema, remote-envelope and save-before-publish seam.
+        const unsafe = commitAuthoritativeState(result.plan.game, state, authority);
+        if (unsafe) return { ok: false, code: "invalidComposition", message: unsafe };
+        if (!semantics || semantics === CANONICAL_ABILITY_SEMANTICS) rememberNightAction(game, request, { ...result.plan, game: get().game! });
         return { ok: true, changed: true, resolutionId: result.plan.resolutionId };
       },
 
@@ -2600,13 +2982,90 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
+      resolveVoting: (intent, context) => {
+        const state = get();
+        const { game, lobby } = state;
+        const refused = (message: string) => ({ ok: false as const, code: "refused" as const, message });
+        if (!game || game.phase === "ended") return refused("Open a live game before recording votes.");
+        if (state.terminalClose?.status === "closing" || state.terminalClose?.confirmedRecovery || state.terminalClose?.recoveryPending) return refused("The game is closing. Nothing was recorded.");
+        if (usePrivacyStore.getState().enabled) return refused("Leave Privacy Mode and reopen voting.");
+        if (!context || context.game !== game || context.lobby !== lobby || context.lifecycle !== gameLifecycleToken())
+          return refused("The game changed. Review voting before continuing.");
+        const authority = votingAuthorityToken(lobby);
+        if (!authority || authority !== context.writerToken || (lobby && (game.code !== lobby.code || game.storytellerUid !== lobby.uid)))
+          return refused("The connection changed. Reconnect before recording votes.");
+        const script = selectScriptById(state, game.scriptId);
+        const registry = registryForGame(state, game);
+        let result = planVoting(game, intent, script && registry ? { script, registry } : undefined);
+        if (!result.ok || !result.changed) return result;
+        // Only the exact notation linked to a removed authoritative modifier
+        // follows it. Freeform reminders with the same label remain notation.
+        if (intent.kind === "bureaucrat" || intent.kind === "removeModifier") {
+          for (const old of game.voting?.modifiers ?? []) {
+            if (result.game.voting?.modifiers.some(m => m.id === old.id)) continue;
+            const target = result.game.players[old.target.playerId];
+            const reminderId = `voting-${old.id}`;
+            if (target?.participantId !== old.target.participantId || !target.reminders.some(r => r.id === reminderId)) continue;
+            const removed = planReminderTransaction(result.game, { intents: [{ kind: "remove", target: { playerId: old.target.playerId, participantId: old.target.participantId }, reminderId }] });
+            if (!removed.ok) return refused(removed.message);
+            if (removed.changed) result = { ...result, game: applyReminderPlan(result.game, removed.plan) };
+          }
+        }
+        if (intent.kind === "bureaucrat") {
+          if (result.game.voting?.modifiers.some(modifier => modifier.id === intent.modifierId)) {
+            const reminder = planReminderTransaction(result.game, { intents: [{ kind: "place", target: intent.target,
+            reminder: { id: `voting-${intent.modifierId}`, label: "3 Votes", source: intent.source, sourceCharacter: "bureaucrat", note: `Day ${game.day} only.` } }] });
+            if (!reminder.ok) return refused(reminder.message);
+            if (reminder.changed) result = { ...result, game: applyReminderPlan(result.game, reminder.plan) };
+          }
+          if (intent.completeStep) {
+            const { day, stepKey } = intent.completeStep;
+            if (game.phase !== "night" || day !== game.day ||
+              ![participantStepKey(intent.source.participantId, "bureaucrat"), travelerArrivalStepKey(intent.source.participantId, "bureaucrat")].includes(stepKey))
+              return refused("The Bureaucrat's Night step changed. Reopen the current action.");
+            const completed = planNightStepStatus(result.game, day, stepKey, "done");
+            if (completed) result = { ...result, game: completed };
+          }
+        }
+        const roundId = "roundId" in intent ? intent.roundId : undefined;
+        const round = result.game.voting?.rounds.find(r => r.id === roundId);
+        if (intent.kind === "begin" && round?.virginPending) {
+          const reminder = planReminderTransaction(result.game, { intents: [{ kind: "place", target: intent.nominee,
+            reminder: { label: "No Ability", source: intent.nominee, sourceCharacter: "virgin" } }] });
+          if (!reminder.ok) return refused(reminder.message);
+          if (reminder.changed) result = { ...result, game: applyReminderPlan(result.game, reminder.plan) };
+        }
+        const participant = "voter" in intent ? round?.order.find(p => p.participantId === intent.voter.participantId) : round?.nominee;
+        const summary = intent.kind === "begin" && round ? `${round.nominator.nameAtTime} nominated ${round.nominee.nameAtTime}${round.mode === "exile" ? " for exile" : ""}.`
+          : intent.kind === "respond" ? `${participant?.nameAtTime ?? "Voter"}: ${intent.choice}. Total: ${round?.tally ?? 0}.`
+          : intent.kind === "bureaucrat" ? "Recorded the Bureaucrat action."
+          : intent.kind === "removeModifier" ? "Removed a voting adjustment."
+          : intent.kind === "execution" ? `Recorded execution: ${intent.outcome}.`
+          : intent.kind === "exileOutcome" ? `Recorded exile: ${intent.outcome}.`
+          : intent.kind === "virgin" ? `Resolved the Virgin nomination${intent.execute ? " with an execution" : " without an execution"}.`
+          : intent.kind === "undoLast" ? "Undid the last vote and its dependent changes."
+          : intent.kind === "correctResponse" ? `Corrected ${participant?.nameAtTime ?? "a voter"}'s response to ${intent.choice}; total ${round?.tally ?? 0}.`
+          : intent.kind === "abandon" ? "Abandoned the round; accepted responses and spent dead votes remain recorded."
+          : intent.kind === "acknowledgeContext" ? "Reviewed the changed table before continuing this vote."
+          : "Acknowledged the voting result.";
+        const record: VotingHistoryRecord = { id: historyId(), category: "voting", moment: { phase: game.phase as "day" | "night", day: game.day }, operation: intent.kind, summary,
+          ...(roundId ? { roundId } : {}), ...(participant ? { participant } : {}),
+          ...(["undoLast", "correctResponse", "abandon", "removeModifier"].includes(intent.kind) ? { correction: true as const } : {}) };
+        result = { ...result, game: { ...result.game, history: [...result.game.history, record] } };
+        const failure = commitAuthoritativeState(result.game, state, authority);
+        if (failure) return refused(failure);
+        return result;
+      },
+
       resolveLife: (transaction) => {
         const { game, undoStack } = get();
         if (!game) return { ok: false, code: "refused", message: "No game is open." };
         // guard -> plan (pure) -> one commit. The planner validates every
         // intent against Current State and returns a refusal, a true no-op,
         // or the complete Current State + Life Event Window + History plan.
-        const result = planLifeTransaction(game, transaction);
+        const script = selectScriptById(get(), game.scriptId);
+        const registry = registryForGame(get(), game);
+        const result = planLifeTransaction(game, transaction, undefined, registry ? { registry, script: script ?? null } : undefined);
         if (!result.ok) return result;
         if (!result.changed) return { ok: true, changed: false, eventIds: [] };
         set({ undoStack: pushUndo(game, undoStack), game: applyLifePlan(game, result.plan) });
@@ -2671,9 +3130,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
-      resolveEffects: (transaction) => {
-        const { game, undoStack } = get();
+      resolveEffects: (transaction, actionContext) => {
+        const state = get();
+        const { game } = state;
         if (!game) return { ok: false, code: "invalid", message: "No game is open." };
+        const refusal = characterActionRefusal(state, actionContext);
+        if (refusal) return { ok: false, code: "stale", message: refusal };
+        const authority = votingAuthorityToken(state.lobby)!;
         // guard -> plan (pure) -> one commit. The planner binds every target,
         // source and participant parameter to the participation instance the
         // caller observed, validates each intent in order against the
@@ -2682,7 +3145,8 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const result = planEffectTransaction(game, transaction);
         if (!result.ok) return result;
         if (!result.changed) return { ok: true, changed: false, effectIds: [] };
-        set({ undoStack: pushUndo(game, undoStack), game: applyEffectPlan(game, result.plan) });
+        const unsafe = commitAuthoritativeState(applyEffectPlan(game, result.plan), state, authority);
+        if (unsafe) return { ok: false, code: "invalid", message: unsafe };
         return { ok: true, changed: true, effectIds: result.plan.appliedEffectIds };
       },
 
@@ -2741,9 +3205,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
         get().resolveEffects({ intents: [{ kind: "remove", target, effectId }] });
       },
 
-      resolveReminders: (transaction) => {
-        const { game, undoStack } = get();
+      resolveReminders: (transaction, actionContext) => {
+        const state = get();
+        const { game } = state;
         if (!game) return { ok: false, code: "invalid", message: "No game is open." };
+        const refusal = characterActionRefusal(state, actionContext);
+        if (refusal) return { ok: false, code: "stale", message: refusal };
+        const authority = votingAuthorityToken(state.lobby)!;
         // guard -> plan (pure) -> one commit. The planner binds every target
         // and source to the participation instance the caller observed,
         // validates each intent in order against the evolving working state,
@@ -2752,7 +3220,8 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const result = planReminderTransaction(game, transaction);
         if (!result.ok) return result;
         if (!result.changed) return { ok: true, changed: false, reminderIds: [] };
-        set({ undoStack: pushUndo(game, undoStack), game: applyReminderPlan(game, result.plan) });
+        const unsafe = commitAuthoritativeState(applyReminderPlan(game, result.plan), state, authority);
+        if (unsafe) return { ok: false, code: "invalid", message: unsafe };
         return { ok: true, changed: true, reminderIds: result.plan.placedReminderIds };
       },
 
@@ -2888,14 +3357,25 @@ export const useStorytellerStore = create<StorytellerStore>()(
         return { ok: true };
       },
 
-      advancePhase: () => {
+      advancePhase: (context) => {
         const { game, undoStack } = get();
         if (!game) return { ok: false, message: "No game is open." };
+        if (context) {
+          const state = get();
+          const authority = votingAuthorityToken(state.lobby);
+          if (context.game !== game || context.lobby !== state.lobby || context.lifecycle !== gameLifecycleToken() ||
+            !authority || authority !== context.writerToken || usePrivacyStore.getState().enabled || state.terminalClose?.status === "closing" || state.terminalClose?.confirmedRecovery || state.terminalClose?.recoveryPending)
+            return { ok: false, message: "The game or connection changed. Review the day before continuing." };
+          if (state.lobby && (game.code !== state.lobby.code || game.storytellerUid !== state.lobby.uid))
+            return { ok: false, message: "The game and connection no longer match. Reconnect before continuing." };
+        }
         if (game.phase === "setup") return get().beginNightOne();
         // Phase 9R.4 (B8): an ended game has no next phase -- this used to
         // commit an identical game. Same refusal setPhase already gives.
         if (game.phase === "ended")
           return { ok: false, message: "This game has ended. Create a new setup to play again." };
+        if (game.phase === "day" && game.voting?.activeRoundId)
+          return { ok: false, message: "Finish or deliberately abandon the current vote before entering Night." };
         let { phase, day } = game;
         if (phase === "night") {
           phase = "day";
@@ -2924,17 +3404,28 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const advanced: StorytellerLobbyRecord = {
           ...game, phase, day, lifeEventWindow: pruneLifeEventWindow(game.lifeEventWindow, phase, day),
         };
+        if (phase === "day") advanced.voting = { ...currentVotingState(advanced), coverage: "known" };
         const withEffects = expired ? applyEffectPlan(advanced, expired) : advanced;
+        const finalGame = expiredFacts ? applyGameRuleFactPlan(withEffects, expiredFacts) : withEffects;
+        if (context) {
+          const failure = commitAuthoritativeState(finalGame, get(), context.writerToken!);
+          return failure ? { ok: false, message: failure } : { ok: true };
+        }
         set({
           undoStack: pushUndo(game, undoStack),
-          game: expiredFacts ? applyGameRuleFactPlan(withEffects, expiredFacts) : withEffects,
+          game: finalGame,
         });
         return { ok: true };
       },
 
-      setNightStepStatus: (day, stepKey, status) => {
-        const { game, undoStack } = get();
-        if (!game) return;
+      setNightStepStatus: (day, stepKey, status, actionContext) => {
+        const state = get();
+        const { game } = state;
+        if (!game) return { ok: false, code: "invalid", message: "No game is open." };
+        const refusal = characterActionRefusal(state, actionContext);
+        if (refusal) return { ok: false, code: "stale", message: refusal };
+        if (game.phase === "ended") return { ok: false, code: "notApplicable", message: "This game has ended." };
+        const authority = votingAuthorityToken(state.lobby)!;
         // Phase 10F: the pure step plan (nightProgress.ts) -- the same rule an
         // ability resolution composes into its one final snapshot. The
         // Traveler-arrival coupling is participation-bound (v24): a step key
@@ -2943,8 +3434,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // (B8): null is a true no-op (an absent key is never "already
         // current": storing it is real -- it is how a custom step exists).
         const next = planNightStepStatus(game, day, stepKey, status);
-        if (!next) return;
-        set({ undoStack: pushUndo(game, undoStack), game: next });
+        if (!next) return { ok: true, changed: false };
+        const unsafe = commitAuthoritativeState(next, state, authority);
+        if (unsafe) return { ok: false, code: "invalidComposition", message: unsafe };
+        return { ok: true, changed: true };
       },
 
       setNightStepNotes: (day, stepKey, notes) => {
@@ -2999,16 +3492,27 @@ export const useStorytellerStore = create<StorytellerStore>()(
       undo: () => {
         const { undoStack } = get();
         if (undoStack.length === 0) return;
+        // The commit wrapper already rejects game/Undo changes during closure;
+        // also prevent a seat swap's local layout inverse escaping that lock.
+        if (get().terminalClose?.status === "closing" || get().terminalClose?.confirmedRecovery || get().terminalClose?.recoveryPending) return;
         const previous = undoStack[undoStack.length - 1]!;
+        const localLayout = validateLocalLayoutUndo(get().localLayoutUndo, undoStack)[undoStack.length - 1];
+        if (localLayout) {
+          return commitLayoutState({ tokenPositions: localLayout.positions, undoStack: undoStack.slice(0, -1),
+            localLayoutUndo: get().localLayoutUndo.slice(0, -1), seatSwapUndo: get().seatSwapUndo.slice(0, -1) });
+        }
         // Undo can restore a pre-existing live snapshot after returning to Setup.
         // Validate that snapshot too; never use Undo as an unguarded first start.
         if (get().game?.phase === "setup" && (previous.phase === "night" || previous.phase === "day")) {
           const context = selectSetupContext({ ...previous, phase: "setup" }, selectScriptById(get(), previous.scriptId));
           if (!analyzeSetup(context).readiness.begin.ok) return;
         }
+        const layout = seatSwapLayout(get().seatSwapUndo[undoStack.length - 1], previous);
+        invalidateNightActionCorrections(previous, undoStack.slice(0, -1));
         set({
           game: clone(previous),
           undoStack: undoStack.slice(0, -1),
+          ...(layout ? { tokenPositions: { ...get().tokenPositions, ...clone(layout) } } : {}),
         });
       },
 
@@ -3020,9 +3524,16 @@ export const useStorytellerStore = create<StorytellerStore>()(
         })),
 
       clearTokenPositions: () => set({ tokenPositions: {} }),
+      moveToken: (id, x, y) => {
+        if (!get().game || !Object.hasOwn(get().game!.players, id) || !Number.isFinite(x) || !Number.isFinite(y))
+          return { ok: false, message: "Choose a current token and a valid position." };
+        return changeTokenLayout({ ...get().tokenPositions, [id]: { x, y } });
+      },
+      resetTokenPositions: () => changeTokenLayout({}),
 
       ensureSyncScope: (code, sessionId) => set(state => {
         if (state.sync && state.sync.code === code && state.sync.sessionId === sessionId) return {};
+        clearNightActionCorrections();
         return { sync: { code, sessionId, ackedGuard: null, ackedGameSeq: 0, lastAttempt: null } };
       }),
 
@@ -3065,7 +3576,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
         };
       }),
 
-      restoreRemoteCheckpoint: (game, guard) => set(state => ({
+      restoreRemoteCheckpoint: (game, guard) => {
+        clearNightActionCorrections();
+        set(state => ({
         game,
         undoStack: [],
         selectedPlayerId: null,
@@ -3081,13 +3594,26 @@ export const useStorytellerStore = create<StorytellerStore>()(
           ? { ...state.sync, ackedGuard: guard, ackedGameSeq: state.localSeq, lastAttempt: null }
           : { code: game.code, sessionId: state.sync?.sessionId ?? state.lobby?.sessionId ?? "", ackedGuard: guard, ackedGameSeq: state.localSeq, lastAttempt: null },
         [SKIP_LOCAL_SEQ]: true,
-      })),
+        }));
+      },
       };
     },
     {
-      name: "new-blood-st",
+      name: STORE_KEY,
       version: STORE_VERSION,
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => {
+        // Preserve Zustand's unavailable-storage behavior in non-browser
+        // environments by resolving storage while its getter is guarded.
+        const storage = localStorage;
+        return {
+        getItem: name => storage.getItem(name),
+        removeItem: name => storage.removeItem(name),
+        setItem: (name, value) => {
+          if (prewrittenVotingSave?.name === name && prewrittenVotingSave.value === value) { prewrittenVotingSave = null; return; }
+          storage.setItem(name, value);
+        },
+        };
+      }),
       migrate: migrateStoreState,
       // Phase 9C.2B.2 (hardening): Zustand only invokes `migrate` above when
       // the persisted version differs from STORE_VERSION — a persisted blob
@@ -3102,8 +3628,15 @@ export const useStorytellerStore = create<StorytellerStore>()(
       // still round-trips unchanged (migrateStoreState is a no-op once
       // fromVersion is no longer less than any of its own thresholds).
       merge: (persistedState, currentState) => {
+        clearNightActionCorrections();
         if (persistedState == null) return currentState;
-        return { ...currentState, ...(migrateStoreState(persistedState, STORE_VERSION) as Partial<StorytellerStore>) };
+        const migrated = migrateStoreState(persistedState, STORE_VERSION) as Partial<StorytellerStore>;
+        const finishedGameUndo = migrated.lobby ? null : validateFinishedGameUndo(migrated.finishedGameUndo, migrated.game, migrated.customScripts ?? {});
+        const journal = readTerminalJournal(migrated.game);
+        return { ...currentState, ...migrated, seatSwapUndo: migrated.seatSwapUndo ?? [],
+          localLayoutUndo: validateLocalLayoutUndo(migrated.localLayoutUndo, migrated.undoStack ?? []), finishedGameUndo, canUndoFinishedGame: finishedGameUndo !== null,
+          ...(journal ? { lobby: journal.lobby, terminalClose: { intent: journal.intent, status: "failed" as const, recoveryPending: true as const,
+            message: "An online ending needs recovery. Retry finishing to confirm the session's recorded result." } } : {}) };
       },
       partialize: (s) => ({
         game: s.game,
@@ -3113,6 +3646,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
         lobby: s.lobby,
         grimoireMode: s.grimoireMode,
         tokenPositions: s.tokenPositions,
+        seatSwapUndo: s.seatSwapUndo,
+        localLayoutUndo: s.localLayoutUndo,
+        finishedGameUndo: s.finishedGameUndo,
         localSeq: s.localSeq,
         sync: s.sync,
       }),

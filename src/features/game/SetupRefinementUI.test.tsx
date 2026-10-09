@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GameScreen } from "./GameScreen";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
@@ -17,7 +17,11 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-const openSetup = () => fireEvent.click(screen.getByRole("button", { name: "setup" }));
+const setupUI = () => within(screen.getByRole("dialog", { name: "Setup details" }));
+const openSetup = () => {
+  if (!screen.queryByRole("button", { name: "Setup details & modifiers" })) fireEvent.click(screen.getByRole("button", { name: "Players" }));
+  fireEvent.click(screen.getByRole("button", { name: "Setup details & modifiers" }));
+};
 const seatOrder = () => store.getState().game!.seatOrder;
 const rolesInSeatOrder = () => seatOrder().map(id => store.getState().game!.players[id]!.actualRole);
 
@@ -86,7 +90,7 @@ describe("Setup refinement UI (Phase 9 Setup finalization B3)", () => {
   it("Shuffle Roles and Edit Bag disappear once Reveal has completed", () => {
     render(<GameScreen />);
     openSetup();
-    fireEvent.click(screen.getByRole("button", { name: "Reveal Roles" }));
+    fireEvent.click(setupUI().getByRole("button", { name: "Reveal Roles" }));
     expect(store.getState().game!.setupRolesRevealed).toBe(true);
 
     expect(screen.queryByRole("button", { name: "Shuffle Roles" })).toBeNull();

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
@@ -137,18 +137,18 @@ describe.each(SURFACES)("10A-ASTRA-003 final: %s", (surface) => {
 });
 
 describe("10A-ASTRA-003 final: GameScreen", () => {
-  it("Day -> Night waits for Privacy Mode to end, then the dusk review opens only on an explicit click", () => {
+  it("Day -> Night waits for Privacy Mode to end, then Finish day opens only on an explicit click", () => {
     render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: "→ Night" }));
-    expect(screen.getByText(`${HISTORIC} — executed — died`)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Begin Night 2" }));
+    expect(screen.getByText(`${HISTORIC} · died`)).toBeInTheDocument();
     setPrivacy(true);
     expectNoPrivateContent();
-    expect(screen.getByRole("button", { name: "→ Night" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "→ Night" }));
+    expect(screen.getByRole("button", { name: "Begin Night 2" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Begin Night 2" }));
     setPrivacy(false);
     expectNoPrivateContent();
-    fireEvent.click(screen.getByRole("button", { name: "→ Night" }));
-    expect(screen.getByText(`${HISTORIC} — executed — died`)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Continue to Night 2" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Begin Night 2" }));
+    expect(screen.getByText(`${HISTORIC} · died`)).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Nomination card" })).getByRole("button", { name: "Begin Night 2" })).toBeInTheDocument();
   });
 });

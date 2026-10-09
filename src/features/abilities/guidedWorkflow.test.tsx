@@ -33,7 +33,7 @@ beforeEach(() => {
     actualRole, shownRole: actualRole === "drunk" ? "empath" : actualRole, behaviorMode: actualRole === "drunk" ? "drunk_fake_role_behavior" : "normal",
     actualAlignment: registry.alignmentOf(actualRole) }));
   const g: StorytellerLobbyRecord = {
-    gameSchemaVersion: 26, gameRuleFacts: [], code: "", storytellerUid: "local", scriptId: script.id, phase: "night", day: 2,
+    gameSchemaVersion: 27, gameRuleFacts: [], code: "", storytellerUid: "local", scriptId: script.id, phase: "night", day: 2,
     players: Object.fromEntries(players.map((p) => [p.id, p])), seatOrder: players.map((p) => p.id),
     plannedPlayerCount: 7, plannedTravelerCount: 0, rolePool: [], fabled: [], lorics: [], bluffs: [], notes: "", nightProgress: {}, pendingPlayers: {},
     history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
@@ -98,7 +98,7 @@ describe("10F-AC-30 / AC-31: the Night Order is an operating dashboard", () => {
     render(<><Night /><GrimoireCircle /></>);
     const monk = card("Monk", "Alice");
     fireEvent.click(within(monk).getByRole("button", { name: /^Choose .+ on the Table$/ }));
-    expect(screen.getByText(/Choosing the player to mark: tap a seat/)).toBeInTheDocument();
+    expect(screen.getByText(/the player to mark · Tap a player/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^Carol, seat 3/ }));
     expect(state().selectedPlayerId).toBeNull(); // consumed as a pick, not a selection
     expect(chosen("the player to mark", card("Monk", "Alice"))).toBe("p2");

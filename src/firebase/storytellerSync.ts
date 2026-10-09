@@ -16,6 +16,7 @@ import { decodeMembershipRevocations, decodePresence, decodeRoster, decodeRoster
 import { membershipRevocationsPath, rosterParticipantsPath, storytellerPathSegments } from "./paths";
 import type { RevocationAction } from "./lobby";
 import { SessionWriter, FENCE_MARGIN_MS, type AuthorityHandle, type TerminalPublicationBuilder } from "./writer";
+import { registerVotingAuthorityReader } from "./votingAuthority";
 import { readPublishedResult } from "./terminalResults";
 import { revealAcksPath } from "./paths";
 import { classifyStorytellerError, decodeSession, guardSchema, isTransient, leaseSchema, LifecycleError, sessionPath, type SessionFailure } from "./lifecycle";
@@ -104,6 +105,13 @@ type Runtime = {
 /** A superseded lobby whose authoritative cleanup failed (see above). */
 export type UnattachedCleanupFailure = { code: string; message: string };
 export const useSessionRuntime = create<Runtime>(() => ({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, retry: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {}, revealAcks: {}, status: "idle", failure: null, closeFailed: false, leaveOffer: null, unattachedCleanupFailures: [] }));
+registerVotingAuthorityReader(scope => {
+  const runtime = useSessionRuntime.getState();
+  const writer = runtime.backend;
+  return scope.status === "live" && runtime.status === "live" && writer &&
+    writer.code === scope.code && writer.sessionId === scope.sessionId &&
+    !writer.leaseMayHaveLapsed() ? writer.token : null;
+});
 /** ASTRA-10G-R1-001: removes exactly this lobby's cleanup warning; changes no
  * game, lobby or session state. */
 export function dismissUnattachedCleanupFailure(code: string) {

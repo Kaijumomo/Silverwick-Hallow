@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GameScreen } from "./GameScreen";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
@@ -14,15 +14,20 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-const openSetup = () => fireEvent.click(screen.getByRole("button", { name: "setup" }));
+const setupUI = () => within(screen.getByRole("dialog", { name: "Setup details" }));
+const openSetup = () => {
+  if (!screen.queryByRole("button", { name: "Setup details & modifiers" })) fireEvent.click(screen.getByRole("button", { name: "Players" }));
+  fireEvent.click(screen.getByRole("button", { name: "Setup details & modifiers" }));
+};
 const closeSetup = () => fireEvent.click(screen.getByRole("button", { name: "Close setup panel" }));
 
 describe("D. Setup does not auto-open", () => {
-  it("entering the Grimoire shows neither the Setup workspace nor a required action -- Go Live and Setup are both merely available", () => {
+  it("entering the Grimoire shows neither the Setup workspace nor a required action -- Go Live and Players are both merely available", () => {
     render(<GameScreen />);
     expect(screen.queryByRole("complementary", { name: "Setup helper" })).toBeNull();
     expect(screen.queryByRole("dialog", { name: "Setup" })).toBeNull();
-    expect(screen.getByRole("button", { name: "setup" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Players" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
     expect(screen.getByRole("button", { name: "Go live" })).toBeVisible();
   });
 });
@@ -41,7 +46,9 @@ describe("E/F. Setup and Go Live work in either order, neither a prerequisite fo
   it("Go Live remains available with an empty, unbuilt bag, and Setup can still be opened afterward", () => {
     render(<GameScreen />);
     expect(store.getState().game!.rolePool).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
     expect(screen.getByRole("button", { name: "Go live" })).toBeEnabled();
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Invite players" })).getByRole("button", { name: "Close" }));
     // The createLobby/Firebase session plumbing is covered by its own tests;
     // GameScreen's Setup state reads only `game` and `script`, never
     // `lobby`, so establishing a live lobby directly proves the same
@@ -101,11 +108,11 @@ describe("I. Planned and seated counts are shown distinctly", () => {
   it("shows Planned and Seated separately and never collapses one into the other", () => {
     render(<GameScreen />);
     openSetup();
-    expect(screen.getByLabelText("Players")).toHaveValue(5);
+    expect(setupUI().getByLabelText("Players")).toHaveValue(5);
     expect(screen.getByText("Seated: 5")).toBeVisible();
 
     act(() => { store.getState().unseatPlayer(store.getState().game!.seatOrder[0]!); });
-    expect(screen.getByLabelText("Players")).toHaveValue(5); // planned unchanged
+    expect(setupUI().getByLabelText("Players")).toHaveValue(5); // planned unchanged
     expect(screen.getByText("Seated: 4")).toBeVisible(); // seated reflects reality
   });
 });

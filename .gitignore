@@ -1,6 +1,8 @@
 node_modules
 dist
 dist-ssr
+dist-tablet-trial/
+silverwick-tablet-trial.zip
 *.local
 .env
 .env.local

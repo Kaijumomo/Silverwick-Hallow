@@ -205,7 +205,7 @@ describe("SOL-10F-B1 -- workspace flows", () => {
     expect(within(workspace()).queryByRole("radiogroup", { name: /^1\. Player 1/ })).toBeNull();
   });
 
-  it("B1 x B2: the workspace labels the initial and final death attempts of one player as separate judgments", () => {
+  it("an uncertain death attempt refuses the entire action without a guided judgment", () => {
     const generic = { id: "gp", type: "protected", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } };
     open(patchPlayer(proofGame(AL), "p1", { effects: [generic as StorytellerLobbyRecord["players"][string]["effects"][number]] }));
     render(<Night />);
@@ -214,10 +214,10 @@ describe("SOL-10F-B1 -- workspace flows", () => {
     const answer = (name: RegExp, value: "Yes" | "No") =>
       fireEvent.click(within(within(workspace()).getByRole("radiogroup", { name })).getByRole("radio", { name: value }));
     answer(/^1\. Player 1/, "No");
-    answer(/after choosing to die/, "Yes");
-    answer(/^2\. Player 2/, "Yes");
-    answer(/^3\. Player 3/, "Yes");
-    expect(within(workspace()).getByRole("radiogroup", { name: /Player 1 is protected .*final death/ })).toBeInTheDocument();
+    expect(within(workspace()).queryByRole("region", { name: "Storyteller judgment" })).toBeNull();
+    expect(within(workspace()).getByRole("button", { name: "Resolve" })).toBeDisabled();
+    expect(game().players.p1!.alive).toBe(true);
+    expect(store.getState().undoStack).toHaveLength(0);
   });
 });
 

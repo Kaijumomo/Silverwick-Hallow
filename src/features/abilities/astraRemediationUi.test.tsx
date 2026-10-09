@@ -61,11 +61,15 @@ describe("SOL-10F-A2 -- selections are bound at selection time", () => {
     expect(game().players.p2!.effects).toEqual([]);
   });
 
-  it("an unchanged participant still resolves (inline)", () => {
+  it("changed action context refuses an old choice; explicit re-selection opens a current action", () => {
     open(proofGame(POISONER_GAME));
     render(<Night />);
     pickChoice("The player to poison", "p1", card("Poisoner", "Player 0"));
     reseatInStore("p3"); // an unrelated seat changes
+    fireEvent.click(within(card("Poisoner", "Player 0")).getByRole("button", { name: "Resolve" }));
+    expect(game().players.p1!.effects).toEqual([]);
+    expect(within(card("Poisoner", "Player 0")).getByRole("alert")).toHaveTextContent(/game changed/i);
+    pickChoice("The player to poison", "p1", card("Poisoner", "Player 0"));
     fireEvent.click(within(card("Poisoner", "Player 0")).getByRole("button", { name: "Resolve" }));
     expect(game().players.p1!.effects).toEqual([expect.objectContaining({ type: "poisoned" })]);
   });

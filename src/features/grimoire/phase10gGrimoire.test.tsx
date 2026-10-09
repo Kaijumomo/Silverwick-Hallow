@@ -36,6 +36,10 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 const token = (name: string) => screen.getByRole("button", { name: new RegExp(`^${name}, seat`) });
+const openRules = () => {
+  fireEvent.click(screen.getByRole("button", { name: "Info" }));
+  fireEvent.click(screen.getByText("Game rules & modifiers"));
+};
 
 describe("10G-AC-28: the ability-used marker", () => {
   it("true -> exactly one concise marker; false -> none", () => {
@@ -73,6 +77,7 @@ describe("10G-AC-30: the global Rule-Fact surface", () => {
   it("shows Toymaker skip required, records it through the Rule Fact seam, then shows it satisfied", () => {
     store.setState({ game: { ...game(), fabled: ["toymaker"] } });
     render(<GameScreen />);
+    openRules();
     const strip = screen.getByRole("region", { name: "Game rule facts" });
     expect(strip).toHaveTextContent("Toymaker skip is still required");
     fireEvent.click(within(strip).getByRole("button", { name: "Record Demon skip" }));
@@ -87,6 +92,7 @@ describe("10G-AC-30: the global Rule-Fact surface", () => {
   it("shows active arbitrary deaths with their expiry; a manual Pit-Hag can record them at Night", () => {
     store.setState({ game: liveGame({ phase: "night" }) });
     render(<GameScreen />);
+    openRules();
     fireEvent.click(screen.getByRole("button", { name: "Record arbitrary deaths tonight" }));
     expect(screen.getByRole("region", { name: "Game rule facts" })).toHaveTextContent("Arbitrary deaths are active tonight (until Day 2)");
     expect(game().gameRuleFacts.map((f) => f.type)).toEqual([PIT_HAG_ARBITRARY_DEATHS]);
@@ -94,6 +100,7 @@ describe("10G-AC-30: the global Rule-Fact surface", () => {
 
   it("is absent when nothing is relevant (a Day with no Toymaker and no fact)", () => {
     render(<GameScreen />);
+    openRules();
     expect(screen.queryByRole("region", { name: "Game rule facts" })).toBeNull();
   });
 });
@@ -104,6 +111,7 @@ describe("10G-AC-31 / proof area 9: Privacy Mode removes every new private indic
     store.setState({ game: { ...game(), fabled: ["toymaker"], gameRuleFacts: [{ type: TOYMAKER_DEMON_SKIP_OCCURRED, recordedAt: { phase: "night", day: 2 } }] } });
     render(<GameScreen />);
     expect(document.querySelectorAll("[data-token-marker]").length).toBe(2);
+    openRules();
     const before = game();
     act(() => usePrivacyStore.getState().setEnabled(true));
     expect(document.querySelectorAll("[data-token-marker]")).toHaveLength(0);

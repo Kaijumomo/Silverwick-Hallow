@@ -161,12 +161,12 @@ describe("10E-AC-29: per-entry migration for Current State, every Undo entry and
     localStorage.setItem("new-blood-st", JSON.stringify({ version: 22, state: { game: v22WithLeftovers(), undoStack: [v22WithLeftovers()] } }));
     await store.persist.rehydrate();
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(game().gameSchemaVersion).toBe(26);
+    expect(game().gameSchemaVersion).toBe(27);
     for (const id of travelerIds(game() as unknown as Raw)) expect(game().players[id]!.shownAlignment).toBeNull();
-    expect(state().undoStack[0]!.gameSchemaVersion).toBe(26);
+    expect(state().undoStack[0]!.gameSchemaVersion).toBe(27);
     state().setNotes(game().seatOrder[0]!, "x");
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(JSON.parse(localStorage.getItem("new-blood-st")!).version).toBe(26);
+    expect(JSON.parse(localStorage.getItem("new-blood-st")!).version).toBe(27);
   });
 
   async function recoverFrom(entry: Raw) {
@@ -300,10 +300,10 @@ describe("10E-AC-30 / AC-31: v23 evidence runs first and fails closed", () => {
   });
 
   it("unsupported / newer markers remain rejected and are never reinterpreted", () => {
-    for (const marker of [27, "26", null, { v: 26 }]) {
+    for (const marker of [28, "26", null, { v: 26 }]) {
       const g = currentGame();
       g.gameSchemaVersion = marker;
-      expect(detectLegacyGameVersion(g)).toBe(26);
+      expect(detectLegacyGameVersion(g)).toBe(27);
       const copy = structuredClone(g);
       migrateGameEntry(copy, 13, { kind: "canonical-only" });
       expect(copy).toEqual(g);
@@ -325,7 +325,7 @@ describe("10E-AC-32: persisted round-trip", () => {
     const snapshot = JSON.parse(JSON.stringify({ game: game(), undoStack: state().undoStack }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     const saved = localStorage.getItem("new-blood-st")!;
-    expect(JSON.parse(saved).version).toBe(26);
+    expect(JSON.parse(saved).version).toBe(27);
     store.setState({ game: null, undoStack: [] });
     localStorage.setItem("new-blood-st", saved);
     await store.persist.rehydrate();

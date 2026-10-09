@@ -3,7 +3,8 @@ import type { NightStep } from "./nightOrder";
 import { MAX_NIGHT_STEP_NOTES } from "@/stores/schemas";
 import { TextLimit } from "@/components/TextLimit";
 import { deriveNightWork, stepResolved } from "./nightWork";
-import { useStorytellerStore } from "@/stores/storytellerStore";
+import { captureCharacterActionContext, useStorytellerStore } from "@/stores/storytellerStore";
+import { secureUuid } from "@/stores/secureUuid";
 import { PlayerInformation } from "@/features/players/PlayerInformation";
 import { TravelerArrival } from "@/features/players/TravelerArrival";
 import { travelerGuidance } from "@/stores/travelers";
@@ -89,12 +90,14 @@ function InlineSimpleAbility({ step, day, descriptor, guided, onEscalate }: {
   // SOL-10F-A2: the target is the bound participation instance captured WHEN it
   // was selected -- never a seat id re-bound to whoever sits there at Resolve.
   const [target, setTarget] = useState<ParticipantBinding | null>(null);
+  const [actionContext, setActionContext] = useState(captureCharacterActionContext);
   const [error, setError] = useState<string | null>(null);
   const input = descriptor.inputs[0]!;
   const { game } = guided;
   const actor = game.players[step.playerId];
   const actorBinding = actor?.participantId ? bindingOf(actor) : null;
   const select = (binding: ParticipantBinding | null) => {
+    setActionContext(captureCharacterActionContext());
     setTarget(binding);
     setError(null);
   };
@@ -109,7 +112,7 @@ function InlineSimpleAbility({ step, day, descriptor, guided, onEscalate }: {
     // kept): a judgment, or a consequence that needs a preview.
     if ((!planned.ok && planned.code === "needsInput") || (planned.ok && planned.changed && planned.plan.needsConfirmation)) { onEscalate(inputs); return; }
     if (!planned.ok) { setError(planned.message); return; }
-    const result = useStorytellerStore.getState().resolveAbility(request, guided.semantics);
+    const result = useStorytellerStore.getState().resolveAbility(request, guided.semantics, actionContext);
     if (!result.ok) { setError(result.message); return; }
     const committed = useStorytellerStore.getState().game!;
     guided.onResolved({ stepKey: step.stepKey, game: committed, delivered: committed.informationDeliveries.length > game.informationDeliveries.length });
@@ -127,7 +130,8 @@ function InlineSimpleAbility({ step, day, descriptor, guided, onEscalate }: {
   );
 }
 
-function StepCard({ step, record, day, ability, chips = [], guided, lastResolution, onOpenWorkspace, current = false, onMakeCurrent }: StepCardProps) {
+export function StepCard({ step, record, day, ability, chips = [], guided, lastResolution, onOpenWorkspace, current = false, onMakeCurrent }: StepCardProps) {
+  const actionContext = captureCharacterActionContext();
   const players = useStorytellerStore(s => s.game?.players);
   const status = record?.status ?? "pending";
   const notes = record?.notes ?? "";
@@ -138,7 +142,7 @@ function StepCard({ step, record, day, ability, chips = [], guided, lastResoluti
   useEffect(() => setNotesLength(notes.length), [notes]);
 
   const handleCycle = () => {
-    useStorytellerStore.getState().setNightStepStatus(day, step.stepKey, NEXT_STATUS[status]);
+    useStorytellerStore.getState().setNightStepStatus(day, step.stepKey, NEXT_STATUS[status], actionContext);
   };
 
   const handleNoteBlur = () => {
@@ -257,7 +261,7 @@ function StepCard({ step, record, day, ability, chips = [], guided, lastResoluti
       </details>}
       <button className="btn btn-sm" disabled={status === "done"}
         aria-describedby={status === "done" ? doneReasonId : undefined}
-        onClick={() => useStorytellerStore.getState().setNightStepStatus(day, step.stepKey, "done")}>Done</button>
+        onClick={() => useStorytellerStore.getState().setNightStepStatus(day, step.stepKey, "done", actionContext)}>Done</button>
       {/* 10H-AC-067: say in words why Done is unavailable (the status icon alone is not enough). */}
       {status === "done" && <span id={doneReasonId} className="disabled-reason">This step is already done.</span>}
 
@@ -536,7 +540,7 @@ function NightDashboard({ game, script, onClose, semantics }: Required<Props>) {
           <PlayerInformation playerId={id} purpose="setup" />
         </details>)}
         <button className="btn btn-sm" onClick={() => useStorytellerStore.getState().setNightStepNotes(
-          game.day, `manual:${crypto.randomUUID()}`, ""
+          game.day, `manual:${secureUuid()}`, ""
         )}>Add custom night step</button>
         <p className="behavior-help">New or changed characters, gained abilities and past events may need a custom step.
           Verify these conditions manually; this sheet does not reconstruct game history.</p>

@@ -148,15 +148,17 @@ describe("Phase 9C storyteller setup", () => {
   });
   it("GameScreen has no competing initial manual-start action", () => {
     render(<GameScreen/>);
-    fireEvent.click(screen.getByRole("button",{name:"setup"}));
+    fireEvent.click(screen.getByRole("button",{name:"Players"}));
+    fireEvent.click(screen.getByRole("button",{name:"Setup details & modifiers"}));
     expect(screen.queryByRole("button",{name:"Begin night 1"})).toBeNull();
     expect(screen.getByRole("button",{name:"Deal roles"})).toBeInTheDocument();
   });
-  it("Setup toolbar keeps Travelers separate from ordinary players", () => {
+  it("the Players setup panel keeps Travelers separate from ordinary players", () => {
     const game=store.getState().game!;game.players.t=makeSTPlayer({id:"t",seat:5,isTraveler:true,actualRole:"thief"});game.seatOrder.push("t");
     render(<GameScreen/>);
-    expect(screen.getByText("5 players · 1 Traveler")).toBeVisible();
-    fireEvent.click(screen.getByRole("button",{name:"setup"}));
+    fireEvent.click(screen.getByRole("button",{name:"Players"}));
+    expect(screen.getByText(/5 residents · 1 travelers/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button",{name:"Setup details & modifiers"}));
     expect(screen.getByText("+ 1 Traveler")).toBeVisible();
   });
   it("Setup uses canonical Sentinel ranges with exact combinations on demand", () => {

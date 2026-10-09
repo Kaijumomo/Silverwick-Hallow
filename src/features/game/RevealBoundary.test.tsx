@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GameScreen } from "./GameScreen";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
@@ -17,7 +17,11 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-const openSetup = () => fireEvent.click(screen.getByRole("button", { name: "setup" }));
+const setupUI = () => within(screen.getByRole("dialog", { name: "Setup details" }));
+const openSetup = () => {
+  if (!screen.queryByRole("button", { name: "Setup details & modifiers" })) fireEvent.click(screen.getByRole("button", { name: "Players" }));
+  fireEvent.click(screen.getByRole("button", { name: "Setup details & modifiers" }));
+};
 const drunkId = () => Object.values(store.getState().game!.players).find(p => p.actualRole === "drunk")!.id;
 
 describe("Q. Minimal Setup UI after Deal, before Reveal", () => {
@@ -26,8 +30,8 @@ describe("Q. Minimal Setup UI after Deal, before Reveal", () => {
     render(<GameScreen />);
     openSetup();
 
-    expect(screen.getByText("Roles dealt privately · 5/6 ready")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Reveal Roles" })).toBeDisabled();
+    expect(setupUI().getByText("Roles dealt privately · 5/6 ready")).toBeVisible();
+    expect(setupUI().getByRole("button", { name: "Reveal Roles" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Begin Night 1" })).toBeNull();
 
     // Exactly one token carries the indicator -- the unresolved Drunk.
@@ -43,8 +47,8 @@ describe("Q. Minimal Setup UI after Deal, before Reveal", () => {
     act(() => { store.getState().setShownRole(drunkId(), "chef"); });
 
     expect(screen.queryByText("Needs shown role")).toBeNull();
-    expect(screen.getByText("6/6 ready to reveal")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Reveal Roles" })).toBeEnabled();
+    expect(setupUI().getByText("6/6 ready to reveal")).toBeVisible();
+    expect(setupUI().getByRole("button", { name: "Reveal Roles" })).toBeEnabled();
   });
 });
 
@@ -55,11 +59,11 @@ describe("H. Night 1 requires both Deal and explicit Reveal", () => {
     openSetup();
 
     expect(screen.queryByRole("button", { name: "Begin Night 1" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Reveal Roles" }));
+    fireEvent.click(setupUI().getByRole("button", { name: "Reveal Roles" }));
     expect(store.getState().game!.setupRolesRevealed).toBe(true);
-    expect(screen.getByText("Roles revealed")).toBeVisible();
+    expect(setupUI().getByText("Roles revealed")).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "Begin Night 1" }));
+    fireEvent.click(setupUI().getByRole("button", { name: "Begin Night 1" }));
     expect(store.getState().game!.phase).toBe("night");
   });
 });

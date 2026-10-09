@@ -653,7 +653,26 @@ export type GameRuleFactHistoryRecord = {
 
 /** Phase 10G (v25): every History Record a game can hold -- the participant
  * categories plus the one game-scoped variant. */
-export type GameHistoryRecord = HistoryRecord | GameRuleFactHistoryRecord;
+export type VotingHistoryRecord = {
+  id: HistoryId;
+  category: "voting";
+  moment: LiveGameMoment;
+  operation: import("./votingTypes").VotingIntent["kind"];
+  summary: string;
+  roundId?: string;
+  participant?: ParticipantRef;
+  correction?: true;
+  change?: never;
+  lifeEvent?: never;
+  effectOperation?: never;
+  reminderOperation?: never;
+  ruleFactType?: never;
+  ruleFactOperation?: never;
+  provenance?: never;
+  note?: never;
+  resolutionId?: never;
+};
+export type GameHistoryRecord = HistoryRecord | GameRuleFactHistoryRecord | VotingHistoryRecord;
 export type GameHistoryCategory = GameHistoryRecord["category"];
 
 /** Phase 10C: the Reminder operation a v21 "reminder" History Record
@@ -935,9 +954,10 @@ export type StorytellerLobbyRecord = {
    * dropped, never reassigned).
    * Phase 10G: the current version is 25; marker 24 receives v24 -> v25 (an
    * empty Game Rule Fact collection; nothing else is touched).
-   * Phase 10H: the current version is 26; marker 25 receives v25 -> v26 (a
-   * stamp: no reveal token and no Game Result is invented). */
-  gameSchemaVersion: 26;
+   * Phase 10H: marker 25 receives v25 -> v26 (a stamp: no reveal token and
+   * no Game Result is invented). Voting v27 stamps v26; absent voting means
+   * unknown legacy coverage, never a known day with no nominations. */
+  gameSchemaVersion: 27;
   code: string;
   storytellerUid: string;
   scriptId: string;
@@ -1004,6 +1024,8 @@ export type StorytellerLobbyRecord = {
    * an ability resolution, or by deterministic expiry in the phase rollover.
    * Never projected. */
   gameRuleFacts: GameRuleFactRecord[];
+  /** Private authoritative voting state. Absence means untracked, never no nominations. */
+  voting?: import("./votingTypes").VotingDayState;
   /** Phase 10H (v26): the Storyteller-declared Game Result -- valid ONLY
    * while `phase === "ended"` (the persisted schema rejects it otherwise).
    * Written only by the one terminal seam (finishGame), never by Undo or any

@@ -39,37 +39,38 @@ beforeEach(() => {
   useShellStore.getState().reset();
   useSessionRuntime.setState({ backend: null });
   store.setState({ game: liveGame(), lobby: null, undoStack: [], localSeq: 0, sync: null, terminalClose: null,
+    finishedGameUndo: null, canUndoFinishedGame: false,
     customScripts: { [setupScript.id]: setupScript }, selectedPlayerId: null, view: "game" });
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("10H-AC-045 / AC-047: the Storyteller declares the result -- nothing is inferred", () => {
-  it("Finish game offers Good victory, Evil victory and the exceptional End Without Result, with nothing preselected", () => {
+  it("End offers explicit Good/Evil choices and exceptional no-result; Keep playing preserves the live game", () => {
     render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: "Finish game" }));
-    const dialog = screen.getByRole("dialog", { name: "Finish the game" });
+    fireEvent.click(screen.getByRole("button", { name: "End game" }));
+    const dialog = screen.getByRole("dialog", { name: "End the game" });
     expect(dialog).toHaveAttribute("aria-modal", "true"); // a TRUE confirmation stays modal
-    expect(within(dialog).getByText("Declare who won. Silverwick does not decide the winner.")).toBeInTheDocument();
+    expect(within(dialog).getByText("Choose the winning team. The Grimoire stays open for review.")).toBeInTheDocument();
     const choices = within(within(dialog).getByRole("group", { name: "Result" })).getAllByRole("button");
-    expect(choices.map((b) => b.textContent)).toEqual(["Good winsDeclare Good victory", "Evil winsDeclare Evil victory"]);
+    expect(choices.map((b) => b.textContent)).toEqual(["Good wins", "Evil wins"]);
     expect(choices.every((b) => !b.hasAttribute("aria-pressed"))).toBe(true);
-    expect(within(dialog).getByRole("button", { name: "End without a result…" })).toBeInTheDocument();
-    // Choosing only moves to the confirmation; Back returns; nothing ended yet.
-    fireEvent.click(choices[1]!);
-    expect(screen.getByRole("dialog", { name: "Declare Evil victory?" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    expect(screen.getByRole("dialog", { name: "Finish the game" })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByText("Other outcome"));
+    expect(within(dialog).getByRole("button", { name: "End without a result" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Keep playing" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(game().phase).toBe("day");
     expect(close).not.toHaveBeenCalled();
   });
 
-  it.each([["good", "Good wins"], ["evil", "Evil wins"]] as const)("Declare %s: ONE terminal commit, Undo-free, with the declared winner and moment", async (winner, headline) => {
+  it.each([["good", "Good Wins"], ["evil", "Evil Wins"]] as const)("Declare %s once with the winner/moment retained and explicit ending recovery", async (winner, headline) => {
     render(<GameScreen />);
     await finishGame({ choice: winner, review: false });
     expect(game()).toMatchObject({ phase: "ended", result: { winner, declaredAt: { phase: "day", day: 3 } } });
     expect(state().undoStack).toEqual([]);
-    const summary = screen.getByRole("region", { name: headline });
-    expect(within(summary).getByText("Declared Day 3")).toBeInTheDocument();
+    expect(state().canUndoFinishedGame).toBe(true);
+    const summary = screen.getByRole("dialog", { name: headline });
+    fireEvent.click(within(summary).getByText("Game details & history"));
+    expect(within(summary).getByText(/Declared Day 3/)).toBeInTheDocument();
     expect(within(summary).getByRole("heading", { name: `${winner === "good" ? "Good" : "Evil"} — winners` })).toBeInTheDocument();
   });
 
@@ -78,8 +79,8 @@ describe("10H-AC-045 / AC-047: the Storyteller declares the result -- nothing is
     await finishGame({ review: false });
     expect(game().phase).toBe("ended");
     expect(game().result).toBeUndefined();
-    const summary = screen.getByRole("region", { name: "The game is over" });
-    expect(within(summary).getByText("No recorded result")).toBeInTheDocument();
+    const summary = screen.getByRole("dialog", { name: "The game is over" });
+    expect(within(summary).getByText("No recorded result", { selector: ".shell-result-kicker" })).toBeInTheDocument();
     expect(within(summary).queryByText(/— winners/)).toBeNull();
   });
 });
@@ -88,14 +89,13 @@ describe("§19: cinematic summary -> read-only final Grimoire -> History -> Home
   it("the summary lists both teams from the retained snapshot, and leads to the read-only review and back", async () => {
     render(<GameScreen />);
     await finishGame({ choice: "good", review: false });
-    const summary = screen.getByRole("region", { name: "Good wins" });
-    expect(within(summary).getByText("Alice")).toBeInTheDocument();
+    const summary = screen.getByRole("dialog", { name: "Good Wins" });
+    expect(within(within(summary).getByRole("list", { name: "Good — winners" })).getByText("Alice")).toBeInTheDocument();
+    fireEvent.click(within(summary).getByText("Game details & history"));
     expect(within(summary).getByText("Imp")).toBeInTheDocument();
-    fireEvent.click(within(summary).getByRole("button", { name: "Review the final Grimoire" }));
-    expect(screen.getByRole("status")).toHaveTextContent("Finished game — read-only review of the final state.");
-    expect(screen.queryByRole("button", { name: "↶ Undo" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Game summary" }));
-    fireEvent.click(within(screen.getByRole("region", { name: "Good wins" })).getByRole("button", { name: "Return Home" }));
+    fireEvent.click(within(summary).getByRole("button", { name: "Review the Grimoire" }));
+    expect(screen.getByRole("button", { name: "Undo ending" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "New game" }));
     expect(state().view).toBe("home");
   });
 
@@ -103,7 +103,7 @@ describe("§19: cinematic summary -> read-only final Grimoire -> History -> Home
     render(<GameScreen />);
     await finishGame({ choice: "evil", review: false });
     act(() => usePrivacyStore.getState().setEnabled(true));
-    expect(screen.queryByRole("region", { name: "Evil wins" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Evil Wins" })).toBeNull();
     expect(document.body).not.toHaveTextContent(/Imp|Poisoner|Washerwoman/);
   });
 });
@@ -114,17 +114,16 @@ describe("10H-AC-051 (UI side): while the close is in flight the game cannot be 
     close.mockImplementation(() => new Promise((_, reject) => { fail = reject; }));
     store.setState({ lobby: { code: "ABCD", uid: "st", sessionId: "s1", status: "live" } });
     render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: "Finish game" }));
-    fireEvent.click(screen.getByRole("button", { name: /^Good wins/ }));
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Declare Good Victory" })); });
+    fireEvent.click(screen.getByRole("button", { name: "End game" }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Good wins" })); });
     expect(within(screen.getByRole("dialog")).getByRole("status")).toHaveTextContent("Ending the game…");
-    expect(screen.getByRole("button", { name: "Declare Good Victory" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Back" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Good wins" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Keep playing" })).toBeDisabled();
     expect(state().terminalClose).toMatchObject({ status: "closing" });
     await act(async () => { fail(new Error("network down")); });
     expect(game().phase).toBe("day");
     expect(screen.getByRole("alert")).toHaveTextContent(/could not be ended/);
-    expect(screen.getByRole("button", { name: "Try again: Declare Good Victory" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Good wins" })).toBeEnabled();
   });
 });
 
@@ -133,6 +132,7 @@ describe("Discard setup is a true confirmation (no window.confirm)", () => {
     store.setState({ game: liveGame({ phase: "setup", day: 0, setupRolesRevealed: false }) });
     const confirmSpy = vi.spyOn(window, "confirm");
     render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "Players" }));
     fireEvent.click(screen.getByRole("button", { name: "Discard setup" }));
     const dialog = screen.getByRole("dialog", { name: "Discard this setup?" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));

@@ -99,7 +99,9 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 async function goLiveHeldBeforeAdoption(b: CleanupBackend): Promise<{ release: () => void; code: () => string }> {
   const release = b.holdSessionRead();
   connect.mockResolvedValue({ backend: b, uid: UID });
+  fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
   fireEvent.click(screen.getByRole("button", { name: "Go live" }));
+  fireEvent.click(within(screen.getByRole("dialog", { name: "Invite players" })).getByRole("button", { name: "Close" }));
   await waitFor(() => expect(b.lobbyCodes()).toHaveLength(1));
   return { release, code: () => b.lobbyCodes()[0]! };
 }
@@ -112,7 +114,7 @@ describe("ASTRA-10G-R1-001-A: Finish game -> Home, then the superseded cleanup f
     const code = held.code();
     await finishGame();
     expect(state().game!.phase).toBe("ended");
-    fireEvent.click(screen.getByRole("button", { name: "← Home" }));
+    fireEvent.click(screen.getByRole("button", { name: "New game" }));
     expect(screen.getByRole("button", { name: "Review finished game" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Finish game" })).toBeNull(); // GameScreen is gone
     b.failLease = true;
@@ -138,7 +140,7 @@ describe("ASTRA-10G-R1-001-A: Finish game -> Home, then the superseded cleanup f
     fireEvent.click(screen.getByRole("button", { name: "Review finished game" }));
     expect(screen.getByRole("status")).toHaveTextContent("Finished game");
     expect(warningFor(code)).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "← Home" }));
+    fireEvent.click(screen.getByRole("button", { name: "New game" }));
     expect(warningFor(code)).not.toBeNull();
   });
 });
@@ -149,7 +151,9 @@ describe("ASTRA-10G-R1-001-B: Home -> New Game -> Create setup, then the old cle
     render(<App />);
     const held = await goLiveHeldBeforeAdoption(b);
     const oldCode = held.code();
-    fireEvent.click(screen.getByRole("button", { name: "← Home" }));
+    // Simulate the navigation/lifecycle boundary while the asynchronous
+    // connection is pending; the live grimoire no longer offers Home.
+    act(() => state().setView("home"));
     fireEvent.click(screen.getByRole("button", { name: "New Game" }));
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^Create setup/ })); });
     const gameB = state().game!;
@@ -166,7 +170,7 @@ describe("ASTRA-10G-R1-001-B: Home -> New Game -> Create setup, then the old cle
     expect(warningFor(oldCode)).toHaveTextContent(formatCode(oldCode));
 
     // Still visible across the new flow: Home, then back to Game B's setup.
-    fireEvent.click(screen.getByRole("button", { name: "← Home" }));
+    act(() => state().setView("home"));
     expect(warningFor(oldCode)).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Continue current game/ }));
     expect(warningFor(oldCode)).not.toBeNull();
@@ -175,7 +179,9 @@ describe("ASTRA-10G-R1-001-B: Home -> New Game -> Create setup, then the old cle
     // warning for the OLD lobby is not erased by it.
     b.failLease = false;
     connect.mockResolvedValue({ backend: b, uid: UID });
+    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
     fireEvent.click(screen.getByRole("button", { name: "Go live" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Invite players" })).getByRole("button", { name: "Close" }));
     await waitFor(() => expect(useSessionRuntime.getState().status).toBe("live"));
     expect(state().lobby!.code).not.toBe(oldCode);
     expect(b.writerEverActive(state().lobby!.code)).toBe(true); // the helper detects a real writer
@@ -191,7 +197,7 @@ describe("ASTRA-10G-R1-001: controls", () => {
     const held = await goLiveHeldBeforeAdoption(b);
     const code = held.code();
     await finishGame();
-    fireEvent.click(screen.getByRole("button", { name: "← Home" }));
+    fireEvent.click(screen.getByRole("button", { name: "New game" }));
     await act(async () => { held.release(); });
     await waitFor(async () => expect(await b.get(`lobbies/${code}/session`)).toMatchObject({ state: "ended" }));
     await settle();
@@ -219,6 +225,7 @@ describe("ASTRA-10G-R1-001: controls", () => {
   it("an ordinary current-game Go Live error stays on the game screen and creates no unattached-lobby warning", async () => {
     connect.mockRejectedValue(new Error("network down"));
     render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Go live" })); });
     await settle();
     expect(warnings()).toHaveLength(0);

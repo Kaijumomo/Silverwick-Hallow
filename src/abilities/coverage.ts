@@ -4,6 +4,7 @@ import { CANONICAL_REVISION } from "@/data/canonical";
 import { CANONICAL_MODIFIER_SCOPES, type HookScope } from "./modifiers";
 import { CANONICAL_ABILITY_SEMANTICS, type AbilitySemanticsRegistry } from "./semantics";
 import { COVERAGE_NOTES, VERIFIED_MANUAL } from "./characters/classification";
+import { hasCountPolicy, hasUncertainComposition } from "@/features/setup/setupPolicies";
 
 /**
  * Phase 10F: the canonical ability COVERAGE MANIFEST (PHASE10F Section 18,
@@ -39,7 +40,40 @@ export type CoverageEntry = {
   wave: CoverageWave;
   scopes?: readonly (HookScope | "global")[];
   note?: string;
+  /** Orthogonal ownership inventory. Legacy status is descriptor-oriented,
+   * not a whole-character automation claim. Never used to authorize actions. */
+  capabilities?: readonly CoverageCapability[];
 };
+
+export type CoverageCapability = {
+  owner: "abilities" | "setup" | "voting" | "identity" | "rules";
+  boundary: string;
+  evidence: string;
+};
+
+const OWNED_CAPABILITIES: Readonly<Record<string, readonly CoverageCapability[]>> = {
+  bureaucrat: [{ owner: "voting", boundary: "Sourced vote weight and linked notation; no ability descriptor", evidence: "src/stores/voting.ts" }],
+  virgin: [{ owner: "voting", boundary: "First nomination adjudication and Life usage; no automatic ruling", evidence: "src/stores/voting.ts" }],
+  huntsman: [{ owner: "setup", boundary: "Damsel dependency warning only", evidence: "src/features/setup/setupAnalyzer.ts" }],
+  choirboy: [{ owner: "setup", boundary: "King dependency warning only", evidence: "src/features/setup/setupAnalyzer.ts" }],
+  villageidiot: [{ owner: "setup", boundary: "Duplicate allowance and manual drunkenness warning", evidence: "src/features/setup/setupAnalyzer.ts" }],
+  legion: [{ owner: "setup", boundary: "Duplicate allowance; composition manual", evidence: "src/features/setup/setupAnalyzer.ts" }],
+  pope: [{ owner: "setup", boundary: "Good character duplicate allowance only", evidence: "src/features/setup/setupAnalyzer.ts" }],
+  marionette: [{ owner: "setup", boundary: "Bounded Demon adjacency validation", evidence: "src/features/setup/setupAnalyzer.ts" }],
+  scarletwoman: [{ owner: "abilities", boundary: "Imp star-pass priority only", evidence: "src/abilities/characters/imp.ts" }],
+  soldier: [{ owner: "rules", boundary: "Canonical functioning Soldier Demon death protection only", evidence: "src/abilities/characters/passiveRules.ts" }],
+  vortox: [{ owner: "rules", boundary: "Relevant Townsfolk information goes wholly Manual; no Vortox resolver", evidence: "src/abilities/characters/passiveRules.ts" }],
+};
+
+function capabilitiesOf(role: RawRole, semantics: AbilitySemanticsRegistry): CoverageCapability[] {
+  const capabilities = [...(OWNED_CAPABILITIES[role.id] ?? [])];
+  if (semantics.has(role.id)) capabilities.push({ owner: "abilities", boundary: "Registered bounded evaluator; context must separately pass automation eligibility", evidence: "src/abilities/characters/index.ts" });
+  if (hasCountPolicy(role.id)) capabilities.push({ owner: "setup", boundary: "Single-effect count policy; mixed effects remain manual", evidence: "src/features/setup/setupPolicies.ts" });
+  if (hasUncertainComposition(role.id)) capabilities.push({ owner: "setup", boundary: "Explicit manual composition gate", evidence: "src/features/setup/setupPolicies.ts" });
+  if (["drunk", "marionette", "lunatic"].includes(role.id)) capabilities.push({ owner: "identity", boundary: "Separate actual and shown identity; not full character mechanics", evidence: "src/stores/identity.ts" });
+  if (["recluse", "spy", "zombuul", "legion", "lycanthrope"].includes(role.id)) capabilities.push({ owner: "rules", boundary: "Registration uncertainty gate only", evidence: "src/stores/rulesQuery.ts" });
+  return capabilities;
+}
 
 /** The frozen Phase 10F proof set (PHASE10F Section 17). Vortox is not
  * required for 10F closure. */
@@ -77,13 +111,21 @@ export function buildCoverageManifest(semantics: AbilitySemanticsRegistry = CANO
       entries.push({ id: `${entry.id}+${jinx.id}`, kind: "jinx", status: "gatedJudgment", wave: "11F", note: "Gates its two characters' evaluations to a Storyteller judgment." });
     }
   }
-  return entries;
+  // Attach ownership independently of old status precedence: Setup/Voting
+  // support must not disappear merely because a character lacks a descriptor.
+  const rolesById = new Map((rawRoles as RawRole[]).map(role => [role.id, role]));
+  return entries.map(entry => {
+    const role = rolesById.get(entry.id);
+    return role ? { ...entry, capabilities: capabilitiesOf(role, semantics) } : entry;
+  });
 }
 
-export type CoverageSummary = { revision: string; total: number; byStatus: Record<CoverageStatus, number> };
+export type CoverageSummary = { revision: string; total: number; characterTotal: number; jinxTotal: number; byStatus: Record<CoverageStatus, number> };
 
 export function coverageSummary(manifest: readonly CoverageEntry[] = buildCoverageManifest()): CoverageSummary {
   const byStatus: Record<CoverageStatus, number> = { supported: 0, verifiedManual: 0, setupOwned: 0, modifierScoped: 0, gatedJudgment: 0, unclassified: 0 };
   for (const entry of manifest) byStatus[entry.status]++;
-  return { revision: CANONICAL_REVISION, total: manifest.length, byStatus };
+  return { revision: CANONICAL_REVISION, total: manifest.length,
+    characterTotal: manifest.filter(entry => entry.kind !== "jinx").length,
+    jinxTotal: manifest.filter(entry => entry.kind === "jinx").length, byStatus };
 }

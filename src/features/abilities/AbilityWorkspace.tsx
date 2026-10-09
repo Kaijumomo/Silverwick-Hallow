@@ -1,9 +1,9 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ActionCard } from "@/components/ActionCard";
 import { KNOWN_EFFECT_TYPES } from "@/stores/effectRegistry";
 import { changeRoleIntent, ordinaryRoleChoices } from "@/stores/roleResolution";
 import { changeAlignmentIntent } from "@/stores/alignmentResolution";
-import { useStorytellerStore } from "@/stores/storytellerStore";
+import { captureCharacterActionContext, useStorytellerStore } from "@/stores/storytellerStore";
 import {
   captureFingerprint,
   planAbilityResolution,
@@ -59,12 +59,15 @@ type Props = {
   target: WorkspaceTarget;
   descriptor: AbilityDescriptor | null;
   manualReason: string;
+  strictGameplay?: boolean;
+  onManualRequired?: () => void;
   /** Choices already made inline before escalating to the workspace. */
   initialInputs?: Record<string, AbilityInputValue>;
   onClose: () => void;
   onResolved: (resolution: { resolutionId: string; game: StorytellerLobbyRecord; delivered: boolean }) => void;
   /** Phase 10H: hidden (draft kept) -- the acting seat resumes it. */
   hidden?: boolean;
+  dockHostId?: string;
   /** Phase 10H: hide the card, keeping the draft. */
   onHide?: () => void;
   /** Phase 10H (§8.6): re-derive the workflow from current authoritative
@@ -102,9 +105,11 @@ const MANUAL_KINDS: { kind: ManualDraft["kind"]; label: string }[] = [
 ];
 
 
-export function AbilityWorkspace({ game, script, registry, semantics, target, descriptor, manualReason, initialInputs, onClose, onResolved, hidden, onHide, onRefresh, guidance }: Props) {
+export function AbilityWorkspace({ game, script, registry, semantics, target, descriptor, manualReason, initialInputs, onClose, onResolved, hidden, onHide, onRefresh, guidance, dockHostId, strictGameplay = false, onManualRequired }: Props) {
   // Captured ONCE, at open: the state the Storyteller is resolving against.
   const [fingerprint] = useState(() => captureFingerprint(game, target.actorId, target.step, target.trigger));
+  const [actionContext] = useState(captureCharacterActionContext);
+  const submitted = useRef(false);
   const [mode, setMode] = useState<"guided" | "manual">(descriptor ? "guided" : "manual");
   const [inputs, setInputs] = useState<Record<string, AbilityInputValue>>(initialInputs ?? {});
   const [judgments, setJudgments] = useState<Record<string, AbilityInputValue>>({});
@@ -196,11 +201,13 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
     return next;
   };
   const changeBase = (id: string, value: AbilityInputValue | undefined) => {
+    submitted.current = false; setCommitError(null);
     setInputs((prev) => setAnswer(Object.fromEntries(Object.entries(prev).filter(([key]) => declaredIds.has(key))), id, value));
     setJudgments({});
     setJudgmentFields([]);
   };
   const changeFollowUp = (requirement: AbilityInputRequirement, value: AbilityInputValue | undefined) => {
+    submitted.current = false; setCommitError(null);
     const position = judgmentFields.findIndex((field) => field.id === requirement.id);
     const later = new Set(position < 0 ? [] : judgmentFields.slice(position + 1).map((field) => field.id));
     const prune = (record: Record<string, AbilityInputValue>) => Object.fromEntries(Object.entries(record).filter(([key]) => !later.has(key)));
@@ -217,12 +224,21 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
 
   const confirm = () => {
     if (!request) return;
-    const result = useStorytellerStore.getState().resolveAbility(request, semantics);
+    const result = useStorytellerStore.getState().resolveAbility(request, semantics, actionContext);
     if (!result.ok) { setCommitError(result.message); return; }
     if (!result.changed) { onClose(); return; }
     const committed = useStorytellerStore.getState().game!;
     onResolved({ resolutionId: result.resolutionId, game: committed, delivered: committed.informationDeliveries.length > game.informationDeliveries.length });
   };
+
+  useEffect(() => {
+    if (!strictGameplay || hidden || stale || submitted.current) return;
+    if (!descriptor || planned && !planned.ok && planned.code === "unsupported") {
+      onManualRequired?.(); return;
+    }
+    // The final authorized choice is the action. No second completion dialog.
+    if (planned?.ok && planned.changed) { submitted.current = true; confirm(); }
+  }, [strictGameplay, hidden, stale, planned]);
 
   const participantSelect = (value: ParticipantBinding | null, onChange: (binding: ParticipantBinding | null) => void, label: string) => (
     <ParticipantSelect game={game} value={value} candidates={participants} label={label} onChange={onChange} />
@@ -233,13 +249,14 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
   // Phase 10G Night sheet; every choice stays mounted.
   const picking = useTargetPicker((s) => !!s.active);
   return (
-    <ActionCard title={`${target.roleName} — ${mode === "guided" ? "guided resolution" : "Resolve manually / unmodeled interaction"}`}
+    <ActionCard dockHostId={dockHostId} title={strictGameplay ? target.roleName : `${target.roleName} — ${mode === "guided" ? "guided resolution" : "Resolve manually / unmodeled interaction"}`}
       subtitle={<>
         <span className="action-card-actor">{actorRecord ? `${actorRecord.name || `Seat ${actorRecord.seat + 1}`} · seat ${actorRecord.seat + 1}` : "No longer seated"}</span>
         {mode === "guided" && descriptor && <span className="action-card-instruction">{descriptor.presentation.action}</span>}
       </>}
       hidden={hidden} onHide={onHide} onClose={onClose} className={`ability-workspace${picking ? " action-card-picking" : ""}`}>
       <div className="ability-workspace-body">
+        {strictGameplay && commitError && <p className="behavior-help" role="alert">{commitError} Close and reopen this action to try again.</p>}
         {(guidance?.ability || guidance?.prompt || guidance?.reminder) && (
           <details className="action-guidance">
             <summary>Ability &amp; guidance</summary>
@@ -261,7 +278,7 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
             <section aria-label="Choices" className="ability-section">
               <h3 className="drawer-section-title">{descriptor.presentation.action}</h3>
               {descriptor.inputs.map((input) => (
-                <RequirementInput key={input.id} requirement={input} game={game} script={script} actor={fingerprint?.actor ?? null}
+                <RequirementInput key={input.id} requirement={input} game={game} script={script} actor={fingerprint?.actor ?? null} showOrigin={!strictGameplay}
                   {...(initialInputs?.[input.id] ? { initial: initialInputs[input.id] } : {})}
                   onChange={(value) => changeBase(input.id, value)} />
               ))}
@@ -270,7 +287,7 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
               <section aria-label="Further choices" className="ability-section">
                 <h3 className="drawer-section-title">Further choices</h3>
                 {judgmentFields.filter((requirement) => requirement.source !== "judgment").map((requirement) => (
-                  <RequirementInput key={requirement.id} requirement={requirement} game={game} script={script} actor={fingerprint?.actor ?? null}
+                  <RequirementInput key={requirement.id} requirement={requirement} game={game} script={script} actor={fingerprint?.actor ?? null} showOrigin={!strictGameplay}
                     onChange={(value) => changeFollowUp(requirement, value)} />
                 ))}
               </section>
@@ -346,7 +363,7 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
           </section>
         )}
 
-        {!stale && (
+        {!stale && !strictGameplay && (
           <section aria-label="Result" className="ability-section ability-preview">
             <h3 className="drawer-section-title">Result <OriginTag origin={mode === "guided" ? "computed" : "manual"} /></h3>
             {preview.length > 0

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { selectScriptById, useStorytellerStore, type ReminderCommandResult } from "@/stores/storytellerStore";
+import { captureVotingContext, selectScriptById, useStorytellerStore, type ReminderCommandResult } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { resolvedCharacters } from "@/data/roleRegistry";
 import { ParticipantPicker } from "@/components/ParticipantPicker";
@@ -16,6 +16,9 @@ import {
 } from "@/stores/reminderResolution";
 import { REMINDER_PRESETS, authoritativeLabelHint, cleanupStatusText } from "./reminderPresentation";
 import type { ParticipantRef, ReminderRecord, RoleDef, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
+import { BureaucratAction } from "@/features/voting/BureaucratAction";
+import { currentVotingState } from "@/stores/voting";
+import { useReminderRemoval } from "./useReminderRemoval";
 
 /**
  * Phase 10C: the Player Drawer's Reminder section -- progressive disclosure:
@@ -33,13 +36,15 @@ import type { ParticipantRef, ReminderRecord, RoleDef, STPlayerRecord, Storytell
  * refused as stale. The caller keys this component by ParticipantId, so no
  * draft or disclosure state carries into a replacement occupant.
  *
- * Reminders are notation: nothing here (or anywhere) makes them mechanics.
+ * Reminders are notation. An explicitly labeled official ability action
+ * submits its separate authoritative command; text never becomes mechanics.
  * Under Privacy Mode this renders nothing and drops all disclosure state, so
  * turning Privacy Mode off never reopens a private detail.
  */
 export function ReminderControls({ player }: { player: STPlayerRecord }) {
   const game = useStorytellerStore((s) => s.game);
   const privacyMode = usePrivacyStore((s) => s.enabled);
+  const removal = useReminderRemoval(game, privacyMode);
   const [draft, setDraft] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [advanced, setAdvanced] = useState(false);
@@ -48,21 +53,39 @@ export function ReminderControls({ player }: { player: STPlayerRecord }) {
   const [cleanupNextPhase, setCleanupNextPhase] = useState(false);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [officialVotes, setOfficialVotes] = useState(false);
   useEffect(() => {
     if (!privacyMode) return;
     setExpanded(null);
     setAdvanced(false);
     setError(null);
+    setOfficialVotes(false);
   }, [privacyMode]);
 
   if (!game || privacyMode || player.isEmpty || !player.participantId) return null;
   const target: ReminderParticipantBinding = { playerId: player.id, participantId: player.participantId };
   const ended = game.phase === "ended";
+  const votingContext = captureVotingContext();
+  const bureaucrats = Object.values(game.players).filter(p => !p.isEmpty && p.participantId && p.participantId !== player.participantId && p.alive && p.actualRole === "bureaucrat");
   const run = (result: ReminderCommandResult): boolean => {
     setError(result.ok ? null : result.message);
     return result.ok;
   };
-  const resolve = (intents: ReminderIntent[]) => run(useStorytellerStore.getState().resolveReminders({ intents }));
+  const resolve = (intents: ReminderIntent[]) => {
+    const intent = intents[0];
+    if (intents.length === 1 && (intent?.kind === "remove" || intent?.kind === "correctRemove")) {
+      // Only the explicit ability command's exact linked token has this
+      // action. Human-authored labels never acquire rules by their wording.
+      const modifier = currentVotingState(game).modifiers.find(m => m.target.participantId === target.participantId && `voting-${m.id}` === intent.reminderId);
+      if (modifier) {
+        const result = useStorytellerStore.getState().resolveVoting({ kind: "removeModifier", modifierId: modifier.id,
+          code: game.code, day: game.day, expectedRevision: currentVotingState(game).revision }, votingContext);
+        setError(result.ok ? null : result.message);
+        return result.ok;
+      }
+    }
+    return run(useStorytellerStore.getState().resolveReminders({ intents }, votingContext));
+  };
   const resetAdvanced = () => {
     setSource(null);
     setSourceCharacter("");
@@ -89,7 +112,13 @@ export function ReminderControls({ player }: { player: STPlayerRecord }) {
   return (
     <section className="drawer-section reminder-controls" aria-label="Reminders">
       <h4 className="drawer-section-title">Reminders</h4>
-      <p className="behavior-help reminder-help">Storyteller notation only -- never a rule.</p>
+      <p className="behavior-help reminder-help">Free-form reminders are Storyteller notation only.</p>
+      {(game.phase === "night" || game.phase === "day") && bureaucrats.length > 0 && <div className="drawer-row">
+        <button type="button" className="btn btn-sm" aria-expanded={officialVotes} onClick={() => setOfficialVotes(v => !v)}>Bureaucrat · 3 Votes</button>
+        {officialVotes && <div><p className="behavior-help">Apply the official ability and its reminder together.</p>
+          {bureaucrats.map(p => <BureaucratAction key={`${p.participantId}:${player.participantId}:${game.day}`} source={{ playerId: p.id, participantId: p.participantId! }} target={target} />)}
+        </div>}
+      </div>}
       {player.reminders.length > 0 ? (
         <ul className="reminder-list" aria-label="Current reminders">
           {player.reminders.map((reminder) => {
@@ -97,7 +126,7 @@ export function ReminderControls({ player }: { player: STPlayerRecord }) {
             const status = cleanupStatusText(reminderCleanupStatus(reminder, game));
             return (
               <li key={reminder.id} className="reminder-row">
-                <span className={`reminder-tag ${status ? "reminder-attention" : ""}`}>
+                <span className={`reminder-tag ${status ? "reminder-attention" : ""}`} data-removal-armed={removal.armedId === reminder.id || undefined}>
                   <button
                     type="button"
                     className="reminder-tag-label"
@@ -106,7 +135,7 @@ export function ReminderControls({ player }: { player: STPlayerRecord }) {
                     onClick={() => setExpanded(open ? null : reminder.id)}
                   >
                     <span className="reminder-glyph" aria-hidden="true">✎</span>
-                    {reminder.label}
+                    {removal.armedId === reminder.id ? "Tap to remove" : reminder.label}
                     {status && <span className="reminder-status"> · {status}</span>}
                   </button>
                   <button
@@ -114,7 +143,7 @@ export function ReminderControls({ player }: { player: STPlayerRecord }) {
                     className="reminder-tag-remove"
                     aria-label={`Remove ${reminder.label} reminder`}
                     disabled={ended}
-                    onClick={() => { if (resolve([{ kind: "remove", target, reminderId: reminder.id }]) && open) setExpanded(null); }}
+                    onClick={() => removal.tap(reminder.id, () => { if (resolve([{ kind: "remove", target, reminderId: reminder.id }]) && open) setExpanded(null); })}
                   >
                     ×
                   </button>

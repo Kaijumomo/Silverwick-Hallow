@@ -25,7 +25,7 @@ function game(phase: "night" | "day"): StorytellerLobbyRecord {
   const roles = ["seamstress", "slayer", "chef", "imp"];
   const players = roles.map((actualRole, seat) => makeSTPlayer({ id: `p${seat}`, name: `P${seat}`, seat, actualRole, shownRole: actualRole,
     actualAlignment: registry.alignmentOf(actualRole), abilityUsed: true }));
-  return { gameSchemaVersion: 26, gameRuleFacts: [], code: "", storytellerUid: "local", scriptId: script.id, phase, day: 2,
+  return { gameSchemaVersion: 27, gameRuleFacts: [], code: "", storytellerUid: "local", scriptId: script.id, phase, day: 2,
     players: Object.fromEntries(players.map((p) => [p.id, p])), seatOrder: players.map((p) => p.id), plannedPlayerCount: 4, plannedTravelerCount: 0,
     rolePool: [], fabled: [], lorics: [], bluffs: [], notes: "", nightProgress: {}, pendingPlayers: {}, history: [], informationDeliveries: [],
     lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] }, setupRolesDealt: true, setupRolesRevealed: true };

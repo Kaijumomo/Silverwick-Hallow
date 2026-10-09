@@ -145,6 +145,9 @@ textarea,
 [role="button"],
 summary {
   touch-action: manipulation;
+  /* Touch feedback uses the control's styled state, not a browser-painted
+     rectangle over its larger tap target. Keyboard focus remains below. */
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* One visible keyboard-focus treatment, distinct from selected and acting. */

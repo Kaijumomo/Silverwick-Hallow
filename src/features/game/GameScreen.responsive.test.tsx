@@ -1,373 +1,222 @@
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GameScreen } from "./GameScreen";
 import { useStorytellerStore as storyteller } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
-import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
-import { choose, chosen } from "@/test/pickers";
 import { useShellStore } from "@/stores/shellStore";
+import { useTargetPicker } from "@/features/abilities/abilityUi";
+import { setupGame, setupScript } from "@/test/setupFixtures";
+import { choose, chosen } from "@/test/pickers";
 
 let narrow = false;
-const mediaListeners = new Set<() => void>();
+const listeners = new Set<() => void>();
 const observers: { callback: ResizeObserverCallback; targets: Set<Element> }[] = [];
-
-function setNarrow(value: boolean) {
-  act(() => {
-    narrow = value;
-    mediaListeners.forEach(listener => listener());
-  });
-}
-
-function resizeStage(stage: Element, width: number, height: number) {
+const state = () => storyteller.getState();
+function resize(stage: Element, width: number, height: number) {
   const observer = observers.find(item => item.targets.has(stage));
-  expect(observer, "the available stage is observed independently of the canvas").toBeDefined();
-  act(() => observer!.callback([
-    { target: stage, contentRect: { width, height } } as ResizeObserverEntry,
-  ], {} as ResizeObserver));
+  expect(observer).toBeDefined();
+  act(() => observer!.callback([{ target: stage, contentRect: { width, height } } as ResizeObserverEntry], {} as ResizeObserver));
+}
+const geometry = (container: HTMLElement) => [...container.querySelectorAll<HTMLElement>(".grimoire .token")]
+  .map(token => [token.style.left, token.style.top, token.style.width, token.style.height]);
+function playing(phase: "day" | "night" = "night", roles = ["monk", "imp", "empath", "chef", "washerwoman"]) {
+  storyteller.setState({ game: setupGame(roles,
+    { phase, day: 2, setupRolesDealt: true, setupRolesRevealed: true }),
+    customScripts: { [setupScript.id]: setupScript } });
+  return render(<GameScreen />);
+}
+const actor = (container: HTMLElement) => container.querySelector<HTMLElement>(".grimoire .token.acting")!;
+const hideNight = () => fireEvent.click(screen.getByRole("button", { name: "Close Night panel" }));
+const openNight = () => fireEvent.click(screen.getByRole("button", { name: "Night" }));
+const card = () => screen.getByRole("dialog", { name: /^Imp/ });
+const slot = () => card().querySelector<HTMLElement>("[data-pick-slot]")!.dataset.pickSlot!;
+function impDraft() {
+  // A complete authorized choice resolves immediately in strict gameplay.
+  // This star-pass still needs a successor, so it is a genuine partial draft.
+  const view = playing("night", ["monk", "imp", "poisoner", "baron", "chef"]);
+  fireEvent.click(screen.getByRole("button", { name: /^Imp Player 1/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Continue action" }));
+  const pick = slot();
+  choose(pick, "p1", card());
+  expect(screen.getByRole("region", { name: "Further choices" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Resolve" })).toBeNull();
+  return { view, pick };
 }
 
 beforeEach(() => {
-  narrow = false;
-  mediaListeners.clear();
-  observers.length = 0;
-  vi.stubGlobal("matchMedia", vi.fn((query: string) => ({
-    media: query,
-    get matches() { return narrow; },
-    addEventListener: (_type: string, listener: () => void) => mediaListeners.add(listener),
-    removeEventListener: (_type: string, listener: () => void) => mediaListeners.delete(listener),
-  })));
+  narrow = false; listeners.clear(); observers.length = 0;
+  vi.stubGlobal("matchMedia", vi.fn((query: string) => ({ media: query, get matches() { return narrow; },
+    addEventListener: (_: string, listener: () => void) => listeners.add(listener),
+    removeEventListener: (_: string, listener: () => void) => listeners.delete(listener) })));
   vi.stubGlobal("ResizeObserver", class {
     targets = new Set<Element>();
     constructor(public callback: ResizeObserverCallback) { observers.push(this); }
     observe(target: Element) { this.targets.add(target); }
     disconnect() { this.targets.clear(); }
   });
-  usePrivacyStore.setState({ enabled: false });
-  storyteller.setState({ game: null, lobby: null, undoStack: [], selectedPlayerId: null, grimoireMode: "ring" });
-  storyteller.getState().newGame("tb", { plannedPlayerCount: 5 });
+  usePrivacyStore.setState({ enabled: false }); useShellStore.getState().reset(); useTargetPicker.getState().cancel();
+  storyteller.setState({ game: null, lobby: null, sync: null, terminalClose: null, undoStack: [], seatSwapUndo: [],
+    selectedPlayerId: null, grimoireMode: "ring", tokenPositions: {}, finishedGameUndo: null, canUndoFinishedGame: false });
+  state().newGame("tb", { plannedPlayerCount: 5 });
 });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-afterEach(() => {
-  cleanup();
-  vi.unstubAllGlobals();
-});
-
-describe("responsive Storyteller workspace", () => {
-  it("recalculates from stage width and height and caps large workspaces", () => {
+describe("single responsive Storyteller board", () => {
+  it("recalculates canonical geometry from measured width and height without capping the movement canvas", () => {
     const view = render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: "setup" })); // deliberately open Setup
     const stage = view.container.querySelector(".grimoire-stage")!;
-    const canvas = view.container.querySelector(".grimoire")!;
-    // Phase 10H (§§5.1, 6.1): the Table is an oval fitted to the measured
-    // stage rectangle (tableStage) instead of a height-bound circle -- still
-    // recalculated from both dimensions and still capped on large workspaces.
-    resizeStage(stage, 1040, 540);
-    expect(canvas).toHaveStyle({ width: "1040px", height: "540px" });
-    resizeStage(stage, 472, 980);
-    expect(canvas).toHaveStyle({ width: "472px", height: "900px" });
-    fireEvent.click(screen.getByRole("button", { name: "Close setup panel" }));
-    resizeStage(stage, 1800, 1200);
-    expect(canvas).toHaveStyle({ width: "1735px", height: "900px" });
+    const canvas = view.container.querySelector<HTMLElement>(".grimoire")!;
+    resize(stage, 1040, 540); const wide = geometry(view.container);
+    resize(stage, 472, 980); expect(geometry(view.container)).not.toEqual(wide);
+    const tall = geometry(view.container);
+    resize(stage, 1800, 1200); expect(geometry(view.container)).not.toEqual(tall);
+    expect(canvas).toHaveAttribute("data-mode", "freeRoam");
+    expect(canvas.style.width).toBe(""); expect(canvas.style.height).toBe("");
+    expect(view.container.querySelector(".grimoire")).toBe(canvas);
   });
 
-  it("preserves the practical diameter as seat count changes from 5 through 15", () => {
+  it("retains one canvas and usable seats as population grows from 5 to 20", () => {
     const view = render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: "setup" })); // deliberately open Setup
-    const stage = view.container.querySelector(".grimoire-stage")!;
     const canvas = view.container.querySelector(".grimoire")!;
-    resizeStage(stage, 1000, 650);
-    for (const count of [5, 7, 12, 15]) {
-      act(() => {
-        while (storyteller.getState().game!.seatOrder.length < count) storyteller.getState().addEmptySeat();
-      });
-      expect(view.container.querySelectorAll(".token.empty-seat")).toHaveLength(count);
-      expect(canvas).toHaveStyle({ width: "1000px", height: "650px" });
+    resize(view.container.querySelector(".grimoire-stage")!, 1480, 924);
+    for (const count of [5, 7, 12, 15, 20]) {
+      act(() => { while (state().game!.seatOrder.length < count) state().addEmptySeat(); });
+      expect(canvas.querySelectorAll(".token.empty-seat")).toHaveLength(count);
+      for (const token of canvas.querySelectorAll<HTMLElement>(".token")) expect(parseFloat(token.style.width)).toBeGreaterThanOrEqual(44);
+      expect(view.container.querySelector(".grimoire")).toBe(canvas);
+      expect(view.container.querySelector(".table-replaced")).toBeNull();
     }
   });
 
-  // Phase 10H (contract §10, S2; 10H-AC-025) amends the 10G mobile Setup
-  // foreground: Setup is a Grimoire-centred stage workspace -- on a phone the
-  // ONE bottom workspace beside the Table -- never a modal takeover page.
-  it("Phase 10H: mobile Setup is the non-modal bottom workspace; the Table stays operable", () => {
-    narrow = true;
-    const view = render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: "setup" })); // deliberately open Setup
-    const panel = screen.getByRole("complementary", { name: "Setup helper" });
+  it("phone Players is nonmodal and keeps the grimoire keyboard accessible", () => {
+    narrow = true; const view = render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "Players" }));
+    expect(screen.getByRole("complementary", { name: "Players" })).toBeVisible();
+    expect(screen.queryByRole("dialog")).toBeNull();
     const seat = view.container.querySelector<HTMLElement>(".token.empty-seat")!;
-    expect(screen.queryByRole("dialog", { name: "Setup" })).toBeNull();
-    expect(view.container.querySelector(".game-body")).toContainElement(panel);
-    expect(seat.closest("[inert]")).toBeNull();
-    expect(view.container.querySelector(".phase-bar")).not.toHaveAttribute("inert");
-    expect(document.body.style.overflow).not.toBe("hidden");
-    act(() => seat.focus());
-    expect(seat).toHaveFocus();
+    expect(seat.closest("[inert]")).toBeNull(); act(() => seat.focus()); expect(seat).toHaveFocus();
   });
 
-  it("closes mobile Setup and returns focus to More actions", () => {
-    narrow = true;
-    const view = render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: "setup" })); // deliberately open Setup
-    fireEvent.click(screen.getByRole("button", { name: "Close setup panel" }));
-    expect(screen.queryByRole("complementary", { name: "Setup helper" })).not.toBeInTheDocument();
-    expect(view.container.querySelector(".grimoire-wrap")!.closest("[inert]")).toBeNull();
-    expect(screen.getByRole("button", { name: "More actions" })).toHaveFocus();
-    expect(document.body.style.overflow).not.toBe("hidden");
+  it("closing phone Players restores focus to its rail button", () => {
+    narrow = true; render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "Players" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close Players panel" }));
+    expect(screen.queryByRole("complementary", { name: "Players" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Players" })).toHaveFocus();
   });
 
-  it("Phase 10H: an open Setup stays the same non-modal workspace across a desktop / phone resize", () => {
-    const view = render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: "setup" })); // deliberately open Setup
-    expect(screen.getByRole("complementary", { name: "Setup helper" })).toBeInTheDocument();
-    setNarrow(true);
-    expect(screen.getByRole("complementary", { name: "Setup helper" })).toBeInTheDocument();
-    expect(screen.queryByRole("dialog", { name: "Setup" })).not.toBeInTheDocument();
-    expect(view.container.querySelector(".grimoire-wrap")!.closest("[inert]")).toBeNull();
-    setNarrow(false);
-    expect(screen.getByRole("complementary", { name: "Setup helper" })).toBeInTheDocument();
-    expect(document.body.style.overflow).not.toBe("hidden");
-  });
-
-  it("removes active Setup when privacy is enabled, and nothing is isolated", () => {
-    narrow = true;
-    const view = render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: "setup" })); // deliberately open Setup
-    const before = structuredClone(storyteller.getState().game);
-    expect(screen.getByRole("complementary", { name: "Setup helper" })).toBeInTheDocument();
-    act(() => usePrivacyStore.setState({ enabled: true }));
-    expect(screen.queryByRole("complementary", { name: "Setup helper" })).not.toBeInTheDocument();
-    expect(view.container.querySelector(".grimoire-wrap")!.closest("[inert]")).toBeNull();
-    expect(storyteller.getState().game).toEqual(before);
-    expect(document.body.style.overflow).not.toBe("hidden");
-    act(() => usePrivacyStore.setState({ enabled: false }));
-    expect(screen.getByRole("complementary", { name: "Setup helper" })).toBeInTheDocument();
-  });
-});
-
-// Phase 10H pre-checkpoint (Forward rule; 10H-AC-067): on tablet and phone
-// widths the compact command bar collapses SECONDARY actions into More
-// actions, but the current phase-advance primary stays directly in the bar.
-describe("Phase 10H: the phase-advance primary is never collapsed into the overflow", () => {
-  function playing(phase: "night" | "day") {
-    storyteller.setState({
-      game: setupGame(standardRoles(5), { phase, day: 1, setupRolesDealt: true, setupRolesRevealed: true }),
-      customScripts: { [setupScript.id]: setupScript },
-    });
-  }
-
-  it.each([["night", "→ Day"], ["day", "→ Night"]] as const)("%s at compact width: %s sits in the bar, outside More actions", (phase, label) => {
-    narrow = true;
-    playing(phase);
-    const view = render(<GameScreen />);
-    const advance = screen.getByRole("button", { name: label });
-    const bar = view.container.querySelector(".phase-bar")!;
-    expect(advance).toHaveClass("phase-advance");
-    expect(advance.parentElement).toHaveClass("phase-primary");
-    expect(advance.parentElement!.parentElement).toBe(bar);
-    expect(advance.closest(".phase-bar-right")).toBeNull();
-    expect(screen.getByRole("button", { name: "More actions" })).toBeInTheDocument();
-    expect(advance).toBeEnabled();
-    expect(advance).not.toHaveAttribute("aria-describedby");
-  });
-
-  it("under Privacy Mode the advance stays visible, disabled, with an adjacent visible reason in words", () => {
-    narrow = true;
-    playing("night");
-    usePrivacyStore.setState({ enabled: true });
-    render(<GameScreen />);
-    const advance = screen.getByRole("button", { name: "→ Day" });
-    expect(advance).toBeDisabled();
-    const reasonId = advance.getAttribute("aria-describedby")!;
-    const reason = document.getElementById(reasonId)!;
-    expect(reason).toHaveTextContent("Turn off Privacy Mode first");
-    expect(reason.parentElement).toBe(advance.parentElement);
-    // The visible words -- not the hover title -- are the accessible description.
-    expect(advance).toHaveAccessibleDescription("Turn off Privacy Mode first");
-    act(() => usePrivacyStore.setState({ enabled: false }));
-    expect(advance).toBeEnabled();
-    expect(document.getElementById(reasonId)).toBeNull();
-  });
-});
-
-// ASTRA-10H-002 / ASTRA-10H-008: the ONE Night dock on tablet / phone. (The
-// dock's visual layout -- card width, Night list stepping aside -- is proven
-// in a real browser; jsdom has no :has(). These prove the state wiring.)
-describe("ASTRA-10H-002 / 008: the docked Night workspace", () => {
-  function night() {
-    narrow = true;
-    const g = setupGame(["monk", "imp", "empath", "chef", "washerwoman"], { phase: "night", day: 2, setupRolesDealt: true, setupRolesRevealed: true });
-    storyteller.setState({ game: g, customScripts: { [setupScript.id]: setupScript } });
-    return render(<GameScreen />);
-  }
-  const rail = (c: HTMLElement) => c.querySelector<HTMLElement>(".shell-rail")!;
-
-  it("008: Close hides the docked Night panel; the reopen toggle and the Night tab restore it", () => {
-    const view = night();
-    expect(rail(view.container)).not.toHaveAttribute("hidden");
-    fireEvent.click(screen.getByRole("button", { name: "Close night panel" }));
-    expect(rail(view.container)).toHaveAttribute("hidden");
-    // The Table is still there to reclaim the space.
-    expect(view.container.querySelector(".shell-stage")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "night order" }));
-    expect(rail(view.container)).not.toHaveAttribute("hidden");
-    // Closing again, then choosing the Night tab while a seat is inspected, reopens it too.
-    fireEvent.click(screen.getByRole("button", { name: "Close night panel" }));
-    act(() => storyteller.getState().selectPlayer(storyteller.getState().game!.seatOrder[3]!));
-    fireEvent.click(screen.getByRole("tab", { name: "Night 2" }));
-    expect(rail(view.container)).not.toHaveAttribute("hidden");
-  });
-
-  it("002: the action card is the dock's own content, with a Night-list control and a Resume that keeps the draft", () => {
-    const view = night();
-    const monk = view.container.querySelector<HTMLElement>(".grimoire .token.acting")!;
-    expect(monk).toBeTruthy();
-    fireEvent.click(monk);
-    const card = screen.getByRole("dialog", { name: /^Monk/ });
-    expect(card.parentElement).toHaveClass("action-card-dock-host");
-    expect(card.closest(".shell-rail")).toBe(rail(view.container));
-    fireEvent.click(within(card).getByRole("button", { name: "Back to the Night list (keeps your choices)" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Resume Monk action" }));
-    expect(screen.getByRole("dialog", { name: /^Monk/ }).parentElement).toHaveClass("action-card-dock-host");
-  });
-});
-
-// ASTRA-10H-005: Privacy removes the private action card (and the private
-// rule facts) WITHOUT moving the Table -- their tracks are held by EMPTY,
-// non-private placeholders. (The seat-rectangle equality itself is proven in
-// a real browser; jsdom has no layout.)
-describe("ASTRA-10H-005: Privacy holds the shell geometry with empty placeholders", () => {
-  it("desktop: an open Night action's column and the rule facts' slot stay as empty structure; nothing private remains", () => {
-    narrow = false;
-    const g = setupGame(["monk", "imp", "empath", "chef", "washerwoman"], { phase: "night", day: 2, setupRolesDealt: true, setupRolesRevealed: true });
-    storyteller.setState({ game: g, customScripts: { [setupScript.id]: setupScript } });
-    const view = render(<GameScreen />);
-    fireEvent.click(view.container.querySelector<HTMLElement>(".grimoire .token.acting")!);
-    const card = screen.getByRole("dialog", { name: /^Monk/ });
-    expect(card.parentElement).toHaveAttribute("id", "action-card-stage-host");
-    // jsdom has no layout: give the rule facts a measurable height.
-    const slot = view.container.querySelector<HTMLElement>(".rule-fact-slot")!;
-    slot.getBoundingClientRect = () => ({ height: 57, width: 800, x: 0, y: 0, top: 0, left: 0, right: 800, bottom: 57, toJSON: () => ({}) }) as DOMRect;
-    act(() => usePrivacyStore.getState().setEnabled(true));
-    const stage = view.container.querySelector<HTMLElement>(".shell-stage")!;
-    expect(stage).toHaveAttribute("data-action-column", "privacy");
-    const host = view.container.querySelector<HTMLElement>("#action-card-stage-host")!;
-    expect(host.childElementCount).toBe(0);
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(view.container.querySelector(".token.acting")).toBeNull();
-    const placeholder = view.container.querySelector<HTMLElement>(".rule-fact-slot")!;
-    expect(placeholder).toHaveAttribute("aria-hidden", "true");
-    expect(placeholder.childElementCount).toBe(0);
-    expect(placeholder.style.height).toBe("57px");
-    expect(document.body).not.toHaveTextContent(/Monk|guided resolution|Game rule facts/i);
-    // Privacy off: the placeholders go and nothing private reopens by itself.
-    act(() => usePrivacyStore.getState().setEnabled(false));
-    expect(stage).not.toHaveAttribute("data-action-column");
-    expect(screen.queryByRole("dialog")).toBeNull();
-  });
-});
-
-// ASTRA-10H-009: tapping the lit / current Night actor opens OR RESUMES its
-// action -- and on a docked layout that always brings the Night dock forward,
-// even when the action was already open but the Storyteller hid the dock.
-describe("ASTRA-10H-009: the actor tap reopens a hidden Night dock", () => {
-  function night() {
-    narrow = true;
-    useShellStore.getState().reset();
-    const g = setupGame(["monk", "imp", "empath", "chef", "washerwoman"], { phase: "night", day: 2, setupRolesDealt: true, setupRolesRevealed: true });
-    storyteller.setState({ game: g, customScripts: { [setupScript.id]: setupScript } });
-    return render(<GameScreen />);
-  }
-  const rail = (c: HTMLElement) => c.querySelector<HTMLElement>(".shell-rail")!;
-  const actor = (c: HTMLElement) => c.querySelector<HTMLElement>(".grimoire .token.acting")!;
-  const card = () => screen.queryByRole("dialog");
-  const slotOf = (el: HTMLElement) => el.querySelector<HTMLElement>("[data-pick-slot]")!.dataset.pickSlot!;
-  // The command-bar Night toggle: the control that hides the dock while an
-  // action card is showing (the Night list's own Close is behind the card).
-  const hideDock = () => fireEvent.click(screen.getByRole("button", { name: "hide order" }));
-
-  it("A. open -> valid draft -> hide the dock -> tap the lit actor: the dock reopens with the SAME draft", () => {
-    const view = night();
-    fireEvent.click(actor(view.container));
-    const slot = slotOf(card()!);
-    const target = storyteller.getState().game!.seatOrder[2]!;
-    choose(slot, target, card()!);
-    hideDock();
-    expect(rail(view.container)).toHaveAttribute("hidden");
-    expect(useShellStore.getState().actionOpen).toBe(true); // still open, only the dock is hidden
-    fireEvent.click(actor(view.container));
-    expect(rail(view.container)).not.toHaveAttribute("hidden");
-    expect(useShellStore.getState().dockTab).toBe("night");
-    expect(card()).toHaveAccessibleName(/^Monk/);
-    expect(chosen(slot, card()!)).toBe(target);
-  });
-
-  it("B. hide the dock -> inspect another participant: the Night dock stays hidden; the actor tap reopens it", () => {
-    const view = night();
-    fireEvent.click(actor(view.container));
-    hideDock();
-    const other = storyteller.getState().game!.seatOrder[3]!;
-    fireEvent.click(view.container.querySelector<HTMLElement>(`.grimoire .token[data-player-id="${other}"]`) ?? screen.getAllByRole("button", { name: /^Player 3, seat/ })[0]!);
-    expect(storyteller.getState().selectedPlayerId).toBe(other);
-    expect(rail(view.container)).toHaveAttribute("hidden");
-    fireEvent.click(actor(view.container));
-    expect(rail(view.container)).not.toHaveAttribute("hidden");
-    expect(useShellStore.getState().dockTab).toBe("night");
-    expect(card()).toHaveAccessibleName(/^Monk/);
-  });
-
-  it("C. hide the dock -> the current step moves to a NEW actor -> tapping the new lit actor opens the NEW action, not the old draft", () => {
-    const view = night();
-    fireEvent.click(actor(view.container));
-    choose(slotOf(card()!), storyteller.getState().game!.seatOrder[2]!, card()!);
-    hideDock();
-    // The legitimate current-step flow (the rail's "Go to this step") moves to the Imp.
-    const imp = storyteller.getState().game!.seatOrder[1]!;
-    const impStep = view.container.querySelector<HTMLElement>(`.step-card button[aria-label="Make Imp the current step"]`)!;
-    fireEvent.click(impStep);
-    expect(useShellStore.getState().litActor?.playerId).toBe(imp);
-    expect(card()).toBeNull(); // the Monk workspace was invalidated (ASTRA-10H-006)
-    fireEvent.click(actor(view.container));
-    expect(rail(view.container)).not.toHaveAttribute("hidden");
-    expect(card()).toHaveAccessibleName(/^Imp/);
-    expect(screen.queryByRole("dialog", { name: /^Monk/ })).toBeNull();
-  });
-
-  it("D. hide -> actor tap -> reopen works repeatedly (no one-shot effect)", () => {
-    const view = night();
-    fireEvent.click(actor(view.container));
-    const slot = slotOf(card()!);
-    const target = storyteller.getState().game!.seatOrder[3]!;
-    choose(slot, target, card()!);
-    for (let round = 0; round < 3; round++) {
-      hideDock();
-      expect(rail(view.container)).toHaveAttribute("hidden");
-      fireEvent.click(actor(view.container));
-      expect(rail(view.container)).not.toHaveAttribute("hidden");
-      expect(chosen(slot, card()!)).toBe(target);
+  it("keeps the same Players workspace through the phone boundary", () => {
+    render(<GameScreen />); fireEvent.click(screen.getByRole("button", { name: "Players" }));
+    const panel = screen.getByRole("complementary", { name: "Players" });
+    for (const value of [true, false]) {
+      act(() => { narrow = value; listeners.forEach(listener => listener()); });
+      expect(screen.getByRole("complementary", { name: "Players" })).toBe(panel);
+      expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
     }
   });
 
-  it("008 still holds with an action open: the command-bar toggle and the Night tab reopen; the actor tap is an ADDITIONAL path; Close still hides", () => {
-    const view = night();
+  it("privacy removes the active Players surface without changing the game or reopening on return", () => {
+    narrow = true; const view = render(<GameScreen />);
+    fireEvent.click(screen.getByRole("button", { name: "Players" }));
+    const before = structuredClone(state().game); const positions = geometry(view.container);
+    act(() => usePrivacyStore.getState().setEnabled(true));
+    expect(screen.queryByRole("complementary")).toBeNull();
+    expect(geometry(view.container)).toEqual(positions); expect(state().game).toEqual(before);
+    act(() => usePrivacyStore.getState().setEnabled(false));
+    expect(screen.queryByRole("complementary")).toBeNull();
+  });
+
+  it.each([["night", "Begin Day"], ["day", "Begin Night 3"]] as const)("keeps %s phase advance directly in the bottom pill on a phone", (phase, name) => {
+    narrow = true; playing(phase);
+    const advance = screen.getByRole("button", { name });
+    expect(advance.closest(".grimoire-phase-dock")).not.toBeNull();
+    expect(advance.parentElement).toHaveClass("phase-primary");
+    expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
+    expect(advance).toBeEnabled();
+  });
+
+  it("privacy disables phase advance with an adjacent accessible reason", () => {
+    narrow = true; playing(); act(() => usePrivacyStore.getState().setEnabled(true));
+    const advance = screen.getByRole("button", { name: "Begin Day" });
+    expect(advance).toBeDisabled();
+    expect(advance).toHaveAccessibleDescription("Turn off Privacy Mode first");
+    expect(document.getElementById(advance.getAttribute("aria-describedby")!)?.parentElement).toBe(advance.parentElement);
+    act(() => usePrivacyStore.getState().setEnabled(false)); expect(advance).toBeEnabled();
+  });
+});
+
+describe("Night navigation and recovery in the single shell", () => {
+  it("closes and reopens the same Night guide while leaving the board available", () => {
+    const view = playing(); const before = state().game;
+    hideNight(); expect(screen.queryByRole("region", { name: "Night 2 guide" })).toBeNull();
+    expect(view.container.querySelector(".grimoire")).toBeInTheDocument();
+    openNight(); expect(screen.getByRole("region", { name: "Night 2 guide" })).toBeVisible();
+    expect(state().game).toBe(before);
+  });
+
+  it("hiding a direct Night action invalidates a captured target and actor tap resumes its step", () => {
+    const view = playing(); const pending = useTargetPicker.getState().active!;
+    expect(pending).not.toBeNull(); const before = state().game; const cursor = useShellStore.getState().nightCursor;
+    hideNight(); expect(useTargetPicker.getState().active).toBeNull();
+    act(() => pending.onPick({ playerId: "p2", participantId: before!.players.p2!.participantId! }));
+    expect(state().game).toBe(before);
     fireEvent.click(actor(view.container));
-    hideDock();
-    expect(rail(view.container)).toHaveAttribute("hidden");
-    fireEvent.click(screen.getByRole("button", { name: "night order" }));
-    expect(rail(view.container)).not.toHaveAttribute("hidden");
-    expect(card()).toHaveAccessibleName(/^Monk/);
-    hideDock();
-    act(() => storyteller.getState().selectPlayer(storyteller.getState().game!.seatOrder[3]!));
-    expect(rail(view.container)).toHaveAttribute("hidden");
-    fireEvent.click(screen.getByRole("tab", { name: "Night 2" }));
-    expect(rail(view.container)).not.toHaveAttribute("hidden");
-    expect(card()).toHaveAccessibleName(/^Monk/);
-    hideDock();
+    expect(screen.getByRole("region", { name: "Night 2 guide" })).toBeVisible();
+    expect(useShellStore.getState().nightCursor).toEqual(cursor);
+    expect(useTargetPicker.getState().active).not.toBeNull();
+  });
+
+  it("hiding a detailed action and reopening by its actor keeps the same draft repeatedly", () => {
+    const { view, pick } = impDraft(); const before = state().game;
+    expect(card().parentElement).toHaveAttribute("id", "action-card-dock-host");
+    for (let repeat = 0; repeat < 3; repeat++) {
+      hideNight(); expect(screen.queryByRole("dialog", { name: /^Imp/ })).toBeNull();
+      fireEvent.click(actor(view.container));
+      expect(chosen(pick, card())).toBe("p1");
+    }
+    expect(state().game).toBe(before);
+  });
+
+  it("inspecting another participant while Night is hidden preserves its actor and draft", () => {
+    const { view, pick } = impDraft();
+    hideNight();
+    fireEvent.click(view.container.querySelector<HTMLElement>('.grimoire [data-player-id="p3"]')!);
+    expect(state().selectedPlayerId).toBe("p3");
+    expect(screen.queryByRole("region", { name: "Night 2 guide" })).toBeNull();
     fireEvent.click(actor(view.container));
-    expect(rail(view.container)).not.toHaveAttribute("hidden");
-    expect(card()).toHaveAccessibleName(/^Monk/);
-    // The Night list's explicit Close still hides the dock.
-    fireEvent.click(within(card()!).getByRole("button", { name: "Back to the Night list (keeps your choices)" }));
-    fireEvent.click(screen.getByRole("button", { name: "Close night panel" }));
-    expect(rail(view.container)).toHaveAttribute("hidden");
+    expect(chosen(pick, card())).toBe("p1");
+    expect(state().selectedPlayerId).toBeNull();
+  });
+
+  it("changing the current actor invalidates the prior draft", () => {
+    impDraft(); hideNight(); openNight();
+    fireEvent.click(screen.getByRole("button", { name: /^Monk Player 0/ }));
+    expect(screen.queryByRole("dialog", { name: /^Imp/ })).toBeNull();
+    expect(useShellStore.getState().litActor?.playerId).toBe("p0");
+    expect(screen.getByRole("article", { name: "Current action: Monk" })).toBeVisible();
+  });
+
+  it("privacy removes private Night and Info content and holds token geometry across a concealed resize", () => {
+    const view = playing();
+    const stage = view.container.querySelector(".grimoire-stage")!;
+    resize(stage, 1024, 768);
+    fireEvent.click(screen.getByRole("button", { name: "Info" }));
+    fireEvent.click(screen.getByText("Game rules & modifiers"));
+    fireEvent.click(screen.getByRole("button", { name: "Pin Info panel" }));
+    const before = geometry(view.container);
+    act(() => usePrivacyStore.getState().setEnabled(true)); resize(stage, 1480, 924);
+    expect(geometry(view.container)).toEqual(before);
+    expect(document.body).not.toHaveTextContent(/Monk|Game rule facts|guided resolution/);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    act(() => usePrivacyStore.getState().setEnabled(false));
+    expect(geometry(view.container)).not.toEqual(before);
+    expect(screen.queryByRole("complementary")).toBeNull();
+  });
+
+  it("retains the advanced Night workspace as a contextual route", () => {
+    playing(); fireEvent.click(screen.getByRole("button", { name: "Additional night controls" }));
+    expect(screen.getByRole("complementary", { name: "Night 2 order" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Back to guided night" }));
+    expect(screen.getByRole("region", { name: "Night 2 guide" })).toBeVisible();
   });
 });

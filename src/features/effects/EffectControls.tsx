@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { selectScriptById, useStorytellerStore, type EffectCommandResult } from "@/stores/storytellerStore";
+import { captureCharacterActionContext, selectScriptById, useStorytellerStore, type EffectCommandResult } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { resolvedCharacters } from "@/data/roleRegistry";
 import { ParticipantPicker } from "@/components/ParticipantPicker";
@@ -37,6 +37,7 @@ import type { EffectExpiry, EffectLifetime, EffectParameterValue, EffectRecord, 
  * private detail -- the Storyteller must open it again.
  */
 export function EffectControls({ player }: { player: STPlayerRecord }) {
+  const actionContext = captureCharacterActionContext();
   const game = useStorytellerStore((s) => s.game);
   const privacyMode = usePrivacyStore((s) => s.enabled);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -55,7 +56,7 @@ export function EffectControls({ player }: { player: STPlayerRecord }) {
     setError(result.ok ? null : result.message);
     return result.ok;
   };
-  const resolve = (intents: EffectIntent[]) => run(useStorytellerStore.getState().resolveEffects({ intents }));
+  const resolve = (intents: EffectIntent[]) => run(useStorytellerStore.getState().resolveEffects({ intents }, actionContext));
   const groups = effectGroups(player);
 
   return (
@@ -279,6 +280,7 @@ function AddEffectForm({ game, target, onDone, onError }: {
   const roles = useMemo<RoleDef[]>(() => resolvedCharacters(script), [script]);
   const [type, setType] = useState<string>(KNOWN_EFFECT_TYPES[0]!.type);
   const [customType, setCustomType] = useState("");
+  const [actionContext] = useState(captureCharacterActionContext);
   // The source is bound to the participation instance at the moment it is
   // chosen; a seat replaced before "Add" is refused as stale.
   const [source, setSource] = useState<EffectParticipantBinding | null>(null);
@@ -312,7 +314,7 @@ function AddEffectForm({ game, target, onDone, onError }: {
         ...(sourceCharacter ? { sourceCharacter } : {}),
         ...(note.trim() ? { note: note.trim() } : {}),
       },
-    }] });
+    }] }, actionContext);
     onError(result.ok ? null : result.message);
     if (result.ok) onDone();
   };
