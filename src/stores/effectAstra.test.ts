@@ -212,10 +212,11 @@ describe("ASTRA-10B-002: v20 evidence blocks every legacy migration step for tha
     const v19 = persisted(game()) as unknown as Record<string, unknown>;
     delete v19.gameSchemaVersion;
     delete v19.gameRuleFacts; // Phase 10G: v25-only
+    delete v19.preparedInformation; // B6: v28-only, never legacy preparation evidence
     for (const player of Object.values(v19.players as Record<string, Record<string, unknown>>)) delete player.revealToken; // Phase 10H: v26-only
     await rehydrateEnvelope(19, v19);
     expect(takeMigrationResetFlag()).toBe(false);
-    expect(state().game!.gameSchemaVersion).toBe(27);
+    expect(state().game!.gameSchemaVersion).toBe(28);
     const v18 = { ...v19 };
     delete v18.lifeEventWindow;
     await rehydrateEnvelope(18, v18);

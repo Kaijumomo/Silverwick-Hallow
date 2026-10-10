@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from "vi
 import type { Database } from "firebase/database";
 import { FirebaseRoomBackend } from "./firebaseBackend";
 import { SessionWriter } from "./writer";
-import { createLobby } from "./lobby";
+import { createLobby, knockOnLobby, seatPlayer } from "./lobby";
 import { requireActiveSession } from "./lifecycle";
 import { writeProjections } from "./sync";
 import { useSessionRuntime } from "./storytellerSync";
@@ -16,6 +16,8 @@ import { buildRegistry } from "@/data/roleRegistry";
 import { captureFingerprint } from "@/stores/abilityResolution";
 import { participantStepKey } from "@/stores/nightProgress";
 import { usePrivacyStore } from "@/stores/privacyStore";
+import { preparedInformationContext } from "@/stores/preparedInformation";
+import { StorytellerGamePersistedSchema } from "@/stores/schemas";
 
 let env: RulesTestEnvironment;
 const code = "CHAR2345";
@@ -54,6 +56,54 @@ function poison() {
     completeStep: true }, undefined, captureCharacterActionContext());
 }
 const publish = (writer: SessionWriter) => writeProjections({ backend: writer, code, stState: game(), registry: buildRegistry(setupScript), online: {}, membership: {} });
+
+test("B6 pending clue and delivered communication serialize privately through the real guarded writer", async () => {
+  const { backend, writer } = await open();
+  const setup = setupGame(["washerwoman", "chef", "empath", "poisoner", "imp"], {
+    code, storytellerUid: host, setupRolesDealt: true, setupRolesRevealed: true,
+  });
+  Object.values(setup.players).forEach(player => { player.packetEpoch = `b6-identity-${player.id}`; });
+  store.setState({ game: setup, undoStack: [], localSeq: 0 });
+  const playerUid = "b6-player";
+  const playerDb = env.authenticatedContext(playerUid).database();
+  await knockOnLobby(new FirebaseRoomBackend(playerDb as unknown as Database), code, playerUid, "Player 1");
+  await seatPlayer(writer, code, playerUid, "p1", null);
+  const project = () => writeProjections({ backend: writer, code, stState: game(), registry: buildRegistry(setupScript),
+    online: {}, membership: { [playerUid]: "p1" } });
+  expect(store.getState().prepareInformation({ character: "washerwoman", source: binding("p0"),
+    expected: preparedInformationContext(game(), setupScript), clue: { kind: "pair",
+      candidates: [binding("p1"), binding("p2")], shownCharacter: "chef", qualifyingParticipantId: binding("p1").participantId },
+  }, captureCharacterActionContext())).toMatchObject({ ok: true, changed: true });
+  expect(store.getState().undoStack).toHaveLength(1);
+  expect(game().informationDeliveries).toEqual([]);
+  await project();
+  const pending = JSON.parse(await backend.get(`lobbies/${code}/checkpoint`) as string).game;
+  expect(pending).toEqual(game());
+  expect(StorytellerGamePersistedSchema.safeParse(pending).success).toBe(true);
+  expect(pending.preparedInformation).toHaveLength(1);
+  for (const privatePath of ["checkpoint", "storyteller", "storyteller/preparedInformation"])
+    await assertFails(playerDb.ref(`lobbies/${code}/${privatePath}`).once("value"));
+  const publicAndSelf = JSON.stringify([
+    (await playerDb.ref(`lobbies/${code}/public`).once("value")).val(),
+    (await playerDb.ref(`lobbies/${code}/player/p1`).once("value")).val(),
+  ]);
+  expect(publicAndSelf).not.toMatch(/preparedInformation|qualifyingParticipantId|sourceIdentityEpoch|informationDeliveries|Townsfolk|Wrong/);
+  store.setState({ game: { ...game(), phase: "night", day: 1 } });
+  const delivery = { preparationId: game().preparedInformation[0]!.id, source: binding("p0"), expected: preparedInformationContext(game(), setupScript) };
+  expect(store.getState().deliverPreparedInformation(delivery, captureCharacterActionContext())).toMatchObject({ ok: true, changed: true });
+  expect(store.getState().undoStack).toHaveLength(2);
+  await project();
+  const delivered = JSON.parse(await backend.get(`lobbies/${code}/checkpoint`) as string).game;
+  expect(delivered).toEqual(game());
+  expect(delivered.preparedInformation).toEqual([]);
+  expect(delivered.informationDeliveries).toHaveLength(1);
+  expect(delivered.players.p1.reminders[0].id).toBe(pending.players.p1.reminders[0].id);
+  expect(delivered.players.p2.reminders[0].id).toBe(pending.players.p2.reminders[0].id);
+  expect(JSON.stringify((await playerDb.ref(`lobbies/${code}/player/p1`).once("value")).val()))
+    .not.toMatch(/preparedInformation|qualifyingParticipantId|informationDeliveries/);
+  expect(store.getState().deliverPreparedInformation(delivery, captureCharacterActionContext())).toMatchObject({ ok: false });
+  expect(JSON.parse(await backend.get(`lobbies/${code}/checkpoint`) as string).game).toEqual(delivered);
+});
 
 test("a guarded character action publishes its atomic private checkpoint without leaking effects publicly", async () => {
   const { backend, writer } = await open(); const before = game();

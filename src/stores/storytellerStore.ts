@@ -87,6 +87,7 @@ import type { VotingHistoryRecord } from "./types";
 import { isTabletTrial } from "@/config/trial";
 import { useShellStore, type NightCursor } from "./shellStore";
 import { deriveNightWork } from "@/features/nightOrder/nightWork";
+import { planPreparedInformation, planPreparedInformationDelivery, reconcilePreparedInformation, type PrepareInformationRequest, type DeliverPreparedInformationRequest, type PreparedInformationResult } from "./preparedInformation";
 import { analyzeSetup } from "@/features/setup/setupAnalyzer";
 import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
 import { assignedBagIsCoherent, canRefineSetup, matchBagToAssignments } from "@/features/setup/setupRefinement";
@@ -146,7 +147,7 @@ export const gameLifecycleToken = (): number => gameLifecycle;
  * `merge` (Phase 9C.2B.2) passes to migrateStoreState when Zustand's own
  * persist middleware skips calling `migrate` outright, which it does
  * whenever the persisted version already equals this one. */
-const STORE_VERSION = 27;
+const STORE_VERSION = 28;
 const STORE_KEY = isTabletTrial ? "silverwick-voting-tablet-trial" : "new-blood-st";
 const TERMINAL_JOURNAL_KEY = `${STORE_KEY}-ending`;
 let prewrittenVotingSave: { name: string; value: string } | null = null;
@@ -671,6 +672,8 @@ export type StorytellerStore = {
    * another store command. `semantics` defaults to the canonical registry.
    */
   resolveAbility: (request: AbilityResolutionRequest, semantics?: AbilitySemanticsRegistry, actionContext?: CharacterActionContext) => AbilityCommandResult;
+  prepareInformation: (request: PrepareInformationRequest, actionContext?: CharacterActionContext) => PreparedInformationResult;
+  deliverPreparedInformation: (request: DeliverPreparedInformationRequest, actionContext?: CharacterActionContext) => PreparedInformationResult;
   correctNightActionTarget: (request: NightActionTargetCorrection, actionContext?: CharacterActionContext) => AbilityCommandResult;
   /**
    * Phase 10G: THE Storyteller-owned Game Rule Fact command (PHASE10G Section
@@ -1348,7 +1351,7 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // Game Result or winner is invented). Every older marker continues the chain
   // through v26; an older marker carrying v26 evidence receives nothing and is
   // rejected.
-  if (fromVersion < 27) {
+  if (fromVersion < 28) {
     const customScripts = (s as { customScripts?: Record<string, Script> }).customScripts ?? {};
     // Phase 9R.1 Astra remediation (Finding A2): local persisted migration
     // uses "trusted" evidence -- this state's OWN saved customScripts,
@@ -1554,8 +1557,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
           if (!skip && "game" in patch && patch.game !== state.game && patch.game != null) {
             const revealed = patch.game === preparedAuthoritativeGame ? patch.game
               : withRevealTokens(state.game, patch.game, registryForGame(state, patch.game));
-            const game = patch.game === preparedAuthoritativeGame ? revealed
+            const reconciled = patch.game === preparedAuthoritativeGame ? revealed
               : state.game ? reconcileVotingDependencies(state.game, revealed) : revealed;
+            const game = reconcilePreparedInformation(reconciled, selectScriptById(state, reconciled.scriptId) ?? null);
             return { ...patch, game, localSeq: state.localSeq + 1 };
           }
           return patch;
@@ -1568,7 +1572,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (state.terminalClose?.status === "closing" || state.terminalClose?.confirmedRecovery || state.terminalClose?.recoveryPending)
           return "The game is closing. Nothing was recorded.";
         const current = state.game!;
-        const prepared = reconcileVotingDependencies(current, withRevealTokens(current, planned, registryForGame(state, planned)));
+        const prepared = reconcilePreparedInformation(reconcileVotingDependencies(current, withRevealTokens(current, planned, registryForGame(state, planned))), selectScriptById(state, planned.scriptId) ?? null);
         if (!StorytellerGamePersistedSchema.safeParse(prepared).success) return "This result could not be safely saved. Nothing was recorded.";
         const failure = persistencePreflight(prepared, current, state.lobby);
         if (failure) return failure;
@@ -1726,6 +1730,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           pendingPlayers: {},
           history: [],
           informationDeliveries: [],
+          preparedInformation: [],
           // Phase 10A: a fresh game observes every Life Event from Night 1.
           lifeEventWindow: freshLifeEventWindow(),
           // Phase 10G: no game-scoped Rule Fact exists before Live Play.
@@ -2719,6 +2724,28 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (unsafe) return { ok: false, code: "invalidComposition", message: unsafe };
         rememberCorrectedNightAction(game, request, { ...result.plan, game: get().game! });
         return { ok: true, changed: true, resolutionId: result.plan.resolutionId };
+      },
+
+      prepareInformation: (request, actionContext) => {
+        const state = get();
+        const refusal = characterActionRefusal(state, actionContext);
+        if (refusal || !state.game) return { ok: false, message: refusal ?? "No game is open." };
+        const script = selectScriptById(state, state.game.scriptId) ?? null;
+        const result = planPreparedInformation(state.game, request, { script, registry: buildRegistry(script ?? { id: state.game.scriptId, name: "", characters: [] }) });
+        if (!result.ok || !result.changed) return result;
+        const unsafe = commitAuthoritativeState(result.game, state, votingAuthorityToken(state.lobby)!);
+        return unsafe ? { ok: false, message: unsafe } : { ok: true, changed: true, preparationId: result.preparationId };
+      },
+
+      deliverPreparedInformation: (request, actionContext) => {
+        const state = get();
+        const refusal = characterActionRefusal(state, actionContext);
+        if (refusal || !state.game) return { ok: false, message: refusal ?? "No game is open." };
+        const script = selectScriptById(state, state.game.scriptId) ?? null;
+        const result = planPreparedInformationDelivery(state.game, request, { script, registry: buildRegistry(script ?? { id: state.game.scriptId, name: "", characters: [] }) });
+        if (!result.ok || !result.changed) return result;
+        const unsafe = commitAuthoritativeState(result.game, state, votingAuthorityToken(state.lobby)!);
+        return unsafe ? { ok: false, message: unsafe } : { ok: true, changed: true, preparationId: result.preparationId };
       },
 
       resolveAbility: (request, semantics, actionContext) => {

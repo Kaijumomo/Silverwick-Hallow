@@ -161,6 +161,66 @@ export const LiveGameMomentSchema = z.object({
 /** A ParticipantRef naming a real participation instance (never "legacy"). */
 export const CurrentParticipantRefSchema = ParticipantRefSchema.options[0];
 
+const PreparedInformationCandidateSchema = z.object({
+  participant: CurrentParticipantRefSchema,
+  actualRole: z.string().min(1),
+  shownRole: z.string().min(1).nullable(),
+  identityEpoch: z.string().min(1),
+}).strict();
+const PreparedInformationReminderSchema = z.object({
+  id: z.string().min(1),
+  participant: CurrentParticipantRefSchema,
+  label: z.enum(["Townsfolk", "Outsider", "Minion", "Wrong"]),
+}).strict();
+/** Pending preparation has no delivered state: communication uses the existing
+ * InformationDelivery contract and removes this record in the same transaction. */
+export const PreparedInformationRecordSchema = z.object({
+  id: z.string().min(1),
+  character: z.enum(["washerwoman", "librarian", "investigator"]),
+  informationActionId: z.string().min(1),
+  source: CurrentParticipantRefSchema,
+  actualRole: z.string().min(1),
+  shownRole: z.string().min(1).nullable(),
+  sourceIdentityEpoch: z.string().min(1),
+  gameCode: z.string(),
+  scriptId: z.string().min(1),
+  scriptFingerprint: z.string().min(1),
+  mode: z.enum(["verified", "storyteller"]),
+  clue: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("pair"),
+      candidates: z.tuple([PreparedInformationCandidateSchema, PreparedInformationCandidateSchema]),
+      shownCharacter: z.string().min(1),
+      qualifyingParticipantId: z.string().min(1),
+      reminders: z.tuple([PreparedInformationReminderSchema, PreparedInformationReminderSchema]),
+    }).strict(),
+    z.object({ kind: z.literal("zero-outsiders") }).strict(),
+  ]),
+}).strict().superRefine((record, ctx) => {
+  const issue = (message: string, path: (string | number)[]) => ctx.addIssue({ code: z.ZodIssueCode.custom, message, path });
+  const actionId = record.clue.kind === "zero-outsiders" ? "librarian-first-night-zero" : `${record.character}-first-night`;
+  if (record.informationActionId !== actionId)
+    issue("prepared information action must belong to its character", ["informationActionId"]);
+  if (record.clue.kind === "zero-outsiders") {
+    if (record.character !== "librarian") issue("only Librarian can prepare zero Outsiders", ["clue"]);
+    return;
+  }
+  const { candidates, qualifyingParticipantId, reminders } = record.clue;
+  if (candidates[0].participant.participantId === candidates[1].participant.participantId ||
+      candidates[0].participant.playerId === candidates[1].participant.playerId)
+    issue("prepared candidates must be distinct participants and seats", ["clue", "candidates"]);
+  if (!candidates.some(candidate => candidate.participant.participantId === qualifyingParticipantId))
+    issue("qualifying participant must belong to the pair", ["clue", "qualifyingParticipantId"]);
+  if (reminders[0].id === reminders[1].id) issue("generated reminder IDs must be distinct", ["clue", "reminders"]);
+  const qualifyingLabel = { washerwoman: "Townsfolk", librarian: "Outsider", investigator: "Minion" }[record.character];
+  candidates.forEach((candidate, index) => {
+    const links = reminders.filter(reminder => reminder.participant.participantId === candidate.participant.participantId &&
+      reminder.participant.playerId === candidate.participant.playerId);
+    const expectedLabel = candidate.participant.participantId === qualifyingParticipantId ? qualifyingLabel : "Wrong";
+    if (links.length !== 1 || links[0]?.label !== expectedLabel)
+      issue("each candidate must own its exact qualifying or Wrong reminder", ["clue", "candidates", index]);
+  });
+});
+
 /**
  * Phase 10B (store v20): the authoritative Effect lifecycle.
  *
@@ -1083,16 +1143,17 @@ export const NightStepRecordSchema = z.object({
 
 /** Phase 10B: the current game snapshot schema version (see
  * StorytellerLobbyRecord.gameSchemaVersion). Phase 10C: v21. Phase 10D: v22.
- * Phase 10E: v23. Phase 10F: v24. Phase 10G: v25. Phase 10H: v26. Voting: v27. */
-export const GAME_SCHEMA_VERSION = 27 as const;
+ * Phase 10E: v23. Phase 10F: v24. Phase 10G: v25. Phase 10H: v26. Voting: v27.
+ * B6: v28 prepared first-night information. */
+export const GAME_SCHEMA_VERSION = 28 as const;
 /** Explicit markers migration still accepts, routed PER ENTRY
- * (see migrateGameEntry): 20 receives v20 -> ... -> v27, ..., 26 receives
- * v26 -> v27. 27 is current and receives
+ * (see migrateGameEntry): 20 receives v20 -> ... -> v28, ..., 27 receives
+ * v27 -> v28. 28 is current and receives
  * nothing. Any other marker is never reinterpreted as legacy -- the current
  * schema rejects it. */
-export const MIGRATABLE_GAME_SCHEMA_VERSIONS = [20, 21, 22, 23, 24, 25, 26] as const;
-/** The immediately previous explicit marker (v26 -> v27). */
-export const PREVIOUS_GAME_SCHEMA_VERSION = 26 as const;
+export const MIGRATABLE_GAME_SCHEMA_VERSIONS = [20, 21, 22, 23, 24, 25, 26, 27] as const;
+/** The immediately previous explicit marker (v27 -> v28). */
+export const PREVIOUS_GAME_SCHEMA_VERSION = 27 as const;
 
 export const StorytellerLobbyRecordSchema = z.object({
   // Phase 10B (v20) / 10C (v21) / 10D (v22) / 10E (v23) / 10F (v24) / 10G (v25): required explicit version evidence, NO
@@ -1121,6 +1182,25 @@ export const StorytellerLobbyRecordSchema = z.object({
   pendingPlayers: z.record(z.string(), z.string()).default({}),
   history: z.array(HistoryRecordSchema).default([]),
   informationDeliveries: z.array(InformationDeliveryRecordSchema).default([]),
+  // Required without a default: only actual older versions receive an empty
+  // collection from migration; malformed v28 state must remain rejected.
+  preparedInformation: z.array(PreparedInformationRecordSchema).superRefine((records, ctx) => {
+    const ids = new Set<string>();
+    const owners = new Set<string>();
+    const reminders = new Set<string>();
+    records.forEach((record, index) => {
+      // Librarian pair and zero are two result shapes of ONE ability.
+      const owner = JSON.stringify([record.source.participantId, record.character]);
+      if (ids.has(record.id) || owners.has(owner)) ctx.addIssue({ code: z.ZodIssueCode.custom,
+        message: "duplicate prepared identity or source ability", path: [index] });
+      ids.add(record.id); owners.add(owner);
+      if (record.clue.kind === "pair") record.clue.reminders.forEach((reminder, offset) => {
+        if (reminders.has(reminder.id)) ctx.addIssue({ code: z.ZodIssueCode.custom,
+          message: "a generated reminder cannot belong to multiple preparations", path: [index, "clue", "reminders", offset] });
+        reminders.add(reminder.id);
+      });
+    });
+  }),
   // Phase 10A (v19): required, with NO default -- a v19 game missing it is
   // incomplete current-version data and fails here; genuine v18 data gets it
   // from migration (gameMigration.ts), never from this schema.
@@ -1451,6 +1531,33 @@ export const StorytellerGamePersistedSchema = z.preprocess((raw, ctx) => {
   }
   checkSeatGeometry(game, ctx);
   checkCurrentParticipantIdentityUniqueness(game, ctx);
+  // Pending intent must remain attached to the precise live participants and
+  // generated tokens. Impairment/registration truth is revalidated by commands,
+  // never repaired or inferred during snapshot recovery.
+  game.preparedInformation.forEach((record, index) => {
+    const issue = (message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom,
+      message, path: ["preparedInformation", index] });
+    const matches = (ref: z.infer<typeof CurrentParticipantRefSchema>) => {
+      const player = game.players[ref.playerId];
+      return player && !player.isEmpty && player.participantId === ref.participantId;
+    };
+    if (record.gameCode !== game.code || record.scriptId !== game.scriptId)
+      issue("prepared information belongs to a different game or script");
+    if (!matches(record.source)) issue("prepared information source is no longer the bound participant");
+    if (record.clue.kind === "pair") {
+      record.clue.candidates.forEach(candidate => {
+        if (!matches(candidate.participant)) issue("prepared information candidate is no longer the bound participant");
+      });
+      record.clue.reminders.forEach(link => {
+        const reminder = game.players[link.participant.playerId]?.reminders.find(item => item.id === link.id);
+        if (!matches(link.participant) || !reminder || reminder.label !== link.label ||
+            reminder.sourceCharacter !== record.character || reminder.sourceParticipant?.kind !== "participant" ||
+            reminder.sourceParticipant.participantId !== record.source.participantId ||
+            reminder.sourceParticipant.playerId !== record.source.playerId)
+          issue("prepared information generated reminder linkage is contradictory");
+      });
+    }
+  });
   checkEffectTemporalCoherence(game, ctx);
   checkReminderTemporalCoherence(game, ctx);
   checkGameRuleFactTemporalCoherence(game, ctx);

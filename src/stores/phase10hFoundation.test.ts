@@ -47,8 +47,8 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 describe("10H-AC-003 / AC-043: v26 schema", () => {
   it("the current game carries no result until it ends", () => {
-    expect(GAME_SCHEMA_VERSION).toBe(27);
-    expect(game().gameSchemaVersion).toBe(27);
+    expect(GAME_SCHEMA_VERSION).toBe(28);
+    expect(game().gameSchemaVersion).toBe(28);
     expect(game()).not.toHaveProperty("result");
     expect(StorytellerGamePersistedSchema.safeParse(game()).success).toBe(true);
   });
@@ -134,7 +134,7 @@ describe("10H-AC-034 / AC-044: v25 -> v26 migration invents nothing", () => {
       expect(StorytellerGamePersistedSchema.safeParse(copy).success).toBe(false);
       const markerless = structuredClone(bad) as Raw;
       delete markerless.gameSchemaVersion;
-      expect(detectLegacyGameVersion(markerless)).toBe(27);
+      expect(detectLegacyGameVersion(markerless)).toBe(28);
     }
   });
 });

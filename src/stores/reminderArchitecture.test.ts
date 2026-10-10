@@ -22,6 +22,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { enclosingUnitFor } from "@/test/writerGuard";
 
 const SRC = resolve(__dirname, "..");
 
@@ -99,6 +100,10 @@ const ALLOWED = new Set([
   // Correction eligibility deliberately EXCLUDES notation from its comparison;
   // it never reads labels or uses reminders to calculate an effect.
   "stores/nightActionCorrection.ts",
+  // B6 coordinates prepared intent with exact generated notation IDs. Its
+  // rules assessment never reads notation; lifecycle integrity and replacement
+  // use the authoritative Reminder seam, asserted separately below.
+  "stores/preparedInformation.ts",
   "features/reminders/reminderPresentation.ts",
   // Read-only canonical token metadata and sourced Effect presentation;
   // player notation never supplies rules or mechanical state.
@@ -166,6 +171,20 @@ describe("Phase 10C architecture guard: Reminders are notation, never mechanics 
     for (const forbidden of [/\.effects\b/, /\.alive\b/, /\.ghostVote\b/, /\.abilityUsed\b/, /\.actualRole\b/, /\.actualAlignment\b/, /\.(label|note)\s*(===|!==)\s*["'`]/, /\.(label|note)\s*\.\s*(match|includes|startsWith|endsWith|toLowerCase|search|split)\b/]) {
       expect(code).not.toMatch(forbidden);
     }
+  });
+
+  it("B6 reads exact notation links only for integrity/replacement and writes through the existing Reminder seam", () => {
+    const source = readFileSync(join(SRC, "stores/preparedInformation.ts"), "utf8");
+    const code = stripComments(source);
+    const rules = code.slice(code.indexOf("export function preparationAvailability"), code.indexOf("const currentRef"));
+    expect(rules).toContain("query.registration");
+    expect(reminderCoupling(rules)).toEqual([]);
+    expect(rules).not.toMatch(/remindersMatch|planReminderTransaction|applyReminderPlan/);
+    const readerUnits = new Set([...code.matchAll(/\.reminders\b/g)].map(match => enclosingUnitFor(source, code.slice(0, match.index).split("\n").length)));
+    expect(readerUnits).toEqual(new Set(["remindersMatch", "planPreparedInformation"]));
+    expect(code).not.toMatch(/\bplayers\s*:|\.reminders\s*=(?!=)|\.(label|note)\s*\.\s*(match|includes|startsWith|endsWith|toLowerCase|search|split)\b/);
+    expect(code).toContain("planReminderTransaction(next, { intents, resolutionId: id })");
+    expect(code).toContain("applyReminderPlan(next, reminders.plan)");
   });
 
   it("the detector itself works (planted violations are caught; prose and role-data lists are not)", () => {

@@ -21,6 +21,21 @@ import type { InformationAction, RoleId } from "@/stores/types";
  * final report for the full coverage/gap list.
  */
 export const INFORMATION_ACTIONS: Record<RoleId, InformationAction[]> = {
+  librarian: [
+    { id: "librarian-first-night", timing: { kind: "firstNight" }, instruction: "Show the Outsider character token and point to the two players.", requirements: [
+      { id: "players", kind: "player", cardinality: { kind: "exactly", count: 2 }, label: "The two players shown" },
+      { id: "role", kind: "role", label: "The Outsider character shown" },
+    ] },
+    { id: "librarian-first-night-zero", timing: { kind: "firstNight" }, instruction: "Show that there are zero Outsiders in play.", requirements: [
+      { id: "outsiders", kind: "number", label: "Zero Outsiders" },
+    ] },
+  ],
+  investigator: [
+    { id: "investigator-first-night", timing: { kind: "firstNight" }, instruction: "Show the Minion character token and point to the two players.", requirements: [
+      { id: "players", kind: "player", cardinality: { kind: "exactly", count: 2 }, label: "The two players shown" },
+      { id: "role", kind: "role", label: "The Minion character shown" },
+    ] },
+  ],
   // "You start knowing that 1 of 2 players is a particular Townsfolk."
   // Players + Role -- the two-player-plus-one-role shape shared by
   // Librarian/Investigator (not separately structured here; see the

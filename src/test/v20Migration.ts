@@ -138,10 +138,11 @@ export function withV26Stamp<T>(entry: T): T {
   return copy as unknown as T;
 }
 
-/** Voting v27: absent legacy voting data remains honestly untracked. */
+/** Current result from v26: voting remains untracked and v28 adds no clues. */
 export function withV26ToCurrent<T>(entry: T): T {
   const copy = structuredClone(entry) as unknown as Record<string, unknown>;
-  copy.gameSchemaVersion = 27;
+  copy.gameSchemaVersion = 28;
+  copy.preparedInformation = [];
   return copy as unknown as T;
 }
 
@@ -170,6 +171,7 @@ export function withCurrentMigration<T>(entry: T): T {
  */
 export function asV25<T>(entry: T): T {
   const copy = structuredClone(entry) as unknown as Record<string, unknown>;
+  delete copy.preparedInformation;
   delete copy.voting;
   if (Array.isArray(copy.history)) copy.history = copy.history.filter(record => record.category !== "voting");
   delete copy.result;

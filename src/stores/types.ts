@@ -794,6 +794,40 @@ export type ManualInformationDeliveryRecord = {
 /** Phase 10G (v25): every Information Delivery a game can hold. */
 export type GameInformationDeliveryRecord = InformationDeliveryRecord | ManualInformationDeliveryRecord;
 
+/** B6: private pending intent, never a record of information already told. */
+export type PreparedInformationCharacter = "washerwoman" | "librarian" | "investigator";
+export type PreparedInformationCandidate = {
+  participant: CurrentParticipantRef;
+  actualRole: RoleId;
+  shownRole: RoleId | null;
+  identityEpoch: string;
+};
+export type PreparedInformationReminder = {
+  id: ReminderId;
+  participant: CurrentParticipantRef;
+  label: "Townsfolk" | "Outsider" | "Minion" | "Wrong";
+};
+export type PreparedInformationRecord = {
+  id: string;
+  character: PreparedInformationCharacter;
+  informationActionId: InformationActionId;
+  source: CurrentParticipantRef;
+  actualRole: RoleId;
+  shownRole: RoleId | null;
+  sourceIdentityEpoch: string;
+  gameCode: string;
+  scriptId: string;
+  scriptFingerprint: string;
+  mode: "verified" | "storyteller";
+  clue: {
+    kind: "pair";
+    candidates: [PreparedInformationCandidate, PreparedInformationCandidate];
+    shownCharacter: RoleId;
+    qualifyingParticipantId: ParticipantId;
+    reminders: [PreparedInformationReminder, PreparedInformationReminder];
+  } | { kind: "zero-outsiders" };
+};
+
 export type GrimoireMode = "ring" | "freeRoam";
 export type TokenPosition = { x: number; y: number };
 
@@ -956,8 +990,10 @@ export type StorytellerLobbyRecord = {
    * empty Game Rule Fact collection; nothing else is touched).
    * Phase 10H: marker 25 receives v25 -> v26 (a stamp: no reveal token and
    * no Game Result is invented). Voting v27 stamps v26; absent voting means
-   * unknown legacy coverage, never a known day with no nominations. */
-  gameSchemaVersion: 27;
+   * unknown legacy coverage, never a known day with no nominations.
+   * B6 v28 adds an empty prepared-information collection to older saves;
+   * preparation intent is never reconstructed from tokens or History. */
+  gameSchemaVersion: 28;
   code: string;
   storytellerUid: string;
   scriptId: string;
@@ -1012,6 +1048,8 @@ export type StorytellerLobbyRecord = {
    * Never used to reconstruct Actual Role, Actual Alignment, Effects,
    * Reminders, or Life State; Current State alone remains authoritative. */
   informationDeliveries: GameInformationDeliveryRecord[];
+  /** Pending first-night clues; consumed on delivery. Never inferred from tokens. */
+  preparedInformation: PreparedInformationRecord[];
   /** Phase 10A (store v19): Storyteller-private, authoritative temporary
    * gameplay state -- recent Life Events of the current and immediately
    * previous phase, plus the coverage bound that says when their absence is

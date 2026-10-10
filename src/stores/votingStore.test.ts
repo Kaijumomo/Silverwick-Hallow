@@ -196,6 +196,7 @@ describe("voting command ownership and atomic persistence", () => {
 describe("v27 voting validation and legacy coverage", () => {
   it("migrates each legacy game and Undo snapshot without inventing voting evidence", () => {
     const legacy = structuredClone(game()) as unknown as Record<string, unknown>; delete legacy.voting; legacy.gameSchemaVersion = 26;
+    delete legacy.preparedInformation;
     const result = migrateStoreState({ game: legacy, undoStack: [structuredClone(legacy)], customScripts: { [setupScript.id]: setupScript } }, 26) as ReturnType<typeof store.getState>;
     expect(result.game!.gameSchemaVersion).toBe(GAME_SCHEMA_VERSION); expect(result.undoStack[0]!.gameSchemaVersion).toBe(GAME_SCHEMA_VERSION);
     expect(result.game!.voting).toBeUndefined(); expect(currentVotingState(result.game!).coverage).toBe("unknown");
@@ -203,7 +204,7 @@ describe("v27 voting validation and legacy coverage", () => {
   it.each([null, {}, { rounds: [] }])("rejects present malformed voting instead of defaulting (%j)", value => {
     const candidate = { ...game(), voting: value }; expect(StorytellerGamePersistedSchema.safeParse(candidate).success).toBe(false);
     const stale = { ...candidate, gameSchemaVersion: 26 }; migrateGameEntry(stale, 26, { kind: "canonical-only" }); expect(stale.gameSchemaVersion).toBe(26);
-    const markerless = { ...candidate } as Record<string, unknown>; delete markerless.gameSchemaVersion; expect(detectLegacyGameVersion(markerless)).toBe(27);
+    const markerless = { ...candidate } as Record<string, unknown>; delete markerless.gameSchemaVersion; expect(detectLegacyGameVersion(markerless)).toBe(28);
   });
   it("creates known coverage only on a witnessed new Day, with Undo restoring the Night", () => {
     store.setState({ game: { ...game(), phase: "night", day: 2, voting: freshVotingDay(1) } }); const previous = game();

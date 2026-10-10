@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ReferenceWorkspace } from "@/features/almanac/ReferenceWorkspace";
 import { captureCharacterActionContext, useStorytellerStore, selectScriptById, type SeatSwapLayout, type CharacterActionContext } from "@/stores/storytellerStore";
 import { RedHerringPreparation, useRedHerringSelection } from "@/features/setup/RedHerringPreparation";
+import { FirstInformationPreparation, useFirstInformationPreparation } from "@/features/setup/FirstInformationPreparation";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { iconUrlFor } from "@/data/iconUrl";
 import { resolvedCharacters } from "@/data/roleRegistry";
@@ -67,6 +68,7 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
   const definitions = useMemo(() => script ? resolvedCharacters(script) : [], [script]);
   const setupContext = useMemo(() => game && script && enabled ? selectSetupContext(game, script) : undefined, [game, script, enabled]);
   const redHerringSelection = useRedHerringSelection(setupContext);
+  const firstInformation = useFirstInformationPreparation(enabled ? game ?? undefined : undefined, enabled ? script : undefined);
   useEffect(() => {
     if (privacy || !enabled || game?.phase === "ended") {
       if (privacy && enabled) useStorytellerStore.getState().selectPlayer(null);
@@ -174,6 +176,7 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
             <button className="btn btn-gold" disabled={!setup.revealReadiness?.ready} onClick={() => report(state.revealRoles(actionContext))}>Reveal Roles</button>
           </>}
           {isPostDeal(game) && <RedHerringPreparation context={context} selection={redHerringSelection} onChoose={dismiss} />}
+          {isPostDeal(game) && <FirstInformationPreparation selection={firstInformation} onChoose={dismiss} />}
           {isInitialRevealComplete(game) && <><PrivateRevealReadiness game={game} live={!!state.lobby} /><button className="btn btn-gold" onClick={() => report(state.beginNightOne(actionContext))}>Begin Night 1</button></>}
           <button className="players-text-button" onClick={() => { dismiss(); setDetails(true); }}>Setup details &amp; modifiers</button>
         </section>}
@@ -193,7 +196,7 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
           const refusal = showPlayer(selected, showPlayerReturn); if (refusal) setNotice(refusal); else state.selectPlayer(null);
         }}
         onSwapSeats={() => { useTargetPicker.getState().cancel(); setSwap(selected); state.selectPlayer(null); }} />}
-      {!privacy && (notice || redHerringSelection.error) && <div className="players-notice" role="status">{redHerringSelection.error || notice}<button aria-label="Dismiss message" onClick={() => { setNotice(""); redHerringSelection.clearError(); }}>×</button></div>}
+      {!privacy && (notice || redHerringSelection.error || firstInformation.error) && <div className="players-notice" role="status">{firstInformation.error || redHerringSelection.error || notice}<button aria-label="Dismiss message" onClick={() => { setNotice(""); redHerringSelection.clearError(); firstInformation.clearError(); }}>×</button></div>}
     </ReferenceWorkspace>
     {!privacy && !ended && chooser?.kind === "distribute" && <RoleChooser mode="distribute" roles={ordinary} scriptName={script.name} selected={draft}
       residents={context.population.targetNonTravelerCount ?? context.ordinary.length} travelers={context.travelers.length} required={required}
@@ -205,7 +208,8 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
     {!privacy && !ended && chooser?.kind === "choose" && <RoleChooser mode="choose" scriptName={script.name}
       roles={chooser.player.isTraveler ? [...TRAVELERS] : ordinary} player={{ id: chooser.player.id, name: chooser.player.name, seat: chooser.player.seat + 1, roleId: chooser.player.actualRole }}
       holders={holderNames} allowSwap={!chooser.player.isTraveler && canRefineSetup(game).ok} onChoose={choose} onClose={() => setChooser(null)} error={error ?? undefined} />}
-    {!privacy && !ended && details && <Modal title="Setup details" onClose={() => setDetails(false)} className="players-setup-details"><SetupPanel game={game} script={script} generatedRoleIds={generatedRoleIds} onGeneratedRoleIdsChange={setGeneratedRoleIds} redHerringSelection={redHerringSelection} onClose={() => setDetails(false)} /></Modal>}
+    {!privacy && !ended && details && <Modal title="Setup details" onClose={() => setDetails(false)} className="players-setup-details"><SetupPanel game={game} script={script} generatedRoleIds={generatedRoleIds} onGeneratedRoleIdsChange={setGeneratedRoleIds} redHerringSelection={redHerringSelection} firstInformationSelection={firstInformation} onClose={() => setDetails(false)} /></Modal>}
+    {firstInformation.dialog}
     {!privacy && !ended && waitingSeat && <SeatAssignPopup seatPlayerId={waitingSeat} seatNumber={(game.players[waitingSeat]?.seat ?? 0) + 1} backend={backend} code={state.lobby?.code ?? ""} onClose={() => setWaitingSeat(null)} onRemoveSeat={() => { state.removePlayer(waitingSeat); setWaitingSeat(null); }} />}
     {!privacy && !ended && adding && <Modal title="Add Player" onClose={() => setAdding(false)}><form className="players-add" onSubmit={event => { event.preventDefault(); add(); }}>
       <label>Player name<input maxLength={20} className="input" value={name} onChange={event => setName(event.target.value)} autoComplete="off" /></label>

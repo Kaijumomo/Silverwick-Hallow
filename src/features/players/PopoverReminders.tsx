@@ -3,10 +3,10 @@ import { iconUrlFor } from "@/data/iconUrl";
 import { buildRegistry } from "@/data/roleRegistry";
 import { captureVotingContext, selectScriptById, useStorytellerStore } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
-import { officialEffectPresentation, redHerringNotationCovered, type OfficialEffectToken } from "@/features/reminders/officialReminderPresentation";
+import { firstInformationReminderGroups, officialEffectPresentation, redHerringNotationCovered, type OfficialEffectToken } from "@/features/reminders/officialReminderPresentation";
 import { currentVotingState } from "@/stores/voting";
 import type { ReminderIntent } from "@/stores/reminderResolution";
-import type { RoleDef, STPlayerRecord } from "@/stores/types";
+import type { ReminderRecord, RoleDef, STPlayerRecord } from "@/stores/types";
 import { useReminderRemoval } from "@/features/reminders/useReminderRemoval";
 import { createRulesQuery } from "@/stores/rulesQuery";
 
@@ -74,6 +74,14 @@ export function PopoverReminders({ player }: { player: STPlayerRecord }) {
     const result = current.resolveEffects({ intents: [{ kind: "remove", target, effectId: token.instances[0]!.id }] }, context);
     setError(result.ok ? null : result.message);
   };
+  const removeNotationGroup = (group: ReminderRecord[]) => {
+    const linkedIds = new Set(game.preparedInformation.flatMap(preparation => preparation.clue.kind === "pair"
+      ? preparation.clue.reminders.filter(link => link.participant.participantId === target.participantId).map(link => link.id) : []));
+    const linked = group.filter(reminder => linkedIds.has(reminder.id));
+    const intended = group.length === 1 ? group[0] : linked.length === 1 ? linked[0] : undefined;
+    if (!intended) { setError("More than one reminder is represented. Use More settings to remove the intended reminder."); return; }
+    resolve({ kind: "remove", target, reminderId: intended.id });
+  };
   return <section className="player-popover-markers popover-token-reminders" aria-label="On this player">
     <h4>On this player</h4>
     {effects.fallback.length > 0 && <p className="player-popover-effects">{effects.fallback.map(effect => `${effect.indicator.label}${effect.suppressedCount ? " (suppressed)" : ""}`).join(" · ")}</p>}
@@ -88,16 +96,16 @@ export function PopoverReminders({ player }: { player: STPlayerRecord }) {
         <span>{removal.armedId === `effect:${token.key}` ? "Tap to remove" : `${token.label}${token.instances.length > 1 ? ` ×${token.instances.length}` : ""}`}</span>
         <span id={`${notationHelpId}-effect-${token.key}`} className="sr-only">{token.detail}</span>
       </button>)}
-      {player.reminders.filter(reminder => !redHerringNotationCovered(reminder, effects.tokens)).map(reminder => <button type="button" key={reminder.id} className="popover-reminder-choice popover-placed-reminder"
+      {firstInformationReminderGroups(player.reminders.filter(reminder => !redHerringNotationCovered(reminder, effects.tokens))).map(group => { const reminder = group[0]!; return <button type="button" key={reminder.id} className="popover-reminder-choice popover-placed-reminder"
         data-removal-armed={removal.armedId === `notation:${reminder.id}` || undefined}
         data-reminder-kind={linkedModifier(reminder.id) ? "effect" : "notation"}
         aria-describedby={`${notationHelpId}-${reminder.id}${linkedModifier(reminder.id) ? "" : ` ${notationHelpId}`}`}
         disabled={ended} aria-label={`Remove ${reminder.label} reminder`} title={`Remove ${reminder.label} reminder`}
-        onClick={() => removal.tap(`notation:${reminder.id}`, () => resolve({ kind: "remove", target, reminderId: reminder.id }))}>
+        onClick={() => removal.tap(`notation:${reminder.id}`, () => removeNotationGroup(group))}>
         <ReminderDisc role={reminder.sourceCharacter ? registry.get(reminder.sourceCharacter) : undefined} />
         {!ended && <span className="popover-reminder-remove" aria-hidden="true">×</span>}<span>{removal.armedId === `notation:${reminder.id}` ? "Tap to remove" : reminder.label}</span>
         <span id={`${notationHelpId}-${reminder.id}`} className="sr-only">{linkedModifier(reminder.id) ? "Effect" : "Note"}</span>
-      </button>)}
+      </button>; })}
     </div> : <p className="player-popover-empty">No reminders yet. Tap a token below to place it.</p>}
     <span id={notationHelpId} className="sr-only">Notes do not apply effects.</span>
     {!ended && <>

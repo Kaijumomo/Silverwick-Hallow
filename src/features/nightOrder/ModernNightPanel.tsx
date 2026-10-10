@@ -21,6 +21,8 @@ import type { NightStep } from "./nightOrder";
 import "@/styles/modern-night.css";
 import { BureaucratAction } from "@/features/voting/BureaucratAction";
 import { NIGHT_INFORMATION_ROLES, NightInformationAction, type NightInformationHandle } from "./NightInformationAction";
+import { PreparedInformationAction } from "./PreparedInformationAction";
+import { FIRST_INFORMATION_CHARACTERS } from "@/features/setup/FirstInformationPreparation";
 
 type Props = { game: StorytellerLobbyRecord; script: Script; visible: boolean; onClose: () => void; showClose?: boolean };
 type Workspace = { target: WorkspaceTarget; ability: StepAbility; inputs?: Record<string, AbilityInputValue>; key: number };
@@ -79,7 +81,8 @@ function NightGuide({ game, script, visible, onClose, showClose = false }: Props
       roleId: current.effectiveRoleId, simulated: current.isDeceived }).kind === "automated"
     && manualAction !== current.stepKey;
   const manualRavenkeeper = current?.kind === "player" && current.effectiveRoleId === "ravenkeeper" && current.isDeceived;
-  const inlineInformation = current?.kind === "player" && NIGHT_INFORMATION_ROLES.has(current.effectiveRoleId)
+  const preparedInformation = current?.kind === "player" && FIRST_INFORMATION_CHARACTERS.has(current.effectiveRoleId);
+  const inlineInformation = preparedInformation || current?.kind === "player" && NIGHT_INFORMATION_ROLES.has(current.effectiveRoleId)
     && ability?.kind === "guided" && (!!eligible || resolved || manualRavenkeeper);
   const direct = !inlineInformation && eligible && ability?.kind === "guided" && !ability.invocationPath && simpleTarget(ability.descriptor);
   const correction = current && resolved ? getNightActionCorrection(game, game.day, current.stepKey) : null;
@@ -263,7 +266,9 @@ function NightGuide({ game, script, visible, onClose, showClose = false }: Props
           <p className="modern-night-instruction">{successorChoice ? "Choose the Minion who becomes the new Imp." : manual || inlineInformation ? role?.ability : ability?.kind === "guided" ? ability.descriptor.presentation.action : current.prompt}</p>
           {manual && <p className="behavior-help">{current.prompt}</p>}
           {current.isDeceived && <p className="behavior-help">Follow the shown character’s procedure. This player is actually the {current.actualRoleName}.</p>}
-          {inlineInformation && ability?.kind === "guided" ? <NightInformationAction key={current.stepKey} ref={information}
+          {preparedInformation ? <PreparedInformationAction key={current.stepKey} ref={information}
+            game={game} script={script} step={current} visible={visible} resolved={resolved} onResolved={finish} />
+            : inlineInformation && ability?.kind === "guided" ? <NightInformationAction key={current.stepKey} ref={information}
             game={game} script={script} step={current} ability={ability} visible={visible} resolved={resolved} onResolved={finish} onManual={requireManual} />
             : success?.key === current.stepKey && success.game === game ? <p className="modern-night-result" role="status">{!direct && steps.slice(currentIndex + 1).some(s => !stepResolved(game, s)) ? "Resolved. Continuing…" : "Resolved."}</p>
             : resolved ? <><p className="modern-night-result">Completed{correction?.target ? ` · ${game.players[correction.target.playerId]?.name ?? "Chosen player"}` : ""}</p>

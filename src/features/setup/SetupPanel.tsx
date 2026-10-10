@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Modal } from "@/components/Modal";
 import { captureCharacterActionContext, useStorytellerStore } from "@/stores/storytellerStore";
 import { RedHerringPreparation, type RedHerringSelection } from "./RedHerringPreparation";
+import { FirstInformationPreparation, useFirstInformationPreparation, type FirstInformationSelection } from "./FirstInformationPreparation";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { analyzeSetup } from "./setupAnalyzer";
 import { selectSetupContext } from "./setupContext";
@@ -25,13 +26,16 @@ type Props = { game: StorytellerLobbyRecord; script: Script; onClose: () => void
   generatedRoleIds?: RoleId[];
   onGeneratedRoleIdsChange?: (ids: RoleId[]) => void;
   redHerringSelection?: RedHerringSelection;
+  firstInformationSelection?: FirstInformationSelection;
 };
 
 export function SetupPanel({ game, script, onClose, foreground = false, returnFocusRef,
-  generatedRoleIds = [], onGeneratedRoleIdsChange = () => {}, redHerringSelection }: Props) {
+  generatedRoleIds = [], onGeneratedRoleIdsChange = () => {}, redHerringSelection, firstInformationSelection }: Props) {
   const store = useStorytellerStore();
   const actionContext = captureCharacterActionContext();
   const hidden = usePrivacyStore(s => s.enabled);
+  const localInformation = useFirstInformationPreparation(firstInformationSelection ? undefined : game, firstInformationSelection ? undefined : script);
+  const firstInformation = firstInformationSelection ?? localInformation;
   const [editing, setEditing] = useState(false);
   const [editingBag, setEditingBag] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -130,6 +134,8 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
     </div>
     {stage === "prepare" && !editingBag && <PreparationRows game={game} pendingIds={view.revealReadiness?.pendingIds ?? []} />}
     {view.dealt && !editingBag && <RedHerringPreparation context={context} selection={redHerringSelection} onChoose={redHerringSelection ? onClose : undefined} />}
+    {view.dealt && !editingBag && <FirstInformationPreparation selection={firstInformation} onChoose={firstInformationSelection ? onClose : undefined} />}
+    {!firstInformationSelection && <>{localInformation.dialog}{localInformation.error && <p role="alert">{localInformation.error}</p>}</>}
     {stage === "reveal" && <PrivateRevealReadiness game={game} live={!!store.lobby} />}
     {view.next === "reveal" && !editingBag && (
       <div className="setup-refine-toolbar">

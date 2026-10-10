@@ -3,7 +3,7 @@ import type { RulesQuery } from "@/stores/rulesQuery";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import { effectIndicators, type EffectIndicatorSummary } from "@/stores/effectRegistry";
 import { isEffectActive } from "@/stores/effects";
-import type { EffectRecord, RoleDef, STPlayerRecord } from "@/stores/types";
+import type { EffectRecord, ReminderRecord, RoleDef, STPlayerRecord } from "@/stores/types";
 
 export type OfficialEffectToken = {
   key: string;
@@ -71,4 +71,19 @@ export function officialNotationRole(sourceCharacter: string | undefined, label:
     const role = canonicalRoles([sourceCharacter])[0]!;
     return role.reminders?.includes(label) || role.remindersGlobal?.includes(label) ? role : undefined;
   } catch { return undefined; }
+}
+
+/** B6 presentation grouping only. Every source record remains independently
+ * addressable; this grouping never authorizes a bulk mutation. Custom notes
+ * remain separate even when their visible wording resembles an official token. */
+export function firstInformationReminderGroups(reminders: readonly ReminderRecord[]): ReminderRecord[][] {
+  const groups = new Map<string, ReminderRecord[]>();
+  for (const reminder of reminders) {
+    const official = ["washerwoman", "librarian", "investigator"].includes(reminder.sourceCharacter ?? "")
+      && !reminder.note && officialNotationRole(reminder.sourceCharacter, reminder.label);
+    const key = official ? `official:${reminder.sourceCharacter}:${reminder.label}` : `instance:${reminder.id}`;
+    const group = groups.get(key) ?? [];
+    group.push(reminder); groups.set(key, group);
+  }
+  return [...groups.values()];
 }

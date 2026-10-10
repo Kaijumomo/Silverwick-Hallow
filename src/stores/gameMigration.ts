@@ -670,6 +670,12 @@ function migrateEntryV26ToV27(e: Record<string, unknown>): void {
   e.gameSchemaVersion = 27;
 }
 
+/** Preparation cannot be reconstructed from reminders, Effects or History. */
+function migrateEntryV27ToV28(e: Record<string, unknown>): void {
+  e.preparedInformation = [];
+  e.gameSchemaVersion = 28;
+}
+
 export function migrateGameEntry(
   entry: unknown,
   fromVersion: number,
@@ -701,9 +707,11 @@ export function migrateGameEntry(
   // than the step's target (ASTRA-10C-003): an entry is never migrated
   // "below" an envelope that already claims the target version.
   const record = e as Record<string, unknown>;
-  // Presence of v27 state under an older/missing marker is malformed data,
-  // even when that field is null or otherwise invalid. Never repair it.
-  if (hasV27Evidence(record) && record.gameSchemaVersion !== GAME_SCHEMA_VERSION) return;
+  // Newer state under an older/missing marker is malformed data, even when
+  // its field is null or otherwise invalid. Never repair it. A genuine v27
+  // snapshot may contain voting, but cannot contain prepared information.
+  if (hasV28Evidence(record) && record.gameSchemaVersion !== GAME_SCHEMA_VERSION) return;
+  if (hasV27Evidence(record) && record.gameSchemaVersion !== 27 && record.gameSchemaVersion !== GAME_SCHEMA_VERSION) return;
   if (hasOwnKey(record, "gameSchemaVersion")) {
     // Phase 10H: v26-only evidence under any older marker is malformed
     // current-version data -- no step runs, the v26 schema rejects it.
@@ -733,6 +741,7 @@ export function migrateGameEntry(
       migrateEntryV25ToV26(record);
     }
     if (record.gameSchemaVersion === 26 && fromVersion < 27) migrateEntryV26ToV27(record);
+    if (record.gameSchemaVersion === 27 && fromVersion < 28) migrateEntryV27ToV28(record);
     return;
   }
   // Phase 10B (ASTRA-10B-002) / 10C / 10D / 10E: marker-less v20+ evidence is
@@ -829,6 +838,7 @@ export function migrateGameEntry(
     if (record.gameSchemaVersion === 24) migrateEntryV24ToV25(record);
     if (record.gameSchemaVersion === 25) migrateEntryV25ToV26(record);
     if (record.gameSchemaVersion === 26) migrateEntryV26ToV27(record);
+    if (record.gameSchemaVersion === 27) migrateEntryV27ToV28(record);
   }
 }
 
@@ -909,7 +919,7 @@ export function detectLegacyGameVersion(game: Record<string, unknown>): number |
     const marker = game.gameSchemaVersion;
     return MIGRATABLE_GAME_SCHEMA_VERSIONS.find((version) => version === marker) ?? GAME_SCHEMA_VERSION;
   }
-  if (hasV27Evidence(game)) return GAME_SCHEMA_VERSION;
+  if (hasV28Evidence(game) || hasV27Evidence(game)) return GAME_SCHEMA_VERSION;
   // v23, then v22, evidence first: it must never be claimed by an older
   // heuristic (an Alignment/Role correction's `correction` key is also v19
   // Life evidence, and an Alignment/Role `resolutionId` is also v20 evidence).
@@ -938,6 +948,10 @@ const someEntry = (list: unknown, test: (entry: unknown) => boolean): boolean =>
 
 export function hasV27Evidence(game: Record<string, unknown>): boolean {
   return hasOwnKey(game, "voting") || someEntry(game.history, h => isObject(h) && h.category === "voting");
+}
+
+export function hasV28Evidence(game: Record<string, unknown>): boolean {
+  return hasOwnKey(game, "preparedInformation");
 }
 
 /**
