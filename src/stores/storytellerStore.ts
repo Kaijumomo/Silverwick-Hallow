@@ -89,6 +89,7 @@ import { useShellStore, type NightCursor } from "./shellStore";
 import { deriveNightWork } from "@/features/nightOrder/nightWork";
 import { planPreparedInformation, planPreparedInformationDelivery, reconcilePreparedInformation, type PrepareInformationRequest, type DeliverPreparedInformationRequest, type PreparedInformationResult } from "./preparedInformation";
 import { planAbilityUseReminders } from "./abilityUseReminders";
+import { planButlerSelection, reconcileButlerReminders, type ButlerSelectionRequest, type ButlerSelectionResult } from "./butlerSelection";
 import { analyzeSetup } from "@/features/setup/setupAnalyzer";
 import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
 import { assignedBagIsCoherent, canRefineSetup, matchBagToAssignments } from "@/features/setup/setupRefinement";
@@ -674,6 +675,7 @@ export type StorytellerStore = {
    */
   resolveAbility: (request: AbilityResolutionRequest, semantics?: AbilitySemanticsRegistry, actionContext?: CharacterActionContext) => AbilityCommandResult;
   prepareInformation: (request: PrepareInformationRequest, actionContext?: CharacterActionContext) => PreparedInformationResult;
+  selectButlerMaster: (request: ButlerSelectionRequest, actionContext?: CharacterActionContext) => ButlerSelectionResult;
   deliverPreparedInformation: (request: DeliverPreparedInformationRequest, actionContext?: CharacterActionContext) => PreparedInformationResult;
   correctNightActionTarget: (request: NightActionTargetCorrection, actionContext?: CharacterActionContext) => AbilityCommandResult;
   /**
@@ -1560,7 +1562,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
               : withRevealTokens(state.game, patch.game, registryForGame(state, patch.game));
             const reconciled = patch.game === preparedAuthoritativeGame ? revealed
               : state.game ? reconcileVotingDependencies(state.game, revealed) : revealed;
-            const game = reconcilePreparedInformation(reconciled, selectScriptById(state, reconciled.scriptId) ?? null);
+            const game = reconcilePreparedInformation(reconcileButlerReminders(reconciled), selectScriptById(state, reconciled.scriptId) ?? null);
             return { ...patch, game, localSeq: state.localSeq + 1 };
           }
           return patch;
@@ -1575,7 +1577,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const current = state.game!;
         const notation = planAbilityUseReminders(current, withRevealTokens(current, planned, registryForGame(state, planned)), registryForGame(state, planned));
         if (!notation.ok) return notation.message;
-        const prepared = reconcilePreparedInformation(reconcileVotingDependencies(current, notation.game), selectScriptById(state, planned.scriptId) ?? null);
+        const prepared = reconcilePreparedInformation(reconcileButlerReminders(reconcileVotingDependencies(current, notation.game)), selectScriptById(state, planned.scriptId) ?? null);
         if (!StorytellerGamePersistedSchema.safeParse(prepared).success) return "This result could not be safely saved. Nothing was recorded.";
         const failure = persistencePreflight(prepared, current, state.lobby);
         if (failure) return failure;
@@ -2729,6 +2731,17 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (unsafe) return { ok: false, code: "invalidComposition", message: unsafe };
         rememberCorrectedNightAction(game, request, { ...result.plan, game: get().game! });
         return { ok: true, changed: true, resolutionId: result.plan.resolutionId };
+      },
+
+      selectButlerMaster: (request, actionContext) => {
+        const state = get();
+        const refusal = characterActionRefusal(state, actionContext);
+        if (refusal || !state.game) return { ok: false, message: refusal ?? "No game is open." };
+        const script = selectScriptById(state, state.game.scriptId) ?? null;
+        const result = planButlerSelection(state.game, request, { script, registry: buildRegistry(script ?? { id: state.game.scriptId, name: "", characters: [] }) });
+        if (!result.ok || !result.changed) return result;
+        const unsafe = commitAuthoritativeState(result.game, state, votingAuthorityToken(state.lobby)!);
+        return unsafe ? { ok: false, message: unsafe } : { ok: true, changed: true };
       },
 
       prepareInformation: (request, actionContext) => {

@@ -2,6 +2,7 @@ import { isCanonicalRole } from "@/data/canonical";
 import { applyEffectPlan, planEffectTransaction, type EffectPlan } from "./effectResolution";
 import { applyReminderPlan, planReminderTransaction, type ReminderPlan } from "./reminderResolution";
 import { historyId } from "./history";
+import { planButlerReminderCleanup } from "./butlerReminders";
 import type { RulesQueryEnvironment } from "./rulesQuery";
 import type { CurrentParticipantRef, ParticipantId, StorytellerLobbyRecord } from "./types";
 import type { VotingModifier, VotingRound } from "./votingTypes";
@@ -84,7 +85,9 @@ export function planSourceAbilityLoss(
   const removed = (game.voting?.modifiers ?? []).filter(m => lost.has(m.source.participantId));
   const reminders = planRemovedVotingReminders(working, removed, nextHistoryId);
   if (!reminders.ok) return reminders;
-  return { ok: true, plan: { effects, reminders: reminders.plans, removedVotingModifiers: removed.map(m => m.id) } };
+  const butler = planButlerReminderCleanup(reminders.game, lost, nextHistoryId, resolutionId);
+  if (!butler.ok) return butler;
+  return { ok: true, plan: { effects, reminders: [...reminders.plans, ...butler.plans], removedVotingModifiers: removed.map(m => m.id) } };
 }
 
 export function applySourceAbilityLossPlan(game: StorytellerLobbyRecord, plan?: SourceAbilityLossPlan, previous: StorytellerLobbyRecord = game): StorytellerLobbyRecord {

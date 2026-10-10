@@ -9,6 +9,7 @@ import type { ReminderIntent } from "@/stores/reminderResolution";
 import type { ReminderRecord, RoleDef, STPlayerRecord } from "@/stores/types";
 import { useReminderRemoval } from "@/features/reminders/useReminderRemoval";
 import { ownsAbilityUseReminder } from "@/stores/abilityUseReminders";
+import { butlerReminderOrigin } from "@/stores/butlerSelection";
 import { createRulesQuery } from "@/stores/rulesQuery";
 
 /** The palette is notation only. Its source character controls artwork and
@@ -78,7 +79,7 @@ export function PopoverReminders({ player }: { player: STPlayerRecord }) {
   const removeNotationGroup = (group: ReminderRecord[]) => {
     const linkedIds = new Set(game.preparedInformation.flatMap(preparation => preparation.clue.kind === "pair"
       ? preparation.clue.reminders.filter(link => link.participant.participantId === target.participantId).map(link => link.id) : []));
-    const linked = group.filter(reminder => linkedIds.has(reminder.id) || ownsAbilityUseReminder(player, reminder));
+    const linked = group.filter(reminder => linkedIds.has(reminder.id) || ownsAbilityUseReminder(player, reminder) || !!butlerReminderOrigin(reminder));
     const intended = group.length === 1 ? group[0] : linked.length === 1 ? linked[0] : undefined;
     if (!intended) { setError("More than one reminder is represented. Use More settings to remove the intended reminder."); return; }
     resolve({ kind: "remove", target, reminderId: intended.id });

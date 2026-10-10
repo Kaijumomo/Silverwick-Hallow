@@ -23,6 +23,7 @@ import { BureaucratAction } from "@/features/voting/BureaucratAction";
 import { NIGHT_INFORMATION_ROLES, NightInformationAction, type NightInformationHandle } from "./NightInformationAction";
 import { PreparedInformationAction } from "./PreparedInformationAction";
 import { FIRST_INFORMATION_CHARACTERS } from "@/features/setup/FirstInformationPreparation";
+import { ButlerNightAction } from "./ButlerNightAction";
 
 type Props = { game: StorytellerLobbyRecord; script: Script; visible: boolean; onClose: () => void; showClose?: boolean };
 type Workspace = { target: WorkspaceTarget; ability: StepAbility; inputs?: Record<string, AbilityInputValue>; key: number };
@@ -82,7 +83,8 @@ function NightGuide({ game, script, visible, onClose, showClose = false }: Props
     && manualAction !== current.stepKey;
   const manualRavenkeeper = current?.kind === "player" && current.effectiveRoleId === "ravenkeeper" && current.isDeceived;
   const preparedInformation = current?.kind === "player" && FIRST_INFORMATION_CHARACTERS.has(current.effectiveRoleId);
-  const inlineInformation = preparedInformation || current?.kind === "player" && NIGHT_INFORMATION_ROLES.has(current.effectiveRoleId)
+  const butlerTurn = current?.kind === "player" && current.effectiveRoleId === "butler";
+  const inlineInformation = butlerTurn || preparedInformation || current?.kind === "player" && NIGHT_INFORMATION_ROLES.has(current.effectiveRoleId)
     && ability?.kind === "guided" && (!!eligible || resolved || manualRavenkeeper);
   const direct = !inlineInformation && eligible && ability?.kind === "guided" && !ability.invocationPath && simpleTarget(ability.descriptor);
   const correction = current && resolved ? getNightActionCorrection(game, game.day, current.stepKey) : null;
@@ -266,7 +268,9 @@ function NightGuide({ game, script, visible, onClose, showClose = false }: Props
           <p className="modern-night-instruction">{successorChoice ? "Choose the Minion who becomes the new Imp." : manual || inlineInformation ? role?.ability : ability?.kind === "guided" ? ability.descriptor.presentation.action : current.prompt}</p>
           {manual && <p className="behavior-help">{current.prompt}</p>}
           {current.isDeceived && <p className="behavior-help">Follow the shown character’s procedure. This player is actually the {current.actualRoleName}.</p>}
-          {preparedInformation ? <PreparedInformationAction key={current.stepKey} ref={information}
+          {butlerTurn ? <ButlerNightAction key={current.stepKey} game={game} script={script}
+            source={{ playerId: current.playerId, participantId: current.participantId }} visible={visible} resolved={resolved} onResolved={finish} />
+            : preparedInformation ? <PreparedInformationAction key={current.stepKey} ref={information}
             game={game} script={script} step={current} visible={visible} resolved={resolved} onResolved={finish} />
             : inlineInformation && ability?.kind === "guided" ? <NightInformationAction key={current.stepKey} ref={information}
             game={game} script={script} step={current} ability={ability} visible={visible} resolved={resolved} onResolved={finish} onManual={requireManual} />

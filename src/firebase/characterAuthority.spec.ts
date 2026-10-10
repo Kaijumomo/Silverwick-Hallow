@@ -10,7 +10,7 @@ import { createLobby, knockOnLobby, seatPlayer } from "./lobby";
 import { requireActiveSession } from "./lifecycle";
 import { writeProjections } from "./sync";
 import { useSessionRuntime } from "./storytellerSync";
-import { captureCharacterActionContext, useStorytellerStore as store } from "@/stores/storytellerStore";
+import { captureCharacterActionContext, captureVotingContext, useStorytellerStore as store } from "@/stores/storytellerStore";
 import { setupGame, setupScript } from "@/test/setupFixtures";
 import { buildRegistry } from "@/data/roleRegistry";
 import { captureFingerprint } from "@/stores/abilityResolution";
@@ -18,6 +18,8 @@ import { participantStepKey } from "@/stores/nightProgress";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { preparedInformationContext } from "@/stores/preparedInformation";
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
+import { butlerSelectionContext } from "@/stores/butlerSelection";
+import { currentVotingState, freshVotingDay, votingContextChanged } from "@/stores/voting";
 
 let env: RulesTestEnvironment;
 const code = "CHAR2345";
@@ -56,6 +58,80 @@ function poison() {
     completeStep: true }, undefined, captureCharacterActionContext());
 }
 const publish = (writer: SessionWriter) => writeProjections({ backend: writer, code, stState: game(), registry: buildRegistry(setupScript), online: {}, membership: {} });
+
+test("B7 Master notation and v28 preparation stay private through checkpoint publication and real writer takeover", async () => {
+  const { backend, writer, session } = await open();
+  const night = setupGame(["butler", "washerwoman", "chef", "poisoner", "imp"], { code, storytellerUid: host, phase: "night", day: 1 });
+  Object.values(night.players).forEach(player => { player.packetEpoch = `b7-identity-${player.id}`; });
+  store.setState({ game: night, undoStack: [], localSeq: 0 });
+  const playerUid = "b7-butler-player";
+  const playerDb = env.authenticatedContext(playerUid).database();
+  await knockOnLobby(new FirebaseRoomBackend(playerDb as unknown as Database), code, playerUid, "Player 0");
+  await seatPlayer(writer, code, playerUid, "p0", null);
+  const project = (activeWriter: SessionWriter) => writeProjections({ backend: activeWriter, code, stState: game(), registry: buildRegistry(setupScript), online: {}, membership: { [playerUid]: "p0" } });
+  expect(store.getState().prepareInformation({ character: "washerwoman", source: binding("p1"), expected: preparedInformationContext(game(), setupScript),
+    clue: { kind: "pair", candidates: [binding("p2"), binding("p3")], shownCharacter: "chef", qualifyingParticipantId: binding("p2").participantId },
+  }, captureCharacterActionContext())).toMatchObject({ ok: true });
+  const prepared = game().preparedInformation;
+  const select = (target: string) => ({ source: binding("p0"), target: binding(target), expected: butlerSelectionContext(game(), setupScript, binding("p0")) });
+  expect(store.getState().selectButlerMaster(select("p2"), captureCharacterActionContext())).toMatchObject({ ok: true, changed: true });
+  expect(game().preparedInformation).toEqual(prepared);
+  expect(game().informationDeliveries).toEqual([]);
+  const master = game().players.p2!.reminders.find(reminder => reminder.sourceCharacter === "butler")!;
+  expect(master).toMatchObject({ label: "Master", sourceParticipant: { participantId: binding("p0").participantId } });
+  await project(writer);
+  const checkpoint = await backend.get(`lobbies/${code}/checkpoint`);
+  const saved = JSON.parse(checkpoint as string).game;
+  expect(StorytellerGamePersistedSchema.parse(saved)).toEqual(game());
+  await assertFails(playerDb.ref(`lobbies/${code}/checkpoint`).once("value"));
+  await assertFails(playerDb.ref(`lobbies/${code}/storyteller`).once("value"));
+  const publicAndSelf = JSON.stringify([(await playerDb.ref(`lobbies/${code}/public`).once("value")).val(),
+    (await playerDb.ref(`lobbies/${code}/player/p0`).once("value")).val()]);
+  expect(publicAndSelf).not.toMatch(/butler-master|Master|sourceParticipant|preparedInformation|qualifyingParticipantId/);
+  const retained = select("p3"); const captured = captureCharacterActionContext();
+  await writer.dispose();
+  const replacement = new SessionWriter(backend, code, session.id); writers.push(replacement); await replacement.start();
+  useSessionRuntime.setState({ backend: replacement, status: "live" });
+  const before = store.getState();
+  expect(store.getState().selectButlerMaster(retained, captured)).toMatchObject({ ok: false });
+  expect(store.getState()).toBe(before);
+  expect(await backend.get(`lobbies/${code}/checkpoint`)).toBe(checkpoint);
+  await expect(project(writer)).rejects.toThrow();
+  expect(store.getState().selectButlerMaster(select("p3"), captureCharacterActionContext())).toMatchObject({ ok: true });
+  await project(replacement);
+  const updated = JSON.parse(await backend.get(`lobbies/${code}/checkpoint`) as string).game;
+  expect(updated.preparedInformation).toEqual(prepared);
+  expect(updated.players.p2.reminders.some((reminder: { id: string }) => reminder.id === master.id)).toBe(false);
+  expect(updated.players.p3.reminders).toContainEqual(expect.objectContaining({ id: master.id, label: "Master" }));
+});
+
+test("B7 Virgin consumption and distinct execution outcome survive real checkpoint serialization without a second Day execution", async () => {
+  const { backend, writer } = await open();
+  const day = setupGame(["chef", "virgin", "soldier", "poisoner", "imp"], { code, storytellerUid: host, phase: "day", day: 1, voting: freshVotingDay(1) });
+  Object.values(day.players).forEach(player => { player.packetEpoch = `b7-virgin-${player.id}`; });
+  store.setState({ game: day, undoStack: [], localSeq: 0 });
+  expect(store.getState().resolveVoting({ kind: "begin", roundId: "b7-first-nomination", mode: "nomination", nominator: binding("p0"), nominee: binding("p1"),
+    code, day: 1, expectedRevision: 0 }, captureVotingContext())).toMatchObject({ ok: true });
+  expect(game().players.p1!.abilityUsed).toBe(true);
+  expect(game().players.p1!.reminders).toContainEqual(expect.objectContaining({ label: "No Ability", sourceCharacter: "virgin" }));
+  await publish(writer);
+  const pending = StorytellerGamePersistedSchema.parse(JSON.parse(await backend.get(`lobbies/${code}/checkpoint`) as string).game);
+  expect(votingContextChanged(pending, pending.voting!.rounds[0]!, { script: setupScript, registry: buildRegistry(setupScript) })).toBe(false);
+  store.setState({ game: pending });
+  expect(store.getState().resolveVoting({ kind: "virgin", roundId: "b7-first-nomination", execute: true, outcome: "survived",
+    code, day: 1, expectedRevision: currentVotingState(game()).revision }, captureVotingContext())).toMatchObject({ ok: true });
+  expect(game().players.p0!.alive).toBe(true);
+  expect(game().lifeEventWindow.events).toEqual([expect.objectContaining({ kind: "execution", outcome: "survived" })]);
+  await publish(writer);
+  const executed = await backend.get(`lobbies/${code}/checkpoint`);
+  expect(JSON.parse(executed as string).game).toEqual(game());
+  expect(store.getState().resolveVoting({ kind: "execution", target: binding("p2"), outcome: "died", code, day: 1,
+    expectedRevision: currentVotingState(game()).revision }, captureVotingContext())).toMatchObject({ ok: false });
+  expect(await backend.get(`lobbies/${code}/checkpoint`)).toBe(executed);
+  expect(JSON.stringify(await backend.get(`lobbies/${code}/public`))).not.toMatch(/No Ability|abilityUsed|virginPending|contextStamp/);
+  store.getState().undo();
+  expect(game()).toEqual(pending);
+});
 
 test("B6 pending clue and delivered communication serialize privately through the real guarded writer", async () => {
   const { backend, writer } = await open();

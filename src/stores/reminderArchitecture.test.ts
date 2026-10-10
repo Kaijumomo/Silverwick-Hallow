@@ -104,8 +104,10 @@ const ALLOWED = new Set([
   // rules assessment never reads notation; lifecycle integrity and replacement
   // use the authoritative Reminder seam, asserted separately below.
   "stores/preparedInformation.ts",
-  // B7 mirrors Life-owned ability consumption through exact generated notation.
-  // No Ability tokens never supply ability-use or availability decisions.
+  // B7 selection and ability-use notation read exact generated ownership only;
+  // availability remains a RulesQuery/Life decision. No voting rule reads it.
+  "stores/butlerSelection.ts",
+  "stores/butlerReminders.ts",
   "stores/abilityUseReminders.ts",
   "features/reminders/reminderPresentation.ts",
   // Read-only canonical token metadata and sourced Effect presentation;
@@ -117,6 +119,8 @@ const ALLOWED = new Set([
   // editor; privacy removes the entire popover. No rules use these labels.
   "features/players/PlayerPopover.tsx",
   "features/players/PopoverReminders.tsx", // presentation and participant-bound notation commands only
+  // Displays the already-recorded private Master choice; no rule reads it.
+  "features/nightOrder/ButlerNightAction.tsx",
   // Definition-only RoleDef.reminders catalogue in the chooser footer;
   // receives no player ReminderRecord or authoritative mechanics state.
   "features/players/RoleChooser.tsx",
@@ -188,6 +192,30 @@ describe("Phase 10C architecture guard: Reminders are notation, never mechanics 
     expect(code).not.toMatch(/\bplayers\s*:|\.reminders\s*=(?!=)|\.(label|note)\s*\.\s*(match|includes|startsWith|endsWith|toLowerCase|search|split)\b/);
     expect(code).toContain("planReminderTransaction(next, { intents, resolutionId: id })");
     expect(code).toContain("applyReminderPlan(next, reminders.plan)");
+  });
+
+  it("B7 Butler rules never read notation; selection and cleanup use only the Reminder seam", () => {
+    const code = stripComments(readFileSync(join(SRC, "stores/butlerSelection.ts"), "utf8"));
+    const availability = code.slice(code.indexOf("export function butlerSelectionAvailability"), code.indexOf("export function planButlerSelection"));
+    expect(reminderCoupling(availability)).toEqual([]);
+    expect(availability).toContain("query.abilityFunctions");
+    expect(code).not.toMatch(/\bplayers\s*:|\.reminders\s*=(?!=)|\.label\s*(===|!==)|\.(label|note)\s*\.\s*(match|includes|startsWith|endsWith|toLowerCase|search|split)\b/);
+    expect(code).toContain("planReminderTransaction");
+    expect(code).toContain("applyReminderPlan");
+    const voting = stripComments(readFileSync(join(SRC, "stores/voting.ts"), "utf8"));
+    expect(voting).not.toMatch(/butlerSelection|butlerReminder|butler-master/);
+    const lifecycle = stripComments(readFileSync(join(SRC, "stores/butlerReminders.ts"), "utf8"));
+    expect(lifecycle).not.toMatch(/from ["'].*(?:rulesQuery|preparedInformation|abilityResolution|semantics|butlerSelection)["']/);
+    expect(lifecycle).not.toMatch(/\bplayers\s*:|\.reminders\s*=(?!=)|\.label\s*(===|!==)/);
+    expect(lifecycle).toContain("planReminderTransaction");
+  });
+
+  it("B7 No Ability notation reflects Life state through the Reminder seam without writing ability availability", () => {
+    const code = stripComments(readFileSync(join(SRC, "stores/abilityUseReminders.ts"), "utf8"));
+    expect(code).toContain("!old.abilityUsed && player.abilityUsed");
+    expect(code).toContain("planReminderTransaction");
+    expect(code).toContain("applyReminderPlan");
+    expect(code).not.toMatch(/\.abilityUsed\s*=(?!=)|abilityUsed\s*:|\.reminders\s*=(?!=)|\.(label|note)\s*(===|!==)|resolveLife|planLifeTransaction/);
   });
 
   it("the detector itself works (planted violations are caught; prose and role-data lists are not)", () => {
