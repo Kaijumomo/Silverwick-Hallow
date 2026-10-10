@@ -154,7 +154,7 @@ describe("Ravenkeeper -- the trigger surfaces immediately after the death", () =
     open(named(["ravenkeeper", "imp", "chef", "monk", "saint", "poisoner", "empath"]));
     render(<Night />);
     expect(screen.queryByRole("region", { name: "Triggered now" })).toBeNull();
-    expect(within(card("Ravenkeeper", "Player 0")).getByText(/Not triggered/)).toBeInTheDocument();
+    expect(screen.queryByText("Ravenkeeper", { selector: ".step-role-name" })).toBeNull();
     choose("The player to kill", "p0", card("Imp", "Player 1"));
     fireEvent.click(within(card("Imp", "Player 1")).getByRole("button", { name: "Resolve" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm and record" }));

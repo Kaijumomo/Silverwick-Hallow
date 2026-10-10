@@ -11,6 +11,7 @@ import { PIT_HAG } from "./pithag";
 import { POISONER } from "./poisoner";
 import { RAVENKEEPER } from "./ravenkeeper";
 import { SLAYER } from "./slayer";
+import { UNDERTAKER } from "./undertaker";
 
 /**
  * Phase 10F Slice 7: the verified proof / support semantics, each traced to
@@ -18,4 +19,4 @@ import { SLAYER } from "./slayer";
  * production Ability Semantics Registry (semantics.ts); it is only ever
  * consulted through the canonical ownership gate (resolveAbilitySemantics).
  */
-export const VERIFIED_DESCRIPTORS: readonly AbilityDescriptor[] = [POISONER, MONK, CHEF, EMPATH, FORTUNE_TELLER, SLAYER, CULT_LEADER, HARLOT, AL_HADIKHIA, IMP, RAVENKEEPER, PIT_HAG];
+export const VERIFIED_DESCRIPTORS: readonly AbilityDescriptor[] = [POISONER, MONK, CHEF, EMPATH, FORTUNE_TELLER, SLAYER, CULT_LEADER, HARLOT, AL_HADIKHIA, IMP, RAVENKEEPER, UNDERTAKER, PIT_HAG];

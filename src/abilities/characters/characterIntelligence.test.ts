@@ -50,7 +50,7 @@ describe("Character Intelligence bounded automation", () => {
       expect(manifest.find(entry => entry.id === id)?.capabilities).toContainEqual(expect.objectContaining({ owner: "setup", boundary: expect.stringContaining("count policy") }));
     }
     for (const id of ["bureaucrat", "virgin"]) expect(manifest.find(entry => entry.id === id)?.capabilities).toContainEqual(expect.objectContaining({ owner: "voting" }));
-    expect(CANONICAL_ABILITY_SEMANTICS.size).toBe(12); // B5a adds Chef.
+    expect(CANONICAL_ABILITY_SEMANTICS.size).toBe(13); // B5a adds Chef.
     expect(CANONICAL_ABILITY_SEMANTICS.has("soldier")).toBe(false);
     expect(CANONICAL_ABILITY_SEMANTICS.has("vortox")).toBe(false);
   });

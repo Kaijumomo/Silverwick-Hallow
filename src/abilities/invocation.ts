@@ -139,6 +139,11 @@ export function nightTriggerStatus(
     case "actorDiedTonight": {
       const deaths = query.lifeEvents(moment, (event) => isDeathEvent(event) && event.subject.participantId === actor.participantId);
       const events = deaths.status === "known" ? deaths.events : deaths.recorded;
+      if (deaths.status === "unknown") {
+        const event = events.find(candidate => !consumed(candidate.id));
+        if (!event && (consumed(null) || events.length > 0)) return { kind: "notTriggered", reason: "This trigger was already resolved tonight." };
+        return { kind: "unknown", eventId: event?.id ?? null, reason: "Silverwick cannot verify tonight's complete Life Event record. Resolve this wake manually." };
+      }
       const current = query.participant(actor)?.actualRole;
       let resolved = false;
       for (const event of events) {
@@ -149,10 +154,6 @@ export function nightTriggerStatus(
         if (current !== descriptor.roleId && evidence === current) {
           return { kind: "unknown", eventId: event.id, reason: "A simulated wake: what this player was shown when they died is not recorded -- the Storyteller decides." };
         }
-      }
-      if (deaths.status === "unknown") {
-        if (consumed(null)) return { kind: "notTriggered", reason: "This trigger was already resolved tonight." };
-        return { kind: "unknown", eventId: null, reason: "Silverwick cannot tell whether this player died tonight (the Life Event record does not cover tonight): the Storyteller decides." };
       }
       return { kind: "notTriggered", reason: resolved ? "This trigger was already resolved tonight."
         : events.length ? "This player did not die tonight as this character." : "This player has not died tonight." };

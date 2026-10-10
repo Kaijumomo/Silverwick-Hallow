@@ -86,7 +86,7 @@ import type { VotingIntent } from "./votingTypes";
 import type { VotingHistoryRecord } from "./types";
 import { isTabletTrial } from "@/config/trial";
 import { useShellStore, type NightCursor } from "./shellStore";
-import { computeNightOrder } from "@/features/nightOrder/nightOrder";
+import { deriveNightWork } from "@/features/nightOrder/nightWork";
 import { analyzeSetup } from "@/features/setup/setupAnalyzer";
 import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
 import { assignedBagIsCoherent, canRefineSetup, matchBagToAssignments } from "@/features/setup/setupRefinement";
@@ -1463,8 +1463,8 @@ function validateRecoveryNightCursor(value: unknown, game: StorytellerLobbyRecor
   const script = Object.prototype.hasOwnProperty.call(BUILTIN_SCRIPTS, game.scriptId) ? BUILTIN_SCRIPTS[game.scriptId]
     : Object.prototype.hasOwnProperty.call(customScripts, game.scriptId) ? customScripts[game.scriptId] : undefined;
   if (!script) return null;
-  const known = computeNightOrder(game.players, game.seatOrder, script, game.day === 1, game).some(step => step.stepKey === stepKey)
-    || (stepKey.startsWith("manual:") && Object.prototype.hasOwnProperty.call(game.nightProgress, `${day}:${stepKey}`));
+  const known = deriveNightWork(game, { script, registry: buildRegistry(script), semantics: CANONICAL_ABILITY_SEMANTICS })
+    .steps.some(step => step.stepKey === stepKey);
   return known ? { day, stepKey } : null;
 }
 

@@ -20,7 +20,7 @@ import { deriveNightWork, stepResolved } from "./nightWork";
 import type { NightStep } from "./nightOrder";
 import "@/styles/modern-night.css";
 import { BureaucratAction } from "@/features/voting/BureaucratAction";
-import { CALCULATED_INFORMATION_ROLES, NightInformationAction, type NightInformationHandle } from "./NightInformationAction";
+import { NIGHT_INFORMATION_ROLES, NightInformationAction, type NightInformationHandle } from "./NightInformationAction";
 
 type Props = { game: StorytellerLobbyRecord; script: Script; visible: boolean; onClose: () => void; showClose?: boolean };
 type Workspace = { target: WorkspaceTarget; ability: StepAbility; inputs?: Record<string, AbilityInputValue>; key: number };
@@ -73,13 +73,15 @@ function NightGuide({ game, script, visible, onClose, showClose = false }: Props
   };
   const ability = current ? abilityOf(current) : null;
   const eligible = ability?.kind === "guided" && actor?.participantId && current?.kind === "player"
-    && (!current.isDeceived || CALCULATED_INFORMATION_ROLES.has(current.effectiveRoleId))
+    && (!current.isDeceived || NIGHT_INFORMATION_ROLES.has(current.effectiveRoleId))
+    && (!ability.trigger || ability.trigger.kind === "triggered")
     && automationEligibility({ query, descriptor: ability.descriptor, actor: bindingOf(actor),
       roleId: current.effectiveRoleId, simulated: current.isDeceived }).kind === "automated"
     && manualAction !== current.stepKey;
-  const direct = eligible && ability?.kind === "guided" && !ability.invocationPath && simpleTarget(ability.descriptor);
-  const inlineInformation = current?.kind === "player" && CALCULATED_INFORMATION_ROLES.has(current.effectiveRoleId)
-    && ability?.kind === "guided" && (!!eligible || resolved);
+  const manualRavenkeeper = current?.kind === "player" && current.effectiveRoleId === "ravenkeeper" && current.isDeceived;
+  const inlineInformation = current?.kind === "player" && NIGHT_INFORMATION_ROLES.has(current.effectiveRoleId)
+    && ability?.kind === "guided" && (!!eligible || resolved || manualRavenkeeper);
+  const direct = !inlineInformation && eligible && ability?.kind === "guided" && !ability.invocationPath && simpleTarget(ability.descriptor);
   const correction = current && resolved ? getNightActionCorrection(game, game.day, current.stepKey) : null;
   const canTarget = direct && (!resolved || !!correction?.canCorrect);
   const role = current?.kind === "player" ? registry.get(current.effectiveRoleId) : actor?.actualRole ? registry.get(actor.actualRole) : undefined;

@@ -159,8 +159,10 @@ describe("10F-AC-08 / AC-26: synchronous final stale revalidation", () => {
 
   it("a canonical character without verified production semantics: a guided request is unsupported and points to Manual", () => {
     live();
+    store.setState({ game: { ...game(), players: { ...game().players,
+      p5: { ...game().players.p5!, actualRole: "washerwoman", shownRole: "washerwoman" } } } });
     const b = baseline();
-    expect(state().resolveAbility({ mode: "guided", invocationPath: "nightOrder", fingerprint: captureFingerprint(game(), "p5")!, roleId: "chef",
+    expect(state().resolveAbility({ mode: "guided", invocationPath: "nightOrder", fingerprint: captureFingerprint(game(), "p5")!, roleId: "washerwoman",
       inputs: {} })).toMatchObject({ ok: false, code: "unsupported" });
     expectInert(b);
   });
