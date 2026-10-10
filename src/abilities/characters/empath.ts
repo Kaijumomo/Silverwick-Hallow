@@ -1,6 +1,7 @@
 import type { AbilityDescriptor, AbilityEvaluation, AbilityEvaluationContext } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import { answerOf, ask, outcome, requireLivingActor } from "./shared";
+import { informationAbilityRefusal } from "./informationSupport";
 
 /**
  * Empath -- SUPPORT SEMANTIC (matrix Sections 8 and 18.2), required to prove
@@ -39,7 +40,7 @@ export const EMPATH: AbilityDescriptor = {
   informationActions: ["empath-first-night", "empath-other-night"],
   presentation: { complexity: "simple", action: "Show how many living neighbours are evil" },
   evaluator: (context) => {
-    const dead = requireLivingActor(context);
+    const dead = requireLivingActor(context) ?? informationAbilityRefusal(context);
     if (dead) return dead;
     if (context.simulated || !context.functioning) {
       const told = answerOf(context.inputs, COMMUNICATED, "number");

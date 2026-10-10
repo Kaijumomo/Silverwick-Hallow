@@ -115,7 +115,7 @@ it("the existing roster fallback chooses only eligible successors in the same at
   expect(store.getState().undoStack).toHaveLength(1);
 });
 
-it.each(["empath", "fortuneteller", "monk"])("Drunk shown as %s uses official instructions and Next without a simulated action workspace", shownRole => {
+it.each(["monk"])("Drunk shown as %s uses official instructions and Next without a simulated action workspace", shownRole => {
   const next = proofGame(["drunk", "chef", "imp", "soldier", "poisoner"]);
   next.players.p0 = { ...next.players.p0!, shownRole, shownAlignment: "good", behaviorMode: "drunk_fake_role_behavior" };
   store.setState({ game: next });
@@ -200,7 +200,8 @@ it("a verified information action resolves through its action interaction withou
   render(<Guide />);
   expect(useTargetPicker.getState().active).toBeNull();
   const before = game();
-  fireEvent.click(screen.getByRole("button", { name: "Continue action" }));
+  expect(screen.getByLabelText("Information to communicate")).toHaveTextContent("1");
+  fireEvent.click(screen.getByRole("button", { name: "Next ›" }));
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(screen.queryByRole("button", { name: "Continue action" })).toBeNull();
   expect(game()).not.toBe(before);

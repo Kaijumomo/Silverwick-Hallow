@@ -20,6 +20,7 @@ import { deriveNightWork, stepResolved } from "./nightWork";
 import type { NightStep } from "./nightOrder";
 import "@/styles/modern-night.css";
 import { BureaucratAction } from "@/features/voting/BureaucratAction";
+import { CALCULATED_INFORMATION_ROLES, NightInformationAction, type NightInformationHandle } from "./NightInformationAction";
 
 type Props = { game: StorytellerLobbyRecord; script: Script; visible: boolean; onClose: () => void; showClose?: boolean };
 type Workspace = { target: WorkspaceTarget; ability: StepAbility; inputs?: Record<string, AbilityInputValue>; key: number };
@@ -55,6 +56,7 @@ function NightGuide({ game, script, visible, onClose, showClose = false }: Props
   const actionContext = captureCharacterActionContext();
   const sequence = useRef(0);
   const scroll = useRef<HTMLDivElement>(null);
+  const information = useRef<NightInformationHandle>(null);
   const current = (success?.game === game && !steps.some(step => step.stepKey === success.key) ? success.step : undefined)
     ?? (cursor?.day === game.day ? steps.find(s => s.stepKey === cursor.stepKey) : undefined)
     ?? steps.find(s => !stepResolved(game, s)) ?? steps.at(-1);
@@ -71,11 +73,13 @@ function NightGuide({ game, script, visible, onClose, showClose = false }: Props
   };
   const ability = current ? abilityOf(current) : null;
   const eligible = ability?.kind === "guided" && actor?.participantId && current?.kind === "player"
-    && !current.isDeceived
+    && (!current.isDeceived || CALCULATED_INFORMATION_ROLES.has(current.effectiveRoleId))
     && automationEligibility({ query, descriptor: ability.descriptor, actor: bindingOf(actor),
       roleId: current.effectiveRoleId, simulated: current.isDeceived }).kind === "automated"
     && manualAction !== current.stepKey;
   const direct = eligible && ability?.kind === "guided" && !ability.invocationPath && simpleTarget(ability.descriptor);
+  const inlineInformation = current?.kind === "player" && CALCULATED_INFORMATION_ROLES.has(current.effectiveRoleId)
+    && ability?.kind === "guided" && (!!eligible || resolved);
   const correction = current && resolved ? getNightActionCorrection(game, game.day, current.stepKey) : null;
   const canTarget = direct && (!resolved || !!correction?.canCorrect);
   const role = current?.kind === "player" ? registry.get(current.effectiveRoleId) : actor?.actualRole ? registry.get(actor.actualRole) : undefined;
@@ -198,10 +202,10 @@ function NightGuide({ game, script, visible, onClose, showClose = false }: Props
     };
   }, []);
   useEffect(() => {
-    if (direct || !success || !visible || details || success.key !== current?.stepKey || success.game !== game) return;
+    if (direct || inlineInformation || !success || !visible || details || success.key !== current?.stepKey || success.game !== game) return;
     const timer = window.setTimeout(advance, 2200);
     return () => window.clearTimeout(timer);
-  }, [direct, success, visible, details, current?.stepKey, game]);
+  }, [direct, inlineInformation, success, visible, details, current?.stepKey, game]);
   useEffect(() => {
     if (successorChoice && (successorChoice.game !== game || successorChoice.stepKey !== current?.stepKey)) setSuccessorChoice(null);
     // Undo and external corrections invalidate the displayed result as well as
@@ -227,7 +231,7 @@ function NightGuide({ game, script, visible, onClose, showClose = false }: Props
     if (!visible) return;
     lastRequest.current = actionRequest;
     if (details || resolved) return;
-    if (direct || bureaucrat) setPaused(false); else if (!workspace) openWorkspace();
+    if (direct || bureaucrat || inlineInformation) setPaused(false); else if (!workspace) openWorkspace();
   }, [actionRequest, visible]);
 
   if (details) return <div className="modern-night-extra"><button className="btn" onClick={() => setDetails(false)}>Back to guided night</button>
@@ -254,10 +258,12 @@ function NightGuide({ game, script, visible, onClose, showClose = false }: Props
         <div className="modern-night-actor">{role && <span className="modern-night-disc"><img src={iconUrlFor(role)} alt="" /></span>}
           <div><h3>{label(current)}</h3>{current.kind === "player" && <small>{current.playerName} · Seat {current.seat + 1}</small>}</div></div>
         {current.kind === "player" ? <>
-          <p className="modern-night-instruction">{successorChoice ? "Choose the Minion who becomes the new Imp." : manual ? role?.ability : ability?.kind === "guided" ? ability.descriptor.presentation.action : current.prompt}</p>
+          <p className="modern-night-instruction">{successorChoice ? "Choose the Minion who becomes the new Imp." : manual || inlineInformation ? role?.ability : ability?.kind === "guided" ? ability.descriptor.presentation.action : current.prompt}</p>
           {manual && <p className="behavior-help">{current.prompt}</p>}
           {current.isDeceived && <p className="behavior-help">Follow the shown character’s procedure. This player is actually the {current.actualRoleName}.</p>}
-          {success?.key === current.stepKey && success.game === game ? <p className="modern-night-result" role="status">{!direct && steps.slice(currentIndex + 1).some(s => !stepResolved(game, s)) ? "Resolved. Continuing…" : "Resolved."}</p>
+          {inlineInformation && ability?.kind === "guided" ? <NightInformationAction key={current.stepKey} ref={information}
+            game={game} script={script} step={current} ability={ability} visible={visible} resolved={resolved} onResolved={finish} onManual={requireManual} />
+            : success?.key === current.stepKey && success.game === game ? <p className="modern-night-result" role="status">{!direct && steps.slice(currentIndex + 1).some(s => !stepResolved(game, s)) ? "Resolved. Continuing…" : "Resolved."}</p>
             : resolved ? <><p className="modern-night-result">Completed{correction?.target ? ` · ${game.players[correction.target.playerId]?.name ?? "Chosen player"}` : ""}</p>
               {canTarget ? <p className="behavior-help">Tap another player to correct this action.</p> : <p className="behavior-help">{correction?.message ?? "This action cannot be safely retargeted here. Open the player’s settings to correct its result."}</p>}</>
             : bureaucrat ? <BureaucratAction key={`${actor!.participantId}:${current.stepKey}`} source={{ playerId: actor!.id, participantId: actor!.participantId! }}
@@ -266,7 +272,7 @@ function NightGuide({ game, script, visible, onClose, showClose = false }: Props
             : manual ? null : <button className="btn btn-gold" onClick={() => openWorkspace()}>Continue action</button>}
           {canTarget && !success && <div className="modern-night-pick-controls"><p className="modern-night-pick">Tap a player on the board</p><button onClick={() => { if (picker?.owner === owner) { useTargetPicker.getState().cancel(); setSuccessorChoice(null); setPaused(true); } else setPaused(false); }}>
             {picker?.owner === owner ? "Cancel selection" : "Choose on board"}</button></div>}
-          {(!resolved || canTarget && !success) && <details className="modern-night-guidance"><summary>More options</summary>
+          {!inlineInformation && (!resolved || canTarget && !success) && <details className="modern-night-guidance"><summary>More options</summary>
             {canTarget && !success && actor && ability?.kind === "guided" && <><p className="behavior-help">Choose from roster</p><div className="modern-night-roster">
               {seatedParticipants(game).filter(p => successorChoice ? successorChoice.eligible.has(p.participantId!) : participantAllowed(p, ability.descriptor.inputs[0]!, bindingOf(actor))).map(p =>
                 <button key={p.id} className="btn btn-sm" onClick={() => { useTargetPicker.getState().cancel(); choose(bindingOf(p)); }}>
@@ -292,15 +298,17 @@ function NightGuide({ game, script, visible, onClose, showClose = false }: Props
       <button className="modern-night-more" onClick={() => { useTargetPicker.getState().cancel(); setDetails(true); }}>Additional night controls</button>
     </div>
     <footer className="modern-night-footer"><button disabled={currentIndex <= 0} onClick={() => navigate(steps[currentIndex - 1]!)}>‹ Previous</button>
-      <button disabled={success?.game !== game && (currentIndex < 0 || currentIndex >= steps.length - 1 && (!manual || resolved) && !(direct && resolved))} onClick={() => {
+      <button disabled={!inlineInformation && success?.game !== game && (currentIndex < 0 || currentIndex >= steps.length - 1 && (!manual || resolved) && !(direct && resolved))} onClick={() => {
         if (!current) return;
-        if (manual && !resolved) {
+        if (inlineInformation && information.current && !information.current.next()) return;
+        const liveGame = useStorytellerStore.getState().game;
+        if ((manual || inlineInformation) && liveGame && !stepResolved(liveGame, current)) {
           const result = useStorytellerStore.getState().setNightStepStatus(game.day, current.stepKey, "done", actionContext);
           if (!result.ok) { setError(result.message); return; }
         }
         const next = currentIndex < 0 ? steps.find(step => !stepResolved(game, step)) : steps[currentIndex + 1];
         if (next) navigate(next);
-        else if ((direct || success?.game === game) && resolved) { useTargetPicker.getState().cancel(); setSuccess(null); onClose(); }
+        else if (inlineInformation || (direct || success?.game === game) && resolved) { useTargetPicker.getState().cancel(); setSuccess(null); onClose(); }
       }}>Next ›</button></footer>
     {workspace && <AbilityWorkspace key={workspace.key} game={game} script={script} registry={registry} semantics={semantics}
       target={workspace.target} descriptor={workspace.ability.kind === "guided" ? workspace.ability.descriptor : null}

@@ -48,5 +48,8 @@
 .modern-night .action-card-header { flex-wrap: wrap; }
 .modern-night .action-card-titles { min-width: 140px; }
 .modern-night .action-card .ability-workspace-body { overflow: visible; }
+.night-information-answer { margin: 20px 0; text-align: center; color: #f2cf7e; font: 700 64px/1.1 "Cormorant Garamond", serif; }
+.night-information-choices { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 14px 0; }
+.night-information-choices button { min-width: 60px; min-height: 60px; font: 700 30px/1 "Cormorant Garamond", serif; }
 @media (max-width: 1100px) { .modern-night-heading { padding-inline: 16px; } .modern-night-scroll { padding-inline: 10px; } .modern-night-current { padding: 13px; } .modern-night-disc { width: 52px; height: 52px; } .modern-night-actor h3 { font-size: 24px; } }
 @media (prefers-reduced-motion: reduce) { .modern-night * { scroll-behavior: auto; } }

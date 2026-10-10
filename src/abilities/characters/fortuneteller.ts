@@ -2,6 +2,7 @@ import type { AbilityDescriptor, AbilityEvaluation, AbilityEvaluationContext } f
 import type { AbilityOperation, ParticipantBinding } from "@/stores/abilityResolution";
 import { answerOf, ask, nameOf, outcome, participantsOf, requireLivingActor, subjectId } from "./shared";
 import { fortuneTellerSetupRefusal } from "./fortuneTellerSetupFact";
+import { informationAbilityRefusal } from "./informationSupport";
 
 /**
  * Fortune Teller -- GUIDED with the approved Red Herring state.
@@ -49,7 +50,7 @@ export const FORTUNE_TELLER: AbilityDescriptor = {
   timing: ["firstNight", "otherNight"],
   invocation: "wake",
   usage: { kind: "unlimited" },
-  inputs: [{ id: "targets", kind: "participant", source: "player", count: 2, label: "The two players chosen" }],
+  inputs: [{ id: "targets", kind: "participant", source: "player", count: 2, constraints: ["distinct"], label: "The two players chosen" }],
   hooks: ["information", "registration", "targeting"],
   informationActions: ["fortuneteller-first-night", "fortuneteller-other-night"],
   // SOL-10F-S7-F2: the Red Herring is established for the actual Fortune
@@ -60,7 +61,7 @@ export const FORTUNE_TELLER: AbilityDescriptor = {
 };
 
 function evaluate(context: AbilityEvaluationContext): AbilityEvaluation {
-  const dead = requireLivingActor(context);
+  const dead = requireLivingActor(context) ?? informationAbilityRefusal(context);
   if (dead) return dead;
   const targets = participantsOf(context.inputs, "targets")!;
   const communicated = (before: AbilityOperation[] = []): AbilityEvaluation => {
