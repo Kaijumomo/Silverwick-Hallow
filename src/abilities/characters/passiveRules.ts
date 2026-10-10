@@ -39,6 +39,18 @@ export function passiveProtection(query: RulesQuery, target: ParticipantBinding,
   }
   if (!player.alive) return { known: true, value: false };
   const functioning = query.abilityFunctions(target);
+  // Official Monk example: a protected Mayor cannot bounce the Imp's attack.
+  // This is a reviewed exception for that interaction, not general precedence
+  // over other unresolved protections. Canonical ownership and external gaps
+  // have already been checked above; uncertain/suppressed Safe stays Manual.
+  // https://wiki.bloodontheclocktower.com/Monk
+  if (player.actualRole === "mayor" && cause === "demon") {
+    for (const effect of player.effects) {
+      if (effect.type !== "safeFromDemon") continue;
+      const applies = query.effectApplies(target, effect);
+      if (applies.known && applies.value) return { known: true, value: true };
+    }
+  }
   if (TARGET_DEATH_GAPS.has(player.actualRole) && (!functioning.known || functioning.value)) {
     return { known: false, reason: `${role.name} death interactions are not modeled. Resolve the whole action manually.` };
   }
