@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:development": "vite --mode development",
+    "build:development": "tsc -b && vite build --mode development --outDir dist-development",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
@@ -14,6 +16,8 @@
     "typecheck": "tsc -b --noEmit",
     "rules:deploy": "firebase deploy --only database",
     "rules:verify": "node scripts/verify-deployed-rules.mjs",
+    "rules:development:verify": "node scripts/verify-development-firebase.mjs",
+    "rules:development:prepare": "node scripts/prepare-development-rules.mjs",
     "emulator": "firebase emulators:start --only database",
     "test:full": "npm run typecheck && npm test && npm run test:rules"
   },

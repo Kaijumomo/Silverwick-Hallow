@@ -15,6 +15,7 @@ import {
 } from "firebase/database";
 import { getAuth, signInAnonymously, type Auth } from "firebase/auth";
 import type { FirebaseAppConfig } from "./config";
+import { assertFirebaseConnectionAllowed } from "./config";
 import type { Json, RoomBackend, Unsubscribe } from "./backend";
 
 let cachedApp: FirebaseApp | null = null;
@@ -32,6 +33,7 @@ export function initFirebase(cfg: FirebaseAppConfig): {
   db: Database;
   auth: Auth;
 } {
+  assertFirebaseConnectionAllowed(cfg);
   const key = configKey(cfg);
   if (cachedApp && cachedDb && cachedAuth && cachedConfigKey === key) {
     return { app: cachedApp, db: cachedDb, auth: cachedAuth };
