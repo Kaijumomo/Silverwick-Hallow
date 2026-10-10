@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { captureVotingContext, gameLifecycleToken, useStorytellerStore, type VotingCommandContext } from "@/stores/storytellerStore";
+import { captureVotingContext, gameLifecycleToken, selectScriptById, useStorytellerStore, type VotingCommandContext } from "@/stores/storytellerStore";
+import { buildRegistry } from "@/data/roleRegistry";
 import { usePrivacyStore } from "@/stores/privacyStore";
-import { activeVotingRound, currentVoter, currentVotingState, votingContextChanged } from "@/stores/voting";
+import { activeVotingRound, currentVoter, currentVotingState, virginNominationOutcome, votingContextChanged } from "@/stores/voting";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import type { VotingBinding, VotingIntent, VotingRound, VotingScope } from "@/stores/votingTypes";
 import type { LifeConfirmationToken } from "@/stores/lifeResolution";
@@ -137,6 +138,8 @@ const suppressRepeat = (e: React.KeyboardEvent) => { if (e.repeat && (e.key === 
 /** Dimensions, typography, colours and ordinary stages follow the exported Claude Card. */
 export function VotingCard({ width = 560, offsetY = 0, offsetX = 0, inline = false }: { width?: number; offsetY?: number; offsetX?: number; inline?: boolean }) {
   const ui = useVotingInteraction(); const game = useStorytellerStore(s => s.game);
+  const script = useStorytellerStore(s => game ? selectScriptById(s, game.scriptId) : undefined);
+  const environment = useMemo(() => script ? { script, registry: buildRegistry(script) } : undefined, [script]);
   const [more, setMore] = useState(false);
   useEffect(() => setMore(false), [ui?.round?.id, ui?.surface, ui?.open]);
   if (!ui?.open || !game) return null;
@@ -146,7 +149,8 @@ export function VotingCard({ width = 560, offsetY = 0, offsetX = 0, inline = fal
   const nominee = draft?.nominee ? game.players[draft.nominee.playerId] : null;
   const isExile = (round?.mode === "exile") || (!round && !!nominee?.isTraveler);
   const current = voter ? game.players[voter.playerId] : null;
-  const contextChanged = !!round && votingContextChanged(game, round);
+  const contextChanged = !!round && votingContextChanged(game, round, environment);
+  const virgin = round?.virginPending ? virginNominationOutcome(game, round.nominator, round.nominee, environment) : null;
   const mode = ui.surface;
   const need = round ? isExile ? round.threshold : Math.max(round.threshold, (state.block?.tally ?? -1) + 1) : 0;
   const vote = (choice: "yes" | "no") => round && voter && ui.run({ kind: "respond", roundId: round.id, voter, choice });
@@ -167,8 +171,8 @@ export function VotingCard({ width = 560, offsetY = 0, offsetX = 0, inline = fal
           {nomin && nominee && <div className="voting-accusation"><em>{isExile ? "Everyone may support an exile." : "Let the accused speak, then call the vote."}</em><div><button className="voting-secondary" onClick={ui.change}>Change</button><button className="voting-primary" onClick={ui.begin}>{isExile ? "Begin exile" : "Begin the vote"}</button></div></div>}
           {state.coverage === "unknown" && <p className="voting-note">Earlier nominations are untracked. Begin records this nomination; earlier limits and results need your judgment.</p>}
         </>}
-        {round?.virginPending && <div className="voting-exception"><strong>{round.nominee.nameAtTime}’s first nomination</strong><p>Does the Virgin execute {round.nominator.nameAtTime}?</p><div className="voting-actions"><button className="voting-primary" onClick={() => ui.run({ kind: "virgin", roundId: round.id, execute: true, outcome: "died" }, undefined, true)}>Execute · died</button><button className="voting-secondary" onClick={() => ui.run({ kind: "virgin", roundId: round.id, execute: true, outcome: "survived" }, undefined, true)}>Executed · survived</button><button className="voting-quiet" onClick={() => ui.run({ kind: "virgin", roundId: round.id, execute: false })}>Continue voting</button></div></div>}
-        {contextChanged && <div className="voting-exception"><p>The table changed during this vote. Review the players and living count before continuing.</p><button className="voting-secondary" onClick={() => round && ui.run({ kind: "acknowledgeContext", roundId: round.id })}>Use current table</button></div>}
+        {round?.virginPending && !contextChanged && <div className="voting-exception"><strong>{round.nominee.nameAtTime}’s first nomination</strong><p>{virgin?.kind === "trigger" ? `${round.nominator.nameAtTime} is executed. Did they die?` : `Does the Virgin execute ${round.nominator.nameAtTime}?`}</p><div className="voting-actions"><button className="voting-primary" onClick={() => ui.run({ kind: "virgin", roundId: round.id, execute: true, outcome: "died" }, undefined, true)}>Execute · died</button><button className="voting-secondary" onClick={() => ui.run({ kind: "virgin", roundId: round.id, execute: true, outcome: "survived" }, undefined, true)}>Executed · survived</button>{virgin?.kind !== "trigger" && <button className="voting-quiet" onClick={() => ui.run({ kind: "virgin", roundId: round.id, execute: false })}>Continue voting</button>}</div></div>}
+        {contextChanged && <div className="voting-exception"><p>{round?.virginPending ? "The first nomination changed. Use Undo to restore it, or resolve the outcome through the existing player settings." : "The table changed during this vote. Review the players and living count before continuing."}</p>{!round?.virginPending && <button className="voting-secondary" onClick={() => round && ui.run({ kind: "acknowledgeContext", roundId: round.id })}>Use current table</button>}</div>}
         {round?.status === "voting" && !round.virginPending && !contextChanged && <>
           <div className="voting-response-row"><div className="voting-current" aria-live="polite" aria-atomic="true"><span>Now {isExile ? "supporting" : "voting"}</span><strong title={voter?.nameAtTime}>{voter?.nameAtTime ?? "Review voter"}</strong><small>{current ? `Seat ${current.seat + 1}${!current.alive && !isExile ? " · ghost vote, spent if used" : ""}` : "The participant changed. Review this round."}</small></div>
             <button className="voting-yes" onKeyDown={suppressRepeat} onClick={() => vote("yes")} disabled={!voter}>Yes</button><button className="voting-no" onKeyDown={suppressRepeat} onClick={() => vote("no")} disabled={!voter}>No</button></div>

@@ -73,13 +73,13 @@ export function officialNotationRole(sourceCharacter: string | undefined, label:
   } catch { return undefined; }
 }
 
-/** B6 presentation grouping only. Every source record remains independently
+/** Official notation presentation grouping only. Every source remains independently
  * addressable; this grouping never authorizes a bulk mutation. Custom notes
  * remain separate even when their visible wording resembles an official token. */
 export function firstInformationReminderGroups(reminders: readonly ReminderRecord[]): ReminderRecord[][] {
   const groups = new Map<string, ReminderRecord[]>();
   for (const reminder of reminders) {
-    const official = ["washerwoman", "librarian", "investigator"].includes(reminder.sourceCharacter ?? "")
+    const official = ["washerwoman", "librarian", "investigator", "virgin", "slayer", "butler"].includes(reminder.sourceCharacter ?? "")
       && !reminder.note && officialNotationRole(reminder.sourceCharacter, reminder.label);
     const key = official ? `official:${reminder.sourceCharacter}:${reminder.label}` : `instance:${reminder.id}`;
     const group = groups.get(key) ?? [];

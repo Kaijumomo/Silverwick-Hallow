@@ -88,6 +88,7 @@ import { isTabletTrial } from "@/config/trial";
 import { useShellStore, type NightCursor } from "./shellStore";
 import { deriveNightWork } from "@/features/nightOrder/nightWork";
 import { planPreparedInformation, planPreparedInformationDelivery, reconcilePreparedInformation, type PrepareInformationRequest, type DeliverPreparedInformationRequest, type PreparedInformationResult } from "./preparedInformation";
+import { planAbilityUseReminders } from "./abilityUseReminders";
 import { analyzeSetup } from "@/features/setup/setupAnalyzer";
 import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
 import { assignedBagIsCoherent, canRefineSetup, matchBagToAssignments } from "@/features/setup/setupRefinement";
@@ -1572,7 +1573,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (state.terminalClose?.status === "closing" || state.terminalClose?.confirmedRecovery || state.terminalClose?.recoveryPending)
           return "The game is closing. Nothing was recorded.";
         const current = state.game!;
-        const prepared = reconcilePreparedInformation(reconcileVotingDependencies(current, withRevealTokens(current, planned, registryForGame(state, planned))), selectScriptById(state, planned.scriptId) ?? null);
+        const notation = planAbilityUseReminders(current, withRevealTokens(current, planned, registryForGame(state, planned)), registryForGame(state, planned));
+        if (!notation.ok) return notation.message;
+        const prepared = reconcilePreparedInformation(reconcileVotingDependencies(current, notation.game), selectScriptById(state, planned.scriptId) ?? null);
         if (!StorytellerGamePersistedSchema.safeParse(prepared).success) return "This result could not be safely saved. Nothing was recorded.";
         const failure = persistencePreflight(prepared, current, state.lobby);
         if (failure) return failure;
@@ -2680,7 +2683,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const result = planRoleTransaction(game, transaction, { script: selectScriptById(get(), game.scriptId), ids: defaultRoleIds });
         if (!result.ok) return result;
         if (!result.changed) return { ok: true, changed: false };
-        set({ undoStack: pushUndo(game, undoStack), game: applyRolePlan(game, result.plan) });
+        const notation = planAbilityUseReminders(game, applyRolePlan(game, result.plan), registryForGame(get(), game));
+        if (!notation.ok) return { ok: false, code: "invalid", message: notation.message };
+        set({ undoStack: pushUndo(game, undoStack), game: notation.game });
         return { ok: true, changed: true };
       },
 
@@ -3119,12 +3124,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
         }
         const roundId = "roundId" in intent ? intent.roundId : undefined;
         const round = result.game.voting?.rounds.find(r => r.id === roundId);
-        if (intent.kind === "begin" && round?.virginPending) {
-          const reminder = planReminderTransaction(result.game, { intents: [{ kind: "place", target: intent.nominee,
-            reminder: { label: "No Ability", source: intent.nominee, sourceCharacter: "virgin" } }] });
-          if (!reminder.ok) return refused(reminder.message);
-          if (reminder.changed) result = { ...result, game: applyReminderPlan(result.game, reminder.plan) };
-        }
         const participant = "voter" in intent ? round?.order.find(p => p.participantId === intent.voter.participantId) : round?.nominee;
         const summary = intent.kind === "begin" && round ? `${round.nominator.nameAtTime} nominated ${round.nominee.nameAtTime}${round.mode === "exile" ? " for exile" : ""}.`
           : intent.kind === "respond" ? `${participant?.nameAtTime ?? "Voter"}: ${intent.choice}. Total: ${round?.tally ?? 0}.`

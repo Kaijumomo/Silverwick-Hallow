@@ -153,14 +153,15 @@ describe("voting card uses the authoritative participant-bound workflow", () => 
     expect(executions[0]).toMatchObject({ outcome: "survived", subject: { participantId: player("Dmitri").participantId } });
   });
 
-  it("resolves the Virgin, consumes her ability, executes the nominator, and continues to Night", () => {
+  it("explicitly resolves a manual Virgin interaction on an unsupported table and continues to Night", () => {
     openTable();
     fireEvent.click(screen.getByRole("button", { name: "Nominate" }));
     fireEvent.click(screen.getByRole("button", { name: "Token Bartholomew" }));
     fireEvent.click(screen.getByRole("button", { name: "Token Alice" }));
     fireEvent.click(screen.getByRole("button", { name: "Begin the vote" }));
-    expect(player("Alice").abilityUsed).toBe(true);
+    expect(player("Alice").abilityUsed).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Execute · died" }));
+    expect(player("Alice").abilityUsed).toBe(true);
     expect(game()).toMatchObject({ phase: "night", day: 3 });
     expect(player("Bartholomew").alive).toBe(false);
     expect(game().lifeEventWindow.events.filter(e => e.kind === "execution")).toHaveLength(1);

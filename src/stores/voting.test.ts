@@ -116,10 +116,10 @@ describe("participant-bound voting", () => {
     game.players.p1 = { ...game.players.p1!, alive: false };
     expect(voteWeight(game, binding("p3"), environment)).toEqual({ known: true, value: 1 });
   });
-  it("Virgin first nomination consumes ability even if no execution; actual execution is explicit", () => {
+  it("Virgin first nomination by an Outsider consumes ability and continues without execution", () => {
     game.players.p2 = { ...game.players.p2!, actualRole: "virgin" };
-    begin(); expect(game.players.p2.abilityUsed).toBe(true); expect(currentVoter(game)).toBeNull();
-    act({ kind: "virgin", roundId: "r1", execute: false });
+    game.players.p0 = { ...game.players.p0!, actualRole: "saint" };
+    begin(); expect(game.players.p2.abilityUsed).toBe(true);
     expect(game.players.p0!.alive).toBe(true); expect(currentVoter(game)?.playerId).toBe("p3");
   });
   it("Virgin explicit execution uses Life semantics and does not synthesize ordinary votes", () => {
@@ -297,7 +297,7 @@ describe("participant-bound voting", () => {
   it("Virgin first legal nomination while poisoned still spends use; later-Day nomination cannot trigger again", () => {
     game.players.p2 = { ...game.players.p2!, actualRole: "virgin", effects: [{ id: "manual:poisoned", type: "poisoned", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } }] };
     begin(); expect(game.players.p2.abilityUsed).toBe(true);
-    act({ kind: "virgin", roundId: "r1", execute: false }); all(0); act({ kind: "acknowledge", roundId: "r1" });
+    all(0); act({ kind: "acknowledge", roundId: "r1" });
     game = { ...game, day: 2, players: { ...game.players, p2: { ...game.players.p2, effects: [] } }, voting: freshVotingDay(2) };
     begin("r2"); expect(game.voting!.rounds[0]!.virginPending).toBe(false); expect(currentVoter(game)?.playerId).toBe("p3");
   });

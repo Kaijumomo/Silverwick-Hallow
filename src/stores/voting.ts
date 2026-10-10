@@ -17,6 +17,29 @@ const canonical = (id: string, environment?: RulesQueryEnvironment): boolean => 
   return !!role && isCanonicalRole(role);
 };
 
+export type VirginNominationOutcome = { kind: "trigger" | "noExecution" } | { kind: "manual"; reason: string };
+/** Qualification only: the caller separately checks first-use availability.
+ * A pending first nomination has already consumed the ability in verified
+ * cases, so abilityUsed is deliberately not a registration/impairment input.
+ * https://wiki.bloodontheclocktower.com/Virgin */
+export function virginNominationOutcome(game: StorytellerLobbyRecord, nominator: VotingBinding, nominee: VotingBinding, environment?: RulesQueryEnvironment): VirginNominationOutcome {
+  const source = boundParticipant(game, nominee);
+  const actor = boundParticipant(game, nominator);
+  const manual = (reason: string): VirginNominationOutcome => ({ kind: "manual", reason });
+  if (!environment || !source || !actor || !source.alive || source.actualRole !== "virgin" || !canonical("virgin", environment))
+    return manual("Resolve this first nomination using the official character instructions.");
+  const query = createRulesQuery(game, environment);
+  const coverage = interactionCoverageEligibility(query);
+  if (coverage.kind === "manual") return coverage;
+  if (query.modifierGate("virgin", ["voting", "registration", "death"]).kind !== "clear")
+    return manual("A rule affecting this nomination needs Storyteller judgment.");
+  const functioning = query.abilityFunctions(nominee);
+  if (!functioning.known) return manual(functioning.reason);
+  if (!functioning.value) return { kind: "noExecution" };
+  const townsfolk = query.registersAsType(nominator, "townsfolk", "virgin");
+  return townsfolk.known ? { kind: townsfolk.value ? "trigger" : "noExecution" } : manual(townsfolk.reason);
+}
+
 /** Shared preflight for the Night UI, selection planner and live vote weight.
  * Known false means an impaired invocation with no modifier; unknown requires
  * the entire character action to remain Manual. */
@@ -72,14 +95,39 @@ export function reconcileVotingDependencies(previous: StorytellerLobbyRecord | n
   return { ...cleanup.game, voting: { ...voting, rounds, modifiers, revision: voting.revision + 1 } };
 }
 
-function tableStamp(game: StorytellerLobbyRecord, round: VotingRound): string {
-  return JSON.stringify(game.seatOrder.map(id => {
+const stableContextValue = (value: unknown): unknown => Array.isArray(value) ? value.map(stableContextValue)
+  : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([key, v]) => [key, stableContextValue(v)])) : value;
+function tableStamp(game: StorytellerLobbyRecord, round: VotingRound, environment?: RulesQueryEnvironment): string {
+  const table = game.seatOrder.map(id => {
     const p = game.players[id];
     const spentHere = round.responses.some(r => r.voter.participantId === p?.participantId && r.spentGhostVote && r.refundSafe);
     return [id, p?.participantId ?? null, p?.isEmpty ?? false, p?.alive ?? false, p?.isTraveler ?? false, spentHere ? true : p?.ghostVote ?? false];
-  }));
+  });
+  // Pending first-nomination outcomes must not be reinterpreted after an
+  // intervening character, source, impairment or modifier correction. This
+  // uses the existing opaque context stamp, not another authoritative state.
+  if (!round.virginPending) return JSON.stringify(table);
+  const context: unknown[] = [table, game.scriptId, game.fabled, game.lorics, game.gameRuleFacts,
+    Object.values(game.players).filter(p => !p.isEmpty).sort((a, b) => a.id.localeCompare(b.id)).map(p =>
+      [p.id, p.participantId, p.actualRole, p.shownRole, p.packetEpoch, p.actualAlignment, p.abilityUsed, p.effects])];
+  if (environment) {
+    const ids = [...new Set([...Object.values(game.players).filter(p => !p.isEmpty).map(p => p.actualRole), ...game.fabled, ...game.lorics])].sort();
+    context.push([ids.map(id => { const role = environment.registry.get(id); return [id, !!role && isCanonicalRole(role), role?.type]; }),
+      environment.script?.characters.map(role => role.id).sort()]);
+  }
+  return JSON.stringify(stableContextValue(context));
 }
-export function votingContextChanged(game: StorytellerLobbyRecord, round: VotingRound): boolean { return tableStamp(game, round) !== round.contextStamp; }
+export function votingContextChanged(game: StorytellerLobbyRecord, round: VotingRound, environment?: RulesQueryEnvironment): boolean {
+  // Existing callers without a registry can still detect all Current State
+  // changes; the authoritative planner additionally checks definition ownership.
+  if (round.virginPending && !environment) {
+    try {
+      const recorded: unknown = JSON.parse(round.contextStamp);
+      if (Array.isArray(recorded) && recorded.length === 7) return tableStamp(game, round) !== JSON.stringify(recorded.slice(0, 6));
+    } catch { return true; }
+  }
+  return tableStamp(game, round, environment) !== round.contextStamp;
+}
 
 /** No Reminder labels, History, shown roles or player client input are rules sources. */
 export function voteWeight(game: StorytellerLobbyRecord, voter: VotingBinding, environment?: RulesQueryEnvironment): { known: true; value: number } | { known: false; reason: string } {
@@ -189,9 +237,11 @@ export function planVoting(game: StorytellerLobbyRecord, intent: VotingIntent, e
     return commit();
   }
   if (intent.kind === "execution") {
+    if (game.lifeEventWindow.events.some(e => e.kind === "execution" && e.moment.day === game.day))
+      return refuse("An execution has already occurred today. Use the existing Life controls for an exceptional correction.");
     const active = state.rounds.find(r => r.id === state.activeRoundId);
     if (active && (active.status !== "outcome" || active.mode !== "nomination")) return refuse("Finish the current vote before recording an execution.");
-    if (active && votingContextChanged(game, active)) return stale();
+    if (active && votingContextChanged(game, active, environment)) return stale();
     if (!snapshot(game, intent.target)) return stale();
     const planned = life(game, [{ kind: "execution", playerId: intent.target.playerId, outcome: intent.outcome, confirmations: intent.confirmations }], environment);
     if (!planned.ok) return planned;
@@ -232,15 +282,21 @@ export function planVoting(game: StorytellerLobbyRecord, intent: VotingIntent, e
       virginPending: intent.mode === "nomination" && to.alive && to.actualRole === "virgin" && canonical("virgin", environment) && !to.abilityUsed, contextStamp: "",
       executionEventIds: game.lifeEventWindow.events.filter(e => e.kind === "execution" && e.moment.day === game.day).map(e => e.id),
     };
-    // The first legal nomination uses the Virgin even when impaired or the
-    // nominator does not register as Townsfolk. Resolution stays ST-owned.
+    // Verified non-triggers need no extra interaction. A trigger waits only
+    // for the Storyteller's actual death outcome; uncertain interactions stay
+    // wholly manual until the existing explicit Virgin resolution is used.
     if (round.virginPending) {
-      const planned = life(next, [{ kind: "useAbility", playerId: to.id }], environment);
-      if (!planned.ok) return planned;
-      next = planned.game;
+      const outcome = virginNominationOutcome(game, intent.nominator, intent.nominee, environment);
+      if (outcome.kind !== "manual") {
+        const planned = life(next, [{ kind: "useAbility", playerId: to.id }], environment);
+        if (!planned.ok) return planned;
+        next = planned.game;
+        if (outcome.kind === "noExecution") round.virginPending = false;
+      }
     }
     state.rounds.push(round); state.activeRoundId = round.id;
-    round.contextStamp = tableStamp(next, round);
+    round.contextStamp = tableStamp(next, round, environment);
+    if (round.contextStamp.length > 12000) return refuse("This nomination's context exceeds the recording limit. Resolve the character interaction manually using the existing Life controls.");
     advanceCursor(next, round);
     return commit();
   }
@@ -251,9 +307,11 @@ export function planVoting(game: StorytellerLobbyRecord, intent: VotingIntent, e
   if (intent.kind === "correctResponse" && round.mode === "exile" && game.lifeEventWindow.events.some(e => e.kind === "exile" && e.moment.day === game.day && e.subject.participantId === round.nominee.participantId)) return refuse("This exile has already been resolved. Review its Life outcome before correcting the supporting vote.");
   if (intent.kind === "acknowledgeContext") {
     if (round.status !== "voting" && round.status !== "outcome") return stale();
+    if (round.virginPending && votingContextChanged(game, round, environment))
+      return refuse("The first nomination changed before its outcome was recorded. Undo the intervening change or resolve it through the existing Life controls; it cannot be reinterpreted automatically.");
     const seated = Object.values(game.players).filter(p => !p.isEmpty);
     round.threshold = Math.max(1, round.mode === "exile" ? Math.ceil(seated.length / 2) : Math.ceil(seated.filter(p => p.alive).length / 2));
-    round.contextStamp = tableStamp(game, round);
+    round.contextStamp = tableStamp(game, round, environment);
     advanceCursor(game, round);
     return commit();
   }
@@ -261,7 +319,7 @@ export function planVoting(game: StorytellerLobbyRecord, intent: VotingIntent, e
   // table: only acknowledgeContext refreshes its threshold and skips a
   // departed current voter. Historical rounds retain their recorded
   // threshold; their corrections still pass the identity/Life checks.
-  if (intent.kind !== "abandon" && state.activeRoundId === round.id && votingContextChanged(game, round)) return { ok: false, code: "stale", message: "The table changed during this vote. Review and acknowledge the updated voting context first." };
+  if (intent.kind !== "abandon" && state.activeRoundId === round.id && votingContextChanged(game, round, environment)) return { ok: false, code: "stale", message: "The table changed during this vote. Review and acknowledge the updated voting context first." };
   if (intent.kind === "acknowledge") {
     if (round.status !== "outcome") return refuse("Record every eligible response first.");
     round.status = "acknowledged"; state.activeRoundId = null;
@@ -275,16 +333,26 @@ export function planVoting(game: StorytellerLobbyRecord, intent: VotingIntent, e
     if (!round.virginPending) return refuse("There is no pending first Virgin nomination.");
     if (!snapshot(game, round.nominee) || !snapshot(game, round.nominator)) return stale();
     if (game.players[round.nominee.playerId]?.actualRole !== "virgin") return stale();
+    const qualification = virginNominationOutcome(game, round.nominator, round.nominee, environment);
+    if (qualification.kind === "trigger" && !intent.execute) return refuse("This functioning Virgin executes the Townsfolk nominator. Record whether they died, or correct the game through Undo.");
+    if (qualification.kind === "noExecution" && intent.execute) return refuse("This nomination does not trigger the Virgin's execution ability.");
+    // Consumption for a manual interaction belongs to the explicit resolution,
+    // never to an incomplete automatic outcome. Plan both before committing.
+    if (!game.players[round.nominee.playerId]!.abilityUsed) {
+      const consumed = life(next, [{ kind: "useAbility", playerId: round.nominee.playerId }], environment);
+      if (!consumed.ok) return consumed;
+      next = consumed.game;
+    }
     const intents: LifeIntent[] = [];
     if (intent.execute) {
       if (!intent.outcome) return refuse("Choose the actual execution outcome.");
       intents.push({ kind: "execution", playerId: round.nominator.playerId, outcome: intent.outcome, confirmations: intent.confirmations });
     }
-    const planned = life(game, intents, environment); if (!planned.ok) return planned;
+    const planned = life(next, intents, environment); if (!planned.ok) return planned;
     next = planned.game; manualReason = planned.manualReason; round.virginPending = false;
     if (intent.execute) { round.status = "outcome"; round.result = "virgin"; }
     else advanceCursor(next, round);
-    round.contextStamp = tableStamp(next, round);
+    round.contextStamp = tableStamp(next, round, environment);
     return commit();
   }
   if (intent.kind === "exileOutcome") {
@@ -308,7 +376,7 @@ export function planVoting(game: StorytellerLobbyRecord, intent: VotingIntent, e
       if (!planned.ok) return planned; next = planned.game;
     }
     round.responses = round.responses.slice(0, index); round.status = "voting"; round.result = null;
-    round.contextStamp = tableStamp(next, round);
+    round.contextStamp = tableStamp(next, round, environment);
     // Do not skip the response just undone; it remains the current voter.
     return commit();
   }
@@ -341,7 +409,7 @@ export function planVoting(game: StorytellerLobbyRecord, intent: VotingIntent, e
   const response: VoteResponse = { voter: old?.voter ?? voter, choice: intent.choice, weight, spentGhostVote: spend, refundSafe: spend && (old?.spentGhostVote ? old.refundSafe : true), lifeSafe: true };
   if (old && JSON.stringify(old) === JSON.stringify(response)) return { ok: true, changed: false, game };
   round.responses[index] = response;
-  round.contextStamp = tableStamp(next, round);
+  round.contextStamp = tableStamp(next, round, environment);
   if (intent.kind === "respond") advanceCursor(next, round);
   return commit();
 }

@@ -104,6 +104,9 @@ const ALLOWED = new Set([
   // rules assessment never reads notation; lifecycle integrity and replacement
   // use the authoritative Reminder seam, asserted separately below.
   "stores/preparedInformation.ts",
+  // B7 mirrors Life-owned ability consumption through exact generated notation.
+  // No Ability tokens never supply ability-use or availability decisions.
+  "stores/abilityUseReminders.ts",
   "features/reminders/reminderPresentation.ts",
   // Read-only canonical token metadata and sourced Effect presentation;
   // player notation never supplies rules or mechanical state.
