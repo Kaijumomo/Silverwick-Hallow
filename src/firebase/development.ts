@@ -12,8 +12,8 @@ export const DEVELOPMENT_FIREBASE_CONFIG = Object.freeze({
   appId: "1:863800899154:web:c9dc003334dfc4d547118b",
 } satisfies FirebaseAppConfig);
 
-export const DEVELOPMENT_FIREBASE_LOCKED_MESSAGE =
-  "The development backend is locked. Hosted multiplayer testing is not enabled.";
+// Separate SDK/Auth persistence from any default app initialized in this page.
+export const DEVELOPMENT_FIREBASE_APP_NAME = "silverwick-hollow-development";
 
 export function isApprovedDevelopmentConfig(config: FirebaseAppConfig): boolean {
   const expected = DEVELOPMENT_FIREBASE_CONFIG;

@@ -15,7 +15,8 @@ import {
 } from "firebase/database";
 import { getAuth, signInAnonymously, type Auth } from "firebase/auth";
 import type { FirebaseAppConfig } from "./config";
-import { assertFirebaseConnectionAllowed } from "./config";
+import { assertFirebaseConnectionAllowed, isDevelopmentFirebaseEnvironment } from "./config";
+import { DEVELOPMENT_FIREBASE_APP_NAME } from "./development";
 import type { Json, RoomBackend, Unsubscribe } from "./backend";
 
 let cachedApp: FirebaseApp | null = null;
@@ -24,8 +25,11 @@ let cachedAuth: Auth | null = null;
 let cachedUid: string | null = null;
 let cachedConfigKey: string | null = null;
 
-function configKey(c: FirebaseAppConfig): string {
-  return `${c.projectId}|${c.databaseURL}`;
+function configKey(c: FirebaseAppConfig, development: boolean): string {
+  // The API key also selects the Auth project. Project/database alone cannot
+  // establish that cached SDK instances belong to the requested configuration.
+  return JSON.stringify([development, c.apiKey, c.authDomain, c.databaseURL,
+    c.projectId, c.storageBucket, c.messagingSenderId, c.appId]);
 }
 
 export function initFirebase(cfg: FirebaseAppConfig): {
@@ -34,14 +38,19 @@ export function initFirebase(cfg: FirebaseAppConfig): {
   auth: Auth;
 } {
   assertFirebaseConnectionAllowed(cfg);
-  const key = configKey(cfg);
+  const development = isDevelopmentFirebaseEnvironment();
+  const key = configKey(cfg, development);
   if (cachedApp && cachedDb && cachedAuth && cachedConfigKey === key) {
     return { app: cachedApp, db: cachedDb, auth: cachedAuth };
   }
   // Re-initialize if config changed (e.g., user updated credentials).
-  cachedApp = initializeApp(cfg);
-  cachedDb = getDatabase(cachedApp);
-  cachedAuth = getAuth(cachedApp);
+  const app = development ? initializeApp(cfg, DEVELOPMENT_FIREBASE_APP_NAME) : initializeApp(cfg);
+  const db = getDatabase(app);
+  const auth = getAuth(app);
+  // Publish the cache together, only after every SDK component initializes.
+  cachedApp = app;
+  cachedDb = db;
+  cachedAuth = auth;
   cachedConfigKey = key;
   cachedUid = null;
   return { app: cachedApp, db: cachedDb, auth: cachedAuth };
