@@ -83,7 +83,10 @@ export const NightInformationAction = forwardRef<NightInformationHandle, Props>(
     useTargetPicker.getState().start(`Choose player ${targets.length + 1} of 2`, target => { if (active) choose(target); }, { owner, eligible });
     return () => { active = false; if (useTargetPicker.getState().active?.owner === owner) useTargetPicker.getState().cancel(); };
   }, [visible, paused, needsTargets, game, inputs]);
-  useEffect(() => () => { live.current.visible = false; }, []);
+  useEffect(() => {
+    live.current.visible = visible;
+    return () => { live.current.visible = false; };
+  }, [visible]);
   useEffect(() => { if (draft.game !== game) { setDraft({ game, inputs: {} }); setPaused(false); setError(null); } }, [game]);
 
   const delivery = resolved ? [...game.informationDeliveries].reverse().find(item => item.kind !== "manual"

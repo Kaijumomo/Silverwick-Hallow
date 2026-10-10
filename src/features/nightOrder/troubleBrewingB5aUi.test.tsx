@@ -10,13 +10,14 @@ import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/ability
 import { impair, proofGame, proofScript } from "@/test/proofFixtures";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import { withRedHerring } from "@/test/redHerringFixture";
+import { StrictMode } from "react";
 
 const game = () => store.getState().game!;
 function Guide() { const g = store(s => s.game)!; return <ModernNightPanel game={g} script={proofScript} visible onClose={() => {}} />; }
 function open(g: StorytellerLobbyRecord) {
   store.setState({ game: g, lobby: null, undoStack: [], localSeq: 0, customScripts: { [proofScript.id]: proofScript } });
   useShellStore.getState().setNightCursor({ day: g.day, stepKey: participantStepKey(g.players.p0!.participantId!, g.players.p0!.shownRole!) });
-  return render(<Guide />);
+  return render(<StrictMode><Guide /></StrictMode>);
 }
 const tap = (id: string) => act(() => { pickSeatIfPicking(game(), id); });
 const next = () => fireEvent.click(screen.getByRole("button", { name: "Next ›" }));
