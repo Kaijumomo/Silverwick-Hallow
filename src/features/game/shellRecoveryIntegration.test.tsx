@@ -43,7 +43,7 @@ describe("whole shell recovery integration", () => {
     expect(game()).toBe(before);
   });
 
-  it("one visible Undo restores a completed Night ability, associated history and its actor after automatic advancement", () => {
+  it("one visible Undo restores a completed Night ability, associated history and its actor after Next", () => {
     vi.useFakeTimers();
     render(<GameScreen />);
     const poisoner = stepKey("p0");
@@ -54,6 +54,8 @@ describe("whole shell recovery integration", () => {
     expect(game().nightProgress[`2:${poisoner}`]?.status).toBe("done");
     expect(state().undoStack).toHaveLength(1);
     act(() => vi.advanceTimersByTime(2300));
+    expect(useShellStore.getState().nightCursor?.stepKey).toBe(poisoner);
+    fireEvent.click(screen.getByRole("button", { name: "Next ›" }));
     expect(useShellStore.getState().nightCursor?.stepKey).toBe(monk);
     fireEvent.click(phaseDock().getByRole("button", { name: /Undo/ }));
     expect(game().players.p4!.effects).toEqual([]);

@@ -20,7 +20,7 @@ export const POISONER: AbilityDescriptor = {
   inputs: [{ id: "target", kind: "participant", source: "player", label: "The player to poison" }],
   hooks: ["targeting"],
   sourcedEffects: [{ type: "poisoned", persistence: "whileSourceFunctions" }],
-  presentation: { complexity: "simple", action: "Choose a player to poison" },
+  presentation: { complexity: "simple", action: "Choose a player to poison." },
   evaluator: (context) => {
     const dead = requireLivingActor(context);
     if (dead) return dead;

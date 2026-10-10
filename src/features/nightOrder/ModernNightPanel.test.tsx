@@ -30,7 +30,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
-it("resolves a direct board target once, holds the result briefly, and advances only after commit", () => {
+it("resolves a direct board target once and waits for Next after commit", () => {
   render(<Guide />);
   expect(current()).toBe(key("p0"));
   expect(useShellStore.getState().litActor?.playerId).toBe("p0");
@@ -42,13 +42,17 @@ it("resolves a direct board target once, holds the result briefly, and advances 
   expect(current()).toBe(key("p0"));
   expect(screen.getByRole("status")).toHaveTextContent("Resolved");
   act(() => vi.advanceTimersByTime(2200));
+  expect(current()).toBe(key("p0"));
+  const committed = game();
+  fireEvent.click(screen.getByRole("button", { name: "Next ›" }));
+  expect(game()).toBe(committed);
   expect(current()).toBe(key("p1"));
   expect(useShellStore.getState().litActor?.playerId).toBe("p1");
 });
 
 it("Previous does not change game state and a new target moves the resolved effect atomically", () => {
   render(<Guide />); tap("p4");
-  act(() => vi.advanceTimersByTime(2200));
+  fireEvent.click(screen.getByRole("button", { name: "Next ›" }));
   const before = game();
   fireEvent.click(screen.getByRole("button", { name: "‹ Previous" }));
   expect(current()).toBe(key("p0")); expect(game()).toBe(before);
@@ -117,7 +121,7 @@ it("manual navigation and privacy cancel delayed advancement and pending picks",
 });
 
 it("later resolved work prevents an unsafe retarget while Previous remains usable", () => {
-  render(<Guide />); tap("p4"); act(() => vi.advanceTimersByTime(2200)); tap("p3");
+  render(<Guide />); tap("p4"); fireEvent.click(screen.getByRole("button", { name: "Next ›" })); tap("p3");
   fireEvent.click(screen.getByRole("button", { name: "‹ Previous" }));
   expect(current()).toBe(key("p0"));
   expect(useTargetPicker.getState().active).toBeNull();

@@ -172,10 +172,10 @@ function NightGuide({ game, script, visible, onClose, showClose = false }: Props
     };
   }, []);
   useEffect(() => {
-    if (!success || !visible || details || success.key !== current?.stepKey || success.game !== game) return;
+    if (direct || !success || !visible || details || success.key !== current?.stepKey || success.game !== game) return;
     const timer = window.setTimeout(advance, 2200);
     return () => window.clearTimeout(timer);
-  }, [success, visible, details, current?.stepKey, game]);
+  }, [direct, success, visible, details, current?.stepKey, game]);
   useEffect(() => {
     // Undo and external corrections invalidate the displayed result as well as
     // its timer; the restored step must immediately be actionable again.
@@ -230,7 +230,7 @@ function NightGuide({ game, script, visible, onClose, showClose = false }: Props
           <p className="modern-night-instruction">{manual ? role?.ability : ability?.kind === "guided" ? ability.descriptor.presentation.action : current.prompt}</p>
           {manual && <p className="behavior-help">{current.prompt}</p>}
           {current.isDeceived && <p className="behavior-help">Follow the shown character’s procedure. This player is actually the {current.actualRoleName}.</p>}
-          {success?.key === current.stepKey && success.game === game ? <p className="modern-night-result" role="status">{steps.slice(currentIndex + 1).some(s => !stepResolved(game, s)) ? "Resolved. Continuing…" : "Resolved."}</p>
+          {success?.key === current.stepKey && success.game === game ? <p className="modern-night-result" role="status">{!direct && steps.slice(currentIndex + 1).some(s => !stepResolved(game, s)) ? "Resolved. Continuing…" : "Resolved."}</p>
             : resolved ? <><p className="modern-night-result">Completed{correction?.target ? ` · ${game.players[correction.target.playerId]?.name ?? "Chosen player"}` : ""}</p>
               {canTarget ? <p className="behavior-help">Tap another player to correct this action.</p> : <p className="behavior-help">{correction?.message ?? "This action cannot be safely retargeted here. Open the player’s settings to correct its result."}</p>}</>
             : bureaucrat ? <BureaucratAction key={`${actor!.participantId}:${current.stepKey}`} source={{ playerId: actor!.id, participantId: actor!.participantId! }}
@@ -265,13 +265,14 @@ function NightGuide({ game, script, visible, onClose, showClose = false }: Props
       <button className="modern-night-more" onClick={() => { useTargetPicker.getState().cancel(); setDetails(true); }}>Additional night controls</button>
     </div>
     <footer className="modern-night-footer"><button disabled={currentIndex <= 0} onClick={() => navigate(steps[currentIndex - 1]!)}>‹ Previous</button>
-      <button disabled={currentIndex < 0 || currentIndex >= steps.length - 1 && (!manual || resolved)} onClick={() => {
+      <button disabled={currentIndex < 0 || currentIndex >= steps.length - 1 && (!manual || resolved) && !(direct && resolved)} onClick={() => {
         if (!current) return;
         if (manual && !resolved) {
           const result = useStorytellerStore.getState().setNightStepStatus(game.day, current.stepKey, "done", actionContext);
           if (!result.ok) { setError(result.message); return; }
         }
         if (steps[currentIndex + 1]) navigate(steps[currentIndex + 1]!);
+        else if (direct && resolved) { useTargetPicker.getState().cancel(); setSuccess(null); onClose(); }
       }}>Next ›</button></footer>
     {workspace && <AbilityWorkspace key={workspace.key} game={game} script={script} registry={registry} semantics={semantics}
       target={workspace.target} descriptor={workspace.ability.kind === "guided" ? workspace.ability.descriptor : null}
