@@ -59,10 +59,14 @@
   .grimoire-invite { width: 40px; justify-content: center; padding: 0; }
   .grimoire-invite > :is(span,strong) { display: none; }
   .game[data-grimoire-modern] .reference-workspace { --reference-width: min(320px,calc(100vw - 56px)); }
-  .game[data-grimoire-modern] .reference-workspace[data-reference-pinned] { padding-right: 0; }
-  .game[data-grimoire-modern] .reference-workspace[data-reference-pinned] .grimoire-phase-dock { right: 0; }
   .grimoire-phase-dock .phase-primary { max-width: calc(100% - 12px); }
   .grimoire-phase-dock .phase-primary > .btn { padding-inline: 8px; font-size: 12px; }
   .grimoire-phase-label { gap: 4px; padding-right: 2px; font-size: 12px; }
   .grimoire-acting { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+/* Narrow phones retain their overlay; portrait tablets reserve the same
+   pinned footprint as larger Storyteller screens. */
+@media (max-width: 599px) {
+  .game[data-grimoire-modern] .reference-workspace[data-reference-pinned] { padding-right: 0; }
+  .game[data-grimoire-modern] .reference-workspace[data-reference-pinned] .grimoire-phase-dock { right: 0; }
 }

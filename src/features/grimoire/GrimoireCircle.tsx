@@ -30,6 +30,7 @@ import { abilityUsedMarker, actualAlignmentMarker } from "./tokenMarkers";
 import { OfficialReminderToken } from "@/features/reminders/OfficialReminderToken";
 import { officialEffectPresentation, officialNotationRole, redHerringNotationCovered } from "@/features/reminders/officialReminderPresentation";
 import { createRulesQuery } from "@/stores/rulesQuery";
+import { fitTokenPositions } from "./fitTokenPositions";
 import {
   cleanupStatusText,
   groupText,
@@ -475,6 +476,7 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
   // Track width + height separately so free-roam uses the full rectangle.
   const [canvasW, setCanvasW] = useState(680);
   const [canvasH, setCanvasH] = useState(680);
+  const [pinnedCanvas, setPinnedCanvas] = useState(false);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [ghostPos, setGhostPos] = useState<{ x: number; y: number } | null>(null);
   const [movementError, setMovementError] = useState<string | null>(null);
@@ -493,18 +495,20 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
   // geometry it had when Privacy Mode began -- a private surface closing (the
   // action card's column, the Inspector) must not move a seat and so reveal
   // that it was open. The latest measured size applies once Privacy Mode ends.
-  const pendingSize = useRef<{ w: number; h: number } | null>(null);
+  const pendingSize = useRef<{ w: number; h: number; pinned: boolean } | null>(null);
   useEffect(() => {
     if (!stageRef.current) return;
     const el = stageRef.current;
     const ro = new ResizeObserver(([entry]) => {
       if (!entry) return;
+      const pinned = !!el.closest("[data-reference-pinned]") && window.innerWidth >= 600;
       if (usePrivacyStore.getState().enabled) {
-        pendingSize.current = { w: entry.contentRect.width, h: entry.contentRect.height };
+        pendingSize.current = { w: entry.contentRect.width, h: entry.contentRect.height, pinned };
         return;
       }
       setCanvasW(entry.contentRect.width);
       setCanvasH(entry.contentRect.height);
+      setPinnedCanvas(pinned);
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -513,6 +517,7 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
     if (privacyMode || !pendingSize.current) return;
     setCanvasW(pendingSize.current.w);
     setCanvasH(pendingSize.current.h);
+    setPinnedCanvas(pendingSize.current.pinned);
     pendingSize.current = null;
   }, [privacyMode]);
 
@@ -546,7 +551,7 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
   // render) -- dominant on a wide desktop, a circle on a square stage -- with
   // the largest collision-free density tier. Every seat shares the tier's
   // fixed footprint, so content (and Privacy Mode) can never move a seat.
-  const designed = playersInteraction?.active ? storytellerGeometry(canvasW, canvasH, playerCount) : null;
+  const designed = playersInteraction?.active ? storytellerGeometry(canvasW, canvasH, playerCount, pinnedCanvas) : null;
   const table = designed ? { width: canvasW, height: canvasH } : tableStage(canvasW, canvasH);
   const tier: DensityTier = designed?.spec.tier ?? pickDensityTier(table, playerCount);
   const spec = designed?.spec ?? tierSpec(tier);
@@ -564,10 +569,12 @@ export function GrimoireCircle({ online, backend = null, code = "" }: Props = {}
   const clampX = (v: number) => Math.max(-maxX, Math.min(maxX, v));
   const clampY = (v: number) => Math.max(-maxY, Math.min(maxY, v));
 
-  const getPos = (id: PlayerId, seatIndex: number) => {
-    const saved = tokenPositions[id] ?? seatBoxCentre(seatIndex);
-    return { x: clampX(saved.x), y: clampY(saved.y) };
-  };
+  const displayedPositions = fitTokenPositions(
+    game.seatOrder.map((id, index) => tokenPositions[id] ?? seatBoxCentre(index)),
+    { x: maxX, y: maxY }, spec,
+    game.seatOrder.map(id => pinnedCanvas && !!tokenPositions[id]),
+  );
+  const getPos = (_id: PlayerId, seatIndex: number) => displayedPositions[seatIndex]!;
 
   const handleAdd = () => {
     if (arrivalsAreTravelers(game) && code) { handleAddTraveler(); return; }

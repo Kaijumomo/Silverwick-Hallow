@@ -1,6 +1,21 @@
 import { expect, it } from "vitest";
 import { storytellerGeometry } from "./storytellerGeometry";
 
+it("fits narrow pinned tablet stages without changing the phone fallback", () => {
+  for (const width of [368, 392, 444, 648]) for (const count of [5, 10, 15]) {
+    expect(storytellerGeometry(width, 1024, count)).toBeNull();
+    const layout = storytellerGeometry(width, 1024, count, true)!;
+    expect(layout).not.toBeNull();
+    expect(layout.spec.disc).toBeGreaterThanOrEqual(44);
+    expect(layout.spec.text).toBe(true);
+    for (const point of layout.positions) {
+      expect(Math.abs(point.x) + layout.spec.width / 2).toBeLessThanOrEqual(width / 2);
+      expect(point.y - layout.spec.disc / 2 + 512).toBeGreaterThanOrEqual(70);
+      expect(point.y + layout.spec.disc / 2 + 24).toBeLessThan(512 - 70);
+    }
+  }
+});
+
 it("matches the approved 20-player tablet design size, ring and half-seat start", () => {
   const layout = storytellerGeometry(1480, 924, 20)!;
   expect(layout).not.toBeNull();

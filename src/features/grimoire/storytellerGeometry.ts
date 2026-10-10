@@ -3,8 +3,10 @@ import { seatCentre, seatShapesFit, type TablePlacement, type TierSpec } from ".
 /** Approved Claude tablet v3 geometry, expressed in canvas-centred coordinates.
  * A crowded surface keeps the existing density fallback instead of shrinking
  * touch targets below 44px or allowing canonical seats to cover each other. */
-export function storytellerGeometry(width: number, height: number, count: number) {
-  if (width < 761 || height < 460 || count <= 0) return null;
+export function storytellerGeometry(width: number, height: number, count: number, tabletWorkspace = false) {
+  // A pinned tablet can have a narrow stage while retaining ample height.
+  // Let the existing collision checks decide whether this named oval fits.
+  if (width < (tabletWorkspace ? 360 : 761) || height < 460 || count <= 0) return null;
   const original = Math.round(Math.max(64, Math.min(92, Math.min(width, height) / 9.6)));
   const radii = (disc: number) => ({
     rx: Math.max(100, (width - 76 - 12) / 2 - disc / 2 - 20),
