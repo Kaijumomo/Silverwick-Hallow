@@ -1,0 +1,128 @@
+Development multiplayer security candidate
+Base: 690f8ded6407edb2bc0130c5e88e68ac24c4a97d
+Scope: implementation and local verification only; hosted activation NOT approved.
+
+BOUNDARIES
+Project silverwick-hollow, app 1:863800899154:web:c9dc003334dfc4d547118b,
+database silverwick-hollow-default-rtdb in us-central1. Existing production
+Rules, Firebase configuration, authentication code, game/session schema and
+writer architecture are unchanged. No hosted provider is enabled by this work.
+firebase.development.json continues to point ONLY to development.locked.rules.json.
+The development SDK connection gate remains unconditional; no bypass was added.
+
+POLICY
+development.multiplayer.rules.json is a local candidate, generated from the
+existing src/firebase/rules.json using npm run rules:development:prepare.
+Every existing read/write permission is conjoined with development admission;
+no parent permission grants access. Original validators, roster boundaries,
+writer lease/token/revision checks, terminal lifecycle and private projections
+remain enforced. Candidate drift is tested against generated output.
+
+Two administrator-owned records are required. These examples use synthetic
+identifiers; the expiry examples are placeholders, not credentials or live ACLs:
+
+developmentAccess/users/<anonymous-uid>:
+  { "enabled": true, "role": "storyteller" OR "player", "expiresAt": <future epoch milliseconds> }
+developmentAccess/games/<existing eight-character lobby code>:
+  { "sessionId": <exact current lobby session ID>, "expiresAt": <future epoch milliseconds>,
+    "players": { "<approved anonymous player uid>": true } }
+
+Only a verified privileged administrator may create/change/remove these records
+using trusted administrative access in the development project. All Firebase
+client reads/writes of developmentAccess are denied, including Storytellers,
+custom admin claims, deletion, transactions and multipath updates. There is no
+client enrollment endpoint, CLI provisioner, service-account key, or wildcard UID.
+The authentication token must identify the anonymous sign-in provider. Missing,
+disabled, expired or malformed approvals fail closed. Empty lists admit nobody.
+
+An approved Storyteller can create an entirely new lobby using the existing
+random code/session flow and control only lobbies whose immutable owner is
+that UID. This is an administrator-approved CREATE capability, not per-game
+administrator approval for Storytellers. It includes their previous owned games
+until their account approval expires/is revoked. It never permits claiming an
+orphaned game. A Storyteller cannot enroll players in developmentAccess.
+
+After creation, the administrator inspects that game's code and session ID and
+approves named player UIDs for that exact session. An account approval alone
+does not permit a player to inspect any game. Game approval permits the existing
+join/own-status handshake, not self-seating or reading another seat. The
+Storyteller still decides acceptance, seating, membership and published views.
+A player-role UID cannot act as owner even if an administrator mistakenly writes
+that UID into storytellerUid. Roles are intentionally separate for this phase.
+
+Public-display token enrollment/access is disabled in this candidate. Only the
+approved Storyteller/player paths are admitted; an old/leaked display token
+cannot bypass membership removal. Production display Rules are unchanged.
+
+REVOCATION AND STALE ACCESS
+Revoke the global user record to deny all future server reads/writes, including
+cleanup writes and old secrets; revoke the game's players/<uid> entry to deny
+that player's access to that game. Account and game expiry are checked against
+server time on requests. Do not rely on a timer to erase previously delivered
+client data. The emulator verifies an attached private listener is cancelled
+on explicit account revocation. Cached information cannot be taken back.
+
+Per-game approvals bind to the immutable existing session ID. Ended sessions
+cannot reopen; clients cannot delete/recycle lobby ownership or rotate session
+IDs. Existing SessionWriter leases and monotonic revisions fence old writers.
+Never administratively reuse/delete/reseed a lobby code for another game, or
+reassign the same anonymous UID to a different person. Start a new code/session
+instead. Approval is identity-based: two tabs holding the same valid UID share
+player authority; distinguishing same-UID tabs or fencing every player advisory
+message with a participation token would require separately approved protocol
+work. Existing reveal tokens and membership cleanup remain in place.
+
+LIMITATIONS
+The Storyteller is the trusted game authority and can intentionally publish
+information into permitted player/public views. Rules cannot make a malicious
+trusted Storyteller honest. Admission does not erase screenshots/browser caches,
+protect stolen tokens, or limit Firebase Authentication signup volume. Cloudflare
+Access protects previews, not the Firebase API. UID approval is not an email
+identity check; the administrator must verify each tester and their exact UID
+out of band. A new anonymous UID needs fresh approval, never automatic recovery.
+This is a controlled development policy, not a new production authorization model.
+
+LOCAL VERIFICATION
+npm run typecheck
+npm test
+npm run test:rules
+npm run build:development
+
+test:rules starts the localhost RTDB emulator with demo-silverwick-rules and
+requires every security test to pass with zero skips. If another task owns the
+default port, use a local ignored Firebase config with a different loopback
+database/hub/logging port, retaining the same demo project. Never reuse a live
+project ID or a hosted database for these tests. Synthetic token contexts and
+admin fixtures exist only in the emulator; they are not real hosted sign-ins.
+
+The new suite tests self-enrollment, false/malformed/expired approvals, provider
+checks, cross-game and ancestor access, Storyteller/player privacy, forged writes,
+revocation/listener cancellation, stale session/lease/revision, atomic bypass
+attempts, terminal results, and the real create/lease/join/seat/revoke/close flow.
+Existing security suites continue testing the unchanged authoritative Rules.
+
+PROPOSED HOSTED ACTIVATION (SEPARATE OWNER APPROVAL REQUIRED; NOT EXECUTED)
+1. Review the exact candidate commit/test evidence and approve the tester cohort,
+   UID verification process, administrators, short approval expiry and revocation
+   procedure. Confirm that approved Storytellers may create their own test games.
+2. Reverify silverwick-hollow project/app/database identifiers and saved deny-all
+   Rules, production isolation, billing unchanged, and preview Access controls.
+3. Approve/enable only the source-verified Anonymous Authentication provider in
+   silverwick-hollow. Establish tester UIDs via a separately reviewed enrollment
+   procedure while database access remains denied. No self-enrollment in the ACL.
+4. Administrator approves exact UIDs. Separately approve a deployment configuration
+   pointing to this reviewed game Rules candidate, with explicit development
+   project/instance and a verified deny-all rollback. Default config stays locked
+   until that approval. Deploy/re-read and negatively verify authorization only
+   when hosted verification is explicitly authorized.
+5. Separately review removal of the SDK gate while retaining exact development
+   config checks and no browser overrides. Publish only a protected development
+   build after specific authorization; never use the ordinary production build.
+6. Approved Storyteller creates a synthetic game; administrator grants exact
+   player UIDs against its session ID. Run the approved hosted negative/positive
+   scenarios, then revoke/expire access. No production records or identities.
+
+References checked for Rules semantics:
+https://firebase.google.com/docs/database/security
+https://firebase.google.com/docs/database/security/rules-conditions
+https://firebase.google.com/docs/reference/security/database
