@@ -1,4 +1,15 @@
 Development multiplayer security candidate
+STATUS UPDATE — October 10, 2026
+The e79c758 Rules were independently reviewed and subsequently deployed to
+silverwick-hollow under explicit approval. Read-only reconciliation confirmed
+the two synthetic grants and actual deny-all rollback evidence. The development
+connection follow-up replaces the unconditional SDK lock with exact-config
+validation and an isolated named SDK app; browser overrides remain disabled.
+See DEVELOPMENT_CONNECTIONS_AND_PREVIEW_PLAN.txt for current scope, verification
+and the separate publication/gameplay approvals still required.
+The original implementation-stage scope and proposed activation sequence below
+are retained as historical context, not a description of current hosted state.
+
 Base: 690f8ded6407edb2bc0130c5e88e68ac24c4a97d
 Scope: implementation and local verification only; hosted activation NOT approved.
 

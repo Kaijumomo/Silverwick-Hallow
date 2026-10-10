@@ -3,7 +3,7 @@ import { initializeApp } from "firebase/app";
 import { getAuth, signInAnonymously } from "firebase/auth";
 import { getDatabase } from "firebase/database";
 import { __setEnvOverrideForTests, getConfigSource, loadFirebaseConfig, saveFirebaseConfig } from "./config";
-import { DEVELOPMENT_FIREBASE_CONFIG as approved, isApprovedDevelopmentConfig } from "./development";
+import { DEVELOPMENT_FIREBASE_APP_NAME, DEVELOPMENT_FIREBASE_CONFIG as approved, isApprovedDevelopmentConfig } from "./development";
 import { initFirebase } from "./firebaseBackend";
 
 vi.mock("firebase/app", () => ({ initializeApp: vi.fn() }));
@@ -77,11 +77,13 @@ describe("development Firebase isolation", () => {
     __setEnvOverrideForTests(env);
     expect(() => initFirebase(production)).toThrow(/does not match/);
   });
-  it("blocks even the approved app until hosted testing is separately authorized", () => {
-    expect(() => initFirebase(approved)).toThrow(/development backend is locked/);
-    expect(initializeApp).not.toHaveBeenCalled();
-    expect(getAuth).not.toHaveBeenCalled();
-    expect(getDatabase).not.toHaveBeenCalled();
+  it("allows the exact app through the guard without signing in or enrolling a UID", () => {
+    const app = { options: approved } as ReturnType<typeof initializeApp>;
+    vi.mocked(initializeApp).mockReturnValue(app);
+    expect(() => initFirebase(approved)).not.toThrow();
+    expect(initializeApp).toHaveBeenCalledWith(approved, DEVELOPMENT_FIREBASE_APP_NAME);
+    expect(getAuth).toHaveBeenCalledWith(app);
+    expect(getDatabase).toHaveBeenCalledWith(app);
     expect(signInAnonymously).not.toHaveBeenCalled();
   });
 });

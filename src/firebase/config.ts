@@ -1,7 +1,7 @@
 // Firebase config resolution order:
 //   1. Vite env vars (VITE_FIREBASE_*) — primary path for production.
 //      Local dev: .env.development pins the approved isolated app; connections
-//      stay locked until hosted multiplayer testing is separately approved.
+//      are allowed only when every identifier matches that isolated app.
 //      Cloudflare Pages: set these 7 vars in Settings → Environment Variables:
 //        VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN,
 //        VITE_FIREBASE_DATABASE_URL, VITE_FIREBASE_PROJECT_ID,
@@ -13,7 +13,7 @@
 // rules at src/firebase/rules.json. Do NOT put service account keys in env.
 
 import { isTabletTrial, TABLET_TRIAL_OFFLINE_MESSAGE } from "@/config/trial";
-import { DEVELOPMENT_FIREBASE_LOCKED_MESSAGE, isApprovedDevelopmentConfig } from "./development";
+import { isApprovedDevelopmentConfig } from "./development";
 
 const STORAGE_KEY = "new-blood-fb-config";
 
@@ -53,9 +53,8 @@ export function assertFirebaseConnectionAllowed(cfg: FirebaseAppConfig): void {
   if (!isApprovedDevelopmentConfig(cfg)) {
     throw new Error("Development Firebase configuration does not match the approved silverwick-hollow app.");
   }
-  // No environment-variable bypass: removing this gate requires a reviewed
-  // change after hosted multiplayer testing is separately authorized.
-  throw new Error(DEVELOPMENT_FIREBASE_LOCKED_MESSAGE);
+  // Admission to game data is still enforced by administrator-owned UID/game
+  // grants in development Rules. Valid configuration does not enroll a user.
 }
 
 export function loadFirebaseConfig(): FirebaseAppConfig | null {

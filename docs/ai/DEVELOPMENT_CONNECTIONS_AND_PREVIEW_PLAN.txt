@@ -1,0 +1,121 @@
+Development connection safeguards and protected-preview plan
+October 10, 2026
+Base: e79c758bbc1402ff943882641f7be041cea15a37
+Scope: implementation and local verification; protected-preview planning only.
+No Firebase/Cloudflare mutations, application publication or hosted gameplay.
+
+CONNECTION BEHAVIOR
+Development mode or the VITE_FIREBASE_ENVIRONMENT=development marker always
+requires all seven exact public identifiers in DEVELOPMENT_FIREBASE_CONFIG.
+Mixed production configuration, missing fields, extra SDK options, redirected
+database URLs and browser-saved configuration fail before SDK initialization
+or cache reuse. No environment-variable or localStorage bypass was introduced.
+The former unconditional throw is replaced by this configuration guard.
+
+The approved app initializes lazily as silverwick-hollow-development, separated
+from the default SDK app and its persisted Auth state. The cache identity includes
+the development context and all seven SDK fields; Auth cannot be reused solely
+because projectId and databaseURL match. A partially failed initialization does
+not replace a valid cached set of app/database/auth instances. Unmarked production
+initialization continues using the default app and existing configuration flow.
+
+No new login, backend, self-enrollment or authorization model is introduced.
+The existing anonymous sign-in and authoritative game-state flow remain in use.
+Configuration acceptance does not grant data access: deployed Rules still require
+an administrator-approved anonymous UID, role, future expiry and, for players,
+the exact game/session grant plus the existing roster/join permissions.
+The named development app uses a separate Firebase Auth persistence namespace;
+do not expect a UID from an old default-app browser session to transfer.
+
+LOCAL VERIFICATION
+Run npm run typecheck, npm test, and npm run build:development.
+Connection tests mock Auth/database calls; two collision checks use the real,
+offline Firebase app registry (without Auth/database initialization or requests).
+They cover positive named initialization, no automatic sign-in during init,
+exact cached reuse, missing/altered fields, wrong Auth API-key cache reuse,
+default/development isolation and failure-atomic initialization. Existing config
+tests cover environment precedence, browser overrides and malformed database URLs.
+Build inspection must show the exact development project, app, Auth domain and
+database in the executable bundle, with no mobile-botc production identifiers.
+Do not launch the real application against hosted Firebase for this phase.
+Rules are unchanged from e79c758; existing 314 emulator cases remain applicable.
+The old rules:development:verify command still checks the original deny-all
+checkpoint; it is not a current activated-Rules readiness check.
+
+CURRENT PREVIEW OBSERVATION (READ-ONLY OCTOBER 10)
+Cloudflare account abc2e13b2510e1ac7e2e3407d71ec2a2, Pages project
+blood-on-the-clocktower, canonical blood-on-the-clocktower-elc.pages.dev.
+Preview branch control remains None (automatic previews disabled).
+Preview access reports restriction by Cloudflare Access.
+The saved build configuration remains npm run build with output dist; the Preview
+variables view is empty. These defaults are not the approved development build.
+Production branch remains main. No shared build or production setting was edited.
+The dashboard repository label still uses Kaijumomo/blood-on-the-clocktower.
+GitHub resolves both that name and Kaijumomo/Silverwick-Hallow to repository ID
+1225035673, confirming the rename. Reverify identity before future deployment.
+This phase publishes only a development source branch/PR.
+
+Historical containment evidence (October 9): 232 preview hashes and 34 aliases
+redirected unauthenticated visitors to Access; the canonical production URL was
+public. Access allowed only the verified product-owner identity. Those full inventory and
+authenticated-login checks are not replaced by the current settings observation.
+Production hash URLs are intentionally protected under the owner's prior approval.
+
+PROPOSED PUBLICATION — REQUIRES SEPARATE APPROVAL
+Prefer a one-time manual upload of reviewed prebuilt assets to the existing
+Pages project on an explicit non-main preview branch. Keep automatic previews
+disabled and keep production/shared build settings unchanged. Cloudflare supports
+Wrangler uploads to existing Git-integrated Pages projects. No new project,
+custom domain, billing change or infrastructure redesign is proposed.
+
+Before publication:
+1. Approve the exact source commit and non-main preview branch. Retain the
+   e79c758 Rules checkpoint, existing integration/main commits and rollback files.
+2. Reverify current Pages account/project, Access wildcard, named owner Allow
+   policy and absence of Bypass/extra Allow rules. Preview access must be protected
+   before publishing code. Do not widen the identity list without approval.
+3. Build npm run build:development in a clean checkout with the committed pinned
+   development env, reviewing any process/.env.local overrides. Record the commit,
+   build output hash manifest, build command and exact Firebase identifiers.
+   Upload dist-development only; never use dist or the ordinary npm run build.
+4. After explicit publication approval, upload that artifact to the exact Pages
+   project and an explicitly specified non-main branch. Reject any command/default
+   selecting main or the production environment. Do not alter Git integration.
+5. Capture the returned immutable deployment URL and actual branch alias rather
+   than guessing aliases. Without cookies, check root, deep links and JS/assets
+   are intercepted by Access; verify owner access and a non-approved identity's
+   denial using separately authorized sessions. Confirm canonical production is
+   still public. Stop on unexpected exposure; do not delete deployments silently.
+6. Verify deployment provenance and served assets against the reviewed artifact.
+   Publication/smoke verification alone must not create or join a hosted game.
+
+TESTER ENROLLMENT AND GAMEPLAY — SEPARATE APPROVAL
+The October 9 synthetic grants expire October 10 at 11:22:52.730 PM EDT.
+Their credentials were not retained. Never reuse them as a live tester cohort,
+renew them silently, or infer enrollment from Cloudflare login.
+Approve named testers, fresh exact anonymous UIDs in the named development app,
+Storyteller/player roles, administrator, expiry window and synthetic test plan.
+Issue administrator-only approvals; no client enrollment or broad wildcard grant.
+Approve an exact newly created session for players after verifying ownership.
+Only after separate gameplay approval exercise join/seating, private views,
+reconnect, stale sessions, writer fencing, removal, expiry and terminal lifecycle.
+The app being reachable does not imply Rules authorization or gameplay approval.
+
+ROLLBACK AND LIMITS
+The actual candidate->deny-all->candidate rehearsal already passed for both
+identities. Keep firebase.development.json pointing to the committed deny-all
+policy; do not change it simply because the candidate is active. An authorized
+emergency rollback must target silverwick-hollow explicitly and verify readback.
+For application rollback, retain a known protected artifact and never use a
+production build as fallback. No deployment deletion is part of this plan.
+Anonymous signup volume, stolen tokens, same-UID tabs, trusted Storyteller
+publication and previously cached information retain their documented limits.
+
+NEXT APPROVAL
+Approve one protected development preview publication of the independently
+reviewed connection commit, including Access verification and no-gameplay smoke
+checks, using the plan above. Hosted gameplay and tester grants remain separate.
+
+PRIMARY REFERENCES (checked October 10)
+https://developers.cloudflare.com/pages/configuration/preview-deployments/
+https://developers.cloudflare.com/pages/get-started/direct-upload/
