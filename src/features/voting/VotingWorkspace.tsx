@@ -69,7 +69,10 @@ export function VotingProvider({ children }: { children: ReactNode }) {
       }
       return false;
     }
-    setError(null); setConfirmation(null);
+    setError(result.manualReason ?? null); setConfirmation(null);
+    // An explicitly recorded exceptional outcome remains Storyteller-owned.
+    // Keep its notice visible before the Storyteller chooses to finish Day.
+    if (result.manualReason) return true;
     if (finishAfter) {
       // Preserve the accepted Life outcome if the following transition is refused.
       // Reopening Finish day retries the phase only, never the execution.

@@ -49,6 +49,7 @@ import {
 import { newParticipantId, participantIdAppearsIn } from "./participants";
 import { participantRoleStepEntries, participantStepKey, travelerArrivalStepKey, planNightStepStatus } from "./nightProgress";
 import { planAbilityResolution, type AbilityRefusal, type AbilityResolutionRequest } from "./abilityResolution";
+import { planRecordedLifeOutcome } from "./deathResolution";
 import { clearNightActionCorrections, invalidateNightActionCorrections, planNightActionTargetCorrection, rememberCorrectedNightAction, rememberNightAction, type NightActionTargetCorrection } from "./nightActionCorrection";
 import {
   applyGameRuleFactPlan,
@@ -298,7 +299,7 @@ export type RecordInformationDeliveryResult =
  * `needsConfirmation` refusal names the exceptional case the caller may
  * explicitly confirm and resubmit (see ExecutionIntent). */
 export type LifeCommandResult =
-  | { ok: true; changed: boolean; eventIds: LifeEventId[] }
+  | { ok: true; changed: boolean; eventIds: LifeEventId[]; manualReason?: string }
   | LifeRefusal;
 
 /** Phase 10B: result of every Effect command. `changed: false` is a true
@@ -706,13 +707,14 @@ export type StorytellerStore = {
    * optionally correlated by `resolutionId` -- and commits an accepted plan
    * as exactly one game replacement: Current State patch, Life Event Window
    * update and one History mirror per affected participant, one Undo entry,
-   * one localSeq step. A refusal or true no-op changes nothing. Every other
-   * Life command below is a one-intent wrapper around this; a future
-   * ability engine submits its resolved intents here too. */
-  resolveLife: (transaction: LifeTransaction) => LifeCommandResult;
+   * one localSeq step. A refusal or true no-op changes nothing. Raw manual
+   * transactions and corrections never replay character consequences.
+   * Recorded death/execution wrappers additionally compose verified B4
+   * succession through the same durable commit boundary. */
+  resolveLife: (transaction: LifeTransaction, actionContext?: CharacterActionContext) => LifeCommandResult;
   resolveVoting: (intent: VotingIntent, context: VotingCommandContext) => ReturnType<typeof planVoting>;
   /** A death not represented by an execution/exile. Night or Day. */
-  recordDeath: (id: PlayerId, context?: MutationContext) => LifeCommandResult;
+  recordDeath: (id: PlayerId, context?: MutationContext, actionContext?: CharacterActionContext) => LifeCommandResult;
   /** The actual executee's execution (Day only). Extra executions and a
    * Traveler executee need the planner's explicit confirmation tokens,
    * bound to the participant and Game Moment (10A-ASTRA-002). */
@@ -721,6 +723,7 @@ export type StorytellerStore = {
     outcome: ExecutionOutcome,
     options?: { confirmations?: readonly LifeConfirmationToken[] },
     context?: MutationContext,
+    actionContext?: CharacterActionContext,
   ) => LifeCommandResult;
   /** A Traveler exile (Day only); may be survived. */
   recordExile: (id: PlayerId, outcome: ExileOutcome, context?: MutationContext) => LifeCommandResult;
@@ -1588,6 +1591,31 @@ export const useStorytellerStore = create<StorytellerStore>()(
         try { set({ game: prepared, undoStack, seatSwapUndo, localLayoutUndo }); }
         finally { prewrittenVotingSave = null; preparedAuthoritativeGame = null; }
         return null;
+      };
+      /** B4: touched Life commands share the existing durable commit boundary.
+       * Raw transactions and corrections never evaluate character succession. */
+      const commitLifeOutcome = (transaction: LifeTransaction, actionContext?: CharacterActionContext, recordedOutcome = false): LifeCommandResult => {
+        const state = get();
+        const game = state.game;
+        const refusal = characterActionRefusal(state, actionContext);
+        if (!game || refusal) return { ok: false, code: "stale", message: refusal ?? "No game is open." };
+        const authority = votingAuthorityToken(state.lobby)!;
+        const script = selectScriptById(state, game.scriptId);
+        const registry = registryForGame(state, game);
+        const environment = registry ? { registry, script: script ?? null } : undefined;
+        if (recordedOutcome) {
+          const result = planRecordedLifeOutcome(game, transaction, environment);
+          if (!result.ok) return result;
+          if (!result.changed) return { ok: true, changed: false, eventIds: [] };
+          const unsafe = commitAuthoritativeState(result.game, state, authority);
+          if (unsafe) return { ok: false, code: "refused", message: unsafe };
+          return { ok: true, changed: true, eventIds: result.eventIds, ...(result.manualReason ? { manualReason: result.manualReason } : {}) };
+        }
+        const result = planLifeTransaction(game, transaction, undefined, environment);
+        if (!result.ok) return result;
+        if (!result.changed) return { ok: true, changed: false, eventIds: [] };
+        const unsafe = commitAuthoritativeState(applyLifePlan(game, result.plan), state, authority);
+        return unsafe ? { ok: false, code: "refused", message: unsafe } : { ok: true, changed: true, eventIds: result.plan.addedEventIds };
       };
       /** Ending/reopening must be durable before any subscriber sees success. */
       const commitTerminalState = (patch: Partial<StorytellerStore>): string | null => {
@@ -3092,27 +3120,14 @@ export const useStorytellerStore = create<StorytellerStore>()(
         return result;
       },
 
-      resolveLife: (transaction) => {
-        const { game, undoStack } = get();
-        if (!game) return { ok: false, code: "refused", message: "No game is open." };
-        // guard -> plan (pure) -> one commit. The planner validates every
-        // intent against Current State and returns a refusal, a true no-op,
-        // or the complete Current State + Life Event Window + History plan.
-        const script = selectScriptById(get(), game.scriptId);
-        const registry = registryForGame(get(), game);
-        const result = planLifeTransaction(game, transaction, undefined, registry ? { registry, script: script ?? null } : undefined);
-        if (!result.ok) return result;
-        if (!result.changed) return { ok: true, changed: false, eventIds: [] };
-        set({ undoStack: pushUndo(game, undoStack), game: applyLifePlan(game, result.plan) });
-        return { ok: true, changed: true, eventIds: result.plan.addedEventIds };
-      },
+      resolveLife: (transaction, actionContext) => commitLifeOutcome(transaction, actionContext),
 
-      recordDeath: (id, context) =>
-        get().resolveLife({ intents: [{ kind: "death", playerId: id }], context }),
+      recordDeath: (id, context, actionContext) =>
+        commitLifeOutcome({ intents: [{ kind: "death", playerId: id }], context }, actionContext, true),
 
-      recordExecution: (id, outcome, options, context) =>
-        get().resolveLife({ intents: [{ kind: "execution", playerId: id, outcome,
-          ...(options?.confirmations?.length ? { confirmations: options.confirmations } : {}) }], context }),
+      recordExecution: (id, outcome, options, context, actionContext) =>
+        commitLifeOutcome({ intents: [{ kind: "execution", playerId: id, outcome,
+          ...(options?.confirmations?.length ? { confirmations: options.confirmations } : {}) }], context }, actionContext, true),
 
       recordExile: (id, outcome, context) =>
         get().resolveLife({ intents: [{ kind: "exile", playerId: id, outcome }], context }),

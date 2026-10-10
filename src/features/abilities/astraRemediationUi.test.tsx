@@ -75,9 +75,9 @@ describe("SOL-10F-A2 -- selections are bound at selection time", () => {
   });
 
   function manualStep(kind: string, configure?: (ws: HTMLElement) => void) {
-    open(proofGame(["imp", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"]));
+    open(proofGame(["empath", "chef", "monk", "imp", "saint", "poisoner", "washerwoman"]));
     render(<Night />);
-    fireEvent.click(within(card("Imp", "Player 0")).getByRole("button", { name: "Guide" }));
+    fireEvent.click(within(card("Empath", "Player 0")).getByRole("button", { name: "Guide" }));
     fireEvent.click(within(workspace()).getByRole("button", { name: "Resolve manually / unmodeled interaction" }));
     fireEvent.change(within(workspace()).getByRole("textbox", { name: "Reason for manual resolution" }), { target: { value: "test" } });
     fireEvent.click(within(workspace()).getByRole("button", { name: `+ ${kind}` }));
@@ -107,9 +107,9 @@ describe("SOL-10F-A2 -- selections are bound at selection time", () => {
   });
 
   it("a Manual step with no player blocks resolution (never silently dropped)", () => {
-    open(proofGame(["imp", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"]));
+    open(proofGame(["empath", "chef", "monk", "imp", "saint", "poisoner", "washerwoman"]));
     render(<Night />);
-    fireEvent.click(within(card("Imp", "Player 0")).getByRole("button", { name: "Guide" }));
+    fireEvent.click(within(card("Empath", "Player 0")).getByRole("button", { name: "Guide" }));
     fireEvent.click(within(workspace()).getByRole("button", { name: "Resolve manually / unmodeled interaction" }));
     fireEvent.change(within(workspace()).getByRole("textbox", { name: "Reason for manual resolution" }), { target: { value: "test" } });
     fireEvent.click(within(workspace()).getByRole("button", { name: "+ Death" }));

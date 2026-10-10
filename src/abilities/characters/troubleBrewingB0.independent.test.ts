@@ -26,8 +26,10 @@ beforeEach(() => { store.setState({ game: null, lobby: null, undoStack: [], loca
 afterEach(() => vi.restoreAllMocks());
 
 describe("independent B0 complete-action review", () => {
-  it("five alive with healthy Scarlet Woman refuses at both UI preflight and command without any publication", () => {
-    const g = base(); openInStore(g); const before = store.getState(); const persisted = localStorage.getItem("new-blood-st");
+  it("five alive with uncertain Scarlet Woman refuses at both UI preflight and command without any publication", () => {
+    // Updated in B4: ordinary healthy succession is now complete. Preserve
+    // this historical independent refusal proof at the remaining boundary.
+    const g = impair(base(), "p2", "soberHealthy"); openInStore(g); const before = store.getState(); const persisted = localStorage.getItem("new-blood-st");
     const write = vi.spyOn(Storage.prototype, "setItem"); let published = 0;
     const unsubscribe = store.subscribe(() => published++);
     try {

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
-import { useStorytellerStore } from "@/stores/storytellerStore";
+import { captureVotingContext, useStorytellerStore } from "@/stores/storytellerStore";
 import { usePrivateDialog } from "./usePrivateDialog";
 import { currentLiveMoment, executionsAt, exilesAt, type LifeEventQueryResult } from "@/stores/lifeEvents";
 import type { LifeEvent, LiveGameMoment, StorytellerLobbyRecord, STPlayerRecord } from "@/stores/types";
@@ -46,6 +46,7 @@ export function DayResolutionPanel({ onClose }: { onClose: () => void }) {
   // renders nothing, and it never reappears when Privacy Mode ends.
   const suppressed = usePrivateDialog(onClose);
   const store = useStorytellerStore.getState;
+  const actionContext = captureVotingContext();
   const [executee, setExecutee] = useState("");
   const [exilee, setExilee] = useState("");
   const moment = game ? currentLiveMoment(game) : null;
@@ -62,7 +63,7 @@ export function DayResolutionPanel({ onClose }: { onClose: () => void }) {
 
   const recordExecution = (outcome: "died" | "survived" | "alreadyDead") => {
     if (!chosen) return;
-    if (attempt((c) => store().recordExecution(chosen.id, outcome, executionOptions(c)))) setExecutee("");
+    if (attempt((c) => store().recordExecution(chosen.id, outcome, executionOptions(c), undefined, actionContext))) setExecutee("");
   };
   const recordExile = (outcome: "died" | "survived") => {
     if (!chosenExilee) return;

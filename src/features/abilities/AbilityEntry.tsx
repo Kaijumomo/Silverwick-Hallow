@@ -8,6 +8,7 @@ import { AbilityWorkspace } from "./AbilityWorkspace";
 import { pathAbility } from "./abilityUi";
 import { automationEligibility } from "@/abilities/automationEligibility";
 import { createRulesQuery } from "@/stores/rulesQuery";
+import { DirectDayAbility } from "./DirectDayAbility";
 
 /**
  * Phase 10F (SOL-10F-L3): the Storyteller-private ability entry point for a
@@ -70,7 +71,10 @@ export function AbilityEntry({ player, semantics = CANONICAL_ABILITY_SEMANTICS }
           </details>
         </div>
       </details>
-      {open && (
+      {open === "guided" && descriptor?.roleId === "slayer" && descriptor.presentation.complexity === "simple" ? (
+        <DirectDayAbility game={game} script={script} registry={registry} semantics={semantics} actorId={player.id} descriptor={descriptor}
+          onClose={() => setOpen(null)} onManualRequired={() => { setManualAction(actionKey); setOpen(null); }} />
+      ) : open && (
         <AbilityWorkspace game={game} script={script} registry={registry} semantics={semantics}
           target={{ actorId: player.id, roleId, roleName, invocationPath: "dayEntry" }}
           descriptor={open === "guided" ? descriptor : null}

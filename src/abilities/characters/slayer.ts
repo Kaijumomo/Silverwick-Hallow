@@ -1,4 +1,6 @@
 import type { AbilityDescriptor } from "../semantics";
+import { toldRoleChangeIntents } from "@/stores/roleResolution";
+import { scarletWomanSuccession } from "./scarletWoman";
 import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, nothing, outcome } from "./shared";
 
 /**
@@ -29,7 +31,7 @@ export const SLAYER: AbilityDescriptor = {
   usage: { kind: "oncePerGame" },
   inputs: [{ id: "target", kind: "participant", source: "player", label: "The player publicly chosen" }],
   hooks: ["targeting", "registration", "death"],
-  presentation: { complexity: "complex", action: "Publicly choose a player" },
+  presentation: { complexity: "simple", action: "Publicly choose a player" },
   evaluator: (context) => {
     if (!context.actor.player.alive) return { kind: "notApplicable", message: "A dead Slayer has no ability -- there is no real Slayer shot to record." };
     if (context.simulated) return nothing();
@@ -55,6 +57,12 @@ export const SLAYER: AbilityDescriptor = {
     if (!demon) return spent();
     const death = deathAttempt(context, target, "any");
     if (death.kind === "ask") return ask(death.message, death.requirement);
-    return outcome([lifeOperation(death.kind === "dies" ? [use, { kind: "death", target }] : [use])]);
+    if (death.kind !== "dies") return spent();
+    const succession = scarletWomanSuccession(context.query, target);
+    if (succession.kind === "manual") return { kind: "unsupported", message: succession.reason };
+    const kill = lifeOperation([use, { kind: "death", target }]);
+    return outcome(succession.kind === "successor"
+      ? [kill, { domain: "role", intents: toldRoleChangeIntents(context.query.participant(succession.target)!, "imp") }]
+      : [kill], succession.kind === "successor");
   },
 };

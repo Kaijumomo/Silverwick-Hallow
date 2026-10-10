@@ -36,7 +36,7 @@ export function useLifeRunner(contextKey = "") {
       return false;
     }
     setPending(null);
-    setError(result.ok ? null : result.message);
+    setError(result.ok ? result.manualReason ?? null : result.message);
     return result.ok;
   };
   const confirmation = pending && (
@@ -58,6 +58,7 @@ export function LifeControls({ player, compact = false }: { player: STPlayerReco
   const game = useStorytellerStore((s) => s.game);
   const terminalClose = useStorytellerStore((s) => s.terminalClose);
   const store = useStorytellerStore.getState;
+  const actionContext = captureVotingContext();
   const { attempt, confirmation, errorNode } = useLifeRunner(
     `${player.participantId ?? ""}|${game?.phase ?? ""}|${game?.day ?? ""}`);
   const [correction, setCorrection] = useState<StatusChoice>("keep");
@@ -91,7 +92,7 @@ export function LifeControls({ player, compact = false }: { player: STPlayerReco
         <DragChoice label="Life status" hideLabel className="life-compact-switch" value={dead ? "dead" : "alive"}
           disabled={locked} contextKey={game}
           options={[{ value: "alive", label: "Alive", hint: "Tap or slide left to resurrect this player" }, { value: "dead", label: "Dead", hint: "Tap or slide right to record this player's death" }]}
-          onChange={value => act(() => value === "alive" ? store().resurrect(player.id) : store().recordDeath(player.id))} />
+          onChange={value => act(() => value === "alive" ? store().resurrect(player.id) : store().recordDeath(player.id, undefined, actionContext))} />
         {live && dead && <button type="button" className="life-ghost-switch" aria-pressed={voteAvailable} disabled={locked}
           title={voteAvailable ? "Mark ghost vote used" : "Restore ghost vote"}
           onClick={() => act(() => voteAvailable ? store().spendGhostVote(player.id) : store().restoreGhostVote(player.id))}>
@@ -123,18 +124,18 @@ export function LifeControls({ player, compact = false }: { player: STPlayerReco
         <>
           <div className="drawer-row life-actions">
             {!dead && (
-              <button className="btn btn-sm" onClick={() => attempt(() => store().recordDeath(player.id))}>Record death</button>
+              <button className="btn btn-sm" onClick={() => attempt(() => store().recordDeath(player.id, undefined, actionContext))}>Record death</button>
             )}
             {day && !dead && <>
-              <button className="btn btn-sm" onClick={() => attempt((c) => store().recordExecution(player.id, "died", executionOptions(c)))}>
+              <button className="btn btn-sm" onClick={() => attempt((c) => store().recordExecution(player.id, "died", executionOptions(c), undefined, actionContext))}>
                 Executed — died
               </button>
-              <button className="btn btn-sm" onClick={() => attempt((c) => store().recordExecution(player.id, "survived", executionOptions(c)))}>
+              <button className="btn btn-sm" onClick={() => attempt((c) => store().recordExecution(player.id, "survived", executionOptions(c), undefined, actionContext))}>
                 Executed — survived
               </button>
             </>}
             {day && dead && (
-              <button className="btn btn-sm" onClick={() => attempt((c) => store().recordExecution(player.id, "alreadyDead", executionOptions(c)))}>
+              <button className="btn btn-sm" onClick={() => attempt((c) => store().recordExecution(player.id, "alreadyDead", executionOptions(c), undefined, actionContext))}>
                 Executed — already dead
               </button>
             )}

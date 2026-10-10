@@ -4,9 +4,8 @@ import { GameScreen } from "./GameScreen";
 import { useStorytellerStore as storyteller } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useShellStore } from "@/stores/shellStore";
-import { useTargetPicker } from "@/features/abilities/abilityUi";
+import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
 import { setupGame, setupScript } from "@/test/setupFixtures";
-import { choose, chosen } from "@/test/pickers";
 
 let narrow = false;
 const listeners = new Set<() => void>();
@@ -28,19 +27,16 @@ function playing(phase: "day" | "night" = "night", roles = ["monk", "imp", "empa
 const actor = (container: HTMLElement) => container.querySelector<HTMLElement>(".grimoire .token.acting")!;
 const hideNight = () => fireEvent.click(screen.getByRole("button", { name: "Close Night panel" }));
 const openNight = () => fireEvent.click(screen.getByRole("button", { name: "Night" }));
-const card = () => screen.getByRole("dialog", { name: /^Imp/ });
-const slot = () => card().querySelector<HTMLElement>("[data-pick-slot]")!.dataset.pickSlot!;
 function impDraft() {
   // A complete authorized choice resolves immediately in strict gameplay.
   // This star-pass still needs a successor, so it is a genuine partial draft.
   const view = playing("night", ["monk", "imp", "poisoner", "baron", "chef"]);
   fireEvent.click(screen.getByRole("button", { name: /^Imp Player 1/ }));
-  fireEvent.click(screen.getByRole("button", { name: "Continue action" }));
-  const pick = slot();
-  choose(pick, "p1", card());
-  expect(screen.getByRole("region", { name: "Further choices" })).toBeVisible();
+  act(() => { pickSeatIfPicking(state().game, "p1"); });
+  expect(useTargetPicker.getState().active?.label).toBe("Choose the new Imp");
+  expect(screen.queryByRole("dialog")).toBeNull();
   expect(screen.queryByRole("button", { name: "Resolve" })).toBeNull();
-  return { view, pick };
+  return { view };
 }
 
 beforeEach(() => {
@@ -62,6 +58,24 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe("single responsive Storyteller board", () => {
+  it.each([false, true])("Slayer selection hides the entire Inspector while retaining the draft (narrow=%s)", phone => {
+    narrow = phone;
+    const view = playing("day", ["slayer", "imp", "scarletwoman", "chef", "monk"]);
+    fireEvent.click(view.container.querySelector<HTMLElement>('.grimoire [data-player-id="p0"]')!);
+    fireEvent.click(screen.getByRole("button", { name: "More settings" }));
+    const expand = screen.queryByRole("button", { name: "Identity, Records and Admin…" });
+    if (expand) fireEvent.click(expand);
+    fireEvent.click(screen.getByText("Abilities"));
+    fireEvent.click(screen.getByRole("button", { name: "Use ability… (Slayer)" }));
+    const inspector = view.container.querySelector(".shell-inspector")!;
+    expect(inspector).toHaveAttribute("hidden");
+    expect(useTargetPicker.getState().active?.owner).toMatch(/^day-ability:/);
+    const before = state().game;
+    act(() => useTargetPicker.getState().cancel());
+    expect(inspector).not.toHaveAttribute("hidden");
+    expect(state().game).toBe(before);
+  });
+
   it("recalculates canonical geometry from measured width and height without capping the movement canvas", () => {
     const view = render(<GameScreen />);
     const stage = view.container.querySelector(".grimoire-stage")!;
@@ -166,25 +180,26 @@ describe("Night navigation and recovery in the single shell", () => {
     expect(useTargetPicker.getState().active).not.toBeNull();
   });
 
-  it("hiding a detailed action and reopening by its actor keeps the same draft repeatedly", () => {
-    const { view, pick } = impDraft(); const before = state().game;
-    expect(card().parentElement).toHaveAttribute("id", "action-card-dock-host");
+  it("hiding an unfinished self-pass and reopening by its actor keeps the successor choice repeatedly", () => {
+    const { view } = impDraft(); const before = state().game;
     for (let repeat = 0; repeat < 3; repeat++) {
       hideNight(); expect(screen.queryByRole("dialog", { name: /^Imp/ })).toBeNull();
       fireEvent.click(actor(view.container));
-      expect(chosen(pick, card())).toBe("p1");
+      expect(useTargetPicker.getState().active?.label).toBe("Choose the new Imp");
+      expect(state().game!.players.p1!.alive).toBe(true);
     }
     expect(state().game).toBe(before);
   });
 
   it("inspecting another participant while Night is hidden preserves its actor and draft", () => {
-    const { view, pick } = impDraft();
+    const { view } = impDraft();
     hideNight();
     fireEvent.click(view.container.querySelector<HTMLElement>('.grimoire [data-player-id="p3"]')!);
     expect(state().selectedPlayerId).toBe("p3");
     expect(screen.queryByRole("region", { name: "Night 2 guide" })).toBeNull();
     fireEvent.click(actor(view.container));
-    expect(chosen(pick, card())).toBe("p1");
+    expect(useTargetPicker.getState().active?.label).toBe("Choose the new Imp");
+    expect(state().game!.players.p1!.alive).toBe(true);
     expect(state().selectedPlayerId).toBeNull();
   });
 

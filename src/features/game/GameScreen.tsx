@@ -64,6 +64,9 @@ function GameScreenContent() {
   const setLobby = useStorytellerStore((s) => s.setLobby);
   const selectedPlayerId = useStorytellerStore((s) => s.selectedPlayerId);
   const privacyMode = usePrivacyStore((s) => s.enabled);
+  // Keep the Day draft mounted while the existing Grimoire picker exposes
+  // every seat. Its toolbar already supplies the selection instruction/Cancel.
+  const pickingDayAbility = useTargetPicker(s => s.active?.owner?.startsWith("day-ability:") ?? false);
   const togglePrivacyMode = usePrivacyStore((s) => s.toggle);
 
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -481,7 +484,7 @@ function GameScreenContent() {
         roles={almanacRoles} onMore={setAdvancedPlayerId} advancedPlayerId={advancedPlayerId}>
         <div className="game-body" data-layout={layout}>
           <div className="shell-stage" role="region" aria-label="Grimoire"><GrimoireCircle online={onlineMap} backend={backend} code={lobby?.code ?? ""} /></div>
-          {inspectorVisible && <div className="shell-pane shell-inspector"><PlayerDrawer player={selected!} onRemove={removeSelectedPlayer} onUnseat={unseatSelectedPlayer} onCorrectOutcome={game.phase !== "setup" && !mutationLocked ? () => setLifeEventsOpen(true) : undefined} /></div>}
+          {inspectorVisible && <div className="shell-pane shell-inspector" hidden={pickingDayAbility}><PlayerDrawer player={selected!} onRemove={removeSelectedPlayer} onUnseat={unseatSelectedPlayer} onCorrectOutcome={game.phase !== "setup" && !mutationLocked ? () => setLifeEventsOpen(true) : undefined} /></div>}
         </div>
         {!voting?.open && <div className="grimoire-phase-dock">{phasePrimary}</div>}
       </PlayersWorkspace>

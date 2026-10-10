@@ -1,11 +1,11 @@
-import { isCanonicalRole } from "@/data/canonical";
 import { needsShownIdentity } from "@/stores/identity";
 import { participantStepKey } from "@/stores/nightProgress";
 import { toldRoleChangeIntents } from "@/stores/roleResolution";
 import type { AbilityDescriptor, AbilityEvaluation, AbilityEvaluationContext } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
-import { answerOf, ask, deathAttempt, firstParticipant, followUpParticipant, lifeOperation, nameOf, nothing, outcome, requireLivingActor } from "./shared";
+import { ask, deathAttempt, firstParticipant, followUpParticipant, lifeOperation, nameOf, nothing, outcome, requireLivingActor } from "./shared";
+import { scarletWomanSuccession } from "./scarletWoman";
 
 /**
  * Imp -- GUIDED, with the narrow Scarlet Woman dependency.
@@ -35,7 +35,6 @@ import { answerOf, ask, deathAttempt, firstParticipant, followUpParticipant, lif
  */
 export const SUCCESSOR = "successor";
 export const swFunctionsJudgment = (participantId: string) => `scarletWoman:functions:${participantId}`;
-const SCARLET_WOMAN_THRESHOLD = 5;
 
 /** Ordinary perception the seam can update truthfully: shown as their own
  * character, no concealed identity. Anything else is not invented here. */
@@ -48,24 +47,11 @@ const ordinaryPerception = (query: RulesQuery, binding: ParticipantBinding) => {
 function successor(context: AbilityEvaluationContext): { binding: ParticipantBinding } | { evaluation: AbilityEvaluation } | null {
   const { query } = context;
   const seated = query.game.seatOrder.map((id) => query.game.players[id]).filter((p) => !!p && !p.isEmpty && !!p.participantId);
-  const aliveNonTravellers = seated.filter((p) => p!.alive && !p!.isTraveler).length; // immediately BEFORE the Demon death
   const binding = (p: (typeof seated)[number]): ParticipantBinding => ({ playerId: p!.id, participantId: p!.participantId! });
-  const minions = seated.filter((p) => p!.alive && !p!.isTraveler && p!.participantId !== context.actor.binding.participantId &&
-    query.roleOf(p!.actualRole)?.type === "minion").map(binding);
   let candidates: ParticipantBinding[] | undefined;
-  const scarletWoman = query.roleOf("scarletwoman");
-  if (aliveNonTravellers >= SCARLET_WOMAN_THRESHOLD && scarletWoman && isCanonicalRole(scarletWoman)) {
-    const priority: ParticipantBinding[] = [];
-    for (const sw of minions.filter((b) => query.participant(b)?.actualRole === "scarletwoman")) {
-      const functions = query.abilityFunctions(sw);
-      if (functions.known) { if (functions.value) priority.push(sw); continue; }
-      const judged = answerOf(context.judgments, swFunctionsJudgment(sw.participantId), "boolean");
-      if (!judged) return { evaluation: ask(functions.reason, { id: swFunctionsJudgment(sw.participantId), kind: "boolean", source: "judgment",
-        label: `${nameOf(context, sw)}'s Scarlet Woman ability is functioning` }) };
-      if (judged.value) priority.push(sw);
-    }
-    if (priority.length) candidates = priority;
-  }
+  const priority = scarletWomanSuccession(query, context.actor.binding);
+  if (priority.kind === "manual") return { evaluation: { kind: "unsupported", message: priority.reason } };
+  if (priority.kind === "successor") candidates = [priority.target];
   // Only an actual, unprevented self-death reaches here. A functioning
   // Scarlet Woman has mandatory priority; otherwise optional Minion
   // registration can change the eligible set and remains wholly Manual.
@@ -106,7 +92,7 @@ export const IMP: AbilityDescriptor = {
   usage: { kind: "unlimited" },
   inputs: [{ id: "target", kind: "participant", source: "player", label: "The player to kill" }],
   hooks: ["targeting", "death", "role"],
-  presentation: { complexity: "complex", action: "Choose a player to kill" },
+  presentation: { complexity: "simple", action: "Choose a player to kill" },
   evaluator: (context) => {
     const dead = requireLivingActor(context);
     if (dead) return dead;
@@ -118,7 +104,13 @@ export const IMP: AbilityDescriptor = {
     if (death.kind === "ask") return ask(death.message, death.requirement);
     if (death.kind === "survives") return nothing();
     const kill = lifeOperation([{ kind: "death", target }]);
-    if (!self) return outcome([kill]);
+    if (!self) {
+      const succession = scarletWomanSuccession(context.query, target);
+      if (succession.kind === "manual") return { kind: "unsupported", message: succession.reason };
+      return outcome(succession.kind === "successor"
+        ? [kill, { domain: "role", intents: toldRoleChangeIntents(context.query.participant(succession.target)!, "imp") }]
+        : [kill], succession.kind === "successor");
+    }
 
     const next = successor(context);
     if (!next) return outcome([kill]);

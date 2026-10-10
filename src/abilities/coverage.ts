@@ -60,7 +60,7 @@ const OWNED_CAPABILITIES: Readonly<Record<string, readonly CoverageCapability[]>
   legion: [{ owner: "setup", boundary: "Duplicate allowance; composition manual", evidence: "src/features/setup/setupAnalyzer.ts" }],
   pope: [{ owner: "setup", boundary: "Good character duplicate allowance only", evidence: "src/features/setup/setupAnalyzer.ts" }],
   marionette: [{ owner: "setup", boundary: "Bounded Demon adjacency validation", evidence: "src/features/setup/setupAnalyzer.ts" }],
-  scarletwoman: [{ owner: "abilities", boundary: "Imp star-pass priority only", evidence: "src/abilities/characters/imp.ts" }],
+  scarletwoman: [{ owner: "abilities", boundary: "B4 supported Imp death, star-pass, Slayer and execution succession; exceptional interactions manual", evidence: "src/abilities/characters/scarletWoman.ts" }],
   soldier: [{ owner: "rules", boundary: "Canonical functioning Soldier Demon death protection only", evidence: "src/abilities/characters/passiveRules.ts" }],
   vortox: [{ owner: "rules", boundary: "Relevant Townsfolk information goes wholly Manual; no Vortox resolver", evidence: "src/abilities/characters/passiveRules.ts" }],
 };

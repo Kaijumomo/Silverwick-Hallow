@@ -1,4 +1,5 @@
 import { applyLifePlan, planLifeTransaction, type LifeIntent, type LifeRefusal } from "./lifeResolution";
+import { planRecordedLifeOutcome } from "./deathResolution";
 import { participantRefOf } from "./participants";
 import { boundParticipant, createRulesQuery, type QueryAnswer, type RulesQueryEnvironment } from "./rulesQuery";
 import type { CurrentParticipantRef, StorytellerLobbyRecord } from "./types";
@@ -8,7 +9,7 @@ import { invalidateVotingLifeEvidence, planRemovedVotingReminders } from "./sour
 import { interactionCoverageEligibility } from "@/abilities/automationEligibility";
 export type { VotingDayState, VotingIntent, VotingRound } from "./votingTypes";
 
-export type VotingPlanResult = { ok: true; changed: boolean; game: StorytellerLobbyRecord } | LifeRefusal;
+export type VotingPlanResult = { ok: true; changed: boolean; game: StorytellerLobbyRecord; manualReason?: string } | LifeRefusal;
 const refuse = (message: string): LifeRefusal => ({ ok: false, code: "refused", message });
 const stale = (): LifeRefusal => ({ ok: false, code: "stale", message: "The voting context changed. Review the current round and try again." });
 const canonical = (id: string, environment?: RulesQueryEnvironment): boolean => {
@@ -102,6 +103,7 @@ function snapshot(game: StorytellerLobbyRecord, binding: VotingBinding): Current
 }
 function life(game: StorytellerLobbyRecord, intents: LifeIntent[], environment?: RulesQueryEnvironment): VotingPlanResult {
   if (!intents.length) return { ok: true, changed: false, game };
+  if (intents.length === 1 && intents[0]?.kind === "execution") return planRecordedLifeOutcome(game, { intents }, environment);
   const result = planLifeTransaction(game, { intents }, undefined, environment);
   return !result.ok ? result : { ok: true, changed: result.changed, game: result.changed ? applyLifePlan(game, result.plan) : game };
 }
@@ -142,6 +144,7 @@ export function planVoting(game: StorytellerLobbyRecord, intent: VotingIntent, e
   if (game.phase !== "day" && !(modifierAction && game.phase === "night")) return refuse("Voting is available during the Day.");
   const state: VotingDayState = JSON.parse(JSON.stringify(before));
   let next = game;
+  let manualReason: string | undefined;
   const commit = (): VotingPlanResult => {
     // Life composed by voting (notably exile) also invalidates earlier
     // responses' evidence. The response intentionally corrected right now
@@ -161,7 +164,7 @@ export function planVoting(game: StorytellerLobbyRecord, intent: VotingIntent, e
     const removed = (game.voting?.modifiers ?? []).filter(m => !state.modifiers.some(kept => kept.id === m.id));
     const cleanup = planRemovedVotingReminders(next, removed);
     if (!cleanup.ok) return refuse(cleanup.message);
-    return { ok: true, changed: true, game: { ...cleanup.game, voting: state } };
+    return { ok: true, changed: true, game: { ...cleanup.game, voting: state }, ...(manualReason ? { manualReason } : {}) };
   };
   if (intent.kind === "bureaucrat") {
     const source = snapshot(game, intent.source); const target = snapshot(game, intent.target);
@@ -193,6 +196,7 @@ export function planVoting(game: StorytellerLobbyRecord, intent: VotingIntent, e
     const planned = life(game, [{ kind: "execution", playerId: intent.target.playerId, outcome: intent.outcome, confirmations: intent.confirmations }], environment);
     if (!planned.ok) return planned;
     next = planned.game;
+    manualReason = planned.manualReason;
     if (active) { active.status = "acknowledged"; state.activeRoundId = null; }
     return commit();
   }
@@ -277,7 +281,7 @@ export function planVoting(game: StorytellerLobbyRecord, intent: VotingIntent, e
       intents.push({ kind: "execution", playerId: round.nominator.playerId, outcome: intent.outcome, confirmations: intent.confirmations });
     }
     const planned = life(game, intents, environment); if (!planned.ok) return planned;
-    next = planned.game; round.virginPending = false;
+    next = planned.game; manualReason = planned.manualReason; round.virginPending = false;
     if (intent.execute) { round.status = "outcome"; round.result = "virgin"; }
     else advanceCursor(next, round);
     round.contextStamp = tableStamp(next, round);

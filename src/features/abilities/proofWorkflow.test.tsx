@@ -2,13 +2,13 @@
 // semantics through the real Night Order / workspace / Player Drawer entry
 // points (progressive disclosure, follow-up choices by origin, one commit).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { NightOrderPanel } from "@/features/nightOrder/NightOrderPanel";
 import { AbilityEntry } from "./AbilityEntry";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
-import { useTargetPicker } from "./abilityUi";
+import { pickSeatIfPicking, useTargetPicker } from "./abilityUi";
 import { patchPlayer, proofGame, proofScript } from "@/test/proofFixtures";
 import type { RoleId, StorytellerLobbyRecord } from "@/stores/types";
 import { choose } from "@/test/pickers";
@@ -89,12 +89,12 @@ function Entry({ id }: { id: string }) {
 }
 
 describe("Slayer -- the Day entry", () => {
-  it("Player Drawer: Use ability… -> preview (use + death) -> Confirm, one commit", () => {
+  it("Player Drawer: Use ability… -> board target, one commit without another screen or confirmation", () => {
     open(named(["slayer", "imp", "chef", "monk", "saint", "poisoner", "empath"], "day", 2));
     render(<Entry id="p0" />);
     fireEvent.click(screen.getByRole("button", { name: "Use ability… (Slayer)" }));
-    const dialog = screen.getByRole("dialog", { name: "Slayer" });
-    choose("The player publicly chosen", "p1", dialog);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    act(() => { pickSeatIfPicking(game(), "p1"); });
     expect(game().players.p1!.alive).toBe(false);
     expect(game().players.p0!.abilityUsed).toBe(true);
     expect(state().undoStack).toHaveLength(1);
@@ -155,9 +155,9 @@ describe("Ravenkeeper -- the trigger surfaces immediately after the death", () =
     render(<Night />);
     expect(screen.queryByRole("region", { name: "Triggered now" })).toBeNull();
     expect(within(card("Ravenkeeper", "Player 0")).getByText(/Not triggered/)).toBeInTheDocument();
-    fireEvent.click(within(card("Imp", "Player 1")).getByRole("button", { name: "Guide" }));
-    choose("The player to kill", "p0", workspace());
-    fireEvent.click(within(workspace()).getByRole("button", { name: "Confirm and record" }));
+    choose("The player to kill", "p0", card("Imp", "Player 1"));
+    fireEvent.click(within(card("Imp", "Player 1")).getByRole("button", { name: "Resolve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm and record" }));
     expect(game().players.p0!.alive).toBe(false);
     const strip = screen.getByRole("region", { name: "Triggered now" });
     fireEvent.click(within(strip).getByRole("button", { name: "Guide" }));

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ModernNightPanel } from "./ModernNightPanel";
+import { computeNightOrder } from "./nightOrder";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { useShellStore } from "@/stores/shellStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
@@ -29,6 +30,90 @@ beforeEach(() => {
   useTargetPicker.getState().cancel(); clearNightActionCorrections();
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
+
+it("Imp chooses a successor on the board before one atomic self-pass and retains Next", () => {
+  store.setState({ game: proofGame(["imp", "poisoner", "baron", "chef", "monk"]) });
+  useShellStore.getState().setNightCursor({ day: 2, stepKey: key("p0") });
+  render(<Guide />);
+  const before = game();
+  tap("p0");
+  expect(game()).toBe(before);
+  expect(store.getState().undoStack).toHaveLength(0);
+  expect(useTargetPicker.getState().active?.label).toBe("Choose the new Imp");
+  expect(screen.queryByRole("dialog")).toBeNull();
+  tap("p3");
+  expect(game()).toBe(before);
+  tap("p2");
+  expect(game().players.p0!.alive).toBe(false);
+  expect(game().players.p2!.actualRole).toBe("imp");
+  expect(store.getState().undoStack).toHaveLength(1);
+  expect(game().nightProgress[`2:${key("p2")}`]?.status).toBe("skipped");
+  expect(current()).toBe(key("p0"));
+  expect(screen.getByRole("status")).toHaveTextContent("Resolved");
+});
+
+it("an uncertain Imp succession stays wholly manual without a workspace", () => {
+  store.setState({ game: proofGame(["imp", "spy", "baron", "chef", "monk"]) });
+  useShellStore.getState().setNightCursor({ day: 2, stepKey: key("p0") });
+  render(<Guide />);
+  const before = game(); tap("p0");
+  expect(game()).toBe(before);
+  expect(useTargetPicker.getState().active).toBeNull();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Continue action" })).toBeNull();
+  expect(screen.getByText(/Each night\*, choose a player: they die/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Next ›" }));
+  expect(game().players).toEqual(before.players);
+});
+
+it("Next closes the final self-pass result without granting the successor another attack", () => {
+  const next = proofGame(["imp", "scarletwoman", "chef", "soldier", "saint"]);
+  const impKey = participantStepKey(next.players.p0!.participantId!, "imp");
+  for (const step of computeNightOrder(next.players, next.seatOrder, proofScript, false, next)) {
+    if (step.stepKey !== impKey) next.nightProgress[`2:${step.stepKey}`] = { status: "done", notes: "" };
+  }
+  store.setState({ game: next });
+  useShellStore.getState().setNightCursor({ day: 2, stepKey: impKey });
+  const close = vi.fn();
+  function FinalGuide() {
+    const live = store(state => state.game)!;
+    return <ModernNightPanel game={live} script={proofScript} visible onClose={close} />;
+  }
+  render(<FinalGuide />); tap("p0");
+  const committed = game();
+  expect(committed.players.p0!.alive).toBe(false);
+  expect(screen.getByRole("button", { name: "Next ›" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "Next ›" }));
+  expect(close).toHaveBeenCalledOnce();
+  expect(game()).toBe(committed);
+  expect(game().nightProgress[`2:${key("p1")}`]?.status).toBe("skipped");
+});
+
+it("cancelling a pending successor leaves the Imp alive and invalidates the held choice", () => {
+  store.setState({ game: proofGame(["imp", "poisoner", "baron", "chef", "monk"]) });
+  useShellStore.getState().setNightCursor({ day: 2, stepKey: key("p0") });
+  render(<Guide />); tap("p0");
+  const held = useTargetPicker.getState().active!;
+  const before = game();
+  fireEvent.click(screen.getByRole("button", { name: "Cancel selection" }));
+  act(() => held.onPick({ playerId: "p2", participantId: before.players.p2!.participantId! }));
+  expect(game()).toBe(before);
+  expect(store.getState().undoStack).toHaveLength(0);
+});
+
+it("the existing roster fallback chooses only eligible successors in the same atomic self-pass", () => {
+  store.setState({ game: proofGame(["imp", "poisoner", "baron", "chef", "monk"]) });
+  useShellStore.getState().setNightCursor({ day: 2, stepKey: key("p0") });
+  render(<Guide />); const before = game(); tap("p0");
+  expect(game()).toBe(before);
+  fireEvent.click(screen.getByText("More options"));
+  const buttons = [...document.querySelectorAll<HTMLButtonElement>(".modern-night-roster button")];
+  expect(buttons.map(button => button.textContent)).toEqual(["Player 1", "Player 2"]);
+  fireEvent.click(screen.getByRole("button", { name: "Player 1" }));
+  expect(game().players.p0!.alive).toBe(false);
+  expect(game().players.p1!.actualRole).toBe("imp");
+  expect(store.getState().undoStack).toHaveLength(1);
+});
 
 it.each(["empath", "fortuneteller", "monk"])("Drunk shown as %s uses official instructions and Next without a simulated action workspace", shownRole => {
   const next = proofGame(["drunk", "chef", "imp", "soldier", "poisoner"]);
