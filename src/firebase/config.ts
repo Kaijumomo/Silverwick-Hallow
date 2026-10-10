@@ -1,17 +1,19 @@
 // Firebase config resolution order:
 //   1. Vite env vars (VITE_FIREBASE_*) — primary path for production.
-//      Local dev: copy .env.example → .env.local and fill in values.
+//      Local dev: .env.development pins the approved isolated app; connections
+//      stay locked until hosted multiplayer testing is separately approved.
 //      Cloudflare Pages: set these 7 vars in Settings → Environment Variables:
 //        VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN,
 //        VITE_FIREBASE_DATABASE_URL, VITE_FIREBASE_PROJECT_ID,
 //        VITE_FIREBASE_STORAGE_BUCKET, VITE_FIREBASE_MESSAGING_SENDER_ID,
 //        VITE_FIREBASE_APP_ID
-//   2. localStorage — fallback for local dev without .env.local (config dialog).
-//      Not shown in production when env vars are present.
+//   2. localStorage — legacy fallback for unmarked non-development builds.
+//      Development builds never read or save a browser configuration override.
 // The apiKey is public by Firebase design; the auth boundary is the security
 // rules at src/firebase/rules.json. Do NOT put service account keys in env.
 
 import { isTabletTrial, TABLET_TRIAL_OFFLINE_MESSAGE } from "@/config/trial";
+import { DEVELOPMENT_FIREBASE_LOCKED_MESSAGE, isApprovedDevelopmentConfig } from "./development";
 
 const STORAGE_KEY = "new-blood-fb-config";
 
@@ -34,15 +36,41 @@ export function __setEnvOverrideForTests(env: EnvBag | null): void {
   envOverride = env;
 }
 
+function environment(): EnvBag | undefined {
+  return envOverride ?? (import.meta as ImportMeta & { env?: EnvBag }).env;
+}
+
+export function isDevelopmentFirebaseEnvironment(): boolean {
+  const env = environment();
+  // MODE cannot be overridden by an .env file. The explicit marker also
+  // protects a development-configured build made with --mode production.
+  return env?.MODE === "development" || env?.VITE_FIREBASE_ENVIRONMENT === "development";
+}
+
+/** Runs before SDK initialization and before cached SDK instances are reused. */
+export function assertFirebaseConnectionAllowed(cfg: FirebaseAppConfig): void {
+  if (!isDevelopmentFirebaseEnvironment()) return;
+  if (!isApprovedDevelopmentConfig(cfg)) {
+    throw new Error("Development Firebase configuration does not match the approved silverwick-hollow app.");
+  }
+  // No environment-variable bypass: removing this gate requires a reviewed
+  // change after hosted multiplayer testing is separately authorized.
+  throw new Error(DEVELOPMENT_FIREBASE_LOCKED_MESSAGE);
+}
+
 export function loadFirebaseConfig(): FirebaseAppConfig | null {
   if (isTabletTrial) return null;
   const envCfg = readFromEnv();
+  if (isDevelopmentFirebaseEnvironment()) {
+    return envCfg && isApprovedDevelopmentConfig(envCfg) ? envCfg : null;
+  }
   if (envCfg) return envCfg;
   return readFromStorage();
 }
 
 export function getConfigSource(): ConfigSource {
   if (isTabletTrial) return "none";
+  if (isDevelopmentFirebaseEnvironment()) return loadFirebaseConfig() ? "env" : "none";
   if (readFromEnv()) return "env";
   if (readFromStorage()) return "localStorage";
   return "none";
@@ -54,6 +82,9 @@ export function saveFirebaseConfig(cfg: FirebaseAppConfig): void {
     throw new Error(
       "Invalid Firebase config: apiKey, databaseURL, and projectId are required."
     );
+  }
+  if (isDevelopmentFirebaseEnvironment()) {
+    throw new Error("Development Firebase configuration is fixed by the development build; browser overrides are disabled.");
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
 }
@@ -69,11 +100,7 @@ export function isFirebaseConfigured(): boolean {
 
 function readFromEnv(): FirebaseAppConfig | null {
   // Test override beats real env so localStorage-fallback tests can isolate.
-  const env: EnvBag | undefined =
-    envOverride ??
-    (typeof import.meta !== "undefined"
-      ? (import.meta as ImportMeta & { env?: EnvBag }).env
-      : undefined);
+  const env = environment();
   if (!env) return null;
   const cfg: FirebaseAppConfig = {
     apiKey: env.VITE_FIREBASE_API_KEY ?? "",

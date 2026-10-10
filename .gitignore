@@ -1,5 +1,6 @@
 node_modules
 dist
+dist-development
 dist-ssr
 dist-tablet-trial/
 silverwick-tablet-trial.zip

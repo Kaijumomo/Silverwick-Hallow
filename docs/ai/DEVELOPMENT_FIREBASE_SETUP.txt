@@ -1,0 +1,77 @@
+Silverwick Hollow development Firebase — October 9, 2026
+
+STATE: PROVISIONED AND LOCKED. HOSTED MULTIPLAYER TESTING IS NOT AUTHORIZED.
+
+Project: silverwick-hollow (863800899154)
+Web app: Silverwick Hollow Development
+App ID: 1:863800899154:web:c9dc003334dfc4d547118b
+Database: silverwick-hollow-default-rtdb
+Region: us-central1
+Endpoint: https://silverwick-hollow-default-rtdb.firebaseio.com
+Billing: Spark; no upgrade or billing link was performed.
+
+The default database was created with deny-all Rules. The canonical local
+locked file is src/firebase/development.locked.rules.json. No game Rules were
+published. firebase.development.json points only to this instance and locked
+file. Do not use the general rules:deploy command for this setup: its existing
+configuration targets the application Rules, not the locked development file.
+
+LOCAL DEVELOPMENT SAFEGUARDS
+Use npm run dev:development or npm run build:development. Ordinary npm run dev
+also uses Vite's development mode. The checked-in .env.development contains
+only public client identifiers for the registered development app.
+
+In development mode, or whenever VITE_FIREBASE_ENVIRONMENT=development:
+- Only the exact development project, database URL, API key, app ID, auth
+  domain, storage identifier, and sender ID are accepted.
+- Partial or mixed configuration fails closed. A saved browser configuration
+  is never used as a fallback and cannot override this build's configuration.
+- The same validation runs at initFirebase before SDK initialization or cache
+  reuse, covering callers that bypass normal configuration resolution.
+- Even valid development configuration cannot initialize a hosted SDK client:
+  an unconditional development connection gate remains in place. There is no
+  environment-variable switch to authorize multiplayer testing.
+
+The normal production build path is intentionally unchanged. These safeguards
+apply to development mode/marked builds; they are not a permission boundary
+against someone modifying source or deliberately building a production target.
+No production build, deployment, environment setting, or mobile-botc resource
+was changed by this work. Do not use a production-mode build for testing.
+
+AUTHENTICATION FINDINGS
+src/firebase/session.ts calls initFirebase and ensureAuthUid before connecting
+the room backend. src/firebase/firebaseBackend.ts waits for Auth state and
+reuses a current UID, or calls signInAnonymously when none exists. The reviewed
+application requires anonymous Authentication; it does not require Google,
+email/password, phone, or a custom-token provider. No provider was enabled by
+this setup, and no hosted test user/session was created.
+
+RULES PREPARATION AND VERIFICATION
+- src/firebase/development.locked.rules.json: current deployed deny-all policy.
+- src/firebase/rules.json: existing application policy, unchanged and tested
+  locally as a candidate for a future approved testing phase. It is NOT the
+  currently deployed development policy.
+- npm run test:rules: local demo-silverwick-rules emulator only. The added locked
+  suite rejects root/nested reads and writes for anonymous and authenticated
+  synthetic contexts. Existing suites cover game authorization and privacy.
+- npm run rules:development:verify: no target arguments accepted. Reads only
+  the exact development app/instance metadata and /.settings/rules via the
+  signed-in CLI, compares the Rules to deny-all, and makes one unauthenticated
+  read-denial probe at a reserved development path. It does not write data.
+
+BEFORE ANY FUTURE HOSTED MULTIPLAYER PHASE
+A separate approval and security review must cover:
+1. Enabling the verified anonymous provider only, if still required by the
+   exact source selected for that phase.
+2. Deciding how to restrict an approved test cohort. Anonymous sign-in does not
+   establish product-owner identity; a public web API key is not an access
+   control. Cloudflare Access on previews does not protect Firebase's API.
+3. Reviewing and explicitly publishing development game Rules, including the
+   cohort decision, and validating unauthorized/cross-game/privacy boundaries.
+4. Reviewing removal of the hosted-connection gate while retaining the pinned
+   project/API key/database safeguards and the browser-fallback prohibition.
+5. Using synthetic identities/data, a clearly development-only origin, and
+   any required authorized domains. Never copy production game records.
+
+No billing change, service-account key, broader IAM permission, new auth
+provider, or hosted multiplayer authorization is included in this checkpoint.
