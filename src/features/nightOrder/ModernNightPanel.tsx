@@ -68,6 +68,7 @@ function NightGuide({ game, script, visible, onClose, showClose = false }: Props
   };
   const ability = current ? abilityOf(current) : null;
   const eligible = ability?.kind === "guided" && actor?.participantId && current?.kind === "player"
+    && !current.isDeceived
     && automationEligibility({ query, descriptor: ability.descriptor, actor: bindingOf(actor),
       roleId: current.effectiveRoleId, simulated: current.isDeceived }).kind === "automated"
     && manualAction !== current.stepKey;

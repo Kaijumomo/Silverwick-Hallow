@@ -42,6 +42,8 @@ export function seedTabletTrial(size: TrialSize): void {
     return changeAlignmentIntent(player, registry.alignmentOf(player.actualRole!));
   }) }), "Set sample alignments");
   for (const id of ids) accepted(state().showAssignedRole(id), "Show assigned role");
+  // Explicit fixture author choice, never a default target in real setup.
+  accepted(state().setSetupRedHerring({ playerId: ids[2]!, participantId: state().game!.players[ids[2]!]!.participantId! }), "Prepare sample Red Herring");
   accepted(state().revealRoles(), "Reveal sample roles");
   accepted(state().beginNightOne(), "Begin sample game");
   accepted(state().advancePhase(), "Day 1");
@@ -86,6 +88,7 @@ export function seedShellDesignTrial(): void {
   const registry = buildRegistry(state().customScripts[id]!);
   accepted(state().resolveAlignments({ intents: ids.map((playerId, i) => changeAlignmentIntent(state().game!.players[playerId]!, travelers.has(i) ? "good" : registry.alignmentOf(roles[i]!))) }), "Set design alignments");
   for (const playerId of ids) accepted(state().showAssignedRole(playerId), "Show design role");
+  accepted(state().setSetupRedHerring({ playerId: ids[10]!, participantId: state().game!.players[ids[10]!]!.participantId! }), "Prepare design Red Herring");
   accepted(state().revealRoles(), "Reveal design roles");
   accepted(state().beginNightOne(), "Begin design game");
   accepted(state().advancePhase(), "Design Day 1");

@@ -5,6 +5,7 @@ import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
 import { effectSemanticsOf } from "@/stores/rulesQuery";
 import { incompleteSuccessionReason } from "./completeActionSafety";
+import { fortuneTellerSetupRefusal } from "./characters/fortuneTellerSetupFact";
 
 export type AutomationEligibility = { kind: "automated" } | { kind: "manual"; reason: string };
 export type AutomationContext = {
@@ -41,6 +42,10 @@ export function automationEligibility({ query, descriptor, actor, roleId, simula
   const role = query.roleOf(roleId);
   const player = query.participant(actor);
   if (!role || !isCanonicalRole(role) || !descriptor.evaluator || !player) return manual("This action is not fully modeled.");
+  if (roleId === "fortuneteller" && !simulated) {
+    const refusal = fortuneTellerSetupRefusal(query, actor);
+    if (refusal) return manual(refusal);
+  }
   const coverage = interactionCoverageEligibility(query);
   if (coverage.kind === "manual") return coverage;
   if (descriptor.hooks.includes("death") && Object.values(query.game.players).filter(p => !p.isEmpty && p.alive && query.roleOf(p.actualRole)?.type === "demon").length > 1) return manual("Death interactions with multiple living Demons are not fully modeled.");

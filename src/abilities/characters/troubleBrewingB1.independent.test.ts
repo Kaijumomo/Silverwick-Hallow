@@ -6,11 +6,12 @@ import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { projectLobbyToPublic, projectLobbyToSelfMap } from "@/stores/projections";
 import { participantStepKey } from "@/stores/nightProgress";
 import type { StorytellerLobbyRecord } from "@/stores/types";
+import { withRedHerring } from "@/test/redHerringFixture";
 
 // Independent examples derived from the official Spy, Recluse, States,
 // Fortune Teller, Imp and Scarlet Woman almanac entries. Registration is a
 // per-interaction answer, never a replacement for Actual Role or Alignment.
-const ft = () => impair(proofGame(["fortuneteller", "spy", "recluse", "imp", "chef", "monk"]), "p5", "fortuneTellerRedHerring");
+const ft = () => withRedHerring(proofGame(["fortuneteller", "spy", "recluse", "imp", "chef", "monk"]), "p5");
 const ftRequest = (g: StorytellerLobbyRecord, a = "p1", b = "p4") => request(g, "p0", "fortuneteller", { targets: pick(g, a, b) }, { withStep: true, completeStep: true });
 const answer = (g: StorytellerLobbyRecord) => g.informationDeliveries.at(-1)?.values?.find(v => v.requirementId === "isDemon");
 

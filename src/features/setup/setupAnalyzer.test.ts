@@ -8,6 +8,7 @@ import { canonicalRoles } from "@/data/canonical";
 import { buildRegistry } from "@/data/roleRegistry";
 import { assignedBagIsCoherent } from "./setupRefinement";
 import type { RoleDef, StorytellerLobbyRecord, Script } from "@/stores/types";
+import { withRedHerring } from "@/test/redHerringFixture";
 
 // Composition/provenance/structural analysis is this file's concern, not deal
 // policy (covered in setupCommands.test.ts), so games analyzed here are
@@ -27,7 +28,9 @@ describe("normalized setup population", () => {
     expect(a.readiness.begin.ok).toBe(false);
   });
   it.each(Array.from({length:11},(_,i)=>i+5))("%i-player baseline", count => {
-    const a=analyze(setupGame(standardRoles(count)));
+    const game = setupGame(standardRoles(count));
+    const teller = Object.values(game.players).find(player => player.actualRole === "fortuneteller");
+    const a = analyze(teller ? withRedHerring(game, teller.id, teller.id) : game);
     expect(a.assigned.actual).toEqual(SETUP_COUNTS[count]);
     expect(a.assigned.candidates).toEqual([SETUP_COUNTS[count]]);
     expect(a.readiness.begin.ok).toBe(true);

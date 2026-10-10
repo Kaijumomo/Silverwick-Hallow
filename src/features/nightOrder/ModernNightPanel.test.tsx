@@ -30,6 +30,22 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
+it.each(["empath", "fortuneteller", "monk"])("Drunk shown as %s uses official instructions and Next without a simulated action workspace", shownRole => {
+  const next = proofGame(["drunk", "chef", "imp", "soldier", "poisoner"]);
+  next.players.p0 = { ...next.players.p0!, shownRole, shownAlignment: "good", behaviorMode: "drunk_fake_role_behavior" };
+  store.setState({ game: next });
+  useShellStore.getState().setNightCursor({ day: next.day, stepKey: participantStepKey(next.players.p0.participantId!, shownRole) });
+  render(<Guide />);
+  expect(screen.getByRole("article", { name: new RegExp("Current action:") })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Continue action" })).not.toBeInTheDocument();
+  expect(useTargetPicker.getState().active).toBeNull();
+  const before = game();
+  fireEvent.click(screen.getByRole("button", { name: "Next ›" }));
+  expect(game().informationDeliveries).toEqual(before.informationDeliveries);
+  expect(game().players).toEqual(before.players);
+  expect(game().nightProgress[`${next.day}:${participantStepKey(next.players.p0.participantId!, shownRole)}`]?.status).toBe("done");
+});
+
 it("resolves a direct board target once and waits for Next after commit", () => {
   render(<Guide />);
   expect(current()).toBe(key("p0"));

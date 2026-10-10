@@ -22,6 +22,7 @@ import { bind, impair, num, patchPlayer, pick, plan, planned, proofEnv, proofGam
 import { CONSENT, DEATH_CONSEQUENCE } from "./harlot";
 import { choiceId } from "./alhadikhia";
 import { COMMUNICATED } from "./fortuneteller";
+import { withRedHerring } from "@/test/redHerringFixture";
 import { subjectId } from "./shared";
 import type { AbilityInputValue } from "@/abilities/semantics";
 import type { StorytellerLobbyRecord } from "@/stores/types";
@@ -153,7 +154,7 @@ describe("SOL-10F-A1 -- evaluator follow-ups are bound to their subject (coordin
   });
 
   it("a Fortune Teller's communicated answer is bound to the chosen pair", () => {
-    const g = impair(proofGame(["fortuneteller", "imp", "chef", "monk", "recluse", "poisoner", "empath"], "night", 2), "p0");
+    const g = withRedHerring(impair(proofGame(["fortuneteller", "imp", "chef", "monk", "recluse", "poisoner", "empath"], "night", 2), "p0"), "p3");
     const forPair = subjectId(COMMUNICATED, bind(g, "p1"), bind(g, "p2"));
     expect(requirementIds(plan(g, request(g, "p0", "fortuneteller", { targets: pick(g, "p2", "p3"), [forPair]: yes() }))))
       .toEqual([subjectId(COMMUNICATED, bind(g, "p2"), bind(g, "p3"))]);

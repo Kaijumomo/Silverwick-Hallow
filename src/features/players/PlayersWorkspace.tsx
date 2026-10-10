@@ -2,7 +2,8 @@ import { InfoPanel } from "@/features/info/InfoPanel";
 import { InfoPresentationBoundary, useShowPlayerPresentation } from "@/features/info/InfoPresentationBoundary";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ReferenceWorkspace } from "@/features/almanac/ReferenceWorkspace";
-import { useStorytellerStore, selectScriptById, type SeatSwapLayout } from "@/stores/storytellerStore";
+import { captureCharacterActionContext, useStorytellerStore, selectScriptById, type SeatSwapLayout, type CharacterActionContext } from "@/stores/storytellerStore";
+import { RedHerringPreparation, useRedHerringSelection } from "@/features/setup/RedHerringPreparation";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { iconUrlFor } from "@/data/iconUrl";
 import { resolvedCharacters } from "@/data/roleRegistry";
@@ -27,7 +28,7 @@ import { RoleChooser } from "./RoleChooser";
 import { PlayerPopover } from "./PlayerPopover";
 import type { RoleDef, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 
-type Chooser = { kind: "distribute"; game: StorytellerLobbyRecord } |
+type Chooser = { kind: "distribute"; game: StorytellerLobbyRecord; actionContext: CharacterActionContext } |
   { kind: "choose"; game: StorytellerLobbyRecord; player: STPlayerRecord };
 
 /** Coordinates presentation only; mutations use the existing store commands. */
@@ -45,6 +46,7 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
   supplementalInfo?: ReactNode; onDiscardSetup?: () => void;
 }) {
   const state = useStorytellerStore();
+  const actionContext = captureCharacterActionContext();
   const game = state.game;
   const privacy = usePrivacyStore(s => s.enabled);
   const script = game ? selectScriptById(state, game.scriptId) : undefined;
@@ -63,6 +65,8 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
   const showPlayer = useShowPlayerPresentation();
   const showPlayerReturn = useRef<HTMLElement | null>(null);
   const definitions = useMemo(() => script ? resolvedCharacters(script) : [], [script]);
+  const setupContext = useMemo(() => game && script && enabled ? selectSetupContext(game, script) : undefined, [game, script, enabled]);
+  const redHerringSelection = useRedHerringSelection(setupContext);
   useEffect(() => {
     if (privacy || !enabled || game?.phase === "ended") {
       if (privacy && enabled) useStorytellerStore.getState().selectPlayer(null);
@@ -89,7 +93,7 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
   const report = (result: { ok: boolean; message?: string }) => setError(result.ok ? null : result.message ?? "Review setup before continuing.");
   const openDistribute = () => {
     setDraft(isPostDeal(game) ? [...context.assigned] : [...game.rolePool]);
-    setChooser({ kind: "distribute", game }); setError(null); state.selectPlayer(null);
+    setChooser({ kind: "distribute", game, actionContext }); setError(null); state.selectPlayer(null);
   };
   const openChoose = (player: STPlayerRecord) => { setError(null); setChooser({ kind: "choose", game, player }); };
   const choose = (roleId: string) => {
@@ -114,7 +118,7 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
     if (chooser?.kind !== "distribute") return;
     const current = useStorytellerStore.getState();
     if (current.game !== chooser.game) { setError("The roster or setup changed. Close and reopen Distribute Roles to review it."); return; }
-    const result = current.dealRolePool(draft);
+    const result = current.dealRolePool(draft, chooser.actionContext);
     report(result);
     if (result.ok) { setChooser(null); setNotice("Roles distributed privately. Review preparation before revealing."); }
   };
@@ -167,10 +171,11 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
           <p>{setup.message}</p>
           {isPostDeal(game) && !isInitialRevealComplete(game) && <>
             {setup.revealReadiness?.pendingIds.map(id => <button className="btn btn-sm" key={id} onClick={() => { dismiss(); state.selectPlayer(id); onMore(id); }}>Prepare {game.players[id]?.name || "player"}</button>)}
-            <button className="btn btn-gold" disabled={!setup.revealReadiness?.ready} onClick={() => report(state.revealRoles())}>Reveal Roles</button>
+            <button className="btn btn-gold" disabled={!setup.revealReadiness?.ready} onClick={() => report(state.revealRoles(actionContext))}>Reveal Roles</button>
           </>}
-          {isInitialRevealComplete(game) && <><PrivateRevealReadiness game={game} live={!!state.lobby} /><button className="btn btn-gold" onClick={() => report(state.beginNightOne())}>Begin Night 1</button></>}
-          <button className="players-text-button" onClick={() => setDetails(true)}>Setup details &amp; modifiers</button>
+          {isPostDeal(game) && <RedHerringPreparation context={context} selection={redHerringSelection} onChoose={dismiss} />}
+          {isInitialRevealComplete(game) && <><PrivateRevealReadiness game={game} live={!!state.lobby} /><button className="btn btn-gold" onClick={() => report(state.beginNightOne(actionContext))}>Begin Night 1</button></>}
+          <button className="players-text-button" onClick={() => { dismiss(); setDetails(true); }}>Setup details &amp; modifiers</button>
         </section>}
         {error && !chooser && !adding && <p role="alert" className="field-error">{error}</p>}
         </div>
@@ -188,7 +193,7 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
           const refusal = showPlayer(selected, showPlayerReturn); if (refusal) setNotice(refusal); else state.selectPlayer(null);
         }}
         onSwapSeats={() => { useTargetPicker.getState().cancel(); setSwap(selected); state.selectPlayer(null); }} />}
-      {!privacy && notice && <div className="players-notice" role="status">{notice}<button aria-label="Dismiss message" onClick={() => setNotice("")}>×</button></div>}
+      {!privacy && (notice || redHerringSelection.error) && <div className="players-notice" role="status">{redHerringSelection.error || notice}<button aria-label="Dismiss message" onClick={() => { setNotice(""); redHerringSelection.clearError(); }}>×</button></div>}
     </ReferenceWorkspace>
     {!privacy && !ended && chooser?.kind === "distribute" && <RoleChooser mode="distribute" roles={ordinary} scriptName={script.name} selected={draft}
       residents={context.population.targetNonTravelerCount ?? context.ordinary.length} travelers={context.travelers.length} required={required}
@@ -200,7 +205,7 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
     {!privacy && !ended && chooser?.kind === "choose" && <RoleChooser mode="choose" scriptName={script.name}
       roles={chooser.player.isTraveler ? [...TRAVELERS] : ordinary} player={{ id: chooser.player.id, name: chooser.player.name, seat: chooser.player.seat + 1, roleId: chooser.player.actualRole }}
       holders={holderNames} allowSwap={!chooser.player.isTraveler && canRefineSetup(game).ok} onChoose={choose} onClose={() => setChooser(null)} error={error ?? undefined} />}
-    {!privacy && !ended && details && <Modal title="Setup details" onClose={() => setDetails(false)} className="players-setup-details"><SetupPanel game={game} script={script} generatedRoleIds={generatedRoleIds} onGeneratedRoleIdsChange={setGeneratedRoleIds} onClose={() => setDetails(false)} /></Modal>}
+    {!privacy && !ended && details && <Modal title="Setup details" onClose={() => setDetails(false)} className="players-setup-details"><SetupPanel game={game} script={script} generatedRoleIds={generatedRoleIds} onGeneratedRoleIdsChange={setGeneratedRoleIds} redHerringSelection={redHerringSelection} onClose={() => setDetails(false)} /></Modal>}
     {!privacy && !ended && waitingSeat && <SeatAssignPopup seatPlayerId={waitingSeat} seatNumber={(game.players[waitingSeat]?.seat ?? 0) + 1} backend={backend} code={state.lobby?.code ?? ""} onClose={() => setWaitingSeat(null)} onRemoveSeat={() => { state.removePlayer(waitingSeat); setWaitingSeat(null); }} />}
     {!privacy && !ended && adding && <Modal title="Add Player" onClose={() => setAdding(false)}><form className="players-add" onSubmit={event => { event.preventDefault(); add(); }}>
       <label>Player name<input maxLength={20} className="input" value={name} onChange={event => setName(event.target.value)} autoComplete="off" /></label>

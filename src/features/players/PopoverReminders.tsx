@@ -3,7 +3,7 @@ import { iconUrlFor } from "@/data/iconUrl";
 import { buildRegistry } from "@/data/roleRegistry";
 import { captureVotingContext, selectScriptById, useStorytellerStore } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
-import { officialEffectPresentation, type OfficialEffectToken } from "@/features/reminders/officialReminderPresentation";
+import { officialEffectPresentation, redHerringNotationCovered, type OfficialEffectToken } from "@/features/reminders/officialReminderPresentation";
 import { currentVotingState } from "@/stores/voting";
 import type { ReminderIntent } from "@/stores/reminderResolution";
 import type { RoleDef, STPlayerRecord } from "@/stores/types";
@@ -88,7 +88,7 @@ export function PopoverReminders({ player }: { player: STPlayerRecord }) {
         <span>{removal.armedId === `effect:${token.key}` ? "Tap to remove" : `${token.label}${token.instances.length > 1 ? ` ×${token.instances.length}` : ""}`}</span>
         <span id={`${notationHelpId}-effect-${token.key}`} className="sr-only">{token.detail}</span>
       </button>)}
-      {player.reminders.map(reminder => <button type="button" key={reminder.id} className="popover-reminder-choice popover-placed-reminder"
+      {player.reminders.filter(reminder => !redHerringNotationCovered(reminder, effects.tokens)).map(reminder => <button type="button" key={reminder.id} className="popover-reminder-choice popover-placed-reminder"
         data-removal-armed={removal.armedId === `notation:${reminder.id}` || undefined}
         data-reminder-kind={linkedModifier(reminder.id) ? "effect" : "notation"}
         aria-describedby={`${notationHelpId}-${reminder.id}${linkedModifier(reminder.id) ? "" : ` ${notationHelpId}`}`}

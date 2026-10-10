@@ -345,6 +345,8 @@ describe("setFabled", () => {
     // Initial ordinary distribution is always the randomized deal.
     expect(useStorytellerStore.getState().dealRolePool().ok).toBe(true);
     for (const id of useStorytellerStore.getState().game!.seatOrder) useStorytellerStore.getState().showAssignedRole(id);
+    const teller = Object.values(useStorytellerStore.getState().game!.players).find(p => p.actualRole === "fortuneteller")!;
+    expect(useStorytellerStore.getState().setSetupRedHerring({ playerId: teller.id, participantId: teller.participantId! }).ok).toBe(true);
     expect(useStorytellerStore.getState().revealRoles().ok).toBe(true);
     expect(useStorytellerStore.getState().advancePhase().ok).toBe(true);
     const game = useStorytellerStore.getState().game!;

@@ -28,7 +28,7 @@ import { lifeAccessibleLabel, lifeStatusOf } from "@/stores/lifeState";
 import { LifeShroud, LifeStateText, VoteToken } from "@/features/life/LifeMarks";
 import { abilityUsedMarker, actualAlignmentMarker } from "./tokenMarkers";
 import { OfficialReminderToken } from "@/features/reminders/OfficialReminderToken";
-import { officialEffectPresentation, officialNotationRole } from "@/features/reminders/officialReminderPresentation";
+import { officialEffectPresentation, officialNotationRole, redHerringNotationCovered } from "@/features/reminders/officialReminderPresentation";
 import { createRulesQuery } from "@/stores/rulesQuery";
 import {
   cleanupStatusText,
@@ -217,7 +217,8 @@ function Token({
   const customSatellites = modern && spec.tier !== "XS" ? reminderGroups.slice(0, 3) : [];
   const satellites = [
     ...(officialEffects?.tokens ?? []).map(token => ({ key: `effect:${token.key}`, role: token.role as RoleDef | null, label: token.label, count: token.instances.length, notation: false, status: null as string | null, detail: token.detail })),
-    ...[...officialNotes.entries()].map(([key, token]) => ({ key: `notation:${key}`, ...token, notation: true, status: null as string | null, detail: undefined })),
+    ...[...officialNotes.entries()].filter(([, token]) => !redHerringNotationCovered({ sourceCharacter: token.role.id, label: token.label }, officialEffects?.tokens ?? []))
+      .map(([key, token]) => ({ key: `notation:${key}`, ...token, notation: true, status: null as string | null, detail: undefined })),
     ...customSatellites.map(group => ({ key: `custom:${group.label}`, role: null, label: group.label, count: group.instances.length, notation: true, status: cleanupStatusText(group.status), detail: undefined })),
   ];
   const reminderCount = modern && spec.tier !== "XS"

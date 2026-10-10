@@ -100,7 +100,8 @@ async function openLobby(b: MemoryRoomBackend): Promise<Lobby> {
  * late arrival, served by a real managed session. */
 async function liveGameWithArrivalSeat(b: MemoryRoomBackend, lobby: Lobby) {
   store().newGame("tb", { plannedPlayerCount: 5 });
-  store().setLobby(lobby);
+  // Complete local setup before attaching the real managed writer below.
+  // A declared live lobby without its writer cannot authorize setup changes.
   for (const name of ["Ann", "Ben", "Cat", "Dan", "Eli"]) store().addPlayerToSeat(name);
   store().setRolePool(["washerwoman", "librarian", "chef", "poisoner", "imp"]);
   expect(store().dealRolePool().ok).toBe(true);
@@ -108,6 +109,7 @@ async function liveGameWithArrivalSeat(b: MemoryRoomBackend, lobby: Lobby) {
   expect(store().revealRoles().ok).toBe(true);
   expect(store().beginNightOne().ok).toBe(true);
   store().addEmptySeat();
+  store().setLobby(lobby);
   const seat = game().seatOrder[game().seatOrder.length - 1]!;
   expect(game().players[seat]).toMatchObject({ isEmpty: true });
   return { seat, ...(await session(b, lobby)) };

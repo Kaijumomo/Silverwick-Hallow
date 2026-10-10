@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Modal } from "@/components/Modal";
-import { useStorytellerStore } from "@/stores/storytellerStore";
+import { captureCharacterActionContext, useStorytellerStore } from "@/stores/storytellerStore";
+import { RedHerringPreparation, type RedHerringSelection } from "./RedHerringPreparation";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { analyzeSetup } from "./setupAnalyzer";
 import { selectSetupContext } from "./setupContext";
@@ -23,11 +24,13 @@ type Props = { game: StorytellerLobbyRecord; script: Script; onClose: () => void
    * pool as Storyteller-intentional, never silently replacing roles. */
   generatedRoleIds?: RoleId[];
   onGeneratedRoleIdsChange?: (ids: RoleId[]) => void;
+  redHerringSelection?: RedHerringSelection;
 };
 
 export function SetupPanel({ game, script, onClose, foreground = false, returnFocusRef,
-  generatedRoleIds = [], onGeneratedRoleIdsChange = () => {} }: Props) {
+  generatedRoleIds = [], onGeneratedRoleIdsChange = () => {}, redHerringSelection }: Props) {
   const store = useStorytellerStore();
+  const actionContext = captureCharacterActionContext();
   const hidden = usePrivacyStore(s => s.enabled);
   const [editing, setEditing] = useState(false);
   const [editingBag, setEditingBag] = useState(false);
@@ -62,11 +65,11 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
     if (view.next === "roles") { setEditing(true); return; }
     if (view.next === "review") { openReview(); return; }
     if (view.next === "reveal") {
-      const result = store.revealRoles();
+      const result = store.revealRoles(actionContext);
       setError(result.ok ? null : result.message ?? "Setup changed. Review the next step before continuing.");
       return;
     }
-    const result = view.next === "deal" ? store.dealRolePool() : store.beginNightOne();
+    const result = view.next === "deal" ? store.dealRolePool(undefined, actionContext) : store.beginNightOne(actionContext);
     setError(result.ok ? null : "Setup changed. Review the next step before continuing.");
   };
   const shuffleRoles = () => {
@@ -126,6 +129,7 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
       {error && <p role="alert" className="field-error">{error}</p>}
     </div>
     {stage === "prepare" && !editingBag && <PreparationRows game={game} pendingIds={view.revealReadiness?.pendingIds ?? []} />}
+    {view.dealt && !editingBag && <RedHerringPreparation context={context} selection={redHerringSelection} onChoose={redHerringSelection ? onClose : undefined} />}
     {stage === "reveal" && <PrivateRevealReadiness game={game} live={!!store.lobby} />}
     {view.next === "reveal" && !editingBag && (
       <div className="setup-refine-toolbar">

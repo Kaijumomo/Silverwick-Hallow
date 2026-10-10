@@ -41,6 +41,8 @@ function realV17Game(): StorytellerLobbyRecord {
   state().setRolePool(["washerwoman", "fortuneteller", "investigator", "chef", "empath", "poisoner", "imp"]);
   expect(state().dealRolePool().ok).toBe(true);
   for (const id of game().seatOrder) state().showAssignedRole(id);
+  const teller = Object.values(game().players).find(p => p.actualRole === "fortuneteller")!;
+  expect(state().setSetupRedHerring({ playerId: teller.id, participantId: teller.participantId! }).ok).toBe(true);
   expect(state().revealRoles().ok).toBe(true);
   expect(state().beginNightOne().ok).toBe(true);
   const alice = idOf("Alice");

@@ -75,6 +75,8 @@ function aliceThenBob() {
     if (holder !== idOf(name)) expect(store().swapSetupRoles(idOf(name), holder).ok).toBe(true);
   }
   for (const id of game().seatOrder) store().showAssignedRole(id);
+  const teller = Object.values(game().players).find(p => p.actualRole === "fortuneteller")!;
+  expect(store().setSetupRedHerring({ playerId: teller.id, participantId: teller.participantId! }).ok).toBe(true);
   expect(store().revealRoles().ok).toBe(true);
   expect(store().beginNightOne().ok).toBe(true);
   const P = idOf("Alice");

@@ -29,6 +29,8 @@ function setup() {
   expect(store.getState().dealRolePool().ok).toBe(true);
   for (const id of store.getState().game!.seatOrder) store.getState().showAssignedRole(id);
   expect(store.getState().revealRoles().ok).toBe(true);
+  const teller = Object.values(store.getState().game!.players).find(player => player.actualRole === "fortuneteller")!;
+  expect(store.getState().setSetupRedHerring({ playerId: teller.id, participantId: teller.participantId! }).ok).toBe(true);
   expect(store.getState().advancePhase().ok).toBe(true);
 }
 it("custom steps can be added, edited, completed, and restored across remount without sending information", () => {

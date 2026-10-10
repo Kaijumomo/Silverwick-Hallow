@@ -1,4 +1,6 @@
 import { shownRoleFilter } from "@/stores/identity";
+import { isCanonicalRole } from "@/data/canonical";
+import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import type { PlayerId, STPlayerRecord } from "@/stores/types";
 import type { SetupContext } from "./setupContext";
 
@@ -11,11 +13,27 @@ export type RevealReadiness = {
   pendingIds: PlayerId[];
 };
 
+/** Ordinary Trouble Brewing has one of each character token. The Drunk's
+ * substitute must therefore be an unused Townsfolk. Modifier/custom setup
+ * exceptions remain Storyteller-controlled rather than inferred here. */
+export function conflictingDrunkDisguise(context: SetupContext): STPlayerRecord | undefined {
+  const { game, script, ordinary } = context;
+  if (game.phase !== "setup" || game.day !== 0 || game.fabled.length || game.lorics.length ||
+    !script || script.characters.length !== troubleBrewing.characters.length ||
+    !script.characters.every(role => isCanonicalRole(role) && troubleBrewing.characters.some(tb => tb.id === role.id))) return;
+  const drunks = ordinary.filter(player => player.actualRole === "drunk");
+  if (drunks.length !== 1) return;
+  const drunk = drunks[0]!;
+  return drunk.shownRole && ordinary.some(player => player.id !== drunk.id && player.actualRole === drunk.shownRole)
+    ? drunk : undefined;
+}
+
 function playerRevealReady(p: STPlayerRecord, context: SetupContext): boolean {
   if (!p.actualRole || !p.shownRole) return false;
   const shownDef = context.registry?.get(p.shownRole);
   if (!shownDef) return false;
   const filter = shownRoleFilter(p.behaviorMode);
+  if (conflictingDrunkDisguise(context)?.id === p.id) return false;
   return !filter || filter(shownDef);
 }
 

@@ -52,6 +52,8 @@ function liveGame(roles: Partial<Record<Name, string>> = { Alice: "washerwoman",
   expect(state().dealRolePool().ok).toBe(true);
   for (const [name, role] of Object.entries(roles)) placeRole(idOf(name), role);
   for (const id of game().seatOrder) state().showAssignedRole(id);
+  const teller = Object.values(game().players).find(p => p.actualRole === "fortuneteller")!;
+  expect(state().setSetupRedHerring({ playerId: teller.id, participantId: teller.participantId! }).ok).toBe(true);
   expect(state().revealRoles().ok).toBe(true);
   expect(state().beginNightOne().ok).toBe(true);
 }

@@ -7,6 +7,7 @@ import { MAX_NIGHT_STEP_NOTES, MAX_ST_NOTES, StorytellerGamePersistedSchema, Sto
 import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { manualEffectId } from "./effects";
+import { redHerringSetup, RED_HERRING_EFFECT } from "@/features/setup/redHerringSetup";
 import { cloneOwned, historyId, type MutationContext, sameSnapshot } from "./history";
 import {
   applyEffectPlan,
@@ -473,11 +474,12 @@ export type StorytellerStore = {
   sync: SyncMeta | null;
 
   newGame: (scriptId: string, opts?: NewGameOpts) => void;
-  dealRolePool: (stagedPool?: RoleId[]) => SetupCommandResult;
+  dealRolePool: (stagedPool?: RoleId[], actionContext?: CharacterActionContext) => SetupCommandResult;
   /** Explicitly publishes the private Deal to players. Never required to be
    * online: a local/offline game still records that the Storyteller
    * completed the initial reveal step. See revealReadiness.ts. */
-  revealRoles: () => SetupCommandResult;
+  revealRoles: (actionContext?: CharacterActionContext) => SetupCommandResult;
+  setSetupRedHerring: (target: EffectParticipantBinding, actionContext?: CharacterActionContext) => EffectCommandResult;
   // --- Pre-Reveal Setup refinement (Phase 9 Setup finalization B3) -------
   // Administration of the private Deal only — available strictly between a
   // completed initial Deal and a completed initial Reveal (see
@@ -501,7 +503,7 @@ export type StorytellerStore = {
    * removed are reassigned, deterministically, to the newly added
    * occurrences. Never a full reshuffle. */
   applyEditedBag: (stagedRoleIds: RoleId[]) => SetupCommandResult;
-  beginNightOne: () => SetupCommandResult;
+  beginNightOne: (actionContext?: CharacterActionContext) => SetupCommandResult;
   setPlannedPlayerCount: (count: number) => void;
   setRolePool: (roles: RoleId[]) => void;
   endGame: () => void;
@@ -1492,6 +1494,9 @@ type StorytellerPatch =
 export const useStorytellerStore = create<StorytellerStore>()(
   persist(
     (rawSet, get) => {
+      // Only the durable commit seam may publish this exact prepared object.
+      // Identity tokens must not be minted again after its bytes are saved.
+      let preparedAuthoritativeGame: StorytellerLobbyRecord | null = null;
       // Central, reviewable game-mutation mechanism (Phase 9C.2A, section 2):
       // every existing action below still calls plain `set(...)` — this
       // shadows that name for the rest of the creator closure, so no
@@ -1544,8 +1549,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
             if (!terminal) clearTerminalJournal();
           }
           if (!skip && "game" in patch && patch.game !== state.game && patch.game != null) {
-            const revealed = withRevealTokens(state.game, patch.game, registryForGame(state, patch.game));
-            const game = state.game ? reconcileVotingDependencies(state.game, revealed) : revealed;
+            const revealed = patch.game === preparedAuthoritativeGame ? patch.game
+              : withRevealTokens(state.game, patch.game, registryForGame(state, patch.game));
+            const game = patch.game === preparedAuthoritativeGame ? revealed
+              : state.game ? reconcileVotingDependencies(state.game, revealed) : revealed;
             return { ...patch, game, localSeq: state.localSeq + 1 };
           }
           return patch;
@@ -1577,8 +1584,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
           return "This device could not save the change. Free browser storage or allow site storage, then try again. Nothing was recorded.";
         }
         prewrittenVotingSave = { name: STORE_KEY, value };
+        preparedAuthoritativeGame = prepared;
         try { set({ game: prepared, undoStack, seatSwapUndo, localLayoutUndo }); }
-        finally { prewrittenVotingSave = null; }
+        finally { prewrittenVotingSave = null; preparedAuthoritativeGame = null; }
         return null;
       };
       /** Ending/reopening must be durable before any subscriber sees success. */
@@ -1705,9 +1713,12 @@ export const useStorytellerStore = create<StorytellerStore>()(
         set({ game, lobby: null, pendingKnocks: [], view: "game", undoStack: [], selectedPlayerId: null, ...endedTerminalIntent(get()) });
       },
 
-      dealRolePool: (stagedPool) => {
-        const { game, undoStack } = get();
+      dealRolePool: (stagedPool, actionContext) => {
+        const state = get();
+        const { game } = state;
         if (!game) return { ok: false, message: "No game is open." };
+        const refusal = characterActionRefusal(state, actionContext);
+        if (refusal) return { ok: false, message: refusal };
         // The centered chooser stages its draft locally. Validate and deal it
         // in one commit so Cancel is inert and Undo restores the whole deal.
         if (stagedPool && (game.phase !== "setup" || isInitialRevealComplete(game)))
@@ -1735,9 +1746,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           newPlayers[playerId] = freshAssignment(existing, shuffled[idx]!, registry);
         });
 
-        set({
-          undoStack: pushUndo(game, undoStack),
-          game: {
+        const unsafe = commitAuthoritativeState({
             ...game,
             players: newPlayers,
             rolePool: [],
@@ -1745,14 +1754,17 @@ export const useStorytellerStore = create<StorytellerStore>()(
             // Deal establishes Storyteller truth only; every fresh initial
             // deal requires its own explicit Reveal before publication.
             setupRolesRevealed: false,
-          },
-        });
+          }, state, votingAuthorityToken(state.lobby)!);
+        if (unsafe) return { ok: false, message: unsafe };
         return { ok: true };
       },
 
-      revealRoles: () => {
-        const { game, undoStack } = get();
+      revealRoles: (actionContext) => {
+        const state = get();
+        const { game } = state;
         if (!game) return { ok: false, message: "No game is open." };
+        const refusal = characterActionRefusal(state, actionContext);
+        if (refusal) return { ok: false, message: refusal };
         if (game.phase !== "setup") return { ok: false, message: "This game is no longer in setup." };
         if (!isPostDeal(game)) return { ok: false, message: "Deal the pool before revealing roles." };
         const script = selectScriptById(get(), game.scriptId);
@@ -1776,8 +1788,30 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // Phase 9R.4 (B8): re-revealing an already-revealed Setup would
         // commit an identical game. Every refusal above is unchanged.
         if (game.setupRolesRevealed === true) return { ok: true };
-        set({ undoStack: pushUndo(game, undoStack), game: { ...game, setupRolesRevealed: true } });
+        const unsafe = commitAuthoritativeState({ ...game, setupRolesRevealed: true }, state, votingAuthorityToken(state.lobby)!);
+        if (unsafe) return { ok: false, message: unsafe };
         return { ok: true };
+      },
+
+      setSetupRedHerring: (target, actionContext) => {
+        const state = get();
+        const refusal = characterActionRefusal(state, actionContext);
+        if (refusal) return { ok: false, code: "stale", message: refusal };
+        const game = state.game!;
+        if (game.phase !== "setup" || game.day !== 0 || !isPostDeal(game))
+          return { ok: false, code: "invalid", message: "Prepare the Red Herring after dealing roles during initial setup." };
+        const context = selectSetupContext(game, selectScriptById(state, game.scriptId));
+        const preparation = redHerringSetup(context);
+        if (preparation.status !== "missing" || !preparation.required)
+          return { ok: false, code: "invalid", message: "Use Undo or the existing effect controls to correct the Red Herring." };
+        if (!preparation.eligible.some(player => player.playerId === target?.playerId && player.participantId === target?.participantId))
+          return { ok: false, code: "invalid", message: "Choose a currently seated good player." };
+        const teller = context.ordinary.find(player => player.actualRole === "fortuneteller")!;
+        return get().resolveEffects({ intents: [{ kind: "apply", target,
+          effect: { type: RED_HERRING_EFFECT, lifetime: { kind: "manual" }, parameters: {
+            fortuneTeller: { kind: "participant", participants: [{ playerId: teller.id, participantId: teller.participantId! }] },
+            fortuneTellerIdentityEpoch: { kind: "text", value: teller.packetEpoch ?? "" },
+          } } }] }, actionContext);
       },
 
       shuffleSetupRoles: () => {
@@ -1884,9 +1918,12 @@ export const useStorytellerStore = create<StorytellerStore>()(
         return { ok: true };
       },
 
-      beginNightOne: () => {
-        const { game, undoStack } = get();
+      beginNightOne: (actionContext) => {
+        const state = get();
+        const { game } = state;
         if (!game) return { ok: false, message: "No game is open." };
+        const refusal = characterActionRefusal(state, actionContext);
+        if (refusal) return { ok: false, message: refusal };
         const context = selectSetupContext(game, selectScriptById(get(), game.scriptId));
         const analysis = analyzeSetup(context);
         const ready = analysis.readiness.begin;
@@ -1905,14 +1942,12 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // participants enter Night 1 with canonical starting life state in
         // this SAME commit -- no Life Event, no History, one Undo entry that
         // holds the exact pre-start Setup snapshot.
-        set({
-          undoStack: pushUndo(game, undoStack),
-          game: { ...game, phase: "night", day: 1,
+        const unsafe = commitAuthoritativeState({ ...game, phase: "night", day: 1,
             players: canonicalizeStartingLife(game.players),
             lifeEventWindow: pruneLifeEventWindow(game.lifeEventWindow, "night", 1),
             ...(game.startingNonTravelerCount === undefined && game.day === 0
-              ? { startingNonTravelerCount: context.population.occupiedNonTravelerCount } : {}) },
-        });
+              ? { startingNonTravelerCount: context.population.occupiedNonTravelerCount } : {}) }, state, votingAuthorityToken(state.lobby)!);
+        if (unsafe) return { ok: false, message: unsafe };
         return { ok: true };
       },
 

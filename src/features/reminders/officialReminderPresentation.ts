@@ -14,11 +14,13 @@ export type OfficialEffectToken = {
 };
 
 // Presentation mappings only. A matching word in a notation record never
-// creates an Effect. These two source/type pairs have verified descriptors
+// creates an Effect. These source/type pairs have verified descriptors
 // and publisher reminder labels; unrecognized sources retain semantic text.
 const EFFECT_TOKENS = [
   { source: "poisoner", type: "poisoned", label: "Poisoned" },
   { source: "monk", type: "safeFromDemon", label: "Safe" },
+  // This existing Storyteller fact deliberately has no functioning source.
+  { source: "fortuneteller", type: "fortuneTellerRedHerring", label: "Red Herring" },
 ] as const;
 
 export function officialEffectPresentation(player: Pick<STPlayerRecord, "effects">, context?: { query: RulesQuery; target: ParticipantBinding }): {
@@ -29,7 +31,8 @@ export function officialEffectPresentation(player: Pick<STPlayerRecord, "effects
   const remaining: EffectRecord[] = [];
   for (const effect of player.effects) {
     if (!isEffectActive(effect) && !(context && effect.state === "suppressed")) continue;
-    const mapping = EFFECT_TOKENS.find(item => item.source === effect.sourceCharacter && item.type === effect.type);
+    const mapping = EFFECT_TOKENS.find(item => item.type === effect.type &&
+      (item.type === "fortuneTellerRedHerring" || item.source === effect.sourceCharacter));
     if (!mapping) { remaining.push(effect); continue; }
     const sourceRole = context?.query.roleOf(mapping.source);
     if (context && (!sourceRole || !isCanonicalRole(sourceRole))) { remaining.push(effect); continue; }
@@ -51,6 +54,14 @@ export function officialEffectPresentation(player: Pick<STPlayerRecord, "effects
       : "Not currently affecting this player"}`;
   }
   return { tokens: [...tokens.values()], fallback: effectIndicators({ effects: remaining }) };
+}
+
+/** Legacy notation stays stored and editable, but the authoritative fact has
+ * the single visible Red Herring token. Removing the fact exposes that inert
+ * notation again; no label ever creates, moves or deletes an Effect. */
+export function redHerringNotationCovered(reminder: { sourceCharacter?: string; label: string }, tokens: readonly OfficialEffectToken[]): boolean {
+  return reminder.sourceCharacter === "fortuneteller" && reminder.label === "Red Herring" &&
+    tokens.some(token => token.key === "fortuneteller:fortuneTellerRedHerring");
 }
 
 /** Exact publisher label/source lookup for existing inert notation. */

@@ -64,7 +64,7 @@ export function PreparationRows({ game, pendingIds }: { game: StorytellerLobbyRe
         return (
           <li key={id} className="setup-prep-row">
             <span className="setup-prep-name">{p.name || `Seat ${p.seat + 1}`} <span className="setup-prep-seat">seat {p.seat + 1}</span></span>
-            <span className="setup-prep-need">Needs a shown role</span>
+            <span className="setup-prep-need">{p.actualRole === "drunk" && p.shownRole ? "Choose an unused Townsfolk" : "Needs a shown role"}</span>
             <button type="button" className="btn btn-sm" onClick={() => useStorytellerStore.getState().selectPlayer(id)}
               aria-label={`Open ${p.name || `seat ${p.seat + 1}`} on the Table`}>Open</button>
           </li>

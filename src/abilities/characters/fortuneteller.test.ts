@@ -1,6 +1,7 @@
 // Phase 10F Slice 7 -- Fortune Teller + the authoritative Red Herring
 // (matrix Section 7). Production semantics.
 import { beforeEach, describe, expect, it } from "vitest";
+import { withRedHerring } from "@/test/redHerringFixture";
 import { COMMUNICATED, RED_HERRING, RED_HERRING_CHOICE, registersAsDemonJudgment } from "./fortuneteller";
 import { subjectId } from "./shared";
 import { bind, homebrewEnv, impair, openInStore, patchPlayer, pick, plan, planned, proofGame, proofRegistry, request, requirementIds, reseat, yes } from "@/test/proofFixtures";
@@ -9,13 +10,11 @@ import { CANONICAL_ABILITY_SEMANTICS, type AbilityDescriptor, type AbilitySemant
 import { FORTUNE_TELLER } from "./fortuneteller";
 import { proofEnv } from "@/test/proofFixtures";
 import { projectLobbyToPublic, projectLobbyToSelfMap } from "@/stores/projections";
-import type { EffectRecord, StorytellerLobbyRecord } from "@/stores/types";
+import type { StorytellerLobbyRecord } from "@/stores/types";
 
 // p0 FT, p1 imp, p2 chef, p3 monk, p4 recluse, p5 poisoner, p6 empath
 const ROLES = ["fortuneteller", "imp", "chef", "monk", "recluse", "poisoner", "empath"];
-const herringOn = (g: StorytellerLobbyRecord, id: string, effectId = "rh-1"): StorytellerLobbyRecord =>
-  patchPlayer(g, id, { effects: [...g.players[id]!.effects, { id: effectId, type: RED_HERRING, lifetime: { kind: "manual" }, state: "active",
-    expiry: { kind: "none" }, appliedAt: { phase: "night", day: 1 } } as EffectRecord] });
+const herringOn = (g: StorytellerLobbyRecord, id: string, effectId = "rh-1") => withRedHerring(g, id, "p0", effectId);
 const answer = (g: StorytellerLobbyRecord) => g.informationDeliveries.at(-1)!.values!.find((v) => v.requirementId === "isDemon");
 /** SOL-10F-A1: the communicated answer is bound to the chosen pair. */
 const comm = (g: StorytellerLobbyRecord, a: string, b: string) => subjectId(COMMUNICATED, bind(g, a), bind(g, b));
@@ -25,30 +24,19 @@ const ask = (g: StorytellerLobbyRecord, a: string, b: string, extra: Record<stri
   plan(g, request(g, "p0", "fortuneteller", { targets: pick(g, a, b), ...pairBound(g, a, b, extra) } as never));
 
 describe("Red Herring -- authoritative state", () => {
-  it("Night 1 with no Red Herring: the Storyteller chooses a good player and the Effect is created in the SAME resolution, before delivery", () => {
+  it("Night 1 never invents a missing setup fact, even with legacy selection input", () => {
     const g = proofGame(ROLES, "night", 1);
-    expect(requirementIds(ask(g, "p2", "p3"))).toEqual([RED_HERRING_CHOICE]);
-    expect(ask(g, "p2", "p3", { [RED_HERRING_CHOICE]: pick(g, "p5") })).toMatchObject({ ok: false, code: "illegal" }); // evil
-    const result = ask(g, "p2", "p3", { [RED_HERRING_CHOICE]: pick(g, "p3") });
-    const next = planned(result);
-    expect(next.players.p3!.effects).toEqual([expect.objectContaining({ type: RED_HERRING, state: "active", lifetime: { kind: "manual" }, expiry: { kind: "none" } })]);
-    expect(next.players.p3!.effects[0]!.sourceParticipant).toBeUndefined();
-    expect(answer(next)).toMatchObject({ kind: "boolean", value: true }); // p3 is the Red Herring
-    if (result.ok && result.changed) expect(result.plan.outcome.operations.map((o) => o.domain)).toEqual(["effect", "information"]);
-    expect(next.informationDeliveries.at(-1)).toMatchObject({ informationActionId: "fortuneteller-first-night",
-      values: [{ requirementId: "players", kind: "player", participants: [
-        expect.objectContaining({ kind: "participant", participantId: g.players.p2!.participantId }),
-        expect.objectContaining({ kind: "participant", participantId: g.players.p3!.participantId }),
-      ] }, { requirementId: "isDemon", kind: "boolean", value: true }] });
+    expect(ask(g, "p2", "p3")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(ask(g, "p2", "p3", { [RED_HERRING_CHOICE]: pick(g, "p3") })).toMatchObject({ ok: false, code: "unsupported" });
+    expect(g.players.p3!.effects).toEqual([]);
   });
 
-  it("the Red Herring may be the Fortune Teller themself", () => {
-    const g = proofGame(ROLES, "night", 1);
-    const next = planned(ask(g, "p0", "p2", { [RED_HERRING_CHOICE]: pick(g, "p0") }));
-    expect(next.players.p0!.effects[0]).toMatchObject({ type: RED_HERRING });
+  it("the prepared Red Herring may be the Fortune Teller themself", () => {
+    const g = herringOn(proofGame(ROLES, "night", 1), "p0");
+    const next = planned(ask(g, "p0", "p2"));
     expect(answer(next)).toMatchObject({ value: true });
+    expect(next.players).toBe(g.players);
   });
-
   it("persists: later Nights read the SAME participant and never re-select or recreate it", () => {
     const g = herringOn(proofGame(ROLES, "night", 3), "p3");
     const next = planned(ask(g, "p3", "p2"));
@@ -82,7 +70,7 @@ describe("Red Herring -- authoritative state", () => {
 
   it("a Reminder labelled 'Red Herring' is never read as the Red Herring", () => {
     const g = patchPlayer(proofGame(ROLES, "night", 1), "p3", { reminders: [{ id: "rm", label: "Red Herring", sourceCharacter: "fortuneteller" }] });
-    expect(requirementIds(ask(g, "p2", "p3"))).toEqual([RED_HERRING_CHOICE]);
+    expect(ask(g, "p2", "p3")).toMatchObject({ ok: false, code: "unsupported" });
     const later = { ...g, day: 3 };
     expect(ask(later, "p2", "p3")).toMatchObject({ ok: false, code: "unsupported" });
   });
@@ -129,10 +117,10 @@ describe("Fortune Teller -- the answer", () => {
     expect(plan(reseat(g, "p2"), request(g, "p0", "fortuneteller", { targets: pick(g, "p1", "p2") }))).toMatchObject({ ok: false, code: "stale" });
   });
 
-  it("stale Red Herring choice after seat reuse is refused", () => {
+  it("legacy Red Herring choice after seat reuse cannot create a fact during Night", () => {
     const n1 = proofGame(ROLES, "night", 1);
     const req = request(n1, "p0", "fortuneteller", { targets: pick(n1, "p1", "p2"), [RED_HERRING_CHOICE]: pick(n1, "p3") });
-    expect(plan(reseat(n1, "p3"), req)).toMatchObject({ ok: false, code: "stale" });
+    expect(plan(reseat(n1, "p3"), req)).toMatchObject({ ok: false, code: "unsupported" });
   });
 
   it("a homebrew Fortune Teller reusing the official id inherits no semantics", () => {
@@ -144,14 +132,14 @@ describe("Fortune Teller -- privacy and Undo", () => {
   beforeEach(() => store.setState({ game: null, undoStack: [], localSeq: 0 }));
 
   it("the Red Herring never reaches public or self projections", () => {
-    const g = planned(ask(proofGame(ROLES, "night", 1), "p2", "p3", { [RED_HERRING_CHOICE]: pick(proofGame(ROLES, "night", 1), "p3") }));
+    const g = herringOn(proofGame(ROLES, "night", 1), "p3");
     const wire = JSON.stringify([projectLobbyToPublic(g, {}), projectLobbyToSelfMap(g, proofRegistry)]);
     expect(wire).not.toContain(RED_HERRING);
     expect(wire).not.toContain("Red Herring");
   });
 
-  it("one commit; Undo restores the game without the Red Herring and without the delivery record", () => {
-    const g = proofGame(ROLES, "night", 1);
+  it("one information commit; Undo restores the setup fact and removes the delivery record", () => {
+    const g = herringOn(proofGame(ROLES, "night", 1), "p3");
     openInStore(g);
     const result = store.getState().resolveAbility(request(g, "p0", "fortuneteller", { targets: pick(g, "p2", "p3"), [RED_HERRING_CHOICE]: pick(g, "p3") }));
     expect(result).toMatchObject({ ok: true, changed: true });
@@ -159,7 +147,7 @@ describe("Fortune Teller -- privacy and Undo", () => {
     expect(store.getState().localSeq).toBe(6);
     expect(store.getState().game!.players.p3!.effects).toHaveLength(1);
     store.getState().undo();
-    expect(store.getState().game!.players.p3!.effects).toEqual([]);
+    expect(store.getState().game!.players.p3!.effects).toEqual(g.players.p3!.effects);
     expect(store.getState().game!.informationDeliveries).toEqual([]);
   });
 });
@@ -170,47 +158,39 @@ describe("SOL-10F-S7-F2 -- the Red Herring is independent of the Fortune Teller 
   const herrings = (g: StorytellerLobbyRecord) => Object.values(g.players).flatMap((p) => p.effects.filter((e) => e.type === RED_HERRING).map(() => p.id));
   const domainsOf = (result: ReturnType<typeof plan>) => result.ok && result.changed ? result.plan.outcome.operations.map((o) => o.domain) : [];
 
-  it("1. sober Night-1 Fortune Teller, fact missing -> creates the fact + delivers the computed answer", () => {
-    const g = n1();
-    const result = ask(g, "p2", "p6", { [RED_HERRING_CHOICE]: pick(g, "p3") });
-    expect(domainsOf(result)).toEqual(["effect", "information"]);
-    const next = planned(result);
-    expect(herrings(next)).toEqual(["p3"]);
-    expect(answer(next)).toMatchObject({ value: false }); // chef + empath, neither the Red Herring nor a Demon
+  it("1. healthy Night-1 Fortune Teller uses the prepared fact without creating another", () => {
+    const g = herringOn(n1(), "p3");
+    const result = ask(g, "p2", "p6");
+    expect(domainsOf(result)).toEqual(["information"]);
+    expect(herrings(planned(result))).toEqual(["p3"]);
   });
 
-  it("2. POISONED Night-1 actual Fortune Teller, fact missing -> asks the Red Herring FIRST, creates it, then delivers an arbitrary answer", () => {
+  it("2. impaired Fortune Teller cannot invent a fact; a prepared fact survives either communicated answer", () => {
     for (const type of ["poisoned", "drunk"]) {
-      const g = impair(n1(), "p0", type);
-      expect(requirementIds(ask(g, "p1", "p2"))).toEqual([RED_HERRING_CHOICE]);
-      expect(requirementIds(ask(g, "p1", "p2", { [RED_HERRING_CHOICE]: pick(g, "p3") }))).toEqual([comm(g, "p1", "p2")]);
+      const missing = impair(n1(), "p0", type);
+      expect(ask(missing, "p1", "p2", { [COMMUNICATED]: yes(false) })).toMatchObject({ ok: false, code: "unsupported" });
+      const g = herringOn(missing, "p3");
+      expect(requirementIds(ask(g, "p1", "p2"))).toEqual([comm(g, "p1", "p2")]);
       for (const value of [true, false]) {
-        const result = ask(g, "p1", "p2", { [RED_HERRING_CHOICE]: pick(g, "p3"), [COMMUNICATED]: yes(value) });
-        expect(domainsOf(result)).toEqual(["effect", "information"]);
+        const result = ask(g, "p1", "p2", { [COMMUNICATED]: yes(value) });
+        expect(domainsOf(result)).toEqual(["information"]);
         const next = planned(result);
-        // 3. exactly one Red Herring afterwards, on the chosen participant, with no source.
-        expect(herrings(next)).toEqual(["p3"]);
-        expect(next.players.p3!.effects[0]).toMatchObject({ type: RED_HERRING, lifetime: { kind: "manual" } });
-        expect(next.players.p3!.effects[0]!.sourceParticipant).toBeUndefined();
-        expect(next.players.p3!.effects[0]!.sourceCharacter).toBeUndefined();
-        expect(answer(next)).toMatchObject({ value }); // arbitrary, not computed (p1 is the actual Demon)
+        expect(next.players).toBe(g.players);
+        expect(answer(next)).toMatchObject({ value });
       }
-      expect(ask(g, "p1", "p2", { [RED_HERRING_CHOICE]: pick(g, "p5"), [COMMUNICATED]: yes(true) })).toMatchObject({ ok: false, code: "illegal" }); // evil
     }
   });
 
-  it("4. a later Night after an impaired Night 1 reuses the SAME participant (no reselection, no new fact)", () => {
-    const night1 = planned(ask(impair(n1(), "p0"), "p1", "p2", { [RED_HERRING_CHOICE]: pick(n1(), "p3"), [COMMUNICATED]: yes(false) }));
-    const night2 = { ...night1, day: 2, players: { ...night1.players, p0: { ...night1.players.p0!, effects: [] } } }; // sober now
+  it("4. later Night reuses the same setup participant after impairment ends", () => {
+    const initial = herringOn(impair(n1(), "p0"), "p3");
+    const night1 = planned(ask(initial, "p1", "p2", { [COMMUNICATED]: yes(false) }));
+    const night2 = { ...night1, day: 2, players: { ...night1.players, p0: { ...night1.players.p0!, effects: [] } } };
     const result = ask(night2, "p3", "p2");
-    expect(requirementIds(result)).toEqual([]);
     const next = planned(result);
     expect(answer(next)).toMatchObject({ value: true });
-    expect(herrings(next)).toEqual(["p3"]);
-    expect(next.players.p3!.effects[0]!.id).toBe(night1.players.p3!.effects[0]!.id);
+    expect(next.players.p3!.effects).toEqual(initial.players.p3!.effects);
     expect(domainsOf(result)).toEqual(["information"]);
   });
-
   it("5. a Drunk simulated as the Fortune Teller creates NO Red Herring, even on Night 1", () => {
     const g = patchPlayer(proofGame(["drunk", "imp", "chef", "monk", "recluse", "poisoner", "empath"], "night", 1), "p0",
       { shownRole: "fortuneteller", shownAlignment: null, behaviorMode: "drunk_fake_role_behavior" });
@@ -234,7 +214,7 @@ describe("SOL-10F-S7-F2 -- the Red Herring is independent of the Fortune Teller 
 
   it("7. a Reminder labelled 'Red Herring' stays ignored for an impaired Fortune Teller too", () => {
     const g = impair(patchPlayer(n1(), "p3", { reminders: [{ id: "rm", label: "Red Herring", sourceCharacter: "fortuneteller" }] }), "p0");
-    expect(requirementIds(ask(g, "p2", "p3", { [COMMUNICATED]: yes(true) }))).toEqual([RED_HERRING_CHOICE]);
+    expect(ask(g, "p2", "p3", { [COMMUNICATED]: yes(true) })).toMatchObject({ ok: false, code: "unsupported" });
   });
 
   describe("the generic non-functioning guard stays intact", () => {
@@ -279,8 +259,8 @@ describe("SOL-10F-S7-F2 -- the Red Herring is independent of the Fortune Teller 
     });
   });
 
-  it("10. Undo removes the newly-created fact AND the delivery together (one commit)", () => {
-    const g = impair(n1(), "p0");
+  it("10. Undo removes impaired delivery while preserving the earlier setup fact", () => {
+    const g = herringOn(impair(n1(), "p0"), "p3");
     openInStore(g);
     expect(store.getState().resolveAbility(request(g, "p0", "fortuneteller", { targets: pick(g, "p1", "p2"), [RED_HERRING_CHOICE]: pick(g, "p3"), [comm(g, "p1", "p2")]: yes(false) })))
       .toMatchObject({ ok: true, changed: true });
@@ -288,7 +268,7 @@ describe("SOL-10F-S7-F2 -- the Red Herring is independent of the Fortune Teller 
     expect(herrings(store.getState().game!)).toEqual(["p3"]);
     expect(store.getState().game!.informationDeliveries).toHaveLength(1);
     store.getState().undo();
-    expect(herrings(store.getState().game!)).toEqual([]);
+    expect(herrings(store.getState().game!)).toEqual(["p3"]);
     expect(store.getState().game!.informationDeliveries).toEqual([]);
   });
 });

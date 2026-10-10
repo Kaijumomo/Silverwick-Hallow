@@ -9,6 +9,10 @@ import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
+import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { SessionWriter } from "@/firebase/writer";
+import { createLobby } from "@/firebase/lobby";
+import { requireActiveSession } from "@/firebase/lifecycle";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -77,14 +81,14 @@ describe("10H-AC-036 / AC-037: Private Reveal readiness is advisory current-toke
     store.setState({ game: setupGame(standardRoles(5), { setupRolesDealt: true, setupRolesRevealed: true }),
       lobby: { code: "ABCD", uid: "st", sessionId: "s1", status: "live" } });
     // Fresh participations carry reveal tokens (v26).
-    const players = Object.fromEntries(Object.entries(game().players).map(([id, p], i) => [id, { ...p, revealToken: `tok-${i}` }]));
+    const players = Object.fromEntries(Object.entries(game().players).map(([id, p], i) => [id, { ...p, revealToken: "A".repeat(21) + i }]));
     store.setState({ game: { ...game(), players } });
   }
 
   it("Viewed only when the acknowledged token equals the CURRENT token; a stale one is not viewed", () => {
     revealedLive();
     const [a, b, c] = game().seatOrder;
-    act(() => useSessionRuntime.setState({ revealAcks: { [a!]: "tok-0", [b!]: "stale-token", [c!]: "tok-2" } }));
+    act(() => useSessionRuntime.setState({ revealAcks: { [a!]: game().players[a!]!.revealToken!, [b!]: "stale-token", [c!]: game().players[c!]!.revealToken! } }));
     render(<Panel />);
     expect(current()).toHaveTextContent("Private Reveal");
     const reveal = within(screen.getByRole("region", { name: "Private reveal" }));
@@ -95,18 +99,30 @@ describe("10H-AC-036 / AC-037: Private Reveal readiness is advisory current-toke
     expect(row(c!)).toHaveAttribute("data-viewed", "true");
   });
 
-  it("never gates Begin Night: with NO acknowledgements Begin Night 1 is enabled and works; acks never touch the game", () => {
+  it("never gates Begin Night: with NO acknowledgements Begin Night 1 is enabled and works; acks never touch the game", async () => {
     revealedLive();
-    const before = game();
-    render(<Panel />);
-    expect(screen.getByRole("region", { name: "Private reveal" })).toHaveTextContent("0 of 5 have seen their role");
-    expect(screen.getByText(/Advisory only/)).toBeInTheDocument();
-    act(() => useSessionRuntime.setState({ revealAcks: { [game().seatOrder[0]!]: "tok-0" } }));
-    expect(game()).toBe(before); // an acknowledgement is runtime state only
-    const begin = screen.getByRole("button", { name: "Begin Night 1" });
-    expect(begin).toBeEnabled();
-    fireEvent.click(begin);
-    expect(game()).toMatchObject({ phase: "night", day: 1 });
+    // An online setup command needs real writer authority independently of
+    // advisory reveal acknowledgements.
+    const backend = new MemoryRoomBackend();
+    const code = "REVE2345";
+    await createLobby(backend, "st", { codeGenerator: () => code });
+    const session = await requireActiveSession(backend, code);
+    const writer = new SessionWriter(backend, code, session.id);
+    await writer.start();
+    store.setState({ game: { ...game(), code, storytellerUid: "st" }, lobby: { code, uid: "st", sessionId: session.id, status: "live" } });
+    useSessionRuntime.setState({ backend: writer, status: "live" });
+    try {
+      const before = game();
+      render(<Panel />);
+      expect(screen.getByRole("region", { name: "Private reveal" })).toHaveTextContent("0 of 5 have seen their role");
+      expect(screen.getByText(/Advisory only/)).toBeInTheDocument();
+      act(() => useSessionRuntime.setState({ revealAcks: { [game().seatOrder[0]!]: game().players[game().seatOrder[0]!]!.revealToken! } }));
+      expect(game()).toBe(before); // an acknowledgement is runtime state only
+      const begin = screen.getByRole("button", { name: "Begin Night 1" });
+      expect(begin).toBeEnabled();
+      fireEvent.click(begin);
+      expect(game()).toMatchObject({ phase: "night", day: 1 });
+    } finally { await writer.dispose(); useSessionRuntime.setState({ backend: null, status: "idle" }); }
   });
 
   it("offline (no phones) explains that roles are revealed in person", () => {

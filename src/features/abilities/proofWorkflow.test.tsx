@@ -12,6 +12,7 @@ import { useTargetPicker } from "./abilityUi";
 import { patchPlayer, proofGame, proofScript } from "@/test/proofFixtures";
 import type { RoleId, StorytellerLobbyRecord } from "@/stores/types";
 import { choose } from "@/test/pickers";
+import { withRedHerring } from "@/test/redHerringFixture";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -66,18 +67,16 @@ describe("Drunk shown as the Empath -- the Storyteller's number is a follow-up c
   });
 });
 
-describe("Fortune Teller -- Night 1 Red Herring is chosen inside the same resolution", () => {
-  it("the Red Herring choice appears as a Storyteller choice; Confirm records the Effect and the answer in one commit", () => {
-    open(named(["fortuneteller", "imp", "chef", "monk", "saint", "poisoner", "empath"], "night", 1));
+describe("Fortune Teller -- Night 1 uses the prepared Red Herring", () => {
+  it("information resolution uses the setup fact without another selection or effect", () => {
+    open(withRedHerring(named(["fortuneteller", "imp", "chef", "monk", "saint", "poisoner", "empath"], "night", 1), "p3"));
     render(<Night />);
     fireEvent.click(within(card("Fortune Teller", "Player 0")).getByRole("button", { name: "Guide" }));
     const ws = workspace();
     choose("The two players chosen 1", "p2", ws);
     choose("The two players chosen 2", "p3", ws);
-    const choices = within(ws).getByRole("region", { name: "Further choices" });
-    choose("The Red Herring (a good player)", "p3", choices);
-    expect(within(ws).getByText(/Player 3 gains Red Herring/)).toBeInTheDocument();
-    fireEvent.click(within(ws).getByRole("button", { name: "Confirm and record" }));
+    expect(within(ws).queryByText(/Player 3 gains Red Herring/)).not.toBeInTheDocument();
+    fireEvent.click(within(ws).getByRole("button", { name: "Resolve" }));
     expect(game().players.p3!.effects).toEqual([expect.objectContaining({ type: "fortuneTellerRedHerring" })]);
     expect(game().informationDeliveries.at(-1)!.values!.at(-1)).toMatchObject({ kind: "boolean", value: true });
     expect(state().undoStack).toHaveLength(1);

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { bind, homebrewEnv, impair, openInStore, patchPlayer, pick, plan, planned, proofGame, proofQuery, request } from "@/test/proofFixtures";
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { captureCharacterActionContext, useStorytellerStore as store } from "@/stores/storytellerStore";
-import { RED_HERRING } from "./fortuneteller";
+import { withRedHerring } from "@/test/redHerringFixture";
 import type { EffectRecord, StorytellerLobbyRecord } from "@/stores/types";
 
 const effect = (type: string): EffectRecord => ({ id: `test-${type}`, type, state: "active", lifetime: { kind: "manual" }, expiry: { kind: "none" } });
@@ -64,7 +64,7 @@ describe.each(["spy", "recluse"])("B1 %s contextual registration", role => {
   });
 });
 
-const ftGame = (role: string) => patchPlayer(proofGame(["fortuneteller", role, "imp", "chef", "monk"]), "p4", { effects: [effect(RED_HERRING)] });
+const ftGame = (role: string) => withRedHerring(proofGame(["fortuneteller", role, "imp", "chef", "monk"]), "p4");
 const read = (game: StorytellerLobbyRecord, second = "p3") => plan(game, request(game, "p0", "fortuneteller", { targets: pick(game, "p1", second) }));
 const answer = (game: StorytellerLobbyRecord) => game.informationDeliveries.at(-1)!.values!.find(value => value.requirementId === "isDemon");
 const selfKill = (game: StorytellerLobbyRecord) => plan(game, request(game, "p0", "imp", { target: pick(game, "p0") }));
