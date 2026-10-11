@@ -518,6 +518,11 @@ describe("Phase 10A: future ability-engine seam (multi-intent transactions)", ()
 describe("Phase 10A: corrections", () => {
   function executed() {
     const ctx = liveGame();
+    // The deal is random. These tests isolate Life corrections, so select a
+    // non-ending character rather than sometimes also removing Demon proof.
+    const target = ctx.ids.find(id => player(id).actualRole === "chef")!;
+    expect(target).toBeDefined();
+    ctx.ids = [target, ...ctx.ids.filter(id => id !== target)];
     toDay();
     expect(state().recordExecution(ctx.ids[0]!, "died").ok).toBe(true);
     return { ...ctx, event: events()[0]! as LifeEvent };
