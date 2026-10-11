@@ -76,5 +76,3 @@ Desktop mouse/keyboard and Samsung Galaxy Tab S8 Ultra touch are Storyteller tar
 ## Official-reference provenance
 
 The canonical [Trouble Brewing roster](https://wiki.bloodontheclocktower.com/Trouble_Brewing), Spy, Washerwoman, Drunk, Butler, Recluse, Scarlet Woman, States, Abilities and available information-character almanac text were checked through the official wiki during this B9 review. B8's independently checked Saint/Mayor/Imp/Scarlet Woman rules and B0–B7 source-linked official contracts remain the baseline. Some direct wiki opens timed out; official search-index text was used where available. The per-character links are reference pointers, not a claim that every full page was freshly fetched. No mirror content substitutes for a newly uncertain rule. The B8 Good-over-simultaneous-ordinary-ending rulebook mirror was not visually verified by this reviewer; that limitation remains in B8's review record.
-
-
