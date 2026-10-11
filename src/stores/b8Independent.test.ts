@@ -179,6 +179,14 @@ describe("B8 independent temporal qualification", () => {
     if (kind === "textPayload") fact.provenance!.note = "functioning=true";
     expect(StorytellerGamePersistedSchema.safeParse(candidate).success).toBe(false);
   });
+  it.each(["saint", "mayor"])("recovered %s cannot retain qualification after contradictory actual identity correction", character => {
+    const qualified = character === "saint" ? execute(saint()) : ending(mayor());
+    for (const change of [{ actualRole: "chef" }, { actualAlignment: "evil" as const }]) {
+      const candidate = patchPlayer(qualified, "p0", change);
+      expect(StorytellerGamePersistedSchema.safeParse(candidate).success).toBe(false);
+      expect(validVictoryEvidence(candidate)).toEqual([]);
+    }
+  });
   it("qualification stays absent from both player and public projections", () => {
     const qualified = execute(saint()); const bare = { ...qualified, gameRuleFacts: [] };
     expect(projectLobbyToPublic(qualified, {})).toEqual(projectLobbyToPublic(bare, {}));

@@ -104,6 +104,12 @@ export function captureMayorQualification(before: StorytellerLobbyRecord, after:
 
 export type ResolvedDemonDeathMode = "recordedDay" | "recordedNight" | "automaticImp" | "automaticSlayer";
 
+/** The reviewed capture envelope belongs to the rule domain, not the generic
+ * ability coordinator. Unsupported abilities cannot assert resolved evidence. */
+export function automaticDemonDeathEvidenceMode(roleId: string | undefined): ResolvedDemonDeathMode | null {
+  return roleId === "imp" ? "automaticImp" : roleId === "slayer" ? "automaticSlayer" : null;
+}
+
 /** Capture only from an accepted complete death pipeline. The caller supplies
  * the immediate pre-death snapshot and the result AFTER every role/succession
  * consequence. These mode values are internal call-site provenance, never a

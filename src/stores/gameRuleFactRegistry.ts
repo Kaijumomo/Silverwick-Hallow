@@ -110,6 +110,11 @@ export function victoryEvidenceInvalidReason(game: Pick<StorytellerLobbyRecord, 
   if (!source || source.kind !== "participant" || !source.participantId || fact.provenance?.sourceCharacter !== role || fact.provenance.reason !== undefined || fact.provenance.note !== undefined) return "Qualification requires its exact character and durable participant source.";
   const player = game.players[source.playerId];
   if (!player || player.isEmpty || player.participantId !== source.participantId) return "Qualification source no longer belongs to this game.";
+  if (player.actualRole !== role) return "Qualification source character no longer matches its captured identity.";
+  if (!demon) {
+    const team = fact.type === SAINT_EXECUTION_GOOD_TEAM_LOST || fact.type === SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED || fact.type === MAYOR_DAY_END_GOOD_TEAM_WON ? "good" : "evil";
+    if (player.actualAlignment !== team) return "Qualification source team no longer matches its captured identity.";
+  }
   if ((!demon && fact.recordedAt.phase !== "day") || fact.expiresAt?.phase !== fact.recordedAt.phase || fact.expiresAt.day !== fact.recordedAt.day + 1) return "Qualification has an invalid lifetime.";
   if (demon) {
     const event = game.lifeEventWindow.events.find(event => event.id === fact.resolutionId);
