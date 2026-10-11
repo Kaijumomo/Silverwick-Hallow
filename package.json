@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:development": "vite --mode development",
+    "build:development": "tsc -b && vite build --mode development --outDir dist-development",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
