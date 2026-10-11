@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { gameRuleFactDefinition, registeredGameRuleFactExpiry } from "./gameRuleFactRegistry";
+import { gameRuleFactDefinition, registeredGameRuleFactExpiry, victoryEvidenceInvalidReason, victoryEvidenceCollectionInvalidReason, isVictoryEvidenceType } from "./gameRuleFactRegistry";
 import { VotingDayStateSchema } from "./votingSchema";
 
 export const AlignmentSchema = z.enum(["good", "evil"]);
@@ -1561,6 +1561,13 @@ export const StorytellerGamePersistedSchema = z.preprocess((raw, ctx) => {
   checkEffectTemporalCoherence(game, ctx);
   checkReminderTemporalCoherence(game, ctx);
   checkGameRuleFactTemporalCoherence(game, ctx);
+  const evidenceCollectionError = victoryEvidenceCollectionInvalidReason(game.gameRuleFacts, game.lifeEventWindow.events);
+  if (evidenceCollectionError) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["gameRuleFacts"], message: evidenceCollectionError });
+  game.gameRuleFacts.forEach((fact, index) => {
+    if (!isVictoryEvidenceType(fact.type)) return;
+    const reason = victoryEvidenceInvalidReason(game, fact);
+    if (reason) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["gameRuleFacts", index], message: reason });
+  });
 }));
 
 export const GuardStampSchema = z.object({

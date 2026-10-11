@@ -13,6 +13,7 @@ import {
   toymakerSkipStatus,
 } from "./gameRuleFacts";
 import { createRulesQuery } from "./rulesQuery";
+import { VICTORY_EVIDENCE_TYPES } from "./gameRuleFactRegistry";
 import { detectLegacyGameVersion, hasV25Evidence, migrateGameEntry } from "./gameMigration";
 import { GameRuleFactHistoryRecordSchema, HistoryRecordSchema, StorytellerGamePersistedSchema } from "./schemas";
 import { setupGame, setupScript } from "@/test/setupFixtures";
@@ -48,8 +49,9 @@ const fact = (type: string, over: Partial<GameRuleFactRecord> = {}): GameRuleFac
   ({ type, recordedAt: { phase: "night", day: 2 }, ...over });
 
 describe("10G-AC-01 / AC-02: the registry and v25 authoritative state", () => {
-  it("registers exactly the two approved singleton facts", () => {
-    expect([...GAME_RULE_FACT_REGISTRY.keys()]).toEqual([PIT_HAG_ARBITRARY_DEATHS, TOYMAKER_DEMON_SKIP_OCCURRED]);
+  it("preserves the original two facts and adds exactly seven approved capture-only qualification records", () => {
+    expect([...GAME_RULE_FACT_REGISTRY.keys()]).toEqual([PIT_HAG_ARBITRARY_DEATHS, TOYMAKER_DEMON_SKIP_OCCURRED, ...VICTORY_EVIDENCE_TYPES]);
+    expect([...GAME_RULE_FACT_REGISTRY.values()].filter(definition => !definition.captureOnly).map(definition => definition.type)).toEqual([PIT_HAG_ARBITRARY_DEATHS, TOYMAKER_DEMON_SKIP_OCCURRED]);
   });
 
   it("a new game starts with an empty, validated collection", () => {

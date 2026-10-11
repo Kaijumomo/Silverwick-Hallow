@@ -99,7 +99,10 @@ describe("SOL-10B-R1: empty seats cannot own Effects", () => {
     expect(planEffectExpiry(crafted, { phase: "day", day: 1 })).toBeNull();
     store.setState({ game: crafted });
     const count = effectHistory().length;
-    expect(state().advancePhase().ok).toBe(true);
+    // B8 phase changes now share the authoritative persisted-state check.
+    // A crafted invalid seat is refused wholesale, never silently repaired.
+    expect(state().advancePhase().ok).toBe(false);
+    expect(game()).toBe(crafted);
     expect(player(alice).effects).toEqual([due]);
     expect(effectHistory()).toHaveLength(count);
   });

@@ -14,7 +14,7 @@ function PinIcon() {
 
 /** A local presentation boundary. Pinning changes available space, never game state. */
 export function ReferenceWorkspace({ children, enabled, privacyMode, roles, scriptName, players, info, night, nightKey, nightOpenRequest = 0, onPanelOpen,
-  onEnd, endDisabled, onReviewHistory }: {
+  onEnd, endDisabled, endAttention, onReviewHistory }: {
   children: ReactNode; enabled: boolean; privacyMode: boolean; roles: RoleDef[]; scriptName: string;
   info?: ReactNode;
   players?: (dismiss: () => void) => ReactNode;
@@ -23,7 +23,7 @@ export function ReferenceWorkspace({ children, enabled, privacyMode, roles, scri
   /** Explicit navigation (for example, Review Night at dawn), never game state. */
   nightOpenRequest?: number;
   onPanelOpen?: () => void;
-  onEnd?: () => void; endDisabled?: boolean; onReviewHistory?: () => void;
+  onEnd?: () => void; endDisabled?: boolean; endAttention?: boolean; onReviewHistory?: () => void;
 }) {
   const phase = useStorytellerStore(state => state.game?.phase);
   const voting = useVotingInteraction();
@@ -134,9 +134,11 @@ export function ReferenceWorkspace({ children, enabled, privacyMode, roles, scri
       {onEnd && <>
         <span className="reference-edge-divider" aria-hidden="true" />
         <button type="button" className="reference-edge-button reference-end-button" aria-label="End game"
+          title={endAttention && !privacyMode ? "A game-ending condition is verified. The Storyteller declares the result." : undefined}
           disabled={privacyMode || endDisabled}
           onClick={() => { setOpen(false); setPinned(false); onPanelOpen?.(); onEnd(); }}>
           <GrimoireIcon name="flag" size={18} /><span>End</span>
+          {endAttention && !privacyMode && <span className="reference-end-attention" aria-label="Game-ending condition verified">!</span>}
         </button>
       </>}
     </div>

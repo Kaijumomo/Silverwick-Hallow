@@ -1,7 +1,7 @@
 import { cloneOwned, durableProvenance, historyId, isLiveGamePhase, type MutationContext } from "./history";
 import { currentLiveMoment, momentOrdinal } from "./lifeEvents";
 import { GAME_RULE_FACT_TYPE, MutationContextInputSchema, ProvenanceSchema } from "./schemas";
-import { gameRuleFactDefinition, registeredGameRuleFactExpiry, TOYMAKER_DEMON_SKIP_OCCURRED } from "./gameRuleFactRegistry";
+import { gameRuleFactDefinition, registeredGameRuleFactExpiry, TOYMAKER_DEMON_SKIP_OCCURRED, isVictoryEvidenceType } from "./gameRuleFactRegistry";
 import type {
   GameRuleFactHistoryRecord,
   GameRuleFactRecord,
@@ -141,7 +141,16 @@ export function planGameRuleFactTransaction(
   }
 }
 
-function plan(game: StorytellerLobbyRecord, transaction: GameRuleFactTransaction, ids: GameRuleFactIdSource): GameRuleFactPlanResult {
+/** Internal composition seam for victoryEvidence.ts after qualification has
+ * been checked against the pre-event state. Never exposed as a store command.
+ * Existing authority/persistence owns the resulting single atomic replacement. */
+export function planCapturedVictoryEvidence(game: StorytellerLobbyRecord, transaction: GameRuleFactTransaction): GameRuleFactPlanResult {
+  if (transaction.intents.length !== 1 || transaction.intents[0]?.kind !== "apply" || !isVictoryEvidenceType(transaction.intents[0].type)) return refuse("invalid", "Invalid qualification capture.");
+  try { return plan(game, transaction, DEFAULT_IDS, true); }
+  catch { return refuse("invalid", "Invalid qualification capture."); }
+}
+
+function plan(game: StorytellerLobbyRecord, transaction: GameRuleFactTransaction, ids: GameRuleFactIdSource, capture = false): GameRuleFactPlanResult {
   if (game.phase === "ended") return refuse("ended", "This game has ended: its Rule Facts are final.");
   if (!isLiveGamePhase(game.phase)) return refuse("notLive", "Rule Facts are recorded only during Night or Day.");
   const now = currentLiveMoment(game);
@@ -191,6 +200,7 @@ function plan(game: StorytellerLobbyRecord, transaction: GameRuleFactTransaction
       const definition = gameRuleFactDefinition(type);
       // Only a registered type can ever be created (Section 4.2).
       if (!definition) return refuse("unregistered", `"${type}" is not a Rule Fact Silverwick knows -- nothing was recorded.`, index);
+      if (definition.captureOnly && !capture) return refuse("invalid", "This qualification can only be captured with its authoritative triggering event.", index);
       if (!definition.applicablePhases.includes(now.phase)) {
         return refuse("phase", `${definition.label} can be recorded only during ${definition.applicablePhases.join(" or ")}.`, index);
       }

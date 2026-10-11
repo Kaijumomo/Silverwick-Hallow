@@ -162,7 +162,9 @@ it("only explicit Send submits the reviewed content, and Sent requires an acknow
   expect(screen.queryByText("Sent to player view")).toBeNull();
   await act(async () => finish());
   expect(screen.getByRole("status")).toHaveTextContent("Sent to player view");
-  act(() => { runningNight(); store.getState().advancePhase(); store.getState().advancePhase(); });
+  // This delivery UI fixture has an unclaimed writer and partial setup.
+  // Seed the later Night directly; real phase commands correctly refuse it.
+  act(() => { runningNight(); store.setState({ game: { ...store.getState().game!, day: 2 } }); });
   expect(store.getState().game).toMatchObject({ phase: "night", day: 2 });
   expect(screen.getByRole("status")).toHaveTextContent("Sent to player view");
   expect(screen.getByRole("button", { name: "Send bluffs" })).toBeDisabled();

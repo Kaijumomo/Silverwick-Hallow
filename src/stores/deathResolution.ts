@@ -3,6 +3,7 @@ import { applyLifePlan, planLifeTransaction, type LifeRefusal, type LifeTransact
 import { applyRolePlan, defaultRoleIds, planRoleTransaction, toldRoleChangeIntents } from "./roleResolution";
 import { createRulesQuery, type RulesQueryEnvironment } from "./rulesQuery";
 import { historyId } from "./history";
+import { captureSaintQualification, captureResolvedDemonDeath } from "./victoryEvidence";
 import type { LifeEventId, StorytellerLobbyRecord } from "./types";
 
 export type RecordedLifePlanResult = {
@@ -36,6 +37,11 @@ export function planRecordedLifeOutcome(
   if (!result.ok) return result;
   if (!result.changed) return { ok: true, changed: false, game, eventIds: [] };
   let next = applyLifePlan(game, result.plan);
+  if (environment && intent?.kind === "execution" && result.plan.addedEventIds.length === 1) {
+    const evidence = captureSaintQualification(game, next, result.plan.addedEventIds[0]!, environment);
+    if (!evidence.ok) return { ok: false, code: "refused", message: evidence.message };
+    next = evidence.game;
+  }
   // Only the single confirmed live outcome is eligible here. In particular,
   // an amendment, late record or status repair can never replay succession.
   if (decision.kind === "manual") return { ok: true, changed: true, game: next, eventIds: result.plan.addedEventIds,
@@ -48,6 +54,12 @@ export function planRecordedLifeOutcome(
       { script: environment?.script ? { id: game.scriptId, name: "", characters: environment.script.characters } : null, ids: defaultRoleIds });
     if (!role.ok) return { ok: false, code: "refused", message: role.message };
     if (role.changed) next = applyRolePlan(next, role.plan);
+  }
+  if (environment && deathIntent && result.plan.addedEventIds.length === 1) {
+    const evidence = captureResolvedDemonDeath(game, next, result.plan.addedEventIds[0]!, environment,
+      game.phase === "night" ? "recordedNight" : "recordedDay");
+    if (!evidence.ok) return { ok: false, code: "refused", message: evidence.message };
+    next = evidence.game;
   }
   return { ok: true, changed: true, game: next, eventIds: result.plan.addedEventIds };
 }

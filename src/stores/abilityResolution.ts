@@ -14,6 +14,7 @@ import {
 import { invocationEligibility, isInvocationPath, nightTriggerStatus, type InvocationPath } from "@/abilities/invocation";
 import { automationEligibility } from "@/abilities/automationEligibility";
 import { incompleteSuccessionReason } from "@/abilities/completeActionSafety";
+import { captureResolvedDemonDeath } from "./victoryEvidence";
 import { activeModifiers, prospectiveJinxes, type ModifierDefinition } from "@/abilities/modifiers";
 import { applyAlignmentPlan, defaultAlignmentIds, planAlignmentTransaction, type AlignmentIdSource, type AlignmentIntent } from "./alignmentResolution";
 import { applyEffectPlan, planEffectTransaction, type EffectIdSource, type EffectIntent } from "./effectResolution";
@@ -453,6 +454,7 @@ export function composeAbilityOutcome(
   const ids = environment.ids ?? {};
   const { context, resolutionId } = options;
   let working = game;
+  const deathEvidence: { before: StorytellerLobbyRecord; eventId: string }[] = [];
 
   for (const [operationIndex, operation] of outcome.operations.entries()) {
     const domainRefusal = (domain: AbilityDomain, result: { code: string; message: string; intentIndex?: number }): AbilityRefusal =>
@@ -486,6 +488,11 @@ export function composeAbilityOutcome(
           const incomplete = incompleteSuccessionReason(createRulesQuery(working, environment), outcome,
             options.automaticAction, operation.intents, createRulesQuery(next, environment));
           if (incomplete) return refuse("unsupported", incomplete, { operationIndex });
+          if (result.changed && !options.simulated && !options.manualWorkflow &&
+              (!environment.semantics || environment.semantics === CANONICAL_ABILITY_SEMANTICS) &&
+              ["imp", "slayer"].includes(options.automaticAction.roleId)) {
+            for (const eventId of result.plan.addedEventIds) deathEvidence.push({ before: working, eventId });
+          }
         }
         working = next;
         break;
@@ -580,6 +587,16 @@ export function composeAbilityOutcome(
   if (working === game) return { ok: true, changed: false };
 
   // Final validation of the WHOLE composed snapshot (10F-AC-05).
+  // Evidence is added only after the supported outcome's full consequence
+  // chain, while its pre-Life snapshot remains available. No intermediate
+  // death or pending successor is ever published or reconstructed later.
+  if (deathEvidence.length === 1 && options.automaticAction) {
+    const candidate = deathEvidence[0]!;
+    const evidence = captureResolvedDemonDeath(candidate.before, working, candidate.eventId, environment,
+      options.automaticAction.roleId === "imp" ? "automaticImp" : "automaticSlayer");
+    if (!evidence.ok) return refuse("invalidComposition", evidence.message);
+    working = evidence.game;
+  }
   const parsed = StorytellerGamePersistedSchema.safeParse(working);
   if (!parsed.success) {
     return refuse("invalidComposition", "The combined result failed validation -- nothing was recorded.");

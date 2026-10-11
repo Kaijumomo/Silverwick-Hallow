@@ -50,6 +50,7 @@ import { newParticipantId, participantIdAppearsIn } from "./participants";
 import { participantRoleStepEntries, participantStepKey, travelerArrivalStepKey, planNightStepStatus } from "./nightProgress";
 import { planAbilityResolution, type AbilityRefusal, type AbilityResolutionRequest } from "./abilityResolution";
 import { planRecordedLifeOutcome } from "./deathResolution";
+import { captureSaintQualification, captureMayorQualification, reconcileVictoryEvidence } from "./victoryEvidence";
 import { clearNightActionCorrections, invalidateNightActionCorrections, planNightActionTargetCorrection, rememberCorrectedNightAction, rememberNightAction, type NightActionTargetCorrection } from "./nightActionCorrection";
 import {
   applyGameRuleFactPlan,
@@ -1562,7 +1563,11 @@ export const useStorytellerStore = create<StorytellerStore>()(
               : withRevealTokens(state.game, patch.game, registryForGame(state, patch.game));
             const reconciled = patch.game === preparedAuthoritativeGame ? revealed
               : state.game ? reconcileVotingDependencies(state.game, revealed) : revealed;
-            const game = reconcilePreparedInformation(reconcileButlerReminders(reconciled), selectScriptById(state, reconciled.scriptId) ?? null);
+            // Validate a restored snapshot on its own terms: Undo must restore
+            // event-time evidence, never compare its source with the later game.
+            const evidence = reconcileVictoryEvidence(reconciled, reconciled);
+            if (!evidence.ok) return {};
+            const game = reconcilePreparedInformation(reconcileButlerReminders(evidence.game), selectScriptById(state, reconciled.scriptId) ?? null);
             return { ...patch, game, localSeq: state.localSeq + 1 };
           }
           return patch;
@@ -1571,10 +1576,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
       /** Save a bounded authoritative result before publishing to subscribers.
        * The ordinary persist middleware consumes the exact prewritten bytes.
        * A refused browser write changes no game, token, history or Undo. */
-      const commitAuthoritativeState = (planned: StorytellerLobbyRecord, state: StorytellerStore, authority: string): string | null => {
+      const commitAuthoritativeState = (planned: StorytellerLobbyRecord, state: StorytellerStore, authority: string, correction = false): string | null => {
         if (state.terminalClose?.status === "closing" || state.terminalClose?.confirmedRecovery || state.terminalClose?.recoveryPending)
           return "The game is closing. Nothing was recorded.";
         const current = state.game!;
+        const evidence = reconcileVictoryEvidence(current, planned, { correction });
+        if (!evidence.ok) return evidence.message;
+        planned = evidence.game;
         const notation = planAbilityUseReminders(current, withRevealTokens(current, planned, registryForGame(state, planned)), registryForGame(state, planned));
         if (!notation.ok) return notation.message;
         const prepared = reconcilePreparedInformation(reconcileButlerReminders(reconcileVotingDependencies(current, notation.game)), selectScriptById(state, planned.scriptId) ?? null);
@@ -1623,7 +1631,14 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const result = planLifeTransaction(game, transaction, undefined, environment);
         if (!result.ok) return result;
         if (!result.changed) return { ok: true, changed: false, eventIds: [] };
-        const unsafe = commitAuthoritativeState(applyLifePlan(game, result.plan), state, authority);
+        let planned = applyLifePlan(game, result.plan);
+        const correction = transaction.intents.some(intent => ["correctStatus", "retractEvent", "amendEvent", "lateRecord"].includes(intent.kind));
+        if (!correction && transaction.intents.length === 1 && transaction.intents[0]?.kind === "execution" && environment && result.plan.addedEventIds.length === 1) {
+          const evidence = captureSaintQualification(game, planned, result.plan.addedEventIds[0]!, environment);
+          if (!evidence.ok) return { ok: false, code: "refused", message: evidence.message };
+          planned = evidence.game;
+        }
+        const unsafe = commitAuthoritativeState(planned, state, authority, correction);
         return unsafe ? { ok: false, code: "refused", message: unsafe } : { ok: true, changed: true, eventIds: result.plan.addedEventIds };
       };
       /** Ending/reopening must be durable before any subscriber sees success. */
@@ -2687,7 +2702,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!result.changed) return { ok: true, changed: false };
         const notation = planAbilityUseReminders(game, applyRolePlan(game, result.plan), registryForGame(get(), game));
         if (!notation.ok) return { ok: false, code: "invalid", message: notation.message };
-        set({ undoStack: pushUndo(game, undoStack), game: notation.game });
+        const evidence = reconcileVictoryEvidence(game, notation.game, { correction: result.plan.actualRoleChanges.some(change => change.correction) });
+        if (!evidence.ok) return { ok: false, code: "invalid", message: evidence.message };
+        set({ undoStack: pushUndo(game, undoStack), game: evidence.game });
         return { ok: true, changed: true };
       },
 
@@ -3012,7 +3029,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const result = planAlignmentTransaction(game, transaction, { ids: defaultAlignmentIds });
         if (!result.ok) return result;
         if (!result.changed) return { ok: true, changed: false };
-        set({ undoStack: pushUndo(game, undoStack), game: applyAlignmentPlan(game, result.plan) });
+        const evidence = reconcileVictoryEvidence(game, applyAlignmentPlan(game, result.plan), { correction: transaction.intents.some(intent => intent.kind === "correctActualAlignment") });
+        if (!evidence.ok) return { ok: false, code: "invalid", message: evidence.message };
+        set({ undoStack: pushUndo(game, undoStack), game: evidence.game });
         return { ok: true, changed: true };
       },
 
@@ -3234,7 +3253,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const result = planEffectTransaction(game, transaction);
         if (!result.ok) return result;
         if (!result.changed) return { ok: true, changed: false, effectIds: [] };
-        const unsafe = commitAuthoritativeState(applyEffectPlan(game, result.plan), state, authority);
+        const unsafe = commitAuthoritativeState(applyEffectPlan(game, result.plan), state, authority, transaction.intents.some(intent => intent.kind.startsWith("correct")));
         if (unsafe) return { ok: false, code: "invalid", message: unsafe };
         return { ok: true, changed: true, effectIds: result.plan.appliedEffectIds };
       },
@@ -3447,8 +3466,11 @@ export const useStorytellerStore = create<StorytellerStore>()(
       },
 
       advancePhase: (context) => {
-        const { game, undoStack } = get();
+        const state = get();
+        const { game } = state;
         if (!game) return { ok: false, message: "No game is open." };
+        const refusal = characterActionRefusal(state);
+        if (refusal) return { ok: false, message: refusal };
         if (context) {
           const state = get();
           const authority = votingAuthorityToken(state.lobby);
@@ -3495,16 +3517,15 @@ export const useStorytellerStore = create<StorytellerStore>()(
         };
         if (phase === "day") advanced.voting = { ...currentVotingState(advanced), coverage: "known" };
         const withEffects = expired ? applyEffectPlan(advanced, expired) : advanced;
-        const finalGame = expiredFacts ? applyGameRuleFactPlan(withEffects, expiredFacts) : withEffects;
-        if (context) {
-          const failure = commitAuthoritativeState(finalGame, get(), context.writerToken!);
-          return failure ? { ok: false, message: failure } : { ok: true };
+        let finalGame = expiredFacts ? applyGameRuleFactPlan(withEffects, expiredFacts) : withEffects;
+        const registry = registryForGame(state, game);
+        if (registry) {
+          const evidence = captureMayorQualification(game, finalGame, { registry, script: selectScriptById(state, game.scriptId) ?? null });
+          if (!evidence.ok) return evidence;
+          finalGame = evidence.game;
         }
-        set({
-          undoStack: pushUndo(game, undoStack),
-          game: finalGame,
-        });
-        return { ok: true };
+        const failure = commitAuthoritativeState(finalGame, state, votingAuthorityToken(state.lobby)!);
+        return failure ? { ok: false, message: failure } : { ok: true };
       },
 
       setNightStepStatus: (day, stepKey, status, actionContext) => {

@@ -38,12 +38,12 @@ export function PlayersWorkspace(props: Parameters<typeof PlayersWorkspaceConten
 }
 
 function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPlayerId, night, nightKey, nightOpenRequest,
-  onEnd, endDisabled, onReviewHistory, supplementalInfo, onDiscardSetup }: {
+  onEnd, endDisabled, endAttention, onReviewHistory, supplementalInfo, onDiscardSetup }: {
   children: ReactNode; enabled: boolean; roles: RoleDef[];
   onMore: (id: string) => void; advancedPlayerId: string | null;
   night?: (visible: boolean, close: () => void) => ReactNode; nightKey?: string;
   nightOpenRequest?: number;
-  onEnd?: () => void; endDisabled?: boolean; onReviewHistory?: () => void;
+  onEnd?: () => void; endDisabled?: boolean; endAttention?: boolean; onReviewHistory?: () => void;
   supplementalInfo?: ReactNode; onDiscardSetup?: () => void;
 }) {
   const state = useStorytellerStore();
@@ -153,7 +153,7 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
   for (const p of context.occupied) if (p.actualRole) (holderNames[p.actualRole] ??= []).push(p.name || `Seat ${p.seat + 1}`);
   return <PlayersInteraction.Provider value={{ active: true, swapping: !!swap, swappingPlayerId: swap?.id, tap }}>
     <ReferenceWorkspace info={<><InfoPanel />{supplementalInfo}</>} enabled privacyMode={privacy} roles={roles} scriptName={script.name} night={night} nightKey={nightKey} nightOpenRequest={nightOpenRequest}
-      onEnd={onEnd} endDisabled={endDisabled} onReviewHistory={onReviewHistory}
+      onEnd={onEnd} endDisabled={endDisabled} endAttention={endAttention} onReviewHistory={onReviewHistory}
       onPanelOpen={() => { state.selectPlayer(null); setSwap(null); }}
       players={dismiss => <>
         <div className="players-summary"><p>{context.ordinary.length} residents · {context.travelers.length} travelers · {context.occupied.filter(p => p.alive).length} alive</p>

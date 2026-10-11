@@ -48,6 +48,7 @@
 .reference-edge-divider { display: block; width: 28px; height: 1px; margin: 8px auto; background: rgba(196,158,80,.16); pointer-events: none; }
 .reference-end-button { color: rgba(216,201,164,.48); }
 .reference-end-button:hover:not(:disabled) { color: #e88a7a; }
+.reference-end-attention { position: absolute; top: 4px; right: 12px; color: var(--gold-bright); font-size: 13px; line-height: 1; }
 .grimoire-rule-details { padding: 16px 22px; border-top: 1px solid rgba(196,158,80,.12); font: 13px var(--font-op); color: rgba(216,201,164,.65); }
 .grimoire-rule-details > summary { cursor: pointer; min-height: 36px; }
 .grimoire-rule-details .rule-fact-strip { flex-wrap: wrap; padding: 0; }

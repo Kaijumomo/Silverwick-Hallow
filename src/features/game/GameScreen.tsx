@@ -37,6 +37,7 @@ import { useShellLayout } from "@/components/useShellLayout";
 import { useShellStore } from "@/stores/shellStore";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { FinishGameDialog, GameResultSummary } from "./ResultDeclaration";
+import { endGameEligibility } from "@/stores/endGameEligibility";
 
 const PHASE_LABEL: Record<string, string> = {
   setup: "Setup",
@@ -478,6 +479,7 @@ function GameScreenContent() {
         nightKey={game.phase === "night" && script ? (gameLifecycleToken() + ":" + game.day) : undefined}
         night={game.phase === "night" && script ? (visible, close) => <ModernNightPanel game={game} script={script} visible={visible} onClose={close} /> : undefined}
         onEnd={game.phase === "day" || game.phase === "night" ? () => setFinishOpen(true) : undefined} endDisabled={terminalClosing || ending}
+        endAttention={!privacyMode && !!script && endGameEligibility(game, { registry, script }).kind === "verified"}
         onReviewHistory={ended && !privacyMode ? () => setActivityOpen(true) : undefined}
         onDiscardSetup={game.phase === "setup" ? () => setDiscardOpen(true) : undefined}
         supplementalInfo={!privacyMode && <>{(game.phase === "day" || game.phase === "night") && <button type="button" className="players-text-button" disabled={mutationLocked} onClick={() => setActivityOpen(true)}>Correct information records</button>}<details className="grimoire-rule-details"><summary>Game rules &amp; modifiers</summary><p>{[...game.fabled, ...(game.lorics ?? [])].map(id => registry.get(id)?.name ?? FABLED.find(r => r.id === id)?.name ?? LORICS.find(r => r.id === id)?.name ?? id).join(" · ") || "No active modifiers"}</p>{game.phase !== "setup" && <RuleFactStrip game={game} readOnly={ended || mutationLocked} />}</details></>}
