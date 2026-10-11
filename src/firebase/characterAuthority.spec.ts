@@ -23,6 +23,7 @@ import { currentVotingState, freshVotingDay, votingContextChanged } from "@/stor
 import { validVictoryEvidence } from "@/stores/victoryEvidence";
 import { SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED, MAYOR_DAY_END_GOOD_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR } from "@/stores/gameRuleFactRegistry";
 import { impair } from "@/test/proofFixtures";
+import { createRulesQuery } from "@/stores/rulesQuery";
 
 let env: RulesTestEnvironment;
 const code = "CHAR2345";
@@ -55,13 +56,67 @@ async function open() {
   useSessionRuntime.setState({ backend: writer, status: "live" });
   return { backend, writer, session };
 }
-function poison() {
+function poison(target = "p1") {
   const stepKey = participantStepKey(binding("p0").participantId, "poisoner");
   return store.getState().resolveAbility({ mode: "guided", invocationPath: "nightOrder", roleId: "poisoner",
-    fingerprint: captureFingerprint(game(), "p0", { day: 2, stepKey })!, inputs: { target: { kind: "participant", participants: [binding("p1")] } },
+    fingerprint: captureFingerprint(game(), "p0", { day: 2, stepKey })!, inputs: { target: { kind: "participant", participants: [binding(target)] } },
     completeStep: true }, undefined, captureCharacterActionContext());
 }
 const publish = (writer: SessionWriter) => writeProjections({ backend: writer, code, stState: game(), registry: buildRegistry(setupScript), online: {}, membership: {} });
+
+test("B9 self-poison is one private durable action through reload, writer recovery, expiry and Undo", async () => {
+  const { backend, writer, session } = await open();
+  const uid = "b9-poisoner-player";
+  const playerDb = env.authenticatedContext(uid).database();
+  await knockOnLobby(new FirebaseRoomBackend(playerDb as unknown as Database), code, uid, "Player 0");
+  await seatPlayer(writer, code, uid, "p0", null, { participantId: binding("p0").participantId, name: "Player 0" });
+  const project = (active: SessionWriter) => writeProjections({ backend: active, code, stState: game(), registry: buildRegistry(setupScript), online: {}, membership: { [uid]: "p0" } });
+  const query = () => createRulesQuery(game(), { script: setupScript, registry: buildRegistry(setupScript) });
+  store.setState({ undoStack: [], localSeq: 0 });
+  const before = game();
+  expect(poison("p0")).toMatchObject({ ok: true, changed: true });
+  expect(game().players.p0!.effects).toHaveLength(1);
+  const effect = game().players.p0!.effects[0]!;
+  expect(effect).toMatchObject({ type: "poisoned", sourceCharacter: "poisoner", sourceParticipant: { participantId: binding("p0").participantId }, expiry: { kind: "at", moment: { phase: "night", day: 3 } } });
+  expect(query().impaired(binding("p0"))).toEqual({ known: true, value: true });
+  expect(store.getState().undoStack).toEqual([before]);
+  expect(store.getState().localSeq).toBe(1);
+  const accepted = game();
+  expect(poison("p0")).toMatchObject({ ok: false });
+  expect(game()).toBe(accepted);
+  await project(writer);
+  expect(StorytellerGamePersistedSchema.parse(JSON.parse(await backend.get(`lobbies/${code}/checkpoint`) as string).game)).toEqual(accepted);
+  for (const path of ["checkpoint", "storyteller", "storyteller/players/p0/effects"])
+    await assertFails(playerDb.ref(`lobbies/${code}/${path}`).once("value"));
+  for (const path of ["public", "player/p0"])
+    expect(JSON.stringify((await playerDb.ref(`lobbies/${code}/${path}`).once("value")).val())).not.toMatch(/effects|sourceParticipant|poisoned|nightProgress|reminders/);
+  const saved = localStorage.getItem("new-blood-st")!;
+  store.setState({ game: null, undoStack: [] }); localStorage.setItem("new-blood-st", saved); await store.persist.rehydrate();
+  expect(game()).toEqual(accepted);
+  expect(query().impaired(binding("p0"))).toEqual({ known: true, value: true });
+  store.getState().undo(); expect(game()).toEqual(before);
+  expect(poison("p0")).toMatchObject({ ok: true }); await project(writer);
+  const retained = captureCharacterActionContext();
+  const captured = game();
+  await writer.dispose();
+  const replacement = new SessionWriter(backend, code, session.id); writers.push(replacement);
+  store.setState({ game: null, undoStack: [], localSeq: 0, sync: null });
+  const recovered = await startStorytellerSession(backend, store.getState().lobby!, replacement);
+  subscriptions.push(recovered.stop); useSessionRuntime.setState({ backend: replacement, status: "live" });
+  expect(game().players.p0!.effects).toEqual(captured.players.p0!.effects);
+  expect(query().impaired(binding("p0"))).toEqual({ known: true, value: true });
+  const recoveredState = store.getState();
+  expect(store.getState().recordDeath("p0", undefined, retained)).toMatchObject({ ok: false });
+  expect(store.getState()).toBe(recoveredState);
+  await expect(project(writer)).rejects.toThrow();
+  expect(store.getState().advancePhase(captureVotingContext())).toMatchObject({ ok: true });
+  expect(game().phase).toBe("day"); expect(query().impaired(binding("p0"))).toEqual({ known: true, value: true });
+  expect(store.getState().advancePhase(captureVotingContext())).toMatchObject({ ok: true });
+  expect(game().phase).toBe("night"); expect(game().day).toBe(3); expect(game().players.p0!.effects).toEqual([]);
+  store.getState().undo(); expect(game().phase).toBe("day"); expect(query().impaired(binding("p0"))).toEqual({ known: true, value: true });
+  await project(replacement);
+  expect(JSON.parse(await backend.get(`lobbies/${code}/checkpoint`) as string).game.players.p0.effects).toEqual(game().players.p0!.effects);
+});
 
 test.each(["saint", "saintNonqualifying", "mayor", "resolvedDemon"] as const)("B8 %s temporal evidence survives real checkpoint recovery privately and rejects stale writer actions", async character => {
   const { backend, writer, session } = await open();

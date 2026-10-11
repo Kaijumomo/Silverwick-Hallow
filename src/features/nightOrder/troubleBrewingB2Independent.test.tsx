@@ -60,16 +60,15 @@ it("rehydrated Poisoner completion cannot replay the transaction without its loc
   expect(game()).toBe(restored); expect(store.getState().undoStack).toBe(undo);
 });
 
-it("legal self-poisoning remains entirely manual with Next recording only the Night bookkeeping", () => {
-  render(<Guide />); const before = game(); const undo = store.getState().undoStack;
+it("self-poisoning uses direct selection and one action; Next only navigates", () => {
+  render(<Guide />); const before = game();
   tap("p0");
-  expect(game()).toBe(before); expect(store.getState().undoStack).toBe(undo);
-  expect(useTargetPicker.getState().active).toBeNull();
-  expect(screen.getByText(proofScript.characters.find(r => r.id === "poisoner")!.ability!)).toBeVisible();
+  const committed = game();
+  expect(committed.players.p0!.effects).toEqual([expect.objectContaining({ type: "poisoned", sourceCharacter: "poisoner" })]);
+  expect(committed.nightProgress[`2:${key("p0")}`]?.status).toBe("done");
   expect(screen.queryByRole("button", { name: /resolve|confirm|apply/i })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Next ›" }));
-  expect(game().players).toEqual(before.players);
-  expect(game().nightProgress[`2:${key("p0")}`]?.status).toBe("done");
+  expect(game()).toBe(committed);
   expect(store.getState().undoStack).toHaveLength(1);
   act(() => store.getState().undo()); expect(game()).toEqual(before);
 });

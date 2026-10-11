@@ -323,15 +323,23 @@ it("Vortox and Empath remain wholly manual: official text and Next complete only
   act(() => store.getState().undo()); expect(game().nightProgress).toEqual(before.nightProgress);
 });
 
-it("an unsupported selected interaction becomes manual with no partial effects", () => {
-  render(<Guide />); const before = game(); tap("p0");
+it("an Imp selecting a functioning Mayor becomes wholly manual with no partial death", () => {
+  store.setState({ game: proofGame(["poisoner", "monk", "imp", "empath", "mayor"]) });
+  useShellStore.getState().setNightCursor({ day: 2, stepKey: key("p2") });
+  render(<Guide />); const before = game();
+  expect(useTargetPicker.getState().active).not.toBeNull();
+  tap("p4");
   expect(game()).toBe(before); expect(useTargetPicker.getState().active).toBeNull();
+  expect(store.getState().undoStack).toHaveLength(0);
   expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.getByText(proofScript.characters.find(role => role.id === "imp")!.ability!)).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Continue action" })).toBeNull();
   act(() => { store.getState().resolveReminders({ intents: [{ kind: "place", target: { playerId: "p0", participantId: game().players.p0!.participantId! },
     reminder: { label: "Chosen" } }] }); });
   expect(useTargetPicker.getState().active).toBeNull();
   const manuallyAdjusted = game();
   fireEvent.click(screen.getByRole("button", { name: "Next ›" }));
   expect(game().players).toEqual(manuallyAdjusted.players);
-  expect(game().nightProgress[`2:${key("p0")}`]?.status).toBe("done");
+  expect(game().nightProgress[`2:${key("p2")}`]?.status).toBe("done");
+  expect(game().lifeEventWindow).toEqual(before.lifeEventWindow);
 });

@@ -28,9 +28,11 @@ describe("Poisoner -- functioning", () => {
       .toEqual({ kind: "at", moment: { phase: "night", day: 4 } });
   });
 
-  it("self-poisoning remains legal but wholly Manual because its sourced cycle is unmodeled; a dead target is modeled", () => {
+  it("self-poisoning persists and impairs its source; a dead target is also legal", () => {
     const g = patchPlayer(proofGame(ROLES), "p2", { alive: false });
-    expect(plan(g, request(g, "p0", "poisoner", { target: pick(g, "p0") }))).toMatchObject({ ok: false, code: "unsupported" });
+    const self = planned(plan(g, request(g, "p0", "poisoner", { target: pick(g, "p0") })));
+    expect(query(self).effectApplies(bind(self, "p0"), poisonOf(self, "p0"))).toEqual({ known: true, value: true });
+    expect(query(self).abilityFunctions(bind(self, "p0"))).toEqual({ known: true, value: false });
     expect(g.players.p0!.effects).toEqual([]);
     expect(poisonOf(planned(plan(g, request(g, "p0", "poisoner", { target: pick(g, "p2") }))), "p2")).toBeDefined();
   });

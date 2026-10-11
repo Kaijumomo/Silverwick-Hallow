@@ -1,5 +1,6 @@
 import { isCanonicalRole } from "@/data/canonical";
 import { passiveProtection, passiveInformationModifiers, passiveRegistrationOptions } from "@/abilities/characters/passiveRules";
+import { isPoisonerSelfEffect } from "@/abilities/characters/poisonerRules";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { activeModifiers, gateEvaluation, type HookScope, type ModifierDefinition, type ModifierGate } from "@/abilities/modifiers";
 import { resolveAbilitySemantics, type AbilitySemanticsRegistry } from "@/abilities/semantics";
@@ -215,7 +216,12 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     // departed / unseated source stays unknown, above.)
     if (!sourcePlayer.alive) return known(false);
     const next = new Set(visiting).add(key);
-    const functioning = functions(sourcePlayer, next);
+    // The character-domain self-effect exception is only a query overlay;
+    // it never rewrites stored applicability or solves other source cycles.
+    const selfPoison = isPoisonerSelfEffect(holder, effect, sourceCharacter ? environment.registry.get(sourceCharacter) : undefined);
+    const functioning = functions(selfPoison
+      ? { ...sourcePlayer, effects: sourcePlayer.effects.filter(candidate => candidate.id !== effect.id) }
+      : sourcePlayer, next);
     if (!functioning.known) return functioning;
     return known(functioning.value);
   };
