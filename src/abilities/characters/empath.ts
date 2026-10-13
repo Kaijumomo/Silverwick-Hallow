@@ -1,7 +1,7 @@
 import type { AbilityDescriptor, AbilityEvaluation, AbilityEvaluationContext } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import { answerOf, ask, outcome, requireLivingActor } from "./shared";
-import { informationAbilityRefusal } from "./informationSupport";
+import { informationAbilityRefusal, recluseInformationChoice } from "./informationSupport";
 
 /**
  * Empath -- SUPPORT SEMANTIC (matrix Sections 8 and 18.2), required to prove
@@ -62,10 +62,20 @@ export const EMPATH: AbilityDescriptor = {
       .filter((binding): binding is ParticipantBinding => !!binding)
       .filter((binding, index, all) => all.findIndex((other) => other.participantId === binding.participantId) === index);
     let evil = 0;
+    let recluseChoice = false;
     for (const neighbour of unique) {
       const alignment = context.query.registration(neighbour, "empath").alignment;
-      if (!alignment.known) return judgment();
+      if (!alignment.known) {
+        if (!recluseInformationChoice(context, neighbour)) return judgment();
+        recluseChoice = true;
+        continue;
+      }
       if (alignment.value === "evil") evil++;
+    }
+    if (recluseChoice) {
+      const told = answerOf(context.inputs, COMMUNICATED, "number");
+      return told ? deliver(context, told.value) : ask("The Recluse may register as evil. Choose the number to show for this interaction.",
+        { id: COMMUNICATED, kind: "number", source: "storyteller", label: "Number of evil living neighbours to show (0, 1 or 2)" });
     }
     return deliver(context, evil);
   },

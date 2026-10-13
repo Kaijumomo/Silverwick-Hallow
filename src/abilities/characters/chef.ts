@@ -1,7 +1,7 @@
 import type { AbilityDescriptor, AbilityEvaluation, AbilityEvaluationContext } from "../semantics";
 import type { RulesQuery } from "@/stores/rulesQuery";
 import { answerOf, ask, outcome, requireLivingActor } from "./shared";
-import { informationAbilityRefusal } from "./informationSupport";
+import { informationAbilityRefusal, recluseInformationChoice } from "./informationSupport";
 
 /** B5 extends PHASE10F_CHARACTER_RULES_MATRIX.md information semantics.
  * https://wiki.bloodontheclocktower.com/Chef
@@ -40,6 +40,7 @@ export const CHEF: AbilityDescriptor = {
     }
     const ring = ringOf(context.query);
     let pairs = 0;
+    let recluseChoice = false;
     const edges = chefMaximumPairs(context.query);
     for (let index = 0; index < edges; index++) {
       const pair = [ring[index]!, ring[(index + 1) % ring.length]!];
@@ -48,9 +49,19 @@ export const CHEF: AbilityDescriptor = {
       // An indisputably good endpoint makes this edge irrelevant to any
       // discretionary registration at its other endpoint.
       if (registrations.some(answer => answer.known && answer.value === "good")) continue;
-      if (registrations.some(answer => !answer.known)) return { kind: "unsupported",
-        message: "A neighbouring pair depends on discretionary registration. Resolve this information manually." };
+      if (registrations.some(answer => !answer.known)) {
+        if (registrations.some((answer, endpoint) => !answer.known && !recluseInformationChoice(context,
+          { playerId: pair[endpoint]!.id, participantId: pair[endpoint]!.participantId! }))) return { kind: "unsupported",
+          message: "A neighbouring pair depends on discretionary registration. Resolve this information manually." };
+        recluseChoice = true;
+        continue;
+      }
       pairs++;
+    }
+    if (recluseChoice) {
+      const told = answerOf(context.inputs, CHEF_COMMUNICATED, "number");
+      return told ? deliver(context, told.value) : ask("The Recluse may change the number of evil pairs. Choose the number to show for this interaction.",
+        { id: CHEF_COMMUNICATED, kind: "number", source: "storyteller", label: "Number of evil pairs shown" });
     }
     return deliver(context, pairs);
   },

@@ -76,12 +76,12 @@ describe("independent B1 contextual registration review", () => {
     }
   });
 
-  it("relevant Recluse uncertainty refuses the whole Night action despite a supplied legacy judgment", () => {
+  it("relevant Recluse uncertainty needs communicated information despite a supplied legacy judgment", () => {
     const g = ft(); openInStore(g); const before = store.getState(); const persisted = localStorage.getItem("new-blood-st");
     const write = vi.spyOn(Storage.prototype, "setItem"); let publications = 0; const unsubscribe = store.subscribe(() => publications++);
     try {
       const req = { ...ftRequest(g, "p2", "p4"), judgments: { [`registersAsDemon:${g.players.p2!.participantId}`]: yes(false) } };
-      expect(store.getState().resolveAbility(req)).toMatchObject({ ok: false, code: "unsupported" });
+      expect(store.getState().resolveAbility(req)).toMatchObject({ ok: false, code: "needsInput" });
       expect(store.getState()).toBe(before); expect(write).not.toHaveBeenCalled(); expect(publications).toBe(0);
       expect(localStorage.getItem("new-blood-st")).toBe(persisted); expect(g.nightProgress).toEqual({});
       expect(g.informationDeliveries).toEqual([]); expect(g.history).toEqual([]); expect(store.getState().undoStack).toEqual([]);

@@ -31,11 +31,12 @@ import { DirectDayAbility } from "./DirectDayAbility";
 
 type Props = {
   player: STPlayerRecord;
+  compact?: boolean;
   /** Verified semantics (defaults to the canonical registry; tests may pass fixtures). */
   semantics?: AbilitySemanticsRegistry;
 };
 
-export function AbilityEntry({ player, semantics = CANONICAL_ABILITY_SEMANTICS }: Props) {
+export function AbilityEntry({ player, compact = false, semantics = CANONICAL_ABILITY_SEMANTICS }: Props) {
   const game = useStorytellerStore((s) => s.game);
   const script = useStorytellerStore((s) => (game ? selectScriptById(s, game.scriptId) : undefined));
   const registry = useMemo(() => (script ? buildRegistry(script) : null), [script]);
@@ -55,22 +56,25 @@ export function AbilityEntry({ player, semantics = CANONICAL_ABILITY_SEMANTICS }
     actor: { playerId: player.id, participantId: player.participantId }, roleId, simulated: wake?.simulated,
   }).kind === "automated" ? ability.descriptor : null;
   const unavailable = ability.kind === "manual" ? `${roleName}: ${ability.reason}` : null;
+  if (compact && (game.phase !== "day" || roleId !== "slayer")) return null;
+  if (compact && (player.abilityUsed || !player.alive)) return <p className="behavior-help">{player.abilityUsed ? "Slayer ability used" : "No ability while dead"}</p>;
+  const Container = compact ? "div" : "details";
 
   return (
     <section className="drawer-section ability-entry">
-      <details>
-        <summary className="drawer-section-title">Abilities</summary>
+      <Container>
+        {!compact && <summary className="drawer-section-title">Abilities</summary>}
         <div className="ability-entry-body">
           {descriptor ? (
-            <button className="btn btn-sm btn-gold" onClick={() => setOpen("guided")}>Use ability… ({roleName})</button>
+            <button className="btn btn-sm btn-gold" onClick={() => setOpen("guided")}>{compact ? `Use ${roleName} ability` : `Use ability… (${roleName})`}</button>
           ) : (
             <p className="behavior-help">{registry.get(roleId)?.ability}</p>
           )}
-          <details><summary>Advanced corrections</summary>
+          {!compact && <details><summary>Advanced corrections</summary>
             <button className="btn btn-sm" onClick={() => setOpen("manual")}>Record outcome…</button>
-          </details>
+          </details>}
         </div>
-      </details>
+      </Container>
       {open === "guided" && descriptor?.roleId === "slayer" && descriptor.presentation.complexity === "simple" ? (
         <DirectDayAbility game={game} script={script} registry={registry} semantics={semantics} actorId={player.id} descriptor={descriptor}
           onClose={() => setOpen(null)} onManualRequired={() => { setManualAction(actionKey); setOpen(null); }} />

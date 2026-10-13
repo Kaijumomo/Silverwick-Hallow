@@ -90,6 +90,8 @@
 .game[data-grimoire-modern] .grimoire .token-name { display: flex; gap: 5px; align-items: baseline; border: 1px solid rgba(196,158,80,.15); border-radius: 10px; padding: 1px 7px; background: rgba(14,10,12,.86); color: #eadcb8; font: 600 13px/1.2 var(--font-op); max-width: 100%; }
 .game[data-grimoire-modern] .token-name > span:last-child { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .token-seat-label { flex: none; font: 11px var(--font-op); color: var(--text-dim); }
+.game[data-grimoire-modern] .grimoire .token-name { flex-shrink: 0; min-height: 20px; box-sizing: border-box; }
+.token-unassigned-disc { color: #49351f; font: 700 10px/1.2 var(--font-op); letter-spacing: -.02em; }
 .game[data-grimoire-modern] .grimoire .token.selected .token-disc { box-shadow: 0 0 0 3px #171116,0 0 0 5px var(--selected),0 10px 24px #0007; transform: none; }
 .game[data-grimoire-modern] .grimoire .token.acting .token-disc { box-shadow: 0 0 0 3px #171116,0 0 0 5px var(--acting),0 0 30px var(--acting-glow); }
 /* Keep the actor prominent even when its ability cannot target itself. */

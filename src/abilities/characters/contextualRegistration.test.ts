@@ -75,13 +75,13 @@ describe("B1 relevant cross-character results", () => {
     expect(answer(planned(read(game)))).toMatchObject({ value: false });
   });
 
-  it("Recluse ambiguity is manual unless a Demon or Red Herring already makes Yes certain", () => {
+  it("Recluse ambiguity needs a communicated answer unless a Demon or Red Herring makes Yes certain", () => {
     const game = ftGame("recluse");
-    expect(read(game)).toMatchObject({ ok: false, code: "unsupported" });
+    expect(read(game)).toMatchObject({ ok: false, code: "needsInput" });
     expect(answer(planned(read(game, "p2")))).toMatchObject({ value: true });
     expect(answer(planned(read(game, "p4")))).toMatchObject({ value: true });
     expect(answer(planned(read(impair(game, "p1"))))).toMatchObject({ value: false });
-    expect(read(patchPlayer(game, "p1", { alive: false }))).toMatchObject({ ok: false, code: "unsupported" });
+    expect(read(patchPlayer(game, "p1", { alive: false }))).toMatchObject({ ok: false, code: "needsInput" });
   });
 
   it("Slayer spends the shot without killing a Spy or impaired Recluse; healthy Recluse stays manual", () => {
@@ -125,13 +125,13 @@ describe("B1 relevant cross-character results", () => {
 describe("B1 authoritative refusal and supported commit", () => {
   beforeEach(() => localStorage.clear());
 
-  it("manual registration leaves store, persisted game, Undo and Night progress untouched", () => {
+  it("unanswered Recluse information leaves store, persisted game, Undo and Night progress untouched", () => {
     const game = ftGame("recluse");
     openInStore(game);
     const before = store.getState();
     const saved = JSON.stringify(localStorage);
     const result = before.resolveAbility(request(game, "p0", "fortuneteller", { targets: pick(game, "p1", "p3") }, { withStep: true, completeStep: true }), undefined, captureCharacterActionContext());
-    expect(result).toMatchObject({ ok: false, code: "unsupported" });
+    expect(result).toMatchObject({ ok: false, code: "needsInput" });
     expect(store.getState().game).toBe(before.game);
     expect(store.getState().undoStack).toBe(before.undoStack);
     expect(JSON.stringify(localStorage)).toBe(saved);

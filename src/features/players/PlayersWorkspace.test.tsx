@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { canonicalRoles } from "@/data/canonical";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
@@ -36,6 +36,47 @@ function chooseForFirst() {
 function setGame(patch: Partial<StorytellerLobbyRecord>) { store.setState({ game: { ...store.getState().game!, ...patch } }); }
 
 describe("Players workspace integration", () => {
+  it("groups Drunk shown-character preparation with the Players tab setup controls", () => {
+    const game = setupGame(["drunk", "washerwoman", "empath", "poisoner", "imp"],
+      { scriptId: script.id, setupRolesDealt: true, setupRolesRevealed: false });
+    game.players.p0!.shownRole = null;
+    store.setState({ game }); workspace(); openPlayers();
+    fireEvent.click(screen.getByRole("button", { name: "Prepare Drunk" }));
+    fireEvent.click(screen.getByRole("button", { name: "Chef" }));
+    expect(store.getState().game!.players.p0).toMatchObject({ actualRole: "drunk", shownRole: "chef" });
+    openPlayers();
+    expect(screen.getByRole("button", { name: "Change Drunk" })).toBeVisible();
+  });
+  it("prepares the Drunk directly with unused Townsfolk without changing actual roles or composition", () => {
+    store.setState({ game: setupGame(["drunk", "washerwoman", "empath", "poisoner", "imp"],
+      { scriptId: script.id, setupRolesDealt: true, setupRolesRevealed: false }) });
+    workspace();
+    act(() => store.getState().selectPlayer("p0"));
+    fireEvent.click(screen.getByRole("button", { name: "Choose shown character" }));
+    const chooser = screen.getByRole("dialog", { name: "Choose shown character" });
+    expect(within(chooser).queryByRole("button", { name: "Empath" })).toBeNull();
+    expect(within(chooser).queryByRole("button", { name: "Imp" })).toBeNull();
+    const before = store.getState().game!;
+    fireEvent.click(within(chooser).getByRole("button", { name: "Chef" }));
+    expect(store.getState().game!.players.p0).toMatchObject({ actualRole: "drunk", shownRole: "chef", participantId: before.players.p0!.participantId });
+    expect(Object.values(store.getState().game!.players).map(p => p.actualRole)).toEqual(Object.values(before.players).map(p => p.actualRole));
+    act(() => store.getState().undo());
+    expect(store.getState().game!.players.p0!.shownRole).toBe(before.players.p0!.shownRole);
+  });
+
+  it("refuses stale Drunk choices and hides the chooser under privacy", () => {
+    store.setState({ game: setupGame(["drunk", "washerwoman", "empath", "poisoner", "imp"],
+      { scriptId: script.id, setupRolesDealt: true, setupRolesRevealed: false }) });
+    workspace(); act(() => store.getState().selectPlayer("p0"));
+    fireEvent.click(screen.getByRole("button", { name: "Choose shown character" }));
+    act(() => store.setState({ game: { ...store.getState().game!, notes: "Changed while choosing" } }));
+    const before = store.getState().game;
+    fireEvent.click(screen.getByRole("button", { name: "Chef" }));
+    expect(store.getState().game).toBe(before);
+    expect(screen.getByRole("alert")).toHaveTextContent("Setup changed");
+    act(() => usePrivacyStore.setState({ enabled: true }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
   it("opens Distribute Roles for a genuinely new game before any reserved seats are filled", () => {
     store.getState().newGame(script.id, { plannedPlayerCount: 5 });
     const before = store.getState().game;

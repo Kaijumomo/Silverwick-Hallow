@@ -9,6 +9,8 @@ import { iconUrlFor } from "@/data/iconUrl";
 import { registerVotingAuthorityReader } from "@/firebase/votingAuthority";
 import { captureVotingContext } from "@/stores/storytellerStore";
 import { currentVotingState } from "@/stores/voting";
+import { proofGame, proofScript } from "@/test/proofFixtures";
+import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
 
 beforeEach(() => {
   usePrivacyStore.setState({ enabled: false });
@@ -37,6 +39,37 @@ it("shows the canonical identity and delegates character/seat actions without mu
   expect(actions.onMore).toHaveBeenCalledOnce();
   expect(store.getState().game).toBe(game);
   expect(store.getState().undoStack).toHaveLength(0);
+});
+
+it("offers Slayer directly, clears the popover from targeting and preserves atomic succession and Undo", () => {
+  store.setState({ game: proofGame(["slayer", "imp", "scarletwoman", "chef", "monk"], "day", 2),
+    customScripts: { [proofScript.id]: proofScript } });
+  render(<View {...callbacks()} />);
+  fireEvent.click(screen.getByRole("button", { name: "Use Slayer ability" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(useTargetPicker.getState().active).not.toBeNull();
+  act(() => { pickSeatIfPicking(store.getState().game!, "p1"); });
+  expect(store.getState().game!.players.p0!.abilityUsed).toBe(true);
+  expect(store.getState().game!.players.p1!.alive).toBe(false);
+  expect(store.getState().game!.players.p2!.actualRole).toBe("imp");
+  expect(screen.queryByRole("button", { name: "Use Slayer ability" })).toBeNull();
+  act(() => store.getState().undo());
+  expect(store.getState().game!.players.p1!.alive).toBe(true);
+  expect(store.getState().game!.players.p2!.actualRole).toBe("scarletwoman");
+  expect(screen.getByRole("button", { name: "Use Slayer ability" })).toBeVisible();
+});
+
+it("disarms the popover Slayer target when privacy hides the actor", () => {
+  store.setState({ game: proofGame(["slayer", "imp", "chef", "monk", "soldier"], "day", 2),
+    customScripts: { [proofScript.id]: proofScript } });
+  render(<View {...callbacks()} />);
+  fireEvent.click(screen.getByRole("button", { name: "Use Slayer ability" }));
+  const held = useTargetPicker.getState().active!;
+  const before = store.getState().game!;
+  act(() => usePrivacyStore.setState({ enabled: true }));
+  act(() => held.onPick({ playerId: "p1", participantId: before.players.p1!.participantId! }));
+  expect(useTargetPicker.getState().active).toBeNull();
+  expect(store.getState().game).toBe(before);
 });
 
 it("removes all private content and resets the palette filter under privacy", () => {

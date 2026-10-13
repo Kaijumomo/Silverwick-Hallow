@@ -36,8 +36,9 @@ describe("B5 Chef official adjacent-pair information", () => {
   });
   it.each(["spy", "recluse"])("never silently chooses relevant %s registration", role => {
     const g = patchPlayer(base(), "p2", { actualRole: role, shownRole: role, actualAlignment: role === "spy" ? "evil" : "good" });
-    expect(evaluate(g)).toMatchObject({ ok: false, code: "unsupported" });
-    expect(evaluate(g, 0)).toMatchObject({ ok: false, code: "unsupported" });
+    expect(evaluate(g)).toMatchObject({ ok: false, code: role === "recluse" ? "needsInput" : "unsupported" });
+    if (role === "recluse") expect(result(g, 0)).toMatchObject({ value: 0 });
+    else expect(evaluate(g, 0)).toMatchObject({ ok: false, code: "unsupported" });
     expect(result(impair(g, "p2"))).toMatchObject({ value: role === "spy" ? 2 : 0 });
   });
   it("irrelevant discretionary registration cannot alter a known-good edge", () => {

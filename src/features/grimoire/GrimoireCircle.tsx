@@ -312,6 +312,7 @@ function Token({
               }}
             />
           ) : null}
+          {modern && !displayRole && !privacyMode && spec.text && <span className="token-unassigned-disc" aria-hidden="true">No role</span>}
           {modern && displayRole && (!privacyMode || publicRole) && spec.text && <svg className="token-character-arc" viewBox="0 0 100 100" aria-hidden="true">
             <defs><path id={arcId} d="M 10,56 A 41,41 0 0 0 90,56" /></defs>
             <text><textPath href={`#${arcId}`} startOffset="50%" textAnchor="middle">{displayRole.name}</textPath></text>
@@ -370,11 +371,11 @@ function Token({
       {votingOpen && !spec.text && <div className="voting-compact-name" title={player.name}><span>{player.seat + 1} {player.name}</span>{!player.alive && <small>{player.ghostVote ? "Vote available" : "Vote used"}</small>}</div>}
       {spec.text && <>
         {privacyMode && !publicRole ? (
-          <div className="token-role token-role-private">role hidden</div>
+          <div className={`token-role token-role-private${modern ? " sr-only" : ""}`}>role hidden</div>
         ) : displayRole ? (
           <div className={`token-role type-${displayRole.type}${modern ? " sr-only" : ""}`}>{displayRole.name}</div>
         ) : (
-          <div className="token-role unassigned">unassigned</div>
+          <div className={`token-role unassigned${modern ? " sr-only" : ""}`}>unassigned</div>
         )}
         <div className="token-name" title={player.name}>{modern && <span className="token-seat-label" aria-hidden="true">{player.seat + 1}</span>}<span>{player.name}</span></div>
         {spec.reminderLabels > 0 && nonIconEffects.length > 0 && (
@@ -419,6 +420,7 @@ type EmptySeatProps = {
 };
 
 function EmptySeat({ seatNumber, spec, x, y, onClick }: EmptySeatProps) {
+  const modern = usePlayersInteraction()?.active;
   return (
     <button
       type="button"
@@ -435,8 +437,8 @@ function EmptySeat({ seatNumber, spec, x, y, onClick }: EmptySeatProps) {
         </div>
       </div>
       {spec.text && <>
-        <div className="token-role empty-seat-label">Empty seat</div>
-        <div className="token-name empty-seat-num">Seat {seatNumber}</div>
+        {!modern && <div className="token-role empty-seat-label">Empty seat</div>}
+        <div className="token-name empty-seat-num">{modern ? `${seatNumber} · Empty seat` : `Seat ${seatNumber}`}</div>
       </>}
     </button>
   );

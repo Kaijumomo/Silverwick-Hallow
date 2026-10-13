@@ -9,11 +9,14 @@ import type { STPlayerRecord } from "@/stores/types";
 import { LifeControls } from "@/features/life/LifeControls";
 import { LifeStateText } from "@/features/life/LifeMarks";
 import { PopoverReminders } from "./PopoverReminders";
+import { AbilityEntry } from "@/features/abilities/AbilityEntry";
+import { useTargetPicker } from "@/features/abilities/abilityUi";
 import "./player-popover-refinement.css";
 
 export type PlayerPopoverProps = {
   player: STPlayerRecord;
   onChangeCharacter: () => void;
+  onChooseShownCharacter?: () => void;
   onSwapSeats: () => void;
   onShowPlayer?: () => void;
   onMore: () => void;
@@ -28,13 +31,14 @@ export function PlayerPopover(props: PlayerPopoverProps) {
   return <PopoverContents key={props.player.participantId ?? props.player.id} {...props} />;
 }
 
-function PopoverContents({ player, onChangeCharacter, onSwapSeats, onShowPlayer, onMore, onClose }: PlayerPopoverProps) {
+function PopoverContents({ player, onChangeCharacter, onChooseShownCharacter, onSwapSeats, onShowPlayer, onMore, onClose }: PlayerPopoverProps) {
   const game = useStorytellerStore(s => s.game);
   const script = useStorytellerStore(s => game ? selectScriptById(s, game.scriptId) : undefined);
   const roles = resolvedCharacters(script);
   const role = roles.find(r => r.id === player.actualRole);
   const shown = roles.find(r => r.id === player.shownRole);
   const ended = game?.phase === "ended";
+  const choosingTarget = useTargetPicker(s => s.active?.owner === `day-ability:${player.participantId}`);
   const titleId = useId();
   const card = useRef<HTMLElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -85,7 +89,7 @@ function PopoverContents({ player, onChangeCharacter, onSwapSeats, onShowPlayer,
 
   if (!game || player.isEmpty) return null;
   return createPortal(<aside ref={card} className="player-popover" role="dialog" aria-modal="false" aria-labelledby={titleId}
-    style={position} onKeyDown={event => {
+    style={{ ...position, ...(choosingTarget ? { display: "none" } : {}) }} onKeyDown={event => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
       event.preventDefault(); event.stopPropagation(); onClose();
     }}>
@@ -103,6 +107,8 @@ function PopoverContents({ player, onChangeCharacter, onSwapSeats, onShowPlayer,
       </div>
       {role?.ability && <p className="player-popover-ability">{role.ability}</p>}
       {player.shownRole !== player.actualRole && <p className="player-popover-identity">Shown to player: <strong>{shown?.name ?? "Not revealed"}</strong></p>}
+      {onChooseShownCharacter && <button className="btn btn-gold" type="button" onClick={onChooseShownCharacter}>Choose shown character</button>}
+      <AbilityEntry player={player} compact />
       {ended ? <p className="player-popover-readonly"><LifeStateText state={lifeStatusOf(player).state} /> · Game ended</p> : <LifeControls player={player} compact />}
       <PopoverReminders player={player} />
     </div>

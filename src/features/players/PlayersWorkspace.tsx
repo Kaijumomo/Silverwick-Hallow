@@ -30,6 +30,7 @@ import { PlayerPopover } from "./PlayerPopover";
 import type { RoleDef, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 
 type Chooser = { kind: "distribute"; game: StorytellerLobbyRecord; actionContext: CharacterActionContext } |
+  { kind: "shown"; game: StorytellerLobbyRecord; player: STPlayerRecord; actionContext: CharacterActionContext } |
   { kind: "choose"; game: StorytellerLobbyRecord; player: STPlayerRecord };
 
 /** Coordinates presentation only; mutations use the existing store commands. */
@@ -98,6 +99,23 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
     setChooser({ kind: "distribute", game, actionContext }); setError(null); state.selectPlayer(null);
   };
   const openChoose = (player: STPlayerRecord) => { setError(null); setChooser({ kind: "choose", game, player }); };
+  const openShown = (player: STPlayerRecord) => { setError(null); setChooser({ kind: "shown", game, player, actionContext }); };
+  const shownChoices = ordinary.filter(role => role.type === "townsfolk" &&
+    !context.occupied.some(player => player.actualRole === role.id));
+  const chooseShown = (roleId: string) => {
+    if (chooser?.kind !== "shown") return;
+    const current = useStorytellerStore.getState();
+    const liveContext = captureCharacterActionContext();
+    if (current.game !== chooser.game || !canRefineSetup(game).ok ||
+      liveContext.lobby !== chooser.actionContext.lobby || liveContext.lifecycle !== chooser.actionContext.lifecycle ||
+      liveContext.writerToken !== chooser.actionContext.writerToken || usePrivacyStore.getState().enabled ||
+      chooser.player.actualRole !== "drunk" || !shownChoices.some(role => role.id === roleId)) {
+      setError("Setup changed. Close this chooser and select the Drunk again."); return;
+    }
+    const result = current.setShownRole(chooser.player.id, roleId);
+    report(result);
+    if (result.ok) setChooser(null);
+  };
   const choose = (roleId: string) => {
     if (chooser?.kind !== "choose") return;
     const current = useStorytellerStore.getState();
@@ -172,9 +190,15 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
         {game.phase === "setup" && <section className="players-preparation" aria-label="Setup preparation">
           <p>{setup.message}</p>
           {isPostDeal(game) && !isInitialRevealComplete(game) && <>
-            {setup.revealReadiness?.pendingIds.map(id => <button className="btn btn-sm" key={id} onClick={() => { dismiss(); state.selectPlayer(id); onMore(id); }}>Prepare {game.players[id]?.name || "player"}</button>)}
+            {setup.revealReadiness?.pendingIds.filter(id => game.players[id]?.actualRole !== "drunk").map(id => <button className="btn btn-sm" key={id} onClick={() => { dismiss(); state.selectPlayer(id); onMore(id); }}>Prepare {game.players[id]?.name || "player"}</button>)}
             <button className="btn btn-gold" disabled={!setup.revealReadiness?.ready} onClick={() => report(state.revealRoles(actionContext))}>Reveal Roles</button>
           </>}
+          {canRefineSetup(game).ok && context.ordinary.filter(player => player.actualRole === "drunk").map(player =>
+            <div className="setup-prep-row" key={player.id} aria-label={`Drunk preparation for ${player.name}`}>
+              <span className="setup-prep-name">Drunk · {player.name}</span>
+              <span className="setup-prep-need">{byId.get(player.shownRole ?? "")?.name ?? "Choose shown character"}</span>
+              <button className="btn btn-sm" onClick={() => { dismiss(); openShown(player); }}>{player.shownRole ? "Change" : "Prepare"} Drunk</button>
+            </div>)}
           {isPostDeal(game) && <RedHerringPreparation context={context} selection={redHerringSelection} onChoose={dismiss} />}
           {isPostDeal(game) && <FirstInformationPreparation selection={firstInformation} onChoose={dismiss} />}
           {isInitialRevealComplete(game) && <><PrivateRevealReadiness game={game} live={!!state.lobby} /><button className="btn btn-gold" onClick={() => report(state.beginNightOne(actionContext))}>Begin Night 1</button></>}
@@ -191,6 +215,7 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
       {!privacy && swap && <div className="players-swap-prompt" role="status">Tap another token to swap seats with {swap.name}<button className="btn btn-sm" onClick={() => setSwap(null)}>Cancel</button></div>}
       {!privacy && !ended && selected && !selected.isEmpty && advancedPlayerId !== selected.id && !swap && !chooser && <PlayerPopover player={selected}
         onClose={() => state.selectPlayer(null)} onMore={() => onMore(selected.id)} onChangeCharacter={() => openChoose(selected)}
+        onChooseShownCharacter={selected.actualRole === "drunk" && canRefineSetup(game).ok ? () => openShown(selected) : undefined}
         onShowPlayer={() => {
           showPlayerReturn.current = document.querySelector<HTMLElement>(`.grimoire .token[data-player-id="${CSS.escape(selected.id)}"]`);
           const refusal = showPlayer(selected, showPlayerReturn); if (refusal) setNotice(refusal); else state.selectPlayer(null);
@@ -198,6 +223,9 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
         onSwapSeats={() => { useTargetPicker.getState().cancel(); setSwap(selected); state.selectPlayer(null); }} />}
       {!privacy && (notice || redHerringSelection.error || firstInformation.error) && <div className="players-notice" role="status">{firstInformation.error || redHerringSelection.error || notice}<button aria-label="Dismiss message" onClick={() => { setNotice(""); redHerringSelection.clearError(); firstInformation.clearError(); }}>×</button></div>}
     </ReferenceWorkspace>
+    {!privacy && !ended && chooser?.kind === "shown" && <RoleChooser mode="select" title="Choose shown character"
+      instruction={`Shown to ${chooser.player.name} · Out-of-play Townsfolk`} scriptName={script.name} roles={shownChoices}
+      onChoose={chooseShown} onClose={() => setChooser(null)} error={error ?? undefined} />}
     {!privacy && !ended && chooser?.kind === "distribute" && <RoleChooser mode="distribute" roles={ordinary} scriptName={script.name} selected={draft}
       residents={context.population.targetNonTravelerCount ?? context.ordinary.length} travelers={context.travelers.length} required={required}
       distributionLabel={`Distribute to ${context.ordinary.length} residents`} canDistribute={privateSetup && draftAnalysis.readiness.deal.ok} status="Distributes residents privately. Traveler characters are managed individually."

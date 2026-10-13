@@ -40,11 +40,15 @@ it("independent: Next with only one Fortune Teller target records no partial inf
   expect(game()).toBe(continued); expect(game().informationDeliveries).toEqual([]);
 });
 
-it("independent: relevant Recluse selected second leaves the complete action manual without a number or delivery", () => {
+it("R1: relevant Recluse selected second exposes Yes/No and commits only the explicit answer", () => {
   const g = withRedHerring(proofGame(["fortuneteller", "recluse", "baron", "monk", "soldier"]), "p4"); open(g);
   tap("p2"); tap("p1"); expect(game()).toBe(g); expect(store.getState().undoStack).toEqual([]);
-  expect(screen.queryByLabelText("Information to communicate")).toBeNull(); expect(useTargetPicker.getState().active).toBeNull();
-  expect(screen.queryByRole("dialog")).toBeNull(); next(); expect(game().informationDeliveries).toEqual([]);
+  expect(screen.getByRole("button", { name: "YES" })).toBeInTheDocument(); expect(useTargetPicker.getState().active).toBeNull();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "NO" }));
+  expect(game().informationDeliveries).toHaveLength(1);
+  expect(game().informationDeliveries[0]!.values).toContainEqual({ requirementId: "isDemon", kind: "boolean", value: false });
+  expect(game().players).toEqual(g.players); expect(store.getState().undoStack).toHaveLength(1);
 });
 
 it("independent: Privacy removes a completed deliberately false answer from text and accessibility", () => {
@@ -53,6 +57,25 @@ it("independent: Privacy removes a completed deliberately false answer from text
   const accepted = game(); act(() => usePrivacyStore.getState().setEnabled(true));
   expect(screen.queryByLabelText("Information to communicate")).toBeNull(); expect(screen.queryByText("Empath")).toBeNull();
   expect(screen.queryByText("Player 0")).toBeNull(); expect(game()).toBe(accepted);
+});
+
+it.each(["empath", "chef"])("R1: %s Recluse choice saves atomically, survives reload and Undo, and stays private", async role => {
+  const g = proofGame([role, "recluse", "imp", "monk", "soldier"], "night", 1);
+  const view = open(g);
+  expect(screen.getByRole("button", { name: "1" })).toBeInTheDocument();
+  expect(game()).toBe(g); expect(game().informationDeliveries).toEqual([]);
+  fireEvent.click(screen.getByRole("button", { name: "1" }));
+  const accepted = game(); const saved = localStorage.getItem("new-blood-st")!;
+  expect(accepted.informationDeliveries).toHaveLength(1); expect(accepted.players).toEqual(g.players);
+  expect(store.getState().undoStack).toHaveLength(1);
+  expect(accepted.nightProgress[`1:${participantStepKey(g.players.p0!.participantId!, role)}`]).toMatchObject({ status: "done" });
+  act(() => usePrivacyStore.getState().setEnabled(true));
+  expect(screen.queryByLabelText("Information to communicate")).toBeNull();
+  view.unmount();
+  await act(async () => { localStorage.setItem("new-blood-st", saved); await store.persist.rehydrate(); });
+  expect(game()).toEqual(accepted);
+  act(() => store.getState().undo());
+  expect(game().informationDeliveries).toEqual(g.informationDeliveries); expect(game().nightProgress).toEqual(g.nightProgress);
 });
 
 it("independent: reopening a manually completed unchosen picker never invents a result", () => {

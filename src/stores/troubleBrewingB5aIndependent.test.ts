@@ -48,10 +48,10 @@ describe("B5a independent authoritative information verification", () => {
     expect(number()).toMatchObject({ value: 2 });
   });
 
-  it.each(["spy", "recluse"])("Chef refuses consequential %s registration without any publication", role => {
+  it.each(["spy", "recluse"])("Chef never chooses consequential %s registration without communicated information", role => {
     const g = proofGame(["chef", "imp", role, "monk", "poisoner"], "night", 1);
     openInStore(g); const before = store.getState(); const saved = localStorage.getItem("new-blood-st");
-    expect(use(g, "chef")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(use(g, "chef")).toMatchObject({ ok: false, code: role === "recluse" ? "needsInput" : "unsupported" });
     expect(store.getState()).toBe(before); expect(localStorage.getItem("new-blood-st")).toBe(saved);
   });
 

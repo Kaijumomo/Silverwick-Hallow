@@ -2,7 +2,7 @@ import type { AbilityDescriptor, AbilityEvaluation, AbilityEvaluationContext } f
 import type { AbilityOperation, ParticipantBinding } from "@/stores/abilityResolution";
 import { answerOf, ask, nameOf, outcome, participantsOf, requireLivingActor, subjectId } from "./shared";
 import { fortuneTellerSetupRefusal } from "./fortuneTellerSetupFact";
-import { informationAbilityRefusal } from "./informationSupport";
+import { informationAbilityRefusal, recluseInformationChoice } from "./informationSupport";
 
 /**
  * Fortune Teller -- GUIDED with the approved Red Herring state.
@@ -106,6 +106,12 @@ function evaluate(context: AbilityEvaluationContext): AbilityEvaluation {
     ambiguous.push(target);
   }
   if (!yes) {
+    if (ambiguous.length && ambiguous.every(target => recluseInformationChoice(context, target))) {
+      const id = subjectId(COMMUNICATED, ...targets);
+      const told = answerOf(context.inputs, id, "boolean");
+      return told ? deliver(context, targets, told.value) : ask("The Recluse may register as a Demon. Choose the answer to show for this pair.",
+        { id, kind: "boolean", source: "storyteller", label: "Answer given: either is a Demon" });
+    }
     const open = ambiguous.filter((target) => !answerOf(context.judgments, registersAsDemonJudgment(target), "boolean"));
     if (open.length) {
       return ask("A chosen player's registration is ambiguous: the Storyteller decides whether they register as a Demon.",

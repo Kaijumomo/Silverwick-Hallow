@@ -91,13 +91,14 @@ describe("Fortune Teller -- the answer", () => {
     expect(answer(planned(ask(dead, "p1", "p2")))).toMatchObject({ value: true });
   });
 
-  it("uncertain Recluse registration keeps the whole action Manual; a decisive Demon remains known", () => {
+  it("uncertain Recluse registration requires communicated information; a decisive Demon remains known", () => {
     const before = JSON.stringify(g);
-    expect(ask(g, "p4", "p2")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(ask(g, "p4", "p2")).toMatchObject({ ok: false, code: "needsInput" });
     const judged = (value: boolean) =>
       plan(g, request(g, "p0", "fortuneteller", { targets: pick(g, "p4", "p2") }, { judgments: { [registersAsDemonJudgment(bind(g, "p4"))]: yes(value) } }));
-    expect(judged(true)).toMatchObject({ ok: false, code: "unsupported" });
-    expect(judged(false)).toMatchObject({ ok: false, code: "unsupported" });
+    expect(judged(true)).toMatchObject({ ok: false, code: "needsInput" });
+    expect(judged(false)).toMatchObject({ ok: false, code: "needsInput" });
+    for (const value of [false, true]) expect(answer(planned(ask(g, "p4", "p2", { [COMMUNICATED]: yes(value) })))).toMatchObject({ value });
     expect(JSON.stringify(g)).toBe(before);
     // Already Yes from the actual Demon: no question.
     expect(answer(planned(ask(g, "p4", "p1")))).toMatchObject({ value: true });
