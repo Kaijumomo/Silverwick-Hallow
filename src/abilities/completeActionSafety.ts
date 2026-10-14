@@ -20,7 +20,7 @@ export function incompleteSuccessionReason(
   if (deaths.length > 1 && Object.values(query.game.players).some(p => !p.isEmpty && p.alive && p.actualRole === "scarletwoman"))
     return "Scarlet Woman succession across multiple deaths requires manual resolution.";
   for (const death of deaths) {
-    const succession = scarletWomanSuccession(query, death.target);
+    const succession = scarletWomanSuccession(query, death.target, action.roleId === "slayer" ? "slayer" : undefined);
     if (succession.kind === "manual") return succession.reason;
     if (succession.kind === "none") continue;
     const binding = succession.target;

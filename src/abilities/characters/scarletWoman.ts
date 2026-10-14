@@ -13,11 +13,16 @@ export type ScarletWomanSuccession = { kind: "none" }
  * Evaluate only the snapshot immediately BEFORE the actual death. This is
  * an ephemeral character ruling, not a Life writer or a persisted trigger.
  * https://wiki.bloodontheclocktower.com/Scarlet_Woman */
-export function scarletWomanSuccession(query: RulesQuery, target: ParticipantBinding): ScarletWomanSuccession {
+export function scarletWomanSuccession(query: RulesQuery, target: ParticipantBinding, interaction?: "slayer"): ScarletWomanSuccession {
   const manual = (reason: string): ScarletWomanSuccession => ({ kind: "manual", reason });
   const dying = query.participant(target);
   if (!dying) return manual("The dying participant changed. Resolve the entire action manually.");
   if (!dying.alive) return { kind: "none" };
+  // A Recluse registering as a Demon to the Slayer is still an actual Outsider.
+  // That shot's choice is not registration to the Scarlet Woman and cannot
+  // transfer the real Demon's role.
+  const dyingRole = query.roleOf(dying.actualRole);
+  if (interaction === "slayer" && dyingRole?.id === "recluse" && isCanonicalRole(dyingRole)) return { kind: "none" };
   const living = Object.values(query.game.players).filter(p => !p.isEmpty && p.participantId && p.alive && !p.isTraveler);
   if (living.length < 5) return { kind: "none" };
   const women = living.filter(p => p.actualRole === "scarletwoman");

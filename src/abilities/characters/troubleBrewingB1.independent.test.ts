@@ -88,11 +88,11 @@ describe("independent B1 contextual registration review", () => {
     } finally { unsubscribe(); }
   });
 
-  it("Slayer spends on Spy or poisoned Recluse without changing identity; healthy Recluse stays manual", () => {
+  it("Slayer spends on Spy or poisoned Recluse without changing identity; healthy Recluse requests a choice", () => {
     for (const role of ["spy", "recluse"]) {
       let g = proofGame(["slayer", role, "imp", "chef", "monk"], "day");
       const shot = () => request(g, "p0", "slayer", { target: pick(g, "p1") });
-      if (role === "recluse") { expect(plan(g, shot())).toMatchObject({ ok: false, code: "unsupported" }); g = impair(g, "p1"); }
+      if (role === "recluse") { expect(plan(g, shot())).toMatchObject({ ok: false, code: "needsInput" }); g = impair(g, "p1"); }
       const next = planned(plan(g, shot()));
       expect(next.players.p0!.abilityUsed).toBe(true); expect(next.players.p1).toEqual(g.players.p1);
     }

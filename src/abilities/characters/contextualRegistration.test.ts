@@ -84,14 +84,14 @@ describe("B1 relevant cross-character results", () => {
     expect(read(patchPlayer(game, "p1", { alive: false }))).toMatchObject({ ok: false, code: "needsInput" });
   });
 
-  it("Slayer spends the shot without killing a Spy or impaired Recluse; healthy Recluse stays manual", () => {
+  it("Slayer spends the shot without killing a Spy or impaired Recluse; healthy Recluse requests a choice", () => {
     for (const role of ["spy", "recluse"]) {
       const healthy = proofGame(["slayer", role, "imp"], "day");
       const game = role === "recluse" ? impair(healthy, "p1") : healthy;
       const next = planned(plan(game, request(game, "p0", "slayer", { target: pick(game, "p1") })));
       expect(next.players.p0!.abilityUsed).toBe(true);
       expect(next.players.p1!.alive).toBe(true);
-      if (role === "recluse") expect(plan(healthy, request(healthy, "p0", "slayer", { target: pick(healthy, "p1") }))).toMatchObject({ ok: false, code: "unsupported" });
+      if (role === "recluse") expect(plan(healthy, request(healthy, "p0", "slayer", { target: pick(healthy, "p1") }))).toMatchObject({ ok: false, code: "needsInput" });
     }
   });
 

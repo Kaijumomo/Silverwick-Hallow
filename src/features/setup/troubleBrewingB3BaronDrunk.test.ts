@@ -12,6 +12,7 @@ import { randomSetup } from "./randomSetup";
 import { selectSetupContext } from "./setupContext";
 import { analyzeSetup } from "./setupAnalyzer";
 import { conflictingDrunkDisguise } from "./revealReadiness";
+import { DRUNK_REMINDER_LABEL, ownsDrunkReminder } from "@/stores/drunkReminders";
 
 const registry = buildRegistry(troubleBrewing);
 const townsfolk = ["washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "monk", "ravenkeeper", "virgin", "slayer", "soldier", "mayor"];
@@ -144,6 +145,10 @@ describe("B3 all thirteen Drunk disguises", () => {
     const id = game().seatOrder.find(id => game().players[id]!.actualRole === "drunk")!;
     expect(state().revealRoles().ok).toBe(false);
     expect(state().setShownRole(id, shown).ok).toBe(true);
+    const drunkReminder = game().players[id]!.reminders[0]!;
+    expect(game().players[id]!.reminders).toHaveLength(1);
+    expect(drunkReminder.label).toBe(DRUNK_REMINDER_LABEL);
+    expect(ownsDrunkReminder(game().players[id]!, drunkReminder)).toBe(true);
     expect(projectLobbyToSelfMap(game(), registry)).toEqual({});
     expect(state().revealRoles().ok).toBe(true);
     expect(projectLobbyToSelfMap(game(), registry)[id]).toEqual({ shownRole: shown, shownAlignment: "good" });
@@ -158,10 +163,12 @@ describe("B3 all thirteen Drunk disguises", () => {
     expect(game().players[id]).toMatchObject({ actualRole: "drunk", shownRole: shown });
     const different = shown === "chef" ? "empath" : "chef";
     expect(state().setShownRole(id, different).ok).toBe(true);
+    expect(game().players[id]!.reminders).toEqual([drunkReminder]);
     expect(game().players[id]!.actualRole).toBe("drunk");
     state().undo();
     expect(game().players[id]).toMatchObject({ actualRole: "drunk", shownRole: shown });
     expect(projectLobbyToSelfMap(game(), registry)[id]).toEqual({ shownRole: shown, shownAlignment: "good" });
+    expect(game().players[id]!.reminders).toEqual([drunkReminder]);
   });
 
   it.each(townsfolk)("%s: Night wake follows shown character while rules use actual Outsider", shown => {

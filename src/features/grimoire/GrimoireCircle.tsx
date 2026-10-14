@@ -28,6 +28,7 @@ import { lifeAccessibleLabel, lifeStatusOf } from "@/stores/lifeState";
 import { LifeShroud, LifeStateText, VoteToken } from "@/features/life/LifeMarks";
 import { abilityUsedMarker, actualAlignmentMarker } from "./tokenMarkers";
 import { OfficialReminderToken } from "@/features/reminders/OfficialReminderToken";
+import { DRUNK_REMINDER_LABEL } from "@/stores/drunkReminders";
 import { officialEffectPresentation, officialNotationRole, redHerringNotationCovered } from "@/features/reminders/officialReminderPresentation";
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { fitTokenPositions } from "./fitTokenPositions";
@@ -225,6 +226,8 @@ function Token({
   const reminderCount = modern && spec.tier !== "XS"
     ? reminderGroups.slice(customSatellites.length).reduce((count, group) => count + group.instances.length, 0)
     : player.reminders.length;
+  const drunkIdentityShown = modern && spec.tier !== "XS" && player.actualRole === "drunk"
+    && officialNotes.has(`drunk:${DRUNK_REMINDER_LABEL}`);
   // Phase 10H (H2): Reminder labels collapse progressively with density --
   // labels where the footprint permits, a count when dense.
   const { shown: shownReminders, hiddenCount: hiddenReminders } = tierReminderGroups(reminderGroups, spec.reminderLabels);
@@ -356,7 +359,7 @@ function Token({
             words, never colour alone. */}
         {spec.tier !== "XS" && (flagCount > 0) && (
           <div className="token-markers" style={{ maxWidth: spec.width }} aria-hidden="true">
-            {diverges && <span className="token-marker token-marker-divergence" data-divergence="true" title={modern ? `Actual role: ${role?.name ?? "another role"}` : `Actually ${role?.name ?? "another role"}`}>{modern ? role?.name ?? "Another role" : spec.text ? "≠ Actual" : "≠"}</span>}
+            {diverges && !drunkIdentityShown && <span className="token-marker token-marker-divergence" data-divergence="true" title={modern ? `Actual role: ${role?.name ?? "another role"}` : `Actually ${role?.name ?? "another role"}`}>{modern ? role?.name ?? "Another role" : spec.text ? "≠ Actual" : "≠"}</span>}
             {markers.map((marker) => <span key={marker.key} className={`token-marker token-marker-${marker.key}`} data-token-marker={marker.key}>{spec.text ? marker.text : shortMarker(marker.key, player)}</span>)}
             {!privacyMode && needsShownRole && <span className="token-marker token-needs-reveal">{modern ? "Prepare role" : spec.text ? "Needs shown role" : "Shown?"}</span>}
             {needsCheck && <span className="token-marker token-needs-check">{spec.text ? "Needs check" : "Check"}</span>}

@@ -109,6 +109,9 @@ const ALLOWED = new Set([
   "stores/butlerSelection.ts",
   "stores/butlerReminders.ts",
   "stores/abilityUseReminders.ts",
+  // Identity preparation writes inert, self-owned Drunk notation only; its
+  // reads deduplicate/remove exact notes, never determine actual identity.
+  "stores/drunkReminders.ts",
   "features/reminders/reminderPresentation.ts",
   // Read-only canonical token metadata and sourced Effect presentation;
   // player notation never supplies rules or mechanical state.

@@ -44,9 +44,13 @@ describe("Slayer -- functioning", () => {
   it("Recluse registration is the Storyteller's judgment (a Recluse may die to the Slayer)", () => {
     const g = day();
     const id = registersAsDemonJudgment(g.players.p3!.participantId!);
-    expect(shoot(g, "p3")).toMatchObject({ ok: false, code: "unsupported" });
-    expect(shoot(g, "p3", { judgments: { [id]: yes(true) } })).toMatchObject({ ok: false, code: "unsupported" });
-    expect(shoot(g, "p3", { judgments: { [id]: yes(false) } })).toMatchObject({ ok: false, code: "unsupported" });
+    expect(shoot(g, "p3")).toMatchObject({ ok: false, code: "needsInput",
+      requirements: [{ id, kind: "boolean", source: "storyteller" }] });
+    for (const demon of [false, true]) {
+      const next = planned(plan(g, request(g, "p0", "slayer", { target: pick(g, "p3"), [id]: yes(demon) })));
+      expect(next.players.p3).toMatchObject({ alive: !demon, actualRole: "recluse", actualAlignment: "good" });
+      expect(next.players.p0!.abilityUsed).toBe(true);
+    }
     expect(g.players.p0!.abilityUsed).toBe(false);
     expect(g.players.p3!.alive).toBe(true);
   });

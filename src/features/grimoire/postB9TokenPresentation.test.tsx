@@ -65,6 +65,21 @@ it("R3 unresolved shown identity remains a visible Prepare role task", () => {
   expect(token()).toHaveAccessibleDescription(/No shown role yet/);
 });
 
+it("prepared Drunk has its official reminder instead of a duplicate generic badge, privately", () => {
+  const g = setupGame(["drunk", "poisoner", "monk"], { setupRolesDealt: true });
+  g.players.p0!.shownRole = null; store.setState({ game: g });
+  act(() => { store.getState().setShownRole("p0", "soldier"); }); board();
+  expect(token().querySelector('[data-official-reminder="drunk"]')).toHaveTextContent("Is The Drunk");
+  expect(token().querySelector('[data-official-reminder="drunk"]')).toHaveAttribute("data-reminder-kind", "notation");
+  expect(token().querySelector(".token-marker-divergence")).toBeNull();
+  expect(token()).toHaveAccessibleDescription(/Shown role: Soldier.*Actual role: Drunk/);
+  expect(token()).toHaveAccessibleName(/Is The Drunk/);
+  act(() => usePrivacyStore.getState().setEnabled(true));
+  expect(token().querySelector('[data-official-reminder="drunk"]')).toBeNull();
+  expect(token()).not.toHaveAccessibleName(/Drunk|Soldier/);
+  expect(token()).not.toHaveAccessibleDescription(/Drunk|Soldier/);
+});
+
 it("R3 official notation keeps artwork and semantics without its decorative pen", () => {
   const { container } = render(<OfficialReminderToken role={canonicalRoles(["washerwoman"])[0]!} label="Townsfolk" notation count={2} />);
   const notation = container.querySelector(".official-reminder-notation")!;

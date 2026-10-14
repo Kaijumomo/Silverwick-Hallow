@@ -108,7 +108,7 @@ describe("B6 independent official rules and authoritative lifecycle", () => {
   });
 
   it.each([
-    ["washerwoman", "spy", "chef"], ["librarian", "spy", "saint"], ["investigator", "recluse", "poisoner"], ["investigator", "spy", "spy"],
+    ["washerwoman", "spy", "chef"], ["librarian", "spy", "saint"], ["investigator", "spy", "spy"],
   ] as const)("%s leaves discretionary %s registration entirely manual", (character, actual, shown) => {
     openInStore(setup([character, actual, "chef", "imp", "baron"])); const before = store.getState();
     expect(prepare(prepareRequest(game(), character, shown))).toMatchObject({ ok: false }); expect(store.getState()).toBe(before);

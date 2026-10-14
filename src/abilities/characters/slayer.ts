@@ -1,6 +1,7 @@
 import type { AbilityDescriptor } from "../semantics";
 import { toldRoleChangeIntents } from "@/stores/roleResolution";
 import { scarletWomanSuccession } from "./scarletWoman";
+import { recluseRegistrationChoice } from "./informationSupport";
 import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, nothing, outcome } from "./shared";
 
 /**
@@ -48,9 +49,14 @@ export const SLAYER: AbilityDescriptor = {
       // When death is certainly prevented, either optional registration has
       // the same result. Reuse the death query without accepting judgments:
       // arbitrary-death facts must still leave the whole action Manual.
-      if (deathAttempt({ ...context, judgments: {} }, target, "any").kind === "survives") return spent();
-      const judged = answerOf(context.judgments, registersAsDemonJudgment(target.participantId), "boolean");
-      if (!judged) return ask(registration.reason, { id: registersAsDemonJudgment(target.participantId), kind: "boolean", source: "judgment",
+      const possibleDeath = deathAttempt({ ...context, judgments: {} }, target, "any");
+      if (possibleDeath.kind === "survives") return spent();
+      if (possibleDeath.kind === "ask") return { kind: "unsupported", message: possibleDeath.message };
+      if (!recluseRegistrationChoice(context.query, target)) return { kind: "unsupported", message: registration.reason };
+      // The official Recluse choice is local to this target and this shot.
+      // Legacy judgments must not unlock other unknown registration rules.
+      const judged = answerOf(context.inputs, registersAsDemonJudgment(target.participantId), "boolean");
+      if (!judged) return ask("Choose how the Recluse registers to this Slayer shot.", { id: registersAsDemonJudgment(target.participantId), kind: "boolean", source: "storyteller",
         label: `${nameOf(context, target)} registers as the Demon to the Slayer` });
       demon = judged.value;
     }
@@ -58,7 +64,7 @@ export const SLAYER: AbilityDescriptor = {
     const death = deathAttempt(context, target, "any");
     if (death.kind === "ask") return ask(death.message, death.requirement);
     if (death.kind !== "dies") return spent();
-    const succession = scarletWomanSuccession(context.query, target);
+    const succession = scarletWomanSuccession(context.query, target, "slayer");
     if (succession.kind === "manual") return { kind: "unsupported", message: succession.reason };
     const kill = lifeOperation([use, { kind: "death", target }]);
     return outcome(succession.kind === "successor"

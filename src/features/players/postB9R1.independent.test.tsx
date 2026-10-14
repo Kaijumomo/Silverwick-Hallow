@@ -27,15 +27,22 @@ function Popover() {
   return <PlayerPopover player={player} onChangeCharacter={() => {}} onSwapSeats={() => {}} onMore={() => {}} onClose={() => {}} />;
 }
 
-it("independent R1: unsupported Recluse shot remains unspent and retains correction access", () => {
+it("independent: Recluse shot offers both explicit outcomes and Cancel preserves the unspent ability", () => {
   const g = proofGame(["slayer", "recluse", "imp", "chef", "monk"], "day");
   store.setState({ game: g }); render(<Popover />);
   fireEvent.click(screen.getByRole("button", { name: "Use Slayer ability" }));
   act(() => { pickSeatIfPicking(g, "p1"); });
   expect(store.getState().game).toBe(g); expect(store.getState().undoStack).toEqual([]);
   expect(useTargetPicker.getState().active).toBeNull();
-  expect(screen.getByRole("button", { name: "More settings" })).toBeVisible();
-  expect(screen.queryByRole("button", { name: "Use Slayer ability" })).toBeNull();
+  const dialog = screen.getByRole("region", { name: "Resolve Slayer shot" });
+  expect(within(dialog).getByRole("button", { name: "No death — does not register as Demon" })).toBeVisible();
+  expect(within(dialog).getByRole("button", { name: "Registers as Demon — resolve death" })).toBeVisible();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Cancel shot" }));
+  expect(screen.queryByRole("region", { name: "Resolve Slayer shot" })).toBeNull();
+  expect(store.getState().game).toBe(g); expect(store.getState().undoStack).toEqual([]);
+  expect(store.getState().game!.players.p0!.abilityUsed).toBe(false);
+  expect(store.getState().game!.players.p1!.alive).toBe(true);
+  expect(screen.getByRole("button", { name: "Use Slayer ability" })).toBeVisible();
 });
 
 it("independent R1: held Slayer callback cannot hit a replacement participant", () => {

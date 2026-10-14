@@ -2,6 +2,7 @@ import { z } from "zod";
 import { isCanonicalRole } from "@/data/canonical";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { interactionCoverageEligibility } from "@/abilities/automationEligibility";
+import { recluseRegistrationChoice } from "@/abilities/characters/informationSupport";
 import { createRulesQuery, boundParticipant } from "./rulesQuery";
 import { wakeIdentity } from "./wakeIdentity";
 import { participantRefOf } from "./participants";
@@ -100,8 +101,15 @@ export function assessPreparation(game: StorytellerLobbyRecord, input: PrepareIn
     if (!shown || !isCanonicalRole(shown) || shown.type !== types[request.character]) return refuse("Choose a character of the appropriate type.");
     if (available.mode === "verified") {
       const registration = query.registration(qualifying, request.character).character;
-      if (!registration.known) return refuse(registration.reason);
-      if (registration.value !== clue.shownCharacter) return refuse("The qualifying player does not register as the selected character.");
+      if (!registration.known) {
+        // Selecting this exact character and qualifying participant is the
+        // Storyteller's registration choice for this clue only. The existing
+        // prepared record binds both identities and is revalidated at reveal;
+        // no participant identity or general registration override is written.
+        const recluseClue = recluseRegistrationChoice(query, qualifying) &&
+          (request.character === "librarian" && shown.id === "recluse" || request.character === "investigator" && shown.type === "minion");
+        if (!recluseClue) return refuse(registration.reason);
+      } else if (registration.value !== clue.shownCharacter) return refuse("The qualifying player does not register as the selected character.");
     }
   }
   return available;

@@ -41,14 +41,37 @@ it("Slayer board selection commits consumption, Imp death and mandatory successi
   expect(game().players.p2!.actualRole).toBe("scarletwoman");
 });
 
-it("uncertain Recluse registration leaves the full shot manual with official instructions", () => {
-  store.setState({ game: proofGame(["slayer", "imp", "recluse", "chef", "monk"], "day", 2) });
+it.each([false, true])("Recluse choice %s resolves the entire shot once without Demon succession", demon => {
+  store.setState({ game: proofGame(["slayer", "imp", "recluse", "scarletwoman", "monk"], "day", 2) });
   render(<Entry />); open(); const before = game(); tap("p2");
   expect(game()).toBe(before);
   expect(store.getState().undoStack).toHaveLength(0);
-  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.getByRole("region", { name: "Resolve Slayer shot" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Resolve Slayer shot" })).toHaveFocus();
   expect(useTargetPicker.getState().active).toBeNull();
-  expect(screen.getByText(/Once per game, during the day, publicly choose a player/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: demon ? "Registers as Demon — resolve death" : "No death — does not register as Demon" }));
+  expect(game().players.p0!.abilityUsed).toBe(true);
+  expect(game().players.p2).toMatchObject({ alive: !demon, actualRole: "recluse", actualAlignment: "good" });
+  expect(game().players.p1).toMatchObject({ alive: true, actualRole: "imp" });
+  expect(game().players.p3!.actualRole).toBe("scarletwoman");
+  expect(store.getState().undoStack).toHaveLength(1);
+  act(() => store.getState().undo());
+  expect(game().players.p0!.abilityUsed).toBe(false);
+  expect(game().players.p2!.alive).toBe(true);
+});
+
+it.each(["cancel", "privacy", "unmount", "state change"])("pending Recluse outcome cannot commit after %s", change => {
+  store.setState({ game: proofGame(["slayer", "imp", "recluse", "scarletwoman", "monk"], "day", 2) });
+  const view = render(<Entry />); open(); tap("p2");
+  const held = screen.getByRole("button", { name: "Registers as Demon — resolve death" });
+  if (change === "cancel") fireEvent.click(screen.getByRole("button", { name: "Cancel shot" }));
+  if (change === "privacy") act(() => usePrivacyStore.getState().setEnabled(true));
+  if (change === "unmount") view.unmount();
+  if (change === "state change") act(() => store.setState({ game: { ...game(), day: 3 } }));
+  const before = game(); fireEvent.click(held);
+  expect(game()).toBe(before);
+  expect(store.getState().undoStack).toHaveLength(0);
+  expect(screen.queryByRole("region", { name: "Resolve Slayer shot" })).toBeNull();
 });
 
 it.each(["cancel", "privacy", "unmount", "state change"])("held Slayer selection cannot commit after %s", change => {

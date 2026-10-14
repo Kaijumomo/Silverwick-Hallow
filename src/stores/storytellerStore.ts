@@ -90,6 +90,7 @@ import { useShellStore, type NightCursor } from "./shellStore";
 import { deriveNightWork } from "@/features/nightOrder/nightWork";
 import { planPreparedInformation, planPreparedInformationDelivery, reconcilePreparedInformation, type PrepareInformationRequest, type DeliverPreparedInformationRequest, type PreparedInformationResult } from "./preparedInformation";
 import { planAbilityUseReminders } from "./abilityUseReminders";
+import { planDrunkPreparationReminders, reconcileDrunkReminders } from "./drunkReminders";
 import { planButlerSelection, reconcileButlerReminders, type ButlerSelectionRequest, type ButlerSelectionResult } from "./butlerSelection";
 import { analyzeSetup } from "@/features/setup/setupAnalyzer";
 import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
@@ -1567,7 +1568,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
             // event-time evidence, never compare its source with the later game.
             const evidence = reconcileVictoryEvidence(reconciled, reconciled);
             if (!evidence.ok) return {};
-            const game = reconcilePreparedInformation(reconcileButlerReminders(evidence.game), selectScriptById(state, reconciled.scriptId) ?? null);
+            const game = reconcilePreparedInformation(reconcileButlerReminders(reconcileDrunkReminders(evidence.game, registryForGame(state, evidence.game))), selectScriptById(state, reconciled.scriptId) ?? null);
             return { ...patch, game, localSeq: state.localSeq + 1 };
           }
           return patch;
@@ -1585,7 +1586,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
         planned = evidence.game;
         const notation = planAbilityUseReminders(current, withRevealTokens(current, planned, registryForGame(state, planned)), registryForGame(state, planned));
         if (!notation.ok) return notation.message;
-        const prepared = reconcilePreparedInformation(reconcileButlerReminders(reconcileVotingDependencies(current, notation.game)), selectScriptById(state, planned.scriptId) ?? null);
+        const drunkNotation = planDrunkPreparationReminders(current, notation.game, registryForGame(state, notation.game));
+        if (!drunkNotation.ok) return drunkNotation.message;
+        const prepared = reconcilePreparedInformation(reconcileButlerReminders(reconcileDrunkReminders(reconcileVotingDependencies(current, drunkNotation.game), registryForGame(state, drunkNotation.game))), selectScriptById(state, planned.scriptId) ?? null);
         if (!StorytellerGamePersistedSchema.safeParse(prepared).success) return "This result could not be safely saved. Nothing was recorded.";
         const failure = persistencePreflight(prepared, current, state.lobby);
         if (failure) return failure;
@@ -2702,7 +2705,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!result.changed) return { ok: true, changed: false };
         const notation = planAbilityUseReminders(game, applyRolePlan(game, result.plan), registryForGame(get(), game));
         if (!notation.ok) return { ok: false, code: "invalid", message: notation.message };
-        const evidence = reconcileVictoryEvidence(game, notation.game, { correction: result.plan.actualRoleChanges.some(change => change.correction) });
+        const drunkNotation = planDrunkPreparationReminders(game, notation.game, registryForGame(get(), notation.game));
+        if (!drunkNotation.ok) return { ok: false, code: "invalid", message: drunkNotation.message };
+        const evidence = reconcileVictoryEvidence(game, drunkNotation.game, { correction: result.plan.actualRoleChanges.some(change => change.correction) });
         if (!evidence.ok) return { ok: false, code: "invalid", message: evidence.message };
         set({ undoStack: pushUndo(game, undoStack), game: evidence.game });
         return { ok: true, changed: true };
