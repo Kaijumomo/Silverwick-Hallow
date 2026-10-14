@@ -128,7 +128,7 @@ describe("10H-AC-036 / AC-037: Private Reveal readiness is advisory current-toke
   it("offline (no phones) explains that roles are revealed in person", () => {
     store.setState({ game: setupGame(standardRoles(5), { setupRolesDealt: true, setupRolesRevealed: true }), lobby: null });
     render(<Panel />);
-    expect(screen.getByText(/reveal roles in person/)).toBeInTheDocument();
+    expect(screen.getByText(/reveal roles in person/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Begin Night 1" })).toBeEnabled();
   });
 });

@@ -23,6 +23,14 @@
 .players-text-button { width: 100%; min-height: 44px; border: 0; background: transparent; color: var(--text-dim); font: 13px var(--font-op); cursor: pointer; }
 .players-preparation { margin-top: 16px; border-top: 1px solid rgba(196,158,80,.12); padding-top: 12px; font: 13px/1.4 var(--font-op); }
 .players-preparation > .btn { min-height: 44px; margin: 3px; }
+.players-preparation > h3 { margin: 0 0 8px; font: 600 18px/1.2 var(--font-display); }
+.players-preparation .setup-prep-row { display: grid; grid-template-columns: 1fr; gap: 6px; margin-block: 8px; padding: 12px; }
+.players-preparation .setup-prep-name { white-space: normal; overflow: visible; }
+.players-preparation .setup-prep-need { color: var(--text-dim); }
+.players-preparation .setup-prep-row .btn { min-height: 44px; width: 100%; }
+.players-advanced-setup { margin-top: 12px; border-top: 1px solid var(--border); }
+.players-advanced-setup > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.players-advanced-setup .setup-panel-body { padding: 0; }
 .players-add { display: grid; gap: 16px; padding: 20px; }
 .players-add label { display: block; }
 .players-add .input { display: block; width: 100%; margin-top: 8px; }

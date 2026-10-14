@@ -56,7 +56,6 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
   const [draft, setDraft] = useState<string[]>([]);
   const [generatedRoleIds, setGeneratedRoleIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [details, setDetails] = useState(false);
   const [adding, setAdding] = useState(false);
   const [addingSeat, setAddingSeat] = useState<string | undefined>();
   const [waitingSeat, setWaitingSeat] = useState<string | null>(null);
@@ -73,7 +72,7 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
   useEffect(() => {
     if (privacy || !enabled || game?.phase === "ended") {
       if (privacy && enabled) useStorytellerStore.getState().selectPlayer(null);
-      setChooser(null); setDetails(false); setAdding(false); setWaitingSeat(null); setSwap(null); setError(null); setNotice("");
+      setChooser(null); setAdding(false); setWaitingSeat(null); setSwap(null); setError(null); setNotice("");
     }
   }, [privacy, enabled, game?.phase]);
   useEffect(() => {
@@ -174,7 +173,7 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
       onEnd={onEnd} endDisabled={endDisabled} endAttention={endAttention} onReviewHistory={onReviewHistory}
       onPanelOpen={() => { state.selectPlayer(null); setSwap(null); }}
       players={dismiss => <>
-        <div className="players-summary"><p>{context.ordinary.length} residents · {context.travelers.length} travelers · {context.occupied.filter(p => p.alive).length} alive</p>
+        <div className="players-summary"><p>{context.occupied.length} players · {context.occupied.filter(p => p.alive).length} alive{context.travelers.length > 0 && ` · ${context.travelers.length} travelers`}</p>
           <div className="players-composition">{(["townsfolk", "outsider", "minion", "demon"] as const).map(type => <div key={type} className={`type-${type}`}><strong>{context.ordinary.filter(p => byId.get(p.actualRole)?.type === type).length}</strong><span>{type === "townsfolk" ? "Townsfolk" : type[0]!.toUpperCase() + type.slice(1)}</span></div>)}</div>
         </div>
         <div className="players-scroll"><ol className="players-list">{game.seatOrder.map(id => {
@@ -184,14 +183,14 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
             onClick={() => { if (p.isEmpty) { if (state.lobby) setWaitingSeat(id); else { setAddingSeat(id); setAdding(true); setError(null); } } else { dismiss(); state.selectPlayer(id); } }}>
             <span className="players-seat">{p.seat + 1}</span><span className={`players-art type-${role?.type ?? "townsfolk"}`}>{role && <img src={iconUrlFor(role)} alt="" />}</span>
             <span className="players-person"><strong>{p.isEmpty ? "Empty seat" : p.name || `Seat ${p.seat + 1}`}</strong><span className={`type-${role?.type ?? "townsfolk"}`}>{role?.name ?? "Unassigned"}</span></span>
-            <span className="players-kind">{p.isTraveler || p.plannedTravelerSeat ? "Traveler" : "Resident"}</span>
+            {(p.isTraveler || p.plannedTravelerSeat) && <span className="players-kind">Traveler</span>}
           </button></li>;
         })}</ol>
         {game.phase === "setup" && <section className="players-preparation" aria-label="Setup preparation">
-          <p>{setup.message}</p>
+          <h3>Prepare your town</h3>
+          <p role="status">{setup.message}</p>
           {isPostDeal(game) && !isInitialRevealComplete(game) && <>
             {setup.revealReadiness?.pendingIds.filter(id => game.players[id]?.actualRole !== "drunk").map(id => <button className="btn btn-sm" key={id} onClick={() => { dismiss(); state.selectPlayer(id); onMore(id); }}>Prepare {game.players[id]?.name || "player"}</button>)}
-            <button className="btn btn-gold" disabled={!setup.revealReadiness?.ready} onClick={() => report(state.revealRoles(actionContext))}>Reveal Roles</button>
           </>}
           {canRefineSetup(game).ok && context.ordinary.filter(player => player.actualRole === "drunk").map(player =>
             <div className="setup-prep-row" key={player.id} aria-label={`Drunk preparation for ${player.name}`}>
@@ -201,8 +200,20 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
             </div>)}
           {isPostDeal(game) && <RedHerringPreparation context={context} selection={redHerringSelection} onChoose={dismiss} />}
           {isPostDeal(game) && <FirstInformationPreparation selection={firstInformation} onChoose={dismiss} />}
+          {isPostDeal(game) && !isInitialRevealComplete(game) && <>
+            <button className="btn btn-gold" disabled={!setup.revealReadiness?.ready}
+              aria-describedby={!setup.revealReadiness?.ready ? "players-reveal-reason" : undefined}
+              onClick={() => report(state.revealRoles(actionContext))}>Reveal Roles</button>
+            {!setup.revealReadiness?.ready && <p id="players-reveal-reason" className="disabled-reason">
+              {setup.revealReadiness?.pendingIds.length ?? 0} {(setup.revealReadiness?.pendingIds.length ?? 0) === 1 ? "player still needs" : "players still need"} a shown role before Reveal Roles.
+            </p>}
+          </>}
           {isInitialRevealComplete(game) && <><PrivateRevealReadiness game={game} live={!!state.lobby} /><button className="btn btn-gold" onClick={() => report(state.beginNightOne(actionContext))}>Begin Night 1</button></>}
-          <button className="players-text-button" onClick={() => { dismiss(); setDetails(true); }}>Setup details &amp; modifiers</button>
+          <SetupFindings findings={setup.findings.filter(finding => finding.severity !== "info")} concise />
+          <details className="players-advanced-setup"><summary>Advanced setup &amp; modifiers</summary>
+            <SetupPanel correctionsOnly game={game} script={script} generatedRoleIds={generatedRoleIds} onGeneratedRoleIdsChange={setGeneratedRoleIds}
+              redHerringSelection={redHerringSelection} firstInformationSelection={firstInformation} onClose={dismiss} />
+          </details>
         </section>}
         {error && !chooser && !adding && <p role="alert" className="field-error">{error}</p>}
         </div>
@@ -228,15 +239,14 @@ function PlayersWorkspaceContent({ children, enabled, roles, onMore, advancedPla
       onChoose={chooseShown} onClose={() => setChooser(null)} error={error ?? undefined} />}
     {!privacy && !ended && chooser?.kind === "distribute" && <RoleChooser mode="distribute" roles={ordinary} scriptName={script.name} selected={draft}
       residents={context.population.targetNonTravelerCount ?? context.ordinary.length} travelers={context.travelers.length} required={required}
-      distributionLabel={`Distribute to ${context.ordinary.length} residents`} canDistribute={privateSetup && draftAnalysis.readiness.deal.ok} status="Distributes residents privately. Traveler characters are managed individually."
+      distributionLabel={`Distribute to ${context.ordinary.length} residents`} canDistribute={privateSetup && draftAnalysis.readiness.deal.ok} status={`${draft.length} of ${context.population.targetNonTravelerCount ?? context.ordinary.length} characters selected`}
       onClose={() => setChooser(null)} onToggle={id => setDraft(values => values.includes(id) ? values.filter(x => x !== id) : [...values, id])}
       onClear={() => setDraft([])} onRandom={() => { const result = randomSetup({ scriptCharacters: script.characters, targetPlayerCount: context.population.targetNonTravelerCount,
         fabledIds: game.fabled, loricIds: game.lorics }); if (result.ok) { setDraft(result.pool); setError(null); } else setError(result.failure.message); }}
-      onDistribute={distribute} error={error ?? undefined} footerExtra={<SetupFindings findings={draftAnalysis.findings} />} />}
+      onDistribute={distribute} error={error ?? undefined} footerExtra={<SetupFindings findings={draftAnalysis.findings.filter(finding => finding.severity !== "info")} concise />} />}
     {!privacy && !ended && chooser?.kind === "choose" && <RoleChooser mode="choose" scriptName={script.name}
       roles={chooser.player.isTraveler ? [...TRAVELERS] : ordinary} player={{ id: chooser.player.id, name: chooser.player.name, seat: chooser.player.seat + 1, roleId: chooser.player.actualRole }}
       holders={holderNames} allowSwap={!chooser.player.isTraveler && canRefineSetup(game).ok} onChoose={choose} onClose={() => setChooser(null)} error={error ?? undefined} />}
-    {!privacy && !ended && details && <Modal title="Setup details" onClose={() => setDetails(false)} className="players-setup-details"><SetupPanel game={game} script={script} generatedRoleIds={generatedRoleIds} onGeneratedRoleIdsChange={setGeneratedRoleIds} redHerringSelection={redHerringSelection} firstInformationSelection={firstInformation} onClose={() => setDetails(false)} /></Modal>}
     {firstInformation.dialog}
     {!privacy && !ended && waitingSeat && <SeatAssignPopup seatPlayerId={waitingSeat} seatNumber={(game.players[waitingSeat]?.seat ?? 0) + 1} backend={backend} code={state.lobby?.code ?? ""} onClose={() => setWaitingSeat(null)} onRemoveSeat={() => { state.removePlayer(waitingSeat); setWaitingSeat(null); }} />}
     {!privacy && !ended && adding && <Modal title="Add Player" onClose={() => setAdding(false)}><form className="players-add" onSubmit={event => { event.preventDefault(); add(); }}>

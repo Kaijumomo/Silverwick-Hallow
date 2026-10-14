@@ -101,15 +101,14 @@ it("cancelling a pending successor leaves the Imp alive and invalidates the held
   expect(store.getState().undoStack).toHaveLength(0);
 });
 
-it("the existing roster fallback chooses only eligible successors in the same atomic self-pass", () => {
+it("R2 successor targeting exposes only eligible board players without a duplicate roster", () => {
   store.setState({ game: proofGame(["imp", "poisoner", "baron", "chef", "monk"]) });
   useShellStore.getState().setNightCursor({ day: 2, stepKey: key("p0") });
   render(<Guide />); const before = game(); tap("p0");
   expect(game()).toBe(before);
-  fireEvent.click(screen.getByText("More options"));
-  const buttons = [...document.querySelectorAll<HTMLButtonElement>(".modern-night-roster button")];
-  expect(buttons.map(button => button.textContent)).toEqual(["Player 1", "Player 2"]);
-  fireEvent.click(screen.getByRole("button", { name: "Player 1" }));
+  expect(screen.queryByText("More options")).toBeNull();
+  expect(useTargetPicker.getState().active?.eligible).toEqual(new Set([before.players.p1!.participantId!, before.players.p2!.participantId!]));
+  tap("p1");
   expect(game().players.p0!.alive).toBe(false);
   expect(game().players.p1!.actualRole).toBe("imp");
   expect(store.getState().undoStack).toHaveLength(1);
@@ -241,14 +240,14 @@ it("Undo during the result restores targeting without an old delayed advance", (
   expect(game().players.p3!.effects).toEqual([expect.objectContaining({ type: "poisoned" })]);
 });
 
-it("the roster fallback resolves through the same command and eligibility as board targeting", () => {
+it("R2 ordinary targeting retains board eligibility and advanced controls without a duplicate roster", () => {
   useShellStore.getState().setNightCursor({ day: 2, stepKey: key("p1") });
   render(<Guide />);
-  const details = screen.getByText("Choose from roster").closest("details")!;
-  fireEvent.click(screen.getByText("More options"));
-  expect(details.querySelectorAll(".modern-night-roster button")).toHaveLength(4);
-  expect([...details.querySelectorAll(".modern-night-roster button")].some(button => button.textContent === "Player 1")).toBe(false);
-  fireEvent.click(screen.getByRole("button", { name: "Player 4" }));
+  expect(screen.queryByText("Choose from roster")).toBeNull();
+  expect(screen.getByRole("button", { name: "Additional night controls" })).toBeInTheDocument();
+  expect(useTargetPicker.getState().active?.eligible?.size).toBe(4);
+  expect(useTargetPicker.getState().active?.eligible?.has(game().players.p1!.participantId!)).toBe(false);
+  tap("p4");
   expect(game().players.p4!.effects).toEqual([expect.objectContaining({ type: "safeFromDemon" })]);
   expect(store.getState().undoStack).toHaveLength(1);
 });

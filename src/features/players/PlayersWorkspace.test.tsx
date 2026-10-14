@@ -36,6 +36,19 @@ function chooseForFirst() {
 function setGame(patch: Partial<StorytellerLobbyRecord>) { store.setState({ game: { ...store.getState().game!, ...patch } }); }
 
 describe("Players workspace integration", () => {
+  it("keeps setup corrections and modifiers in Players without a second setup dialog", () => {
+    workspace(); openPlayers();
+    const advanced = screen.getByText("Advanced setup & modifiers").closest("details")!;
+    fireEvent.click(within(advanced).getByText("Advanced setup & modifiers"));
+    expect(screen.queryByRole("dialog", { name: "Setup details" })).toBeNull();
+    expect(within(advanced).queryByRole("button", { name: "Reveal Roles" })).toBeNull();
+    expect(within(advanced).queryByRole("button", { name: "Close setup panel" })).toBeNull();
+    expect(within(advanced).getByRole("button", { name: "Shuffle Roles" })).toBeVisible();
+    fireEvent.click(within(advanced).getByRole("button", { name: "Edit Bag" }));
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(within(advanced).getByText(/Fabled & Lorics/)).toBeVisible();
+  });
   it("groups Drunk shown-character preparation with the Players tab setup controls", () => {
     const game = setupGame(["drunk", "washerwoman", "empath", "poisoner", "imp"],
       { scriptId: script.id, setupRolesDealt: true, setupRolesRevealed: false });
@@ -85,7 +98,7 @@ describe("Players workspace integration", () => {
     expect(open).toBeEnabled();
     fireEvent.click(open);
     expect(screen.getByRole("dialog", { name: "Distribute Roles" })).toBeVisible();
-    expect(screen.getByText("Trouble Brewing · 5 residents · 0 travelers")).toBeVisible();
+    expect(screen.getByText("Trouble Brewing · 5 players")).toBeVisible();
     // Recipient readiness guards the final deal, never the opening button.
     expect(screen.getByRole("button", { name: "Distribute to 0 residents" })).toBeDisabled();
     expect(store.getState().game).toBe(before);

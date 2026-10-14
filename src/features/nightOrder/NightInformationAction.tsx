@@ -4,7 +4,7 @@ import { captureFingerprint, planAbilityResolution, type AbilityResolutionReques
 import { captureCharacterActionContext, useStorytellerStore } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { buildRegistry, resolvedCharacters } from "@/data/roleRegistry";
-import { bindingOf, seatedParticipants, useTargetPicker, type StepAbility } from "@/features/abilities/abilityUi";
+import { seatedParticipants, useTargetPicker, type StepAbility } from "@/features/abilities/abilityUi";
 import type { Script, StorytellerLobbyRecord } from "@/stores/types";
 import type { NightStep } from "./nightOrder";
 import { chefMaximumPairs } from "@/abilities/characters/chef";
@@ -14,6 +14,7 @@ import { captureInfoContext, infoContextCurrent } from "@/features/info/infoComm
 import { characterCard } from "@/features/info/infoModel";
 import { RoleChooser } from "@/features/players/RoleChooser";
 import { isDeathEvent } from "@/stores/lifeEvents";
+import { TokenInformationAction } from "@/features/info/TokenInformationAction";
 
 export const CALCULATED_INFORMATION_ROLES = new Set(["chef", "empath", "fortuneteller"]);
 export const NIGHT_INFORMATION_ROLES = new Set([...CALCULATED_INFORMATION_ROLES, "undertaker", "ravenkeeper"]);
@@ -161,11 +162,11 @@ const InformationAction = forwardRef<NightInformationHandle, Props>(function Inf
   const choices = requirement?.kind === "boolean" ? [false, true] : numberChoices;
   return <div className="night-information">
     {characterInformation && (token?.kind === "role" || requirement?.kind === "character" || simulatedRavenkeeper && !resolved && !manualWake) &&
-      <button className="btn btn-gold" onClick={() => {
+      <TokenInformationAction role={token?.kind === "role" ? registry.get(token.roleId) : undefined} label="Reveal a Token" onClick={() => {
         if (simulatedRavenkeeper && !resolved && !manualWake) { setManualWake(true); return; }
         if (token?.kind === "role") { if (resolved) showCharacter(token.roleId); else commit(inputs, token.roleId); }
         else if (requirement?.kind === "character") setChooser({ game, inputs, id: requirement.id });
-      }}>Reveal a Token</button>}
+      }} />}
     {value && <div className="night-information-answer" role="status" aria-label="Information to communicate">
       {value.kind === "boolean" ? value.value ? "YES" : "NO" : value.kind === "number" ? value.value : ""}
     </div>}
@@ -180,8 +181,6 @@ const InformationAction = forwardRef<NightInformationHandle, Props>(function Inf
       <p className="modern-night-pick">{targetCount === 1 ? "Choose a player on the board." : `Choose player ${targets.length + 1} of 2 on the board.`}</p>
       {!!targets.length && <p className="behavior-help">Selected: {targets.map(target => game.players[target.playerId]?.name).join(", ")}</p>}
       <button className="btn btn-sm" onClick={() => { setPaused(!paused); if (!paused) useTargetPicker.getState().cancel(); }}>{paused ? "Choose on board" : "Cancel selection"}</button>
-      <details className="modern-night-guidance"><summary>More options</summary><div className="modern-night-roster">{seatedParticipants(game).filter(player => !targets.some(target => target.participantId === player.participantId)).map(player =>
-        <button className="btn btn-sm" key={player.id} onClick={() => choose(bindingOf(player))}>{player.name || `Seat ${player.seat + 1}`}</button>)}</div></details>
     </>}
     {resolved && <p className="modern-night-result">Completed</p>}
     {chooser && chooser.game === game && visible && <div

@@ -56,16 +56,15 @@ describe("10H-AC-067: disabled primaries explain themselves", () => {
     act(() => { state().dealRolePool(); });
     render(<GameScreen />);
     fireEvent.click(screen.getByRole("button", { name: "Players" }));
-    fireEvent.click(screen.getByRole("button", { name: "Setup details & modifiers" }));
-    const reveal = within(screen.getByRole("dialog", { name: "Setup details" })).getByRole("button", { name: "Reveal Roles" });
+    const reveal = within(screen.getByRole("region", { name: "Setup preparation" })).getByRole("button", { name: "Reveal Roles" });
     expect(reveal).toBeDisabled();
     const reason = reasonOf(reveal);
     expect(reason).toHaveTextContent("1 player still needs a shown role before Reveal Roles.");
     expect(reason.parentElement).toBe(reveal.parentElement);
     const drunk = Object.values(game().players).find((p) => p.actualRole === "drunk")!;
     act(() => { state().setShownRole(drunk.id, "chef"); });
-    expect(within(screen.getByRole("dialog", { name: "Setup details" })).getByRole("button", { name: "Reveal Roles" })).toBeEnabled();
-    expect(document.getElementById("setup-primary-reason")).toBeNull();
+    expect(within(screen.getByRole("region", { name: "Setup preparation" })).getByRole("button", { name: "Reveal Roles" })).toBeEnabled();
+    expect(document.getElementById("players-reveal-reason")).toBeNull();
   });
 
   it("Dusk: Continue to Night says to record an execution or confirm none happened", () => {

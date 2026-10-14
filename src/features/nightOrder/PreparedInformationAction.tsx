@@ -13,6 +13,7 @@ import type { PreparedInformationCharacter, Script, StorytellerLobbyRecord } fro
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { NightStep } from "./nightOrder";
 import type { NightInformationHandle } from "./NightInformationAction";
+import { TokenInformationAction } from "@/features/info/TokenInformationAction";
 
 type Props = { game: StorytellerLobbyRecord; script: Script; step: Extract<NightStep, { kind: "player" }>;
   visible: boolean; resolved: boolean; onResolved: (game: StorytellerLobbyRecord) => void };
@@ -103,13 +104,13 @@ const PreparedAction = forwardRef<NightInformationHandle, Props>(function Prepar
     : pair?.kind === "player" ? pair.participants.map(participant => participant.kind === "participant" ? participant.nameAtTime : "Player") : [];
   const roleId = clue?.kind === "pair" ? clue.shownCharacter : token?.kind === "role" ? token.roleId : undefined;
   return <div className="night-information">
-    {!!names.length && <p className="behavior-help">{names.join(" or ")} · {roleId ? registry.get(roleId)?.name : ""}</p>}
+    {!!names.length && <p className="night-information-recipients">{names.join(" or ")}</p>}
     {(clue?.kind === "zero-outsiders" || zero) && <div className="night-information-answer" role="status" aria-label="Information to communicate">0</div>}
-    {(roleId || choosing) && <button className="btn btn-gold" onClick={() => {
+    {(roleId || choosing) && <TokenInformationAction role={!choosing && roleId ? registry.get(roleId) : undefined} label="Reveal a Token" onClick={() => {
       if (!safe()) return;
       if (choosing) setChooser(true);
       else if (roleId) show(roleId);
-    }}>Reveal a Token</button>}
+    }} />}
     {choosing && character === "librarian" && <button className="btn" onClick={() => replace({ kind: "zero-outsiders" })}>Show 0 Outsiders</button>}
     {resolved && <p className="modern-night-result">Completed</p>}
     {error && <p role="alert">{error}</p>}

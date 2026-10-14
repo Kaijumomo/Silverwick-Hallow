@@ -6,10 +6,10 @@ import { findingSummary } from "./setupPresentation";
 
 export const TYPE_LABEL = { townsfolk: "Townsfolk", outsider: "Outsiders", minion: "Minions", demon: "Demons" };
 const LABELS = { blocker: "Before continuing", check: "Storyteller check", warning: "Review", info: "Note" };
-export function SetupFindings({ findings }: { findings: SetupFinding[] }) {
+export function SetupFindings({ findings, concise = false }: { findings: SetupFinding[]; concise?: boolean }) {
   if (!findings.length) return null;
-  return <details className="setup-findings">
-    <summary>Review setup details</summary>
+  return <details className="setup-findings" open={concise && findings.some(finding => finding.severity === "blocker") || undefined}>
+    <summary>{concise ? "Setup checks" : "Review setup details"}</summary>
     <ul>{findings.map(f => <li key={f.code} data-severity={f.severity}>
       <strong>{LABELS[f.severity]}: </strong>
       {f.code === "pool-and-assigned" ? findingSummary(f) : f.code === "modifier:gardener"

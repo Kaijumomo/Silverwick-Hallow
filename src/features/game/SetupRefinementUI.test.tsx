@@ -17,10 +17,11 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-const setupUI = () => within(screen.getByRole("dialog", { name: "Setup details" }));
+const setupUI = () => within(screen.getByRole("region", { name: "Setup preparation" }));
 const openSetup = () => {
-  if (!screen.queryByRole("button", { name: "Setup details & modifiers" })) fireEvent.click(screen.getByRole("button", { name: "Players" }));
-  fireEvent.click(screen.getByRole("button", { name: "Setup details & modifiers" }));
+  if (!screen.queryByRole("region", { name: "Setup preparation" })) fireEvent.click(screen.getByRole("button", { name: "Players" }));
+  const advanced = screen.getByText("Advanced setup & modifiers");
+  if (!advanced.parentElement?.hasAttribute("open")) fireEvent.click(advanced);
 };
 const seatOrder = () => store.getState().game!.seatOrder;
 const rolesInSeatOrder = () => seatOrder().map(id => store.getState().game!.players[id]!.actualRole);

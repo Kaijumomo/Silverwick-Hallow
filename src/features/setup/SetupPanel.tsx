@@ -17,6 +17,7 @@ import { LORICS } from "@/data/lorics";
 import type { RoleId, Script, StorytellerLobbyRecord } from "@/stores/types";
 
 type Props = { game: StorytellerLobbyRecord; script: Script; onClose: () => void;
+  correctionsOnly?: boolean;
   foreground?: boolean; returnFocusRef?: RefObject<HTMLElement>;
   /** Which roles in game.rolePool Silverwick most recently auto-filled (Fill/
    * Re-roll Bag), lifted above this panel so the distinction survives closing
@@ -29,7 +30,7 @@ type Props = { game: StorytellerLobbyRecord; script: Script; onClose: () => void
   firstInformationSelection?: FirstInformationSelection;
 };
 
-export function SetupPanel({ game, script, onClose, foreground = false, returnFocusRef,
+export function SetupPanel({ game, script, onClose, foreground = false, correctionsOnly = false, returnFocusRef,
   generatedRoleIds = [], onGeneratedRoleIdsChange = () => {}, redHerringSelection, firstInformationSelection }: Props) {
   const store = useStorytellerStore();
   const actionContext = captureCharacterActionContext();
@@ -95,6 +96,7 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
   const messageReady = view.next === "reveal" ? !!view.revealReadiness?.ready : view.ready.ok;
   const stage = setupStageOf(view.next, !!game.setupRolesRevealed);
   const body = <div className={`setup-panel-body setup-refined${editing ? " setup-editing" : ""}`}>
+    {!correctionsOnly && <>
     <SetupStageIndicator stage={stage} />
     <div className="setup-overview">
       <div className="setup-player-heading">
@@ -137,6 +139,11 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
     {view.dealt && !editingBag && <FirstInformationPreparation selection={firstInformation} onChoose={firstInformationSelection ? onClose : undefined} />}
     {!firstInformationSelection && <>{localInformation.dialog}{localInformation.error && <p role="alert">{localInformation.error}</p>}</>}
     {stage === "reveal" && <PrivateRevealReadiness game={game} live={!!store.lobby} />}
+    </>}
+    {correctionsOnly && error && <p role="alert" className="field-error">{error}</p>}
+    {correctionsOnly && <p className="setup-caption">Planned: {p.targetNonTravelerCount ?? "—"} · Seated: {p.occupiedNonTravelerCount}{p.occupiedTravelerCount > 0 && ` · ${p.occupiedTravelerCount} Traveler`}</p>}
+    {correctionsOnly && !view.dealt && <button className="btn btn-sm" onClick={() => setEditing(!editing)}>
+      {editing ? "Done choosing" : pool.length ? "Edit roles" : "Choose roles"}</button>}
     {view.next === "reveal" && !editingBag && (
       <div className="setup-refine-toolbar">
         <button className="btn btn-sm" onClick={shuffleRoles}>Shuffle Roles</button>
@@ -171,7 +178,7 @@ export function SetupPanel({ game, script, onClose, foreground = false, returnFo
       </section>)}
     </details>
   </div>;
-  return foreground ? <Modal title="Setup" closeLabel="Close setup panel" onClose={onClose}
+  return correctionsOnly ? body : foreground ? <Modal title="Setup" closeLabel="Close setup panel" onClose={onClose}
     className="setup-workspace" returnFocusRef={returnFocusRef}>{body}</Modal> : <aside className="setup-panel" aria-label="Setup helper">
     <div className="setup-panel-header"><h2 className="setup-panel-title">Setup</h2>
       <button className="btn btn-sm" onClick={() => { onClose(); returnFocusRef?.current?.focus({ preventScroll: true }); }} aria-label="Close setup panel">✕</button>

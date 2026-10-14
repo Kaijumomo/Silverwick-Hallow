@@ -24,6 +24,7 @@ import { NIGHT_INFORMATION_ROLES, NightInformationAction, type NightInformationH
 import { PreparedInformationAction } from "./PreparedInformationAction";
 import { FIRST_INFORMATION_CHARACTERS } from "@/features/setup/FirstInformationPreparation";
 import { ButlerNightAction } from "./ButlerNightAction";
+import { SetupInformationAction } from "./SetupInformationAction";
 
 type Props = { game: StorytellerLobbyRecord; script: Script; visible: boolean; onClose: () => void; showClose?: boolean };
 type Workspace = { target: WorkspaceTarget; ability: StepAbility; inputs?: Record<string, AbilityInputValue>; key: number };
@@ -283,22 +284,17 @@ function NightGuide({ game, script, visible, onClose, showClose = false }: Props
             : manual ? null : <button className="btn btn-gold" onClick={() => openWorkspace()}>Continue action</button>}
           {canTarget && !success && <div className="modern-night-pick-controls"><p className="modern-night-pick">Tap a player on the board</p><button onClick={() => { if (picker?.owner === owner) { useTargetPicker.getState().cancel(); setSuccessorChoice(null); setPaused(true); } else setPaused(false); }}>
             {picker?.owner === owner ? "Cancel selection" : "Choose on board"}</button></div>}
-          {!inlineInformation && (!resolved || canTarget && !success) && <details className="modern-night-guidance"><summary>More options</summary>
-            {canTarget && !success && actor && ability?.kind === "guided" && <><p className="behavior-help">Choose from roster</p><div className="modern-night-roster">
-              {seatedParticipants(game).filter(p => successorChoice ? successorChoice.eligible.has(p.participantId!) : participantAllowed(p, ability.descriptor.inputs[0]!, bindingOf(actor))).map(p =>
-                <button key={p.id} className="btn btn-sm" onClick={() => { useTargetPicker.getState().cancel(); choose(bindingOf(p)); }}>
-                  {p.name || `Seat ${p.seat + 1}`}</button>)}
-            </div></>}
-            {!resolved && <p className="behavior-help">Use the player’s settings for any reminders or changes you need to make.</p>}</details>}
         </> : bureaucrat ? <>
           <p className="modern-night-instruction">{current.prompt}</p>
           {current.advisory && <p className="behavior-help">{current.advisory}</p>}
           {resolved ? <p className="modern-night-result" role="status">{success?.game === game ? "Resolved. Continuing…" : "Completed"}</p>
             : <BureaucratAction key={`${actor!.participantId}:${current.stepKey}`} source={{ playerId: actor!.id, participantId: actor!.participantId! }}
               visible={visible} completeStep={{ day: game.day, stepKey: current.stepKey }} onResolved={finish} />}
-          {!resolved && <details className="modern-night-guidance"><summary>More options</summary>
+          {!resolved && <details className="modern-night-guidance"><summary>Manual correction</summary>
             <StepCard step={current} record={game.nightProgress?.[`${game.day}:${current.stepKey}`]} day={game.day} /></details>}
-        </> : <StepCard step={current} record={game.nightProgress?.[`${game.day}:${current.stepKey}`]} day={game.day} />}
+        </> : ["minionInfo", "demonInfo"].includes(current.stepKey)
+          ? <SetupInformationAction key={current.stepKey} game={game} script={script} step={current} visible={visible} resolved={resolved} />
+          : <StepCard step={current} record={game.nightProgress?.[`${game.day}:${current.stepKey}`]} day={game.day} />}
         {error && <p role="alert" className="behavior-help">{error}</p>}{refused && <p role="alert" className="behavior-help">{refused}</p>}
       </article>}
       {!current && <p>No night actions are currently required.</p>}

@@ -80,7 +80,7 @@ export function PrivateRevealReadiness({ game, live }: { game: StorytellerLobbyR
   const acks = useSessionRuntime((s) => s.revealAcks);
   const seated = game.seatOrder.map((id) => game.players[id]).filter((p): p is STPlayerRecord => !!p && !p.isEmpty);
   if (!live) {
-    return <p className="behavior-help">No phones are connected: reveal roles in person. Beginning Night 1 is always available.</p>;
+    return <p className="behavior-help">Reveal roles in person. No phones required.</p>;
   }
   const viewed = seated.filter((p) => revealViewed(p, acks[p.id]));
   return (

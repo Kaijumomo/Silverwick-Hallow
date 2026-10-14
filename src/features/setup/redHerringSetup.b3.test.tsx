@@ -54,14 +54,14 @@ it("cancels selection on privacy, rejects retained callback after state change, 
   unmount(); expect(useTargetPicker.getState().active).toBeNull();
 });
 
-it.each(["players", "details"])("opens the full board from %s while preserving selection above the dismissed panel", surface => {
+it.each(["players", "expanded advanced controls"])("opens the full board from %s while preserving selection above the dismissed panel", surface => {
   render(<PlayersWorkspace enabled roles={setupScript.characters} onMore={vi.fn()} advancedPlayerId={null}>
     <button onClick={() => pickSeatIfPicking(game(), "p1")}>Choose board player</button>
   </PlayersWorkspace>);
   fireEvent.click(screen.getByRole("button", { name: "Players" }));
-  if (surface === "details") {
-    fireEvent.click(screen.getByRole("button", { name: "Setup details & modifiers" }));
-    expect(screen.getByRole("dialog", { name: "Setup details" })).toBeVisible();
+  if (surface === "expanded advanced controls") {
+    fireEvent.click(screen.getByText("Advanced setup & modifiers"));
+    expect(screen.getByText("Advanced setup & modifiers").parentElement).toHaveAttribute("open");
   }
   fireEvent.click(screen.getByRole("button", { name: "Choose Red Herring" }));
   expect(screen.getByRole("button", { name: "Players" })).toHaveAttribute("aria-expanded", "false");

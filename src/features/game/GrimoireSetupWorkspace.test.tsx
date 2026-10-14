@@ -14,12 +14,13 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-const setupUI = () => within(screen.getByRole("dialog", { name: "Setup details" }));
+const setupUI = () => within(screen.getByRole("region", { name: "Setup preparation" }));
 const openSetup = () => {
-  if (!screen.queryByRole("button", { name: "Setup details & modifiers" })) fireEvent.click(screen.getByRole("button", { name: "Players" }));
-  fireEvent.click(screen.getByRole("button", { name: "Setup details & modifiers" }));
+  if (!screen.queryByRole("region", { name: "Setup preparation" })) fireEvent.click(screen.getByRole("button", { name: "Players" }));
+  const advanced = screen.getByText("Advanced setup & modifiers");
+  if (!advanced.parentElement?.hasAttribute("open")) fireEvent.click(advanced);
 };
-const closeSetup = () => fireEvent.click(screen.getByRole("button", { name: "Close setup panel" }));
+const closeSetup = () => fireEvent.click(screen.getByRole("button", { name: "Players" }));
 
 describe("D. Setup does not auto-open", () => {
   it("entering the Grimoire shows neither the Setup workspace nor a required action -- Go Live and Players are both merely available", () => {
@@ -108,12 +109,12 @@ describe("I. Planned and seated counts are shown distinctly", () => {
   it("shows Planned and Seated separately and never collapses one into the other", () => {
     render(<GameScreen />);
     openSetup();
-    expect(setupUI().getByLabelText("Players")).toHaveValue(5);
-    expect(screen.getByText("Seated: 5")).toBeVisible();
+    expect(setupUI().getByText(/Planned: 5/)).toBeVisible();
+    expect(screen.getByText(/Planned: 5 .* Seated: 5/)).toBeVisible();
 
     act(() => { store.getState().unseatPlayer(store.getState().game!.seatOrder[0]!); });
-    expect(setupUI().getByLabelText("Players")).toHaveValue(5); // planned unchanged
-    expect(screen.getByText("Seated: 4")).toBeVisible(); // seated reflects reality
+    expect(setupUI().getByText(/Planned: 5/)).toBeVisible(); // planned unchanged
+    expect(screen.getByText(/Planned: 5 .* Seated: 4/)).toBeVisible(); // seated reflects reality
   });
 });
 
@@ -130,7 +131,8 @@ describe("M. Setup panel close/reopen preserves pinned vs. generated state", () 
     expect(screen.queryByRole("button", { name: "Empath" })).toBeNull();
 
     openSetup();
-    fireEvent.click(screen.getByRole("button", { name: "Edit roles" }));
+    const editRoles = screen.queryByRole("button", { name: "Edit roles" });
+    if (editRoles) fireEvent.click(editRoles);
     expect(screen.getByRole("button", { name: "Empath" })).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(screen.getByRole("button", { name: "Re-roll Bag" }));

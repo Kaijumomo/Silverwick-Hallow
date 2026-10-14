@@ -1,7 +1,7 @@
 .dialog.role-chooser {
-  width: min(1320px, calc(100vw - 48px));
-  height: calc(100dvh - 48px);
-  max-height: calc(100dvh - 48px);
+  width: min(980px, calc(100vw - 48px));
+  height: min(780px, calc(100dvh - 64px));
+  max-height: calc(100dvh - 64px);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -42,7 +42,7 @@
 .role-chooser-holder { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); box-sizing: border-box; width: 68px; padding: 3px 5px; border-radius: 12px; border: 1px solid #c49e5059; background: #191316; color: var(--gold-soft); font: 600 11px/1.25 var(--font-op); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .role-chooser-name { width: 100%; min-width: 0; font: 600 13px/1.2 var(--font-op); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .role-chooser-footer { flex: none; border-top: 1px solid #c49e5024; background: #100c0ed9; padding: 12px 22px; }
-.role-chooser-detail { height: 132px; display: flex; align-items: flex-start; gap: 16px; overflow: hidden; }
+.role-chooser-detail { height: 96px; display: flex; align-items: flex-start; gap: 16px; overflow: hidden; }
 .role-chooser-detail-disc { width: 60px; height: 60px; margin-top: 4px; }
 .role-chooser-detail > div { min-width: 0; flex: 1; max-height: 100%; overflow-y: auto; overscroll-behavior: contain; }
 .role-chooser-detail-copy:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
@@ -55,11 +55,19 @@
 .role-chooser-reminders ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
 .role-chooser-reminders li { display: flex; flex-direction: column; align-items: center; gap: 4px; font: 12px var(--font-op); }
 .role-chooser-reminders img { width: 36px; height: 36px; padding: 3px; border-radius: 50%; object-fit: contain; background: #e3d3a5; }
-.role-chooser-actions { height: 64px; display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.role-chooser-actions { min-height: 52px; display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 .role-chooser-status { flex: 1; min-width: 0; max-height: 64px; overflow-y: auto; }
 .role-chooser-actions p { margin: 0; font-size: 14px; }
 .role-chooser-actions .btn { min-height: 44px; }
-.role-chooser-choice-status { height: 64px; overflow-y: auto; }
+.role-chooser-choice-status { max-height: 64px; overflow-y: auto; }
+.role-chooser-choice-status:empty { display: none; }
+.dialog.role-chooser-select { width: min(820px, calc(100vw - 48px)); height: auto; }
+.role-chooser-select .role-chooser-scroll { flex: 0 1 auto; }
+.role-chooser-select .role-chooser-groups { grid-template-columns: 1fr; }
+.role-chooser-select .role-chooser-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+.role-chooser-select .role-chooser-tile { width: 104px; min-height: 116px; }
+.role-chooser-select .role-chooser-disc { width: 76px; height: 76px; }
+.role-chooser-select .role-chooser-name { white-space: normal; }
 .role-chooser-note, .role-chooser-hint { font: 14px/1.4 var(--font-op); color: var(--text-dim); }
 .role-chooser-error { color: #efa08e; }
 @media (min-width: 1600px) and (pointer: fine) {

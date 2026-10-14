@@ -63,10 +63,10 @@ export function RoleChooser(props: RoleChooserProps) {
   const count = (type: RoleType) => props.mode === "distribute"
     ? props.selected.filter(id => props.roles.some(role => role.id === id && role.type === type)).length : 0;
 
-  return <Modal title={title} onClose={props.onClose} className="role-chooser" closeLabel="Close character chooser">
+  return <Modal title={title} onClose={props.onClose} className={`role-chooser role-chooser-${props.mode}`} closeLabel="Close character chooser">
     <div className="role-chooser-intro">
-      <p>{props.mode === "select" ? props.instruction : props.mode === "distribute"
-        ? `${props.scriptName} · ${props.residents} residents · ${props.travelers} travelers`
+      <p id={props.mode === "select" ? hintId : undefined}>{props.mode === "select" ? props.instruction : props.mode === "distribute"
+        ? `${props.scriptName} · ${props.residents} players${props.travelers ? ` · ${props.travelers} travelers` : ""}`
         : `Seat ${props.player.seat} · ${props.roles.find(role => role.id === props.player.roleId)?.name ?? "Unassigned"}`}</p>
       <input className="input" type="search" aria-label="Search chooser characters" placeholder="Search characters or abilities…"
         value={query} onChange={event => setQuery(event.target.value)} autoComplete="off" />
@@ -122,7 +122,7 @@ export function RoleChooser(props: RoleChooserProps) {
           <button type="button" className="btn" disabled={props.pending} onClick={props.onRandom}>Random setup</button>
           <button type="button" className="btn btn-gold" disabled={props.pending || !props.canDistribute} onClick={props.onDistribute}>
             {props.pending ? "Distributing…" : props.distributionLabel ?? `Distribute to ${props.residents + props.travelers} players`}</button>
-        </div> : props.mode === "select" ? <div className="role-chooser-choice-status"><p id={hintId}>{props.instruction}</p>
+        </div> : props.mode === "select" ? <div className="role-chooser-choice-status">
           {props.error && <p role="alert">{props.error}</p>}
           {props.onClear && <button type="button" className="btn" disabled={props.pending} onClick={props.onClear}>Clear slot</button>}
         </div> : <div className="role-chooser-choice-status"><p id={hintId} className="role-chooser-hint">{props.allowSwap

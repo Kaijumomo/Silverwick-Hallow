@@ -8,6 +8,7 @@ import { preparationAvailability, preparedInformationContext } from "@/stores/pr
 import { wakeIdentity } from "@/stores/wakeIdentity";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { PreparedInformationCharacter, Script, StorytellerLobbyRecord } from "@/stores/types";
+import { TokenInformationAction } from "@/features/info/TokenInformationAction";
 
 export const FIRST_INFORMATION_CHARACTERS = new Set<string>(["washerwoman", "librarian", "investigator"]);
 export const informationCategory = (character: PreparedInformationCharacter) => character === "washerwoman" ? "townsfolk" : character === "librarian" ? "outsider" : "minion";
@@ -78,7 +79,7 @@ export function useFirstInformationPreparation(game?: StorytellerLobbyRecord, sc
     roles={resolvedCharacters(script).filter(role => role.type === informationCategory(chooser.character))} scriptName={script.name}
     title="Choose the character clue" instruction="Choose the character, then its player and the other player on the board."
     onClose={() => setChooser(null)} onChoose={chooseCharacter} /> : null;
-  return { begin, zero, entries, dialog, error, clearError: () => setError(null) };
+  return { begin, zero, entries, dialog, error, registry, clearError: () => setError(null) };
 }
 
 export type FirstInformationSelection = ReturnType<typeof useFirstInformationPreparation>;
@@ -87,9 +88,8 @@ export function FirstInformationPreparation({ selection, onChoose }: { selection
   if (privacy || !selection.entries.length) return null;
   return <div aria-label="First-night information preparation">{selection.entries.map(entry => <div className="setup-prep-row" key={entry.source.participantId}>
     <span className="setup-prep-name">{entry.roleName} · {entry.name}</span>
-    <span className="setup-prep-need">{entry.prepared ? "Information prepared" : "Choose starting information"}</span>
-    <button className="btn btn-sm" onClick={() => { selection.begin(entry.source, entry.character); onChoose?.(); }}>
-      {entry.prepared ? "Change" : "Prepare"} {entry.roleName}</button>
+    <TokenInformationAction compact role={entry.prepared?.clue.kind === "pair" ? selection.registry?.get(entry.prepared.clue.shownCharacter) : undefined}
+      label={`${entry.prepared ? "Change" : "Prepare"} ${entry.roleName}`} onClick={() => { selection.begin(entry.source, entry.character); onChoose?.(); }} />
     {entry.character === "librarian" && <button className="btn btn-sm" onClick={() => selection.zero(entry.source)}>Show 0 Outsiders</button>}
   </div>)}</div>;
 }
