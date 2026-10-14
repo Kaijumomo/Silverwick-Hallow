@@ -36,18 +36,18 @@ describe("Q. Minimal Setup UI after Deal, before Reveal", () => {
     expect(screen.queryByRole("button", { name: "Begin Night 1" })).toBeNull();
 
     // Exactly one token carries the indicator -- the unresolved Drunk.
-    expect(screen.getAllByText("Needs shown role")).toHaveLength(1);
+    expect(screen.getAllByText("Prepare role")).toHaveLength(1);
   });
 
   it("the token indicator disappears immediately once that player's shown identity becomes ready", () => {
     act(() => { store.getState().dealRolePool(); });
     render(<GameScreen />);
     openSetup();
-    expect(screen.getAllByText("Needs shown role")).toHaveLength(1);
+    expect(screen.getAllByText("Prepare role")).toHaveLength(1);
 
     act(() => { store.getState().setShownRole(drunkId(), "chef"); });
 
-    expect(screen.queryByText("Needs shown role")).toBeNull();
+    expect(screen.queryByText("Prepare role")).toBeNull();
     expect(setupUI().getByText("6/6 ready to reveal")).toBeVisible();
     expect(setupUI().getByRole("button", { name: "Reveal Roles" })).toBeEnabled();
   });

@@ -3,7 +3,6 @@
 .official-reminder-disc img { width: 75%; height: 75%; object-fit: contain; }
 .official-reminder-label { max-width: 100%; font: 600 11px/1.2 var(--font-op); text-align: center; }
 .official-reminder-notation .official-reminder-disc { border-style: dashed; }
-.official-reminder-pen { position: absolute; right: -3px; bottom: -1px; color: #e7d9af; background: #241c25; border-radius: 50%; padding: 1px 3px; font: 10px/1.1 var(--font-op); }
 .token-official-effects { position: absolute; top: 0; display: flex; align-items: flex-start; justify-content: space-between; pointer-events: none; }
 .token-official-effects > .official-reminder-token { width: 48%; max-width: 48px; }
 .token-official-effects .official-reminder-disc { width: 26px; height: 26px; }

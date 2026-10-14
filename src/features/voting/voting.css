@@ -8,14 +8,14 @@
 .voting-card button{font-family:inherit;cursor:pointer;touch-action:manipulation}
 .voting-card button:disabled{opacity:.38;cursor:default}
 .voting-card button:focus-visible,.voting-card select:focus-visible{outline:2px solid #f0e2bd;outline-offset:3px}
-.voting-quiet{min-height:36px;padding:0 10px;border:none;background:transparent;color:rgba(216,201,164,.6);font-size:13px;border-radius:10px}
+.voting-quiet{min-height:44px;min-width:44px;padding:0 10px;border:none;background:transparent;color:rgba(216,201,164,.6);font-size:13px;border-radius:10px}
 .voting-quiet:hover{color:#e0b96a;background:rgba(196,158,80,.08)}
 .voting-card-header>.voting-quiet{padding:0 12px;white-space:nowrap}
 .voting-slots{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:14px}
 .voting-slot{display:flex;flex-direction:column;gap:2px;padding:10px 14px;border-radius:14px;border:1px solid rgba(196,158,80,.14);background:rgba(0,0,0,.2);transition:border-color .3s;min-width:0}
 .voting-slot.choosing{border-color:rgba(224,185,106,.7)}
 .voting-slot span{font-size:11px;letter-spacing:.2em;text-transform:uppercase;font-weight:600;color:rgba(224,185,106,.7)}
-.voting-slot strong{font-family:"Cormorant Garamond",serif;font-size:26px;font-weight:700;line-height:1.1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.voting-slot strong{font-family:"Cormorant Garamond",serif;font-size:26px;font-weight:700;line-height:1.15;overflow-wrap:anywhere;white-space:normal}
 .voting-slot.choosing strong{color:rgba(216,201,164,.4)}
 .voting-slot-nominee span{color:rgba(232,138,122,.8)}
 .voting-slot-nominee.choosing{border-color:rgba(232,138,122,.75)}
@@ -30,7 +30,7 @@
 .voting-response-row{display:grid;grid-template-columns:minmax(0,1fr) 120px 120px;gap:10px;align-items:stretch}
 .voting-current{display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:0}
 .voting-current>span{font-size:11px;letter-spacing:.2em;text-transform:uppercase;font-weight:600;color:rgba(216,201,164,.5)}
-.voting-current>strong{font-family:"Cormorant Garamond",serif;font-size:32px;font-weight:700;line-height:1.05;color:#f0e2bd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.voting-current>strong{font-family:"Cormorant Garamond",serif;font-size:32px;font-weight:700;line-height:1.15;color:#f0e2bd;overflow-wrap:anywhere;white-space:normal}
 .voting-current>small{font-size:12px;color:rgba(216,201,164,.55)}
 .voting-card .voting-yes,.voting-card .voting-no{min-height:72px;border-radius:16px;border:1px solid rgba(224,185,106,.5);background:linear-gradient(180deg,rgba(196,158,80,.24),rgba(196,158,80,.08));color:#f2cf7e;font-family:"Cinzel Decorative",serif;font-size:24px;font-weight:700;letter-spacing:.06em}
 .voting-card .voting-no{border-color:rgba(216,201,164,.18);background:rgba(0,0,0,.25);color:rgba(216,201,164,.85)}
@@ -52,17 +52,17 @@
 .voting-result>.voting-primary{flex:none}
 .voting-note,.voting-error{font-size:13px;margin:0;color:rgba(216,201,164,.7);line-height:1.4}
 .voting-error{color:#ffb4a5}
-.voting-tools{position:absolute;right:22px;bottom:-30px}
+.voting-tools{align-self:flex-end;margin-top:-8px}
 .voting-tools:has(.voting-actions){position:static;border-top:1px solid rgba(196,158,80,.18)}
-.voting-tools>.voting-quiet{min-height:30px}
+.voting-tools>.voting-quiet{min-height:44px}
 .voting-finish,.voting-exception{display:flex;flex-direction:column;gap:14px}
 .voting-finish p,.voting-exception p{margin:0}
-.voting-card select{background:#221b20;color:#eadcb8;border:1px solid rgba(196,158,80,.4);border-radius:8px;min-height:40px;max-width:100%;padding:6px 10px;font:inherit}
+.voting-card select{background:#221b20;color:#eadcb8;border:1px solid rgba(196,158,80,.4);border-radius:8px;min-height:44px;max-width:100%;padding:6px 10px;font:inherit}
 .voting-finish label{display:flex;flex-direction:column;gap:6px;font-size:13px}
 .voting-history{max-height:280px;overflow:auto}
 .voting-history summary{cursor:pointer;min-height:44px;padding:10px 0}
 .voting-history-response{display:flex;align-items:center;gap:12px;min-height:46px}
-.voting-history-response>span{flex:1}
+.voting-history-response>span{flex:1;min-width:0;overflow-wrap:anywhere}
 .voting-compact-name{position:absolute;top:calc(100% + 5px);left:50%;transform:translateX(-50%);width:80px;text-align:center;background:rgba(14,10,12,.9);border-radius:8px;padding:1px 4px;pointer-events:none;color:#eadcb8;font:600 11px/1.25 "Source Sans 3",sans-serif}
 .voting-compact-name>span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .voting-compact-name>small{display:block;font-size:10px;color:#e0b96a}

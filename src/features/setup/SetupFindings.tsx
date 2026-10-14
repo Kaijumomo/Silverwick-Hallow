@@ -12,7 +12,7 @@ export function SetupFindings({ findings, concise = false }: { findings: SetupFi
     <summary>{concise ? "Setup checks" : "Review setup details"}</summary>
     <ul>{findings.map(f => <li key={f.code} data-severity={f.severity}>
       <strong>{LABELS[f.severity]}: </strong>
-      {f.code === "pool-and-assigned" ? findingSummary(f) : f.code === "modifier:gardener"
+      {concise && f.severity !== "blocker" ? findingSummary(f) : f.code === "pool-and-assigned" ? findingSummary(f) : f.code === "modifier:gardener"
         ? "Gardener: review the intended placement, then adjust individual roles in the grimoire after dealing."
         : f.message}
     </li>)}</ul>

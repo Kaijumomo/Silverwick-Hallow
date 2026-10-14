@@ -209,7 +209,7 @@ function Token({
   const officialEffects = modern && query && player.participantId
     ? officialEffectPresentation(player, { query, target: { playerId: player.id, participantId: player.participantId } }) : null;
   const effectSummary = privacyMode ? "" : officialEffects
-    ? [...officialEffects.tokens.map(token => token.detail), ...officialEffects.fallback.map(summary => summary.indicator.label)].join("; ")
+    ? [...officialEffects.tokens.map(token => token.detail), ...officialEffects.fallback.map(effectIndicatorLabel)].join("; ")
     : effectAccessibleSummary(player);
   const perceptionCheck = !privacyMode && !!script && identityNeedsCheck(player, buildRegistry(script));
   const listedReminders = modern && spec.tier !== "XS"
@@ -297,7 +297,8 @@ function Token({
     >
       {description && <span id={descriptionId} className="sr-only">{description}</span>}
       <div className="token-disc-frame" style={{ width: spec.disc, height: spec.disc }}>
-        {votingLabel && <span className="voting-seat-tag" aria-hidden="true">{votingLabel}</span>}
+        {votingLabel && <span className="voting-seat-tag" aria-hidden="true"
+          style={y > boardCentre.y ? { top: spec.height + 2, bottom: "auto" } : undefined}>{votingLabel}</span>}
         <div className="token-disc" style={{ width: spec.disc, height: spec.disc }}>
           {privacyMode && !publicRole ? (
             <span className="token-private-mark" aria-hidden="true">•</span>
@@ -355,11 +356,13 @@ function Token({
             words, never colour alone. */}
         {spec.tier !== "XS" && (flagCount > 0) && (
           <div className="token-markers" style={{ maxWidth: spec.width }} aria-hidden="true">
-            {diverges && <span className="token-marker token-marker-divergence" data-divergence="true" title={`Actually ${role?.name ?? "another role"}`}>{spec.text ? "≠ Actual" : "≠"}</span>}
+            {diverges && <span className="token-marker token-marker-divergence" data-divergence="true" title={modern ? `Actual role: ${role?.name ?? "another role"}` : `Actually ${role?.name ?? "another role"}`}>{modern ? role?.name ?? "Another role" : spec.text ? "≠ Actual" : "≠"}</span>}
             {markers.map((marker) => <span key={marker.key} className={`token-marker token-marker-${marker.key}`} data-token-marker={marker.key}>{spec.text ? marker.text : shortMarker(marker.key, player)}</span>)}
-            {!privacyMode && needsShownRole && <span className="token-marker token-needs-reveal">{spec.text ? "Needs shown role" : "Shown?"}</span>}
+            {!privacyMode && needsShownRole && <span className="token-marker token-needs-reveal">{modern ? "Prepare role" : spec.text ? "Needs shown role" : "Shown?"}</span>}
             {needsCheck && <span className="token-marker token-needs-check">{spec.text ? "Needs check" : "Check"}</span>}
-            {spec.reminderLabels === 0 && nonIconEffects.length > 0 && <span className="token-marker token-marker-effects" data-effect-count={nonIconEffects.length} title={nonIconEffects.map(effectIndicatorLabel).join(", ")}>{`+${nonIconEffects.length} eff.`}</span>}
+            {spec.reminderLabels === 0 && nonIconEffects.length > 0 && <span className="token-marker token-marker-effects" data-effect-count={nonIconEffects.length} title={nonIconEffects.map(effectIndicatorLabel).join(", ")}>{modern
+              ? `${nonIconEffects[0]!.indicator.label}${nonIconEffects.length > 1 ? ` +${nonIconEffects.length - 1}` : ""}`
+              : `+${nonIconEffects.length} eff.`}</span>}
             {spec.text && !player.alive && <LifeStateText state={life.state} className="token-marker token-ghost" />}
           </div>
         )}

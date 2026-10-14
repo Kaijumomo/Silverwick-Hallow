@@ -47,6 +47,8 @@
 .shell-result-portrait.is-slain::after { content:''; position:absolute; inset:0; background:linear-gradient(135deg,transparent 47%,rgba(122,29,26,.85) 47%,rgba(122,29,26,.85) 53%,transparent 53%); }
 .shell-result-title-group { display:flex; flex-direction:column; align-items:center; gap:14px; }
 .shell-result-title-group h2 { margin:0; font-family:'Cinzel Decorative',serif; font-size:76px; font-weight:700; letter-spacing:.04em; line-height:1; color:var(--result-title); text-shadow:0 0 40px var(--result-halo),0 2px 0 rgba(0,0,0,.6); }
+/* Keep ceremonial letterforms without interlocking the letters in "Good". */
+.shell-result-title-group h2 { font-variant-ligatures: none; font-kerning: none; }
 .shell-result-title-group p { margin:0; font-family:'IM Fell English',serif; font-style:italic; font-size:24px; line-height:1.4; color:rgba(242,230,200,.86); max-width:620px; text-wrap:pretty; }
 .shell-result-ornament { display:flex; align-items:center; gap:12px; }
 .shell-result-ornament span { width:110px; height:1px; background:linear-gradient(90deg,transparent,var(--result-ornament)); }

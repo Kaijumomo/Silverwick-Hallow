@@ -18,7 +18,6 @@ export function OfficialReminderToken({ role, label, count = 1, notation = false
     title={title ?? `${role.name}: ${text}${notation ? " (notation only)" : " (effect)"}`}
     aria-hidden={decorative || undefined}>
     <span className="official-reminder-disc"><img src={iconUrlFor(role)} alt="" onError={event => { event.currentTarget.style.visibility = "hidden"; }} />
-      {notation && <span className="official-reminder-pen" aria-hidden="true">✎</span>}
     </span>
     <span className="official-reminder-label">{text}</span>
     {notation && !decorative && <span className="sr-only"> (notation only)</span>}
