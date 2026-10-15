@@ -26,6 +26,9 @@ import {
 type Props = {
   category: ReferenceCategory;
   onClose: () => void;
+  /** Team tab carried over from the previous script (optional; the overlay keeps its own when absent). */
+  team?: RoleType | null;
+  onTeamChange?: (team: RoleType) => void;
 };
 
 type Tab = "characters" | "night";
@@ -53,13 +56,18 @@ function RoleIcon({ role, className }: { role: RoleDef; className: string }) {
   );
 }
 
-export function ReferenceOverlay({ category, onClose }: Props) {
+export function ReferenceOverlay({ category, onClose, team, onTeamChange }: Props) {
   const layerRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const backRef = useRef<HTMLButtonElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<Tab>("characters");
-  const [teamType, setTeamType] = useState<RoleType | null>(null);
+  const [ownTeam, setOwnTeam] = useState<RoleType | null>(null);
+  const teamType = team !== undefined ? team : ownTeam;
+  const setTeamType = (t: RoleType) => {
+    setOwnTeam(t);
+    onTeamChange?.(t);
+  };
   const [detail, setDetail] = useState<RoleDef | null>(null);
   useModalBehavior(dialogRef, layerRef, onClose, backRef);
 

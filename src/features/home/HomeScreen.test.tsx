@@ -239,4 +239,20 @@ describe("Character Reference", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /Home/ }));
     expect(screen.queryByRole("dialog")).toBeNull();
   });
+  it("keeps the chosen team tab when another script is opened, as the design does", () => {
+    render(<HomeScreen navigate={vi.fn()} />);
+    openPath("Character Reference");
+    fireEvent.click(screen.getByRole("button", { name: /Trouble Brewing/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Demons/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Home/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Sects & Violets/ }));
+    expect(screen.getByRole("button", { name: /^Demons/ })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: /Home/ }));
+    // The Carousel has Fabled; a script without that team falls back to its first team.
+    fireEvent.click(screen.getByRole("button", { name: /The Carousel/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Fabled/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Home/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Trouble Brewing/ }));
+    expect(screen.getByRole("button", { name: /^Townsfolk/ })).toHaveAttribute("aria-pressed", "true");
+  });
 });

@@ -6,7 +6,7 @@ import { canonicalJoin, normaliseCode } from "@/firebase/lobby";
 import { ROOM_CODE_LENGTH } from "@/firebase/roomCode";
 import { getBuiltinScript } from "@/data/scripts";
 import { isTabletTrial, TABLET_TRIAL_OFFLINE_MESSAGE } from "@/config/trial";
-import type { StorytellerLobbyRecord } from "@/stores/types";
+import type { RoleType, StorytellerLobbyRecord } from "@/stores/types";
 import { clearJoinPrefill, writeJoinPrefill } from "./joinPrefill";
 import { buildReferenceCategories, type ReferenceCategory } from "./referenceCategories";
 import { ReferenceOverlay } from "./reference/ReferenceOverlay";
@@ -62,6 +62,9 @@ export function HomeScreen({ navigate = defaultNavigate }: Props) {
   // Storyteller-first (tablet is the primary device); the design's default was Player.
   const [path, setPath] = useState<HomePath>("storyteller");
   const [reference, setReference] = useState<ReferenceCategory | null>(null);
+  // The design keeps the chosen team tab when another script is opened (falling
+  // back to the first team the script has), so it lives here, not in the overlay.
+  const [referenceTeam, setReferenceTeam] = useState<RoleType | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const configSource = getConfigSource();
@@ -220,7 +223,12 @@ export function HomeScreen({ navigate = defaultNavigate }: Props) {
       )}
 
       {reference && (
-        <ReferenceOverlay category={reference} onClose={() => setReference(null)} />
+        <ReferenceOverlay
+          category={reference}
+          team={referenceTeam}
+          onTeamChange={setReferenceTeam}
+          onClose={() => setReference(null)}
+        />
       )}
       {configOpen && (
         <FirebaseConfigDialog
