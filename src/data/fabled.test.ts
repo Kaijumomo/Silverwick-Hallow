@@ -3,8 +3,8 @@ import { RoleDefSchema } from "@/stores/schemas";
 import { FABLED, getFabled, listFabled } from "./fabled";
 
 describe("FABLED registry", () => {
-  it("contains the 12 standard fabled", () => {
-    expect(FABLED).toHaveLength(12);
+  it("contains the 14 official fabled", () => {
+    expect(FABLED).toHaveLength(14);
   });
 
   it("every fabled validates against RoleDefSchema", () => {
