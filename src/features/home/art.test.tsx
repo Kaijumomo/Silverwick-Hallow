@@ -72,3 +72,13 @@ describe("committed art", () => {
     }
   });
 });
+
+describe("added-character art", () => {
+  it("every self-hosted character icon exists in public/", async () => {
+    const { existsSync } = await import("node:fs");
+    const { localCharacterArt } = await import("./art");
+    for (const id of ["shugenja", "harpy", "summoner", "kazali", "lordoftyphon", "leviathan", "deusexfiasco", "ferryman"]) {
+      expect(existsSync(`public${localCharacterArt(id)}`), id).toBe(true);
+    }
+  });
+});
