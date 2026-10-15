@@ -118,14 +118,14 @@ export function HomeScreen({ navigate = defaultNavigate }: Props) {
       </div>
 
       <div className="home-door-right">
+        <Ornament />
+        <div className="home-door-mid" aria-live="polite">
         <div className="home-door-panelhead">
-          <Ornament />
           <h2 id="home-panel-h" className="home-door-heading">{PANEL_HEADS[path].title}</h2>
           <p className="home-door-sub">
             {isTabletTrial && path === "player" ? TABLET_TRIAL_OFFLINE_MESSAGE : PANEL_HEADS[path].sub}
           </p>
         </div>
-        <div className="home-door-panelbody" aria-live="polite">
         {path === "player" && <PlayerPanel navigate={navigate} />}
         {path === "storyteller" && (
           <section className="home-door-panel" aria-labelledby="home-panel-h">
@@ -200,11 +200,19 @@ export function HomeScreen({ navigate = defaultNavigate }: Props) {
                     </span>
                     <span className="home-door-tile-name">{c.name}</span>
                     <span className="home-door-tile-count">
-                      {c.id === "carousel"
-                        ? `${c.roles.length} characters`
-                        : `${c.scriptCount} characters${c.travelerCount ? ` + ${c.travelerCount} Travellers` : ""}`}
+                      {c.id === "carousel" ? (
+                        <>
+                          {c.roles.length} characters
+                          <br />
+                          Experimental
+                        </>
+                      ) : (
+                        <>
+                          {c.scriptCount} characters
+                          <br />+ {c.travelerCount} Travellers
+                        </>
+                      )}
                     </span>
-                    {c.id === "carousel" && <span className="home-door-tile-note">Experimental, Fabled &amp; Loric</span>}
                   </button>
                 </li>
               ))}
@@ -212,6 +220,7 @@ export function HomeScreen({ navigate = defaultNavigate }: Props) {
           </section>
         )}
         </div>
+        <Ornament />
       </div>
 
       <p className="home-door-disclaimer">
@@ -320,7 +329,7 @@ function PlayerPanel({ navigate }: { navigate: (url: string) => void }) {
         />
       </label>
 
-      <div className="home-door-field">
+      <div className="home-door-field home-door-field-code">
         <label className="home-door-label" htmlFor="home-code">Game code</label>
         <div className="home-door-code" onClick={() => codeInput.current?.focus()}>
           {cells.map((ch, i) => (
@@ -353,12 +362,14 @@ function PlayerPanel({ navigate }: { navigate: (url: string) => void }) {
         </div>
       </div>
 
-      <button type="submit" className="home-door-cta" disabled={!valid}>
-        Enter the Town
-      </button>
-      <p className="home-door-hint" role={error ? "alert" : undefined}>
-        {error ?? (trimmed ? `Signed, ${trimmed}` : "Sign the ledger to continue")}
-      </p>
+      <div className="home-door-join">
+        <button type="submit" className="home-door-cta" disabled={!valid}>
+          Enter the Town
+        </button>
+        <p className="home-door-hint" role={error ? "alert" : undefined}>
+          {error ?? (trimmed ? `Signed, ${trimmed}` : "Sign the ledger to continue")}
+        </p>
+      </div>
     </form>
   );
 }
