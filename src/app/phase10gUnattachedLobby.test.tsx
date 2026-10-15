@@ -172,7 +172,7 @@ describe("ASTRA-10G-R1-001-B: Home -> New Game -> Create setup, then the old cle
     // Still visible across the new flow: Home, then back to Game B's setup.
     act(() => state().setView("home"));
     expect(warningFor(oldCode)).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Continue current game/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Resume Game/ }));
     expect(warningFor(oldCode)).not.toBeNull();
 
     // A later valid Go Live for Game B starts a real session; the unresolved

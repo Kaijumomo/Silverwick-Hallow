@@ -1,0 +1,333 @@
+/* ===== Home "front door" (Package 1) =====
+   Tablet-first (design canvas 1480x924). Desktop shares the layout; narrow
+   portrait widths stack into one column. Scenic background is Home-only. */
+.home-door {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 560px) minmax(0, 520px);
+  justify-content: space-between;
+  align-items: center;
+  gap: 48px;
+  padding: clamp(32px, 6.5vw, 96px) clamp(32px, 10vw, 150px) clamp(48px, 7vw, 96px) clamp(32px, 6.5vw, 96px);
+  box-sizing: border-box;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    linear-gradient(90deg, rgba(10, 8, 6, 0.88) 0%, rgba(10, 8, 6, 0.6) 42%, rgba(10, 8, 6, 0.35) 70%, rgba(10, 8, 6, 0.55) 100%),
+    linear-gradient(180deg, rgba(10, 8, 6, 0) 50%, rgba(10, 8, 6, 0.8) 100%),
+    radial-gradient(ellipse 100% 90% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.6) 100%),
+    url("/bg/BackgroundMenuTablet.png") center / cover no-repeat,
+    #070606;
+  color: #d8c9a4;
+}
+.home-door-glow {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: min(760px, 55%);
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse 50% 46% at 50% 52%, rgba(232, 168, 88, 0.26), rgba(232, 168, 88, 0.08) 55%, transparent 75%);
+  animation: homeFlicker 4s ease-in-out infinite;
+}
+@keyframes homeFlicker {
+  0%, 100% { opacity: 0.85; }
+  30% { opacity: 1; }
+  60% { opacity: 0.78; }
+  80% { opacity: 0.95; }
+}
+
+/* ---- Left column ---- */
+.home-door-left { display: flex; flex-direction: column; gap: 28px; min-width: 0; }
+.home-door-kicker {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5em;
+  text-transform: uppercase;
+  color: rgba(216, 201, 164, 0.6);
+}
+.home-door-title {
+  margin: 0;
+  font-family: "Cinzel Decorative", var(--font-display);
+  font-weight: 400;
+  font-size: clamp(48px, 5.4vw, 80px);
+  line-height: 0.98;
+  letter-spacing: 0.03em;
+  color: #ecd9a8;
+  text-shadow: 0 0 40px rgba(224, 185, 106, 0.25), 0 2px 0 rgba(0, 0, 0, 0.6);
+}
+.home-door-title span { display: block; }
+.home-door-tagline {
+  margin: 0;
+  font-family: "IM Fell English", var(--font-body);
+  font-style: italic;
+  font-size: 22px;
+  color: rgba(234, 220, 184, 0.75);
+}
+.home-door-paths {
+  display: flex;
+  flex-direction: column;
+  margin-top: 12px;
+  border-bottom: 1px solid rgba(196, 158, 80, 0.14);
+}
+.home-door-path {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 80px;
+  padding: 10px 6px;
+  border-top: 1px solid rgba(196, 158, 80, 0.14);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.home-door-path:hover { background: rgba(196, 158, 80, 0.04); }
+.home-door-path:focus-visible,
+.home-door-row:focus-visible,
+.home-door-tile:focus-visible,
+.home-door-cta:focus-visible { outline: 2px solid var(--focus, #ffe9b0); outline-offset: 2px; }
+.home-door-path-text { display: flex; flex-direction: column; gap: 2px; }
+.home-door-path-title {
+  font-family: "Cormorant Garamond", var(--font-display);
+  font-weight: 700;
+  font-size: 30px;
+  line-height: 1.1;
+  color: rgba(234, 220, 184, 0.7);
+  transition: color 0.3s;
+}
+.home-door-path[aria-pressed="true"] .home-door-path-title { color: #f0d590; }
+.home-door-path-blurb { font-size: 15px; color: rgba(216, 201, 164, 0.6); }
+.home-door-chevron { font-size: 22px; color: rgba(216, 201, 164, 0.3); transition: color 0.3s; }
+.home-door-path[aria-pressed="true"] .home-door-chevron { color: #e0b96a; }
+
+/* ---- Right column ---- */
+.home-door-right {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 30px;
+  min-width: 0;
+  min-height: 560px;
+}
+.home-door-ornament { display: flex; align-items: center; justify-content: center; gap: 10px; align-self: center; width: 260px; }
+.home-door-ornament i { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(224, 185, 106, 0.7)); }
+.home-door-ornament i:last-child { transform: scaleX(-1); }
+.home-door-ornament b { width: 8px; height: 8px; border: 1px solid #e0b96a; transform: rotate(45deg); }
+.home-door-panel { display: flex; flex-direction: column; align-items: stretch; gap: 22px; text-align: center; margin: 0; }
+.home-door-heading {
+  margin: 0;
+  font-family: "Cormorant Garamond", var(--font-display);
+  font-weight: 700;
+  font-size: 40px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ecd9a8;
+}
+.home-door-sub {
+  margin: -10px 0 0;
+  font-family: "IM Fell English", var(--font-body);
+  font-style: italic;
+  font-size: 18px;
+  color: rgba(234, 220, 184, 0.65);
+}
+
+/* Player panel */
+.home-door-field { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.home-door-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: rgba(216, 201, 164, 0.6);
+}
+.home-door-name {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 58px;
+  padding: 0 4px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(224, 185, 106, 0.5);
+  border-radius: 0;
+  text-align: center;
+  font-family: "IM Fell English", var(--font-body);
+  font-style: italic;
+  font-size: 34px;
+  color: #f0e2bc;
+}
+.home-door-name::placeholder { color: rgba(240, 226, 188, 0.4); }
+.home-door-name:focus { outline: none; border-bottom-color: #f0d590; }
+.home-door-code { position: relative; display: flex; gap: 6px; justify-content: center; cursor: text; }
+.home-door-cell {
+  width: 46px;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border-radius: 6px;
+  border: 1px solid rgba(196, 158, 80, 0.2);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.5), rgba(30, 16, 12, 0.55));
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
+  font-family: "Cormorant Garamond", var(--font-display);
+  font-weight: 700;
+  font-size: 30px;
+  color: #f0d590;
+}
+.home-door-code:focus-within .home-door-cell[data-active="true"] { border-color: rgba(224, 185, 106, 0.6); }
+/* Real, accessible input laid over the cells; its own glyphs are hidden. */
+.home-door-code-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  font-size: 16px; /* prevents zoom-on-focus */
+}
+.home-door-cta {
+  align-self: center;
+  min-height: 60px;
+  padding: 0 40px;
+  border-radius: 30px;
+  border: 1px solid rgba(240, 213, 144, 0.7);
+  background: linear-gradient(180deg, rgba(224, 185, 106, 0.28), rgba(150, 100, 40, 0.18));
+  box-shadow: 0 0 30px rgba(224, 185, 106, 0.22), inset 0 1px 0 rgba(255, 235, 180, 0.25);
+  font-family: "Cormorant Garamond", var(--font-display);
+  font-weight: 700;
+  font-size: 24px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #f6dfa0;
+  cursor: pointer;
+}
+.home-door-cta:disabled { opacity: 0.4; cursor: default; pointer-events: none; }
+.home-door-hint {
+  margin: -8px 0 0;
+  min-height: 1.4em;
+  font-family: "IM Fell English", var(--font-body);
+  font-style: italic;
+  font-size: 15px;
+  color: rgba(234, 220, 184, 0.55);
+}
+.home-door-hint[role="alert"] { color: var(--danger, #e88a7a); }
+
+/* Storyteller panel */
+.home-door-rows { list-style: none; margin: 0; padding: 0; text-align: left; }
+.home-door-row {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 84px;
+  padding: 10px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid rgba(196, 158, 80, 0.18);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.home-door-row:hover { background: rgba(196, 158, 80, 0.04); }
+.home-door-row:disabled { opacity: 0.45; cursor: default; background: none; }
+.home-door-row-text { display: flex; flex-direction: column; gap: 2px; }
+.home-door-row-title { font-family: "Cormorant Garamond", var(--font-display); font-weight: 700; font-size: 26px; color: #eadcb8; }
+.home-door-row-primary .home-door-row-title { color: #f0d590; }
+.home-door-row-secondary { min-height: 64px; }
+.home-door-row-secondary .home-door-row-title { font-size: 20px; color: rgba(234, 220, 184, 0.75); }
+.home-door-row-sub { font-size: 15px; color: rgba(216, 201, 164, 0.6); }
+
+/* Reference panel */
+.home-door-panel-wide { width: 100%; }
+.home-door-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.home-door-tile {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 170px;
+  padding: 14px 8px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  border: 1px solid rgba(196, 158, 80, 0.16);
+  border-radius: 12px;
+  background: rgba(12, 9, 8, 0.35);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.home-door-tile:hover { background: rgba(196, 158, 80, 0.08); border-color: rgba(224, 185, 106, 0.4); }
+.home-door-mark {
+  width: 76px;
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(224, 185, 106, 0.45);
+  box-shadow: inset 0 0 0 5px rgba(12, 9, 8, 0.6), inset 0 0 0 6px rgba(224, 185, 106, 0.2);
+  font-family: "Cinzel Decorative", var(--font-display);
+  font-size: 22px;
+  color: #e0b96a;
+}
+.home-door-tile-name { font-family: "Cormorant Garamond", var(--font-display); font-weight: 700; font-size: 22px; color: #f0dfb2; line-height: 1.1; }
+.home-door-tile-count { font-size: 13px; color: rgba(216, 201, 164, 0.65); }
+.home-door-tile-note { font-size: 12px; font-style: italic; color: rgba(216, 201, 164, 0.5); }
+
+.home-door-disclaimer {
+  position: absolute;
+  left: clamp(32px, 6.5vw, 96px);
+  bottom: 24px;
+  margin: 0;
+  font-size: 12px;
+  color: rgba(216, 201, 164, 0.4);
+}
+
+/* Narrow / portrait: one stacked column (phone fallback, portrait tablet). */
+@media (max-width: 1000px) {
+  .home-door {
+    grid-template-columns: minmax(0, 560px);
+    justify-content: center;
+    align-content: start;
+    gap: 32px;
+    padding: 40px 24px 72px;
+  }
+  .home-door-glow { width: 100%; }
+  .home-door-title { font-size: clamp(44px, 9vw, 72px); }
+  .home-door-right { min-height: 0; }
+}
+@media (max-width: 640px) {
+  .home-door {
+    background:
+      linear-gradient(to bottom, rgba(10, 8, 6, 0.75) 0%, rgba(10, 8, 6, 0.55) 45%, rgba(10, 8, 6, 0.85) 100%),
+      url("/bg/BackgroundMenuPhone.png") center / cover no-repeat,
+      #070606;
+  }
+  .home-door-kicker { letter-spacing: 0.3em; font-size: 11px; }
+  .home-door-left { gap: 18px; }
+  .home-door-path { min-height: 68px; }
+  .home-door-heading { font-size: 32px; }
+  .home-door-name { font-size: 28px; }
+  .home-door-cell { width: 34px; height: 48px; font-size: 24px; }
+  .home-door-code { gap: 4px; }
+  .home-door-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .home-door-tile { min-height: 150px; }
+  .home-door-mark { width: 60px; height: 60px; font-size: 18px; }
+  .home-door-disclaimer { position: static; margin-top: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-door-glow { animation: none; }
+}
