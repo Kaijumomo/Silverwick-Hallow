@@ -171,6 +171,7 @@ describe("ReferenceOverlay", () => {
 describe("self-hosted art for the eight added characters", () => {
   it("uses the committed icon first, then the app's resolver, then the marked monogram", () => {
     open("carousel");
+    team("Demons");
     const card = screen.getAllByRole("button", { name: /^Kazali/ })[0]!;
     expect(card.querySelector("img")!.getAttribute("src")).toBe("/art/characters/carousel/kazali.png");
     fireEvent.error(card.querySelector("img")!);
