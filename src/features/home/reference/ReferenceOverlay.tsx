@@ -290,7 +290,7 @@ function ReferenceDetail({ role, onClose }: { role: RoleDef; onClose: () => void
           </div>
         ))}
         {jinxes.length > 0 && (
-          <div className="ref-detail-sec">
+          <div className="ref-detail-sec ref-detail-sec-jinx">
             <span className="ref-detail-label">Jinxes</span>
             <ul className="ref-jinxes">
               {jinxes.map((j) => (
