@@ -62,3 +62,13 @@ describe("official art on the Reference tiles", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Trouble Brewing" }).querySelector("img")).not.toBeNull();
   });
 });
+
+describe("committed art", () => {
+  it("the orbit has the design's eight icons and every referenced file ships in public/", async () => {
+    const { existsSync } = await import("node:fs");
+    expect(CAROUSEL_ORBIT).toHaveLength(8);
+    for (const src of [...Object.values(EDITION_LOGO), ...CAROUSEL_ORBIT]) {
+      expect(existsSync(`public${src}`), src).toBe(true);
+    }
+  });
+});
