@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStorytellerStore } from "@/stores/storytellerStore";
-import { Almanac } from "@/features/almanac/Almanac";
 import { FirebaseConfigDialog } from "@/features/firebase/FirebaseConfigDialog";
 import { getConfigSource } from "@/firebase/config";
 import { canonicalJoin, normaliseCode } from "@/firebase/lobby";
@@ -10,6 +9,7 @@ import { isTabletTrial, TABLET_TRIAL_OFFLINE_MESSAGE } from "@/config/trial";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import { clearJoinPrefill, writeJoinPrefill } from "./joinPrefill";
 import { buildReferenceCategories, type ReferenceCategory } from "./referenceCategories";
+import { ReferenceOverlay } from "./reference/ReferenceOverlay";
 
 type HomePath = "player" | "storyteller" | "reference";
 
@@ -26,7 +26,7 @@ const NAME_MAX = 20;
 const PANEL_HEADS: Record<HomePath, { title: string; sub: string }> = {
   player: { title: "Join the town", sub: "Give your name and the Storyteller\u2019s code." },
   storyteller: { title: "The Grimoire", sub: "The town awaits its Storyteller." },
-  reference: { title: "Character Reference", sub: "Browse scripts and abilities." },
+  reference: { title: "Character Reference", sub: "Browse scripts, abilities and night order." },
 };
 
 type Props = {
@@ -234,11 +234,7 @@ export function HomeScreen({ navigate = defaultNavigate }: Props) {
       )}
 
       {reference && (
-        <Almanac
-          title={`Character reference — ${reference.name}`}
-          roles={reference.roles}
-          onClose={() => setReference(null)}
-        />
+        <ReferenceOverlay category={reference} onClose={() => setReference(null)} />
       )}
       {configOpen && (
         <FirebaseConfigDialog

@@ -220,14 +220,15 @@ describe("Character Reference", () => {
     expect(carousel.some((r) => r.type === "loric")).toBe(true);
     expect(carousel.some((r) => r.edition === "experimental")).toBe(true);
   });
-  it("a tile opens the existing Almanac filtered to that category", () => {
+  it("a tile opens the Reference overlay for that category and Home closes behind it", () => {
     render(<HomeScreen navigate={vi.fn()} />);
     openPath("Character Reference");
     expect(screen.getAllByRole("button", { name: /Trouble Brewing|Bad Moon Rising|Sects & Violets|The Carousel/ })).toHaveLength(4);
     fireEvent.click(screen.getByRole("button", { name: /Trouble Brewing/ }));
-    const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText(/Character reference — Trouble Brewing/)).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: /Character reference: Trouble Brewing/ });
     expect(within(dialog).getAllByText(/Washerwoman/).length).toBeGreaterThan(0);
     expect(within(dialog).queryByText(/^Grandmother$/)).toBeNull(); // Bad Moon Rising only
+    fireEvent.click(within(dialog).getByRole("button", { name: /Home/ }));
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
