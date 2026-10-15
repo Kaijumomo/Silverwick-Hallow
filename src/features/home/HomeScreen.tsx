@@ -21,6 +21,14 @@ const PATHS: { id: HomePath; title: string; blurb: string }[] = [
 
 const NAME_MAX = 20;
 
+// The panel heading lives beside the left column's title block, and the panel
+// body starts level with the path list, so the two columns read as one page.
+const PANEL_HEADS: Record<HomePath, { title: string; sub: string }> = {
+  player: { title: "Join the town", sub: "Give your name and the Storyteller\u2019s code." },
+  storyteller: { title: "The Grimoire", sub: "The town awaits its Storyteller." },
+  reference: { title: "Character Reference", sub: "Browse scripts and abilities." },
+};
+
 type Props = {
   /** Page navigation; injectable for tests. Defaults to a normal page load. */
   navigate?: (url: string) => void;
@@ -83,11 +91,13 @@ export function HomeScreen({ navigate = defaultNavigate }: Props) {
       <div className="home-door-glow" aria-hidden="true" />
 
       <div className="home-door-left">
-        <p className="home-door-kicker">A Blood on the Clocktower companion</p>
-        <h1 className="home-door-title">
-          Silverwick <span>Hollow</span>
-        </h1>
-        <p className="home-door-tagline">Light the candles. The town is gathering.</p>
+        <header className="home-door-head">
+          <p className="home-door-kicker">A Blood on the Clocktower companion</p>
+          <h1 className="home-door-title">
+            Silverwick <span>Hollow</span>
+          </h1>
+          <p className="home-door-tagline">Light the candles. The town is gathering.</p>
+        </header>
         <nav className="home-door-paths" aria-label="Choose how to begin">
           {PATHS.map((p) => (
             <button
@@ -107,13 +117,18 @@ export function HomeScreen({ navigate = defaultNavigate }: Props) {
         </nav>
       </div>
 
-      <section className="home-door-right" aria-live="polite">
-        <Ornament />
+      <div className="home-door-right">
+        <div className="home-door-panelhead">
+          <Ornament />
+          <h2 id="home-panel-h" className="home-door-heading">{PANEL_HEADS[path].title}</h2>
+          <p className="home-door-sub">
+            {isTabletTrial && path === "player" ? TABLET_TRIAL_OFFLINE_MESSAGE : PANEL_HEADS[path].sub}
+          </p>
+        </div>
+        <div className="home-door-panelbody" aria-live="polite">
         {path === "player" && <PlayerPanel navigate={navigate} />}
         {path === "storyteller" && (
-          <section className="home-door-panel" aria-labelledby="home-st-h">
-            <h2 id="home-st-h" className="home-door-heading">The Grimoire</h2>
-            <p className="home-door-sub">The town awaits its Storyteller.</p>
+          <section className="home-door-panel" aria-labelledby="home-panel-h">
             <ul className="home-door-rows">
               <li>
                 <button className="home-door-row home-door-row-primary" aria-label="New Game" aria-describedby="home-new-sub" onClick={() => setView("newgame")}>
@@ -173,9 +188,7 @@ export function HomeScreen({ navigate = defaultNavigate }: Props) {
           </section>
         )}
         {path === "reference" && (
-          <section className="home-door-panel home-door-panel-wide" aria-labelledby="home-ref-h">
-            <h2 id="home-ref-h" className="home-door-heading">Character Reference</h2>
-            <p className="home-door-sub">Browse scripts and abilities.</p>
+          <section className="home-door-panel home-door-panel-wide" aria-labelledby="home-panel-h">
             <ul className="home-door-tiles">
               {categories.map((c) => (
                 <li key={c.id}>
@@ -198,8 +211,8 @@ export function HomeScreen({ navigate = defaultNavigate }: Props) {
             </ul>
           </section>
         )}
-        <Ornament />
-      </section>
+        </div>
+      </div>
 
       <p className="home-door-disclaimer">
         Unofficial fan companion. Not affiliated with The Pandemonium Institute.
@@ -277,25 +290,19 @@ function PlayerPanel({ navigate }: { navigate: (url: string) => void }) {
 
   if (isTabletTrial) {
     return (
-      <section className="home-door-panel" aria-labelledby="home-pl-h">
-        <h2 id="home-pl-h" className="home-door-heading">Join the town</h2>
-        <p className="home-door-sub">{TABLET_TRIAL_OFFLINE_MESSAGE}</p>
-      </section>
+      <section className="home-door-panel" aria-labelledby="home-panel-h" />
     );
   }
 
   return (
     <form
       className="home-door-panel"
-      aria-labelledby="home-pl-h"
+      aria-labelledby="home-panel-h"
       onSubmit={(e) => {
         e.preventDefault();
         enter();
       }}
     >
-      <h2 id="home-pl-h" className="home-door-heading">Join the town</h2>
-      <p className="home-door-sub">Give your name and the Storyteller&rsquo;s code.</p>
-
       <label className="home-door-field">
         <span className="home-door-label">Your name</span>
         <input

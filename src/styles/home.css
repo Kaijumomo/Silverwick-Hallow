@@ -5,12 +5,17 @@
   position: relative;
   min-height: 100vh;
   min-height: 100dvh;
+  /* Two rows shared by both columns: row 1 = title block | panel heading,
+     row 2 = path list | panel body. Anchored near the top so switching paths never moves the left column. */
   display: grid;
-  grid-template-columns: minmax(0, 560px) minmax(0, 520px);
+  grid-template-columns: minmax(0, 560px) minmax(0, 560px);
+  grid-template-rows: auto auto;
+  grid-template-areas: "lhead rhead" "lpaths rbody";
   justify-content: space-between;
-  align-items: center;
-  gap: 48px;
-  padding: clamp(32px, 6.5vw, 96px) clamp(32px, 10vw, 150px) clamp(48px, 7vw, 96px) clamp(32px, 6.5vw, 96px);
+  align-content: start; /* fixed top so the left column never jumps between paths */
+  column-gap: 0;
+  row-gap: 0;
+  padding: max(48px, 13vh) clamp(32px, 8vw, 120px) clamp(72px, 7vw, 96px) clamp(32px, 6.5vw, 96px);
   box-sizing: border-box;
   overflow: hidden;
   isolation: isolate;
@@ -40,8 +45,9 @@
   80% { opacity: 0.95; }
 }
 
-/* ---- Left column ---- */
-.home-door-left { display: flex; flex-direction: column; gap: 28px; min-width: 0; }
+/* ---- Left column (its two parts sit directly in the page grid) ---- */
+.home-door-left { display: contents; }
+.home-door-head { grid-area: lhead; display: flex; flex-direction: column; gap: 28px; min-width: 0; padding-bottom: 28px; }
 .home-door-kicker {
   margin: 0;
   font-size: 12px;
@@ -69,9 +75,10 @@
   color: rgba(234, 220, 184, 0.75);
 }
 .home-door-paths {
+  grid-area: lpaths;
+  align-self: start;
   display: flex;
   flex-direction: column;
-  margin-top: 12px;
   border-bottom: 1px solid rgba(196, 158, 80, 0.14);
 }
 .home-door-path {
@@ -106,32 +113,38 @@
 .home-door-chevron { font-size: 22px; color: rgba(216, 201, 164, 0.3); transition: color 0.3s; }
 .home-door-path[aria-pressed="true"] .home-door-chevron { color: #e0b96a; }
 
-/* ---- Right column ---- */
-.home-door-right {
+/* ---- Right column: a hairline ties it to the left, text shares the left edge ---- */
+.home-door-right { display: contents; }
+.home-door-panelhead,
+.home-door-panelbody { min-width: 0; padding-left: 56px; border-left: 1px solid rgba(196, 158, 80, 0.18); }
+.home-door-panelhead {
+  grid-area: rhead;
+  align-self: end;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  justify-content: center;
-  gap: 30px;
-  min-width: 0;
-  min-height: 560px;
+  align-items: flex-start;
+  gap: 14px;
+  padding-bottom: 28px;
+  text-align: left;
 }
-.home-door-ornament { display: flex; align-items: center; justify-content: center; gap: 10px; align-self: center; width: 260px; }
-.home-door-ornament i { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(224, 185, 106, 0.7)); }
-.home-door-ornament i:last-child { transform: scaleX(-1); }
+.home-door-panelbody { grid-area: rbody; align-self: start; }
+.home-door-ornament { display: flex; align-items: center; gap: 10px; width: 160px; margin-bottom: 4px; }
+.home-door-ornament i { flex: 1; height: 1px; background: linear-gradient(90deg, rgba(224, 185, 106, 0.7), transparent); }
+.home-door-ornament i:first-child { display: none; }
 .home-door-ornament b { width: 8px; height: 8px; border: 1px solid #e0b96a; transform: rotate(45deg); }
-.home-door-panel { display: flex; flex-direction: column; align-items: stretch; gap: 22px; text-align: center; margin: 0; }
+.home-door-panel { display: flex; flex-direction: column; align-items: stretch; gap: 26px; text-align: left; margin: 0; }
 .home-door-heading {
   margin: 0;
   font-family: "Cormorant Garamond", var(--font-display);
   font-weight: 700;
   font-size: 40px;
+  line-height: 1.05;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: #ecd9a8;
 }
 .home-door-sub {
-  margin: -10px 0 0;
+  margin: 0;
   font-family: "IM Fell English", var(--font-body);
   font-style: italic;
   font-size: 18px;
@@ -139,7 +152,7 @@
 }
 
 /* Player panel */
-.home-door-field { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.home-door-field { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .home-door-label {
   font-size: 11px;
   font-weight: 600;
@@ -156,7 +169,7 @@
   border: 0;
   border-bottom: 1px solid rgba(224, 185, 106, 0.5);
   border-radius: 0;
-  text-align: center;
+  text-align: left;
   font-family: "IM Fell English", var(--font-body);
   font-style: italic;
   font-size: 34px;
@@ -164,7 +177,7 @@
 }
 .home-door-name::placeholder { color: rgba(240, 226, 188, 0.4); }
 .home-door-name:focus { outline: none; border-bottom-color: #f0d590; }
-.home-door-code { position: relative; display: flex; gap: 6px; justify-content: center; cursor: text; }
+.home-door-code { position: relative; display: flex; gap: 6px; justify-content: flex-start; cursor: text; }
 .home-door-cell {
   width: 46px;
   height: 58px;
@@ -196,7 +209,7 @@
   font-size: 16px; /* prevents zoom-on-focus */
 }
 .home-door-cta {
-  align-self: center;
+  align-self: flex-start;
   min-height: 60px;
   padding: 0 40px;
   border-radius: 30px;
@@ -213,7 +226,7 @@
 }
 .home-door-cta:disabled { opacity: 0.4; cursor: default; pointer-events: none; }
 .home-door-hint {
-  margin: -8px 0 0;
+  margin: -12px 0 0;
   min-height: 1.4em;
   font-family: "IM Fell English", var(--font-body);
   font-style: italic;
@@ -300,14 +313,16 @@
 @media (max-width: 1000px) {
   .home-door {
     grid-template-columns: minmax(0, 560px);
+    grid-template-rows: none;
+    grid-template-areas: "lhead" "lpaths" "rhead" "rbody";
     justify-content: center;
     align-content: start;
-    gap: 32px;
     padding: 40px 24px 72px;
   }
   .home-door-glow { width: 100%; }
   .home-door-title { font-size: clamp(44px, 9vw, 72px); }
-  .home-door-right { min-height: 0; }
+  .home-door-panelhead, .home-door-panelbody { padding-left: 0; border-left: 0; }
+  .home-door-panelhead { padding-top: 36px; }
 }
 @media (max-width: 640px) {
   .home-door {

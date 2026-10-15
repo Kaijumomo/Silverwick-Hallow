@@ -157,7 +157,7 @@ describe("Player entry and the one-time hand-off", () => {
     store.setState({ game: liveGame() });
     render(<HomeScreen navigate={vi.fn()} />);
     openPath("Player");
-    const panel = screen.getByRole("heading", { name: "Join the town" }).closest("form")!;
+    const panel = screen.getByRole("form", { name: "Join the town" });
     expect(panel.textContent).not.toMatch(/Resume|Night|players|Grimoire|Setup test/);
     for (const id of ROLES) expect(panel.textContent!.toLowerCase()).not.toContain(id);
   });
