@@ -12,6 +12,7 @@ import { useModalBehavior } from "@/components/Modal";
 import { iconUrlFor } from "@/data/iconUrl";
 import type { RoleDef } from "@/stores/types";
 import type { ReferenceCategory } from "../referenceCategories";
+import { EDITION_LOGO, useLoadedArt } from "../art";
 import {
   arcLetters,
   buildNightColumns,
@@ -61,6 +62,8 @@ export function ReferenceOverlay({ category, onClose }: Props) {
   const [detail, setDetail] = useState<RoleDef | null>(null);
   useModalBehavior(dialogRef, layerRef, onClose, backRef);
 
+  const logoSrc = EDITION_LOGO[category.id];
+  const logoLoaded = useLoadedArt(logoSrc ? [logoSrc] : []);
   const hasNight = category.id !== "carousel";
   const groups = useMemo(() => groupByTeam(category.roles), [category]);
   const night = useMemo(() => (hasNight ? buildNightColumns(category.roles) : []), [category, hasNight]);
@@ -87,8 +90,10 @@ export function ReferenceOverlay({ category, onClose }: Props) {
             <span aria-hidden="true">‹</span>Home
           </button>
           <div className="ref-head-mid">
-            {/* Edition logos are not in the repo yet; the design's own text fallback is used. */}
-            <h2 className="ref-title">{category.name}</h2>
+            {/* Official logo when installed locally; otherwise the design's own text fallback. */}
+            <h2 className={logoSrc && logoLoaded.has(logoSrc) ? "ref-title ref-title-logo" : "ref-title"}>
+              {logoSrc && logoLoaded.has(logoSrc) ? <img src={logoSrc} alt={category.name} draggable={false} /> : category.name}
+            </h2>
             {hasNight && (
               <div className="ref-tabs" role="group" aria-label="Reference view">
                 <button type="button" aria-pressed={tab === "characters"} onClick={() => setTab("characters")}>

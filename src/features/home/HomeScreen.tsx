@@ -10,6 +10,7 @@ import type { StorytellerLobbyRecord } from "@/stores/types";
 import { clearJoinPrefill, writeJoinPrefill } from "./joinPrefill";
 import { buildReferenceCategories, type ReferenceCategory } from "./referenceCategories";
 import { ReferenceOverlay } from "./reference/ReferenceOverlay";
+import { CAROUSEL_ORBIT, EDITION_LOGO, useLoadedArt } from "./art";
 
 type HomePath = "player" | "storyteller" | "reference";
 
@@ -71,6 +72,7 @@ export function HomeScreen({ navigate = defaultNavigate }: Props) {
   }, []);
 
   const categories = useMemo(() => buildReferenceCategories(), []);
+  const art = useLoadedArt([...Object.values(EDITION_LOGO), ...CAROUSEL_ORBIT]);
 
   const scriptName = game
     ? (getBuiltinScript(game.scriptId) ?? customScripts?.[game.scriptId])?.name
@@ -193,11 +195,7 @@ export function HomeScreen({ navigate = defaultNavigate }: Props) {
               {categories.map((c) => (
                 <li key={c.id}>
                   <button className="home-door-tile" onClick={() => setReference(c)} data-category={c.id}>
-                    {/* Temporary typographic mark: approved edition artwork is
-                        not yet in the repo (see Package 1 asset inventory). */}
-                    <span className="home-door-mark" data-temporary-art="true" aria-hidden="true">
-                      {c.mark}
-                    </span>
+                    <TileArt category={c} art={art} />
                     <span className="home-door-tile-name">{c.name}</span>
                     <span className="home-door-tile-count">
                       {c.id === "carousel" ? (
@@ -247,6 +245,43 @@ export function HomeScreen({ navigate = defaultNavigate }: Props) {
         />
       )}
     </main>
+  );
+}
+
+/** Official art when it is installed locally; otherwise the marked temporary mark. */
+function TileArt({ category, art }: { category: ReferenceCategory; art: ReadonlySet<string> }) {
+  if (category.id === "carousel") {
+    const orbit = CAROUSEL_ORBIT.filter((src) => art.has(src));
+    if (orbit.length > 0) {
+      return (
+        <span className="home-door-orbit" role="img" aria-label="The Carousel">
+          <span className="home-door-orbit-ring" aria-hidden="true">
+            {orbit.map((src, i) => {
+              const a = (i / orbit.length) * Math.PI * 2 - Math.PI / 2;
+              return (
+                <img
+                  key={src}
+                  src={src}
+                  alt=""
+                  draggable={false}
+                  style={{ left: Math.round(64 + Math.cos(a) * 49 - 15), top: Math.round(64 + Math.sin(a) * 49 - 15) }}
+                />
+              );
+            })}
+          </span>
+          <span className="home-door-orbit-label" aria-hidden="true">The<br />Carousel</span>
+        </span>
+      );
+    }
+  } else {
+    const logo = EDITION_LOGO[category.id];
+    if (logo && art.has(logo)) return <img className="home-door-logo" src={logo} alt="" draggable={false} />;
+  }
+  // Temporary typographic mark: used only where the approved artwork is not installed.
+  return (
+    <span className="home-door-mark" data-temporary-art="true" aria-hidden="true">
+      {category.mark}
+    </span>
   );
 }
 

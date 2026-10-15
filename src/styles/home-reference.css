@@ -346,3 +346,7 @@ li.ref-night-step { cursor: default; }
   .ref-overlay, .ref-detail, .ref-detail-layer { animation: none; }
   .ref-card { transition: none; }
 }
+
+/* Official edition logo in the header (installed locally; see features/home/art.ts). */
+.ref-title-logo { line-height: 0; }
+.ref-title-logo img { width: 110px; height: 72px; object-fit: contain; filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.6)); }

@@ -359,3 +359,32 @@
 @media (prefers-reduced-motion: reduce) {
   .home-door-glow { animation: none; }
 }
+
+/* Official edition logo / Carousel orbit (installed locally; see art.ts). */
+.home-door-logo { width: 128px; height: 128px; object-fit: contain; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.6)); }
+.home-door-orbit { position: relative; width: 128px; height: 128px; display: flex; align-items: center; justify-content: center; }
+.home-door-orbit-ring { position: absolute; inset: 0; animation: homeSpin 40s linear infinite; }
+.home-door-orbit-ring img {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  animation: homeSpin 40s linear infinite reverse;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.7));
+}
+.home-door-orbit-label {
+  position: relative;
+  font-family: "Cormorant Garamond", serif;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  color: #ecd9a8;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+@keyframes homeSpin { to { transform: rotate(360deg); } }
+@media (max-width: 1000px) { .home-door-logo, .home-door-orbit { width: 104px; height: 104px; } }
+@media (max-width: 640px) { .home-door-logo, .home-door-orbit { width: 84px; height: 84px; } }
+@media (prefers-reduced-motion: reduce) { .home-door-orbit-ring, .home-door-orbit-ring img { animation: none; } }
