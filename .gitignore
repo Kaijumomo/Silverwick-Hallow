@@ -41,6 +41,3 @@ database-debug.log
 **/.impeccable/live/*.png
 # impeccable-ignore-end
 
-# Official artwork supplied for private personal use only (not cleared for redistribution).
-# Installed locally by scripts/install-private-art.mjs; see ASSET_INVENTORY.md.
-public/art/

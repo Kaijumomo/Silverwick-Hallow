@@ -1,10 +1,10 @@
 // Official edition logos and Carousel icons (Package 1).
 //
-// The artwork is The Pandemonium Institute's, supplied as a private-personal-use
-// PNG handoff (see ASSET_INVENTORY.md). It is NOT committed to this repository:
-// public/art/ is git-ignored and filled locally by scripts/install-private-art.mjs.
-// Every use below checks that the file is really there and otherwise keeps the
-// marked temporary treatment, so a clone without the artwork still works.
+// The artwork is The Pandemonium Institute's, kept under public/art/ with its
+// provenance and rights notes in public/art/PROVENANCE.md (private-personal-use
+// artwork that the project owner chose to include). Every use below still checks
+// that the file really loads and otherwise keeps the marked temporary treatment,
+// so removing public/art/ degrades gracefully.
 
 import { useEffect, useState } from "react";
 
@@ -16,14 +16,10 @@ export const EDITION_LOGO: Record<string, string> = {
   snv: `${ART_BASE}/scripts/snv.png`,
 };
 
-/**
- * The design's Carousel tile orbits eight character icons. The handoff has six
- * of them; Harpy and Kazali are not in it (they are among the eight newly added
- * characters), so the orbit simply has six.
- */
-export const CAROUSEL_ORBIT: readonly string[] = ["lleech", "balloonist", "pixie", "huntsman", "boffin", "king"].map(
-  (id) => `${ART_BASE}/characters/carousel/${id}.png`,
-);
+/** The design's eight orbiting Carousel icons, in its order. */
+export const CAROUSEL_ORBIT: readonly string[] = [
+  "lleech", "balloonist", "harpy", "pixie", "kazali", "huntsman", "boffin", "king",
+].map((id) => `${ART_BASE}/characters/carousel/${id}.png`);
 
 /** The subset of `srcs` that actually loads, filled in as each image arrives. */
 export function useLoadedArt(srcs: readonly string[]): ReadonlySet<string> {
