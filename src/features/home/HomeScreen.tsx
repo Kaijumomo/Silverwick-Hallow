@@ -336,11 +336,10 @@ function PlayerPanel({ navigate }: { navigate: (url: string) => void }) {
             autoCapitalize="characters"
             autoCorrect="off"
             spellCheck={false}
-            maxLength={ROOM_CODE_LENGTH + 1}
             aria-label="Game code, eight characters"
             onChange={(e) => {
               // Hyphens are tolerated (XXXX-XXXX); anything else non-alphanumeric is dropped.
-              setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ""));
+              setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, ROOM_CODE_LENGTH + 1));
               setError(null);
             }}
           />

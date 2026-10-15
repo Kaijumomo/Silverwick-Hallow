@@ -181,7 +181,7 @@
   font-size: 30px;
   color: #f0d590;
 }
-.home-door-code:focus-within .home-door-cell[data-active="true"] { border-color: rgba(224, 185, 106, 0.6); }
+.home-door-code:focus-within .home-door-cell[data-active="true"] { border-color: #f0d590; box-shadow: 0 0 0 2px rgba(240, 213, 144, 0.5), inset 0 2px 6px rgba(0, 0, 0, 0.5); }
 /* Real, accessible input laid over the cells; its own glyphs are hidden. */
 .home-door-code-input {
   position: absolute;
