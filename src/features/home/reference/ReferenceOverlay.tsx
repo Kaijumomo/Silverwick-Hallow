@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useModalBehavior } from "@/components/Modal";
 import { iconUrlFor } from "@/data/iconUrl";
-import type { RoleDef } from "@/stores/types";
+import type { RoleDef, RoleType } from "@/stores/types";
 import type { ReferenceCategory } from "../referenceCategories";
 import { EDITION_LOGO, useLoadedArt } from "../art";
 import {
@@ -59,6 +59,7 @@ export function ReferenceOverlay({ category, onClose }: Props) {
   const backRef = useRef<HTMLButtonElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<Tab>("characters");
+  const [teamType, setTeamType] = useState<RoleType | null>(null);
   const [detail, setDetail] = useState<RoleDef | null>(null);
   useModalBehavior(dialogRef, layerRef, onClose, backRef);
 
@@ -68,10 +69,12 @@ export function ReferenceOverlay({ category, onClose }: Props) {
   const groups = useMemo(() => groupByTeam(category.roles), [category]);
   const night = useMemo(() => (hasNight ? buildNightColumns(category.roles) : []), [category, hasNight]);
   const showNight = hasNight && tab === "night";
-  // Each view starts at the top rather than inheriting the other view's scroll.
+  // The chosen team falls back to the first team that has characters in this script.
+  const activeGroup = groups.find((g) => g.type === teamType) ?? groups[0];
+  // Each team and view starts at the top rather than inheriting the previous scroll.
   useEffect(() => {
     bodyRef.current?.scrollTo?.({ top: 0 });
-  }, [tab]);
+  }, [tab, activeGroup?.type]);
 
   return createPortal(
     <div ref={layerRef} className="ref-layer">
@@ -94,25 +97,43 @@ export function ReferenceOverlay({ category, onClose }: Props) {
             <h2 className={logoSrc && logoLoaded.has(logoSrc) ? "ref-title ref-title-logo" : "ref-title"}>
               {logoSrc && logoLoaded.has(logoSrc) ? <img src={logoSrc} alt={category.name} draggable={false} /> : category.name}
             </h2>
-            {hasNight && (
-              <div className="ref-tabs" role="group" aria-label="Reference view">
-                <button type="button" aria-pressed={tab === "characters"} onClick={() => setTab("characters")}>
-                  Characters
-                </button>
-                <button type="button" aria-pressed={tab === "night"} onClick={() => setTab("night")}>
-                  Night order
-                </button>
-              </div>
-            )}
           </div>
-          <span className="ref-count">{category.roles.length} characters</span>
+          <span aria-hidden="true" />
         </header>
 
+        <div className="ref-tabrow">
+          <div className="ref-tabs" role="group" aria-label="Teams">
+            {groups.map((g) => (
+              <button
+                key={g.type}
+                type="button"
+                aria-pressed={!showNight && g === activeGroup}
+                onClick={() => {
+                  setTeamType(g.type);
+                  setTab("characters");
+                }}
+              >
+                {g.label}
+                <span className="ref-tab-n">{g.roles.length}</span>
+              </button>
+            ))}
+            {hasNight && (
+              <>
+                <span className="ref-tab-sep" aria-hidden="true" />
+                <button type="button" aria-pressed={showNight} onClick={() => setTab("night")}>
+                  Night order
+                  {/* Empty count: the design's tab keeps the gap a count would take, so widths match. */}
+                  <span className="ref-tab-n" aria-hidden="true" />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
         <div ref={bodyRef} className="ref-body">
-          {!showNight &&
-            (
+          {!showNight && activeGroup && (
               <div className="ref-shelves">
-                {groups.map((g) => (
+                {[activeGroup].map((g) => (
                   <section key={g.type} className="ref-shelf" aria-label={g.label}>
                     <div className="ref-shelf-head">
                       <h3 style={{ color: g.color }}>{g.label}</h3>

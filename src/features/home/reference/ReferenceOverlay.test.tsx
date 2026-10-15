@@ -5,7 +5,7 @@ import { ReferenceOverlay } from "./ReferenceOverlay";
 import { buildReferenceCategories } from "../referenceCategories";
 import { JINXES } from "@/data/jinxes";
 import { lookupOfficialRole } from "@/data/officialRoles";
-import { arcLetters, buildNightColumns, cleanReminder, groupByTeam, jinxesOf } from "./referenceData";
+import { arcLetters, buildNightColumns, cleanReminder, groupByTeam, jinxesOf, teamOf } from "./referenceData";
 
 afterEach(cleanup);
 
@@ -28,6 +28,14 @@ describe("referenceData", () => {
     expect(groupByTeam(cats.carousel!.roles).map((x) => x.label)).toEqual(
       expect.arrayContaining(["Fabled", "Loric"]),
     );
+  });
+
+  it("lists each team in the publisher's order, as the design does", () => {
+    const townsfolk = groupByTeam(cats.tb!.roles).find((g) => g.type === "townsfolk")!;
+    expect(townsfolk.roles.map((r) => r.id)).toEqual([
+      "chef", "investigator", "washerwoman", "librarian", "empath", "fortuneteller", "undertaker",
+      "monk", "slayer", "soldier", "ravenkeeper", "mayor", "virgin",
+    ]);
   });
 
   it("night order: only this category's characters, numbered, with Dusk/Dawn and first-night-only info steps", () => {
@@ -62,35 +70,52 @@ describe("referenceData", () => {
   });
 });
 
+const team = (label: string) => fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${label}\\b`) }));
+
 describe("ReferenceOverlay", () => {
-  it("shows a shelf per team with counts and a character total", () => {
+  it("shows one tab per team with counts, the logo in the header and the selected team's cards", () => {
     open("tb");
     const dialog = screen.getByRole("dialog", { name: /Character reference: Trouble Brewing/ });
     expect(within(dialog).getByRole("heading", { level: 2, name: "Trouble Brewing" })).toBeInTheDocument();
-    expect(within(dialog).getByText(`${cats.tb!.roles.length} characters`)).toBeInTheDocument();
-    for (const team of ["Townsfolk", "Outsiders", "Minions", "Demons", "Travellers"]) {
-      expect(within(dialog).getByRole("region", { name: team })).toBeInTheDocument();
-    }
+    const tabs = within(within(dialog).getByRole("group", { name: "Teams" })).getAllByRole("button");
+    expect(tabs.map((t) => t.firstChild!.textContent)).toEqual(["Townsfolk", "Outsiders", "Minions", "Demons", "Travellers", "Night order"]);
+    const n = (label: string) => groupByTeam(cats.tb!.roles).find((g) => g.label === label)!.roles.length;
+    expect(tabs[0]!.textContent).toBe(`Townsfolk${n("Townsfolk")}`);
+    expect(tabs[5]!.textContent).toBe("Night order"); // no count
+    // First team is selected; only its shelf is on screen.
+    expect(tabs[0]).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).getByRole("region", { name: "Townsfolk" })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("region", { name: "Minions" })).toBeNull();
     expect(within(dialog).getAllByRole("button", { name: /Washerwoman/ }).length).toBe(1);
+    // The old pill and the character total are gone.
+    expect(within(dialog).queryByRole("button", { name: "Characters" })).toBeNull();
+    expect(within(dialog).queryByText(`${cats.tb!.roles.length} characters`)).toBeNull();
   });
 
-  it("has Characters and Night order tabs for editions, switching views", () => {
+  it("switching tabs shows that team; Night order is a tab and no team tab is active while it shows", () => {
     open("tb");
-    expect(screen.getByRole("button", { name: "Characters", pressed: true })).toBeInTheDocument();
+    team("Minions");
+    expect(screen.getByRole("region", { name: "Minions" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Townsfolk" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Night order" }));
     expect(screen.getByRole("region", { name: "First night" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Other nights" })).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Townsfolk" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Characters" }));
+    expect(screen.getByRole("button", { name: "Night order" })).toHaveAttribute("aria-pressed", "true");
+    for (const b of within(screen.getByRole("group", { name: "Teams" })).getAllByRole("button")) {
+      if (b.textContent !== "Night order") expect(b).toHaveAttribute("aria-pressed", "false");
+    }
+    team("Townsfolk");
     expect(screen.getByRole("region", { name: "Townsfolk" })).toBeInTheDocument();
   });
 
-  it("Carousel has Fabled and Loric shelves and no night order tab", () => {
+  it("Carousel uses the same team tabs, including Fabled and Loric, and no night order tab", () => {
     open("carousel");
     expect(screen.queryByRole("button", { name: "Night order" })).toBeNull();
-    expect(screen.getByRole("region", { name: "Fabled" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Loric" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: "The Carousel" })).toBeInTheDocument();
+    team("Fabled");
+    expect(screen.getByRole("region", { name: "Fabled" })).toBeInTheDocument();
+    team("Loric");
+    expect(screen.getByRole("region", { name: "Loric" })).toBeInTheDocument();
   });
 
   it("a night-order row opens that character's detail", () => {
@@ -106,6 +131,7 @@ describe("ReferenceOverlay", () => {
     const role = lookupOfficialRole(j.a)!;
     const other = lookupOfficialRole(j.b)!;
     open("tb");
+    team(teamOf(role.type)!.label);
     fireEvent.click(screen.getAllByRole("button", { name: new RegExp(`^${role.name}`) })[0]!);
     const detail = screen.getByRole("dialog", { name: role.name });
     expect(within(detail).getByRole("heading", { level: 3, name: role.name })).toBeInTheDocument();

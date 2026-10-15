@@ -68,30 +68,38 @@
   color: #ecd9a8;
   white-space: nowrap;
 }
+/* Team tab row: one row under the logo, Night order last after a divider. */
+.ref-tabrow { position: relative; display: flex; justify-content: center; padding: 0 56px 22px; }
 .ref-tabs {
   display: flex;
-  padding: 4px;
-  border-radius: 24px;
-  border: 1px solid rgba(196, 158, 80, 0.3);
-  background: rgba(12, 9, 8, 0.6);
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 36px;
+  border-bottom: 1px solid rgba(196, 158, 80, 0.18);
 }
 .ref-tabs button {
-  min-height: 40px;
-  padding: 0 20px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 2px;
+  margin-bottom: -1px;
   border: none;
-  border-radius: 20px;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
   background: transparent;
   color: rgba(234, 220, 184, 0.55);
-  font: inherit;
-  font-size: 14px;
+  font-family: "Cormorant Garamond", serif;
+  font-size: 21px;
   font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   white-space: nowrap;
   cursor: pointer;
 }
-.ref-tabs button[aria-pressed="true"] { background: rgba(224, 185, 106, 0.22); color: #f0d590; }
-.ref-count { justify-self: end; font-size: 14px; color: rgba(234, 220, 184, 0.5); }
+.ref-tabs button:hover { color: #ecd9a8; }
+.ref-tabs button[aria-pressed="true"] { color: #f0d590; border-bottom-color: #e0b96a; }
+.ref-tab-n { font-family: "Source Sans 3", sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0; opacity: 0.55; }
+.ref-tab-sep { align-self: center; width: 1px; height: 22px; background: rgba(196, 158, 80, 0.3); }
 .ref-back:focus-visible,
 .ref-tabs button:focus-visible,
 .ref-card:focus-visible,
@@ -117,12 +125,11 @@
   list-style: none;
   margin: 0;
   display: flex;
+  flex-wrap: wrap;
   gap: 18px;
-  overflow-x: auto;
   padding: 6px 4px 22px;
-  scroll-snap-type: x proximity;
 }
-.ref-cards > li { flex: none; scroll-snap-align: start; }
+.ref-cards > li { flex: none; }
 .ref-card {
   width: 178px;
   height: 262px;
@@ -335,9 +342,11 @@ li.ref-night-step { cursor: default; }
 
 @media (max-width: 900px) {
   .ref-head { grid-template-columns: auto minmax(0, 1fr); padding: 16px 20px 12px; }
-  .ref-count { display: none; }
   .ref-head-mid { flex-wrap: wrap; gap: 12px; justify-content: flex-end; }
   .ref-title { font-size: 22px; white-space: normal; }
+  .ref-tabrow { padding: 0 20px 16px; }
+  .ref-tabs { gap: 20px; }
+  .ref-tabs button { font-size: 18px; }
   .ref-body { padding: 6px 20px 32px; }
   .ref-night { grid-template-columns: minmax(0, 1fr); gap: 28px; }
   .ref-detail { padding: 32px 24px; }
