@@ -220,6 +220,14 @@ describe("Character Reference", () => {
     expect(carousel.some((r) => r.type === "loric")).toBe(true);
     expect(carousel.some((r) => r.edition === "experimental")).toBe(true);
   });
+  it("tiles show only the design's single line of text; names stay as accessible labels", () => {
+    render(<HomeScreen navigate={vi.fn()} />);
+    openPath("Character Reference");
+    const tiles = [...document.querySelectorAll(".home-door-tile")];
+    expect(tiles.map((t) => t.querySelector(".home-door-tile-count")!.textContent)).toEqual(["22 characters", "25 characters", "25 characters", "Experimental"]);
+    expect(tiles.every((t) => !/Travellers|Trouble Brewing|Carousel/.test(t.querySelector(".home-door-tile-count")!.textContent!))).toBe(true);
+    expect(tiles.map((t) => t.getAttribute("aria-label"))).toEqual(["Trouble Brewing", "Bad Moon Rising", "Sects & Violets", "The Carousel"]);
+  });
   it("a tile opens the Reference overlay for that category and Home closes behind it", () => {
     render(<HomeScreen navigate={vi.fn()} />);
     openPath("Character Reference");

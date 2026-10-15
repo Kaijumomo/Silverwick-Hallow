@@ -194,22 +194,10 @@ export function HomeScreen({ navigate = defaultNavigate }: Props) {
             <ul className="home-door-tiles">
               {categories.map((c) => (
                 <li key={c.id}>
-                  <button className="home-door-tile" onClick={() => setReference(c)} data-category={c.id}>
+                  <button className="home-door-tile" onClick={() => setReference(c)} data-category={c.id} aria-label={c.name}>
                     <TileArt category={c} art={art} />
-                    <span className="home-door-tile-name">{c.name}</span>
                     <span className="home-door-tile-count">
-                      {c.id === "carousel" ? (
-                        <>
-                          {c.roles.length} characters
-                          <br />
-                          Experimental
-                        </>
-                      ) : (
-                        <>
-                          {c.scriptCount} characters
-                          <br />+ {c.travelerCount} Travellers
-                        </>
-                      )}
+                      {c.id === "carousel" ? "Experimental" : `${c.scriptCount} characters`}
                     </span>
                   </button>
                 </li>
