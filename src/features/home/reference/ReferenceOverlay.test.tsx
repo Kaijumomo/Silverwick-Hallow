@@ -167,3 +167,21 @@ describe("ReferenceOverlay", () => {
     expect(card.querySelector("img")).toBeNull();
   });
 });
+
+describe("self-hosted art for the eight added characters", () => {
+  it("uses the committed icon first, then the app's resolver, then the marked monogram", () => {
+    open("carousel");
+    team("Demons");
+    const card = screen.getAllByRole("button", { name: /^Kazali/ })[0]!;
+    expect(card.querySelector("img")!.getAttribute("src")).toBe("/art/characters/carousel/kazali.png");
+    fireEvent.error(card.querySelector("img")!);
+    expect(card.querySelector("img")!.getAttribute("src")).toContain("botc.app");
+    fireEvent.error(card.querySelector("img")!);
+    expect(card.querySelector('[data-temporary-art="true"]')).not.toBeNull();
+  });
+  it("other characters keep the existing resolver", () => {
+    open("tb");
+    const card = screen.getAllByRole("button", { name: /^Washerwoman/ })[0]!;
+    expect(card.querySelector("img")!.getAttribute("src")).toContain("botc.app");
+  });
+});

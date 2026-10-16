@@ -21,6 +21,16 @@ export const CAROUSEL_ORBIT: readonly string[] = [
   "lleech", "balloonist", "harpy", "pixie", "kazali", "huntsman", "boffin", "king",
 ].map((id) => `${ART_BASE}/characters/carousel/${id}.png`);
 
+/** Self-hosted icons for the eight characters added in feature/missing-characters. */
+const LOCAL_CHARACTER_ART: Record<string, string> = {
+  ...Object.fromEntries(
+    ["shugenja", "harpy", "summoner", "kazali", "lordoftyphon", "leviathan"].map((id) => [id, `${ART_BASE}/characters/carousel/${id}.png`]),
+  ),
+  deusexfiasco: `${ART_BASE}/characters/fabled/deusexfiasco.png`,
+  ferryman: `${ART_BASE}/characters/fabled/ferryman.png`,
+};
+export const localCharacterArt = (id: string): string | undefined => LOCAL_CHARACTER_ART[id];
+
 /** The subset of `srcs` that actually loads, filled in as each image arrives. */
 export function useLoadedArt(srcs: readonly string[]): ReadonlySet<string> {
   const key = srcs.join("|");

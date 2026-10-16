@@ -12,7 +12,7 @@ import { useModalBehavior } from "@/components/Modal";
 import { iconUrlFor } from "@/data/iconUrl";
 import type { RoleDef, RoleType } from "@/stores/types";
 import type { ReferenceCategory } from "../referenceCategories";
-import { EDITION_LOGO, useLoadedArt } from "../art";
+import { EDITION_LOGO, localCharacterArt, useLoadedArt } from "../art";
 import {
   arcLetters,
   buildNightColumns,
@@ -33,10 +33,15 @@ type Props = {
 
 type Tab = "characters" | "night";
 
-/** Character icon with a marked temporary fallback when the image is unavailable. */
+/**
+ * Character icon. The eight characters added with their own committed art use
+ * it first; everyone else (and any failure) uses the app's existing icon
+ * resolver. If that also fails, a marked temporary monogram shows instead.
+ */
 function RoleIcon({ role, className }: { role: RoleDef; className: string }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) {
+  const local = localCharacterArt(role.id);
+  const [stage, setStage] = useState<"local" | "remote" | "none">(local ? "local" : "remote");
+  if (stage === "none") {
     return (
       <span className={`${className} ref-icon-fallback`} data-temporary-art="true" aria-hidden="true">
         {role.name.slice(0, 1)}
@@ -46,12 +51,12 @@ function RoleIcon({ role, className }: { role: RoleDef; className: string }) {
   return (
     <img
       className={className}
-      src={iconUrlFor(role)}
+      src={stage === "local" ? local : iconUrlFor(role)}
       alt=""
       loading="lazy"
       decoding="async"
       draggable={false}
-      onError={() => setFailed(true)}
+      onError={() => setStage(stage === "local" ? "remote" : "none")}
     />
   );
 }
