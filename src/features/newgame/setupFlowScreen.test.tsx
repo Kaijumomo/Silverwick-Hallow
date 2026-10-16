@@ -84,7 +84,7 @@ describe("Step III: Offline, Seat the town", () => {
     expect(screen.getByLabelText("Seat I")).toHaveAttribute("placeholder", "Seat I…");
     expect(screen.getByRole("button", { name: "Begin the night" })).toBeDisabled();
     expect(screen.getByText("Name at least 5 seats to begin.")).toHaveClass("sr-only");
-    expect(screen.getByText("0 of 10 named · empty seats keep their number.")).toBeVisible();
+    expect(document.querySelector(".sf-foot-note")).toBeNull(); // no status line under the seats
     nameSeats(["Bram", "Odile", "Fenwick", "Marisol"]);
     expect(screen.getByRole("button", { name: "Begin the night" })).toBeDisabled();
     nameSeats(["Bram", "Odile", "Fenwick", "Marisol", "  "]);
@@ -93,10 +93,11 @@ describe("Step III: Offline, Seat the town", () => {
     expect(screen.getByRole("button", { name: "Begin the night" })).toBeEnabled();
   });
 
-  it("the status line and rail follow the names; a full table reads 'Every seat is named.'", () => {
+  it("the rail follows the names and no status line appears under the seats", () => {
     offline();
     nameSeats(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]);
-    expect(screen.getByText("Every seat is named.")).toBeVisible();
+    expect(screen.queryByText(/named ·|Every seat is named/)).toBeNull();
+    expect(document.querySelector(".sf-foot-note")).toBeNull();
     expect(within(screen.getByRole("navigation", { name: "Setup progress" })).getByText("10 of 10 named")).toBeVisible();
   });
 

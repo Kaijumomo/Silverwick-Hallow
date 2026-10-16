@@ -148,7 +148,7 @@ export function SeatTown({ total, names, onName, minNamed, onBegin, busy, messag
       </div>
       <div className="sf-foot">
         <div className="sf-foot-status" role="status">
-          <span className="sf-foot-note">{message ?? (named >= total ? "Every seat is named." : `${named} of ${total} named · empty seats keep their number.`)}</span>
+          {message && <span className="sf-foot-note">{message}</span>}
         </div>
         <button type="button" className="sf-cta" disabled={!canBegin} aria-describedby="sf-offline-reason" onClick={onBegin}>Begin the night</button>
         {!canBegin && <span id="sf-offline-reason" className="sr-only">Name at least {minNamed} seats to begin.</span>}
