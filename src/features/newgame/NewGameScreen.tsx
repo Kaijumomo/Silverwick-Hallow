@@ -143,6 +143,15 @@ export function NewGameScreen() {
   };
 
   const beginLive = () => {
+    // A background tab may defer its expiry timer or React render. Recheck
+    // the current runtime and heartbeat deadlines at the actual click.
+    const runtime = useSessionRuntime.getState();
+    const current = useStorytellerStore.getState();
+    const now = Date.now();
+    const present = new Set(runtime.joined.filter(player => player.expiresAt > now).map(player => player.uid));
+    if (busy || !current.lobby || runtime.status !== "live" || runtime.presence !== "ready" || present.size < MIN_PLAYERS) return;
+    const writer = runtime.backend;
+    if (!writer || writer.code !== current.lobby.code || writer.sessionId !== current.lobby.sessionId || writer.leaseMayHaveLapsed()) return;
     markLive(false);
     setView("game");
   };

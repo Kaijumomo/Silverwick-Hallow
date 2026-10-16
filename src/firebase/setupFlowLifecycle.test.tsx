@@ -47,7 +47,7 @@ beforeEach(() => {
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 const newSetup = (opts: Parameters<ReturnType<typeof useStorytellerStore.getState>["newGame"]>[1] = {}) =>
   useStorytellerStore.getState().newGame("tb", { plannedPlayerCount: 6, keepView: true, ...opts });
@@ -337,7 +337,52 @@ describe("runtime.joined: distinct, currently joined players", () => {
     expect(Object.values(game.players).every((p) => p.isEmpty)).toBe(true);
     const seat = game.seatOrder[0]!;
     await b.set(rosterEntryPath(code, "u1"), seat);
-    await waitFor(() => expect(useSessionRuntime.getState().joined).toEqual([{ uid: "u1", playerId: seat }]));
+    await waitFor(() => expect(useSessionRuntime.getState().joined).toEqual([{ uid: "u1", playerId: seat, expiresAt: expect.any(Number) }]));
+  });
+
+  it("expires a silent heartbeat at exactly 45 seconds without a subscription callback, then accepts a fresh heartbeat", async () => {
+    const { b, code, here, knock, joined } = await liveLobby();
+    vi.useFakeTimers();
+    await knock("u1", "Bram");
+    const seat = useStorytellerStore.getState().game!.seatOrder[0]!;
+    await b.set(rosterEntryPath(code, "u1"), seat);
+    // Keep this test below the writer's renewal interval: the heartbeat is
+    // already 44 seconds old when received; no presence callback follows.
+    await here("u1", { lastSeen: Date.now() - 44_000 });
+    const game = useStorytellerStore.getState().game;
+    const undo = useStorytellerStore.getState().undoStack;
+    await act(async () => { await vi.advanceTimersByTimeAsync(999); });
+    expect(joined()).toEqual(["u1"]);
+    expect(useSessionRuntime.getState().pending).toBe(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(joined()).toEqual([]);
+    expect(useSessionRuntime.getState().pending).toBe(0);
+    expect(useSessionRuntime.getState().online[seat]).toBeUndefined();
+    expect(await b.get(rosterEntryPath(code, "u1"))).toBe(seat);
+    expect(useStorytellerStore.getState().game).toBe(game);
+    expect(useStorytellerStore.getState().undoStack).toBe(undo);
+    await here("u1");
+    expect(joined()).toEqual(["u1"]);
+    expect(useSessionRuntime.getState().online[seat]).toBe(true);
+    expect(useSessionRuntime.getState().pending).toBe(1);
+  });
+
+  it("a refreshed heartbeat replaces its old expiration deadline, and unmount cancels expiry updates", async () => {
+    const { here, knock, joined } = await liveLobby();
+    vi.useFakeTimers();
+    await knock("u1", "Bram");
+    await here("u1", { lastSeen: Date.now() - 44_000 });
+    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+    await here("u1");
+    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+    expect(joined()).toEqual(["u1"]);
+    cleanup();
+    expect(joined()).toEqual([]);
+    const changed = vi.fn();
+    const unsubscribe = useSessionRuntime.subscribe(changed);
+    await act(async () => { await vi.advanceTimersByTimeAsync(45_000); });
+    unsubscribe();
+    expect(changed).not.toHaveBeenCalled();
   });
 
   it("a malformed presence row is dropped: it never counts and never poisons other players", async () => {

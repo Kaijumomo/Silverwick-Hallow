@@ -41,7 +41,7 @@ beforeEach(() => {
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 const ui = () => render(<><StorytellerSession /><NewGameScreen /></>);
 const press = (name: string | RegExp) => fireEvent.click(screen.getByRole("button", { name }));
@@ -217,6 +217,51 @@ describe("Step III: Live, Invite to phones", () => {
     expect(Object.keys(store.getState().game!.pendingPlayers)).toHaveLength(5);
   });
 
+  it("Begin follows disconnect, silent timeout and reconnect without changing seats or the setup lifecycle", async () => {
+    const { b, code, knock } = await live();
+    for (let i = 0; i < 5; i++) await act(async () => { await knock(`u${i}`, `P${i}`); });
+    const begin = () => screen.getByRole("button", { name: /^Begin/ });
+    expect(begin()).toBeEnabled();
+    await act(async () => { await b.set(presencePath(code, "u4"), { online: false, lastSeen: Date.now() }); });
+    expect(begin()).toBeDisabled();
+    await act(async () => { await knock("u4", "P4"); });
+    expect(begin()).toBeEnabled();
+    vi.useFakeTimers();
+    await act(async () => { await b.set(presencePath(code, "u4"), { online: true, lastSeen: Date.now() - 44_000 }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(999); });
+    expect(begin()).toBeEnabled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(begin()).toBeDisabled();
+    expect(begin()).toHaveTextContent("Begin with 4");
+    await act(async () => { await knock("u4", "P4"); });
+    expect(begin()).toBeEnabled();
+    expect(store.getState().game!.phase).toBe("setup");
+    expect(Object.values(store.getState().game!.players).every(player => player.isEmpty)).toBe(true);
+  });
+
+  it("Begin rechecks heartbeat expiration at click time when a background tab has not run its timer", async () => {
+    const { knock } = await live();
+    for (let i = 0; i < 5; i++) await act(async () => { await knock(`u${i}`, `P${i}`); });
+    const button = screen.getByRole("button", { name: /^Begin/ });
+    expect(button).toBeEnabled();
+    // Advance only the clock: no timer or React update has occurred yet.
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 45_000);
+    fireEvent.click(button);
+    expect(store.getState().view).toBe("newgame");
+    expect(sessionStorage.getItem("sf-live-screen")).toBe("1");
+  });
+
+  it("Begin refuses a lapsed Storyteller lease even while the rendered session still says live", async () => {
+    const { knock } = await live();
+    for (let i = 0; i < 5; i++) await act(async () => { await knock(`u${i}`, `P${i}`); });
+    const button = screen.getByRole("button", { name: /^Begin/ });
+    expect(button).toBeEnabled();
+    vi.spyOn(useSessionRuntime.getState().backend!, "leaseMayHaveLapsed").mockReturnValue(true);
+    fireEvent.click(button);
+    expect(store.getState().view).toBe("newgame");
+    expect(store.getState().game!.phase).toBe("setup");
+  });
+
   it("becomes 'Begin the night' once everyone planned has arrived", async () => {
     const { knock } = await live();
     for (let i = 0; i < 10; i++) await act(async () => { await knock(`u${i}`, `P${i}`); });
@@ -325,6 +370,21 @@ describe("Step III: Live, Invite to phones", () => {
     expect(screen.getByRole("heading", { name: "Invite the town" })).toBeVisible();
     expect(screen.getByLabelText(`Join code ${code.split("").join(" ")}`)).toBeVisible();
     expect(screen.getByText("0 of 12")).toBeVisible();
+  });
+
+  it("recovery rebuilds arrivals from fresh presence rather than the saved queue, and a returning player enables Begin", async () => {
+    const { b, code, knock } = await live();
+    for (let i = 0; i < 5; i++) await act(async () => { await knock(`u${i}`, `P${i}`); });
+    expect(screen.getByRole("button", { name: /^Begin/ })).toBeEnabled();
+    cleanup();
+    await b.set(presencePath(code, "u4"), { online: true, lastSeen: Date.now() - 45_000 });
+    ui();
+    await waitFor(() => expect(useSessionRuntime.getState().status).toBe("live"));
+    expect(screen.getByRole("button", { name: /^Begin with 4/ })).toBeDisabled();
+    expect(Object.keys(store.getState().game!.pendingPlayers)).toHaveLength(5);
+    await act(async () => { await knock("u4", "P4"); });
+    expect(screen.getByRole("button", { name: /^Begin with 5/ })).toBeEnabled();
+    expect(store.getState().game!.phase).toBe("setup");
   });
 
   it("without the Live-screen marker (arriving from Home) a leftover game is not restored", () => {
