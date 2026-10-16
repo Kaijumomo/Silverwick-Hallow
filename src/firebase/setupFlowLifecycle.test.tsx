@@ -211,7 +211,17 @@ describe("discardSetupGame and newGame seams", () => {
     useStorytellerStore.setState((s) => ({ game: { ...s.game!, phase: "night" } }));
     expect(useStorytellerStore.getState().discardSetupGame(token)).toBe(false);
     useStorytellerStore.setState((s) => ({ game: { ...s.game!, phase: "setup" } }));
+    useStorytellerStore.setState({ terminalClose: { intent: { kind: "noResult" }, status: "closing" } as never });
+    expect(useStorytellerStore.getState().discardSetupGame(token)).toBe(false);
+    useStorytellerStore.setState({ terminalClose: null });
     expect(useStorytellerStore.getState().discardSetupGame(token)).toBe(true);
+  });
+
+  it("discard is refused once the Reveal has completed", () => {
+    newSetup();
+    const token = gameLifecycleToken();
+    useStorytellerStore.setState((s) => ({ game: { ...s.game!, setupRolesRevealed: true } }));
+    expect(useStorytellerStore.getState().discardSetupGame(token)).toBe(false);
   });
 
   it("newGame is refused (false, unchanged) while a terminal close owns the current game", () => {
@@ -330,12 +340,27 @@ describe("runtime.joined: distinct, currently joined players", () => {
     await waitFor(() => expect(useSessionRuntime.getState().joined).toEqual([{ uid: "u1", playerId: seat }]));
   });
 
-  it("presence that is unreadable clears the list instead of guessing", async () => {
+  it("a malformed presence row is dropped: it never counts and never poisons other players", async () => {
     const { b, code, knock, joined } = await liveLobby();
     await knock("u1", "Bram");
-    await waitFor(() => expect(joined()).toEqual(["u1"]));
-    useSessionRuntime.setState({ presence: "error", joined: [] });
-    expect(joined()).toEqual([]);
-    void b; void code;
+    await knockOnLobby(b, code, "u2", "Odile");
+    await b.set(presencePath(code, "u2"), { online: "yes" });
+    await knock("u3", "Fenwick");
+    await waitFor(() => expect(joined()).toEqual(["u1", "u3"]));
+  });
+
+  it("stopping the session clears the list", async () => {
+    const b = new MemoryRoomBackend();
+    env.backend = b;
+    newSetup({ plannedPlayerCount: 8 });
+    await goLive();
+    const hook = renderHook(() => useStorytellerSync(b));
+    await waitFor(() => expect(useSessionRuntime.getState().status).toBe("live"));
+    const code = useStorytellerStore.getState().lobby!.code;
+    await knockOnLobby(b, code, "u1", "Bram");
+    await b.set(presencePath(code, "u1"), { online: true, lastSeen: Date.now() });
+    await waitFor(() => expect(useSessionRuntime.getState().joined).toHaveLength(1));
+    hook.unmount();
+    await waitFor(() => expect(useSessionRuntime.getState().joined).toEqual([]));
   });
 });
