@@ -23,13 +23,14 @@ const openSetup = () => {
 const closeSetup = () => fireEvent.click(screen.getByRole("button", { name: "Players" }));
 
 describe("D. Setup does not auto-open", () => {
-  it("entering the Grimoire shows neither the Setup workspace nor a required action -- Go Live and Players are both merely available", () => {
+  it("entering the Grimoire shows neither the Setup workspace nor a required action -- Players is merely available and an offline game has no Invite button", () => {
     render(<GameScreen />);
     expect(screen.queryByRole("complementary", { name: "Setup helper" })).toBeNull();
     expect(screen.queryByRole("dialog", { name: "Setup" })).toBeNull();
     expect(screen.getByRole("button", { name: "Players" })).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
-    expect(screen.getByRole("button", { name: "Go live" })).toBeVisible();
+    // Package 2D: the Grimoire no longer creates lobbies; games started offline stay offline.
+    expect(screen.queryByRole("button", { name: /^Invite/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Go live" })).toBeNull();
   });
 });
 
@@ -44,17 +45,20 @@ describe("E/F. Setup and Go Live work in either order, neither a prerequisite fo
     expect(store.getState().lobby).toBeNull();
   });
 
-  it("Go Live remains available with an empty, unbuilt bag, and Setup can still be opened afterward", () => {
+  it("a live lobby can exist with an empty, unbuilt bag: Invite opens the existing invitation (no Go live), and Setup can still be opened afterward", () => {
     render(<GameScreen />);
     expect(store.getState().game!.rolePool).toEqual([]);
-    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
-    expect(screen.getByRole("button", { name: "Go live" })).toBeEnabled();
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Invite players" })).getByRole("button", { name: "Close" }));
     // The createLobby/Firebase session plumbing is covered by its own tests;
     // GameScreen's Setup state reads only `game` and `script`, never
     // `lobby`, so establishing a live lobby directly proves the same
     // independence without re-testing the connect flow here.
     act(() => { store.getState().setLobby({ code: "ABCD1234", uid: "st", status: "live" }); });
+    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
+    const invite = screen.getByRole("dialog", { name: "Invite players" });
+    expect(within(invite).getByText("ABCD-1234")).toBeVisible();
+    expect(within(invite).queryByRole("button", { name: "Go live" })).toBeNull();
+    expect(store.getState().lobby?.code).toBe("ABCD1234"); // opening it created nothing
+    fireEvent.click(within(invite).getByRole("button", { name: "Close" }));
     expect(store.getState().game!.rolePool).toEqual([]);
     openSetup();
     expect(screen.getByRole("button", { name: "Choose roles" })).toBeVisible();

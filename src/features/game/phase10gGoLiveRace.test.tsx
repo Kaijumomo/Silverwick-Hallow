@@ -5,7 +5,7 @@
 // continuation, the store's setLobby / setPhase boundary, the Storyteller
 // writer startup, and rehydration (PHASE10G Sections 17.3, 17.5, 18; AC-35).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, renderHook, waitFor } from "@testing-library/react";
 import type { Json, RoomBackend } from "@/firebase/backend";
 
 const connect = vi.fn<() => Promise<{ backend: RoomBackend; uid: string }>>();
@@ -18,6 +18,7 @@ vi.mock("@/firebase/config", async (importOriginal) => {
   return { ...actual, isFirebaseConfigured: () => true };
 });
 
+import { goLive } from "@/firebase/goLive";
 import { GameScreen } from "./GameScreen";
 import { useStorytellerStore as store, takeMigrationResetFlag } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
@@ -85,11 +86,9 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-const clickGoLive = () => {
-  fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
-  fireEvent.click(screen.getByRole("button", { name: "Go live" }));
-  fireEvent.click(within(screen.getByRole("dialog", { name: "Invite players" })).getByRole("button", { name: "Close" }));
-};
+// Package 2D: the Grimoire no longer has a Go live button; the New Game flow's
+// "Invite to phones" runs the same shared sequence, so the race is driven at it.
+const clickGoLive = () => { act(() => { void goLive(); }); };
 const clickFinish = async () => { await finishGame(); };
 const settle = async () => { await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 

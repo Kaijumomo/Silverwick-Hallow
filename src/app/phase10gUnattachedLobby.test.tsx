@@ -23,6 +23,7 @@ vi.mock("@/firebase/config", async (importOriginal) => {
 import { App } from "./App";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
+import { goLive } from "@/firebase/goLive";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { MemoryRoomBackend } from "@/firebase/memoryBackend";
 import { formatCode } from "@/firebase/lobby";
@@ -99,9 +100,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 async function goLiveHeldBeforeAdoption(b: CleanupBackend): Promise<{ release: () => void; code: () => string }> {
   const release = b.holdSessionRead();
   connect.mockResolvedValue({ backend: b, uid: UID });
-  fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
-  fireEvent.click(screen.getByRole("button", { name: "Go live" }));
-  fireEvent.click(within(screen.getByRole("dialog", { name: "Invite players" })).getByRole("button", { name: "Close" }));
+  act(() => { void goLive(); }); // the New Game flow's "Invite to phones" runs this same sequence
   await waitFor(() => expect(b.lobbyCodes()).toHaveLength(1));
   return { release, code: () => b.lobbyCodes()[0]! };
 }
@@ -189,9 +188,7 @@ describe("ASTRA-10G-R1-001-B: Home -> New Game -> Seat the town, then the old cl
     // warning for the OLD lobby is not erased by it.
     b.failLease = false;
     connect.mockResolvedValue({ backend: b, uid: UID });
-    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Go live" }));
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Invite players" })).getByRole("button", { name: "Close" }));
+    act(() => { void goLive(); });
     await waitFor(() => expect(useSessionRuntime.getState().status).toBe("live"));
     expect(state().lobby!.code).not.toBe(oldCode);
     expect(b.writerEverActive(state().lobby!.code)).toBe(true); // the helper detects a real writer
@@ -232,11 +229,10 @@ describe("ASTRA-10G-R1-001: controls", () => {
     expect(useSessionRuntime.getState().status).toBe(before.status);
   });
 
-  it("an ordinary current-game Go Live error stays on the game screen and creates no unattached-lobby warning", async () => {
+  it("an ordinary current-game Go Live error creates no unattached-lobby warning", async () => {
     connect.mockRejectedValue(new Error("network down"));
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Go live" })); });
+    await act(async () => { expect((await goLive()).kind).toBe("failed"); });
     await settle();
     expect(warnings()).toHaveLength(0);
     expect(useSessionRuntime.getState().unattachedCleanupFailures).toEqual([]);
