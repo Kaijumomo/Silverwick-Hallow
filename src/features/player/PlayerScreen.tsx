@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { lifeAccessibleLabel, publicLifeStateOf } from "@/stores/lifeState";
 import { LifeStateText } from "@/features/life/LifeMarks";
 import { PrivateInformation } from "./PrivateInformation";
@@ -22,6 +22,7 @@ import { AlmanacBody } from "@/features/almanac/AlmanacBody";
 import { RemoteScreenBoundary } from "@/features/remote/RemoteScreenBoundary";
 import { DATA_ERROR_MESSAGE, CONNECTION_ERROR_MESSAGE } from "@/firebase/snapshots";
 import { PlayerEnded, PlayerEnding } from "./PlayerTerminal";
+import { clearJoinPrefill, peekJoinPrefill } from "@/features/home/joinPrefill";
 
 type PlayerTab = "role" | "town" | "more";
 
@@ -34,6 +35,11 @@ export function PlayerScreen({ initialCode }: Props) {
 }
 
 function PlayerScreenContent({ initialCode }: Props) {
+  // Name handed over once by Home (never via the URL). Read without clearing so
+  // StrictMode's double render keeps it, then cleared on mount: single use.
+  const [prefillName, setPrefillName] = useState(() => peekJoinPrefill(initialCode));
+  useEffect(() => { clearJoinPrefill(); }, []);
+  const consumePrefill = useCallback(() => setPrefillName(null), []);
   const status = usePlayerStore((s) => s.status);
   const code = usePlayerStore((s) => s.code);
   const requestedName = usePlayerStore((s) => s.requestedName);
@@ -186,6 +192,8 @@ function PlayerScreenContent({ initialCode }: Props) {
         <h1 className="home-title">Join lobby</h1>
         <PlayerJoinForm
           initialCode={initialCode ?? ""}
+          initialName={prefillName ?? ""}
+          onNameConsumed={consumePrefill}
           onSubmit={onJoinSubmit}
         />
         {error && (
@@ -479,15 +487,21 @@ function TravelerChoicePanel({
 
 function PlayerJoinForm({
   initialCode,
+  initialName,
+  onNameConsumed,
   onSubmit,
 }: {
   initialCode: string;
+  initialName: string;
+  onNameConsumed: () => void;
   onSubmit: (code: string, name: string) => Promise<void> | void;
 }) {
   const [code, setCode] = useState(initialCode);
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // One-shot: a later remount of this form must not reuse the Home hand-off.
+  useEffect(() => { onNameConsumed(); }, [onNameConsumed]);
 
   const submit = async () => {
     if (!code.trim()) { setFormError("Enter a lobby code."); return; }

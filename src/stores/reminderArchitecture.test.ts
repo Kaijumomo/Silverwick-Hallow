@@ -138,6 +138,9 @@ const ALLOWED = new Set([
   // Phase 10H: the Roster / Labels readers of the Table (Storyteller-only
   // presentation via reminderPresentation; DOM-absent under Privacy Mode).
   "features/grimoire/RosterView.tsx",
+  // Package 1: Home Character Reference detail. Definition-only RoleDef.reminders
+  // token labels (like the RoleChooser footer); no game or ReminderRecord state.
+  "features/home/reference/referenceData.ts",
 ]);
 
 function productionSources(dir = SRC): string[] {

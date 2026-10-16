@@ -6,25 +6,6 @@
 }
 
 /* ===== Home screen ===== */
-.home {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  padding: 32px;
-  gap: 28px;
-  position: relative;
-  background:
-    linear-gradient(
-      to bottom,
-      rgba(10, 8, 4, 0.45) 0%,
-      rgba(10, 8, 4, 0.15) 40%,
-      rgba(10, 8, 4, 0.15) 60%,
-      rgba(10, 8, 4, 0.55) 100%
-    ),
-    url("/bg/BackgroundMenuTablet.png") center / cover no-repeat;
-}
 .home-title {
   font-family: "Cinzel Decorative", var(--font-display);
   font-size: clamp(36px, 6vw, 68px);
@@ -50,30 +31,6 @@
   line-height: 1.5;
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.95);
 }
-@media (max-width: 640px) {
-  .home {
-    background:
-      linear-gradient(
-        to bottom,
-        rgba(10, 8, 4, 0.45) 0%,
-        rgba(10, 8, 4, 0.15) 40%,
-        rgba(10, 8, 4, 0.15) 60%,
-        rgba(10, 8, 4, 0.55) 100%
-      ),
-      url("/bg/BackgroundMenuPhone.png") center / cover no-repeat;
-  }
-}
-.home-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: min(360px, 100%);
-}
-.home-actions .btn {
-  font-size: 18px;
-  padding: 14px 18px;
-}
-
 /* ===== Game screen ===== */
 .game {
   display: flex;
@@ -1535,12 +1492,6 @@
   justify-content: center;
   gap: 14px;
   text-align: center;
-}
-.home-player-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-decoration: none;
 }
 .player-join-form {
   display: flex;

@@ -4,6 +4,8 @@ import { App } from "@/app/App";
 import "@/styles/fonts.css";
 import "@/styles/theme.css";
 import "@/styles/components.css";
+import "@/styles/home.css";
+import "@/styles/home-reference.css";
 import "@/styles/newgame.css";
 import "@/styles/player-notes.css";
 import "@/styles/system.css";

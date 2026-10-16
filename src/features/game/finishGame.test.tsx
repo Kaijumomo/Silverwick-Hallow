@@ -151,7 +151,7 @@ describe("10G-AC-37: the ended review is inspectable and read-only", () => {
 
   it("10G-AC-38: Home offers Review finished game; New Game is the explicit replacement", () => {
     render(<HomeScreen />);
-    expect(screen.queryByRole("button", { name: /Continue current game/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Resume Game/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Review finished game" }));
     expect(state().view).toBe("game");
     expect(game().phase).toBe("ended");
