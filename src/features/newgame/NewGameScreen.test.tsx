@@ -2,8 +2,7 @@ import { cleanup, render, screen, fireEvent, within } from "@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NewGameScreen } from "./NewGameScreen";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
-import { MIN_PLAYERS, MAX_TOTAL_PLAYERS } from "@/data/setupCounts";
-import { compositionFor, travellerBounds, fabledNote, scriptCardCount, builtinScriptCards, FABLED_CHOICES, LORIC_CHOICES } from "./setupFlowModel";
+import { compositionFor, seatedBounds, travellerBounds, totalOf, fabledNote, scriptCardCount, builtinScriptCards, FABLED_CHOICES, LORIC_CHOICES } from "./setupFlowModel";
 
 const morePlayers = () => screen.getByRole("button", { name: "One more player" });
 const fewerPlayers = () => screen.getByRole("button", { name: "One fewer player" });
@@ -25,17 +24,23 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("setup model", () => {
   it.each([
-    [5, 0, "3/0/1/1"], [10, 0, "7/0/2/1"], [10, 2, "5/1/1/1"], [15, 0, "9/2/3/1"],
-    [17, 2, "9/2/3/1"], [20, 5, "9/2/3/1"], [10, 5, "3/0/1/1"],
-  ])("total %i with %i Travellers shows %s ordinary composition", (total, travellers, expected) => {
-    expect(compositionFor(total, travellers).join("/")).toBe(expected);
+    [5, "3/0/1/1"], [10, "7/0/2/1"], [11, "7/1/2/1"], [15, "9/2/3/1"],
+  ])("%i seated players show %s composition", (seated, expected) => {
+    expect(compositionFor(seated).join("/")).toBe(expected);
   });
 
-  it("Traveller bounds keep ordinary players between 5 and 15", () => {
-    expect(travellerBounds(5)).toEqual({ min: 0, max: 0 });
-    expect(travellerBounds(10)).toEqual({ min: 0, max: 5 });
-    expect(travellerBounds(17)).toEqual({ min: 2, max: 12 });
-    expect(travellerBounds(MAX_TOTAL_PLAYERS).min).toBe(5);
+  it("Players is the total: seated plus Travellers", () => {
+    expect(totalOf(15, 2)).toBe(17);
+    expect(totalOf(15, 5)).toBe(20);
+  });
+
+  it("seated players run 5 to 15 and seated plus Travellers never passes 20", () => {
+    expect(seatedBounds(0)).toEqual({ min: 5, max: 15 });
+    expect(seatedBounds(2)).toEqual({ min: 5, max: 15 });
+    expect(seatedBounds(8)).toEqual({ min: 5, max: 12 });
+    expect(seatedBounds(15)).toEqual({ min: 5, max: 5 });
+    expect(travellerBounds(5)).toEqual({ min: 0, max: 15 });
+    expect(travellerBounds(15)).toEqual({ min: 0, max: 5 });
   });
 
   it("the three built-in script cards list 22, 25 and 25 characters, in the design's order", () => {
@@ -66,7 +71,7 @@ describe("Step I: Script & Players", () => {
     expect(next(/Fabled & Loric ›/)).toBeEnabled();
   });
 
-  it("defaults to 10 players and 0 travellers, Travellers directly below Total Players with identical markup", () => {
+  it("defaults to 10 players and 0 travellers, Travellers directly below Players with identical markup", () => {
     const { container } = render(<NewGameScreen />);
     expect(counterValue("players")).toBe("10");
     expect(counterValue("travellers")).toBe("0");
@@ -79,35 +84,56 @@ describe("Step I: Script & Players", () => {
     expect(shape(counters[0]!)).toBe(shape(counters[1]!));
   });
 
-  it("changing Travellers never changes the Total; composition follows the ordinary count", () => {
+  it("Players shows the total: Travellers add to it and the seated composition does not change", () => {
     render(<NewGameScreen />);
     fireEvent.click(moreTravellers());
     fireEvent.click(moreTravellers());
-    expect(counterValue("players")).toBe("10");
+    expect(counterValue("players")).toBe("12");
     expect(counterValue("travellers")).toBe("2");
-    expect(compositionText()).toBe("5/1/1/1");
+    expect(compositionText()).toBe("7/0/2/1");
   });
 
-  it("holds at 5 players with no Travellers possible, and at the 20 cap", () => {
+  it("the Players buttons move the seated count; 15 seated plus 2 Travellers is 17", () => {
     render(<NewGameScreen />);
-    for (let i = 0; i < 10; i++) fireEvent.click(fewerPlayers());
-    expect(counterValue("players")).toBe(String(MIN_PLAYERS));
-    expect(moreTravellers()).toHaveAttribute("aria-disabled", "true");
+    for (let i = 0; i < 5; i++) fireEvent.click(morePlayers());
     fireEvent.click(moreTravellers());
-    expect(counterValue("travellers")).toBe("0");
-    for (let i = 0; i < 30; i++) fireEvent.click(morePlayers());
-    expect(counterValue("players")).toBe(String(MAX_TOTAL_PLAYERS));
-    expect(counterValue("travellers")).toBe("5"); // 20 total keeps ordinary at 15
+    fireEvent.click(moreTravellers());
+    expect(counterValue("players")).toBe("17");
     expect(compositionText()).toBe("9/2/3/1");
+    fireEvent.click(fewerPlayers());
+    expect(counterValue("players")).toBe("16");
+    expect(compositionText()).toBe("9/1/3/1");
   });
 
-  it("raising Total above 15 raises the Traveller floor; lowering it keeps a still-legal count", () => {
+  it("Players + stops at 15 seated; both + stop at a total of 20", () => {
     render(<NewGameScreen />);
-    for (let i = 0; i < 6; i++) fireEvent.click(morePlayers()); // 16
-    expect(counterValue("travellers")).toBe("1");
-    expect(fewerTravellers()).toHaveAttribute("aria-disabled", "true");
-    fireEvent.click(fewerPlayers()); // 15
-    expect(counterValue("travellers")).toBe("1");
+    for (let i = 0; i < 10; i++) fireEvent.click(morePlayers());
+    expect(counterValue("players")).toBe("15");
+    expect(morePlayers()).toBeDisabled();
+    expect(moreTravellers()).toBeEnabled();
+    for (let i = 0; i < 9; i++) fireEvent.click(moreTravellers());
+    expect(counterValue("travellers")).toBe("5");
+    expect(counterValue("players")).toBe("20");
+    expect(moreTravellers()).toBeDisabled();
+    expect(morePlayers()).toBeDisabled();
+  });
+
+  it("Travellers + takes the total to 20 and then stops the seated + at fewer than 15", () => {
+    render(<NewGameScreen />);
+    for (let i = 0; i < 10; i++) fireEvent.click(moreTravellers());
+    expect(counterValue("players")).toBe("20");
+    expect(counterValue("travellers")).toBe("10");
+    expect(morePlayers()).toBeDisabled();
+    expect(compositionText()).toBe("7/0/2/1");
+  });
+
+  it("minimums: 5 seated and 0 Travellers disable the matching - buttons", () => {
+    render(<NewGameScreen />);
+    expect(fewerTravellers()).toBeDisabled();
+    for (let i = 0; i < 10; i++) fireEvent.click(fewerPlayers());
+    expect(counterValue("players")).toBe("5");
+    expect(fewerPlayers()).toBeDisabled();
+    expect(moreTravellers()).toBeEnabled();
   });
 
   it("the rail summarises the script and the player count once chosen", () => {
@@ -178,7 +204,8 @@ describe("Step II: Fabled & Loric", () => {
 
   it("the Fabled note recommends Spirit of Ivory above 15 players", () => {
     render(<NewGameScreen />);
-    for (let i = 0; i < 7; i++) fireEvent.click(morePlayers());
+    for (let i = 0; i < 5; i++) fireEvent.click(morePlayers());
+    for (let i = 0; i < 2; i++) fireEvent.click(moreTravellers());
     toStepTwo();
     expect(screen.getByText("Spirit of Ivory is recommended with 17 players.")).toBeVisible();
   });

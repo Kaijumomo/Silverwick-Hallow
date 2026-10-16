@@ -5,7 +5,7 @@ import type { Script } from "@/stores/types";
 import { EDITION_LOGO, useLoadedArt } from "@/features/home/art";
 import { ScriptStep } from "./ScriptStep";
 import { ExtrasStep } from "./ExtrasStep";
-import { DEFAULT_TOTAL, STEP_TITLES, ROMAN, clampTotal, clampTravellers, FABLED_CHOICES, LORIC_CHOICES } from "./setupFlowModel";
+import { DEFAULT_SEATED, STEP_TITLES, ROMAN, clampSeated, clampTravellers, totalOf, FABLED_CHOICES, LORIC_CHOICES } from "./setupFlowModel";
 
 /**
  * New Game: the three-step setup flow (Script & Players, Fabled & Loric,
@@ -20,7 +20,7 @@ export function NewGameScreen() {
   const customScripts = useStorytellerStore((s) => s.customScripts);
   const [step, setStep] = useState<Step>(0);
   const [scriptId, setScriptId] = useState<string | null>(null);
-  const [total, setTotal] = useState(DEFAULT_TOTAL);
+  const [seated, setSeated] = useState(DEFAULT_SEATED);
   const [travellers, setTravellers] = useState(0);
   const [extras, setExtras] = useState<string[]>([]);
 
@@ -29,12 +29,9 @@ export function NewGameScreen() {
   const logos = useLoadedArt(Object.values(EDITION_LOGO));
   const logoUrl = script && EDITION_LOGO[script.id] && logos.has(EDITION_LOGO[script.id]!) ? EDITION_LOGO[script.id] : undefined;
 
-  const setTotalClamped = (next: number) => {
-    const value = clampTotal(next);
-    setTotal(value);
-    setTravellers((current) => clampTravellers(value, current));
-  };
-  const setTravellersClamped = (next: number) => setTravellers(clampTravellers(total, next));
+  const total = totalOf(seated, travellers);
+  const setSeatedClamped = (next: number) => setSeated(clampSeated(next, travellers));
+  const setTravellersClamped = (next: number) => setTravellers(clampTravellers(seated, next));
 
   const namesOf = (ids: readonly string[]) =>
     ids.map((id) => [...FABLED_CHOICES, ...LORIC_CHOICES].find((role) => role.id === id)?.name).filter((name): name is string => !!name);
@@ -107,9 +104,9 @@ export function NewGameScreen() {
               scripts={allScripts}
               scriptId={scriptId}
               onScript={setScriptId}
-              total={total}
+              seated={seated}
               travellers={travellers}
-              onTotal={setTotalClamped}
+              onSeated={setSeatedClamped}
               onTravellers={setTravellersClamped}
               onNext={() => setStep(1)}
             />

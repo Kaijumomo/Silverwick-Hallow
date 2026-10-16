@@ -1,6 +1,6 @@
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
-import { SETUP_COUNTS, MIN_PLAYERS, MAX_PLAYERS, MAX_TOTAL_PLAYERS, clampTravelersForTotal, minTravelersForTotal, maxTravelersForTotal } from "@/data/setupCounts";
+import { SETUP_COUNTS, MIN_PLAYERS, MAX_PLAYERS, MAX_TOTAL_PLAYERS, MAX_TRAVELERS } from "@/data/setupCounts";
 import { BUILTIN_SCRIPTS } from "@/data/scripts";
 import type { RoleDef, Script } from "@/stores/types";
 
@@ -21,20 +21,23 @@ export const TEAM_COLOR = {
   loric: "#7fc4b4",
 } as const;
 
-export const DEFAULT_TOTAL = 10;
+export const DEFAULT_SEATED = 10;
 export { MIN_PLAYERS, MAX_PLAYERS, MAX_TOTAL_PLAYERS };
 
-/** The two counters of Step I. Travellers are separate from the total and the
- * total is never below 5 ordinary players or above 15 ordinary plus Travellers
- * (the app's existing population contract), so both clamp each other. */
-export const clampTotal = (total: number): number => Math.max(MIN_PLAYERS, Math.min(MAX_TOTAL_PLAYERS, total));
-export const travellerBounds = (total: number) => ({ min: minTravelersForTotal(total), max: maxTravelersForTotal(total) });
-export const clampTravellers = clampTravelersForTotal;
+/** The two counters of Step I. "Players" is the TOTAL (seated players plus
+ * Travellers); its buttons move the seated count (5 to 15). The Travellers
+ * buttons move the Traveller count (from 0). Seated plus Travellers never
+ * exceeds 20. */
+export const seatedBounds = (travellers: number) => ({ min: MIN_PLAYERS, max: Math.min(MAX_PLAYERS, MAX_TOTAL_PLAYERS - travellers) });
+export const travellerBounds = (seated: number) => ({ min: 0, max: Math.min(MAX_TRAVELERS, MAX_TOTAL_PLAYERS - seated) });
+const clamp = (n: number, { min, max }: { min: number; max: number }) => Math.max(min, Math.min(max, n));
+export const clampSeated = (seated: number, travellers: number): number => clamp(seated, seatedBounds(travellers));
+export const clampTravellers = (seated: number, travellers: number): number => clamp(travellers, travellerBounds(seated));
+export const totalOf = (seated: number, travellers: number): number => seated + travellers;
 
-/** Composition of the ordinary players: Townsfolk, Outsiders, Minions, Demon. */
-export function compositionFor(total: number, travellers: number): [number, number, number, number] {
-  const ordinary = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, total - clampTravellers(total, travellers)));
-  const row = SETUP_COUNTS[ordinary]!;
+/** Composition of the seated (ordinary) players: Townsfolk, Outsiders, Minions, Demon. */
+export function compositionFor(seated: number): [number, number, number, number] {
+  const row = SETUP_COUNTS[clamp(seated, { min: MIN_PLAYERS, max: MAX_PLAYERS })]!;
   return [row.townsfolk, row.outsider, row.minion, row.demon];
 }
 

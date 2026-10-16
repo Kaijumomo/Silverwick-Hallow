@@ -3,15 +3,15 @@ import type { Script } from "@/stores/types";
 import { BUILTIN_SCRIPT_IDS } from "@/data/scripts";
 import { EDITION_LOGO, GENERIC_TEAM_ICON, useLoadedArt } from "@/features/home/art";
 import { CustomScriptDialog } from "./CustomScriptDialog";
-import { MIN_PLAYERS, MAX_TOTAL_PLAYERS, ROMAN, TEAM_COLOR, builtinScriptCards, compositionFor, scriptCardCount, travellerBounds } from "./setupFlowModel";
+import { ROMAN, TEAM_COLOR, builtinScriptCards, compositionFor, scriptCardCount, seatedBounds, totalOf, travellerBounds } from "./setupFlowModel";
 
 type Props = {
   scripts: Record<string, Script>;
   scriptId: string | null;
   onScript: (id: string) => void;
-  total: number;
+  seated: number;
   travellers: number;
-  onTotal: (n: number) => void;
+  onSeated: (n: number) => void;
   onTravellers: (n: number) => void;
   onNext: () => void;
 };
@@ -25,29 +25,31 @@ const COMPOSITION = [
 
 /** One counter of the player strip. Total Players and Travellers share it, so
  * they cannot drift apart visually or in how they respond. */
-function Counter({ value, label, less, more, onChange, min, max }: {
-  value: number; label: string; less: string; more: string; onChange: (n: number) => void; min: number; max: number;
+function Counter({ kind, value, label, less, more, onChange, min, max }: {
+  kind: "players" | "travellers"; value: number; label: string; less: string; more: string; onChange: (n: number) => void; min: number; max: number;
 }) {
   return (
-    <div className="sf-counter">
-      <button type="button" className="sf-counter-btn" aria-label={less} aria-disabled={value <= min || undefined} onClick={() => onChange(value - 1)}>−</button>
+    <div className="sf-counter" data-kind={kind}>
+      <button type="button" className="sf-counter-btn" aria-label={less} disabled={value <= min} onClick={() => onChange(value - 1)}>−</button>
       <div className="sf-counter-mid">
         <span className="sf-counter-value" aria-live="polite">{value}</span>
         <span className="sf-counter-label">{label}</span>
       </div>
-      <button type="button" className="sf-counter-btn" aria-label={more} aria-disabled={value >= max || undefined} onClick={() => onChange(value + 1)}>+</button>
+      <button type="button" className="sf-counter-btn" aria-label={more} disabled={value >= max} onClick={() => onChange(value + 1)}>+</button>
     </div>
   );
 }
 
-export function ScriptStep({ scripts, scriptId, onScript, total, travellers, onTotal, onTravellers, onNext }: Props) {
+export function ScriptStep({ scripts, scriptId, onScript, seated, travellers, onSeated, onTravellers, onNext }: Props) {
   const [importOpen, setImportOpen] = useState(false);
   const cards = builtinScriptCards();
   const logos = useLoadedArt(Object.values(EDITION_LOGO));
   const chosen = scriptId ? scripts[scriptId] : undefined;
   const customChosen = !!chosen && !BUILTIN_SCRIPT_IDS.has(chosen.id);
-  const bounds = travellerBounds(total);
-  const composition = compositionFor(total, travellers);
+  const seatedLimits = seatedBounds(travellers);
+  const travellerLimits = travellerBounds(seated);
+  const total = totalOf(seated, travellers);
+  const composition = compositionFor(seated);
 
   return (
     <section className="sf-main" aria-labelledby="sf-step-title">
@@ -88,8 +90,8 @@ export function ScriptStep({ scripts, scriptId, onScript, total, travellers, onT
 
       <div className="sf-strip">
         <div className="sf-counters">
-          <Counter value={total} label="players" less="One fewer player" more="One more player" onChange={onTotal} min={MIN_PLAYERS} max={MAX_TOTAL_PLAYERS} />
-          <Counter value={travellers} label="travellers" less="One fewer Traveller" more="One more Traveller" onChange={onTravellers} min={bounds.min} max={bounds.max} />
+          <Counter kind="players" value={total} label="players" less="One fewer player" more="One more player" onChange={(n) => onSeated(seated + (n - total))} min={seatedLimits.min + travellers} max={seatedLimits.max + travellers} />
+          <Counter kind="travellers" value={travellers} label="travellers" less="One fewer Traveller" more="One more Traveller" onChange={onTravellers} min={travellerLimits.min} max={travellerLimits.max} />
         </div>
         <div className="sf-strip-divider" />
         <div className="sf-comp">
