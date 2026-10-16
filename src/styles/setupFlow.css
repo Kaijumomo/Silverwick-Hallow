@@ -337,3 +337,72 @@
   .sf-screen, .sf-main { animation: none; }
   .sf-script-card, .sf-token { transition: none; }
 }
+
+/* ---- Step III: Players ---- */
+.sf-heading-stack { flex-direction: column; align-items: flex-start; gap: 8px; }
+.sf-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px; }
+.sf-mode {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: 380px;
+  padding: 40px 40px 34px;
+  border: none;
+  border-radius: 16px;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 0.25s;
+}
+.sf-mode:hover:not(:disabled) { transform: translateY(-8px); }
+.sf-mode:disabled { cursor: default; opacity: 0.7; }
+.sf-mode-kicker { font-size: 12px; letter-spacing: 0.4em; text-transform: uppercase; font-weight: 700; color: #e8a85a; }
+.sf-mode-title { margin-top: 12px; font-family: "Cormorant Garamond", serif; font-size: 40px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; line-height: 1.05; color: #f0dfb2; }
+.sf-mode-body { margin-top: 14px; font-size: 18px; line-height: 1.5; color: rgba(234, 220, 184, 0.72); }
+.sf-mode-points { margin-top: auto; align-self: stretch; padding-top: 18px; border-top: 1px solid rgba(224, 170, 100, 0.25); display: flex; flex-direction: column; gap: 10px; }
+.sf-mode-point { position: relative; padding-left: 20px; font-size: 15px; color: rgba(234, 220, 184, 0.6); }
+.sf-mode-point::before { content: ""; position: absolute; left: 0; top: 50%; width: 7px; height: 7px; margin-top: -3.5px; background: #e8a85a; transform: rotate(45deg); }
+
+.sf-invite { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 48px; align-items: start; }
+.sf-invite-card { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 28px 30px; border-radius: 14px; min-width: 330px; box-sizing: border-box; }
+.sf-qr-plate { padding: 12px; border-radius: 10px; background: #f4ead0; line-height: 0; }
+.sf-qr { width: 270px; height: 270px; display: block; }
+.sf-code { font-family: "Cormorant Garamond", serif; font-size: 40px; font-weight: 700; letter-spacing: 0.24em; padding-left: 0.24em; color: #f0dfb2; line-height: 1; }
+.sf-invite-wait { width: 294px; min-height: 340px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; text-align: center; }
+.sf-invite-wait-text { font-family: "IM Fell English", serif; font-style: italic; font-size: 19px; color: rgba(234, 220, 184, 0.72); }
+.sf-arrivals { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.sf-arrivals-head { display: flex; align-items: baseline; gap: 12px; }
+.sf-arrivals-label { font-size: 12px; letter-spacing: 0.3em; text-transform: uppercase; font-weight: 700; color: rgba(234, 220, 184, 0.6); }
+.sf-arrivals-count { font-size: 12px; letter-spacing: 0.1em; color: rgba(234, 220, 184, 0.6); }
+.sf-pills, .sf-seats { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.sf-pills { gap: 10px; }
+.sf-pill { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 0 16px 0 8px; border-radius: 26px; box-sizing: border-box; min-width: 0; }
+.sf-pill-name { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sf-pill-wait { border: 1px solid rgba(224, 170, 100, 0.2); color: rgba(234, 220, 184, 0.4); }
+.sf-pill-wait .sf-pill-name { font-weight: 400; }
+.sf-pill-here { border: 1px solid rgba(224, 185, 106, 0.4); background: rgba(232, 168, 90, 0.08); color: #f0dfb2; animation: sfSeat 0.4s ease-out; }
+.sf-badge {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Cormorant Garamond", serif;
+  font-size: 16px;
+  font-weight: 700;
+  border: 1px solid rgba(224, 170, 100, 0.2);
+  color: rgba(234, 220, 184, 0.4);
+}
+.sf-badge-token { border: none; background: radial-gradient(circle at 38% 30%, #f1e6c9, #dccaa0 50%, #b09566); color: #2a1712; }
+.sf-seats { gap: 12px 18px; }
+.sf-seat { display: flex; align-items: center; gap: 14px; min-height: 56px; padding: 0 20px 0 9px; border-radius: 28px; box-sizing: border-box; border: 1px solid rgba(224, 170, 100, 0.25); background: rgba(12, 8, 6, 0.5); min-width: 0; }
+.sf-seat:focus-within { border-color: #e8a85a; }
+.sf-seat .sf-badge { width: 38px; height: 38px; }
+.sf-seat-input { flex: 1; min-width: 0; background: transparent; border: none; outline: none; color: #f0dfb2; font-family: inherit; font-size: 17px; font-weight: 600; }
+.sf-seat-input::placeholder { color: rgba(234, 220, 184, 0.4); font-weight: 400; }
+.sf-foot-note { font-family: "IM Fell English", serif; font-style: italic; font-size: 15px; color: rgba(234, 220, 184, 0.6); }
+.sf-notices { position: absolute; top: 0; left: 0; right: 0; z-index: 2; display: flex; flex-direction: column; gap: 4px; padding: 6px 64px 0; pointer-events: none; }
+.sf-notices > * { pointer-events: auto; margin: 0; background: #1a0f0c; }
+.sf-seat-input:focus, .sf-seat-input:focus-visible { outline: none; }

@@ -106,6 +106,16 @@ async function goLiveHeldBeforeAdoption(b: CleanupBackend): Promise<{ release: (
   return { release, code: () => b.lobbyCodes()[0]! };
 }
 
+/** Home -> New Game -> Offline "Seat the town" -> Begin the night (Package 2C flow). */
+async function startOfflineGame() {
+  fireEvent.click(screen.getByRole("button", { name: "Trouble Brewing" }));
+  fireEvent.click(screen.getByRole("button", { name: /Fabled & Loric ›/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Skip to players ›/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Play offline/ }));
+  ["I", "II", "III", "IV", "V"].forEach((seat, i) => fireEvent.change(screen.getByLabelText(`Seat ${seat}`), { target: { value: `Seat ${i + 1}` } }));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Begin the night" })); });
+}
+
 describe("ASTRA-10G-R1-001-A: Finish game -> Home, then the superseded cleanup fails", () => {
   it("the ended game stays detached, no writer starts, and Home shows the warning with the room code", async () => {
     const b = new CleanupBackend();
@@ -145,7 +155,7 @@ describe("ASTRA-10G-R1-001-A: Finish game -> Home, then the superseded cleanup f
   });
 });
 
-describe("ASTRA-10G-R1-001-B: Home -> New Game -> Create setup, then the old cleanup fails", () => {
+describe("ASTRA-10G-R1-001-B: Home -> New Game -> Seat the town, then the old cleanup fails", () => {
   it("the old lobby never attaches to Game B, no old writer starts, and the new flow shows the old room code", async () => {
     const b = new CleanupBackend();
     render(<App />);
@@ -155,7 +165,7 @@ describe("ASTRA-10G-R1-001-B: Home -> New Game -> Create setup, then the old cle
     // connection is pending; the live grimoire no longer offers Home.
     act(() => state().setView("home"));
     fireEvent.click(screen.getByRole("button", { name: "New Game" }));
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^Create setup/ })); });
+    await startOfflineGame();
     const gameB = state().game!;
     expect(gameB.phase).toBe("setup");
     b.failLease = true;
