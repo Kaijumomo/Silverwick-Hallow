@@ -14,16 +14,14 @@ import { iconUrlFor } from "@/data/iconUrl";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
 import { resolvedCharacters } from "@/data/roleRegistry";
-import { connectFirebase } from "@/firebase/session";
-import { isFirebaseConfigured } from "@/firebase/config";
-import { createLobby, formatCode } from "@/firebase/lobby";
+import { goLive as runGoLive } from "@/firebase/goLive";
+import { formatCode } from "@/firebase/lobby";
 import { acceptLeaveRequest, rejectLeaveRequest, revokePlayerAndCommit, storytellerOccupancyCompletion, type OccupancyCompletion } from "@/firebase/membershipCommands";
-import { closeMultiplayerSession, closeSupersededLobby, useSessionRuntime } from "@/firebase/storytellerSync";
+import { closeMultiplayerSession, useSessionRuntime } from "@/firebase/storytellerSync";
 import { ConnectionStatus } from "@/firebase/StorytellerSession";
 import { ensurePublicDisplayAccess, rotatePublicDisplayAccess, buildPublicDisplayLink } from "@/firebase/publicDisplayAuth";
 import { FirebaseConfigDialog } from "@/features/firebase/FirebaseConfigDialog";
 import { friendlyFirebaseError, type FriendlyError } from "@/firebase/errors";
-import { requireActiveSession } from "@/firebase/lifecycle";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { LifeEventsPanel } from "@/features/life/LifeEventsPanel";
 import { ActivityPanel } from "@/features/activity/ActivityPanel";
@@ -62,7 +60,6 @@ function GameScreenContent() {
   const advancePhase = useStorytellerStore((s) => s.advancePhase);
   const endGame = useStorytellerStore((s) => s.endGame);
   const setView = useStorytellerStore((s) => s.setView);
-  const setLobby = useStorytellerStore((s) => s.setLobby);
   const selectedPlayerId = useStorytellerStore((s) => s.selectedPlayerId);
   const privacyMode = usePrivacyStore((s) => s.enabled);
   // Keep the Day draft mounted while the existing Grimoire picker exposes
@@ -268,46 +265,16 @@ function GameScreenContent() {
     }
   };
 
+  // The Go Live sequence itself lives in @/firebase/goLive (shared with the
+  // New Game flow); this screen only reports its outcome.
   const goLive = async () => {
     if (goingLive) return;
     setGoingLive(true);
     setGoLiveError(null);
-    if (!isFirebaseConfigured()) {
-      setConfigOpen(true);
-      setGoingLive(false);
-      return;
-    }
-    // ASTRA-10G-001: Go Live belongs to the game it started for. Every await
-    // below can outlive that game (Finish game, Discard setup, New game), so
-    // the continuation revalidates before creating and before adopting a
-    // lobby. A lobby created for a game that is gone is closed
-    // authoritatively (the fenced writer close), never attached or orphaned.
-    const lifecycle = gameLifecycleToken();
-    const stillEligible = () => {
-      const now = useStorytellerStore.getState();
-      return gameLifecycleToken() === lifecycle && !!now.game && now.game.phase !== "ended" && !now.lobby;
-    };
     try {
-      const { backend: b, uid } = await connectFirebase();
-      if (!stillEligible()) return;
-      const { code } = await createLobby(b, uid);
-      const session = await requireActiveSession(b, code);
-      const created = { code, uid, sessionId: session.id, status: "live" as const };
-      // setLobby itself also refuses an ended game (defense in depth).
-      if (!stillEligible() || !setLobby(created)) {
-        // A failed cleanup is reported by closeSupersededLobby itself into the
-        // page-global runtime (ASTRA-10G-R1-001): this screen may already be
-        // gone, so its own error state would never be seen.
-        try { await closeSupersededLobby(b, created); }
-        catch (closeError) {
-          // eslint-disable-next-line no-console
-          console.error("[goLive] superseded lobby close", closeError instanceof Error ? closeError.message : closeError);
-        }
-      }
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error("[goLive]", e instanceof Error ? e.message : e);
-      setGoLiveError(friendlyFirebaseError(e, "st"));
+      const outcome = await runGoLive();
+      if (outcome.kind === "needsConfig") setConfigOpen(true);
+      else if (outcome.kind === "failed") setGoLiveError(outcome.error);
     } finally {
       setGoingLive(false);
     }
