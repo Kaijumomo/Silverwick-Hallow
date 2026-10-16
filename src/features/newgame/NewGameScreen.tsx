@@ -1,185 +1,137 @@
 import { useMemo, useState } from "react";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { BUILTIN_SCRIPTS } from "@/data/scripts";
-import { ScriptTabs } from "./ScriptTabs";
-import { PlayerCountTable } from "./PlayerCountTable";
-import { PlayerCountStepper } from "./PlayerCountStepper";
-import { ImportPanel } from "./ImportPanel";
-import { MIN_PLAYERS, MAX_TOTAL_PLAYERS, minTravelersForTotal, maxTravelersForTotal, clampTravelersForTotal } from "@/data/setupCounts";
 import type { Script } from "@/stores/types";
-import { closeMultiplayerSession, useSessionRuntime } from "@/firebase/storytellerSync";
-import { lifecycleMessage } from "@/firebase/lifecycle";
+import { EDITION_LOGO, useLoadedArt } from "@/features/home/art";
+import { ScriptStep } from "./ScriptStep";
+import { ExtrasStep } from "./ExtrasStep";
+import { DEFAULT_TOTAL, STEP_TITLES, ROMAN, clampTotal, clampTravellers, FABLED_CHOICES, LORIC_CHOICES } from "./setupFlowModel";
 
 /**
- * New Game plans the game (script + total participants + intended
- * Travelers); it no longer builds the character bag. That moves to the
- * Grimoire Setup workspace, which the Storyteller opens deliberately after
- * entering the Grimoire -- Fill/Re-roll, manual role selection, and
- * Fabled/Lorics all live there now.
- *
- * Ordinary players = total participants - Travelers (Phase 9 Setup
- * finalization B4). The Storyteller does not choose which seat is the
- * Traveler here -- that is decided later inside the Grimoire. This screen
- * only plans totals: total planned seats and an intended Traveler count,
- * both cross-clamped so ordinary always stays within [5, 15].
+ * New Game: the three-step setup flow (Script & Players, Fabled & Loric,
+ * Players) from the Claude Design "Ledger". Steps I and II are a local draft:
+ * nothing is created, and nothing touches Firebase, until Step III. The
+ * Players step (Invite to phones / Play offline) arrives in the next slice.
  */
+type Step = 0 | 1 | 2;
+
 export function NewGameScreen() {
-  const [starting, setStarting] = useState(false);
-  const [startError, setStartError] = useState<string | null>(null);
   const setView = useStorytellerStore((s) => s.setView);
-  const newGame = useStorytellerStore((s) => s.newGame);
   const customScripts = useStorytellerStore((s) => s.customScripts);
-  const game = useStorytellerStore((s) => s.game);
+  const [step, setStep] = useState<Step>(0);
+  const [scriptId, setScriptId] = useState<string | null>(null);
+  const [total, setTotal] = useState(DEFAULT_TOTAL);
+  const [travellers, setTravellers] = useState(0);
+  const [extras, setExtras] = useState<string[]>([]);
 
-  const firstBuiltinId = Object.keys(BUILTIN_SCRIPTS)[0] ?? "tb";
+  const allScripts: Record<string, Script> = useMemo(() => ({ ...BUILTIN_SCRIPTS, ...customScripts }), [customScripts]);
+  const script = scriptId ? allScripts[scriptId] : undefined;
+  const logos = useLoadedArt(Object.values(EDITION_LOGO));
+  const logoUrl = script && EDITION_LOGO[script.id] && logos.has(EDITION_LOGO[script.id]!) ? EDITION_LOGO[script.id] : undefined;
 
-  const [selectedScriptId, setSelectedScriptId] = useState<string | "import">(
-    firstBuiltinId
-  );
-  const [totalCount, setTotalCount] = useState(MIN_PLAYERS);
-  const [travelerCount, setTravelerCount] = useState(0);
-  const ordinaryCount = totalCount - travelerCount;
+  const setTotalClamped = (next: number) => {
+    const value = clampTotal(next);
+    setTotal(value);
+    setTravellers((current) => clampTravellers(value, current));
+  };
+  const setTravellersClamped = (next: number) => setTravellers(clampTravellers(total, next));
 
-  const travelerMin = minTravelersForTotal(totalCount);
-  const travelerMax = maxTravelersForTotal(totalCount);
+  const namesOf = (ids: readonly string[]) =>
+    ids.map((id) => [...FABLED_CHOICES, ...LORIC_CHOICES].find((role) => role.id === id)?.name).filter((name): name is string => !!name);
 
-  const handleTotalChange = (nextTotal: number) => {
-    setTotalCount(nextTotal);
-    setTravelerCount((current) => clampTravelersForTotal(nextTotal, current));
+  const back = () => {
+    if (step === 0) setView("home");
+    else setStep((step - 1) as Step);
   };
 
-  const handleTravelerChange = (nextTravelers: number) => {
-    setTravelerCount(clampTravelersForTotal(totalCount, nextTravelers));
-  };
-
-  const handleOrdinarySelect = (nextOrdinary: number) => {
-    // Phase 9 Setup finalization (FINAL SETUP INTEGRATION REVISION, Section
-    // 4): the composition table must obey the same 20-total cap as the
-    // stepper. Selecting an ordinary count never changes the ordinary count
-    // itself -- if adding the current Travelers to it would exceed the cap,
-    // the Traveler count reduces to the largest legal value instead (e.g.
-    // 15 Travelers + click "15 ordinary" -> 15 ordinary + 5 Travelers = 20,
-    // never 30).
-    const cappedTotal = Math.min(nextOrdinary + travelerCount, MAX_TOTAL_PLAYERS);
-    setTotalCount(cappedTotal);
-    setTravelerCount(Math.max(0, cappedTotal - nextOrdinary));
-  };
-
-  const allScripts: Record<string, Script> = useMemo(
-    () => ({ ...BUILTIN_SCRIPTS, ...customScripts }),
-    [customScripts]
-  );
-
-  const activeScript =
-    selectedScriptId !== "import" ? allScripts[selectedScriptId] : undefined;
-
-  const handleStart = async () => {
-    if (starting) return;
-    if (!activeScript) return;
-    if (
-      game &&
-      !window.confirm(game.phase === "ended"
-        ? "Start a new game? The finished game's review record will be replaced."
-        : "Start a new game? The current game will be discarded.")
-    ) {
-      return;
-    }
-    setStarting(true);
-    setStartError(null);
-    try {
-      await closeMultiplayerSession();
-      newGame(activeScript.id, { plannedPlayerCount: totalCount, plannedTravelerCount: travelerCount });
-    } catch (error) {
-      // closeMultiplayerSession recorded the classified close failure (and
-      // any recovery option) in the connection status shown above.
-      setStartError(useSessionRuntime.getState().errors.close ?? lifecycleMessage(error));
-    }
-    finally { setStarting(false); }
-  };
+  const railLines: string[][] = [
+    script ? [script.name, `${total} players`] : [],
+    step < 1 ? [] : extras.length ? namesOf(extras) : ["None"],
+    [],
+  ];
 
   return (
-    <div className="ng-screen">
-      <header className="ng-header">
-        <button
-          className="btn btn-sm ng-back-btn"
-          onClick={() => setView("home")}
-        >
-          ← Home
-        </button>
-        <h1 className="ng-title">New Game</h1>
-      </header>
+    <div className="sf-screen">
+      <img className="sf-photo" src="/bg/BackgroundMenuTablet.png" alt="" />
+      <div className="sf-veil" />
+      <div className="sf-sheet">
+        <header className="sf-head">
+          <button type="button" className="sf-back" onClick={back}>
+            <span className="sf-back-chev" aria-hidden="true">‹</span>
+            {step === 0 ? "Home" : "Back"}
+          </button>
+          <ol className="sf-steps" aria-label="Setup steps" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+            {STEP_TITLES.map((title, i) => {
+              const state = i < step ? "done" : i === step ? "current" : "future";
+              return (
+                <li key={title} className="sf-step-item" aria-current={i === step ? "step" : undefined}>
+                  <span className="sf-step-label" data-state={state}>
+                    <span className="sf-step-diamond" aria-hidden="true" />
+                    {title}
+                  </span>
+                  {i < STEP_TITLES.length - 1 && <span className="sf-step-sep" aria-hidden="true" />}
+                </li>
+              );
+            })}
+          </ol>
+          {step > 0 && logoUrl ? <span className="sf-head-logo" role="img" aria-label={script?.name} style={{ backgroundImage: `url(${logoUrl})` }} /> : <span aria-hidden="true" />}
+        </header>
 
-      <div className="ng-body">
-        <div className="ng-left">
-          <section className="ng-section">
-            <h2 className="ng-section-title">Script</h2>
-            <ScriptTabs
-              customScripts={customScripts}
-              selectedId={selectedScriptId}
-              onSelect={setSelectedScriptId}
-            />
-            {selectedScriptId === "import" && (
-              <ImportPanel
-                onImported={(script) => setSelectedScriptId(script.id)}
-              />
-            )}
-          </section>
+        <div className="sf-body">
+          <nav className="sf-rail" aria-label="Setup progress">
+            {STEP_TITLES.map((title, i) => {
+              const state = i < step ? "done" : i === step ? "current" : "future";
+              return (
+                <button
+                  key={title}
+                  type="button"
+                  className="sf-rail-step"
+                  data-state={state}
+                  aria-current={i === step ? "step" : undefined}
+                  disabled={state !== "done"}
+                  onClick={() => state === "done" && setStep(i as Step)}
+                >
+                  {i < STEP_TITLES.length - 1 && <span className="sf-rail-line" aria-hidden="true" />}
+                  <span className="sf-rail-num">{state === "done" ? "✓" : ROMAN[i]}</span>
+                  <span className="sf-rail-text">
+                    <span className="sf-rail-title">{title}</span>
+                    {railLines[i]!.map((line, n) => <span key={`${line}-${n}`} className="sf-rail-line-text">{line}</span>)}
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
 
-          <section className="ng-section">
-            <h2 className="ng-section-title">Players</h2>
-            <PlayerCountStepper
-              value={totalCount}
-              onChange={handleTotalChange}
-              min={MIN_PLAYERS}
-              max={MAX_TOTAL_PLAYERS}
-              label="players"
+          {step === 0 && (
+            <ScriptStep
+              scripts={allScripts}
+              scriptId={scriptId}
+              onScript={setScriptId}
+              total={total}
+              travellers={travellers}
+              onTotal={setTotalClamped}
+              onTravellers={setTravellersClamped}
+              onNext={() => setStep(1)}
             />
-            <div className="ng-traveler-stepper">
-              <PlayerCountStepper
-                value={travelerCount}
-                onChange={handleTravelerChange}
-                min={travelerMin}
-                max={travelerMax}
-                label="Travelers"
-                decrementLabel="Fewer Travelers"
-                incrementLabel="More Travelers"
-              />
-            </div>
-            <p className="ng-ordinary-line">Ordinary: <strong>{ordinaryCount}</strong></p>
-            <p className="ng-ordinary-note">
-              Composition is based on ordinary players. Travellers are separate.
-            </p>
-            <PlayerCountTable
-              selected={ordinaryCount}
-              onSelect={handleOrdinarySelect}
+          )}
+          {step === 1 && (
+            <ExtrasStep
+              total={total}
+              extras={extras}
+              onToggle={(id) => setExtras((current) => current.includes(id) ? current.filter((x) => x !== id) : [...current, id])}
+              onNext={() => setStep(2)}
             />
-          </section>
+          )}
+          {step === 2 && (
+            <section className="sf-main">
+              <div className="sf-heading">
+                <h1 className="sf-title">Players</h1>
+                <span className="sf-sub">Arrives in the next slice.</span>
+              </div>
+            </section>
+          )}
         </div>
       </div>
-
-      {/* Bottom action bar */}
-      <footer className="ng-footer">
-        {startError && <p role="alert">{startError}</p>}
-        {/* 10H-AC-067: a disabled primary says why, adjacent and in words. */}
-        {!activeScript && <p className="disabled-reason">Import or choose a script first.</p>}
-        {starting && <p className="disabled-reason" role="status">Creating the setup…</p>}
-        <button className="btn" onClick={() => setView("home")}>
-          Cancel
-        </button>
-        <button
-          className="btn btn-gold ng-start-btn"
-          disabled={!activeScript || starting}
-          onClick={handleStart}
-        >
-          Create setup
-          {activeScript && (
-            <span className="ng-start-meta">
-              {" "}· {activeScript.name} · {totalCount} players
-              {travelerCount > 0 ? ` (${travelerCount} Traveler${travelerCount === 1 ? "" : "s"})` : ""}
-            </span>
-          )}
-        </button>
-      </footer>
     </div>
   );
 }

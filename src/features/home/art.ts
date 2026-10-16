@@ -16,6 +16,14 @@ export const EDITION_LOGO: Record<string, string> = {
   snv: `${ART_BASE}/scripts/snv.png`,
 };
 
+/** The generic team icons beside the setup flow's composition counts. */
+export const GENERIC_TEAM_ICON: Record<"townsfolk" | "outsider" | "minion" | "demon", string> = {
+  townsfolk: `${ART_BASE}/characters/generic/townsfolk.png`,
+  outsider: `${ART_BASE}/characters/generic/outsider.png`,
+  minion: `${ART_BASE}/characters/generic/minion.png`,
+  demon: `${ART_BASE}/characters/generic/demon.png`,
+};
+
 /** The design's eight orbiting Carousel icons, in its order. */
 export const CAROUSEL_ORBIT: readonly string[] = [
   "lleech", "balloonist", "harpy", "pixie", "kazali", "huntsman", "boffin", "king",
@@ -28,6 +36,15 @@ const LOCAL_CHARACTER_ART: Record<string, string> = {
   ),
   deusexfiasco: `${ART_BASE}/characters/fabled/deusexfiasco.png`,
   ferryman: `${ART_BASE}/characters/fabled/ferryman.png`,
+  // Package 2: the Fabled and Loric tokens shown in the New Game setup flow.
+  ...Object.fromEntries(
+    ["angel", "buddhist", "djinn", "doomsayer", "duchess", "fibbin", "fiddler", "hellslibrarian", "revolutionary", "sentinel", "spiritofivory", "toymaker"]
+      .map((id) => [id, `${ART_BASE}/characters/fabled/${id}.png`]),
+  ),
+  ...Object.fromEntries(
+    ["bigwig", "bootlegger", "gardener", "godofug", "hindu", "knaves", "pope", "stormcatcher", "tor", "ventriloquist", "zenomancer"]
+      .map((id) => [id, `${ART_BASE}/characters/loric/${id}.png`]),
+  ),
 };
 export const localCharacterArt = (id: string): string | undefined => LOCAL_CHARACTER_ART[id];
 
