@@ -1,4 +1,5 @@
 import { ROMAN } from "./setupFlowModel";
+import { isTabletTrial } from "@/config/trial";
 import { QrCode, buildPlayerJoinLink } from "./qr";
 
 /** Step III, screen 1: how will the town gather? Tapping a card goes to its screen. */
@@ -10,7 +11,7 @@ export function ChooseMode({ onLive, onOffline, busy }: { onLive: () => void; on
         <span className="sf-sub">Phones are optional. You can run the whole game from this tablet.</span>
       </div>
       <div className="sf-modes">
-        <button type="button" className="sf-mode sf-leather" disabled={busy} onClick={onLive}>
+        <button type="button" className="sf-mode sf-leather" disabled={busy || isTabletTrial} onClick={onLive}>
           <span className="sf-mode-kicker">Live</span>
           <span className="sf-mode-title">Invite to phones</span>
           <span className="sf-mode-body">Players join with a code. Each sees their character privately and can follow the game on their phone.</span>
@@ -64,7 +65,7 @@ export function LiveInvite({ code, arrivals, total, status, onBegin, canBegin, m
           {code && link ? (
             <>
               <div className="sf-qr-plate"><QrCode text={link} label={`QR code to join with code ${code.split("").join(" ")}`} /></div>
-              <div className="sf-code" aria-label={`Join code ${code.split("").join(" ")}`}>{code}</div>
+              <div className="sf-code" role="img" aria-label={`Join code ${code.split("").join(" ")}`}>{code}</div>
             </>
           ) : (
             <div className="sf-invite-wait">

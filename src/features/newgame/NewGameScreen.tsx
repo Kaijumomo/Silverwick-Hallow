@@ -61,6 +61,8 @@ export function NewGameScreen() {
   const alive = useRef(true);
   /** Identifies the current Go Live attempt, so a late result of one the user already left never paints this screen. */
   const attempt = useRef(0);
+  /** Synchronous guard against a double tap starting two flows before `busy` re-renders. */
+  const starting = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
 
   const allScripts: Record<string, Script> = useMemo(() => ({ ...BUILTIN_SCRIPTS, ...customScripts }), [customScripts]);
@@ -95,7 +97,16 @@ export function NewGameScreen() {
     const mine = ++attempt.current;
     setLiveFailed(false);
     setNotice(null);
-    const outcome = await retryLive();
+    let outcome = await retryLive();
+    if (outcome.kind === "busy") {
+      // An earlier attempt (one the user already left) is still finishing: wait for it, then try once.
+      await new Promise<void>((resolve) => {
+        if (!useGoLiveState.getState().busy) return resolve();
+        const unsubscribe = useGoLiveState.subscribe((state) => { if (!state.busy) { unsubscribe(); resolve(); } });
+      });
+      if (!alive.current || attempt.current !== mine || !useStorytellerStore.getState().game || useStorytellerStore.getState().lobby) return;
+      outcome = await retryLive();
+    }
     if (!alive.current || attempt.current !== mine) return;
     if (outcome.kind === "needsConfig") { setLiveFailed(true); setConfigOpen(true); }
     else if (outcome.kind === "failed") { setLiveFailed(true); setNotice(outcome.error.message); }
@@ -104,7 +115,8 @@ export function NewGameScreen() {
   }, []);
 
   const chooseLive = async () => {
-    if (!plan || busy) return;
+    if (!plan || busy || starting.current) return;
+    starting.current = true;
     setBusy(true);
     setNotice(null);
     try {
@@ -114,19 +126,20 @@ export function NewGameScreen() {
       if (outcome.kind === "error") { setNotice(outcome.message); return; }
       markLive(true);
       setMode("live");
-    } finally { if (alive.current) setBusy(false); }
+    } finally { starting.current = false; if (alive.current) setBusy(false); }
     void runGoLive();
   };
 
   const beginOffline = async () => {
-    if (!plan || busy) return;
+    if (!plan || busy || starting.current) return;
+    starting.current = true;
     setBusy(true);
     setNotice(null);
     try {
       const outcome = await startOffline(plan, names.slice(0, total));
       if (!alive.current) return;
       if (outcome.kind === "error") setNotice(outcome.message);
-    } finally { if (alive.current) setBusy(false); }
+    } finally { starting.current = false; if (alive.current) setBusy(false); }
   };
 
   const beginLive = () => {
@@ -137,7 +150,9 @@ export function NewGameScreen() {
   /** Leaves the Live screen: a lobby with anyone joined asks first, then closes before discarding. */
   const leaveLiveScreen = async (): Promise<boolean> => {
     if (mode !== "live") return true;
-    if (arrivals.length > 0 && !window.confirm("Go back? Everyone who has joined will be disconnected and the lobby will close.")) return false;
+    // The joined list can read empty while phones are connected (presence error, reconnect), so any attached lobby with a waiting queue or unreadable presence also asks.
+    const somebodyMayBeHere = arrivals.length > 0 || Object.keys(game?.pendingPlayers ?? {}).length > 0 || (!!lobby && useSessionRuntime.getState().presence !== "ready");
+    if (somebodyMayBeHere && !window.confirm("Go back? Everyone who has joined will be disconnected and the lobby will close.")) return false;
     setBusy(true);
     attempt.current++;
     try {

@@ -258,6 +258,18 @@ describe("Step III: Live, Invite to phones", () => {
     expect(store.getState().game).toBeNull();
   });
 
+  it("Back also asks when the joined list reads empty but somebody is waiting or presence is unreadable", async () => {
+    const { code } = await live();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    act(() => { store.setState({ game: { ...store.getState().game!, pendingPlayers: { u9: "Wren" } } }); });
+    press(/Back/);
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    act(() => { store.setState({ game: { ...store.getState().game!, pendingPlayers: {} } }); useSessionRuntime.setState({ presence: "error", joined: [] }); });
+    press(/Back/);
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(2));
+    expect(store.getState().lobby?.code).toBe(code);
+  });
+
   it("a close the server denies keeps the Live screen, the lobby and the game; nothing is discarded", async () => {
     const { b, code } = await live();
     const update = b.update.bind(b);

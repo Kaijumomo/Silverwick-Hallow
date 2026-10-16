@@ -13,7 +13,7 @@ export function qrModules(text: string): boolean[][] {
   return Array.from({ length: n }, (_, row) => Array.from({ length: n }, (_, col) => qr.isDark(row, col)));
 }
 
-const QUIET = 2;
+const QUIET = 4; // the QR spec's quiet zone
 
 export function QrCode({ text, label }: { text: string; label: string }) {
   const { path, size } = useMemo(() => {
