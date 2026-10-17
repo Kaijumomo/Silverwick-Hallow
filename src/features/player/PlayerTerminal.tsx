@@ -3,6 +3,9 @@ import { usePlayerStore, type PlayerTerminalResult, type TownNote, type TownNote
 import { lookupOfficialRole } from "@/data/officialRoles";
 import { getBuiltinScript } from "@/data/scripts";
 import { CONFIDENCE_CLASS } from "./SeatNotePreview";
+import { MoonEmblem } from "./phone/PhoneParts";
+import { StatusScreen } from "./phone/StatusScreen";
+import { EndingScreen, formatCode } from "./phone/PhoneStates";
 
 /**
  * Phase 10H (contract §16): the player's terminal states.
@@ -16,12 +19,8 @@ import { CONFIDENCE_CLASS } from "./SeatNotePreview";
  * No "you won/lost" is derived: the result names only the winning team.
  */
 export function PlayerEnding() {
-  return (
-    <div className="player player-status" role="status" aria-live="polite">
-      <h2 className="title">Ending…</h2>
-      <p className="behavior-help">The Storyteller is ending the game.</p>
-    </div>
-  );
+  const code = usePlayerStore((s) => s.code);
+  return <EndingScreen code={code ?? ""} />;
 }
 
 const WINNER_TITLE = { good: "Good wins", evil: "Evil wins" } as const;
@@ -31,53 +30,67 @@ export function PlayerEnded({ result, onRetry, onBack }: {
   onRetry: () => void;
   onBack: () => void;
 }) {
+  const code = usePlayerStore((s) => s.code) ?? "";
+  const back = { label: "Back to start", onClick: onBack };
   // ASTRA-10H-007: only an explicit pending read shows "Reading..."; an ended
   // state with no result state at all is the generic Game Ended below.
   if (result?.status === "pending") {
+    // ASTRA-10H-007: leaving never waits on the read. Back to Start clears
+    // the terminal context; the read's own context guard (playerSync)
+    // then discards its late answer, so nothing old reappears.
     return (
-      <div className="player player-status" role="status" aria-live="polite">
-        <h2 className="title">Game ended</h2>
-        <p className="behavior-help">Reading the final result…</p>
-        {/* ASTRA-10H-007: leaving never waits on the read. Back to Start clears
-            the terminal context; the read's own context guard (playerSync)
-            then discards its late answer, so nothing old reappears. */}
-        <button className="btn" onClick={onBack}>Back to start</button>
-      </div>
+      <StatusScreen
+        label="ended-pending"
+        reserve={46}
+        emblem={<MoonEmblem lit spin={16} />}
+        eyebrow={code ? formatCode(code) : "Silverwick Hollow"}
+        title="Game ended"
+        body="Reading the final result…"
+        primary={back}
+      />
     );
   }
   if (result?.status === "error") {
     return (
-      <div className="player player-status" role="alert">
-        <h2 className="title">Game ended</h2>
-        <p className="behavior-help">We couldn't read the final result. {result.message}</p>
-        <button className="btn" onClick={onRetry}>Try again</button>
-        <button className="btn" onClick={onBack}>Back to start</button>
-      </div>
+      <StatusScreen
+        label="ended-error"
+        tone="error"
+        emblem={<MoonEmblem lit={false} tone="error" spin={0} />}
+        eyebrow={code ? formatCode(code) : "Silverwick Hollow"}
+        title="Game ended"
+        message={`We couldn't read the final result. ${result.message}`}
+        primary={{ label: "Try again", onClick: onRetry }}
+        secondary={back}
+      />
     );
   }
   if (result?.status === "ready") {
     const { winner, declaredAt } = result.result;
     return (
-      <div className={`player player-status player-result player-result-${winner}`} role="status">
-        <div className="player-result-light" aria-hidden="true" />
-        <p className="player-result-eyebrow">The game is over</p>
-        <h2 className="title player-result-title">{WINNER_TITLE[winner]}</h2>
-        <p className="behavior-help">
-          The Storyteller declared {winner === "good" ? "Good" : "Evil"} victory on {declaredAt.phase === "night" ? "Night" : "Day"} {declaredAt.day}.
-        </p>
+      <StatusScreen
+        label={`ended-${winner}`}
+        big
+        tone={winner}
+        eyebrow="The game is over"
+        title={WINNER_TITLE[winner]}
+        body={`The Storyteller declared ${winner === "good" ? "Good" : "Evil"} victory on ${declaredAt.phase === "night" ? "Night" : "Day"} ${declaredAt.day}.`}
+        primary={back}
+      >
         <TownNotesReview />
-        <button className="btn btn-gold" onClick={onBack}>Back to start</button>
-      </div>
+      </StatusScreen>
     );
   }
   return (
-    <div className="player player-status player-result player-result-none" role="status">
-      <p className="player-result-eyebrow">The game is over</p>
-      <h2 className="title player-result-title">Game ended</h2>
-      <p className="behavior-help">The Storyteller has ended the game. Thanks for playing!</p>
+    <StatusScreen
+      label="ended-none"
+      emblem={<MoonEmblem lit={false} spin={0} />}
+      eyebrow="The game is over"
+      title="Game ended"
+      body="The Storyteller has ended the game. Thanks for playing!"
+      primary={back}
+    >
       <TownNotesReview />
-      <button className="btn btn-gold" onClick={onBack}>Back to start</button>
-    </div>
+    </StatusScreen>
   );
 }
 

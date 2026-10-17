@@ -75,12 +75,13 @@ describe("10H-AC-028 (F1): only public-safe coarse milestones", () => {
     expect(screen.getByText("Request to leave lobby")).toBeInTheDocument();
   });
 
-  it("F6: a waiting player sees already-seated public participants only", async () => {
-    usePlayerStore.setState({ status: "waiting", playerId: null, self: null });
+  it("F6 (superseded by Package 3 A1): a waiting player sees the public names-only arrivals, never the private queue", async () => {
+    usePlayerStore.setState({ status: "waiting", playerId: null, self: null, requestedName: "Cara",
+      publicLobby: { ...usePlayerStore.getState().publicLobby!, arrivals: ["Alice", "Bob", "Cara"], plannedPlayers: 8 } });
     render(<PlayerScreen />);
-    const seated = await screen.findByRole("region", { name: "Already seated" });
-    expect(within(seated).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["seat 1Alice", "seat 2Bob"]);
-    expect(screen.getByRole("status")).toHaveTextContent("Waiting — the Storyteller will seat you.");
+    const list = await screen.findByRole("list", { name: "In the town" });
+    expect(within(list).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Alice", "Bob", "CaraYou"]);
+    expect(screen.getByText("3 of 8 arrived")).toBeInTheDocument();
   });
 });
 
@@ -241,9 +242,9 @@ describe("ASTRA-10H-007: joining an already-ended lobby is a completed generic G
     usePlayerStore.getState().reset();
     render(<PlayerScreen />);
     // The real join form and the real joinLobby.
-    fireEvent.change(await screen.findByPlaceholderText("XXXX-XXXX"), { target: { value: "ENDD-2345" } });
-    fireEvent.change(screen.getByPlaceholderText("Bob"), { target: { value: "Zed" } });
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Knock to join" })); });
+    fireEvent.change(await screen.findByLabelText("Game code"), { target: { value: "ENDD2345" } });
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Zed" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Enter the Town/ })); });
     expect(await screen.findByRole("heading", { name: "Game ended" })).toBeInTheDocument();
     expect(usePlayerStore.getState()).toMatchObject({ status: "ended", terminalResult: { status: "none" } });
     expect(screen.queryByText(/Reading the final result/)).toBeNull();

@@ -40,6 +40,8 @@ export type WriteContext = {
   stState: StorytellerLobbyRecord;
   registry: RoleRegistry;
   online: OnlineMap;
+  /** Package 3 (A1): public arrival names (Setup only), see arrivals.ts. */
+  arrivals?: readonly string[];
   membership?: Record<string, string>;
 };
 
@@ -50,7 +52,8 @@ export async function writeProjections(ctx: WriteContext): Promise<void> {
 
   updates[publicPath(code)] = projectLobbyToPublic(
     stState,
-    online
+    online,
+    ctx.arrivals
   ) as unknown as Json;
 
   const selfMap = projectLobbyToSelfMap(stState, registry);

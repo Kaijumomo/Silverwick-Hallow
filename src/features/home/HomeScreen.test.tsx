@@ -256,3 +256,34 @@ describe("Character Reference", () => {
     expect(screen.getByRole("button", { name: /^Townsfolk/ })).toHaveAttribute("aria-pressed", "true");
   });
 });
+
+describe("Package 3 (D9): phone Home", () => {
+  const phone = (matches: boolean) =>
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: matches && query.includes("760"), media: query, addEventListener() {}, removeEventListener() {} }));
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("on a phone shows only Player and Character Reference, and Player opens the join screen", () => {
+    phone(true);
+    const navigate = vi.fn();
+    render(<HomeScreen navigate={navigate} />);
+    expect(screen.getAllByRole("button")).toHaveLength(2);
+    expect(screen.queryByText("Storyteller")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Player/ }));
+    expect(navigate).toHaveBeenCalledWith("?join=");
+  });
+
+  it("on a phone Character Reference opens the script picker, then a script's reference", () => {
+    phone(true);
+    render(<HomeScreen navigate={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Character Reference/ }));
+    expect(screen.getByRole("heading", { name: "Character Reference" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Trouble Brewing" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("a wider screen keeps the Storyteller entry", () => {
+    phone(false);
+    render(<HomeScreen navigate={() => {}} />);
+    expect(screen.getByRole("button", { name: /^Storyteller/ })).toBeInTheDocument();
+  });
+});

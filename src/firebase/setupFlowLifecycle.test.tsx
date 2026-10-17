@@ -409,3 +409,41 @@ describe("runtime.joined: distinct, currently joined players", () => {
     await waitFor(() => expect(useSessionRuntime.getState().joined).toEqual([]));
   });
 });
+
+describe("public arrivals (Package 3 A1): the writer publishes who is here", () => {
+  async function liveLobby() {
+    const b = new MemoryRoomBackend();
+    env.backend = b;
+    newSetup({ plannedPlayerCount: 8 });
+    await goLive();
+    renderHook(() => useStorytellerSync(b));
+    await waitFor(() => expect(useSessionRuntime.getState().status).toBe("live"));
+    const code = useStorytellerStore.getState().lobby!.code;
+    const here = async (uid: string, extra: { online?: boolean; lastSeen?: number } = {}) =>
+      b.set(presencePath(code, uid), { online: extra.online ?? true, lastSeen: extra.lastSeen ?? Date.now() });
+    const knock = async (uid: string, name: string) => { await knockOnLobby(b, code, uid, name); await here(uid); };
+    const pub = async () => (await b.get(`lobbies/${code}/public`)) as { arrivals?: string[]; plannedPlayers?: number } | null;
+    return { b, code, here, knock, pub };
+  }
+
+  it("publishes arrival names in order with the planned count, and nothing that identifies a uid", async () => {
+    const { knock, pub } = await liveLobby();
+    await knock("uid-aaa", "Bram");
+    await knock("uid-bbb", "Ivy");
+    await waitFor(async () => expect((await pub())?.arrivals).toEqual(["Bram", "Ivy"]));
+    expect((await pub())?.plannedPlayers).toBe(8);
+    expect(JSON.stringify(await pub())).not.toMatch(/uid-aaa|uid-bbb/);
+  });
+
+  it("removes a player who cancels or goes offline, and a silent heartbeat expiry republishes without a callback", async () => {
+    const { b, code, here, knock, pub } = await liveLobby();
+    await knock("u1", "Bram");
+    await knock("u2", "Ivy");
+    await waitFor(async () => expect((await pub())?.arrivals).toEqual(["Bram", "Ivy"]));
+    await cancelJoinRequest(b, code, "u1");
+    await here("u1", { online: false });
+    await waitFor(async () => expect((await pub())?.arrivals).toEqual(["Ivy"]));
+    await here("u2", { online: false });
+    await waitFor(async () => expect((await pub())?.arrivals).toEqual([]));
+  });
+});

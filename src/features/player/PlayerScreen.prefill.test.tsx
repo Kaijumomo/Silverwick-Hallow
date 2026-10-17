@@ -20,7 +20,7 @@ import { PlayerScreen } from "./PlayerScreen";
 import { JOIN_PREFILL_KEY, peekJoinPrefill, writeJoinPrefill } from "@/features/home/joinPrefill";
 
 const CODE = "BCDF2345";
-const nameInput = () => screen.getByPlaceholderText("Bob") as HTMLInputElement;
+const nameInput = () => screen.getByLabelText("Your name") as HTMLInputElement;
 
 beforeEach(() => {
   __setEnvOverrideForTests({});
@@ -34,7 +34,7 @@ describe("join form pre-fill from Home", () => {
   it("pre-fills the name for the matching code (StrictMode-safe) and consumes the hand-off", async () => {
     writeJoinPrefill("Ada", CODE);
     render(<StrictMode><PlayerScreen initialCode={CODE} /></StrictMode>);
-    expect(await screen.findByPlaceholderText("XXXX-XXXX")).toHaveValue(CODE);
+    expect(await screen.findByLabelText("Game code")).toHaveValue(CODE);
     expect(nameInput()).toHaveValue("Ada");
     expect(window.sessionStorage.getItem(JOIN_PREFILL_KEY)).toBeNull();
   });
@@ -42,14 +42,14 @@ describe("join form pre-fill from Home", () => {
   it("does not leak into a different lobby's join, and is still cleared", async () => {
     writeJoinPrefill("Ada", CODE);
     render(<PlayerScreen initialCode="ZZZZ2345" />);
-    await screen.findByPlaceholderText("XXXX-XXXX");
+    await screen.findByLabelText("Game code");
     expect(nameInput()).toHaveValue("");
     expect(peekJoinPrefill(CODE)).toBeNull();
   });
 
   it("an ordinary ?join= link without a hand-off leaves the name empty", async () => {
     render(<PlayerScreen initialCode={CODE} />);
-    await screen.findByPlaceholderText("XXXX-XXXX");
+    await screen.findByLabelText("Game code");
     expect(nameInput()).toHaveValue("");
   });
 });

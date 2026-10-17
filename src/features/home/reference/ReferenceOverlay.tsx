@@ -34,9 +34,9 @@ type Props = {
 type Tab = "characters" | "night";
 
 /**
- * Character icon. The eight characters added with their own committed art use
- * it first; everyone else (and any failure) uses the app's existing icon
- * resolver. If that also fails, a marked temporary monogram shows instead.
+ * Character icon. Committed local art is used first (and alone when the app's
+ * resolver would return the same file); a character without it, or a custom
+ * icon, uses the app's resolver. If that also fails, a marked temporary monogram shows instead.
  */
 function RoleIcon({ role, className }: { role: RoleDef; className: string }) {
   const local = localCharacterArt(role.id);
@@ -56,7 +56,7 @@ function RoleIcon({ role, className }: { role: RoleDef; className: string }) {
       loading="lazy"
       decoding="async"
       draggable={false}
-      onError={() => setStage(stage === "local" ? "remote" : "none")}
+      onError={() => setStage(stage === "local" && iconUrlFor(role) !== local ? "remote" : "none")}
     />
   );
 }

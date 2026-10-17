@@ -1139,4 +1139,11 @@ export type PublicLobbyRecord = {
   winner?: Alignment;
   /** Legacy projection marker; lifecycle state is authoritative in session. */
   status?: "ended";
+  /** Package 3 (A1): names of the players currently joined to the lobby, in
+   * arrival order, published only during Setup. Names only -- never a uid,
+   * role or seat binding. Absent outside Setup and from older writers. */
+  arrivals?: string[];
+  /** Package 3 (A1): the Storyteller's planned player count (the "of M" in
+   * "N of M arrived"). Published only during Setup. */
+  plannedPlayers?: number;
 };

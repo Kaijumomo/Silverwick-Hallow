@@ -1240,6 +1240,8 @@ export const PublicLobbyRecordSchema = z.object({
   lorics: z.array(z.string().min(1)).default([]),
   winner: AlignmentSchema.optional(),
   status: z.literal("ended").optional(),
+  arrivals: z.array(z.string().min(1).max(60)).max(40).optional(),
+  plannedPlayers: z.number().int().positive().max(40).optional(),
 });
 
 // Looser variants for validating persisted (localStorage) state.

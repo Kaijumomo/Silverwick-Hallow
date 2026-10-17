@@ -1,0 +1,409 @@
+/* Package 3: player phone flow (Claude Design "Silverwick Player Flow").
+ *
+ * A port of the prototype's inline styles to classes, value for value. The
+ * phone surface is a 390-wide column (full viewport on a phone, a centred
+ * column elsewhere); the prototype's bezel and 54px status-bar mock are not
+ * product, but the 54px spacer they occupy is kept so content sits exactly
+ * where the design places it. All classes are .swp-*; nothing here touches the
+ * Storyteller UI. */
+
+@keyframes swSpin { to { transform: rotate(360deg); } }
+@keyframes swFlicker { 0%, 100% { opacity: .85; } 30% { opacity: 1; } 55% { opacity: .78; } 75% { opacity: .95; } }
+@keyframes swRise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes swStamp { 0% { opacity: 0; transform: scale(2.2) rotate(-20deg); } 60% { opacity: 1; transform: scale(.92) rotate(4deg); } 100% { transform: none; } }
+
+.swp-root {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  height: 100vh;
+  height: 100dvh;
+  margin: 0 auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #0a0806;
+  color: #d8c9a4;
+  font-family: "Source Sans 3", system-ui, sans-serif;
+  font-variant-numeric: lining-nums tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  box-sizing: border-box;
+}
+.swp-root *, .swp-root *::before, .swp-root *::after { box-sizing: border-box; }
+:where(.swp-root) button { font-family: inherit; }
+.swp-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.swp-wash { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10, 8, 6, .3) 0%, rgba(10, 8, 6, .55) 40%, rgba(10, 8, 6, .92) 100%); }
+.swp-wash-dark { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(13, 10, 10, .5), rgba(13, 10, 10, .85) 55%); }
+.swp-wash-evil { position: absolute; inset: 0; background: radial-gradient(ellipse 90% 60% at 50% 38%, rgba(120, 24, 22, .45), transparent 70%); }
+.swp-wash-ref { position: absolute; inset: 0; background: radial-gradient(ellipse 80% 50% at 50% 30%, rgba(232, 168, 88, .14), transparent 70%), rgba(8, 6, 4, .84); }
+.swp-topgap { position: relative; height: 54px; flex: none; }
+
+.swp-glow {
+  position: absolute;
+  left: 50%;
+  width: 560px;
+  height: 560px;
+  margin-left: -280px;
+  pointer-events: none;
+  animation: swFlicker 4s ease-in-out infinite;
+}
+.swp-glow-join { top: 90px; background: radial-gradient(closest-side, rgba(232, 168, 88, .24), rgba(232, 168, 88, .07) 58%, transparent); }
+.swp-glow-status { top: 100px; background: radial-gradient(closest-side, var(--swp-glow, rgba(196, 204, 220, .17)), transparent 72%); }
+
+.swp-page { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px 28px 34px; }
+
+/* Shared parts ----------------------------------------------------------- */
+.swp-rule { display: flex; align-items: center; gap: 14px; width: 200px; align-self: center; flex: none; }
+.swp-rule-line { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(224, 185, 106, .7)); }
+.swp-rule-line:last-child { background: linear-gradient(270deg, transparent, rgba(224, 185, 106, .7)); }
+.swp-rule-gem { width: 8px; height: 8px; transform: rotate(45deg); border: 1px solid #e0b96a; }
+
+.swp-back {
+  align-self: flex-start;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px 0 10px;
+  border-radius: 22px;
+  border: 1px solid rgba(196, 158, 80, .3);
+  background: transparent;
+  color: rgba(234, 220, 184, .7);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.swp-back-chev { font-size: 20px; line-height: 1; }
+
+.swp-gold {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  padding: 0 30px;
+  border-radius: 28px;
+  border: 1px solid rgba(240, 213, 144, .7);
+  background: linear-gradient(180deg, rgba(224, 185, 106, .28), rgba(150, 100, 40, .18));
+  box-shadow: 0 0 30px rgba(224, 185, 106, .22), inset 0 1px 0 rgba(255, 240, 200, .25);
+  font-family: "Cormorant Garamond", serif;
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  font-size: 20px;
+  font-weight: 700;
+  color: #f6dfa0;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: opacity .3s;
+}
+.swp-gold:disabled { opacity: .4; pointer-events: none; cursor: default; }
+.swp-gold-full { width: 100%; }
+
+.swp-outline {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 0 24px;
+  border-radius: 26px;
+  border: 1px solid rgba(196, 158, 80, .3);
+  background: transparent;
+  font-family: "Cormorant Garamond", serif;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  font-size: 16px;
+  font-weight: 700;
+  color: rgba(234, 220, 184, .78);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.swp-outline:hover { border-color: rgba(224, 185, 106, .55); color: #eadcb8; }
+.swp-outline:disabled { opacity: .4; pointer-events: none; }
+
+.swp-eyebrow { font-size: 11px; letter-spacing: .24em; text-transform: uppercase; font-weight: 600; color: rgba(216, 201, 164, .6); }
+.swp-title {
+  font-family: "Cormorant Garamond", serif;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-variant-numeric: lining-nums;
+  font-weight: 700;
+  color: #ecd9a8;
+  margin: 0;
+}
+.swp-fell { font-family: "IM Fell English", serif; font-style: italic; color: rgba(234, 220, 184, .65); }
+
+/* Home -------------------------------------------------------------------- */
+.swp-home-hero { display: flex; flex-direction: column; gap: 14px; padding-top: 150px; align-items: center; text-align: center; }
+.swp-home-kicker { font-size: 10px; letter-spacing: .45em; text-transform: uppercase; font-weight: 600; color: rgba(216, 201, 164, .6); margin: 0; }
+.swp-home-title {
+  margin: 0;
+  font-family: "Cinzel Decorative", serif;
+  font-size: 48px;
+  font-weight: 400;
+  line-height: .98;
+  color: #ecd9a8;
+  letter-spacing: .03em;
+  text-shadow: 0 0 40px rgba(224, 185, 106, .25), 0 2px 0 rgba(0, 0, 0, .6);
+}
+.swp-home-tag { margin: 0; font-family: "IM Fell English", serif; font-style: italic; font-size: 18px; color: rgba(234, 220, 184, .75); }
+.swp-paths { margin: auto 0 48px; display: flex; flex-direction: column; border-bottom: 1px solid rgba(196, 158, 80, .14); }
+.swp-path {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 76px;
+  padding: 0 4px;
+  border: none;
+  border-top: 1px solid rgba(196, 158, 80, .14);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.swp-path:hover { background: rgba(196, 158, 80, .04); }
+.swp-path-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.swp-path-title { font-family: "Cormorant Garamond", serif; font-size: 26px; font-weight: 700; line-height: 1.05; color: rgba(234, 220, 184, .72); }
+.swp-path-desc { font-size: 14px; color: rgba(216, 201, 164, .6); }
+.swp-path-chev { font-size: 22px; color: rgba(216, 201, 164, .32); }
+.swp-path-primary .swp-path-title { color: #f0d590; }
+.swp-path-primary .swp-path-chev { color: #e0b96a; }
+.swp-home-foot { padding-top: 18px; font-size: 11px; color: rgba(216, 201, 164, .4); text-align: center; }
+
+/* Sign in ------------------------------------------------------------------ */
+.swp-sign { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 28px; animation: swRise .4s ease-out; }
+.swp-sign-head { display: flex; flex-direction: column; gap: 8px; align-items: center; text-align: center; }
+.swp-sign-title { font-size: 34px; }
+.swp-sign-sub { font-size: 17px; margin: 0; }
+.swp-field { display: flex; flex-direction: column; gap: 6px; align-items: center; text-align: center; }
+.swp-name-input {
+  width: 100%;
+  height: 56px;
+  border: none;
+  border-bottom: 1px solid rgba(224, 185, 106, .5);
+  background: transparent;
+  padding: 0 4px;
+  color: #f0e2bc;
+  font-family: "IM Fell English", serif;
+  font-style: italic;
+  font-size: 30px;
+  outline: none;
+  text-align: center;
+  border-radius: 0;
+}
+.swp-name-input::placeholder { color: rgba(240, 226, 188, .35); }
+.swp-code { display: flex; flex-direction: column; gap: 8px; align-items: center; text-align: center; }
+.swp-code-cells { position: relative; display: flex; gap: 6px; cursor: text; }
+.swp-code-cell {
+  width: 36px;
+  height: 50px;
+  border-radius: 6px;
+  border: 1px solid rgba(196, 158, 80, .2);
+  background: linear-gradient(180deg, rgba(0, 0, 0, .5), rgba(30, 16, 12, .55));
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, .5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Cormorant Garamond", serif;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-weight: 700;
+  font-size: 26px;
+  color: #f0d590;
+}
+.swp-code-cell-active { border-color: rgba(224, 185, 106, .6); }
+.swp-code-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: none; padding: 0; font-size: 16px; cursor: text; }
+.swp-code-help { font-size: 14px; }
+.swp-join { align-self: center; border: none; background: transparent; padding: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 10px; transition: opacity .3s; }
+.swp-join:disabled { opacity: .4; pointer-events: none; cursor: default; }
+.swp-join .swp-gold { opacity: 1; }
+.swp-join-hint { font-size: 14px; color: rgba(234, 220, 184, .55); }
+.swp-join-error { font-size: 14px; color: #f0d6c8; max-width: 300px; text-wrap: pretty; }
+
+/* Waiting ------------------------------------------------------------------ */
+.swp-wait-body { display: flex; flex-direction: column; gap: 22px; padding-top: 22px; animation: swRise .4s ease-out; min-height: 0; flex: 0 1 auto; }
+.swp-wait-head { display: flex; flex-direction: column; gap: 6px; align-items: center; text-align: center; }
+.swp-wait-welcome { font-size: 32px; line-height: 1.05; overflow-wrap: anywhere; }
+.swp-wait-list { display: flex; flex-direction: column; min-height: 0; }
+.swp-wait-listhead { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 8px; }
+.swp-wait-count { font-family: "Cormorant Garamond", serif; font-size: 18px; font-weight: 700; color: #f2e6c8; }
+.swp-wait-rows { display: flex; flex-direction: column; border-bottom: 1px solid rgba(196, 158, 80, .14); overflow-y: auto; min-height: 0; }
+.swp-wait-row { display: flex; align-items: center; justify-content: space-between; min-height: 40px; border-top: 1px solid rgba(196, 158, 80, .14); flex: none; }
+.swp-wait-name { font-family: "IM Fell English", serif; font-style: italic; font-size: 20px; color: #eadcb8; overflow-wrap: anywhere; }
+.swp-wait-row-you .swp-wait-name { color: #f0d590; }
+.swp-wait-tag { font-size: 11px; letter-spacing: .2em; text-transform: uppercase; font-weight: 700; color: #e0b96a; }
+.swp-wait-foot { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding-top: 14px; }
+.swp-dot { width: 10px; height: 10px; border-radius: 50%; background: #e0b96a; box-shadow: 0 0 14px rgba(224, 185, 106, .7); animation: swFlicker 2.4s ease-in-out infinite; }
+.swp-wait-foot-title { font-size: 20px; }
+.swp-wait-foot-line { font-size: 15px; margin: 0; }
+
+/* Status screens ------------------------------------------------------------ */
+.swp-status-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+.swp-status {
+  margin: auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 0;
+  text-align: center;
+  animation: swRise .45s ease-out;
+}
+.swp-status-title { font-size: 32px; line-height: 1.05; margin-top: -8px; }
+.swp-status-body { margin: 0; font-family: "IM Fell English", serif; font-size: 18px; line-height: 1.45; color: rgba(234, 220, 184, .8); max-width: 310px; text-wrap: pretty; }
+.swp-status-msg {
+  width: 100%;
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: rgba(60, 14, 14, .35);
+  border: 1px solid rgba(200, 80, 70, .25);
+  font-family: "IM Fell English", serif;
+  font-size: 17px;
+  line-height: 1.42;
+  color: #f0d6c8;
+  text-wrap: pretty;
+}
+.swp-status-msg p { margin: 0; }
+.swp-status-rule { margin-top: 40px; }
+.swp-status-big { margin: -6px 0 0; font-family: "Cinzel Decorative", serif; font-variant-ligatures: none; font-size: 46px; font-weight: 700; line-height: 1; color: #b7d6ea; text-shadow: 0 0 40px rgba(134, 183, 212, .3), 0 2px 0 rgba(0, 0, 0, .6); }
+.swp-status-big-evil { color: #ef9c8c; text-shadow: 0 0 40px rgba(200, 60, 55, .32), 0 2px 0 rgba(0, 0, 0, .6); }
+.swp-actions-spacer { flex: none; }
+.swp-actions { flex: none; display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 14px; }
+
+.swp-emblem { position: relative; width: 160px; height: 160px; flex: none; }
+.swp-moon-ring { position: absolute; inset: 0; border-radius: 50%; border: 1px dashed rgba(214, 218, 224, .38); animation: swSpin var(--swp-spin, 16s) linear infinite; }
+.swp-moon-ring-err { border-color: rgba(200, 80, 70, .35); }
+.swp-moon-halo { position: absolute; inset: 20px; border-radius: 50%; background: radial-gradient(closest-side, rgba(214, 218, 224, .16), transparent); }
+.swp-moon-eclipsed .swp-moon-halo { background: radial-gradient(closest-side, rgba(120, 110, 100, .1), transparent); }
+.swp-moon-disc {
+  position: absolute;
+  inset: 30px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: radial-gradient(circle at 36% 28%, #5a5e66 0%, #33363c 45%, #1c1e22 100%);
+  box-shadow: 0 18px 34px rgba(0, 0, 0, .6), inset 0 0 0 1px rgba(220, 224, 230, .35), inset 0 -12px 20px rgba(0, 0, 0, .55), inset 0 8px 12px rgba(255, 255, 255, .08);
+}
+.swp-moon-eclipsed .swp-moon-disc { filter: grayscale(1) brightness(.6); }
+.swp-moon-grain { position: absolute; inset: 0; border-radius: 50%; background: repeating-radial-gradient(circle at 50% 50%, rgba(255, 255, 255, .035) 0 1px, transparent 1px 3px); }
+.swp-moon-inner { position: absolute; inset: 7px; border-radius: 50%; border: 1.5px solid rgba(214, 218, 224, .5); }
+.swp-moon-star { position: absolute; transform: rotate(45deg); background: #e6e9ee; box-shadow: 0 0 5px rgba(230, 233, 238, .7); }
+.swp-moon-eclipsed .swp-moon-star { opacity: .15; }
+.swp-moon-crescent { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; overflow: hidden; transform: rotate(-24deg); }
+.swp-moon-eclipsed .swp-moon-crescent { opacity: .28; }
+.swp-moon-lit { position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 30% 30%, #ffffff, #d6d9de 45%, #8d9197); }
+.swp-moon-shade { position: absolute; left: var(--swp-shade, 26%); top: -10%; width: 100%; height: 100%; border-radius: 50%; background: radial-gradient(circle at 36% 28%, #4a4e55, #26292e 70%); }
+.swp-moon-flame { position: absolute; inset: 24px; border-radius: 50%; box-shadow: 0 0 34px rgba(214, 218, 224, .28); animation: swFlicker 3s ease-in-out infinite; pointer-events: none; }
+
+.swp-seal-glow { position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(closest-side, rgba(232, 168, 88, .14), transparent); }
+.swp-seal-half { position: absolute; inset: 0; }
+.swp-seal-token {
+  position: absolute;
+  inset: 24px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 30%, #f1e6c9, #dccaa0 48%, #b09566);
+  box-shadow: 0 20px 36px rgba(0, 0, 0, .6), inset 0 -12px 22px rgba(90, 60, 25, .38), inset 0 8px 14px rgba(255, 248, 225, .3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.swp-seal-ring { position: absolute; inset: 7px; border-radius: 50%; border: 1.5px solid rgba(90, 62, 30, .35); }
+.swp-seal-ribbon {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  width: 84px;
+  height: 20px;
+  margin-left: -42px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #8a2a20, #5e1812);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, .35);
+  clip-path: polygon(0 0, 100% 0, 92% 50%, 100% 100%, 0 100%, 8% 50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Cormorant Garamond", serif;
+  font-size: 10px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: #f6e3b4;
+}
+.swp-seal-plate { display: flex; flex-direction: column; align-items: center; gap: 0; margin-top: -14px; }
+.swp-seal-plate-eyebrow { font-size: 9px; letter-spacing: .28em; text-transform: uppercase; font-weight: 700; color: rgba(74, 50, 24, .6); }
+.swp-seal-plate-name { font-family: "IM Fell English", serif; font-style: italic; font-size: 26px; line-height: 1.1; color: #2e1c10; max-width: 86px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.swp-seal-torn .swp-seal-token { filter: grayscale(.55) brightness(.82); }
+.swp-stamp {
+  position: absolute;
+  inset: 32px;
+  border-radius: 50%;
+  border: 4px solid rgba(160, 32, 28, .82);
+  box-shadow: inset 0 0 0 2px rgba(160, 32, 28, .25), 0 0 0 1px rgba(160, 32, 28, .2);
+  transform: rotate(-14deg);
+  mix-blend-mode: multiply;
+  animation: swStamp .6s cubic-bezier(.3, .7, .2, 1) both;
+}
+.swp-stamp-bar { position: absolute; left: 50%; top: 50%; width: 118%; height: 5px; margin: -2.5px 0 0 -59%; border-radius: 2px; background: rgba(160, 32, 28, .82); transform: rotate(-38deg); }
+
+.swp-seatring-core { position: absolute; inset: 24px; border-radius: 50%; border: 1px dashed rgba(196, 158, 80, .28); background: radial-gradient(closest-side, rgba(232, 168, 88, .1), transparent); }
+.swp-seatring-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.swp-seatring-word { font-size: 10px; letter-spacing: .3em; text-transform: uppercase; font-weight: 700; color: rgba(216, 201, 164, .55); }
+.swp-seatring-num { font-family: "Cormorant Garamond", serif; font-size: 40px; font-weight: 700; line-height: 1; color: #f0d590; }
+.swp-seatring-seat { position: absolute; border-radius: 50%; background: rgba(30, 22, 18, .9); border: 1px solid rgba(196, 158, 80, .35); }
+.swp-seatring-seat-me { background: radial-gradient(circle at 38% 30%, #f6dfa0, #c49a4a); border: 2px solid #f2cf7e; box-shadow: 0 0 20px rgba(224, 185, 106, .6); animation: swFlicker 2.4s ease-in-out infinite; }
+
+/* Character Reference picker ------------------------------------------------ */
+.swp-ref-page { position: relative; flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 22px; padding: 8px 24px 34px; }
+.swp-ref-head { display: flex; flex-direction: column; gap: 8px; align-items: center; text-align: center; }
+.swp-ref-title { font-size: 30px; }
+.swp-ref-sub { margin: 0; font-size: 16px; }
+.swp-ref-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.swp-ref-tile { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 8px; border: 1px solid rgba(196, 158, 80, .16); border-radius: 12px; background: rgba(12, 9, 8, .4); cursor: pointer; }
+.swp-ref-tile:active { background: rgba(196, 158, 80, .1); }
+.swp-ref-logo { width: 118px; height: 96px; background-size: contain; background-position: center; background-repeat: no-repeat; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .6)); }
+.swp-ref-count { font-size: 12px; color: rgba(216, 201, 164, .6); }
+.swp-ref-orbit { position: relative; width: 96px; height: 96px; display: flex; align-items: center; justify-content: center; }
+.swp-ref-orbit-ring { position: absolute; inset: 0; animation: swSpin 40s linear infinite; }
+.swp-ref-orbit-icon { position: absolute; width: 24px; height: 24px; background-size: contain; background-position: center; background-repeat: no-repeat; animation: swSpin 40s linear infinite reverse; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .7)); }
+.swp-ref-orbit-label { position: relative; font-family: "Cormorant Garamond", serif; font-size: 10px; font-weight: 700; line-height: 1.1; letter-spacing: .08em; text-transform: uppercase; text-align: center; color: #ecd9a8; text-shadow: 0 1px 3px rgba(0, 0, 0, .9); }
+
+/* Firebase configuration ----------------------------------------------------- */
+.swp-glow-fb { top: 40px; width: 520px; height: 520px; margin-left: -260px; background: radial-gradient(closest-side, rgba(232, 168, 88, .2), rgba(232, 168, 88, .06) 58%, transparent); }
+.swp-fb-page { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 4px 18px 26px; }
+.swp-fb-head { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 0 20px; text-align: center; }
+.swp-fb-brand { font-family: "Cinzel Decorative", serif; font-weight: 400; font-size: 30px; line-height: 1; color: #ecd9a8; letter-spacing: .03em; text-shadow: 0 0 30px rgba(224, 185, 106, .25), 0 2px 0 rgba(0, 0, 0, .6); margin: 0; }
+.swp-fb-sub { font-size: 16px; color: rgba(234, 220, 184, .7); margin: 0; }
+.swp-fb-card {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  background: linear-gradient(170deg, rgba(42, 23, 18, .97), rgba(20, 11, 9, .98));
+  box-shadow: 0 30px 60px rgba(0, 0, 0, .7), inset 0 0 0 1px rgba(224, 185, 106, .5), inset 0 0 0 7px rgba(26, 15, 12, .95), inset 0 0 0 8px rgba(224, 185, 106, .24);
+  animation: swRise .4s ease-out;
+}
+.swp-fb-top { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 18px 6px 24px; }
+.swp-fb-title { font-size: 22px; white-space: nowrap; }
+.swp-fb-close { flex: none; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(224, 185, 106, .4); background: rgba(0, 0, 0, .35); color: #e0b96a; font-size: 22px; cursor: pointer; }
+.swp-fb-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 6px 24px 22px; }
+.swp-fb-help { margin: 0; font-family: "IM Fell English", serif; font-size: 15px; line-height: 1.45; color: rgba(234, 220, 184, .72); text-wrap: pretty; }
+.swp-fb-code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: #e0b96a; }
+.swp-fb-field { display: flex; flex-direction: column; gap: 6px; }
+.swp-fb-label { font-size: 12px; letter-spacing: .06em; font-weight: 700; color: rgba(216, 201, 164, .72); }
+.swp-fb-input { width: 100%; height: 46px; padding: 0 14px; border-radius: 10px; border: 1px solid rgba(196, 158, 80, .2); background: rgba(0, 0, 0, .35); color: #eadcb8; font-family: ui-monospace, Menlo, monospace; font-size: 13px; outline: none; }
+.swp-fb-input:focus { border-color: #c4a050; }
+.swp-fb-input-bad { border-color: rgba(232, 138, 122, .6); }
+.swp-fb-error { padding: 12px 16px; border-radius: 12px; background: rgba(60, 14, 14, .4); border: 1px solid rgba(200, 80, 70, .3); display: flex; flex-direction: column; gap: 2px; }
+.swp-fb-error-label { font-size: 11px; letter-spacing: .2em; text-transform: uppercase; font-weight: 700; color: #e88a7a; }
+.swp-fb-error-text { font-family: "IM Fell English", serif; font-size: 16px; color: #f0d6c8; }
+.swp-fb-save { margin-top: 4px; width: 100%; }
+
+/* Reduce Motion: keep every state, drop the movement (A6). */
+@media (prefers-reduced-motion: reduce) {
+  .swp-ref-orbit-ring, .swp-ref-orbit-icon, .swp-glow, .swp-moon-ring, .swp-moon-flame, .swp-dot, .swp-seatring-seat-me { animation: none; }
+  .swp-sign, .swp-wait-body, .swp-status, .swp-fb-card { animation: none; }
+  .swp-stamp { animation: none; }
+}
+.swp-path:disabled { opacity: .45; cursor: default; }

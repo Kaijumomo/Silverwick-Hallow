@@ -8,7 +8,10 @@ import { isFirebaseConfigured, getConfigSource } from "@/firebase/config";
 import { acknowledgeReveal, applyJoinIntent, chooseTraveler, joinLobby, leaveLobby, useOwnTravelerChoice, usePlayerSync } from "@/firebase/playerSync";
 import { TRAVELERS } from "@/data/travelers";
 import { lifecycleMessage } from "@/firebase/lifecycle";
-import { FirebaseConfigDialog } from "@/features/firebase/FirebaseConfigDialog";
+import { FirebaseConfigScreen } from "./phone/FirebaseConfigScreen";
+import { SignInScreen } from "./phone/SignInScreen";
+import { WaitingScreen } from "./phone/WaitingScreen";
+import { ConnectingScreen, FailureScreen, formatCode, KnockingScreen, LeavingScreen, ReconnectingScreen, RejectedScreen, RevokedScreen } from "./phone/PhoneStates";
 import type { RoomBackend } from "@/firebase/backend";
 import { lookupOfficialRole } from "@/data/officialRoles";
 import { getBuiltinScript } from "@/data/scripts";
@@ -28,13 +31,17 @@ type PlayerTab = "role" | "town" | "more";
 
 type Props = {
   initialCode?: string;
+  /** Leaves the player flow for Home; injectable for tests. */
+  goHome?: () => void;
 };
 
-export function PlayerScreen({ initialCode }: Props) {
-  return <RemoteScreenBoundary><PlayerScreenContent initialCode={initialCode} /></RemoteScreenBoundary>;
+const defaultGoHome = () => window.location.assign(window.location.pathname);
+
+export function PlayerScreen({ initialCode, goHome = defaultGoHome }: Props) {
+  return <RemoteScreenBoundary><PlayerScreenContent initialCode={initialCode} goHome={goHome} /></RemoteScreenBoundary>;
 }
 
-function PlayerScreenContent({ initialCode }: Props) {
+function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
   // Name handed over once by Home (never via the URL). Read without clearing so
   // StrictMode's double render keeps it, then cleared on mount: single use.
   const [prefillName, setPrefillName] = useState(() => peekJoinPrefill(initialCode));
@@ -60,6 +67,10 @@ function PlayerScreenContent({ initialCode }: Props) {
   const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
   const [backend, setBackend] = useState<RoomBackend | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
+  // The connection attempt's own failure (never a join-submit error), and the
+  // code typed on the sign-in screen while the knock is in flight.
+  const [connectFailure, setConnectFailure] = useState<string | null>(null);
+  const [submittedCode, setSubmittedCode] = useState("");
   const [activeTab, setActiveTab] = useState<PlayerTab>("role");
   const [travelerChoiceBusy, setTravelerChoiceBusy] = useState(false);
   const [travelerChoiceError, setTravelerChoiceError] = useState<string | null>(null);
@@ -68,9 +79,12 @@ function PlayerScreenContent({ initialCode }: Props) {
 
   useEffect(() => {
     let mounted = true;
+    setConnectFailure(null);
     if (!isFirebaseConfigured()) {
       if (getConfigSource() === "env") {
-        usePlayerStore.getState().setStatus("error", "Unable to connect — contact your Storyteller.");
+        const message = "Unable to connect — contact your Storyteller.";
+        usePlayerStore.getState().setStatus("error", message);
+        setConnectFailure(message);
       } else {
         setConfigOpen(true);
       }
@@ -85,9 +99,9 @@ function PlayerScreenContent({ initialCode }: Props) {
       } catch (e) {
         // eslint-disable-next-line no-console
         console.error("[player connect]", e instanceof Error ? e.message : e);
-        usePlayerStore
-          .getState()
-          .setStatus("error", lifecycleMessage(e));
+        const message = lifecycleMessage(e);
+        usePlayerStore.getState().setStatus("error", message);
+        setConnectFailure(message);
       }
     })();
     return () => {
@@ -139,6 +153,7 @@ function PlayerScreenContent({ initialCode }: Props) {
   }, [scriptCharacters, publicLobby]);
 
   const onJoinSubmit = async (joinCode: string, name: string) => {
+    setSubmittedCode(joinCode);
     if (!backend) {
       usePlayerStore
         .getState()
@@ -159,124 +174,123 @@ function PlayerScreenContent({ initialCode }: Props) {
     }
   };
 
+  const back = () => { reset(); goHome(); };
+  const ownSeat = publicLobby && playerId ? publicLobby.players[playerId]?.seat : undefined;
+  const seatNumber = ownSeat === undefined ? null : ownSeat + 1;
+  const retryConnection = () => { setConnectFailure(null); setRetry(value => value + 1); };
+
   if (configOpen && getConfigSource() !== "env") {
     return (
-      <div className="player">
-        <h1 className="home-title">Silverwick Hallow</h1>
-        <p className="home-subtitle">Configure Firebase to join a lobby.</p>
-        <FirebaseConfigDialog
-          onClose={() => setConfigOpen(false)}
-          onSaved={async () => {
-            try {
-              const { backend: b } = await connectFirebase();
-              setBackend(b);
-              setConfigOpen(false);
-            } catch {
-              // Stay in config view if connect fails
-            }
-          }}
-        />
-      </div>
+      <FirebaseConfigScreen
+        onClose={() => setConfigOpen(false)}
+        onSaved={async () => {
+          try {
+            const { backend: b } = await connectFirebase();
+            setBackend(b);
+            setConfigOpen(false);
+          } catch {
+            // Stay in config view if connect fails
+          }
+        }}
+      />
     );
   }
 
   if (status === "ended") {
-    return <PlayerEnded result={terminalResult} onRetry={() => setRetry(value => value + 1)} onBack={() => reset()} />;
+    return <PlayerEnded result={terminalResult} onRetry={() => setRetry(value => value + 1)} onBack={() => back()} />;
   }
 
   if (status === "ending") return <PlayerEnding />;
 
-  if (!code || status === "idle" || status === "configuring") {
+  // 1b: the join request is being written. The store has no code yet, so the
+  // eyebrow uses what the player typed.
+  if (status === "knocking" && !code) return <KnockingScreen code={submittedCode} />;
+
+  // Join screens that need no session code: rejected / revoked / not found at
+  // join time, and the connection attempt's own failure.
+  if (!code && (status === "rejected" || status === "revoked")) {
+    return status === "rejected"
+      ? <RejectedScreen code={submittedCode} name="Guest" message={error} onBack={back} />
+      : <RevokedScreen code={submittedCode} name="Guest" seat={null} message={error} onBack={back} />;
+  }
+  if (!code && status === "notFound") {
+    return <FailureScreen label="not-found" eyebrow={submittedCode ? formatCode(submittedCode) : "Silverwick Hollow"} title="Lobby unavailable" message={error} onBack={back} />;
+  }
+  if (!code && !backend && connectFailure) {
     return (
-      <div className="player">
-        <h1 className="home-title">Join lobby</h1>
-        <PlayerJoinForm
-          initialCode={initialCode ?? ""}
-          initialName={prefillName ?? ""}
-          onNameConsumed={consumePrefill}
-          onSubmit={onJoinSubmit}
-        />
-        {error && (
-          <div className="error-list" role="alert">
-            <strong>Error:</strong>
-            <p>{error}</p>
-          </div>
-        )}
-      </div>
+      <FailureScreen
+        label="connect-failed"
+        eyebrow="Silverwick Hollow"
+        title="Lobby unavailable"
+        message={connectFailure}
+        onRetry={retryConnection}
+        onCancel={back}
+      />
     );
   }
 
-  if (status === "connecting" || status === "knocking" || status === "reconnecting") {
+  if (!code || status === "idle" || status === "configuring") {
+    // 1a: the join form is not usable until the backend is connected.
+    if (!backend && isFirebaseConfigured()) return <ConnectingScreen />;
     return (
-      <div className="player player-status">
-        <h2 className="title">Connecting…</h2>
-      </div>
+      <SignInScreen
+        key={initialCode ?? ""}
+        initialCode={initialCode ?? ""}
+        initialName={prefillName ?? ""}
+        error={error}
+        onBack={back}
+        onSubmit={async (joinCode, name) => { consumePrefill(); await onJoinSubmit(joinCode, name); }}
+      />
     );
   }
+
+  const ownName = requestedName ?? "";
+  if (status === "connecting" || status === "knocking") return <ConnectingScreen />;
+  if (status === "reconnecting") return <ReconnectingScreen code={code} name={ownName} />;
 
   const remoteFailure = Object.values(remoteData).find((value) => value === "invalid" || value === "error");
   if (remoteFailure) {
     return (
-      <div className="player player-status" role="alert">
-        <h2>Game data unavailable</h2>
-        <p>{remoteFailure === "invalid" ? DATA_ERROR_MESSAGE : CONNECTION_ERROR_MESSAGE}</p>
-        <button className="btn" onClick={() => setRetry(value => value + 1)}>Retry connection</button>
-        <button className="btn" onClick={leave} disabled={leaving}>Cancel / request to leave</button>
-      </div>
+      <FailureScreen
+        label="data-unavailable"
+        eyebrow={formatCode(code)}
+        title="Game data unavailable"
+        message={remoteFailure === "invalid" ? DATA_ERROR_MESSAGE : CONNECTION_ERROR_MESSAGE}
+        onRetry={retryConnection}
+        onCancel={() => void leave()}
+      />
     );
   }
 
   if (status === "waiting") {
-    // F6 (10H-AC-028): a waiting player sees the already-SEATED public
-    // participants only -- never the private waiting queue.
-    const seatedPublic = publicLobby ? publicLobby.seatOrder.map((id) => publicLobby.players[id]).filter((p) => !!p) : [];
+    // A1: the public, names-only arrivals list (Setup only). Never the
+    // private waiting queue, uids or seat bindings.
     return (
-      <div className="player player-shell">
-        <header className="player-shell-header">
-          <span className="player-phase">Lobby</span>
-          <span className="player-name">{requestedName}</span>
-          <p className="player-status-line" role="status">Waiting — the Storyteller will seat you.</p>
-        </header>
-        <main className="player-main">
-          <p className="behavior-help">Code <strong>{code}</strong></p>
-          {seatedPublic.length > 0 && (
-            <section className="player-waiting-town" aria-label="Already seated">
-              <h3 className="drawer-section-title">Already seated</h3>
-              <ul className="town-list">
-                {seatedPublic.map((p) => <li key={p!.id} className="town-row"><span className="town-row-main"><span className="label town-row-seat">seat {p!.seat + 1}</span><span className="town-name">{p!.name}</span></span></li>)}
-              </ul>
-            </section>
-          )}
-          <button className="btn btn-sm btn-danger player-secondary" onClick={leave} disabled={leaving}>Leave</button>
-        </main>
-      </div>
+      <WaitingScreen
+        ownName={ownName}
+        arrivals={publicLobby?.arrivals}
+        planned={publicLobby?.plannedPlayers}
+        leaving={leaving}
+        onLeave={() => void leave()}
+      />
     );
   }
 
   if (status === "leaving") {
-    return (
-      <div className="player player-status">
-        <h2 className="title">Leave request pending</h2>
-        <p className="behavior-help">
-          Your seat is still reserved. Waiting for the Storyteller to accept or decline your request.
-        </p>
-      </div>
-    );
+    return <LeavingScreen code={code} seat={seatNumber} seatCount={publicLobby?.seatOrder.length || 12} />;
   }
 
-  if (status === "error" || status === "rejected" || status === "revoked" || status === "notFound") {
+  if (status === "rejected") return <RejectedScreen code={code} name={ownName} message={error} onBack={back} />;
+  if (status === "revoked") return <RevokedScreen code={code} name={ownName} seat={seatNumber} message={error} onBack={back} />;
+  if (status === "error" || status === "notFound") {
     return (
-      <div className="player player-status">
-        <h2 className="title">Lobby unavailable</h2>
-        <div className="error-list" role="alert">
-          <strong>Error:</strong>
-          <p>{error}</p>
-        </div>
-        {status === "error" && <button className="btn" onClick={() => setRetry(value => value + 1)}>Retry connection</button>}
-        <button className="btn" onClick={status === "error" ? leave : reset} disabled={leaving}>
-          {status === "error" ? "Cancel / request to leave" : "Back to start"}
-        </button>
-      </div>
+      <FailureScreen
+        label={status === "notFound" ? "not-found" : "error"}
+        eyebrow={formatCode(code)}
+        title="Lobby unavailable"
+        message={error}
+        {...(status === "error" ? { onRetry: retryConnection, onCancel: () => void leave() } : { onBack: back })}
+      />
     );
   }
 
@@ -477,84 +491,6 @@ function TravelerChoicePanel({
       {/* 10H-AC-067: while the choice is sending, say so in words. */}
       {busy && <p className="disabled-reason">Sending your choice…</p>}
       {error && <p className="field-error" role="alert">{error}</p>}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Join form
-// ---------------------------------------------------------------------------
-
-function PlayerJoinForm({
-  initialCode,
-  initialName,
-  onNameConsumed,
-  onSubmit,
-}: {
-  initialCode: string;
-  initialName: string;
-  onNameConsumed: () => void;
-  onSubmit: (code: string, name: string) => Promise<void> | void;
-}) {
-  const [code, setCode] = useState(initialCode);
-  const [name, setName] = useState(initialName);
-  const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
-  // One-shot: a later remount of this form must not reuse the Home hand-off.
-  useEffect(() => { onNameConsumed(); }, [onNameConsumed]);
-
-  const submit = async () => {
-    if (!code.trim()) { setFormError("Enter a lobby code."); return; }
-    if (!name.trim()) { setFormError("Enter your name."); return; }
-    setFormError(null);
-    setSubmitting(true);
-    try {
-      await onSubmit(code, name);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") submit();
-  };
-
-  return (
-    <div className="player-join-form">
-      <label className="field">
-        <span className="field-label">Lobby code</span>
-        <input
-          className="input"
-          value={code}
-          onChange={(e) => { setCode(e.target.value.toUpperCase()); setFormError(null); }}
-          onKeyDown={handleKeyDown}
-          autoCapitalize="characters"
-          autoCorrect="off"
-          spellCheck={false}
-          maxLength={9}
-          placeholder="XXXX-XXXX"
-        />
-      </label>
-      <label className="field">
-        <span className="field-label">Your name</span>
-        <input
-          className="input"
-          value={name}
-          onChange={(e) => { setName(e.target.value); setFormError(null); }}
-          onKeyDown={handleKeyDown}
-          autoCapitalize="words"
-          maxLength={20}
-          placeholder="Bob"
-        />
-      </label>
-      {formError && (
-        <p className="field-error" role="alert">
-          {formError}
-        </p>
-      )}
-      <button className="btn btn-gold" onClick={submit} disabled={submitting}>
-        {submitting ? "Knocking…" : "Knock to join"}
-      </button>
     </div>
   );
 }

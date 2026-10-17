@@ -17,6 +17,7 @@ import "@/styles/player-popover.css";
 import "@/styles/tablet-grimoire.css";
 import "@/styles/storyteller-shell.css";
 import "@/styles/shell-ending.css";
+import "@/styles/player-phone.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

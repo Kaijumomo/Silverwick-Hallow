@@ -9,6 +9,7 @@ import type { GuardStamp, ParticipantId, PlayerId } from "@/stores/types";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import { buildRegistry } from "@/data/roleRegistry";
 import { writeProjections } from "./sync";
+import { computeArrivals } from "./arrivals";
 import { formatCode, revokePlayerMembership } from "./lobby";
 import type { RoomBackend } from "./backend";
 import type { OnlineMap } from "@/stores/projections";
@@ -796,6 +797,14 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   // so once this is wired, no watcher can be installed after a stop.
   writer.onStop = stop;
 
+  // Package 3 (A1): derived from the runtime `joined` view the instant it is
+  // read; empty outside Setup. Never contains a uid.
+  let lastArrivalsSignature = "[]";
+  const currentArrivals = (): string[] => {
+    const game = useStorytellerStore.getState().game;
+    if (!game || game.code !== lobby.code) return [];
+    return computeArrivals(game, useSessionRuntime.getState().joined, requests);
+  };
   const updateOnline = () => {
     clearTimeout(presenceExpiry);
     if (stopped || !sameSession()) return;
@@ -817,6 +826,12 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
       }
     }
     useSessionRuntime.setState({ online, joined, pending: Object.keys(requests).filter(here).length });
+    // Package 3 (A1): the public arrivals list follows presence, which is not
+    // part of the game record, so a change in who is here must trigger its own
+    // projection write -- including a silent heartbeat expiry (this function is
+    // also the expiry timer's callback). `schedule` coalesces with other flushes.
+    const arrivalsSignature = JSON.stringify(currentArrivals());
+    if (arrivalsSignature !== lastArrivalsSignature) { lastArrivalsSignature = arrivalsSignature; schedule(); }
     // Recompute at the first heartbeat deadline, even if Firebase is silent.
     // This only expires the observational view; it never removes membership,
     // changes a participant identity, or writes authoritative game state.
@@ -874,7 +889,7 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
       if (!script) throw new SnapshotValidationError();
       const membership = decodeRoster(await inner.get(`lobbies/${lobby.code}/roster`));
       if (membership.status !== "ready") throw new SnapshotValidationError();
-      await writeProjections({ backend: inner, code: lobby.code, stState: state.game, registry: buildRegistry(script), online: useSessionRuntime.getState().online, membership: membership.data });
+      await writeProjections({ backend: inner, code: lobby.code, stState: state.game, registry: buildRegistry(script), online: useSessionRuntime.getState().online, arrivals: currentArrivals(), membership: membership.data });
     }).then(() => {
       // This flush's commit may have been in flight before a terminal stop
       // (e.g. a real lease-renewal denial) landed it successfully afterward.

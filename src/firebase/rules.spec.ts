@@ -340,6 +340,17 @@ describe("Firebase RTDB membership authorization", () => {
     await assertFails(ref(alice, "player/p-alice").remove());
   });
 
+  test("Package 3 A1: public arrivals are written only by the Storyteller and read only by a requester or member", async () => {
+    await seed();
+    await assertSucceeds(backend(st).update({ [path("public/arrivals")]: ["Alice", "Bob"], [path("public/plannedPlayers")]: 8 }));
+    await assertFails(ref(bob, "public/arrivals").once("value"));
+    await knockOnLobby(backend(bob), code, bob, "Bob");
+    expect((await ref(bob, "public/arrivals").once("value")).val()).toEqual(["Alice", "Bob"]);
+    expect((await ref(bob, "public/plannedPlayers").once("value")).val()).toBe(8);
+    await assertFails(ref(bob, "public/arrivals").set(["Mallory"]));
+    await assertFails(ref(alice, "public/arrivals").set(["Mallory"]));
+  });
+
   test("unauthenticated clients cannot request, bind, claim, or read private/public data", async () => {
     await seed();
     const guest = env.unauthenticatedContext().database();

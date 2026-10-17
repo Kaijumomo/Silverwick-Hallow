@@ -137,7 +137,8 @@ export type OnlineMap = Record<PlayerId, boolean>;
 
 export function projectLobbyToPublic(
   st: StorytellerLobbyRecord,
-  online: OnlineMap
+  online: OnlineMap,
+  arrivals?: readonly string[]
 ): PublicLobbyRecord {
   const players: Record<PlayerId, PlayerPublicRecord> = {};
   for (const id of Object.keys(st.players)) {
@@ -155,6 +156,12 @@ export function projectLobbyToPublic(
     fabled: [...st.fabled],
     lorics: [...(st.lorics ?? [])],
   };
+  // Package 3 (A1): the waiting lobby's public arrivals. Setup only; names
+  // only (computed by firebase/arrivals.ts from currently-present players).
+  if (st.phase === "setup" && arrivals) {
+    out.arrivals = [...arrivals];
+    if (st.plannedPlayerCount > 0) out.plannedPlayers = st.plannedPlayerCount;
+  }
   return out;
 }
 
