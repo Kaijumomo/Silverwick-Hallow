@@ -41,6 +41,7 @@ function seat(over: Partial<ReturnType<typeof usePlayerStore.getState>> = {}) {
   });
 }
 beforeEach(() => {
+  localStorage.removeItem("swp-veil:ABCD2345:p-alice");
   connection.backend = new MemoryRoomBackend();
   __setEnvOverrideForTests({});
   saveFirebaseConfig({ apiKey: "AIzaSyTEST", databaseURL: "https://example-default-rtdb.firebaseio.com", projectId: "example-project" });
@@ -63,18 +64,18 @@ describe("10H-AC-028 (F1): only public-safe coarse milestones", () => {
     for (const { line } of lines) expect(line).not.toMatch(/deal|bag|dealt|unfinished|waiting for (other|players)|check/i);
   });
 
-  it("the shell shows phase, name and one status line, with touch-safe bottom navigation (Role / Town / More)", async () => {
+  it("the game frame shows phase and seat, the name and the four tabs; Leave is secondary on the Script tab", async () => {
     render(<PlayerScreen />);
     await enterTown();
     const nav = await screen.findByRole("navigation", { name: "Player views" });
-    expect(within(nav).getAllByRole("button").map((b) => b.textContent)).toEqual(["Role", "Town", "More"]);
-    expect(screen.getByText("Setting up")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Your role is ready.");
-    // Leave is secondary: not on the Role view.
-    expect(screen.queryByText("Request to leave lobby")).toBeNull();
-    fireEvent.click(within(nav).getByRole("button", { name: "More" }));
+    expect(within(nav).getAllByRole("button").map((b) => b.textContent)).toEqual(["Character", "Notes", "Town", "Script"]);
+    expect(screen.getByText("Setting up · Seat 1")).toBeInTheDocument();
+    expect(screen.getByText("Alice")).toBeInTheDocument();
+    // Leave is secondary: not on the Character tab.
+    expect(screen.queryByRole("button", { name: "Request to leave" })).toBeNull();
+    fireEvent.click(within(nav).getByRole("button", { name: "Script" }));
     expect(screen.getByRole("region", { name: "Reference" })).toBeInTheDocument();
-    expect(screen.getByText("Request to leave lobby")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Request to leave" })).toBeInTheDocument();
   });
 
   it("F6 (superseded by Package 3 A1): a waiting player sees the public names-only arrivals, never the private queue", async () => {
@@ -133,15 +134,23 @@ describe("10H-AC-029 / AC-031 (E1, F2, F3): ceremonial first reveal, neutral upd
     expect(acknowledgeReveal).not.toHaveBeenCalled();
   });
 
-  it("an acknowledged player in a running game goes straight to the shell with a plain sealed card (interim, until 3C)", async () => {
+  it("an acknowledged player in a running game goes straight to the Character tab, with no ceremony and no second acknowledgement", async () => {
     seat({ ownRevealAck: TOKEN, publicLobby: lobby("day", 1) });
     render(<PlayerScreen />);
-    const sealed = await screen.findByRole("button", { name: "Tap to reveal your role" });
-    expect(sealed).toHaveTextContent("Tap to reveal your role");
-    fireEvent.click(sealed);
-    expect(screen.getByRole("article", { name: "Your role" })).not.toHaveClass("ceremony");
-    expect(screen.queryByRole("button", { name: "I've Seen My Role" })).toBeNull();
-    expect(screen.getByText("✓ The Storyteller knows you've seen your role")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Chef" })).toBeInTheDocument();
+    expect(screen.getByText("You are the")).toBeInTheDocument();
+    expect(screen.getByText("Day 1 · Seat 1")).toBeInTheDocument();
+    expect(acknowledgeReveal).not.toHaveBeenCalled();
+  });
+
+  it("a changed identity mid-game returns to the circle with only the neutral notice, never the new character", async () => {
+    seat({ ownRevealAck: TOKEN, publicLobby: lobby("day", 1) });
+    render(<PlayerScreen />);
+    await screen.findByRole("heading", { name: "Chef" });
+    act(() => { usePlayerStore.setState({ self: { shownRole: "imp", shownAlignment: "evil", revealToken: "tok_cccccccccccccccccccccc" } }); });
+    await screen.findByRole("heading", { name: "Your place in the circle" });
+    expect(screen.getByText("Alice, the Storyteller has updated your character.")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/Imp|evil/i);
   });
 
   it("the store never persists 'revealed' (re-seal on reload is structural)", () => {
@@ -150,22 +159,71 @@ describe("10H-AC-029 / AC-031 (E1, F2, F3): ceremonial first reveal, neutral upd
   });
 });
 
-describe("10H-AC-039 / AC-042 (F7, F5): own Life at Night; latest-only From the Storyteller", () => {
-  it("at Night the player privately sees their OWN Life while the public Town withholds everyone's", async () => {
+describe("10H-AC-039 (F7) and Package 3 D3/D7: own Life at Night, the complete information history", () => {
+  it("at Night the player privately sees their OWN Life (ghost pill, veil once) while the public Town withholds everyone's", async () => {
     seat({ ownRevealAck: TOKEN, publicLobby: lobby("night", 2, false), self: { shownRole: "chef", revealToken: TOKEN, life: { alive: false, ghostVote: true } } });
     render(<PlayerScreen />);
-    expect(await screen.findByText(/^You:/)).toHaveTextContent("You: Dead · vote available");
+    expect(await screen.findByRole("dialog", { name: "The veil has fallen" })).toHaveTextContent("You have died. You may still speak, and you keep one ghost vote.");
+    fireEvent.click(screen.getByRole("button", { name: "Continue as a ghost" }));
+    expect(screen.queryByRole("dialog", { name: "The veil has fallen" })).toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent("Ghost · 1 vote");
     fireEvent.click(screen.getByRole("button", { name: "Town" }));
-    expect(document.querySelectorAll(".town-row .life-state-text")).toHaveLength(0);
+    // Names and seats stay; life, the alive count and the threshold do not.
+    expect(screen.getAllByRole("img", { name: /^Seat \d/ })).toHaveLength(2);
+    const town = document.querySelector(".swp-town")!;
+    expect(town).not.toHaveTextContent(/alive|dead|ghost|votes to execute/i);
+    expect(town).toHaveTextContent("The town sleeps");
   });
 
-  it("the latest private information appears once revealed, under From the Storyteller -- no history list", async () => {
-    seat({ ownRevealAck: TOKEN, publicLobby: lobby("day", 1), self: { shownRole: "imp", shownAlignment: "evil", revealToken: TOKEN, extraText: "Latest message", minions: [{ id: "p-bob", name: "Bob", seat: 1 }] } });
+  it("the veil is shown once: a reload of the same dead player goes straight to the ghost view", async () => {
+    seat({ ownRevealAck: TOKEN, publicLobby: lobby("day", 2), self: { shownRole: "chef", revealToken: TOKEN, life: { alive: false, ghostVote: false } } });
+    const first = render(<PlayerScreen />);
+    expect((await screen.findByRole("dialog", { name: "The veil has fallen" })).textContent).not.toMatch(/ghost vote/);
+    fireEvent.click(screen.getByRole("button", { name: "Continue as a ghost" }));
+    first.unmount();
     render(<PlayerScreen />);
-    fireEvent.click(await screen.findByRole("button", { name: "Tap to reveal your role" }));
-    const info = screen.getByRole("region", { name: "From the Storyteller" });
+    await screen.findByRole("heading", { name: "Chef" });
+    expect(screen.queryByRole("dialog", { name: "The veil has fallen" })).toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent("Ghost · vote used");
+  });
+
+  it("everything the Storyteller delivered stays under From the Storyteller, night by night, oldest first", async () => {
+    seat({ ownRevealAck: TOKEN, publicLobby: lobby("day", 2), self: { shownRole: "chef", revealToken: TOKEN, infoHistory: [
+      { id: "e1", moment: { phase: "night", day: 1 }, text: "First message" },
+      { id: "e2", moment: { phase: "day", day: 2 }, text: "Latest message" },
+    ] } });
+    render(<PlayerScreen />);
+    const info = await screen.findByRole("region", { name: "From the Storyteller" });
+    expect(within(info).getByText("Night 1")).toBeInTheDocument();
+    expect(within(info).getByText("First message")).toBeInTheDocument();
+    expect(within(info).getByText("Day 2")).toBeInTheDocument();
     expect(within(info).getByText("Latest message")).toBeInTheDocument();
-    expect(within(info).queryByText(/history|earlier|previous/i)).toBeNull();
+    expect(within(info).queryByText(/could not be loaded/)).toBeNull();
+  });
+
+  it("a Storyteller device without history still shows the current packet, and a partial history says so", async () => {
+    seat({ ownRevealAck: TOKEN, publicLobby: lobby("day", 1), self: { shownRole: "chef", revealToken: TOKEN, extraText: "Legacy message" } });
+    const view = render(<PlayerScreen />);
+    expect(within(await screen.findByRole("region", { name: "From the Storyteller" })).getByText("Legacy message")).toBeInTheDocument();
+    view.unmount();
+    seat({ ownRevealAck: TOKEN, publicLobby: lobby("day", 1), self: { shownRole: "chef", revealToken: TOKEN, infoHistory: [{ id: "e1", text: "Kept" }], infoHistoryPartial: true } });
+    render(<PlayerScreen />);
+    const info = await screen.findByRole("region", { name: "From the Storyteller" });
+    expect(within(info).getByText("Earlier")).toBeInTheDocument();
+    expect(within(info).getByRole("status")).toHaveTextContent("Some earlier information could not be loaded.");
+  });
+
+  it("an evil player's team comes from the latest history entry: names, seats and designations, never a character", async () => {
+    seat({ ownRevealAck: TOKEN, publicLobby: lobby("day", 1), self: { shownRole: "imp", shownAlignment: "evil", revealToken: TOKEN, infoHistory: [
+      { id: "e1", moment: { phase: "night", day: 1 }, minions: [{ id: "p-bob", name: "Bob", seat: 1 }], bluffs: ["chef", "empath", "monk"] },
+    ] } });
+    render(<PlayerScreen />);
+    const team = await screen.findByRole("region", { name: "Your team" });
+    expect(within(team).getByText("Bob")).toBeInTheDocument();
+    expect(within(team).getByText("Seat 2 · Minion")).toBeInTheDocument();
+    expect(within(team).getByRole("group", { name: "Bluffs, not in play" }).textContent).toMatch(/Chef.*Empath.*Monk/);
+    const info = screen.getByRole("region", { name: "From the Storyteller" });
+    expect(info).toHaveTextContent("You learnt your Minion and bluffs");
   });
 });
 

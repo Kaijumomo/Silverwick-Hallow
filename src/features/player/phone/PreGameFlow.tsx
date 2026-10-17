@@ -1,17 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { lookupOfficialRole } from "@/data/officialRoles";
 import { getBuiltinScript } from "@/data/scripts";
 import { iconUrlFor } from "@/data/iconUrl";
 import { travellerArt } from "@/data/localArt";
 import { GENERIC_TEAM_ICON } from "@/features/home/art";
-import { TRAVELERS } from "@/data/travelers";
 import type { PlayerSelfEnvelope, PublicLobbyRecord } from "@/stores/types";
 import { SeatedChart, type ChartSeat } from "./SeatedChart";
 import { RevealScreen, type RevealCharacter, type RevealTone } from "./RevealScreen";
 import { EvilTeamScreen, type TeamBluff, type TeamMate } from "./EvilTeamScreen";
-import { TravellerChoice } from "./TravellerChoice";
+import { latestTeam } from "./gameModel";
 
-type Stage = "chart" | "reveal" | "team" | "traveller";
+type Stage = "chart" | "reveal" | "team";
 
 const TYPE_LABEL: Record<string, string> = {
   townsfolk: "Townsfolk", outsider: "Outsider", minion: "Minion", demon: "Demon", traveler: "Traveller", traveller: "Traveller",
@@ -26,24 +25,23 @@ export function showsPreGame(phase: PublicLobbyRecord["phase"], hasSelf: boolean
 }
 
 /** The team the Storyteller told this player about (names, seats and Minion /
- * Demon designation only; never a teammate's character). Travellers never
- * get the team screen: their Demon information stays in From the Storyteller. */
+ * Demon designation only; never a teammate's character), from the player's
+ * information history. Travellers never get the team screen: their Demon
+ * information stays under From the Storyteller. */
 export function teamOf(self: PlayerSelfEnvelope, isTraveller: boolean): { mates: TeamMate[]; bluffs: TeamBluff[] } {
-  if (isTraveller) return { mates: [], bluffs: [] };
-  const mates: TeamMate[] = [];
-  if (self.demon) mates.push({ name: self.demon.name, seat: self.demon.seat, designation: "Demon", icon: GENERIC_TEAM_ICON.demon });
-  for (const m of self.minions ?? []) mates.push({ name: m.name, seat: m.seat, designation: "Minion", icon: GENERIC_TEAM_ICON.minion });
-  const bluffs: TeamBluff[] = [];
-  for (const id of self.bluffs ?? []) {
-    const r = lookupOfficialRole(id);
-    bluffs.push({ id, name: r?.name ?? id, art: iconUrlFor(r ?? id) });
-  }
-  return { mates, bluffs };
+  const { mates, bluffs } = latestTeam(self, isTraveller);
+  return {
+    mates: mates.map((m) => ({ ...m, icon: m.designation === "Demon" ? GENERIC_TEAM_ICON.demon : GENERIC_TEAM_ICON.minion })),
+    bluffs: bluffs.map((id) => {
+      const r = lookupOfficialRole(id);
+      return { id, name: r?.name ?? id, art: iconUrlFor(r ?? id) };
+    }),
+  };
 }
 
 export function PreGameFlow({
-  publicLobby, playerId, ownName, self, mode, acknowledged, needsTravellerChoice, pendingTravellerId, busyTravellerId, travellerError,
-  onChooseTraveller, onAcknowledge, onEnter,
+  publicLobby, playerId, ownName, self, mode, acknowledged, needsTravellerChoice, startAtReveal,
+  onOpenTravellerChoice, onAcknowledge, onEnter,
 }: {
   publicLobby: PublicLobbyRecord;
   playerId: string | null;
@@ -52,26 +50,35 @@ export function PreGameFlow({
   mode: "first" | "updated" | "seen";
   acknowledged: boolean;
   needsTravellerChoice: boolean;
-  pendingTravellerId: string | null;
-  busyTravellerId: string | null;
-  travellerError: string | null;
-  onChooseTraveller: (id: string) => void;
+  /** The Traveller just had their character applied: go straight to the token. */
+  startAtReveal: boolean;
+  /** Opens the in-game Character tab with the Traveller choice. */
+  onOpenTravellerChoice: () => void;
   /** Records that this player has seen their identity (advisory). */
   onAcknowledge: () => void;
   /** Leaves the ceremony for the game. */
   onEnter: () => void;
 }) {
-  const [stage, setStage] = useState<Stage>("chart");
+  const [stage, setStage] = useState<Stage>(startAtReveal && self ? "reveal" : "chart");
   const token = self?.revealToken;
   const mine = playerId ? publicLobby.players[playerId] : undefined;
   const isTraveller = !!mine?.isTraveler;
 
   // A new identity re-seals: back to the circle, never mid-ceremony.
-  useEffect(() => { setStage((s) => (s === "reveal" || s === "team" ? "chart" : s)); }, [token]);
-  // The Storyteller applied the Traveller choice: straight to the reveal.
+  const lastToken = useRef(token);
   useEffect(() => {
-    if (stage === "traveller" && !needsTravellerChoice) setStage(self ? "reveal" : "chart");
-  }, [stage, needsTravellerChoice, self]);
+    if (lastToken.current === token) return;
+    lastToken.current = token;
+    setStage((s) => (s === "reveal" || s === "team" ? "chart" : s));
+  }, [token]);
+  // The Storyteller applied the Traveller choice: straight to the reveal, as
+  // soon as the character itself has arrived.
+  const jumped = useRef(startAtReveal && !!self);
+  useEffect(() => {
+    if (!startAtReveal || !self || jumped.current) return;
+    jumped.current = true;
+    setStage((s) => (s === "chart" ? "reveal" : s));
+  }, [startAtReveal, self]);
 
   const seats: ChartSeat[] = useMemo(
     () => publicLobby.seatOrder
@@ -87,18 +94,6 @@ export function PreGameFlow({
   const role = self ? lookupOfficialRole(self.shownRole) : undefined;
   const team = self ? teamOf(self, isTraveller) : { mates: [], bluffs: [] };
   const hasTeam = team.mates.length > 0 || team.bluffs.length > 0;
-
-  if (stage === "traveller") {
-    return (
-      <TravellerChoice
-        travellers={TRAVELERS}
-        busyId={busyTravellerId}
-        error={travellerError}
-        pendingId={pendingTravellerId}
-        onChoose={onChooseTraveller}
-      />
-    );
-  }
 
   if (stage === "reveal" && self) {
     const tone: RevealTone = isTraveller || role?.type === "traveler" ? "traveller" : self.shownAlignment === "evil" ? "evil" : self.shownAlignment === "good" ? "good" : "plain";
@@ -142,7 +137,7 @@ export function PreGameFlow({
         ? `${ownName}, the Storyteller has updated your character.`
         : `${ownName}, the night is coming. Your character has been sealed.`;
   const action = needsTravellerChoice
-    ? { label: "Choose your Traveler", onClick: () => setStage("traveller") }
+    ? { label: "Choose your Traveler", onClick: onOpenTravellerChoice }
     : self
       ? { label: "Receive your character", onClick: () => setStage("reveal") }
       : undefined;

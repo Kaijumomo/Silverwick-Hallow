@@ -547,3 +547,85 @@
   .swp-reveal-cta { transition: none; }
   .swp-trav-pilldot { animation: none; }
 }
+
+/* Package 3 (3C): in-game frame, Character, Town, death veil ---------------- */
+@keyframes swVeil { from { transform: translateY(-100%); } to { transform: none; } }
+
+.swp-game-head { position: relative; flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 24px 6px; }
+.swp-game-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.swp-game-eyebrow { font-size: 11px; letter-spacing: .24em; text-transform: uppercase; font-weight: 600; color: rgba(216, 201, 164, .5); }
+.swp-game-name { font-family: "Cormorant Garamond", serif; font-size: 24px; font-weight: 700; line-height: 1.05; color: #eadcb8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.swp-game-code { flex: none; font-family: "Cormorant Garamond", serif; font-size: 13px; letter-spacing: .12em; color: rgba(224, 185, 106, .7); }
+.swp-ghost-pill { flex: none; display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border-radius: 15px; background: #141011; border: 1px solid rgba(234, 220, 184, .2); font-size: 12px; font-weight: 700; color: #d8c9a4; }
+.swp-ghost-dot { width: 12px; height: 12px; border-radius: 50%; background: #2a2224; }
+.swp-game-content { position: relative; flex: 1; min-height: 0; overflow-y: auto; padding: 8px 24px 16px; }
+.swp-tabbar { position: relative; flex: none; display: grid; grid-template-columns: repeat(4, 1fr); padding: 8px 12px 30px; border-top: 1px solid rgba(196, 158, 80, .12); background: rgba(12, 9, 10, .92); }
+.swp-tab { min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: none; background: transparent; color: rgba(216, 201, 164, .5); font-size: 11px; font-weight: 600; cursor: pointer; }
+.swp-tab-on { color: #e0b96a; }
+
+.swp-char { display: flex; flex-direction: column; gap: 18px; }
+.swp-banner { display: flex; align-items: center; gap: 18px; padding: 2px 0 17px; border-bottom: 1px solid rgba(196, 158, 80, .2); }
+.swp-banner-text { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; }
+.swp-banner-token { position: relative; width: 120px; height: 120px; flex: none; border-radius: 50%; overflow: hidden; background: radial-gradient(circle at 38% 30%, #f1e6c9, #dccaa0 48%, #b09566); box-shadow: 0 0 40px var(--swp-tone-glow, transparent), 0 14px 28px rgba(0, 0, 0, .55), inset 0 -10px 18px rgba(90, 60, 25, .35); }
+.swp-token-veil { position: absolute; left: 0; right: 0; top: -4%; height: 62%; background: linear-gradient(180deg, rgba(14, 11, 12, .97), rgba(26, 21, 22, .86) 72%, rgba(26, 21, 22, 0)); border-radius: 0 0 50% 50% / 0 0 30% 30%; }
+.swp-banner-eyebrow { font-size: 11px; letter-spacing: .24em; text-transform: uppercase; font-weight: 700; color: rgba(216, 201, 164, .6); }
+.swp-banner-name { margin: 0; font-family: "Cormorant Garamond", serif; text-transform: uppercase; letter-spacing: .06em; font-size: 30px; font-weight: 700; line-height: 1.05; color: #ecd9a8; overflow-wrap: anywhere; }
+.swp-banner-type { display: flex; gap: 8px; align-items: center; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; font-weight: 600; }
+.swp-banner-wake { font-family: "IM Fell English", serif; font-style: italic; font-size: 14px; color: rgba(234, 220, 184, .65); }
+.swp-char-ability { margin: 0; font-family: "IM Fell English", serif; font-size: 20px; line-height: 1.45; color: rgba(234, 220, 184, .9); text-wrap: pretty; }
+.swp-box { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 14px; background: rgba(0, 0, 0, .3); border: 1px solid rgba(196, 158, 80, .12); }
+.swp-box-title { font-size: 11px; letter-spacing: .22em; text-transform: uppercase; font-weight: 700; color: rgba(216, 201, 164, .6); }
+.swp-box-title-evil { color: #e88a7a; }
+.swp-info-row { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; }
+.swp-info-when { flex: none; font-size: 14px; color: rgba(216, 201, 164, .65); }
+.swp-info-what { display: flex; flex-direction: column; gap: 4px; text-align: right; min-width: 0; }
+.swp-info-line { font-family: "IM Fell English", serif; font-size: 16px; line-height: 1.35; color: #eadcb8; overflow-wrap: anywhere; white-space: pre-wrap; }
+.swp-info-partial { margin: 0; font-family: "IM Fell English", serif; font-style: italic; font-size: 14px; color: rgba(234, 220, 184, .6); }
+.swp-box-evil { background: rgba(60, 14, 14, .35); border-color: rgba(200, 80, 70, .25); }
+.swp-mate { display: flex; align-items: center; gap: 12px; min-height: 34px; }
+.swp-mate-token { position: relative; width: 34px; height: 34px; flex: none; border-radius: 50%; overflow: hidden; background: radial-gradient(circle at 38% 30%, #f1e6c9, #dccaa0 48%, #b09566); box-shadow: 0 0 0 1px rgba(217, 122, 108, .55); }
+.swp-mate-name { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; color: #f2e6c8; overflow-wrap: anywhere; }
+.swp-mate-sub { flex: none; font-size: 12px; color: rgba(232, 138, 122, .85); }
+.swp-bluffrow { display: flex; justify-content: space-around; padding-top: 12px; margin-top: 2px; border-top: 1px solid rgba(200, 80, 70, .18); }
+.swp-bluff-token-lg { width: 56px; height: 56px; }
+
+.swp-town { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.swp-ring { position: relative; flex: none; }
+.swp-ring-disc { position: absolute; inset: 40px; border-radius: 50%; border: 1px solid rgba(196, 158, 80, .14); background: radial-gradient(closest-side, rgba(196, 158, 80, .06), transparent); }
+.swp-ring-centre { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.swp-ring-count { font-family: "Cormorant Garamond", serif; font-size: 44px; font-weight: 700; line-height: 1; color: #eadcb8; }
+.swp-ring-label { font-size: 12px; letter-spacing: .2em; text-transform: uppercase; font-weight: 600; color: rgba(216, 201, 164, .6); }
+.swp-ring-sub { margin-top: 4px; font-size: 13px; color: rgba(216, 201, 164, .65); }
+.swp-seat { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 3px; border-radius: 50%; background: radial-gradient(circle at 38% 30%, #f1e6c9, #d6c290 60%, #b09566); border: 1px solid rgba(90, 60, 25, .5); color: #2e1c10; font-family: "Cormorant Garamond", serif; font-weight: 700; line-height: 1; box-shadow: 0 6px 14px rgba(0, 0, 0, .5); overflow: hidden; }
+.swp-seat-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.swp-seat-sub { font-family: "Source Sans 3", system-ui, sans-serif; font-size: 10px; font-weight: 600; }
+.swp-seat-dead { background: radial-gradient(circle at 40% 32%, #3a3232, #1a1515); color: rgba(234, 220, 184, .7); }
+.swp-seat-you { border: 2px solid #e0b96a; }
+.swp-seat-trav { border: 1.5px solid #b994d4; }
+.swp-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px 18px; font-size: 12px; color: rgba(216, 201, 164, .65); }
+.swp-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.swp-legend-swatch { width: 12px; height: 12px; border-radius: 50%; }
+.swp-legend-alive { background: #d6c290; } .swp-legend-dead { background: #2a2224; border: 1px solid rgba(234, 220, 184, .3); }
+.swp-legend-trav { background: transparent; border: 1.5px solid #b994d4; } .swp-legend-you { background: transparent; border: 2px solid #e0b96a; }
+.swp-comp { align-self: stretch; display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 14px; background: rgba(0, 0, 0, .3); border: 1px solid rgba(196, 158, 80, .12); }
+.swp-comp-title { font-size: 11px; letter-spacing: .22em; text-transform: uppercase; font-weight: 700; color: rgba(216, 201, 164, .6); }
+.swp-comp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; text-align: center; }
+.swp-comp-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.swp-comp-num { font-family: "Cormorant Garamond", serif; font-size: 30px; font-weight: 700; line-height: 1; }
+.swp-comp-label { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; color: rgba(216, 201, 164, .6); }
+.swp-comp-note { margin: 0; font-family: "IM Fell English", serif; font-style: italic; font-size: 14px; color: rgba(234, 220, 184, .6); text-align: center; }
+.swp-comp-trav { display: flex; justify-content: center; align-items: baseline; gap: 10px; }
+.swp-comp-trav .swp-comp-num { font-size: 22px; }
+
+.swp-veil { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; justify-content: center; padding: 126px 24px 0; background: #080606; }
+.swp-veil-drop { position: absolute; left: 0; right: 0; top: 0; height: 46%; background: linear-gradient(180deg, #121010, #1e1a1a 70%, #262020); border-radius: 0 0 50% 50% / 0 0 14% 14%; box-shadow: 0 20px 40px rgba(0, 0, 0, .6); animation: swVeil 1.4s cubic-bezier(.3, .7, .2, 1) both; }
+.swp-veil-body { position: relative; display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 0 4px; text-align: center; }
+.swp-veil-token { position: relative; width: 170px; height: 170px; flex: none; border-radius: 50%; overflow: hidden; margin-bottom: 2px; background: radial-gradient(circle at 38% 30%, #f1e6c9, #dccaa0 48%, #b09566); box-shadow: 0 0 60px var(--swp-tone-glow, transparent); }
+.swp-veil-title { margin: 0; font-family: "Cormorant Garamond", serif; text-transform: uppercase; letter-spacing: .06em; font-size: 32px; font-weight: 700; line-height: 1.2; color: #ecd9a8; }
+.swp-veil-text { margin: 0; font-family: "IM Fell English", serif; font-size: 18px; line-height: 1.45; color: rgba(234, 220, 184, .85); max-width: 310px; text-wrap: pretty; }
+.swp-veil-cta { position: relative; width: 100%; margin-top: 4px; }
+.swp-game-content .swp-linkrow { padding-top: 20px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .swp-veil-drop { animation: none; }
+}

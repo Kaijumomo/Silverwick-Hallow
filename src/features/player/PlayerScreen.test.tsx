@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { usePlayerStore } from "@/stores/playerStore";
 import { __setEnvOverrideForTests, clearFirebaseConfig, saveFirebaseConfig } from "@/firebase/config";
 
@@ -80,10 +80,10 @@ async function openTravellerChoice() {
   await screen.findByRole("heading", { name: /Choose your Traveler|Your Traveler/ }).catch(() => screen.findByText(/waiting for Storyteller/));
 }
 
-/** Phase 10H: Reference and Leave live under the bottom-navigation More tab. */
-async function openMore() {
-  fireEvent.click(await screen.findByRole("button", { name: "More" }));
-  await screen.findByText("Request to leave lobby");
+/** Package 3 (3C): Reference and the Request to Leave link live on the Script tab. */
+async function openScript() {
+  fireEvent.click(await screen.findByRole("button", { name: "Script" }));
+  await screen.findByRole("button", { name: "Request to leave" });
 }
 
 let memory: MemoryRoomBackend;
@@ -108,9 +108,9 @@ describe("PlayerScreen leave confirmation (Phase 9C.3, OPUS-003)", () => {
   it("requires explicit confirmation, and a cancelled confirmation invokes no leave command", async () => {
     render(<PlayerScreen />);
     await enterTown();
-    // Phase 10H (§11.2): Leave is secondary -- under More.
-    await openMore();
-    fireEvent.click(screen.getByText("Request to leave lobby"));
+    // Leave is secondary: a small link on the Script tab.
+    await openScript();
+    fireEvent.click(screen.getByRole("button", { name: "Request to leave" }));
     expect(await screen.findByText("Request to leave?")).toBeInTheDocument();
     expect(screen.getByText(/You will remain seated in the game/)).toBeInTheDocument();
 
@@ -124,9 +124,9 @@ describe("PlayerScreen leave confirmation (Phase 9C.3, OPUS-003)", () => {
   it("only the affirmative action calls the existing leave-request command", async () => {
     render(<PlayerScreen />);
     await enterTown();
-    await openMore();
-    fireEvent.click(screen.getByText("Request to leave lobby"));
-    fireEvent.click(await screen.findByRole("button", { name: "Request to leave" }));
+    await openScript();
+    fireEvent.click(screen.getByRole("button", { name: "Request to leave" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Request to leave" }));
 
     await waitFor(() => expect(leaveLobby).toHaveBeenCalledTimes(1));
     await act(async () => {});
@@ -140,7 +140,7 @@ describe("PlayerScreen Traveler choice (Phase 9 Setup finalization B4)", () => {
     await screen.findByRole("button", { name: "Receive your character" });
     expect(screen.queryByText("Choose your Traveler")).toBeNull();
     await enterTown();
-    await screen.findByRole("button", { name: "More" });
+    await screen.findByRole("button", { name: "Script" });
     expect(screen.queryByText("Choose your Traveler")).toBeNull();
   });
 

@@ -11,6 +11,9 @@ import { FirebaseConfigScreen } from "./phone/FirebaseConfigScreen";
 import { SignInScreen } from "./phone/SignInScreen";
 import { WaitingScreen } from "./phone/WaitingScreen";
 import { PreGameFlow, showsPreGame } from "./phone/PreGameFlow";
+import { GameScreen } from "./phone/GameScreen";
+import { TravellerChoicePanel } from "./phone/TravellerChoice";
+import { TRAVELERS } from "@/data/travelers";
 import { ConnectingScreen, FailureScreen, formatCode, KnockingScreen, LeavingScreen, ReconnectingScreen, RejectedScreen, RevokedScreen } from "./phone/PhoneStates";
 import type { RoomBackend } from "@/firebase/backend";
 import { lookupOfficialRole } from "@/data/officialRoles";
@@ -20,14 +23,11 @@ import type { PublicLobbyRecord, RoleDef } from "@/stores/types";
 import { Modal } from "@/components/Modal";
 import { SeatNotePopup } from "./SeatNotePopup";
 import { SeatNotePreview } from "./SeatNotePreview";
-import { PlayerTabs } from "./PlayerTabs";
 import { AlmanacBody } from "@/features/almanac/AlmanacBody";
 import { RemoteScreenBoundary } from "@/features/remote/RemoteScreenBoundary";
 import { DATA_ERROR_MESSAGE, CONNECTION_ERROR_MESSAGE } from "@/firebase/snapshots";
 import { PlayerEnded, PlayerEnding } from "./PlayerTerminal";
 import { clearJoinPrefill, peekJoinPrefill } from "@/features/home/joinPrefill";
-
-type PlayerTab = "role" | "town" | "more";
 
 type Props = {
   initialCode?: string;
@@ -53,7 +53,6 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
   const playerId = usePlayerStore((s) => s.playerId);
   const self = usePlayerStore((s) => s.self);
   const publicLobby = usePlayerStore((s) => s.publicLobby);
-  const revealed = usePlayerStore((s) => s.revealed);
   const terminalResult = usePlayerStore((s) => s.terminalResult);
   const ownRevealAck = usePlayerStore((s) => s.ownRevealAck);
   const error = usePlayerStore((s) => s.error);
@@ -72,17 +71,19 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
   const [connectFailure, setConnectFailure] = useState<string | null>(null);
   const [submittedCode, setSubmittedCode] = useState("");
   const [submittedName, setSubmittedName] = useState("");
-  const [activeTab, setActiveTab] = useState<PlayerTab>("role");
   const [travelerChoiceBusyId, setTravelerChoiceBusyId] = useState<string | null>(null);
   // Package 3 (3B): the pre-game ceremony (circle, reveal, team) is over once
-  // the player enters the town. Local only, so a reload re-seals the token.
-  const [entered, setEntered] = useState(false);
+  // the player enters the town with THIS identity. Local only, so a reload
+  // re-seals the token, and a changed identity (a new reveal token) starts the
+  // ceremony again, mid-game as well as in Setup.
+  const [enteredToken, setEnteredToken] = useState<string | undefined | false>(false);
+  // Package 3 (3C): the Traveller opened the choice (in the Character tab).
+  const [choiceOpen, setChoiceOpen] = useState(false);
   // Acknowledging mid-ceremony flips the reveal mode to "seen"; this keeps the
   // player in the ceremony until they enter the town themselves.
   const [ceremonyActive, setCeremonyActive] = useState(false);
   const [travelerChoiceError, setTravelerChoiceError] = useState<string | null>(null);
   const [ackBusy, setAckBusy] = useState(false);
-  const [ackError, setAckError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -117,11 +118,6 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
   }, [initialCode, retry]);
 
   usePlayerSync(backend, retry);
-  // A new identity in Setup starts the ceremony again.
-  const revealToken = self?.revealToken;
-  useEffect(() => {
-    if (usePlayerStore.getState().publicLobby?.phase === "setup") setEntered(false);
-  }, [revealToken]);
   // CLOSURE-01: the player's own pending Traveler request, if any.
   const pendingTravelerChoice = useOwnTravelerChoice(backend, status === "seated");
 
@@ -340,21 +336,32 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
     if (!backend || ackBusy) return;
     setCeremonyActive(true);
     setAckBusy(true);
-    setAckError(null);
     try { await acknowledgeReveal(backend); }
-    catch (e) { setAckError(lifecycleMessage(e)); }
+    catch { /* advisory only: the Storyteller simply does not see "seen" */ }
     finally { setAckBusy(false); }
   };
   const token = self?.revealToken;
+  const entered = enteredToken !== false && enteredToken === token;
   const mode = revealModeOf(token, ownRevealAck);
   const acked = !!token && ownRevealAck === token;
   const milestone = playerMilestone(publicLobby, !!self, acked);
-  const ownLife = self?.life ? lifeStateOfSelf(self.life) : null;
+
+  // Package 3 (3C): a Traveller who opened the choice sees it in the Character
+  // tab of the game frame, with the tabs live.
+  const travellerChoice = needsTravelerChoice && choiceOpen ? (
+    <TravellerChoicePanel
+      travellers={TRAVELERS}
+      busyId={travelerChoiceBusyId}
+      error={travelerChoiceError}
+      pendingId={pendingTravelerChoice}
+      onChoose={(id) => void chooseTravelerRole(id)}
+    />
+  ) : undefined;
 
   // Package 3 (3B): before the game, the circle, the sealed token and (for
   // evil players the Storyteller briefed) the team. Nothing private renders
   // until the player turns their own token.
-  if (needsTravelerChoice || (!entered && (ceremonyActive || showsPreGame(publicLobby.phase, !!self, mode, needsTravelerChoice)))) {
+  if (!travellerChoice && (needsTravelerChoice || (!entered && (ceremonyActive || showsPreGame(publicLobby.phase, !!self, mode, needsTravelerChoice))))) {
     return (
       <PreGameFlow
         publicLobby={publicLobby}
@@ -364,69 +371,40 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
         mode={mode}
         acknowledged={acked}
         needsTravellerChoice={needsTravelerChoice}
-        pendingTravellerId={pendingTravelerChoice}
-        busyTravellerId={travelerChoiceBusyId}
-        travellerError={travelerChoiceError}
-        onChooseTraveller={(id) => void chooseTravelerRole(id)}
+        startAtReveal={choiceOpen}
+        onOpenTravellerChoice={() => setChoiceOpen(true)}
         onAcknowledge={() => void acknowledge()}
-        onEnter={() => { setRevealed(false); setCeremonyActive(false); setEntered(true); }}
+        onEnter={() => { setRevealed(false); setCeremonyActive(false); setChoiceOpen(false); setEnteredToken(token); }}
       />
     );
   }
 
-  // Seated -- Phase 10H (§§11.1-11.2): a personal window -- phase, name, one
-  // short public-safe status line, the current view, and touch-safe bottom
-  // navigation. Leave is secondary (under More).
+  // Package 3 (3C): the in-game phone -- Character, Notes, Town and Script.
+  // (Notes and Script keep their interim content until 3D.)
   return (
-    <div className="player player-shell player-seated">
-      <header className="player-shell-header">
-        <span className="player-phase">{milestone.phase}</span>
-        <span className="player-name">{requestedName}</span>
-        <p className="player-status-line" role="status">{milestone.line}</p>
-      </header>
-
-      <main className="player-main">
-        {activeTab === "role" && <>
-          {ownLife && (
-            // F7 (10H-AC-039): the player's OWN Life, privately -- also at Night.
-            <p className="player-own-life">You: <LifeStateText state={ownLife} /></p>
-          )}
-          <SealedCard
-            self={self}
-            revealed={revealed}
-            mode={mode}
-            onReveal={() => setRevealed(true)}
-            onHide={() => setRevealed(false)}
-            {...(token && backend ? { onAcknowledge: () => void acknowledge() } : {})}
-            ackState={acked ? "done" : ackBusy ? "busy" : "idle"}
-            ackError={ackError}
-          />
-        </>}
-
-        {activeTab === "town" && (
-          <TownView
-            publicLobby={publicLobby}
-            ownPlayerId={playerId}
-            code={code}
-            scriptCharacters={scriptCharacters}
-          />
-        )}
-
-        {activeTab === "more" && (
+    <>
+      <GameScreen
+        publicLobby={publicLobby}
+        self={self}
+        playerId={playerId}
+        code={code}
+        name={ownName}
+        phaseLabel={milestone.phase}
+        {...(travellerChoice ? { character: travellerChoice } : {})}
+        notes={<TownView publicLobby={publicLobby} ownPlayerId={playerId} code={code} scriptCharacters={scriptCharacters} />}
+        script={(
           <div className="player-more">
             <section className="player-reference" aria-label="Reference">
-              <h3 className="drawer-section-title">Reference</h3>
               <div className="player-almanac-panel">
                 <AlmanacBody roles={playerAlmanacRoles} />
               </div>
             </section>
-            <section className="player-leave" aria-label="Leave">
-              <h3 className="drawer-section-title">Leave</h3>
-              <button className="btn btn-sm" onClick={() => setConfirmLeaveOpen(true)} disabled={leaving}>Request to leave lobby</button>
-            </section>
+            <div className="swp-linkrow">
+              <button type="button" className="swp-textlink" onClick={() => setConfirmLeaveOpen(true)} disabled={leaving}>Request to leave</button>
+            </div>
           </div>
         )}
-      </main>
+      />
 
       {confirmLeaveOpen && (
         <Modal title="Request to leave?" onClose={() => setConfirmLeaveOpen(false)}>
@@ -447,9 +425,7 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
           </div>
         </Modal>
       )}
-
-      <PlayerTabs active={activeTab} onChange={setActiveTab} />
-    </div>
+    </>
   );
 }
 
@@ -464,11 +440,6 @@ export function playerMilestone(publicLobby: PublicLobbyRecord, hasRole: boolean
   if (publicLobby.phase === "day") return { phase: `Day ${publicLobby.day}`, line: "The town is awake." };
   if (!hasRole) return { phase: "Setting up", line: "The Storyteller is setting up the game." };
   return { phase: "Setting up", line: acknowledged ? "Your role is ready. Waiting for the game to begin." : "Your role is ready." };
-}
-
-/** The player's own Life State from their private self envelope. */
-function lifeStateOfSelf(life: { alive: boolean; ghostVote: boolean; exiled?: true }) {
-  return publicLifeStateOf({ alive: life.alive, ghostVote: life.ghostVote, ...(life.exiled ? { exiled: true } : {}) });
 }
 
 // ---------------------------------------------------------------------------

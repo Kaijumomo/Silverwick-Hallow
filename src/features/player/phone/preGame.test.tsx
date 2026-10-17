@@ -117,7 +117,7 @@ describe("the sealed token", () => {
     seat({ shownRole: "chef", shownAlignment: "good", revealToken: TOKEN });
     render(<PlayerScreen />);
     await enterTown();
-    expect(await screen.findByRole("button", { name: "More" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Script" })).toBeInTheDocument();
     expect(usePlayerStore.getState().publicLobby?.phase).toBe("setup");
   });
 });
@@ -187,7 +187,7 @@ describe("the evil team", () => {
     expect(icons.filter((i) => i.includes("/characters/generic/minion.png"))).toHaveLength(2);
     expect(container.textContent).not.toMatch(/Poisoner|Spy|Baron|Scarlet/);
     fireEvent.click(screen.getByRole("button", { name: "Enter the town" }));
-    expect(screen.getByRole("button", { name: "More" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Script" })).toBeInTheDocument();
   });
 
   it("an evil player the Storyteller gave no team to goes straight in: no team screen, 'Enter the town'", async () => {
@@ -198,7 +198,7 @@ describe("the evil team", () => {
     expect(screen.queryByRole("button", { name: "Meet your team" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Enter the town" }));
     expect(screen.queryByRole("heading", { name: "Sworn in darkness" })).toBeNull();
-    expect(screen.getByRole("button", { name: "More" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Script" })).toBeInTheDocument();
   });
 });
 
@@ -209,6 +209,9 @@ describe("the Traveller", () => {
     expect(await screen.findByText("The Storyteller has marked you as a Traveler. Choose who you will be.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Choose your Traveler" }));
     expect(screen.getByRole("heading", { name: "Choose your Traveler" })).toBeInTheDocument();
+    // The choice is the Character tab of the game frame: header and live tabs.
+    expect(screen.getByText("Setting up · Seat 2")).toBeInTheDocument();
+    expect(within(screen.getByRole("navigation", { name: "Player views" })).getAllByRole("button")).toHaveLength(4);
     // The Storyteller applies the choice: public role set, identity delivered.
     act(() => {
       const current = usePlayerStore.getState().publicLobby!;
