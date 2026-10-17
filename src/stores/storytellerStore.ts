@@ -81,6 +81,7 @@ import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 import { invalidatePrivatePacket } from "./privatePackets";
 import { withRevealTokens } from "./revealTokens";
 import { usePrivacyStore } from "./privacyStore";
+import { planCorrectPlayerInfo } from "./playerInfoLog";
 import { votingAuthorityToken } from "@/firebase/votingAuthority";
 import { planVoting, currentVotingState, reconcileVotingDependencies } from "./voting";
 import type { VotingIntent } from "./votingTypes";
@@ -122,6 +123,7 @@ import type {
   NightStepStatus,
   ParticipantId,
   PlayerId,
+  PlayerInfoContent,
   ReminderId,
   ReminderInput,
   RoleId,
@@ -664,6 +666,8 @@ export type StorytellerStore = {
   setBluffs: (id: PlayerId, bluffs: RoleId[]) => void;
   setFakeMinions: (id: PlayerId, playerIds: PlayerId[]) => void;
   setPrivateText: (id: PlayerId, text: string) => void;
+  /** Package 3 (C2): include (or stop including) the evil team in this Minion's/Demon's draft. */
+  setTeamInfo: (id: PlayerId, on: boolean) => void;
   /** Explicit ordinary<->Traveler conversion for an occupied seat (Phase 9
    * Setup finalization B4, revised). Converting ordinary->Traveler is
    * refused if it would drop occupied ordinary players below MIN_PLAYERS;
@@ -865,6 +869,8 @@ export type StorytellerStore = {
   clearNightProgress: (day: number) => void;
 
   undo: () => void | SetupCommandResult;
+  /** Package 3 (C3): silently replaces what a delivered entry shows the player. */
+  correctPlayerInfo: (entryId: string, content: PlayerInfoContent) => { ok: true } | { ok: false; message: string };
 
   setGrimoireMode: (mode: GrimoireMode) => void;
   setTokenPosition: (id: PlayerId, x: number, y: number) => void;
@@ -989,7 +995,10 @@ const pushUndo = (
   stack: StorytellerLobbyRecord[]
 ): StorytellerLobbyRecord[] => {
   if (!game) return stack;
-  const next = [...stack, clone(game)];
+  // Package 3 (C4): the player information log is never part of an Undo
+  // snapshot (delivered information is not unsent by Undo, and the log must
+  // not be multiplied by the Undo limit). Undo restores it from Current State.
+  const next = [...stack, clone({ ...game, playerInfoLog: [] })];
   if (next.length > UNDO_LIMIT) next.shift();
   return next;
 };
@@ -1107,6 +1116,29 @@ const freshAssignment = (existing: STPlayerRecord, role: RoleId, registry: RoleR
   delete next.privateInfo;
   return invalidatePrivatePacket(next);
 };
+
+/** Package 3 (C4): the largest browser-persisted state a planned game may produce. */
+const MAX_PERSISTED_STATE_CHARS = 3.5 * 1024 * 1024;
+
+/**
+ * Package 3 (C4): the full proof a planned authoritative game must pass BEFORE
+ * any network write that carries it -- the persisted schema, the Firebase
+ * write-compatibility and checkpoint proofs, and a trial serialization of the
+ * browser-persisted state. Null when safe, otherwise the refusal to show.
+ */
+export function checkPlannedGame(planned: StorytellerLobbyRecord, current: StorytellerLobbyRecord, lobby: LobbyConnection | null): string | null {
+  if (!StorytellerGamePersistedSchema.safeParse(planned).success) return "This information could not be safely saved. Nothing was sent.";
+  const unsafe = persistencePreflight(planned, current, lobby);
+  if (unsafe) return unsafe;
+  try {
+    const options = useStorytellerStore.persist.getOptions();
+    const candidate = { ...useStorytellerStore.getState(), game: planned };
+    if (JSON.stringify({ state: options.partialize ? options.partialize(candidate) : candidate, version: STORE_VERSION }).length > MAX_PERSISTED_STATE_CHARS) {
+      return "This game is too large to save on this device. Nothing was sent.";
+    }
+  } catch { return "This information could not be safely saved. Nothing was sent."; }
+  return null;
+}
 
 /**
  * PHASE10G Section 4.5 / Section 21: the persistence preflight of a NEW 10G
@@ -1621,7 +1653,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
       /** Save a bounded authoritative result before publishing to subscribers.
        * The ordinary persist middleware consumes the exact prewritten bytes.
        * A refused browser write changes no game, token, history or Undo. */
-      const commitAuthoritativeState = (planned: StorytellerLobbyRecord, state: StorytellerStore, authority: string, correction = false): string | null => {
+      const commitAuthoritativeState = (planned: StorytellerLobbyRecord, state: StorytellerStore, authority: string, correction = false, clearUndo = false): string | null => {
         if (state.terminalClose?.status === "closing" || state.terminalClose?.confirmedRecovery || state.terminalClose?.recoveryPending)
           return "The game is closing. Nothing was recorded.";
         const current = state.game!;
@@ -1636,7 +1668,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!StorytellerGamePersistedSchema.safeParse(prepared).success) return "This result could not be safely saved. Nothing was recorded.";
         const failure = persistencePreflight(prepared, current, state.lobby);
         if (failure) return failure;
-        const undoStack = pushUndo(current, state.undoStack);
+        // Package 3 (C3): correcting delivered information never pushes an Undo
+        // snapshot and clears the stack, so Undo can never roll it back.
+        const undoStack = clearUndo ? [] : pushUndo(current, state.undoStack);
         const seatSwapUndo = reindexSeatSwapUndo(state.undoStack, undoStack, state.seatSwapUndo);
         const localLayoutUndo = reindexLocalLayoutUndo(state.undoStack, undoStack, state.localLayoutUndo);
         const candidate = { ...state, game: prepared, undoStack, seatSwapUndo, localLayoutUndo,
@@ -2187,7 +2221,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (!recovery) return { ok: false, message: "There is no saved ending to undo for this game." };
         const detach = (snapshot: StorytellerLobbyRecord): StorytellerLobbyRecord => ({ ...clone(snapshot), code: "", storytellerUid: "local", pendingPlayers: {} });
         const wasOnline = recovery.live.code !== "";
-        const restored = detach(recovery.live);
+        const restored = { ...detach(recovery.live), playerInfoLog: state.game?.playerInfoLog ?? recovery.live.playerInfoLog };
         const failure = commitTerminalState({
           game: restored, undoStack: recovery.undoStack.map(detach), seatSwapUndo: recovery.seatSwapUndo, localLayoutUndo: recovery.localLayoutUndo ?? [],
           finishedGameUndo: null, canUndoFinishedGame: false,
@@ -2809,6 +2843,17 @@ export const useStorytellerStore = create<StorytellerStore>()(
         return { ok: true, changed: true };
       },
 
+      correctPlayerInfo: (entryId, content) => {
+        const state = get();
+        const { game } = state;
+        if (!game) return { ok: false, message: "No game is open." };
+        if (usePrivacyStore.getState().enabled) return { ok: false, message: "Leave Privacy Mode to correct player information." };
+        const planned = planCorrectPlayerInfo(game, entryId, content);
+        if (!planned.ok) return planned;
+        const unsafe = commitAuthoritativeState(planned.game, state, votingAuthorityToken(state.lobby)!, false, true);
+        return unsafe ? { ok: false, message: unsafe } : { ok: true };
+      },
+
       correctNightActionTarget: (request, actionContext) => {
         const state = get();
         const { game } = state;
@@ -3019,6 +3064,17 @@ export const useStorytellerStore = create<StorytellerStore>()(
           undoStack: pushUndo(game, undoStack),
           game: patchPlayer(game, id, { privateInfo }),
         });
+      },
+
+      setTeamInfo: (id, on) => {
+        const { game, undoStack } = get();
+        const player = game?.players[id];
+        if (!game || !player || player.isEmpty || game.phase === "ended") return;
+        if (!!player.privateInfo?.team === on) return;
+        const privateInfo = { ...player.privateInfo };
+        if (on) privateInfo.team = true;
+        else delete privateInfo.team;
+        set({ undoStack: pushUndo(game, undoStack), game: patchPlayer(game, id, { privateInfo }) });
       },
 
       setIsTraveler: (id, isTraveler) => {
@@ -3698,7 +3754,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const layout = seatSwapLayout(get().seatSwapUndo[undoStack.length - 1], previous);
         invalidateNightActionCorrections(previous, undoStack.slice(0, -1));
         set({
-          game: clone(previous),
+          game: { ...clone(previous), playerInfoLog: get().game?.playerInfoLog ?? previous.playerInfoLog },
           undoStack: undoStack.slice(0, -1),
           ...(layout ? { tokenPositions: { ...get().tokenPositions, ...clone(layout) } } : {}),
         });

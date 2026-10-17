@@ -174,6 +174,8 @@ export type PrivateInfo = {
   bluffs?: RoleId[];
   fakeMinions?: PlayerId[];
   extraText?: string;
+  /** Package 3 (C2): show this Minion/Demon the evil team (see teamInformation.ts). */
+  team?: true;
 };
 
 export type PrivatePacket = {
@@ -1108,7 +1110,15 @@ export type PlayerSelfLife = { alive: boolean; ghostVote: boolean; exiled?: true
 export type PlayerSelfEnvelope = PlayerSelfRecord & {
   revealToken?: string;
   life?: PlayerSelfLife;
+  /** Package 3 (C6): this participation's information history, shown content
+   * only, oldest first. Absent when nothing was delivered. */
+  infoHistory?: PlayerInfoView[];
+  /** Client-only (never written): some history entries failed to decode. */
+  infoHistoryPartial?: true;
 };
+
+/** Package 3 (C6): one history entry as the player receives it. */
+export type PlayerInfoView = PlayerInfoContent & { id: string; moment?: { phase: "night" | "day"; day: number } };
 
 /** Phase 10F (v24): `alive` / `ghostVote` / `exiled` are public table
  * information outside Night only. While the public phase is Night they are

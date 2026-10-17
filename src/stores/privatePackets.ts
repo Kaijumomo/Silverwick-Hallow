@@ -1,5 +1,6 @@
 import type { RoleRegistry } from "@/data/roleRegistry";
 import type { STPlayerRecord, StorytellerLobbyRecord } from "./types";
+import { teamInformationFor } from "./teamInformation";
 import { PlayerSelfRecordSchema } from "./schemas";
 import { projectIdentity } from "./projections";
 import { needsShownIdentity } from "./identity";
@@ -11,6 +12,8 @@ export type PrivateInfoApplicability = {
   bluffs: boolean;
   fakeMinions: boolean;
   extraText: boolean;
+  /** Package 3 (C2): a Minion or Demon shown as themselves may be given the evil team. */
+  team: boolean;
 };
 
 /**
@@ -31,8 +34,10 @@ export function getPrivateInfoApplicability(
       || mode === "drunk_fake_role_behavior"
       || mode === "marionette_fake_good_behavior"
   );
+  const evilType = registry.get(player.actualRole)?.type;
   return {
     simulatedInfo,
+    team: mode === "normal" && !player.isTraveler && (evilType === "minion" || evilType === "demon") && player.shownRole === player.actualRole,
     bluffs: fakeDemon || normalDemon,
     fakeMinions: fakeDemon,
     extraText: simulatedInfo || fakeDemon || !!player.shownRole && [
@@ -49,7 +54,7 @@ export function offersNightInformation(prompt: string): boolean {
 
 export function hasPrivateDraft(player: STPlayerRecord): boolean {
   const info = player.privateInfo;
-  return !!(info?.travelerDemon || info?.bluffs?.length || info?.fakeMinions?.length || info?.extraText?.trim());
+  return !!(info?.travelerDemon || info?.team || info?.bluffs?.length || info?.fakeMinions?.length || info?.extraText?.trim());
 }
 
 /** Remove fields made incompatible by an explicit behavior-mode change. */
@@ -60,6 +65,7 @@ export function pruneInapplicablePrivateInfo(player: STPlayerRecord, registry: R
   if (!applicable.bluffs) delete info.bluffs;
   if (!applicable.fakeMinions) delete info.fakeMinions;
   if (!applicable.extraText) delete info.extraText;
+  if (!applicable.team) delete info.team;
   const next = { ...player };
   if (Object.keys(info).length) next.privateInfo = info;
   else delete next.privateInfo;
@@ -89,11 +95,18 @@ export function previewPrivatePacket(player: STPlayerRecord, game: StorytellerLo
     throw new Error("Extra information is not applicable to this player's current scenario.");
   }
   const minionIds = [...new Set(info.fakeMinions ?? [])];
-  const minions = minionIds.map(id => {
+  let minions = minionIds.map(id => {
     const selected = game.players[id];
     if (!selected || selected.isEmpty || id === player.id) throw new Error("Review minion selections: a selected player is no longer seated.");
     return { id, name: selected.name, seat: selected.seat };
   });
+  if (info.team) {
+    if (!applicable.team) throw new Error("The evil team is only for a Minion or the Demon shown as themselves.");
+    const team = teamInformationFor(game, registry, player.id);
+    if (!team.ok) throw new Error(team.message);
+    if (team.demon) demon = team.demon;
+    if (team.minions) minions = team.minions;
+  }
   const bluffs = info.bluffs?.length ? [...info.bluffs] : undefined;
   if (bluffs?.some(id => !registry.get(id))) throw new Error("Review bluff selections: a character is unavailable.");
   const payload = PlayerSelfRecordSchema.parse({

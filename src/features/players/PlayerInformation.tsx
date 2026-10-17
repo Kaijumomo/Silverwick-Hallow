@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { buildRegistry } from "@/data/roleRegistry";
 import { selectScriptById, useStorytellerStore } from "@/stores/storytellerStore";
-import { hasPrivateDraft, previewPrivatePacket } from "@/stores/privatePackets";
+import { getPrivateInfoApplicability, hasPrivateDraft, previewPrivatePacket } from "@/stores/privatePackets";
 import { projectToSelf } from "@/stores/projections";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { publishPrivatePacket } from "@/firebase/privatePacketCommands";
@@ -78,8 +78,12 @@ export function PlayerInformation({ playerId, purpose, pendingExtraText }: {
   const matches = !!preview && JSON.stringify(current) === JSON.stringify(preview.payload);
   const sent = acknowledged && matches && (purpose !== "result" ||
     p.publishedPacket?.forDay === game.day && p.publishedPacket?.forPhase === game.phase);
-  const sendLabel = purpose === "traveler" ? "Show Demon to Traveler" : purpose === "result" ? "Send to player view" : p.privateInfo?.fakeMinions?.length ? "Send setup information" : "Send bluffs";
+  const sendLabel = purpose === "traveler" ? "Show Demon to Traveler" : purpose === "result" ? "Send to player view" : p.privateInfo?.fakeMinions?.length || p.privateInfo?.team ? "Send setup information" : "Send bluffs";
   return <div className="player-information" aria-label={`Information for ${p.name}`}>
+    {purpose === "setup" && getPrivateInfoApplicability(p, registry).team && <label className="information-input">
+      <input type="checkbox" checked={!!p.privateInfo?.team} onChange={event => { setError(null); state.setTeamInfo(playerId, event.target.checked); }} />
+      {" "}Include {p.name}&rsquo;s evil team (names and seats only)
+    </label>}
     {setupWarning && <p className="behavior-help">{setupWarning} Deliberate sending is a manual override, not a rules decision.</p>}
     {purpose === "result" && <label className="information-input">
       Information
@@ -118,6 +122,7 @@ export function PlayerInformation({ playerId, purpose, pendingExtraText }: {
       {purpose === "result" ? "Write the information first." : "Nothing to send yet."}
     </p>}
     {(error || invalid) && <p className="field-error" role="alert">{error || invalid}</p>}
+    
     {current && <details className="information-review">
       <summary>Currently shown to player</summary>
       {!backend && <p className="behavior-help">Saved player view; reconnect to verify.</p>}

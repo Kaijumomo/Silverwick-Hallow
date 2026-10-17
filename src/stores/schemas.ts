@@ -105,6 +105,8 @@ export const PrivateInfoSchema = z.object({
   bluffs: z.array(z.string().min(1)).optional(),
   fakeMinions: z.array(z.string().min(1)).optional(),
   extraText: z.string().optional(),
+  /** Package 3 (C2): the Storyteller chose to show this Minion/Demon the evil team. */
+  team: z.literal(true).optional(),
 });
 
 export const StatusesSchema = z.record(z.string().min(1), z.boolean());
@@ -1077,13 +1079,21 @@ export const MAX_PLAYER_INFO_VERSIONS = 10;
 export const MAX_PLAYER_INFO_ENTRIES_PER_PARTICIPANT = 100;
 /** The whole per-game log must stay within this many Firebase string bytes. */
 export const MAX_PLAYER_INFO_LOG_BYTES = 1024 * 1024;
-export const PlayerInfoContentSchema = z.object({
+const PlayerInfoContentShape = z.object({
   text: z.string().min(1).max(MAX_PLAYER_INFO_TEXT).optional(),
   demon: PlayerInfoSeatSchema.optional(),
   minions: z.array(PlayerInfoSeatSchema).max(20).optional(),
   bluffs: z.array(z.string().min(1)).max(5).optional(),
-}).strict().refine((c) => c.text !== undefined || c.demon !== undefined || c.minions !== undefined || c.bluffs !== undefined,
-  { message: "player information needs at least one field" });
+}).strict();
+const hasInfoField = (c: { text?: unknown; demon?: unknown; minions?: unknown; bluffs?: unknown }) =>
+  c.text !== undefined || c.demon !== undefined || c.minions !== undefined || c.bluffs !== undefined;
+export const PlayerInfoContentSchema = PlayerInfoContentShape.refine(hasInfoField, { message: "player information needs at least one field" });
+/** What the player's own phone receives for one entry: the shown content only
+ * (never packet ids, recipients or superseded versions). */
+export const PlayerInfoViewSchema = PlayerInfoContentShape.extend({
+  id: z.string().min(1),
+  moment: LiveGameMomentSchema.optional(),
+}).refine(hasInfoField, { message: "player information needs at least one field" });
 export const PlayerInfoEntrySchema = z.object({
   id: z.string().min(1),
   packetId: z.string().min(1),

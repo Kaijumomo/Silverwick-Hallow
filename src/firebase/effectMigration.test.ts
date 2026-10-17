@@ -397,7 +397,7 @@ describe("Phase 10B: remote checkpoint recovery", () => {
 // ---------------------------------------------------------------------------
 describe("Phase 10B privacy: Effects are Storyteller-private", () => {
   it("public, self and the Firebase public/player projections carry no Effect data or metadata", async () => {
-    const game = expectedV20(v19Game()) as unknown as StorytellerLobbyRecord;
+    const game = { ...expectedV20(v19Game()), playerInfoLog: [] } as unknown as StorytellerLobbyRecord;
     game.players.b!.effects.push({ id: "SENTINEL-EFFECT-ID", type: "SENTINEL-TYPE", lifetime: { kind: "manual" }, state: "suppressed",
       expiry: { kind: "none" }, parameters: { secret: { kind: "text", value: "SENTINEL-PARAM" } } });
     const registry = buildRegistry(troubleBrewing);

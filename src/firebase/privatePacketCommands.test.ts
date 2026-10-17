@@ -16,7 +16,10 @@ import { publishPrivatePacket } from "./privatePacketCommands";
 import { packetKey, usePacketDeliveryState } from "./packetDeliveryState";
 import { revokePlayerAndCommit, storytellerOccupancyCompletion } from "./membershipCommands";
 import { withoutSelfEnvelope } from "@/test/revealTokens";
+import { usePrivacyStore } from "@/stores/privacyStore";
 
+/** Package 3 (C10): a seating binds the participation the game records at the seat. */
+const seatedAs = (playerId: string) => { const p = store.getState().game!.players[playerId]!; return { participantId: p.participantId!, name: p.name }; };
 const code = "BCDF2345";
 const root = `lobbies/${code}`;
 const disposals: (() => void | Promise<void>)[] = [];
@@ -64,7 +67,7 @@ async function setup(managed = false) {
   disposals.push(async () => { manager?.stop(); await writer.dispose(); });
   useSessionRuntime.setState({ backend: writer });
   await knockOnLobby(b, code, "alice", "Alice");
-  await seatPlayer(writer, code, "alice", id, null);
+  await seatPlayer(writer, code, "alice", id, null, seatedAs(id));
 
   const review = () => previewPrivatePacket(store.getState().game!.players[id]!, store.getState().game!, buildRegistry(troubleBrewing));
   return { b, id, other, writer, manager, session, lobby, review, p: () => store.getState().game!.players[id]! };
@@ -241,7 +244,7 @@ describe("Phase 9C.4 (OPUS-004) — setup publication barrier preflight", () => 
     store.getState().setPrivateText(travelerId, "Traveler information");
     store.getState().setShownRole(other, null); // bar the ordinary set
     await knockOnLobby(b, code, "cara", "Cara");
-    await seatPlayer(writer, code, "cara", travelerId, null);
+    await seatPlayer(writer, code, "cara", travelerId, null, seatedAs(travelerId));
     const registry = buildRegistry(troubleBrewing);
     const preview = previewPrivatePacket(store.getState().game!.players[travelerId]!, store.getState().game!, registry);
     await publishPrivatePacket(travelerId, preview, writer);
@@ -258,5 +261,73 @@ describe("Phase 9C.4 (OPUS-004) — setup publication barrier preflight", () => 
     await publishPrivatePacket(id, review(), writer);
     expect(p().publishedPacket).toBeDefined();
     expect(withoutSelfEnvelope(await b.get(`${root}/player/${id}`))).toEqual(p().publishedPacket!.payload);
+  });
+});
+
+describe("Package 3: the player information log is written with the packet", () => {
+  it("appends exactly one entry for the participation, locally and in the Storyteller's private record, and projects only the shown content", async () => {
+    const { b, id, writer, review, p } = await setup();
+    await publishPrivatePacket(id, review(), writer);
+    const log = store.getState().game!.playerInfoLog;
+    expect(log).toHaveLength(1);
+    expect(log[0]).toMatchObject({
+      packetId: p().publishedPacket!.id, recipient: { participantId: p().participantId, playerId: id },
+      shown: { text: "First information" }, versions: [],
+    });
+    const stored = (await b.get(`${root}/storyteller`)) as { playerInfoLog?: unknown[] };
+    expect(stored.playerInfoLog).toHaveLength(1);
+    const node = (await b.get(`${root}/player/${id}`)) as { infoHistory?: Record<string, unknown>[] };
+    expect(node.infoHistory).toHaveLength(1);
+    expect(node.infoHistory![0]).toMatchObject({ id: log[0]!.id, text: "First information" });
+    expect(JSON.stringify(node.infoHistory)).not.toContain(p().participantId!);
+    expect(JSON.stringify(node.infoHistory)).not.toContain("packetId");
+  });
+
+  it("a second, different delivery adds a second entry; the same delivery again is refused", async () => {
+    const { id, writer, review } = await setup();
+    await publishPrivatePacket(id, review(), writer);
+    await expect(publishPrivatePacket(id, review(), writer)).rejects.toThrow(/already sent/);
+    store.getState().setPrivateText(id, "Second information");
+    await publishPrivatePacket(id, review(), writer);
+    expect(store.getState().game!.playerInfoLog.map(e => e.shown.text)).toEqual(["First information", "Second information"]);
+  });
+
+  it("refuses when the seat's membership names a different participation, writing nothing", async () => {
+    const { b, id, writer, review } = await setup();
+    await writer.set(`${root}/rosterParticipants/alice`, { playerId: id, participantId: "someone-else", name: "Alice" });
+    await expect(publishPrivatePacket(id, review(), writer)).rejects.toThrow(/membership does not match/);
+    expect(await b.get(`${root}/player/${id}`)).toBeUndefined();
+    expect(store.getState().game!.playerInfoLog).toEqual([]);
+  });
+
+  it("refuses in Privacy Mode and once the game has ended", async () => {
+    const { id, writer, review } = await setup();
+    usePrivacyStore.getState().setEnabled(true);
+    await expect(publishPrivatePacket(id, review(), writer)).rejects.toThrow(/Privacy Mode/);
+    usePrivacyStore.getState().setEnabled(false);
+    const current = store.getState().game!;
+    const preview = review();
+    store.setState({ game: { ...current, phase: "ended" } });
+    await expect(publishPrivatePacket(id, preview, writer)).rejects.toThrow(/ending|ended/);
+    store.setState({ game: current });
+    expect(store.getState().game!.playerInfoLog).toEqual([]);
+  });
+
+  it("the entry does not mark a Traveller Demon arrival complete for an ordinary player", async () => {
+    const { id, writer, review, p } = await setup();
+    await publishPrivatePacket(id, review(), writer);
+    expect(p().travelerArrival?.demonInfoComplete).not.toBe(true);
+  });
+
+  it("a correction after sending reaches the player's node on the next projection and never the earlier version", async () => {
+    const { b, id, writer, review } = await setup(true);
+    await publishPrivatePacket(id, review(), writer);
+    const entryId = store.getState().game!.playerInfoLog[0]!.id;
+    expect(store.getState().correctPlayerInfo(entryId, { text: "Corrected" })).toEqual({ ok: true });
+    await waitFor(async () => {
+      const node = (await b.get(`${root}/player/${id}`)) as { infoHistory?: { text?: string }[] };
+      expect(node.infoHistory?.[0]?.text).toBe("Corrected");
+    });
+    expect(JSON.stringify(await b.get(`${root}/player/${id}`))).not.toContain("First information");
   });
 });

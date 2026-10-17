@@ -3,6 +3,7 @@ import { PlayerSelfRecordSchema } from "./schemas";
 import { isInitialRevealComplete } from "./identity";
 import { publicTravelerRole } from "./travelers";
 import { publicLifeOf, publicLifeWithheld } from "./lifeState";
+import { infoHistoryFor } from "./playerInfoLog";
 import type {
   Alignment,
   PlayerId,
@@ -216,17 +217,27 @@ export function ownLifeOf(p: STPlayerRecord): PlayerSelfLife {
  * Phase 10H: the record written at player/{id} -- the allowlisted self record
  * (identity or matching published packet, exactly as projectToSelf returns
  * it) plus envelope fields that are never part of a packet: this
- * participation's current reveal token and the player's own Life. Packet
+ * participation's current reveal token, the player's own Life and (Package 3)
+ * their own information history. Packet
  * delivery comparison keeps using the bare self record.
  */
-export function selfEnvelopeOf(p: STPlayerRecord, self: PlayerSelfRecord): PlayerSelfEnvelope {
+export function selfEnvelopeOf(
+  st: Pick<StorytellerLobbyRecord, "players" | "playerInfoLog">,
+  playerId: PlayerId,
+  self: PlayerSelfRecord,
+): PlayerSelfEnvelope {
+  const p = st.players[playerId]!;
+  // Package 3 (C6): this participation's information history -- the content
+  // it was shown, never packet ids, recipients or superseded versions. Omitted
+  // (never empty) when nothing was delivered to this occupant.
+  const history = infoHistoryFor(st, p);
   return {
     ...self,
     ...(p.revealToken ? { revealToken: p.revealToken } : {}),
     life: ownLifeOf(p),
+    ...(history.length ? { infoHistory: history } : {}),
   };
 }
-
 /** Phase 10H: projectLobbyToSelfMap (unchanged gating, including the Setup
  * all-or-none barrier) with each delivered record wrapped in its envelope.
  * A withheld identity carries no envelope either. */
@@ -235,5 +246,5 @@ export function projectLobbyToSelfEnvelopeMap(
   registry: RoleRegistry
 ): Record<PlayerId, PlayerSelfEnvelope> {
   const selfMap = projectLobbyToSelfMap(st, registry);
-  return Object.fromEntries(Object.entries(selfMap).map(([id, self]) => [id, selfEnvelopeOf(st.players[id]!, self)]));
+  return Object.fromEntries(Object.entries(selfMap).map(([id, self]) => [id, selfEnvelopeOf(st, id, self)]));
 }

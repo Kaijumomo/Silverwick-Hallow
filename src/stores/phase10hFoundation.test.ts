@@ -278,7 +278,7 @@ describe("10H-AC-039..041: own Life in the private self envelope; public Night L
     expect(self.life).toEqual({ alive: false, ghostVote: true });
     expect(self.revealToken).toBe(player(id).revealToken);
     expect(self.shownRole).toBe("empath");
-    expect(selfEnvelopeOf(player(id), projectLobbyToSelfMap(game(), registry)[id]!)).toEqual(self);
+    expect(selfEnvelopeOf(game(), id, projectLobbyToSelfMap(game(), registry)[id]!)).toEqual(self);
   });
 
   it("AC-040: the public Night projection still withholds every Life field for every player (unchanged)", () => {

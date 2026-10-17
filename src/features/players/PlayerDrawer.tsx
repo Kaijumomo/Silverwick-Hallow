@@ -6,6 +6,7 @@ import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore
 import { TRAVELERS } from "@/data/travelers";
 import { isInitialRevealComplete, needsShownIdentity, shownRoleFilter } from "@/stores/identity";
 import { canRefineSetup } from "@/features/setup/setupRefinement";
+import { PlayerInfoLog } from "./PlayerInfoLog";
 import { PlayerInformation, commitExtraTextDraft } from "./PlayerInformation";
 import { changeRoleIntent, correctRoleIntent, ordinaryRoleChoices, setPerceptionIntent } from "@/stores/roleResolution";
 import type { RoleIntent } from "@/stores/roleResolution";
@@ -633,6 +634,8 @@ export function PlayerDrawer({ player, onRemove, onUnseat, onCorrectOutcome }: P
                 onSetBluffs={(b) => setBluffs(player.id, b)}
               />
             )}
+
+            <PlayerInfoLog playerId={player.id} />
 
             <section className="drawer-section">
               <h4 className="drawer-section-title">ST notes</h4>
