@@ -25,7 +25,7 @@ export function CharacterTab({ self, role, isTraveller, art, dead }: {
   const typeKey = isTraveller ? "traveller" : teamKeyOf(role?.type);
   const tone: RevealTone = isTraveller ? "traveller" : self.shownAlignment === "evil" ? "evil" : self.shownAlignment === "good" ? "good" : "plain";
   const team = self.shownAlignment === "good" ? "Good" : self.shownAlignment === "evil" ? "Evil" : null;
-  const rows = historyRows(self);
+  const rows = historyRows(self, isTraveller);
   const { mates, bluffs } = latestTeam(self, isTraveller);
   const partial = self.infoHistoryPartial === true;
 

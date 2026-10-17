@@ -24,6 +24,10 @@ describe("history rows", () => {
     expect(lines.join(" ")).not.toMatch(/Dee|Max|Chef/);
   });
 
+  it("a Traveller's Demon information stays under From the Storyteller, by name and seat", () => {
+    expect(entryLines({ id: "a", demon: { id: "d", name: "Dee", seat: 2 } }, true)).toEqual(["Your Demon: Dee, seat 3"]);
+  });
+
   it("the team is the latest entry that named it; bluffs the latest that showed them", () => {
     const team = latestTeam({
       ...base,

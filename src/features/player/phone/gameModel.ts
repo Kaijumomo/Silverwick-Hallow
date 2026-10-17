@@ -27,9 +27,16 @@ const joinList = (items: string[]): string => (items.length < 2 ? items.join("")
 /** What one history entry says, as the lines shown in "From the Storyteller".
  * Text is shown verbatim. Team and bluff entries are summarised in one line
  * ("You learnt your Minions and bluffs"): who they are lives in "Your team". */
-export function entryLines(entry: PlayerInfoView): string[] {
+export function entryLines(entry: PlayerInfoView, isTraveller = false): string[] {
   const lines: string[] = [];
   if (entry.text) lines.push(entry.text);
+  if (isTraveller) {
+    // A Traveller has no team box: what they were told stays here, by name.
+    if (entry.demon) lines.push(`Your Demon: ${entry.demon.name}, seat ${entry.demon.seat + 1}`);
+    for (const m of entry.minions ?? []) lines.push(`Your Minion: ${m.name}, seat ${m.seat + 1}`);
+    if (entry.bluffs?.length) lines.push(entry.bluffs.length === 1 ? "You learnt a bluff" : "You learnt your bluffs");
+    return lines;
+  }
   const minions = entry.minions?.length ?? 0;
   const learnt: string[] = [];
   if (entry.demon) learnt.push("Demon");
@@ -54,9 +61,9 @@ export function historyOf(self: PlayerSelfEnvelope): PlayerInfoView[] {
   return entry.text || entry.demon || entry.minions || entry.bluffs ? [entry] : [];
 }
 
-export function historyRows(self: PlayerSelfEnvelope): HistoryRow[] {
+export function historyRows(self: PlayerSelfEnvelope, isTraveller = false): HistoryRow[] {
   return historyOf(self)
-    .map((e) => ({ id: e.id, when: momentLabel(e.moment), lines: entryLines(e) }))
+    .map((e) => ({ id: e.id, when: momentLabel(e.moment), lines: entryLines(e, isTraveller) }))
     .filter((row) => row.lines.length > 0);
 }
 
