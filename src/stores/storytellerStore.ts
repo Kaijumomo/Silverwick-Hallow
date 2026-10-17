@@ -151,7 +151,7 @@ export const gameLifecycleToken = (): number => gameLifecycle;
  * `merge` (Phase 9C.2B.2) passes to migrateStoreState when Zustand's own
  * persist middleware skips calling `migrate` outright, which it does
  * whenever the persisted version already equals this one. */
-const STORE_VERSION = 28;
+const STORE_VERSION = 29;
 const STORE_KEY = isTabletTrial ? "silverwick-voting-tablet-trial" : "new-blood-st";
 const TERMINAL_JOURNAL_KEY = `${STORE_KEY}-ending`;
 let prewrittenVotingSave: { name: string; value: string } | null = null;
@@ -1377,7 +1377,7 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
   // Game Result or winner is invented). Every older marker continues the chain
   // through v26; an older marker carrying v26 evidence receives nothing and is
   // rejected.
-  if (fromVersion < 28) {
+  if (fromVersion < 29) {
     const customScripts = (s as { customScripts?: Record<string, Script> }).customScripts ?? {};
     // Phase 9R.1 Astra remediation (Finding A2): local persisted migration
     // uses "trusted" evidence -- this state's OWN saved customScripts,
@@ -1387,9 +1387,25 @@ export function migrateStoreState(state: unknown, fromVersion: number): unknown 
     // own doc comment).
     // ASTRA-10C-003: each entry migrates from its OWN routed version (see
     // above) -- the same answer checkpoint recovery reaches directly.
-    for (const entry of [s.game, ...(isMigratableUndoStack(s.undoStack) ? s.undoStack : [])]) {
+    const migrateOne = (entry: unknown, snapshot: boolean) => {
       const version = entry && typeof entry === "object" ? entryVersion.get(entry) ?? fromVersion : fromVersion;
-      migrateGameEntry(entry, version, { kind: "trusted", customScripts });
+      migrateGameEntry(entry, version, { kind: "trusted", customScripts }, { snapshot });
+    };
+    migrateOne(s.game, false);
+    for (const entry of isMigratableUndoStack(s.undoStack) ? s.undoStack : []) migrateOne(entry, true);
+    // Package 3 (C7): the finished-game recovery envelope is migrated like the
+    // game it was taken from. Its own undo stack holds snapshots (no log).
+    const recovery = (s as { finishedGameUndo?: unknown }).finishedGameUndo;
+    if (recovery && typeof recovery === "object") {
+      const r = recovery as Record<string, unknown>;
+      const migrateLoose = (entry: unknown, snapshot: boolean) => {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) return;
+        const detected = detectLegacyGameVersion(entry as Record<string, unknown>);
+        migrateGameEntry(entry, detected === null ? fromVersion : Math.max(fromVersion, detected), { kind: "trusted", customScripts }, { snapshot });
+      };
+      migrateLoose(r.ended, false);
+      migrateLoose(r.live, false);
+      if (Array.isArray(r.undoStack)) for (const entry of r.undoStack) migrateLoose(entry, true);
     }
   }
   const check = StorytellerStateSchema.safeParse(state);
@@ -1463,6 +1479,13 @@ function readTerminalJournal(game: StorytellerLobbyRecord | null | undefined): T
   try {
     const value = JSON.parse(localStorage.getItem(TERMINAL_JOURNAL_KEY) ?? "null") as TerminalJournal | null;
     if (!value || typeof value !== "object") return null;
+    // Package 3 (C7): a journal written before v29 carries a pre-log game.
+    if (value.game && typeof value.game === "object" && !Array.isArray(value.game)) {
+      const detected = detectLegacyGameVersion(value.game as unknown as Record<string, unknown>);
+      if (detected !== null && detected < GAME_SCHEMA_VERSION) {
+        migrateGameEntry(value.game, detected, { kind: "canonical-only" });
+      }
+    }
     const parsed = StorytellerStateSchema.safeParse({ game: value.game, lobby: value.lobby });
     if (!parsed.success || !parsed.data.game || !parsed.data.lobby?.sessionId ||
       !sameSnapshot(parsed.data.game, game) || parsed.data.lobby.code !== game.code || parsed.data.lobby.uid !== game.storytellerUid ||
@@ -1777,6 +1800,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           history: [],
           informationDeliveries: [],
           preparedInformation: [],
+          playerInfoLog: [],
           // Phase 10A: a fresh game observes every Life Event from Night 1.
           lifeEventWindow: freshLifeEventWindow(),
           // Phase 10G: no game-scoped Rule Fact exists before Live Play.

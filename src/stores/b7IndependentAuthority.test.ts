@@ -87,7 +87,7 @@ describe("B7 independent command, privacy and recovery challenge", () => {
     manager.stop(); await writer.dispose(); store.setState({ game: null, undoStack: [], localSeq: 0, sync: null });
     const restoredWriter = new SessionWriter(backend, code, session.id); disposals.push(() => restoredWriter.dispose());
     const recovery = await startStorytellerSession(backend, lobby, restoredWriter); disposals.push(() => recovery.stop());
-    expect(recovery.outcome).toBe("live"); expect(game()).toEqual(acknowledged); expect(game().gameSchemaVersion).toBe(28);
+    expect(recovery.outcome).toBe("live"); expect(game()).toEqual(acknowledged); expect(game().gameSchemaVersion).toBe(29);
   });
 
   it("same-session writer replacement fences a retained Master action", async () => {

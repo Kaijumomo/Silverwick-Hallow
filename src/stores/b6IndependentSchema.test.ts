@@ -26,7 +26,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("B6 independent prepared-information serialization", () => {
   it.each([20, 21, 22, 23, 24, 25, 26, 27])("explicit v%s converts with empty pending intent and retains reminders without inferring a clue", version => {
-    const raw = JSON.parse(JSON.stringify(pending())); raw.gameSchemaVersion = version; delete raw.preparedInformation;
+    const raw = JSON.parse(JSON.stringify(pending())); raw.gameSchemaVersion = version; delete raw.preparedInformation; delete raw.playerInfoLog;
     if (version < 25) delete raw.gameRuleFacts;
     if (version < 27) delete raw.voting;
     for (const player of Object.values(raw.players) as Record<string, any>[]) {
@@ -38,21 +38,21 @@ describe("B6 independent prepared-information serialization", () => {
     expect(detectLegacyGameVersion(raw)).toBe(version);
     migrateGameEntry(raw, version, { kind: "trusted", customScripts: { [proofScript.id]: proofScript } });
     const parsed = StorytellerGamePersistedSchema.parse(raw);
-    expect(parsed.gameSchemaVersion).toBe(28); expect(parsed.preparedInformation).toEqual([]); expect(parsed.informationDeliveries).toEqual([]);
+    expect(parsed.gameSchemaVersion).toBe(29); expect(parsed.preparedInformation).toEqual([]); expect(parsed.informationDeliveries).toEqual([]);
     expect(Object.values(parsed.players).flatMap(p => p.reminders.map(r => r.id))).toEqual(reminderIds);
   });
 
   it("local v27 envelope independently migrates Current State and Undo snapshots", () => {
     const current = JSON.parse(JSON.stringify(pending())); const prior = JSON.parse(JSON.stringify(store.getState().undoStack[0]));
-    for (const item of [current, prior]) { item.gameSchemaVersion = 27; delete item.preparedInformation; }
+    for (const item of [current, prior]) { item.gameSchemaVersion = 27; delete item.preparedInformation; delete item.playerInfoLog; }
     const result = migrateStoreState({ game: current, undoStack: [prior], customScripts: { [proofScript.id]: proofScript } }, 27) as { game: StorytellerLobbyRecord; undoStack: StorytellerLobbyRecord[] };
     expect(result.game.preparedInformation).toEqual([]); expect(result.undoStack[0]!.preparedInformation).toEqual([]);
-    expect(result.game.gameSchemaVersion).toBe(28); expect(result.undoStack[0]!.gameSchemaVersion).toBe(28);
+    expect(result.game.gameSchemaVersion).toBe(29); expect(result.undoStack[0]!.gameSchemaVersion).toBe(29);
   });
 
   it.each(["missing", "null", "object", "invented"])("v28 %s collection is never repaired by a v27 envelope", kind => {
     const raw = JSON.parse(JSON.stringify(pending()));
-    if (kind === "missing") delete raw.preparedInformation;
+    if (kind === "missing") delete raw.preparedInformation; delete raw.playerInfoLog;
     if (kind === "null") raw.preparedInformation = null;
     if (kind === "object") raw.preparedInformation = {};
     if (kind === "invented") raw.preparedInformation = [{ character: "chef" }];

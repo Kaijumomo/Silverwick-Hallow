@@ -101,7 +101,7 @@ describe("Butler command-managed selection notation", () => {
   });
   it("schema v28 reload preserves exact selection and public/player projections omit it", () => {
     const g = select(); const restored = StorytellerGamePersistedSchema.parse(JSON.parse(JSON.stringify(g)));
-    expect(restored.gameSchemaVersion).toBe(28);
+    expect(restored.gameSchemaVersion).toBe(29);
     expect(restored.players.p1!.reminders).toEqual(g.players.p1!.reminders);
     expect(JSON.stringify(projectLobbyToPublic(g, {}))).not.toContain("butler-master");
     expect(JSON.stringify(projectLobbyToSelfMap(g, proofRegistry))).not.toContain("butler-master");

@@ -6,6 +6,8 @@ import { migrateNightProgressV23ToV24 } from "./nightProgress";
 import {
   GAME_SCHEMA_VERSION,
   GameMomentSchema,
+  PlayerInfoContentSchema,
+  PreparedInformationRecordSchema,
   LegacyV20ReminderRecordSchema,
   MIGRATABLE_GAME_SCHEMA_VERSIONS,
   isEffectAppliedAtCoherent,
@@ -676,10 +678,69 @@ function migrateEntryV27ToV28(e: Record<string, unknown>): void {
   e.gameSchemaVersion = 28;
 }
 
+/**
+ * Package 3 (v29): the player information log. Registry-free and non-throwing.
+ * One entry per occupied seat whose single latest published packet is
+ * currently what that participant sees (same Shown Role, and an explicit
+ * alignment equal when the packet carries one) and carries content beyond the
+ * identity. A packet that does not fit stays unrepresented: nothing is
+ * invented. The entry id is derived from the packet id, and a valid
+ * forPhase/forDay becomes its moment (otherwise it reads as "Earlier").
+ */
+function backfillPlayerInfoLog(e: Record<string, unknown>): unknown[] {
+  const log: unknown[] = [];
+  try {
+    if (!isObject(e.players)) return log;
+    for (const raw of Object.values(e.players)) {
+      if (!isObject(raw) || raw.isEmpty === true) continue;
+      const participantId = raw.participantId;
+      const packet = raw.publishedPacket;
+      if (typeof participantId !== "string" || !participantId || typeof raw.id !== "string" || !isObject(packet)) continue;
+      const payload = packet.payload;
+      if (typeof packet.id !== "string" || !packet.id || !isObject(payload)) continue;
+      if (typeof raw.shownRole !== "string" || payload.shownRole !== raw.shownRole) continue;
+      if (payload.shownAlignment !== undefined && payload.shownAlignment !== raw.shownAlignment) continue;
+      const content: Record<string, unknown> = {};
+      if (payload.extraText !== undefined && payload.extraText !== "") content.text = payload.extraText;
+      if (payload.demon !== undefined) content.demon = payload.demon;
+      if (payload.minions !== undefined) content.minions = payload.minions;
+      if (payload.bluffs !== undefined) content.bluffs = payload.bluffs;
+      if (!PlayerInfoContentSchema.safeParse(content).success) continue;
+      const entry: Record<string, unknown> = {
+        id: `migrated-${packet.id}`,
+        packetId: packet.id,
+        recipient: { kind: "participant", participantId, playerId: raw.id, nameAtTime: typeof raw.name === "string" ? raw.name : "" },
+        shown: content,
+        versions: [],
+      };
+      const day = packet.forDay;
+      if ((packet.forPhase === "night" || packet.forPhase === "day") && typeof day === "number" && Number.isInteger(day) && day > 0) {
+        entry.moment = { phase: packet.forPhase, day };
+      }
+      log.push(entry);
+    }
+  } catch {
+    // Backfill is best effort; the schema judges whatever was produced.
+  }
+  return log;
+}
+
+/** A v28 entry with malformed prepared information is never stamped into the
+ * next version (the earlier steps' rule): the schema keeps rejecting it. */
+const hasWellFormedPreparedInformation = (e: Record<string, unknown>): boolean =>
+  Array.isArray(e.preparedInformation) && e.preparedInformation.every((record) => PreparedInformationRecordSchema.safeParse(record).success);
+
+/** An Undo snapshot never carries the log (it is restored from Current State). */
+function migrateEntryV28ToV29(e: Record<string, unknown>, isSnapshot = false): void {
+  e.playerInfoLog = isSnapshot ? [] : backfillPlayerInfoLog(e);
+  e.gameSchemaVersion = 29;
+}
+
 export function migrateGameEntry(
   entry: unknown,
   fromVersion: number,
-  scriptEvidence: MigrationScriptEvidence
+  scriptEvidence: MigrationScriptEvidence,
+  options: { snapshot?: boolean } = {}
 ): void {
   if (!entry || typeof entry !== "object") return;
   const e = entry as {
@@ -710,7 +771,8 @@ export function migrateGameEntry(
   // Newer state under an older/missing marker is malformed data, even when
   // its field is null or otherwise invalid. Never repair it. A genuine v27
   // snapshot may contain voting, but cannot contain prepared information.
-  if (hasV28Evidence(record) && record.gameSchemaVersion !== GAME_SCHEMA_VERSION) return;
+  if (hasV29Evidence(record) && record.gameSchemaVersion !== GAME_SCHEMA_VERSION) return;
+  if (hasV28Evidence(record) && record.gameSchemaVersion !== 28 && record.gameSchemaVersion !== GAME_SCHEMA_VERSION) return;
   if (hasV27Evidence(record) && record.gameSchemaVersion !== 27 && record.gameSchemaVersion !== GAME_SCHEMA_VERSION) return;
   if (hasOwnKey(record, "gameSchemaVersion")) {
     // Phase 10H: v26-only evidence under any older marker is malformed
@@ -742,6 +804,7 @@ export function migrateGameEntry(
     }
     if (record.gameSchemaVersion === 26 && fromVersion < 27) migrateEntryV26ToV27(record);
     if (record.gameSchemaVersion === 27 && fromVersion < 28) migrateEntryV27ToV28(record);
+    if (record.gameSchemaVersion === 28 && fromVersion < 29 && hasWellFormedPreparedInformation(record)) migrateEntryV28ToV29(record, options.snapshot);
     return;
   }
   // Phase 10B (ASTRA-10B-002) / 10C / 10D / 10E: marker-less v20+ evidence is
@@ -839,6 +902,7 @@ export function migrateGameEntry(
     if (record.gameSchemaVersion === 25) migrateEntryV25ToV26(record);
     if (record.gameSchemaVersion === 26) migrateEntryV26ToV27(record);
     if (record.gameSchemaVersion === 27) migrateEntryV27ToV28(record);
+    if (record.gameSchemaVersion === 28) migrateEntryV28ToV29(record, options.snapshot);
   }
 }
 
@@ -919,7 +983,7 @@ export function detectLegacyGameVersion(game: Record<string, unknown>): number |
     const marker = game.gameSchemaVersion;
     return MIGRATABLE_GAME_SCHEMA_VERSIONS.find((version) => version === marker) ?? GAME_SCHEMA_VERSION;
   }
-  if (hasV28Evidence(game) || hasV27Evidence(game)) return GAME_SCHEMA_VERSION;
+  if (hasV29Evidence(game) || hasV28Evidence(game) || hasV27Evidence(game)) return GAME_SCHEMA_VERSION;
   // v23, then v22, evidence first: it must never be claimed by an older
   // heuristic (an Alignment/Role correction's `correction` key is also v19
   // Life evidence, and an Alignment/Role `resolutionId` is also v20 evidence).
@@ -948,6 +1012,10 @@ const someEntry = (list: unknown, test: (entry: unknown) => boolean): boolean =>
 
 export function hasV27Evidence(game: Record<string, unknown>): boolean {
   return hasOwnKey(game, "voting") || someEntry(game.history, h => isObject(h) && h.category === "voting");
+}
+
+export function hasV29Evidence(game: Record<string, unknown>): boolean {
+  return hasOwnKey(game, "playerInfoLog");
 }
 
 export function hasV28Evidence(game: Record<string, unknown>): boolean {

@@ -83,7 +83,7 @@ describe("independent development preview local game isolation", () => {
       expect(game()).toEqual(ended); ok(state().undoFinishedGame()); expect(game().phase).toBe("day");
       ok(await endGameWithIntent({ kind: "declare", winner: "good" }));
     });
-    expect(game().gameSchemaVersion).toBe(28); expect(game().code).toBe(""); expect(game().storytellerUid).toBe("local");
+    expect(game().gameSchemaVersion).toBe(29); expect(game().code).toBe(""); expect(game().storytellerUid).toBe("local");
     expect(state().lobby).toBeNull(); expect(useSessionRuntime.getState().status).toBe("idle");
     expect(denied).not.toHaveBeenCalled(); expect(connection.connect).toHaveBeenCalledTimes(1);
   });

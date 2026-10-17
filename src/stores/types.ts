@@ -993,7 +993,7 @@ export type StorytellerLobbyRecord = {
    * unknown legacy coverage, never a known day with no nominations.
    * B6 v28 adds an empty prepared-information collection to older saves;
    * preparation intent is never reconstructed from tokens or History. */
-  gameSchemaVersion: 28;
+  gameSchemaVersion: 29;
   code: string;
   storytellerUid: string;
   scriptId: string;
@@ -1050,6 +1050,10 @@ export type StorytellerLobbyRecord = {
   informationDeliveries: GameInformationDeliveryRecord[];
   /** Pending first-night clues; consumed on delivery. Never inferred from tokens. */
   preparedInformation: PreparedInformationRecord[];
+  /** Package 3 (v29): Storyteller-authoritative, per-participation record of
+   * the information actually shown to each player (see PlayerInfoEntry).
+   * Never pushed into Undo snapshots; only the `shown` content is projected. */
+  playerInfoLog: PlayerInfoEntry[];
   /** Phase 10A (store v19): Storyteller-private, authoritative temporary
    * gameplay state -- recent Life Events of the current and immediately
    * previous phase, plus the coverage bound that says when their absence is
@@ -1147,3 +1151,22 @@ export type PublicLobbyRecord = {
    * "N of M arrived"). Published only during Setup. */
   plannedPlayers?: number;
 };
+
+/** Package 3 (C1): player-visible information content. */
+export interface PlayerInfoSeat { id: string; name: string; seat: number }
+export interface PlayerInfoContent {
+  text?: string;
+  demon?: PlayerInfoSeat;
+  minions?: PlayerInfoSeat[];
+  bluffs?: string[];
+}
+/** Package 3 (C1): one delivered piece of information. `shown` is what the
+ * player sees; `versions` keeps the superseded originals privately. */
+export interface PlayerInfoEntry {
+  id: string;
+  packetId: string;
+  recipient: CurrentParticipantRef;
+  moment?: { phase: "night" | "day"; day: number };
+  shown: PlayerInfoContent;
+  versions: PlayerInfoContent[];
+}

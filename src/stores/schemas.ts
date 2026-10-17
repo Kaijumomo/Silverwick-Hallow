@@ -1068,6 +1068,43 @@ export const PrivatePacketSchema = z.object({
   forPhase: z.enum(["setup", "night", "day", "ended"]).optional(),
 });
 
+/** Package 3 (C1): one piece of player-visible information. Strict, at least
+ * one field, no unknown keys -- the content a participant is shown, never a
+ * Storyteller draft or note. */
+const PlayerInfoSeatSchema = z.object({ id: z.string().min(1), name: z.string().min(1), seat: z.number().int().nonnegative() }).strict();
+export const MAX_PLAYER_INFO_TEXT = 4000;
+export const MAX_PLAYER_INFO_VERSIONS = 10;
+export const MAX_PLAYER_INFO_ENTRIES_PER_PARTICIPANT = 100;
+/** The whole per-game log must stay within this many Firebase string bytes. */
+export const MAX_PLAYER_INFO_LOG_BYTES = 1024 * 1024;
+export const PlayerInfoContentSchema = z.object({
+  text: z.string().min(1).max(MAX_PLAYER_INFO_TEXT).optional(),
+  demon: PlayerInfoSeatSchema.optional(),
+  minions: z.array(PlayerInfoSeatSchema).max(20).optional(),
+  bluffs: z.array(z.string().min(1)).max(5).optional(),
+}).strict().refine((c) => c.text !== undefined || c.demon !== undefined || c.minions !== undefined || c.bluffs !== undefined,
+  { message: "player information needs at least one field" });
+export const PlayerInfoEntrySchema = z.object({
+  id: z.string().min(1),
+  packetId: z.string().min(1),
+  recipient: CurrentParticipantRefSchema,
+  moment: LiveGameMomentSchema.optional(),
+  shown: PlayerInfoContentSchema,
+  versions: z.array(PlayerInfoContentSchema).max(MAX_PLAYER_INFO_VERSIONS),
+}).strict();
+export const PlayerInfoLogSchema = z.array(PlayerInfoEntrySchema).superRefine((log, ctx) => {
+  const ids = new Set<string>();
+  const perRecipient = new Map<string, number>();
+  log.forEach((entry, index) => {
+    if (ids.has(entry.id)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "duplicate player information id", path: [index, "id"] });
+    ids.add(entry.id);
+    const key = entry.recipient.participantId;
+    const n = (perRecipient.get(key) ?? 0) + 1;
+    perRecipient.set(key, n);
+    if (n > MAX_PLAYER_INFO_ENTRIES_PER_PARTICIPANT) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "too many information entries for one participant", path: [index] });
+  });
+});
+
 export const STPlayerRecordSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -1144,16 +1181,16 @@ export const NightStepRecordSchema = z.object({
 /** Phase 10B: the current game snapshot schema version (see
  * StorytellerLobbyRecord.gameSchemaVersion). Phase 10C: v21. Phase 10D: v22.
  * Phase 10E: v23. Phase 10F: v24. Phase 10G: v25. Phase 10H: v26. Voting: v27.
- * B6: v28 prepared first-night information. */
-export const GAME_SCHEMA_VERSION = 28 as const;
+ * B6: v28 prepared first-night information. Package 3: v29 player information log. */
+export const GAME_SCHEMA_VERSION = 29 as const;
 /** Explicit markers migration still accepts, routed PER ENTRY
- * (see migrateGameEntry): 20 receives v20 -> ... -> v28, ..., 27 receives
- * v27 -> v28. 28 is current and receives
+ * (see migrateGameEntry): 20 receives v20 -> ... -> v29, ..., 28 receives
+ * v28 -> v29. 29 is current and receives
  * nothing. Any other marker is never reinterpreted as legacy -- the current
  * schema rejects it. */
-export const MIGRATABLE_GAME_SCHEMA_VERSIONS = [20, 21, 22, 23, 24, 25, 26, 27] as const;
-/** The immediately previous explicit marker (v27 -> v28). */
-export const PREVIOUS_GAME_SCHEMA_VERSION = 27 as const;
+export const MIGRATABLE_GAME_SCHEMA_VERSIONS = [20, 21, 22, 23, 24, 25, 26, 27, 28] as const;
+/** The immediately previous explicit marker (v28 -> v29). */
+export const PREVIOUS_GAME_SCHEMA_VERSION = 28 as const;
 
 export const StorytellerLobbyRecordSchema = z.object({
   // Phase 10B (v20) / 10C (v21) / 10D (v22) / 10E (v23) / 10F (v24) / 10G (v25): required explicit version evidence, NO
@@ -1201,6 +1238,8 @@ export const StorytellerLobbyRecordSchema = z.object({
       });
     });
   }),
+  // Package 3 (v29): required, no default; only migration supplies [].
+  playerInfoLog: PlayerInfoLogSchema,
   // Phase 10A (v19): required, with NO default -- a v19 game missing it is
   // incomplete current-version data and fails here; genuine v18 data gets it
   // from migration (gameMigration.ts), never from this schema.
