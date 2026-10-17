@@ -1,3 +1,4 @@
+import { computeArrivals } from "./arrivals";
 import { useStorytellerStore, selectScriptById } from "@/stores/storytellerStore";
 import { previewPrivatePacket } from "@/stores/privatePackets";
 import { projectLobbyToSelfMap } from "@/stores/projections";
@@ -56,7 +57,9 @@ export async function publishPrivatePacket(playerId: string, preview: ReturnType
         throw new Error("Set the identity every player will see before sending information.");
       }
       await writeProjections({ backend: inner, code: lobby.code, stState: snapshot, registry,
-        online: useSessionRuntime.getState().online, membership: roster });
+        online: useSessionRuntime.getState().online,
+        // Package 3 (A1): keep the waiting list on the public node this write replaces.
+        arrivals: computeArrivals(snapshot, useSessionRuntime.getState().joined, {}), membership: roster });
       // Preserve draft edits made while the network was in flight. Never restore
       // an old occupant or identity. The next normal flush reconciles any change.
       const after = useStorytellerStore.getState();

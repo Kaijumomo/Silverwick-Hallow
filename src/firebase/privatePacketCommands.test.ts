@@ -107,6 +107,16 @@ describe("explicit publication through the session writer", () => {
     expect(usePacketDeliveryState.getState().queued[key]).toBe(false);
   });
 
+  it("Package 3 A1: a private packet write keeps the public waiting list in Setup", async () => {
+    const { b, id, writer, review } = await setup();
+    store.setState({ game: { ...store.getState().game!, pendingPlayers: { late: "Late Larry" } } });
+    useSessionRuntime.setState({ joined: [{ uid: "late", playerId: null, expiresAt: Date.now() + 30_000 }] });
+    await publishPrivatePacket(id, review(), writer);
+    const pub = (await b.get(`${root}/public`)) as { arrivals?: string[] };
+    expect(pub.arrivals).toEqual(["Late Larry"]);
+    useSessionRuntime.setState({ joined: [] });
+  });
+
   it.each(["before write", "lost response"])("retry after %s keeps one packet and one acknowledged revision", async failure => {
     const { b, id, writer, review, p } = await setup();
     const update = b.update.bind(b);
