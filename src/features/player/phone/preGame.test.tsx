@@ -99,8 +99,8 @@ describe("the sealed token", () => {
     fireEvent.click(screen.getByRole("button", { name: "Turn your token back over" }));
     expect(screen.queryByRole("heading", { name: "Chef" })).toBeNull();
     expect(screen.getByText("Tap the token to turn it over")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Enter the town" })).toBeNull(); // hidden from assistive tech until turned
-    expect(screen.getByRole("button", { name: "Enter the town", hidden: true })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Continue" })).toBeNull(); // hidden from assistive tech until turned
+    expect(screen.getByRole("button", { name: "Continue", hidden: true })).toBeDisabled();
   });
 
   it("a new identity sent mid-ceremony returns to the circle instead of swapping under the player's eyes", async () => {
@@ -119,6 +119,30 @@ describe("the sealed token", () => {
     await enterTown();
     expect(await screen.findByRole("button", { name: "More" })).toBeInTheDocument();
     expect(usePlayerStore.getState().publicLobby?.phase).toBe("setup");
+  });
+});
+
+describe("the sealed token leaks nothing about the team or alignment", () => {
+  it("no tone class and no team-revealing button label until the token is turned", async () => {
+    seat({ shownRole: "imp", shownAlignment: "evil", revealToken: TOKEN, minions: [{ id: "p-greta", name: "Greta", seat: 5 }] });
+    const { container } = render(<PlayerScreen />);
+    await receiveCharacter();
+    expect(container.innerHTML).not.toMatch(/swp-tone-|Meet your team|Enter the town/);
+    turnToken();
+    expect(container.innerHTML).toMatch(/swp-tone-evil/);
+    fireEvent.click(screen.getByRole("button", { name: "Turn your token back over" }));
+  });
+
+  it("acknowledging mid-game does not eject the player from the ceremony before they enter", async () => {
+    vi.mocked(acknowledgeReveal).mockImplementationOnce(async () => { usePlayerStore.setState({ ownRevealAck: TOKEN }); });
+    seat({ shownRole: "imp", shownAlignment: "evil", revealToken: TOKEN, minions: [{ id: "p-greta", name: "Greta", seat: 5 }] }, { publicLobby: lobby("day") });
+    render(<PlayerScreen />);
+    await receiveCharacter();
+    turnToken();
+    await act(async () => {});
+    expect(usePlayerStore.getState().ownRevealAck).toBe(TOKEN);
+    fireEvent.click(screen.getByRole("button", { name: "Meet your team" }));
+    expect(screen.getByRole("heading", { name: "Sworn in darkness" })).toBeInTheDocument();
   });
 });
 

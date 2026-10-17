@@ -101,7 +101,7 @@ export function RevealScreen({ character, continueLabel, onTurned, onContinue }:
           >
             <span className={`swp-token-flip${turned ? " swp-token-flipped" : ""}`}>
               <span className="swp-token-side swp-token-back"><TokenBack /></span>
-              <span className={`swp-token-side swp-token-front swp-tone-${character.tone}`}>
+              <span className={`swp-token-side swp-token-front${faceMounted ? ` swp-tone-${character.tone}` : ""}`}>
                 {faceMounted && <TokenFace art={character.art} tone={character.tone} />}
               </span>
             </span>
@@ -122,7 +122,7 @@ export function RevealScreen({ character, continueLabel, onTurned, onContinue }:
           </div>
         </div>
         <div className={`swp-reveal-cta${turned ? " swp-reveal-cta-on" : ""}`} aria-hidden={!turned}>
-          <GoldButton full onClick={onContinue} disabled={!turned}>{continueLabel}</GoldButton>
+          <GoldButton full onClick={onContinue} disabled={!turned}>{turned ? continueLabel : "Continue"}</GoldButton>
         </div>
       </div>
     </PhoneFrame>

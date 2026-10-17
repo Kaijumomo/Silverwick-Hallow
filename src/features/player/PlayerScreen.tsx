@@ -77,6 +77,9 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
   // Package 3 (3B): the pre-game ceremony (circle, reveal, team) is over once
   // the player enters the town. Local only, so a reload re-seals the token.
   const [entered, setEntered] = useState(false);
+  // Acknowledging mid-ceremony flips the reveal mode to "seen"; this keeps the
+  // player in the ceremony until they enter the town themselves.
+  const [ceremonyActive, setCeremonyActive] = useState(false);
   const [travelerChoiceError, setTravelerChoiceError] = useState<string | null>(null);
   const [ackBusy, setAckBusy] = useState(false);
   const [ackError, setAckError] = useState<string | null>(null);
@@ -335,6 +338,7 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
 
   const acknowledge = async () => {
     if (!backend || ackBusy) return;
+    setCeremonyActive(true);
     setAckBusy(true);
     setAckError(null);
     try { await acknowledgeReveal(backend); }
@@ -350,7 +354,7 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
   // Package 3 (3B): before the game, the circle, the sealed token and (for
   // evil players the Storyteller briefed) the team. Nothing private renders
   // until the player turns their own token.
-  if (needsTravelerChoice || (!entered && showsPreGame(publicLobby.phase, !!self, mode, needsTravelerChoice))) {
+  if (needsTravelerChoice || (!entered && (ceremonyActive || showsPreGame(publicLobby.phase, !!self, mode, needsTravelerChoice)))) {
     return (
       <PreGameFlow
         publicLobby={publicLobby}
@@ -365,7 +369,7 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
         travellerError={travelerChoiceError}
         onChooseTraveller={(id) => void chooseTravelerRole(id)}
         onAcknowledge={() => void acknowledge()}
-        onEnter={() => { setRevealed(false); setEntered(true); }}
+        onEnter={() => { setRevealed(false); setCeremonyActive(false); setEntered(true); }}
       />
     );
   }
