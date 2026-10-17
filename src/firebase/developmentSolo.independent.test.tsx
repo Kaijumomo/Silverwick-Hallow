@@ -52,11 +52,17 @@ describe("independent development preview local game isolation", () => {
     render(<App />);
     await waitFor(() => expect(connection.connect).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: "New Game" }));
-    fireEvent.click(screen.getByRole("button", { name: /^Create setup/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Trouble Brewing" }));
+    for (let index = 0; index < 5; index++) fireEvent.click(screen.getByRole("button", { name: "One fewer player" })); // 10 -> 5 players
+    fireEvent.click(screen.getByRole("button", { name: /Fabled & Loric ›/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Skip to players ›/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Play offline/ }));
+    for (let index = 0; index < 5; index++) fireEvent.change(screen.getByLabelText(`Seat ${["I", "II", "III", "IV", "V"][index]}`), { target: { value: `Local ${index + 1}` } });
+    fireEvent.click(screen.getByRole("button", { name: "Begin the night" }));
     await waitFor(() => expect(game()?.phase).toBe("setup"));
     expect(state().lobby).toBeNull();
+    expect(Object.values(game().players).filter(player => !player.isEmpty).map(player => player.name)).toEqual(["Local 1", "Local 2", "Local 3", "Local 4", "Local 5"]);
     await act(async () => {
-      for (let index = 0; index < 5; index++) state().addPlayerToSeat(`Local ${index + 1}`);
       state().setRolePool(["chef", "soldier", "slayer", "poisoner", "imp"]); ok(state().dealRolePool());
       for (const player of Object.values(game().players)) state().showAssignedRole(player.id);
       ok(state().revealRoles()); ok(state().beginNightOne());

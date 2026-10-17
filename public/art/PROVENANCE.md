@@ -38,4 +38,36 @@ in the collection, and each file here was re-checked on 2026-10-15 against the c
 | `scripts/snv.png` | resources/editions/snv/logo.webp | `f4e0f10fab52110fef62d4c1afb7c625aa923fa0` | `6362cbb7e67e718d` | 340481 |
 | `scripts/tb.png` | resources/editions/tb/logo.webp | `95a25388384c2917bce82db5e24dbf3be009f58e` | `cc4d53a7bd466001` | 427385 |
 
+Added for the New Game setup flow (Package 2): the Fabled and Loric default icons (byte-exact from the collection's zip; sha256 matched the manifest) and the four generic team icons (`characters/generic/*`), which the collection did not contain: they were fetched directly from the pinned revision's raw URL (https://raw.githubusercontent.com/ThePandemoniumInstitute/botc-release/f10cd02e3401af227ce406287eaae7bb99a06a42/resources/characters/generic/), the git blob SHA-1 below was computed over the downloaded WebP bytes, and the PNG is a lossless conversion (RGBA SHA-256 shown). Same private-personal-use basis as above.
+
+| File | Official source (pinned) | Source git blob SHA-1 | PNG hash (first 16) | Bytes |
+|---|---|---|---|---|
+| `characters/fabled/angel.png` | resources/characters/fabled/angel.webp | `8588b50fd51f1a22642bc8db035256a84b5d66a7` | `118b6c27b5a08c10` | 71789 |
+| `characters/fabled/buddhist.png` | resources/characters/fabled/buddhist.webp | `c93819a88ea53be906be37e8d9ba2bdfdeb1bd83` | `ca87f5e233558d22` | 118401 |
+| `characters/fabled/djinn.png` | resources/characters/fabled/djinn.webp | `46c7afd9faf48ab9f3226b5e0e670e804339d92b` | `f5a078cf2e73e3de` | 117494 |
+| `characters/fabled/doomsayer.png` | resources/characters/fabled/doomsayer.webp | `473dc00e0744803d1eb82a5defa6140c42b00658` | `f3b22142a85ee89f` | 90656 |
+| `characters/fabled/duchess.png` | resources/characters/fabled/duchess.webp | `bf32a989018dc3877c6b80e83b4eba60ab5560a0` | `4485134494aa8c12` | 94159 |
+| `characters/fabled/fibbin.png` | resources/characters/fabled/fibbin.webp | `0335c38d59a0ef4239e24041017c0c4ca6f09c9e` | `877481b14fbad13f` | 94825 |
+| `characters/fabled/fiddler.png` | resources/characters/fabled/fiddler.webp | `d6852d89dc503e8c94f614c5f7f0dc960789c92f` | `1c1be5f665c97bb2` | 102827 |
+| `characters/fabled/hellslibrarian.png` | resources/characters/fabled/hellslibrarian.webp | `465331a82dcf53e309fa1cd71dfc988dcc0d5f58` | `621f1c6f00759cba` | 125114 |
+| `characters/fabled/revolutionary.png` | resources/characters/fabled/revolutionary.webp | `c1e150ec9db39917dba86e9d71982420b9a6e375` | `3542f2e559594510` | 100564 |
+| `characters/fabled/sentinel.png` | resources/characters/fabled/sentinel.webp | `9d675594d8f87af075117612996a7666968e3ff0` | `bd8224186d31794a` | 100183 |
+| `characters/fabled/spiritofivory.png` | resources/characters/fabled/spiritofivory.webp | `37c0d96f08d69ea6cb78668e6ffa2a529c1010b3` | `c2a0352ee5220d8e` | 95180 |
+| `characters/fabled/toymaker.png` | resources/characters/fabled/toymaker.webp | `89a3d4a98e670eab7f425d91739305c05e46d8ca` | `b019e0b4f9b92cd2` | 109207 |
+| `characters/loric/bigwig.png` | resources/characters/loric/bigwig.webp | `8846ecfe08ff380ccc43b3dca98430a624b637ec` | `6403be9d4773a6c5` | 138354 |
+| `characters/loric/bootlegger.png` | resources/characters/loric/bootlegger.webp | `5e43861b60145f62efa70d1706e7293419ec60f5` | `2da2b17437d6a9ef` | 99499 |
+| `characters/loric/gardener.png` | resources/characters/loric/gardener.webp | `986ba80a41e06b2547ab2a5a27d32f0ec5f96d4a` | `4a51e597d2f13682` | 68010 |
+| `characters/loric/godofug.png` | resources/characters/loric/godofug.webp | `98fa9b1fe7757515b233781d3e35096f4f6b1dd7` | `83252a0e7b1542e7` | 132934 |
+| `characters/loric/hindu.png` | resources/characters/loric/hindu.webp | `92c6b8f2f4cac3881d40d8e3bf4921df11865dd0` | `ad7c15c38cd0ff36` | 128244 |
+| `characters/loric/knaves.png` | resources/characters/loric/knaves.webp | `51866daa5f8e7d815ae26a81c1818a843c2d7d0a` | `151efe28a2b752b4` | 105388 |
+| `characters/loric/pope.png` | resources/characters/loric/pope.webp | `0f668dddd0138ecf62184868dc144dd66617da98` | `576f7a13503dc102` | 127236 |
+| `characters/loric/stormcatcher.png` | resources/characters/loric/stormcatcher.webp | `07cf38e4758c33aaac97f8d83c28ba6dfe9f428e` | `f1ab70cc54a7f4c5` | 102951 |
+| `characters/loric/tor.png` | resources/characters/loric/tor.webp | `1697344b5f92d5af040839b94aaea5eea4f91505` | `0f32f368d912e701` | 102169 |
+| `characters/loric/ventriloquist.png` | resources/characters/loric/ventriloquist.webp | `04d4470490150c12856a38c0277f051de2605186` | `1da4858fdfe48b20` | 95831 |
+| `characters/loric/zenomancer.png` | resources/characters/loric/zenomancer.webp | `f79cf5964a253f0072281494a96217b73ab51023` | `b363b2769c729253` | 121711 |
+| `characters/generic/townsfolk.png` | resources/characters/generic/townsfolk.webp | `7cfd5f9f3cabe05d35fb0132a963b5e21618c363` | `f1ee812bf3a7ccaa` | 114954 |
+| `characters/generic/outsider.png` | resources/characters/generic/outsider.webp | `1b428472f11db0aa0e913e0e8eecf907c7bd7d45` | `eb3a7485a06fa0be` | 104091 |
+| `characters/generic/minion.png` | resources/characters/generic/minion.webp | `34d1e951643d057ca02f69a716409b1ca9fe7600` | `50a5eb4645da7cd5` | 103311 |
+| `characters/generic/demon.png` | resources/characters/generic/demon.webp | `e076a6826b66b9d16d73237e1f7fbb13a3ef0ce5` | `54b624107e11b763` | 88836 |
+
 Collection records (outside the repository): `/mnt/project-files/assets/official-pngs-2026-10-15/` and `.../official-pngs-2026-10-15-supplement-v2/`.

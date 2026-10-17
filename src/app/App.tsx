@@ -73,7 +73,7 @@ function NormalApp() {
     <div className="app">
       <StorytellerSession />
       {/* ASTRA-10G-R1-001: shell-level, so it survives Storyteller navigation. */}
-      <UnattachedLobbyWarnings />
+      {view !== "newgame" && <UnattachedLobbyWarnings />}
       {migrationResetBanner && (
         <div className="error-list" role="alert" style={{ position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 9999, maxWidth: 480 }}>
           <strong>Save data reset</strong>

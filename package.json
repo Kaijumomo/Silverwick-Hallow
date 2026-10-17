@@ -16,11 +16,14 @@
     "typecheck": "tsc -b --noEmit",
     "rules:deploy": "firebase deploy --only database",
     "rules:verify": "node scripts/verify-deployed-rules.mjs",
+    "rules:development:verify": "node scripts/verify-development-firebase.mjs",
+    "rules:development:prepare": "node scripts/prepare-development-rules.mjs",
     "emulator": "firebase emulators:start --only database",
     "test:full": "npm run typecheck && npm test && npm run test:rules"
   },
   "dependencies": {
     "firebase": "^12.12.1",
+    "qrcode-generator": "2.0.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zod": "^3.23.8",

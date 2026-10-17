@@ -60,7 +60,8 @@ afterEach(() => {
 describe("GameScreen Public Display link controls (Phase 9C.6, OPUS-002)", () => {
   it("does not attempt to ensure a capability while there is no lobby", () => {
     render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
+    // Package 2D: an offline game has no Invite button at all.
+    expect(screen.queryByRole("button", { name: /^Invite/ })).toBeNull();
     expect(ensurePublicDisplayAccess).not.toHaveBeenCalled();
   });
 

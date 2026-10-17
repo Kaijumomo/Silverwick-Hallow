@@ -1,0 +1,6 @@
+{
+  "database": {
+    "instance": "silverwick-hollow-default-rtdb",
+    "rules": "src/firebase/development.locked.rules.json"
+  }
+}

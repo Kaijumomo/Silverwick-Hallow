@@ -398,6 +398,14 @@ export type NewGameOpts = {
   plannedRoles?: RoleId[];
   plannedFabled?: RoleId[];
   plannedLorics?: RoleId[];
+  /** Offline "Seat the town": names by seat index (clockwise). A blank name
+   * keeps that seat empty. Each name seats a brand-new participation through
+   * the same occupancy entry point every other seating uses (fresh
+   * ParticipantId, same Traveler arrival rules), in seat order. */
+  plannedSeatNames?: string[];
+  /** Stay on the current view instead of opening the Grimoire (the New Game
+   * flow decides when to enter it). */
+  keepView?: boolean;
 };
 
 /**
@@ -479,7 +487,20 @@ export type StorytellerStore = {
    * yet. See src/firebase/reconnectDecision.ts. */
   sync: SyncMeta | null;
 
-  newGame: (scriptId: string, opts?: NewGameOpts) => void;
+  /** Creates a fresh setup game, replacing any current one. Returns false --
+   * with nothing changed -- when a terminal close owns the current game's
+   * lifecycle; true once the new game is open. */
+  newGame: (scriptId: string, opts?: NewGameOpts) => boolean;
+  /**
+   * Discards the pristine setup game the New Game flow created (the Live
+   * screen's Back). Refused (false, nothing changed) unless that exact game
+   * is still current (`expectedLifecycle`), is still in private setup before
+   * any Reveal, and has NO lobby attached: a lobby is always closed
+   * authoritatively first (closeMultiplayerSession clears it only on
+   * success), so a failed close can never discard a game that a live session
+   * still serves. Stays on the current view.
+   */
+  discardSetupGame: (expectedLifecycle: number) => boolean;
   dealRolePool: (stagedPool?: RoleId[], actionContext?: CharacterActionContext) => SetupCommandResult;
   /** Explicitly publishes the private Deal to players. Never required to be
    * online: a local/offline game still records that the Storyteller
@@ -1715,7 +1736,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // A terminal completion owns the current game's lifecycle until it
         // commits or fails. Refuse at the action boundary before advancing
         // the lifecycle token, clearing UI state, or detaching its lobby.
-        if (get().terminalClose?.status === "closing" || get().terminalClose?.confirmedRecovery || get().terminalClose?.recoveryPending) return;
+        if (get().terminalClose?.status === "closing" || get().terminalClose?.confirmedRecovery || get().terminalClose?.recoveryPending) return false;
         const script =
           BUILTIN_SCRIPTS[scriptId] ?? get().customScripts[scriptId];
         if (!script) throw new Error(`Unknown script id: ${scriptId}`);
@@ -1741,8 +1762,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
           phase: "setup",
           day: 0,
           bluffs: [],
-          fabled: opts.plannedFabled ?? [],
-          lorics: opts.plannedLorics ?? [],
+          // Normalized exactly like setFabled / setLorics: catalogue ids only,
+          // de-duplicated, never a second definition of the rule.
+          fabled: [...new Set((opts.plannedFabled ?? []).filter((id) => FABLED.some((f) => f.id === id)))],
+          lorics: [...new Set((opts.plannedLorics ?? []).filter((id) => LORICS.some((l) => l.id === id)))],
           notes: "",
           players: prePlayers,
           seatOrder: preSeatOrder,
@@ -1759,6 +1782,18 @@ export const useStorytellerStore = create<StorytellerStore>()(
           // Phase 10G: no game-scoped Rule Fact exists before Live Play.
           gameRuleFacts: [],
         };
+        // Offline "Seat the town": fold the names in seat order through the
+        // single occupancy entry point, each against the game as it stands
+        // after the previous seat (the same sequence addPlayerToSeat runs).
+        let seated: StorytellerLobbyRecord = game;
+        (opts.plannedSeatNames ?? []).slice(0, count).forEach((raw, index) => {
+          const name = typeof raw === "string" ? raw.trim().slice(0, 20) : "";
+          const seatId = preSeatOrder[index];
+          if (!name || /[\r\n\t]/.test(name) || !seatId) return;
+          const seat = seated.players[seatId];
+          if (!seat) return;
+          seated = { ...seated, players: { ...seated.players, [seatId]: occupySeat(seat, name, seated) } };
+        });
         usePrivacyStore.getState().reset();
         // PR-10H-003: the previous game's Night cursor (its step keys repeat
         // across games) never reaches this game's Night.
@@ -1766,7 +1801,21 @@ export const useStorytellerStore = create<StorytellerStore>()(
         useShellStore.getState().resetGameScope();
         // PR-10H-004: a failed terminal intent belongs to the game it was
         // declared on and is never retried against a new one.
-        set({ game, lobby: null, pendingKnocks: [], view: "game", undoStack: [], selectedPlayerId: null, ...endedTerminalIntent(get()) });
+        set({ game: seated, lobby: null, pendingKnocks: [], ...(opts.keepView ? {} : { view: "game" as const }), undoStack: [], selectedPlayerId: null, ...endedTerminalIntent(get()) });
+        return true;
+      },
+
+      discardSetupGame: (expectedLifecycle) => {
+        const { game, lobby, terminalClose } = get();
+        if (gameLifecycle !== expectedLifecycle || !game || lobby) return false;
+        if (game.phase !== "setup" || isInitialRevealComplete(game)) return false;
+        if (terminalClose?.status === "closing" || terminalClose?.confirmedRecovery || terminalClose?.recoveryPending) return false;
+        gameLifecycle++;
+        usePrivacyStore.getState().reset();
+        clearNightActionCorrections();
+        useShellStore.getState().resetGameScope();
+        set({ ...endedTerminalIntent(get()), game: null, undoStack: [], selectedPlayerId: null, pendingKnocks: [] });
+        return true;
       },
 
       dealRolePool: (stagedPool, actionContext) => {

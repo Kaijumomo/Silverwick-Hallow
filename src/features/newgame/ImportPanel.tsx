@@ -5,11 +5,13 @@ import type { Script } from "@/stores/types";
 
 type Props = {
   onImported: (script: Script) => void;
+  /** Choose an already-saved imported script. */
+  onUse?: (script: Script) => void;
 };
 
 type Tab = "paste" | "upload";
 
-export function ImportPanel({ onImported }: Props) {
+export function ImportPanel({ onImported, onUse }: Props) {
   const addCustomScript = useStorytellerStore((s) => s.addCustomScript);
   const removeCustomScript = useStorytellerStore((s) => s.removeCustomScript);
   const customScripts = useStorytellerStore((s) => s.customScripts);
@@ -150,6 +152,11 @@ export function ImportPanel({ onImported }: Props) {
           {importedScripts.map((s) => (
             <div key={s.id} className="ng-import-existing-row">
               <span className="ng-import-existing-name">{s.name}</span>
+              {onUse && (
+                <button className="btn btn-sm" aria-label={`Use ${s.name}`} onClick={() => onUse(s)}>
+                  Use
+                </button>
+              )}
               <button
                 className="btn btn-sm btn-danger"
                 aria-label={`Remove ${s.name}`}

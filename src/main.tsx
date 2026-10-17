@@ -7,6 +7,7 @@ import "@/styles/components.css";
 import "@/styles/home.css";
 import "@/styles/home-reference.css";
 import "@/styles/newgame.css";
+import "@/styles/setupFlow.css";
 import "@/styles/player-notes.css";
 import "@/styles/system.css";
 import "@/styles/reference.css";
