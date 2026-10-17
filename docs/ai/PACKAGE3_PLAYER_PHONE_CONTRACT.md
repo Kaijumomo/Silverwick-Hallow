@@ -23,3 +23,23 @@ Scope: contract amendments approved by the Product Owner for Package 3. This fil
 6. No Firebase Rules change: `public` is already readable by a lobby requester or roster member, writable only by the Storyteller, and its shape is not validated (`rules.spec.ts`, "public access follows request/membership, and only ST can write it").
 
 **Tests.** `src/firebase/arrivals.test.ts` (derivation, privacy, setup-only, schema), `src/firebase/setupFlowLifecycle.test.tsx` ("public arrivals" — live writer publish, cancel/offline cleanup), existing `rules.spec.ts` public-read cases.
+
+## B. Pre-game ceremony (slice 3B)
+
+Scope: what a seated phone shows between taking a seat and entering the game. No schema, Rules or wire change; everything below is client behaviour over the existing public lobby record and the player's own self envelope.
+
+**Stages.** Circle -> sealed token -> (team) -> game. `showsPreGame` (src/features/player/phone/PreGameFlow.tsx) selects the ceremony while the phase is `setup`, while a Traveller still has to choose, or while the current identity (`revealToken`) has not been acknowledged. Anything else goes straight to the game shell.
+
+**Re-seal.** The turned state, the stage and "entered" live only in component state. Nothing is persisted, so a reload (or a new `revealToken` mid-ceremony) returns to the circle with a sealed token. The sealed state contains no character text, art URL or ability in the page; the face is mounted only while the token is turned (and for the 1 s it takes to turn back).
+
+**Acknowledgement.** `acknowledgeReveal` is called the first time the token is turned face up and never again for the same token (the existing per-token ack, advisory only). Turning it back and over again does not re-send. A changed identity is a new token: the circle then shows only the neutral "the Storyteller has updated your character", never what changed.
+
+**Circle.** Public data only: seat numbers, names, count, script name. Neighbours are the previous and next seat in seat order, wrapping.
+
+**Evil team (D2).** The screen is built from the self packet alone (`teamOf`): `demon` -> Demon, `minions` -> Minion, `bluffs` -> the Demon's bluffs. It shows name, seat and the Minion/Demon designation with a generic team icon, never a teammate's character, and appears only when the packet carries team or bluff information; otherwise the player goes straight in. Travellers never get it (their Demon information stays under From the Storyteller). Small-game restrictions are inherited, not recomputed: the Storyteller's own information rules (`infoModel`) decide what is given.
+
+**Open item for the 3C contract.** Today an ordinary Minion's or Demon's packet carries no team data: starting team information is shown on the Storyteller's device (`infoModel` setup views), and `demon` / `minions` are only populated for a Traveller's Demon and a fake-Demon. The team screen therefore appears for those cases now, and for ordinary evil players once team information is delivered to the phone. That delivery is the same persistent per-participant delivery channel the history contract (3C, D3) must define, so the data path (what is delivered, when, how a correction or Undo treats it) is specified there, not improvised here.
+
+**Traveller.** The circle offers "Choose your Traveler" while `isTraveler && !publicDisplayRole`; one tap sends the choice (`chooseTraveler`), a pending request is immutable until the Storyteller clears it, and applying the choice (public role set, identity delivered) moves straight to the sealed token. Traveller art is the neutral icon (`travellerArt`).
+
+**Tests.** `src/features/player/phone/preGame.test.tsx`, plus the rewritten 10H reveal tests in `phase10hPlayerPhone.test.tsx` and Traveller tests in `PlayerScreen.test.tsx`.

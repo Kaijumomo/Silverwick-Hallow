@@ -20,6 +20,7 @@ import { MemoryRoomBackend } from "@/firebase/memoryBackend";
 import { createLobby } from "@/firebase/lobby";
 import { requireActiveSession, sessionPath } from "@/firebase/lifecycle";
 import { PlayerScreen, playerMilestone, revealModeOf } from "./PlayerScreen";
+import { enterTown, receiveCharacter, turnToken } from "./phone/ceremonyTestUtils";
 import { PlayerEnded } from "./PlayerTerminal";
 import type { PublicLobbyRecord } from "@/stores/types";
 
@@ -64,6 +65,7 @@ describe("10H-AC-028 (F1): only public-safe coarse milestones", () => {
 
   it("the shell shows phase, name and one status line, with touch-safe bottom navigation (Role / Town / More)", async () => {
     render(<PlayerScreen />);
+    await enterTown();
     const nav = await screen.findByRole("navigation", { name: "Player views" });
     expect(within(nav).getAllByRole("button").map((b) => b.textContent)).toEqual(["Role", "Town", "More"]);
     expect(screen.getByText("Setting up")).toBeInTheDocument();
@@ -92,31 +94,47 @@ describe("10H-AC-029 / AC-031 (E1, F2, F3): ceremonial first reveal, neutral upd
     expect(revealModeOf(TOKEN, "tok_bbbbbbbbbbbbbbbbbbbbbb")).toBe("updated");
   });
 
-  it("first reveal is ceremonial, then a readable card with Hide and I've Seen My Role", async () => {
+  it("first reveal: a sealed circle, then a sealed token, then the turned token and an acknowledgement (3B)", async () => {
     render(<PlayerScreen />);
-    const sealed = await screen.findByRole("button", { name: "Tap to reveal your role" });
-    expect(sealed).toHaveTextContent("Your Role Is Ready");
-    expect(document.body).not.toHaveTextContent("Chef");
-    fireEvent.click(sealed);
-    const card = screen.getByRole("article", { name: "Your role" });
-    expect(card).toHaveClass("ceremony");
-    expect(within(card).getByRole("heading", { name: /Chef/ })).toBeInTheDocument();
-    fireEvent.click(within(card).getByRole("button", { name: "I've Seen My Role" }));
+    // The circle says the character is sealed and names no character.
+    await screen.findByRole("heading", { name: "Your place in the circle" });
+    expect(screen.getByText("Alice, the night is coming. Your character has been sealed.")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/Chef/);
+    await receiveCharacter();
+    // Sealed token: nothing about the character is in the page.
+    expect(screen.getByText("Tap the token to turn it over")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/Chef|townsfolk|You are the/i);
+    expect(document.querySelector("[style*='background-image']")).toBeNull();
+    expect(acknowledgeReveal).not.toHaveBeenCalled();
+    turnToken();
+    expect(screen.getByRole("heading", { name: "Chef" })).toBeInTheDocument();
+    expect(screen.getByText("You are the")).toBeInTheDocument();
     expect(acknowledgeReveal).toHaveBeenCalledTimes(1);
-    fireEvent.click(within(card).getByRole("button", { name: "Tap to seal your role" }));
-    expect(screen.queryByRole("article", { name: "Your role" })).toBeNull();
+    // Turning it back and over again never re-acknowledges.
+    fireEvent.click(screen.getByRole("button", { name: "Turn your token back over" }));
+    turnToken();
+    expect(acknowledgeReveal).toHaveBeenCalledTimes(1);
   });
 
-  it("a changed visible identity shows ONLY 'Your Role Was Updated' until revealed -- no character, no detail", async () => {
+  it("a changed visible identity shows ONLY a neutral notice on the circle -- no character, no detail", async () => {
     seat({ ownRevealAck: "tok_bbbbbbbbbbbbbbbbbbbbbb" });
     render(<PlayerScreen />);
-    const sealed = await screen.findByRole("button", { name: "Tap to reveal your role" });
-    expect(sealed).toHaveTextContent("Your Role Was Updated");
+    await screen.findByRole("heading", { name: "Your place in the circle" });
+    expect(screen.getByText("Alice, the Storyteller has updated your character.")).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/Chef|good|townsfolk/i);
   });
 
-  it("an acknowledged current identity is the plain sealed card; revealing shows the acknowledgement, no button", async () => {
+  it("an acknowledged current identity goes through the same sealed token without a second acknowledgement", async () => {
     seat({ ownRevealAck: TOKEN });
+    render(<PlayerScreen />);
+    await receiveCharacter();
+    turnToken();
+    expect(screen.getByRole("heading", { name: "Chef" })).toBeInTheDocument();
+    expect(acknowledgeReveal).not.toHaveBeenCalled();
+  });
+
+  it("an acknowledged player in a running game goes straight to the shell with a plain sealed card (interim, until 3C)", async () => {
+    seat({ ownRevealAck: TOKEN, publicLobby: lobby("day", 1) });
     render(<PlayerScreen />);
     const sealed = await screen.findByRole("button", { name: "Tap to reveal your role" });
     expect(sealed).toHaveTextContent("Tap to reveal your role");
@@ -134,7 +152,7 @@ describe("10H-AC-029 / AC-031 (E1, F2, F3): ceremonial first reveal, neutral upd
 
 describe("10H-AC-039 / AC-042 (F7, F5): own Life at Night; latest-only From the Storyteller", () => {
   it("at Night the player privately sees their OWN Life while the public Town withholds everyone's", async () => {
-    seat({ publicLobby: lobby("night", 2, false), self: { shownRole: "chef", revealToken: TOKEN, life: { alive: false, ghostVote: true } } });
+    seat({ ownRevealAck: TOKEN, publicLobby: lobby("night", 2, false), self: { shownRole: "chef", revealToken: TOKEN, life: { alive: false, ghostVote: true } } });
     render(<PlayerScreen />);
     expect(await screen.findByText(/^You:/)).toHaveTextContent("You: Dead · vote available");
     fireEvent.click(screen.getByRole("button", { name: "Town" }));
@@ -142,7 +160,7 @@ describe("10H-AC-039 / AC-042 (F7, F5): own Life at Night; latest-only From the 
   });
 
   it("the latest private information appears once revealed, under From the Storyteller -- no history list", async () => {
-    seat({ self: { shownRole: "imp", shownAlignment: "evil", revealToken: TOKEN, extraText: "Latest message", minions: [{ id: "p-bob", name: "Bob", seat: 1 }] } });
+    seat({ ownRevealAck: TOKEN, publicLobby: lobby("day", 1), self: { shownRole: "imp", shownAlignment: "evil", revealToken: TOKEN, extraText: "Latest message", minions: [{ id: "p-bob", name: "Bob", seat: 1 }] } });
     render(<PlayerScreen />);
     fireEvent.click(await screen.findByRole("button", { name: "Tap to reveal your role" }));
     const info = screen.getByRole("region", { name: "From the Storyteller" });

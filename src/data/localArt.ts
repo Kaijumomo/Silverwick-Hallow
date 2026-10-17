@@ -28,3 +28,8 @@ for (const [dir, list] of Object.entries(SET_IDS)) {
 }
 
 export const localCharacterArt = (id: string): string | undefined => LOCAL_CHARACTER_ART[id];
+
+/** Self-hosted neutral (unsuffixed) Traveller icon: the phone player flow draws
+ * every Traveller with it, whatever their alignment. */
+export const travellerArt = (id: string): string | undefined =>
+  SET_IDS.travellers.includes(id) ? `${ART_BASE}/characters/travellers/neutral/${id}.png` : undefined;

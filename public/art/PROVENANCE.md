@@ -172,3 +172,30 @@ folder decode to the same pixels but have different bytes, so the zip was used.)
 | `characters/travellers/bishop.png` | resources/characters/bmr/bishop_g.webp | `f91c30653d5446bb62a5f7b534cb2f09a263962d` | `84539308a4c52e91` | 85997 |
 | `characters/travellers/gangster.png` | resources/characters/carousel/gangster_g.webp | `5f4bc588a2810304ac0f769a774950e6d4821dc9` | `9b4e2ae5c0361fb3` | 96576 |
 | `characters/travellers/gnome.png` | resources/characters/carousel/gnome_g.webp | `32cffc39896d1532ae50e6095098b6a64abc8827` | `82d588d5b8c201bb` | 105217 |
+
+## Package 3 (3B) addition (2026-10-17): neutral Traveller icons
+The player-flow design draws every Traveller with the official neutral (unsuffixed) icon, not the `_g` one above. These 18 files (1.8 MB) are the
+collection's neutral variants for the Travellers, used only by the player phone (`travellerArt` in `src/data/localArt.ts`), under the same
+private-personal-use caveat and removal manifest (`public/art/`). Each is byte-identical to the entry in the collection's
+`Silverwick-Hollow-Personal-PNG-Assets.zip` and its SHA-256 equals the `neutral` variant `sha256` in the collection's `manifest.json`.
+
+| File | Official source (pinned) | Source git blob SHA-1 | File SHA-256 (first 16) | Bytes |
+|---|---|---|---|---|
+| `characters/travellers/neutral/scapegoat.png` | resources/characters/tb/scapegoat.webp | `a17db93e320525077da0ff56409c1802c3d50809` | `e60c553ac8ca7fe2` | 100952 |
+| `characters/travellers/neutral/gunslinger.png` | resources/characters/tb/gunslinger.webp | `273e4cb3f4f78b60f646da1b52f2b4230de6c10f` | `edccd0a18dbbf292` | 81001 |
+| `characters/travellers/neutral/beggar.png` | resources/characters/tb/beggar.webp | `4be813bf37e373b6ac504fa23188a68170142e00` | `f542cc2fd45b0f03` | 119310 |
+| `characters/travellers/neutral/bureaucrat.png` | resources/characters/tb/bureaucrat.webp | `275de575329ec4cc1dc7034aedcea7eea33fff81` | `fa4f14baa157c263` | 113457 |
+| `characters/travellers/neutral/thief.png` | resources/characters/tb/thief.webp | `165a5e30954aa8976823a2c6314ee263dc56a243` | `af3d06c7f3301aa2` | 113754 |
+| `characters/travellers/neutral/butcher.png` | resources/characters/snv/butcher.webp | `00b2bcb6f933c555adaa1af3d4974915c13b31a4` | `b99fcf98df0c68f2` | 93519 |
+| `characters/travellers/neutral/cacklejack.png` | resources/characters/carousel/cacklejack.webp | `8a6e625e8f5b7764f631047dfe5600ca4f030e72` | `53081fff334e06fb` | 64339 |
+| `characters/travellers/neutral/bonecollector.png` | resources/characters/snv/bonecollector.webp | `a52800be22b967b5b7d64af7f90b42b8b7e64226` | `a98cb1a2d036e878` | 122851 |
+| `characters/travellers/neutral/harlot.png` | resources/characters/snv/harlot.webp | `636020d52a80043f847c7827368abd96c4bc3d49` | `e6ff472c7ea5394a` | 111716 |
+| `characters/travellers/neutral/barista.png` | resources/characters/snv/barista.webp | `f998a6029e4074ecf6ff4b3899b8d51eb4f27889` | `efc3b68477ece1a3` | 95644 |
+| `characters/travellers/neutral/deviant.png` | resources/characters/snv/deviant.webp | `a4760f81e17a070728da36a44812c4cf8b242cf6` | `1f0d066272fffcfa` | 100131 |
+| `characters/travellers/neutral/apprentice.png` | resources/characters/bmr/apprentice.webp | `abce2ea50d3351e2770b6ebe68d74048e9605745` | `f2ff63ae3891c47e` | 102566 |
+| `characters/travellers/neutral/matron.png` | resources/characters/bmr/matron.webp | `650edfdc2fdfc25a1046a5b249a8b90e8056653f` | `0adc67d93a98c815` | 66487 |
+| `characters/travellers/neutral/voudon.png` | resources/characters/bmr/voudon.webp | `9ab957978ef26f5c6fac5e6cebc0a11f58ac02a3` | `2737cabd8baaf293` | 131138 |
+| `characters/travellers/neutral/judge.png` | resources/characters/bmr/judge.webp | `5f3698846d258a4146b57463fd5da34b8d97def9` | `37e73577e0c77b97` | 84849 |
+| `characters/travellers/neutral/bishop.png` | resources/characters/bmr/bishop.webp | `72a0090ffac5b5d3419e000aaa108523465e6490` | `2b79a123fccde311` | 91205 |
+| `characters/travellers/neutral/gangster.png` | resources/characters/carousel/gangster.webp | `4f4777c0e21ea4679364ff0207cf84a6a66fa857` | `1e64a6e0561ab5d1` | 91387 |
+| `characters/travellers/neutral/gnome.png` | resources/characters/carousel/gnome.webp | `8b2e343ecf1a80acfa09dc732852c8ed105164fd` | `6a4931f96cef15b8` | 104580 |

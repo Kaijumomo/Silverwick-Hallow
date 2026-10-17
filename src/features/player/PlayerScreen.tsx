@@ -6,11 +6,11 @@ import { usePlayerStore } from "@/stores/playerStore";
 import { connectFirebase } from "@/firebase/session";
 import { isFirebaseConfigured, getConfigSource } from "@/firebase/config";
 import { acknowledgeReveal, applyJoinIntent, chooseTraveler, joinLobby, leaveLobby, useOwnTravelerChoice, usePlayerSync } from "@/firebase/playerSync";
-import { TRAVELERS } from "@/data/travelers";
 import { lifecycleMessage } from "@/firebase/lifecycle";
 import { FirebaseConfigScreen } from "./phone/FirebaseConfigScreen";
 import { SignInScreen } from "./phone/SignInScreen";
 import { WaitingScreen } from "./phone/WaitingScreen";
+import { PreGameFlow, showsPreGame } from "./phone/PreGameFlow";
 import { ConnectingScreen, FailureScreen, formatCode, KnockingScreen, LeavingScreen, ReconnectingScreen, RejectedScreen, RevokedScreen } from "./phone/PhoneStates";
 import type { RoomBackend } from "@/firebase/backend";
 import { lookupOfficialRole } from "@/data/officialRoles";
@@ -73,7 +73,10 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
   const [submittedCode, setSubmittedCode] = useState("");
   const [submittedName, setSubmittedName] = useState("");
   const [activeTab, setActiveTab] = useState<PlayerTab>("role");
-  const [travelerChoiceBusy, setTravelerChoiceBusy] = useState(false);
+  const [travelerChoiceBusyId, setTravelerChoiceBusyId] = useState<string | null>(null);
+  // Package 3 (3B): the pre-game ceremony (circle, reveal, team) is over once
+  // the player enters the town. Local only, so a reload re-seals the token.
+  const [entered, setEntered] = useState(false);
   const [travelerChoiceError, setTravelerChoiceError] = useState<string | null>(null);
   const [ackBusy, setAckBusy] = useState(false);
   const [ackError, setAckError] = useState<string | null>(null);
@@ -111,6 +114,11 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
   }, [initialCode, retry]);
 
   usePlayerSync(backend, retry);
+  // A new identity in Setup starts the ceremony again.
+  const revealToken = self?.revealToken;
+  useEffect(() => {
+    if (usePlayerStore.getState().publicLobby?.phase === "setup") setEntered(false);
+  }, [revealToken]);
   // CLOSURE-01: the player's own pending Traveler request, if any.
   const pendingTravelerChoice = useOwnTravelerChoice(backend, status === "seated");
 
@@ -319,10 +327,10 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
     // replacement write (the server rule refuses one anyway).
     if (pendingTravelerChoice) return;
     setTravelerChoiceError(null);
-    setTravelerChoiceBusy(true);
+    setTravelerChoiceBusyId(roleId);
     try { await chooseTraveler(backend, roleId); }
     catch (e) { setTravelerChoiceError(lifecycleMessage(e)); }
-    finally { setTravelerChoiceBusy(false); }
+    finally { setTravelerChoiceBusyId(null); }
   };
 
   const acknowledge = async () => {
@@ -339,6 +347,29 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
   const milestone = playerMilestone(publicLobby, !!self, acked);
   const ownLife = self?.life ? lifeStateOfSelf(self.life) : null;
 
+  // Package 3 (3B): before the game, the circle, the sealed token and (for
+  // evil players the Storyteller briefed) the team. Nothing private renders
+  // until the player turns their own token.
+  if (needsTravelerChoice || (!entered && showsPreGame(publicLobby.phase, !!self, mode, needsTravelerChoice))) {
+    return (
+      <PreGameFlow
+        publicLobby={publicLobby}
+        playerId={playerId}
+        ownName={ownName}
+        self={self}
+        mode={mode}
+        acknowledged={acked}
+        needsTravellerChoice={needsTravelerChoice}
+        pendingTravellerId={pendingTravelerChoice}
+        busyTravellerId={travelerChoiceBusyId}
+        travellerError={travelerChoiceError}
+        onChooseTraveller={(id) => void chooseTravelerRole(id)}
+        onAcknowledge={() => void acknowledge()}
+        onEnter={() => { setRevealed(false); setEntered(true); }}
+      />
+    );
+  }
+
   // Seated -- Phase 10H (§§11.1-11.2): a personal window -- phase, name, one
   // short public-safe status line, the current view, and touch-safe bottom
   // navigation. Leave is secondary (under More).
@@ -351,15 +382,6 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
       </header>
 
       <main className="player-main">
-        {needsTravelerChoice && (
-          <TravelerChoicePanel
-            busy={travelerChoiceBusy}
-            error={travelerChoiceError}
-            pending={pendingTravelerChoice}
-            onChoose={chooseTravelerRole}
-          />
-        )}
-
         {activeTab === "role" && <>
           {ownLife && (
             // F7 (10H-AC-039): the player's OWN Life, privately -- also at Night.
@@ -443,61 +465,6 @@ export function playerMilestone(publicLobby: PublicLobbyRecord, hasRole: boolean
 /** The player's own Life State from their private self envelope. */
 function lifeStateOfSelf(life: { alive: boolean; ghostVote: boolean; exiled?: true }) {
   return publicLifeStateOf({ alive: life.alive, ghostVote: life.ghostVote, ...(life.exiled ? { exiled: true } : {}) });
-}
-
-// ---------------------------------------------------------------------------
-// Traveler choice — player-side character picker (Phase 9 Setup
-// finalization B4). Restricted to the supported Traveler catalogue; never
-// shows ordinary characters.
-// ---------------------------------------------------------------------------
-
-function TravelerChoicePanel({
-  busy,
-  error,
-  pending,
-  onChoose,
-}: {
-  busy: boolean;
-  error: string | null;
-  /** CLOSURE-01: the submitted request still waiting for the Storyteller. */
-  pending: string | null;
-  onChoose: (roleId: string) => void;
-}) {
-  if (pending) {
-    const name = TRAVELERS.find((r) => r.id === pending)?.name ?? pending;
-    return (
-      <div className="traveler-choice-panel" role="region" aria-label="Choose your Traveler">
-        <h3 className="drawer-section-title">Choose your Traveler</h3>
-        <p role="status">{name} selected · waiting for Storyteller</p>
-      </div>
-    );
-  }
-  return (
-    <div className="traveler-choice-panel" role="region" aria-label="Choose your Traveler">
-      <h3 className="drawer-section-title">Choose your Traveler</h3>
-      <p className="behavior-help">
-        The Storyteller has marked you as a Traveler. Pick your character below — it can't be changed while it waits for the Storyteller.
-      </p>
-      <div className="role-picker-grid">
-        {TRAVELERS.map((r) => (
-          <button
-            key={r.id}
-            type="button"
-            className="role-card"
-            disabled={busy}
-            onClick={() => onChoose(r.id)}
-            title={r.ability}
-          >
-            <span className="role-card-name type-traveler">{r.name}</span>
-            <span className="role-card-type">traveler</span>
-          </button>
-        ))}
-      </div>
-      {/* 10H-AC-067: while the choice is sending, say so in words. */}
-      {busy && <p className="disabled-reason">Sending your choice…</p>}
-      {error && <p className="field-error" role="alert">{error}</p>}
-    </div>
-  );
 }
 
 // ---------------------------------------------------------------------------
