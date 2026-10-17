@@ -407,3 +407,21 @@
   .swp-stamp { animation: none; }
 }
 .swp-path:disabled { opacity: .45; cursor: default; }
+
+/* Discreet text link (design: "Request to leave" link style). */
+.swp-linkrow { flex: none; display: flex; justify-content: center; padding-top: 6px; }
+.swp-textlink {
+  min-height: 44px;
+  padding: 0 8px;
+  border: none;
+  background: transparent;
+  font-family: "IM Fell English", serif;
+  font-style: italic;
+  font-size: 16px;
+  color: rgba(216, 201, 164, .62);
+  text-decoration: underline;
+  text-decoration-color: rgba(224, 185, 106, .35);
+  text-underline-offset: 5px;
+  cursor: pointer;
+}
+.swp-textlink:hover { color: #e0b96a; }

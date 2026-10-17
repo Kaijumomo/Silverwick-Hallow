@@ -153,6 +153,43 @@ describe("Sign in (design screens 02-03)", () => {
     expect(screen.getByRole("button", { name: "Cancel / request to leave" })).toBeInTheDocument();
   });
 
+  it("Connection Settings appears on the connection-failure screen and opens the Firebase config screen", async () => {
+    connection.fail = true;
+    render(<PlayerScreen goHome={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Connection Settings" }));
+    expect(await screen.findByRole("dialog", { name: "Configure Firebase" })).toBeInTheDocument();
+  });
+
+  it("Connection Settings is not offered on other screens or when the config is environment-managed", async () => {
+    seed({ status: "error", error: "Connection lost. Check your network and retry." });
+    render(<PlayerScreen goHome={() => {}} />);
+    await connected();
+    expect(screen.queryByRole("button", { name: "Connection Settings" })).toBeNull();
+    cleanup();
+    __setEnvOverrideForTests({ VITE_FIREBASE_API_KEY: "k", VITE_FIREBASE_DATABASE_URL: "https://x-default-rtdb.firebaseio.com", VITE_FIREBASE_PROJECT_ID: "x" });
+    connection.fail = true;
+    usePlayerStore.getState().reset();
+    render(<PlayerScreen goHome={() => {}} />);
+    expect(await screen.findByRole("heading", { name: "Lobby unavailable" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Connection Settings" })).toBeNull();
+  });
+
+  it("a failed join (lobby not found) returns to Sign in with the name and code still filled in", async () => {
+    vi.mocked(joinLobby).mockImplementationOnce(async () => {
+      usePlayerStore.getState().setStatus("notFound", "This lobby does not exist or has expired.");
+    });
+    const goHome = vi.fn();
+    render(<PlayerScreen goHome={goHome} />);
+    fireEvent.change(await screen.findByLabelText("Your name"), { target: { value: "Bram" } });
+    fireEvent.change(screen.getByLabelText("Game code"), { target: { value: "WICK7Q3M" } });
+    fireEvent.click(screen.getByRole("button", { name: /Enter the Town/ }));
+    expect(await screen.findByRole("heading", { name: "Lobby unavailable" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back to start" }));
+    expect(goHome).not.toHaveBeenCalled();
+    expect(await screen.findByLabelText("Your name")).toHaveValue("Bram");
+    expect(screen.getByLabelText("Game code")).toHaveValue("WICK7Q3M");
+  });
+
   it("a join-time error stays inline on Sign in", async () => {
     render(<PlayerScreen goHome={() => {}} />);
     await screen.findByLabelText("Your name");

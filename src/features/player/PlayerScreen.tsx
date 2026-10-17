@@ -71,6 +71,7 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
   // code typed on the sign-in screen while the knock is in flight.
   const [connectFailure, setConnectFailure] = useState<string | null>(null);
   const [submittedCode, setSubmittedCode] = useState("");
+  const [submittedName, setSubmittedName] = useState("");
   const [activeTab, setActiveTab] = useState<PlayerTab>("role");
   const [travelerChoiceBusy, setTravelerChoiceBusy] = useState(false);
   const [travelerChoiceError, setTravelerChoiceError] = useState<string | null>(null);
@@ -154,6 +155,7 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
 
   const onJoinSubmit = async (joinCode: string, name: string) => {
     setSubmittedCode(joinCode);
+    setSubmittedName(name);
     if (!backend) {
       usePlayerStore
         .getState()
@@ -214,7 +216,9 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
       : <RevokedScreen code={submittedCode} name="Guest" seat={null} message={error} onBack={back} />;
   }
   if (!code && status === "notFound") {
-    return <FailureScreen label="not-found" eyebrow={submittedCode ? formatCode(submittedCode) : "Silverwick Hollow"} title="Lobby unavailable" message={error} onBack={back} />;
+    // Failed join: return to Sign in with the name and code still filled in,
+    // so the code can be corrected without starting over.
+    return <FailureScreen label="not-found" eyebrow={submittedCode ? formatCode(submittedCode) : "Silverwick Hollow"} title="Lobby unavailable" message={error} onBack={() => reset()} />;
   }
   if (!code && !backend && connectFailure) {
     return (
@@ -225,6 +229,7 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
         message={connectFailure}
         onRetry={retryConnection}
         onCancel={back}
+        {...(getConfigSource() !== "env" ? { onSettings: () => setConfigOpen(true) } : {})}
       />
     );
   }
@@ -234,9 +239,9 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
     if (!backend && isFirebaseConfigured()) return <ConnectingScreen />;
     return (
       <SignInScreen
-        key={initialCode ?? ""}
-        initialCode={initialCode ?? ""}
-        initialName={prefillName ?? ""}
+        key={`${initialCode ?? ""}|${submittedCode}`}
+        initialCode={submittedCode || (initialCode ?? "")}
+        initialName={submittedName || (prefillName ?? "")}
         error={error}
         onBack={back}
         onSubmit={async (joinCode, name) => { consumePrefill(); await onJoinSubmit(joinCode, name); }}

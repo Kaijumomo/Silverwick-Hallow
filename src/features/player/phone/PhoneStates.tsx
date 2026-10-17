@@ -51,13 +51,15 @@ export function ReconnectingScreen({ code, name }: { code: string; name: string 
 }
 
 /** 2b / 3a / 3c / 3d: an eclipsed moon, the store's own message, retry/cancel. */
-export function FailureScreen({ eyebrow, title, message, onRetry, onCancel, onBack, label }: {
+export function FailureScreen({ eyebrow, title, message, onRetry, onCancel, onBack, onSettings, label }: {
   eyebrow: string;
   title: string;
   message: string | null;
   onRetry?: () => void;
   onCancel?: () => void;
   onBack?: () => void;
+  /** Configuration-related failures only: opens Connection Settings. */
+  onSettings?: () => void;
   label: string;
 }) {
   const primary: StatusAction | undefined = onRetry
@@ -74,6 +76,7 @@ export function FailureScreen({ eyebrow, title, message, onRetry, onCancel, onBa
       message={message}
       primary={primary}
       secondary={secondary}
+      link={onSettings ? { label: "Connection Settings", onClick: onSettings } : undefined}
     />
   );
 }

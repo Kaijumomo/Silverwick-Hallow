@@ -16,11 +16,13 @@ const GLOW: Record<StatusTone, string | undefined> = {
 
 /** Shared full-screen status layout (design: "Shared status-screen layout").
  * It replaces the whole phone UI, so nothing private can render behind it. */
-export function StatusScreen({ tone = "neutral", reserve, big, emblem, eyebrow, title, body, message, primary, secondary, children, label }: {
+export function StatusScreen({ tone = "neutral", reserve, link, big, emblem, eyebrow, title, body, message, primary, secondary, children, label }: {
   tone?: StatusTone;
   /** Height (px) of the band the design reserves for its review-only
    * "Simulate" links, so centred content sits where the mockup puts it. */
   reserve?: number;
+  /** A discreet text link under the actions (e.g. Connection Settings). */
+  link?: { label: string; onClick: () => void };
   /** Result style (Game ended with a winner): rule + large Cinzel title. */
   big?: boolean;
   emblem?: ReactNode;
@@ -57,6 +59,7 @@ export function StatusScreen({ tone = "neutral", reserve, big, emblem, eyebrow, 
             {secondary && <OutlineButton onClick={secondary.onClick} disabled={secondary.disabled}>{secondary.label}</OutlineButton>}
           </div>
         )}
+        {link && <div className="swp-linkrow"><button type="button" className="swp-textlink" onClick={link.onClick}>{link.label}</button></div>}
         {reserve ? <div className="swp-actions-spacer" style={{ height: reserve }} aria-hidden="true" /> : null}
       </div>
     </PhoneFrame>
