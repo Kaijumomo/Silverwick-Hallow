@@ -28,9 +28,8 @@ export function TownTab({ lobby, ownId }: { lobby: PublicLobbyRecord; ownId: str
   const alive = seats.filter((s) => s.dead === false).length;
   const disc = Math.max(30, Math.min(54, Math.floor((2 * Math.PI * RADIUS) / Math.max(total, 1)) - 4));
   const residents = seats.filter((s) => !s.traveller).length;
-  const travellers = total - residents;
   const mix = compositionFor(residents);
-  const hasTraveller = travellers > 0;
+  const hasTraveller = seats.some((s) => s.traveller);
 
   return (
     <div className="swp-town">
@@ -88,13 +87,6 @@ export function TownTab({ lobby, ownId }: { lobby: PublicLobbyRecord; ownId: str
               </div>
             ))}
           </div>
-          <p className="swp-comp-note">The standard starting mix for {residents} players.</p>
-          {hasTraveller && (
-            <div className="swp-comp-trav">
-              <span className="swp-comp-label">Travellers</span>
-              <span className="swp-comp-num" style={{ color: TYPE_COLOUR.traveller }}>{travellers}</span>
-            </div>
-          )}
         </section>
       )}
     </div>

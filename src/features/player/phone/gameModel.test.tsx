@@ -85,10 +85,9 @@ describe("Town tab", () => {
     expect(centre).toHaveTextContent("alive");
     expect(centre).toHaveTextContent("3 votes to execute");
     const mix = screen.getByRole("region", { name: "Composition" });
-    // 8 residents: 5 Townsfolk, 1 Outsider, 1 Minion, 1 Demon; the Traveller is separate.
-    expect(within(mix).getAllByText(/^[0-9]+$/).map((n) => n.textContent)).toEqual(["5", "1", "1", "1", "1"]);
-    expect(mix).toHaveTextContent("The standard starting mix for 8 players.");
-    expect(within(mix).getByText("Travellers").nextSibling).toHaveTextContent("1");
+    // 8 residents: 5 Townsfolk, 1 Outsider, 1 Minion, 1 Demon; the Traveller is not counted.
+    expect(within(mix).getAllByText(/^[0-9]+$/).map((n) => n.textContent)).toEqual(["5", "1", "1", "1"]);
+    expect(mix).not.toHaveTextContent(/standard starting mix|travellers/i);
     // Deaths never change it.
     expect(screen.getAllByRole("img", { name: /dead/ })).toHaveLength(3);
   });
@@ -109,6 +108,6 @@ describe("Town tab", () => {
     unmount();
     render(<TownTab lobby={lobby("day", 20, { travellers: 5 })} ownId="p0" />);
     expect(screen.getAllByRole("img", { name: /^Seat \d/ })).toHaveLength(20);
-    expect(screen.getByRole("region", { name: "Composition" })).toHaveTextContent("standard starting mix for 15 players");
+    expect(screen.getByRole("region", { name: "Composition" })).toHaveTextContent("Townsfolk");
   });
 });
