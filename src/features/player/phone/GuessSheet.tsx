@@ -1,3 +1,5 @@
+import { useRef } from "react";
+import { useDialogFocus } from "./useDialogFocus";
 import { iconUrlFor } from "@/data/iconUrl";
 import { MAX_SEAT_GUESSES, usePlayerStore } from "@/stores/playerStore";
 import type { RoleDef } from "@/stores/types";
@@ -23,6 +25,8 @@ export function GuessSheet({ seat, name, code, seatId, scriptCharacters, onClose
 }) {
   const chosen = usePlayerStore((s) => s.seatGuesses[`${code}:${seatId}`]?.guesses ?? []);
   const setSeatGuess = usePlayerStore((s) => s.setSeatGuess);
+  const ref = useRef<HTMLDivElement>(null);
+  useDialogFocus(ref, onClose);
   const full = chosen.length >= MAX_SEAT_GUESSES;
   const toggle = (id: string) => {
     if (chosen.includes(id)) setSeatGuess(code, seatId, { guesses: chosen.filter((c) => c !== id) });
@@ -31,7 +35,7 @@ export function GuessSheet({ seat, name, code, seatId, scriptCharacters, onClose
   return (
     <div className="swp-sheet-layer">
       <div className="swp-sheet-backdrop" onClick={onClose} />
-      <div className="swp-sheet swp-guess-sheet" role="dialog" aria-modal="true" aria-label={`Who is ${name}?`}>
+      <div ref={ref} tabIndex={-1} className="swp-sheet swp-guess-sheet" role="dialog" aria-modal="true" aria-label={`Who is ${name}?`}>
         <div className="swp-sheet-head">
           <div className="swp-sheet-titles">
             <span className="swp-sheet-eyebrow">Seat {seat} · {chosen.length} of {MAX_SEAT_GUESSES} chosen</span>

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useDialogFocus } from "./useDialogFocus";
 import { isCanonicalRole } from "@/data/canonical";
 import { wikiUrlFor } from "@/features/almanac/wikiUrl";
 import { arcLetters, cleanReminder, jinxesOf, reminderLabels, teamOf } from "@/features/home/reference/referenceData";
@@ -9,6 +10,8 @@ import { roleArt } from "./roleArt";
  * its reminders, night prompts and jinxes. Tapping the card turns it. */
 export function TarotCard({ role, onClose }: { role: RoleDef; onClose: () => void }) {
   const [back, setBack] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useDialogFocus(ref, onClose);
   const team = teamOf(role.type);
   const colour = team?.color ?? "#e0b96a";
   const tokens = reminderLabels(role);
@@ -23,7 +26,7 @@ export function TarotCard({ role, onClose }: { role: RoleDef; onClose: () => voi
     <div className="swp-tarot-layer">
       <div className="swp-tarot-backdrop" onClick={onClose} />
       <button type="button" className="swp-tarot-close" aria-label="Close" onClick={onClose}>×</button>
-      <div className="swp-tarot" role="dialog" aria-modal="true" aria-label={role.name}>
+      <div ref={ref} tabIndex={-1} className="swp-tarot" role="dialog" aria-modal="true" aria-label={role.name}>
         <div className={`swp-tarot-flip${back ? " swp-tarot-turned" : ""}`}>
           <div className="swp-tarot-face swp-tarot-front" aria-hidden={back} onClick={flip} role="button" tabIndex={back ? -1 : 0}
             aria-label={`${role.name}. Tap to turn the card`}
@@ -83,9 +86,9 @@ export function TarotCard({ role, onClose }: { role: RoleDef; onClose: () => voi
                 </div>
               )}
               {official && (
-                <a className="swp-wiki" href={wikiUrlFor(role.name)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Read on the official wiki<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></svg></a>
+                <a className="swp-wiki" tabIndex={back ? 0 : -1} href={wikiUrlFor(role.name)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Read on the official wiki<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></svg></a>
               )}
-              <span className="swp-tarot-hint">Tap to turn back</span>
+              <button type="button" className="swp-tarot-hint swp-tarot-turnback" tabIndex={back ? 0 : -1} onClick={flip}>Tap to turn back</button>
             </div>
           </div>
         </div>

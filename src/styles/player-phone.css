@@ -756,3 +756,4 @@
 .swp-leave-body { font-family: "Cormorant Garamond", serif; font-style: normal; font-weight: 600; font-size: 18px; line-height: 1.3; color: rgba(234, 220, 184, .85); }
 .swp-tarot-orn-gem { position: relative; }
 .swp-tarot-orn-gem::after { content: ""; position: absolute; left: 50%; top: 50%; width: 7px; height: 7px; margin: -4px 0 0 -4px; transform: rotate(45deg); border: 1px solid #e0b96a; background: #1a0f0c; }
+.swp-tarot-turnback { border: none; background: transparent; cursor: pointer; }

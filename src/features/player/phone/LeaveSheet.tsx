@@ -1,3 +1,5 @@
+import { useRef } from "react";
+import { useDialogFocus } from "./useDialogFocus";
 import { formatCode } from "./PhoneStates";
 
 /** "Request to leave?" bottom sheet (design: leave confirm / sending). Both
@@ -10,11 +12,13 @@ export function LeaveSheet({ code, seat, name, sending, onConfirm, onClose }: {
   onConfirm: () => void;
   onClose: () => void;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useDialogFocus(ref, () => { if (!sending) onClose(); });
   const eyebrow = [formatCode(code), seat ? `Seat ${seat}` : null, name].filter(Boolean).join(" · ");
   return (
     <div className="swp-sheet-layer">
       <div className="swp-sheet-backdrop" onClick={sending ? undefined : onClose} />
-      <div className="swp-sheet swp-leave-sheet" role="dialog" aria-modal="true" aria-label="Request to leave?">
+      <div ref={ref} tabIndex={-1} className="swp-sheet swp-leave-sheet" role="dialog" aria-modal="true" aria-label="Request to leave?">
         <div className="swp-rule" aria-hidden="true"><span className="swp-rule-line" /><span className="swp-rule-gem" /><span className="swp-rule-line" /></div>
         <span className="swp-sheet-eyebrow swp-leave-eyebrow">{eyebrow}</span>
         <h2 className="swp-leave-title">Request to leave?</h2>

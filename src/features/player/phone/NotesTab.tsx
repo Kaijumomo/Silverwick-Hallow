@@ -32,7 +32,7 @@ export function NotesTab({ lobby, ownId, code, scriptCharacters, onGuess }: {
         return (
           <div key={s.id} className="swp-note-row">
             <span className="swp-note-seat">{s.seat}</span>
-            <button type="button" className="swp-note-main" onClick={() => onGuess(s.id)} aria-label={`Guess who ${s.name} is`}>
+            <button type="button" className="swp-note-main" onClick={() => onGuess(s.id)} aria-label={`Guess who ${s.name} is${guesses.length ? `. Chosen: ${guesses.map((id) => roleOf(id)?.name ?? id).join(", ")}` : ""}`}>
               <span className={`swp-note-name${s.dead ? " swp-note-dead" : ""}`}>{s.name}</span>
               <span className="swp-note-guesses">
                 {guesses.map((id) => {
@@ -58,7 +58,7 @@ export function NotesTab({ lobby, ownId, code, scriptCharacters, onGuess }: {
                     aria-pressed={on}
                     onClick={() => setSeatGuess(code, s.id, { verdict: on ? null : v.id })}
                   >
-                    {v.label}
+                    {v.id === "unsure" ? <><span aria-hidden="true">?</span><span className="swp-sr-only">Unsure</span></> : v.label}
                   </button>
                 );
               })}
