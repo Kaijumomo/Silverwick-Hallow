@@ -277,6 +277,12 @@ describe("Package 3 (D9): phone Home", () => {
     render(<HomeScreen navigate={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /^Character Reference/ }));
     expect(screen.getByRole("heading", { name: "Character Reference" })).toBeInTheDocument();
+    // Its own screen: Home is not rendered underneath (nothing to scroll past).
+    expect(screen.queryByRole("heading", { name: /Silverwick/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Player/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Home" }));
+    expect(screen.getByRole("button", { name: /^Player/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Character Reference/ }));
     fireEvent.click(screen.getByRole("button", { name: "Trouble Brewing" }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });

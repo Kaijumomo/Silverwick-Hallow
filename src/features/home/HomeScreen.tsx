@@ -91,7 +91,7 @@ export function HomeScreen({ navigate = defaultNavigate }: Props) {
   if (phone) {
     return (
       <>
-        {!reference && (
+        {!reference && !phoneReference && (
           <PhoneHome
             trial={isTabletTrial}
             onPick={(id) => {

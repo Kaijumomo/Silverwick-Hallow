@@ -135,7 +135,7 @@
 .swp-fell { font-family: "IM Fell English", serif; font-style: italic; color: rgba(234, 220, 184, .65); }
 
 /* Home -------------------------------------------------------------------- */
-.swp-home-hero { display: flex; flex-direction: column; gap: 14px; padding-top: 150px; align-items: center; text-align: center; }
+.swp-home-hero { display: flex; flex-direction: column; gap: 14px; padding-top: 215px; align-items: center; text-align: center; }
 .swp-home-kicker { font-size: 10px; letter-spacing: .45em; text-transform: uppercase; font-weight: 600; color: rgba(216, 201, 164, .6); margin: 0; }
 .swp-home-title {
   margin: 0;
@@ -148,7 +148,7 @@
   text-shadow: 0 0 40px rgba(224, 185, 106, .25), 0 2px 0 rgba(0, 0, 0, .6);
 }
 .swp-home-tag { margin: 0; font-family: "IM Fell English", serif; font-style: italic; font-size: 18px; color: rgba(234, 220, 184, .75); }
-.swp-paths { margin: auto 0 48px; display: flex; flex-direction: column; border-bottom: 1px solid rgba(196, 158, 80, .14); }
+.swp-paths { margin: auto 0 118px; display: flex; flex-direction: column; border-bottom: 1px solid rgba(196, 158, 80, .14); }
 .swp-path {
   display: flex;
   align-items: center;
@@ -737,7 +737,7 @@
 .swp-nr-item + .swp-nr-item { border-top: 1px solid rgba(196, 158, 80, .1); padding-top: 10px; }
 .swp-nr-help { margin: 0; font-size: 14px; }
 .swp-nr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.swp-status-top { margin: 0; justify-content: flex-start; padding-top: 28px; }
+.swp-status:has(.swp-nr) { margin: 0; justify-content: flex-start; padding-top: 28px; }
 .swp-nr-item { display: grid; grid-template-columns: 22px 1fr auto; gap: 2px 10px; align-items: center; }
 .swp-nr-seat { font-size: 12px; color: rgba(216, 201, 164, .55); text-align: center; }
 .swp-nr-name { font-size: 15px; font-weight: 600; color: #eadcb8; }

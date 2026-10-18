@@ -41,7 +41,7 @@ export function StatusScreen({ tone = "neutral", reserve, link, big, emblem, eye
     <PhoneFrame dark glow="status" glowColor={GLOW[tone]} label={label}>
       <div className="swp-page">
         <div className="swp-status-scroll">
-          <div className={`swp-status${children ? " swp-status-top" : ""}`} role={message ? "alert" : "status"} aria-live={message ? undefined : "polite"}>
+          <div className="swp-status" role={message ? "alert" : "status"} aria-live={message ? undefined : "polite"}>
             {emblem}
             {big && <DiamondRule className="swp-status-rule" />}
             <span className="swp-eyebrow">{eyebrow}</span>
