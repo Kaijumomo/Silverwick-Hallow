@@ -690,12 +690,11 @@
 .swp-tarot-face { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 22px 22px 18px; border-radius: 18px; backface-visibility: hidden; -webkit-backface-visibility: hidden; background: linear-gradient(170deg, #2a1712, #140b09); box-shadow: 0 30px 60px rgba(0, 0, 0, .75), inset 0 0 0 1px rgba(224, 185, 106, .6), inset 0 0 0 9px #1a0f0c, inset 0 0 0 10px rgba(224, 185, 106, .32); overflow: hidden; text-align: center; cursor: pointer; }
 .swp-tarot-rear { transform: rotateY(180deg); padding: 0; cursor: default; }
 .swp-tarot-bar { width: 60%; height: 2px; flex: none; }
-.swp-tarot-arch { position: relative; flex: 1 1 0; min-height: 120px; width: 100%; border-radius: 140px 140px 6px 6px; overflow: hidden; border: 1px solid rgba(224, 185, 106, .3); background: radial-gradient(ellipse at 50% 65%, rgba(130, 150, 170, .28), rgba(20, 11, 9, 0) 65%), linear-gradient(180deg, #2a1712, #140b09); }
-.swp-tarot-arch .swp-token-art { left: 26%; top: 28%; width: 48%; height: 44%; }
+.swp-tarot-arch { position: relative; flex: 1 1 0; min-height: 200px; width: 100%; margin-top: 16px; border-radius: 140px 140px 6px 6px; overflow: hidden; background: radial-gradient(ellipse 70% 80% at 50% 70%, color-mix(in srgb, var(--swp-arch, #86b7d4) 25%, transparent), transparent 70%), rgba(0, 0, 0, .35); box-shadow: inset 0 0 0 1px rgba(224, 185, 106, .35); display: flex; align-items: center; justify-content: center; }
+.swp-tarot-arch .swp-token-art { position: static; width: min(200px, 80%); height: auto; aspect-ratio: 1; filter: drop-shadow(0 10px 18px rgba(0, 0, 0, .75)); }
 .swp-tarot-name { margin: 0; font-family: "Cinzel Decorative", serif; font-size: 28px; font-weight: 700; color: #f0dfb2; line-height: 1.1; }
 .swp-tarot-name-sm { font-size: 20px; }
 .swp-tarot-team { font-family: "Cormorant Garamond", serif; font-size: 13px; letter-spacing: .24em; text-transform: uppercase; }
-.swp-tarot-orn { width: 90px; height: 1px; background: linear-gradient(90deg, transparent, rgba(224, 185, 106, .7), transparent); flex: none; }
 .swp-tarot-ability { margin: 0; font-family: "Cormorant Garamond", serif; font-size: 20px; font-weight: 600; line-height: 1.2; color: #eadcb8; }
 .swp-tarot-flavor { margin: 0; font-family: "IM Fell English", serif; font-style: italic; font-size: 15px; color: rgba(216, 201, 164, .7); }
 .swp-tarot-hint { margin-top: auto; padding-top: 6px; font-family: "IM Fell English", serif; font-style: italic; font-size: 13px; color: rgba(216, 201, 164, .55); }
@@ -746,7 +745,6 @@
 .swp-nr-token { width: 22px; height: 22px; }
 .swp-nr-verdict { grid-column: 3; grid-row: 1; padding: 3px 10px; border: 1px solid; border-radius: 12px; font-size: 12px; font-weight: 700; }
 @media (prefers-reduced-motion: reduce) { .swp-nr-chev { transition: none; } }
-.swp-tarot-orn-gem { width: 150px; height: 8px; background: linear-gradient(90deg, transparent, rgba(224, 185, 106, .7)) left center / 60px 1px no-repeat, linear-gradient(270deg, transparent, rgba(224, 185, 106, .7)) right center / 60px 1px no-repeat; }
 .swp-tarot-label-c { text-align: center; }
 .swp-tarot-night { flex-direction: row; gap: 10px; align-items: flex-start; }
 .swp-tarot-night-text { display: flex; flex-direction: column; gap: 4px; }
@@ -754,6 +752,60 @@
 .swp-tarot-text { font-family: "Cormorant Garamond", serif; font-weight: 600; font-size: 17px; }
 .swp-wiki { gap: 14px; justify-content: center; font-size: 18px; }
 .swp-leave-body { font-family: "Cormorant Garamond", serif; font-style: normal; font-weight: 600; font-size: 18px; line-height: 1.3; color: rgba(234, 220, 184, .85); }
-.swp-tarot-orn-gem { position: relative; }
-.swp-tarot-orn-gem::after { content: ""; position: absolute; left: 50%; top: 50%; width: 7px; height: 7px; margin: -4px 0 0 -4px; transform: rotate(45deg); border: 1px solid #e0b96a; background: #1a0f0c; }
 .swp-tarot-turnback { border: none; background: transparent; cursor: pointer; }
+
+/* Character Reference script view (design 23 to 26) ----------------------- */
+.swp-rs { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.swp-rs-head { flex: none; display: flex; flex-direction: column; gap: 10px; padding: 6px 20px 12px; border-bottom: 1px solid rgba(196, 158, 80, .14); }
+.swp-rs-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.swp-rs-count { font-size: 13px; color: rgba(234, 220, 184, .5); }
+.swp-rs-logo { display: flex; justify-content: center; align-items: center; min-height: 64px; }
+.swp-rs-logo-img { width: 150px; height: 72px; background-size: contain; background-position: center; background-repeat: no-repeat; filter: drop-shadow(0 4px 8px rgba(0, 0, 0, .6)); }
+.swp-rs-logo-text { margin: 0; font-family: "Cormorant Garamond", serif; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; color: #ecd9a8; font-size: 26px; }
+.swp-rs-tabs { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 -20px -12px; border-top: 1px solid rgba(196, 158, 80, .1); }
+.swp-rs-tab { min-height: 54px; border: none; background: transparent; color: rgba(234, 220, 184, .55); font-family: "Cormorant Garamond", serif; font-variant-numeric: lining-nums; font-size: 16px; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; transition: color .3s; }
+.swp-rs-tab-on { color: #f0d590; }
+.swp-rs-tab-n { font-family: "Source Sans 3", sans-serif; font-size: 11px; font-weight: 600; color: rgba(216, 201, 164, .45); }
+.swp-rs-ind { position: absolute; bottom: -1px; left: calc(var(--swp-tab-at, 0) * 33.333%); width: 33.333%; height: 9px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; transition: left .4s cubic-bezier(.3, .7, .2, 1); pointer-events: none; }
+.swp-rs-ind-gem { width: 7px; height: 7px; margin-bottom: -2px; transform: rotate(45deg); background: #e0b96a; box-shadow: 0 0 8px rgba(224, 185, 106, .7); }
+.swp-rs-ind-line { width: 70%; height: 2px; background: linear-gradient(90deg, transparent, #e0b96a, transparent); }
+.swp-rs-body { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 0 34px; }
+.swp-rs-groups { display: flex; flex-direction: column; gap: 22px; padding: 0 20px; }
+.swp-rs-group { display: flex; flex-direction: column; gap: 4px; }
+.swp-rs-ghead { display: flex; align-items: center; gap: 12px; padding-bottom: 6px; }
+.swp-rs-gname { font-family: "Cormorant Garamond", serif; text-transform: uppercase; letter-spacing: .06em; font-variant-numeric: lining-nums; font-weight: 700; font-size: 18px; }
+.swp-rs-gn { font-size: 12px; color: rgba(234, 220, 184, .45); }
+.swp-rs-grule { flex: 1; height: 1px; }
+.swp-rs-row { display: flex; align-items: center; gap: 14px; min-height: 72px; padding: 6px 4px; border: none; border-bottom: 1px solid rgba(196, 158, 80, .1); background: transparent; text-align: left; color: inherit; cursor: pointer; }
+.swp-rs-icon { flex: none; width: 54px; height: 54px; background-size: contain; background-position: center; background-repeat: no-repeat; filter: drop-shadow(0 4px 8px rgba(0, 0, 0, .65)); }
+.swp-rs-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.swp-rs-name { font-family: "Cormorant Garamond", serif; font-size: 20px; font-weight: 700; line-height: 1.1; color: #ecd9a8; }
+.swp-rs-ability { font-size: 13px; line-height: 1.38; color: rgba(234, 220, 184, .66); text-wrap: pretty; }
+.swp-rs-night { list-style: none; margin: 0; padding: 0 20px; display: flex; flex-direction: column; }
+.swp-rs-nrow { display: grid; grid-template-columns: 24px 40px minmax(0, 1fr); align-items: center; gap: 10px; width: 100%; min-height: 58px; padding: 6px 0; border: none; border-bottom: 1px solid rgba(196, 158, 80, .1); background: transparent; text-align: left; color: inherit; cursor: pointer; }
+.swp-rs-nrow-step { cursor: default; }
+li.swp-rs-nrow { list-style: none; }
+.swp-rs-num { font-family: "Cormorant Garamond", serif; font-variant-numeric: lining-nums; font-weight: 700; font-size: 15px; text-align: right; color: rgba(224, 185, 106, .6); }
+.swp-rs-nicon { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; }
+.swp-rs-nicon-img { width: 40px; height: 40px; background-size: contain; background-position: center; background-repeat: no-repeat; }
+.swp-rs-diamond { width: 10px; height: 10px; transform: rotate(45deg); border: 1px solid #e0b96a; }
+.swp-rs-nname { font-family: "Cormorant Garamond", serif; font-size: 18px; font-weight: 700; line-height: 1.1; color: #ecd9a8; }
+.swp-rs-nname-step { color: #e0b96a; }
+.swp-rs-ntext { font-size: 12px; line-height: 1.35; color: rgba(234, 220, 184, .6); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+@media (prefers-reduced-motion: reduce) { .swp-rs-ind, .swp-rs-tab { transition: none; } }
+
+.swp-orn { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 14px 0; flex: none; }
+.swp-orn-line { width: 70px; height: 1px; background: linear-gradient(90deg, transparent, rgba(224, 185, 106, .6)); }
+.swp-orn-line:last-child { background: linear-gradient(90deg, rgba(224, 185, 106, .6), transparent); }
+.swp-orn-d { width: 4px; height: 4px; transform: rotate(45deg); background: rgba(224, 185, 106, .6); }
+.swp-orn-d-big { width: 8px; height: 8px; background: none; border: 1px solid rgba(224, 185, 106, .6); }
+.swp-tarot-back .swp-orn { margin: 0; }
+
+.swp-tarot-front { gap: 0; padding: 26px 22px 22px; }
+.swp-tarot-front .swp-tarot-bar { opacity: .75; }
+.swp-tarot-front .swp-tarot-name { margin-top: 18px; line-height: 1.05; }
+.swp-tarot-front .swp-tarot-team { margin-top: 6px; font-weight: 700; }
+.swp-tarot-front .swp-tarot-ability { line-height: 1.32; text-wrap: pretty; color: #ecd9a8; }
+.swp-tarot-front .swp-tarot-flavor { margin-top: 12px; line-height: 1.45; color: rgba(234, 220, 184, .55); text-wrap: pretty; }
+.swp-tarot-front .swp-tarot-hint { margin-top: 0; padding-top: 16px; font-size: 14px; color: rgba(224, 185, 106, .6); }
+.swp-tarot-front .swp-tarot-flavor + .swp-tarot-hint, .swp-tarot-front .swp-tarot-ability + .swp-tarot-hint { margin-top: auto; }

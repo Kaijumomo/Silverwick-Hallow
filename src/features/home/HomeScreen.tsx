@@ -13,6 +13,7 @@ import { ReferenceOverlay } from "./reference/ReferenceOverlay";
 import { CAROUSEL_ORBIT, EDITION_LOGO, useLoadedArt } from "./art";
 import { useMediaQuery } from "@/components/useMediaQuery";
 import { PhoneHome } from "@/features/player/phone/PhoneHome";
+import { PhoneReferenceScript } from "@/features/player/phone/PhoneReferenceScript";
 import { PhoneReferencePicker } from "@/features/player/phone/PhoneReferencePicker";
 
 type HomePath = "player" | "storyteller" | "reference";
@@ -103,9 +104,7 @@ export function HomeScreen({ navigate = defaultNavigate }: Props) {
         {!reference && phoneReference && (
           <PhoneReferencePicker onBack={() => setPhoneReference(false)} onOpen={setReference} />
         )}
-        {reference && (
-          <ReferenceOverlay category={reference} team={referenceTeam} onTeamChange={setReferenceTeam} onClose={() => setReference(null)} />
-        )}
+        {reference && <PhoneReferenceScript category={reference} onBack={() => setReference(null)} />}
       </>
     );
   }

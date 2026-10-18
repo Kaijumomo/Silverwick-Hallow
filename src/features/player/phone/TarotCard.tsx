@@ -6,6 +6,12 @@ import { arcLetters, cleanReminder, jinxesOf, reminderLabels, teamOf } from "@/f
 import type { RoleDef } from "@/stores/types";
 import { roleArt } from "./roleArt";
 
+const Ornament = () => (
+  <span className="swp-orn" aria-hidden="true">
+    <span className="swp-orn-line" /><span className="swp-orn-d" /><span className="swp-orn-d swp-orn-d-big" /><span className="swp-orn-d" /><span className="swp-orn-line" />
+  </span>
+);
+
 /** Character card (design: tarot card). The front is the character, the back
  * its reminders, night prompts and jinxes. Tapping the card turns it. */
 export function TarotCard({ role, onClose }: { role: RoleDef; onClose: () => void }) {
@@ -32,12 +38,12 @@ export function TarotCard({ role, onClose }: { role: RoleDef; onClose: () => voi
             aria-label={`${role.name}. Tap to turn the card`}
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); } }}>
             <span className="swp-tarot-bar" style={{ background: colour }} />
-            <span className="swp-tarot-arch" style={{ boxShadow: `0 0 28px ${colour}55` }}>
+            <span className="swp-tarot-arch" style={{ ["--swp-arch" as string]: colour }}>
               <span role="img" aria-label="" className="swp-token-art" style={{ backgroundImage: `url(${art})` }} />
             </span>
             <h2 className="swp-tarot-name">{role.name}</h2>
             <span className="swp-tarot-team" style={{ color: colour }}>{team?.kicker ?? role.type}</span>
-            <span className="swp-tarot-orn swp-tarot-orn-gem" aria-hidden="true" />
+            <Ornament />
             {role.ability && <p className="swp-tarot-ability">{role.ability}</p>}
             {role.flavor && <p className="swp-tarot-flavor">{role.flavor}</p>}
             <span className="swp-tarot-hint">Tap to turn the card</span>
@@ -45,7 +51,7 @@ export function TarotCard({ role, onClose }: { role: RoleDef; onClose: () => voi
           <div className="swp-tarot-face swp-tarot-rear" aria-hidden={!back}>
             <div className="swp-tarot-scroll" onClick={flip}>
               <h2 className="swp-tarot-name swp-tarot-name-sm">{role.name}</h2>
-              <span className="swp-tarot-orn swp-tarot-orn-gem" aria-hidden="true" />
+              <Ornament />
               {role.flavor && <p className="swp-tarot-flavor">{role.flavor}</p>}
               {tokens.length > 0 && (
                 <>

@@ -284,7 +284,29 @@ describe("Package 3 (D9): phone Home", () => {
     expect(screen.getByRole("button", { name: /^Player/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^Character Reference/ }));
     fireEvent.click(screen.getByRole("button", { name: "Trouble Brewing" }));
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // Design screens 23 to 26: Scripts back button, three tabs, compact rows, card on tap.
+    expect(screen.getByRole("button", { name: /Scripts/ })).toBeInTheDocument();
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([expect.stringMatching(/^Characters\d+$/), expect.stringMatching(/^First night\d+$/), expect.stringMatching(/^Other nights\d+$/)]);
+    fireEvent.click(screen.getByRole("tab", { name: /First night/ }));
+    expect(screen.getByRole("tab", { name: /First night/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Dusk")).toBeInTheDocument();
+    expect(screen.queryByText("Townsfolk")).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: /Characters/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Washerwoman/ }));
+    expect(screen.getByRole("dialog", { name: "Washerwoman" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Scripts/ }));
+    expect(screen.getByRole("button", { name: "Trouble Brewing" })).toBeInTheDocument();
+  });
+
+  it("on a phone The Carousel is one list with no tabs", () => {
+    phone(true);
+    render(<HomeScreen navigate={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Character Reference/ }));
+    fireEvent.click(screen.getByRole("button", { name: "The Carousel" }));
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    expect(screen.getByRole("button", { name: /Scripts/ })).toBeInTheDocument();
   });
 
   it("a wider screen keeps the Storyteller entry", () => {
