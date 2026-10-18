@@ -36,7 +36,7 @@ function seat(over: Partial<ReturnType<typeof usePlayerStore.getState>> = {}) {
   usePlayerStore.setState({
     code: "ABCD2345", uid: "alice", playerId: "p-alice", requestedName: "Alice", status: "seated", error: null,
     self: { shownRole: "chef", shownAlignment: "good", revealToken: TOKEN }, publicLobby: lobby("setup"),
-    revealed: false, ownRevealAck: null, townNotes: {}, terminalResult: null,
+    revealed: false, ownRevealAck: null, townNotes: {}, seatGuesses: {}, terminalResult: null,
     remoteData: { public: "ready", self: "ready", membership: "ready", request: "ready" }, ...over,
   });
 }
@@ -74,7 +74,7 @@ describe("10H-AC-028 (F1): only public-safe coarse milestones", () => {
     // Leave is secondary: not on the Character tab.
     expect(screen.queryByRole("button", { name: "Request to leave" })).toBeNull();
     fireEvent.click(within(nav).getByRole("button", { name: "Script" }));
-    expect(screen.getByRole("region", { name: "Reference" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Reference" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Request to leave" })).toBeInTheDocument();
   });
 
@@ -227,84 +227,70 @@ describe("10H-AC-039 (F7) and Package 3 D3/D7: own Life at Night, the complete i
   });
 });
 
-describe("10H-AC-058 (F10): Town notes survive the post-game review until Back to Start", () => {
+describe("10H-AC-058 (F10): notes survive the post-game review until Back to Start", () => {
   it("the ended screen lists this game's notes; Back to start clears them", () => {
-    seat({ status: "ended", townNotes: { "ABCD2345:p-bob": { confidence: null, roles: [], text: "Bob seemed nervous" } } });
+    seat({ status: "ended", seatGuesses: { "ABCD2345:p-bob": { verdict: "evil", guesses: ["imp"] } } });
     const onBack = () => usePlayerStore.getState().reset();
     render(<PlayerEnded result={{ status: "ready", result: { winner: "good", declaredAt: { phase: "day", day: 4 } } } as never} onRetry={() => {}} onBack={onBack} />);
-    fireEvent.click(screen.getByText("Your Town notes (1)"));
-    expect(screen.getByText(/Bob seemed nervous/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Your town notes \(1\)/i }));
+    expect(screen.getByText("Imp")).toBeInTheDocument();
     act(() => { fireEvent.click(screen.getByRole("button", { name: "Back to start" })); });
-    expect(usePlayerStore.getState().townNotes).toEqual({});
+    expect(usePlayerStore.getState().seatGuesses).toEqual({});
   });
 });
 
-// PR-10H-002 (Sol R3): the post-game review shows EVERY non-empty Town note --
-// confidence-only, role-only and text notes alike -- with all of its recorded
-// content, named from the player-side catalogue, as the player's own guesses.
-describe("PR-10H-002: the post-game Town notes review keeps every non-empty note and all of its content", () => {
+// The post-game review is collapsed by default and shows EVERY seat that has a
+// verdict or guesses, named from the player-side catalogue, as the player's own
+// guesses. Legacy free-text notes stay on the device but are not shown.
+describe("the post-game notes review keeps every verdict and guess", () => {
   const town = (): PublicLobbyRecord => {
     const base = lobby("day", 4);
     const extra = ["p-carol", "p-dave", "p-erin", "p-frank"].map((id, index) => [id, { id, name: id.slice(2, 3).toUpperCase() + id.slice(3), seat: index + 2, online: true, joinedAt: 0, isTraveler: false, alive: true, ghostVote: true }] as const);
     return { ...base, seatOrder: [...base.seatOrder, ...extra.map(([id]) => id)], players: { ...base.players, ...Object.fromEntries(extra) } };
   };
   const NOTES = {
-    "ABCD2345:p-bob": { confidence: "suspect" as const, roles: [], text: "" }, // A. confidence only
-    "ABCD2345:p-carol": { confidence: null, roles: ["imp", "spy"], text: "" }, // B. role guesses only
-    "ABCD2345:p-dave": { confidence: null, roles: [], text: "Claimed Chef, 1 pair" }, // C. text only
-    "ABCD2345:p-erin": { confidence: "likely" as const, roles: ["poisoner"], text: "Odd vote" }, // D. all three
-    "ABCD2345:p-frank": { confidence: null, roles: [], text: "   " }, // E. truly empty (whitespace)
-    "OTHERGAME:p-bob": { confidence: "confirm" as const, roles: ["imp"], text: "other game" }, // H. unrelated game
+    "ABCD2345:p-bob": { verdict: "evil" as const, guesses: [] }, // verdict only
+    "ABCD2345:p-carol": { verdict: null, guesses: ["imp", "spy"] }, // guesses only
+    "ABCD2345:p-erin": { verdict: "unsure" as const, guesses: ["poisoner"] }, // both
+    "ABCD2345:p-frank": { verdict: null, guesses: [] }, // empty
+    "OTHERGAME:p-bob": { verdict: "good" as const, guesses: ["imp"] }, // unrelated game
   };
   function ended(notes: Record<string, unknown> = NOTES) {
-    seat({ status: "ended", publicLobby: town(), townNotes: notes as never });
+    seat({ status: "ended", publicLobby: town(), seatGuesses: notes as never, townNotes: { "ABCD2345:p-dave": { confidence: null, roles: [], text: "legacy words" } } });
     const onBack = () => usePlayerStore.getState().reset();
     render(<PlayerEnded result={{ status: "ready", result: { winner: "evil", declaredAt: { phase: "day", day: 4 } } }} onRetry={() => {}} onBack={onBack} />);
-    fireEvent.click(screen.getByText("Your Town notes (4)"));
-    return screen.getAllByRole("listitem");
+    return screen.getByRole("button", { name: /Your town notes \(3\)/i });
   }
 
-  it("A-F: confidence-only, role-only, text-only and full notes are all listed in seat order; an empty note is absent", () => {
-    const items = ended();
-    // F. multiple seats, each identified by name and seat number, in seat order.
-    expect(items.map(item => within(item).getByText(/^(Bob|Carol|Dave|Erin)$/).textContent)).toEqual(["Bob", "Carol", "Dave", "Erin"]);
-    const [bob, carol, dave, erin] = items as [HTMLElement, HTMLElement, HTMLElement, HTMLElement];
-    // A. confidence only.
-    expect(bob).toHaveTextContent(/^Bob seat 2Your confidence: Suspect$/);
-    // B. role guesses only, by human-readable name.
-    expect(carol).toHaveTextContent(/^Carol seat 3Your role guesses: Imp, Spy$/);
-    // C. text only.
-    expect(dave).toHaveTextContent(/^Dave seat 4Claimed Chef, 1 pair$/);
-    // D. confidence + role + text.
-    expect(erin).toHaveTextContent(/^Erin seat 5Your confidence: LikelyYour role guess: PoisonerOdd vote$/);
-    // E. the whitespace-only note is not listed (and not counted).
+  it("is collapsed by default, then lists seats in order with names, guesses and verdicts; empty seats and other games are absent", () => {
+    const head = ended();
+    expect(head).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("listitem")).toBeNull();
+    fireEvent.click(head);
+    expect(head).toHaveAttribute("aria-expanded", "true");
+    const [bob, carol, erin] = screen.getAllByRole("listitem") as [HTMLElement, HTMLElement, HTMLElement];
+    expect(bob).toHaveTextContent(/^2BobEvil$/);
+    expect(carol).toHaveTextContent(/^3CarolImp, Spy$/);
+    expect(erin).toHaveTextContent(/^5ErinPoisoner\?$/);
     expect(screen.queryByText(/Frank/)).toBeNull();
-    // H. another game's note is never shown here.
-    expect(screen.queryByText(/other game/)).toBeNull();
-  });
-
-  it("accessible text, not icons: every value is real text; the review is labelled as the player's own guesses", () => {
-    ended();
-    const review = screen.getByText("Your Town notes (4)").closest("details")!;
-    expect(review.querySelectorAll("img")).toHaveLength(0);
-    expect(within(review).getByText("Suspect")).toBeVisible();
-    expect(within(review).getByText("Your own notes and guesses, not confirmed game information.")).toBeInTheDocument();
-    // Never the player's own character (Chef): the one "Chef" is Dave's note text.
-    expect(review.textContent!.match(/Chef/g)).toHaveLength(1);
-    expect(review).not.toHaveTextContent(/actual|alignment|reminder|effect/i);
+    expect(screen.getByText("Your own notes and guesses, not confirmed game information.")).toBeInTheDocument();
+    expect(screen.getByText("These notes stay on this phone until you go Back to start.")).toBeInTheDocument();
+    // Legacy notes are kept on the device but never shown.
+    expect(screen.queryByText(/legacy words/)).toBeNull();
+    expect(usePlayerStore.getState().townNotes["ABCD2345:p-dave"]).toBeDefined();
   });
 
   it("an unknown saved RoleId stays understandable; without the public lobby the seat falls back to a generic label", () => {
-    seat({ status: "ended", publicLobby: null, townNotes: { "ABCD2345:p-zed": { confidence: null, roles: ["notarole", "imp"], text: "" } } });
+    seat({ status: "ended", publicLobby: null, seatGuesses: { "ABCD2345:p-zed": { verdict: null, guesses: ["notarole", "imp"] } } });
     render(<PlayerEnded result={{ status: "none" }} onRetry={() => {}} onBack={() => {}} />);
-    fireEvent.click(screen.getByText("Your Town notes (1)"));
-    expect(screen.getByRole("listitem")).toHaveTextContent(/^A seatYour role guesses: Unrecognized character \(notarole\), Imp$/);
+    fireEvent.click(screen.getByRole("button", { name: /Your town notes \(1\)/i }));
+    expect(screen.getByRole("listitem")).toHaveTextContent(/^–A seatUnrecognized character \(notarole\), Imp$/);
   });
 
-  it("G-H: Back to start clears this game's notes -- including confidence/role-only ones -- and keeps another game's", () => {
-    ended();
+  it("Back to start clears this game's notes and keeps another game's", () => {
+    fireEvent.click(ended());
     act(() => { fireEvent.click(screen.getByRole("button", { name: "Back to start" })); });
-    expect(usePlayerStore.getState().townNotes).toEqual({ "OTHERGAME:p-bob": NOTES["OTHERGAME:p-bob"] });
+    expect(usePlayerStore.getState().seatGuesses).toEqual({ "OTHERGAME:p-bob": NOTES["OTHERGAME:p-bob"] });
   });
 });
 

@@ -626,3 +626,133 @@
 @media (prefers-reduced-motion: reduce) {
   .swp-veil-drop { animation: none; }
 }
+
+/* Package 3 (3D): Notes, guess sheet, leave sheet, Script tab, tarot card --- */
+.swp-notes { display: flex; flex-direction: column; }
+.swp-note-row { display: flex; align-items: center; gap: 10px; min-height: 58px; border-bottom: 1px solid rgba(196, 158, 80, .08); }
+.swp-note-seat { width: 18px; flex: none; font-size: 12px; color: rgba(216, 201, 164, .4); text-align: right; }
+.swp-note-main { flex: 1; min-width: 0; min-height: 52px; display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 6px 0; border: none; background: transparent; text-align: left; cursor: pointer; }
+.swp-note-name { font-size: 15px; line-height: 1.5; font-weight: 600; color: #eadcb8; overflow-wrap: anywhere; }
+.swp-note-dead { color: rgba(216, 201, 164, .45); }
+.swp-note-guesses { display: flex; align-items: center; gap: 4px; min-height: 24px; }
+.swp-note-hint { font-family: "IM Fell English", serif; font-style: italic; font-size: 13px; color: rgba(216, 201, 164, .42); }
+.swp-mini-token { position: relative; width: 24px; height: 24px; flex: none; border-radius: 50%; overflow: hidden; background: radial-gradient(circle at 38% 30%, #efe3c4, #b39b6c); }
+.swp-verdicts { display: flex; gap: 4px; flex: none; }
+.swp-verdict { min-width: 46px; height: 36px; padding: 0 10px; border-radius: 18px; border: 1px solid rgba(196, 158, 80, .2); background: transparent; color: rgba(216, 201, 164, .5); font-size: 12px; font-weight: 700; cursor: pointer; }
+
+.swp-sheet-layer { position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column; justify-content: flex-end; }
+.swp-sheet-backdrop { position: absolute; inset: 0; background: rgba(4, 3, 2, .78); }
+.swp-sheet { position: relative; display: flex; flex-direction: column; gap: 14px; padding: 22px 20px 34px; border-radius: 22px 22px 0 0; background: linear-gradient(170deg, rgba(42, 23, 18, .98), rgba(20, 11, 9, .99)); box-shadow: 0 -18px 40px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(224, 185, 106, .45); animation: swRise .25s ease-out; }
+.swp-guess-sheet { max-height: 82%; }
+.swp-sheet-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.swp-sheet-titles { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.swp-sheet-eyebrow { font-size: 11px; letter-spacing: .22em; text-transform: uppercase; font-weight: 700; color: rgba(216, 201, 164, .6); }
+.swp-sheet-title { font-family: "Cormorant Garamond", serif; font-size: 26px; font-weight: 700; line-height: 1.1; color: #eadcb8; overflow-wrap: anywhere; }
+.swp-done { flex: none; min-height: 44px; padding: 0 18px; border-radius: 22px; border: 1px solid rgba(240, 213, 144, .6); background: rgba(224, 185, 106, .16); color: #f6dfa0; font-family: "Cormorant Garamond", serif; text-transform: uppercase; letter-spacing: .12em; font-size: 15px; font-weight: 700; cursor: pointer; }
+.swp-sheet-help { font-size: 14px; color: rgba(216, 201, 164, .6); }
+.swp-guess-scroll { overflow-y: auto; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.swp-guess-group { display: flex; flex-direction: column; gap: 8px; }
+.swp-guess-eyebrow { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; font-weight: 600; }
+.swp-guess-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 4px; }
+.swp-guess-cell { display: flex; flex-direction: column; align-items: center; gap: 5px; min-height: 68px; padding: 2px 0; border: none; background: transparent; cursor: pointer; }
+.swp-guess-token { position: relative; width: 46px; height: 46px; border-radius: 50%; overflow: hidden; background: radial-gradient(circle at 38% 30%, #efe3c4, #b39b6c); box-shadow: 0 4px 10px rgba(0, 0, 0, .45); }
+.swp-guess-name { font-family: "Cormorant Garamond", serif; font-size: 12px; font-weight: 700; line-height: 1.05; text-align: center; color: rgba(234, 220, 184, .8); }
+.swp-guess-on .swp-guess-token { box-shadow: 0 0 0 2px #f2cf7e, 0 0 14px rgba(224, 185, 106, .55); }
+.swp-guess-on .swp-guess-name { color: #f0d590; }
+.swp-guess-dim { opacity: .32; cursor: default; }
+
+/* Package 3 (3D): Script tab, character card, leave sheet ------------------ */
+.swp-script { display: flex; flex-direction: column; gap: 14px; padding-bottom: 12px; }
+.swp-script-head { display: flex; flex-direction: column; gap: 2px; }
+.swp-script-title { margin: 0; font-family: "Cormorant Garamond", serif; font-size: 26px; font-weight: 700; color: #eadcb8; }
+.swp-script-sub { font-size: 12px; color: rgba(216, 201, 164, .6); }
+.swp-search { height: 44px; padding: 0 14px; border-radius: 10px; border: 1px solid rgba(196, 158, 80, .18); background: rgba(0, 0, 0, .3); color: #eadcb8; font-size: 16px; font-family: inherit; }
+.swp-search:focus { outline: none; border-color: #c4a050; }
+.swp-script-empty { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 24px 0; font-family: "IM Fell English", serif; font-style: italic; color: rgba(216, 201, 164, .7); }
+.swp-script-group { display: flex; flex-direction: column; gap: 4px; }
+.swp-script-eyebrow { font-size: 11px; letter-spacing: .2em; text-transform: uppercase; font-weight: 700; padding: 6px 0; }
+.swp-script-row { display: flex; align-items: center; gap: 12px; min-height: 58px; padding: 9px 12px 9px 0; border: none; background: transparent; text-align: left; cursor: pointer; color: inherit; }
+.swp-script-token { position: relative; flex: none; width: 38px; height: 38px; border-radius: 50%; overflow: hidden; background: radial-gradient(circle at 38% 30%, #efe3c4, #b39b6c); }
+.swp-script-text { display: flex; flex-direction: column; min-width: 0; }
+.swp-script-name { display: flex; align-items: center; gap: 7px; font-family: "Cormorant Garamond", serif; font-size: 17px; font-weight: 700; color: #eadcb8; }
+.swp-own-dot { width: 5px; height: 5px; border-radius: 50%; background: #e0b96a; flex: none; }
+.swp-script-ability { font-family: "IM Fell English", serif; font-size: 14px; line-height: 1.25; color: rgba(216, 201, 164, .82); }
+.swp-leave-end { display: flex; flex-direction: column; align-items: center; padding-top: 24px; }
+.swp-leave-rule { width: 120px; }
+
+.swp-tarot-layer { position: absolute; inset: 0; z-index: 7; }
+.swp-tarot-backdrop { position: absolute; inset: 0; background: rgba(4, 3, 2, .84); }
+.swp-tarot-close { position: absolute; top: 56px; right: 16px; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(224, 185, 106, .5); background: rgba(20, 11, 9, .9); color: #eadcb8; font-size: 26px; line-height: 1; cursor: pointer; z-index: 2; }
+.swp-tarot { position: absolute; inset: 104px 34px 64px; perspective: 1200px; animation: swCardIn .5s cubic-bezier(.2, .7, .2, 1); }
+@keyframes swCardIn { from { opacity: 0; transform: translateY(24px) scale(.96); } to { opacity: 1; transform: none; } }
+.swp-tarot-flip { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .9s cubic-bezier(.3, .7, .2, 1); }
+.swp-tarot-turned { transform: rotateY(180deg); }
+.swp-tarot-face { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 22px 22px 18px; border-radius: 18px; backface-visibility: hidden; -webkit-backface-visibility: hidden; background: linear-gradient(170deg, #2a1712, #140b09); box-shadow: 0 30px 60px rgba(0, 0, 0, .75), inset 0 0 0 1px rgba(224, 185, 106, .6), inset 0 0 0 9px #1a0f0c, inset 0 0 0 10px rgba(224, 185, 106, .32); overflow: hidden; text-align: center; cursor: pointer; }
+.swp-tarot-rear { transform: rotateY(180deg); padding: 0; cursor: default; }
+.swp-tarot-bar { width: 60%; height: 2px; flex: none; }
+.swp-tarot-arch { position: relative; flex: 1 1 0; min-height: 120px; width: 100%; border-radius: 140px 140px 6px 6px; overflow: hidden; border: 1px solid rgba(224, 185, 106, .3); background: radial-gradient(ellipse at 50% 65%, rgba(130, 150, 170, .28), rgba(20, 11, 9, 0) 65%), linear-gradient(180deg, #2a1712, #140b09); }
+.swp-tarot-arch .swp-token-art { left: 26%; top: 28%; width: 48%; height: 44%; }
+.swp-tarot-name { margin: 0; font-family: "Cinzel Decorative", serif; font-size: 28px; font-weight: 700; color: #f0dfb2; line-height: 1.1; }
+.swp-tarot-name-sm { font-size: 20px; }
+.swp-tarot-team { font-family: "Cormorant Garamond", serif; font-size: 13px; letter-spacing: .24em; text-transform: uppercase; }
+.swp-tarot-orn { width: 90px; height: 1px; background: linear-gradient(90deg, transparent, rgba(224, 185, 106, .7), transparent); flex: none; }
+.swp-tarot-ability { margin: 0; font-family: "Cormorant Garamond", serif; font-size: 20px; font-weight: 600; line-height: 1.2; color: #eadcb8; }
+.swp-tarot-flavor { margin: 0; font-family: "IM Fell English", serif; font-style: italic; font-size: 15px; color: rgba(216, 201, 164, .7); }
+.swp-tarot-hint { margin-top: auto; padding-top: 6px; font-family: "IM Fell English", serif; font-style: italic; font-size: 13px; color: rgba(216, 201, 164, .55); }
+.swp-tarot-scroll { width: 100%; height: 100%; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 26px 26px 22px; cursor: pointer; }
+.swp-tarot-tokens { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.swp-rem { position: relative; width: 84px; height: 84px; border-radius: 50%; background: radial-gradient(circle at 38% 30%, #efe3c4, #b39b6c); box-shadow: 0 4px 10px rgba(0, 0, 0, .45); color: #3b2a17; }
+.swp-rem-art { inset: 14px 14px 26px; left: 22px; top: 8px; width: 40px; height: 40px; }
+.swp-rem-arc { position: absolute; left: 50%; top: 50%; width: 0; height: 0; font-family: "Cormorant Garamond", serif; font-weight: 700; }
+.swp-rem-arc span { position: absolute; left: -.3em; top: -.6em; transform-origin: center; }
+.swp-tarot-sec { width: 100%; display: flex; flex-direction: column; gap: 4px; text-align: left; }
+.swp-tarot-label { font-size: 11px; letter-spacing: .2em; text-transform: uppercase; font-weight: 700; color: #e0b96a; }
+.swp-tarot-text { margin: 0; font-family: "IM Fell English", serif; font-size: 15px; line-height: 1.3; color: rgba(234, 220, 184, .85); }
+.swp-jinx { display: flex; align-items: flex-start; gap: 10px; }
+.swp-jinx-icon { position: relative; flex: none; width: 36px; height: 36px; border-radius: 50%; overflow: hidden; background: radial-gradient(circle at 38% 30%, #efe3c4, #b39b6c); }
+.swp-jinx-text { display: flex; flex-direction: column; }
+.swp-jinx-name { font-family: "Cormorant Garamond", serif; font-weight: 700; font-size: 16px; color: #eadcb8; }
+.swp-jinx-reason { font-family: "IM Fell English", serif; font-size: 14px; color: rgba(216, 201, 164, .7); }
+.swp-wiki { display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; border-radius: 22px; border: 1px solid rgba(224, 185, 106, .5); color: #f0d590; font-family: "Cormorant Garamond", serif; font-weight: 700; font-size: 15px; text-decoration: none; }
+
+.swp-leave-sheet { gap: 12px; align-items: stretch; }
+.swp-leave-eyebrow { text-align: center; }
+.swp-leave-title { margin: 0; text-align: center; font-family: "Cormorant Garamond", serif; font-size: 28px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #eadcb8; }
+.swp-leave-body { margin: 0; text-align: center; font-size: 16px; }
+.swp-danger { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; height: 56px; border-radius: 28px; border: 1px solid rgba(232, 138, 122, .6); background: linear-gradient(180deg, rgba(160, 44, 36, .42), rgba(90, 20, 16, .36)); color: #f6d9cf; font-family: "Cormorant Garamond", serif; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; cursor: pointer; }
+.swp-danger:disabled { cursor: default; }
+.swp-cancel { width: 100%; min-height: 48px; border-radius: 24px; border: 1px solid rgba(196, 158, 80, .35); background: transparent; color: #eadcb8; font-family: "Cormorant Garamond", serif; font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; cursor: pointer; }
+.swp-cancel:disabled { cursor: default; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .swp-tarot, .swp-sheet { animation: none; }
+  .swp-tarot-flip { transition: none; }
+}
+
+/* Package 3 (3D): the ended-game notes review ------------------------------- */
+.swp-nr { width: 100%; border-radius: 14px; border: 1px solid rgba(196, 158, 80, .12); background: rgba(0, 0, 0, .3); text-align: left; }
+.swp-nr-head { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 52px; padding: 0 16px; border: none; background: transparent; color: rgba(216, 201, 164, .7); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .2em; cursor: pointer; }
+.swp-nr-chev { font-size: 22px; transition: transform .2s; }
+.swp-nr-open .swp-nr-chev { transform: rotate(90deg); }
+.swp-nr-body { display: flex; flex-direction: column; gap: 10px; padding: 0 16px 16px; }
+.swp-nr-item + .swp-nr-item { border-top: 1px solid rgba(196, 158, 80, .1); padding-top: 10px; }
+.swp-nr-help { margin: 0; font-size: 14px; }
+.swp-nr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.swp-status-top { margin: 0; justify-content: flex-start; padding-top: 28px; }
+.swp-nr-item { display: grid; grid-template-columns: 22px 1fr auto; gap: 2px 10px; align-items: center; }
+.swp-nr-seat { font-size: 12px; color: rgba(216, 201, 164, .55); text-align: center; }
+.swp-nr-name { font-size: 15px; font-weight: 600; color: #eadcb8; }
+.swp-nr-guesses { grid-column: 2; display: flex; align-items: center; gap: 4px; }
+.swp-nr-names { margin-left: 6px; font-family: "Cormorant Garamond", serif; font-size: 14px; font-weight: 700; color: rgba(216, 201, 164, .7); }
+.swp-nr-token { width: 22px; height: 22px; }
+.swp-nr-verdict { grid-column: 3; grid-row: 1; padding: 3px 10px; border: 1px solid; border-radius: 12px; font-size: 12px; font-weight: 700; }
+@media (prefers-reduced-motion: reduce) { .swp-nr-chev { transition: none; } }
+.swp-tarot-orn-gem { width: 150px; height: 8px; background: linear-gradient(90deg, transparent, rgba(224, 185, 106, .7)) left center / 60px 1px no-repeat, linear-gradient(270deg, transparent, rgba(224, 185, 106, .7)) right center / 60px 1px no-repeat; }
+.swp-tarot-label-c { text-align: center; }
+.swp-tarot-night { flex-direction: row; gap: 10px; align-items: flex-start; }
+.swp-tarot-night-text { display: flex; flex-direction: column; gap: 4px; }
+.swp-moon-ico { flex: none; margin-top: 2px; }
+.swp-tarot-text { font-family: "Cormorant Garamond", serif; font-weight: 600; font-size: 17px; }
+.swp-wiki { gap: 14px; justify-content: center; font-size: 18px; }
+.swp-leave-body { font-family: "Cormorant Garamond", serif; font-style: normal; font-weight: 600; font-size: 18px; line-height: 1.3; color: rgba(234, 220, 184, .85); }
+.swp-tarot-orn-gem { position: relative; }
+.swp-tarot-orn-gem::after { content: ""; position: absolute; left: 50%; top: 50%; width: 7px; height: 7px; margin: -4px 0 0 -4px; transform: rotate(45deg); border: 1px solid #e0b96a; background: #1a0f0c; }

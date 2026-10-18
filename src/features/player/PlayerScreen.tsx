@@ -1,7 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { lifeAccessibleLabel, publicLifeStateOf } from "@/stores/lifeState";
-import { LifeStateText } from "@/features/life/LifeMarks";
-import { PrivateInformation } from "./PrivateInformation";
 import { usePlayerStore } from "@/stores/playerStore";
 import { connectFirebase } from "@/firebase/session";
 import { isFirebaseConfigured, getConfigSource } from "@/firebase/config";
@@ -18,12 +15,7 @@ import { ConnectingScreen, FailureScreen, formatCode, KnockingScreen, LeavingScr
 import type { RoomBackend } from "@/firebase/backend";
 import { lookupOfficialRole } from "@/data/officialRoles";
 import { getBuiltinScript } from "@/data/scripts";
-import { iconUrlFor } from "@/data/iconUrl";
 import type { PublicLobbyRecord, RoleDef } from "@/stores/types";
-import { Modal } from "@/components/Modal";
-import { SeatNotePopup } from "./SeatNotePopup";
-import { SeatNotePreview } from "./SeatNotePreview";
-import { AlmanacBody } from "@/features/almanac/AlmanacBody";
 import { RemoteScreenBoundary } from "@/features/remote/RemoteScreenBoundary";
 import { DATA_ERROR_MESSAGE, CONNECTION_ERROR_MESSAGE } from "@/firebase/snapshots";
 import { PlayerEnded, PlayerEnding } from "./PlayerTerminal";
@@ -63,7 +55,6 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
 
   const [retry, setRetry] = useState(0);
   const [leaving, setLeaving] = useState(false);
-  const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
   const [backend, setBackend] = useState<RoomBackend | null>(null);
   const [configOpen, setConfigOpen] = useState(false);
   // The connection attempt's own failure (never a join-submit error), and the
@@ -391,40 +382,13 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
         name={ownName}
         phaseLabel={milestone.phase}
         {...(travellerChoice ? { character: travellerChoice } : {})}
-        notes={<TownView publicLobby={publicLobby} ownPlayerId={playerId} code={code} scriptCharacters={scriptCharacters} />}
-        script={(
-          <div className="player-more">
-            <section className="player-reference" aria-label="Reference">
-              <div className="player-almanac-panel">
-                <AlmanacBody roles={playerAlmanacRoles} />
-              </div>
-            </section>
-            <div className="swp-linkrow">
-              <button type="button" className="swp-textlink" onClick={() => setConfirmLeaveOpen(true)} disabled={leaving}>Request to leave</button>
-            </div>
-          </div>
-        )}
+        scriptName={getBuiltinScript(publicLobby.scriptId)?.name ?? "Script"}
+        scriptCharacters={scriptCharacters}
+        referenceRoles={playerAlmanacRoles}
+        leaving={leaving}
+        onLeave={leave}
       />
 
-      {confirmLeaveOpen && (
-        <Modal title="Request to leave?" onClose={() => setConfirmLeaveOpen(false)}>
-          <div className="dialog-body">
-            <p className="behavior-help">
-              You will remain seated in the game until the Storyteller accepts your request.
-            </p>
-            <div className="dialog-row">
-              <button className="btn btn-sm" onClick={() => setConfirmLeaveOpen(false)}>Cancel</button>
-              <button
-                className="btn btn-sm btn-danger"
-                onClick={() => { setConfirmLeaveOpen(false); void leave(); }}
-                disabled={leaving}
-              >
-                Request to leave
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
     </>
   );
 }
@@ -443,321 +407,17 @@ export function playerMilestone(publicLobby: PublicLobbyRecord, hasRole: boolean
 }
 
 // ---------------------------------------------------------------------------
-// Wiki link helper
+// Reveal mode
 // ---------------------------------------------------------------------------
 
-function wikiUrlFor(name: string): string {
-  const slug = name
-    .trim()
-    .replace(/['']/g, "")
-    .replace(/[^A-Za-z0-9 _-]/g, "")
-    .split(/\s+/)
-    .filter(Boolean)
-    .join("_");
-  return `https://wiki.bloodontheclocktower.com/${slug}`;
-}
-
-// ---------------------------------------------------------------------------
-// SealedCard — role reveal + per-bluff tap-to-reveal
-// ---------------------------------------------------------------------------
-
-/** Phase 10H (§§11.4-11.6; E1, F2, F3, F5): which face the sealed card shows.
+/** Phase 10H (§§11.4-11.6; E1, F2, F3, F5): which face the reveal shows.
  *  - first:   never acknowledged -- the ceremonial first reveal;
  *  - updated: the visible identity changed since the player acknowledged --
  *             ONLY the neutral "Your Role Was Updated" until revealed;
- *  - seen:    the current identity was acknowledged -- the plain sealed card. */
+ *  - seen:    the current identity was acknowledged. */
 export type RevealMode = "first" | "updated" | "seen";
 
 export function revealModeOf(token: string | undefined, ownAck: string | null): RevealMode {
   if (!ownAck) return "first";
   return token && ownAck === token ? "seen" : "updated";
-}
-
-export function SealedCard({
-  self,
-  revealed,
-  onReveal,
-  onHide,
-  mode = "seen",
-  onAcknowledge,
-  ackState = "idle",
-  ackError = null,
-}: {
-  self: import("@/stores/types").PlayerSelfEnvelope | null;
-  revealed: boolean;
-  onReveal: () => void;
-  onHide: () => void;
-  mode?: RevealMode;
-  /** "I've Seen My Role" -- advisory only; absent when nothing to acknowledge. */
-  onAcknowledge?: () => void;
-  ackState?: "idle" | "busy" | "done";
-  ackError?: string | null;
-}) {
-  const [waitedLong, setWaitedLong] = useState(false);
-  const [revealedBluffs, setRevealedBluffs] = useState<Set<number>>(new Set());
-  // The ceremony plays once per reveal of a never-acknowledged identity.
-  const [ceremony, setCeremony] = useState(false);
-
-  useEffect(() => {
-    if (self !== null) { setWaitedLong(false); return; }
-    const t = setTimeout(() => setWaitedLong(true), 5000);
-    return () => clearTimeout(t);
-  }, [self]);
-
-  const bluffsKey = (self?.bluffs ?? []).join("|");
-  useEffect(() => {
-    setRevealedBluffs(new Set());
-  }, [bluffsKey]);
-
-  if (!self) {
-    return (
-      <div className="sealed-card sealed-card-waiting">
-        <p className="behavior-help">
-          Your role isn't ready yet.
-        </p>
-        {waitedLong && (
-          <p className="behavior-help sealed-card-wait-more">
-            The Storyteller is still setting up.
-          </p>
-        )}
-      </div>
-    );
-  }
-
-  const role = lookupOfficialRole(self.shownRole);
-  const roleName = role?.name ?? self.shownRole;
-  const roleType = role?.type ?? "townsfolk";
-  const info = !!(self.demon || self.minions?.length || self.extraText);
-
-  if (!revealed) {
-    return (
-      <div className="sealed-card-wrap">
-        <button
-          type="button"
-          className={`sealed-card sealed-card-${mode}`}
-          onClick={() => { setCeremony(mode === "first"); onReveal(); }}
-          aria-label="Tap to reveal your role"
-        >
-          {mode === "updated" ? (
-            <span className="sealed-card-back">
-              <span className="sealed-card-notice">Your Role Was Updated</span>
-              <span className="sealed-card-hint">Tap to reveal it when no one can see your screen</span>
-            </span>
-          ) : mode === "first" ? (
-            <span className="sealed-card-back sealed-card-ceremonial">
-              <span className="sealed-card-ornament" aria-hidden="true">✦</span>
-              <span className="sealed-card-notice">Your Role Is Ready</span>
-              <span className="sealed-card-hint">Make sure no one can see your screen, then tap to reveal</span>
-            </span>
-          ) : (
-            <span className="sealed-card-back">Tap to reveal your role</span>
-          )}
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="sealed-card-wrap">
-      <article className={`sealed-card revealed${ceremony ? " ceremony" : ""}`} aria-label="Your role">
-        <div className="sealed-card-art">
-          <img
-            src={iconUrlFor(role ?? self.shownRole)}
-            alt=""
-            loading="lazy"
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).style.display = "none";
-            }}
-          />
-        </div>
-        <h2 className="sealed-card-name">
-          {roleName}
-          <span className={`label type-${roleType}`}>{roleType}</span>
-          {self.shownAlignment && <span className={`label alignment-${self.shownAlignment}`}>
-            {self.shownAlignment}
-          </span>}
-        </h2>
-        {role?.ability && <p className="sealed-card-ability prose">{role.ability}</p>}
-        {role?.flavor && <p className="sealed-card-flavor prose">{role.flavor}</p>}
-        <div className="sealed-card-actions">
-          <button type="button" className="btn" onClick={() => { setCeremony(false); onHide(); }} aria-label="Tap to seal your role">Hide my role</button>
-          {onAcknowledge && ackState !== "done" && (
-            <button type="button" className="btn btn-gold" onClick={onAcknowledge} disabled={ackState === "busy"}>
-              {ackState === "busy" ? "Sending…" : "I've Seen My Role"}
-            </button>
-          )}
-          {ackState === "done" && <span className="sealed-card-acked" role="status">✓ The Storyteller knows you've seen your role</span>}
-        </div>
-        {ackError && <p className="field-error" role="alert">{ackError}</p>}
-      </article>
-
-      <div className="sealed-card-extras">
-        {info && (
-          <section className="from-storyteller" aria-label="From the Storyteller">
-            <h3 className="from-storyteller-title">From the Storyteller</h3>
-            <PrivateInformation payload={self} />
-          </section>
-        )}
-        {self.bluffs && self.bluffs.length > 0 && (
-          <div className="sealed-card-bluffs">
-            <span className="label">Demon bluffs — tap to reveal individually</span>
-            <div className="bluff-reveal-grid">
-              {self.bluffs.map((b, i) => {
-                const r = lookupOfficialRole(b);
-                const open = revealedBluffs.has(i);
-                return (
-                  <button
-                    key={`${i}-${b}`}
-                    type="button"
-                    className={`bluff-reveal-card ${open ? "revealed" : ""}`}
-                    onClick={() => {
-                      setRevealedBluffs((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(i)) next.delete(i);
-                        else next.add(i);
-                        return next;
-                      });
-                    }}
-                    aria-label={`Bluff ${i + 1}${open ? "" : " — tap to reveal"}`}
-                  >
-                    {open ? (
-                      <span className="bluff-reveal-name">{r?.name ?? b}</span>
-                    ) : (
-                      <>
-                        <span className="bluff-reveal-q">?</span>
-                        <span className="bluff-reveal-hint">Bluff {i + 1}</span>
-                      </>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-        <a className="sealed-card-wiki" href={wikiUrlFor(roleName)} target="_blank" rel="noopener noreferrer">
-          {roleName} on the wiki ↗
-        </a>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Town view — roster, online dot, per-seat notes (no neighbour subtitles)
-// ---------------------------------------------------------------------------
-
-export function TownView({
-  publicLobby,
-  ownPlayerId,
-  code,
-  scriptCharacters,
-}: {
-  publicLobby: PublicLobbyRecord | null;
-  ownPlayerId: string | null;
-  code: string;
-  scriptCharacters: RoleDef[];
-}) {
-  const townNotes = usePlayerStore((s) => s.townNotes);
-  const setTownNote = usePlayerStore((s) => s.setTownNote);
-  const [noteTarget, setNoteTarget] = useState<string | null>(null);
-
-  const roleById = useMemo(
-    () => new Map(scriptCharacters.map((r) => [r.id, r])),
-    [scriptCharacters]
-  );
-
-  // Phase 10F: during Night the public projection withholds Life State, so
-  // no alive count is derived or shown (`lifeShown` false).
-  const counts = useMemo(() => {
-    if (!publicLobby) return { alive: 0, dead: 0, online: 0, total: 0, lifeShown: false };
-    let alive = 0, dead = 0, online = 0, lifeShown = true;
-    for (const id of publicLobby.seatOrder) {
-      const p = publicLobby.players[id];
-      if (!p) continue;
-      const life = publicLifeStateOf(p);
-      if (life === null) lifeShown = false;
-      else if (life === "alive") alive++;
-      else dead++;
-      if (p.online) online++;
-    }
-    return { alive, dead, online, total: publicLobby.seatOrder.length, lifeShown };
-  }, [publicLobby]);
-
-  if (!publicLobby) return null;
-
-  const noteTargetPlayer = noteTarget
-    ? publicLobby.players[noteTarget]
-    : null;
-
-  return (
-    <div className="town-view">
-      <div className="town-view-header">
-        <h3 className="drawer-section-title" style={{ margin: 0 }}>Town</h3>
-        {counts.lifeShown && <span className="label">{counts.alive}/{counts.total} alive</span>}
-        <span className="label">{counts.online}/{counts.total} online</span>
-      </div>
-
-      <ul className="town-list">
-        {publicLobby.seatOrder.map((id) => {
-          const p = publicLobby.players[id];
-          if (!p) return null;
-          const isYou = id === ownPlayerId;
-          const nKey = `${code}:${id}`;
-          const note = townNotes[nKey] ?? null;
-          const life = publicLifeStateOf(p);
-
-          return (
-            <li
-              key={id}
-              className={`town-row ${life === null ? "life-withheld" : `${life === "alive" ? "" : "dead"} life-${life}`} ${isYou ? "you" : ""}`}
-            >
-              <button
-                type="button"
-                className="town-row-main"
-                onClick={() => {
-                  if (!isYou) setNoteTarget(id);
-                }}
-                aria-label={`${lifeAccessibleLabel(p.name, p.seat + 1, life)} — tap to add notes`}
-              >
-                <span className="label town-row-seat">seat {p.seat + 1}</span>
-                <span className="town-name">
-                  {p.name}
-                  {isYou && " (you)"}
-                  {p.isTraveler && p.publicDisplayRole && <span className="label type-traveler">{lookupOfficialRole(p.publicDisplayRole)?.name ?? p.publicDisplayRole}</span>}
-                </span>
-                <span className="town-row-meta">
-                  <span
-                    className={`town-presence ${p.online ? "online" : "offline"}`}
-                    title={p.online ? "Online" : "Offline"}
-                    aria-label={p.online ? "Online" : "Offline"}
-                  />
-                  {/* Phase 10A: the shared public life grammar -- dead,
-                      vote available/used, exiled -- always in text. */}
-                  {life && <LifeStateText state={life} className="label" />}
-                </span>
-              </button>
-              {note && (note.roles.length > 0 || note.confidence) && (
-                <SeatNotePreview note={note} roleById={roleById} />
-              )}
-              {note?.text && (
-                <p className="town-row-note">{note.text}</p>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-
-      <p className="town-legend">Tap a seat to add private notes</p>
-
-      {noteTarget && noteTargetPlayer && (
-        <SeatNotePopup
-          playerName={noteTargetPlayer.name}
-          scriptCharacters={scriptCharacters}
-          note={townNotes[`${code}:${noteTarget}`] ?? null}
-          onSave={(next) => setTownNote(code, noteTarget, next)}
-          onClose={() => setNoteTarget(null)}
-        />
-      )}
-    </div>
-  );
 }

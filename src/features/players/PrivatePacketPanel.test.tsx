@@ -7,7 +7,6 @@ import { SessionWriter } from "@/firebase/writer";
 import { MemoryRoomBackend } from "@/firebase/memoryBackend";
 vi.mock("@/firebase/privatePacketCommands", () => ({ publishPrivatePacket: vi.fn() }));
 import { PrivateInformation } from "@/features/player/PrivateInformation";
-import { SealedCard } from "@/features/player/PlayerScreen";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { usePacketDeliveryState } from "@/firebase/packetDeliveryState";
@@ -69,19 +68,6 @@ describe("private information workflow UI", () => {
     expect(screen.getByRole("list")).toHaveTextContent("Bob · seat 2");
     expect(screen.getByText("Your private message")).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/lunatic|fake|actual|simulated/i);
-  });
-
-  it("the actual player card shows published information only while revealed", () => {
-    const props = { self: { shownRole: "imp", shownAlignment: "evil" as const,
-      minions: [{ id: "bob", name: "Bob", seat: 1 }], extraText: "Secret message" },
-      onReveal: () => {}, onHide: () => {} };
-    const view = render(<SealedCard {...props} revealed={false} />);
-    expect(screen.queryByText("Secret message")).toBeNull();
-    view.rerender(<SealedCard {...props} revealed />);
-    expect(screen.getByText("Secret message")).toBeInTheDocument();
-    expect(screen.getByRole("list")).toHaveTextContent("Bob · seat 2");
-    view.rerender(<SealedCard {...props} revealed={false} />);
-    expect(screen.queryByText("Secret message")).toBeNull();
   });
 
   it("night procedure comes first and Lunatic setup is a collapsed introduction action", () => {

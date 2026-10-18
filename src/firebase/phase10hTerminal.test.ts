@@ -381,7 +381,7 @@ describe("10H-AC-030 / AC-031 / AC-056..058: player reveal, acknowledgement and 
     expect(usePlayerStore.getState().revealed).toBe(false);
     stop2();
     // A v3 blob that stored revealed:true never re-opens the card.
-    expect(migratePlayerState({ revealed: true, townNotes: {} }, 3)).toEqual({ townNotes: {} });
+    expect(migratePlayerState({ revealed: true, townNotes: {} }, 3)).toEqual({ townNotes: {}, seatGuesses: {} });
   });
 
   it("AC-031: a visible-identity change re-seals the card; the player's own Life is in their envelope", async () => {
