@@ -1127,9 +1127,9 @@ describe("Firebase RTDB membership authorization", () => {
     try {
       await writer.start();
       await knockOnLobby(backend(alice), code, alice, "Alice");
-      await seatPlayer(writer, code, alice, id, null);
+      await seatPlayer(writer, code, alice, id, null, { participantId: store.getState().game!.players[id]!.participantId!, name: store.getState().game!.players[id]!.name });
       await knockOnLobby(backend(bob), code, bob, "Bob");
-      await seatPlayer(writer, code, bob, other, null);
+      await seatPlayer(writer, code, bob, other, null, { participantId: store.getState().game!.players[other]!.participantId!, name: store.getState().game!.players[other]!.name });
       await writeProjections({ backend: writer, code, stState: store.getState().game!,
         registry: buildRegistry(tbScript), online: {}, membership: { [alice]: id, [bob]: other } });
       expect(withoutSelfEnvelope((await ref(alice, `player/${id}`).once("value")).val())).toEqual({ shownRole: "imp", shownAlignment: "evil" });
@@ -1179,8 +1179,8 @@ describe("Firebase RTDB membership authorization", () => {
       registry: buildRegistry(troubleBrewing), online: {}, membership: { [alice]: id, [bob]: other } });
     try {
       await writer.start();
-      await knockOnLobby(backend(alice), code, alice, "Traveler"); await seatPlayer(writer, code, alice, id, null);
-      await knockOnLobby(backend(bob), code, bob, "Demon"); await seatPlayer(writer, code, bob, other, null);
+      await knockOnLobby(backend(alice), code, alice, "Traveler"); await seatPlayer(writer, code, alice, id, null, { participantId: store.getState().game!.players[id]!.participantId!, name: store.getState().game!.players[id]!.name });
+      await knockOnLobby(backend(bob), code, bob, "Demon"); await seatPlayer(writer, code, bob, other, null, { participantId: store.getState().game!.players[other]!.participantId!, name: store.getState().game!.players[other]!.name });
       await flush();
       const pub = (await ref(bob, `public/players/${id}`).once("value")).val();
       expect(pub.publicDisplayRole).toBe("thief"); expect(pub.actualAlignment).toBeUndefined();

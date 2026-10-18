@@ -135,7 +135,7 @@ test.each(["saint", "saintNonqualifying", "mayor", "resolvedDemon"] as const)("B
     ? store.getState().resolveLife({ intents: [{ kind: "execution", playerId: "p0", outcome: "died" }] }, captureCharacterActionContext())
     : store.getState().advancePhase(captureVotingContext());
   expect(outcome).toMatchObject({ ok: true });
-  expect(game().gameSchemaVersion).toBe(28);
+  expect(game().gameSchemaVersion).toBe(29);
   expect(game().gameRuleFacts).toHaveLength(1);
   expect(game().gameRuleFacts[0]?.type).toBe(character === "saint" ? SAINT_EXECUTION_GOOD_TEAM_LOST : character === "saintNonqualifying" ? SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED : character === "resolvedDemon" ? RESOLVED_DEMON_DEATH_NO_SUCCESSOR : MAYOR_DAY_END_GOOD_TEAM_WON);
   if (character === "resolvedDemon") {
@@ -162,7 +162,7 @@ test.each(["saint", "saintNonqualifying", "mayor", "resolvedDemon"] as const)("B
   useSessionRuntime.setState({ backend: replacement, status: "live" });
   expect(validVictoryEvidence(game())).toEqual(accepted.gameRuleFacts);
   expect(game().lifeEventWindow).toEqual(accepted.lifeEventWindow);
-  expect(game().gameSchemaVersion).toBe(28);
+  expect(game().gameSchemaVersion).toBe(29);
   const before = store.getState();
   expect(store.getState().resolveLife({ intents: [{ kind: "death", playerId: "p1" }] }, retained)).toMatchObject({ ok: false });
   expect(store.getState()).toBe(before);
