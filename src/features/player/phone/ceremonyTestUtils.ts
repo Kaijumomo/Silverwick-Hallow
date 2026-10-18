@@ -17,3 +17,13 @@ export async function enterTown() {
     fireEvent.click(screen.getByRole("button", { name: "Enter the town" }));
   }
 }
+
+/** A reload during Day or Night lands on the sealed token: turn it, continue. */
+export async function enterSealed() {
+  await screen.findByRole("button", { name: "Turn your token over" });
+  turnToken();
+  fireEvent.click(screen.getByRole("button", { name: /^(Enter the town|Meet your team)$/ }));
+  if (screen.queryByRole("heading", { name: "Sworn in darkness" })) {
+    fireEvent.click(screen.getByRole("button", { name: "Enter the town" }));
+  }
+}

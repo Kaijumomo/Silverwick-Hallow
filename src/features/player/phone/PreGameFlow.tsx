@@ -16,13 +16,19 @@ const TYPE_LABEL: Record<string, string> = {
   townsfolk: "Townsfolk", outsider: "Outsider", minion: "Minion", demon: "Demon", traveler: "Traveller", traveller: "Traveller",
 };
 
-/** Whether the pre-game ceremony applies: before the game begins, until the
- * player has acknowledged the current identity, or while a Traveller still has
- * to choose. Reloading re-seals the token, so a returning player in Setup
- * passes through the circle again. */
-export function showsPreGame(phase: PublicLobbyRecord["phase"], hasSelf: boolean, mode: "first" | "updated" | "seen", needsTravellerChoice: boolean): boolean {
-  return phase === "setup" || needsTravellerChoice || (hasSelf && mode !== "seen");
+/** Whether the sealed ceremony applies: whenever the player holds a character
+ * they have not turned over on this load, in any phase. Reloading always
+ * re-seals the token: in Setup the player passes through the circle again,
+ * during Day and Night they land on the sealed token. */
+export function showsPreGame(phase: PublicLobbyRecord["phase"], hasSelf: boolean, _mode: "first" | "updated" | "seen", needsTravellerChoice: boolean): boolean {
+  return phase === "setup" || needsTravellerChoice || hasSelf;
 }
+
+/** In Day or Night an already-acknowledged identity re-seals straight to the
+ * token (the circle is a Setup scene). A new or updated identity keeps the
+ * circle, which carries the neutral "updated your character" notice. */
+const sealsAtToken = (phase: PublicLobbyRecord["phase"], mode: "first" | "updated" | "seen", hasSelf: boolean): boolean =>
+  hasSelf && phase !== "setup" && mode === "seen";
 
 /** The team the Storyteller told this player about (names, seats and Minion /
  * Demon designation only; never a teammate's character), from the player's
@@ -59,7 +65,7 @@ export function PreGameFlow({
   /** Leaves the ceremony for the game. */
   onEnter: () => void;
 }) {
-  const [stage, setStage] = useState<Stage>(startAtReveal && self ? "reveal" : "chart");
+  const [stage, setStage] = useState<Stage>((startAtReveal || sealsAtToken(publicLobby.phase, mode, !!self)) && self ? "reveal" : "chart");
   const token = self?.revealToken;
   const mine = playerId ? publicLobby.players[playerId] : undefined;
   const isTraveller = !!mine?.isTraveler;
@@ -73,12 +79,13 @@ export function PreGameFlow({
   }, [token]);
   // The Storyteller applied the Traveller choice: straight to the reveal, as
   // soon as the character itself has arrived.
-  const jumped = useRef(startAtReveal && !!self);
+  const jumped = useRef((startAtReveal || sealsAtToken(publicLobby.phase, mode, !!self)) && !!self);
+  const wantsToken = startAtReveal || sealsAtToken(publicLobby.phase, mode, !!self);
   useEffect(() => {
-    if (!startAtReveal || !self || jumped.current) return;
+    if (!wantsToken || !self || jumped.current) return;
     jumped.current = true;
     setStage((s) => (s === "chart" ? "reveal" : s));
-  }, [startAtReveal, self]);
+  }, [wantsToken, self]);
 
   const seats: ChartSeat[] = useMemo(
     () => publicLobby.seatOrder
