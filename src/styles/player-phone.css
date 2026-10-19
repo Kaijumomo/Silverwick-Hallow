@@ -622,25 +622,27 @@
 
 .swp-token-veil { position: absolute; left: 0; right: 0; top: -4%; height: 62%; background: linear-gradient(180deg, rgba(14, 11, 12, .97), rgba(26, 21, 22, .86) 72%, rgba(26, 21, 22, 0)); border-radius: 0 0 50% 50% / 0 0 30% 30%; }
 
-.swp-town { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.swp-town { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .swp-ring { position: relative; flex: none; }
 .swp-ring-disc { position: absolute; inset: 40px; border-radius: 50%; border: 1px solid rgba(196, 158, 80, .14); background: radial-gradient(closest-side, rgba(196, 158, 80, .06), transparent); }
-.swp-ring-centre { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.swp-ring-centre { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-align: center; }
 .swp-ring-count { font-family: "Cormorant Garamond", serif; font-size: 44px; font-weight: 700; line-height: 1; color: #eadcb8; }
-.swp-ring-label { font-size: 12px; letter-spacing: .2em; text-transform: uppercase; font-weight: 600; color: rgba(216, 201, 164, .6); }
-.swp-ring-sub { margin-top: 4px; font-size: 13px; color: rgba(216, 201, 164, .65); }
+.swp-ring-label { font-size: 12px; letter-spacing: .2em; text-transform: uppercase; font-weight: 600; color: rgba(216, 201, 164, .55); }
+.swp-ring-sub { margin-top: 8px; font-size: 13px; color: rgba(216, 201, 164, .65); }
 .swp-seat { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 3px; border-radius: 50%; background: radial-gradient(circle at 38% 30%, #f1e6c9, #d6c290 60%, #b09566); border: 1px solid rgba(90, 60, 25, .5); color: #2e1c10; font-family: "Cormorant Garamond", serif; font-weight: 700; line-height: 1; box-shadow: 0 6px 14px rgba(0, 0, 0, .5); overflow: hidden; }
 .swp-seat-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .swp-seat-sub { font-family: "Source Sans 3", system-ui, sans-serif; font-size: 10px; font-weight: 600; }
 .swp-seat-dead { background: radial-gradient(circle at 40% 32%, #3a3232, #1a1515); color: rgba(234, 220, 184, .7); }
 .swp-seat-you { border: 2px solid #e0b96a; }
 .swp-seat-trav { border: 1.5px solid #b994d4; }
-.swp-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px 18px; font-size: 12px; color: rgba(216, 201, 164, .65); }
+.swp-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px 18px; font-size: 12px; color: rgba(216, 201, 164, .6); }
 .swp-legend-item { display: inline-flex; align-items: center; gap: 6px; }
-.swp-legend-swatch { width: 12px; height: 12px; border-radius: 50%; }
+.swp-legend-swatch { width: 10px; height: 10px; border-radius: 50%; }
 .swp-legend-alive { background: #d6c290; } .swp-legend-dead { background: #2a2224; border: 1px solid rgba(234, 220, 184, .3); }
 .swp-legend-trav { background: transparent; border: 1.5px solid #b994d4; } .swp-legend-you { background: transparent; border: 2px solid #e0b96a; }
 .swp-comp { align-self: stretch; display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; border-radius: 14px; background: rgba(0, 0, 0, .3); border: 1px solid rgba(196, 158, 80, .12); }
+.swp-comp-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.swp-comp-note { font-size: 12px; color: rgba(216, 201, 164, .55); }
 .swp-comp-title { font-size: 11px; letter-spacing: .22em; text-transform: uppercase; font-weight: 700; color: rgba(216, 201, 164, .68); }
 .swp-comp-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; text-align: center; }
 .swp-comp-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; border-radius: 10px; background: rgba(255, 255, 255, .03); }

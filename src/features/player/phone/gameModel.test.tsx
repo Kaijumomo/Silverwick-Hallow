@@ -85,9 +85,11 @@ describe("Town tab", () => {
     expect(centre).toHaveTextContent("alive");
     expect(centre).toHaveTextContent("3 votes to execute");
     const mix = screen.getByRole("region", { name: "Composition" });
-    // 8 residents: 5 Townsfolk, 1 Outsider, 1 Minion, 1 Demon; the Traveller is not counted.
+    // 8 residents: 5 Townsfolk, 1 Outsider, 1 Minion, 1 Demon; the Traveller is not in the mix.
     expect(within(mix).getAllByText(/^[0-9]+$/).map((n) => n.textContent)).toEqual(["5", "1", "1", "1"]);
-    expect(mix).not.toHaveTextContent(/standard starting mix|travellers/i);
+    // The design's note: residents plus Travellers, never the real bag.
+    expect(mix).toHaveTextContent("8 players + 1 Traveller");
+    expect(mix).not.toHaveTextContent(/standard starting mix/i);
     // Deaths never change it.
     expect(screen.getAllByRole("img", { name: /dead/ })).toHaveLength(3);
   });

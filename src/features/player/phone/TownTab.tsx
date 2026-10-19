@@ -29,7 +29,8 @@ export function TownTab({ lobby, ownId }: { lobby: PublicLobbyRecord; ownId: str
   const disc = Math.max(30, Math.min(54, Math.floor((2 * Math.PI * RADIUS) / Math.max(total, 1)) - 4));
   const residents = seats.filter((s) => !s.traveller).length;
   const mix = compositionFor(residents);
-  const hasTraveller = seats.some((s) => s.traveller);
+  const travellers = seats.length - residents;
+  const hasTraveller = travellers > 0;
 
   return (
     <div className="swp-town">
@@ -78,7 +79,10 @@ export function TownTab({ lobby, ownId }: { lobby: PublicLobbyRecord; ownId: str
 
       {mix && (
         <section className="swp-comp" aria-label="Composition">
-          <span className="swp-comp-title">Composition</span>
+          <div className="swp-comp-head">
+            <span className="swp-comp-title">Composition</span>
+            <span className="swp-comp-note">{`${residents} players${travellers ? ` + ${travellers} Traveller${travellers > 1 ? "s" : ""}` : ""}`}</span>
+          </div>
           <div className="swp-comp-grid">
             {([["townsfolk", "Townsfolk", mix.townsfolk], ["outsider", mix.outsider === 1 ? "Outsider" : "Outsiders", mix.outsider], ["minion", mix.minion === 1 ? "Minion" : "Minions", mix.minion], ["demon", "Demon", mix.demon]] as const).map(([key, label, n]) => (
               <div key={key} className="swp-comp-cell">
