@@ -199,3 +199,16 @@ private-personal-use caveat and removal manifest (`public/art/`). Each is byte-i
 | `characters/travellers/neutral/bishop.png` | resources/characters/bmr/bishop.webp | `72a0090ffac5b5d3419e000aaa108523465e6490` | `2b79a123fccde311` | 91205 |
 | `characters/travellers/neutral/gangster.png` | resources/characters/carousel/gangster.webp | `4f4777c0e21ea4679364ff0207cf84a6a66fa857` | `1e64a6e0561ab5d1` | 91387 |
 | `characters/travellers/neutral/gnome.png` | resources/characters/carousel/gnome.webp | `8b2e343ecf1a80acfa09dc732852c8ed105164fd` | `6a4931f96cef15b8` | 104580 |
+
+## Night-sheet icons (`public/nightsheet/`)
+Official night-sheet icons (130x130 PNG) for the four non-character night-order steps (Dusk, Minion info, Demon info, Dawn).
+Supplied by the project owner in the `player_flow` design handoff (2026-10-19) and used app-wide wherever those steps are listed.
+They are Pandemonium Institute artwork under the same rights status and removal rule as above; the exact upstream path and blob
+were not recorded with the supplied files, so only the file hashes are listed.
+
+| File | SHA-256 (first 16) | Bytes |
+|---|---|---|
+| `nightsheet/dawn.png` | 15b67ae51b3bb239 | 23395 |
+| `nightsheet/demoninfo.png` | e2ec4f5657278ff5 | 28398 |
+| `nightsheet/dusk.png` | 097a6b28097cd98f | 28056 |
+| `nightsheet/minioninfo.png` | 833647e48d9a8410 | 28864 |

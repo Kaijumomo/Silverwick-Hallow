@@ -1,3 +1,4 @@
+import { nightSheetIconUrl, type NightSheetStepId } from "@/data/nightSheetIcon";
 import { useMemo, useState } from "react";
 import { EDITION_LOGO, useLoadedArt } from "@/features/home/art";
 import type { ReferenceCategory } from "@/features/home/referenceCategories";
@@ -23,8 +24,8 @@ export function PhoneReferenceScript({ category, onBack }: { category: Reference
   const night = tab === "chars" ? undefined : nights.find((n) => n.key === tab);
   const tabs: { id: Tab; label: string; n: number }[] = [
     { id: "chars", label: "Characters", n: category.roles.length },
-    { id: "first", label: "First night", n: nights[0]?.wakes ?? 0 },
-    { id: "other", label: "Other nights", n: nights[1]?.wakes ?? 0 },
+    { id: "first", label: "First night", n: nights[0]?.rows.length ?? 0 },
+    { id: "other", label: "Other nights", n: nights[1]?.rows.length ?? 0 },
   ];
   const at = tabs.findIndex((t) => t.id === tab);
   return (
@@ -83,7 +84,7 @@ export function PhoneReferenceScript({ category, onBack }: { category: Reference
                 row.kind === "step" ? (
                   <li key={row.id} className="swp-rs-nrow swp-rs-nrow-step">
                     <span className="swp-rs-num" />
-                    <span className="swp-rs-nicon"><span className="swp-rs-diamond" aria-hidden="true" /></span>
+                    <span className="swp-rs-nicon"><span role="img" aria-label="" className="swp-rs-nicon-img" style={{ backgroundImage: `url(${nightSheetIconUrl(row.id as NightSheetStepId)})` }} /></span>
                     <span className="swp-rs-text">
                       <span className="swp-rs-nname swp-rs-nname-step">{row.name}</span>
                       <span className="swp-rs-ntext">{row.text}</span>

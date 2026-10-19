@@ -342,3 +342,12 @@ it("an Imp selecting a functioning Mayor becomes wholly manual with no partial d
   expect(game().nightProgress[`2:${key("p2")}`]?.status).toBe("done");
   expect(game().lifeEventWindow).toEqual(before.lifeEventWindow);
 });
+
+it("the first-night Minion and Demon info steps carry the official night-sheet icons", () => {
+  store.setState({ game: { ...proofGame(["poisoner", "monk", "imp", "empath", "chef", "baron", "chef"]), day: 1, phase: "night" } });
+  useShellStore.getState().setNightCursor({ day: 1, stepKey: "minionInfo" });
+  const { container } = render(<Guide />);
+  const srcs = [...container.querySelectorAll(".modern-night-sheet img")].map((i) => i.getAttribute("src"));
+  expect(srcs).toContain("/nightsheet/minioninfo.png");
+  expect(srcs).toContain("/nightsheet/demoninfo.png");
+});

@@ -14,6 +14,7 @@ export function DeathVeil({ art, tone, vote, onContinue }: { art: string; tone: 
       <div className="swp-veil-drop" aria-hidden="true" />
       <div className="swp-veil-body">
         <span className={`swp-veil-token swp-tone-${tone}`} aria-hidden="true">
+          <span className="swp-token-face-ring" style={{ inset: 6 }} />
           <span className="swp-token-art" style={{ backgroundImage: `url(${art})` }} />
           <span className="swp-token-veil" />
         </span>

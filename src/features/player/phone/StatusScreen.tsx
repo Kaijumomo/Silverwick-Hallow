@@ -16,11 +16,13 @@ const GLOW: Record<StatusTone, string | undefined> = {
 
 /** Shared full-screen status layout (design: "Shared status-screen layout").
  * It replaces the whole phone UI, so nothing private can render behind it. */
-export function StatusScreen({ tone = "neutral", reserve, link, big, emblem, eyebrow, title, body, message, primary, secondary, children, label }: {
+export function StatusScreen({ tone = "neutral", reserve, pin, link, big, emblem, eyebrow, title, body, message, primary, secondary, children, label }: {
   tone?: StatusTone;
   /** Height (px) of the band the design reserves for its review-only
    * "Simulate" links, so centred content sits where the mockup puts it. */
   reserve?: number;
+  /** The design pins these states: content starts a fixed distance from the top instead of centring. */
+  pin?: boolean;
   /** A discreet text link under the actions (e.g. Connection Settings). */
   link?: { label: string; onClick: () => void };
   /** Result style (Game ended with a winner): rule + large Cinzel title. */
@@ -41,7 +43,7 @@ export function StatusScreen({ tone = "neutral", reserve, link, big, emblem, eye
     <PhoneFrame dark glow="status" glowColor={GLOW[tone]} label={label}>
       <div className="swp-page">
         <div className="swp-status-scroll">
-          <div className="swp-status" role={message ? "alert" : "status"} aria-live={message ? undefined : "polite"}>
+          <div className={`swp-status${pin ? " swp-status-pin" : ""}`} role={message ? "alert" : "status"} aria-live={message ? undefined : "polite"}>
             {emblem}
             {big && <DiamondRule className="swp-status-rule" />}
             <span className="swp-eyebrow">{eyebrow}</span>
@@ -60,7 +62,7 @@ export function StatusScreen({ tone = "neutral", reserve, link, big, emblem, eye
           </div>
         )}
         {link && <div className="swp-linkrow"><button type="button" className="swp-textlink" onClick={link.onClick}>{link.label}</button></div>}
-        {reserve ? <div className="swp-actions-spacer" style={{ height: reserve }} aria-hidden="true" /> : null}
+        {reserve && !pin ? <div className="swp-actions-spacer" style={{ height: reserve }} aria-hidden="true" /> : null}
       </div>
     </PhoneFrame>
   );

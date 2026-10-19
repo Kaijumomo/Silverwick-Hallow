@@ -41,6 +41,7 @@ export function PlayerEnded({ result, onRetry, onBack }: {
     return (
       <StatusScreen
         label="ended-pending"
+        pin
         reserve={46}
         emblem={<MoonEmblem lit spin={16} />}
         eyebrow={code ? formatCode(code) : "Silverwick Hollow"}
@@ -54,6 +55,7 @@ export function PlayerEnded({ result, onRetry, onBack }: {
     return (
       <StatusScreen
         label="ended-error"
+        pin
         tone="error"
         emblem={<MoonEmblem lit={false} tone="error" spin={0} />}
         eyebrow={code ? formatCode(code) : "Silverwick Hollow"}
@@ -83,6 +85,7 @@ export function PlayerEnded({ result, onRetry, onBack }: {
   return (
     <StatusScreen
       label="ended-none"
+      pin
       emblem={<MoonEmblem lit={false} spin={0} />}
       eyebrow="The game is over"
       title="Game ended"

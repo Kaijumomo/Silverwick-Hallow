@@ -118,6 +118,16 @@ describe("ReferenceOverlay", () => {
     expect(screen.getByRole("region", { name: "Loric" })).toBeInTheDocument();
   });
 
+  it("the Dusk / Minion info / Demon info / Dawn steps use the official night-sheet icons", () => {
+    open("tb");
+    fireEvent.click(screen.getByRole("button", { name: "Night order" }));
+    const first = screen.getByRole("region", { name: "First night" });
+    const srcs = [...first.querySelectorAll("li.ref-night-step img")].map((i) => i.getAttribute("src"));
+    expect(srcs).toEqual(["/nightsheet/dusk.png", "/nightsheet/minioninfo.png", "/nightsheet/demoninfo.png", "/nightsheet/dawn.png"]);
+    const other = screen.getByRole("region", { name: "Other nights" });
+    expect([...other.querySelectorAll("li.ref-night-step img")].map((i) => i.getAttribute("src"))).toEqual(["/nightsheet/dusk.png", "/nightsheet/dawn.png"]);
+  });
+
   it("a night-order row opens that character's detail", () => {
     open("tb");
     fireEvent.click(screen.getByRole("button", { name: "Night order" }));

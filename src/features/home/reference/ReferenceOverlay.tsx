@@ -6,6 +6,7 @@
 // no new image source is introduced, and a character whose icon cannot load
 // shows a clearly marked temporary monogram instead of a broken image.
 
+import { nightSheetIconUrl, type NightSheetStepId } from "@/data/nightSheetIcon";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useModalBehavior } from "@/components/Modal";
@@ -184,7 +185,7 @@ export function ReferenceOverlay({ category, onClose, team, onTeamChange }: Prop
                           <li key={row.id} className="ref-night-row ref-night-step">
                             <span className="ref-night-num" />
                             <span className="ref-night-ico">
-                              <i className="ref-diamond" aria-hidden="true" />
+                              <img className="ref-night-icon" src={nightSheetIconUrl(row.id as NightSheetStepId)} alt="" />
                             </span>
                             <RowText name={row.name} text={row.text} />
                           </li>

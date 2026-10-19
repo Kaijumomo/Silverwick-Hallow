@@ -48,23 +48,26 @@ export function TravellerChoicePanel({ travellers, busyId, error, pendingId, onC
             </div>
           )}
           {error && <div role="alert" className="swp-trav-error">{error}</div>}
-          <div className="swp-trav-grid">
+          <div className="swp-trav-list">
             {travellers.map((r) => {
               const on = busyId === r.id;
               return (
                 <button
                   key={r.id}
                   type="button"
-                  className={`swp-trav-cell${on ? " swp-trav-cell-on" : ""}${sending && !on ? " swp-trav-cell-dim" : ""}`}
+                  className={`swp-trav-row${on ? " swp-trav-row-on" : ""}${sending && !on ? " swp-trav-row-dim" : ""}`}
                   aria-disabled={sending}
                   onClick={() => { if (!sending) onChoose(r.id); }}
                 >
                   <span className="swp-trav-token">
                     <span className="swp-trav-token-ring" />
-                    <span role="img" aria-label="" className="swp-token-art" style={{ backgroundImage: `url(${art(r)})` }} />
+                    <span role="img" aria-label="" className="swp-trav-art" style={{ backgroundImage: `url(${art(r)})` }} />
                   </span>
-                  <span className="swp-trav-name">{r.name}</span>
-                  <span className="swp-trav-ability">{r.ability}</span>
+                  <span className="swp-trav-text">
+                    <span className="swp-trav-name">{r.name}</span>
+                    <span className="swp-trav-ability">{r.ability}</span>
+                  </span>
+                  <span aria-hidden="true" className="swp-trav-chev">›</span>
                 </button>
               );
             })}

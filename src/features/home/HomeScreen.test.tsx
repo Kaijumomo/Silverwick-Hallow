@@ -290,6 +290,11 @@ describe("Package 3 (D9): phone Home", () => {
     fireEvent.click(screen.getByRole("tab", { name: /First night/ }));
     expect(screen.getByRole("tab", { name: /First night/ })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Dusk")).toBeInTheDocument();
+    // Phone design: the night tab counts list every row, including the four night-sheet steps.
+    const rows = document.querySelectorAll(".swp-rs-night > li").length;
+    expect(screen.getByRole("tab", { name: /First night/ })).toHaveTextContent(`First night${rows}`);
+    expect([...document.querySelectorAll(".swp-rs-nrow-step .swp-rs-nicon-img")].map((e) => (e as HTMLElement).style.backgroundImage)).toEqual([
+      ...["dusk", "minioninfo", "demoninfo", "dawn"].map((id) => `url("/nightsheet/${id}.png")`)]);
     expect(screen.queryByText("Townsfolk")).toBeNull();
     fireEvent.click(screen.getByRole("tab", { name: /Characters/ }));
     fireEvent.click(screen.getByRole("button", { name: /Washerwoman/ }));

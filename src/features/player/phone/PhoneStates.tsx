@@ -13,6 +13,7 @@ export function ConnectingScreen() {
   return (
     <StatusScreen
       label="connecting"
+      pin
       reserve={50}
       emblem={<MoonEmblem lit spin={16} />}
       eyebrow="Silverwick Hollow"
@@ -27,6 +28,7 @@ export function KnockingScreen({ code }: { code: string }) {
   return (
     <StatusScreen
       label="knocking"
+      pin
       reserve={50}
       emblem={<MoonEmblem lit spin={16} />}
       eyebrow={code ? formatCode(code) : "Silverwick Hollow"}
@@ -41,6 +43,7 @@ export function ReconnectingScreen({ code, name }: { code: string; name: string 
   return (
     <StatusScreen
       label="reconnecting"
+      pin
       reserve={50}
       emblem={<MoonEmblem lit spin={8} />}
       eyebrow={dot([code && formatCode(code), name])}
@@ -69,6 +72,7 @@ export function FailureScreen({ eyebrow, title, message, onRetry, onCancel, onBa
   return (
     <StatusScreen
       label={label}
+      pin
       tone="error"
       emblem={<MoonEmblem lit={false} tone="error" spin={16} />}
       eyebrow={eyebrow}
@@ -86,6 +90,7 @@ export function RejectedScreen({ code, name, message, onBack }: { code: string; 
   return (
     <StatusScreen
       label="rejected"
+      pin
       tone="seal"
       emblem={<SealEmblem name={name} sub="Guest" />}
       eyebrow={code ? formatCode(code) : "Silverwick Hollow"}
@@ -101,6 +106,7 @@ export function RevokedScreen({ code, name, seat, message, onBack }: { code: str
   return (
     <StatusScreen
       label="revoked"
+      pin
       tone="seal"
       emblem={<SealEmblem name={name} torn sub={seat ? `Seat ${seat}` : "Seat"} />}
       eyebrow={dot([code && formatCode(code), name])}
@@ -131,6 +137,7 @@ export function EndingScreen({ code }: { code: string }) {
   return (
     <StatusScreen
       label="ending"
+      pin
       reserve={50}
       emblem={<MoonEmblem lit spin={0} shade={44} />}
       eyebrow={code ? formatCode(code) : "Silverwick Hollow"}

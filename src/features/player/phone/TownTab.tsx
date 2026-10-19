@@ -80,7 +80,7 @@ export function TownTab({ lobby, ownId }: { lobby: PublicLobbyRecord; ownId: str
         <section className="swp-comp" aria-label="Composition">
           <span className="swp-comp-title">Composition</span>
           <div className="swp-comp-grid">
-            {([["townsfolk", "Townsfolk", mix.townsfolk], ["outsider", "Outsiders", mix.outsider], ["minion", "Minions", mix.minion], ["demon", "Demon", mix.demon]] as const).map(([key, label, n]) => (
+            {([["townsfolk", "Townsfolk", mix.townsfolk], ["outsider", mix.outsider === 1 ? "Outsider" : "Outsiders", mix.outsider], ["minion", mix.minion === 1 ? "Minion" : "Minions", mix.minion], ["demon", "Demon", mix.demon]] as const).map(([key, label, n]) => (
               <div key={key} className="swp-comp-cell">
                 <span className="swp-comp-num" style={{ color: TYPE_COLOUR[key] }}>{n}</span>
                 <span className="swp-comp-label">{label}</span>
