@@ -56,7 +56,7 @@ export function CharacterTab({ self, role, isTraveller, art, dead }: {
                   </>
                 )}
               </span>
-              <span className="swp-ctok-side swp-ctok-back" aria-label="Face-down token"><MoonBack /></span>
+              <span className="swp-ctok-side swp-ctok-back" role="img" aria-label="Face-down token"><MoonBack /></span>
             </span>
           </button>
         </div>

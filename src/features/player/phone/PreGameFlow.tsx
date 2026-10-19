@@ -33,7 +33,7 @@ const sealsAtToken = (phase: PublicLobbyRecord["phase"], mode: "first" | "update
 /** The team the Storyteller told this player about (names, seats and Minion /
  * Demon designation only; never a teammate's character), from the player's
  * information history. Travellers never get the team screen: their Demon
- * information stays under From the Storyteller. */
+ * information is no longer shown on the phone. */
 export function teamOf(self: PlayerSelfEnvelope, isTraveller: boolean): { mates: TeamMate[]; bluffs: TeamBluff[] } {
   const { mates, bluffs } = latestTeam(self, isTraveller);
   return {

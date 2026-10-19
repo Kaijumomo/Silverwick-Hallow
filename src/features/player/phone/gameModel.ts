@@ -24,7 +24,7 @@ export function momentLabel(moment: PlayerInfoView["moment"]): string {
 
 const joinList = (items: string[]): string => (items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`);
 
-/** What one history entry says, as the lines shown in "From the Storyteller".
+/** What one history entry says, as lines of text (no longer shown on the phone).
  * Text is shown verbatim. Team and bluff entries are summarised in one line
  * ("You learnt your Minions and bluffs"): who they are lives in "Your team". */
 export function entryLines(entry: PlayerInfoView, isTraveller = false): string[] {
