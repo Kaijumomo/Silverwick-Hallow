@@ -33,4 +33,14 @@ describe("Character tab bluffs", () => {
     expect(screen.queryByRole("group", { name: "Bluffs, not in play" })).toBeNull();
     expect(screen.queryByText("Your team")).toBeNull();
   });
+
+  it("a player now shown as good does not keep an earlier bluffs panel", () => {
+    tab({ shownRole: "washerwoman", shownAlignment: "good", infoHistory: [{ id: "e1", bluffs: ["chef"] }] } as PlayerSelfEnvelope);
+    expect(screen.queryByRole("group", { name: "Bluffs, not in play" })).toBeNull();
+  });
+
+  it("a Traveller never sees bluffs here", () => {
+    render(<CharacterTab self={{ shownRole: "gunslinger", shownAlignment: "evil", bluffs: ["chef"] } as PlayerSelfEnvelope} role={lookupOfficialRole("gunslinger")} isTraveller art="/g.png" dead={false} />);
+    expect(screen.queryByRole("group", { name: "Bluffs, not in play" })).toBeNull();
+  });
 });

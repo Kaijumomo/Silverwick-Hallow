@@ -31,7 +31,7 @@ export function CharacterTab({ self, role, isTraveller, art, dead }: {
   const hasMates = self.shownAlignment === "evil" && mates.length > 0;
   // Bluffs the Storyteller supplied always show, even with no teammates (a
   // small game or a Poppy Grower game where only bluffs were sent).
-  const evil = hasMates || bluffs.length > 0;
+  const evil = hasMates || (bluffs.length > 0 && self.shownAlignment !== "good");
   const [flipped, setFlipped] = useState(false);
   const [concealed, setConcealed] = useState(false);
 
@@ -80,7 +80,7 @@ export function CharacterTab({ self, role, isTraveller, art, dead }: {
       </section>
 
       {evil && !concealed && (
-        <section className={`swp-ctl-team${hide}`} aria-label={hasMates ? "Your team" : "Bluffs"} aria-hidden={flipped}>
+        <section className={`swp-ctl-team${hide}`} aria-label={hasMates ? "Your team" : undefined} aria-hidden={flipped}>
           {hasMates && <span className="swp-ctl-team-title">Your team</span>}
           {hasMates && <div className="swp-ctl-mates">
             {mates.map((m) => (
