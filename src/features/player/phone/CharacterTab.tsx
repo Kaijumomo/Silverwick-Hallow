@@ -28,7 +28,10 @@ export function CharacterTab({ self, role, isTraveller, art, dead }: {
   const tone: RevealTone = isTraveller ? "traveller" : self.shownAlignment === "evil" ? "evil" : self.shownAlignment === "good" ? "good" : "plain";
   const team = self.shownAlignment === "good" ? "Good" : self.shownAlignment === "evil" ? "Evil" : null;
   const { mates, bluffs } = latestTeam(self, isTraveller);
-  const evil = self.shownAlignment === "evil" && mates.length > 0;
+  const hasMates = self.shownAlignment === "evil" && mates.length > 0;
+  // Bluffs the Storyteller supplied always show, even with no teammates (a
+  // small game or a Poppy Grower game where only bluffs were sent).
+  const evil = hasMates || bluffs.length > 0;
   const [flipped, setFlipped] = useState(false);
   const [concealed, setConcealed] = useState(false);
 
@@ -77,9 +80,9 @@ export function CharacterTab({ self, role, isTraveller, art, dead }: {
       </section>
 
       {evil && !concealed && (
-        <section className={`swp-ctl-team${hide}`} aria-label="Your team" aria-hidden={flipped}>
-          <span className="swp-ctl-team-title">Your team</span>
-          <div className="swp-ctl-mates">
+        <section className={`swp-ctl-team${hide}`} aria-label={hasMates ? "Your team" : "Bluffs"} aria-hidden={flipped}>
+          {hasMates && <span className="swp-ctl-team-title">Your team</span>}
+          {hasMates && <div className="swp-ctl-mates">
             {mates.map((m) => (
               <div key={`${m.seat}-${m.name}`} className="swp-ctl-mate">
                 <span className="swp-ctl-mate-token"><span role="img" aria-label="" className="swp-ctl-mate-art" style={{ backgroundImage: `url(${GENERIC_TEAM_ICON[m.designation === "Demon" ? "demon" : "minion"]})` }} /></span>
@@ -87,9 +90,9 @@ export function CharacterTab({ self, role, isTraveller, art, dead }: {
                 <span className="swp-ctl-mate-sub">Seat {m.seat + 1} · {m.designation}</span>
               </div>
             ))}
-          </div>
+          </div>}
           {bluffs.length > 0 && (
-            <div className="swp-ctl-bluffs" role="group" aria-label="Bluffs, not in play">
+            <div className={`swp-ctl-bluffs${hasMates ? "" : " swp-ctl-bluffs-solo"}`} role="group" aria-label="Bluffs, not in play">
               <span className="swp-ctl-bluffs-title">Bluffs</span>
               <div className="swp-ctl-bluffs-row">
                 {bluffs.map((id) => {
