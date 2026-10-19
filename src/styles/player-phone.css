@@ -496,7 +496,7 @@
 /* Evil team: threads (design 08) ------------------------------------------ */
 .swp-evt { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px 24px 34px; }
 .swp-evt-glow { position: absolute; left: 50%; top: 40px; width: 520px; height: 520px; margin-left: -260px; pointer-events: none; background: radial-gradient(closest-side, rgba(180, 40, 34, .38), rgba(120, 24, 22, .1) 60%, transparent); transition: opacity 1.2s ease; }
-.swp-evt-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; text-align: center; }
+.swp-evt-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: safe center; overflow-y: auto; scrollbar-width: none; gap: 22px; text-align: center; }
 .swp-evt-head { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .swp-evt-eyebrow { font-size: 11px; letter-spacing: .3em; text-transform: uppercase; font-weight: 700; color: #e88a7a; }
 .swp-evt-title { margin: 0; font-family: "Cormorant Garamond", serif; text-transform: uppercase; letter-spacing: .06em; font-size: 32px; font-weight: 700; line-height: 1.05; color: #f0d6c8; }
