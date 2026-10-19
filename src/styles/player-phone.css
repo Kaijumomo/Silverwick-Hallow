@@ -502,6 +502,7 @@
 .swp-evt-title { margin: 0; font-family: "Cormorant Garamond", serif; text-transform: uppercase; letter-spacing: .06em; font-size: 32px; font-weight: 700; line-height: 1.05; color: #f0d6c8; }
 .swp-evt-caption { font-family: "IM Fell English", serif; font-style: italic; font-size: 16px; color: rgba(234, 220, 184, .65); }
 .swp-evt-web { position: relative; width: 380px; height: 420px; flex: none; }
+.swp-evt-web-in { position: relative; width: 380px; height: 420px; transform-origin: top center; }
 .swp-evt-svg { position: absolute; inset: 0; overflow: visible; }
 .swp-evt-node { position: absolute; width: 140px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .swp-evt-token { position: relative; border-radius: 50%; overflow: hidden; background: radial-gradient(circle at 38% 30%, #f1e6c9, #dccaa0 48%, #b09566); }
