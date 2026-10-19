@@ -340,6 +340,17 @@ describe("Firebase RTDB membership authorization", () => {
     await assertFails(ref(alice, "player/p-alice").remove());
   });
 
+  test("Package 3 A1: public arrivals are written only by the Storyteller and read only by a requester or member", async () => {
+    await seed();
+    await assertSucceeds(backend(st).update({ [path("public/arrivals")]: ["Alice", "Bob"], [path("public/plannedPlayers")]: 8 }));
+    await assertFails(ref(bob, "public/arrivals").once("value"));
+    await knockOnLobby(backend(bob), code, bob, "Bob");
+    expect((await ref(bob, "public/arrivals").once("value")).val()).toEqual(["Alice", "Bob"]);
+    expect((await ref(bob, "public/plannedPlayers").once("value")).val()).toBe(8);
+    await assertFails(ref(bob, "public/arrivals").set(["Mallory"]));
+    await assertFails(ref(alice, "public/arrivals").set(["Mallory"]));
+  });
+
   test("unauthenticated clients cannot request, bind, claim, or read private/public data", async () => {
     await seed();
     const guest = env.unauthenticatedContext().database();
@@ -961,7 +972,7 @@ describe("Firebase RTDB membership authorization", () => {
     const metadata = (await ref(st, "session").once("value")).val();
     const writer = new SessionWriter(raw, code, metadata.id);
     const game: StorytellerLobbyRecord = {
-      gameSchemaVersion: 28, preparedInformation: [], gameRuleFacts: [], code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
+      gameSchemaVersion: 29, preparedInformation: [], playerInfoLog: [], gameRuleFacts: [], code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
       notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {}, history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       rolePool: [], plannedPlayerCount: 1, plannedTravelerCount: 0, pendingPlayers: {}, seatOrder: ["p-alice"],
       // This test isolates identity delivery through the real writer/rules,
@@ -1005,7 +1016,7 @@ describe("Firebase RTDB membership authorization", () => {
     const metadata = (await ref(st, "session").once("value")).val();
     const writer = new SessionWriter(raw, code, metadata.id);
     const game: StorytellerLobbyRecord = {
-      gameSchemaVersion: 28, preparedInformation: [], gameRuleFacts: [], code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
+      gameSchemaVersion: 29, preparedInformation: [], playerInfoLog: [], gameRuleFacts: [], code, storytellerUid: st, scriptId: "tb", phase: "setup", day: 0,
       notes: "Storyteller only", bluffs: [], fabled: [], lorics: [], nightProgress: {}, history: [], informationDeliveries: [], lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
       rolePool: [], plannedPlayerCount: 2, plannedTravelerCount: 0, pendingPlayers: {}, seatOrder: ["p-alice", "p-bob"],
       // This test isolates the completeness barrier, not Setup deal/reveal
@@ -1116,9 +1127,9 @@ describe("Firebase RTDB membership authorization", () => {
     try {
       await writer.start();
       await knockOnLobby(backend(alice), code, alice, "Alice");
-      await seatPlayer(writer, code, alice, id, null);
+      await seatPlayer(writer, code, alice, id, null, { participantId: store.getState().game!.players[id]!.participantId!, name: store.getState().game!.players[id]!.name });
       await knockOnLobby(backend(bob), code, bob, "Bob");
-      await seatPlayer(writer, code, bob, other, null);
+      await seatPlayer(writer, code, bob, other, null, { participantId: store.getState().game!.players[other]!.participantId!, name: store.getState().game!.players[other]!.name });
       await writeProjections({ backend: writer, code, stState: store.getState().game!,
         registry: buildRegistry(tbScript), online: {}, membership: { [alice]: id, [bob]: other } });
       expect(withoutSelfEnvelope((await ref(alice, `player/${id}`).once("value")).val())).toEqual({ shownRole: "imp", shownAlignment: "evil" });
@@ -1168,8 +1179,8 @@ describe("Firebase RTDB membership authorization", () => {
       registry: buildRegistry(troubleBrewing), online: {}, membership: { [alice]: id, [bob]: other } });
     try {
       await writer.start();
-      await knockOnLobby(backend(alice), code, alice, "Traveler"); await seatPlayer(writer, code, alice, id, null);
-      await knockOnLobby(backend(bob), code, bob, "Demon"); await seatPlayer(writer, code, bob, other, null);
+      await knockOnLobby(backend(alice), code, alice, "Traveler"); await seatPlayer(writer, code, alice, id, null, { participantId: store.getState().game!.players[id]!.participantId!, name: store.getState().game!.players[id]!.name });
+      await knockOnLobby(backend(bob), code, bob, "Demon"); await seatPlayer(writer, code, bob, other, null, { participantId: store.getState().game!.players[other]!.participantId!, name: store.getState().game!.players[other]!.name });
       await flush();
       const pub = (await ref(bob, `public/players/${id}`).once("value")).val();
       expect(pub.publicDisplayRole).toBe("thief"); expect(pub.actualAlignment).toBeUndefined();

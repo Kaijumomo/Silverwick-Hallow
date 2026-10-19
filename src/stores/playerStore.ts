@@ -53,6 +53,15 @@ export type TownNote = {
  */
 export type TownNoteMap = Record<string, TownNote>;
 
+/** Package 3 (D5/D6): the player's own verdict and up to three character
+ * guesses for one other seat. Local to this device like the legacy Town
+ * notes, keyed `${code}:${seatId}`, and never written to Firebase. The legacy
+ * `townNotes` stay stored but are no longer shown. */
+export type SeatVerdict = "good" | "unsure" | "evil";
+export type SeatGuess = { verdict: SeatVerdict | null; guesses: RoleId[] };
+export type SeatGuessMap = Record<string, SeatGuess>;
+export const MAX_SEAT_GUESSES = 3;
+
 export type PlayerStore = {
   /** Ephemeral remote validation status; never persisted. */
   remoteData: { public: "waiting" | "ready" | "invalid" | "error"; self: "waiting" | "ready" | "invalid" | "error"; membership: "ready" | "invalid" | "error"; request: "ready" | "invalid" | "error" };
@@ -71,6 +80,7 @@ export type PlayerStore = {
   // change, so the card always re-seals.
   revealed: boolean;
   townNotes: TownNoteMap;
+  seatGuesses: SeatGuessMap;
   /** Phase 10H: the id of the session this player joined, captured from the
    * active session record; the terminal result must name it (10H-AC-056).
    * Persisted with the rest of the terminal context until Back to Start. */
@@ -91,6 +101,8 @@ export type PlayerStore = {
   setPublic: (p: PublicLobbyRecord | null) => void;
   setRevealed: (revealed: boolean) => void;
   setTownNote: (code: string, seatId: string, note: TownNote | null) => void;
+  /** Sets this seat's verdict and/or guesses; an empty result removes it. */
+  setSeatGuess: (code: string, seatId: string, patch: Partial<SeatGuess>) => void;
   setSessionId: (sessionId: string | null) => void;
   setOwnRevealAck: (token: string | null) => void;
   setTerminalResult: (result: PlayerTerminalResult | null) => void;
@@ -135,6 +147,8 @@ export function migratePlayerState(state: unknown, fromVersion: number): unknown
   // Phase 10H (F2, 10H-AC-030): the reveal UX flag is no longer persisted --
   // a stored "revealed" from v3 must never re-open the card after a reload.
   if (fromVersion < 4) delete s.revealed;
+  // Package 3: verdicts and guesses are new; legacy notes are kept untouched.
+  if (fromVersion < 5) (s as { seatGuesses?: unknown }).seatGuesses = {};
   return state;
 }
 
@@ -153,6 +167,7 @@ export const usePlayerStore = create<PlayerStore>()(
       publicLobby: null,
       revealed: false,
       townNotes: {},
+      seatGuesses: {},
       sessionId: null,
       ownRevealAck: null,
       terminalResult: null,
@@ -181,6 +196,19 @@ export const usePlayerStore = create<PlayerStore>()(
           }
           return { townNotes: next };
         }),
+      setSeatGuess: (code, seatId, patch) =>
+        set((s) => {
+          const k = noteKey(code, seatId);
+          const current = s.seatGuesses[k] ?? { verdict: null, guesses: [] };
+          const next: SeatGuess = {
+            verdict: patch.verdict === undefined ? current.verdict : patch.verdict,
+            guesses: (patch.guesses ?? current.guesses).filter((id, i, all) => all.indexOf(id) === i).slice(0, MAX_SEAT_GUESSES),
+          };
+          const seatGuesses = { ...s.seatGuesses };
+          if (next.verdict === null && next.guesses.length === 0) delete seatGuesses[k];
+          else seatGuesses[k] = next;
+          return { seatGuesses };
+        }),
       setSessionId: (sessionId) => set({ sessionId }),
       setOwnRevealAck: (ownRevealAck) => set({ ownRevealAck }),
       setTerminalResult: (terminalResult) => set({ terminalResult }),
@@ -200,6 +228,9 @@ export const usePlayerStore = create<PlayerStore>()(
           const townNotes = prefix
             ? Object.fromEntries(Object.entries(s.townNotes).filter(([key]) => !key.startsWith(prefix)))
             : s.townNotes;
+          const seatGuesses = prefix
+            ? Object.fromEntries(Object.entries(s.seatGuesses).filter(([key]) => !key.startsWith(prefix)))
+            : s.seatGuesses;
           return {
             remoteData: { public: "waiting", self: "waiting", membership: "ready", request: "ready" },
             code: null,
@@ -215,12 +246,13 @@ export const usePlayerStore = create<PlayerStore>()(
             ownRevealAck: null,
             terminalResult: null,
             townNotes,
+            seatGuesses,
           };
         }),
     }),
     {
       name: "new-blood-player",
-      version: 4,
+      version: 5,
       storage: createJSONStorage(() => localStorage),
       migrate: migratePlayerState,
       // Phase 10H: `revealed` is deliberately absent (always re-seal), and the
@@ -233,6 +265,7 @@ export const usePlayerStore = create<PlayerStore>()(
         requestedName: s.requestedName,
         sessionId: s.sessionId,
         townNotes: s.townNotes,
+        seatGuesses: s.seatGuesses,
       }),
     }
   )

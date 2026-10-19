@@ -33,7 +33,7 @@ it("prepares one official self-owned note atomically without effects, identity, 
     sourceParticipant: { kind: "participant", playerId: "p0", participantId: player().participantId }, createdAt: { phase: "setup" } });
   expect(ownsDrunkReminder(player(), player().reminders[0]!)).toBe(true);
   expect(state().undoStack).toHaveLength(1);
-  expect(game().gameSchemaVersion).toBe(28);
+  expect(game().gameSchemaVersion).toBe(29);
   expect(JSON.stringify(projectLobbyToPublic(game(), {}))).not.toMatch(/drunk|Is The Drunk|monk/);
   expect(projectLobbyToSelfMap(game(), registry)).toEqual({});
   state().undo();

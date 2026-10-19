@@ -118,6 +118,16 @@ describe("ReferenceOverlay", () => {
     expect(screen.getByRole("region", { name: "Loric" })).toBeInTheDocument();
   });
 
+  it("the Dusk / Minion info / Demon info / Dawn steps use the official night-sheet icons", () => {
+    open("tb");
+    fireEvent.click(screen.getByRole("button", { name: "Night order" }));
+    const first = screen.getByRole("region", { name: "First night" });
+    const srcs = [...first.querySelectorAll("li.ref-night-step img")].map((i) => i.getAttribute("src"));
+    expect(srcs).toEqual(["/nightsheet/dusk.png", "/nightsheet/minioninfo.png", "/nightsheet/demoninfo.png", "/nightsheet/dawn.png"]);
+    const other = screen.getByRole("region", { name: "Other nights" });
+    expect([...other.querySelectorAll("li.ref-night-step img")].map((i) => i.getAttribute("src"))).toEqual(["/nightsheet/dusk.png", "/nightsheet/dawn.png"]);
+  });
+
   it("a night-order row opens that character's detail", () => {
     open("tb");
     fireEvent.click(screen.getByRole("button", { name: "Night order" }));
@@ -161,6 +171,7 @@ describe("ReferenceOverlay", () => {
     const card = screen.getAllByRole("button", { name: /Washerwoman/ })[0]!;
     const img = card.querySelector("img")!;
     fireEvent.error(img);
+    // Every script character has a committed local icon (no remote fallback).
     const mono = card.querySelector('[data-temporary-art="true"]');
     expect(mono).not.toBeNull();
     expect(mono!.textContent).toBe("W");
@@ -168,20 +179,18 @@ describe("ReferenceOverlay", () => {
   });
 });
 
-describe("self-hosted art for the eight added characters", () => {
-  it("uses the committed icon first, then the app's resolver, then the marked monogram", () => {
+describe("self-hosted art", () => {
+  it("uses the committed icon, then the marked monogram -- no remote fallback when a local file exists", () => {
     open("carousel");
     team("Demons");
     const card = screen.getAllByRole("button", { name: /^Kazali/ })[0]!;
     expect(card.querySelector("img")!.getAttribute("src")).toBe("/art/characters/carousel/kazali.png");
     fireEvent.error(card.querySelector("img")!);
-    expect(card.querySelector("img")!.getAttribute("src")).toContain("botc.app");
-    fireEvent.error(card.querySelector("img")!);
     expect(card.querySelector('[data-temporary-art="true"]')).not.toBeNull();
   });
-  it("other characters keep the existing resolver", () => {
+  it("script characters now use their committed local icon too", () => {
     open("tb");
     const card = screen.getAllByRole("button", { name: /^Washerwoman/ })[0]!;
-    expect(card.querySelector("img")!.getAttribute("src")).toContain("botc.app");
+    expect(card.querySelector("img")!.getAttribute("src")).toBe("/art/characters/tb/washerwoman.png");
   });
 });

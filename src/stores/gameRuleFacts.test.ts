@@ -57,7 +57,7 @@ describe("10G-AC-01 / AC-02: the registry and v25 authoritative state", () => {
   it("a new game starts with an empty, validated collection", () => {
     state().newGame(setupScript.id, { plannedPlayerCount: 5 });
     expect(game().gameRuleFacts).toEqual([]);
-    expect(game().gameSchemaVersion).toBe(28);
+    expect(game().gameSchemaVersion).toBe(29);
     expect(StorytellerGamePersistedSchema.safeParse(game()).success).toBe(true);
   });
 

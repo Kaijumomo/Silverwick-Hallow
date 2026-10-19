@@ -16,7 +16,7 @@ describe("representative states", () => {
     const { ids, drunkId } = buildRS15();
     const game = store.getState().game!;
     expect(ids).toHaveLength(15);
-    expect(game).toMatchObject({ phase: "night", day: 2, gameSchemaVersion: 28 });
+    expect(game).toMatchObject({ phase: "night", day: 2, gameSchemaVersion: 29 });
     expect(game.players[drunkId]).toMatchObject({ actualRole: "drunk", shownRole: "virgin" });
     const players = Object.values(game.players);
     expect(players.filter((p) => !p.alive).length).toBeGreaterThanOrEqual(2);

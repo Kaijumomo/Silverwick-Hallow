@@ -8,7 +8,6 @@ import "@/styles/home.css";
 import "@/styles/home-reference.css";
 import "@/styles/newgame.css";
 import "@/styles/setupFlow.css";
-import "@/styles/player-notes.css";
 import "@/styles/system.css";
 import "@/styles/reference.css";
 import "@/styles/players.css";
@@ -17,6 +16,7 @@ import "@/styles/player-popover.css";
 import "@/styles/tablet-grimoire.css";
 import "@/styles/storyteller-shell.css";
 import "@/styles/shell-ending.css";
+import "@/styles/player-phone.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

@@ -6,6 +6,7 @@
 // no new image source is introduced, and a character whose icon cannot load
 // shows a clearly marked temporary monogram instead of a broken image.
 
+import { nightSheetIconUrl, type NightSheetStepId } from "@/data/nightSheetIcon";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useModalBehavior } from "@/components/Modal";
@@ -34,9 +35,9 @@ type Props = {
 type Tab = "characters" | "night";
 
 /**
- * Character icon. The eight characters added with their own committed art use
- * it first; everyone else (and any failure) uses the app's existing icon
- * resolver. If that also fails, a marked temporary monogram shows instead.
+ * Character icon. Committed local art is used first (and alone when the app's
+ * resolver would return the same file); a character without it, or a custom
+ * icon, uses the app's resolver. If that also fails, a marked temporary monogram shows instead.
  */
 function RoleIcon({ role, className }: { role: RoleDef; className: string }) {
   const local = localCharacterArt(role.id);
@@ -56,7 +57,7 @@ function RoleIcon({ role, className }: { role: RoleDef; className: string }) {
       loading="lazy"
       decoding="async"
       draggable={false}
-      onError={() => setStage(stage === "local" ? "remote" : "none")}
+      onError={() => setStage(stage === "local" && iconUrlFor(role) !== local ? "remote" : "none")}
     />
   );
 }
@@ -184,7 +185,7 @@ export function ReferenceOverlay({ category, onClose, team, onTeamChange }: Prop
                           <li key={row.id} className="ref-night-row ref-night-step">
                             <span className="ref-night-num" />
                             <span className="ref-night-ico">
-                              <i className="ref-diamond" aria-hidden="true" />
+                              <img className="ref-night-icon" src={nightSheetIconUrl(row.id as NightSheetStepId)} alt="" />
                             </span>
                             <RowText name={row.name} text={row.text} />
                           </li>

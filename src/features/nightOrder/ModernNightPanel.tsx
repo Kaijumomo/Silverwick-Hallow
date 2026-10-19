@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CANONICAL_ABILITY_SEMANTICS, type AbilityDescriptor, type AbilityInputValue } from "@/abilities/semantics";
 import { buildRegistry } from "@/data/roleRegistry";
 import { iconUrlFor } from "@/data/iconUrl";
+import { nightSheetIconUrl, nightSheetIdOfStep } from "@/data/nightSheetIcon";
 import { captureCharacterActionContext, useStorytellerStore } from "@/stores/storytellerStore";
 import { automationEligibility } from "@/abilities/automationEligibility";
 import { bureaucratActionEligibility } from "@/stores/voting";
@@ -246,10 +247,11 @@ function NightGuide({ game, script, visible, onClose, showClose = false }: Props
     {visible && <NightOrderPanel game={game} script={script} onClose={() => setDetails(false)} />}</div>;
   const pending = steps.filter(s => s.stepKey !== current?.stepKey && !stepResolved(game, s));
   const completed = steps.filter(s => s.stepKey !== current?.stepKey && stepResolved(game, s));
+  const sheetOf = (step: NightStep) => step.kind === "global" ? nightSheetIdOfStep(step.stepKey) : undefined;
   const stepRow = (step: NightStep) => {
     const definition = step.kind === "player" ? registry.get(step.effectiveRoleId) : null;
     return <button className="modern-night-row" key={step.stepKey} onClick={() => navigate(step)}>
-      <span className="modern-night-mini">{definition ? <img src={iconUrlFor(definition)} alt="" /> : stepResolved(game, step) ? "✓" : "·"}</span>
+      <span className={`modern-night-mini${!definition && sheetOf(step) ? " modern-night-sheet" : ""}`}>{definition ? <img src={iconUrlFor(definition)} alt="" /> : sheetOf(step) ? <img src={nightSheetIconUrl(sheetOf(step)!)} alt="" /> : stepResolved(game, step) ? "✓" : "·"}</span>
       <span><strong>{label(step)}</strong><small>{step.kind === "player" ? `${step.playerName} · Seat ${step.seat + 1}${!step.alive ? " · Dead" : ""}` : stepResolved(game, step) ? "Completed" : "Storyteller procedure"}</small></span>
     </button>;
   };
@@ -263,7 +265,8 @@ function NightGuide({ game, script, visible, onClose, showClose = false }: Props
     <div className="modern-night-scroll" ref={scroll}>
       <div id={ACTION_CARD_DOCK_HOST} />
       {current && !workspace && <article className="modern-night-current" aria-label={`Current action: ${label(current)}`}>
-        <div className="modern-night-actor">{role && <span className="modern-night-disc"><img src={iconUrlFor(role)} alt="" /></span>}
+        <div className="modern-night-actor">{role ? <span className="modern-night-disc"><img src={iconUrlFor(role)} alt="" /></span>
+          : sheetOf(current) && <span className="modern-night-disc modern-night-sheet"><img src={nightSheetIconUrl(sheetOf(current)!)} alt="" /></span>}
           <div><h3>{label(current)}</h3>{current.kind === "player" && <small>{current.playerName} · Seat {current.seat + 1}</small>}</div></div>
         {current.kind === "player" ? <>
           <p className="modern-night-instruction">{successorChoice ? "Choose the Minion who becomes the new Imp." : manual || inlineInformation ? role?.ability : ability?.kind === "guided" ? ability.descriptor.presentation.action : current.prompt}</p>

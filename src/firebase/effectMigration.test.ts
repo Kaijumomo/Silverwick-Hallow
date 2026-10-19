@@ -136,9 +136,9 @@ describe("Phase 10B migration: v19 -> v20", () => {
     await useStorytellerStore.persist.rehydrate();
     expect(takeMigrationResetFlag()).toBe(false);
     const game = useStorytellerStore.getState().game!;
-    expect(game.gameSchemaVersion).toBe(28);
+    expect(game.gameSchemaVersion).toBe(29);
     expect(game.players.b!.effects[1]!.expiry).toEqual({ kind: "unresolved" });
-    expect(useStorytellerStore.getState().undoStack[0]!.gameSchemaVersion).toBe(28);
+    expect(useStorytellerStore.getState().undoStack[0]!.gameSchemaVersion).toBe(29);
   });
 });
 
@@ -200,7 +200,7 @@ describe("SOL-10B-RC1: legacy appliedAt made untrustworthy by old non-monotonic 
     await useStorytellerStore.persist.rehydrate();
     expect(takeMigrationResetFlag()).toBe(false);
     const store = useStorytellerStore.getState();
-    expect(store.game).toMatchObject({ phase: "setup", day: 1, gameSchemaVersion: 28 });
+    expect(store.game).toMatchObject({ phase: "setup", day: 1, gameSchemaVersion: 29 });
     const bob = store.game!.players.b!;
     expect(store.setManualEffect({ playerId: "b", participantId: bob.participantId! }, "drunk", true)).toMatchObject({ ok: true, changed: true });
     const after = useStorytellerStore.getState();
@@ -260,22 +260,23 @@ describe("Phase 10B/10C: explicit current-version evidence is never 'repaired' b
 
   it.each(malformed)("%s: rejected locally (reset) whether labelled v26, v25, v24, v23, v22, v21, v20 or v19 -- migration never repairs it", (label, corrupt) => {
     const markerCase = label.includes("version marker");
-    for (const marker of markerCase ? [undefined] : [27, 26, 25, 24, 23, 22, 21, 20]) {
+    for (const marker of markerCase ? [undefined] : [28, 27, 26, 25, 24, 23, 22, 21, 20]) {
       for (const version of [27, 26, 25, 24, 23, 22, 21, 20, 19]) {
         const game = v20();
-        delete game.preparedInformation; // These fixtures predate v28.
+        if (marker !== 28) delete game.preparedInformation; // These fixtures predate v28 (a v28 marker keeps its collection).
+        delete game.playerInfoLog; // ... and v29.
         // Phase 10G: an entry labelled 20..24 holds no v25-only collection.
         if (marker !== undefined && marker < 25) delete game.gameRuleFacts;
         if (marker !== undefined) game.gameSchemaVersion = marker;
         corrupt(game);
         expect(hasV20Evidence(game)).toBe(true);
-        const migratable = marker === 20 || marker === 21 || marker === 22 || marker === 23 || marker === 24 || marker === 25 || marker === 26 || marker === 27;
-        expect(detectLegacyGameVersion(game)).toBe(migratable ? marker : 28);
+        const migratable = marker === 20 || marker === 21 || marker === 22 || marker === 23 || marker === 24 || marker === 25 || marker === 26 || marker === 27 || marker === 28;
+        expect(detectLegacyGameVersion(game)).toBe(migratable ? marker : 29);
         const copy = structuredClone(game);
         migrateGameEntry(copy, 13, { kind: "canonical-only" });
         // Marker 20..25: exactly the version steps (the marker, plus v25's empty
         // Rule Fact collection and the v26 stamp); otherwise nothing.
-        expect(copy).toEqual(migratable ? { ...game, gameSchemaVersion: 28, preparedInformation: [], gameRuleFacts: [] } : game);
+        expect(copy).toEqual(migratable ? { ...game, gameSchemaVersion: 29, preparedInformation: [], playerInfoLog: [], gameRuleFacts: [] } : game);
         const result = migrateStoreState({ game: structuredClone(game), undoStack: [] }, version) as { game: unknown };
         expect(takeMigrationResetFlag()).toBe(true);
         expect(result.game).toBeNull();
@@ -396,7 +397,7 @@ describe("Phase 10B: remote checkpoint recovery", () => {
 // ---------------------------------------------------------------------------
 describe("Phase 10B privacy: Effects are Storyteller-private", () => {
   it("public, self and the Firebase public/player projections carry no Effect data or metadata", async () => {
-    const game = expectedV20(v19Game()) as unknown as StorytellerLobbyRecord;
+    const game = { ...expectedV20(v19Game()), playerInfoLog: [] } as unknown as StorytellerLobbyRecord;
     game.players.b!.effects.push({ id: "SENTINEL-EFFECT-ID", type: "SENTINEL-TYPE", lifetime: { kind: "manual" }, state: "suppressed",
       expiry: { kind: "none" }, parameters: { secret: { kind: "text", value: "SENTINEL-PARAM" } } });
     const registry = buildRegistry(troubleBrewing);

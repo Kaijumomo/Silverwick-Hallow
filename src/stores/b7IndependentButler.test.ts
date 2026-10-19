@@ -28,7 +28,7 @@ describe("B7 independent Butler selection and non-enforcement", () => {
     expect(masters(next)).toHaveLength(1); expect(masters(next)[0]).toMatchObject({ playerId: "p1", sourceCharacter: "butler", sourceParticipant: { participantId: before.players.p0!.participantId } });
     expect(next.nightProgress["1:" + participantStepKey(before.players.p0!.participantId!, "butler")]?.status).toBe("done");
     expect(next.phase).toBe("night"); expect(next.day).toBe(1); expect(next.players.p0!.abilityUsed).toBe(false);
-    expect(next.gameSchemaVersion).toBe(28); expect(StorytellerGamePersistedSchema.safeParse(next).success).toBe(true);
+    expect(next.gameSchemaVersion).toBe(29); expect(StorytellerGamePersistedSchema.safeParse(next).success).toBe(true);
     expect(before.players.p1!.reminders).toEqual([]);
   });
 

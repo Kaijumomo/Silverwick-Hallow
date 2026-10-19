@@ -256,3 +256,67 @@ describe("Character Reference", () => {
     expect(screen.getByRole("button", { name: /^Townsfolk/ })).toHaveAttribute("aria-pressed", "true");
   });
 });
+
+describe("Package 3 (D9): phone Home", () => {
+  const phone = (matches: boolean) =>
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: matches && query.includes("760"), media: query, addEventListener() {}, removeEventListener() {} }));
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("on a phone shows only Player and Character Reference, and Player opens the join screen", () => {
+    phone(true);
+    const navigate = vi.fn();
+    render(<HomeScreen navigate={navigate} />);
+    expect(screen.getAllByRole("button")).toHaveLength(2);
+    expect(screen.queryByText("Storyteller")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Player/ }));
+    expect(navigate).toHaveBeenCalledWith("?join=");
+  });
+
+  it("on a phone Character Reference opens the script picker, then a script's reference", () => {
+    phone(true);
+    render(<HomeScreen navigate={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Character Reference/ }));
+    expect(screen.getByRole("heading", { name: "Character Reference" })).toBeInTheDocument();
+    // Its own screen: Home is not rendered underneath (nothing to scroll past).
+    expect(screen.queryByRole("heading", { name: /Silverwick/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Player/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Home" }));
+    expect(screen.getByRole("button", { name: /^Player/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Character Reference/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Trouble Brewing" }));
+    // Design screens 23 to 26: Scripts back button, three tabs, compact rows, card on tap.
+    expect(screen.getByRole("button", { name: /Scripts/ })).toBeInTheDocument();
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([expect.stringMatching(/^Characters\d+$/), expect.stringMatching(/^First night\d+$/), expect.stringMatching(/^Other nights\d+$/)]);
+    fireEvent.click(screen.getByRole("tab", { name: /First night/ }));
+    expect(screen.getByRole("tab", { name: /First night/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Dusk")).toBeInTheDocument();
+    // Phone design: the night tab counts list every row, including the four night-sheet steps.
+    const rows = document.querySelectorAll(".swp-rs-night > li").length;
+    expect(screen.getByRole("tab", { name: /First night/ })).toHaveTextContent(`First night${rows}`);
+    expect([...document.querySelectorAll(".swp-rs-nrow-step .swp-rs-nicon-img")].map((e) => (e as HTMLElement).style.backgroundImage)).toEqual([
+      ...["dusk", "minioninfo", "demoninfo", "dawn"].map((id) => `url("/nightsheet/${id}.png")`)]);
+    expect(screen.queryByText("Townsfolk")).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: /Characters/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Washerwoman/ }));
+    expect(screen.getByRole("dialog", { name: "Washerwoman" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Scripts/ }));
+    expect(screen.getByRole("button", { name: "Trouble Brewing" })).toBeInTheDocument();
+  });
+
+  it("on a phone The Carousel is one list with no tabs", () => {
+    phone(true);
+    render(<HomeScreen navigate={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Character Reference/ }));
+    fireEvent.click(screen.getByRole("button", { name: "The Carousel" }));
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    expect(screen.getByRole("button", { name: /Scripts/ })).toBeInTheDocument();
+  });
+
+  it("a wider screen keeps the Storyteller entry", () => {
+    phone(false);
+    render(<HomeScreen navigate={() => {}} />);
+    expect(screen.getByRole("button", { name: /^Storyteller/ })).toBeInTheDocument();
+  });
+});

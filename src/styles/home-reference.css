@@ -208,7 +208,6 @@ li.ref-night-step { cursor: default; }
 }
 .ref-night-ico { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; }
 .ref-night-icon { width: 48px; height: 48px; object-fit: contain; }
-.ref-diamond { width: 12px; height: 12px; transform: rotate(45deg); border: 1px solid #e0b96a; box-sizing: border-box; display: block; }
 .ref-night-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ref-night-name { font-family: "Cormorant Garamond", serif; font-size: 20px; font-weight: 700; line-height: 1.1; color: #ecd9a8; }
 .ref-night-step .ref-night-name { color: #e0b96a; }

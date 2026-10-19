@@ -113,7 +113,7 @@ export type FirebaseWriteValidationResult = { ok: true } | { ok: false; message:
  * Firebase's own SDK would count it, so this gate's accept/reject verdict
  * matches the real SDK's, not a more "correct" Unicode-aware one.
  */
-function firebaseStringLength(value: string): number {
+export function firebaseStringLength(value: string): number {
   let bytes = 0;
   for (let i = 0; i < value.length; i++) {
     const c = value.charCodeAt(i);

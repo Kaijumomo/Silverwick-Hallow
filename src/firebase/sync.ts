@@ -40,6 +40,8 @@ export type WriteContext = {
   stState: StorytellerLobbyRecord;
   registry: RoleRegistry;
   online: OnlineMap;
+  /** Package 3 (A1): public arrival names (Setup only), see arrivals.ts. */
+  arrivals?: readonly string[];
   membership?: Record<string, string>;
 };
 
@@ -50,7 +52,8 @@ export async function writeProjections(ctx: WriteContext): Promise<void> {
 
   updates[publicPath(code)] = projectLobbyToPublic(
     stState,
-    online
+    online,
+    ctx.arrivals
   ) as unknown as Json;
 
   const selfMap = projectLobbyToSelfMap(stState, registry);
@@ -58,7 +61,7 @@ export async function writeProjections(ctx: WriteContext): Promise<void> {
     // Phase 10H: the delivered record carries the self envelope (this
     // participation's reveal token and the player's own Life); the packet
     // acknowledgement below still compares the bare allowlisted record.
-    updates[playerPath(code, playerId)] = selfEnvelopeOf(stState.players[playerId]!, self) as unknown as Json;
+    updates[playerPath(code, playerId)] = selfEnvelopeOf(stState, playerId, self) as unknown as Json;
   }
   // Withdraw stale records when shown identity is cleared, even if actual
   // identity still exists. The player returns to the neutral waiting state.

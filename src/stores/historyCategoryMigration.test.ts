@@ -226,12 +226,12 @@ describe("B. local v17 -> v18 migration of Current State", () => {
     // absence), change snapshots, Provenance, notes, players, and
     // Information Delivery are exactly as they were.
     expect(result.game).toEqual(expectedCurrent(game17));
-    const { lifeEventWindow: _window, gameSchemaVersion: _version, gameRuleFacts: _facts, preparedInformation: _prepared, ...withoutWindow } = result.game;
+    const { lifeEventWindow: _window, gameSchemaVersion: _version, gameRuleFacts: _facts, preparedInformation: _prepared, playerInfoLog: _log, ...withoutWindow } = result.game;
     expect(withoutWindow).toEqual(expected);
     // Byte-level: the serialized records differ only in the renamed value.
     expect(JSON.stringify((result.game as { history: unknown }).history))
       .toBe(JSON.stringify(v17History()).replaceAll("\"category\":\"identity\"", "\"category\":\"role\""));
-    const { history: _h, lifeEventWindow: _w, gameSchemaVersion: _v, gameRuleFacts: _f, preparedInformation: _p, ...currentState } = result.game;
+    const { history: _h, lifeEventWindow: _w, gameSchemaVersion: _v, gameRuleFacts: _f, preparedInformation: _p, playerInfoLog: _pl, ...currentState } = result.game;
     const { history: _h17, ...currentState17 } = v17Game();
     expect(currentState).toEqual(currentState17);
     // Phase 10A: a Night 2 entry is covered from Day 2 -- no event invented.
@@ -290,7 +290,7 @@ describe("C. local v17 -> v18 migration of every Undo snapshot", () => {
     expect(before.undoStack.some((entry) => categoriesOf(entry).includes("role"))).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 0));
     const current = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as { state: Raw; version: number };
-    expect(current.version).toBe(28);
+    expect(current.version).toBe(29);
 
     const v17Blob = {
       version: 17,
@@ -404,8 +404,8 @@ describe("migrateGameEntry v17 -> v18 step", () => {
     // Phase 10A: the only addition on the way to v19 is the Life Event Window
     // (Phase 10B: and, to v20, only the version marker -- no Effects here;
     // Phase 10G: and, to v25, only an EMPTY Rule Fact collection).
-    const { lifeEventWindow, gameSchemaVersion, gameRuleFacts, preparedInformation, ...rest } = entry;
-    expect(gameSchemaVersion).toBe(28);
+    const { lifeEventWindow, gameSchemaVersion, gameRuleFacts, preparedInformation, playerInfoLog, ...rest } = entry;
+    expect(gameSchemaVersion).toBe(29);
     expect(gameRuleFacts).toEqual([]);
     expect(JSON.stringify(rest)).toBe(before);
     expect(lifeEventWindow).toEqual({ coverageFrom: { phase: "day", day: 2 }, events: [] });

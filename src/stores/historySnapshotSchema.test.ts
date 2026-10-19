@@ -105,7 +105,7 @@ describe("Section 6: the exact v17 regression -- a retired sourcePlayer inside a
     expect(StorytellerGamePersistedSchema.safeParse(base).success).toBe(true); // control: otherwise valid
     // This is already-current data (Phase 10B: its explicit gameSchemaVersion
     // is v20 evidence): remote recovery would never migrate it.
-    expect(detectLegacyGameVersion(base as unknown as Record<string, unknown>)).toBe(28);
+    expect(detectLegacyGameVersion(base as unknown as Record<string, unknown>)).toBe(29);
     const index = indexOf(base, category, kind);
     const bad = withItemField(base, index, "sourcePlayer", "a");
 
@@ -231,6 +231,7 @@ describe("Section 12: an all-empty, markerless v17 game is harmlessly detected a
     delete (v17 as Partial<StorytellerLobbyRecord>).gameSchemaVersion;
     delete (v17 as Partial<StorytellerLobbyRecord>).gameRuleFacts; // Phase 10G: v25-only
     delete (v17 as Partial<StorytellerLobbyRecord>).preparedInformation;
+    delete (v17 as Partial<StorytellerLobbyRecord>).playerInfoLog;
     // Genuinely markerless: every seat empty, no History, no deliveries.
     expect(Object.values(v17.players).every((p) => p.isEmpty && !("participantId" in p))).toBe(true);
     expect(v17.history).toEqual([]);
@@ -244,9 +245,9 @@ describe("Section 12: an all-empty, markerless v17 game is harmlessly detected a
     // Every identity/category step is a no-op; only the v19 window (and the
     // v20 marker -- there are no Effects; Phase 10G: and the v25 EMPTY Rule
     // Fact collection) is added.
-    const { lifeEventWindow, gameSchemaVersion, gameRuleFacts, preparedInformation, ...rest } = entry;
+    const { lifeEventWindow, gameSchemaVersion, gameRuleFacts, preparedInformation, playerInfoLog, ...rest } = entry;
     expect(preparedInformation).toEqual([]);
-    expect(gameSchemaVersion).toBe(28);
+    expect(gameSchemaVersion).toBe(29);
     expect(gameRuleFacts).toEqual([]);
     expect(lifeEventWindow).toEqual({ coverageFrom: { phase: "night", day: 1 }, events: [] });
     expect(JSON.stringify(rest)).toBe(before);

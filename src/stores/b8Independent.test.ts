@@ -62,7 +62,7 @@ describe("B8 independent temporal qualification", () => {
     expect(evidence[0]).toMatchObject({ recordedAt: { phase: "day", day: 2 }, expiresAt: { phase: "day", day: 3 }, resolutionId: after.lifeEventWindow.events[0]!.id,
       provenance: { sourceCharacter: "saint", sourceParticipant: { participantId: before.players.p0!.participantId } } });
     expect(evidence[0]!.type.toLowerCase()).toContain(alignment);
-    expect(after.gameSchemaVersion).toBe(28); expect(after.result).toBeUndefined();
+    expect(after.gameSchemaVersion).toBe(29); expect(after.result).toBeUndefined();
     expect(StorytellerGamePersistedSchema.safeParse(after).success).toBe(true);
     expect(validVictoryEvidence(JSON.parse(JSON.stringify(after)))).toEqual(evidence);
   });

@@ -171,7 +171,7 @@ async function liveDeviceWithAlice(b: MemoryRoomBackend, lobby: Lobby, sessionId
 async function reloadLocalImage() {
   await new Promise((resolve) => setTimeout(resolve, 0));
   const raw = localStorage.getItem(STORAGE_KEY)!;
-  expect(JSON.parse(raw).version).toBe(28);
+  expect(JSON.parse(raw).version).toBe(29);
   resetStore();
   localStorage.setItem(STORAGE_KEY, raw);
   await useStorytellerStore.persist.rehydrate();

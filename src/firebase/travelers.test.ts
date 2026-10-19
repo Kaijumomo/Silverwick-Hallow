@@ -17,6 +17,8 @@ import { revokePlayerAndCommit, storytellerOccupancyCompletion } from "./members
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
 import { withoutSelfEnvelope } from "@/test/revealTokens";
 
+/** Package 3 (C10): a seating binds the participation the game records at the seat. */
+const seatedAs = (playerId: string) => { const p = store.getState().game!.players[playerId]!; return { participantId: p.participantId!, name: p.name }; };
 const code = "BCDF2345", root = `lobbies/${code}`;
 const disposals: (() => void | Promise<void>)[] = [];
 beforeEach(() => {
@@ -50,7 +52,7 @@ async function setup() {
   const manager = await startStorytellerSession(b, lobby, writer);
   disposals.push(async () => { manager.stop(); await writer.dispose(); });
   useSessionRuntime.setState({ backend: writer });
-  await knockOnLobby(b, code, "alice", "Traveler"); await seatPlayer(writer, code, "alice", id, null);
+  await knockOnLobby(b, code, "alice", "Traveler"); await seatPlayer(writer, code, "alice", id, null, seatedAs(id));
   const p = () => store.getState().game!.players[id]!;
   const review = () => previewPrivatePacket(p(), store.getState().game!, buildRegistry(troubleBrewing));
   store.getState().prepareTravelerDemon(id);
@@ -61,7 +63,7 @@ describe("Phase 9B membership and private delivery", () => {
     const { b, other, writer } = await setup();
     store.getState().showAssignedRole(other);
     store.setState({ game: { ...store.getState().game!, phase: "night", day: 4 } });
-    await knockOnLobby(b, code, "bob", "Demon"); await seatPlayer(writer, code, "bob", other, null);
+    await knockOnLobby(b, code, "bob", "Demon"); await seatPlayer(writer, code, "bob", other, null, seatedAs(other));
     const before = store.getState().game!.players[other]!;
     usePlayerStore.getState().setSession({ code, uid: "bob", requestedName: "Demon" });
     disposals.push(startPlayerHandshake(b, code, "bob"));
@@ -76,7 +78,7 @@ describe("Phase 9B membership and private delivery", () => {
     store.setState({ game: { ...store.getState().game!, phase: "night", day: 4 } });
     expect(store.getState().setShownAlignment(other, "undisclosed")).toMatchObject({ ok: true, changed: true });
     expect(store.getState().setShownAlignment(id, "undisclosed")).toMatchObject({ ok: true, changed: true });
-    await knockOnLobby(b, code, "bob", "Demon"); await seatPlayer(writer, code, "bob", other, null);
+    await knockOnLobby(b, code, "bob", "Demon"); await seatPlayer(writer, code, "bob", other, null, seatedAs(other));
     usePlayerStore.getState().setSession({ code, uid: "bob", requestedName: "Demon" });
     disposals.push(startPlayerHandshake(b, code, "bob"));
     await waitFor(() => expect(withoutSelfEnvelope(usePlayerStore.getState().self)).toEqual({ shownRole: "imp" }));

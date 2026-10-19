@@ -11,6 +11,10 @@ import { clearJoinPrefill, writeJoinPrefill } from "./joinPrefill";
 import { buildReferenceCategories, type ReferenceCategory } from "./referenceCategories";
 import { ReferenceOverlay } from "./reference/ReferenceOverlay";
 import { CAROUSEL_ORBIT, EDITION_LOGO, useLoadedArt } from "./art";
+import { useMediaQuery } from "@/components/useMediaQuery";
+import { PhoneHome } from "@/features/player/phone/PhoneHome";
+import { PhoneReferenceScript } from "@/features/player/phone/PhoneReferenceScript";
+import { PhoneReferencePicker } from "@/features/player/phone/PhoneReferencePicker";
 
 type HomePath = "player" | "storyteller" | "reference";
 
@@ -68,6 +72,8 @@ export function HomeScreen({ navigate = defaultNavigate }: Props) {
   const [configOpen, setConfigOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const configSource = getConfigSource();
+  const phone = useMediaQuery("(max-width: 760px)");
+  const [phoneReference, setPhoneReference] = useState(false);
 
   // A hand-off left behind by an abandoned join must never reach a later one.
   useEffect(() => {
@@ -80,6 +86,28 @@ export function HomeScreen({ navigate = defaultNavigate }: Props) {
   const scriptName = game
     ? (getBuiltinScript(game.scriptId) ?? customScripts?.[game.scriptId])?.name
     : undefined;
+
+  // Package 3 (D9): on a phone Home is the player design -- Player and
+  // Character Reference only. The Storyteller stays part of the app (tablet).
+  if (phone) {
+    return (
+      <>
+        {!reference && !phoneReference && (
+          <PhoneHome
+            trial={isTabletTrial}
+            onPick={(id) => {
+              if (id === "player") navigate("?join=");
+              else setPhoneReference(true);
+            }}
+          />
+        )}
+        {!reference && phoneReference && (
+          <PhoneReferencePicker onBack={() => setPhoneReference(false)} onOpen={setReference} />
+        )}
+        {reference && <PhoneReferenceScript category={reference} onBack={() => setReference(null)} />}
+      </>
+    );
+  }
 
   return (
     <main className="home-door" data-path={path}>

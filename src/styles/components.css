@@ -1062,46 +1062,6 @@
   font-size: 18px;
   margin: 0;
 }
-/* ===== Player screen tab strip ===== */
-.player-tabs {
-  display: flex;
-  width: 100%;
-  border-bottom: 1px solid var(--border);
-}
-.player-tab {
-  flex: 1;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  padding: 10px 0;
-  color: var(--text-dim);
-  cursor: pointer;
-  font-family: var(--font-op);
-  font-size: 13px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  transition: color 0.15s, border-color 0.15s;
-}
-.player-tab:hover {
-  color: var(--text);
-}
-.player-tab[aria-pressed="true"] {
-  color: var(--gold-bright);
-  border-bottom-color: var(--gold);
-}
-
-/* Almanac embedded in player tab — fills remaining viewport height */
-.player-almanac-panel {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-.player-almanac-panel .dialog-body {
-  max-height: none;
-  flex: 1;
-}
 
 .dialog-tabs {
   display: flex;
@@ -1633,23 +1593,6 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-.town-row {
-  display: grid;
-  grid-template-columns: max-content 1fr max-content;
-  align-items: center;
-  gap: 12px;
-  padding: 6px 12px;
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-}
-.town-row.dead {
-  opacity: 0.55;
-}
-.town-row.you {
-  border-color: var(--gold);
-  background: rgba(196, 158, 80, 0.08);
 }
 .town-name {
   font-family: var(--font-op);
@@ -2682,55 +2625,6 @@ select:focus-visible,
   margin-bottom: 6px;
   flex-wrap: wrap;
 }
-.town-row {
-  list-style: none;
-  border: 1px solid var(--border, #333);
-  border-radius: 6px;
-  padding: 8px 10px;
-  margin-bottom: 6px;
-  background: rgba(255, 255, 255, 0.02);
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-.town-row.dead {
-  opacity: 0.6;
-}
-.town-row.you {
-  border-color: var(--gold-bright, #d6b96b);
-}
-.town-row-main {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  background: none;
-  border: 0;
-  color: inherit;
-  cursor: pointer;
-  font-family: inherit;
-  text-align: left;
-  padding: 0;
-}
-.town-row-meta {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.town-row-neighbours {
-  font-size: 11px;
-  color: var(--text-faint, #888);
-  margin-top: 4px;
-  margin-left: 2px;
-}
-.town-row-note {
-  margin: 6px 0 0;
-  padding: 6px 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 4px;
-  font-size: 12px;
-}
 .town-note-chip,
 .label.note-tag-good,
 .label.note-tag-evil,
@@ -2754,9 +2648,6 @@ select:focus-visible,
   background: rgba(214, 185, 107, 0.16);
   color: #e0c987;
 }
-.town-row.note-tag-good { border-left: 3px solid #6ec27a; }
-.town-row.note-tag-evil { border-left: 3px solid #b94545; }
-.town-row.note-tag-unsure { border-left: 3px solid #d6b96b; }
 
 .town-note-editor {
   margin-top: 6px;
@@ -2768,13 +2659,6 @@ select:focus-visible,
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-}
-.town-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-  align-items: center;
 }
 
 /* Almanac art */

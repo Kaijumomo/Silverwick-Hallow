@@ -9,6 +9,7 @@ function legacy27(): Raw {
   const game = structuredClone(proofGame(["washerwoman", "chef", "imp"])) as unknown as Raw;
   game.gameSchemaVersion = 27;
   delete game.preparedInformation;
+  delete game.playerInfoLog;
   return game;
 }
 
@@ -20,10 +21,10 @@ describe("B6 prepared-information compatibility", () => {
     const before = structuredClone(game);
     expect(detectLegacyGameVersion(game)).toBe(27);
     migrateGameEntry(game, 27, evidence);
-    expect(game).toEqual({ ...before, gameSchemaVersion: 28, preparedInformation: [] });
+    expect(game).toEqual({ ...before, gameSchemaVersion: 29, preparedInformation: [], playerInfoLog: [] });
     expect(StorytellerGamePersistedSchema.safeParse(game).success).toBe(true);
     migrateGameEntry(game, 27, evidence);
-    expect(game).toEqual({ ...before, gameSchemaVersion: 28, preparedInformation: [] });
+    expect(game).toEqual({ ...before, gameSchemaVersion: 29, preparedInformation: [], playerInfoLog: [] });
   });
 
   it.each([undefined, null, {}, "", [null]])("never defaults malformed v28 collection %j", value => {
