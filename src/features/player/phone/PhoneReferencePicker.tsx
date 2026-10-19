@@ -18,9 +18,9 @@ export function PhoneReferencePicker({ onBack, onOpen }: { onBack: () => void; o
           <h1 className="swp-title swp-ref-title">Character Reference</h1>
           <p className="swp-fell swp-ref-sub">Browse scripts, abilities and night order.</p>
         </div>
-        <div className="swp-ref-grid">
+        <div className="swp-ref-list">
           {categories.map((c) => (
-            <button key={c.id} type="button" className="swp-ref-tile" onClick={() => onOpen(c)} data-category={c.id} aria-label={c.name}>
+            <button key={c.id} type="button" className="swp-ref-row" onClick={() => onOpen(c)} data-category={c.id} aria-label={c.name}>
               {c.id === "carousel" ? (
                 <span className="swp-ref-orbit" role="img" aria-label="The Carousel">
                   <span className="swp-ref-orbit-ring" aria-hidden="true">
@@ -45,7 +45,11 @@ export function PhoneReferencePicker({ onBack, onOpen }: { onBack: () => void; o
                   style={EDITION_LOGO[c.id] && art.has(EDITION_LOGO[c.id]!) ? { backgroundImage: `url(${EDITION_LOGO[c.id]})` } : undefined}
                 />
               )}
-              <span className="swp-ref-count">{c.id === "carousel" ? "Experimental" : `${c.scriptCount} characters`}</span>
+              <span className="swp-ref-text">
+                <span className="swp-ref-name">{c.name}</span>
+                <span className="swp-ref-count">{c.id === "carousel" ? "Experimental" : `${c.scriptCount} characters`}</span>
+              </span>
+              <span className="swp-ref-chev" aria-hidden="true">›</span>
             </button>
           ))}
         </div>

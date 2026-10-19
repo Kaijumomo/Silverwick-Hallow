@@ -1,7 +1,7 @@
 // Phase 10H, Slice 6: the player phone (contract §11; E1, F1-F10).
 // Traceability: 10H-AC-028, -029, -031, -039, -042, -058 (UI side).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { usePlayerStore } from "@/stores/playerStore";
 import { __setEnvOverrideForTests, clearFirebaseConfig, saveFirebaseConfig } from "@/firebase/config";
 
@@ -147,11 +147,25 @@ describe("10H-AC-029 / AC-031 (E1, F2, F3): ceremonial first reveal, neutral upd
     expect(screen.getByRole("heading", { name: "Imp" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^(Enter the town|Meet your team)$/ }));
     fireEvent.click(screen.getByRole("button", { name: "Enter the town" }));
-    // Identity, acknowledgement and history are untouched by the re-seal.
-    expect(await screen.findByRole("region", { name: "From the Storyteller" })).toHaveTextContent("Secret note");
+    // Identity and acknowledgement are untouched by the re-seal; the phone never shows the history.
+    expect(await screen.findByRole("region", { name: "Your team" })).toHaveTextContent("Bob");
+    expect(document.body).not.toHaveTextContent(/Secret note|From the Storyteller/);
     expect(screen.getByText("Day 1 · Seat 1")).toBeInTheDocument();
     expect(acknowledgeReveal).not.toHaveBeenCalled();
     expect(usePlayerStore.getState().ownRevealAck).toBe(TOKEN);
+  });
+
+  it("flipping the Character tab token face-down removes the character content, and turning it back restores it", async () => {
+    seat({ ownRevealAck: TOKEN, publicLobby: lobby("day", 1), self: { shownRole: "imp", shownAlignment: "evil", revealToken: TOKEN, infoHistory: [{ id: "e1", minions: [{ id: "p-bob", name: "Bob", seat: 1 }] }] } });
+    render(<PlayerScreen />);
+    await enterSealed();
+    await screen.findByRole("heading", { name: "Imp" });
+    fireEvent.click(screen.getByRole("button", { name: "Flip token" }));
+    await waitFor(() => expect(document.body).not.toHaveTextContent(/Imp|Bob|You are the|Your team/), { timeout: 3000 });
+    expect(document.querySelector(".swp-ctl [style*='background-image']")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Flip token" }));
+    expect(await screen.findByRole("heading", { name: "Imp" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Your team" })).toHaveTextContent("Bob");
   });
 
   it("the re-sealed token also holds at Night", async () => {
@@ -210,33 +224,16 @@ describe("10H-AC-039 (F7) and Package 3 D3/D7: own Life at Night, the complete i
     expect(screen.getByRole("status")).toHaveTextContent("Ghost · vote used");
   });
 
-  it("everything the Storyteller delivered stays under From the Storyteller, night by night, oldest first", async () => {
-    seat({ ownRevealAck: TOKEN, publicLobby: lobby("day", 2), self: { shownRole: "chef", revealToken: TOKEN, infoHistory: [
+  it("the information history is never shown on the phone: no day-by-day entries, whatever the Storyteller delivered", async () => {
+    seat({ ownRevealAck: TOKEN, publicLobby: lobby("day", 2), self: { shownRole: "chef", revealToken: TOKEN, extraText: "Legacy message", infoHistory: [
       { id: "e1", moment: { phase: "night", day: 1 }, text: "First message" },
       { id: "e2", moment: { phase: "day", day: 2 }, text: "Latest message" },
-    ] } });
+    ], infoHistoryPartial: true } });
     render(<PlayerScreen />);
     await enterSealed();
-    const info = await screen.findByRole("region", { name: "From the Storyteller" });
-    expect(within(info).getByText("Night 1")).toBeInTheDocument();
-    expect(within(info).getByText("First message")).toBeInTheDocument();
-    expect(within(info).getByText("Day 2")).toBeInTheDocument();
-    expect(within(info).getByText("Latest message")).toBeInTheDocument();
-    expect(within(info).queryByText(/could not be loaded/)).toBeNull();
-  });
-
-  it("a Storyteller device without history still shows the current packet, and a partial history says so", async () => {
-    seat({ ownRevealAck: TOKEN, publicLobby: lobby("day", 1), self: { shownRole: "chef", revealToken: TOKEN, extraText: "Legacy message" } });
-    const view = render(<PlayerScreen />);
-    await enterSealed();
-    expect(within(await screen.findByRole("region", { name: "From the Storyteller" })).getByText("Legacy message")).toBeInTheDocument();
-    view.unmount();
-    seat({ ownRevealAck: TOKEN, publicLobby: lobby("day", 1), self: { shownRole: "chef", revealToken: TOKEN, infoHistory: [{ id: "e1", text: "Kept" }], infoHistoryPartial: true } });
-    render(<PlayerScreen />);
-    await enterSealed();
-    const info = await screen.findByRole("region", { name: "From the Storyteller" });
-    expect(within(info).getByText("Earlier")).toBeInTheDocument();
-    expect(within(info).getByRole("status")).toHaveTextContent("Some earlier information could not be loaded.");
+    await screen.findByRole("heading", { name: "Chef" });
+    expect(screen.queryByRole("region", { name: "From the Storyteller" })).toBeNull();
+    expect(document.body).not.toHaveTextContent(/First message|Latest message|Legacy message|could not be loaded|Night 1/);
   });
 
   it("an evil player's team comes from the latest history entry: names, seats and designations, never a character", async () => {
@@ -249,8 +246,7 @@ describe("10H-AC-039 (F7) and Package 3 D3/D7: own Life at Night, the complete i
     expect(within(team).getByText("Bob")).toBeInTheDocument();
     expect(within(team).getByText("Seat 2 · Minion")).toBeInTheDocument();
     expect(within(team).getByRole("group", { name: "Bluffs, not in play" }).textContent).toMatch(/Chef.*Empath.*Monk/);
-    const info = screen.getByRole("region", { name: "From the Storyteller" });
-    expect(info).toHaveTextContent("You learnt your Minion and bluffs");
+    expect(screen.queryByRole("region", { name: "From the Storyteller" })).toBeNull();
   });
 });
 

@@ -43,6 +43,25 @@ function TokenBack() {
   );
 }
 
+/** The face-down moon token without the lettering ring (Character tab flip). */
+export function MoonBack() {
+  return (
+    <span className="swp-moonback" aria-hidden="true">
+      <span className="swp-token-silver" />
+      <span className="swp-token-grain" />
+      <span className="swp-moonback-rim" />
+      <span className="swp-moonback-rim2" />
+      {STARS.map(([x, y, s], i) => (
+        <span key={i} className="swp-token-star" style={{ left: `${x}%`, top: `${y}%`, width: s, height: s }} />
+      ))}
+      <span className="swp-moonback-moon">
+        <span className="swp-token-moon-lit" />
+        <span className="swp-token-moon-shade" />
+      </span>
+    </span>
+  );
+}
+
 /** The parchment character token (shared by Reveal and, later, the banner). */
 export function TokenFace({ art, tone }: { art: string; tone: RevealTone }) {
   return (

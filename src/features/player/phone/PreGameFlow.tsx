@@ -128,9 +128,16 @@ export function PreGameFlow({
   if (stage === "team" && self) {
     return (
       <EvilTeamScreen
-        me={{ name: ownName, roleName: role?.name ?? self.shownRole, art: iconUrlFor(role ?? self.shownRole) }}
+        me={{
+          name: ownName,
+          seat: mine?.seat ?? 0,
+          type: role?.type === "demon" ? "Demon" : "Minion",
+          art: iconUrlFor(role ?? self.shownRole),
+          lilMonsta: self.shownRole === "lilmonsta",
+        }}
         mates={team.mates}
         bluffs={team.bluffs}
+        evilOf={seats.length - publicLobby.seatOrder.filter((id) => publicLobby.players[id]?.isTraveler).length}
         onContinue={onEnter}
       />
     );

@@ -177,13 +177,14 @@ describe("the evil team", () => {
     expect(screen.getByText("Evil")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Meet your team" }));
     expect(screen.getByRole("heading", { name: "Sworn in darkness" })).toBeInTheDocument();
-    expect(screen.getByText("Seat 6 · Minion")).toBeInTheDocument();
-    expect(screen.getByText("Seat 8 · Minion")).toBeInTheDocument();
-    expect(screen.getByText("You · Imp")).toBeInTheDocument();
+    expect(screen.getByText("Seat 6")).toBeInTheDocument();
+    expect(screen.getByText("Seat 8")).toBeInTheDocument();
+    expect(screen.getAllByText("Minion")).toHaveLength(2);
+    expect(screen.getByText(/^You · Seat \d+$/)).toBeInTheDocument();
     const bluffs = screen.getByRole("region", { name: "Bluffs, not in play" });
     expect(within(bluffs).getAllByText(/^(Mayor|Soldier|Chef)$/)).toHaveLength(3);
     // The teammates are drawn with the generic Minion icon, never a character.
-    const icons = [...container.querySelectorAll(".swp-coven-token .swp-token-art")].map((el) => (el as HTMLElement).style.backgroundImage);
+    const icons = [...container.querySelectorAll(".swp-evt-token .swp-evt-art")].map((el) => (el as HTMLElement).style.backgroundImage);
     expect(icons.filter((i) => i.includes("/characters/generic/minion.png"))).toHaveLength(2);
     expect(container.textContent).not.toMatch(/Poisoner|Spy|Baron|Scarlet/);
     fireEvent.click(screen.getByRole("button", { name: "Enter the town" }));
