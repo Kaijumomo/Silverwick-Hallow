@@ -316,13 +316,16 @@ describe("Phase 10D: exile-death is independent of the current Role (correction 
 });
 
 describe("Phase 10A: public display seat", () => {
-  it("a dead Traveler whose Role art is shown stays visibly and textually dead/exiled", () => {
+  it("a dead Traveler whose Role art is shown stays visibly shrouded and accessibly dead/exiled", () => {
     const { traveler } = everyState();
     const pub = projectLobbyToPublic(game(), {}).players[traveler]!;
     render(<PublicSeat player={pub} size={80} x={0} y={0} />);
     const seat = screen.getByRole("group", { name: "Tess, seat 8, exiled, vote used" });
-    expect(within(seat).getByTestId("life-shroud")).toHaveTextContent("Exiled");
-    expect(within(seat).getByText("Exiled · vote used")).toBeInTheDocument();
+    // Package 4G: the Town Square shroud is a torn-away covering with no
+    // words; the textual equivalent is the seat's accessible name above.
+    expect(within(seat).getByTestId("life-shroud")).toBeInTheDocument();
+    expect(seat).toHaveAttribute("data-dead", "true");
+    expect(within(seat).queryByTestId("ghost-vote")).toBeNull(); // the vote is used
     expect(within(seat).getByText("Thief")).toBeInTheDocument();
   });
 });

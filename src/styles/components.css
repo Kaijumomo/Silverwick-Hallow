@@ -2219,243 +2219,6 @@ select:focus-visible,
   color: var(--type-fabled);
 }
 
-/* ===== Public Display (TV / projector view) ===== */
-.public-display {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
-  background: var(--bg, #0a0a0d);
-  color: var(--text);
-}
-.public-display-message {
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 40px;
-  gap: 16px;
-  font-family: var(--font-body);
-}
-.public-display-message h2 {
-  font-family: var(--font-display);
-  color: var(--gold-soft);
-  letter-spacing: 0.08em;
-  font-size: clamp(28px, 4vmin, 56px);
-  margin: 0;
-}
-.public-display-message p {
-  color: var(--text-dim);
-  max-width: 60ch;
-  line-height: 1.5;
-}
-
-.public-display-header {
-  display: flex;
-  align-items: center;
-  gap: clamp(12px, 2vmin, 32px);
-  padding: clamp(10px, 1.5vmin, 24px) clamp(16px, 3vmin, 48px);
-  border-bottom: 1px solid rgba(196, 158, 80, 0.18);
-  background: rgba(0, 0, 0, 0.35);
-  flex-wrap: wrap;
-}
-.public-display-code {
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  font-size: clamp(20px, 3vmin, 44px);
-  color: var(--gold-bright);
-}
-.public-display .phase-pill {
-  font-size: clamp(11px, 1.6vmin, 22px);
-  padding: clamp(4px, 0.7vmin, 10px) clamp(10px, 1.4vmin, 22px);
-}
-.public-display-day {
-  font-family: var(--font-display);
-  letter-spacing: 0.18em;
-  font-size: clamp(12px, 1.6vmin, 22px);
-  color: var(--text-dim);
-}
-.public-display-fabled {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: center;
-  margin-left: auto;
-}
-.public-display-fabled .label {
-  font-size: clamp(11px, 1.4vmin, 20px);
-  letter-spacing: 0.1em;
-}
-.public-display-fabled .fabled-strip-item,
-.public-display-fabled .loric-strip-item {
-  font-size: clamp(14px, 2vmin, 26px);
-  line-height: 1.4;
-  padding: clamp(5px, 0.9vmin, 12px) clamp(14px, 2vmin, 28px);
-  border-radius: 999px;
-  border-width: 1px;
-  border-style: solid;
-  box-sizing: border-box;
-}
-.public-display-fabled .fabled-strip-item {
-  color: var(--type-fabled);
-  background: rgba(255, 213, 79, 0.08);
-  border-color: rgba(255, 213, 79, 0.3);
-}
-.public-display-fabled .loric-strip-item {
-  color: var(--type-loric);
-  background: rgba(196, 160, 232, 0.08);
-  border-color: rgba(196, 160, 232, 0.3);
-}
-
-.public-display-circle-wrap {
-  flex: 1;
-  position: relative;
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: clamp(16px, 3vmin, 48px);
-}
-.public-display-circle {
-  position: relative;
-  width: min(90vmin, 1400px);
-  height: min(90vmin, 1400px);
-}
-.public-display-empty-center {
-  font-style: italic;
-  color: var(--text-faint);
-  font-size: clamp(16px, 2vmin, 28px);
-  text-align: center;
-}
-
-.public-seat {
-  position: absolute;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: clamp(4px, 0.6vmin, 10px);
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  user-select: none;
-}
-.public-seat-disc {
-  position: relative;
-  border-radius: 50%;
-  background: var(--surface-strong);
-  border: 2px solid var(--border-strong);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  text-align: center;
-  padding: clamp(6px, 1vmin, 16px);
-  overflow: hidden;
-}
-.public-seat.alive .public-seat-disc {
-  border-color: var(--gold);
-  box-shadow: 0 0 0 3px rgba(196, 158, 80, 0.12);
-}
-.public-seat.dead .public-seat-disc {
-  filter: none;
-  opacity: 0.82;
-  border-color: var(--border-strong);
-}
-/* State PNG token — centered within the disc, clipped to circle by overflow:hidden */
-.public-seat-state-png {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 90%;
-  height: 90%;
-  object-fit: contain;
-  pointer-events: none;
-  z-index: 1;
-}
-.public-seat-state-png.token-alive { mix-blend-mode: normal; }
-.public-seat-state-png.token-dead  { mix-blend-mode: screen; }
-
-.public-seat-num {
-  position: absolute;
-  top: 6px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-family: var(--font-display);
-  font-size: 11px;
-  letter-spacing: 0.2em;
-  color: var(--text-faint);
-}
-.public-seat-name {
-  font-family: var(--font-op);
-  font-size: 16px;
-  color: var(--text);
-  font-weight: 600;
-  line-height: 1.15;
-  max-width: 100%;
-  overflow-wrap: anywhere;
-  padding: 0 4px;
-}
-.public-seat-role {
-  font-family: var(--font-display);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  color: var(--gold-soft);
-  margin-top: 4px;
-}
-.public-seat-ghost {
-  font-size: 11px;
-  letter-spacing: 0.2em;
-  color: var(--text-faint);
-  text-transform: uppercase;
-  margin-top: 3px;
-}
-.public-seat-traveler {
-  font-family: var(--font-display);
-  font-size: clamp(10px, 1.2vmin, 16px);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--type-traveler);
-  border: 1px solid var(--type-traveler);
-  border-radius: 999px;
-  padding: 2px 10px;
-  background: rgba(186, 104, 200, 0.08);
-}
-
-.public-display-footer {
-  padding: clamp(6px, 1vmin, 14px) clamp(16px, 3vmin, 48px);
-  font-size: clamp(10px, 1.2vmin, 16px);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  border-top: 1px solid rgba(196, 158, 80, 0.1);
-  text-align: center;
-}
-.public-display-footer strong {
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  color: var(--gold-soft);
-  letter-spacing: 0.18em;
-}
-
-.public-display-ended-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(2px);
-  z-index: 10;
-}
-.public-display-ended-overlay h1 {
-  font-family: var(--font-display);
-  font-size: clamp(48px, 8vmin, 120px);
-  letter-spacing: 0.12em;
-  color: var(--gold-bright);
-  margin: 0;
-  text-transform: uppercase;
-}
 
 /* ----------------------------------------------------------------------- */
 /* Phase 4–7 additions: copy button, presence pip, neighbours, town notes, */
@@ -2486,8 +2249,7 @@ select:focus-visible,
 
 /* Presence pip */
 .token-presence,
-.town-presence,
-.public-seat-offline {
+.town-presence {
   display: inline-block;
   width: 8px;
   height: 8px;
@@ -2495,8 +2257,7 @@ select:focus-visible,
   background: var(--text-faint, #888);
 }
 .token-presence.offline,
-.town-presence.offline,
-.public-seat-offline {
+.town-presence.offline {
   background: #b94545;
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.6);
 }
@@ -2507,14 +2268,6 @@ select:focus-visible,
   position: absolute;
   top: 4px;
   right: 4px;
-}
-.public-seat-offline {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-}
-.public-seat.offline .public-seat-disc {
-  opacity: 0.7;
 }
 
 /* Drag-to-reorder highlight */
@@ -2527,8 +2280,7 @@ select:focus-visible,
 }
 
 /* Token art + public seat art */
-.token-art,
-.public-seat-art {
+.token-art {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -2538,10 +2290,7 @@ select:focus-visible,
   pointer-events: none;
   opacity: 0.85;
 }
-.token-role,
-.public-seat-role,
-.public-seat-num,
-.public-seat-name {
+.token-role {
   position: relative;
   z-index: 1;
 }
@@ -2885,8 +2634,6 @@ select:focus-visible,
 .life-correction-form { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 8px 0; }
 .life-confirm-none { display: flex; align-items: center; gap: 8px; min-height: 36px; }
 .dialog-actions { justify-content: flex-end; gap: 8px; margin-top: 8px; }
-.public-seat-disc-frame { position: relative; flex-shrink: 0; }
-.public-seat .life-shroud-label { font-size: clamp(9px, 1.3vmin, 16px); }
 
 /* Phase 10B: Player Drawer Effects -- quick controls, aggregated list,
    instance details and the advanced form. */

@@ -1,7 +1,7 @@
 // Phase 9C.6 (OPUS-002): the Public Display device connection flow —
 // capturing the UID from connectFirebase() (never the URL), fragment-token
 // enrollment BEFORE subscribing, cleaning the URL on success, never blocking
-// on a failed/stale fragment, and the new display-specific denial guidance.
+// on a failed/stale fragment, and the Town Square "Not Linked" scene for a denied read.
 // Real rules/real writer enrollment and revocation are proven in
 // rules.spec.ts and contract.spec.ts; this file isolates the component's own
 // sequencing and rendering contract with connectFirebase, publicDisplayAuth,
@@ -156,14 +156,15 @@ describe("PublicDisplayScreen device connection flow (Phase 9C.6, OPUS-002)", ()
     expect(screen.queryByText("Lobby " + CODE + " not found")).toBeNull();
   });
 
-  it("a denied /public read shows display-specific guidance, not the obsolete 'open from the storyteller's tab' text", async () => {
+  it("a denied /public read shows the Town Square Not Linked scene, not the obsolete 'open from the storyteller's tab' text", async () => {
     usePublicLobbyMock.mockReturnValue({ publicLobby: null, ended: false, loading: false, error: CONNECTION_ERROR_MESSAGE });
 
     render(<PublicDisplayScreen code={CODE} />);
     await act(async () => {});
 
-    expect(await screen.findByText(/no longer authorized/i)).toBeInTheDocument();
-    expect(screen.getByText(/fresh Public Display link/i)).toBeInTheDocument();
+    expect(await screen.findByText("Not Linked")).toBeInTheDocument();
+    expect(screen.getByText("Town Square")).toBeInTheDocument();
+    expect(screen.getByText("Open Invite in the Grimoire to link this screen")).toBeInTheDocument();
     expect(screen.queryByText(/storyteller's browser tab/i)).toBeNull();
   });
 
@@ -174,7 +175,7 @@ describe("PublicDisplayScreen device connection flow (Phase 9C.6, OPUS-002)", ()
 
     render(<PublicDisplayScreen code={CODE} />);
     await act(async () => {});
-    await screen.findByText(/no longer authorized/i);
+    await screen.findByText("Not Linked");
 
     expect(document.body.textContent).not.toContain(TOKEN);
     expect(document.body.innerHTML).not.toContain(TOKEN);
@@ -193,71 +194,79 @@ describe("PublicDisplayScreen device connection flow (Phase 9C.6, OPUS-002)", ()
   });
 });
 
-// ASTRA-10H-003: the stage observer attaches to the ACTUAL stage wrapper,
-// which only mounts after the asynchronous connect + subscription produce a
-// lobby -- and detaches / rebinds if that node is replaced.
-describe("ASTRA-10H-003: the Public Display stage observer follows the mounted stage", () => {
-  type Observer = { callback: ResizeObserverCallback; targets: Element[]; disconnected: boolean };
-  let observers: Observer[];
-  beforeEach(() => {
-    observers = [];
-    vi.stubGlobal("ResizeObserver", class {
-      record: Observer;
-      constructor(callback: ResizeObserverCallback) { this.record = { callback, targets: [], disconnected: false }; observers.push(this.record); }
-      observe(target: Element) { this.record.targets.push(target); }
-      disconnect() { this.record.disconnected = true; }
-    });
-  });
-  const rs20 = (): PublicLobbyRecord => {
-    const ids = Array.from({ length: 20 }, (_, i) => `p${i}`);
+// Package 4G: the stage is a fixed 1920x1080 canvas scaled to the window --
+// it never reflows -- and the scenes are driven by the connection and the
+// public record alone.
+describe("Package 4G: the Town Square stage", () => {
+  const dayLobby = (): PublicLobbyRecord => {
+    const ids = Array.from({ length: 15 }, (_, i) => `p${i}`);
     return {
       code: CODE, scriptId: "tb", phase: "day", day: 2, fabled: [], lorics: [], seatOrder: ids,
       players: Object.fromEntries(ids.map((id, i) => [id, { id, name: `Player ${i + 1}`, seat: i, online: true, joinedAt: 0,
-        isTraveler: i >= 15, ...(i >= 15 ? { publicDisplayRole: "thief" } : {}), alive: true, ghostVote: true }])),
+        isTraveler: i >= 13, ...(i >= 13 ? { publicDisplayRole: "thief" } : {}), alive: i !== 3, ghostVote: i === 3 }])),
     };
   };
-  const live = (o: Observer) => !o.disconnected && o.targets.length > 0;
-  const resize = (o: Observer, width: number, height: number) =>
-    act(() => o.callback([{ target: o.targets[0]!, contentRect: { width, height } } as ResizeObserverEntry], {} as ResizeObserver));
 
-  it("no observer while connecting; once the lobby mounts, the mounted stage is observed and its real size drives the tiers", async () => {
-    let release!: () => void;
-    connectFirebaseMock.mockImplementation(() => new Promise((resolve) => { release = () => resolve({ backend: {} as never, uid: UID }); }));
-    usePublicLobbyMock.mockImplementation((backend) => (backend ? { publicLobby: rs20(), ended: false, loading: false, error: null } : WAITING_RESULT));
-    render(<PublicDisplayScreen code={CODE} />);
-    expect(screen.getByText("Connecting…")).toBeInTheDocument();
-    expect(observers.filter(live)).toHaveLength(0);
-    await act(async () => { release(); });
-    const wrap = document.querySelector<HTMLElement>(".public-display-circle-wrap")!;
-    expect(wrap).toBeTruthy();
-    const active = observers.filter(live);
-    expect(active).toHaveLength(1);
-    expect(active[0]!.targets).toEqual([wrap]);
-    // The MEASURED stage drives the layout: a 1280x720 projector stage.
-    resize(active[0]!, 1237, 589);
-    expect(wrap).toHaveAttribute("data-stage", "1237x589");
-    expect(document.querySelector(".public-display-circle")).toHaveAttribute("data-density", "minimal");
-    resize(active[0]!, 1856, 940);
-    expect(document.querySelector(".public-display-circle")).toHaveAttribute("data-density", "full");
+  it("scales the fixed 1920x1080 stage to the window and never reflows", async () => {
+    usePublicLobbyMock.mockImplementation((backend) => (backend ? { publicLobby: dayLobby(), ended: false, loading: false, error: null } : WAITING_RESULT));
+    Object.defineProperty(document.documentElement, "clientWidth", { configurable: true, value: 960 });
+    Object.defineProperty(document.documentElement, "clientHeight", { configurable: true, value: 540 });
+    try {
+      render(<PublicDisplayScreen code={CODE} />);
+      await act(async () => {});
+      const stage = document.querySelector<HTMLElement>(".ts-stage")!;
+      expect(stage).toBeTruthy();
+      expect(stage.style.getPropertyValue("--ts-k")).toBe("0.5");
+      expect(stage.getAttribute("data-tone")).toBe("day");
+      expect(screen.getByText("14 Alive")).toBeInTheDocument();
+      expect(screen.getByText("1 dead · 2 travellers")).toBeInTheDocument();
+      expect(screen.getByText("Day II")).toBeInTheDocument();
+    } finally {
+      delete (document.documentElement as unknown as Record<string, unknown>).clientWidth;
+      delete (document.documentElement as unknown as Record<string, unknown>).clientHeight;
+    }
   });
 
-  it("a replaced stage node is unobserved and the new node observed (no stale binding)", async () => {
-    let mode: "ready" | "error" = "ready";
-    usePublicLobbyMock.mockImplementation((backend) => !backend ? WAITING_RESULT
-      : mode === "ready" ? { publicLobby: rs20(), ended: false, loading: false, error: null }
-      : { publicLobby: null, ended: false, loading: false, error: CONNECTION_ERROR_MESSAGE });
-    const view = render(<PublicDisplayScreen code={CODE} />);
+  it("shows the Reconnecting pill only after an established connection drops, and keeps the last update", async () => {
+    let emit!: (connected: boolean) => void;
+    connectFirebaseMock.mockResolvedValue({ backend: { subscribeConnection: (cb: (c: boolean) => void) => { emit = cb; return () => {}; } } as never, uid: UID });
+    usePublicLobbyMock.mockImplementation((backend) => (backend ? { publicLobby: dayLobby(), ended: false, loading: false, error: null } : WAITING_RESULT));
+    render(<PublicDisplayScreen code={CODE} />);
     await act(async () => {});
-    const first = document.querySelector(".public-display-circle-wrap")!;
-    expect(observers.filter(live).flatMap((o) => o.targets)).toEqual([first]);
-    mode = "error";
-    view.rerender(<PublicDisplayScreen code={CODE} />);
-    expect(document.querySelector(".public-display-circle-wrap")).toBeNull();
-    expect(observers.filter(live)).toHaveLength(0); // the old node's observer disconnected
-    mode = "ready";
-    view.rerender(<PublicDisplayScreen code={CODE} />);
-    const second = document.querySelector(".public-display-circle-wrap")!;
-    expect(second).not.toBe(first);
-    expect(observers.filter(live).flatMap((o) => o.targets)).toEqual([second]);
+    act(() => emit(false)); // the initial "not yet connected" is not a drop
+    expect(screen.queryByText("Reconnecting to the Storyteller…")).toBeNull();
+    act(() => emit(true));
+    act(() => emit(false));
+    expect(screen.getByText("Reconnecting to the Storyteller…")).toBeInTheDocument();
+    expect(screen.getByText("Showing the last update")).toBeInTheDocument();
+    expect(screen.getByText("14 Alive")).toBeInTheDocument();
+    act(() => emit(true));
+    expect(screen.queryByText("Reconnecting to the Storyteller…")).toBeNull();
+  });
+
+  it("shows the neutral ended scene when the game ends, never a winner the hook withholds", async () => {
+    usePublicLobbyMock.mockImplementation((backend) => (backend ? { publicLobby: null, ended: true, loading: false, error: null } : WAITING_RESULT));
+    render(<PublicDisplayScreen code={CODE} />);
+    await act(async () => {});
+    expect(await screen.findByText("Game over")).toBeInTheDocument();
+    expect(screen.getByText("Game Ended")).toBeInTheDocument();
+    expect(screen.getByText("Thank you for playing")).toBeInTheDocument();
+    expect(screen.queryByText(/wins/i)).toBeNull();
+    expect(screen.queryByText("No result was recorded")).toBeNull();
+  });
+
+  it("shows the waiting scene during setup with a join QR that carries only the lobby code", async () => {
+    setHash(`#displayToken=${TOKEN}`);
+    usePublicLobbyMock.mockImplementation((backend) => (backend
+      ? { publicLobby: { ...makePublicLobby(), plannedPlayers: 8, arrivals: ["Ada", "Bram", "Cleo"] }, ended: false, loading: false, error: null }
+      : WAITING_RESULT));
+    render(<PublicDisplayScreen code={CODE} />);
+    await act(async () => {});
+    expect(await screen.findByText("Join the town")).toBeInTheDocument();
+    expect(screen.getByText("ABCD·2345")).toBeInTheDocument();
+    expect(screen.getByText("3 of 8 have joined")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /Join ABCD2345/ })).toBeInTheDocument();
+    expect(screen.getAllByText(/^Seat \d+$/)).toHaveLength(8);
+    expect(document.body.innerHTML).not.toContain(TOKEN);
   });
 });
