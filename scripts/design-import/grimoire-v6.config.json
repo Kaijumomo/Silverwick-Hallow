@@ -1,0 +1,5 @@
+{
+  "rootId": "grim-screen",
+  "rootStyle": "position:absolute; inset:0; display:flex; overflow:hidden; background:#0b0909; font-family:'Source Sans 3', system-ui, sans-serif; font-variant-numeric:lining-nums tabular-nums; color:#ddd6c8;",
+  "dropStyleHas": ["{{ panel.pos }}"]
+}
