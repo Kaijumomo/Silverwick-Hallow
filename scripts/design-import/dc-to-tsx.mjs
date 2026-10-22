@@ -28,6 +28,13 @@ const close = src.lastIndexOf('</x-dc>');
 if (!open || close < open.index) throw new Error('no <x-dc> block');
 let html = src.slice(open.index + open[0].length, close);
 
+// Sample data the design bakes into the template (a made-up game code and host) becomes view-model fields.
+for (const { regex, flags = 'g', replace } of opts.templatePatches ?? []) {
+  const before = html;
+  html = html.replace(new RegExp(regex, flags), replace);
+  if (html === before) throw new Error(`template patch matched nothing: ${regex}`);
+}
+
 // Same pre-processing the design runtime applies so attribute case survives parsing.
 const CAMEL = 'sc-camel-';
 html = html.replace(/<helmet(\s|>)/gi, '<sc-helmet$1').replace(/<\/helmet\s*>/gi, '</sc-helmet>');

@@ -1146,7 +1146,11 @@ export function GrimoireV6View({ vm }: { vm: any }) {
           )}
           <div style={css(`position:absolute; left:24px; top:20px; display:${vm.chromeDisp ?? ''}; align-items:center; gap:14px; z-index:20;`)}>
             <div style={S84}>
-              <img src="https://release.botc.app/resources/characters/tb/imp_e.webp" alt="" style={S85} />
+              {vm.scriptEmblem && (
+                <>
+                <img src={vm.scriptEmblem} alt="" style={S85} />
+                </>
+              )}
             </div>
             <div style={S86}>
               <div style={S87}>
@@ -1190,11 +1194,11 @@ export function GrimoireV6View({ vm }: { vm: any }) {
               Invite
             </span>
             <span style={S94}>
-              WICK
+              {T(vm.code?.head)}
               <span style={S95}>
                 –
               </span>
-              7Q3M
+              {T(vm.code?.tail)}
             </span>
             <svg viewBox="0 0 24 24" style={S96}>
               <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -2364,38 +2368,28 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                         <div style={S318}>
                           Scan the code or enter it at
                           <span style={S319}>
-                            silverwick.app/join
+                            {T(vm.code?.host)}
                           </span>
                           . Seats are assigned once everyone is in.
                         </div>
                       </div>
                       <div style={S320}>
-                        <span aria-label="Game code WICK7Q3M" style={S265}>
-                          <span style={S321}>
-                            W
-                          </span>
-                          <span style={S321}>
-                            I
-                          </span>
-                          <span style={S321}>
-                            C
-                          </span>
-                          <span style={S321}>
-                            K
-                          </span>
+                        <span aria-label={vm.code?.aria} style={S265}>
+                          {(vm.code?.headChars ?? []).map((ch: any, ch$i: number) => (
+                            <Fragment key={ch$i}>
+                              <span style={S321}>
+                                {T(ch)}
+                              </span>
+                            </Fragment>
+                          ))}
                           <span aria-hidden="true" style={S322} />
-                          <span style={S321}>
-                            7
-                          </span>
-                          <span style={S321}>
-                            Q
-                          </span>
-                          <span style={S321}>
-                            3
-                          </span>
-                          <span style={S321}>
-                            M
-                          </span>
+                          {(vm.code?.tailChars ?? []).map((ch: any, ch$i: number) => (
+                            <Fragment key={ch$i}>
+                              <span style={S321}>
+                                {T(ch)}
+                              </span>
+                            </Fragment>
+                          ))}
                         </span>
                         <button onClick={vm.copyCode} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S323}>
                           <svg viewBox="0 0 24 24" style={S324}>
@@ -3432,35 +3426,25 @@ export function GrimoireV6View({ vm }: { vm: any }) {
               <div style={S487}>
                 {T(vm.qrSvg)}
               </div>
-              <span aria-label="Game code WICK7Q3M" style={S488}>
-                <span style={S489}>
-                  W
-                </span>
-                <span style={S489}>
-                  I
-                </span>
-                <span style={S489}>
-                  C
-                </span>
-                <span style={S489}>
-                  K
-                </span>
+              <span aria-label={vm.code?.aria} style={S488}>
+                {(vm.code?.headChars ?? []).map((ch: any, ch$i: number) => (
+                  <Fragment key={ch$i}>
+                    <span style={S489}>
+                      {T(ch)}
+                    </span>
+                  </Fragment>
+                ))}
                 <span aria-hidden="true" style={S490} />
-                <span style={S489}>
-                  7
-                </span>
-                <span style={S489}>
-                  Q
-                </span>
-                <span style={S489}>
-                  3
-                </span>
-                <span style={S489}>
-                  M
-                </span>
+                {(vm.code?.tailChars ?? []).map((ch: any, ch$i: number) => (
+                  <Fragment key={ch$i}>
+                    <span style={S489}>
+                      {T(ch)}
+                    </span>
+                  </Fragment>
+                ))}
               </span>
               <div style={S204}>
-                silverwick.app/join · scan or enter the code
+                {T(vm.code?.host)} · scan or enter the code
               </div>
               <div style={S117}>
                 <button onClick={vm.copyCode} className={["", "gv-h1b"].filter(Boolean).join(' ')} style={S491}>

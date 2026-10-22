@@ -1,5 +1,25 @@
 {
   "rootId": "grim-screen",
   "rootStyle": "position:absolute; inset:0; display:flex; overflow:hidden; background:#0b0909; font-family:'Source Sans 3', system-ui, sans-serif; font-variant-numeric:lining-nums tabular-nums; color:#ddd6c8;",
-  "dropStyleHas": ["{{ panel.pos }}"]
+  "dropStyleHas": [
+    "{{ panel.pos }}"
+  ],
+  "templatePatches": [
+    {
+      "regex": "WICK(<span style=\"color:rgba\\(232,88,74,\\.7\\); letter-spacing:0; margin:0 \\.3em 0 \\.1em;\">–</span>)7Q3M",
+      "replace": "{{ code.head }}$1{{ code.tail }}"
+    },
+    {
+      "regex": "<span aria-label=\"Game code WICK7Q3M\" style=\"([^\"]*)\"><span style=\"([^\"]*)\">W</span>(?:<span style=\"[^\"]*\">[ICK]</span>){3}(<span aria-hidden=\"true\"[^>]*></span>)(?:<span style=\"[^\"]*\">[7Q3M]</span>){4}</span>",
+      "replace": "<span aria-label=\"{{ code.aria }}\" style=\"$1\"><sc-for list=\"{{ code.headChars }}\" as=\"ch\"><span style=\"$2\">{{ ch }}</span></sc-for>$3<sc-for list=\"{{ code.tailChars }}\" as=\"ch\"><span style=\"$2\">{{ ch }}</span></sc-for></span>"
+    },
+    {
+      "regex": "silverwick\\.app/join",
+      "replace": "{{ code.host }}"
+    },
+    {
+      "regex": "<img src=\"https://release\\.botc\\.app/resources/characters/tb/imp_e\\.webp\"([^>]*)>",
+      "replace": "<sc-if value=\"{{ scriptEmblem }}\"><img src=\"{{ scriptEmblem }}\"$1></sc-if>"
+    }
+  ]
 }
