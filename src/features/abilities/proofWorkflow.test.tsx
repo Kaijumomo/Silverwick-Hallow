@@ -1,24 +1,26 @@
-// Phase 10F Slice 7: UI scenarios for the PRODUCTION proof-character
-// semantics through the real Night Order / workspace / Player Drawer entry
-// points (progressive disclosure, follow-up choices by origin, one commit).
+// Phase 10F Slice 7: UI scenarios for the PRODUCTION proof-character semantics (progressive disclosure,
+// follow-up choices by origin, one commit).
+//
+// Package 4: these now run through the unified Grimoire's Night card and the ability workspace it embeds.
+// The Night Order rows, the inline simple flow and the Player Drawer entries are retired; the Poisoner, Drunk,
+// Fortune Teller, Ravenkeeper and Slayer scenarios live in grimoire-v6/night/port and grimoire-v6/day.
+import { cleanup, fireEvent, render, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { NightOrderPanel } from "@/features/nightOrder/NightOrderPanel";
-import { AbilityEntry } from "./AbilityEntry";
+import { NightScreen, continueAction, resetNightUi, selectNightStep, workspace } from "@/features/grimoire-v6/night/port/v6Night";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
-import { pickSeatIfPicking, useTargetPicker } from "./abilityUi";
-import { patchPlayer, proofGame, proofScript } from "@/test/proofFixtures";
+import { useTargetPicker } from "./abilityUi";
+import { proofGame, proofScript } from "@/test/proofFixtures";
 import type { RoleId, StorytellerLobbyRecord } from "@/stores/types";
 import { choose } from "@/test/pickers";
-import { withRedHerring } from "@/test/redHerringFixture";
 
 const state = () => store.getState();
 const game = () => state().game!;
 
 function open(g: StorytellerLobbyRecord) {
   store.setState({ game: g, lobby: null, undoStack: [], localSeq: 0, customScripts: { [proofScript.id]: proofScript }, selectedPlayerId: null });
+  resetNightUi();
 }
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
@@ -28,100 +30,16 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-function Night() {
-  const current = store((s) => s.game)!;
-  return <NightOrderPanel game={current} script={proofScript} onClose={() => {}} />;
-}
-const card = (role: string, player: string) =>
-  screen.getAllByText(role, { selector: ".step-role-name" }).map((el) => el.closest(".step-card") as HTMLElement)
-    .find((el) => el.querySelector(".step-player-name")?.textContent?.startsWith(`${player} ·`))!;
-const workspace = () => document.querySelector(".ability-workspace") as HTMLElement;
 const named = (roles: RoleId[], phase: "night" | "day" = "night", day = 2) => proofGame(roles, phase, day);
 
-describe("Poisoner -- inline simple flow (target + Resolve)", () => {
-  it("one commit applies the sourced poison and completes the step", () => {
-    open(named(["poisoner", "empath", "chef", "monk", "imp", "saint", "spy"]));
-    render(<Night />);
-    const row = card("Poisoner", "Player 0");
-    choose("The player to poison", "p1", row);
-    fireEvent.click(within(row).getByRole("button", { name: "Resolve" }));
-    expect(game().players.p1!.effects).toEqual([expect.objectContaining({ type: "poisoned", sourceCharacter: "poisoner" })]);
-    expect(state().undoStack).toHaveLength(1);
-    expect(card("Poisoner", "Player 0")).toHaveAttribute("data-status", "done");
-  });
-});
-
-describe("Drunk shown as the Empath -- the Storyteller's number is a follow-up choice", () => {
-  it("Guide opens the workspace; the communicated number is asked as a Storyteller choice and recorded with performedRole", () => {
-    open(patchPlayer(named(["empath", "imp", "chef", "monk", "saint", "drunk", "poisoner"]), "p5",
-      { shownRole: "empath", shownAlignment: null, behaviorMode: "drunk_fake_role_behavior" }));
-    render(<Night />);
-    fireEvent.click(within(card("Empath", "Player 5")).getByRole("button", { name: "Guide" }));
-    const choices = within(workspace()).getByRole("region", { name: "Further choices" });
-    expect(within(choices).getByText("Storyteller choice")).toBeInTheDocument();
-    fireEvent.change(within(choices).getByRole("spinbutton", { name: "The number shown (0, 1 or 2)" }), { target: { value: "2" } });
-    expect(within(workspace()).getByText(/Record what Player 5 was told: 2/)).toBeInTheDocument();
-    fireEvent.click(within(workspace()).getByRole("button", { name: "Resolve" }));
-    expect(game().informationDeliveries).toEqual([expect.objectContaining({ actualRole: "drunk", performedRole: "empath" })]);
-    expect(game().players.p5!.actualRole).toBe("drunk");
-  });
-});
-
-describe("Fortune Teller -- Night 1 uses the prepared Red Herring", () => {
-  it("information resolution uses the setup fact without another selection or effect", () => {
-    open(withRedHerring(named(["fortuneteller", "imp", "chef", "monk", "saint", "poisoner", "empath"], "night", 1), "p3"));
-    render(<Night />);
-    fireEvent.click(within(card("Fortune Teller", "Player 0")).getByRole("button", { name: "Guide" }));
-    const ws = workspace();
-    choose("The two players chosen 1", "p2", ws);
-    choose("The two players chosen 2", "p3", ws);
-    expect(within(ws).queryByText(/Player 3 gains Red Herring/)).not.toBeInTheDocument();
-    fireEvent.click(within(ws).getByRole("button", { name: "Resolve" }));
-    expect(game().players.p3!.effects).toEqual([expect.objectContaining({ type: "fortuneTellerRedHerring" })]);
-    expect(game().informationDeliveries.at(-1)!.values!.at(-1)).toMatchObject({ kind: "boolean", value: true });
-    expect(state().undoStack).toHaveLength(1);
-  });
-});
-
-function Entry({ id }: { id: string }) {
-  const player = store((s) => s.game?.players[id]);
-  return player ? <AbilityEntry player={player} /> : null;
-}
-
-describe("Slayer -- the Day entry", () => {
-  it("Player Drawer: Use ability… -> board target, one commit without another screen or confirmation", () => {
-    open(named(["slayer", "imp", "chef", "monk", "saint", "poisoner", "empath"], "day", 2));
-    render(<Entry id="p0" />);
-    fireEvent.click(screen.getByRole("button", { name: "Use ability… (Slayer)" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
-    act(() => { pickSeatIfPicking(game(), "p1"); });
-    expect(game().players.p1!.alive).toBe(false);
-    expect(game().players.p0!.abilityUsed).toBe(true);
-    expect(state().undoStack).toHaveLength(1);
-  });
-
-  it("at Night the Player Drawer stays Manual-only for ordinary Night abilities", () => {
-    open(named(["poisoner", "imp", "chef", "monk", "saint", "spy", "empath"], "night", 2));
-    render(<Entry id="p0" />);
-    expect(screen.queryByRole("button", { name: /Use ability/ })).toBeNull();
-    fireEvent.click(screen.getByText("Advanced corrections"));
-    expect(screen.getByRole("button", { name: "Record outcome…" })).toBeInTheDocument();
-  });
-
-  it("the Cult Leader's Day portion is Manual-only in the Day entry", () => {
-    open(named(["cultleader", "imp", "chef", "monk", "saint", "spy", "empath"], "day", 2));
-    render(<Entry id="p0" />);
-    expect(screen.queryByRole("button", { name: /Use ability/ })).toBeNull();
-    fireEvent.click(screen.getByText("Advanced corrections"));
-    expect(screen.getByRole("button", { name: "Record outcome…" })).toBeInTheDocument();
-  });
-});
-
 describe("Al-Hadikhia -- ordered choices in the workspace", () => {
-  it("three ordered selects; each live/die choice appears in turn; the preview keeps 1 -> 2 -> 3", () => {
-    open(named(["alhadikhia", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"]));
-    render(<Night />);
-    fireEvent.click(within(card("Al-Hadikhia", "Player 0")).getByRole("button", { name: "Guide" }));
+  const AL = ["alhadikhia", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"];
+
+  it("three ordered selects; each live/die choice appears in turn; the answer keeps 1 -> 2 -> 3", () => {
+    open(named(AL));
+    render(<NightScreen />);
+    selectNightStep("p0");
+    continueAction();
     const ws = workspace();
     const label = "The 3 players chosen, in order (or nobody)";
     choose(`${label} 1`, "p3", ws);
@@ -132,51 +50,18 @@ describe("Al-Hadikhia -- ordered choices in the workspace", () => {
     fireEvent.click(live("1. Player 3 chooses to LIVE (No: chooses to die)"));
     fireEvent.click(live("2. Player 1 chooses to LIVE (No: chooses to die)"));
     fireEvent.click(live("3. Player 4 chooses to LIVE (No: chooses to die)"));
-    const lines = within(within(ws).getByRole("region", { name: "Result" })).getAllByRole("listitem").map((li) => li.textContent);
-    expect(lines.slice(0, 3)).toEqual(["Player 3 dies", "Player 1 dies", "Player 4 dies"]);
-    fireEvent.click(within(ws).getByRole("button", { name: "Confirm and record" }));
+    // The Night card commits as soon as the answer is complete: no separate Resolve step.
     expect(["p3", "p1", "p4"].map((id) => game().players[id]!.alive)).toEqual([false, false, false]);
+    expect(state().undoStack).toHaveLength(1);
   });
 
   it("Nobody is an explicit answer: the step completes with no Life change", () => {
-    open(named(["alhadikhia", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"]));
-    render(<Night />);
-    fireEvent.click(within(card("Al-Hadikhia", "Player 0")).getByRole("button", { name: "Guide" }));
+    open(named(AL));
+    render(<NightScreen />);
+    selectNightStep("p0");
+    continueAction();
     fireEvent.click(within(workspace()).getByRole("checkbox", { name: "Nobody" }));
-    fireEvent.click(within(workspace()).getByRole("button", { name: "Resolve" }));
     expect(Object.values(game().nightProgress)).toEqual([expect.objectContaining({ status: "done" })]);
     expect(game().players.p1!.alive).toBe(true);
-  });
-});
-
-describe("Ravenkeeper -- the trigger surfaces immediately after the death", () => {
-  it("Imp kills the Ravenkeeper -> 'Triggered now' offers Guide at once; resolving completes the Ravenkeeper's own step", () => {
-    open(named(["ravenkeeper", "imp", "chef", "monk", "saint", "poisoner", "empath"]));
-    render(<Night />);
-    expect(screen.queryByRole("region", { name: "Triggered now" })).toBeNull();
-    expect(screen.queryByText("Ravenkeeper", { selector: ".step-role-name" })).toBeNull();
-    choose("The player to kill", "p0", card("Imp", "Player 1"));
-    fireEvent.click(within(card("Imp", "Player 1")).getByRole("button", { name: "Resolve" }));
-    fireEvent.click(screen.getByRole("button", { name: "Confirm and record" }));
-    expect(game().players.p0!.alive).toBe(false);
-    const strip = screen.getByRole("region", { name: "Triggered now" });
-    fireEvent.click(within(strip).getByRole("button", { name: "Guide" }));
-    choose("The player chosen", "p2", workspace());
-    expect(within(workspace()).getByText(/Record what Player 0 was told: Player 2 · Chef/)).toBeInTheDocument();
-    fireEvent.click(within(workspace()).getByRole("button", { name: "Resolve" }));
-    expect(game().informationDeliveries.at(-1)).toMatchObject({ informationActionId: "ravenkeeper-triggered" });
-    expect(screen.queryByRole("region", { name: "Triggered now" })).toBeNull();
-    expect(card("Ravenkeeper", "Player 0")).toHaveAttribute("data-status", "done");
-  });
-});
-
-describe("Tinker -- verified Manual reference in the Player Drawer", () => {
-  it("Day: no guided action; the verified reference text and the Manual path are shown", () => {
-    open(named(["tinker", "imp", "chef", "monk", "saint", "spy", "empath"], "day", 2));
-    render(<Entry id="p0" />);
-    expect(screen.queryByRole("button", { name: /Use ability/ })).toBeNull();
-    expect(screen.getByText(proofScript.characters.find(role => role.id === "tinker")!.ability!)).toBeInTheDocument();
-    fireEvent.click(screen.getByText("Advanced corrections"));
-    expect(screen.getByRole("button", { name: "Record outcome…" })).toBeInTheDocument();
   });
 });

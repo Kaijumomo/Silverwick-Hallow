@@ -8,7 +8,6 @@ import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { proofGame, proofScript } from "@/test/proofFixtures";
 import type { SessionWriter } from "@/firebase/writer";
-import { GrimoireCircle } from "@/features/grimoire/GrimoireCircle";
 import { participantStepKey } from "@/stores/nightProgress";
 import { useTargetPicker } from "@/features/abilities/abilityUi";
 
@@ -83,13 +82,13 @@ it.each(["Enter", " "])("independent R2: %s targets on the actual board without 
   const g = game();
   const stepKey = participantStepKey(g.players.p1!.participantId!, "poisoner");
   useShellStore.getState().setNightCursor({ day: 1, stepKey });
-  const view = render(<><GrimoireCircle /><Guide /></>);
+  const view = render(<Guide />);
   expect(screen.queryByText("More options")).toBeNull();
   expect(useTargetPicker.getState().active).not.toBeNull();
   fireEvent.click(screen.getByTitle("Close night order"));
   expect(useTargetPicker.getState().active).toBeNull(); expect(game()).toBe(g);
   act(() => useV6Ui.getState().set({ panel: "night" }));
-  const target = view.container.querySelector<HTMLElement>('.token[data-player-id="p2"]')!;
+  const target = view.container.querySelector<HTMLElement>('[role="button"][title="' + game().players.p2!.name + '"]')!;
   expect(target).toHaveAttribute("tabindex", "0");
   target.focus(); fireEvent.keyDown(target, { key });
   expect(game().players.p2!.effects.some(effect => effect.type === "poisoned" && effect.state === "active")).toBe(true);

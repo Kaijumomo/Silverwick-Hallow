@@ -2,9 +2,9 @@ import { StrictMode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ModernNightPanel } from "./testGuide";
+import { marksOn, removeMarkLabelled } from "./v6Night";
 import { FirstInformationPreparation, useFirstInformationPreparation } from "@/features/setup/FirstInformationPreparation";
 import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
-import { PopoverReminders } from "@/features/players/PopoverReminders";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { useShellStore } from "@/stores/shellStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
@@ -124,17 +124,13 @@ it("failed Night persistence leaves preparation pending and communication absent
   expect(screen.getByRole("alert")).toBeTruthy();
 });
 
-it("groups equivalent tokens but removes only the exact pending generated reminder in two taps", () => {
+it("groups equivalent tokens but removes only the exact pending generated reminder", () => {
   initial("washerwoman");
   store.getState().resolveReminders({ intents: [{ kind: "place", target: bind(game(), "p1"), reminder: { label: "Townsfolk", sourceCharacter: "washerwoman" } }] });
   const manual = game().players.p1!.reminders[0]!;
   prepare("washerwoman");
-  function Markers() { return <PopoverReminders player={store(s => s.game!.players.p1!)} />; }
-  render(<Markers />);
-  expect(screen.getAllByRole("button", { name: "Remove Townsfolk reminder" })).toHaveLength(1);
-  fireEvent.click(screen.getByRole("button", { name: "Remove Townsfolk reminder" }));
-  expect(game().preparedInformation).toHaveLength(1);
-  fireEvent.click(screen.getByRole("button", { name: "Remove Townsfolk reminder" }));
+  expect(marksOn("p1").filter((m) => /Townsfolk/.test(m.label))).toHaveLength(1);
+  expect(removeMarkLabelled("p1", /Townsfolk/)).toEqual({ ok: true });
   expect(game().preparedInformation).toHaveLength(0);
   expect(game().players.p1!.reminders).toEqual([manual]);
 });

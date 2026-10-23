@@ -5,7 +5,7 @@ import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 
 // Phase 9C.3 (OPUS-003): the Storyteller-only pending-departure surface in
-// GameScreen. Accept/reject are mocked here — their real Firebase behavior
+// the unified Grimoire (Package 4: ported from the retired GameScreen). Accept/reject are mocked here — their real Firebase behavior
 // is already proven in membershipCommands.test.ts and lifecycle.test.ts —
 // so this isolates the UI's own contract: name mapping, per-row in-flight
 // disabling, duplicate-click prevention, and surfacing failure without
@@ -16,7 +16,7 @@ vi.mock("@/firebase/membershipCommands", async (importOriginal) => {
 });
 
 import { acceptLeaveRequest, rejectLeaveRequest } from "@/firebase/membershipCommands";
-import { GameScreen } from "./GameScreen";
+import { SetupOverlays } from "./SetupOverlays";
 
 let seatId = "";
 
@@ -42,12 +42,12 @@ afterEach(() => {
   useSessionRuntime.setState({ backend: null, leaveRequests: {} });
 });
 
-describe("GameScreen pending leave requests (Phase 9C.3, OPUS-003)", () => {
+describe("pending leave requests (Phase 9C.3, OPUS-003)", () => {
   it("shows the roster-mapped name and disables both row actions while accepting is in flight, preventing duplicate clicks", async () => {
     let resolveAccept!: () => void;
     vi.mocked(acceptLeaveRequest).mockImplementation(() => new Promise<void>(resolve => { resolveAccept = resolve; }));
 
-    render(<GameScreen />);
+    render(<SetupOverlays />);
     expect(screen.getByText("Leave requests")).toBeInTheDocument();
     expect(screen.getByText("Alice requested to leave")).toBeInTheDocument();
 
@@ -66,14 +66,14 @@ describe("GameScreen pending leave requests (Phase 9C.3, OPUS-003)", () => {
 
   it("falls back to a generic label when the uid does not currently map to a known local seat", () => {
     useSessionRuntime.setState({ leaveRequests: { "uid-ghost": null } });
-    render(<GameScreen />);
+    render(<SetupOverlays />);
     expect(screen.getByText("A player requested to leave")).toBeInTheDocument();
   });
 
   it("surfaces a rejection failure without pretending the request resolved", async () => {
     vi.mocked(rejectLeaveRequest).mockRejectedValue(new Error("offline"));
 
-    render(<GameScreen />);
+    render(<SetupOverlays />);
     fireEvent.click(screen.getByRole("button", { name: "Keep seated" }));
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());

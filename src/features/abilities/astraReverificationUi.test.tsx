@@ -6,13 +6,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { RequirementInput } from "./RequirementInput";
-import { NightOrderPanel } from "@/features/nightOrder/NightOrderPanel";
+import { NightScreen, continueAction, resetNightUi, selectNightStep, workspace } from "@/features/grimoire-v6/night/port/v6Night";
 import { AL_HADIKHIA } from "@/abilities/characters/alhadikhia";
 import { FORTUNE_TELLER } from "@/abilities/characters/fortuneteller";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
-import { pickSeatIfPicking, useTargetPicker } from "./abilityUi";
+import { useTargetPicker } from "./abilityUi";
 import { bind, patchPlayer, proofGame, proofScript, reseat } from "@/test/proofFixtures";
 import type { AbilityInputRequirement, AbilityInputValue } from "@/abilities/semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
@@ -145,30 +145,24 @@ describe("SOL-10F-B1 -- RequirementInput binds each slot when it is selected", (
   });
 });
 
-// --- Through the real Night Order / workspace ------------------------------
+// --- Through the unified Grimoire's Night card / workspace -------------------
 
 const game = () => store.getState().game!;
-const open = (g: StorytellerLobbyRecord) =>
+const open = (g: StorytellerLobbyRecord) => {
   store.setState({ game: g, lobby: null, undoStack: [], localSeq: 0, customScripts: { [proofScript.id]: proofScript }, selectedPlayerId: null });
+  resetNightUi();
+};
 const reseatInStore = (id: string) => act(() => { store.setState({ game: reseat(game(), id) }); });
-function Night() {
-  const current = store((s) => s.game)!;
-  return <NightOrderPanel game={current} script={proofScript} onClose={() => {}} />;
-}
-const card = (role: string, player: string) =>
-  screen.getAllByText(role, { selector: ".step-role-name" }).map((el) => el.closest(".step-card") as HTMLElement)
-    .find((el) => el.querySelector(".step-player-name")?.textContent?.startsWith(`${player} ·`))!;
-const workspace = () => document.querySelector(".ability-workspace") as HTMLElement;
+/** Opens the Night card on Player 0's step and the ability workspace behind "Continue action". */
+const openWorkspace = () => { render(<NightScreen />); selectNightStep("p0"); continueAction(); };
 
 describe("SOL-10F-B1 -- workspace flows", () => {
   const AL_LABEL = AL_HADIKHIA.inputs[0]!.label;
-  const FT_LABEL = FORTUNE_TELLER.inputs[0]!.label;
   const choose = (label: string, n: number, id: string) => chooseParticipant(`${label} ${n}`, id, workspace());
 
   it("Al-Hadikhia: A chosen for slot 1, A's seat reused, slots 2/3 filled -> refused as stale; nothing recorded", () => {
     open(proofGame(AL));
-    render(<Night />);
-    fireEvent.click(within(card("Al-Hadikhia", "Player 0")).getByRole("button", { name: "Guide" }));
+    openWorkspace();
     choose(AL_LABEL, 1, "p1");
     reseatInStore("p1");
     expect(within(workspace()).getByRole("status")).toHaveTextContent(/no longer in that seat/);
@@ -180,21 +174,9 @@ describe("SOL-10F-B1 -- workspace flows", () => {
     expect(game().players.p1!.alive).toBe(true);
   });
 
-  it("Fortune Teller: the same sequence is refused as stale", () => {
-    open(proofGame(FT, "night", 1));
-    render(<Night />);
-    fireEvent.click(within(card("Fortune Teller", "Player 0")).getByRole("button", { name: "Guide" }));
-    choose(FT_LABEL, 1, "p1");
-    reseatInStore("p1");
-    choose(FT_LABEL, 2, "p2");
-    expect(within(workspace()).getByRole("alert")).toHaveTextContent(/out of date/);
-    expect(game().informationDeliveries).toEqual([]);
-  });
-
   it("B1 x A1: explicitly re-choosing the reused seat binds B, and the follow-up choice is asked for B (never A's)", () => {
     open(proofGame(AL));
-    render(<Night />);
-    fireEvent.click(within(card("Al-Hadikhia", "Player 0")).getByRole("button", { name: "Guide" }));
+    openWorkspace();
     choose(AL_LABEL, 1, "p1");
     reseatInStore("p1");
     choose(AL_LABEL, 1, "p1");
@@ -208,46 +190,15 @@ describe("SOL-10F-B1 -- workspace flows", () => {
   it("an uncertain death attempt refuses the entire action without a guided judgment", () => {
     const generic = { id: "gp", type: "protected", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } };
     open(patchPlayer(proofGame(AL), "p1", { effects: [generic as StorytellerLobbyRecord["players"][string]["effects"][number]] }));
-    render(<Night />);
-    fireEvent.click(within(card("Al-Hadikhia", "Player 0")).getByRole("button", { name: "Guide" }));
+    openWorkspace();
     ["p1", "p2", "p3"].forEach((id, i) => choose(AL_LABEL, i + 1, id));
     const answer = (name: RegExp, value: "Yes" | "No") =>
       fireEvent.click(within(within(workspace()).getByRole("radiogroup", { name })).getByRole("radio", { name: value }));
     answer(/^1\. Player 1/, "No");
-    expect(within(workspace()).queryByRole("region", { name: "Storyteller judgment" })).toBeNull();
-    expect(within(workspace()).getByRole("button", { name: "Resolve" })).toBeDisabled();
+    // The unified Grimoire turns an uncertain attempt wholly manual: no guided judgment, nothing recordable.
+    expect(screen.queryByRole("region", { name: "Storyteller judgment" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Resolve" })).toBeNull();
     expect(game().players.p1!.alive).toBe(true);
     expect(store.getState().undoStack).toHaveLength(0);
-  });
-});
-
-describe("SOL-10F-B1 -- the inline flow shows a stale pick as stale", () => {
-  const POISONER = ["poisoner", "empath", "chef", "monk", "imp", "saint", "spy"];
-  const row = () => card("Poisoner", "Player 0");
-  const select = () => participantSlot("The player to poison", row());
-
-  it("select: a reused seat never displays the replacement; re-choosing it targets B", () => {
-    open(proofGame(POISONER));
-    render(<Night />);
-    chooseParticipant("The player to poison", "p1", row());
-    reseatInStore("p1");
-    expect(shown(select())).toMatch(/No longer in that seat/);
-    chooseParticipant("The player to poison", "p1", row());
-    fireEvent.click(within(row()).getByRole("button", { name: "Resolve" }));
-    expect(game().players.p1!.effects).toEqual([expect.objectContaining({ type: "poisoned" })]);
-    expect(game().players.p1!.participantId).toMatch(/replacement/);
-  });
-
-  it("Grimoire picker: the picked instance is captured at the tap; a reused seat shows stale", () => {
-    open(proofGame(POISONER));
-    render(<Night />);
-    fireEvent.click(within(row()).getByRole("button", { name: /^Choose .+ on the Table$/ }));
-    act(() => { expect(pickSeatIfPicking(game(), "p2")).toBe(true); });
-    expect(shown(select())).toMatch(/Player 2/);
-    reseatInStore("p2");
-    expect(shown(select())).toMatch(/No longer in that seat/);
-    fireEvent.click(within(row()).getByRole("button", { name: "Resolve" }));
-    expect(within(row()).getByRole("alert")).toHaveTextContent(/no longer in that seat/);
-    expect(game().players.p2!.effects).toEqual([]);
   });
 });

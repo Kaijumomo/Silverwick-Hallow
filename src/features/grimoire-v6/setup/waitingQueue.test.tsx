@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
-import { GameScreen } from "./GameScreen";
+import { SetupOverlays } from "./SetupOverlays";
+import { useSetupFlow } from "./flow";
 
 // Phase 9 Setup finalization B4: the "N in queue" indicator becomes
 // directly actionable, reusing the exact same SeatAssignPopup component and
@@ -19,13 +20,15 @@ beforeEach(() => {
   state().newGame("tb");
   state().addEmptySeat();
   state().addToPendingQueue("uid-1", "Alice");
+  store.setState({ lobby: { code: "ABCD2345", uid: "host", sessionId: "test-session", status: "live" } });
+  useSetupFlow.getState().set({ queueOpen: false });
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe("Waiting queue direct access (Phase 9 Setup finalization B4)", () => {
   it("makes the queue indicator open a popup listing waiting players with Assign/Reject actions", () => {
-    render(<GameScreen />);
-    const pill = screen.getByRole("button", { name: /1 in queue/ });
+    render(<SetupOverlays />);
+    const pill = screen.getByRole("button", { name: /1 waiting/ });
     fireEvent.click(pill);
     expect(screen.getByText("Waiting queue")).toBeInTheDocument();
     expect(screen.getByText("Alice")).toBeInTheDocument();
@@ -33,10 +36,10 @@ describe("Waiting queue direct access (Phase 9 Setup finalization B4)", () => {
     expect(screen.getByRole("button", { name: "Reject" })).toBeInTheDocument();
   });
 
-  it("Assign uses the same assignPendingToSeat path as the seat-first workflow", () => {
-    render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: /1 in queue/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Assign" }));
+  // The unified Grimoire shows the queue pill only for a live lobby, where Assign / Reject go through the membership backend
+  // (covered by membershipCommands / lifecycle tests). The local commands behind them are the store contract:
+  it("Assign uses the assignPendingToSeat command and empties the queue", () => {
+    expect(state().assignPendingToSeat("uid-1", game().seatOrder[0]!)).toBe(true);
     const seatId = game().seatOrder.find((id) => game().players[id]!.name === "Alice");
     expect(seatId).toBeDefined();
     expect(game().players[seatId!]!.isEmpty).toBe(false);
@@ -44,24 +47,17 @@ describe("Waiting queue direct access (Phase 9 Setup finalization B4)", () => {
   });
 
   it("Reject removes the waiting player without seating them", () => {
-    render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: /1 in queue/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Reject" }));
+    state().removePendingPlayer("uid-1");
     expect(game().pendingPlayers).toEqual({});
     expect(Object.values(game().players).some((p) => p.name === "Alice")).toBe(false);
   });
 
-  it("processes multiple waiting players in one session without closing between assignments", () => {
+  it("processes multiple waiting players one after another", () => {
     state().addEmptySeat();
     state().addToPendingQueue("uid-2", "Bob");
-    render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: /2 in queue/ }));
-    fireEvent.click(screen.getAllByRole("button", { name: "Assign" })[0]!);
-    // The popup stays open in queue mode -- the second waiting player is
-    // still there to process next.
-    expect(screen.getByText("Waiting queue")).toBeInTheDocument();
-    expect(screen.getByText("Bob")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Assign" }));
+    expect(state().assignPendingToSeat("uid-1", game().seatOrder[0]!)).toBe(true);
+    expect(game().pendingPlayers).toEqual({ "uid-2": "Bob" });
+    expect(state().assignPendingToSeat("uid-2", game().seatOrder[1]!)).toBe(true);
     expect(game().pendingPlayers).toEqual({});
     expect(Object.values(game().players).filter((p) => !p.isEmpty)).toHaveLength(2);
   });
@@ -71,8 +67,8 @@ describe("Waiting queue direct access (Phase 9 Setup finalization B4)", () => {
     state().addToPendingQueue("uid-2", "Bob");
     const onlySeat = game().seatOrder[0]!;
     state().assignPendingToSeat("uid-1", onlySeat);
-    render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: /1 in queue/ }));
+    render(<SetupOverlays />);
+    fireEvent.click(screen.getByRole("button", { name: /1 waiting/ }));
     expect(screen.getByText("No empty seats available. Add a seat first.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Assign" })).toBeDisabled();
   });

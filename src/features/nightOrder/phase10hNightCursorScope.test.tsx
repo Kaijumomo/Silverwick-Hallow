@@ -6,10 +6,10 @@
 // same-game hide/show/remount and Privacy Mode keep it.
 //
 // Both games are driven through the real store commands (newGame -> seat ->
-// deal -> reveal -> beginNightOne), and the real NightOrderPanel.
+// deal -> reveal -> beginNightOne). Package 4: the cursor assertions are made on the
+// shell store directly; the legacy NightOrderPanel that used to display it is retired.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { NightOrderPanel } from "./NightOrderPanel";
+import { act, cleanup } from "@testing-library/react";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useShellStore } from "@/stores/shellStore";
@@ -21,8 +21,6 @@ import { needsShownIdentity } from "@/stores/identity";
 const state = () => store.getState();
 const game = () => state().game!;
 const shell = () => useShellStore.getState();
-const MINION_INFO = "Minions — learn each other & the Demon";
-const DEMON_INFO = "Demon — learns Minions & Bluffs";
 
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
@@ -50,24 +48,14 @@ function playToNightOne(names: string[]) {
   expect(state().beginNightOne().ok).toBe(true);
   expect([game().phase, game().day]).toEqual(["night", 1]);
 }
-function Night() {
-  const current = store((s) => s.game);
-  return current?.phase === "night" ? <NightOrderPanel game={current} script={setupScript} onClose={() => {}} /> : null;
-}
-const currentCard = () => document.querySelector<HTMLElement>('.step-card[aria-current="step"]');
-const makeCurrent = (label: string) => fireEvent.click(screen.getByRole("button", { name: `Make ${label} the current step` }));
 const GAME_A = ["Alice", "Bob", "Carol", "Dave", "Eve", "Frank", "Grace"];
 const GAME_B = ["Hana", "Ivan", "Jade", "Kurt", "Lena", "Milo", "Nora"];
 
 /** Game A, Night 1, with the cursor moved to the reusable later global step. */
 function gameAOnDemonInfo() {
   playToNightOne(GAME_A);
-  const view = render(<Night />);
-  expect(currentCard()).toHaveTextContent(MINION_INFO); // the first unresolved step
-  makeCurrent(DEMON_INFO);
-  expect(currentCard()).toHaveTextContent(DEMON_INFO);
+  act(() => { shell().setNightCursor({ day: 1, stepKey: "demonInfo" }); });
   expect(shell().nightCursor).toEqual({ day: 1, stepKey: "demonInfo" });
-  return view;
 }
 
 describe("PR-10H-003: a previous game's Night cursor never selects a step in a new game", () => {
@@ -80,23 +68,14 @@ describe("PR-10H-003: a previous game's Night cursor never selects a step in a n
     } },
   ];
 
-  it.each(BOUNDARIES)("$name: Game B starts at its own first unresolved step; the cursor then reflects only Game B", ({ leave }) => {
-    const view = gameAOnDemonInfo();
+  it.each(BOUNDARIES)("$name: Game B starts with no cursor; it then reflects only Game B", ({ leave }) => {
+    gameAOnDemonInfo();
     act(() => { leave(); });
-    view.unmount();
     playToNightOne(GAME_B);
     // The boundary cleared the game-scoped cursor before Game B's Night began.
     expect(shell().nightCursor).toBeNull();
-    render(<Night />);
-    // Game B has the SAME reusable step key, yet starts at its first step.
-    expect(screen.getByRole("button", { name: `Make ${DEMON_INFO} the current step` })).toBeInTheDocument();
-    expect(currentCard()).toHaveTextContent(MINION_INFO);
-    expect(currentCard()).not.toHaveTextContent(DEMON_INFO);
-    expect(document.querySelectorAll('.step-card[aria-current="step"]')).toHaveLength(1);
-    // From here on the cursor reflects Game B's interaction only.
-    makeCurrent(DEMON_INFO);
+    act(() => { shell().setNightCursor({ day: 1, stepKey: "demonInfo" }); });
     expect(shell().nightCursor).toEqual({ day: 1, stepKey: "demonInfo" });
-    expect(currentCard()).toHaveTextContent(DEMON_INFO);
   });
 
   it("the boundary clears the cursor and its action context, but keeps the Storyteller's view preferences", () => {
@@ -120,28 +99,17 @@ describe("PR-10H-003: a previous game's Night cursor never selects a step in a n
 });
 
 describe("PR-10H-003: same-game continuity is unchanged", () => {
-  it("hide/show (unmount/remount) within the same game keeps the current Night step", () => {
-    const view = gameAOnDemonInfo();
-    view.unmount();
-    expect(shell().nightCursor).toEqual({ day: 1, stepKey: "demonInfo" });
-    render(<Night />);
-    expect(currentCard()).toHaveTextContent(DEMON_INFO);
-  });
-
   it("ordinary same-game mutations keep the current Night step", () => {
     gameAOnDemonInfo();
     act(() => { state().setNotes(game().seatOrder[2]!, "watch this one"); });
     expect(shell().nightCursor).toEqual({ day: 1, stepKey: "demonInfo" });
-    expect(currentCard()).toHaveTextContent(DEMON_INFO);
   });
 
-  it("Privacy Mode on then off: the dashboard is withdrawn, then returns on the same step (behavior unchanged)", () => {
+  it("Privacy Mode on then off keeps the cursor", () => {
     gameAOnDemonInfo();
     act(() => { usePrivacyStore.setState({ enabled: true }); });
-    expect(currentCard()).toBeNull();
-    expect(screen.getByText("Privacy Mode On")).toBeInTheDocument();
     expect(shell().litActor).toBeNull();
     act(() => { usePrivacyStore.setState({ enabled: false }); });
-    expect(currentCard()).toHaveTextContent(DEMON_INFO);
+    expect(shell().nightCursor).toEqual({ day: 1, stepKey: "demonInfo" });
   });
 });

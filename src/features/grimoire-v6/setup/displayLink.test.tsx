@@ -1,8 +1,9 @@
-// Phase 9C.6 (OPUS-002): the Storyteller-side Public Display link controls
-// in GameScreen. The security-specific ensure/rotate operations themselves
+// Phase 9C.6 (OPUS-002): the Storyteller-side Public Display link controls.
+// Package 4: ported from the retired GameScreen to the unified Grimoire's SetupOverlays (Invite card open = qrOpen).
+// The security-specific ensure/rotate operations themselves
 // are proven in publicDisplayAuth.test.ts (unit) and rules.spec.ts/
-// contract.spec.ts (real rules/real writer); this file isolates GameScreen's
-// own contract — when it calls them, what it builds from the result, and
+// contract.spec.ts (real rules/real writer); this file isolates the
+// controls' own contract — when it calls them, what it builds from the result, and
 // what it never renders or does.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -16,7 +17,8 @@ vi.mock("@/firebase/publicDisplayAuth", async (importOriginal) => {
 });
 
 import { ensurePublicDisplayAccess, rotatePublicDisplayAccess } from "@/firebase/publicDisplayAuth";
-import { GameScreen } from "./GameScreen";
+import { SetupOverlays } from "./SetupOverlays";
+import { useV6Ui } from "../v6Store";
 
 const TOKEN_A = "a".repeat(43);
 const TOKEN_B = "b".repeat(43);
@@ -41,6 +43,8 @@ beforeEach(() => {
   storyteller.setState({ game: null, lobby: null, undoStack: [] });
   storyteller.getState().newGame("tb");
   storyteller.getState().addPlayer("Alice");
+  useV6Ui.getState().reset();
+  useV6Ui.getState().set({ qrOpen: true });
   useSessionRuntime.setState({ backend: null });
   vi.mocked(ensurePublicDisplayAccess).mockReset();
   vi.mocked(rotatePublicDisplayAccess).mockReset();
@@ -57,18 +61,17 @@ afterEach(() => {
   useSessionRuntime.setState({ backend: null });
 });
 
-describe("GameScreen Public Display link controls (Phase 9C.6, OPUS-002)", () => {
+describe("Public Display link controls (Phase 9C.6, OPUS-002)", () => {
   it("does not attempt to ensure a capability while there is no lobby", () => {
-    render(<GameScreen />);
-    // Package 2D: an offline game has no Invite button at all.
-    expect(screen.queryByRole("button", { name: /^Invite/ })).toBeNull();
+    render(<SetupOverlays />);
+    // An offline game has no lobby, so no display controls at all.
+    expect(screen.queryByRole("button", { name: "Public display ↗" })).toBeNull();
     expect(ensurePublicDisplayAccess).not.toHaveBeenCalled();
   });
 
   it("does not attempt to ensure a capability while the runtime backend is missing", () => {
     storyteller.setState({ lobby });
-    render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
+    render(<SetupOverlays />);
     expect(ensurePublicDisplayAccess).not.toHaveBeenCalled();
   });
 
@@ -78,8 +81,7 @@ describe("GameScreen Public Display link controls (Phase 9C.6, OPUS-002)", () =>
     const fakeBackend = {} as never;
     useSessionRuntime.setState({ backend: fakeBackend });
 
-    render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
+    render(<SetupOverlays />);
     await act(async () => {});
 
     expect(ensurePublicDisplayAccess).toHaveBeenCalledWith(fakeBackend, lobby.code, lobby.sessionId);
@@ -109,8 +111,7 @@ describe("GameScreen Public Display link controls (Phase 9C.6, OPUS-002)", () =>
     storyteller.setState({ lobby });
     useSessionRuntime.setState({ backend: {} as never });
 
-    render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
+    render(<SetupOverlays />);
     await act(async () => {});
     await waitFor(() => expect(openDisplayButton()).not.toBeDisabled());
 
@@ -125,8 +126,7 @@ describe("GameScreen Public Display link controls (Phase 9C.6, OPUS-002)", () =>
     const fakeBackend = {} as never;
     useSessionRuntime.setState({ backend: fakeBackend });
 
-    render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
+    render(<SetupOverlays />);
     await act(async () => {});
     await waitFor(() => expect(openDisplayButton()).not.toBeDisabled());
 
@@ -146,8 +146,7 @@ describe("GameScreen Public Display link controls (Phase 9C.6, OPUS-002)", () =>
     storyteller.setState({ lobby });
     useSessionRuntime.setState({ backend: null });
 
-    render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
+    render(<SetupOverlays />);
 
     expect(openDisplayButton()).toBeDisabled();
     expect(copyDisplayButton()).toBeDisabled();
@@ -163,8 +162,7 @@ describe("GameScreen Public Display link controls (Phase 9C.6, OPUS-002)", () =>
     storyteller.setState({ lobby });
     useSessionRuntime.setState({ backend: {} as never });
 
-    render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
+    render(<SetupOverlays />);
     await act(async () => {});
     await waitFor(() => expect(openDisplayButton()).not.toBeDisabled());
 
@@ -192,8 +190,7 @@ describe("GameScreen Public Display link controls (Phase 9C.6, OPUS-002)", () =>
     storyteller.setState({ lobby });
     useSessionRuntime.setState({ backend: {} as never });
 
-    render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
+    render(<SetupOverlays />);
     await act(async () => {});
     await waitFor(() => expect(openDisplayButton()).not.toBeDisabled());
     expect(copyDisplayButton()).not.toBeDisabled();
@@ -230,8 +227,7 @@ describe("GameScreen Public Display link controls (Phase 9C.6, OPUS-002)", () =>
     storyteller.setState({ lobby });
     useSessionRuntime.setState({ backend: {} as never });
 
-    render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
+    render(<SetupOverlays />);
     await act(async () => {});
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
@@ -252,8 +248,7 @@ describe("GameScreen Public Display link controls (Phase 9C.6, OPUS-002)", () =>
     const backendA = { id: "A" } as never;
     useSessionRuntime.setState({ backend: backendA });
 
-    render(<GameScreen />);
-    fireEvent.click(screen.getByRole("button", { name: /^Invite/ }));
+    render(<SetupOverlays />);
     await act(async () => {});
 
     // 1-4: the first ensure attempt failed — a stale error is visible and

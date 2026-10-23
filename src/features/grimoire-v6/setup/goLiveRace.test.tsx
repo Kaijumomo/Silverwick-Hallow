@@ -19,7 +19,7 @@ vi.mock("@/firebase/config", async (importOriginal) => {
 });
 
 import { goLive } from "@/firebase/goLive";
-import { GameScreen } from "./GameScreen";
+import { SetupOverlays } from "@/features/grimoire-v6/setup/SetupOverlays";
 import { useStorytellerStore as store, takeMigrationResetFlag } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { closeMultiplayerSession, startStorytellerSession, useSessionRuntime, useStorytellerSync } from "@/firebase/storytellerSync";
@@ -30,7 +30,6 @@ import { SessionWriter } from "@/firebase/writer";
 import { buildRegistry } from "@/data/roleRegistry";
 import { setupGame, setupScript } from "@/test/setupFixtures";
 import type { StorytellerLobbyRecord } from "@/stores/types";
-import { finishGame } from "@/test/finishGame";
 
 const state = () => store.getState();
 const registry = buildRegistry(setupScript);
@@ -89,14 +88,14 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 // Package 2D: the Grimoire no longer has a Go live button; the New Game flow's
 // "Invite to phones" runs the same shared sequence, so the race is driven at it.
 const clickGoLive = () => { act(() => { void goLive(); }); };
-const clickFinish = async () => { await finishGame(); };
+const clickFinish = async () => { await act(async () => { state().finishGame({ kind: "noResult" }); }); };
 const settle = async () => { await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 
 describe("ASTRA-10G-001: the Go Live continuation revalidates its game", () => {
   it("normal Go Live still attaches the new lobby to the current eligible game", async () => {
     const b = new GatedBackend();
     connect.mockResolvedValue({ backend: b, uid: UID });
-    render(<GameScreen />);
+    render(<SetupOverlays />);
     clickGoLive();
     await waitFor(() => expect(state().lobby).not.toBeNull());
     expect(state().lobby).toMatchObject({ uid: UID, status: "live" });
@@ -108,7 +107,7 @@ describe("ASTRA-10G-001: the Go Live continuation revalidates its game", () => {
     const b = new GatedBackend();
     const connection = deferred<{ backend: RoomBackend; uid: string }>();
     connect.mockReturnValue(connection.promise);
-    render(<GameScreen />);
+    render(<SetupOverlays />);
     clickGoLive();
     await clickFinish();
     expect(state().game!.phase).toBe("ended");
@@ -123,7 +122,7 @@ describe("ASTRA-10G-001: the Go Live continuation revalidates its game", () => {
     const b = new GatedBackend();
     const release = b.hold((kind, path) => kind === "set" && path.endsWith("/session"));
     connect.mockResolvedValue({ backend: b, uid: UID });
-    render(<GameScreen />);
+    render(<SetupOverlays />);
     clickGoLive();
     await settle();
     await clickFinish();
@@ -143,7 +142,7 @@ describe("ASTRA-10G-001: the Go Live continuation revalidates its game", () => {
     const b = new GatedBackend();
     const release = b.hold((kind, path) => kind === "get" && path.endsWith("/session"));
     connect.mockResolvedValue({ backend: b, uid: UID });
-    render(<GameScreen />);
+    render(<SetupOverlays />);
     clickGoLive();
     await settle();
     await clickFinish();
@@ -157,7 +156,7 @@ describe("ASTRA-10G-001: the Go Live continuation revalidates its game", () => {
     const b = new GatedBackend();
     const release = b.hold((kind, path) => kind === "get" && path.endsWith("/session"));
     connect.mockResolvedValue({ backend: b, uid: UID });
-    render(<GameScreen />);
+    render(<SetupOverlays />);
     clickGoLive();
     await settle();
     act(() => { state().endGame(); state().newGame(setupScript.id, { plannedPlayerCount: 7 }); });

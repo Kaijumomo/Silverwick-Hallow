@@ -6,9 +6,7 @@ import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { activeVotingRound } from "@/stores/voting";
-import { AbilityEntry } from "@/features/abilities/AbilityEntry";
-import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
-import { PopoverReminders } from "@/features/players/PopoverReminders";
+import { useTargetPicker } from "@/features/abilities/abilityUi";
 import { VotingCard, VotingDayControls, VotingProvider, useVotingInteraction } from "./VotingWorkspace";
 
 const game = () => store.getState().game!;
@@ -47,19 +45,4 @@ it("changed pending ability context conceals automatic death choices and cannot 
   expect(screen.queryByRole("button", { name: "Execute · died" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Use current table" })).toBeNull();
   expect(screen.getByText(/Use Undo to restore it/)).toBeTruthy();
-});
-
-it("Slayer direct selection creates one visible No Ability token; two taps remove notation without refund", () => {
-  store.setState({ game: proofGame(["slayer", "chef", "soldier", "poisoner", "imp"], "day", 1) });
-  store.getState().addReminder("p0", { label: "No Ability", sourceCharacter: "slayer" });
-  const manual = game().players.p0!.reminders[0]!;
-  function Slayer() { const p = store(s => s.game!.players.p0!); return <><AbilityEntry player={p} /><PopoverReminders player={p} /></>; }
-  render(<Slayer />); fireEvent.click(screen.getByRole("button", { name: "Use ability… (Slayer)" }));
-  act(() => { pickSeatIfPicking(game(), "p1"); });
-  expect(game().players.p0!.abilityUsed).toBe(true);
-  expect(screen.getAllByRole("button", { name: "Remove No Ability reminder" })).toHaveLength(1);
-  const remove = () => fireEvent.click(screen.getByRole("button", { name: "Remove No Ability reminder" }));
-  remove(); expect(game().players.p0!.reminders).toHaveLength(2);
-  remove(); expect(game().players.p0!.reminders).toEqual([manual]); expect(game().players.p0!.abilityUsed).toBe(true);
-  act(() => store.getState().undo()); expect(game().players.p0!.reminders).toHaveLength(2); expect(game().players.p0!.abilityUsed).toBe(true);
 });

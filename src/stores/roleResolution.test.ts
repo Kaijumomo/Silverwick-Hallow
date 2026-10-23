@@ -32,12 +32,18 @@ import { participantRefOf } from "./participants";
 import { identityNeedsCheck, projectToSelf } from "./projections";
 import { getPrivateInfoApplicability, offersNightInformation } from "./privatePackets";
 import { buildRegistry, ownedScriptCharacters, resolvedCharacters } from "@/data/roleRegistry";
-import { buildRoleDisplayMap } from "@/features/grimoire/GrimoireCircle";
 import { makeSTPlayer } from "@/test/fixtures";
 import { isCanonicalRole } from "@/data/canonical";
 import { parseClocktowerScript } from "@/data/customScript";
 import type { PlayerId, RoleDef, Script, StorytellerLobbyRecord, STPlayerRecord } from "./types";
 import { withoutRevealTokens } from "@/test/revealTokens";
+
+/** One displayed definition per RoleId (SOL-10D-C03): the first owner, then the Travellers. (The retired Grimoire circle exported this.) */
+const buildRoleDisplayMap = (script: Script | undefined): Map<string, RoleDef> => {
+  const map = new Map(ownedScriptCharacters(script).map((c) => [c.id, c]));
+  for (const t of TRAVELERS) map.set(t.id, t);
+  return map;
+};
 
 const state = () => store.getState();
 const game = () => state().game!;

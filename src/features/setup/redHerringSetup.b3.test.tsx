@@ -1,107 +1,42 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it } from "vitest";
+import { cleanup } from "@testing-library/react";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
-import { useTargetPicker, pickSeatIfPicking } from "@/features/abilities/abilityUi";
 import { setupGame, setupScript } from "@/test/setupFixtures";
 import { withRedHerring } from "@/test/redHerringFixture";
 import { bind, proofGame, proofQuery } from "@/test/proofFixtures";
 import { automationEligibility } from "@/abilities/automationEligibility";
 import { FORTUNE_TELLER } from "@/abilities/characters/fortuneteller";
-import { PopoverReminders } from "@/features/players/PopoverReminders";
-import { PlayersWorkspace } from "@/features/players/PlayersWorkspace";
-import { RedHerringPreparation } from "./RedHerringPreparation";
 import { redHerringSetup } from "./redHerringSetup";
 import { selectSetupContext } from "./setupContext";
 
+// Package 4: the Setup panel's "Choose Red Herring" picker, the Players workspace and the PopoverReminders token are
+// retired; the v6 setup wizard picks the Red Herring through setSetupRedHerring (see grimoire-v6/day/test/dayFixture).
+// The command, the readiness derivation and the Night fail-closed eligibility are unchanged and asserted here.
 const game = () => store.getState().game!;
-function View() { const current = store(state => state.game!); return <RedHerringPreparation context={selectSetupContext(current, setupScript)} />; }
 beforeEach(() => {
-  usePrivacyStore.getState().reset(); useTargetPicker.getState().cancel();
+  usePrivacyStore.getState().reset();
   const initial = setupGame(["fortuneteller", "chef", "monk", "poisoner", "imp"], { setupRolesDealt: true });
   initial.players.p0!.packetEpoch = "original-identity";
   store.setState({ game: initial, lobby: null, undoStack: [], terminalClose: null, customScripts: { [setupScript.id]: setupScript } });
 });
-afterEach(() => { cleanup(); useTargetPicker.getState().cancel(); });
+afterEach(cleanup);
 
 it("requires an explicit good target, permits self and commits the existing fact with one Undo", () => {
-  render(<View />);
-  fireEvent.click(screen.getByRole("button", { name: "Choose Red Herring" }));
-  expect(useTargetPicker.getState().active?.eligible?.has(game().players.p0!.participantId!)).toBe(true);
   const before = game();
-  act(() => { pickSeatIfPicking(game(), "p4"); });
+  expect(store.getState().setSetupRedHerring({ playerId: "p4", participantId: before.players.p4!.participantId! })).toMatchObject({ ok: false });
   expect(game()).toBe(before);
-  act(() => { pickSeatIfPicking(game(), "p0"); });
+  expect(store.getState().setSetupRedHerring({ playerId: "p0", participantId: before.players.p0!.participantId! })).toMatchObject({ ok: true });
   expect(game().players.p0!.effects).toEqual([expect.objectContaining({ type: "fortuneTellerRedHerring", lifetime: { kind: "manual" } })]);
   expect(game().players.p0!.reminders).toEqual([]);
   expect(store.getState().undoStack).toHaveLength(1);
-  expect(screen.queryByRole("button", { name: "Choose Red Herring" })).toBeNull();
-  act(() => store.getState().undo());
+  store.getState().undo();
   expect(game()).toEqual(before);
 });
 
-it("cancels selection on privacy, rejects retained callback after state change, and cancels on unmount", () => {
-  const { unmount } = render(<View />);
-  fireEvent.click(screen.getByRole("button", { name: "Choose Red Herring" }));
-  const callback = useTargetPicker.getState().active!.onPick;
-  const target = bind(game(), "p1");
-  act(() => usePrivacyStore.setState({ enabled: true }));
-  expect(useTargetPicker.getState().active).toBeNull();
-  expect(screen.queryByText("Fortune Teller")).toBeNull();
-  callback(target); expect(game().players.p1!.effects).toEqual([]);
-  act(() => usePrivacyStore.setState({ enabled: false }));
-  fireEvent.click(screen.getByRole("button", { name: "Choose Red Herring" }));
-  unmount(); expect(useTargetPicker.getState().active).toBeNull();
-});
-
-it.each(["players", "expanded advanced controls"])("opens the full board from %s while preserving selection above the dismissed panel", surface => {
-  render(<PlayersWorkspace enabled roles={setupScript.characters} onMore={vi.fn()} advancedPlayerId={null}>
-    <button onClick={() => pickSeatIfPicking(game(), "p1")}>Choose board player</button>
-  </PlayersWorkspace>);
-  fireEvent.click(screen.getByRole("button", { name: "Players" }));
-  if (surface === "expanded advanced controls") {
-    fireEvent.click(screen.getByText("Advanced setup & modifiers"));
-    expect(screen.getByText("Advanced setup & modifiers").parentElement).toHaveAttribute("open");
-  }
-  fireEvent.click(screen.getByRole("button", { name: "Choose Red Herring" }));
-  expect(screen.getByRole("button", { name: "Players" })).toHaveAttribute("aria-expanded", "false");
-  expect(screen.queryByRole("dialog", { name: "Setup details" })).toBeNull();
-  expect(screen.queryByRole("button", { name: "Choose Red Herring" })).toBeNull();
-  expect(useTargetPicker.getState().active?.label).toBe("Red Herring");
-  fireEvent.click(screen.getByRole("button", { name: "Choose board player" }));
-  expect(game().players.p1!.effects).toHaveLength(1);
-  expect(store.getState().undoStack).toHaveLength(1);
-});
-
-it("the persistent picker cancels when its owner becomes disabled and rejects old callbacks after game change", () => {
-  const view = (enabled = true) => <PlayersWorkspace enabled={enabled} roles={setupScript.characters} onMore={vi.fn()} advancedPlayerId={null}><div>Board</div></PlayersWorkspace>;
-  const { rerender, unmount } = render(view());
-  fireEvent.click(screen.getByRole("button", { name: "Players" }));
-  fireEvent.click(screen.getByRole("button", { name: "Choose Red Herring" }));
-  const selected = bind(game(), "p1");
-  const old = useTargetPicker.getState().active!.onPick;
-  act(() => store.getState().setNotes("p1", "Changed during selection"));
-  expect(useTargetPicker.getState().active).toBeNull();
-  old(selected); expect(game().players.p1!.effects).toEqual([]);
-  fireEvent.click(screen.getByRole("button", { name: "Players" }));
-  fireEvent.click(screen.getByRole("button", { name: "Choose Red Herring" }));
-  rerender(view(false)); expect(useTargetPicker.getState().active).toBeNull();
-  unmount();
-});
-
-it("keeps legacy notation stored under one official effect token; exact two-tap removal exposes only the inert note", () => {
-  const initial = withRedHerring(game(), "p1");
-  initial.players.p1!.reminders = [{ id: "legacy-note", label: "Red Herring", sourceCharacter: "fortuneteller" }];
-  store.setState({ game: initial });
-  function Reminders() { return <PopoverReminders player={store(state => state.game!.players.p1!)} />; }
-  render(<Reminders />);
-  const token = screen.getByRole("button", { name: "Remove Red Herring effect from Fortune Teller" });
-  expect(screen.queryByRole("button", { name: "Remove Red Herring reminder" })).toBeNull();
-  fireEvent.click(token); expect(game()).toBe(initial);
-  fireEvent.click(token);
+it("rejects a choice bound to a participant that is no longer seated", () => {
+  store.getState().setSetupRedHerring({ playerId: "p1", participantId: "someone-else" });
   expect(game().players.p1!.effects).toEqual([]);
-  expect(game().players.p1!.reminders).toEqual(initial.players.p1!.reminders);
-  expect(screen.getByRole("button", { name: "Remove Red Herring reminder" })).toHaveAttribute("data-reminder-kind", "notation");
 });
 
 it("ordinary readiness distinguishes missing, fixed valid, invalid and manual facts without choosing another target", () => {

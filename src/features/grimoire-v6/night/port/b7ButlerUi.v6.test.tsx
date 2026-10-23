@@ -2,8 +2,8 @@ import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ModernNightPanel } from "./testGuide";
+import { marksOn, removeMarkLabelled } from "./v6Night";
 import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
-import { PopoverReminders } from "@/features/players/PopoverReminders";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useShellStore } from "@/stores/shellStore";
@@ -115,31 +115,16 @@ describe("B7 Butler Night UI", () => {
     expect(store.getState().undoStack).toHaveLength(1);
     expect(screen.queryByRole("alert")).toBeNull();
   });
-  it("equivalent manual Master stays stored behind one token; two taps remove only the generated selection", () => {
+  it("equivalent manual Master stays stored behind one token; removing it takes away only the generated selection", () => {
     initial(); store.getState().resolveReminders({ intents: [{ kind: "place", target: bind(game(), "p1"), reminder: { label: "Master", sourceCharacter: "butler" } }] });
     const manual = game().players.p1!.reminders[0]!;
     guide(); tap("p1"); cleanup();
     const selected = game();
-    function Markers() { return <PopoverReminders player={store(s => s.game!.players.p1!)} />; }
-    render(<Markers />);
-    expect(screen.getAllByRole("button", { name: "Remove Master reminder" })).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: "Remove Master reminder" }));
-    expect(game()).toBe(selected);
-    fireEvent.click(screen.getByRole("button", { name: "Remove Master reminder" }));
+    expect(marksOn("p1").filter((m) => /Master/.test(m.label))).toHaveLength(1);
+    expect(removeMarkLabelled("p1", /Master/)).toEqual({ ok: true });
     expect(game().players.p1!.reminders).toEqual([manual]);
     expect(game().nightProgress[`1:${butlerKey()}`]?.status).toBe("done");
     expect(game().players.p1!.reminders.some(r => butlerReminderOrigin(r))).toBe(false);
     act(() => store.getState().undo()); expect(game()).toEqual(selected);
-  });
-  it("Master removal arming expires after three seconds", () => {
-    vi.useFakeTimers(); initial(); guide(); tap("p1"); cleanup();
-    function Markers() { return <PopoverReminders player={store(s => s.game!.players.p1!)} />; }
-    render(<Markers />); const before = game();
-    fireEvent.click(screen.getByRole("button", { name: "Remove Master reminder" }));
-    act(() => vi.advanceTimersByTime(3001));
-    fireEvent.click(screen.getByRole("button", { name: "Remove Master reminder" }));
-    expect(game()).toBe(before);
-    fireEvent.click(screen.getByRole("button", { name: "Remove Master reminder" }));
-    expect(game().players.p1!.reminders).toEqual([]);
   });
 });
