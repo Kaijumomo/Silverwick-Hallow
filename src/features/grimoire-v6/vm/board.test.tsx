@@ -51,9 +51,9 @@ describe("slice 4B: board view-model", () => {
     expect(dead.dead).toBe(true);
     expect(dead.dsTorn).toBe(true);
     const empath = tokenOf(vm, holder("empath"));
-    // Poisoned (an Effect) and the placed notation share the reminder-disc treatment.
+    // The placed notation is drawn; the source-free Poisoned Effect has no official token, so no disc is invented for it.
     expect(empath.rems.length).toBeGreaterThanOrEqual(3);
-    expect(empath.rems.some((r: any) => r.label === "Poisoned")).toBe(true);
+    expect(empath.rems.some((r: any) => r.label === "Poisoned")).toBe(false);
     expect(empath.aria).toContain("reminder");
   });
 

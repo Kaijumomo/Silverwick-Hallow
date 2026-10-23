@@ -5,7 +5,6 @@ import type { RulesQuery } from "@/stores/rulesQuery";
 import { currentVotingState } from "@/stores/voting";
 import { ownsAbilityUseReminder } from "@/stores/abilityUseReminders";
 import { butlerReminderOrigin } from "@/stores/butlerSelection";
-import type { EffectIndicatorSummary } from "@/stores/effectRegistry";
 import {
   firstInformationReminderGroups, officialEffectPresentation, officialNotationRole, redHerringNotationCovered,
   type OfficialEffectToken,
@@ -20,7 +19,6 @@ import type { PlayerId, ReminderRecord, RoleDef, Script, STPlayerRecord, Storyte
  */
 export type MarkRemoval =
   | { type: "effect"; token: OfficialEffectToken }
-  | { type: "indicator"; summary: EffectIndicatorSummary }
   | { type: "notation"; group: ReminderRecord[]; modifierId?: string };
 
 export type Mark = {
@@ -37,7 +35,11 @@ export type Mark = {
 
 export type MarkEnv = { game: StorytellerLobbyRecord; script: Script | undefined; registry: RoleRegistry; query: RulesQuery | null };
 
-/** Only official reminder token art and character icons are drawn; a condition without official art is a plain disc with its label as text. */
+/**
+ * Only official reminder token art and character icons are drawn. Drunk, Poisoned and Safe come from their
+ * characters' abilities (officialEffectPresentation); an Effect with no official token stays authoritative in the
+ * game record but is not drawn, and no source-free disc is ever invented for it.
+ */
 const ROLE_SIZE = 100;
 
 const times = (label: string, n: number) => (n > 1 ? `${label} ×${n}` : label);
@@ -50,10 +52,6 @@ export function playerMarks(env: MarkEnv, player: STPlayerRecord): Mark[] {
   for (const token of effects.tokens) {
     const label = times(token.label, token.instances.length);
     marks.push({ key: `effect:${token.key}`, kind: "effect", label, title: `${token.role.name}: ${label}`, src: iconUrlFor(token.role), size: ROLE_SIZE, removal: { type: "effect", token } });
-  }
-  for (const summary of effects.fallback) {
-    const label = times(summary.indicator.label, summary.activeCount);
-    marks.push({ key: `indicator:${summary.indicator.key}`, kind: "effect", label, title: `${label}${summary.suppressedCount ? " (suppressed)" : ""}`, src: "", size: ROLE_SIZE, removal: { type: "indicator", summary } });
   }
   const voting = currentVotingState(game);
   const linked = (id: string) => voting.modifiers.find((m) => m.target.playerId === player.id && m.target.participantId === player.participantId && `voting-${m.id}` === id);
@@ -89,8 +87,8 @@ export function removeMark(playerId: PlayerId, participantId: string | undefined
   const { current, game, player, target } = ctx;
   const context = captureVotingContext();
   const removal = mark.removal;
-  if (removal.type === "effect" || removal.type === "indicator") {
-    const instances = removal.type === "effect" ? removal.token.instances : removal.summary.instances;
+  if (removal.type === "effect") {
+    const instances = removal.token.instances;
     // Grouping is presentation only: never choose a source implicitly or cancel independent effects together.
     if (instances.length !== 1) return { ok: false, message: "More than one effect is represented. Remove the intended effect from its source." };
     const result = current.resolveEffects({ intents: [{ kind: "remove", target, effectId: instances[0]!.id }] }, context);
