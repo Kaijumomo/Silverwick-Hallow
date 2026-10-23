@@ -50,7 +50,7 @@ describe("slice 4B: effects without an official token", () => {
     // Tap twice (arm, then confirm) takes the authoritative Effect away through its command.
     act(() => listed[0]!.remove());
     act(() => (result.current.board.pop.unsourced as Array<{ remove: () => void }>)[0]!.remove());
-    expect(store().game!.players[empath]!.effects.filter((e) => e.type === "poisoned" && e.state !== "removed")).toHaveLength(0);
+    expect(store().game!.players[empath]!.effects.filter((e) => e.type === "poisoned")).toHaveLength(0);
   });
 
   it("hides the list in Privacy Mode", () => {
