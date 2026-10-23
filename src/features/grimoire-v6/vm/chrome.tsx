@@ -11,7 +11,7 @@ import type { V6Ctx } from "../ctx";
 import { ICON } from "../icons";
 import { roman } from "../ringLayout";
 import { crescentArt, moonBackdrop, useCrescentMemory } from "../boardArt";
-import { flash } from "../v6Store";
+import { flash, type AskState, type V6UiState } from "../v6Store";
 import { useUndo } from "./undo";
 import type { SliceResult } from "./types";
 
@@ -136,6 +136,7 @@ export function useChromeVm(ctx: V6Ctx, slices: { advance?: SliceResult["advance
     toggleHidden: togglePrivacy, hideLabel: privacy ? "Show tokens" : "Hide tokens", hideColor: privacy ? "#e0b96a" : "rgba(216,201,164,.55)",
     boardExtras: extras, hasBoardExtras: extras.length > 0,
     inviteDisp: invitation ? "flex" : "none",
+    askDlg: askVm(ui),
     openQr: () => ui.set({ qrOpen: true }), closeQr: () => ui.set({ qrOpen: false }), stop: (e: { stopPropagation: () => void }) => e.stopPropagation(),
     qr: ui.qrOpen && !!invitation, qrSvg: qr,
     code: invitation ? { head: invitation.head, tail: invitation.tail, aria: `Game code ${invitation.head}${invitation.tail}`, headChars: invitation.head.split(""), tailChars: invitation.tail.split(""), host: window.location.host } : undefined,
@@ -161,4 +162,24 @@ export function useChromeVm(ctx: V6Ctx, slices: { advance?: SliceResult["advance
 function winnerLabel(game: V6Ctx["game"]): string {
   const w = game.result?.winner;
   return w === "good" ? "Good" : w === "evil" ? "Evil" : "No result";
+}
+
+/** The ask dialog the Grimoire shows instead of window.confirm / window.prompt. Same panel language as the End dialog. */
+function askVm(ui: { ask: AskState | null; set: (patch: Partial<V6UiState>) => void }) {
+  const a = ui.ask;
+  const close = () => ui.set({ ask: null });
+  const ok = () => {
+    if (!a) return;
+    const value = a.input ? a.input.value.trim() : "";
+    if (a.input && !value) return;
+    ui.set({ ask: null });
+    a.run(value);
+  };
+  return {
+    open: !!a, title: a?.title ?? "", body: a?.body ?? "", okText: a?.okText ?? "OK",
+    hasInput: !!a?.input, value: a?.input?.value ?? "", placeholder: a?.input?.placeholder ?? "", maxLength: a?.input?.maxLength ?? 20,
+    onInput: (e: { target: { value: string } }) => { if (a?.input) ui.set({ ask: { ...a, input: { ...a.input, value: e.target.value } } }); },
+    onKey: (e: { key: string; preventDefault: () => void }) => { if (e.key === "Enter") { e.preventDefault(); ok(); } else if (e.key === "Escape") close(); },
+    ok, close, danger: !!a?.danger, okDisabled: !!a?.input && !a.input.value.trim(),
+  };
 }

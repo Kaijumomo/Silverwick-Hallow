@@ -9,7 +9,6 @@ import {
   firstInformationReminderGroups, officialEffectPresentation, officialNotationRole, redHerringNotationCovered,
   type OfficialEffectToken,
 } from "@/features/reminders/officialReminderPresentation";
-import type { EffectIndicatorSummary } from "@/stores/effectRegistry";
 import type { PlayerId, ReminderRecord, RoleDef, Script, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 
 /**
@@ -20,7 +19,6 @@ import type { PlayerId, ReminderRecord, RoleDef, Script, STPlayerRecord, Storyte
  */
 export type MarkRemoval =
   | { type: "effect"; token: OfficialEffectToken }
-  | { type: "indicator"; summary: EffectIndicatorSummary }
   | { type: "notation"; group: ReminderRecord[]; modifierId?: string };
 
 export type Mark = {
@@ -72,30 +70,6 @@ export function playerMarks(env: MarkEnv, player: STPlayerRecord): Mark[] {
   return marks;
 }
 
-/**
- * Active Effects that have no official token (no verified character source): never drawn on the board, but
- * never hidden either. The Details card lists them as plain text lines so the Storyteller can find and correct them.
- */
-export type UnsourcedEffect = { key: string; label: string; title: string; removal: MarkRemoval };
-
-export function unsourcedEffects(env: MarkEnv, player: STPlayerRecord): UnsourcedEffect[] {
-  const { registry, query } = env;
-  if (player.isEmpty || !player.participantId || !env.script || !query) return [];
-  const { fallback } = officialEffectPresentation(player, { query, target: { playerId: player.id, participantId: player.participantId } });
-  return fallback.map((summary) => {
-    const sources = [...new Set(summary.instances.map((effect) => effect.sourceCharacter).filter((id): id is string => !!id))]
-      .map((id) => registry.get(id)?.name ?? id);
-    const label = times(summary.indicator.label, summary.activeCount);
-    const origin = sources.length ? `from ${sources.join(", ")}` : "no source character";
-    return {
-      key: `indicator:${summary.indicator.key}`,
-      label: `${label} · ${origin}${summary.suppressedCount ? " · suppressed" : ""}`,
-      title: `${label}, ${origin}. Tap twice to remove.`,
-      removal: { type: "indicator", summary },
-    };
-  });
-}
-
 export type MarkResult = { ok: true } | { ok: false; message: string };
 
 /** The same stale-seat guard the old popover used: the command is bound to the occupant that was drawn. */
@@ -113,8 +87,8 @@ export function removeMark(playerId: PlayerId, participantId: string | undefined
   const { current, game, player, target } = ctx;
   const context = captureVotingContext();
   const removal = mark.removal;
-  if (removal.type === "effect" || removal.type === "indicator") {
-    const instances = removal.type === "effect" ? removal.token.instances : removal.summary.instances;
+  if (removal.type === "effect") {
+    const instances = removal.token.instances;
     // Grouping is presentation only: never choose a source implicitly or cancel independent effects together.
     if (instances.length !== 1) return { ok: false, message: "More than one effect is represented. Remove the intended effect from its source." };
     const result = current.resolveEffects({ intents: [{ kind: "remove", target, effectId: instances[0]!.id }] }, context);

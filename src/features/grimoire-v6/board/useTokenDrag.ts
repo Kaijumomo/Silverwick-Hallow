@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import type { PlayerId } from "@/stores/types";
 import type { RingLayout } from "../ringLayout";
-import type { Point } from "../positions";
+import { toStoredPosition, type Point } from "../positions";
 import { flash } from "../v6Store";
 
 /** A press that moves less than this is a tap, not a drag (unchanged from the previous board). */
@@ -16,8 +16,6 @@ export function clampToBoard(p: Point, layout: Pick<RingLayout, "w" | "h" | "S">
   return { x: Math.max(m, Math.min(layout.w - m, p.x)), y: Math.max(m, Math.min(layout.h - m, p.y)) };
 }
 
-/** Disc centre in board pixels -> the position stored in the layout (relative to the board centre). */
-export const toStoredPosition = (p: Point, layout: Pick<RingLayout, "w" | "h">): Point => ({ x: p.x - layout.w / 2, y: p.y - layout.h / 2 });
 
 type Options = {
   boardRef: React.RefObject<HTMLDivElement>;

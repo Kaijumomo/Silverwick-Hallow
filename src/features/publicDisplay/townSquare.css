@@ -336,27 +336,6 @@
   width: 100%;
   height: 100%;
 }
-.ts-ghost {
-  position: absolute;
-  right: -2px;
-  top: 4px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #14151d;
-  border: 1px solid rgba(222, 216, 204, 0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
-}
-.ts-ghost::after {
-  content: "";
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #e8dcc0;
-}
 .ts-plate {
   position: absolute;
   left: 50%;

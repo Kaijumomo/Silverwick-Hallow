@@ -128,7 +128,7 @@ const EVIL_SCENE = {
 };
 
 /** The victory scene. A game ended without a result has no scene: it opens straight on the review. */
-export function buildWinVm(ctx: V6Ctx, close: () => void): Record<string, unknown> {
+export function buildWinVm(ctx: V6Ctx, close: () => void, home: () => void): Record<string, unknown> {
   const { game, registry, ui, ended, privacy } = ctx;
   const winner = game.result?.winner;
   if (!ui.winScene || !ended || privacy || (winner !== "good" && winner !== "evil")) return { open: false };
@@ -141,7 +141,7 @@ export function buildWinVm(ctx: V6Ctx, close: () => void): Record<string, unknow
     const role = registry.get(p.actualRole);
     return { name: seatName(p), img: role ? iconUrlFor(role) : "", op: p.alive ? 1 : 0.55 };
   });
-  const common = { open: true, img: demonRole ? iconUrlFor(demonRole) : "", team, close };
+  const common = { open: true, img: demonRole ? iconUrlFor(demonRole) : "", team, close, home };
   if (winner === "good") {
     return { ...common, ...GOOD_SCENE, title: "Good Wins", kicker: `Day ${game.day} · Dawn over Silverwick Hollow`, slain,
       line1: `${slain ? `The ${demonRole?.name ?? "Demon"} has been found and slain. ` : ""}The town of Silverwick Hollow will see another dawn.` };

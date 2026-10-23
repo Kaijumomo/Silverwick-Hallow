@@ -27,6 +27,13 @@ export type ShowState =
 
 export type WizardStep = "script" | "extras" | "town";
 
+/** A question put to the Storyteller in the Grimoire's own dialog style. `input` set means it asks for a line of text. */
+export type AskState = {
+  title: string; body: string; okText: string; danger?: boolean;
+  input?: { placeholder: string; value: string; maxLength?: number };
+  run: (value: string) => void;
+};
+
 export type V6UiState = {
   // ── chrome (4A) ───────────────────────────────────────────────────────────
   panel: PanelKind | null;
@@ -61,6 +68,8 @@ export type V6UiState = {
   refSel: string | null;
   endOpen: boolean;
   winScene: boolean;
+  // ── in-app confirmation / name entry (replaces the browser's own dialogs) ───
+  ask: AskState | null;
 };
 
 export type V6UiActions = {
@@ -74,7 +83,7 @@ const INITIAL: V6UiState = {
   picker: null, pickSel: [], pickHover: null,
   wiz: null, townCur: null, seatMode: false, seatCur: 0, lobbyName: "", prepEdit: null,
   shownNumber: null, slay: null,
-  show: null, refQuery: "", refSel: null, endOpen: false, winScene: false,
+  show: null, refQuery: "", refSel: null, endOpen: false, winScene: false, ask: null,
 };
 
 export const useV6Ui = create<V6UiState & V6UiActions>()((set) => ({

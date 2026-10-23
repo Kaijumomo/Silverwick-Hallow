@@ -294,6 +294,20 @@ describe("4F victory scene and the ended review", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Good wins. Finished game, read-only review.");
   });
 
+  it("Return Home sits beside Review the Grimoire, keeps the finished game and leaves the Grimoire", () => {
+    reset(ended("good", false));
+    render(<GrimoireV6Screen />);
+    ui({ winScene: true });
+    const scene = screen.getByRole("dialog", { name: "Good Wins" });
+    expect(within(scene).getByRole("button", { name: "Review the Grimoire" })).toBeTruthy();
+    fireEvent.click(within(scene).getByRole("button", { name: "Return Home" }));
+    const state = store.getState();
+    expect(state.view).toBe("home");
+    expect(state.game?.phase).toBe("ended");
+    expect(state.game?.result?.winner).toBe("good");
+    expect(useV6Ui.getState().winScene).toBe(false);
+  });
+
   it("Evil wins lists the evil team; it does not claim a dead Demon walks free", () => {
     reset(ended("evil", true));
     render(<GrimoireV6Screen />);

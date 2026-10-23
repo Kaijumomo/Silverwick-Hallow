@@ -117,7 +117,7 @@ export function useInfoVm(ctx: V6Ctx): SliceResult {
       clearRef: () => ui.set({ refQuery: "" }),
       show: buildShowVm(showOpen ? current : null, closeShow),
       endDlg,
-      win: buildWinVm(ctx, () => ui.set({ winScene: false })),
+      win: buildWinVm(ctx, () => ui.set({ winScene: false }), () => { ui.set({ winScene: false }); useStorytellerStore.getState().setView("home"); }),
     },
   };
 }

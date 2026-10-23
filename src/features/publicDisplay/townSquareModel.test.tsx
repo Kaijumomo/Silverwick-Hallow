@@ -80,11 +80,11 @@ describe("Town Square view model (Package 4G)", () => {
 });
 
 describe("Town Square stage rendering (Package 4G)", () => {
-  it("Day: shrouds and dims the dead, marks the ghost vote, and shows travellers' art with an arc label", () => {
+  it("Day: shrouds and dims the dead (no ghost-vote badge on the display), and shows travellers' art with an arc label", () => {
     const view = buildTownSquareView({ lobby: lobby({ dead: [1], travellers: [9] }), status: "live" });
     const { container } = render(<TownSquare view={view} scale={1} motion={false} />);
     expect(container.querySelectorAll('[data-testid="life-shroud"]')).toHaveLength(1);
-    expect(container.querySelectorAll('[data-testid="ghost-vote"]')).toHaveLength(1);
+    expect(container.querySelectorAll('[data-testid="ghost-vote"], .ts-ghost')).toHaveLength(0);
     const dead = screen.getByRole("group", { name: /^Player 2, seat 2, dead/i });
     expect(dead).toHaveAttribute("data-dead", "true");
     const traveller = screen.getByRole("group", { name: /^Player 10, seat 10/ });

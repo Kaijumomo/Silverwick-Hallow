@@ -1,6 +1,6 @@
 import { lookupOfficialRole } from "@/data/officialRoles";
 import { iconUrlFor } from "@/data/iconUrl";
-import { hasVoteAvailable, isDeadState, lifeAccessibleLabel, publicLifeStateOf } from "@/stores/lifeState";
+import { isDeadState, lifeAccessibleLabel, publicLifeStateOf } from "@/stores/lifeState";
 import type { PlayerPublicRecord } from "@/stores/types";
 
 // Package 4G: a Town Square seat. Residents show the initial of the player's
@@ -67,7 +67,6 @@ export function PublicSeat({ player, size, x, y, nameSize = 24, plateMax, showSe
           )}
           {dead && life && <TornShroud />}
         </div>
-        {dead && life && hasVoteAvailable(life) && <span className="ts-ghost" data-testid="ghost-vote" title="Ghost vote available" aria-hidden="true" />}
         <div className="ts-plate" style={plateMax ? { maxWidth: plateMax } : undefined}>
           {showSeatNumber && <span className="ts-plate-seat" style={{ fontSize: Math.round(nameSize * 0.78) }}>{seatNumber}</span>}
           <span className="ts-plate-name" style={{ fontSize: nameSize }}>{player.name}</span>

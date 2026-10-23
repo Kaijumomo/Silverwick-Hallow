@@ -18,7 +18,8 @@ import { flash, useV6Ui } from "../v6Store";
 import { presentPlayerToken, report } from "../info/actions";
 import { mergedDecoration, offerTokenTap, useTokenDecorations } from "../board/overlay";
 import { remArc, remFs, tokenArc } from "../board/remArc";
-import { placeReminder, playerMarks, reminderPalette, removeMark, unsourcedEffects, type Mark, type MarkEnv } from "../board/marks";
+import { placeReminder, playerMarks, reminderPalette, removeMark, type Mark, type MarkEnv } from "../board/marks";
+import { toStoredPosition } from "../positions";
 import { runLifeAction } from "../board/life";
 import { buildPicker, openChoosePicker } from "../board/picker";
 import { useTokenDrag } from "../board/useTokenDrag";
@@ -102,7 +103,7 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
     if (!current || privacy || current.phase === "ended" || !a || !b || a.isEmpty || b.isEmpty) { flash("The roster changed. Select the players again to swap seats."); return; }
     if (fromId === toId) return;
     // The rendered positions are the fallback for seats never dragged: stored relative to the board centre.
-    const layoutPositions = Object.fromEntries(current.seatOrder.flatMap((id) => positions[id] ? [[id, { x: positions[id]!.x - layout.w / 2, y: positions[id]!.y - layout.h / 2 }]] : []));
+    const layoutPositions = Object.fromEntries(current.seatOrder.flatMap((id) => positions[id] ? [[id, toStoredPosition(positions[id]!, layout)]] : []));
     const result = s.swapPlayerSeats({ playerId: fromId, participantId: a.participantId! }, { playerId: toId, participantId: b.participantId! }, { game: current, positions: layoutPositions });
     flash(result.ok ? `${a.name || "A player"} and ${b.name || "a player"} swapped seats.` : result.message ?? "Those seats could not be swapped.");
   };
@@ -211,13 +212,17 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
     if (ended || mutationLocked) return;
     const s = store.getState();
     if (s.lobby) { ui.set({ panel: "players", card: false }); selectPlayer(null); return; }
-    const name = window.prompt(arrivalsAreTravelers(game) ? "Traveller name?" : "Player name?");
-    if (!name?.trim()) return;
-    const before = s.game;
-    s.addPlayerToSeat(name);
-    const after = store.getState().game;
-    if (after === before) { flash("Could not add a player. Check available seats and game capacity."); return; }
-    flash("A new seat joins the circle.");
+    const traveller = arrivalsAreTravelers(game);
+    ui.set({ ask: {
+      title: traveller ? "Add a Traveller" : "Add a player", body: traveller ? "Who is joining the table as a Traveller?" : "Who is joining the table?", okText: "Add to the circle",
+      input: { placeholder: traveller ? "Traveller name" : "Player name", value: "", maxLength: 20 },
+      run: (name) => {
+        const before = store.getState().game;
+        store.getState().addPlayerToSeat(name);
+        if (store.getState().game === before) { flash("Could not add a player. Check available seats and game capacity."); return; }
+        flash("A new seat joins the circle.");
+      },
+    } });
   };
   const resetPositions = () => {
     const result = store.getState().resetTokenPositions();
@@ -275,20 +280,6 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
     const top = Math.max(16, Math.min(layout.h - H - 16, Math.max(76, selPos.y - 130)));
     const role = sel.actualRole ? registry.get(sel.actualRole) : undefined;
     const marks = privacy ? [] : playerMarks(env, sel);
-    const unsourced = privacy ? [] : unsourcedEffects(env, sel).map((u) => ({
-      label: u.label, title: u.title, armed: ui.remArm === u.key,
-      remove: () => {
-        clearTimeout(armTimer.current);
-        if (ui.remArm !== u.key) {
-          ui.set({ remArm: u.key });
-          armTimer.current = setTimeout(() => { if (useV6Ui.getState().remArm === u.key) ui.set({ remArm: null }); }, 3000);
-          return;
-        }
-        ui.set({ remArm: null });
-        const result = removeMark(sel.id, sel.participantId, { key: u.key, kind: "effect", label: u.label, title: u.title, src: "", size: 100, removal: u.removal });
-        if (!result.ok) flash(result.message);
-      },
-    }));
     const palette = reminderPalette(env);
     const addList = ui.remAll ? palette.all : palette.inPlay;
     const place = (entry: (typeof addList)[number]) => () => {
@@ -337,10 +328,11 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
       [`${key}T`]: segDrag && segDrag.key === key ? "background .2s" : "transform .28s cubic-bezier(.2,.7,.2,1), background .2s",
     });
 
-    const removeFromGame = async () => {
+    const removeFromGame = () => {
       const name = sel.name || `Seat ${seatIndex(sel.id) + 1}`;
-      const text = sel.isTraveler ? `${name} leaves the game and their seat is removed.` : `${name} leaves the game and their seat is removed.`;
-      if (!window.confirm(`Remove ${name}?\n\n${text}`)) return;
+      ui.set({ ask: { title: `Remove ${name}?`, body: `${name} leaves the game and their seat is removed.`, okText: "Remove from game", danger: true, run: () => void removeConfirmed(name) } });
+    };
+    const removeConfirmed = async (name: string) => {
       const s = store.getState();
       const completion = storytellerOccupancyCompletion("remove", sel.id);
       try {
@@ -391,7 +383,7 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
         label: entry.label, fs: remFs(entry.label), arc: remArc(entry.label, `add-${entry.role.id}-${entry.label}`), size: 100, src: iconUrlFor(entry.role),
         title: `${entry.role.name}: ${entry.label}`, add: place(entry),
       })),
-      unsourced, hasUnsourced: unsourced.length > 0, canAdd: !ended, remCount: marks.length || "", noRems: marks.length === 0, allCount: palette.all.length,
+      canAdd: !ended, remCount: marks.length || "", noRems: marks.length === 0, allCount: palette.all.length,
       showPlay: guard(() => ui.set({ remAll: false })), showAll: guard(() => ui.set({ remAll: true })),
       playBg: !ui.remAll ? "rgba(176,186,204,.2)" : "transparent", playFg: !ui.remAll ? "#ffb4a6" : "rgba(222,216,204,.55)",
       allBg: ui.remAll ? "rgba(176,186,204,.2)" : "transparent", allFg: ui.remAll ? "#ffb4a6" : "rgba(222,216,204,.55)",

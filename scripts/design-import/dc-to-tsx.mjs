@@ -150,6 +150,7 @@ const propName = (n) => {
   if (n === 'viewbox') return 'viewBox';
   if (n === 'maxlength') return 'maxLength';
   if (n === 'readonly') return 'readOnly';
+  if (n === 'autofocus') return 'autoFocus';
   return n.includes('-') ? kebabToCamel(n) : n;
 };
 

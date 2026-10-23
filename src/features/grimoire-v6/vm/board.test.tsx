@@ -7,6 +7,7 @@ import type { PlayerId, StorytellerLobbyRecord } from "@/stores/types";
 import { useV6Ctx } from "../ctx";
 import { useV6Ui } from "../v6Store";
 import { useTokenDecorations, clearTokenTapInterceptors, useTokenTapInterceptor } from "../board/overlay";
+import { SAVED_Y_OFFSET } from "../positions";
 import { useBoardVm } from "./board";
 
 const store = () => useStorytellerStore.getState();
@@ -36,32 +37,6 @@ beforeEach(() => {
   clearTokenTapInterceptors();
 });
 afterEach(() => { vi.restoreAllMocks(); });
-
-describe("slice 4B: effects without an official token", () => {
-  it("are never drawn on the board but stay listed, and removable, in Details", () => {
-    seed15();
-    const empath = holder("empath");
-    const { result } = mount();
-    expect(tokenOf(result.current.board, empath).rems.some((r: any) => /Poisoned/.test(r.label))).toBe(false);
-    act(() => { store().selectPlayer(empath); useV6Ui.getState().set({ card: true }); });
-    const listed = result.current.board.pop.unsourced as Array<{ label: string; remove: () => void }>;
-    expect(result.current.board.pop.hasUnsourced).toBe(true);
-    expect(listed.map((u) => u.label)).toEqual([expect.stringMatching(/^Poisoned · no source character/)]);
-    // Tap twice (arm, then confirm) takes the authoritative Effect away through its command.
-    act(() => listed[0]!.remove());
-    act(() => (result.current.board.pop.unsourced as Array<{ remove: () => void }>)[0]!.remove());
-    expect(store().game!.players[empath]!.effects.filter((e) => e.type === "poisoned")).toHaveLength(0);
-  });
-
-  it("hides the list in Privacy Mode", () => {
-    seed15();
-    const empath = holder("empath");
-    act(() => usePrivacyStore.getState().setEnabled(true));
-    const { result } = mount();
-    act(() => { store().selectPlayer(empath); useV6Ui.getState().set({ card: true }); });
-    expect(result.current.board.pop.hasUnsourced ?? false).toBe(false);
-  });
-});
 
 describe("slice 4B: board view-model", () => {
   it("draws one token per occupied seat with the shown character, Life and reminders", () => {
@@ -153,6 +128,35 @@ describe("slice 4B: board view-model", () => {
     const armed = result.current.board.pop.rems.find((r: any) => r.shown === "Tap to remove");
     act(() => armed.remove());
     expect(store().game!.players[id]!.reminders.length).toBe(before);
+  });
+
+  it("asks before removing a player in the Grimoire's own dialog, never the browser's", async () => {
+    seed15();
+    const nativeConfirm = vi.spyOn(window, "confirm");
+    const { result } = mount();
+    const id = holder("chef");
+    act(() => { store().selectPlayer(id); useV6Ui.getState().set({ card: true }); });
+    act(() => result.current.board.pop.remove());
+    const ask = useV6Ui.getState().ask!;
+    expect(ask.title).toMatch(/^Remove /);
+    expect(nativeConfirm).not.toHaveBeenCalled();
+    expect(store().game!.players[id]!.isEmpty).toBeFalsy();
+    await act(async () => { ask.run(""); await Promise.resolve(); });
+    expect(store().game!.players[id]?.isEmpty ?? true).toBe(true);
+  });
+
+  it("collects a name for an offline Add player in the dialog and adds nothing when cancelled", () => {
+    seed15();
+    const nativePrompt = vi.spyOn(window, "prompt");
+    const { result } = mount();
+    act(() => result.current.board.addPlayer());
+    const ask = useV6Ui.getState().ask;
+    expect(nativePrompt).not.toHaveBeenCalled();
+    if (!ask) return; // a full table or lobby routes elsewhere; nothing to ask
+    expect(ask.input).toBeTruthy();
+    const before = store().game!.seatOrder.length;
+    act(() => useV6Ui.getState().set({ ask: null }));
+    expect(store().game!.seatOrder.length).toBe(before);
   });
 
   it("keeps Privacy Mode's Details card free of character and reminders", () => {
@@ -275,8 +279,17 @@ describe("slice 4B: board view-model", () => {
       act(() => fire("pointerup", 560, 450));
       const saved = store().tokenPositions[id]!;
       expect(saved.x).toBeCloseTo(start.x + 60 - w / 2, 5);
-      expect(saved.y).toBeCloseTo(start.y + 50 - h / 2, 5);
+      expect(saved.y).toBeCloseTo(start.y + 50 - h / 2 + SAVED_Y_OFFSET, 5);
       expect(store().selectedPlayerId).toBeNull();
+    });
+
+    it("reads a previously saved position back where the old Grimoire drew it (footprint centre, 12px below the disc)", () => {
+      seed15();
+      const id = holder("chef");
+      act(() => { useStorytellerStore.setState({ tokenPositions: { [id]: { x: 40, y: 30 } } }); });
+      const { result } = mount();
+      const { w, h } = result.current.ctx.layout;
+      expect(result.current.ctx.positions[id]).toEqual({ x: w / 2 + 40, y: h / 2 + 30 - SAVED_Y_OFFSET });
     });
 
     it("treats a press that barely moves as a tap, never a move", () => {
@@ -298,7 +311,7 @@ describe("slice 4B: board view-model", () => {
       const { w, h, S } = result.current.ctx.layout;
       const saved = store().tokenPositions[id]!;
       expect(saved.x + w / 2).toBeLessThanOrEqual(w - S / 2 - 6 + 1e-6);
-      expect(saved.y + h / 2).toBeLessThanOrEqual(h - S / 2 - 6 + 1e-6);
+      expect(saved.y + h / 2 - SAVED_Y_OFFSET).toBeLessThanOrEqual(h - S / 2 - 6 + 1e-6);
     });
 
     it("resets arranged tokens from the Players card control", () => {

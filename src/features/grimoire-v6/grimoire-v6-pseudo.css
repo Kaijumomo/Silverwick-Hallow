@@ -5,47 +5,48 @@
 .gv-h3:hover { background:rgba(176,186,204,.1) !important; color:#e8584a !important; }
 .gv-h4:hover { transform:scale(1.05) !important; }
 .gv-f5:focus { outline:2px solid #e8584a !important; outline-offset:3px !important; }
-.gv-h6:hover { color:#ece6da !important; }
-.gv-h7:hover { opacity:1 !important; transform:translateY(-2px) !important; }
-.gv-h8:hover { background:rgba(176,186,204,.08) !important; color:#e8584a !important; }
-.gv-h9:hover { color:#e8584a !important; }
-.gv-ha:hover { color:#e0b96a !important; }
-.gv-hb:hover { border-color:rgba(232,88,74,.55) !important; background:rgba(24,25,35,.85) !important; }
-.gv-hc:hover { color:#e8584a !important; background:rgba(176,186,204,.08) !important; }
-.gv-hd:hover { border-color:rgba(176,186,204,.45) !important; }
-.gv-he:hover { background:rgba(192,57,46,.36) !important; }
-.gv-hf:hover { border-color:rgba(232,88,74,.5) !important; }
-.gv-hg:hover { background:rgba(176,186,204,.26) !important; }
-.gv-hh:hover { background:linear-gradient(180deg, rgba(176,186,204,.34), rgba(176,186,204,.12)) !important; }
-.gv-ai:active { transform:scale(.98) !important; }
-.gv-hj:hover { background:rgba(255,255,255,.05) !important; }
-.gv-hk:hover { color:#7a2418 !important; }
-.gv-al:active { transform:scale(.96) !important; }
-.gv-hm:hover { background:rgba(42,26,16,.06) !important; }
-.gv-hn:hover { background:rgba(122,36,24,.08) !important; }
-.gv-ho:hover { color:#7a2418 !important; background:rgba(42,26,16,.06) !important; }
-.gv-hp:hover { background:radial-gradient(ellipse at 50% 20%, rgba(255,122,104,.45), rgba(176,186,204,.18)) !important; }
-.gv-aq:active { transform:scale(.97) !important; }
-.gv-hr:hover { border-color:#e6ecf8 !important; }
-.gv-hs:hover { color:#ff7a68 !important; }
-.gv-ft:focus { outline:2px solid #e8584a !important; outline-offset:1px !important; }
-.gv-fu:focus { outline:none !important; }
-.gv-hv:hover { border-color:#c0392e !important; }
-.gv-hw:hover { transform:translateY(-3px) !important; opacity:1 !important; }
-.gv-hx:hover { transform:translateY(-2px) !important; opacity:1 !important; }
-.gv-hy:hover { border-color:#e8584a !important; }
-.gv-hz:hover { border-color:rgba(232,88,74,.6) !important; background:rgba(232,88,74,.08) !important; }
-.gv-h10:hover { background:rgba(192,57,46,.3) !important; }
-.gv-h11:hover { border-color:#c0392e !important; background:rgba(192,57,46,.08) !important; }
-.gv-h12:hover { background:rgba(255,240,210,.08) !important; }
-.gv-h13:hover { background:rgba(134,183,212,.16) !important; border-color:#86b7d4 !important; }
-.gv-h14:hover { background:rgba(217,122,108,.16) !important; border-color:#e88a7a !important; }
-.gv-h15:hover { background:rgba(224,200,140,.16) !important; }
-.gv-f16:focus { border-color:#c0392e !important; }
-.gv-h17:hover { background:rgba(176,186,204,.06) !important; }
-.gv-f18:focus { outline:2px solid #e8584a !important; outline-offset:2px !important; }
-.gv-h19:hover { background:rgba(192,57,46,.26) !important; }
-.gv-f1a:focus { outline:2px solid #e8584a !important; outline-offset:2px !important; border-radius:10px !important; }
-.gv-h1b:hover { transform:translateY(-2px) !important; }
-.gv-h1c:hover { border-color:#c0392e !important; color:#e8584a !important; }
-.gv-h1d:hover { border-color:#c0392e !important; color:#ffb4a6 !important; }
+.gv-h6:hover { opacity:1 !important; transform:translateY(-2px) !important; }
+.gv-h7:hover { background:rgba(176,186,204,.08) !important; color:#e8584a !important; }
+.gv-h8:hover { color:#e8584a !important; }
+.gv-h9:hover { color:#e0b96a !important; }
+.gv-ha:hover { border-color:rgba(232,88,74,.55) !important; background:rgba(24,25,35,.85) !important; }
+.gv-hb:hover { color:#e8584a !important; background:rgba(176,186,204,.08) !important; }
+.gv-hc:hover { border-color:rgba(176,186,204,.45) !important; }
+.gv-hd:hover { background:rgba(192,57,46,.36) !important; }
+.gv-he:hover { border-color:rgba(232,88,74,.5) !important; }
+.gv-hf:hover { background:rgba(176,186,204,.26) !important; }
+.gv-hg:hover { background:linear-gradient(180deg, rgba(176,186,204,.34), rgba(176,186,204,.12)) !important; }
+.gv-ah:active { transform:scale(.98) !important; }
+.gv-hi:hover { background:rgba(255,255,255,.05) !important; }
+.gv-hj:hover { color:#7a2418 !important; }
+.gv-ak:active { transform:scale(.96) !important; }
+.gv-hl:hover { background:rgba(42,26,16,.06) !important; }
+.gv-hm:hover { background:rgba(122,36,24,.08) !important; }
+.gv-hn:hover { color:#7a2418 !important; background:rgba(42,26,16,.06) !important; }
+.gv-ho:hover { background:radial-gradient(ellipse at 50% 20%, rgba(255,122,104,.45), rgba(176,186,204,.18)) !important; }
+.gv-ap:active { transform:scale(.97) !important; }
+.gv-hq:hover { border-color:#e6ecf8 !important; }
+.gv-hr:hover { color:#ff7a68 !important; }
+.gv-fs:focus { outline:2px solid #e8584a !important; outline-offset:1px !important; }
+.gv-ft:focus { outline:none !important; }
+.gv-hu:hover { border-color:#c0392e !important; }
+.gv-hv:hover { transform:translateY(-3px) !important; opacity:1 !important; }
+.gv-hw:hover { transform:translateY(-2px) !important; opacity:1 !important; }
+.gv-hx:hover { border-color:#e8584a !important; }
+.gv-hy:hover { border-color:rgba(232,88,74,.6) !important; background:rgba(232,88,74,.08) !important; }
+.gv-hz:hover { background:rgba(192,57,46,.3) !important; }
+.gv-h10:hover { border-color:#c0392e !important; background:rgba(192,57,46,.08) !important; }
+.gv-h11:hover { background:rgba(255,240,210,.08) !important; }
+.gv-f12:focus { border-color:#c0392e !important; }
+.gv-h13:hover { filter:brightness(1.1) !important; }
+.gv-h14:hover { color:#ece6da !important; }
+.gv-h15:hover { background:rgba(134,183,212,.16) !important; border-color:#86b7d4 !important; }
+.gv-h16:hover { background:rgba(217,122,108,.16) !important; border-color:#e88a7a !important; }
+.gv-h17:hover { background:rgba(224,200,140,.16) !important; }
+.gv-h18:hover { background:rgba(176,186,204,.06) !important; }
+.gv-f19:focus { outline:2px solid #e8584a !important; outline-offset:2px !important; }
+.gv-h1a:hover { background:rgba(192,57,46,.26) !important; }
+.gv-f1b:focus { outline:2px solid #e8584a !important; outline-offset:2px !important; border-radius:10px !important; }
+.gv-h1c:hover { transform:translateY(-2px) !important; }
+.gv-h1d:hover { border-color:#c0392e !important; color:#e8584a !important; }
+.gv-h1e:hover { border-color:#c0392e !important; color:#ffb4a6 !important; }

@@ -1,17 +1,12 @@
 [
   {
-    "_why": "The Card nomination result button names the next step (Next nomination / Exiled · died / Execute · died / Begin Night N / Use current table ...). Default text stays 'Next nomination'.",
+    "_why": "The Card nomination result button names the next step (Next nomination / Exiled \u00b7 died / Execute \u00b7 died / Begin Night N / Use current table ...). Default text stays 'Next nomination'.",
     "regex": "(style=\"flex:none; min-height:48px; padding:0 22px; border-radius:12px; border:1px solid #c0392e;[^\"]*\"[^>]*>)Next nomination(</button>)",
     "replace": "$1{{ ns.nextText }}$2"
   },
   {
-    "_why": "One slot at the foot of the Card nomination for the follow-ups the design has no face for (Virgin, exile, execution outcome, refusal text, vote corrections, the ··· options). Rendered by day/NominationExtras.tsx in the card's own button style.",
+    "_why": "One slot at the foot of the Card nomination for the follow-ups the design has no face for (Virgin, exile, execution outcome, refusal text). Rendered by day/NominationExtras.tsx in the card's own button style.",
     "regex": "(<span style=\"font-family:'IM Fell English', serif; font-size:16px; color:rgba\\(236,230,218,\\.75\\);\">\\{\\{ ns\\.resultSub \\}\\}</span>\\s*</div>\\s*<button onClick=\"\\{\\{ ns\\.next \\}\\}\"[^>]*>\\{\\{ ns\\.nextText \\}\\}</button>\\s*</div>\\s*</sc-if>)(\\s*</div>\\s*</div>\\s*</sc-if>\\s*<sc-if value=\"\\{\\{ ns\\.scrollOn \\}\\}\")",
     "replace": "$1\n        <sc-if value=\"{{ ns.extraOn }}\" hint-placeholder-val=\"{{ false }}\">{{ ns.extra }}</sc-if>$2"
-  },
-  {
-    "_why": "The ··· options affordance of the Card nomination is positioned inside the card (absolute), so it takes no layout space and the card keeps the design's size.",
-    "regex": "(style=\"width:100%;)( padding:16px 18px 18px; border-radius:20px;)",
-    "replace": "$1 position:relative;$2"
   }
 ]
