@@ -13,8 +13,10 @@ import { roman } from "../ringLayout";
 import { flash, showVeil } from "../v6Store";
 import { isDraftGame } from "../setup/draft";
 import { endGathering, goInPerson, goOnline, useSetupFlow } from "../setup/flow";
-import { buildPrepTasks, commitPrep, orderedTasks, type PrepTask } from "../setup/prepare";
-import { buildPickerFrame, openDistribute, TEAM_COLOR } from "../setup/pickerFrame";
+import { buildPrepTasks, commitPrep, orderedTasks, prepTap, type PrepTask } from "../setup/prepare";
+import { useTokenTapInterceptor } from "../board/overlay";
+import { openDistributePicker as openDistribute } from "../board/picker";
+import { TEAM_COLOR } from "../icons";
 import { beginOffline, changeSeatCount, emptySeats, nameNextSeat, seatInArrivalOrder, seatPersonAtCursor, waitingOf } from "../setup/seating";
 import { wizardSteps, wizardVm } from "../setup/wizard";
 import type { SliceResult } from "./types";
@@ -45,6 +47,8 @@ export function useSetupVm(ctx: V6Ctx): SliceResult {
   const lobby = useStorytellerStore((s) => s.lobby);
   const joined = useSessionRuntime((s) => s.joined);
   const flow = useSetupFlow();
+  // An open preparation (Red Herring, first-night information) takes the board tap as its choice.
+  useTokenTapInterceptor("setup", ctx.game.phase === "setup" && ctx.ui.prepEdit ? prepTap : null);
   const draft = isDraftGame(game);
   const wiz = ui.wiz;
   const setupOn = game.phase === "setup";
@@ -67,12 +71,12 @@ export function useSetupVm(ctx: V6Ctx): SliceResult {
     // Steps I and II: a draft table behind the wizard. No dock, no centre text, no invitation.
     return { vm: {
       wiz: wizardVm(ctx, wiz, true), wizSteps: wizardSteps(wiz), town: { on: false }, seatC: { on: false, btnOn: false }, pe: { on: false, off: true }, setup: { segs: [] },
-      composition: [], rosterMeta: "", openSeats: [],
+      composition: [], rosterMeta: "",
       dockOn: false, centerKicker: "", centerTitle: "", centerSub: "", inviteDisp: "none",
       scriptName: wiz.script ? script?.name ?? "New game" : "New game",
     } };
   }
-  if (!setupOn && !ctx.cards.town) return { vm: { openSeats: [], wizSteps: [], wiz: { on: false }, pe: { on: false, off: true } } };
+  if (!setupOn && !ctx.cards.town) return { vm: { wizSteps: [], wiz: { on: false }, pe: { on: false, off: true } } };
 
   const occupied = context.occupied.length;
   const waiting = waitingOf(game);
@@ -250,24 +254,14 @@ export function useSetupVm(ctx: V6Ctx): SliceResult {
     return { text: "Begin Night 1", run: () => beginNightOne(ctx, analysis.readiness.begin.ok ? "Setup changed. Review the next step before continuing." : view.message) };
   })() : undefined;
 
-  const picker = buildPickerFrame(ctx);
 
   return {
     advance,
     vm: {
       wiz: wiz ? wizardVm(ctx, wiz, false) : { on: false },
       wizSteps: wiz && setupOn ? wizardSteps(wiz) : [],
-      town, rosterMeta, composition, setup: setupKey, seatC, pe, openSeats: [],
-      ...(picker ?? {}),
-      addPlayer: () => {
-        const before = game.seatOrder.length;
-        if (revealed || game.phase !== "setup") store().addTravelerSeat();
-        else store().addEmptySeat();
-        const after = store().game?.seatOrder.length ?? before;
-        flash(after > before ? "A new seat joins the circle." : "A town holds at most 20 players.");
-      },
+      town, rosterMeta, composition, setup: setupKey, seatC, pe,
       distribute: () => openDistribute(),
-      resetPositions: () => { store().resetTokenPositions(); },
       ...(lobby && setupOn && !gathering && waiting.length ? { queueCount: waiting.length } : {}),
     },
   };

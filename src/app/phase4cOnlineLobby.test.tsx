@@ -55,12 +55,11 @@ describe("lobby lifecycle in Prepare the Town", () => {
     await openTown();
     expect(state().game!.phase).toBe("setup");
     expect(state().lobby).toBeNull();
-    expect(screen.queryByText(/INVITE/i)).toBeNull(); // the Invite pill needs an attached lobby
+    expect(screen.queryByText("Waiting for the town")).toBeNull(); // the invitation needs an attached lobby
 
     await act(async () => { click("Players join by code"); });
     await waitFor(() => expect(state().lobby).not.toBeNull());
     expect(state().lobby!.code).toHaveLength(8);
-    expect(screen.getByText(/INVITE/i)).toBeInTheDocument();
     expect(screen.getByText("Waiting for the town")).toBeInTheDocument();
 
     // Nobody has joined: Begin is held (five distinct joined players and a live writer are required), and nobody is seated.
