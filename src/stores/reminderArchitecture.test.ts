@@ -138,6 +138,8 @@ const ALLOWED = new Set([
   // Phase 10H: the Roster / Labels readers of the Table (Storyteller-only
   // presentation via reminderPresentation; DOM-absent under Privacy Mode).
   "features/grimoire/RosterView.tsx",
+  "features/grimoire-v6/board/marks.ts", // Package 4: token reminder discs, presentation of notation and Effects only
+  "features/grimoire-v6/board/picker.tsx", // Package 4: the picker detail shows a character's catalogue reminder labels
   // Package 1: Home Character Reference detail. Definition-only RoleDef.reminders
   // token labels (like the RoleChooser footer); no game or ReminderRecord state.
   "features/home/reference/referenceData.ts",

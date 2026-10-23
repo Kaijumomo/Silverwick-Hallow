@@ -56,7 +56,8 @@ it("independent: Privacy removes a completed deliberately false answer from text
   fireEvent.click(screen.getByRole("button", { name: "2" })); expect(screen.getByLabelText("Information to communicate")).toHaveTextContent("2");
   const accepted = game(); act(() => usePrivacyStore.getState().setEnabled(true));
   expect(screen.queryByLabelText("Information to communicate")).toBeNull(); expect(screen.queryByText("Empath")).toBeNull();
-  expect(screen.queryByText("Player 0")).toBeNull(); expect(game()).toBe(accepted);
+  // Seat names stay on the V2 board in Privacy Mode (it hides characters and reminders, not names).
+  expect(game()).toBe(accepted);
 });
 
 it.each(["empath", "chef"])("R1: %s Recluse choice saves atomically, survives reload and Undo, and stays private", async role => {

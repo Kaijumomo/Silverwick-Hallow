@@ -65,13 +65,13 @@ export function useChromeVm(ctx: V6Ctx, slices: { advance?: SliceResult["advance
   }, [game.fabled, game.lorics, ctx.registry]);
 
   const openPanel = (k: "players" | "night" | "info" | "reference") => () => {
-    const locked = (k === "night" && (privacy || ended)) || (k === "info" && privacy);
+    const locked = (k === "night" && (privacy || ended)) || ((k === "info" || k === "reference") && privacy);
     if (locked) { flash(k === "night" && ended ? "The game has ended." : "Show tokens to open this panel."); return; }
     ui.set({ panel: ui.panel === k ? null : k });
     selectPlayer(null);
   };
   const rail = ([["players", "Players", ICON.users], ["night", isNight || setupPhase ? "Night" : "Day", isNight || setupPhase ? ICON.moon : ICON.sun], ["info", "Info", ICON.info], ["reference", "Reference", ICON.book]] as const).map(([k, label, icon]) => {
-    const locked = (k === "night" && (privacy || ended)) || (k === "info" && privacy);
+    const locked = (k === "night" && (privacy || ended)) || ((k === "info" || k === "reference") && privacy);
     const active = ui.panel === k;
     return { label, icon, active, bg: active ? "rgba(176,186,204,.12)" : "transparent", color: active ? "#e8584a" : "rgba(222,216,204,.6)", onClick: openPanel(k), opacity: locked ? 0.38 : 1 };
   });
@@ -148,7 +148,7 @@ export function useChromeVm(ctx: V6Ctx, slices: { advance?: SliceResult["advance
     phaseIconPath: isNight ? ICON.moon : ICON.sun, phaseIconColor: isNight ? "#e6ecf8" : "#f2c46a",
     undo: undo.run, undoOff: undo.disabled, undoTitle: undo.title, undoOpacity: undo.disabled ? 0.3 : 1,
     ended, endedText: `${endedLabel}. Finished game, read-only review.`,
-    endOn: !ended && (game.phase === "day" || game.phase === "night"), openEnd: () => ui.set({ endOpen: true }),
+    endOn: !ended && !privacy && (game.phase === "day" || game.phase === "night"), openEnd: () => ui.set({ endOpen: true }),
     winHint: !!hint, endTitle: hint ? `End game · ${hint}` : "End game", endColor: hint ? "#ff8a78" : "rgba(222,216,204,.45)",
     swapping: !!ui.swapFrom, swapName: ui.swapFrom ? game.players[ui.swapFrom]?.name ?? "" : "",
     clearSelection: () => { selectPlayer(null); ui.set({ swapFrom: null, card: false }); },

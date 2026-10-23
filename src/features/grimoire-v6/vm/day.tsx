@@ -7,6 +7,8 @@ import { buildDayCard, buildNominationArt } from "../day/dayCard";
 import { useDayUi } from "../day/dayUi";
 import { buildNominations } from "../day/nomination";
 import { buildSlayer } from "../day/slayer";
+import { dayTokenDecor, dayTokenTap } from "../day/tokens";
+import { usePublishTokenDecorations, useTokenTapInterceptor } from "../board/overlay";
 import type { SliceResult } from "./types";
 
 /**
@@ -23,6 +25,10 @@ export function useDayVm(ctx: V6Ctx): SliceResult {
   // The Day's overlays belong to the Day: leaving it, or hiding the tokens, puts the shot away.
   useEffect(() => { if (!day && ui.slay) ui.set({ slay: null }); }, [day, ui.slay]);
   useEffect(() => { if (privacy && ui.slay) ui.set({ slay: null }); }, [privacy, ui.slay]);
+
+  // The Day's marks and seat taps reach the board through its two overlay seams.
+  usePublishTokenDecorations("day", day ? dayTokenDecor(ctx) : null);
+  useTokenTapInterceptor("day", day ? (id) => dayTokenTap(ctx, id) : null);
 
   if (!day) return { vm: { ns: { on: false, cardOn: false }, dayC: { on: false }, sv: { open: false }, nomDim: 0, nomArt: null } };
 

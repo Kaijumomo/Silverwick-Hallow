@@ -2376,7 +2376,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                           {T(vm.town?.lobbyTitle)}
                         </div>
                         <div style={S318}>
-                          Scan the code or enter it at
+                          Scan the code or enter it at{' '}
                           <span style={S319}>
                             {T(vm.code?.host)}
                           </span>

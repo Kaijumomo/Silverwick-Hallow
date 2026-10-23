@@ -15,6 +15,7 @@ import type { V6Ctx } from "../ctx";
 import { ICON, TEAM_COLOR, TEAM_LABEL } from "../icons";
 import { roman } from "../ringLayout";
 import { flash, useV6Ui } from "../v6Store";
+import { presentPlayerToken, report } from "../info/actions";
 import { mergedDecoration, offerTokenTap, useTokenDecorations } from "../board/overlay";
 import { remArc, remFs, tokenArc } from "../board/remArc";
 import { placeReminder, playerMarks, reminderPalette, removeMark, type Mark, type MarkEnv } from "../board/marks";
@@ -235,8 +236,7 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
   const showPlayer = () => {
     if (!sel) return;
     if (!sel.shownRole) { flash(`Choose ${sel.name || "this player"}'s shown character before showing their token.`); return; }
-    ui.set({ show: { kind: "char", title: "You Are", roleId: sel.shownRole }, card: false });
-    selectPlayer(null);
+    report(presentPlayerToken(sel));
   };
   const startSwap = () => { if (!sel) return; ui.set({ swapFrom: sel.id, card: false }); selectPlayer(null); };
 

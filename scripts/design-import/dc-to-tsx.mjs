@@ -160,7 +160,10 @@ function emitText(node, scope, d) {
   const txt = node.nodeValue ?? '';
   if (!txt.includes('{{')) {
     if (!txt.trim()) return txt.includes(' ') && !txt.includes('\n') ? `${ind(d)}{' '}` : '';
-    return `${ind(d)}${esc(txt.replace(/\s+/g, ' ').trim() === txt.trim() ? txt.trim() : txt.replace(/\s+/g, ' '))}`;
+    // JSX drops a space that touches a line break, so a space between text and a neighbouring element is spelled out.
+    const lead = /^[ \t]/.test(txt) && node.previousSibling?.nodeType === 1 ? "{' '}" : '';
+    const trail = /[ \t]$/.test(txt) && node.nextSibling?.nodeType === 1 ? "{' '}" : '';
+    return `${ind(d)}${lead}${esc(txt.replace(/\s+/g, ' ').trim())}${trail}`;
   }
   const parts = txt.split(/\{\{([\s\S]+?)\}\}/g);
   const out = [];

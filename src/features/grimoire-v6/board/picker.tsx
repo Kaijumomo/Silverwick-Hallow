@@ -12,6 +12,7 @@ import { isInitialRevealComplete } from "@/stores/identity";
 import type { PlayerId, RoleDef, RoleId, RoleType, Script, StorytellerLobbyRecord } from "@/stores/types";
 import { TEAM_COLOR, TEAM_LABEL } from "../icons";
 import { flash, useV6Ui, type PickerState, type V6UiActions, type V6UiState } from "../v6Store";
+import { presentCharacter, report } from "../info/actions";
 import { remArc, remFs } from "./remArc";
 import { bluffHolderId, bluffsOf } from "./bluffs";
 
@@ -205,7 +206,7 @@ function pickTile(env: PickerEnv, picker: PickerState, role: RoleDef, p: Pick) {
     ui.set({ pickSel: ui.pickSel.includes(role.id) ? ui.pickSel.filter((x) => x !== role.id) : [...ui.pickSel, role.id] });
     return;
   }
-  if (picker.mode === "show") { ui.set({ picker: null, show: { kind: "char", title: picker.title, roleId: role.id } }); return; }
+  if (picker.mode === "show") { report(presentCharacter(picker.title, role.id)); return; }
   if (picker.mode === "bluff") {
     if (role.type === "traveler") { flash("Travelers cannot be Demon bluffs."); return; }
     const held = p.holders[role.id];

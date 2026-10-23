@@ -257,7 +257,7 @@ describe("4F End game", () => {
     expect(useV6Ui.getState().endOpen).toBe(true);
     fireEvent.keyDown(document, { key: "Escape" });
     expect(useV6Ui.getState().endOpen).toBe(true);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Good wins" })); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Retry saving result" })); });
     expect(end).toHaveBeenCalledOnce();
     expect(end).toHaveBeenCalledWith({ kind: "declare", winner: "evil" });
   });
