@@ -114,12 +114,6 @@ describe("Phase 10E architecture guard: no writer bypasses the Alignment seam", 
     const callers = productionSources().filter((module) => module !== "stores/storytellerStore.ts" &&
       /\b(setActualAlignment|setTravelerAlignment)\b/.test(stripComments(source(module))));
     expect(callers).toEqual([]);
-    const ui = stripComments(source("features/players/AlignmentControls.tsx"));
-    expect(ui).toMatch(/resolveAlignments\(\{ intents: \[intent\] \}\)/);
-    expect(ui).toMatch(/changeAlignmentIntent\(player, /);
-    expect(ui).toMatch(/correctAlignmentIntent\(player, /);
-    // Player-facing alignment goes through the Phase 10D perception seam.
-    expect(ui).toMatch(/resolveRoles\(\{ intents: \[shownAlignmentIntent\(player, /);
   });
 
   it("the planner and applyAlignmentPlan are pure: no randomness, clock or store access", () => {

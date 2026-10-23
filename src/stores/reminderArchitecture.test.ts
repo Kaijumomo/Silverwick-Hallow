@@ -76,7 +76,6 @@ const MECHANICS_MODULES = [
   "features/setup/revealReadiness.ts",
   "features/nightOrder/nightOrder.ts",
   "features/nightOrder/nightRules.ts",
-  "features/publicDisplay/presenters.ts",
   // Phase 10F: the Rules Query and the ability semantics / modifier contract
   // answer rules questions -- they never touch Reminders at all.
   "stores/rulesQuery.ts",

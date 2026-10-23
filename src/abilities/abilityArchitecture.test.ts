@@ -118,7 +118,7 @@ describe("10F architecture guards", () => {
     // informationDelivery.ts reads an Information ACTION's timing (a different type), never an ability descriptor's.
     expect(read("stores/informationDelivery.ts").match(/[\w.]+\.(timing|invocation)\b/g)).toEqual(["action.timing"]);
     for (const module of ["stores/abilityResolution.ts", "features/abilities/abilityUi.ts"]) expect(read(module), module).toMatch(/\binvocationEligibility\(/);
-    for (const module of ["features/abilities/AbilityEntry.tsx", "features/nightOrder/NightOrderPanel.tsx"]) expect(read(module), module).toMatch(/\bpathAbility\(/);
+    for (const module of ["features/grimoire-v6/day/slayer.tsx", "features/grimoire-v6/night/useNightEngine.tsx"]) expect(read(module), module).toMatch(/\bpathAbility\(/);
     expect(read("stores/abilityResolution.ts")).not.toMatch(/timingAllows/);
   });
 
