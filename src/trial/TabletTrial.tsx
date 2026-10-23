@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useStorytellerStore } from "@/stores/storytellerStore";
-import { GameScreen } from "@/features/game/GameScreen";
-import { HomeScreen } from "@/features/home/HomeScreen";
-import { NewGameScreen } from "@/features/newgame/NewGameScreen";
+import { GrimoireV6Screen } from "@/features/grimoire-v6/GrimoireV6Screen";
+import { HomeV6 } from "@/features/grimoire-v6/home/HomeV6";
+import { useV6Ui } from "@/features/grimoire-v6/v6Store";
+import { VotingProvider } from "@/features/voting/VotingWorkspace";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { seedTabletTrial, seedShellDesignTrial, type TrialSize } from "./seed";
 import "./trial.css";
@@ -10,6 +11,7 @@ import "./trial.css";
 export default function TabletTrial() {
   const game = useStorytellerStore(s => s.game);
   const view = useStorytellerStore(s => s.view);
+  const wizarding = useV6Ui(s => !!s.wiz);
   const [error, setError] = useState<string | null>(null);
   const [resetSize, setResetSize] = useState<TrialSize | "design" | null>(null);
   function reset(size: TrialSize | "design") {
@@ -30,7 +32,9 @@ export default function TabletTrial() {
       </div>
     </div>
     {error && <div role="alert" className="tablet-trial-error">{error}</div>}
-    {view === "home" ? <HomeScreen /> : view === "newgame" ? <NewGameScreen /> : game ? <GameScreen /> : <p role="status">Preparing the practice table…</p>}
+    {(view === "game" && game) || (view === "newgame" && (wizarding || game))
+      ? <VotingProvider><GrimoireV6Screen /></VotingProvider>
+      : view === "home" || view === "newgame" ? <HomeV6 /> : <p role="status">Preparing the practice table…</p>}
     {resetSize !== null && <ConfirmDialog title="Reset the practice table?" danger
       confirmLabel={`Reset ${resetSize}`} cancelLabel="Keep playing"
       onConfirm={() => reset(resetSize)} onCancel={() => setResetSize(null)}>
