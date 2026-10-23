@@ -18,7 +18,7 @@ import { flash, useV6Ui } from "../v6Store";
 import { presentPlayerToken, report } from "../info/actions";
 import { mergedDecoration, offerTokenTap, useTokenDecorations } from "../board/overlay";
 import { remArc, remFs, tokenArc } from "../board/remArc";
-import { placeReminder, playerMarks, reminderPalette, removeMark, type Mark, type MarkEnv } from "../board/marks";
+import { placeReminder, playerMarks, reminderPalette, removeMark, unsourcedEffects, type Mark, type MarkEnv } from "../board/marks";
 import { runLifeAction } from "../board/life";
 import { buildPicker, openChoosePicker } from "../board/picker";
 import { useTokenDrag } from "../board/useTokenDrag";
@@ -275,6 +275,20 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
     const top = Math.max(16, Math.min(layout.h - H - 16, Math.max(76, selPos.y - 130)));
     const role = sel.actualRole ? registry.get(sel.actualRole) : undefined;
     const marks = privacy ? [] : playerMarks(env, sel);
+    const unsourced = privacy ? [] : unsourcedEffects(env, sel).map((u) => ({
+      label: u.label, title: u.title, armed: ui.remArm === u.key,
+      remove: () => {
+        clearTimeout(armTimer.current);
+        if (ui.remArm !== u.key) {
+          ui.set({ remArm: u.key });
+          armTimer.current = setTimeout(() => { if (useV6Ui.getState().remArm === u.key) ui.set({ remArm: null }); }, 3000);
+          return;
+        }
+        ui.set({ remArm: null });
+        const result = removeMark(sel.id, sel.participantId, { key: u.key, kind: "effect", label: u.label, title: u.title, src: "", size: 100, removal: u.removal });
+        if (!result.ok) flash(result.message);
+      },
+    }));
     const palette = reminderPalette(env);
     const addList = ui.remAll ? palette.all : palette.inPlay;
     const place = (entry: (typeof addList)[number]) => () => {
@@ -377,7 +391,7 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
         label: entry.label, fs: remFs(entry.label), arc: remArc(entry.label, `add-${entry.role.id}-${entry.label}`), size: 100, src: iconUrlFor(entry.role),
         title: `${entry.role.name}: ${entry.label}`, add: place(entry),
       })),
-      canAdd: !ended, remCount: marks.length || "", noRems: marks.length === 0, allCount: palette.all.length,
+      unsourced, hasUnsourced: unsourced.length > 0, canAdd: !ended, remCount: marks.length || "", noRems: marks.length === 0, allCount: palette.all.length,
       showPlay: guard(() => ui.set({ remAll: false })), showAll: guard(() => ui.set({ remAll: true })),
       playBg: !ui.remAll ? "rgba(176,186,204,.2)" : "transparent", playFg: !ui.remAll ? "#ffb4a6" : "rgba(222,216,204,.55)",
       allBg: ui.remAll ? "rgba(176,186,204,.2)" : "transparent", allFg: ui.remAll ? "#ffb4a6" : "rgba(222,216,204,.55)",
