@@ -1,4 +1,4 @@
-import { useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { useRef, useState, type ReactNode, type RefObject } from "react";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import { AbilityWorkspace } from "@/features/abilities/AbilityWorkspace";
 import { MAX_NIGHT_STEP_NOTES } from "@/stores/schemas";
@@ -14,14 +14,9 @@ import { SetupInformationAction } from "@/features/nightOrder/SetupInformationAc
 import { CUSTOM_STEP_PREFIX, nightStepName } from "@/features/nightOrder/nightWork";
 import type { V6Ctx } from "../ctx";
 import type { NightEngine } from "./useNightEngine";
+import "./night-custom.css";
 
 const SEMANTICS = CANONICAL_ABILITY_SEMANTICS;
-
-const CHIP: CSSProperties = {
-  minHeight: 36, padding: "0 12px", borderRadius: 10, border: "1px solid rgba(232,88,74,.45)", background: "rgba(232,88,74,.08)",
-  color: "#ffb4a6", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer", textAlign: "left",
-};
-const ALERT: CSSProperties = { margin: 0, fontSize: 13, color: "#f4a595" };
 
 /** Storyteller notes for a custom Night step, the only place a custom step is described. */
 function StepNotes({ day, stepKey, notes }: { day: number; stepKey: string; notes: string }) {
@@ -31,7 +26,7 @@ function StepNotes({ day, stepKey, notes }: { day: number; stepKey: string; note
     <textarea ref={ref} className="step-notes" defaultValue={notes} key={`${day}:${stepKey}:${notes}`} placeholder="ST notes…"
       aria-label="Night step notes" rows={2} maxLength={MAX_NIGHT_STEP_NOTES}
       onBlur={() => useStorytellerStore.getState().setNightStepNotes(day, stepKey, ref.current?.value ?? "")}
-      onInput={(event) => setLength(event.currentTarget.value.length)} style={{ width: "100%" }} />
+      onInput={(event) => setLength(event.currentTarget.value.length)} />
     <TextLimit length={length} max={MAX_NIGHT_STEP_NOTES} />
   </div>;
 }
@@ -52,17 +47,16 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
     const jumpTo = (stepKey: string) => { const step = engine.steps.find((item) => item.stepKey === stepKey); if (step) engine.navigate(step); };
     const trigger = (item: (typeof triggers)[number], hint: string) => {
       const hasRow = engine.steps.some((step) => step.stepKey === item.stepKey);
-      return <button key={`t:${item.stepKey}`} type="button" style={CHIP} onClick={() => hasRow ? jumpTo(item.stepKey) : engine.openTrigger(item)}>
+      return <button key={`t:${item.stepKey}`} type="button" className="gvn-chip" onClick={() => hasRow ? jumpTo(item.stepKey) : engine.openTrigger(item)}>
         {item.roleName} — {item.player.name || `Seat ${item.player.seat + 1}`} · {hint}</button>;
     };
-    rows.push(<div key="dawn-open" role="group" aria-label="Night work not finished" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ fontSize: 12, letterSpacing: ".18em", textTransform: "uppercase", fontWeight: 700, color: "#e7a35b" }}>
-        Not finished: review it, or begin the Day anyway</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {open.map((step) => <button key={step.stepKey} type="button" style={CHIP} onClick={() => engine.navigate(step)}>{nightStepName(step)}</button>)}
+    rows.push(<div key="dawn-open" role="group" aria-label="Night work not finished" className="gvn-dawn">
+      <div className="gvn-dawn-label">Not finished: review it, or begin the Day anyway</div>
+      <div className="gvn-dawn-chips">
+        {open.map((step) => <button key={step.stepKey} type="button" className="gvn-chip" onClick={() => engine.navigate(step)}>{nightStepName(step)}</button>)}
         {triggers.map((item) => trigger(item, "triggered tonight"))}
         {triggerChecks.map((item) => trigger(item, "trigger needs your check"))}
-        {customSteps.map((step) => <button key={step.stepKey} type="button" style={CHIP} onClick={() => engine.navigate(step)}>
+        {customSteps.map((step) => <button key={step.stepKey} type="button" className="gvn-chip" onClick={() => engine.navigate(step)}>
           {game.nightProgress[`${game.day}:${step.stepKey}`]?.notes?.trim() || "Custom night step"}</button>)}
       </div>
     </div>);
@@ -113,8 +107,8 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
       onResolved={({ game: committed }) => engine.finish(committed)} />);
   }
 
-  if (error) rows.push(<p key="error" role="alert" style={ALERT}>{error}</p>);
-  if (refused) rows.push(<p key="refused" role="alert" style={ALERT}>{refused}</p>);
+  if (error) rows.push(<p key="error" role="alert">{error}</p>);
+  if (refused) rows.push(<p key="refused" role="alert">{refused}</p>);
   if (!rows.length) return null;
-  return <div className="gv-night-custom" style={{ display: "flex", flexDirection: "column", gap: 10 }}>{rows}</div>;
+  return <div className="gv-night-custom">{rows}</div>;
 }
