@@ -5,11 +5,11 @@ import type { RulesQuery } from "@/stores/rulesQuery";
 import { currentVotingState } from "@/stores/voting";
 import { ownsAbilityUseReminder } from "@/stores/abilityUseReminders";
 import { butlerReminderOrigin } from "@/stores/butlerSelection";
-import type { EffectIndicatorSummary } from "@/stores/effectRegistry";
 import {
   firstInformationReminderGroups, officialEffectPresentation, officialNotationRole, redHerringNotationCovered,
   type OfficialEffectToken,
 } from "@/features/reminders/officialReminderPresentation";
+import type { EffectIndicatorSummary } from "@/stores/effectRegistry";
 import type { PlayerId, ReminderRecord, RoleDef, Script, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 
 /**
@@ -37,7 +37,11 @@ export type Mark = {
 
 export type MarkEnv = { game: StorytellerLobbyRecord; script: Script | undefined; registry: RoleRegistry; query: RulesQuery | null };
 
-/** Only official reminder token art and character icons are drawn; a condition without official art is a plain disc with its label as text. */
+/**
+ * Only official reminder token art and character icons are drawn. Drunk, Poisoned and Safe come from their
+ * characters' abilities (officialEffectPresentation); an Effect with no official token stays authoritative in the
+ * game record but is not drawn, and no source-free disc is ever invented for it.
+ */
 const ROLE_SIZE = 100;
 
 const times = (label: string, n: number) => (n > 1 ? `${label} ×${n}` : label);
@@ -50,10 +54,6 @@ export function playerMarks(env: MarkEnv, player: STPlayerRecord): Mark[] {
   for (const token of effects.tokens) {
     const label = times(token.label, token.instances.length);
     marks.push({ key: `effect:${token.key}`, kind: "effect", label, title: `${token.role.name}: ${label}`, src: iconUrlFor(token.role), size: ROLE_SIZE, removal: { type: "effect", token } });
-  }
-  for (const summary of effects.fallback) {
-    const label = times(summary.indicator.label, summary.activeCount);
-    marks.push({ key: `indicator:${summary.indicator.key}`, kind: "effect", label, title: `${label}${summary.suppressedCount ? " (suppressed)" : ""}`, src: "", size: ROLE_SIZE, removal: { type: "indicator", summary } });
   }
   const voting = currentVotingState(game);
   const linked = (id: string) => voting.modifiers.find((m) => m.target.playerId === player.id && m.target.participantId === player.participantId && `voting-${m.id}` === id);
@@ -70,6 +70,30 @@ export function playerMarks(env: MarkEnv, player: STPlayerRecord): Mark[] {
     });
   }
   return marks;
+}
+
+/**
+ * Active Effects that have no official token (no verified character source): never drawn on the board, but
+ * never hidden either. The Details card lists them as plain text lines so the Storyteller can find and correct them.
+ */
+export type UnsourcedEffect = { key: string; label: string; title: string; removal: MarkRemoval };
+
+export function unsourcedEffects(env: MarkEnv, player: STPlayerRecord): UnsourcedEffect[] {
+  const { registry, query } = env;
+  if (player.isEmpty || !player.participantId || !env.script || !query) return [];
+  const { fallback } = officialEffectPresentation(player, { query, target: { playerId: player.id, participantId: player.participantId } });
+  return fallback.map((summary) => {
+    const sources = [...new Set(summary.instances.map((effect) => effect.sourceCharacter).filter((id): id is string => !!id))]
+      .map((id) => registry.get(id)?.name ?? id);
+    const label = times(summary.indicator.label, summary.activeCount);
+    const origin = sources.length ? `from ${sources.join(", ")}` : "no source character";
+    return {
+      key: `indicator:${summary.indicator.key}`,
+      label: `${label} · ${origin}${summary.suppressedCount ? " · suppressed" : ""}`,
+      title: `${label}, ${origin}. Tap twice to remove.`,
+      removal: { type: "indicator", summary },
+    };
+  });
 }
 
 export type MarkResult = { ok: true } | { ok: false; message: string };

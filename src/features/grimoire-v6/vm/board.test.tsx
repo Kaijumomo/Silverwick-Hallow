@@ -37,6 +37,32 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); });
 
+describe("slice 4B: effects without an official token", () => {
+  it("are never drawn on the board but stay listed, and removable, in Details", () => {
+    seed15();
+    const empath = holder("empath");
+    const { result } = mount();
+    expect(tokenOf(result.current.board, empath).rems.some((r: any) => /Poisoned/.test(r.label))).toBe(false);
+    act(() => { store().selectPlayer(empath); useV6Ui.getState().set({ card: true }); });
+    const listed = result.current.board.pop.unsourced as Array<{ label: string; remove: () => void }>;
+    expect(result.current.board.pop.hasUnsourced).toBe(true);
+    expect(listed.map((u) => u.label)).toEqual([expect.stringMatching(/^Poisoned · no source character/)]);
+    // Tap twice (arm, then confirm) takes the authoritative Effect away through its command.
+    act(() => listed[0]!.remove());
+    act(() => (result.current.board.pop.unsourced as Array<{ remove: () => void }>)[0]!.remove());
+    expect(store().game!.players[empath]!.effects.filter((e) => e.type === "poisoned" && e.state !== "removed")).toHaveLength(0);
+  });
+
+  it("hides the list in Privacy Mode", () => {
+    seed15();
+    const empath = holder("empath");
+    act(() => usePrivacyStore.getState().setEnabled(true));
+    const { result } = mount();
+    act(() => { store().selectPlayer(empath); useV6Ui.getState().set({ card: true }); });
+    expect(result.current.board.pop.hasUnsourced ?? false).toBe(false);
+  });
+});
+
 describe("slice 4B: board view-model", () => {
   it("draws one token per occupied seat with the shown character, Life and reminders", () => {
     seed15();
@@ -51,9 +77,9 @@ describe("slice 4B: board view-model", () => {
     expect(dead.dead).toBe(true);
     expect(dead.dsTorn).toBe(true);
     const empath = tokenOf(vm, holder("empath"));
-    // Poisoned (an Effect) and the placed notation share the reminder-disc treatment.
+    // The placed notation is drawn; the source-free Poisoned Effect has no official token, so no disc is invented for it.
     expect(empath.rems.length).toBeGreaterThanOrEqual(3);
-    expect(empath.rems.some((r: any) => r.label === "Poisoned")).toBe(true);
+    expect(empath.rems.some((r: any) => r.label === "Poisoned")).toBe(false);
     expect(empath.aria).toContain("reminder");
   });
 
