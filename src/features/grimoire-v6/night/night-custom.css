@@ -1,0 +1,451 @@
+/*
+ * The Night card's embedded controls, drawn the V2 way.
+ *
+ * Everything under .gv-night-custom is the unchanged legacy action components (information, Butler, Bureaucrat,
+ * setup information, the ability workspace) sitting in the V2 Night card's custom slot. Their DOM, ARIA names and
+ * behaviour are untouched; only their paint is replaced here so they read as part of the V2 card: the 48px
+ * number selector, the token "Show" row, the result block, the amber guidance line and the 44px buttons.
+ * Class names added by this slice carry the gvn- prefix. Selectors are doubled on .gv-night-custom where a
+ * legacy rule (theme.css .btn, token-information.css) would otherwise win on specificity.
+ */
+.gv-night-custom {
+  --gvn-text: #ece6da;
+  --gvn-title: #f2ece0;
+  --gvn-muted: rgba(222, 216, 204, .6);
+  --gvn-faint: rgba(222, 216, 204, .55);
+  --gvn-line: rgba(176, 186, 204, .22);
+  --gvn-field: rgba(9, 10, 15, .6);
+  --gvn-accent: #e8584a;
+  --gvn-hot: #ff7a68;
+  --gvn-soft: #ffb4a6;
+  --gvn-amber: #e7a35b;
+  --gvn-serif: "IM Fell English", serif;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--gvn-text);
+  font-size: 14px;
+  line-height: 1.4;
+  min-width: 0;
+}
+.gv-night-custom > * { min-width: 0; }
+.gv-night-custom .night-information > .btn,
+.gv-night-custom .bureaucrat-action .btn,
+.gv-night-custom .ability-stale .btn { align-self: flex-start; }
+
+/* ── Buttons: the V2 Previous / Next family ─────────────────────────────────────────────────────────────── */
+.gv-night-custom .btn {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--gvn-line);
+  background: transparent;
+  color: var(--gvn-text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.2;
+  transition: border-color .2s, background .2s;
+}
+.gv-night-custom .btn:hover:not(:disabled) {
+  background: transparent;
+  border-color: var(--gvn-accent);
+  color: var(--gvn-text);
+}
+.gv-night-custom .btn:disabled { opacity: .4; cursor: not-allowed; }
+.gv-night-custom .btn.btn-gold {
+  border-color: #c0392e;
+  background: rgba(192, 57, 46, .18);
+  color: var(--gvn-soft);
+  font-weight: 700;
+}
+.gv-night-custom .btn.btn-gold:hover:not(:disabled) {
+  background: rgba(192, 57, 46, .3);
+  border-color: #c0392e;
+  color: var(--gvn-soft);
+}
+.gv-night-custom .btn:focus-visible,
+.gv-night-custom summary:focus-visible { outline: 2px solid var(--gvn-hot); outline-offset: 2px; }
+
+/* ── Guidance and hints ─────────────────────────────────────────────────────────────────────────────────── */
+.gv-night-custom .behavior-help,
+.gv-night-custom .disabled-reason,
+.gv-night-custom .ability-field-hint {
+  margin: 0;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.4;
+  color: var(--gvn-faint);
+}
+.gv-night-custom [role="alert"] { margin: 0; font-size: 13px; color: #f4a595; }
+.gv-night-custom .modern-night-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--gvn-soft);
+}
+.gv-night-custom .modern-night-pick::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gvn-hot);
+  box-shadow: 0 0 10px var(--gvn-hot);
+  animation: swBreath 1.8s ease-in-out infinite;
+}
+.gv-night-custom .modern-night-pick + .behavior-help { font-size: 13px; color: var(--gvn-soft); }
+.gv-night-custom .modern-night-pick-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ── The information the Storyteller gives: number selector, answer, token ──────────────────────────────── */
+.gv-night-custom .night-information,
+.gv-night-custom .night-setup-information,
+.gv-night-custom .bureaucrat-action { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+.gv-night-custom .night-information-choices { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.gv-night-custom .night-information-choices::before,
+.gv-night-custom .night-information-answer::before {
+  content: "Show";
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--gvn-faint);
+}
+.gv-night-custom .night-information-choices .btn {
+  min-width: 48px;
+  height: 48px;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 24px;
+  border: 1.5px solid var(--gvn-line);
+  background: rgba(9, 10, 15, .7);
+  color: var(--gvn-faint);
+  font-family: var(--gvn-serif);
+  font-size: 24px;
+  font-weight: 400;
+}
+.gv-night-custom .night-information-choices .btn:hover:not(:disabled) {
+  background: rgba(9, 10, 15, .7);
+  border-color: var(--gvn-accent);
+  color: var(--gvn-hot);
+}
+.gv-night-custom .night-information-choices .btn { flex: none; }
+/* A calculated answer sits in the same 48px well, drawn as the selected option. */
+.gv-night-custom .night-information-answer {
+  position: relative;
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 48px;
+  height: 48px;
+  margin: 0 0 0 52px;
+  padding: 0 14px;
+  border-radius: 24px;
+  border: 1.5px solid var(--gvn-accent);
+  background: rgba(9, 10, 15, .7);
+  color: var(--gvn-hot);
+  font-family: var(--gvn-serif);
+  font-size: 24px;
+  line-height: 1;
+}
+.gv-night-custom .night-information-answer::before {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 8px);
+  transform: translateY(-50%);
+}
+
+/* ── The "Show" row: a token to reveal, drawn like the V2 show action ───────────────────────────────────── */
+.gv-night-custom .token-information-action {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+  min-height: 56px;
+  margin: 0;
+  padding: 8px 14px 8px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--gvn-line);
+  background: rgba(9, 10, 15, .6);
+  text-align: left;
+  justify-items: stretch;
+  animation: swRise .3s ease-out;
+  transition: border-color .2s, background .2s;
+}
+.gv-night-custom .token-information-action:hover {
+  border-color: rgba(232, 88, 74, .6);
+  background: rgba(232, 88, 74, .08);
+}
+.gv-night-custom .token-information-preview { display: contents; }
+.gv-night-custom .token-information-disc {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  width: 40px;
+  height: 40px;
+  aspect-ratio: auto;
+  border: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 30%, #f1e6c9, #b09566);
+  box-shadow: 0 0 0 2px #14151d, 0 0 0 3px rgba(232, 88, 74, .5);
+}
+.gv-night-custom .token-information-disc img { width: 80%; height: 80%; }
+.gv-night-custom .token-information-preview strong {
+  grid-column: 2;
+  grid-row: 2;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.3;
+  color: var(--gvn-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gv-night-custom .token-information-action > .btn {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: end;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--gvn-text);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+  white-space: normal;
+}
+.gv-night-custom .token-information-action > .btn:hover:not(:disabled) { background: transparent; border: 0; color: var(--gvn-text); }
+.gv-night-custom .token-information-action > .btn:only-child { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+/* The whole row presses the button. */
+.gv-night-custom .token-information-action > .btn::before { content: ""; position: absolute; inset: 0; border-radius: 12px; }
+.gv-night-custom .token-information-action > .btn:focus-visible { outline: none; }
+.gv-night-custom .token-information-action > .btn:focus-visible::before { outline: 2px solid var(--gvn-hot); outline-offset: 2px; }
+.gv-night-custom .token-information-action::after {
+  content: "Show ›";
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: #ff8a78;
+}
+/* With no token chosen yet the leading well is the V2 "eye" tile. */
+.gv-night-custom .token-information-action:not(:has(.token-information-preview))::before {
+  content: "";
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(232, 88, 74, .1);
+  -webkit-mask: none;
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e8584a' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'><path d='M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z'/></svg>"),
+    none;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 20px 20px;
+}
+
+/* ── Results ────────────────────────────────────────────────────────────────────────────────────────────── */
+.gv-night-custom .modern-night-result,
+.gv-night-custom .night-information-recipients {
+  display: block;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(232, 88, 74, .08);
+  border: 1px solid rgba(232, 88, 74, .3);
+  font-family: var(--gvn-serif);
+  font-size: 18px;
+  line-height: 1.3;
+  color: var(--gvn-title);
+  animation: swRise .3s ease-out;
+}
+
+/* ── Setup information: one Show row per recipient ──────────────────────────────────────────────────────── */
+.gv-night-custom .night-setup-recipient {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 8px 8px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--gvn-line);
+  background: rgba(9, 10, 15, .6);
+}
+.gv-night-custom .night-setup-recipient > p { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 700; color: var(--gvn-text); overflow-wrap: anywhere; }
+.gv-night-custom .night-setup-recipient > .btn { flex: none; max-width: 60%; white-space: normal; }
+.gv-night-custom .night-setup-information > p { margin: 0; font-size: 13px; color: var(--gvn-faint); }
+
+/* ── Bureaucrat: choose on the board or from the roster ─────────────────────────────────────────────────── */
+.gv-night-custom .modern-night-guidance > summary,
+.gv-night-custom details.information-review > summary,
+.gv-night-custom .action-guidance > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0;
+  list-style: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--gvn-faint);
+}
+.gv-night-custom .modern-night-guidance > summary::-webkit-details-marker,
+.gv-night-custom details.information-review > summary::-webkit-details-marker,
+.gv-night-custom .action-guidance > summary::-webkit-details-marker { display: none; }
+.gv-night-custom .modern-night-guidance > summary::before,
+.gv-night-custom details.information-review > summary::before,
+.gv-night-custom .action-guidance > summary::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform .15s;
+}
+.gv-night-custom .modern-night-guidance[open] > summary::before,
+.gv-night-custom details.information-review[open] > summary::before,
+.gv-night-custom .action-guidance[open] > summary::before { transform: rotate(45deg); }
+.gv-night-custom .modern-night-guidance > summary:hover,
+.gv-night-custom details.information-review > summary:hover,
+.gv-night-custom .action-guidance > summary:hover { color: var(--gvn-text); }
+.gv-night-custom .modern-night-roster { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 6px; }
+.gv-night-custom .modern-night-roster .btn { min-height: 40px; padding: 0 12px; border-color: rgba(232, 88, 74, .45); background: rgba(232, 88, 74, .08); color: var(--gvn-soft); }
+.gv-night-custom .modern-night-roster .btn:hover:not(:disabled) { background: rgba(232, 88, 74, .18); }
+
+/* ── Give information (the manual disclosure) ───────────────────────────────────────────────────────────── */
+.gv-night-custom details.information-review { margin: 0; font-size: 14px; }
+.gv-night-custom .player-information { display: flex; flex-direction: column; gap: 8px; padding: 8px 0 0; }
+.gv-night-custom .information-input { display: flex; flex-direction: column; gap: 6px; }
+
+/* ── Fields, notes ──────────────────────────────────────────────────────────────────────────────────────── */
+.gv-night-custom textarea,
+.gv-night-custom input[type="text"],
+.gv-night-custom input:not([type]),
+.gv-night-custom input[type="search"],
+.gv-night-custom select,
+.gv-night-custom .input {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--gvn-line);
+  background: var(--gvn-field);
+  color: var(--gvn-text);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.gv-night-custom textarea { min-height: 64px; resize: vertical; }
+.gv-night-custom textarea::placeholder,
+.gv-night-custom input::placeholder { color: var(--gvn-faint); opacity: 1; }
+.gv-night-custom textarea:focus,
+.gv-night-custom input:focus,
+.gv-night-custom select:focus { outline: none; border-color: var(--gvn-accent); }
+.gv-night-custom .step-notes { margin: 0; width: 100%; font-size: 14px; border: 1px solid var(--gvn-line); color: var(--gvn-text); font-family: inherit; padding: 8px 12px; overflow: auto; }
+.gv-night-custom .step-notes:focus { border-color: var(--gvn-accent); color: var(--gvn-text); }
+.gv-night-custom .text-limit,
+.gv-night-custom [class*="text-limit"] { font-size: 11px; color: var(--gvn-faint); }
+
+/* ── Dawn: work that is not finished ────────────────────────────────────────────────────────────────────── */
+.gvn-dawn { display: flex; flex-direction: column; gap: 8px; }
+.gvn-dawn-label { font-size: 12px; letter-spacing: .18em; text-transform: uppercase; font-weight: 700; color: var(--gvn-amber); }
+.gvn-dawn-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.gvn-chip {
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(232, 88, 74, .45);
+  background: rgba(232, 88, 74, .08);
+  color: var(--gvn-soft);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background .2s, border-color .2s;
+}
+.gvn-chip:hover { background: rgba(232, 88, 74, .18); border-color: var(--gvn-accent); }
+.gvn-chip:focus-visible { outline: 2px solid var(--gvn-hot); outline-offset: 2px; }
+
+/* ── The ability workspace, flattened into the card ─────────────────────────────────────────────────────── */
+.gv-night-custom .action-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: none;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.gv-night-custom .action-card { position: relative; }
+/* Hide and Close ride the first row of the workspace instead of taking a row of their own. */
+.gv-night-custom .action-card-header { position: absolute; top: 0; right: 0; z-index: 1; display: flex; justify-content: flex-end; padding: 0; border: 0; }
+.gv-night-custom .ability-workspace-body { min-height: 40px; }
+.gv-night-custom .ability-workspace-body > :first-child { padding-right: 112px; }
+.gv-night-custom input[type="radio"],
+.gv-night-custom input[type="checkbox"] { accent-color: var(--gvn-accent); }
+/* The card above already names the character, who and what; the heading stays for assistive technology. */
+.gv-night-custom .action-card-titles {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.gv-night-custom .action-card-controls { display: flex; gap: 8px; }
+.gv-night-custom .action-card-controls .btn { min-height: 36px; min-width: 0; padding: 0 12px; }
+.gv-night-custom .ability-workspace-body,
+.gv-night-custom .action-card .ability-workspace-body { display: flex; flex-direction: column; gap: 10px; padding: 0; overflow: visible; }
+.gv-night-custom .ability-section { display: flex; flex-direction: column; gap: 8px; }
+.gv-night-custom .drawer-section-title {
+  margin: 0;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--gvn-faint);
+}
+.gv-night-custom .ability-field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--gvn-text); }
+.gv-night-custom .ability-field-label { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--gvn-faint); }
+.gv-night-custom .ability-choice { display: inline-flex; align-items: center; gap: 6px; margin: 0 12px 0 0; font-size: 14px; }
+.gv-night-custom .ability-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.gv-night-custom .ability-preview ul { margin: 0; padding-left: 18px; font-size: 13px; }
+.gv-night-custom .ability-stale { display: flex; flex-direction: column; gap: 8px; color: #f4a595; font-size: 13px; }
+.gv-night-custom .action-guidance .prose,
+.gv-night-custom .prose { margin: 4px 0; font-size: 13px; color: var(--gvn-muted); }
+.gv-night-custom .drawer-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.gv-night-custom .origin-tag { margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: 11px; }
+.gv-night-custom .manual-ops { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; }
+.gv-night-custom .manual-op { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.gv-night-custom .manual-op-kind { min-width: 7em; font-size: 12px; color: var(--gvn-muted); }
+.gv-night-custom .manual-add { display: flex; flex-wrap: wrap; gap: 6px; }
