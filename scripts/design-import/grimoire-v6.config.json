@@ -20,6 +20,10 @@
     {
       "regex": "<img src=\"https://release\\.botc\\.app/resources/characters/tb/imp_e\\.webp\"([^>]*)>",
       "replace": "<sc-if value=\"{{ scriptEmblem }}\"><img src=\"{{ scriptEmblem }}\"$1></sc-if>"
+    },
+    {
+      "regex": "(<div style=\"display:flex; align-items:center; gap:8px; margin-top:2px;\">\\s*<button onClick=\"\\{\\{ prevStep \\}\\}\" style=\"height:44px)",
+      "replace": "<sc-if value=\"{{ night.hasCustom }}\"><div style=\"display:flex; flex-direction:column; gap:10px;\">{{ night.custom }}</div></sc-if>$1"
     }
   ]
 }
