@@ -31,8 +31,6 @@ export type EffectIndicatorDefinition = {
   key: string;
   label: string;
   family: EffectVisualFamily;
-  /** Decorative artwork; the indicator is always also labelled in text. */
-  icon?: string;
 };
 
 export type EffectDefinition = {
@@ -46,9 +44,9 @@ export type EffectDefinition = {
 };
 
 const INDICATORS: Record<string, EffectIndicatorDefinition> = {
-  drunk: { key: "drunk", label: "Drunk", family: "impairment", icon: "/status/drunk.png" },
-  poisoned: { key: "poisoned", label: "Poisoned", family: "impairment", icon: "/status/poisoned.png" },
-  protected: { key: "protected", label: "Protected", family: "protection", icon: "/status/protected.png" },
+  drunk: { key: "drunk", label: "Drunk", family: "impairment" },
+  poisoned: { key: "poisoned", label: "Poisoned", family: "impairment" },
+  protected: { key: "protected", label: "Protected", family: "protection" },
   soberHealthy: { key: "soberHealthy", label: "Sober & healthy", family: "abilityState" },
   abilityLost: { key: "abilityLost", label: "No ability", family: "abilityState" },
   mad: { key: "mad", label: "Mad", family: "obligation" },
