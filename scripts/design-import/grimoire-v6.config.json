@@ -6,7 +6,7 @@
   ],
   "templatePatches": [
     {
-      "regex": "WICK(<span style=\"color:rgba\\(232,88,74,\\.7\\); letter-spacing:0; margin:0 \\.3em 0 \\.1em;\">–</span>)7Q3M",
+      "regex": "WICK(<span style=\"color:rgba\\(232,88,74,\\.7\\); letter-spacing:0; margin:0 \\.3em 0 \\.1em;\">\u2013</span>)7Q3M",
       "replace": "{{ code.head }}$1{{ code.tail }}"
     },
     {
@@ -24,6 +24,35 @@
     {
       "regex": "(<div style=\"display:flex; align-items:center; gap:8px; margin-top:2px;\">\\s*<button onClick=\"\\{\\{ prevStep \\}\\}\" style=\"height:44px)",
       "replace": "<sc-if value=\"{{ night.hasCustom }}\"><div style=\"display:flex; flex-direction:column; gap:10px;\">{{ night.custom }}</div></sc-if>$1"
+    },
+    {
+      "regex": ">Trouble Brewing</span>(<span style=\"font-size:13px;[^>]*>\\{\\{ refM\\.count \\}\\} characters)",
+      "replace": ">{{ refM.script }}</span>$1"
+    },
+    {
+      "regex": "(<a href=\"\\{\\{ refM\\.sel\\.wiki \\}\\}\".*?</svg></a>)",
+      "replace": "<sc-if value=\"{{ refM.sel.hasWiki }}\">$1</sc-if>",
+      "flags": "s"
+    },
+    {
+      "regex": "(<div style=\"display:grid; grid-template-columns:minmax\\(0,1fr\\) minmax\\(0,1fr\\); gap:10px;\">\\s*<button onClick=\"\\{\\{ endDlg\\.good \\}\\}\".*?Evil wins</button>\\s*</div>)(\\s*<button onClick=\"\\{\\{ endDlg\\.close \\}\\}\"[^>]*>Keep playing</button>)",
+      "replace": "<sc-if value=\"{{ endDlg.notice }}\"><div style=\"font-size:13px; line-height:1.45; color:rgba(222,216,204,.65);\">{{ endDlg.notice }}</div></sc-if><sc-if value=\"{{ endDlg.choices }}\">$1</sc-if><sc-if value=\"{{ endDlg.recovery }}\"><button onClick=\"{{ endDlg.retry }}\" style=\"min-height:52px; border-radius:14px; border:1px solid rgba(224,200,140,.5); background:rgba(224,200,140,.08); color:#ecd9a8; font-family:'IM Fell English', serif; font-size:22px; font-weight:400; cursor:pointer;\" style-hover=\"background:rgba(224,200,140,.16);\">Retry saving result</button></sc-if><sc-if value=\"{{ endDlg.error }}\"><div role=\"alert\" style=\"font-size:13px; line-height:1.4; color:#f4a595;\">{{ endDlg.error }}</div></sc-if>$2<sc-if value=\"{{ endDlg.choices }}\"><button onClick=\"{{ endDlg.noResult }}\" style=\"align-self:center; margin-top:-12px; min-height:36px; padding:0 18px; border:none; background:transparent; color:rgba(222,216,204,.45); font-family:inherit; font-size:12px; cursor:pointer;\" style-hover=\"color:#ece6da;\">End without a result</button></sc-if>",
+      "flags": "s"
+    },
+    {
+      "_why": "The Card nomination result button names the next step (Next nomination / Exiled \u00b7 died / Execute \u00b7 died / Begin Night N / Use current table ...). Default text stays 'Next nomination'.",
+      "regex": "(style=\"flex:none; min-height:48px; padding:0 22px; border-radius:12px; border:1px solid #c0392e;[^\"]*\"[^>]*>)Next nomination(</button>)",
+      "replace": "$1{{ ns.nextText }}$2"
+    },
+    {
+      "_why": "One slot at the foot of the Card nomination for the follow-ups the design has no face for (Virgin, exile, execution outcome, refusal text, vote corrections, the \u00b7\u00b7\u00b7 options). Rendered by day/NominationExtras.tsx in the card's own button style.",
+      "regex": "(<span style=\"font-family:'IM Fell English', serif; font-size:16px; color:rgba\\(236,230,218,\\.75\\);\">\\{\\{ ns\\.resultSub \\}\\}</span>\\s*</div>\\s*<button onClick=\"\\{\\{ ns\\.next \\}\\}\"[^>]*>\\{\\{ ns\\.nextText \\}\\}</button>\\s*</div>\\s*</sc-if>)(\\s*</div>\\s*</div>\\s*</sc-if>\\s*<sc-if value=\"\\{\\{ ns\\.scrollOn \\}\\}\")",
+      "replace": "$1\n        <sc-if value=\"{{ ns.extraOn }}\" hint-placeholder-val=\"{{ false }}\">{{ ns.extra }}</sc-if>$2"
+    },
+    {
+      "_why": "The \u00b7\u00b7\u00b7 options affordance of the Card nomination is positioned inside the card (absolute), so it takes no layout space and the card keeps the design's size.",
+      "regex": "(style=\"width:100%;)( padding:16px 18px 18px; border-radius:20px;)",
+      "replace": "$1 position:relative;$2"
     }
   ]
 }
