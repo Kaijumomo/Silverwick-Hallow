@@ -1578,6 +1578,64 @@ type StorytellerPatch =
   | (Partial<StorytellerStore> & { [SKIP_LOCAL_SEQ]?: boolean; [TERMINAL_COMMIT]?: boolean })
   | ((state: StorytellerStore) => Partial<StorytellerStore> & { [SKIP_LOCAL_SEQ]?: boolean; [TERMINAL_COMMIT]?: boolean });
 
+/**
+ * The pristine setup game of a plan: planned seats, Fabled / Loric and any seat names, with no side effect.
+ * newGame opens it; the Grimoire's New Game draft (steps before the game exists) previews it.
+ */
+export function buildSetupGame(script: Script, opts: NewGameOpts = {}): StorytellerLobbyRecord {
+  const count = Math.max(0, Math.min(opts.plannedPlayerCount ?? 0, MAX_TOTAL_PLAYERS));
+  const travelerCount = Math.max(0, Math.min(opts.plannedTravelerCount ?? 0, count));
+  const prePlayers: Record<PlayerId, STPlayerRecord> = {};
+  const preSeatOrder: PlayerId[] = [];
+  for (let i = 0; i < count; i++) {
+    const id = newId();
+    prePlayers[id] = blankPlayer(id, "", i, true);
+    preSeatOrder.push(id);
+  }
+  const game: StorytellerLobbyRecord = {
+    gameSchemaVersion: GAME_SCHEMA_VERSION,
+    code: "",
+    storytellerUid: "local",
+    scriptId: script.id,
+    phase: "setup",
+    day: 0,
+    bluffs: [],
+    // Normalized exactly like setFabled / setLorics: catalogue ids only,
+    // de-duplicated, never a second definition of the rule.
+    fabled: [...new Set((opts.plannedFabled ?? []).filter((id) => FABLED.some((f) => f.id === id)))],
+    lorics: [...new Set((opts.plannedLorics ?? []).filter((id) => LORICS.some((l) => l.id === id)))],
+    notes: "",
+    players: prePlayers,
+    seatOrder: preSeatOrder,
+    nightProgress: {},
+    rolePool: opts.plannedRoles ?? [],
+    plannedPlayerCount: count,
+    plannedTravelerCount: travelerCount,
+    pendingPlayers: {},
+    history: [],
+    informationDeliveries: [],
+    preparedInformation: [],
+    playerInfoLog: [],
+    // Phase 10A: a fresh game observes every Life Event from Night 1.
+    lifeEventWindow: freshLifeEventWindow(),
+    // Phase 10G: no game-scoped Rule Fact exists before Live Play.
+    gameRuleFacts: [],
+  };
+  // Offline "Seat the town": fold the names in seat order through the
+  // single occupancy entry point, each against the game as it stands
+  // after the previous seat (the same sequence addPlayerToSeat runs).
+  let seated: StorytellerLobbyRecord = game;
+  (opts.plannedSeatNames ?? []).slice(0, count).forEach((raw, index) => {
+    const name = typeof raw === "string" ? raw.trim().slice(0, 20) : "";
+    const seatId = preSeatOrder[index];
+    if (!name || /[\r\n\t]/.test(name) || !seatId) return;
+    const seat = seated.players[seatId];
+    if (!seat) return;
+    seated = { ...seated, players: { ...seated.players, [seatId]: occupySeat(seat, name, seated) } };
+  });
+  return seated;
+}
+
 export const useStorytellerStore = create<StorytellerStore>()(
   persist(
     (rawSet, get) => {
@@ -1802,56 +1860,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // Section 4): the store boundary enforces the supported total cap
         // independently of the UI stepper/table, so malformed UI or
         // programmatic input can never create an unsupported plan.
-        const count = Math.max(0, Math.min(opts.plannedPlayerCount ?? 0, MAX_TOTAL_PLAYERS));
-        const travelerCount = Math.max(0, Math.min(opts.plannedTravelerCount ?? 0, count));
-        const prePlayers: Record<PlayerId, STPlayerRecord> = {};
-        const preSeatOrder: PlayerId[] = [];
-        for (let i = 0; i < count; i++) {
-          const id = newId();
-          prePlayers[id] = blankPlayer(id, "", i, true);
-          preSeatOrder.push(id);
-        }
-        const game: StorytellerLobbyRecord = {
-          gameSchemaVersion: GAME_SCHEMA_VERSION,
-          code: "",
-          storytellerUid: "local",
-          scriptId: script.id,
-          phase: "setup",
-          day: 0,
-          bluffs: [],
-          // Normalized exactly like setFabled / setLorics: catalogue ids only,
-          // de-duplicated, never a second definition of the rule.
-          fabled: [...new Set((opts.plannedFabled ?? []).filter((id) => FABLED.some((f) => f.id === id)))],
-          lorics: [...new Set((opts.plannedLorics ?? []).filter((id) => LORICS.some((l) => l.id === id)))],
-          notes: "",
-          players: prePlayers,
-          seatOrder: preSeatOrder,
-          nightProgress: {},
-          rolePool: opts.plannedRoles ?? [],
-          plannedPlayerCount: count,
-          plannedTravelerCount: travelerCount,
-          pendingPlayers: {},
-          history: [],
-          informationDeliveries: [],
-          preparedInformation: [],
-          playerInfoLog: [],
-          // Phase 10A: a fresh game observes every Life Event from Night 1.
-          lifeEventWindow: freshLifeEventWindow(),
-          // Phase 10G: no game-scoped Rule Fact exists before Live Play.
-          gameRuleFacts: [],
-        };
-        // Offline "Seat the town": fold the names in seat order through the
-        // single occupancy entry point, each against the game as it stands
-        // after the previous seat (the same sequence addPlayerToSeat runs).
-        let seated: StorytellerLobbyRecord = game;
-        (opts.plannedSeatNames ?? []).slice(0, count).forEach((raw, index) => {
-          const name = typeof raw === "string" ? raw.trim().slice(0, 20) : "";
-          const seatId = preSeatOrder[index];
-          if (!name || /[\r\n\t]/.test(name) || !seatId) return;
-          const seat = seated.players[seatId];
-          if (!seat) return;
-          seated = { ...seated, players: { ...seated.players, [seatId]: occupySeat(seat, name, seated) } };
-        });
+        const seated = buildSetupGame(script, opts);
         usePrivacyStore.getState().reset();
         // PR-10H-003: the previous game's Night cursor (its step keys repeat
         // across games) never reaches this game's Night.

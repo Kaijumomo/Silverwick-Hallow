@@ -1,0 +1,13 @@
+/* Animations the Home design declares in its <helmet>; the rest (swSpin, swFlicker, swRise) already ship with the Grimoire. */
+@keyframes swHbMoon { 0%, 100% { opacity: .55; transform: scale(1); } 50% { opacity: .9; transform: scale(1.08); } }
+@keyframes swHbMist { 0% { transform: translateX(-12%); } 100% { transform: translateX(12%); } }
+@keyframes swHbShimmer { 0% { background-position: 0 0; } 100% { background-position: 0 -120px; } }
+@keyframes swHbTwinkle { 0%, 100% { opacity: .15; } 50% { opacity: .9; } }
+@keyframes swHbCloud { 0% { transform: translateX(0); } 100% { transform: translateX(-6%); } }
+
+.hv-root { position: absolute; inset: 0; overflow: hidden; background: #070606; color: #d8c9a4; -webkit-font-smoothing: antialiased; }
+.hv-root a { color: #e0b96a; text-decoration: none; }
+.hv-root a:hover { color: #f2cf7e; }
+.hv-root *::-webkit-scrollbar { display: none; }
+.hv-root input::placeholder { color: rgba(234, 220, 184, .35); }
+.hv-gear { position: absolute; top: 14px; right: 14px; z-index: 5; }

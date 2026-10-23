@@ -2,9 +2,10 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { isTabletTrial } from "@/config/trial";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { takeMigrationResetFlag } from "@/stores/storytellerStore";
-import { HomeScreen } from "@/features/home/HomeScreen";
-import { GameScreen } from "@/features/game/GameScreen";
-import { NewGameScreen } from "@/features/newgame/NewGameScreen";
+import { HomeV6 } from "@/features/grimoire-v6/home/HomeV6";
+import { GrimoireV6Screen } from "@/features/grimoire-v6/GrimoireV6Screen";
+import { VotingProvider } from "@/features/voting/VotingWorkspace";
+import { useV6Ui } from "@/features/grimoire-v6/v6Store";
 import { PlayerScreen } from "@/features/player/PlayerScreen";
 import { PublicDisplayScreen } from "@/features/publicDisplay/PublicDisplayScreen";
 import { isFirebaseConfigured } from "@/firebase/config";
@@ -39,6 +40,8 @@ function NormalApp() {
   const publicCode = readPublicDisplayCodeFromUrl();
   const joinCode = readJoinCodeFromUrl();
   const view = useStorytellerStore((s) => s.view);
+  const hasGame = useStorytellerStore((s) => !!s.game);
+  const wizarding = useV6Ui((s) => !!s.wiz);
   const [migrationResetBanner, setMigrationResetBanner] = useState(false);
 
   useEffect(() => {
@@ -54,6 +57,9 @@ function NormalApp() {
       console.warn("[firebase auto-connect]", e instanceof Error ? e.message : e);
     });
   }, []);
+
+  // The unified Grimoire carries Setup too: New Game opens it on the wizard, Resume on the saved game.
+  const showGrimoire = (view === "game" && hasGame) || (view === "newgame" && (wizarding || hasGame));
 
   if (publicCode !== null) {
     return (
@@ -81,13 +87,7 @@ function NormalApp() {
           <button className="btn btn-sm" onClick={() => setMigrationResetBanner(false)}>dismiss</button>
         </div>
       )}
-      {view === "game" ? (
-        <GameScreen />
-      ) : view === "newgame" ? (
-        <NewGameScreen />
-      ) : (
-        <HomeScreen />
-      )}
+      {showGrimoire ? <VotingProvider><GrimoireV6Screen /></VotingProvider> : <HomeV6 />}
     </div>
   );
 }
