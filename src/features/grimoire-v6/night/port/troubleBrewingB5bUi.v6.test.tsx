@@ -48,9 +48,9 @@ it("Undertaker deliberately reveals the verified token with one delivery and Und
   expect(game().informationDeliveries.at(-1)?.values).toContainEqual({ requirementId: "role", kind: "role", roleId: "chef" });
   expect(store.getState().undoStack).toHaveLength(1); closeReveal(); const accepted = game(); next(); expect(game()).toBe(accepted);
 });
-it("impaired Undertaker uses the existing character chooser and can show a true token", () => {
+it("impaired Undertaker uses the board character picker and can show a true token", () => {
   undertaker(true); reveal(); expect(game().informationDeliveries).toHaveLength(0);
-  expect(screen.getByRole("searchbox", { name: "Search chooser characters" })).toBeInTheDocument();
+  expect(screen.getByText(/choose a character to show/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Chef" }));
   expect(screen.getByRole("dialog", { name: "This Character" })).toHaveTextContent("Chef");
   expect(game().informationDeliveries).toHaveLength(1);
@@ -84,7 +84,7 @@ it("the target tap's compatibility click cannot also select an impaired characte
   ravenkeeper(true); tap("p2"); const before = game();
   const token = screen.getByRole("button", { name: "Gossip" });
   fireEvent.click(token, { detail: 1 });
-  expect(game()).toBe(before); expect(screen.getByRole("searchbox")).toBeInTheDocument();
+  expect(game()).toBe(before); expect(screen.getByText(/choose a character to show/)).toBeInTheDocument();
   fireEvent.pointerDown(token, { pointerType: "touch", pointerId: 2 });
   fireEvent.click(token, { detail: 1 });
   expect(game().informationDeliveries).toHaveLength(1);
@@ -98,7 +98,7 @@ it("Privacy Mode masks an open character reveal and cancels a pending chooser", 
 it("a corrected execution invalidates the open Undertaker picker without delivery", () => {
   undertaker(true); reveal();
   act(() => store.setState({ game: { ...game(), lifeEventWindow: { ...game().lifeEventWindow!, events: [] } } }));
-  expect(screen.queryByRole("searchbox")).toBeNull(); expect(game().informationDeliveries).toHaveLength(0);
+  expect(screen.queryByText(/choose a character to show/)).toBeNull(); expect(game().informationDeliveries).toHaveLength(0);
 });
 it("failed persistence neither reveals nor completes Undertaker", () => {
   undertaker(); const before = game();

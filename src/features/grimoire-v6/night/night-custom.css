@@ -464,3 +464,19 @@
 .gv-night-custom .gvn-show-text small { font-size: 12px; color: rgba(222, 216, 204, 0.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gv-night-custom .gvn-show-go { flex: none; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #ff8a78; }
 .gv-night-custom .gvn-show-go svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ── Reveal a Token: the Information panel's token button (PO review C06/C12) ─────────────────────────── */
+.gv-night-custom .gvn-reveal { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-width: 0; }
+.gv-night-custom .gvn-reveal-role { display: inline-flex; align-items: center; gap: 8px; min-width: 0; color: var(--gvn-text); font-size: 14px; font-weight: 700; }
+.gv-night-custom .gvn-reveal-disc {
+  display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 50%;
+  background: radial-gradient(circle at 38% 30%, #f1e6c9, #b09566); box-shadow: 0 0 0 2px #14151d, 0 0 0 3px rgba(232, 88, 74, .5);
+}
+.gv-night-custom .gvn-reveal-disc img { width: 80%; height: 80%; object-fit: contain; }
+.gv-night-custom .gvn-info-token {
+  min-height: 36px; padding: 4px 10px; border-radius: 9px; border: 1px solid rgba(176, 186, 204, .18); background: rgba(9, 10, 15, .55);
+  color: #ece6da; font-family: inherit; font-size: 12px; font-weight: 600; line-height: 1.15; text-align: left; cursor: pointer;
+  display: flex; align-items: center; gap: 7px; min-width: 0;
+}
+.gv-night-custom .gvn-info-token:hover { border-color: #c0392e; background: rgba(192, 57, 46, .08); }
+.gv-night-custom .gvn-info-token svg { width: 14px; height: 14px; flex: none; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }

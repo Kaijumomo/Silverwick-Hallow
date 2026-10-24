@@ -41,8 +41,8 @@ it("independent: dead Ravenkeeper can target itself and the intentional reveal c
 });
 
 it("independent: Privacy while selecting an impaired token unmounts the chooser and produces no delivery", () => {
-  ravenkeeper(true); tap("p2"); const before = game(); expect(screen.getByRole("searchbox")).toBeInTheDocument();
-  act(() => usePrivacyStore.getState().setEnabled(true)); expect(screen.queryByRole("searchbox")).toBeNull(); expect(screen.queryByRole("dialog")).toBeNull();
+  ravenkeeper(true); tap("p2"); const before = game(); expect(screen.getByText(/choose a character to show/)).toBeInTheDocument();
+  act(() => usePrivacyStore.getState().setEnabled(true)); expect(screen.queryByText(/choose a character to show/)).toBeNull(); expect(screen.queryByRole("dialog")).toBeNull();
   expect(game()).toBe(before); expect(game().informationDeliveries).toEqual([]);
 });
 
@@ -50,7 +50,7 @@ it("independent: storage failure at token choice cannot reveal or consume the Ra
   ravenkeeper(true); tap("p2"); const before = game();
   vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new DOMException("Full", "QuotaExceededError"); });
   fireEvent.click(screen.getByRole("button", { name: "Chef" }));
-  expect(game()).toBe(before); expect(screen.getByRole("searchbox")).toBeInTheDocument();
+  expect(game()).toBe(before); expect(screen.getByText(/choose a character to show/)).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Return to Grimoire" })).toBeNull(); expect(store.getState().undoStack).toEqual([]);
 });
 

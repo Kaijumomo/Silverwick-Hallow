@@ -1,11 +1,11 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
 import { CANONICAL_ABILITY_SEMANTICS, type AbilityInputs } from "@/abilities/semantics";
 import { captureFingerprint, planAbilityResolution, type AbilityResolutionRequest, type ParticipantBinding } from "@/stores/abilityResolution";
 import { captureCharacterActionContext, useStorytellerStore } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { buildRegistry, resolvedCharacters } from "@/data/roleRegistry";
 import { seatedParticipants, useTargetPicker, type StepAbility } from "@/features/abilities/abilityUi";
-import type { Script, StorytellerLobbyRecord } from "@/stores/types";
+import type { RoleDef, RoleType, Script, StorytellerLobbyRecord } from "@/stores/types";
 import type { NightStep } from "./nightOrder";
 import { chefMaximumPairs } from "@/abilities/characters/chef";
 import { createRulesQuery } from "@/stores/rulesQuery";
@@ -20,10 +20,19 @@ export const CALCULATED_INFORMATION_ROLES = new Set(["chef", "empath", "fortunet
 export const NIGHT_INFORMATION_ROLES = new Set([...CALCULATED_INFORMATION_ROLES, "undertaker", "ravenkeeper"]);
 const EMPTY_INPUTS: AbilityInputs = {};
 export type NightInformationHandle = { next: () => boolean };
+/** How a host screen reveals a character token: its own button, character picker and player view.
+ * The action still owns the ability: it plans, commits and decides which token is shown. */
+export type RevealHost = {
+  button: (props: { role?: RoleDef; onClick: () => void }) => ReactNode;
+  show: (roleId: string) => void;
+  /** `pick` answers with a refusal message, or undefined once the token was accepted. */
+  choose: (pick: (roleId: string) => string | undefined, types?: RoleType[]) => void;
+  cancel: () => void;
+};
 type Props = {
   game: StorytellerLobbyRecord; script: Script; step: Extract<NightStep, { kind: "player" }>;
   ability: Extract<StepAbility, { kind: "guided" }>; visible: boolean; resolved: boolean;
-  onResolved: (game: StorytellerLobbyRecord) => void; onManual: () => void;
+  onResolved: (game: StorytellerLobbyRecord) => void; onManual: () => void; reveal?: RevealHost;
 };
 
 /** In-panel presentation of the existing coordinator's result. No rules or
@@ -33,7 +42,7 @@ export const NightInformationAction = forwardRef<NightInformationHandle, Props>(
 });
 
 const InformationAction = forwardRef<NightInformationHandle, Props>(function InformationAction(
-  { game, script, step, ability, visible, resolved, onResolved, onManual }, ref,
+  { game, script, step, ability, visible, resolved, onResolved, onManual, reveal }, ref,
 ) {
   const registry = useMemo(() => buildRegistry(script), [script]);
   const environment = useMemo(() => ({ script, registry, semantics: CANONICAL_ABILITY_SEMANTICS }), [script, registry]);
@@ -74,12 +83,23 @@ const InformationAction = forwardRef<NightInformationHandle, Props>(function Inf
     [game, inputs, resolved, step.stepKey, environment]);
   const requirement = preview && !preview.ok && preview.code === "needsInput" && preview.requirements?.length === 1
     ? preview.requirements[0] : undefined;
+  const choosing = useRef(false);
+  const openChooser = (answers: AbilityInputs, id: string) => {
+    if (!reveal) { setChooser({ game, inputs: answers, id }); return; }
+    choosing.current = true;
+    reveal.choose(roleId => {
+      if (!safe()) return "The game changed. Review this step again.";
+      return commit({ ...answers, [id]: { kind: "character", roleIds: [roleId] } }, roleId) ? undefined : "That token could not be shown. Review this step.";
+    });
+  };
+  useEffect(() => () => { if (choosing.current) reveal?.cancel(); }, [game, step.stepKey]);
   const safe = () => live.current.game === game && live.current.visible && !live.current.resolved
     && useStorytellerStore.getState().game === game && !usePrivacyStore.getState().enabled && submitted.current !== game;
   const showCharacter = (roleId: string, expectedGame = game) => {
     if (!live.current.visible || useStorytellerStore.getState().game !== expectedGame || usePrivacyStore.getState().enabled) return;
     const context = captureInfoContext(), role = registry.get(roleId);
     if (!role || !infoContextCurrent(context)) return;
+    if (reveal) { reveal.show(roleId); return; }
     present({ context, payload: { kind: "character", heading: "This Character", character: characterCard(role) } });
   };
   const commit = (answers: AbilityInputs, revealRole?: string) => {
@@ -89,6 +109,7 @@ const InformationAction = forwardRef<NightInformationHandle, Props>(function Inf
     submitted.current = game;
     useTargetPicker.getState().cancel();
     setChooser(null);
+    choosing.current = false;
     const committed = useStorytellerStore.getState().game!;
     if (revealRole) setAcceptedToken({ game: committed, stepKey: step.stepKey, roleId: revealRole });
     onResolved(committed);
@@ -115,7 +136,7 @@ const InformationAction = forwardRef<NightInformationHandle, Props>(function Inf
     setDraft({ game, inputs: next });
     if (targets.length + 1 < targetCount) return;
     useTargetPicker.getState().cancel();
-    if (simulatedRavenkeeper) { setChooser({ game, inputs: next, id: "shown" }); return; }
+    if (simulatedRavenkeeper) { openChooser(next, "shown"); return; }
     const plan = planAbilityResolution(game, request(next), environment);
     if (plan.ok) {
       const operation = plan.changed ? plan.plan.outcome.operations.find(item => item.domain === "information") : undefined;
@@ -123,7 +144,7 @@ const InformationAction = forwardRef<NightInformationHandle, Props>(function Inf
       commit(next, token?.kind === "role" ? token.roleId : undefined);
     }
     else if (plan.code === "needsInput" && plan.requirements?.length === 1 && plan.requirements[0]?.source === "storyteller" && plan.requirements[0].kind === "character") {
-      setChooser({ game, inputs: next, id: plan.requirements[0].id });
+      openChooser(next, plan.requirements[0].id);
     }
     else if (plan.code !== "needsInput" || plan.requirements?.some(item => item.source === "judgment")) onManual();
   };
@@ -163,11 +184,15 @@ const InformationAction = forwardRef<NightInformationHandle, Props>(function Inf
   const choices = requirement?.kind === "boolean" ? [false, true] : numberChoices;
   return <div className="night-information">
     {characterInformation && (token?.kind === "role" || requirement?.kind === "character" || simulatedRavenkeeper && !resolved && !manualWake) &&
-      <TokenInformationAction role={token?.kind === "role" ? registry.get(token.roleId) : undefined} label="Reveal a Token" onClick={() => {
-        if (simulatedRavenkeeper && !resolved && !manualWake) { setManualWake(true); return; }
-        if (token?.kind === "role") { if (resolved) showCharacter(token.roleId); else commit(inputs, token.roleId); }
-        else if (requirement?.kind === "character") setChooser({ game, inputs, id: requirement.id });
-      }} />}
+      (() => {
+        const role = token?.kind === "role" ? registry.get(token.roleId) : undefined;
+        const onClick = () => {
+          if (simulatedRavenkeeper && !resolved && !manualWake) { setManualWake(true); return; }
+          if (token?.kind === "role") { if (resolved) showCharacter(token.roleId); else commit(inputs, token.roleId); }
+          else if (requirement?.kind === "character") openChooser(inputs, requirement.id);
+        };
+        return reveal ? reveal.button({ role, onClick }) : <TokenInformationAction role={role} label="Reveal a Token" onClick={onClick} />;
+      })()}
     {value && <div className="night-information-answer" role="status" aria-label="Information to communicate">
       {value.kind === "boolean" ? value.value ? "YES" : "NO" : value.kind === "number" ? value.value : ""}
     </div>}

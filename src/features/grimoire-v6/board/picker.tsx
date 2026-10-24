@@ -120,7 +120,9 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
         tag = mode === "bluff" && bi === slot ? "This slot" : "Bluff"; tagKind = "bluff";
         if (mode === "bluff") { ring = TEAM_COLOR.demon; glow = `0 0 16px ${TEAM_COLOR.demon}66`; }
       }
-      const locked = (mode === "bluff" && type === "traveler") || (mode === "drunk" && !shownChoices.some((r) => r.id === role.id));
+      const showTypes = mode === "show" ? (picker as Extract<PickerState, { mode: "show" }>).types : undefined;
+      const locked = (mode === "bluff" && type === "traveler") || (mode === "drunk" && !shownChoices.some((r) => r.id === role.id))
+        || (!!showTypes && !showTypes.includes(type));
       return tileFor(role, {
         filter, ring, glow, nameColor, tag, tagKind, pressed: dist ? on : !!mine, locked,
         aria: `${role.name}${bi >= 0 ? ", Demon bluff" : ""}${dist ? (on ? ", selected" : "") : used ? `, in use by ${holder.join(", ")}` : mine ? ", current" : ""}`,
@@ -160,7 +162,7 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
     title: mode === "drunk" ? `Who does ${name || "the Drunk"} think they are?` : dist ? "Distribute Roles" : mode === "bluff" ? `Demon bluff ${slot + 1} of 3`
       : mode === "show" ? (picker as Extract<PickerState, { mode: "show" }>).title : `Choose a character for ${name}`,
     kicker: mode === "drunk" ? "The Drunk · choose a Townsfolk that is not in play" : mode === "bluff" ? "Choose a character that is not in play"
-      : mode === "show" ? "Information token · choose a character to show"
+      : mode === "show" ? (picker as Extract<PickerState, { mode: "show" }>).kicker ?? "Information token · choose a character to show"
       : dist ? `${script.name} · ${residents} residents${context.travelers.length ? ` · ${context.travelers.length} traveler${context.travelers.length === 1 ? "" : "s"}` : ""}`
       : `Seat ${player ? player.seat + 1 : ""} · ${player?.actualRole ? registry.get(player.actualRole)?.name ?? "Unassigned" : "Unassigned"}`,
   };
@@ -206,7 +208,8 @@ function pickTile(env: PickerEnv, picker: PickerState, role: RoleDef, p: Pick) {
     ui.set({ pickSel: ui.pickSel.includes(role.id) ? ui.pickSel.filter((x) => x !== role.id) : [...ui.pickSel, role.id] });
     return;
   }
-  if (picker.mode === "show") { report(presentCharacter(picker.title, role.id)); return; }
+  // A Night card's Reveal a Token answers its own ability first; the Information panel just shows the token.
+  if (picker.mode === "show") { report(picker.onPick ? picker.onPick(role.id) : presentCharacter(picker.title, role.id)); return; }
   if (picker.mode === "bluff") {
     if (role.type === "traveler") { flash("Travelers cannot be Demon bluffs."); return; }
     const held = p.holders[role.id];

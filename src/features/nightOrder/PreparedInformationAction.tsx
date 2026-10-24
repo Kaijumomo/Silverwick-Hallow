@@ -12,17 +12,17 @@ import { usePrivacyStore } from "@/stores/privacyStore";
 import type { PreparedInformationCharacter, Script, StorytellerLobbyRecord } from "@/stores/types";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { NightStep } from "./nightOrder";
-import type { NightInformationHandle } from "./NightInformationAction";
+import type { NightInformationHandle, RevealHost } from "./NightInformationAction";
 import { TokenInformationAction } from "@/features/info/TokenInformationAction";
 
 type Props = { game: StorytellerLobbyRecord; script: Script; step: Extract<NightStep, { kind: "player" }>;
-  visible: boolean; resolved: boolean; onResolved: (game: StorytellerLobbyRecord) => void };
+  visible: boolean; resolved: boolean; onResolved: (game: StorytellerLobbyRecord) => void; reveal?: RevealHost };
 
 export const PreparedInformationAction = forwardRef<NightInformationHandle, Props>(function PreparedInformationAction(props, ref) {
   return <InfoPresentationBoundary><PreparedAction {...props} ref={ref} /></InfoPresentationBoundary>;
 });
 
-const PreparedAction = forwardRef<NightInformationHandle, Props>(function PreparedAction({ game, script, step, visible, resolved, onResolved }, ref) {
+const PreparedAction = forwardRef<NightInformationHandle, Props>(function PreparedAction({ game, script, step, visible, resolved, onResolved, reveal: host }, ref) {
   const registry = useMemo(() => buildRegistry(script), [script]);
   const environment = useMemo(() => ({ registry, script }), [registry, script]);
   const actor = game.players[step.playerId]!;
@@ -53,6 +53,7 @@ const PreparedAction = forwardRef<NightInformationHandle, Props>(function Prepar
     const role = registry.get(roleId);
     if (!role || !live.current.visible || context.game !== expectedGame || !infoContextCurrent(context)) return;
     setPresented(expectedGame);
+    if (host) { host.show(roleId); return; }
     present({ context, payload: { kind: "character", heading: "This Character", character: characterCard(role) } });
   };
   const replace = (clue: PrepareInformationRequest["clue"], reveal?: string) => {
@@ -106,11 +107,21 @@ const PreparedAction = forwardRef<NightInformationHandle, Props>(function Prepar
   return <div className="night-information">
     {!!names.length && <p className="night-information-recipients">{names.join(" or ")}</p>}
     {(clue?.kind === "zero-outsiders" || zero) && <div className="night-information-answer" role="status" aria-label="Information to communicate">0</div>}
-    {(roleId || choosing) && <TokenInformationAction role={!choosing && roleId ? registry.get(roleId) : undefined} label="Reveal a Token" onClick={() => {
-      if (!safe()) return;
-      if (choosing) setChooser(true);
-      else if (roleId) show(roleId);
-    }} />}
+    {(roleId || choosing) && (() => {
+      const role = !choosing && roleId ? registry.get(roleId) : undefined;
+      const onClick = () => {
+        if (!safe()) return;
+        if (choosing && host) host.choose(id => {
+          if (!safe()) return "The game changed. Review this step again.";
+          if (registry.get(id)?.type !== informationCategory(character)) return "Choose a character of the type this ability shows.";
+          chooseCharacter(id);
+          return undefined;
+        }, [informationCategory(character)]);
+        else if (choosing) setChooser(true);
+        else if (roleId) show(roleId);
+      };
+      return host ? host.button({ role, onClick }) : <TokenInformationAction role={role} label="Reveal a Token" onClick={onClick} />;
+    })()}
     {choosing && character === "librarian" && <button className="btn" onClick={() => replace({ kind: "zero-outsiders" })}>Show 0 Outsiders</button>}
     {resolved && <p className="modern-night-result">Completed</p>}
     {error && <p role="alert">{error}</p>}

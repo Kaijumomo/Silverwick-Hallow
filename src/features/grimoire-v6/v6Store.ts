@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { PlayerId, RoleId } from "@/stores/types";
+import type { PlayerId, RoleId, RoleType } from "@/stores/types";
 
 /**
  * Package 4: UI-only state of the unified Grimoire (the V2 "Storyteller Grimoire v6" design).
@@ -15,7 +15,7 @@ export type PanelKind = "players" | "night" | "info" | "reference";
 export type PickerState =
   | { mode: "distribute" }
   | { mode: "choose"; playerId: PlayerId }
-  | { mode: "show"; title: string }
+  | { mode: "show"; title: string; kicker?: string; types?: RoleType[]; onPick?: (roleId: RoleId) => string | undefined }
   | { mode: "bluff"; slot: number }
   | { mode: "drunk"; playerId: PlayerId };
 

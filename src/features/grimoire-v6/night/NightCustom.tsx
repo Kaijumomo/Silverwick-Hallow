@@ -6,11 +6,15 @@ import { TextLimit } from "@/components/TextLimit";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { BureaucratAction } from "@/features/voting/BureaucratAction";
 import { ButlerNightAction } from "@/features/nightOrder/ButlerNightAction";
-import { NightInformationAction, type NightInformationHandle } from "@/features/nightOrder/NightInformationAction";
+import { NightInformationAction, type NightInformationHandle, type RevealHost } from "@/features/nightOrder/NightInformationAction";
 import { PreparedInformationAction } from "@/features/nightOrder/PreparedInformationAction";
 import { SetupInformationAction } from "@/features/nightOrder/SetupInformationAction";
 import { CUSTOM_STEP_PREFIX, nightStepName } from "@/features/nightOrder/nightWork";
+import { iconUrlFor } from "@/data/iconUrl";
 import type { V6Ctx } from "../ctx";
+import { useV6Ui } from "../v6Store";
+import { presentCharacter, report } from "../info/actions";
+import { INFO_TOKENS } from "../info/tokens";
 import type { NightEngine } from "./useNightEngine";
 import "./night-custom.css";
 
@@ -27,6 +31,51 @@ function StepNotes({ day, stepKey, notes }: { day: number; stepKey: string; note
       onInput={(event) => setLength(event.currentTarget.value.length)} />
     <TextLimit length={length} max={MAX_NIGHT_STEP_NOTES} />
   </div>;
+}
+
+const REVEAL = INFO_TOKENS.find((t) => t.label === "Reveal a Token")!;
+
+/**
+ * The board chooses a target on pointerup, and the picker can open under the same finger. The browser's
+ * following compatibility click must not pick the token that appeared there: until a new pointer gesture
+ * starts, pointer clicks are swallowed. Keyboard activation (detail 0) is always deliberate.
+ */
+function guardGesture() {
+  let armed = false;
+  const arm = () => { armed = true; };
+  const swallow = (event: MouseEvent) => { if (!armed && event.detail > 0) { event.preventDefault(); event.stopPropagation(); } };
+  window.addEventListener("pointerdown", arm, true);
+  window.addEventListener("click", swallow, true);
+  const stop = useV6Ui.subscribe((state) => {
+    if (state.picker?.mode === "show" && state.picker.onPick) return;
+    window.removeEventListener("pointerdown", arm, true);
+    window.removeEventListener("click", swallow, true);
+    stop();
+  });
+}
+
+/** PO review (C06/C12): a Night card reveals a token exactly as the Information panel does: the same
+ * Reveal a Token button, the board's character picker and the same player view. */
+function revealHost(abilityName: string): RevealHost {
+  const title = REVEAL.title ?? REVEAL.label;
+  const cancel = () => { const picker = useV6Ui.getState().picker; if (picker?.mode === "show" && picker.onPick) useV6Ui.getState().set({ picker: null }); };
+  return {
+    button: ({ role, onClick }) => <div className="gvn-reveal">
+      {role && <span className="gvn-reveal-role"><span className="gvn-reveal-disc"><img src={iconUrlFor(role)} alt="" draggable={false} /></span>{role.name}</span>}
+      <button type="button" className="gvn-info-token" onClick={onClick}>
+        <svg viewBox="0 0 24 24" aria-hidden="true" style={{ stroke: REVEAL.color }}><path d={REVEAL.icon} /></svg>
+        <span>{REVEAL.label}</span>
+      </button>
+    </div>,
+    show: (roleId) => report(presentCharacter(title, roleId)),
+    choose: (pick, types) => {
+      guardGesture();
+      useV6Ui.getState().set({ pickHover: null, picker: { mode: "show", title, kicker: `${abilityName} · choose a character to show`, ...(types ? { types } : {}),
+        // The picker closes once the token is accepted, whether or not a player view follows.
+        onPick: (roleId) => { const refusal = pick(roleId); if (!refusal) cancel(); return refusal; } } });
+    },
+    cancel,
+  };
 }
 
 /**
@@ -67,10 +116,11 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
         rows.push(<ButlerNightAction key={current.stepKey} game={game} script={script} source={source} visible={engine.visible} resolved={done} onResolved={engine.finish} />);
       } else if (engine.preparedInformation) {
         rows.push(<PreparedInformationAction key={current.stepKey} ref={information} game={game} script={script} step={current}
-          visible={engine.visible} resolved={done} onResolved={engine.finish} />);
+          visible={engine.visible} resolved={done} onResolved={engine.finish} reveal={revealHost(registry.get(current.effectiveRoleId)?.name ?? "This character")} />);
       } else if (engine.inlineInformation && engine.ability?.kind === "guided") {
         rows.push(<NightInformationAction key={current.stepKey} ref={information} game={game} script={script} step={current}
-          ability={engine.ability} visible={engine.visible} resolved={done} onResolved={engine.finish} onManual={engine.requireManual} />);
+          ability={engine.ability} visible={engine.visible} resolved={done} onResolved={engine.finish} onManual={engine.requireManual}
+          reveal={revealHost(registry.get(current.effectiveRoleId)?.name ?? "This character")} />);
       } else if (!done && engine.bureaucrat && engine.actor?.participantId) {
         rows.push(<BureaucratAction key={`${engine.actor.participantId}:${current.stepKey}`} source={{ playerId: engine.actor.id, participantId: engine.actor.participantId }}
           visible={engine.visible} completeStep={{ day: game.day, stepKey: current.stepKey }} onResolved={engine.finish} />);
