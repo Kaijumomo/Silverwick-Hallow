@@ -109,11 +109,11 @@ describe("10G-AC-24 / AC-25 / AC-26: Night -> Day", () => {
     expect(dawn()).toHaveTextContent("Alice");
   });
 
-  it("Continue to Day anyway advances with exactly the ordinary phase transition -- no acknowledgment is stored", () => {
+  it("Begin Day at Dawn (with work unfinished) advances with exactly the ordinary phase transition -- no acknowledgment is stored", () => {
     render(<Screen />);
     const before = game();
     fireEvent.click(beginDay());
-    fireEvent.click(screen.getByRole("button", { name: "Continue to Day anyway" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Begin Day 2$/ }));
     expect(game()).toMatchObject({ phase: "day", day: 2 });
     expect(game().nightProgress).toEqual(before.nightProgress);
     expect(Object.keys(game()).sort()).toEqual([...new Set([...Object.keys(before), "voting"])].sort());

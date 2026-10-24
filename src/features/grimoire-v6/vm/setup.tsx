@@ -140,7 +140,10 @@ export function useSetupVm(ctx: V6Ctx): SliceResult {
       namedText: `${namedSeats} of ${planned} seats named${nextEmpty >= 0 ? ". Unnamed seats keep a number." : "."}`,
       lobbyTitle, qr: gathering ? qrNode : null, joinedText, needText,
       joinSegs: Array.from({ length: Math.max(planned, present) }, (_, i) => ({ bg: i < present ? "#e8584a" : "rgba(176,186,204,.18)" })),
-      revealOn: setupOn && !gathering && dealt && !revealed, distOn: setupOn && !revealed && !gathering && !needSeating,
+      revealOn: setupOn && !gathering && dealt && !revealed,
+      // PO review A18: in person, Prepare the Town always carries Assign seats and Deal roles, as V2 does. Both keep the
+      // Package 2 gate: under five named seats they say so instead of going ahead.
+      distOn: setupOn && !revealed && (offlineGathering || !gathering && !needSeating),
       inviteOn: !!lobby && !onlineGathering && !ctx.ended, idleOn: !hasT && !gathering,
       stepOn: wizTown, w: Math.round(wizTown ? Math.min(layout.w - 40, Math.max(600, Math.min(740, 2 * (layout.rx - layout.S / 2)))) : Math.max(340, Math.min(540, 2 * (layout.rx - layout.S / 2 - 70)))),
       kicker: setupOn ? "Prepare the town" : "The town",
@@ -170,9 +173,14 @@ export function useSetupVm(ctx: V6Ctx): SliceResult {
   const canFinish = left === 0 || waiting.length === 0;
   const seatC = (() => {
     const base = {
-      btnOn: setupOn && !dealt && !gathering && !revealed,
+      btnOn: setupOn && !dealt && !revealed && (offlineGathering || !gathering),
       btnBorder: needSeating ? "#c0392e" : "rgba(176,186,204,.26)", btnBg: needSeating ? "rgba(192,57,46,.22)" : "rgba(9,10,15,.5)", btnColor: needSeating ? "#ffb4a6" : "#ece6da",
-      open: () => ui.set({ panel: "players", seatMode: true, seatCur: Math.max(0, game.seatOrder.findIndex((id) => game.players[id]?.isEmpty)), card: false }),
+      open: () => {
+        // In person, leaving the name list fills unnamed seats with their numbers first (the dock's Begin the night does the same).
+        if (offlineGathering && !beginOffline()) return;
+        const g = store().game ?? game;
+        ui.set({ panel: "players", seatMode: true, seatCur: Math.max(0, g.seatOrder.findIndex((id) => g.players[id]?.isEmpty)), card: false });
+      },
     };
     if (!ui.seatMode || !setupOn || dealt) return { ...base, on: false };
     return {
@@ -261,7 +269,7 @@ export function useSetupVm(ctx: V6Ctx): SliceResult {
       wiz: wiz ? wizardVm(ctx, wiz, false) : { on: false },
       wizSteps: wiz && setupOn ? wizardSteps(wiz) : [],
       town, rosterMeta, composition, setup: setupKey, seatC, pe,
-      distribute: () => openDistribute(),
+      distribute: () => { if (offlineGathering && !beginOffline()) return; openDistribute(); },
       ...(lobby && setupOn && !gathering && waiting.length ? { queueCount: waiting.length } : {}),
     },
   };

@@ -4,8 +4,6 @@ import { AbilityWorkspace } from "@/features/abilities/AbilityWorkspace";
 import { MAX_NIGHT_STEP_NOTES } from "@/stores/schemas";
 import { TextLimit } from "@/components/TextLimit";
 import { useStorytellerStore } from "@/stores/storytellerStore";
-import { offersNightInformation } from "@/stores/privatePackets";
-import { PlayerInformation } from "@/features/players/PlayerInformation";
 import { BureaucratAction } from "@/features/voting/BureaucratAction";
 import { ButlerNightAction } from "@/features/nightOrder/ButlerNightAction";
 import { NightInformationAction, type NightInformationHandle } from "@/features/nightOrder/NightInformationAction";
@@ -50,15 +48,14 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
       return <button key={`t:${item.stepKey}`} type="button" className="gvn-chip" onClick={() => hasRow ? jumpTo(item.stepKey) : engine.openTrigger(item)}>
         {item.roleName} — {item.player.name || `Seat ${item.player.seat + 1}`} · {hint}</button>;
     };
+    const short = (step: (typeof open)[number]) => step.stepKey === "minionInfo" ? "Minion info" : step.stepKey === "demonInfo" ? "Demon info" : nightStepName(step);
     rows.push(<div key="dawn-open" role="group" aria-label="Night work not finished" className="gvn-dawn">
-      <div className="gvn-dawn-label">Not finished: review it, or begin the Day anyway</div>
-      <div className="gvn-dawn-chips">
-        {open.map((step) => <button key={step.stepKey} type="button" className="gvn-chip" onClick={() => engine.navigate(step)}>{nightStepName(step)}</button>)}
-        {triggers.map((item) => trigger(item, "triggered tonight"))}
-        {triggerChecks.map((item) => trigger(item, "trigger needs your check"))}
-        {customSteps.map((step) => <button key={step.stepKey} type="button" className="gvn-chip" onClick={() => engine.navigate(step)}>
-          {game.nightProgress[`${game.day}:${step.stepKey}`]?.notes?.trim() || "Custom night step"}</button>)}
-      </div>
+      <span className="gvn-dawn-label">Not finished:</span>
+      {open.map((step) => <button key={step.stepKey} type="button" className="gvn-chip" onClick={() => engine.navigate(step)}>{short(step)}</button>)}
+      {triggers.map((item) => trigger(item, "triggered tonight"))}
+      {triggerChecks.map((item) => trigger(item, "trigger needs your check"))}
+      {customSteps.map((step) => <button key={step.stepKey} type="button" className="gvn-chip" onClick={() => engine.navigate(step)}>
+        {game.nightProgress[`${game.day}:${step.stepKey}`]?.notes?.trim() || "Custom night step"}</button>)}
     </div>);
   }
 
@@ -80,10 +77,7 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
       } else if (!done && !engine.manual && !engine.canTarget) {
         rows.push(<button key="continue" type="button" className="btn btn-gold" onClick={() => engine.openWorkspace()}>Continue action</button>);
       }
-      if (engine.manual && offersNightInformation(`${current.prompt} ${current.reminder}`)) {
-        rows.push(<details key="give" className="information-review"><summary>Give information</summary>
-          <PlayerInformation playerId={current.playerId} purpose="result" /></details>);
-      }
+      // PO review C15: no "Give information" form in the Night card; the Storyteller tells the player in person.
     } else if (!done && engine.bureaucrat && engine.actor?.participantId) {
       rows.push(<BureaucratAction key={`${engine.actor.participantId}:${current.stepKey}`} source={{ playerId: engine.actor.id, participantId: engine.actor.participantId }}
         visible={engine.visible} completeStep={{ day: game.day, stepKey: current.stepKey }} onResolved={engine.finish} />);

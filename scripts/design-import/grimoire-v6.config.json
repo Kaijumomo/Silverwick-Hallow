@@ -58,6 +58,16 @@
       "_why": "Return Home sits beside Review the Grimoire on the victory scene, in the same button style (PO Gate 2 decision 2). The finished game stays stored and reviewable from Home.",
       "regex": "<button\\ onClick=\"\\{\\{\\ win\\.close\\ \\}\\}\"\\ style=\"margin\\-top:10px;\\ min\\-height:52px;\\ padding:0\\ 28px;\\ border\\-radius:26px;\\ border:1px\\ solid\\ \\{\\{\\ win\\.ring\\ \\}\\};\\ background:rgba\\(0,0,0,\\.35\\);\\ color:\\{\\{\\ win\\.titleColor\\ \\}\\};\\ font\\-family:'IM\\ Fell\\ English',\\ serif;\\ font\\-size:20px;\\ font\\-weight:400;\\ cursor:pointer;\"\\ style\\-hover=\"background:rgba\\(255,240,210,\\.08\\);\">Review\\ the\\ Grimoire</button>",
       "replace": "<div style=\"display:flex; flex-wrap:wrap; justify-content:center; gap:14px;\"><button onClick=\"{{ win.close }}\" style=\"margin-top:10px; min-height:52px; padding:0 28px; border-radius:26px; border:1px solid {{ win.ring }}; background:rgba(0,0,0,.35); color:{{ win.titleColor }}; font-family:'IM Fell English', serif; font-size:20px; font-weight:400; cursor:pointer;\" style-hover=\"background:rgba(255,240,210,.08);\">Review the Grimoire</button><button onClick=\"{{ win.home }}\" style=\"margin-top:10px; min-height:52px; padding:0 28px; border-radius:26px; border:1px solid {{ win.ring }}; background:rgba(0,0,0,.35); color:{{ win.titleColor }}; font-family:'IM Fell English', serif; font-size:20px; font-weight:400; cursor:pointer;\" style-hover=\"background:rgba(255,240,210,.08);\">Return Home</button></div>"
+    },
+    {
+      "_why": "PO review A08: the dock hugs its buttons (no empty band beside Undo) and shifts by half the side difference so the phase button stays on the centre line.",
+      "regex": "(<div style=\"pointer-events:auto; display:grid; grid-template-columns:)minmax\\(0,1fr\\) 150px minmax\\(0,1fr\\);",
+      "replace": "$1auto 150px auto; translate:{{ dockShift }}px 0;"
+    },
+    {
+      "_why": "PO review A03 (reference 'v6-selection'): an impaired (drunk or poisoned) player shows a 'Poisoned \u00b7 any info' pill beside their name on the Night card.",
+      "regex": "(<span style=\"font-size:13px; color:rgba\\(222,216,204,\\.6\\);\">\\{\\{ night\\.cur\\.who \\}\\}</span>)",
+      "replace": "$1<sc-if value=\"{{ night.cur.impOn }}\" hint-placeholder-val=\"{{ false }}\"><span style=\"align-self:center; display:inline-flex; align-items:center; gap:6px; padding:3px 10px; border-radius:99px; border:1px solid rgba(180,140,224,.55); background:rgba(120,80,170,.2); font-size:13px; color:rgba(222,216,204,.7);\"><span style=\"width:7px; height:7px; border-radius:50%; background:#b48ce0;\"></span><span style=\"font-weight:700; color:#efe6fa;\">{{ night.cur.impLabel }}</span>\u00b7 any info</span></sc-if>"
     }
   ]
 }

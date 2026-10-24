@@ -63,7 +63,7 @@ it("Begin Day with unfinished work goes to Dawn first; continuing there is expli
   expect(pos()).not.toBe("6 / 6");
   press(/^Begin Day 2$/);
   expect(pos()).toBe("6 / 6");
-  press("Continue to Day anyway");
+  press(/^Begin Day 2$/); // at Dawn, a second deliberate press continues
   expect(game().phase).toBe("day");
 });
 

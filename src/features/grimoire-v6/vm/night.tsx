@@ -1,6 +1,7 @@
 import { createElement as E, useEffect, useRef, type ReactNode } from "react";
 import type { NightInformationHandle } from "@/features/nightOrder/NightInformationAction";
 import { stepResolved } from "@/features/nightOrder/nightWork";
+import { hasEffect } from "@/stores/effects";
 import type { V6Ctx } from "../ctx";
 import { renderNightCustom } from "../night/NightCustom";
 import { dawnText, duskText, MARKER_ICON, stepIcon, stepLabel, stepWho, stripItem } from "../night/nightSteps";
@@ -72,10 +73,14 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
         : engine.manual || inlineInformation ? engine.role?.ability ?? current.prompt
         : engine.ability?.kind === "guided" ? engine.ability.descriptor.presentation.action : current.prompt
       : current.prompt;
+    // PO review A03/C07: an impaired player is named by the pill beside the name, and the routine procedure lines
+    // (manual prompt, impairment, death check) are not repeated in amber. Rarer Storyteller checks still show.
+    const seat = player ? game.players[current.playerId] : undefined;
+    const drunk = !!seat && (current.isDeceived && current.actualRoleId === "drunk" || hasEffect(seat, "drunk"));
+    const poisoned = !!seat && !drunk && (hasEffect(seat, "poisoned") || seat.behaviorMode === "poisoned");
     const note = lines([
-      player && engine.manual && current.prompt !== verb ? current.prompt : undefined,
-      player && current.isDeceived ? `Follow the shown character’s procedure. This player is actually the ${current.actualRoleName}.` : undefined,
-      current.advisory,
+      player && current.isDeceived && !drunk ? `Follow the shown character’s procedure. This player is actually the ${current.actualRoleName}.` : undefined,
+      quietAdvisory(current.advisory),
     ]);
     const waiting = canTarget && !resolved && !!picker && picker.owner === engine.owner || !!successorChoice;
     const celebrated = success?.key === current.stepKey && success.game === game;
@@ -91,7 +96,10 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
     }
     cur = {
       isRole: true, isMarker: false,
-      role: stepLabel(current), who: stepWho(current, game), verb,
+      role: stepLabel(current), who: stepWho(current, game),
+      // PO review C09/C10: the Minion and Demon information steps carry only their title and the show row.
+      verb: current.stepKey === "minionInfo" || current.stepKey === "demonInfo" ? "" : verb,
+      impOn: drunk || poisoned, impLabel: drunk ? "Drunk" : "Poisoned",
       waiting, waitText: successorChoice ? "Choose the new Imp on the board" : "Tap a player on the board", picks: [],
       hasNumber: false, numberOpts: [], hasToken: false,
       hasResult: !!result, result, resultHint,
@@ -112,7 +120,7 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
       prevStep: engine.prev, nextStep: engine.next, beginDay: engine.beginDay,
       night: {
         kicker: `Night ${game.day}`, breath: BREATH,
-        dayButton: dawn && unfinished > 0 ? "Continue to Day anyway" : `Begin Day ${game.day}`,
+        dayButton: `Begin Day ${game.day}`,
         cur, hasCustom: !!custom, custom,
       },
       strip: {
@@ -126,3 +134,11 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
   };
 }
 
+
+const ROUTINE = [/Impaired: simulate[^.]*\./g, /Check the ability's death\/event condition tonight; historical triggers are not tracked\./g];
+/** The step's advisory without the routine sentences the card already conveys. */
+function quietAdvisory(advisory: string | undefined): string | undefined {
+  if (!advisory) return undefined;
+  const rest = ROUTINE.reduce((text, pattern) => text.replace(pattern, ""), advisory).replace(/\s+/g, " ").trim();
+  return rest || undefined;
+}

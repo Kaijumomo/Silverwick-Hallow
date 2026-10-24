@@ -130,18 +130,15 @@ describe("slice 4B: board view-model", () => {
     expect(store().game!.players[id]!.reminders.length).toBe(before);
   });
 
-  it("asks before removing a player in the Grimoire's own dialog, never the browser's", async () => {
+  it("removes a player straight from More settings, with no second confirmation", async () => {
     seed15();
     const nativeConfirm = vi.spyOn(window, "confirm");
     const { result } = mount();
     const id = holder("chef");
     act(() => { store().selectPlayer(id); useV6Ui.getState().set({ card: true }); });
-    act(() => result.current.board.pop.remove());
-    const ask = useV6Ui.getState().ask!;
-    expect(ask.title).toMatch(/^Remove /);
+    await act(async () => { await result.current.board.pop.remove(); });
     expect(nativeConfirm).not.toHaveBeenCalled();
-    expect(store().game!.players[id]!.isEmpty).toBeFalsy();
-    await act(async () => { ask.run(""); await Promise.resolve(); });
+    expect(useV6Ui.getState().ask).toBeNull();
     expect(store().game!.players[id]?.isEmpty ?? true).toBe(true);
   });
 

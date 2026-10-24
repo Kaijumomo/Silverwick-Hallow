@@ -224,327 +224,329 @@ const S217: React.CSSProperties = { "position": "absolute", "left": "50%", "bott
 const S218: React.CSSProperties = { "display": "flex", "gap": "8px", "pointerEvents": "auto" };
 const S219: React.CSSProperties = { "height": "30px", "padding": "0 14px", "borderRadius": "3px", "border": "1px solid rgba(214,224,245,.35)", "background": "rgba(9,10,15,.82)", "color": "#e6ecf8", "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "15px", "whiteSpace": "nowrap", "cursor": "pointer", "backdropFilter": "blur(8px)" };
 const S220: React.CSSProperties = { "height": "30px", "padding": "0 14px", "display": "flex", "alignItems": "center", "borderRadius": "3px", "border": "1px solid rgba(232,88,74,.6)", "background": "rgba(40,10,10,.82)", "color": "#ffb4a6", "fontSize": "12px", "fontWeight": "700", "letterSpacing": ".14em", "textTransform": "uppercase" };
-const S221: React.CSSProperties = { "pointerEvents": "auto", "display": "grid", "gridTemplateColumns": "minmax(0,1fr) 150px minmax(0,1fr)", "alignItems": "center", "height": "62px", "padding": "0 6px", "borderRadius": "14px", "background": "linear-gradient(180deg, rgba(18,19,27,.94), rgba(9,10,15,.96))", "border": "1px solid rgba(176,186,204,.2)", "boxShadow": "0 18px 40px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.05), inset 0 0 0 3px rgba(9,10,15,.9), inset 0 0 0 4px rgba(176,186,204,.06)", "backdropFilter": "blur(10px)" };
-const S222: React.CSSProperties = { "display": "flex", "alignItems": "center", "justifyContent": "flex-end", "gap": "2px" };
-const S223: React.CSSProperties = { "width": "19px", "height": "19px", "fill": "none", "stroke": "currentColor", "strokeWidth": "1.7", "strokeLinecap": "round", "strokeLinejoin": "round" };
-const S224: React.CSSProperties = { "width": "1px", "height": "30px", "margin": "0 4px", "background": "rgba(176,186,204,.16)" };
-const S225: React.CSSProperties = { "width": "20px", "height": "20px", "fill": "none", "stroke": "currentColor", "strokeWidth": "1.6", "strokeLinecap": "round", "strokeLinejoin": "round" };
-const S226: React.CSSProperties = { "position": "absolute", "bottom": "2px", "left": "50%", "width": "16px", "height": "2px", "marginLeft": "-8px", "borderRadius": "1px", "background": "#e8584a", "boxShadow": "0 0 8px #e8584a" };
-const S227: React.CSSProperties = { "position": "relative", "width": "150px", "height": "62px", "border": "none", "background": "transparent", "padding": "0", "cursor": "pointer", "fontFamily": "inherit" };
-const S228: React.CSSProperties = { "position": "absolute", "left": "50%", "top": "-41px", "marginLeft": "-38px", "width": "76px", "height": "76px", "borderRadius": "50%", "background": "radial-gradient(circle at 50% 32%, #2c1519, #120a0c 72%)", "border": "1.5px solid #c0392e", "boxShadow": "0 12px 30px rgba(0,0,0,.65), 0 0 26px rgba(192,57,46,.38), inset 0 0 0 5px #0d0e14, inset 0 0 0 6px rgba(176,186,204,.18)", "display": "flex", "alignItems": "center", "justifyContent": "center" };
-const S229: React.CSSProperties = { "position": "absolute", "inset": "8px", "borderRadius": "50%", "background": "repeating-conic-gradient(rgba(236,230,218,.6) 0deg 2.4deg, transparent 2.4deg 30deg)", "WebkitMask": "radial-gradient(circle, transparent 80%, #000 81%)", "mask": "radial-gradient(circle, transparent 80%, #000 81%)" };
-const S230: React.CSSProperties = { "position": "absolute", "left": "-24px", "right": "-24px", "bottom": "7px", "fontSize": "11px", "fontWeight": "700", "letterSpacing": ".14em", "textTransform": "uppercase", "color": "#ff8a78", "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis", "textAlign": "center" };
-const S231: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "2px" };
-const S232: React.CSSProperties = { "width": "19px", "height": "19px", "fill": "none", "stroke": "currentColor", "strokeWidth": "1.6", "strokeLinecap": "round", "strokeLinejoin": "round" };
-const S233: React.CSSProperties = { "position": "absolute", "top": "2px", "right": "6px", "width": "18px", "height": "18px", "borderRadius": "50%", "background": "#e8584a", "color": "#fff", "fontSize": "13px", "fontWeight": "800", "lineHeight": "18px", "letterSpacing": "0", "boxShadow": "0 0 0 2px #0d0e14, 0 0 12px rgba(232,88,74,.8)" };
-const S234: React.CSSProperties = { "position": "absolute", "left": "-18%", "right": "-18%", "top": "-24%", "bottom": "-24%", "borderRadius": "50%", "background": "radial-gradient(closest-side, rgba(5,6,10,.78), rgba(5,6,10,.45) 60%, transparent)", "pointerEvents": "none" };
-const S235: React.CSSProperties = { "position": "relative", "width": "100%", "display": "flex", "flexDirection": "column", "gap": "14px", "padding": "12px 16px 16px", "borderRadius": "16px", "background": "linear-gradient(180deg, rgba(20,21,30,.97), rgba(10,11,16,.98))", "border": "1px solid rgba(176,186,204,.22)", "boxShadow": "0 20px 50px rgba(0,0,0,.6), inset 0 2px 0 rgba(192,57,46,.55)" };
-const S236: React.CSSProperties = { "display": "flex", "alignItems": "center", "justifyContent": "space-between", "gap": "10px" };
-const S237: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "10px", "fontFamily": "'Cinzel Decorative', serif", "fontSize": "11px", "fontWeight": "700", "letterSpacing": ".28em", "textTransform": "uppercase", "color": "rgba(222,216,204,.6)" };
-const S238: React.CSSProperties = { "color": "rgba(222,216,204,.4)", "letterSpacing": ".04em", "fontFamily": "'Source Sans 3', sans-serif", "textTransform": "none" };
-const S239: React.CSSProperties = { "width": "32px", "height": "32px", "border": "none", "borderRadius": "8px", "background": "transparent", "color": "rgba(222,216,204,.55)", "cursor": "pointer", "display": "flex", "alignItems": "center", "justifyContent": "center" };
-const S240: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "44px minmax(0,1fr) 44px", "alignItems": "center", "gap": "8px" };
-const S241: React.CSSProperties = { "width": "44px", "height": "44px", "borderRadius": "50%", "border": "1px solid rgba(176,186,204,.3)", "background": "transparent", "color": "#ece6da", "cursor": "pointer", "display": "flex", "alignItems": "center", "justifyContent": "center" };
-const S242: React.CSSProperties = { "width": "16px", "height": "16px", "fill": "none", "stroke": "currentColor", "strokeWidth": "1.8", "strokeLinecap": "round", "strokeLinejoin": "round" };
-const S243: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "4px", "minWidth": "0" };
-const S244: React.CSSProperties = { "fontSize": "11px", "letterSpacing": ".22em", "textTransform": "uppercase", "fontWeight": "700", "color": "#ff8a78" };
-const S245: React.CSSProperties = { "fontSize": "13px", "lineHeight": "1.4", "textAlign": "center", "color": "rgba(222,216,204,.6)", "textWrap": "pretty" };
-const S246: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "repeat(auto-fill, minmax(128px, 1fr))", "gap": "8px" };
-const S247: React.CSSProperties = { "flex": "none", "minWidth": "26px", "fontFamily": "'IM Fell English', serif", "fontSize": "14px", "color": "#ff8a78" };
-const S248: React.CSSProperties = { "minWidth": "0", "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis" };
-const S249: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "8px", "flexWrap": "wrap", "paddingTop": "12px", "borderTop": "1px solid rgba(176,186,204,.1)" };
-const S250: React.CSSProperties = { "minHeight": "44px", "padding": "0 14px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.26)", "background": "rgba(9,10,15,.5)", "color": "#ece6da", "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "600", "cursor": "pointer", "whiteSpace": "nowrap" };
-const S251: React.CSSProperties = { "minHeight": "44px", "padding": "0 10px", "border": "none", "background": "transparent", "color": "rgba(222,216,204,.65)", "fontFamily": "inherit", "fontSize": "13px", "textDecoration": "underline", "textUnderlineOffset": "3px", "cursor": "pointer" };
-const S252: React.CSSProperties = { "position": "relative", "width": "100%", "display": "flex", "flexDirection": "column", "gap": "14px", "padding": "14px 18px 16px", "borderRadius": "16px", "background": "linear-gradient(180deg, rgba(20,21,30,.97), rgba(10,11,16,.98))", "border": "1px solid rgba(176,186,204,.22)", "boxShadow": "0 20px 50px rgba(0,0,0,.6), inset 0 2px 0 rgba(192,57,46,.55)" };
-const S253: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "8px", "minWidth": "0" };
-const S254: React.CSSProperties = { "width": "12px", "height": "12px", "fill": "none", "stroke": "#ffb4a6", "strokeWidth": "2.6", "strokeLinecap": "round", "strokeLinejoin": "round" };
-const S255: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "14px", "animation": "swRise .35s ease-out" };
-const S256: React.CSSProperties = { "display": "flex", "alignItems": "baseline", "justifyContent": "space-between", "gap": "12px", "flexWrap": "wrap", "paddingTop": "12px", "borderTop": "1px solid rgba(176,186,204,.1)" };
-const S257: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "26px", "lineHeight": "1", "color": "#f2ece0" };
-const S258: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "repeat(4, minmax(0,1fr))", "gap": "10px" };
-const S259: React.CSSProperties = { "position": "absolute", "right": "6px", "top": "6px", "width": "20px", "height": "20px", "borderRadius": "50%", "background": "#c0392e", "color": "#fbe9e4", "display": "flex", "alignItems": "center", "justifyContent": "center", "boxShadow": "0 0 0 2px #14151d" };
-const S260: React.CSSProperties = { "width": "11px", "height": "11px", "fill": "none", "stroke": "currentColor", "strokeWidth": "3", "strokeLinecap": "round", "strokeLinejoin": "round" };
-const S261: React.CSSProperties = { "display": "none" };
-const S262: React.CSSProperties = { "width": "100%", "height": "62px", "backgroundImage": "url(public/custom-script.png)", "backgroundSize": "contain", "backgroundPosition": "center", "backgroundRepeat": "no-repeat", "filter": "drop-shadow(0 4px 8px rgba(0,0,0,.6))" };
-const S263: React.CSSProperties = { "maxWidth": "100%", "fontSize": "10.5px", "color": "rgba(222,216,204,.6)", "overflow": "hidden", "textOverflow": "ellipsis", "whiteSpace": "nowrap" };
-const S264: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "auto minmax(0,1fr)", "gap": "18px", "alignItems": "center", "padding": "10px 0", "borderTop": "1px solid rgba(176,186,204,.1)", "borderBottom": "1px solid rgba(176,186,204,.1)" };
-const S265: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "4px" };
-const S266: React.CSSProperties = { "width": "44px", "height": "44px", "borderRadius": "50%", "border": "1px solid rgba(176,186,204,.3)", "background": "transparent", "color": "#ece6da", "fontSize": "22px", "lineHeight": "1", "cursor": "pointer" };
-const S267: React.CSSProperties = { "width": "64px", "display": "flex", "flexDirection": "column", "alignItems": "center" };
-const S268: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "40px", "lineHeight": "1", "color": "#ff8a78" };
-const S269: React.CSSProperties = { "fontSize": "10px", "letterSpacing": ".14em", "textTransform": "uppercase", "color": "rgba(222,216,204,.55)" };
-const S270: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "6px", "minWidth": "0" };
-const S271: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "repeat(4, minmax(0,1fr))", "gap": "4px" };
-const S272: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "2px" };
-const S273: React.CSSProperties = { "fontSize": "10.5px", "letterSpacing": ".08em", "textTransform": "uppercase", "color": "rgba(222,216,204,.55)" };
-const S274: React.CSSProperties = { "fontSize": "12px", "textAlign": "center", "color": "rgba(222,216,204,.5)" };
-const S275: React.CSSProperties = { "flex": "1", "minWidth": "0", "fontSize": "12px", "textAlign": "right", "color": "rgba(222,216,204,.55)", "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis" };
-const S276: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "12px", "animation": "swRise .35s ease-out" };
-const S277: React.CSSProperties = { "display": "flex", "alignItems": "center", "justifyContent": "space-between", "gap": "12px", "flexWrap": "wrap", "paddingTop": "12px", "borderTop": "1px solid rgba(176,186,204,.1)" };
-const S278: React.CSSProperties = { "fontSize": "12.5px", "color": "rgba(222,216,204,.6)" };
-const S279: React.CSSProperties = { "display": "flex", "gap": "4px", "padding": "4px", "borderRadius": "12px", "background": "rgba(9,10,15,.6)", "border": "1px solid rgba(176,186,204,.14)" };
-const S280: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "minmax(0,1fr) 236px", "gap": "14px", "alignItems": "stretch" };
-const S281: React.CSSProperties = { "height": "204px", "overflowY": "auto", "overflowX": "hidden", "padding": "8px 4px 14px", "WebkitMaskImage": "linear-gradient(180deg, #000 88%, transparent)", "maskImage": "linear-gradient(180deg, #000 88%, transparent)" };
-const S282: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "repeat(auto-fill, minmax(70px, 1fr))", "gap": "14px 6px" };
-const S283: React.CSSProperties = { "width": "10px", "height": "10px", "fill": "none", "stroke": "currentColor", "strokeWidth": "3.4", "strokeLinecap": "round", "strokeLinejoin": "round" };
-const S284: React.CSSProperties = { "flex": "1", "display": "flex", "flexDirection": "column", "gap": "10px", "minHeight": "0", "animation": "swRise .25s ease-out" };
-const S285: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "12px", "minWidth": "0" };
-const S286: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "3px", "minWidth": "0" };
-const S287: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "21px", "lineHeight": "1.05", "color": "#f2ece0", "textWrap": "balance" };
-const S288: React.CSSProperties = { "flex": "1", "minHeight": "0", "overflowY": "auto", "fontSize": "13px", "lineHeight": "1.45", "color": "rgba(222,216,204,.8)", "textWrap": "pretty" };
-const S289: React.CSSProperties = { "flex": "1", "display": "flex", "flexDirection": "column", "justifyContent": "center", "alignItems": "center", "gap": "10px", "textAlign": "center" };
-const S290: React.CSSProperties = { "width": "52px", "height": "52px", "borderRadius": "50%", "border": "1.5px dashed rgba(176,186,204,.35)" };
-const S291: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "18px", "color": "#f2ece0" };
-const S292: React.CSSProperties = { "fontSize": "12.5px", "lineHeight": "1.45", "color": "rgba(222,216,204,.6)", "textWrap": "pretty" };
-const S293: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "10px", "paddingTop": "12px", "borderTop": "1px solid rgba(176,186,204,.1)" };
-const S294: React.CSSProperties = { "flex": "1", "minWidth": "0", "display": "flex", "alignItems": "center", "justifyContent": "flex-end", "gap": "6px" };
-const S295: React.CSSProperties = { "marginLeft": "6px", "fontSize": "12px", "color": "rgba(222,216,204,.55)", "whiteSpace": "nowrap" };
-const S296: React.CSSProperties = { "minHeight": "44px", "padding": "0 18px", "borderRadius": "10px", "border": "1px solid #c0392e", "background": "rgba(192,57,46,.22)", "color": "#ffb4a6", "fontFamily": "inherit", "fontSize": "14px", "fontWeight": "700", "cursor": "pointer", "whiteSpace": "nowrap" };
-const S297: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "10px", "minWidth": "0" };
-const S298: React.CSSProperties = { "position": "relative", "flex": "none", "width": "40px", "height": "40px", "borderRadius": "50%", "background": "radial-gradient(circle at 38% 30%, #f1e6c9, #b09566)", "boxShadow": "0 0 0 2px #14151d, 0 0 0 3px rgba(232,88,74,.6)" };
-const S299: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "20px", "lineHeight": "1", "color": "#f2ece0" };
-const S300: React.CSSProperties = { "fontSize": "13px", "color": "#ffb4a6" };
-const S301: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "8px" };
-const S302: React.CSSProperties = { "minHeight": "40px", "padding": "0 12px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.22)", "background": "transparent", "color": "rgba(222,216,204,.75)", "fontFamily": "inherit", "fontSize": "13px", "cursor": "pointer" };
-const S303: React.CSSProperties = { "position": "relative", "width": "100%", "display": "flex", "flexDirection": "column", "gap": "12px", "padding": "12px 16px 14px", "borderRadius": "16px", "background": "linear-gradient(180deg, rgba(20,21,30,.97), rgba(10,11,16,.98))", "border": "1px solid rgba(176,186,204,.22)", "boxShadow": "0 20px 50px rgba(0,0,0,.6), inset 0 2px 0 rgba(192,57,46,.55)" };
-const S304: React.CSSProperties = { "paddingBottom": "10px", "borderBottom": "1px solid rgba(176,186,204,.1)" };
-const S305: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "repeat(4, minmax(0,1fr))", "gap": "4px", "padding": "8px 0", "borderTop": "1px solid rgba(176,186,204,.1)", "borderBottom": "1px solid rgba(176,186,204,.1)" };
-const S306: React.CSSProperties = { "display": "flex", "gap": "4px", "padding": "3px", "borderRadius": "10px", "background": "rgba(9,10,15,.7)", "border": "1px solid rgba(176,186,204,.16)" };
-const S307: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "12px" };
-const S308: React.CSSProperties = { "fontSize": "14px", "lineHeight": "1.4", "color": "rgba(222,216,204,.7)", "textWrap": "pretty" };
-const S309: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "auto minmax(0,1fr)", "gap": "16px", "alignItems": "center" };
-const S310: React.CSSProperties = { "fontSize": "11px", "letterSpacing": ".14em", "textTransform": "uppercase", "color": "rgba(222,216,204,.5)" };
-const S311: React.CSSProperties = { "fontSize": "14px", "lineHeight": "1.4", "color": "#ece6da" };
-const S312: React.CSSProperties = { "flex": "1", "minWidth": "0", "height": "44px", "padding": "0 14px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.26)", "background": "rgba(9,10,15,.7)", "color": "#f2ece0", "fontFamily": "inherit", "fontSize": "15px", "outline": "none" };
-const S313: React.CSSProperties = { "height": "44px", "padding": "0 16px", "borderRadius": "10px", "border": "1px solid #c0392e", "background": "rgba(192,57,46,.18)", "color": "#ffb4a6", "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "700", "cursor": "pointer", "whiteSpace": "nowrap" };
-const S314: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "auto minmax(0,1fr)", "gap": "18px", "alignItems": "center", "padding": "12px", "borderRadius": "14px", "background": "rgba(9,10,15,.5)", "border": "1px solid rgba(176,186,204,.12)" };
-const S315: React.CSSProperties = { "padding": "7px", "borderRadius": "10px", "background": "#f2ece0", "boxShadow": "0 0 0 1px rgba(192,57,46,.45), 0 8px 18px rgba(0,0,0,.45)", "lineHeight": "0" };
-const S316: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "10px", "minWidth": "0" };
-const S317: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "24px", "lineHeight": "1", "color": "#f2ece0" };
-const S318: React.CSSProperties = { "fontSize": "13px", "lineHeight": "1.4", "color": "rgba(222,216,204,.65)", "textWrap": "pretty" };
-const S319: React.CSSProperties = { "color": "#ece6da", "fontWeight": "600" };
-const S320: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "12px", "flexWrap": "wrap" };
-const S321: React.CSSProperties = { "width": "26px", "height": "34px", "display": "flex", "alignItems": "center", "justifyContent": "center", "borderRadius": "7px", "border": "1px solid rgba(232,88,74,.35)", "background": "rgba(9,10,15,.75)", "fontFamily": "'Source Sans 3', sans-serif", "fontSize": "19px", "fontWeight": "700", "lineHeight": "1", "color": "#f2ece0", "fontVariantNumeric": "tabular-nums" };
-const S322: React.CSSProperties = { "width": "4px", "height": "2px", "borderRadius": "1px", "background": "rgba(232,88,74,.5)" };
-const S323: React.CSSProperties = { "minHeight": "34px", "display": "flex", "alignItems": "center", "gap": "6px", "padding": "0 12px", "borderRadius": "8px", "border": "1px solid rgba(176,186,204,.26)", "background": "transparent", "color": "#ece6da", "fontFamily": "inherit", "fontSize": "12px", "fontWeight": "600", "cursor": "pointer", "whiteSpace": "nowrap" };
-const S324: React.CSSProperties = { "width": "14px", "height": "14px", "fill": "none", "stroke": "currentColor", "strokeWidth": "1.8", "strokeLinecap": "round", "strokeLinejoin": "round" };
-const S325: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "6px" };
-const S326: React.CSSProperties = { "display": "flex", "justifyContent": "space-between", "fontSize": "12px", "color": "rgba(222,216,204,.6)" };
-const S327: React.CSSProperties = { "display": "flex", "alignItems": "baseline", "gap": "10px", "flexWrap": "wrap" };
-const S328: React.CSSProperties = { "marginLeft": "auto", "alignSelf": "center", "display": "flex", "alignItems": "center", "gap": "6px" };
-const S329: React.CSSProperties = { "width": "34px", "height": "34px", "borderRadius": "50%", "border": "1px solid rgba(176,186,204,.26)", "background": "transparent", "color": "#ece6da", "fontSize": "16px", "cursor": "pointer" };
-const S330: React.CSSProperties = { "minWidth": "36px", "textAlign": "center", "fontSize": "12px", "color": "rgba(222,216,204,.5)" };
-const S331: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "8px", "flexWrap": "wrap" };
-const S332: React.CSSProperties = { "minHeight": "40px", "padding": "0 6px", "border": "none", "background": "transparent", "color": "rgba(222,216,204,.65)", "fontFamily": "inherit", "fontSize": "13px", "textDecoration": "underline", "textUnderlineOffset": "3px", "cursor": "pointer" };
-const S333: React.CSSProperties = { "minHeight": "40px", "padding": "0 14px", "borderRadius": "10px", "border": "1px solid rgba(148,194,154,.45)", "background": "transparent", "color": "#94c29a", "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "600", "cursor": "pointer" };
-const S334: React.CSSProperties = { "marginLeft": "auto", "fontSize": "12px", "color": "rgba(222,216,204,.55)" };
-const S335: React.CSSProperties = { "position": "relative", "width": "100%", "display": "flex", "flexDirection": "column", "gap": "8px", "padding": "12px 16px", "borderRadius": "16px", "background": "linear-gradient(180deg, rgba(20,21,30,.97), rgba(10,11,16,.98))", "border": "1px solid rgba(176,186,204,.22)", "boxShadow": "0 20px 50px rgba(0,0,0,.6), inset 0 2px 0 rgba(192,57,46,.55)" };
-const S336: React.CSSProperties = { "color": "rgba(222,216,204,.35)", "letterSpacing": ".1em", "fontFamily": "'Source Sans 3', sans-serif" };
-const S337: React.CSSProperties = { "fontSize": "17px", "lineHeight": "1.4", "color": "#ece6da", "textWrap": "pretty" };
-const S338: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "10px", "fontSize": "14px", "color": "#ffb4a6" };
-const S339: React.CSSProperties = { "padding": "1px 8px", "borderRadius": "3px", "border": "1px solid rgba(232,88,74,.5)", "color": "#ffb4a6" };
-const S340: React.CSSProperties = { "fontSize": "12px", "letterSpacing": ".12em", "textTransform": "uppercase", "color": "rgba(222,216,204,.55)" };
-const S341: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "10px", "fontSize": "14px", "color": "#ece6da" };
-const S342: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "2px", "padding": "10px 12px", "borderRadius": "10px", "background": "rgba(232,88,74,.08)", "border": "1px solid rgba(232,88,74,.3)", "animation": "swRise .3s ease-out" };
-const S343: React.CSSProperties = { "fontSize": "13px", "color": "#e7a35b" };
-const S344: React.CSSProperties = { "alignSelf": "stretch", "display": "flex", "alignItems": "center", "gap": "12px", "minHeight": "56px", "padding": "8px 14px 8px 8px", "borderRadius": "12px", "border": "1px solid rgba(176,186,204,.2)", "background": "rgba(9,10,15,.6)", "fontFamily": "inherit", "textAlign": "left", "cursor": "pointer", "transition": "border-color .2s, background .2s", "animation": "swRise .3s ease-out" };
-const S345: React.CSSProperties = { "position": "relative", "flex": "none", "width": "40px", "height": "40px", "borderRadius": "50%", "background": "radial-gradient(circle at 38% 30%, #f1e6c9, #b09566)", "boxShadow": "0 0 0 2px #14151d, 0 0 0 3px rgba(232,88,74,.5)" };
-const S346: React.CSSProperties = { "flex": "none", "width": "40px", "height": "40px", "borderRadius": "10px", "background": "rgba(232,88,74,.1)", "display": "flex", "alignItems": "center", "justifyContent": "center" };
-const S347: React.CSSProperties = { "width": "20px", "height": "20px", "fill": "none", "stroke": "#e8584a", "strokeWidth": "1.7", "strokeLinecap": "round", "strokeLinejoin": "round" };
-const S348: React.CSSProperties = { "flex": "1", "minWidth": "0", "display": "flex", "flexDirection": "column", "gap": "2px" };
-const S349: React.CSSProperties = { "fontSize": "14px", "fontWeight": "700", "color": "#ece6da" };
-const S350: React.CSSProperties = { "fontSize": "12px", "color": "rgba(222,216,204,.55)", "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis" };
-const S351: React.CSSProperties = { "flex": "none", "display": "flex", "alignItems": "center", "gap": "6px", "fontSize": "11px", "fontWeight": "700", "letterSpacing": ".16em", "textTransform": "uppercase", "color": "#ff8a78" };
-const S352: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "30px", "lineHeight": "1", "color": "#f2ece0" };
-const S353: React.CSSProperties = { "fontSize": "16px", "lineHeight": "1.4", "color": "#ece6da", "textWrap": "pretty" };
-const S354: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "10px" };
-const S355: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "8px", "marginTop": "2px" };
-const S356: React.CSSProperties = { "height": "44px", "padding": "0 14px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.22)", "background": "transparent", "color": "#ece6da", "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "600", "cursor": "pointer" };
-const S357: React.CSSProperties = { "height": "44px", "padding": "0 18px", "borderRadius": "10px", "border": "1px solid #c0392e", "background": "rgba(192,57,46,.18)", "color": "#ffb4a6", "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "700", "cursor": "pointer" };
-const S358: React.CSSProperties = { "width": "16px", "height": "16px", "fill": "none", "stroke": "currentColor", "strokeWidth": "1.7", "strokeLinecap": "round" };
-const S359: React.CSSProperties = { "position": "relative", "alignSelf": "stretch", "height": "94px", "overflow": "hidden", "WebkitMaskImage": "linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent)", "maskImage": "linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent)" };
-const S360: React.CSSProperties = { "position": "absolute", "left": "0", "right": "0", "top": "38px", "height": "1px", "background": "linear-gradient(90deg, transparent, rgba(176,186,204,.3), transparent)" };
-const S361: React.CSSProperties = { "position": "absolute", "left": "50%", "top": "50%", "width": "26px", "height": "26px", "margin": "-13px 0 0 -13px", "fill": "none", "stroke": "#e6ecf8", "strokeWidth": "1.6", "strokeLinecap": "round", "strokeLinejoin": "round" };
-const S362: React.CSSProperties = { "position": "absolute", "right": "-2px", "top": "-2px", "width": "22px", "height": "22px", "borderRadius": "50%", "background": "#14151d", "border": "1px solid rgba(143,207,149,.7)", "color": "#8fcf95", "display": "flex", "alignItems": "center", "justifyContent": "center" };
-const S363: React.CSSProperties = { "width": "12px", "height": "12px", "fill": "none", "stroke": "currentColor", "strokeWidth": "2.6", "strokeLinecap": "round", "strokeLinejoin": "round" };
-const S364: React.CSSProperties = { "position": "relative", "width": "100%", "display": "flex", "flexDirection": "column", "gap": "14px", "padding": "12px 16px 16px", "borderRadius": "16px", "background": "linear-gradient(180deg, rgba(20,21,30,.98), rgba(10,11,16,.99))", "border": "1px solid rgba(176,186,204,.22)", "boxShadow": "0 20px 50px rgba(0,0,0,.6), inset 0 2px 0 rgba(192,57,46,.55)", "animation": "swRise .3s ease-out", "boxSizing": "border-box" };
-const S365: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "10px", "minWidth": "0", "fontFamily": "'Cinzel Decorative', serif", "fontSize": "11px", "fontWeight": "700", "letterSpacing": ".28em", "textTransform": "uppercase", "color": "rgba(222,216,204,.6)" };
-const S366: React.CSSProperties = { "color": "rgba(222,216,204,.4)", "letterSpacing": ".04em", "fontFamily": "'Source Sans 3', sans-serif", "textTransform": "none", "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis" };
-const S367: React.CSSProperties = { "width": "32px", "height": "32px", "flex": "none", "border": "none", "borderRadius": "8px", "background": "transparent", "color": "rgba(222,216,204,.55)", "cursor": "pointer", "display": "flex", "alignItems": "center", "justifyContent": "center" };
-const S368: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "10px", "paddingTop": "12px", "borderTop": "1px solid rgba(176,186,204,.1)" };
-const S369: React.CSSProperties = { "fontSize": "11px", "letterSpacing": ".2em", "textTransform": "uppercase", "fontWeight": "700", "color": "rgba(222,216,204,.5)" };
-const S370: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "12px" };
-const S371: React.CSSProperties = { "minHeight": "40px", "padding": "0 14px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.26)", "background": "rgba(9,10,15,.5)", "color": "#ece6da", "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "600", "cursor": "pointer", "whiteSpace": "nowrap" };
-const S372: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "4px", "paddingLeft": "56px" };
-const S373: React.CSSProperties = { "display": "flex", "justifyContent": "space-between", "gap": "10px", "fontSize": "12px" };
-const S374: React.CSSProperties = { "color": "rgba(222,216,204,.7)" };
-const S375: React.CSSProperties = { "position": "absolute", "left": "-14%", "right": "-14%", "top": "-24%", "bottom": "-24%", "borderRadius": "50%", "background": "radial-gradient(closest-side, rgba(5,6,10,.78), rgba(5,6,10,.45) 60%, transparent)", "pointerEvents": "none" };
-const S376: React.CSSProperties = { "position": "relative", "width": "100%", "display": "flex", "flexDirection": "column", "gap": "14px", "padding": "12px 18px 16px", "borderRadius": "16px", "background": "linear-gradient(180deg, rgba(20,21,30,.98), rgba(10,11,16,.99))", "border": "1px solid rgba(176,186,204,.22)", "boxShadow": "0 20px 50px rgba(0,0,0,.6), inset 0 2px 0 rgba(192,57,46,.55)", "animation": "swRise .3s ease-out", "boxSizing": "border-box" };
-const S377: React.CSSProperties = { "display": "flex", "alignItems": "baseline", "gap": "12px", "minWidth": "0" };
-const S378: React.CSSProperties = { "fontFamily": "'Cinzel Decorative', serif", "fontSize": "11px", "fontWeight": "700", "letterSpacing": ".28em", "textTransform": "uppercase", "color": "rgba(222,216,204,.6)" };
-const S379: React.CSSProperties = { "fontSize": "13px", "fontWeight": "600", "color": "rgba(222,216,204,.55)", "whiteSpace": "nowrap" };
-const S380: React.CSSProperties = { "fontSize": "12px", "color": "rgba(222,216,204,.4)", "whiteSpace": "nowrap" };
-const S381: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "repeat(3, minmax(0,1fr)) 1px minmax(0,4fr)", "gap": "10px", "alignItems": "center", "padding": "10px 0", "borderTop": "1px solid rgba(176,186,204,.1)", "borderBottom": "1px solid rgba(176,186,204,.1)" };
-const S382: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "3px", "minWidth": "0" };
-const S383: React.CSSProperties = { "fontSize": "9.5px", "letterSpacing": ".08em", "textTransform": "uppercase", "color": "rgba(222,216,204,.55)", "whiteSpace": "nowrap" };
-const S384: React.CSSProperties = { "width": "1px", "height": "40px", "background": "rgba(176,186,204,.16)" };
-const S385: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "8px", "minWidth": "0" };
-const S386: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "repeat(4, minmax(0,1fr))", "gap": "6px" };
-const S387: React.CSSProperties = { "display": "flex", "height": "4px", "borderRadius": "2px", "overflow": "hidden", "gap": "2px" };
-const S388: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "auto minmax(0,1.15fr) minmax(0,2fr)", "gap": "16px", "alignItems": "start" };
-const S389: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "8px", "paddingRight": "18px", "borderRight": "1px solid rgba(176,186,204,.1)" };
-const S390: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "6px", "width": "60px", "padding": "2px 0 0", "border": "none", "background": "transparent", "fontFamily": "inherit", "cursor": "pointer" };
-const S391: React.CSSProperties = { "width": "48px", "height": "48px", "borderRadius": "50%", "border": "1.5px dashed rgba(176,186,204,.4)", "color": "rgba(232,88,74,.75)", "display": "flex", "alignItems": "center", "justifyContent": "center", "fontSize": "22px", "lineHeight": "1" };
-const S392: React.CSSProperties = { "minHeight": "36px", "padding": "0 12px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.26)", "background": "rgba(9,10,15,.5)", "color": "#ece6da", "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "600", "cursor": "pointer", "whiteSpace": "nowrap" };
-const S393: React.CSSProperties = { "minHeight": "36px", "padding": "4px 10px", "borderRadius": "9px", "border": "1px solid rgba(176,186,204,.18)", "background": "rgba(9,10,15,.55)", "color": "#ece6da", "fontFamily": "inherit", "fontSize": "12px", "fontWeight": "600", "lineHeight": "1.15", "textAlign": "left", "cursor": "pointer", "display": "flex", "alignItems": "center", "gap": "7px", "minWidth": "0" };
-const S394: React.CSSProperties = { "width": "14px", "height": "14px", "flex": "none", "fill": "none", "stroke": "#e8584a", "strokeWidth": "1.7", "strokeLinecap": "round", "strokeLinejoin": "round" };
-const S395: React.CSSProperties = { "minWidth": "0", "textWrap": "balance" };
-const S396: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "repeat(2, minmax(0,1fr))", "gap": "6px" };
-const S397: React.CSSProperties = { "position": "absolute", "left": "50%", "top": "24px", "transform": "translateX(-50%)", "zIndex": "25", "padding": "10px 18px", "borderRadius": "20px", "background": "rgba(18,19,27,.92)", "border": "1px solid rgba(176,186,204,.35)", "fontSize": "13px", "color": "#ece6da", "whiteSpace": "nowrap" };
-const S398: React.CSSProperties = { "position": "absolute", "left": "50%", "top": "24px", "transform": "translateX(-50%)", "zIndex": "25", "display": "flex", "alignItems": "center", "gap": "14px", "padding": "6px 6px 6px 18px", "borderRadius": "26px", "background": "rgba(18,19,27,.92)", "border": "1px solid rgba(159,195,232,.4)", "fontSize": "14px", "color": "#cfe0f2" };
-const S399: React.CSSProperties = { "minHeight": "44px", "padding": "0 18px", "borderRadius": "22px", "border": "1px solid rgba(159,195,232,.45)", "background": "rgba(159,195,232,.12)", "color": "#cfe0f2", "font": "inherit", "fontWeight": "600", "cursor": "pointer" };
-const S400: React.CSSProperties = { "position": "absolute", "left": "50%", "bottom": "130px", "transform": "translateX(-50%)", "zIndex": "80", "maxWidth": "520px", "padding": "10px 18px", "borderRadius": "20px", "background": "rgba(18,19,27,.95)", "border": "1px solid rgba(176,186,204,.28)", "fontFamily": "'IM Fell English', serif", "fontSize": "15px", "color": "#ece6da", "boxShadow": "0 12px 30px rgba(0,0,0,.5)", "animation": "swRise .25s ease-out", "textAlign": "center" };
-const S401: React.CSSProperties = { "position": "absolute", "inset": "0", "pointerEvents": "none", "opacity": ".2", "mixBlendMode": "overlay", "backgroundImage": "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' sc-camel-base-frequency='.9' sc-camel-num-octaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")" };
-const S402: React.CSSProperties = { "position": "absolute", "inset": "0", "pointerEvents": "none", "background": "radial-gradient(ellipse 100% 90% at 50% 50%, transparent 45%, rgba(0,0,0,.75) 100%)" };
-const S403: React.CSSProperties = { "position": "absolute", "inset": "18px", "border": "1px solid rgba(176,186,204,.08)", "borderRadius": "12px", "pointerEvents": "none" };
-const S404: React.CSSProperties = { "position": "relative", "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "22px", "maxWidth": "900px", "padding": "0 48px", "textAlign": "center" };
-const S405: React.CSSProperties = { "position": "absolute", "inset": "0", "background": "linear-gradient(135deg, transparent 47%, rgba(122,29,26,.85) 47%, rgba(122,29,26,.85) 53%, transparent 53%)" };
-const S406: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "14px" };
-const S407: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "24px", "lineHeight": "1.4", "color": "rgba(242,230,200,.86)", "maxWidth": "620px", "textWrap": "pretty" };
-const S408: React.CSSProperties = { "display": "flex", "flexWrap": "wrap", "justifyContent": "center", "gap": "14px 22px", "marginTop": "6px" };
-const S409: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "17px", "fontWeight": "400", "color": "#ece6da", "lineHeight": "1.1", "overflow": "hidden", "textOverflow": "ellipsis", "whiteSpace": "nowrap", "maxWidth": "84px" };
-const S410: React.CSSProperties = { "display": "flex", "flexWrap": "wrap", "justifyContent": "center", "gap": "14px" };
-const S411: React.CSSProperties = { "position": "absolute", "inset": "0", "zIndex": "95", "background": "rgba(6,4,5,.6)", "backdropFilter": "blur(3px)", "display": "flex", "alignItems": "center", "justifyContent": "center", "animation": "swRise .25s ease-out" };
-const S412: React.CSSProperties = { "width": "380px", "maxWidth": "calc(100% - 48px)", "padding": "24px", "borderRadius": "20px", "background": "linear-gradient(180deg, rgba(34,24,28,.98), rgba(12,13,20,.98))", "border": "1px solid rgba(176,186,204,.28)", "boxShadow": "0 30px 80px rgba(0,0,0,.6)", "display": "flex", "flexDirection": "column", "gap": "16px", "textAlign": "center" };
-const S413: React.CSSProperties = { "fontFamily": "'Cinzel Decorative', serif", "fontSize": "24px", "fontWeight": "700", "color": "#ecd9a8" };
-const S414: React.CSSProperties = { "fontSize": "14px", "lineHeight": "1.45", "color": "rgba(222,216,204,.65)" };
-const S415: React.CSSProperties = { "width": "100%", "boxSizing": "border-box", "height": "44px", "padding": "0 14px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.26)", "background": "rgba(9,10,15,.7)", "color": "#f2ece0", "fontFamily": "inherit", "fontSize": "15px", "outline": "none" };
-const S416: React.CSSProperties = { "minHeight": "52px", "borderRadius": "14px", "border": "1px solid #c0392e", "background": "linear-gradient(180deg, #c0392e, #8a2820)", "color": "#fff6ea", "fontFamily": "'IM Fell English', serif", "fontSize": "22px", "fontWeight": "400", "cursor": "pointer" };
-const S417: React.CSSProperties = { "alignSelf": "center", "marginTop": "-4px", "minHeight": "44px", "padding": "0 18px", "border": "none", "background": "transparent", "color": "rgba(222,216,204,.6)", "fontFamily": "inherit", "fontSize": "14px", "cursor": "pointer" };
-const S418: React.CSSProperties = { "position": "absolute", "inset": "0", "zIndex": "90", "background": "rgba(6,4,5,.6)", "backdropFilter": "blur(3px)", "display": "flex", "alignItems": "center", "justifyContent": "center", "animation": "swRise .25s ease-out" };
-const S419: React.CSSProperties = { "fontSize": "13px", "lineHeight": "1.45", "color": "rgba(222,216,204,.65)" };
-const S420: React.CSSProperties = { "minHeight": "52px", "borderRadius": "14px", "border": "1px solid rgba(134,183,212,.4)", "background": "rgba(134,183,212,.08)", "color": "#a9cde3", "fontFamily": "'IM Fell English', serif", "fontSize": "22px", "fontWeight": "400", "cursor": "pointer" };
-const S421: React.CSSProperties = { "minHeight": "52px", "borderRadius": "14px", "border": "1px solid rgba(217,122,108,.4)", "background": "rgba(217,122,108,.08)", "color": "#eba597", "fontFamily": "'IM Fell English', serif", "fontSize": "22px", "fontWeight": "400", "cursor": "pointer" };
-const S422: React.CSSProperties = { "minHeight": "52px", "borderRadius": "14px", "border": "1px solid rgba(224,200,140,.5)", "background": "rgba(224,200,140,.08)", "color": "#ecd9a8", "fontFamily": "'IM Fell English', serif", "fontSize": "22px", "fontWeight": "400", "cursor": "pointer" };
-const S423: React.CSSProperties = { "fontSize": "13px", "lineHeight": "1.4", "color": "#f4a595" };
-const S424: React.CSSProperties = { "alignSelf": "center", "marginTop": "-12px", "minHeight": "36px", "padding": "0 18px", "border": "none", "background": "transparent", "color": "rgba(222,216,204,.45)", "fontFamily": "inherit", "fontSize": "12px", "cursor": "pointer" };
-const S425: React.CSSProperties = { "position": "absolute", "inset": "0", "zIndex": "70", "padding": "24px", "background": "rgba(6,4,5,.74)", "backdropFilter": "blur(6px)", "display": "flex", "alignItems": "center", "justifyContent": "center", "animation": "swIn .2s ease-out" };
-const S426: React.CSSProperties = { "width": "100%", "maxWidth": "1320px", "height": "100%", "maxHeight": "860px", "display": "grid", "gridTemplateColumns": "minmax(0,1fr) 340px", "borderRadius": "14px", "background": "linear-gradient(180deg, #171821, #0d0e14)", "border": "1px solid rgba(176,186,204,.22)", "boxShadow": "0 30px 80px rgba(0,0,0,.7), inset 0 2px 0 rgba(192,57,46,.55)", "overflow": "hidden" };
-const S427: React.CSSProperties = { "display": "flex", "flexDirection": "column", "minHeight": "0", "minWidth": "0" };
-const S428: React.CSSProperties = { "display": "flex", "alignItems": "flex-end", "justifyContent": "space-between", "gap": "16px", "padding": "18px 22px 14px", "borderBottom": "1px solid rgba(176,186,204,.1)" };
-const S429: React.CSSProperties = { "fontFamily": "'Cinzel Decorative', serif", "fontSize": "11px", "fontWeight": "700", "letterSpacing": ".28em", "textTransform": "uppercase", "color": "rgba(222,216,204,.55)" };
-const S430: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "30px", "lineHeight": "1", "color": "#f2ece0", "whiteSpace": "nowrap" };
-const S431: React.CSSProperties = { "fontSize": "13px", "color": "rgba(222,216,204,.5)", "whiteSpace": "nowrap" };
-const S432: React.CSSProperties = { "width": "100%", "maxWidth": "300px", "height": "40px", "padding": "0 14px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.24)", "background": "rgba(9,10,15,.7)", "color": "#f2ece0", "fontFamily": "inherit", "fontSize": "14px", "outline": "none", "boxSizing": "border-box" };
-const S433: React.CSSProperties = { "flex": "1", "minHeight": "0", "overflowY": "auto", "overflowX": "hidden", "padding": "4px 22px 18px" };
-const S434: React.CSSProperties = { "padding": "60px 0", "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "12px" };
-const S435: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "18px", "color": "rgba(222,216,204,.65)" };
-const S436: React.CSSProperties = { "minHeight": "36px", "padding": "0 14px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.26)", "background": "rgba(9,10,15,.5)", "color": "#ece6da", "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "600", "cursor": "pointer", "whiteSpace": "nowrap" };
-const S437: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "132px minmax(0,1fr)", "gap": "16px", "padding": "16px 0", "borderBottom": "1px solid rgba(176,186,204,.08)" };
-const S438: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "6px", "paddingTop": "8px" };
-const S439: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "14px", "lineHeight": "1.3", "color": "rgba(222,216,204,.5)", "textWrap": "pretty" };
-const S440: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "repeat(auto-fill, minmax(88px, 1fr))", "gap": "10px 4px" };
-const S441: React.CSSProperties = { "position": "relative", "width": "56px", "height": "56px" };
-const S442: React.CSSProperties = { "position": "absolute", "inset": "0", "borderRadius": "50%", "overflow": "hidden", "background": "radial-gradient(circle at 38% 30%, #f1e6c9 0%, #dccaa0 48%, #b09566 100%)", "boxShadow": "0 6px 14px rgba(0,0,0,.55), inset 0 -5px 10px rgba(90,60,25,.35)" };
-const S443: React.CSSProperties = { "position": "absolute", "right": "-3px", "top": "-3px", "width": "12px", "height": "12px", "borderRadius": "50%", "background": "#e8584a", "boxShadow": "0 0 0 2px #14151d" };
-const S444: React.CSSProperties = { "position": "relative", "display": "flex", "flexDirection": "column", "minHeight": "0", "borderLeft": "1px solid rgba(176,186,204,.12)", "background": "linear-gradient(180deg, rgba(0,0,0,.18), rgba(0,0,0,.32))" };
-const S445: React.CSSProperties = { "position": "absolute", "right": "12px", "top": "12px", "width": "36px", "height": "36px", "border": "none", "borderRadius": "10px", "background": "transparent", "color": "rgba(222,216,204,.55)", "cursor": "pointer", "display": "flex", "alignItems": "center", "justifyContent": "center" };
-const S446: React.CSSProperties = { "width": "18px", "height": "18px", "fill": "none", "stroke": "currentColor", "strokeWidth": "1.8", "strokeLinecap": "round" };
-const S447: React.CSSProperties = { "flex": "1", "minHeight": "0", "overflowY": "auto", "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "16px", "padding": "56px 28px 20px", "textAlign": "center" };
-const S448: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "6px" };
-const S449: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "34px", "lineHeight": "1", "color": "#f2ece0" };
-const S450: React.CSSProperties = { "width": "60px", "height": "1px", "background": "linear-gradient(90deg, transparent, rgba(192,57,46,.6))" };
-const S451: React.CSSProperties = { "width": "6px", "height": "6px", "transform": "rotate(45deg)", "border": "1px solid rgba(232,88,74,.7)" };
-const S452: React.CSSProperties = { "width": "60px", "height": "1px", "background": "linear-gradient(90deg, rgba(192,57,46,.6), transparent)" };
-const S453: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "19px", "lineHeight": "1.45", "color": "#ece6da", "textWrap": "pretty" };
-const S454: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "8px", "marginTop": "4px" };
-const S455: React.CSSProperties = { "display": "flex", "flexWrap": "wrap", "justifyContent": "center", "gap": "12px" };
-const S456: React.CSSProperties = { "display": "flex" };
-const S457: React.CSSProperties = { "position": "relative", "flex": "none", "width": "68px", "height": "68px", "borderRadius": "50%", "overflow": "hidden", "background": "radial-gradient(circle at 50% 28%, #f4ecd6 0%, #e3d4b0 58%, #b9a072 100%)", "boxShadow": "0 4px 12px rgba(0,0,0,.5), inset 0 0 0 1px rgba(90,60,25,.35), inset 0 -3px 6px rgba(90,60,25,.22)" };
-const S458: React.CSSProperties = { "padding": "16px 22px 20px", "borderTop": "1px solid rgba(176,186,204,.1)" };
-const S459: React.CSSProperties = { "minHeight": "46px", "borderRadius": "10px", "border": "1px solid #c0392e", "background": "rgba(192,57,46,.14)", "color": "#ffb4a6", "fontSize": "14px", "fontWeight": "700", "textDecoration": "none", "display": "flex", "alignItems": "center", "justifyContent": "center", "gap": "8px" };
-const S460: React.CSSProperties = { "position": "absolute", "inset": "0", "zIndex": "70", "padding": "24px", "background": "rgba(6,4,5,.74)", "backdropFilter": "blur(6px)", "display": "flex", "alignItems": "center", "justifyContent": "center", "animation": "swRise .2s ease-out" };
-const S461: React.CSSProperties = { "width": "100%", "maxWidth": "1320px", "maxHeight": "100%", "display": "flex", "flexDirection": "column", "borderRadius": "12px", "background": "linear-gradient(180deg, #221a1e, #151013)", "border": "1px solid rgba(176,186,204,.24)", "boxShadow": "0 30px 80px rgba(0,0,0,.7)", "overflow": "hidden" };
-const S462: React.CSSProperties = { "display": "flex", "alignItems": "flex-start", "justifyContent": "space-between", "gap": "16px", "padding": "16px 14px 10px 22px" };
-const S463: React.CSSProperties = { "fontSize": "11px", "letterSpacing": ".32em", "textTransform": "uppercase", "fontWeight": "600", "color": "rgba(222,216,204,.5)" };
-const S464: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "28px", "fontWeight": "400", "lineHeight": "1", "color": "#f2ece0" };
-const S465: React.CSSProperties = { "width": "36px", "height": "36px", "flex": "none", "border": "none", "borderRadius": "10px", "background": "transparent", "color": "rgba(222,216,204,.55)", "cursor": "pointer", "display": "flex", "alignItems": "center", "justifyContent": "center" };
-const S466: React.CSSProperties = { "flex": "1 1 auto", "minHeight": "0", "minWidth": "0", "overflowY": "auto", "overflowX": "hidden", "padding": "2px 22px 14px", "display": "flex", "flexDirection": "column", "gap": "10px" };
-const S467: React.CSSProperties = { "minWidth": "0", "padding": "10px 10px 8px", "borderRadius": "8px", "background": "rgba(0,0,0,.24)", "border": "1px solid rgba(176,186,204,.08)", "display": "flex", "flexDirection": "column", "gap": "8px" };
-const S468: React.CSSProperties = { "display": "flex", "alignItems": "baseline", "justifyContent": "space-between", "gap": "10px", "padding": "0 4px" };
-const S469: React.CSSProperties = { "display": "flex", "alignItems": "baseline", "gap": "10px", "minWidth": "0" };
-const S470: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "13px", "color": "rgba(222,216,204,.5)", "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis" };
-const S471: React.CSSProperties = { "display": "grid", "minWidth": "0", "gridTemplateColumns": "repeat(auto-fill, minmax(70px, 1fr))", "gap": "8px 2px" };
-const S472: React.CSSProperties = { "position": "relative", "width": "52px", "height": "52px", "transition": "transform .18s" };
-const S473: React.CSSProperties = { "display": "flex", "flexWrap": "wrap", "alignItems": "center", "flex": "none", "gap": "12px 24px", "padding": "12px 22px 14px", "borderTop": "1px solid rgba(176,186,204,.12)", "background": "rgba(0,0,0,.2)" };
-const S474: React.CSSProperties = { "flex": "1 1 380px", "minWidth": "0", "display": "flex", "gap": "14px", "alignItems": "center", "minHeight": "76px" };
-const S475: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "4px", "minWidth": "0", "flex": "1" };
-const S476: React.CSSProperties = { "display": "flex", "alignItems": "baseline", "gap": "10px" };
-const S477: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "21px", "fontWeight": "400", "lineHeight": "1", "color": "#f2ece0" };
-const S478: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "14px", "lineHeight": "1.35", "color": "rgba(236,230,218,.82)", "textWrap": "pretty" };
-const S479: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "6px", "flex": "none" };
-const S480: React.CSSProperties = { "fontSize": "11px", "letterSpacing": ".18em", "textTransform": "uppercase", "fontWeight": "600", "color": "rgba(222,216,204,.45)" };
-const S481: React.CSSProperties = { "display": "flex", "gap": "8px", "minHeight": "48px", "alignItems": "flex-start" };
-const S482: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "13px", "color": "rgba(222,216,204,.45)", "paddingTop": "8px" };
-const S483: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "3px", "width": "58px" };
-const S484: React.CSSProperties = { "position": "relative", "flex": "none", "width": "52px", "height": "52px", "borderRadius": "50%", "overflow": "hidden", "background": "radial-gradient(circle at 50% 28%, #f4ecd6 0%, #e3d4b0 58%, #b9a072 100%)", "boxShadow": "0 3px 8px rgba(0,0,0,.5), inset 0 0 0 1px rgba(90,60,25,.35), inset 0 -3px 6px rgba(90,60,25,.22)" };
-const S485: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "16px", "marginLeft": "auto", "flexWrap": "wrap", "justifyContent": "flex-end" };
-const S486: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "2px", "alignItems": "flex-end" };
-const S487: React.CSSProperties = { "fontSize": "14px", "fontWeight": "600", "color": "#ece6da" };
-const S488: React.CSSProperties = { "display": "flex", "gap": "6px" };
-const S489: React.CSSProperties = { "minHeight": "44px", "padding": "0 14px", "border": "none", "borderRadius": "10px", "background": "transparent", "color": "rgba(222,216,204,.6)", "fontFamily": "inherit", "fontSize": "14px", "cursor": "pointer", "whiteSpace": "nowrap" };
-const S490: React.CSSProperties = { "minHeight": "44px", "padding": "0 16px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.3)", "background": "transparent", "color": "#ddd6c8", "fontFamily": "inherit", "fontSize": "14px", "cursor": "pointer", "whiteSpace": "nowrap" };
-const S491: React.CSSProperties = { "marginLeft": "auto", "maxWidth": "260px", "fontSize": "13px", "lineHeight": "1.4", "color": "rgba(222,216,204,.6)", "textAlign": "right" };
-const S492: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "16px", "marginLeft": "auto" };
-const S493: React.CSSProperties = { "maxWidth": "260px", "fontSize": "13px", "lineHeight": "1.4", "color": "rgba(222,216,204,.6)", "textAlign": "right" };
-const S494: React.CSSProperties = { "position": "absolute", "inset": "0", "zIndex": "60", "background": "rgba(6,4,5,.72)", "backdropFilter": "blur(6px)", "display": "flex", "alignItems": "center", "justifyContent": "center", "animation": "swRise .2s ease-out" };
-const S495: React.CSSProperties = { "width": "360px", "maxWidth": "calc(100% - 32px)", "padding": "28px 28px 22px", "borderRadius": "20px", "background": "linear-gradient(180deg, #221a1e, #171215)", "border": "1px solid rgba(176,186,204,.24)", "boxShadow": "0 30px 80px rgba(0,0,0,.7)", "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "16px", "textAlign": "center" };
-const S496: React.CSSProperties = { "padding": "16px", "borderRadius": "14px", "background": "#efe5cc", "boxShadow": "inset 0 0 0 1px rgba(90,60,25,.25)" };
-const S497: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "6px" };
-const S498: React.CSSProperties = { "width": "34px", "height": "44px", "display": "flex", "alignItems": "center", "justifyContent": "center", "borderRadius": "9px", "border": "1px solid rgba(232,88,74,.35)", "background": "rgba(9,10,15,.75)", "fontFamily": "'Source Sans 3', sans-serif", "fontSize": "24px", "fontWeight": "700", "lineHeight": "1", "color": "#f2ece0", "fontVariantNumeric": "tabular-nums" };
-const S499: React.CSSProperties = { "width": "6px", "height": "2px", "borderRadius": "1px", "background": "rgba(232,88,74,.5)" };
-const S500: React.CSSProperties = { "flex": "1", "minHeight": "44px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.3)", "background": "transparent", "color": "#ddd6c8", "fontFamily": "inherit", "fontSize": "14px", "cursor": "pointer" };
-const S501: React.CSSProperties = { "flex": "1", "minHeight": "44px", "borderRadius": "10px", "border": "1px solid #c0392e", "background": "rgba(176,186,204,.14)", "color": "#ffb4a6", "fontFamily": "inherit", "fontSize": "14px", "fontWeight": "600", "cursor": "pointer" };
-const S502: React.CSSProperties = { "position": "absolute", "inset": "0", "zIndex": "90", "overflow": "hidden", "background": "#0d0607", "display": "flex", "alignItems": "center", "justifyContent": "center", "animation": "swRise .25s ease-out" };
-const S503: React.CSSProperties = { "position": "absolute", "inset": "0", "pointerEvents": "none", "background": "radial-gradient(ellipse 70% 60% at 50% 48%, #3b1a1d 0%, #261011 45%, #120708 80%), #0d0607" };
-const S504: React.CSSProperties = { "position": "absolute", "inset": "0", "pointerEvents": "none", "background": "radial-gradient(ellipse 40% 30% at 18% 100%, rgba(110,40,30,.22), transparent 70%), radial-gradient(ellipse 40% 30% at 82% 0%, rgba(80,44,96,.18), transparent 70%)" };
-const S505: React.CSSProperties = { "position": "absolute", "inset": "0", "pointerEvents": "none", "opacity": ".22", "mixBlendMode": "overlay", "backgroundImage": "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' sc-camel-base-frequency='.85' sc-camel-num-octaves='3' sc-camel-stitch-tiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .9 0 0 0 0 .8 0 0 0 0 .65 0 0 0 .9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")" };
-const S506: React.CSSProperties = { "position": "absolute", "inset": "0", "pointerEvents": "none", "opacity": ".35", "mixBlendMode": "multiply", "backgroundImage": "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Cfilter id='l'%3E%3CfeTurbulence type='turbulence' sc-camel-base-frequency='.012 .02' sc-camel-num-octaves='4' seed='4'/%3E%3CfeColorMatrix values='0 0 0 0 .2 0 0 0 0 .08 0 0 0 0 .08 0 0 0 1.4 -.4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23l)'/%3E%3C/svg%3E\")" };
-const S507: React.CSSProperties = { "position": "absolute", "inset": "0", "pointerEvents": "none", "background": "radial-gradient(ellipse 95% 85% at 50% 50%, transparent 45%, rgba(0,0,0,.72) 100%)" };
-const S508: React.CSSProperties = { "position": "absolute", "inset": "12px", "border": "1px solid rgba(176,186,204,.14)", "borderRadius": "16px", "pointerEvents": "none" };
-const S509: React.CSSProperties = { "position": "absolute", "inset": "18px", "border": "1px solid rgba(176,186,204,.06)", "borderRadius": "12px", "pointerEvents": "none" };
-const S510: React.CSSProperties = { "position": "absolute", "left": "22px", "top": "22px", "width": "10px", "height": "10px", "transform": "rotate(45deg)", "border": "1px solid rgba(232,88,74,.55)", "background": "#1a0b0c", "pointerEvents": "none" };
-const S511: React.CSSProperties = { "position": "absolute", "right": "22px", "top": "22px", "width": "10px", "height": "10px", "transform": "rotate(45deg)", "border": "1px solid rgba(232,88,74,.55)", "background": "#1a0b0c", "pointerEvents": "none" };
-const S512: React.CSSProperties = { "position": "absolute", "left": "22px", "bottom": "22px", "width": "10px", "height": "10px", "transform": "rotate(45deg)", "border": "1px solid rgba(232,88,74,.55)", "background": "#1a0b0c", "pointerEvents": "none" };
-const S513: React.CSSProperties = { "position": "absolute", "right": "22px", "bottom": "22px", "width": "10px", "height": "10px", "transform": "rotate(45deg)", "border": "1px solid rgba(232,88,74,.55)", "background": "#1a0b0c", "pointerEvents": "none" };
-const S514: React.CSSProperties = { "position": "relative", "zIndex": "1", "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "18px", "maxWidth": "640px", "padding": "0 40px", "textAlign": "center" };
-const S515: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "12px" };
-const S516: React.CSSProperties = { "fontFamily": "'Cinzel Decorative', serif", "fontSize": "48px", "fontWeight": "700", "letterSpacing": ".06em", "lineHeight": "1", "color": "#e8c77a", "textShadow": "0 2px 18px rgba(232,170,90,.25)" };
-const S517: React.CSSProperties = { "width": "80px", "height": "1px", "background": "linear-gradient(90deg, transparent, rgba(232,88,74,.65))" };
-const S518: React.CSSProperties = { "width": "5px", "height": "5px", "transform": "rotate(45deg)", "background": "rgba(232,88,74,.7)" };
-const S519: React.CSSProperties = { "width": "9px", "height": "9px", "transform": "rotate(45deg)", "border": "1px solid rgba(232,88,74,.85)" };
-const S520: React.CSSProperties = { "width": "80px", "height": "1px", "background": "linear-gradient(90deg, rgba(232,88,74,.65), transparent)" };
-const S521: React.CSSProperties = { "position": "relative", "width": "230px", "height": "230px", "margin": "8px 0", "borderRadius": "50%", "overflow": "hidden", "background": "radial-gradient(circle at 38% 30%, #f1e6c9 0%, #dccaa0 48%, #b09566 100%)", "boxShadow": "0 0 0 3px rgba(232,88,74,.7), 0 0 0 10px rgba(20,8,8,.85), 0 0 0 11px rgba(232,88,74,.35), 0 0 60px 14px rgba(232,170,90,.18), 0 24px 50px rgba(0,0,0,.6), inset 0 -12px 24px rgba(90,60,25,.35)" };
-const S522: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "4px" };
-const S523: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "52px", "fontWeight": "400", "lineHeight": "1", "color": "#f2e6c8" };
-const S524: React.CSSProperties = { "width": "5px", "height": "5px", "transform": "rotate(45deg)", "background": "currentColor" };
-const S525: React.CSSProperties = { "width": "60px", "height": "1px", "background": "linear-gradient(90deg, transparent, rgba(232,88,74,.65))" };
-const S526: React.CSSProperties = { "width": "60px", "height": "1px", "background": "linear-gradient(90deg, rgba(232,88,74,.65), transparent)" };
-const S527: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "24px", "lineHeight": "1.4", "color": "rgba(242,230,200,.88)", "textWrap": "pretty" };
-const S528: React.CSSProperties = { "position": "relative", "zIndex": "1", "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "36px", "padding": "0 40px", "textAlign": "center" };
-const S529: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "18px" };
-const S530: React.CSSProperties = { "width": "110px", "height": "1px", "background": "linear-gradient(90deg, transparent, rgba(232,88,74,.65))" };
-const S531: React.CSSProperties = { "width": "110px", "height": "1px", "background": "linear-gradient(90deg, rgba(232,88,74,.65), transparent)" };
-const S532: React.CSSProperties = { "position": "relative", "zIndex": "1", "display": "flex", "alignItems": "stretch", "justifyContent": "center", "padding": "0 48px" };
-const S533: React.CSSProperties = { "fontFamily": "'Cinzel Decorative', serif", "fontSize": "36px", "fontWeight": "700", "letterSpacing": ".04em", "lineHeight": "1.15", "color": "#e8c77a", "maxWidth": "440px", "textWrap": "balance", "textShadow": "0 2px 18px rgba(232,170,90,.22)" };
-const S534: React.CSSProperties = { "display": "flex", "flexWrap": "wrap", "justifyContent": "center", "gap": "18px" };
-const S535: React.CSSProperties = { "padding": "6px 26px 8px", "borderRadius": "4px", "background": "radial-gradient(ellipse at 50% 30%, #f1e6c9 0%, #dccaa0 60%, #b9a06e 100%)", "boxShadow": "0 0 0 1px rgba(90,60,25,.5), 0 0 0 4px rgba(20,8,8,.8), 0 0 0 5px rgba(232,88,74,.45), 0 12px 26px rgba(0,0,0,.5), inset 0 -4px 10px rgba(90,60,25,.3)", "fontFamily": "'IM Fell English', serif", "fontSize": "38px", "fontWeight": "400", "color": "#2e1c10" };
-const S536: React.CSSProperties = { "display": "flex", "gap": "28px" };
-const S537: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "16px" };
-const S538: React.CSSProperties = { "position": "relative", "width": "136px", "height": "136px", "borderRadius": "50%", "overflow": "hidden", "background": "radial-gradient(circle at 38% 30%, #f1e6c9 0%, #dccaa0 48%, #b09566 100%)", "boxShadow": "0 0 0 2px rgba(232,88,74,.7), 0 0 0 7px rgba(20,8,8,.85), 0 0 0 8px rgba(232,88,74,.3), 0 14px 34px rgba(0,0,0,.55), inset 0 -8px 16px rgba(90,60,25,.35)" };
-const S539: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "26px", "fontWeight": "400", "color": "#f2e6c8" };
-const S540: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "26px", "color": "rgba(242,230,200,.7)" };
-const S541: React.CSSProperties = { "position": "absolute", "zIndex": "2", "right": "44px", "bottom": "44px", "minHeight": "48px", "padding": "0 20px", "borderRadius": "12px", "border": "1px solid rgba(176,186,204,.25)", "background": "rgba(14,9,10,.75)", "color": "#ddd6c8", "fontFamily": "'IM Fell English', serif", "fontSize": "19px", "fontWeight": "400", "cursor": "pointer", "display": "flex", "alignItems": "center", "gap": "8px", "whiteSpace": "nowrap" };
+const S221: React.CSSProperties = { "display": "flex", "alignItems": "center", "justifyContent": "flex-end", "gap": "2px" };
+const S222: React.CSSProperties = { "width": "19px", "height": "19px", "fill": "none", "stroke": "currentColor", "strokeWidth": "1.7", "strokeLinecap": "round", "strokeLinejoin": "round" };
+const S223: React.CSSProperties = { "width": "1px", "height": "30px", "margin": "0 4px", "background": "rgba(176,186,204,.16)" };
+const S224: React.CSSProperties = { "width": "20px", "height": "20px", "fill": "none", "stroke": "currentColor", "strokeWidth": "1.6", "strokeLinecap": "round", "strokeLinejoin": "round" };
+const S225: React.CSSProperties = { "position": "absolute", "bottom": "2px", "left": "50%", "width": "16px", "height": "2px", "marginLeft": "-8px", "borderRadius": "1px", "background": "#e8584a", "boxShadow": "0 0 8px #e8584a" };
+const S226: React.CSSProperties = { "position": "relative", "width": "150px", "height": "62px", "border": "none", "background": "transparent", "padding": "0", "cursor": "pointer", "fontFamily": "inherit" };
+const S227: React.CSSProperties = { "position": "absolute", "left": "50%", "top": "-41px", "marginLeft": "-38px", "width": "76px", "height": "76px", "borderRadius": "50%", "background": "radial-gradient(circle at 50% 32%, #2c1519, #120a0c 72%)", "border": "1.5px solid #c0392e", "boxShadow": "0 12px 30px rgba(0,0,0,.65), 0 0 26px rgba(192,57,46,.38), inset 0 0 0 5px #0d0e14, inset 0 0 0 6px rgba(176,186,204,.18)", "display": "flex", "alignItems": "center", "justifyContent": "center" };
+const S228: React.CSSProperties = { "position": "absolute", "inset": "8px", "borderRadius": "50%", "background": "repeating-conic-gradient(rgba(236,230,218,.6) 0deg 2.4deg, transparent 2.4deg 30deg)", "WebkitMask": "radial-gradient(circle, transparent 80%, #000 81%)", "mask": "radial-gradient(circle, transparent 80%, #000 81%)" };
+const S229: React.CSSProperties = { "position": "absolute", "left": "-24px", "right": "-24px", "bottom": "7px", "fontSize": "11px", "fontWeight": "700", "letterSpacing": ".14em", "textTransform": "uppercase", "color": "#ff8a78", "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis", "textAlign": "center" };
+const S230: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "2px" };
+const S231: React.CSSProperties = { "width": "19px", "height": "19px", "fill": "none", "stroke": "currentColor", "strokeWidth": "1.6", "strokeLinecap": "round", "strokeLinejoin": "round" };
+const S232: React.CSSProperties = { "position": "absolute", "top": "2px", "right": "6px", "width": "18px", "height": "18px", "borderRadius": "50%", "background": "#e8584a", "color": "#fff", "fontSize": "13px", "fontWeight": "800", "lineHeight": "18px", "letterSpacing": "0", "boxShadow": "0 0 0 2px #0d0e14, 0 0 12px rgba(232,88,74,.8)" };
+const S233: React.CSSProperties = { "position": "absolute", "left": "-18%", "right": "-18%", "top": "-24%", "bottom": "-24%", "borderRadius": "50%", "background": "radial-gradient(closest-side, rgba(5,6,10,.78), rgba(5,6,10,.45) 60%, transparent)", "pointerEvents": "none" };
+const S234: React.CSSProperties = { "position": "relative", "width": "100%", "display": "flex", "flexDirection": "column", "gap": "14px", "padding": "12px 16px 16px", "borderRadius": "16px", "background": "linear-gradient(180deg, rgba(20,21,30,.97), rgba(10,11,16,.98))", "border": "1px solid rgba(176,186,204,.22)", "boxShadow": "0 20px 50px rgba(0,0,0,.6), inset 0 2px 0 rgba(192,57,46,.55)" };
+const S235: React.CSSProperties = { "display": "flex", "alignItems": "center", "justifyContent": "space-between", "gap": "10px" };
+const S236: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "10px", "fontFamily": "'Cinzel Decorative', serif", "fontSize": "11px", "fontWeight": "700", "letterSpacing": ".28em", "textTransform": "uppercase", "color": "rgba(222,216,204,.6)" };
+const S237: React.CSSProperties = { "color": "rgba(222,216,204,.4)", "letterSpacing": ".04em", "fontFamily": "'Source Sans 3', sans-serif", "textTransform": "none" };
+const S238: React.CSSProperties = { "width": "32px", "height": "32px", "border": "none", "borderRadius": "8px", "background": "transparent", "color": "rgba(222,216,204,.55)", "cursor": "pointer", "display": "flex", "alignItems": "center", "justifyContent": "center" };
+const S239: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "44px minmax(0,1fr) 44px", "alignItems": "center", "gap": "8px" };
+const S240: React.CSSProperties = { "width": "44px", "height": "44px", "borderRadius": "50%", "border": "1px solid rgba(176,186,204,.3)", "background": "transparent", "color": "#ece6da", "cursor": "pointer", "display": "flex", "alignItems": "center", "justifyContent": "center" };
+const S241: React.CSSProperties = { "width": "16px", "height": "16px", "fill": "none", "stroke": "currentColor", "strokeWidth": "1.8", "strokeLinecap": "round", "strokeLinejoin": "round" };
+const S242: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "4px", "minWidth": "0" };
+const S243: React.CSSProperties = { "fontSize": "11px", "letterSpacing": ".22em", "textTransform": "uppercase", "fontWeight": "700", "color": "#ff8a78" };
+const S244: React.CSSProperties = { "fontSize": "13px", "lineHeight": "1.4", "textAlign": "center", "color": "rgba(222,216,204,.6)", "textWrap": "pretty" };
+const S245: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "repeat(auto-fill, minmax(128px, 1fr))", "gap": "8px" };
+const S246: React.CSSProperties = { "flex": "none", "minWidth": "26px", "fontFamily": "'IM Fell English', serif", "fontSize": "14px", "color": "#ff8a78" };
+const S247: React.CSSProperties = { "minWidth": "0", "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis" };
+const S248: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "8px", "flexWrap": "wrap", "paddingTop": "12px", "borderTop": "1px solid rgba(176,186,204,.1)" };
+const S249: React.CSSProperties = { "minHeight": "44px", "padding": "0 14px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.26)", "background": "rgba(9,10,15,.5)", "color": "#ece6da", "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "600", "cursor": "pointer", "whiteSpace": "nowrap" };
+const S250: React.CSSProperties = { "minHeight": "44px", "padding": "0 10px", "border": "none", "background": "transparent", "color": "rgba(222,216,204,.65)", "fontFamily": "inherit", "fontSize": "13px", "textDecoration": "underline", "textUnderlineOffset": "3px", "cursor": "pointer" };
+const S251: React.CSSProperties = { "position": "relative", "width": "100%", "display": "flex", "flexDirection": "column", "gap": "14px", "padding": "14px 18px 16px", "borderRadius": "16px", "background": "linear-gradient(180deg, rgba(20,21,30,.97), rgba(10,11,16,.98))", "border": "1px solid rgba(176,186,204,.22)", "boxShadow": "0 20px 50px rgba(0,0,0,.6), inset 0 2px 0 rgba(192,57,46,.55)" };
+const S252: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "8px", "minWidth": "0" };
+const S253: React.CSSProperties = { "width": "12px", "height": "12px", "fill": "none", "stroke": "#ffb4a6", "strokeWidth": "2.6", "strokeLinecap": "round", "strokeLinejoin": "round" };
+const S254: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "14px", "animation": "swRise .35s ease-out" };
+const S255: React.CSSProperties = { "display": "flex", "alignItems": "baseline", "justifyContent": "space-between", "gap": "12px", "flexWrap": "wrap", "paddingTop": "12px", "borderTop": "1px solid rgba(176,186,204,.1)" };
+const S256: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "26px", "lineHeight": "1", "color": "#f2ece0" };
+const S257: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "repeat(4, minmax(0,1fr))", "gap": "10px" };
+const S258: React.CSSProperties = { "position": "absolute", "right": "6px", "top": "6px", "width": "20px", "height": "20px", "borderRadius": "50%", "background": "#c0392e", "color": "#fbe9e4", "display": "flex", "alignItems": "center", "justifyContent": "center", "boxShadow": "0 0 0 2px #14151d" };
+const S259: React.CSSProperties = { "width": "11px", "height": "11px", "fill": "none", "stroke": "currentColor", "strokeWidth": "3", "strokeLinecap": "round", "strokeLinejoin": "round" };
+const S260: React.CSSProperties = { "display": "none" };
+const S261: React.CSSProperties = { "width": "100%", "height": "62px", "backgroundImage": "url(public/custom-script.png)", "backgroundSize": "contain", "backgroundPosition": "center", "backgroundRepeat": "no-repeat", "filter": "drop-shadow(0 4px 8px rgba(0,0,0,.6))" };
+const S262: React.CSSProperties = { "maxWidth": "100%", "fontSize": "10.5px", "color": "rgba(222,216,204,.6)", "overflow": "hidden", "textOverflow": "ellipsis", "whiteSpace": "nowrap" };
+const S263: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "auto minmax(0,1fr)", "gap": "18px", "alignItems": "center", "padding": "10px 0", "borderTop": "1px solid rgba(176,186,204,.1)", "borderBottom": "1px solid rgba(176,186,204,.1)" };
+const S264: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "4px" };
+const S265: React.CSSProperties = { "width": "44px", "height": "44px", "borderRadius": "50%", "border": "1px solid rgba(176,186,204,.3)", "background": "transparent", "color": "#ece6da", "fontSize": "22px", "lineHeight": "1", "cursor": "pointer" };
+const S266: React.CSSProperties = { "width": "64px", "display": "flex", "flexDirection": "column", "alignItems": "center" };
+const S267: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "40px", "lineHeight": "1", "color": "#ff8a78" };
+const S268: React.CSSProperties = { "fontSize": "10px", "letterSpacing": ".14em", "textTransform": "uppercase", "color": "rgba(222,216,204,.55)" };
+const S269: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "6px", "minWidth": "0" };
+const S270: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "repeat(4, minmax(0,1fr))", "gap": "4px" };
+const S271: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "2px" };
+const S272: React.CSSProperties = { "fontSize": "10.5px", "letterSpacing": ".08em", "textTransform": "uppercase", "color": "rgba(222,216,204,.55)" };
+const S273: React.CSSProperties = { "fontSize": "12px", "textAlign": "center", "color": "rgba(222,216,204,.5)" };
+const S274: React.CSSProperties = { "flex": "1", "minWidth": "0", "fontSize": "12px", "textAlign": "right", "color": "rgba(222,216,204,.55)", "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis" };
+const S275: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "12px", "animation": "swRise .35s ease-out" };
+const S276: React.CSSProperties = { "display": "flex", "alignItems": "center", "justifyContent": "space-between", "gap": "12px", "flexWrap": "wrap", "paddingTop": "12px", "borderTop": "1px solid rgba(176,186,204,.1)" };
+const S277: React.CSSProperties = { "fontSize": "12.5px", "color": "rgba(222,216,204,.6)" };
+const S278: React.CSSProperties = { "display": "flex", "gap": "4px", "padding": "4px", "borderRadius": "12px", "background": "rgba(9,10,15,.6)", "border": "1px solid rgba(176,186,204,.14)" };
+const S279: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "minmax(0,1fr) 236px", "gap": "14px", "alignItems": "stretch" };
+const S280: React.CSSProperties = { "height": "204px", "overflowY": "auto", "overflowX": "hidden", "padding": "8px 4px 14px", "WebkitMaskImage": "linear-gradient(180deg, #000 88%, transparent)", "maskImage": "linear-gradient(180deg, #000 88%, transparent)" };
+const S281: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "repeat(auto-fill, minmax(70px, 1fr))", "gap": "14px 6px" };
+const S282: React.CSSProperties = { "width": "10px", "height": "10px", "fill": "none", "stroke": "currentColor", "strokeWidth": "3.4", "strokeLinecap": "round", "strokeLinejoin": "round" };
+const S283: React.CSSProperties = { "flex": "1", "display": "flex", "flexDirection": "column", "gap": "10px", "minHeight": "0", "animation": "swRise .25s ease-out" };
+const S284: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "12px", "minWidth": "0" };
+const S285: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "3px", "minWidth": "0" };
+const S286: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "21px", "lineHeight": "1.05", "color": "#f2ece0", "textWrap": "balance" };
+const S287: React.CSSProperties = { "flex": "1", "minHeight": "0", "overflowY": "auto", "fontSize": "13px", "lineHeight": "1.45", "color": "rgba(222,216,204,.8)", "textWrap": "pretty" };
+const S288: React.CSSProperties = { "flex": "1", "display": "flex", "flexDirection": "column", "justifyContent": "center", "alignItems": "center", "gap": "10px", "textAlign": "center" };
+const S289: React.CSSProperties = { "width": "52px", "height": "52px", "borderRadius": "50%", "border": "1.5px dashed rgba(176,186,204,.35)" };
+const S290: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "18px", "color": "#f2ece0" };
+const S291: React.CSSProperties = { "fontSize": "12.5px", "lineHeight": "1.45", "color": "rgba(222,216,204,.6)", "textWrap": "pretty" };
+const S292: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "10px", "paddingTop": "12px", "borderTop": "1px solid rgba(176,186,204,.1)" };
+const S293: React.CSSProperties = { "flex": "1", "minWidth": "0", "display": "flex", "alignItems": "center", "justifyContent": "flex-end", "gap": "6px" };
+const S294: React.CSSProperties = { "marginLeft": "6px", "fontSize": "12px", "color": "rgba(222,216,204,.55)", "whiteSpace": "nowrap" };
+const S295: React.CSSProperties = { "minHeight": "44px", "padding": "0 18px", "borderRadius": "10px", "border": "1px solid #c0392e", "background": "rgba(192,57,46,.22)", "color": "#ffb4a6", "fontFamily": "inherit", "fontSize": "14px", "fontWeight": "700", "cursor": "pointer", "whiteSpace": "nowrap" };
+const S296: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "10px", "minWidth": "0" };
+const S297: React.CSSProperties = { "position": "relative", "flex": "none", "width": "40px", "height": "40px", "borderRadius": "50%", "background": "radial-gradient(circle at 38% 30%, #f1e6c9, #b09566)", "boxShadow": "0 0 0 2px #14151d, 0 0 0 3px rgba(232,88,74,.6)" };
+const S298: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "20px", "lineHeight": "1", "color": "#f2ece0" };
+const S299: React.CSSProperties = { "fontSize": "13px", "color": "#ffb4a6" };
+const S300: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "8px" };
+const S301: React.CSSProperties = { "minHeight": "40px", "padding": "0 12px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.22)", "background": "transparent", "color": "rgba(222,216,204,.75)", "fontFamily": "inherit", "fontSize": "13px", "cursor": "pointer" };
+const S302: React.CSSProperties = { "position": "relative", "width": "100%", "display": "flex", "flexDirection": "column", "gap": "12px", "padding": "12px 16px 14px", "borderRadius": "16px", "background": "linear-gradient(180deg, rgba(20,21,30,.97), rgba(10,11,16,.98))", "border": "1px solid rgba(176,186,204,.22)", "boxShadow": "0 20px 50px rgba(0,0,0,.6), inset 0 2px 0 rgba(192,57,46,.55)" };
+const S303: React.CSSProperties = { "paddingBottom": "10px", "borderBottom": "1px solid rgba(176,186,204,.1)" };
+const S304: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "repeat(4, minmax(0,1fr))", "gap": "4px", "padding": "8px 0", "borderTop": "1px solid rgba(176,186,204,.1)", "borderBottom": "1px solid rgba(176,186,204,.1)" };
+const S305: React.CSSProperties = { "display": "flex", "gap": "4px", "padding": "3px", "borderRadius": "10px", "background": "rgba(9,10,15,.7)", "border": "1px solid rgba(176,186,204,.16)" };
+const S306: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "12px" };
+const S307: React.CSSProperties = { "fontSize": "14px", "lineHeight": "1.4", "color": "rgba(222,216,204,.7)", "textWrap": "pretty" };
+const S308: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "auto minmax(0,1fr)", "gap": "16px", "alignItems": "center" };
+const S309: React.CSSProperties = { "fontSize": "11px", "letterSpacing": ".14em", "textTransform": "uppercase", "color": "rgba(222,216,204,.5)" };
+const S310: React.CSSProperties = { "fontSize": "14px", "lineHeight": "1.4", "color": "#ece6da" };
+const S311: React.CSSProperties = { "flex": "1", "minWidth": "0", "height": "44px", "padding": "0 14px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.26)", "background": "rgba(9,10,15,.7)", "color": "#f2ece0", "fontFamily": "inherit", "fontSize": "15px", "outline": "none" };
+const S312: React.CSSProperties = { "height": "44px", "padding": "0 16px", "borderRadius": "10px", "border": "1px solid #c0392e", "background": "rgba(192,57,46,.18)", "color": "#ffb4a6", "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "700", "cursor": "pointer", "whiteSpace": "nowrap" };
+const S313: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "auto minmax(0,1fr)", "gap": "18px", "alignItems": "center", "padding": "12px", "borderRadius": "14px", "background": "rgba(9,10,15,.5)", "border": "1px solid rgba(176,186,204,.12)" };
+const S314: React.CSSProperties = { "padding": "7px", "borderRadius": "10px", "background": "#f2ece0", "boxShadow": "0 0 0 1px rgba(192,57,46,.45), 0 8px 18px rgba(0,0,0,.45)", "lineHeight": "0" };
+const S315: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "10px", "minWidth": "0" };
+const S316: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "24px", "lineHeight": "1", "color": "#f2ece0" };
+const S317: React.CSSProperties = { "fontSize": "13px", "lineHeight": "1.4", "color": "rgba(222,216,204,.65)", "textWrap": "pretty" };
+const S318: React.CSSProperties = { "color": "#ece6da", "fontWeight": "600" };
+const S319: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "12px", "flexWrap": "wrap" };
+const S320: React.CSSProperties = { "width": "26px", "height": "34px", "display": "flex", "alignItems": "center", "justifyContent": "center", "borderRadius": "7px", "border": "1px solid rgba(232,88,74,.35)", "background": "rgba(9,10,15,.75)", "fontFamily": "'Source Sans 3', sans-serif", "fontSize": "19px", "fontWeight": "700", "lineHeight": "1", "color": "#f2ece0", "fontVariantNumeric": "tabular-nums" };
+const S321: React.CSSProperties = { "width": "4px", "height": "2px", "borderRadius": "1px", "background": "rgba(232,88,74,.5)" };
+const S322: React.CSSProperties = { "minHeight": "34px", "display": "flex", "alignItems": "center", "gap": "6px", "padding": "0 12px", "borderRadius": "8px", "border": "1px solid rgba(176,186,204,.26)", "background": "transparent", "color": "#ece6da", "fontFamily": "inherit", "fontSize": "12px", "fontWeight": "600", "cursor": "pointer", "whiteSpace": "nowrap" };
+const S323: React.CSSProperties = { "width": "14px", "height": "14px", "fill": "none", "stroke": "currentColor", "strokeWidth": "1.8", "strokeLinecap": "round", "strokeLinejoin": "round" };
+const S324: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "6px" };
+const S325: React.CSSProperties = { "display": "flex", "justifyContent": "space-between", "fontSize": "12px", "color": "rgba(222,216,204,.6)" };
+const S326: React.CSSProperties = { "display": "flex", "alignItems": "baseline", "gap": "10px", "flexWrap": "wrap" };
+const S327: React.CSSProperties = { "marginLeft": "auto", "alignSelf": "center", "display": "flex", "alignItems": "center", "gap": "6px" };
+const S328: React.CSSProperties = { "width": "34px", "height": "34px", "borderRadius": "50%", "border": "1px solid rgba(176,186,204,.26)", "background": "transparent", "color": "#ece6da", "fontSize": "16px", "cursor": "pointer" };
+const S329: React.CSSProperties = { "minWidth": "36px", "textAlign": "center", "fontSize": "12px", "color": "rgba(222,216,204,.5)" };
+const S330: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "8px", "flexWrap": "wrap" };
+const S331: React.CSSProperties = { "minHeight": "40px", "padding": "0 6px", "border": "none", "background": "transparent", "color": "rgba(222,216,204,.65)", "fontFamily": "inherit", "fontSize": "13px", "textDecoration": "underline", "textUnderlineOffset": "3px", "cursor": "pointer" };
+const S332: React.CSSProperties = { "minHeight": "40px", "padding": "0 14px", "borderRadius": "10px", "border": "1px solid rgba(148,194,154,.45)", "background": "transparent", "color": "#94c29a", "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "600", "cursor": "pointer" };
+const S333: React.CSSProperties = { "marginLeft": "auto", "fontSize": "12px", "color": "rgba(222,216,204,.55)" };
+const S334: React.CSSProperties = { "position": "relative", "width": "100%", "display": "flex", "flexDirection": "column", "gap": "8px", "padding": "12px 16px", "borderRadius": "16px", "background": "linear-gradient(180deg, rgba(20,21,30,.97), rgba(10,11,16,.98))", "border": "1px solid rgba(176,186,204,.22)", "boxShadow": "0 20px 50px rgba(0,0,0,.6), inset 0 2px 0 rgba(192,57,46,.55)" };
+const S335: React.CSSProperties = { "color": "rgba(222,216,204,.35)", "letterSpacing": ".1em", "fontFamily": "'Source Sans 3', sans-serif" };
+const S336: React.CSSProperties = { "alignSelf": "center", "display": "inline-flex", "alignItems": "center", "gap": "6px", "padding": "3px 10px", "borderRadius": "99px", "border": "1px solid rgba(180,140,224,.55)", "background": "rgba(120,80,170,.2)", "fontSize": "13px", "color": "rgba(222,216,204,.7)" };
+const S337: React.CSSProperties = { "width": "7px", "height": "7px", "borderRadius": "50%", "background": "#b48ce0" };
+const S338: React.CSSProperties = { "fontWeight": "700", "color": "#efe6fa" };
+const S339: React.CSSProperties = { "fontSize": "17px", "lineHeight": "1.4", "color": "#ece6da", "textWrap": "pretty" };
+const S340: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "10px", "fontSize": "14px", "color": "#ffb4a6" };
+const S341: React.CSSProperties = { "padding": "1px 8px", "borderRadius": "3px", "border": "1px solid rgba(232,88,74,.5)", "color": "#ffb4a6" };
+const S342: React.CSSProperties = { "fontSize": "12px", "letterSpacing": ".12em", "textTransform": "uppercase", "color": "rgba(222,216,204,.55)" };
+const S343: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "10px", "fontSize": "14px", "color": "#ece6da" };
+const S344: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "2px", "padding": "10px 12px", "borderRadius": "10px", "background": "rgba(232,88,74,.08)", "border": "1px solid rgba(232,88,74,.3)", "animation": "swRise .3s ease-out" };
+const S345: React.CSSProperties = { "fontSize": "13px", "color": "#e7a35b" };
+const S346: React.CSSProperties = { "alignSelf": "stretch", "display": "flex", "alignItems": "center", "gap": "12px", "minHeight": "56px", "padding": "8px 14px 8px 8px", "borderRadius": "12px", "border": "1px solid rgba(176,186,204,.2)", "background": "rgba(9,10,15,.6)", "fontFamily": "inherit", "textAlign": "left", "cursor": "pointer", "transition": "border-color .2s, background .2s", "animation": "swRise .3s ease-out" };
+const S347: React.CSSProperties = { "position": "relative", "flex": "none", "width": "40px", "height": "40px", "borderRadius": "50%", "background": "radial-gradient(circle at 38% 30%, #f1e6c9, #b09566)", "boxShadow": "0 0 0 2px #14151d, 0 0 0 3px rgba(232,88,74,.5)" };
+const S348: React.CSSProperties = { "flex": "none", "width": "40px", "height": "40px", "borderRadius": "10px", "background": "rgba(232,88,74,.1)", "display": "flex", "alignItems": "center", "justifyContent": "center" };
+const S349: React.CSSProperties = { "width": "20px", "height": "20px", "fill": "none", "stroke": "#e8584a", "strokeWidth": "1.7", "strokeLinecap": "round", "strokeLinejoin": "round" };
+const S350: React.CSSProperties = { "flex": "1", "minWidth": "0", "display": "flex", "flexDirection": "column", "gap": "2px" };
+const S351: React.CSSProperties = { "fontSize": "14px", "fontWeight": "700", "color": "#ece6da" };
+const S352: React.CSSProperties = { "fontSize": "12px", "color": "rgba(222,216,204,.55)", "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis" };
+const S353: React.CSSProperties = { "flex": "none", "display": "flex", "alignItems": "center", "gap": "6px", "fontSize": "11px", "fontWeight": "700", "letterSpacing": ".16em", "textTransform": "uppercase", "color": "#ff8a78" };
+const S354: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "30px", "lineHeight": "1", "color": "#f2ece0" };
+const S355: React.CSSProperties = { "fontSize": "16px", "lineHeight": "1.4", "color": "#ece6da", "textWrap": "pretty" };
+const S356: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "10px" };
+const S357: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "8px", "marginTop": "2px" };
+const S358: React.CSSProperties = { "height": "44px", "padding": "0 14px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.22)", "background": "transparent", "color": "#ece6da", "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "600", "cursor": "pointer" };
+const S359: React.CSSProperties = { "height": "44px", "padding": "0 18px", "borderRadius": "10px", "border": "1px solid #c0392e", "background": "rgba(192,57,46,.18)", "color": "#ffb4a6", "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "700", "cursor": "pointer" };
+const S360: React.CSSProperties = { "width": "16px", "height": "16px", "fill": "none", "stroke": "currentColor", "strokeWidth": "1.7", "strokeLinecap": "round" };
+const S361: React.CSSProperties = { "position": "relative", "alignSelf": "stretch", "height": "94px", "overflow": "hidden", "WebkitMaskImage": "linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent)", "maskImage": "linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent)" };
+const S362: React.CSSProperties = { "position": "absolute", "left": "0", "right": "0", "top": "38px", "height": "1px", "background": "linear-gradient(90deg, transparent, rgba(176,186,204,.3), transparent)" };
+const S363: React.CSSProperties = { "position": "absolute", "left": "50%", "top": "50%", "width": "26px", "height": "26px", "margin": "-13px 0 0 -13px", "fill": "none", "stroke": "#e6ecf8", "strokeWidth": "1.6", "strokeLinecap": "round", "strokeLinejoin": "round" };
+const S364: React.CSSProperties = { "position": "absolute", "right": "-2px", "top": "-2px", "width": "22px", "height": "22px", "borderRadius": "50%", "background": "#14151d", "border": "1px solid rgba(143,207,149,.7)", "color": "#8fcf95", "display": "flex", "alignItems": "center", "justifyContent": "center" };
+const S365: React.CSSProperties = { "width": "12px", "height": "12px", "fill": "none", "stroke": "currentColor", "strokeWidth": "2.6", "strokeLinecap": "round", "strokeLinejoin": "round" };
+const S366: React.CSSProperties = { "position": "relative", "width": "100%", "display": "flex", "flexDirection": "column", "gap": "14px", "padding": "12px 16px 16px", "borderRadius": "16px", "background": "linear-gradient(180deg, rgba(20,21,30,.98), rgba(10,11,16,.99))", "border": "1px solid rgba(176,186,204,.22)", "boxShadow": "0 20px 50px rgba(0,0,0,.6), inset 0 2px 0 rgba(192,57,46,.55)", "animation": "swRise .3s ease-out", "boxSizing": "border-box" };
+const S367: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "10px", "minWidth": "0", "fontFamily": "'Cinzel Decorative', serif", "fontSize": "11px", "fontWeight": "700", "letterSpacing": ".28em", "textTransform": "uppercase", "color": "rgba(222,216,204,.6)" };
+const S368: React.CSSProperties = { "color": "rgba(222,216,204,.4)", "letterSpacing": ".04em", "fontFamily": "'Source Sans 3', sans-serif", "textTransform": "none", "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis" };
+const S369: React.CSSProperties = { "width": "32px", "height": "32px", "flex": "none", "border": "none", "borderRadius": "8px", "background": "transparent", "color": "rgba(222,216,204,.55)", "cursor": "pointer", "display": "flex", "alignItems": "center", "justifyContent": "center" };
+const S370: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "10px", "paddingTop": "12px", "borderTop": "1px solid rgba(176,186,204,.1)" };
+const S371: React.CSSProperties = { "fontSize": "11px", "letterSpacing": ".2em", "textTransform": "uppercase", "fontWeight": "700", "color": "rgba(222,216,204,.5)" };
+const S372: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "12px" };
+const S373: React.CSSProperties = { "minHeight": "40px", "padding": "0 14px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.26)", "background": "rgba(9,10,15,.5)", "color": "#ece6da", "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "600", "cursor": "pointer", "whiteSpace": "nowrap" };
+const S374: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "4px", "paddingLeft": "56px" };
+const S375: React.CSSProperties = { "display": "flex", "justifyContent": "space-between", "gap": "10px", "fontSize": "12px" };
+const S376: React.CSSProperties = { "color": "rgba(222,216,204,.7)" };
+const S377: React.CSSProperties = { "position": "absolute", "left": "-14%", "right": "-14%", "top": "-24%", "bottom": "-24%", "borderRadius": "50%", "background": "radial-gradient(closest-side, rgba(5,6,10,.78), rgba(5,6,10,.45) 60%, transparent)", "pointerEvents": "none" };
+const S378: React.CSSProperties = { "position": "relative", "width": "100%", "display": "flex", "flexDirection": "column", "gap": "14px", "padding": "12px 18px 16px", "borderRadius": "16px", "background": "linear-gradient(180deg, rgba(20,21,30,.98), rgba(10,11,16,.99))", "border": "1px solid rgba(176,186,204,.22)", "boxShadow": "0 20px 50px rgba(0,0,0,.6), inset 0 2px 0 rgba(192,57,46,.55)", "animation": "swRise .3s ease-out", "boxSizing": "border-box" };
+const S379: React.CSSProperties = { "display": "flex", "alignItems": "baseline", "gap": "12px", "minWidth": "0" };
+const S380: React.CSSProperties = { "fontFamily": "'Cinzel Decorative', serif", "fontSize": "11px", "fontWeight": "700", "letterSpacing": ".28em", "textTransform": "uppercase", "color": "rgba(222,216,204,.6)" };
+const S381: React.CSSProperties = { "fontSize": "13px", "fontWeight": "600", "color": "rgba(222,216,204,.55)", "whiteSpace": "nowrap" };
+const S382: React.CSSProperties = { "fontSize": "12px", "color": "rgba(222,216,204,.4)", "whiteSpace": "nowrap" };
+const S383: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "repeat(3, minmax(0,1fr)) 1px minmax(0,4fr)", "gap": "10px", "alignItems": "center", "padding": "10px 0", "borderTop": "1px solid rgba(176,186,204,.1)", "borderBottom": "1px solid rgba(176,186,204,.1)" };
+const S384: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "3px", "minWidth": "0" };
+const S385: React.CSSProperties = { "fontSize": "9.5px", "letterSpacing": ".08em", "textTransform": "uppercase", "color": "rgba(222,216,204,.55)", "whiteSpace": "nowrap" };
+const S386: React.CSSProperties = { "width": "1px", "height": "40px", "background": "rgba(176,186,204,.16)" };
+const S387: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "8px", "minWidth": "0" };
+const S388: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "repeat(4, minmax(0,1fr))", "gap": "6px" };
+const S389: React.CSSProperties = { "display": "flex", "height": "4px", "borderRadius": "2px", "overflow": "hidden", "gap": "2px" };
+const S390: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "auto minmax(0,1.15fr) minmax(0,2fr)", "gap": "16px", "alignItems": "start" };
+const S391: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "8px", "paddingRight": "18px", "borderRight": "1px solid rgba(176,186,204,.1)" };
+const S392: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "6px", "width": "60px", "padding": "2px 0 0", "border": "none", "background": "transparent", "fontFamily": "inherit", "cursor": "pointer" };
+const S393: React.CSSProperties = { "width": "48px", "height": "48px", "borderRadius": "50%", "border": "1.5px dashed rgba(176,186,204,.4)", "color": "rgba(232,88,74,.75)", "display": "flex", "alignItems": "center", "justifyContent": "center", "fontSize": "22px", "lineHeight": "1" };
+const S394: React.CSSProperties = { "minHeight": "36px", "padding": "0 12px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.26)", "background": "rgba(9,10,15,.5)", "color": "#ece6da", "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "600", "cursor": "pointer", "whiteSpace": "nowrap" };
+const S395: React.CSSProperties = { "minHeight": "36px", "padding": "4px 10px", "borderRadius": "9px", "border": "1px solid rgba(176,186,204,.18)", "background": "rgba(9,10,15,.55)", "color": "#ece6da", "fontFamily": "inherit", "fontSize": "12px", "fontWeight": "600", "lineHeight": "1.15", "textAlign": "left", "cursor": "pointer", "display": "flex", "alignItems": "center", "gap": "7px", "minWidth": "0" };
+const S396: React.CSSProperties = { "width": "14px", "height": "14px", "flex": "none", "fill": "none", "stroke": "#e8584a", "strokeWidth": "1.7", "strokeLinecap": "round", "strokeLinejoin": "round" };
+const S397: React.CSSProperties = { "minWidth": "0", "textWrap": "balance" };
+const S398: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "repeat(2, minmax(0,1fr))", "gap": "6px" };
+const S399: React.CSSProperties = { "position": "absolute", "left": "50%", "top": "24px", "transform": "translateX(-50%)", "zIndex": "25", "padding": "10px 18px", "borderRadius": "20px", "background": "rgba(18,19,27,.92)", "border": "1px solid rgba(176,186,204,.35)", "fontSize": "13px", "color": "#ece6da", "whiteSpace": "nowrap" };
+const S400: React.CSSProperties = { "position": "absolute", "left": "50%", "top": "24px", "transform": "translateX(-50%)", "zIndex": "25", "display": "flex", "alignItems": "center", "gap": "14px", "padding": "6px 6px 6px 18px", "borderRadius": "26px", "background": "rgba(18,19,27,.92)", "border": "1px solid rgba(159,195,232,.4)", "fontSize": "14px", "color": "#cfe0f2" };
+const S401: React.CSSProperties = { "minHeight": "44px", "padding": "0 18px", "borderRadius": "22px", "border": "1px solid rgba(159,195,232,.45)", "background": "rgba(159,195,232,.12)", "color": "#cfe0f2", "font": "inherit", "fontWeight": "600", "cursor": "pointer" };
+const S402: React.CSSProperties = { "position": "absolute", "left": "50%", "bottom": "130px", "transform": "translateX(-50%)", "zIndex": "80", "maxWidth": "520px", "padding": "10px 18px", "borderRadius": "20px", "background": "rgba(18,19,27,.95)", "border": "1px solid rgba(176,186,204,.28)", "fontFamily": "'IM Fell English', serif", "fontSize": "15px", "color": "#ece6da", "boxShadow": "0 12px 30px rgba(0,0,0,.5)", "animation": "swRise .25s ease-out", "textAlign": "center" };
+const S403: React.CSSProperties = { "position": "absolute", "inset": "0", "pointerEvents": "none", "opacity": ".2", "mixBlendMode": "overlay", "backgroundImage": "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' sc-camel-base-frequency='.9' sc-camel-num-octaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")" };
+const S404: React.CSSProperties = { "position": "absolute", "inset": "0", "pointerEvents": "none", "background": "radial-gradient(ellipse 100% 90% at 50% 50%, transparent 45%, rgba(0,0,0,.75) 100%)" };
+const S405: React.CSSProperties = { "position": "absolute", "inset": "18px", "border": "1px solid rgba(176,186,204,.08)", "borderRadius": "12px", "pointerEvents": "none" };
+const S406: React.CSSProperties = { "position": "relative", "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "22px", "maxWidth": "900px", "padding": "0 48px", "textAlign": "center" };
+const S407: React.CSSProperties = { "position": "absolute", "inset": "0", "background": "linear-gradient(135deg, transparent 47%, rgba(122,29,26,.85) 47%, rgba(122,29,26,.85) 53%, transparent 53%)" };
+const S408: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "14px" };
+const S409: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "24px", "lineHeight": "1.4", "color": "rgba(242,230,200,.86)", "maxWidth": "620px", "textWrap": "pretty" };
+const S410: React.CSSProperties = { "display": "flex", "flexWrap": "wrap", "justifyContent": "center", "gap": "14px 22px", "marginTop": "6px" };
+const S411: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "17px", "fontWeight": "400", "color": "#ece6da", "lineHeight": "1.1", "overflow": "hidden", "textOverflow": "ellipsis", "whiteSpace": "nowrap", "maxWidth": "84px" };
+const S412: React.CSSProperties = { "display": "flex", "flexWrap": "wrap", "justifyContent": "center", "gap": "14px" };
+const S413: React.CSSProperties = { "position": "absolute", "inset": "0", "zIndex": "95", "background": "rgba(6,4,5,.6)", "backdropFilter": "blur(3px)", "display": "flex", "alignItems": "center", "justifyContent": "center", "animation": "swRise .25s ease-out" };
+const S414: React.CSSProperties = { "width": "380px", "maxWidth": "calc(100% - 48px)", "padding": "24px", "borderRadius": "20px", "background": "linear-gradient(180deg, rgba(34,24,28,.98), rgba(12,13,20,.98))", "border": "1px solid rgba(176,186,204,.28)", "boxShadow": "0 30px 80px rgba(0,0,0,.6)", "display": "flex", "flexDirection": "column", "gap": "16px", "textAlign": "center" };
+const S415: React.CSSProperties = { "fontFamily": "'Cinzel Decorative', serif", "fontSize": "24px", "fontWeight": "700", "color": "#ecd9a8" };
+const S416: React.CSSProperties = { "fontSize": "14px", "lineHeight": "1.45", "color": "rgba(222,216,204,.65)" };
+const S417: React.CSSProperties = { "width": "100%", "boxSizing": "border-box", "height": "44px", "padding": "0 14px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.26)", "background": "rgba(9,10,15,.7)", "color": "#f2ece0", "fontFamily": "inherit", "fontSize": "15px", "outline": "none" };
+const S418: React.CSSProperties = { "minHeight": "52px", "borderRadius": "14px", "border": "1px solid #c0392e", "background": "linear-gradient(180deg, #c0392e, #8a2820)", "color": "#fff6ea", "fontFamily": "'IM Fell English', serif", "fontSize": "22px", "fontWeight": "400", "cursor": "pointer" };
+const S419: React.CSSProperties = { "alignSelf": "center", "marginTop": "-4px", "minHeight": "44px", "padding": "0 18px", "border": "none", "background": "transparent", "color": "rgba(222,216,204,.6)", "fontFamily": "inherit", "fontSize": "14px", "cursor": "pointer" };
+const S420: React.CSSProperties = { "position": "absolute", "inset": "0", "zIndex": "90", "background": "rgba(6,4,5,.6)", "backdropFilter": "blur(3px)", "display": "flex", "alignItems": "center", "justifyContent": "center", "animation": "swRise .25s ease-out" };
+const S421: React.CSSProperties = { "fontSize": "13px", "lineHeight": "1.45", "color": "rgba(222,216,204,.65)" };
+const S422: React.CSSProperties = { "minHeight": "52px", "borderRadius": "14px", "border": "1px solid rgba(134,183,212,.4)", "background": "rgba(134,183,212,.08)", "color": "#a9cde3", "fontFamily": "'IM Fell English', serif", "fontSize": "22px", "fontWeight": "400", "cursor": "pointer" };
+const S423: React.CSSProperties = { "minHeight": "52px", "borderRadius": "14px", "border": "1px solid rgba(217,122,108,.4)", "background": "rgba(217,122,108,.08)", "color": "#eba597", "fontFamily": "'IM Fell English', serif", "fontSize": "22px", "fontWeight": "400", "cursor": "pointer" };
+const S424: React.CSSProperties = { "minHeight": "52px", "borderRadius": "14px", "border": "1px solid rgba(224,200,140,.5)", "background": "rgba(224,200,140,.08)", "color": "#ecd9a8", "fontFamily": "'IM Fell English', serif", "fontSize": "22px", "fontWeight": "400", "cursor": "pointer" };
+const S425: React.CSSProperties = { "fontSize": "13px", "lineHeight": "1.4", "color": "#f4a595" };
+const S426: React.CSSProperties = { "alignSelf": "center", "marginTop": "-12px", "minHeight": "36px", "padding": "0 18px", "border": "none", "background": "transparent", "color": "rgba(222,216,204,.45)", "fontFamily": "inherit", "fontSize": "12px", "cursor": "pointer" };
+const S427: React.CSSProperties = { "position": "absolute", "inset": "0", "zIndex": "70", "padding": "24px", "background": "rgba(6,4,5,.74)", "backdropFilter": "blur(6px)", "display": "flex", "alignItems": "center", "justifyContent": "center", "animation": "swIn .2s ease-out" };
+const S428: React.CSSProperties = { "width": "100%", "maxWidth": "1320px", "height": "100%", "maxHeight": "860px", "display": "grid", "gridTemplateColumns": "minmax(0,1fr) 340px", "borderRadius": "14px", "background": "linear-gradient(180deg, #171821, #0d0e14)", "border": "1px solid rgba(176,186,204,.22)", "boxShadow": "0 30px 80px rgba(0,0,0,.7), inset 0 2px 0 rgba(192,57,46,.55)", "overflow": "hidden" };
+const S429: React.CSSProperties = { "display": "flex", "flexDirection": "column", "minHeight": "0", "minWidth": "0" };
+const S430: React.CSSProperties = { "display": "flex", "alignItems": "flex-end", "justifyContent": "space-between", "gap": "16px", "padding": "18px 22px 14px", "borderBottom": "1px solid rgba(176,186,204,.1)" };
+const S431: React.CSSProperties = { "fontFamily": "'Cinzel Decorative', serif", "fontSize": "11px", "fontWeight": "700", "letterSpacing": ".28em", "textTransform": "uppercase", "color": "rgba(222,216,204,.55)" };
+const S432: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "30px", "lineHeight": "1", "color": "#f2ece0", "whiteSpace": "nowrap" };
+const S433: React.CSSProperties = { "fontSize": "13px", "color": "rgba(222,216,204,.5)", "whiteSpace": "nowrap" };
+const S434: React.CSSProperties = { "width": "100%", "maxWidth": "300px", "height": "40px", "padding": "0 14px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.24)", "background": "rgba(9,10,15,.7)", "color": "#f2ece0", "fontFamily": "inherit", "fontSize": "14px", "outline": "none", "boxSizing": "border-box" };
+const S435: React.CSSProperties = { "flex": "1", "minHeight": "0", "overflowY": "auto", "overflowX": "hidden", "padding": "4px 22px 18px" };
+const S436: React.CSSProperties = { "padding": "60px 0", "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "12px" };
+const S437: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "18px", "color": "rgba(222,216,204,.65)" };
+const S438: React.CSSProperties = { "minHeight": "36px", "padding": "0 14px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.26)", "background": "rgba(9,10,15,.5)", "color": "#ece6da", "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "600", "cursor": "pointer", "whiteSpace": "nowrap" };
+const S439: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "132px minmax(0,1fr)", "gap": "16px", "padding": "16px 0", "borderBottom": "1px solid rgba(176,186,204,.08)" };
+const S440: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "6px", "paddingTop": "8px" };
+const S441: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "14px", "lineHeight": "1.3", "color": "rgba(222,216,204,.5)", "textWrap": "pretty" };
+const S442: React.CSSProperties = { "display": "grid", "gridTemplateColumns": "repeat(auto-fill, minmax(88px, 1fr))", "gap": "10px 4px" };
+const S443: React.CSSProperties = { "position": "relative", "width": "56px", "height": "56px" };
+const S444: React.CSSProperties = { "position": "absolute", "inset": "0", "borderRadius": "50%", "overflow": "hidden", "background": "radial-gradient(circle at 38% 30%, #f1e6c9 0%, #dccaa0 48%, #b09566 100%)", "boxShadow": "0 6px 14px rgba(0,0,0,.55), inset 0 -5px 10px rgba(90,60,25,.35)" };
+const S445: React.CSSProperties = { "position": "absolute", "right": "-3px", "top": "-3px", "width": "12px", "height": "12px", "borderRadius": "50%", "background": "#e8584a", "boxShadow": "0 0 0 2px #14151d" };
+const S446: React.CSSProperties = { "position": "relative", "display": "flex", "flexDirection": "column", "minHeight": "0", "borderLeft": "1px solid rgba(176,186,204,.12)", "background": "linear-gradient(180deg, rgba(0,0,0,.18), rgba(0,0,0,.32))" };
+const S447: React.CSSProperties = { "position": "absolute", "right": "12px", "top": "12px", "width": "36px", "height": "36px", "border": "none", "borderRadius": "10px", "background": "transparent", "color": "rgba(222,216,204,.55)", "cursor": "pointer", "display": "flex", "alignItems": "center", "justifyContent": "center" };
+const S448: React.CSSProperties = { "width": "18px", "height": "18px", "fill": "none", "stroke": "currentColor", "strokeWidth": "1.8", "strokeLinecap": "round" };
+const S449: React.CSSProperties = { "flex": "1", "minHeight": "0", "overflowY": "auto", "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "16px", "padding": "56px 28px 20px", "textAlign": "center" };
+const S450: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "6px" };
+const S451: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "34px", "lineHeight": "1", "color": "#f2ece0" };
+const S452: React.CSSProperties = { "width": "60px", "height": "1px", "background": "linear-gradient(90deg, transparent, rgba(192,57,46,.6))" };
+const S453: React.CSSProperties = { "width": "6px", "height": "6px", "transform": "rotate(45deg)", "border": "1px solid rgba(232,88,74,.7)" };
+const S454: React.CSSProperties = { "width": "60px", "height": "1px", "background": "linear-gradient(90deg, rgba(192,57,46,.6), transparent)" };
+const S455: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "19px", "lineHeight": "1.45", "color": "#ece6da", "textWrap": "pretty" };
+const S456: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "8px", "marginTop": "4px" };
+const S457: React.CSSProperties = { "display": "flex", "flexWrap": "wrap", "justifyContent": "center", "gap": "12px" };
+const S458: React.CSSProperties = { "display": "flex" };
+const S459: React.CSSProperties = { "position": "relative", "flex": "none", "width": "68px", "height": "68px", "borderRadius": "50%", "overflow": "hidden", "background": "radial-gradient(circle at 50% 28%, #f4ecd6 0%, #e3d4b0 58%, #b9a072 100%)", "boxShadow": "0 4px 12px rgba(0,0,0,.5), inset 0 0 0 1px rgba(90,60,25,.35), inset 0 -3px 6px rgba(90,60,25,.22)" };
+const S460: React.CSSProperties = { "padding": "16px 22px 20px", "borderTop": "1px solid rgba(176,186,204,.1)" };
+const S461: React.CSSProperties = { "minHeight": "46px", "borderRadius": "10px", "border": "1px solid #c0392e", "background": "rgba(192,57,46,.14)", "color": "#ffb4a6", "fontSize": "14px", "fontWeight": "700", "textDecoration": "none", "display": "flex", "alignItems": "center", "justifyContent": "center", "gap": "8px" };
+const S462: React.CSSProperties = { "position": "absolute", "inset": "0", "zIndex": "70", "padding": "24px", "background": "rgba(6,4,5,.74)", "backdropFilter": "blur(6px)", "display": "flex", "alignItems": "center", "justifyContent": "center", "animation": "swRise .2s ease-out" };
+const S463: React.CSSProperties = { "width": "100%", "maxWidth": "1320px", "maxHeight": "100%", "display": "flex", "flexDirection": "column", "borderRadius": "12px", "background": "linear-gradient(180deg, #221a1e, #151013)", "border": "1px solid rgba(176,186,204,.24)", "boxShadow": "0 30px 80px rgba(0,0,0,.7)", "overflow": "hidden" };
+const S464: React.CSSProperties = { "display": "flex", "alignItems": "flex-start", "justifyContent": "space-between", "gap": "16px", "padding": "16px 14px 10px 22px" };
+const S465: React.CSSProperties = { "fontSize": "11px", "letterSpacing": ".32em", "textTransform": "uppercase", "fontWeight": "600", "color": "rgba(222,216,204,.5)" };
+const S466: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "28px", "fontWeight": "400", "lineHeight": "1", "color": "#f2ece0" };
+const S467: React.CSSProperties = { "width": "36px", "height": "36px", "flex": "none", "border": "none", "borderRadius": "10px", "background": "transparent", "color": "rgba(222,216,204,.55)", "cursor": "pointer", "display": "flex", "alignItems": "center", "justifyContent": "center" };
+const S468: React.CSSProperties = { "flex": "1 1 auto", "minHeight": "0", "minWidth": "0", "overflowY": "auto", "overflowX": "hidden", "padding": "2px 22px 14px", "display": "flex", "flexDirection": "column", "gap": "10px" };
+const S469: React.CSSProperties = { "minWidth": "0", "padding": "10px 10px 8px", "borderRadius": "8px", "background": "rgba(0,0,0,.24)", "border": "1px solid rgba(176,186,204,.08)", "display": "flex", "flexDirection": "column", "gap": "8px" };
+const S470: React.CSSProperties = { "display": "flex", "alignItems": "baseline", "justifyContent": "space-between", "gap": "10px", "padding": "0 4px" };
+const S471: React.CSSProperties = { "display": "flex", "alignItems": "baseline", "gap": "10px", "minWidth": "0" };
+const S472: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "13px", "color": "rgba(222,216,204,.5)", "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis" };
+const S473: React.CSSProperties = { "display": "grid", "minWidth": "0", "gridTemplateColumns": "repeat(auto-fill, minmax(70px, 1fr))", "gap": "8px 2px" };
+const S474: React.CSSProperties = { "position": "relative", "width": "52px", "height": "52px", "transition": "transform .18s" };
+const S475: React.CSSProperties = { "display": "flex", "flexWrap": "wrap", "alignItems": "center", "flex": "none", "gap": "12px 24px", "padding": "12px 22px 14px", "borderTop": "1px solid rgba(176,186,204,.12)", "background": "rgba(0,0,0,.2)" };
+const S476: React.CSSProperties = { "flex": "1 1 380px", "minWidth": "0", "display": "flex", "gap": "14px", "alignItems": "center", "minHeight": "76px" };
+const S477: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "4px", "minWidth": "0", "flex": "1" };
+const S478: React.CSSProperties = { "display": "flex", "alignItems": "baseline", "gap": "10px" };
+const S479: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "21px", "fontWeight": "400", "lineHeight": "1", "color": "#f2ece0" };
+const S480: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "14px", "lineHeight": "1.35", "color": "rgba(236,230,218,.82)", "textWrap": "pretty" };
+const S481: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "6px", "flex": "none" };
+const S482: React.CSSProperties = { "fontSize": "11px", "letterSpacing": ".18em", "textTransform": "uppercase", "fontWeight": "600", "color": "rgba(222,216,204,.45)" };
+const S483: React.CSSProperties = { "display": "flex", "gap": "8px", "minHeight": "48px", "alignItems": "flex-start" };
+const S484: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "13px", "color": "rgba(222,216,204,.45)", "paddingTop": "8px" };
+const S485: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "3px", "width": "58px" };
+const S486: React.CSSProperties = { "position": "relative", "flex": "none", "width": "52px", "height": "52px", "borderRadius": "50%", "overflow": "hidden", "background": "radial-gradient(circle at 50% 28%, #f4ecd6 0%, #e3d4b0 58%, #b9a072 100%)", "boxShadow": "0 3px 8px rgba(0,0,0,.5), inset 0 0 0 1px rgba(90,60,25,.35), inset 0 -3px 6px rgba(90,60,25,.22)" };
+const S487: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "16px", "marginLeft": "auto", "flexWrap": "wrap", "justifyContent": "flex-end" };
+const S488: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "2px", "alignItems": "flex-end" };
+const S489: React.CSSProperties = { "fontSize": "14px", "fontWeight": "600", "color": "#ece6da" };
+const S490: React.CSSProperties = { "display": "flex", "gap": "6px" };
+const S491: React.CSSProperties = { "minHeight": "44px", "padding": "0 14px", "border": "none", "borderRadius": "10px", "background": "transparent", "color": "rgba(222,216,204,.6)", "fontFamily": "inherit", "fontSize": "14px", "cursor": "pointer", "whiteSpace": "nowrap" };
+const S492: React.CSSProperties = { "minHeight": "44px", "padding": "0 16px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.3)", "background": "transparent", "color": "#ddd6c8", "fontFamily": "inherit", "fontSize": "14px", "cursor": "pointer", "whiteSpace": "nowrap" };
+const S493: React.CSSProperties = { "marginLeft": "auto", "maxWidth": "260px", "fontSize": "13px", "lineHeight": "1.4", "color": "rgba(222,216,204,.6)", "textAlign": "right" };
+const S494: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "16px", "marginLeft": "auto" };
+const S495: React.CSSProperties = { "maxWidth": "260px", "fontSize": "13px", "lineHeight": "1.4", "color": "rgba(222,216,204,.6)", "textAlign": "right" };
+const S496: React.CSSProperties = { "position": "absolute", "inset": "0", "zIndex": "60", "background": "rgba(6,4,5,.72)", "backdropFilter": "blur(6px)", "display": "flex", "alignItems": "center", "justifyContent": "center", "animation": "swRise .2s ease-out" };
+const S497: React.CSSProperties = { "width": "360px", "maxWidth": "calc(100% - 32px)", "padding": "28px 28px 22px", "borderRadius": "20px", "background": "linear-gradient(180deg, #221a1e, #171215)", "border": "1px solid rgba(176,186,204,.24)", "boxShadow": "0 30px 80px rgba(0,0,0,.7)", "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "16px", "textAlign": "center" };
+const S498: React.CSSProperties = { "padding": "16px", "borderRadius": "14px", "background": "#efe5cc", "boxShadow": "inset 0 0 0 1px rgba(90,60,25,.25)" };
+const S499: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "6px" };
+const S500: React.CSSProperties = { "width": "34px", "height": "44px", "display": "flex", "alignItems": "center", "justifyContent": "center", "borderRadius": "9px", "border": "1px solid rgba(232,88,74,.35)", "background": "rgba(9,10,15,.75)", "fontFamily": "'Source Sans 3', sans-serif", "fontSize": "24px", "fontWeight": "700", "lineHeight": "1", "color": "#f2ece0", "fontVariantNumeric": "tabular-nums" };
+const S501: React.CSSProperties = { "width": "6px", "height": "2px", "borderRadius": "1px", "background": "rgba(232,88,74,.5)" };
+const S502: React.CSSProperties = { "flex": "1", "minHeight": "44px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.3)", "background": "transparent", "color": "#ddd6c8", "fontFamily": "inherit", "fontSize": "14px", "cursor": "pointer" };
+const S503: React.CSSProperties = { "flex": "1", "minHeight": "44px", "borderRadius": "10px", "border": "1px solid #c0392e", "background": "rgba(176,186,204,.14)", "color": "#ffb4a6", "fontFamily": "inherit", "fontSize": "14px", "fontWeight": "600", "cursor": "pointer" };
+const S504: React.CSSProperties = { "position": "absolute", "inset": "0", "zIndex": "90", "overflow": "hidden", "background": "#0d0607", "display": "flex", "alignItems": "center", "justifyContent": "center", "animation": "swRise .25s ease-out" };
+const S505: React.CSSProperties = { "position": "absolute", "inset": "0", "pointerEvents": "none", "background": "radial-gradient(ellipse 70% 60% at 50% 48%, #3b1a1d 0%, #261011 45%, #120708 80%), #0d0607" };
+const S506: React.CSSProperties = { "position": "absolute", "inset": "0", "pointerEvents": "none", "background": "radial-gradient(ellipse 40% 30% at 18% 100%, rgba(110,40,30,.22), transparent 70%), radial-gradient(ellipse 40% 30% at 82% 0%, rgba(80,44,96,.18), transparent 70%)" };
+const S507: React.CSSProperties = { "position": "absolute", "inset": "0", "pointerEvents": "none", "opacity": ".22", "mixBlendMode": "overlay", "backgroundImage": "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' sc-camel-base-frequency='.85' sc-camel-num-octaves='3' sc-camel-stitch-tiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .9 0 0 0 0 .8 0 0 0 0 .65 0 0 0 .9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")" };
+const S508: React.CSSProperties = { "position": "absolute", "inset": "0", "pointerEvents": "none", "opacity": ".35", "mixBlendMode": "multiply", "backgroundImage": "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Cfilter id='l'%3E%3CfeTurbulence type='turbulence' sc-camel-base-frequency='.012 .02' sc-camel-num-octaves='4' seed='4'/%3E%3CfeColorMatrix values='0 0 0 0 .2 0 0 0 0 .08 0 0 0 0 .08 0 0 0 1.4 -.4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23l)'/%3E%3C/svg%3E\")" };
+const S509: React.CSSProperties = { "position": "absolute", "inset": "0", "pointerEvents": "none", "background": "radial-gradient(ellipse 95% 85% at 50% 50%, transparent 45%, rgba(0,0,0,.72) 100%)" };
+const S510: React.CSSProperties = { "position": "absolute", "inset": "12px", "border": "1px solid rgba(176,186,204,.14)", "borderRadius": "16px", "pointerEvents": "none" };
+const S511: React.CSSProperties = { "position": "absolute", "inset": "18px", "border": "1px solid rgba(176,186,204,.06)", "borderRadius": "12px", "pointerEvents": "none" };
+const S512: React.CSSProperties = { "position": "absolute", "left": "22px", "top": "22px", "width": "10px", "height": "10px", "transform": "rotate(45deg)", "border": "1px solid rgba(232,88,74,.55)", "background": "#1a0b0c", "pointerEvents": "none" };
+const S513: React.CSSProperties = { "position": "absolute", "right": "22px", "top": "22px", "width": "10px", "height": "10px", "transform": "rotate(45deg)", "border": "1px solid rgba(232,88,74,.55)", "background": "#1a0b0c", "pointerEvents": "none" };
+const S514: React.CSSProperties = { "position": "absolute", "left": "22px", "bottom": "22px", "width": "10px", "height": "10px", "transform": "rotate(45deg)", "border": "1px solid rgba(232,88,74,.55)", "background": "#1a0b0c", "pointerEvents": "none" };
+const S515: React.CSSProperties = { "position": "absolute", "right": "22px", "bottom": "22px", "width": "10px", "height": "10px", "transform": "rotate(45deg)", "border": "1px solid rgba(232,88,74,.55)", "background": "#1a0b0c", "pointerEvents": "none" };
+const S516: React.CSSProperties = { "position": "relative", "zIndex": "1", "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "18px", "maxWidth": "640px", "padding": "0 40px", "textAlign": "center" };
+const S517: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "12px" };
+const S518: React.CSSProperties = { "fontFamily": "'Cinzel Decorative', serif", "fontSize": "48px", "fontWeight": "700", "letterSpacing": ".06em", "lineHeight": "1", "color": "#e8c77a", "textShadow": "0 2px 18px rgba(232,170,90,.25)" };
+const S519: React.CSSProperties = { "width": "80px", "height": "1px", "background": "linear-gradient(90deg, transparent, rgba(232,88,74,.65))" };
+const S520: React.CSSProperties = { "width": "5px", "height": "5px", "transform": "rotate(45deg)", "background": "rgba(232,88,74,.7)" };
+const S521: React.CSSProperties = { "width": "9px", "height": "9px", "transform": "rotate(45deg)", "border": "1px solid rgba(232,88,74,.85)" };
+const S522: React.CSSProperties = { "width": "80px", "height": "1px", "background": "linear-gradient(90deg, rgba(232,88,74,.65), transparent)" };
+const S523: React.CSSProperties = { "position": "relative", "width": "230px", "height": "230px", "margin": "8px 0", "borderRadius": "50%", "overflow": "hidden", "background": "radial-gradient(circle at 38% 30%, #f1e6c9 0%, #dccaa0 48%, #b09566 100%)", "boxShadow": "0 0 0 3px rgba(232,88,74,.7), 0 0 0 10px rgba(20,8,8,.85), 0 0 0 11px rgba(232,88,74,.35), 0 0 60px 14px rgba(232,170,90,.18), 0 24px 50px rgba(0,0,0,.6), inset 0 -12px 24px rgba(90,60,25,.35)" };
+const S524: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "4px" };
+const S525: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "52px", "fontWeight": "400", "lineHeight": "1", "color": "#f2e6c8" };
+const S526: React.CSSProperties = { "width": "5px", "height": "5px", "transform": "rotate(45deg)", "background": "currentColor" };
+const S527: React.CSSProperties = { "width": "60px", "height": "1px", "background": "linear-gradient(90deg, transparent, rgba(232,88,74,.65))" };
+const S528: React.CSSProperties = { "width": "60px", "height": "1px", "background": "linear-gradient(90deg, rgba(232,88,74,.65), transparent)" };
+const S529: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "24px", "lineHeight": "1.4", "color": "rgba(242,230,200,.88)", "textWrap": "pretty" };
+const S530: React.CSSProperties = { "position": "relative", "zIndex": "1", "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "36px", "padding": "0 40px", "textAlign": "center" };
+const S531: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "18px" };
+const S532: React.CSSProperties = { "width": "110px", "height": "1px", "background": "linear-gradient(90deg, transparent, rgba(232,88,74,.65))" };
+const S533: React.CSSProperties = { "width": "110px", "height": "1px", "background": "linear-gradient(90deg, rgba(232,88,74,.65), transparent)" };
+const S534: React.CSSProperties = { "position": "relative", "zIndex": "1", "display": "flex", "alignItems": "stretch", "justifyContent": "center", "padding": "0 48px" };
+const S535: React.CSSProperties = { "fontFamily": "'Cinzel Decorative', serif", "fontSize": "36px", "fontWeight": "700", "letterSpacing": ".04em", "lineHeight": "1.15", "color": "#e8c77a", "maxWidth": "440px", "textWrap": "balance", "textShadow": "0 2px 18px rgba(232,170,90,.22)" };
+const S536: React.CSSProperties = { "display": "flex", "flexWrap": "wrap", "justifyContent": "center", "gap": "18px" };
+const S537: React.CSSProperties = { "padding": "6px 26px 8px", "borderRadius": "4px", "background": "radial-gradient(ellipse at 50% 30%, #f1e6c9 0%, #dccaa0 60%, #b9a06e 100%)", "boxShadow": "0 0 0 1px rgba(90,60,25,.5), 0 0 0 4px rgba(20,8,8,.8), 0 0 0 5px rgba(232,88,74,.45), 0 12px 26px rgba(0,0,0,.5), inset 0 -4px 10px rgba(90,60,25,.3)", "fontFamily": "'IM Fell English', serif", "fontSize": "38px", "fontWeight": "400", "color": "#2e1c10" };
+const S538: React.CSSProperties = { "display": "flex", "gap": "28px" };
+const S539: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "16px" };
+const S540: React.CSSProperties = { "position": "relative", "width": "136px", "height": "136px", "borderRadius": "50%", "overflow": "hidden", "background": "radial-gradient(circle at 38% 30%, #f1e6c9 0%, #dccaa0 48%, #b09566 100%)", "boxShadow": "0 0 0 2px rgba(232,88,74,.7), 0 0 0 7px rgba(20,8,8,.85), 0 0 0 8px rgba(232,88,74,.3), 0 14px 34px rgba(0,0,0,.55), inset 0 -8px 16px rgba(90,60,25,.35)" };
+const S541: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "26px", "fontWeight": "400", "color": "#f2e6c8" };
+const S542: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "26px", "color": "rgba(242,230,200,.7)" };
+const S543: React.CSSProperties = { "position": "absolute", "zIndex": "2", "right": "44px", "bottom": "44px", "minHeight": "48px", "padding": "0 20px", "borderRadius": "12px", "border": "1px solid rgba(176,186,204,.25)", "background": "rgba(14,9,10,.75)", "color": "#ddd6c8", "fontFamily": "'IM Fell English', serif", "fontSize": "19px", "fontWeight": "400", "cursor": "pointer", "display": "flex", "alignItems": "center", "gap": "8px", "whiteSpace": "nowrap" };
 
 export function GrimoireV6View({ vm }: { vm: any }) {
   return (
@@ -1797,47 +1799,47 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                   </>
                 )}
               </div>
-              <div style={S221}>
-                <div style={S222}>
+              <div style={css(`pointer-events:auto; display:grid; grid-template-columns:auto 150px auto; translate:${vm.dockShift ?? ''}px 0; align-items:center; height:62px; padding:0 6px; border-radius:14px; background:linear-gradient(180deg, rgba(18,19,27,.94), rgba(9,10,15,.96)); border:1px solid rgba(176,186,204,.2); box-shadow:0 18px 40px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.05), inset 0 0 0 3px rgba(9,10,15,.9), inset 0 0 0 4px rgba(176,186,204,.06); backdrop-filter:blur(10px);`)}>
+                <div style={S221}>
                   <button onClick={vm.undo} disabled={vm.undoOff} aria-label="Undo" title={vm.undoTitle} className={["", "gv-hr"].filter(Boolean).join(' ')} style={css(`width:52px; height:52px; padding:0; border:none; border-radius:10px; background:transparent; color:rgba(222,216,204,.6); cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; font-family:inherit; font-size:10.5px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; opacity:${vm.undoOpacity ?? ''};`)}>
-                    <svg viewBox="0 0 24 24" style={S223}>
+                    <svg viewBox="0 0 24 24" style={S222}>
                       <path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
                     </svg>
                     Undo
                   </button>
-                  <span style={S224} />
+                  <span style={S223} />
                   {(vm.dockL ?? []).map((b: any, b$i: number) => (
                     <Fragment key={b$i}>
                       <button onClick={b?.onClick} title={b?.label} aria-pressed={b?.active} className={["", "gv-fs gv-hr"].filter(Boolean).join(' ')} style={css(`opacity:${b?.opacity ?? ''}; position:relative; width:66px; height:52px; border:none; border-radius:10px; background:${b?.bg ?? ''}; color:${b?.color ?? ''}; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; font-family:inherit; font-size:10.5px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; transition:background .2s, color .2s;`)}>
-                        <svg viewBox="0 0 24 24" style={S225}>
+                        <svg viewBox="0 0 24 24" style={S224}>
                           <path d={b?.icon} />
                         </svg>
                         {T(b?.label)}
                         {b?.active && (
                           <>
-                          <span style={S226} />
+                          <span style={S225} />
                           </>
                         )}
                       </button>
                     </Fragment>
                   ))}
                 </div>
-                <button onClick={vm.pill?.advance} title={vm.pill?.advanceText} className={["", "gv-ft"].filter(Boolean).join(' ')} style={S227}>
-                  <span style={S228}>
-                    <span style={S229} />
+                <button onClick={vm.pill?.advance} title={vm.pill?.advanceText} className={["", "gv-ft"].filter(Boolean).join(' ')} style={S226}>
+                  <span style={S227}>
+                    <span style={S228} />
                     <svg viewBox="0 0 24 24" style={css(`width:28px; height:28px; fill:none; stroke:${vm.phaseIconColor ?? ''}; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round;`)}>
                       <path d={vm.phaseIconPath} />
                     </svg>
                   </span>
-                  <span style={S230}>
+                  <span style={S229}>
                     {T(vm.pill?.advanceText)}
                   </span>
                 </button>
-                <div style={S231}>
+                <div style={S230}>
                   {vm.pill?.isDay && (
                     <>
                     <button onClick={vm.pill?.nominate} aria-pressed={vm.pill?.nomActive} className={["", "gv-hr"].filter(Boolean).join(' ')} style={css(`width:76px; height:52px; border:none; border-radius:10px; background:transparent; color:${vm.pill?.nomColor ?? ''}; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; font-family:inherit; font-size:10.5px; font-weight:700; letter-spacing:.12em; text-transform:uppercase;`)}>
-                      <svg viewBox="0 0 24 24" style={S225}>
+                      <svg viewBox="0 0 24 24" style={S224}>
                         <path d="M3 11v3a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1M15 9a4 4 0 0 1 0 6M18 6a8 8 0 0 1 0 12" />
                       </svg>
                       {T(vm.pill?.nomShort)}
@@ -1847,13 +1849,13 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                   {(vm.dockR ?? []).map((b: any, b$i: number) => (
                     <Fragment key={b$i}>
                       <button onClick={b?.onClick} title={b?.label} aria-pressed={b?.active} className={["", "gv-fs gv-hr"].filter(Boolean).join(' ')} style={css(`opacity:${b?.opacity ?? ''}; position:relative; width:66px; height:52px; border:none; border-radius:10px; background:${b?.bg ?? ''}; color:${b?.color ?? ''}; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; font-family:inherit; font-size:10.5px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; transition:background .2s, color .2s;`)}>
-                        <svg viewBox="0 0 24 24" style={S225}>
+                        <svg viewBox="0 0 24 24" style={S224}>
                           <path d={b?.icon} />
                         </svg>
                         {T(b?.label)}
                         {b?.active && (
                           <>
-                          <span style={S226} />
+                          <span style={S225} />
                           </>
                         )}
                       </button>
@@ -1861,15 +1863,15 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                   ))}
                   {vm.endOn && (
                     <>
-                    <span style={S224} />
+                    <span style={S223} />
                     <button onClick={vm.openEnd} title={vm.endTitle} className={["", "gv-hr"].filter(Boolean).join(' ')} style={css(`position:relative; width:52px; height:52px; border:none; border-radius:10px; background:transparent; color:${vm.endColor ?? ''}; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; font-family:inherit; font-size:10.5px; font-weight:700; letter-spacing:.12em; text-transform:uppercase;`)}>
-                      <svg viewBox="0 0 24 24" style={S232}>
+                      <svg viewBox="0 0 24 24" style={S231}>
                         <path d="M5 21V4M5 4h11l-2 4 2 4H5" />
                       </svg>
                       End
                       {vm.winHint && (
                         <>
-                        <span aria-label="Win condition met" style={S233}>
+                        <span aria-label="Win condition met" style={S232}>
                           !
                         </span>
                         </>
@@ -1885,67 +1887,67 @@ export function GrimoireV6View({ vm }: { vm: any }) {
           {vm.seatC?.on && (
             <>
             <div style={css(`position:absolute; left:${vm.ring?.cx ?? ''}px; top:${vm.ring?.cy ?? ''}px; translate:-50% -50%; z-index:22; width:${vm.seatC?.w ?? ''}px; display:flex; flex-direction:column; align-items:center;`)}>
-              <div aria-hidden="true" style={S234} />
-              <div style={S235}>
-                <div style={S236}>
-                  <div style={S237}>
+              <div aria-hidden="true" style={S233} />
+              <div style={S234}>
+                <div style={S235}>
+                  <div style={S236}>
                     Assign seats
-                    <span style={S238}>
+                    <span style={S237}>
                       {T(vm.seatC?.meta)}
                     </span>
                   </div>
-                  <button onClick={vm.seatC?.close} title="Close" className={["", "gv-hr"].filter(Boolean).join(' ')} style={S239}>
+                  <button onClick={vm.seatC?.close} title="Close" className={["", "gv-hr"].filter(Boolean).join(' ')} style={S238}>
                     <svg viewBox="0 0 24 24" style={S46}>
                       <path d="M18 6 6 18M6 6l12 12" />
                     </svg>
                   </button>
                 </div>
-                <div style={S240}>
-                  <button onClick={vm.seatC?.prev} aria-label="Previous seat" className={["", "gv-hu"].filter(Boolean).join(' ')} style={S241}>
-                    <svg viewBox="0 0 24 24" style={S242}>
+                <div style={S239}>
+                  <button onClick={vm.seatC?.prev} aria-label="Previous seat" className={["", "gv-hu"].filter(Boolean).join(' ')} style={S240}>
+                    <svg viewBox="0 0 24 24" style={S241}>
                       <path d="M15 6l-6 6 6 6" />
                     </svg>
                   </button>
-                  <div style={S243}>
-                    <span style={S244}>
+                  <div style={S242}>
+                    <span style={S243}>
                       {T(vm.seatC?.seatR)}
                     </span>
                     <span style={css(`font-family:'IM Fell English', serif; font-size:28px; line-height:1.05; color:${vm.seatC?.occColor ?? ''}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;`)}>
                       {T(vm.seatC?.occ)}
                     </span>
                   </div>
-                  <button onClick={vm.seatC?.next} aria-label="Next seat" className={["", "gv-hu"].filter(Boolean).join(' ')} style={S241}>
-                    <svg viewBox="0 0 24 24" style={S242}>
+                  <button onClick={vm.seatC?.next} aria-label="Next seat" className={["", "gv-hu"].filter(Boolean).join(' ')} style={S240}>
+                    <svg viewBox="0 0 24 24" style={S241}>
                       <path d="M9 6l6 6-6 6" />
                     </svg>
                   </button>
                 </div>
-                <div style={S245}>
+                <div style={S244}>
                   Tap who sits here. Tap any seat on the board to change it.
                 </div>
-                <div style={S246}>
+                <div style={S245}>
                   {(vm.seatC?.people ?? []).map((pp: any, pp$i: number) => (
                     <Fragment key={pp$i}>
                       <button onClick={pp?.pick} className={["", "gv-hu"].filter(Boolean).join(' ')} style={css(`display:flex; align-items:center; gap:8px; min-height:44px; padding:0 12px; border-radius:22px; border:1px solid ${pp?.border ?? ''}; background:${pp?.bg ?? ''}; color:${pp?.color ?? ''}; font-family:inherit; font-size:14px; font-weight:600; cursor:pointer; text-align:left; min-width:0;`)}>
                         {pp?.hasBadge && (
                           <>
-                          <span style={S247}>
+                          <span style={S246}>
                             {T(pp?.badge)}
                           </span>
                           </>
                         )}
-                        <span style={S248}>
+                        <span style={S247}>
                           {T(pp?.name)}
                         </span>
                       </button>
                     </Fragment>
                   ))}
                 </div>
-                <div style={S249}>
-                  <button onClick={vm.seatC?.order} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S250}>
+                <div style={S248}>
+                  <button onClick={vm.seatC?.order} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S249}>
                     Arrival order
                   </button>
-                  <button onClick={vm.seatC?.clear} style={S251}>
+                  <button onClick={vm.seatC?.clear} style={S250}>
                     Clear
                   </button>
                   <button onClick={vm.seatC?.finish} style={css(`margin-left:auto; min-height:44px; padding:0 18px; border-radius:10px; border:1px solid #c0392e; background:rgba(192,57,46,.22); color:#ffb4a6; font-family:inherit; font-size:14px; font-weight:700; cursor:${vm.seatC?.doneCursor ?? ''}; opacity:${vm.seatC?.doneOp ?? ''}; white-space:nowrap;`)}>
@@ -1959,9 +1961,9 @@ export function GrimoireV6View({ vm }: { vm: any }) {
           {vm.wiz?.on && (
             <>
             <div style={css(`position:absolute; left:${vm.ring?.cx ?? ''}px; top:${vm.ring?.cy ?? ''}px; translate:-50% -50%; z-index:22; width:${vm.wiz?.w ?? ''}px; display:flex; flex-direction:column; align-items:center; transition:left .5s, top .5s; animation:swRise .45s ease-out;`)}>
-              <div aria-hidden="true" style={S234} />
-              <div style={S252}>
-                <div style={S253}>
+              <div aria-hidden="true" style={S233} />
+              <div style={S251}>
+                <div style={S252}>
                   {(vm.wizSteps ?? []).map((st: any, st$i: number) => (
                     <Fragment key={st$i}>
                       <button onClick={st?.go} title={st?.label} style={css(`flex:0 1 auto; min-width:0; min-height:32px; display:flex; align-items:center; gap:8px; padding:0; border:none; background:transparent; cursor:${st?.cursor ?? ''}; font-family:inherit;`)}>
@@ -1969,7 +1971,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                           {T(st?.num)}
                           {st?.done && (
                             <>
-                            <svg viewBox="0 0 24 24" style={S254}>
+                            <svg viewBox="0 0 24 24" style={S253}>
                               <path d="M5 12l5 5 9-10" />
                             </svg>
                             </>
@@ -1989,16 +1991,16 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                 </div>
                 {vm.wiz?.isScript && (
                   <>
-                  <div style={S255}>
-                    <div style={S256}>
-                      <div style={S257}>
+                  <div style={S254}>
+                    <div style={S255}>
+                      <div style={S256}>
                         Choose a script
                       </div>
                       <div style={S204}>
                         Then count the town.
                       </div>
                     </div>
-                    <div style={S258}>
+                    <div style={S257}>
                       {(vm.wiz?.scripts ?? []).map((sc: any, sc$i: number) => (
                         <Fragment key={sc$i}>
                           {sc?.notCustom && (
@@ -2007,8 +2009,8 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                               <div role="img" aria-label={sc?.name} style={css(`width:100%; height:74px; background-image:url(${sc?.logo ?? ''}); background-size:contain; background-position:center; background-repeat:no-repeat; filter:drop-shadow(0 4px 8px rgba(0,0,0,.6));`)} />
                               {sc?.check && (
                                 <>
-                                <span style={S259}>
-                                  <svg viewBox="0 0 24 24" style={S260}>
+                                <span style={S258}>
+                                  <svg viewBox="0 0 24 24" style={S259}>
                                     <path d="M5 12l5 5 9-10" />
                                   </svg>
                                 </span>
@@ -2020,15 +2022,15 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                           {sc?.custom && (
                             <>
                             <label title="Import a custom script" className={["", "gv-hv"].filter(Boolean).join(' ')} style={css(`position:relative; height:92px; padding:8px; border-radius:12px; border:1px dashed ${sc?.border ?? ''}; background:${sc?.bg ?? ''}; box-shadow:${sc?.glow ?? ''}; opacity:${sc?.op ?? ''}; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; text-align:center; transition:transform .2s, opacity .25s, box-shadow .3s;`)}>
-                              <input type="file" accept=".json,application/json" onChange={vm.wiz?.onImport} style={S261} />
-                              <div role="img" aria-label="Custom script" style={S262} />
-                              <span style={S263}>
+                              <input type="file" accept=".json,application/json" onChange={vm.wiz?.onImport} style={S260} />
+                              <div role="img" aria-label="Custom script" style={S261} />
+                              <span style={S262}>
                                 {T(sc?.hint)}
                               </span>
                               {sc?.check && (
                                 <>
-                                <span style={S259}>
-                                  <svg viewBox="0 0 24 24" style={S260}>
+                                <span style={S258}>
+                                  <svg viewBox="0 0 24 24" style={S259}>
                                     <path d="M5 12l5 5 9-10" />
                                   </svg>
                                 </span>
@@ -2040,48 +2042,48 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                         </Fragment>
                       ))}
                     </div>
-                    <div style={S264}>
-                      <div style={S265}>
-                        <button onClick={vm.wiz?.dec} aria-label="One fewer player" className={["", "gv-hu"].filter(Boolean).join(' ')} style={S266}>
+                    <div style={S263}>
+                      <div style={S264}>
+                        <button onClick={vm.wiz?.dec} aria-label="One fewer player" className={["", "gv-hu"].filter(Boolean).join(' ')} style={S265}>
                           −
                         </button>
-                        <div style={S267}>
-                          <span style={S268}>
+                        <div style={S266}>
+                          <span style={S267}>
                             {T(vm.wiz?.count)}
                           </span>
-                          <span style={S269}>
+                          <span style={S268}>
                             players
                           </span>
                         </div>
-                        <button onClick={vm.wiz?.inc} aria-label="One more player" className={["", "gv-hu"].filter(Boolean).join(' ')} style={S266}>
+                        <button onClick={vm.wiz?.inc} aria-label="One more player" className={["", "gv-hu"].filter(Boolean).join(' ')} style={S265}>
                           +
                         </button>
                       </div>
-                      <div style={S270}>
-                        <div style={S271}>
+                      <div style={S269}>
+                        <div style={S270}>
                           {(vm.wiz?.composition ?? []).map((c: any, c$i: number) => (
                             <Fragment key={c$i}>
-                              <div style={S272}>
+                              <div style={S271}>
                                 <span style={css(`font-family:'IM Fell English', serif; font-size:24px; line-height:1; color:${c?.color ?? ''};`)}>
                                   {T(c?.n)}
                                 </span>
-                                <span style={S273}>
+                                <span style={S272}>
                                   {T(c?.label)}
                                 </span>
                               </div>
                             </Fragment>
                           ))}
                         </div>
-                        <div style={S274}>
+                        <div style={S273}>
                           {T(vm.wiz?.travText)}
                         </div>
                       </div>
                     </div>
                     <div style={S90}>
-                      <button onClick={vm.wiz?.home} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S250}>
+                      <button onClick={vm.wiz?.home} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S249}>
                         ‹ Home
                       </button>
-                      <span style={S275}>
+                      <span style={S274}>
                         {T(vm.wiz?.status1)}
                       </span>
                       <button onClick={vm.wiz?.toExtras} style={css(`min-height:44px; padding:0 18px; border-radius:10px; border:1px solid #c0392e; background:rgba(192,57,46,.22); color:#ffb4a6; font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; white-space:nowrap; opacity:${vm.wiz?.nextOp ?? ''}; pointer-events:${vm.wiz?.nextEv ?? ''}; transition:opacity .3s;`)}>
@@ -2093,17 +2095,17 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                 )}
                 {vm.wiz?.isExtras && (
                   <>
-                  <div style={S276}>
-                    <div style={S277}>
+                  <div style={S275}>
+                    <div style={S276}>
                       <div style={S144}>
-                        <div style={S257}>
+                        <div style={S256}>
                           Fabled & Loric
                         </div>
-                        <div style={S278}>
+                        <div style={S277}>
                           {T(vm.wiz?.tabNote)}
                         </div>
                       </div>
-                      <div role="tablist" style={S279}>
+                      <div role="tablist" style={S278}>
                         {(vm.wiz?.tabs ?? []).map((tb: any, tb$i: number) => (
                           <Fragment key={tb$i}>
                             <button role="tab" aria-selected={tb?.act} onClick={tb?.go} style={css(`min-height:36px; display:flex; align-items:center; gap:8px; padding:0 14px; border-radius:9px; border:1px solid ${tb?.border ?? ''}; background:${tb?.bg ?? ''}; color:${tb?.color ?? ''}; font-family:inherit; font-size:11px; font-weight:700; letter-spacing:.2em; text-transform:uppercase; cursor:pointer; transition:background .25s, color .25s, border-color .25s;`)}>
@@ -2118,9 +2120,9 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                         ))}
                       </div>
                     </div>
-                    <div style={S280}>
-                      <div onWheel={vm.wiz?.stopWheel} style={S281}>
-                        <div style={S282}>
+                    <div style={S279}>
+                      <div onWheel={vm.wiz?.stopWheel} style={S280}>
+                        <div style={S281}>
                           {(vm.wiz?.grid ?? []).map((xc: any, xc$i: number) => (
                             <Fragment key={xc$i}>
                               <button onClick={xc?.pick} title={xc?.name} aria-pressed={xc?.on} className={["", "gv-hw"].filter(Boolean).join(' ')} style={css(`display:flex; flex-direction:column; align-items:center; gap:7px; padding:0; border:none; background:transparent; cursor:pointer; font-family:inherit; opacity:${xc?.op ?? ''}; transition:opacity .2s, transform .2s;`)}>
@@ -2129,7 +2131,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                                   {xc?.on && (
                                     <>
                                     <span style={css(`position:absolute; right:-4px; top:-4px; width:18px; height:18px; border-radius:50%; background:${xc?.color ?? ''}; color:#14151d; display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 2px #14151d;`)}>
-                                      <svg viewBox="0 0 24 24" style={S283}>
+                                      <svg viewBox="0 0 24 24" style={S282}>
                                         <path d="M5 12l5 5 9-10" />
                                       </svg>
                                     </span>
@@ -2147,21 +2149,21 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                       <div style={css(`display:flex; flex-direction:column; min-width:0; padding:14px; border-radius:12px; background:linear-gradient(180deg, rgba(30,31,42,.7), rgba(9,10,15,.7)); border:1px solid ${vm.wiz?.detailBorder ?? ''}; transition:border-color .3s;`)}>
                         {vm.wiz?.hasFocus && (
                           <>
-                          <div style={S284}>
-                            <div style={S285}>
+                          <div style={S283}>
+                            <div style={S284}>
                               <span style={css(`position:relative; flex:none; width:60px; height:60px; border-radius:50%; background:radial-gradient(circle at 38% 30%, #f1e6c9 0%, #dccaa0 48%, #b09566 100%); box-shadow:0 0 0 3px #14151d, 0 0 0 4px ${vm.wiz?.focusColor ?? ''}, 0 0 20px rgba(0,0,0,.5);`)}>
                                 <span role="img" aria-hidden="true" style={css(`position:absolute; left:10%; top:8%; width:80%; height:80%; background-image:url(${vm.wiz?.focusIcon ?? ''}); background-size:contain; background-position:center; background-repeat:no-repeat;`)} />
                               </span>
-                              <div style={S286}>
+                              <div style={S285}>
                                 <span style={css(`font-size:10px; font-weight:700; letter-spacing:.22em; text-transform:uppercase; color:${vm.wiz?.focusColor ?? ''};`)}>
                                   {T(vm.wiz?.focusTeam)}
                                 </span>
-                                <span style={S287}>
+                                <span style={S286}>
                                   {T(vm.wiz?.focusName)}
                                 </span>
                               </div>
                             </div>
-                            <div style={S288}>
+                            <div style={S287}>
                               {T(vm.wiz?.focusText)}
                             </div>
                             <button onClick={vm.wiz?.focusToggle} style={css(`min-height:40px; border-radius:10px; border:1px solid ${vm.wiz?.focusBtnBorder ?? ''}; background:${vm.wiz?.focusBtnBg ?? ''}; color:${vm.wiz?.focusBtnColor ?? ''}; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; transition:background .25s, border-color .25s;`)}>
@@ -2172,12 +2174,12 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                         )}
                         {vm.wiz?.noFocus && (
                           <>
-                          <div style={S289}>
-                            <span aria-hidden="true" style={S290} />
-                            <span style={S291}>
+                          <div style={S288}>
+                            <span aria-hidden="true" style={S289} />
+                            <span style={S290}>
                               Read before you add
                             </span>
-                            <span style={S292}>
+                            <span style={S291}>
                               {T(vm.wiz?.idleNote)}
                             </span>
                           </div>
@@ -2185,11 +2187,11 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                         )}
                       </div>
                     </div>
-                    <div style={S293}>
-                      <button onClick={vm.wiz?.back} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S250}>
+                    <div style={S292}>
+                      <button onClick={vm.wiz?.back} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S249}>
                         ‹ Back
                       </button>
-                      <div style={S294}>
+                      <div style={S293}>
                         {(vm.wiz?.chosenIcons ?? []).map((ci: any, ci$i: number) => (
                           <Fragment key={ci$i}>
                             <button onClick={ci?.pick} title={ci?.name} style={css(`position:relative; flex:none; width:30px; height:30px; padding:0; border:none; border-radius:50%; background:radial-gradient(circle at 38% 30%, #f1e6c9, #dccaa0 50%, #a88c5c); box-shadow:0 0 0 2px #14151d, 0 0 0 3px ${ci?.color ?? ''}; cursor:pointer;`)}>
@@ -2197,11 +2199,11 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                             </button>
                           </Fragment>
                         ))}
-                        <span style={S295}>
+                        <span style={S294}>
                           {T(vm.wiz?.status2)}
                         </span>
                       </div>
-                      <button onClick={vm.wiz?.toTown} style={S296}>
+                      <button onClick={vm.wiz?.toTown} style={S295}>
                         {T(vm.wiz?.cta2)} ›
                       </button>
                     </div>
@@ -2215,21 +2217,21 @@ export function GrimoireV6View({ vm }: { vm: any }) {
           {vm.pe?.on && (
             <>
             <div style={css(`position:absolute; left:${vm.ring?.cx ?? ''}px; top:${vm.ring?.cy ?? ''}px; translate:-50% -50%; z-index:22; width:460px; max-width:calc(100% - 32px); display:flex; flex-direction:column; gap:16px; padding:18px 20px; border-radius:16px; background:linear-gradient(180deg, rgba(20,21,30,.95), rgba(10,11,16,.97)); border:1px solid rgba(176,186,204,.22); box-shadow:0 18px 40px rgba(0,0,0,.55), inset 0 2px 0 rgba(192,57,46,.55); animation:swRise .25s ease-out;`)}>
-              <div style={S297}>
-                <span style={S298}>
+              <div style={S296}>
+                <span style={S297}>
                   <span role="img" aria-hidden="true" style={css(`position:absolute; inset:4px; background-image:url(${vm.pe?.img ?? ''}); background-size:contain; background-position:center; background-repeat:no-repeat;`)} />
                 </span>
                 <div style={S53}>
-                  <span style={S299}>
+                  <span style={S298}>
                     {T(vm.pe?.role)}
                   </span>
-                  <span style={S300}>
+                  <span style={S299}>
                     {T(vm.pe?.prompt)}
                   </span>
                 </div>
               </div>
-              <div style={S301}>
-                <button onClick={vm.pe?.cancel} style={S302}>
+              <div style={S300}>
+                <button onClick={vm.pe?.cancel} style={S301}>
                   Cancel
                 </button>
                 <button onClick={vm.pe?.confirm} style={css(`margin-left:auto; min-height:40px; padding:0 18px; border-radius:10px; border:1px solid #c0392e; background:rgba(192,57,46,.22); color:#ffb4a6; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; opacity:${vm.pe?.okOp ?? ''};`)}>
@@ -2242,12 +2244,12 @@ export function GrimoireV6View({ vm }: { vm: any }) {
           {vm.town?.on && (
             <>
             <div style={css(`position:absolute; left:${vm.ring?.cx ?? ''}px; top:${vm.ring?.cy ?? ''}px; translate:-50% -50%; z-index:22; width:${vm.town?.w ?? ''}px; display:flex; flex-direction:column-reverse; align-items:center; gap:2px; transition:left .5s, top .5s;`)}>
-              <div aria-hidden="true" style={S234} />
-              <div style={S303}>
+              <div aria-hidden="true" style={S233} />
+              <div style={S302}>
                 {vm.town?.stepOn && (
                   <>
-                  <div style={S304}>
-                    <div style={S253}>
+                  <div style={S303}>
+                    <div style={S252}>
                       {(vm.wizSteps ?? []).map((st: any, st$i: number) => (
                         <Fragment key={st$i}>
                           <button onClick={st?.go} title={st?.label} style={css(`flex:0 1 auto; min-width:0; min-height:32px; display:flex; align-items:center; gap:8px; padding:0; border:none; background:transparent; cursor:${st?.cursor ?? ''}; font-family:inherit;`)}>
@@ -2255,7 +2257,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                               {T(st?.num)}
                               {st?.done && (
                                 <>
-                                <svg viewBox="0 0 24 24" style={S254}>
+                                <svg viewBox="0 0 24 24" style={S253}>
                                   <path d="M5 12l5 5 9-10" />
                                 </svg>
                                 </>
@@ -2276,14 +2278,14 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                   </div>
                   </>
                 )}
-                <div style={S236}>
-                  <div style={S237}>
+                <div style={S235}>
+                  <div style={S236}>
                     {T(vm.town?.kicker)}
-                    <span style={S238}>
+                    <span style={S237}>
                       {T(vm.rosterMeta)}
                     </span>
                   </div>
-                  <button onClick={vm.closePanel} title="Close" className={["", "gv-hr"].filter(Boolean).join(' ')} style={S239}>
+                  <button onClick={vm.closePanel} title="Close" className={["", "gv-hr"].filter(Boolean).join(' ')} style={S238}>
                     <svg viewBox="0 0 24 24" style={S46}>
                       <path d="M18 6 6 18M6 6l12 12" />
                     </svg>
@@ -2291,14 +2293,14 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                 </div>
                 {vm.town?.compOn && (
                   <>
-                  <div style={S305}>
+                  <div style={S304}>
                     {(vm.composition ?? []).map((c: any, c$i: number) => (
                       <Fragment key={c$i}>
-                        <div style={S272}>
+                        <div style={S271}>
                           <span style={css(`font-family:'IM Fell English', serif; font-size:24px; line-height:1; color:${c?.color ?? ''};`)}>
                             {T(c?.n)}
                           </span>
-                          <span style={S273}>
+                          <span style={S272}>
                             {T(c?.label)}
                           </span>
                         </div>
@@ -2309,7 +2311,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                 )}
                 {vm.town?.lobby && (
                   <>
-                  <div style={S306}>
+                  <div style={S305}>
                     <button onClick={vm.town?.setOnline} style={css(`flex:1; min-height:36px; border:none; border-radius:8px; background:${vm.town?.onlineBg ?? ''}; color:#ece6da; font-family:inherit; font-size:12px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; cursor:pointer;`)}>
                       Players join by code
                     </button>
@@ -2321,44 +2323,44 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                 )}
                 {vm.town?.offline && (
                   <>
-                  <div style={S307}>
+                  <div style={S306}>
                     <div style={S191}>
-                      <div style={S257}>
+                      <div style={S256}>
                         Seat your town
                       </div>
-                      <div style={S308}>
+                      <div style={S307}>
                         Everyone plays at the table. Set how many are playing, then write names in seat order, clockwise. Names are optional.
                       </div>
                     </div>
-                    <div style={S309}>
-                      <div style={S265}>
-                        <button onClick={vm.town?.dec} aria-label="One fewer player" className={["", "gv-hu"].filter(Boolean).join(' ')} style={S266}>
+                    <div style={S308}>
+                      <div style={S264}>
+                        <button onClick={vm.town?.dec} aria-label="One fewer player" className={["", "gv-hu"].filter(Boolean).join(' ')} style={S265}>
                           −
                         </button>
-                        <div style={S267}>
-                          <span style={S268}>
+                        <div style={S266}>
+                          <span style={S267}>
                             {T(vm.town?.count)}
                           </span>
-                          <span style={S269}>
+                          <span style={S268}>
                             players
                           </span>
                         </div>
-                        <button onClick={vm.town?.inc} aria-label="One more player" className={["", "gv-hu"].filter(Boolean).join(' ')} style={S266}>
+                        <button onClick={vm.town?.inc} aria-label="One more player" className={["", "gv-hu"].filter(Boolean).join(' ')} style={S265}>
                           +
                         </button>
                       </div>
-                      <div style={S286}>
-                        <span style={S310}>
+                      <div style={S285}>
+                        <span style={S309}>
                           {T(vm.scriptName)} setup
                         </span>
-                        <span style={S311}>
+                        <span style={S310}>
                           {T(vm.town?.mix)}
                         </span>
                       </div>
                     </div>
                     <div style={S129}>
-                      <input value={vm.town?.name} onChange={vm.town?.onName} onKeyDown={vm.town?.onNameKey} placeholder={vm.town?.namePh} style={S312} />
-                      <button onClick={vm.town?.addName} style={S313}>
+                      <input value={vm.town?.name} onChange={vm.town?.onName} onKeyDown={vm.town?.onNameKey} placeholder={vm.town?.namePh} style={S311} />
+                      <button onClick={vm.town?.addName} style={S312}>
                         Name seat
                       </button>
                     </div>
@@ -2370,43 +2372,43 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                 )}
                 {vm.town?.online && (
                   <>
-                  <div style={S314}>
-                    <div style={S315}>
+                  <div style={S313}>
+                    <div style={S314}>
                       {T(vm.town?.qr)}
                     </div>
-                    <div style={S316}>
+                    <div style={S315}>
                       <div style={S191}>
-                        <div style={S317}>
+                        <div style={S316}>
                           {T(vm.town?.lobbyTitle)}
                         </div>
-                        <div style={S318}>
+                        <div style={S317}>
                           Scan the code or enter it at{' '}
-                          <span style={S319}>
+                          <span style={S318}>
                             {T(vm.code?.host)}
                           </span>
                           . Seats are assigned once everyone is in.
                         </div>
                       </div>
-                      <div style={S320}>
-                        <span aria-label={vm.code?.aria} style={S265}>
+                      <div style={S319}>
+                        <span aria-label={vm.code?.aria} style={S264}>
                           {(vm.code?.headChars ?? []).map((ch: any, ch$i: number) => (
                             <Fragment key={ch$i}>
-                              <span style={S321}>
+                              <span style={S320}>
                                 {T(ch)}
                               </span>
                             </Fragment>
                           ))}
-                          <span aria-hidden="true" style={S322} />
+                          <span aria-hidden="true" style={S321} />
                           {(vm.code?.tailChars ?? []).map((ch: any, ch$i: number) => (
                             <Fragment key={ch$i}>
-                              <span style={S321}>
+                              <span style={S320}>
                                 {T(ch)}
                               </span>
                             </Fragment>
                           ))}
                         </span>
-                        <button onClick={vm.copyCode} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S323}>
-                          <svg viewBox="0 0 24 24" style={S324}>
+                        <button onClick={vm.copyCode} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S322}>
+                          <svg viewBox="0 0 24 24" style={S323}>
                             <rect x="9" y="9" width="11" height="11" rx="2" />
                             <path d="M5 15V5a2 2 0 0 1 2-2h8" />
                           </svg>
@@ -2415,8 +2417,8 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                       </div>
                     </div>
                   </div>
-                  <div style={S325}>
-                    <div style={S326}>
+                  <div style={S324}>
+                    <div style={S325}>
                       <span>
                         {T(vm.town?.joinedText)}
                       </span>
@@ -2436,8 +2438,8 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                 )}
                 {vm.town?.setup && (
                   <>
-                  <div style={S325}>
-                    <div style={S327}>
+                  <div style={S324}>
+                    <div style={S326}>
                       <span style={css(`font-family:'IM Fell English', serif; font-size:26px; line-height:1; color:${vm.town?.cur?.color ?? ''};`)}>
                         {T(vm.town?.cur?.role)}
                       </span>
@@ -2446,14 +2448,14 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                       </span>
                       {vm.town?.multiT && (
                         <>
-                        <div style={S328}>
-                          <button onClick={vm.town?.tPrev} aria-label="Previous character" className={["", "gv-hx"].filter(Boolean).join(' ')} style={S329}>
+                        <div style={S327}>
+                          <button onClick={vm.town?.tPrev} aria-label="Previous character" className={["", "gv-hx"].filter(Boolean).join(' ')} style={S328}>
                             ‹
                           </button>
-                          <span style={S330}>
+                          <span style={S329}>
                             {T(vm.town?.tPos)}
                           </span>
-                          <button onClick={vm.town?.tNext} aria-label="Next character" className={["", "gv-hx"].filter(Boolean).join(' ')} style={S329}>
+                          <button onClick={vm.town?.tNext} aria-label="Next character" className={["", "gv-hx"].filter(Boolean).join(' ')} style={S328}>
                             ›
                           </button>
                         </div>
@@ -2465,7 +2467,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                     </div>
                     {vm.pe?.off && (
                       <>
-                      <div style={S331}>
+                      <div style={S330}>
                         {vm.town?.cur?.open && (
                           <>
                           <button onClick={vm.town?.cur?.act} style={css(`min-height:40px; padding:0 16px; border-radius:10px; border:1px solid ${vm.town?.cur?.btnBorder ?? ''}; background:${vm.town?.cur?.btnBg ?? ''}; color:${vm.town?.cur?.btnColor ?? ''}; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer;`)}>
@@ -2475,19 +2477,19 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                         )}
                         {vm.town?.cur?.altOn && (
                           <>
-                          <button onClick={vm.town?.cur?.alt} style={S332}>
+                          <button onClick={vm.town?.cur?.alt} style={S331}>
                             {T(vm.town?.cur?.altLabel)}
                           </button>
                           </>
                         )}
                         {vm.town?.cur?.done && (
                           <>
-                          <button onClick={vm.town?.cur?.undo} style={S333}>
+                          <button onClick={vm.town?.cur?.undo} style={S332}>
                             Prepared · undo
                           </button>
                           </>
                         )}
-                        <span style={S334}>
+                        <span style={S333}>
                           {T(vm.setup?.count)}
                         </span>
                       </div>
@@ -2505,12 +2507,12 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                 )}
                 {vm.town?.idleOn && (
                   <>
-                  <div style={S308}>
+                  <div style={S307}>
                     {T(vm.town?.idleText)}
                   </div>
                   </>
                 )}
-                <div style={S331}>
+                <div style={S330}>
                   {vm.town?.revealOn && (
                     <>
                     <button onClick={vm.setup?.reveal} disabled={vm.setup?.locked} style={css(`min-height:44px; padding:0 18px; border-radius:10px; border:1px solid ${vm.setup?.revBorder ?? ''}; background:${vm.setup?.revBg ?? ''}; color:${vm.setup?.revColor ?? ''}; font-family:inherit; font-size:14px; font-weight:700; cursor:${vm.setup?.revCursor ?? ''}; white-space:nowrap;`)}>
@@ -2527,28 +2529,28 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                   )}
                   {vm.town?.addOn && (
                     <>
-                    <button onClick={vm.addPlayer} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S250}>
+                    <button onClick={vm.addPlayer} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S249}>
                       Add player
                     </button>
                     </>
                   )}
                   {vm.town?.distOn && (
                     <>
-                    <button onClick={vm.distribute} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S250}>
+                    <button onClick={vm.distribute} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S249}>
                       {T(vm.town?.distLabel)}
                     </button>
                     </>
                   )}
                   {vm.town?.idleOn && (
                     <>
-                    <button onClick={vm.resetPositions} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S250}>
+                    <button onClick={vm.resetPositions} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S249}>
                       Reset seats
                     </button>
                     </>
                   )}
                   {vm.town?.inviteOn && (
                     <>
-                    <button onClick={vm.openQr} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S250}>
+                    <button onClick={vm.openQr} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S249}>
                       Invite
                     </button>
                     </>
@@ -2568,16 +2570,16 @@ export function GrimoireV6View({ vm }: { vm: any }) {
           {vm.strip?.on && (
             <>
             <div style={css(`position:absolute; left:${vm.ring?.cx ?? ''}px; top:${vm.ring?.cy ?? ''}px; translate:-50% -50%; z-index:22; width:${vm.strip?.w ?? ''}px; display:flex; flex-direction:column-reverse; align-items:center; gap:2px; transition:left .5s, top .5s;`)}>
-              <div aria-hidden="true" style={S234} />
-              <div style={S335}>
-                <div style={S236}>
-                  <div style={S237}>
+              <div aria-hidden="true" style={S233} />
+              <div style={S334}>
+                <div style={S235}>
+                  <div style={S236}>
                     {T(vm.night?.kicker)}
-                    <span style={S336}>
+                    <span style={S335}>
                       {T(vm.strip?.pos)}
                     </span>
                   </div>
-                  <button onClick={vm.closePanel} title="Close night order" className={["", "gv-hr"].filter(Boolean).join(' ')} style={S239}>
+                  <button onClick={vm.closePanel} title="Close night order" className={["", "gv-hr"].filter(Boolean).join(' ')} style={S238}>
                     <svg viewBox="0 0 24 24" style={S46}>
                       <path d="M18 6 6 18M6 6l12 12" />
                     </svg>
@@ -2586,25 +2588,36 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                 {vm.night?.cur?.isRole && (
                   <>
                   <div style={S191}>
-                    <div style={S327}>
-                      <span style={S257}>
+                    <div style={S326}>
+                      <span style={S256}>
                         {T(vm.night?.cur?.role)}
                       </span>
                       <span style={S204}>
                         {T(vm.night?.cur?.who)}
                       </span>
+                      {vm.night?.cur?.impOn && (
+                        <>
+                        <span style={S336}>
+                          <span style={S337} />
+                          <span style={S338}>
+                            {T(vm.night?.cur?.impLabel)}
+                          </span>
+                          · any info
+                        </span>
+                        </>
+                      )}
                     </div>
-                    <div style={S337}>
+                    <div style={S339}>
                       {T(vm.night?.cur?.verb)}
                     </div>
                   </div>
                   {vm.night?.cur?.waiting && (
                     <>
-                    <div style={S338}>
+                    <div style={S340}>
                       {T(vm.night?.breath)}{T(vm.night?.cur?.waitText)}
                       {(vm.night?.cur?.picks ?? []).map((pk: any, pk$i: number) => (
                         <Fragment key={pk$i}>
-                          <span style={S339}>
+                          <span style={S341}>
                             {T(pk?.name)}
                           </span>
                         </Fragment>
@@ -2614,8 +2627,8 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                   )}
                   {vm.night?.cur?.hasNumber && (
                     <>
-                    <div style={S301}>
-                      <span style={S340}>
+                    <div style={S300}>
+                      <span style={S342}>
                         Show
                       </span>
                       {(vm.night?.cur?.numberOpts ?? []).map((o: any, o$i: number) => (
@@ -2630,7 +2643,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                   )}
                   {vm.night?.cur?.hasToken && (
                     <>
-                    <div style={S341}>
+                    <div style={S343}>
                       <div role="img" aria-hidden="true" style={css(`width:40px; height:40px; border-radius:50%; background:url(${vm.night?.cur?.tokenImg ?? ''}) center/80% no-repeat, radial-gradient(circle at 38% 30%, #f1e6c9, #b09566);`)} />
                       Show the {T(vm.night?.cur?.tokenName)} token
                     </div>
@@ -2638,8 +2651,8 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                   )}
                   {vm.night?.cur?.hasResult && (
                     <>
-                    <div style={S342}>
-                      <div style={S291}>
+                    <div style={S344}>
+                      <div style={S290}>
                         {T(vm.night?.cur?.result)}
                       </div>
                       <div style={S136}>
@@ -2650,39 +2663,39 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                   )}
                   {vm.night?.cur?.hasNote && (
                     <>
-                    <div style={S343}>
+                    <div style={S345}>
                       {T(vm.night?.cur?.note)}
                     </div>
                     </>
                   )}
                   {vm.night?.cur?.showOn && (
                     <>
-                    <button onClick={vm.night?.cur?.showAct} className={["", "gv-hy"].filter(Boolean).join(' ')} style={S344}>
+                    <button onClick={vm.night?.cur?.showAct} className={["", "gv-hy"].filter(Boolean).join(' ')} style={S346}>
                       {vm.night?.cur?.showHasImg && (
                         <>
-                        <span style={S345}>
+                        <span style={S347}>
                           <span role="img" aria-hidden="true" style={css(`position:absolute; inset:4px; background-image:url(${vm.night?.cur?.showImg ?? ''}); background-size:contain; background-position:center; background-repeat:no-repeat;`)} />
                         </span>
                         </>
                       )}
                       {vm.night?.cur?.showNoImg && (
                         <>
-                        <span style={S346}>
-                          <svg viewBox="0 0 24 24" style={S347}>
+                        <span style={S348}>
+                          <svg viewBox="0 0 24 24" style={S349}>
                             <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" />
                           </svg>
                         </span>
                         </>
                       )}
-                      <span style={S348}>
-                        <span style={S349}>
+                      <span style={S350}>
+                        <span style={S351}>
                           {T(vm.night?.cur?.showLabel)}
                         </span>
-                        <span style={S350}>
+                        <span style={S352}>
                           {T(vm.night?.cur?.showSub)}
                         </span>
                       </span>
-                      <span style={S351}>
+                      <span style={S353}>
                         Show
                         <svg viewBox="0 0 24 24" style={S35}>
                           <path d="M9 6l6 6-6 6" />
@@ -2696,10 +2709,10 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                 {vm.night?.cur?.isMarker && (
                   <>
                   <div style={S191}>
-                    <span style={S352}>
+                    <span style={S354}>
                       {T(vm.night?.cur?.title)}
                     </span>
-                    <div style={S353}>
+                    <div style={S355}>
                       {T(vm.night?.cur?.text)}
                     </div>
                   </div>
@@ -2707,28 +2720,28 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                 )}
                 {vm.night?.hasCustom && (
                   <>
-                  <div style={S354}>
+                  <div style={S356}>
                     {T(vm.night?.custom)}
                   </div>
                   </>
                 )}
-                <div style={S355}>
-                  <button onClick={vm.prevStep} className={["", "gv-hx"].filter(Boolean).join(' ')} style={S356}>
+                <div style={S357}>
+                  <button onClick={vm.prevStep} className={["", "gv-hx"].filter(Boolean).join(' ')} style={S358}>
                     Previous
                   </button>
-                  <button onClick={vm.nextStep} className={["", "gv-hz"].filter(Boolean).join(' ')} style={S357}>
+                  <button onClick={vm.nextStep} className={["", "gv-hz"].filter(Boolean).join(' ')} style={S359}>
                     Next
                   </button>
                   <button onClick={vm.beginDay} style={css(`margin-left:auto; height:44px; padding:0 14px; border-radius:10px; border:1px solid ${vm.strip?.dayBorder ?? ''}; background:${vm.strip?.dayBg ?? ''}; color:#f2c46a; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:8px; white-space:nowrap;`)}>
-                    <svg viewBox="0 0 24 24" style={S358}>
+                    <svg viewBox="0 0 24 24" style={S360}>
                       <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
                     </svg>
                     {T(vm.night?.dayButton)}
                   </button>
                 </div>
               </div>
-              <div style={S359}>
-                <div aria-hidden="true" style={S360} />
+              <div style={S361}>
+                <div aria-hidden="true" style={S362} />
                 <div style={css(`position:absolute; left:50%; top:10px; display:flex; gap:12px; align-items:center; height:56px; transform:translateX(${vm.strip?.x ?? ''}px); transition:transform .7s cubic-bezier(.2,.8,.2,1);`)}>
                   {(vm.strip?.items ?? []).map((it: any, it$i: number) => (
                     <Fragment key={it$i}>
@@ -2740,15 +2753,15 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                         )}
                         {it?.marker && (
                           <>
-                          <svg viewBox="0 0 24 24" style={S361}>
+                          <svg viewBox="0 0 24 24" style={S363}>
                             <path d={it?.markerIcon} />
                           </svg>
                           </>
                         )}
                         {it?.done && (
                           <>
-                          <span style={S362}>
-                            <svg viewBox="0 0 24 24" style={S363}>
+                          <span style={S364}>
+                            <svg viewBox="0 0 24 24" style={S365}>
                               <path d="M5 12l5 5 9-10" />
                             </svg>
                           </span>
@@ -2768,16 +2781,16 @@ export function GrimoireV6View({ vm }: { vm: any }) {
           {vm.dayC?.on && (
             <>
             <div style={css(`position:absolute; left:${vm.ring?.cx ?? ''}px; top:${vm.ring?.cy ?? ''}px; translate:-50% -50%; z-index:22; width:${vm.dayC?.w ?? ''}px; transition:left .5s, top .5s;`)}>
-              <div aria-hidden="true" style={S234} />
-              <div style={S364}>
-                <div style={S236}>
-                  <div style={S365}>
+              <div aria-hidden="true" style={S233} />
+              <div style={S366}>
+                <div style={S235}>
+                  <div style={S367}>
                     {T(vm.dayC?.kicker)}
-                    <span style={S366}>
+                    <span style={S368}>
                       {T(vm.dayC?.sub)}
                     </span>
                   </div>
-                  <button onClick={vm.closePanel} title="Close day" className={["", "gv-hr"].filter(Boolean).join(' ')} style={S367}>
+                  <button onClick={vm.closePanel} title="Close day" className={["", "gv-hr"].filter(Boolean).join(' ')} style={S369}>
                     <svg viewBox="0 0 24 24" style={S46}>
                       <path d="M18 6 6 18M6 6l12 12" />
                     </svg>
@@ -2793,41 +2806,41 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                     <div style={css(`font-family:'IM Fell English', serif; font-size:28px; line-height:1; color:${vm.dayC?.titleColor ?? ''};`)}>
                       {T(vm.dayC?.title)}
                     </div>
-                    <div style={S308}>
+                    <div style={S307}>
                       {T(vm.dayC?.text)}
                     </div>
                   </div>
                 </div>
-                <div style={S368}>
-                  <span style={S369}>
+                <div style={S370}>
+                  <span style={S371}>
                     Day actions
                   </span>
-                  <div style={S370}>
+                  <div style={S372}>
                     <div role="img" aria-hidden="true" style={css(`width:44px; height:44px; flex:none; border-radius:50%; background:url(${vm.sv?.img ?? ''}) center/78% no-repeat, radial-gradient(circle at 38% 30%, #f1e6c9, #b09566); box-shadow:0 0 0 2px #14151d, 0 0 0 3px rgba(176,186,204,.35); filter:${vm.sv?.rowFilter ?? ''};`)} />
-                    <div style={S348}>
+                    <div style={S350}>
                       <div style={S41}>
-                        <span style={S299}>
+                        <span style={S298}>
                           Slayer
                         </span>
                         <span style={css(`font-size:12px; font-weight:600; color:${vm.sv?.statusColor ?? ''};`)}>
                           {T(vm.sv?.status)}
                         </span>
                       </div>
-                      <span style={S350}>
+                      <span style={S352}>
                         {T(vm.sv?.holderText)}
                       </span>
                     </div>
-                    <button onClick={vm.sv?.toggle} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S371}>
+                    <button onClick={vm.sv?.toggle} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S373}>
                       {T(vm.sv?.btnText)}
                     </button>
                   </div>
                   {vm.sv?.hasLog && (
                     <>
-                    <div style={S372}>
+                    <div style={S374}>
                       {(vm.sv?.log ?? []).map((l: any, l$i: number) => (
                         <Fragment key={l$i}>
-                          <div style={S373}>
-                            <span style={S374}>
+                          <div style={S375}>
+                            <span style={S376}>
                               {T(l?.who)}
                             </span>
                             <span style={css(`color:${l?.color ?? ''};`)}>
@@ -2847,56 +2860,56 @@ export function GrimoireV6View({ vm }: { vm: any }) {
           {vm.infoC?.on && (
             <>
             <div style={css(`position:absolute; left:${vm.ring?.cx ?? ''}px; top:${vm.ring?.cy ?? ''}px; translate:-50% -50%; z-index:22; width:${vm.infoC?.w ?? ''}px; transition:left .5s, top .5s;`)}>
-              <div aria-hidden="true" style={S375} />
-              <div style={S376}>
-                <div style={S236}>
-                  <div style={S377}>
-                    <span style={S378}>
+              <div aria-hidden="true" style={S377} />
+              <div style={S378}>
+                <div style={S235}>
+                  <div style={S379}>
+                    <span style={S380}>
                       Game
                     </span>
-                    <span style={S379}>
+                    <span style={S381}>
                       {T(vm.scriptName)} · {T(vm.phaseLabel)}
                     </span>
-                    <span style={S380}>
+                    <span style={S382}>
                       {T(vm.extrasLine)}
                     </span>
                   </div>
-                  <button onClick={vm.closePanel} title="Close game info" className={["", "gv-hr"].filter(Boolean).join(' ')} style={S367}>
+                  <button onClick={vm.closePanel} title="Close game info" className={["", "gv-hr"].filter(Boolean).join(' ')} style={S369}>
                     <svg viewBox="0 0 24 24" style={S46}>
                       <path d="M18 6 6 18M6 6l12 12" />
                     </svg>
                   </button>
                 </div>
-                <div style={S381}>
+                <div style={S383}>
                   {(vm.stats ?? []).map((st: any, st$i: number) => (
                     <Fragment key={st$i}>
-                      <div style={S382}>
-                        <span style={S317}>
+                      <div style={S384}>
+                        <span style={S316}>
                           {T(st?.n)}
                         </span>
-                        <span style={S383}>
+                        <span style={S385}>
                           {T(st?.label)}
                         </span>
                       </div>
                     </Fragment>
                   ))}
-                  <span style={S384} />
-                  <div style={S385}>
-                    <div style={S386}>
+                  <span style={S386} />
+                  <div style={S387}>
+                    <div style={S388}>
                       {(vm.composition ?? []).map((c: any, c$i: number) => (
                         <Fragment key={c$i}>
-                          <div style={S382}>
+                          <div style={S384}>
                             <span style={css(`font-family:'IM Fell English', serif; font-size:24px; line-height:1; color:${c?.color ?? ''};`)}>
                               {T(c?.n)}
                             </span>
-                            <span style={S383}>
+                            <span style={S385}>
                               {T(c?.label)}
                             </span>
                           </div>
                         </Fragment>
                       ))}
                     </div>
-                    <div style={S387}>
+                    <div style={S389}>
                       {(vm.composition ?? []).map((c: any, c$i: number) => (
                         <Fragment key={c$i}>
                           <div style={css(`flex:${c?.n ?? ''}; background:${c?.color ?? ''}; opacity:.85;`)} />
@@ -2905,18 +2918,18 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                     </div>
                   </div>
                 </div>
-                <div style={S388}>
-                  <div style={S389}>
-                    <span style={S369}>
+                <div style={S390}>
+                  <div style={S391}>
+                    <span style={S371}>
                       Demon bluffs
                     </span>
                     <div style={S129}>
                       {(vm.bluffs ?? []).map((b: any, b$i: number) => (
                         <Fragment key={b$i}>
-                          <button onClick={b?.open} aria-label={b?.aria} style={S390}>
+                          <button onClick={b?.open} aria-label={b?.aria} style={S392}>
                             {b?.empty && (
                               <>
-                              <span style={S391}>
+                              <span style={S393}>
                                 +
                               </span>
                               </>
@@ -2933,22 +2946,22 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                         </Fragment>
                       ))}
                     </div>
-                    <button onClick={vm.showBluffs} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S392}>
+                    <button onClick={vm.showBluffs} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S394}>
                       Show to Demon
                     </button>
                   </div>
-                  <div style={S385}>
-                    <span style={S369}>
+                  <div style={S387}>
+                    <span style={S371}>
                       First night
                     </span>
-                    <div style={S325}>
+                    <div style={S324}>
                       {(vm.setupInfo ?? []).map((si: any, si$i: number) => (
                         <Fragment key={si$i}>
-                          <button onClick={si?.open} title={si?.label} className={["", "gv-h10"].filter(Boolean).join(' ')} style={S393}>
-                            <svg viewBox="0 0 24 24" style={S394}>
+                          <button onClick={si?.open} title={si?.label} className={["", "gv-h10"].filter(Boolean).join(' ')} style={S395}>
+                            <svg viewBox="0 0 24 24" style={S396}>
                               <path d={si?.icon} />
                             </svg>
-                            <span style={S395}>
+                            <span style={S397}>
                               {T(si?.label)}
                             </span>
                           </button>
@@ -2956,18 +2969,18 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                       ))}
                     </div>
                   </div>
-                  <div style={S385}>
-                    <span style={S369}>
+                  <div style={S387}>
+                    <span style={S371}>
                       Information tokens
                     </span>
-                    <div style={S396}>
+                    <div style={S398}>
                       {(vm.infoTokens ?? []).map((it: any, it$i: number) => (
                         <Fragment key={it$i}>
-                          <button onClick={it?.open} title={it?.label} className={["", "gv-h10"].filter(Boolean).join(' ')} style={S393}>
+                          <button onClick={it?.open} title={it?.label} className={["", "gv-h10"].filter(Boolean).join(' ')} style={S395}>
                             <svg viewBox="0 0 24 24" style={css(`width:14px; height:14px; flex:none; fill:none; stroke:${it?.color ?? ''}; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round;`)}>
                               <path d={it?.icon} />
                             </svg>
-                            <span style={S395}>
+                            <span style={S397}>
                               {T(it?.label)}
                             </span>
                           </button>
@@ -2982,18 +2995,18 @@ export function GrimoireV6View({ vm }: { vm: any }) {
           )}
           {vm.ended && (
             <>
-            <div role="status" style={S397}>
+            <div role="status" style={S399}>
               {T(vm.endedText)}
             </div>
             </>
           )}
           {vm.swapping && (
             <>
-            <div style={S398}>
+            <div style={S400}>
               <span>
                 Tap another token to swap seats with {T(vm.swapName)}
               </span>
-              <button onClick={vm.clearSelection} style={S399}>
+              <button onClick={vm.clearSelection} style={S401}>
                 Cancel
               </button>
             </div>
@@ -3002,7 +3015,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
           {T(vm.veil)}
           {vm.toast?.on && (
             <>
-            <div style={S400}>
+            <div style={S402}>
               {T(vm.toast?.text)}
             </div>
             </>
@@ -3013,11 +3026,11 @@ export function GrimoireV6View({ vm }: { vm: any }) {
           <div role="dialog" aria-label={vm.win?.title} style={css(`position:absolute; inset:0; z-index:95; overflow:hidden; background:${vm.win?.base ?? ''}; display:flex; align-items:center; justify-content:center; animation:swRise .6s ease-out;`)}>
             <div style={css(`position:absolute; inset:0; background:${vm.win?.light ?? ''};`)} />
             <div style={css(`position:absolute; left:50%; top:42%; width:1100px; height:1100px; margin:-550px 0 0 -550px; border-radius:50%; background:${vm.win?.rays ?? ''}; opacity:.55; pointer-events:none;`)} />
-            <div style={S401} />
-            <div style={S402} />
-            <div style={css(`position:absolute; inset:12px; border:1px solid ${vm.win?.line ?? ''}; border-radius:16px; pointer-events:none;`)} />
             <div style={S403} />
-            <div style={S404}>
+            <div style={S404} />
+            <div style={css(`position:absolute; inset:12px; border:1px solid ${vm.win?.line ?? ''}; border-radius:16px; pointer-events:none;`)} />
+            <div style={S405} />
+            <div style={S406}>
               <div style={css(`font-size:13px; letter-spacing:.42em; text-transform:uppercase; font-weight:600; color:${vm.win?.kickColor ?? ''};`)}>
                 {T(vm.win?.kicker)}
               </div>
@@ -3029,26 +3042,26 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                 )}
                 {vm.win?.slain && (
                   <>
-                  <span style={S405} />
+                  <span style={S407} />
                   </>
                 )}
               </div>
-              <div style={S406}>
+              <div style={S408}>
                 <div style={css(`font-family:'Cinzel Decorative', serif; font-size:76px; font-weight:700; letter-spacing:.04em; line-height:1; color:${vm.win?.titleColor ?? ''}; text-shadow:0 0 40px ${vm.win?.halo ?? ''}, 0 2px 0 rgba(0,0,0,.6);`)}>
                   {T(vm.win?.title)}
                 </div>
-                <div aria-hidden="true" style={S370}>
+                <div aria-hidden="true" style={S372}>
                   <span style={css(`width:110px; height:1px; background:linear-gradient(90deg, transparent, ${vm.win?.orn ?? ''});`)} />
                   <span style={css(`width:5px; height:5px; transform:rotate(45deg); background:${vm.win?.orn ?? ''};`)} />
                   <span style={css(`width:9px; height:9px; transform:rotate(45deg); border:1px solid ${vm.win?.orn ?? ''};`)} />
                   <span style={css(`width:5px; height:5px; transform:rotate(45deg); background:${vm.win?.orn ?? ''};`)} />
                   <span style={css(`width:110px; height:1px; background:linear-gradient(90deg, ${vm.win?.orn ?? ''}, transparent);`)} />
                 </div>
-                <div style={S407}>
+                <div style={S409}>
                   {T(vm.win?.line1)}
                 </div>
               </div>
-              <div style={S408}>
+              <div style={S410}>
                 {(vm.win?.team ?? []).map((m: any, m$i: number) => (
                   <Fragment key={m$i}>
                     <div style={css(`display:flex; flex-direction:column; align-items:center; gap:6px; width:84px; opacity:${m?.op ?? ''};`)}>
@@ -3059,14 +3072,14 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                           </>
                         )}
                       </span>
-                      <span style={S409}>
+                      <span style={S411}>
                         {T(m?.name)}
                       </span>
                     </div>
                   </Fragment>
                 ))}
               </div>
-              <div style={S410}>
+              <div style={S412}>
                 <button onClick={vm.win?.close} className={["", "gv-h11"].filter(Boolean).join(' ')} style={css(`margin-top:10px; min-height:52px; padding:0 28px; border-radius:26px; border:1px solid ${vm.win?.ring ?? ''}; background:rgba(0,0,0,.35); color:${vm.win?.titleColor ?? ''}; font-family:'IM Fell English', serif; font-size:20px; font-weight:400; cursor:pointer;`)}>
                   Review the Grimoire
                 </button>
@@ -3080,25 +3093,25 @@ export function GrimoireV6View({ vm }: { vm: any }) {
         )}
         {vm.askDlg?.open && (
           <>
-          <div onClick={vm.askDlg?.close} style={S411}>
-            <div role="dialog" aria-label={vm.askDlg?.title} onClick={vm.stop} style={S412}>
-              <div style={S325}>
-                <div style={S413}>
+          <div onClick={vm.askDlg?.close} style={S413}>
+            <div role="dialog" aria-label={vm.askDlg?.title} onClick={vm.stop} style={S414}>
+              <div style={S324}>
+                <div style={S415}>
                   {T(vm.askDlg?.title)}
                 </div>
-                <div style={S414}>
+                <div style={S416}>
                   {T(vm.askDlg?.body)}
                 </div>
               </div>
               {vm.askDlg?.hasInput && (
                 <>
-                <input autoFocus={vm.askDlg?.open} value={vm.askDlg?.value} onInput={vm.askDlg?.onInput} onKeyDown={vm.askDlg?.onKey} maxLength={vm.askDlg?.maxLength} placeholder={vm.askDlg?.placeholder} aria-label={vm.askDlg?.placeholder} className={["", "gv-f12"].filter(Boolean).join(' ')} style={S415} />
+                <input autoFocus={vm.askDlg?.open} value={vm.askDlg?.value} onInput={vm.askDlg?.onInput} onKeyDown={vm.askDlg?.onKey} maxLength={vm.askDlg?.maxLength} placeholder={vm.askDlg?.placeholder} aria-label={vm.askDlg?.placeholder} className={["", "gv-f12"].filter(Boolean).join(' ')} style={S417} />
                 </>
               )}
-              <button onClick={vm.askDlg?.ok} disabled={vm.askDlg?.okDisabled} className={["", "gv-h13"].filter(Boolean).join(' ')} style={S416}>
+              <button onClick={vm.askDlg?.ok} disabled={vm.askDlg?.okDisabled} className={["", "gv-h13"].filter(Boolean).join(' ')} style={S418}>
                 {T(vm.askDlg?.okText)}
               </button>
-              <button onClick={vm.askDlg?.close} className={["", "gv-h14"].filter(Boolean).join(' ')} style={S417}>
+              <button onClick={vm.askDlg?.close} className={["", "gv-h14"].filter(Boolean).join(' ')} style={S419}>
                 Cancel
               </button>
             </div>
@@ -3107,19 +3120,19 @@ export function GrimoireV6View({ vm }: { vm: any }) {
         )}
         {vm.endDlg?.open && (
           <>
-          <div onClick={vm.endDlg?.close} style={S418}>
-            <div role="dialog" aria-label="End game" onClick={vm.stop} style={S412}>
-              <div style={S325}>
-                <div style={S413}>
+          <div onClick={vm.endDlg?.close} style={S420}>
+            <div role="dialog" aria-label="End game" onClick={vm.stop} style={S414}>
+              <div style={S324}>
+                <div style={S415}>
                   End the game
                 </div>
-                <div style={S414}>
+                <div style={S416}>
                   Choose the winning team. The Grimoire stays open for review.
                 </div>
               </div>
               {vm.endDlg?.notice && (
                 <>
-                <div style={S419}>
+                <div style={S421}>
                   {T(vm.endDlg?.notice)}
                 </div>
                 </>
@@ -3127,10 +3140,10 @@ export function GrimoireV6View({ vm }: { vm: any }) {
               {vm.endDlg?.choices && (
                 <>
                 <div style={S206}>
-                  <button onClick={vm.endDlg?.good} className={["", "gv-h15"].filter(Boolean).join(' ')} style={S420}>
+                  <button onClick={vm.endDlg?.good} className={["", "gv-h15"].filter(Boolean).join(' ')} style={S422}>
                     Good wins
                   </button>
-                  <button onClick={vm.endDlg?.evil} className={["", "gv-h16"].filter(Boolean).join(' ')} style={S421}>
+                  <button onClick={vm.endDlg?.evil} className={["", "gv-h16"].filter(Boolean).join(' ')} style={S423}>
                     Evil wins
                   </button>
                 </div>
@@ -3138,24 +3151,24 @@ export function GrimoireV6View({ vm }: { vm: any }) {
               )}
               {vm.endDlg?.recovery && (
                 <>
-                <button onClick={vm.endDlg?.retry} className={["", "gv-h17"].filter(Boolean).join(' ')} style={S422}>
+                <button onClick={vm.endDlg?.retry} className={["", "gv-h17"].filter(Boolean).join(' ')} style={S424}>
                   Retry saving result
                 </button>
                 </>
               )}
               {vm.endDlg?.error && (
                 <>
-                <div role="alert" style={S423}>
+                <div role="alert" style={S425}>
                   {T(vm.endDlg?.error)}
                 </div>
                 </>
               )}
-              <button onClick={vm.endDlg?.close} className={["", "gv-h14"].filter(Boolean).join(' ')} style={S417}>
+              <button onClick={vm.endDlg?.close} className={["", "gv-h14"].filter(Boolean).join(' ')} style={S419}>
                 Keep playing
               </button>
               {vm.endDlg?.choices && (
                 <>
-                <button onClick={vm.endDlg?.noResult} className={["", "gv-h14"].filter(Boolean).join(' ')} style={S424}>
+                <button onClick={vm.endDlg?.noResult} className={["", "gv-h14"].filter(Boolean).join(' ')} style={S426}>
                   End without a result
                 </button>
                 </>
@@ -3166,33 +3179,33 @@ export function GrimoireV6View({ vm }: { vm: any }) {
         )}
         {vm.refM?.on && (
           <>
-          <div onClick={vm.closePanel} style={S425}>
-            <div onClick={vm.stop} role="dialog" aria-label="Character reference" style={S426}>
-              <div style={S427}>
-                <div style={S428}>
-                  <div style={S270}>
-                    <div style={S429}>
+          <div onClick={vm.closePanel} style={S427}>
+            <div onClick={vm.stop} role="dialog" aria-label="Character reference" style={S428}>
+              <div style={S429}>
+                <div style={S430}>
+                  <div style={S269}>
+                    <div style={S431}>
                       Reference
                     </div>
                     <div style={S87}>
-                      <span style={S430}>
+                      <span style={S432}>
                         {T(vm.refM?.script)}
                       </span>
-                      <span style={S431}>
+                      <span style={S433}>
                         {T(vm.refM?.count)} characters
                       </span>
                     </div>
                   </div>
-                  <input value={vm.refQuery} onInput={vm.onRefQuery} placeholder="Search characters or abilities" className={["", "gv-f12"].filter(Boolean).join(' ')} style={S432} />
+                  <input value={vm.refQuery} onInput={vm.onRefQuery} placeholder="Search characters or abilities" className={["", "gv-f12"].filter(Boolean).join(' ')} style={S434} />
                 </div>
-                <div style={S433}>
+                <div style={S435}>
                   {vm.refEmpty && (
                     <>
-                    <div style={S434}>
-                      <span style={S435}>
+                    <div style={S436}>
+                      <span style={S437}>
                         No characters match “{T(vm.refQuery)}”.
                       </span>
-                      <button onClick={vm.clearRef} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S436}>
+                      <button onClick={vm.clearRef} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S438}>
                         Clear search
                       </button>
                     </div>
@@ -3200,30 +3213,30 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                   )}
                   {(vm.refM?.groups ?? []).map((g: any, g$i: number) => (
                     <Fragment key={g$i}>
-                      <div style={S437}>
-                        <div style={S438}>
+                      <div style={S439}>
+                        <div style={S440}>
                           <span style={css(`font-size:11px; letter-spacing:.22em; text-transform:uppercase; font-weight:700; color:${g?.color ?? ''};`)}>
                             {T(g?.label)}
                           </span>
                           <span style={css(`font-family:'IM Fell English', serif; font-size:30px; line-height:1; color:${g?.color ?? ''};`)}>
                             {T(g?.count)}
                           </span>
-                          <span style={S439}>
+                          <span style={S441}>
                             {T(g?.note)}
                           </span>
                         </div>
-                        <div style={S440}>
+                        <div style={S442}>
                           {(g?.tiles ?? []).map((t: any, t$i: number) => (
                             <Fragment key={t$i}>
                               <button onClick={t?.pick} aria-pressed={t?.on} aria-label={t?.name} className={["", "gv-h18 gv-f19"].filter(Boolean).join(' ')} style={css(`position:relative; min-width:0; padding:8px 2px 4px; border:none; border-radius:12px; background:${t?.bg ?? ''}; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:8px; font-family:inherit;`)}>
-                                <span style={S441}>
+                                <span style={S443}>
                                   <span style={css(`position:absolute; inset:-4px; border-radius:50%; border:2px solid ${t?.ring ?? ''}; box-shadow:${t?.glow ?? ''}; transition:all .2s;`)} />
-                                  <span style={S442}>
+                                  <span style={S444}>
                                     <span role="img" aria-hidden="true" style={css(`position:absolute; left:10%; top:8%; width:80%; height:80%; background-image:url(${t?.img ?? ''}); background-size:contain; background-position:center; background-repeat:no-repeat;`)} />
                                   </span>
                                   {t?.inPlay && (
                                     <>
-                                    <span title="In play" style={S443} />
+                                    <span title="In play" style={S445} />
                                     </>
                                   )}
                                 </span>
@@ -3239,21 +3252,21 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                   ))}
                 </div>
               </div>
-              <aside style={S444}>
-                <button onClick={vm.closePanel} aria-label="Close" className={["", "gv-h3"].filter(Boolean).join(' ')} style={S445}>
-                  <svg viewBox="0 0 24 24" style={S446}>
+              <aside style={S446}>
+                <button onClick={vm.closePanel} aria-label="Close" className={["", "gv-h3"].filter(Boolean).join(' ')} style={S447}>
+                  <svg viewBox="0 0 24 24" style={S448}>
                     <path d="M18 6 6 18M6 6l12 12" />
                   </svg>
                 </button>
                 {vm.refM?.has && (
                   <>
-                  <div style={S447}>
+                  <div style={S449}>
                     <span role="img" aria-hidden="true" style={css(`width:132px; height:132px; flex:none; border-radius:50%; background:url(${vm.refM?.sel?.img ?? ''}) center/80% no-repeat, radial-gradient(circle at 38% 30%, #f1e6c9 0%, #dccaa0 48%, #b09566 100%); box-shadow:0 0 0 3px #14151d, 0 0 0 5px ${vm.refM?.sel?.color ?? ''}, 0 0 40px rgba(0,0,0,.6), 0 16px 34px rgba(0,0,0,.55);`)} />
-                    <div style={S448}>
+                    <div style={S450}>
                       <span style={css(`font-size:11px; letter-spacing:.22em; text-transform:uppercase; font-weight:700; color:${vm.refM?.sel?.color ?? ''};`)}>
                         {T(vm.refM?.sel?.type)}
                       </span>
-                      <span style={S449}>
+                      <span style={S451}>
                         {T(vm.refM?.sel?.name)}
                       </span>
                       <span style={css(`font-size:12px; font-weight:600; color:${vm.refM?.sel?.playColor ?? ''};`)}>
@@ -3261,24 +3274,24 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                       </span>
                     </div>
                     <div aria-hidden="true" style={S90}>
-                      <span style={S450} />
-                      <span style={S451} />
                       <span style={S452} />
+                      <span style={S453} />
+                      <span style={S454} />
                     </div>
-                    <div style={S453}>
+                    <div style={S455}>
                       {T(vm.refM?.sel?.ability)}
                     </div>
                     {vm.refM?.sel?.hasRems && (
                       <>
-                      <div style={S454}>
-                        <span style={S369}>
+                      <div style={S456}>
+                        <span style={S371}>
                           Reminder tokens
                         </span>
-                        <div style={S455}>
+                        <div style={S457}>
                           {(vm.refM?.sel?.rems ?? []).map((r: any, r$i: number) => (
                             <Fragment key={r$i}>
-                              <span title={r?.label} style={S456}>
-                                <span style={S457}>
+                              <span title={r?.label} style={S458}>
+                                <span style={S459}>
                                   <span style={S21}>
                                     {r?.src && (
                                       <>
@@ -3296,12 +3309,12 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                       </>
                     )}
                   </div>
-                  <div style={S458}>
+                  <div style={S460}>
                     {vm.refM?.sel?.hasWiki && (
                       <>
-                      <a href={vm.refM?.sel?.wiki} target="_blank" rel="noopener" className={["", "gv-h1a"].filter(Boolean).join(' ')} style={S459}>
+                      <a href={vm.refM?.sel?.wiki} target="_blank" rel="noopener" className={["", "gv-h1a"].filter(Boolean).join(' ')} style={S461}>
                         {T(vm.refM?.sel?.name)} wiki
-                        <svg viewBox="0 0 24 24" style={S324}>
+                        <svg viewBox="0 0 24 24" style={S323}>
                           <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
                         </svg>
                       </a>
@@ -3317,36 +3330,36 @@ export function GrimoireV6View({ vm }: { vm: any }) {
         )}
         {vm.pk?.open && (
           <>
-          <div onClick={vm.pk?.close} style={S460}>
-            <div onClick={vm.stop} role="dialog" aria-label={vm.pk?.title} style={S461}>
-              <div style={S462}>
-                <div style={S270}>
-                  <div style={S463}>
+          <div onClick={vm.pk?.close} style={S462}>
+            <div onClick={vm.stop} role="dialog" aria-label={vm.pk?.title} style={S463}>
+              <div style={S464}>
+                <div style={S269}>
+                  <div style={S465}>
                     {T(vm.pk?.kicker)}
                   </div>
-                  <div style={S464}>
+                  <div style={S466}>
                     {T(vm.pk?.title)}
                   </div>
                 </div>
-                <button onClick={vm.pk?.close} aria-label="Close" className={["", "gv-h3"].filter(Boolean).join(' ')} style={S465}>
-                  <svg viewBox="0 0 24 24" style={S446}>
+                <button onClick={vm.pk?.close} aria-label="Close" className={["", "gv-h3"].filter(Boolean).join(' ')} style={S467}>
+                  <svg viewBox="0 0 24 24" style={S448}>
                     <path d="M18 6 6 18M6 6l12 12" />
                   </svg>
                 </button>
               </div>
-              <div style={S466}>
+              <div style={S468}>
                 {(vm.pk?.rows ?? []).map((row: any, row$i: number) => (
                   <Fragment key={row$i}>
                     <div style={css(`display:grid; min-width:0; grid-template-columns:${row?.cols ?? ''}; gap:12px;`)}>
                       {(row?.groups ?? []).map((g: any, g$i: number) => (
                         <Fragment key={g$i}>
-                          <div style={S467}>
-                            <div style={S468}>
-                              <div style={S469}>
+                          <div style={S469}>
+                            <div style={S470}>
+                              <div style={S471}>
                                 <span style={css(`font-size:11px; letter-spacing:.22em; text-transform:uppercase; font-weight:700; color:${g?.color ?? ''};`)}>
                                   {T(g?.label)}
                                 </span>
-                                <span style={S470}>
+                                <span style={S472}>
                                   {T(g?.note)}
                                 </span>
                               </div>
@@ -3354,11 +3367,11 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                                 {T(g?.count)}
                               </span>
                             </div>
-                            <div style={S471}>
+                            <div style={S473}>
                               {(g?.tiles ?? []).map((t: any, t$i: number) => (
                                 <Fragment key={t$i}>
                                   <button onClick={t?.click} onMouseEnter={t?.hover} onFocus={t?.hover} aria-pressed={t?.pressed} aria-label={t?.aria} className={["", "gv-f1b"].filter(Boolean).join(' ')} style={css(`position:relative; min-width:0; padding:10px 2px 2px; border:none; background:transparent; cursor:${t?.cursor ?? ''}; opacity:${t?.opacity ?? ''}; display:flex; flex-direction:column; align-items:center; gap:6px; font-family:inherit;`)}>
-                                    <span className={["", "gv-h1c"].filter(Boolean).join(' ')} style={S472}>
+                                    <span className={["", "gv-h1c"].filter(Boolean).join(' ')} style={S474}>
                                       <span style={css(`position:absolute; inset:-4px; border-radius:50%; border:2px solid ${t?.ring ?? ''}; box-shadow:${t?.glow ?? ''}; transition:all .2s;`)} />
                                       <span style={css(`position:absolute; inset:0; border-radius:50%; overflow:hidden; background:radial-gradient(circle at 38% 30%, #f1e6c9 0%, #dccaa0 48%, #b09566 100%); box-shadow:0 6px 14px rgba(0,0,0,.55), inset 0 -5px 10px rgba(90,60,25,.35); filter:${t?.filter ?? ''}; transition:filter .25s;`)}>
                                         {t?.img && (
@@ -3389,8 +3402,8 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                   </Fragment>
                 ))}
               </div>
-              <div style={S473}>
-                <div style={S474}>
+              <div style={S475}>
+                <div style={S476}>
                   <span style={css(`position:relative; width:56px; height:56px; flex:none; border-radius:50%; overflow:hidden; background:radial-gradient(circle at 38% 30%, #f1e6c9 0%, #dccaa0 48%, #b09566 100%); box-shadow:0 6px 14px rgba(0,0,0,.5), inset 0 0 0 1.5px ${vm.pk?.d?.color ?? ''};`)}>
                     {vm.pk?.d?.img && (
                       <>
@@ -3398,35 +3411,35 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                       </>
                     )}
                   </span>
-                  <div style={S475}>
-                    <div style={S476}>
-                      <span style={S477}>
+                  <div style={S477}>
+                    <div style={S478}>
+                      <span style={S479}>
                         {T(vm.pk?.d?.name)}
                       </span>
                       <span style={css(`font-size:11px; letter-spacing:.16em; text-transform:uppercase; font-weight:600; color:${vm.pk?.d?.color ?? ''};`)}>
                         {T(vm.pk?.d?.type)}
                       </span>
                     </div>
-                    <div style={S478}>
+                    <div style={S480}>
                       {T(vm.pk?.d?.ability)}
                     </div>
                   </div>
-                  <div style={S479}>
-                    <span style={S480}>
+                  <div style={S481}>
+                    <span style={S482}>
                       Reminders
                     </span>
-                    <div style={S481}>
+                    <div style={S483}>
                       {vm.pk?.d?.noRems && (
                         <>
-                        <span style={S482}>
+                        <span style={S484}>
                           None
                         </span>
                         </>
                       )}
                       {(vm.pk?.d?.rems ?? []).map((r: any, r$i: number) => (
                         <Fragment key={r$i}>
-                          <div style={S483}>
-                            <span style={S484}>
+                          <div style={S485}>
+                            <span style={S486}>
                               <span style={S21}>
                                 {r?.src && (
                                   <>
@@ -3444,24 +3457,24 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                 </div>
                 {vm.pk?.isDist && (
                   <>
-                  <div style={S485}>
-                    <div style={S486}>
-                      <span style={S487}>
+                  <div style={S487}>
+                    <div style={S488}>
+                      <span style={S489}>
                         {T(vm.pk?.status)}
                       </span>
                       <span style={css(`font-size:12px; color:${vm.pk?.noteColor ?? ''};`)}>
                         {T(vm.pk?.note)}
                       </span>
                     </div>
-                    <div style={S488}>
-                      <button onClick={vm.pk?.clear} className={["", "gv-h8"].filter(Boolean).join(' ')} style={S489}>
+                    <div style={S490}>
+                      <button onClick={vm.pk?.clear} className={["", "gv-h8"].filter(Boolean).join(' ')} style={S491}>
                         Clear
                       </button>
-                      <button onClick={vm.pk?.random} className={["", "gv-h1d"].filter(Boolean).join(' ')} style={S490}>
+                      <button onClick={vm.pk?.random} className={["", "gv-h1d"].filter(Boolean).join(' ')} style={S492}>
                         Random setup
                       </button>
                       <button onClick={vm.pk?.go} aria-disabled={vm.pk?.blocked} style={css(`min-height:44px; padding:0 20px; border-radius:10px; border:1px solid ${vm.pk?.goBorder ?? ''}; background:${vm.pk?.goBg ?? ''}; color:${vm.pk?.goFg ?? ''}; font-family:inherit; font-size:14px; font-weight:700; cursor:${vm.pk?.goCursor ?? ''}; display:flex; align-items:center; gap:8px; white-space:nowrap;`)}>
-                        <svg viewBox="0 0 24 24" style={S242}>
+                        <svg viewBox="0 0 24 24" style={S241}>
                           <path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
                         </svg>
                          Distribute to {T(vm.pk?.seatCount)}
@@ -3472,20 +3485,20 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                 )}
                 {vm.pk?.isChoose && (
                   <>
-                  <div style={S491}>
+                  <div style={S493}>
                     Characters marked with a name are in use. Picking one swaps it with that player.
                   </div>
                   </>
                 )}
                 {vm.pk?.isBluff && (
                   <>
-                  <div style={S492}>
-                    <div style={S493}>
+                  <div style={S494}>
+                    <div style={S495}>
                       Characters in play can't be bluffed. Picking another bluff swaps the two slots.
                     </div>
                     {vm.pk?.canClearBluff && (
                       <>
-                      <button onClick={vm.pk?.clearBluff} className={["", "gv-h1d"].filter(Boolean).join(' ')} style={S490}>
+                      <button onClick={vm.pk?.clearBluff} className={["", "gv-h1d"].filter(Boolean).join(' ')} style={S492}>
                         Clear slot
                       </button>
                       </>
@@ -3495,7 +3508,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                 )}
                 {vm.pk?.isShow && (
                   <>
-                  <div style={S491}>
+                  <div style={S493}>
                     Tap a character to show it full screen. Nothing on the board changes.
                   </div>
                   </>
@@ -3507,26 +3520,26 @@ export function GrimoireV6View({ vm }: { vm: any }) {
         )}
         {vm.qr && (
           <>
-          <div onClick={vm.closeQr} style={S494}>
-            <div onClick={vm.stop} style={S495}>
-              <div style={S463}>
+          <div onClick={vm.closeQr} style={S496}>
+            <div onClick={vm.stop} style={S497}>
+              <div style={S465}>
                 Join the game
               </div>
-              <div style={S496}>
+              <div style={S498}>
                 {T(vm.qrSvg)}
               </div>
-              <span aria-label={vm.code?.aria} style={S497}>
+              <span aria-label={vm.code?.aria} style={S499}>
                 {(vm.code?.headChars ?? []).map((ch: any, ch$i: number) => (
                   <Fragment key={ch$i}>
-                    <span style={S498}>
+                    <span style={S500}>
                       {T(ch)}
                     </span>
                   </Fragment>
                 ))}
-                <span aria-hidden="true" style={S499} />
+                <span aria-hidden="true" style={S501} />
                 {(vm.code?.tailChars ?? []).map((ch: any, ch$i: number) => (
                   <Fragment key={ch$i}>
-                    <span style={S498}>
+                    <span style={S500}>
                       {T(ch)}
                     </span>
                   </Fragment>
@@ -3536,10 +3549,10 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                 {T(vm.code?.host)} · scan or enter the code
               </div>
               <div style={S117}>
-                <button onClick={vm.copyCode} className={["", "gv-h1d"].filter(Boolean).join(' ')} style={S500}>
+                <button onClick={vm.copyCode} className={["", "gv-h1d"].filter(Boolean).join(' ')} style={S502}>
                   Copy link
                 </button>
-                <button onClick={vm.closeQr} style={S501}>
+                <button onClick={vm.closeQr} style={S503}>
                   Done
                 </button>
               </div>
@@ -3549,59 +3562,59 @@ export function GrimoireV6View({ vm }: { vm: any }) {
         )}
         {vm.show?.open && (
           <>
-          <div role="dialog" aria-label={vm.show?.aria} style={S502}>
-            <div style={S503} />
-            {T(vm.show?.glow)}
-            <div style={S504} />
+          <div role="dialog" aria-label={vm.show?.aria} style={S504}>
             <div style={S505} />
+            {T(vm.show?.glow)}
             <div style={S506} />
             <div style={S507} />
             <div style={S508} />
             <div style={S509} />
-            <div aria-hidden="true" style={S510} />
-            <div aria-hidden="true" style={S511} />
+            <div style={S510} />
+            <div style={S511} />
             <div aria-hidden="true" style={S512} />
             <div aria-hidden="true" style={S513} />
+            <div aria-hidden="true" style={S514} />
+            <div aria-hidden="true" style={S515} />
             {vm.show?.isChar && (
               <>
-              <div style={S514}>
-                <div style={S515}>
-                  <div style={S516}>
+              <div style={S516}>
+                <div style={S517}>
+                  <div style={S518}>
                     {T(vm.show?.title)}
                   </div>
-                  <div aria-hidden="true" style={S370}>
-                    <span style={S517} />
-                    <span style={S518} />
+                  <div aria-hidden="true" style={S372}>
                     <span style={S519} />
-                    <span style={S518} />
                     <span style={S520} />
+                    <span style={S521} />
+                    <span style={S520} />
+                    <span style={S522} />
                   </div>
                 </div>
-                <div style={S521}>
+                <div style={S523}>
                   {vm.show?.img && (
                     <>
                     <div role="img" aria-hidden="true" style={css(`position:absolute; left:12%; top:10%; width:76%; height:76%; background-image:url(${vm.show?.img ?? ''}); background-size:contain; background-position:center; background-repeat:no-repeat;`)} />
                     </>
                   )}
                 </div>
-                <div style={S522}>
-                  <div style={S523}>
+                <div style={S524}>
+                  <div style={S525}>
                     {T(vm.show?.name)}
                   </div>
                   <div style={css(`display:flex; align-items:center; gap:10px; font-size:14px; letter-spacing:.24em; text-transform:uppercase; font-weight:700; color:${vm.show?.typeColor ?? ''};`)}>
-                    <span style={S524} />
+                    <span style={S526} />
                     {T(vm.show?.type)}
-                    <span style={S524} />
+                    <span style={S526} />
                   </div>
                 </div>
-                <div aria-hidden="true" style={S370}>
-                  <span style={S525} />
-                  <span style={S518} />
-                  <span style={S519} />
-                  <span style={S518} />
-                  <span style={S526} />
+                <div aria-hidden="true" style={S372}>
+                  <span style={S527} />
+                  <span style={S520} />
+                  <span style={S521} />
+                  <span style={S520} />
+                  <span style={S528} />
                 </div>
-                <div style={S527}>
+                <div style={S529}>
                   {T(vm.show?.ability)}
                 </div>
               </div>
@@ -3609,23 +3622,23 @@ export function GrimoireV6View({ vm }: { vm: any }) {
             )}
             {vm.show?.isText && (
               <>
-              <div style={S528}>
+              <div style={S530}>
                 <div style={css(`position:relative; width:220px; height:220px; border-radius:50%; background:radial-gradient(circle at 38% 30%, #f1e6c9 0%, #dccaa0 48%, #b09566 100%); box-shadow:0 0 0 3px rgba(232,88,74,.7), 0 0 0 10px rgba(20,8,8,.85), 0 0 0 11px rgba(232,88,74,.35), 0 0 60px 14px ${vm.show?.halo ?? ''}, 0 24px 50px rgba(0,0,0,.6), inset 0 -12px 24px rgba(90,60,25,.35); display:flex; align-items:center; justify-content:center;`)}>
                   <span style={css(`position:absolute; inset:10px; border-radius:50%; border:2px solid ${vm.show?.ring ?? ''};`)} />
                   <svg viewBox="0 0 24 24" style={css(`position:relative; width:104px; height:104px; fill:none; stroke:${vm.show?.ink ?? ''}; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round;`)}>
                     <path d={vm.show?.icon} />
                   </svg>
                 </div>
-                <div style={S529}>
+                <div style={S531}>
                   <div style={css(`font-family:'Cinzel Decorative', serif; font-size:68px; font-weight:700; letter-spacing:.04em; line-height:1.05; color:${vm.show?.titleColor ?? ''}; text-shadow:0 2px 22px rgba(232,170,90,.22); text-wrap:balance;`)}>
                     {T(vm.show?.title)}
                   </div>
-                  <div aria-hidden="true" style={S370}>
-                    <span style={S530} />
-                    <span style={S518} />
-                    <span style={S519} />
-                    <span style={S518} />
-                    <span style={S531} />
+                  <div aria-hidden="true" style={S372}>
+                    <span style={S532} />
+                    <span style={S520} />
+                    <span style={S521} />
+                    <span style={S520} />
+                    <span style={S533} />
                   </div>
                 </div>
               </div>
@@ -3633,28 +3646,28 @@ export function GrimoireV6View({ vm }: { vm: any }) {
             )}
             {vm.show?.isSetup && (
               <>
-              <div style={S532}>
+              <div style={S534}>
                 {(vm.show?.cols ?? []).map((c: any, c$i: number) => (
                   <Fragment key={c$i}>
                     <div style={css(`display:flex; flex-direction:column; align-items:center; justify-content:center; gap:26px; padding:0 64px; border-left:${c?.divider ?? ''}; border-image:${c?.dividerImg ?? ''}; text-align:center;`)}>
-                      <div style={S406}>
-                        <div style={S533}>
+                      <div style={S408}>
+                        <div style={S535}>
                           {T(c?.title)}
                         </div>
-                        <div aria-hidden="true" style={S370}>
-                          <span style={S525} />
-                          <span style={S518} />
-                          <span style={S519} />
-                          <span style={S518} />
-                          <span style={S526} />
+                        <div aria-hidden="true" style={S372}>
+                          <span style={S527} />
+                          <span style={S520} />
+                          <span style={S521} />
+                          <span style={S520} />
+                          <span style={S528} />
                         </div>
                       </div>
                       {c?.hasPlayers && (
                         <>
-                        <div style={S534}>
+                        <div style={S536}>
                           {(c?.players ?? []).map((pl: any, pl$i: number) => (
                             <Fragment key={pl$i}>
-                              <span style={S535}>
+                              <span style={S537}>
                                 {T(pl?.name)}
                               </span>
                             </Fragment>
@@ -3664,18 +3677,18 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                       )}
                       {c?.hasChars && (
                         <>
-                        <div style={S536}>
+                        <div style={S538}>
                           {(c?.chars ?? []).map((ch: any, ch$i: number) => (
                             <Fragment key={ch$i}>
-                              <div style={S537}>
-                                <span style={S538}>
+                              <div style={S539}>
+                                <span style={S540}>
                                   {ch?.img && (
                                     <>
                                     <span role="img" aria-hidden="true" style={css(`position:absolute; left:12%; top:10%; width:76%; height:76%; background-image:url(${ch?.img ?? ''}); background-size:contain; background-position:center; background-repeat:no-repeat;`)} />
                                     </>
                                   )}
                                 </span>
-                                <span style={S539}>
+                                <span style={S541}>
                                   {T(ch?.name)}
                                 </span>
                               </div>
@@ -3686,7 +3699,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                       )}
                       {c?.isEmpty && (
                         <>
-                        <div style={S540}>
+                        <div style={S542}>
                           {T(c?.emptyText)}
                         </div>
                         </>
@@ -3697,8 +3710,8 @@ export function GrimoireV6View({ vm }: { vm: any }) {
               </div>
               </>
             )}
-            <button onClick={vm.show?.close} className={["", "gv-h1e"].filter(Boolean).join(' ')} style={S541}>
-              <svg viewBox="0 0 24 24" style={S242}>
+            <button onClick={vm.show?.close} className={["", "gv-h1e"].filter(Boolean).join(' ')} style={S543}>
+              <svg viewBox="0 0 24 24" style={S241}>
                 <path d="M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
               </svg>
               Return to Grimoire

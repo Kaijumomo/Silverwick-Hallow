@@ -328,11 +328,9 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
       [`${key}T`]: segDrag && segDrag.key === key ? "background .2s" : "transform .28s cubic-bezier(.2,.7,.2,1), background .2s",
     });
 
-    const removeFromGame = () => {
+    // PO review B03: "Remove from game" in More settings is the deliberate step; no second confirmation.
+    const removeFromGame = async () => {
       const name = sel.name || `Seat ${seatIndex(sel.id) + 1}`;
-      ui.set({ ask: { title: `Remove ${name}?`, body: `${name} leaves the game and their seat is removed.`, okText: "Remove from game", danger: true, run: () => void removeConfirmed(name) } });
-    };
-    const removeConfirmed = async (name: string) => {
       const s = store.getState();
       const completion = storytellerOccupancyCompletion("remove", sel.id);
       try {

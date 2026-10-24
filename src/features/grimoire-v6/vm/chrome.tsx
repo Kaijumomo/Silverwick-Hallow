@@ -145,6 +145,7 @@ export function useChromeVm(ctx: V6Ctx, slices: { advance?: SliceResult["advance
       navigator.clipboard.writeText(invitation.link).then(() => flash("Invite link copied."), () => flash("Copy failed. Select the code instead."));
     },
     dockOn: true, dockL: rail.slice(0, 2), dockR: rail.slice(2), pill,
+    dockShift: dockShift(rail.slice(0, 2).length, rail.slice(2).length, !!pill.isDay, !ended && !privacy && (game.phase === "day" || game.phase === "night")),
     openNight: () => ui.set({ panel: "night" }),
     phaseIconPath: isNight ? ICON.moon : ICON.sun, phaseIconColor: isNight ? "#e6ecf8" : "#f2c46a",
     undo: undo.run, undoOff: undo.disabled, undoTitle: undo.title, undoOpacity: undo.disabled ? 0.3 : 1,
@@ -182,4 +183,15 @@ function askVm(ui: { ask: AskState | null; set: (patch: Partial<V6UiState>) => v
     onKey: (e: { key: string; preventDefault: () => void }) => { if (e.key === "Enter") { e.preventDefault(); ok(); } else if (e.key === "Escape") close(); },
     ok, close, danger: !!a?.danger, okDisabled: !!a?.input && !a.input.value.trim(),
   };
+}
+
+/**
+ * The dock hugs its buttons (no empty band beside Undo), so its two sides differ in width. Shifting the row by half
+ * the difference keeps the phase button on the board's centre line. Widths are the design's fixed button sizes.
+ */
+export function dockShift(left: number, right: number, nominate: boolean, end: boolean): number {
+  const row = (widths: number[]) => widths.reduce((a, b) => a + b, 0) + 2 * Math.max(0, widths.length - 1);
+  const l = row([52, 9, ...Array(left).fill(66)]);
+  const r = row([...(nominate ? [76] : []), ...Array(right).fill(66), ...(end ? [9, 52] : [])]);
+  return (r - l) / 2;
 }

@@ -75,15 +75,13 @@ it("poisoned Fortune Teller can deliberately communicate the truthful NO", () =>
   expect(screen.getByLabelText("Information to communicate")).toHaveTextContent("NO");
   expect(game().players).toEqual(g.players);
 });
-it("a cancelled target callback and changed game cannot reuse a pending Fortune Teller pair", () => {
+it("a changed game cannot reuse a pending Fortune Teller pair", () => {
   const g = withRedHerring(proofGame(["fortuneteller", "imp", "poisoner", "soldier", "saint"]), "p3");
-  open(g); const held = useTargetPicker.getState().active!;
-  fireEvent.click(screen.getByRole("button", { name: "Cancel selection" }));
-  act(() => held.onPick({ playerId: "p1", participantId: g.players.p1!.participantId! }));
-  expect(screen.queryByText(/Selected:/)).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Choose on board" }));
-  tap("p1"); act(() => store.setState({ game: { ...game(), notes: "Changed" } }));
-  expect(screen.queryByText(/Selected:/)).toBeNull();
+  open(g);
+  tap("p1");
+  expect(document.querySelectorAll(".night-pick-chip")).toHaveLength(1);
+  act(() => store.setState({ game: { ...game(), notes: "Changed" } }));
+  expect(document.querySelectorAll(".night-pick-chip")).toHaveLength(0);
   expect(game().informationDeliveries).toHaveLength(0);
 });
 it("consequential registration stays manual with no misleading number or picker", () => {

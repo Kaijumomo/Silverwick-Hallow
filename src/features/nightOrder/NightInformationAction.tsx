@@ -158,7 +158,8 @@ const InformationAction = forwardRef<NightInformationHandle, Props>(function Inf
   const value = values?.find(item => item.kind === "number" || item.kind === "boolean");
   const token = acceptedToken?.game === game && acceptedToken.stepKey === step.stepKey
     ? { kind: "role" as const, roleId: acceptedToken.roleId } : values?.find(item => item.kind === "role");
-  const numberChoices = step.effectiveRoleId === "chef" ? Array.from({ length: chefMaximumPairs(createRulesQuery(game, environment)) + 1 }, (_, index) => index) : [0, 1, 2];
+  // PO review C03: the Chef offers at most 0-4.
+  const numberChoices = step.effectiveRoleId === "chef" ? Array.from({ length: Math.min(4, chefMaximumPairs(createRulesQuery(game, environment))) + 1 }, (_, index) => index) : [0, 1, 2];
   const choices = requirement?.kind === "boolean" ? [false, true] : numberChoices;
   return <div className="night-information">
     {characterInformation && (token?.kind === "role" || requirement?.kind === "character" || simulatedRavenkeeper && !resolved && !manualWake) &&
@@ -171,16 +172,15 @@ const InformationAction = forwardRef<NightInformationHandle, Props>(function Inf
       {value.kind === "boolean" ? value.value ? "YES" : "NO" : value.kind === "number" ? value.value : ""}
     </div>}
     {!resolved && requirement?.source === "storyteller" && ["number", "boolean"].includes(requirement.kind) && <>
-      <p className="behavior-help">Choose the information to communicate.</p>
       <div className="night-information-choices" role="group" aria-label="Information to communicate">{choices.map(choice =>
         <button className="btn" key={String(choice)} type="button" onClick={() => commit({ ...inputs,
           [requirement.id]: typeof choice === "boolean" ? { kind: "boolean", value: choice } : { kind: "number", value: choice } })}>
           {typeof choice === "boolean" ? choice ? "YES" : "NO" : choice}</button>)}</div>
     </>}
     {needsTargets && <>
-      <p className="modern-night-pick">{targetCount === 1 ? "Choose a player on the board." : `Choose player ${targets.length + 1} of 2 on the board.`}</p>
-      {!!targets.length && <p className="behavior-help">Selected: {targets.map(target => game.players[target.playerId]?.name).join(", ")}</p>}
-      <button className="btn btn-sm" onClick={() => { setPaused(!paused); if (!paused) useTargetPicker.getState().cancel(); }}>{paused ? "Choose on board" : "Cancel selection"}</button>
+      {/* PO review C04/C12: chosen players sit inline beside the prompt, as in V2; no cancel control. */}
+      <p className="modern-night-pick">{targetCount === 1 ? "Choose a player on the board" : targets.length ? "Choose one more player on the board" : "Choose two players on the board"}
+        {targets.map(target => <span key={target.participantId} className="night-pick-chip">{game.players[target.playerId]?.name}</span>)}</p>
     </>}
     {resolved && <p className="modern-night-result">Completed</p>}
     {chooser && chooser.game === game && visible && <div

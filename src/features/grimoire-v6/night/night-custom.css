@@ -370,24 +370,15 @@
 .gv-night-custom [class*="text-limit"] { font-size: 11px; color: var(--gvn-faint); }
 
 /* ── Dawn: work that is not finished ────────────────────────────────────────────────────────────────────── */
-.gvn-dawn { display: flex; flex-direction: column; gap: 8px; }
-.gvn-dawn-label { font-size: 12px; letter-spacing: .18em; text-transform: uppercase; font-weight: 700; color: var(--gvn-amber); }
-.gvn-dawn-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+/* PO review C11: Dawn names unfinished work in one quiet line; each name jumps back to its step. */
+.gvn-dawn { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 13px; color: var(--gvn-faint); }
+.gvn-dawn-label { color: var(--gvn-amber); font-weight: 600; }
 .gvn-chip {
-  min-height: 40px;
-  padding: 0 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(232, 88, 74, .45);
-  background: rgba(232, 88, 74, .08);
-  color: var(--gvn-soft);
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  text-align: left;
-  cursor: pointer;
-  transition: background .2s, border-color .2s;
+  min-height: 28px; padding: 0; border: 0; background: transparent; color: var(--gvn-soft);
+  font-family: inherit; font-size: 13px; text-decoration: underline; text-decoration-color: rgba(232, 88, 74, .45);
+  text-underline-offset: 3px; cursor: pointer;
 }
-.gvn-chip:hover { background: rgba(232, 88, 74, .18); border-color: var(--gvn-accent); }
+.gvn-chip:hover { color: var(--gvn-text); text-decoration-color: var(--gvn-accent); }
 .gvn-chip:focus-visible { outline: 2px solid var(--gvn-hot); outline-offset: 2px; }
 
 /* ── The ability workspace, flattened into the card ─────────────────────────────────────────────────────── */
@@ -449,3 +440,27 @@
 .gv-night-custom .manual-op { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .gv-night-custom .manual-op-kind { min-width: 7em; font-size: 12px; color: var(--gvn-muted); }
 .gv-night-custom .manual-add { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* PO review C04: chosen players inline beside the prompt, as V2 draws them. */
+.gv-night-custom .night-pick-chip {
+  padding: 1px 8px;
+  border-radius: 3px;
+  border: 1px solid rgba(232, 88, 74, 0.5);
+  color: #ffb4a6;
+}
+
+/* PO review C09/C10: the V2 "show" row for Minion and Demon information. */
+.gv-night-custom .gvn-show {
+  align-self: stretch; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 14px 8px 8px;
+  border-radius: 12px; border: 1px solid rgba(176, 186, 204, 0.2); background: rgba(9, 10, 15, 0.6);
+  font-family: inherit; text-align: left; cursor: pointer; transition: border-color .2s, background .2s;
+}
+.gv-night-custom .gvn-show:hover { border-color: rgba(232, 88, 74, 0.55); background: rgba(232, 88, 74, 0.06); }
+.gv-night-custom .gvn-show:focus-visible { outline: 2px solid var(--gvn-hot); outline-offset: 2px; }
+.gv-night-custom .gvn-show-eye { flex: none; width: 40px; height: 40px; border-radius: 10px; background: rgba(232, 88, 74, 0.1); display: flex; align-items: center; justify-content: center; }
+.gv-night-custom .gvn-show-eye svg { width: 20px; height: 20px; fill: none; stroke: #e8584a; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.gv-night-custom .gvn-show-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.gv-night-custom .gvn-show-text strong { font-size: 14px; font-weight: 700; color: #ece6da; }
+.gv-night-custom .gvn-show-text small { font-size: 12px; color: rgba(222, 216, 204, 0.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gv-night-custom .gvn-show-go { flex: none; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #ff8a78; }
+.gv-night-custom .gvn-show-go svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
