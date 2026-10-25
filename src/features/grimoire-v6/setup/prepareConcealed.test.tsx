@@ -29,7 +29,7 @@ function dealt(roles: RoleId[], scriptId = SCRIPT.id) {
   store.setState({ game: null, lobby: null, view: "home", undoStack: [], selectedPlayerId: null, customScripts: { [SCRIPT.id]: SCRIPT } });
   store.getState().newGame(scriptId, { plannedPlayerCount: roles.length, keepView: true });
   const ids = [...game().seatOrder];
-  roles.forEach((role, i) => store.getState().addPlayerToSeat(`P${i + 1}`, ids[i]!));
+  roles.forEach((_role, i) => store.getState().addPlayerToSeat(`P${i + 1}`, ids[i]!));
   const players = { ...game().players };
   roles.forEach((role, i) => {
     const concealed = MODE[role];

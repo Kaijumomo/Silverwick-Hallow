@@ -51,7 +51,6 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
   const { pos, steps, current } = engine;
   const total = steps.length + 2;
   const index = pos.kind === "dusk" ? 0 : pos.kind === "dawn" ? steps.length + 1 : engine.currentIndex + 1;
-  const unfinished = engine.unfinished?.total ?? 0;
 
   const items = [
     stripItem({ label: "Dusk", img: "", marker: true, markerIcon: MARKER_ICON.dusk, done: false, index: 0, cursor: index, jump: () => engine.gotoCheckpoint("dusk") }),
@@ -76,7 +75,7 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
     // PO review A03/C07: an impaired player is named by the pill beside the name, and the routine procedure lines
     // (manual prompt, impairment, death check) are not repeated in amber. Rarer Storyteller checks still show.
     const seat = player ? game.players[current.playerId] : undefined;
-    const drunk = !!seat && (current.isDeceived && current.actualRoleId === "drunk" || hasEffect(seat, "drunk"));
+    const drunk = player && !!seat && (current.isDeceived && current.actualRoleId === "drunk" || hasEffect(seat, "drunk"));
     const poisoned = !!seat && !drunk && (hasEffect(seat, "poisoned") || seat.behaviorMode === "poisoned");
     const note = lines([
       player && current.isDeceived && !drunk ? `Follow the shown character’s procedure. This player is actually the ${current.actualRoleName}.` : undefined,

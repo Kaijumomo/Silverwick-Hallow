@@ -215,10 +215,10 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
   };
 }
 
-type Pick = { holders: Record<RoleId, string[]>; shownChoices: RoleDef[]; bluffHolder: PlayerId | null; bluffs: RoleId[]; context: ReturnType<typeof selectSetupContext> };
+type PickContext = { holders: Record<RoleId, string[]>; shownChoices: RoleDef[]; bluffHolder: PlayerId | null; bluffs: RoleId[]; context: ReturnType<typeof selectSetupContext> };
 
 /** A tile was chosen: every mode applies it through the command that already owns that change. */
-function pickTile(env: PickerEnv, picker: PickerState, role: RoleDef, p: Pick) {
+function pickTile(env: PickerEnv, picker: PickerState, role: RoleDef, p: PickContext) {
   const { game, ui, script } = env;
   const store = () => useStorytellerStore.getState();
   const close = () => ui.set({ picker: null });

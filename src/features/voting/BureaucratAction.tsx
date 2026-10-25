@@ -25,7 +25,7 @@ export function BureaucratAction({ source, target, visible = true, completeStep,
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ name: string; game: StorytellerLobbyRecord } | null>(null);
   const mounted = useRef(true);
-  const active = useTargetPicker(s => s.active);
+  useTargetPicker(s => s.active);
   const context = captureVotingContext();
   const live = useRef({ game, visible, privacy });
   live.current = { game, visible, privacy };
