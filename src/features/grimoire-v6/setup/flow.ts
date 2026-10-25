@@ -6,7 +6,7 @@ import { closeMultiplayerSession, useSessionRuntime } from "@/firebase/storytell
 import { useGoLiveState } from "@/firebase/goLive";
 import { lifecycleMessage } from "@/firebase/lifecycle";
 import { createLiveGame, leaveLive, retryLive } from "@/features/newgame/setupFlowActions";
-import { flash, useV6Ui, type WizardStep } from "../v6Store";
+import { confirmAsk, flash, useV6Ui, type WizardStep } from "../v6Store";
 import { planExtras, TABLE_MAX, travellersOf, WIZARD_MAX, WIZARD_MIN, wizardScript } from "./draft";
 
 /**
@@ -112,7 +112,8 @@ export async function leaveTown(step: WizardStep): Promise<boolean> {
       const message = store().lobby
         ? "Go back? Everyone who has joined will be disconnected and the lobby will close."
         : "Go back? The seated names and any dealt roles will be cleared.";
-      if (!window.confirm(message)) return false;
+      if (!(await confirmAsk("Go back", message, "Go back", true))) return false;
+      if (ui().wiz !== wiz || store().game !== game || flow().busy) return false;
     }
     flow().set({ busy: true });
     try {
@@ -152,7 +153,8 @@ export async function goOnline(): Promise<void> {
 export async function goInPerson(): Promise<void> {
   if (flow().busy) return;
   if (!store().lobby) { flow().set({ lobby: "idle", notice: null }); return; }
-  if (somebodyMayBeHere() && !window.confirm("Switch to in person? Everyone who has joined will be disconnected and the lobby will close.")) return;
+  if (somebodyMayBeHere() && !(await confirmAsk("Switch to in person", "Switch to in person? Everyone who has joined will be disconnected and the lobby will close.", "Switch", true))) return;
+  if (flow().busy || !store().lobby) return;
   flow().set({ busy: true });
   try {
     try { await closeMultiplayerSession(); }

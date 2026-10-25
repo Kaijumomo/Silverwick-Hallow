@@ -19,12 +19,15 @@ export function buildDevelopmentRules(base) {
   // must not give a removed player an alternate way to read the public view.
   room.displayMembers.$uid['.write'] = false;
   const displayClause = ` || (${lobby}.child('session/version').val() === 2 && ${lobby}.child('session/state').val() === 'active' && ${lobby}.child('displayAccess/token').isString() && ${lobby}.child('displayAccess/sessionId').val() === ${lobby}.child('session/id').val() && ${lobby}.child('displayMembers').child(auth.uid).isString() && ${lobby}.child('displayMembers').child(auth.uid).val() === ${lobby}.child('displayAccess/token').val())`;
-  if (!room.public['.read'].endsWith(displayClause + ')')) {
+  // Package 4: an enrolled display may also read the final public record after
+  // the end. Same capability, so development strips it the same way.
+  const endedDisplayClause = ` || (${lobby}.child('session/version').val() === 2 && ${lobby}.child('session/state').val() === 'ended' && ${lobby}.child('public/status').val() === 'ended' && ${lobby}.child('displayAccess/token').isString() && ${lobby}.child('displayAccess/sessionId').val() === ${lobby}.child('session/id').val() && ${lobby}.child('displayMembers').child(auth.uid).isString() && ${lobby}.child('displayMembers').child(auth.uid).val() === ${lobby}.child('displayAccess/token').val())`;
+  if (!room.public['.read'].endsWith(displayClause + endedDisplayClause + ')')) {
     throw new Error('Review changed public/display authorization before generating development Rules.');
   }
   // Remove only the recognized final display disjunct, retaining the source's
   // remaining expression (including any new restrictions), never replacing it.
-  room.public['.read'] = room.public['.read'].slice(0, -displayClause.length - 1) + ')';
+  room.public['.read'] = room.public['.read'].slice(0, -displayClause.length - endedDisplayClause.length - 1) + ')';
   function restrict(node) {
     for (const [key, value] of Object.entries(node)) {
       if (key === '.read' || key === '.write') {

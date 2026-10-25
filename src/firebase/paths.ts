@@ -45,6 +45,9 @@ export const displayMemberPath = (code: string, uid: string) =>
 // Stored inside public/ so it uses the existing deployed public rule:
 // ST can write, roster members can read. No new Firebase rules needed.
 export const lobbyStatusPath = (code: string) => `lobbies/${code}/public/status`;
+// Package 4 (PO-approved public winner delivery): the declared winner, written
+// once inside the terminal commit so an enrolled Public Display can show it.
+export const publicWinnerPath = (code: string) => `lobbies/${code}/public/winner`;
 // Phase 10H (10H-IMPLEMENTATION-CONTRACT-v1.0 §12.3): a player's advisory
 // acknowledgement of the reveal token they were shown. Written by that uid
 // only (bounded string); read by the Storyteller; cleared by revocation and

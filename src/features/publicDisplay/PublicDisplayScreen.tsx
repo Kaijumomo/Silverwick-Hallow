@@ -115,8 +115,8 @@ function PublicDisplayContent({ code }: Props) {
     return <div className="public-display public-display-message" role="alert"><h2>Game data unavailable</h2><p>{error}</p></div>;
   }
   if (ended && !publicLobby) {
-    // usePublicLobby withholds the record once the game ends, so no winner is
-    // shown here -- the neutral ended scene.
+    // No final record could be read (an older deployment, or End Without
+    // Result before it arrives): the neutral ended scene, no winner invented.
     return <TownSquare view={buildTownSquareView({ lobby: null, status: "ended" })} />;
   }
   if (!backend || loading) {

@@ -168,7 +168,7 @@ function winnerLabel(game: V6Ctx["game"]): string {
 /** The ask dialog the Grimoire shows instead of window.confirm / window.prompt. Same panel language as the End dialog. */
 function askVm(ui: { ask: AskState | null; set: (patch: Partial<V6UiState>) => void }) {
   const a = ui.ask;
-  const close = () => ui.set({ ask: null });
+  const close = () => { ui.set({ ask: null }); a?.cancel?.(); };
   const ok = () => {
     if (!a) return;
     const value = a.input ? a.input.value.trim() : "";

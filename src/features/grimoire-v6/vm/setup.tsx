@@ -10,7 +10,7 @@ import { setupPresentation } from "@/features/setup/setupPresentation";
 import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 import type { V6Ctx } from "../ctx";
 import { roman } from "../ringLayout";
-import { flash, showVeil } from "../v6Store";
+import { confirmAsk, flash, showVeil, useV6Ui } from "../v6Store";
 import { isDraftGame } from "../setup/draft";
 import { endGathering, goInPerson, goOnline, useSetupFlow } from "../setup/flow";
 import { buildPrepTasks, commitPrep, orderedTasks, prepTap, type PrepTask } from "../setup/prepare";
@@ -127,9 +127,13 @@ export function useSetupVm(ctx: V6Ctx): SliceResult {
       onlineBg: lobbyish ? "rgba(192,57,46,.3)" : "transparent", offlineBg: lobbyish ? "transparent" : "rgba(192,57,46,.3)",
       setOnline: () => {
         if (flow.busy || lobby) return;
-        if (occupied > 0 && !window.confirm("Switch to players joining by code? The names you wrote will be cleared.")) return;
-        for (const id of [...game.seatOrder]) if (!game.players[id]?.isEmpty) store().unseatPlayer(id);
-        void goOnline();
+        void (async () => {
+          if (occupied > 0 && !(await confirmAsk("Players join by code", "Switch to players joining by code? The names you wrote will be cleared.", "Switch", true))) return;
+          const current = store().game;
+          if (!current || store().lobby) return;
+          for (const id of [...current.seatOrder]) if (!current.players[id]?.isEmpty) store().unseatPlayer(id);
+          void goOnline();
+        })();
       },
       setOffline: () => { void goInPerson(); },
       count: planned, inc: () => changeSeatCount(1), dec: () => changeSeatCount(-1), mix,
@@ -199,16 +203,24 @@ export function useSetupVm(ctx: V6Ctx): SliceResult {
       order: () => { if (waiting.length) void seatInArrivalOrder(); else flash("Seats follow the order names were written."); },
       clear: () => {
         if (lobby) { flash("Seated players stay seated. Tap a seat to change who sits there."); return; }
-        if (!window.confirm("Clear every seat? The names will be cleared.")) return;
-        for (const id of [...game.seatOrder]) store().unseatPlayer(id);
-        ui.set({ seatCur: 0 });
+        void confirmAsk("Clear every seat", "Clear every seat? The names will be cleared.", "Clear seats", true).then((yes) => {
+          const current = store().game;
+          if (!yes || !current) return;
+          for (const id of [...current.seatOrder]) store().unseatPlayer(id);
+          useV6Ui.getState().set({ seatCur: 0 });
+        });
       },
       finish: () => {
         if (left > 0 && waiting.length > 0) { flash(`${left} left to seat.`); return; }
-        if (left > 0 && !window.confirm(`Release ${left} empty seat${left === 1 ? "" : "s"}? The town will have ${planned - left} players.`)) return;
-        for (const id of [...emptySeats(game)].reverse()) store().removePlayer(id);
-        ui.set({ seatMode: false });
-        flash("Seats assigned.");
+        const release = () => {
+          const current = store().game;
+          if (!current) return;
+          for (const id of [...emptySeats(current)].reverse()) store().removePlayer(id);
+          useV6Ui.getState().set({ seatMode: false });
+          flash("Seats assigned.");
+        };
+        if (left === 0) { release(); return; }
+        void confirmAsk("Release empty seats", `Release ${left} empty seat${left === 1 ? "" : "s"}? The town will have ${planned - left} players.`, "Release").then((yes) => { if (yes) release(); });
       },
       close: () => ui.set({ seatMode: false }),
       doneOp: canFinish ? 1 : 0.4, doneCursor: canFinish ? "pointer" : "not-allowed",

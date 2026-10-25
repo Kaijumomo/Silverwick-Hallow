@@ -106,7 +106,9 @@ export function buildTownSquareView(input: TownSquareInput): TownSquareView {
   const ended = status === "ended" || lobby?.phase === "ended";
   if (ended) {
     const winner: EndedWinner = input.winner !== undefined ? input.winner : lobby?.winner ?? null;
-    const seatCount = lobby ? lobby.seatOrder.length : 0;
+    // The final record's presence flags froze when the game ended: no seat is drawn as offline.
+    const final = lobby ? { ...lobby, players: Object.fromEntries(Object.entries(lobby.players).map(([id, p]) => [id, { ...p, online: true }])) } : null;
+    const seatCount = final ? final.seatOrder.length : 0;
     return {
       ...base,
       tone: winner === "good" || winner === "none" ? "day" : "night",
@@ -116,8 +118,8 @@ export function buildTownSquareView(input: TownSquareInput): TownSquareView {
       sub: winner === "none" ? "No result was recorded" : "Thank you for playing",
       seatCount,
       layoutCount: seatCount || DEFAULT_LAYOUT_COUNT,
-      seats: lobby ? seatViews(lobby, seatCount) : [],
-      glow: lobby ? glowItems(lobby) : [],
+      seats: final ? seatViews(final, seatCount) : [],
+      glow: final ? glowItems(final) : [],
     };
   }
 

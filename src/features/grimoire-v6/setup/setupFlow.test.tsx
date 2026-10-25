@@ -136,14 +136,17 @@ describe("wizard flow", () => {
     await act(async () => { expect(await leaveTown("extras")).toBe(true); });
     expect(game()).toBeNull();
     expect(ui().wiz!.step).toBe("extras");
-    expect(window.confirm).not.toHaveBeenCalled();
+    expect(ui().ask).toBeNull();
 
     await act(async () => { await enterTown(); });
     nameNextSeat("Ada");
-    (window.confirm as ReturnType<typeof vi.fn>).mockReturnValueOnce(false);
-    await act(async () => { expect(await leaveTown("script")).toBe(false); });
+    // The question is the Grimoire's own dialog; dismissing it keeps the town.
+    let left!: Promise<boolean>;
+    act(() => { left = leaveTown("script"); });
+    expect(ui().ask?.title).toBe("Go back");
+    await act(async () => { const ask = ui().ask!; ui().set({ ask: null }); ask.cancel!(); expect(await left).toBe(false); });
     expect(game()).not.toBeNull();
-    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(window.confirm).not.toHaveBeenCalled();
   });
 });
 

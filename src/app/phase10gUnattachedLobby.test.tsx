@@ -9,6 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { Json, RoomBackend } from "@/firebase/backend";
+import { useV6Ui } from "@/features/grimoire-v6/v6Store";
 
 const connect = vi.fn<() => Promise<{ backend: RoomBackend; uid: string }>>();
 vi.mock("@/firebase/session", async (importOriginal) => {
@@ -86,11 +87,15 @@ const warnings = () => document.querySelectorAll("[data-unattached-lobby]");
 const warningFor = (code: string) => document.querySelector(`[data-unattached-lobby="${code}"]`) as HTMLElement | null;
 const settle = async () => { await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 
+let offAsk: () => void = () => {};
+afterEach(() => { offAsk(); });
 beforeEach(() => {
   localStorage.clear();
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
   vi.stubGlobal("matchMedia", vi.fn((query: string) => ({ media: query, matches: false, addEventListener() {}, removeEventListener() {} })));
   vi.spyOn(window, "confirm").mockReturnValue(true);
+  // "Start a new game?" is the Grimoire's own dialog now; these flows always confirm it.
+  offAsk = useV6Ui.subscribe((state) => { if (state.ask) { const ask = state.ask; useV6Ui.getState().set({ ask: null }); ask.run(""); } });
   vi.spyOn(console, "error").mockImplementation(() => {});
   connect.mockReset();
   // The App shell auto-connects on mount; each test sets its own Go Live backend.

@@ -32,6 +32,8 @@ export type AskState = {
   title: string; body: string; okText: string; danger?: boolean;
   input?: { placeholder: string; value: string; maxLength?: number };
   run: (value: string) => void;
+  /** Called when the Storyteller dismisses the question without answering it. */
+  cancel?: () => void;
 };
 
 export type V6UiState = {
@@ -107,4 +109,11 @@ export function showVeil(label: string, sub: string, day: boolean) {
   clearTimeout(veilTimer);
   useV6Ui.getState().set({ veil: { key: `v${veilSeq++}`, label, sub, day } });
   veilTimer = setTimeout(() => useV6Ui.getState().set({ veil: null }), 2100);
+}
+
+/** A yes/no question in the Grimoire's own dialog, in place of window.confirm. Resolves false when dismissed. */
+export function confirmAsk(title: string, body: string, okText: string, danger = false): Promise<boolean> {
+  return new Promise((resolve) => useV6Ui.getState().set({
+    ask: { title, body, okText, danger, run: () => resolve(true), cancel: () => resolve(false) },
+  }));
 }

@@ -149,7 +149,8 @@ All writer operations are serialized. `close()` first stops new commands,
 cancels old retry backoff, and publishes a guarded `public/status = ended`
 sentinel so new joins stop immediately. It then drains any already-started
 write, reacquires its lease, and performs one final guarded multi-path update
-that marks `session.state = ended` and removes roster, participant records, requests, leave requests,
+that marks `session.state = ended` (for a declared result it also writes
+`public/winner`, which the enrolled Public Display may read after the end) and removes roster, participant records, requests, leave requests,
 private projections, Storyteller state, and checkpoint. It then stops listeners.
 Rules allow no new join after the sentinel or projection after the session is
 ended, and stale revisions cannot revive it.

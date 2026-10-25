@@ -3,6 +3,7 @@ import { goLive, type GoLiveOutcome } from "@/firebase/goLive";
 import { closeMultiplayerSession, useSessionRuntime } from "@/firebase/storytellerSync";
 import { lifecycleMessage } from "@/firebase/lifecycle";
 import { FABLED_CHOICES } from "./setupFlowModel";
+import { confirmAsk } from "@/features/grimoire-v6/v6Store";
 
 /**
  * The New Game flow's lifecycle actions. Steps I and II are a local draft;
@@ -31,9 +32,9 @@ function planOptions(plan: SetupPlan) {
 /** Confirms replacing an existing game, then closes its lobby (if any). */
 async function retirePreviousGame(): Promise<Prepared> {
   const { game } = useStorytellerStore.getState();
-  if (game && !window.confirm(game.phase === "ended"
+  if (game && !(await confirmAsk("Start a new game", game.phase === "ended"
     ? "Start a new game? The finished game's review record will be replaced."
-    : "Start a new game? The current game will be discarded.")) return { ok: false, cancelled: true };
+    : "Start a new game? The current game will be discarded.", "Start new game", true))) return { ok: false, cancelled: true };
   try { await closeMultiplayerSession(); }
   catch (error) {
     // closeMultiplayerSession recorded the classified failure and any recovery option.

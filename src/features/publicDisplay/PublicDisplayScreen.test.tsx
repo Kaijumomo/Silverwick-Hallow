@@ -255,6 +255,27 @@ describe("Package 4G: the Town Square stage", () => {
     expect(screen.queryByText("No result was recorded")).toBeNull();
   });
 
+  it("shows the declared winner over the final seats, none of them drawn offline (Package 4, PO-approved)", async () => {
+    const final = { ...dayLobby(), status: "ended" as const, winner: "evil" as const };
+    final.players.p0 = { ...final.players.p0!, online: false };
+    usePublicLobbyMock.mockImplementation((backend) => (backend ? { publicLobby: final, ended: true, loading: false, error: null } : WAITING_RESULT));
+    render(<PublicDisplayScreen code={CODE} />);
+    await act(async () => {});
+    expect(await screen.findByText("Evil Wins")).toBeInTheDocument();
+    expect(screen.getByText("Thank you for playing")).toBeInTheDocument();
+    expect(document.querySelectorAll(".public-seat").length).toBe(15);
+    expect(document.querySelector(".public-seat.offline")).toBeNull();
+  });
+
+  it("End Without Result over the final seats stays neutral", async () => {
+    const final = { ...dayLobby(), status: "ended" as const };
+    usePublicLobbyMock.mockImplementation((backend) => (backend ? { publicLobby: final, ended: true, loading: false, error: null } : WAITING_RESULT));
+    render(<PublicDisplayScreen code={CODE} />);
+    await act(async () => {});
+    expect(await screen.findByText("Game Ended")).toBeInTheDocument();
+    expect(screen.queryByText(/wins/i)).toBeNull();
+  });
+
   it("shows the waiting scene during setup with a join QR that carries only the lobby code", async () => {
     setHash(`#displayToken=${TOKEN}`);
     usePublicLobbyMock.mockImplementation((backend) => (backend
