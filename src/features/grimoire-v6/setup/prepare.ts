@@ -2,13 +2,14 @@ import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import { iconUrlFor } from "@/data/iconUrl";
 import { shownRoleFilter } from "@/stores/identity";
 import { changeAlignmentIntent } from "@/stores/alignmentResolution";
+import { travelerHasUnresolvedArrival, travelerNeedsArrivalCheck } from "@/stores/travelers";
 import { preparationAvailability, preparedInformationContext } from "@/stores/preparedInformation";
 import { captureCharacterActionContext, selectScriptById, useStorytellerStore } from "@/stores/storytellerStore";
 import { bindingOf } from "@/features/abilities/abilityUi";
 import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 import { redHerringSetup } from "@/features/setup/redHerringSetup";
 import { FIRST_INFORMATION_CHARACTERS, informationCategory } from "@/features/setup/FirstInformationPreparation";
-import type { SetupContext, SetupFinding } from "@/features/setup/setupContext";
+import type { SetupContext } from "@/features/setup/setupContext";
 import type { PlayerId, PreparedInformationCharacter, RoleDef, Script, StorytellerLobbyRecord } from "@/stores/types";
 import { flash, useV6Ui } from "../v6Store";
 
@@ -46,7 +47,7 @@ const seatName = (game: StorytellerLobbyRecord, id: PlayerId) => {
 
 const TEAM_WORD: Record<PreparedInformationCharacter, string> = { washerwoman: "Townsfolk", librarian: "Outsider", investigator: "Minion" };
 
-export function buildPrepTasks(game: StorytellerLobbyRecord, script: Script | undefined, registry: RoleRegistry, context: SetupContext, findings: SetupFinding[]): PrepTask[] {
+export function buildPrepTasks(game: StorytellerLobbyRecord, script: Script | undefined, registry: RoleRegistry, context: SetupContext): PrepTask[] {
   const tasks: PrepTask[] = [];
   const iconOf = (id: string) => { const def = registry.get(id); return def ? iconUrlFor(def) : ""; };
   const nameOf = (id: string) => registry.get(id)?.name ?? id;
@@ -103,20 +104,24 @@ export function buildPrepTasks(game: StorytellerLobbyRecord, script: Script | un
     }
   }
 
-  // Travellers: alignment is chosen privately, and any unresolved arrival is for the card.
+  // Travellers: alignment is chosen privately; each required arrival is resolved by the Storyteller's explicit confirmation.
   for (const p of context.travelers) {
     if (!p.actualRole) continue;
-    const missing = !p.actualAlignment;
-    const arrival = findings.find((f) => f.playerId === p.id && f.code.startsWith("traveler-arrival:"));
-    if (!missing && !arrival) continue;
-    tasks.push({
-      key: `traveller:${p.id}`, roleId: p.actualRole, roleName: nameOf(p.actualRole), who: seatName(game, p.id), img: iconOf(p.actualRole), type: "traveler",
-      done: false, req: true,
-      sub: missing ? "Required · choose their alignment" : "Required · resolve their arrival information",
-      open: true, actLabel: missing ? "Good" : "Open", act: missing ? () => setAlignment(p.id, "good") : () => openCard(p.id),
-      altLabel: missing ? "Evil" : undefined, alt: missing ? () => setAlignment(p.id, "evil") : undefined,
-      undo: () => openCard(p.id),
-    });
+    const base = { roleId: p.actualRole, roleName: nameOf(p.actualRole), who: seatName(game, p.id), img: iconOf(p.actualRole), type: "traveler" as const, done: false, req: true, open: true, undo: () => openCard(p.id) };
+    if (!p.actualAlignment) {
+      tasks.push({ ...base, key: `traveller:${p.id}`, sub: "Required · choose their alignment", actLabel: "Good", act: () => setAlignment(p.id, "good"), altLabel: "Evil", alt: () => setAlignment(p.id, "evil") });
+      continue;
+    }
+    if (!travelerHasUnresolvedArrival(p)) continue;
+    const state = store();
+    if (travelerNeedsArrivalCheck(p) && !p.travelerArrival?.arrivalCheckComplete) {
+      tasks.push({ ...base, key: `traveller:${p.id}:check`, sub: "Required · resolve the public starting information in person, then confirm",
+        actLabel: "Resolved", act: () => state.completeTravelerArrivalCheck(p.id), altLabel: "Open", alt: () => openCard(p.id) });
+    }
+    if (p.actualAlignment === "evil" && !p.travelerArrival?.demonInfoComplete) {
+      tasks.push({ ...base, key: `traveller:${p.id}:demon`, sub: "Required · give the Demon information in person, then confirm",
+        actLabel: "Given", act: () => state.completeTravelerInformation(p.id), altLabel: "Open", alt: () => openCard(p.id) });
+    }
   }
   return tasks;
 }

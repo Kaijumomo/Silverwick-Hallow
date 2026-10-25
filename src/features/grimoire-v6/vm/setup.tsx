@@ -91,7 +91,7 @@ export function useSetupVm(ctx: V6Ctx): SliceResult {
   const needSeating = open && !gathering && (waiting.length > 0 || empties.length > 0);
 
   // Tasks.
-  const tasks = setupOn && dealt && !revealed && script ? orderedTasks(buildPrepTasks(game, script, registry, context, view.findings)) : [];
+  const tasks = setupOn && dealt && !revealed && script ? orderedTasks(buildPrepTasks(game, script, registry, context)) : [];
   const hasT = tasks.length > 0;
   let ci = ui.townCur != null && ui.townCur < tasks.length ? ui.townCur : tasks.findIndex((t) => !t.done);
   if (ci < 0) ci = 0;

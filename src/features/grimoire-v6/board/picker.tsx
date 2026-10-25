@@ -4,12 +4,12 @@ import { TRAVELERS } from "@/data/travelers";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { captureCharacterActionContext, selectScriptById, useStorytellerStore } from "@/stores/storytellerStore";
 import { changeRoleIntent, ordinaryRoleChoices } from "@/stores/roleResolution";
-import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
+import { isPostDeal, selectSetupContext, type SetupContext } from "@/features/setup/setupContext";
 import { analyzeSetup } from "@/features/setup/setupAnalyzer";
 import { canRefineSetup } from "@/features/setup/setupRefinement";
 import { randomSetup } from "@/features/setup/randomSetup";
-import { isInitialRevealComplete } from "@/stores/identity";
-import type { PlayerId, RoleDef, RoleId, RoleType, Script, StorytellerLobbyRecord } from "@/stores/types";
+import { isInitialRevealComplete, shownRoleFilter } from "@/stores/identity";
+import type { PlayerId, RoleDef, RoleId, RoleType, Script, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 import { TEAM_COLOR, TEAM_LABEL } from "../icons";
 import { flash, useV6Ui, type PickerState, type V6UiActions, type V6UiState } from "../v6Store";
 import { presentCharacter, report } from "../info/actions";
@@ -66,6 +66,24 @@ function holdersOf(game: StorytellerLobbyRecord): Record<RoleId, string[]> {
   return out;
 }
 
+/**
+ * What a concealed player may be shown as: the one central policy (shownRoleFilter: Drunk a Townsfolk, Marionette a
+ * good character, Lunatic a Demon). The Drunk's disguise must also be a Townsfolk that is not in play.
+ */
+export function shownChoicesFor(player: Pick<STPlayerRecord, "actualRole" | "behaviorMode"> | undefined, ordinary: RoleDef[], context: Pick<SetupContext, "occupied">): RoleDef[] {
+  const allowed = player ? shownRoleFilter(player.behaviorMode) : undefined;
+  if (!allowed) return [];
+  const notInPlay = player!.actualRole === "drunk";
+  return ordinary.filter((r) => allowed(r) && (!notInPlay || !context.occupied.some((p) => p.actualRole === r.id)));
+}
+
+const SHOWN_NAME: Record<string, string> = { drunk: "the Drunk", lunatic: "the Lunatic", marionette: "the Marionette" };
+const shownKicker = (role?: RoleId | null) => (role && SHOWN_NAME[role]) || "this player";
+const shownInstruction = (role?: RoleId | null) =>
+  role === "lunatic" ? "The Lunatic · choose a Demon"
+    : role === "marionette" ? "The Marionette · choose a good character"
+      : "The Drunk · choose a Townsfolk that is not in play";
+
 export function buildPicker(env: PickerEnv): Record<string, unknown> {
   const { game, script, registry, ui } = env;
   const picker = ui.picker;
@@ -92,7 +110,7 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
   const residents = context.population.targetNonTravelerCount ?? context.ordinary.length;
   const privateSetup = game.phase === "setup" && !isInitialRevealComplete(game);
   const slot = picker.mode === "bluff" ? picker.slot : -1;
-  const shownChoices = ordinary.filter((r) => r.type === "townsfolk" && !context.occupied.some((p) => p.actualRole === r.id));
+  const shownChoices = shownChoicesFor(player, ordinary, context);
 
   const click = (role: RoleDef) => () => {
     set({ pickHover: role.id });
@@ -141,7 +159,7 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
   const present = (g: ReturnType<typeof group> | undefined) => (g && g.tiles.length ? [g] : []);
   const wide = typeof window === "undefined" || window.innerWidth >= 900;
   const rows = (mode === "drunk"
-    ? [{ cols: "minmax(0,1fr)", groups: present(G.townsfolk) }]
+    ? [{ cols: "minmax(0,1fr)", groups: (["townsfolk", "outsider", "demon"] as const).filter((t) => shownChoices.some((r) => r.type === t)).flatMap((t) => present(G[t])) }]
     : [
       { cols: "minmax(0,1fr)", groups: present(G.townsfolk) },
       { cols: wide ? "minmax(0,4fr) minmax(0,4fr) minmax(0,1.3fr)" : "minmax(0,1fr)", groups: [...present(G.outsider), ...present(G.minion), ...present(G.demon)] },
@@ -159,9 +177,9 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
   const firstFinding = draftAnalysis?.findings.find((f) => f.severity !== "info")?.message;
   const name = player ? player.name || `Seat ${player.seat + 1}` : "";
   const heading = {
-    title: mode === "drunk" ? `Who does ${name || "the Drunk"} think they are?` : dist ? "Distribute Roles" : mode === "bluff" ? `Demon bluff ${slot + 1} of 3`
+    title: mode === "drunk" ? `Who does ${name || shownKicker(player?.actualRole)} think they are?` : dist ? "Distribute Roles" : mode === "bluff" ? `Demon bluff ${slot + 1} of 3`
       : mode === "show" ? (picker as Extract<PickerState, { mode: "show" }>).title : `Choose a character for ${name}`,
-    kicker: mode === "drunk" ? "The Drunk · choose a Townsfolk that is not in play" : mode === "bluff" ? "Choose a character that is not in play"
+    kicker: mode === "drunk" ? shownInstruction(player?.actualRole) : mode === "bluff" ? "Choose a character that is not in play"
       : mode === "show" ? (picker as Extract<PickerState, { mode: "show" }>).kicker ?? "Information token · choose a character to show"
       : dist ? `${script.name} · ${residents} residents${context.travelers.length ? ` · ${context.travelers.length} traveler${context.travelers.length === 1 ? "" : "s"}` : ""}`
       : `Seat ${player ? player.seat + 1 : ""} · ${player?.actualRole ? registry.get(player.actualRole)?.name ?? "Unassigned" : "Unassigned"}`,
@@ -228,9 +246,11 @@ function pickTile(env: PickerEnv, picker: PickerState, role: RoleDef, p: Pick) {
   if (!player || player.isEmpty) { close(); return; }
   if (picker.mode === "drunk") {
     const current = store();
-    if (!canRefineSetup(game).ok || player.actualRole !== "drunk" || !p.shownChoices.some((r) => r.id === role.id)) {
+    if (!canRefineSetup(game).ok || !shownRoleFilter(player.behaviorMode) || !p.shownChoices.some((r) => r.id === role.id)) {
       const held = p.holders[role.id];
-      flash(held?.length ? `${role.name} is in play (${held.join(", ")}). The Drunk must think they are a Townsfolk not in play.` : "Setup changed. Close this chooser and select the Drunk again.");
+      flash(!canRefineSetup(game).ok || !shownRoleFilter(player.behaviorMode) ? "Setup changed. Close this chooser and select the player again."
+        : player.actualRole === "drunk" && held?.length ? `${role.name} is in play (${held.join(", ")}). The Drunk must think they are a Townsfolk not in play.`
+        : `${role.name} is not a choice for ${shownKicker(player.actualRole)}.`);
       return;
     }
     const result = current.setShownRole(player.id, role.id);
