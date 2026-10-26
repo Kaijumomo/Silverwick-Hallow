@@ -1,3 +1,4 @@
+import { isRevealPage } from "@/diag/revealRoute";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { App } from "@/app/App";
@@ -21,8 +22,12 @@ import { installDiagnostics } from "@/diag/diagnostics";
 
 installDiagnostics();
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+if (isRevealPage) {
+  void import("@/diag/revealScreen");
+} else {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
+}
