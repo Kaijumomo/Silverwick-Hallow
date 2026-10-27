@@ -13,6 +13,10 @@ describe("tablet diagnostics (preview-only)", () => {
     expect(diagCss(parseDiag("?diag=nonoise"))).toContain('[style*="mix-blend-mode"]');
     expect(diagCss(parseDiag("?diag=noboard"))).toContain(":has(");
     expect(diagCss(parseDiag("?diag=vv"))).toBe("");
+    expect(diagCss(parseDiag("?diag=tex"))).toContain("/diag-noise/overlay-240.webp");
+    expect(diagCss(parseDiag("?diag=bgblend"))).toContain("background-blend-mode: multiply, overlay");
+    expect(diagCss(parseDiag("?diag=noflicker"))).toContain("animation: none");
+    expect(diagCss(parseDiag("?diag=nonoise,tex,bgblend"))).not.toContain("diag-noise");
   });
 
   it("combines switches and reads the keyboard mode", () => {
