@@ -4,6 +4,7 @@ import { GrimoireV6 } from "./GrimoireV6";
 import { useV6Ctx } from "./ctx";
 import { useGrimoireVm } from "./useGrimoireVm";
 import { useV6Ui } from "./v6Store";
+import { preloadRevealGrain } from "./revealGrain";
 import { useDraftGame, wizardIsDraft } from "./setup/draft";
 import { SetupOverlays } from "./setup/SetupOverlays";
 import type { StorytellerLobbyRecord } from "@/stores/types";
@@ -26,6 +27,8 @@ export function GrimoireV6Screen() {
   const wiz = useV6Ui((s) => s.wiz);
   const drafting = wizardIsDraft(wiz, game);
   const draft = useDraftGame(wiz, drafting);
+
+  useEffect(() => { preloadRevealGrain(); }, []);
 
   // The town step needs its game: if it was discarded from elsewhere, fall back to the last draft step.
   useEffect(() => {
