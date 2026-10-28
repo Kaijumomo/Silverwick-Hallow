@@ -10,6 +10,7 @@ import { proofGame, proofScript } from "@/test/proofFixtures";
 import type { SessionWriter } from "@/firebase/writer";
 import { participantStepKey } from "@/stores/nightProgress";
 import { useTargetPicker } from "@/features/abilities/abilityUi";
+import { useInfoShow } from "../../info/showStore";
 
 // Independent boundary checks for the R2 Setup Info replacement.
 const game = () => store.getState().game!;
@@ -19,7 +20,7 @@ function Guide({ visible = true }: { visible?: boolean }) {
 }
 beforeEach(() => {
   localStorage.clear(); usePrivacyStore.getState().reset(); useShellStore.getState().reset();
-  useTargetPicker.getState().cancel();
+  useTargetPicker.getState().cancel(); useV6Ui.getState().reset(); useInfoShow.getState().clear();
   useSessionRuntime.setState({ backend: null, status: "failed" });
   const g = proofGame(["imp", "poisoner", "chef", "empath", "soldier", "virgin", "slayer"], "night", 1);
   g.players.p0!.privateInfo = { bluffs: ["monk", "saint", "ravenkeeper"] };
@@ -73,7 +74,7 @@ it("independent R2: an open intro masks team names when its online writer change
   act(() => useSessionRuntime.setState({ backend: replacement }));
   const dialog = screen.getByRole("dialog");
   expect(within(dialog).queryByText("Player 0")).toBeNull();
-  expect(within(dialog).getByRole("heading", { name: "Information changed", level: 2 })).toBeInTheDocument();
+  expect(dialog).toHaveAccessibleName("Information changed");
   expect(game()).toBe(g); expect(store.getState().undoStack).toEqual([]);
 });
 

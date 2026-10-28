@@ -13,7 +13,7 @@ import { CUSTOM_STEP_PREFIX, nightStepName } from "@/features/nightOrder/nightWo
 import { TokenInformationAction } from "@/features/info/TokenInformationAction";
 import type { V6Ctx } from "../ctx";
 import { useV6Ui } from "../v6Store";
-import { presentCharacter, report } from "../info/actions";
+import { presentCharacter, presentSetup, report } from "../info/actions";
 import { INFO_TOKENS } from "../info/tokens";
 import type { NightEngine } from "./useNightEngine";
 import "./night-custom.css";
@@ -127,7 +127,9 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
       rows.push(<BureaucratAction key={`${engine.actor.participantId}:${current.stepKey}`} source={{ playerId: engine.actor.id, participantId: engine.actor.participantId }}
         visible={engine.visible} completeStep={{ day: game.day, stepKey: current.stepKey }} onResolved={engine.finish} />);
     } else if (["minionInfo", "demonInfo"].includes(current.stepKey)) {
-      rows.push(<SetupInformationAction key={current.stepKey} game={game} script={script} step={current} visible={engine.visible} resolved={done} />);
+      // PO 2026-10-28: Minion and Demon information open the same V2 Reveal as the Information panel.
+      rows.push(<SetupInformationAction key={current.stepKey} game={game} script={script} step={current} visible={engine.visible} resolved={done}
+        present={presentSetup} />);
     }
     if (current.stepKey.startsWith(CUSTOM_STEP_PREFIX)) {
       rows.push(<StepNotes key="notes" day={game.day} stepKey={current.stepKey} notes={game.nightProgress?.[`${game.day}:${current.stepKey}`]?.notes ?? ""} />);

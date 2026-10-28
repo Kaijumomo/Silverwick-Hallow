@@ -61,16 +61,20 @@ export function setupPayload(game: StorytellerLobbyRecord, script: Script, view:
     }
     return characterCard(role);
   });
+  // PO 2026-10-28: the Demon learns exactly three bluffs, so neither presentation that carries them opens
+  // while any is still unchosen (an empty or partial bluff column was shown on the tablet).
+  const bluffsReady = () => { if (bluffs.length < 3) throw new Error("Choose all 3 Demon bluffs before showing this information."); };
   if (view === "traveler") {
     const result = travelerDemonInformation(player, game, registry);
     if (!result.demon) throw new Error(result.check ?? "Review the Traveller's Demon information.");
     return { kind: "setup", groups: [{ heading: "Your Demon", names: [result.demon.name] }] };
   }
   if (view === "bluffs") {
-    if (!bluffs.length) throw new Error("Choose at least one bluff before showing it.");
+    bluffsReady();
     return { kind: "setup", groups: [{ heading: "These Characters Are Not in Play", characters: bluffs }] };
   }
   if (player.behaviorMode === "fake_demon_behavior") {
+    bluffsReady();
     const packet = previewPrivatePacket(player, game, registry).payload;
     return { kind: "setup", groups: [{ heading: "Your Minions", names: (packet.minions ?? []).map(p => p.name) }, { heading: "These Characters Are Not in Play", characters: bluffs }] };
   }
@@ -85,10 +89,13 @@ export function setupPayload(game: StorytellerLobbyRecord, script: Script, view:
   // wake recipients. Death does not remove a teammate's character identity.
   const team = (type: "minion" | "demon") => players.filter(p => !p.isTraveler && registry.get(p.actualRole)?.type === type).map(p => p.id);
   const magician = policy.magician ? players.filter(p => p.actualRole === "magician" && p.alive).map(p => p.id) : [];
-  if (view === "demon") return { kind: "setup", groups: [
-    { heading: "Your Minions", names: names([...team("minion"), ...magician]) },
-    { heading: "These Characters Are Not in Play", characters: bluffs },
-  ] };
+  if (view === "demon") {
+    bluffsReady();
+    return { kind: "setup", groups: [
+      { heading: "Your Minions", names: names([...team("minion"), ...magician]) },
+      { heading: "These Characters Are Not in Play", characters: bluffs },
+    ] };
+  }
   return { kind: "setup", groups: [
     { heading: "Your Demon", names: names([...team("demon"), ...magician]) },
     { heading: "Your Minions", names: names(team("minion")) },

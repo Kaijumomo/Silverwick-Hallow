@@ -69,16 +69,19 @@ export function bluffRecipient(game: StorytellerLobbyRecord, script: Script | un
   return script ? infoRecipients(game, script, "bluffs")[0] : undefined;
 }
 
-/** First-night and Demon-bluff information, shown to the first eligible recipient. */
-export function presentSetup(view: SetupView): string | undefined {
-  const context = captureInfoContext();
+/**
+ * First-night and Demon-bluff information, shown to the first eligible recipient, or to `recipientId` when the
+ * Night step names one (separate Demons keep separate bluffs). The Night card and the Info card share this one
+ * V2 Reveal; showing it is presentation only, and Night Next stays the completion command.
+ */
+export function presentSetup(view: SetupView, recipientId?: string, context: InfoContext = captureInfoContext()): string | undefined {
   if (!infoContextCurrent(context)) return STALE;
   const game = context.game!, script = context.script;
   if (!script) return STALE;
   const eligible = infoRecipients(game, script, view);
   if (!eligible.length) return NO_RECIPIENT[view];
   try {
-    open(context, setupPayload(game, script, view, eligible[0]!.id), { kind: "setup", key: view === "traveler" ? "traveller" : view === "bluffs" ? "bluffs" : view === "demon" ? "demon" : "minion" }, view);
+    open(context, setupPayload(game, script, view, recipientId ?? eligible[0]!.id), { kind: "setup", key: view === "traveler" ? "traveller" : view === "bluffs" ? "bluffs" : view === "demon" ? "demon" : "minion" }, view);
     return undefined;
   } catch (error) {
     return error instanceof Error ? error.message : "Review the information before showing it.";
