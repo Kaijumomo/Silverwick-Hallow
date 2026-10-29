@@ -17,7 +17,7 @@ import type { NightStep } from "@/features/nightOrder/nightOrder";
 import { NIGHT_INFORMATION_ROLES, type NightInformationHandle } from "@/features/nightOrder/NightInformationAction";
 import { FIRST_INFORMATION_CHARACTERS } from "@/features/setup/FirstInformationPreparation";
 import type { V6Ctx } from "../ctx";
-import { flash, showVeil } from "../v6Store";
+import { flash, veilChange } from "../v6Store";
 import { roman } from "../ringLayout";
 import { activeCheckpoint, useNightPos, type NightCheckpoint } from "./nightPos";
 import { dawnFlash, nightDeaths, resolvePosition, type NightPosition } from "./nightSteps";
@@ -307,11 +307,13 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   };
   const proceedToDay = () => {
     const deaths = nightDeaths(game);
-    const result = useStorytellerStore.getState().advancePhase();
-    if (!result.ok) { flash("Setup changed. Open Players to review what needs attention."); return; }
-    useNightPos.getState().go(0, null, null);
-    showVeil(`Day ${roman(game.day)}`, "Dawn over Silverwick Hollow", true);
-    flash(dawnFlash(deaths));
+    veilChange(`Day ${roman(game.day)}`, "Dawn over Silverwick Hollow", true, () => {
+      const result = useStorytellerStore.getState().advancePhase();
+      if (!result.ok) { flash("Setup changed. Open Players to review what needs attention."); return false; }
+      useNightPos.getState().go(0, null, null);
+      flash(dawnFlash(deaths));
+      return true;
+    });
   };
   /** Begin Day. Unfinished work sends the Storyteller to Dawn first; there, continuing is explicit. */
   const beginDay = () => {

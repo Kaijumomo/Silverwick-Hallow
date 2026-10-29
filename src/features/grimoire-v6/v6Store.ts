@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { PlayerId, RoleId, RoleType } from "@/stores/types";
+import { stutterFlags, VEIL_LATE_MS } from "@/diag/stutterDiag";
 
 /**
  * Package 4: UI-only state of the unified Grimoire (the V2 "Storyteller Grimoire v6" design).
@@ -109,6 +110,29 @@ export function showVeil(label: string, sub: string, day: boolean) {
   clearTimeout(veilTimer);
   useV6Ui.getState().set({ veil: { key: `v${veilSeq++}`, label, sub, day } });
   veilTimer = setTimeout(() => useV6Ui.getState().set({ veil: null }), 2100);
+}
+
+let lateChange: ReturnType<typeof setTimeout> | undefined;
+/**
+ * A phase change together with its veil. As in V2 the change is made and the veil starts in the same moment. With the
+ * preview-only ?veil=late switch (src/diag/stutterDiag.ts) the veil starts first and the change is made once the veil is
+ * dark; a second tap while that change is pending is ignored, and a change that is refused takes the veil away.
+ */
+export function veilChange(label: string, sub: string, day: boolean, change: () => boolean, late = stutterFlags.veilLate): boolean {
+  if (!late) {
+    if (!change()) return false;
+    showVeil(label, sub, day);
+    return true;
+  }
+  if (lateChange) return false;
+  showVeil(label, sub, day);
+  lateChange = setTimeout(() => {
+    lateChange = undefined;
+    if (change()) return;
+    clearTimeout(veilTimer);
+    useV6Ui.getState().set({ veil: null });
+  }, VEIL_LATE_MS);
+  return true;
 }
 
 /** A yes/no question in the Grimoire's own dialog, in place of window.confirm. Resolves false when dismissed. */

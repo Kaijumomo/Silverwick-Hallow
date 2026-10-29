@@ -4,7 +4,7 @@ import { currentVotingState } from "@/stores/voting";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import type { V6Ctx } from "../ctx";
 import { roman } from "../ringLayout";
-import { flash, showVeil, useV6Ui } from "../v6Store";
+import { flash, useV6Ui, veilChange } from "../v6Store";
 
 /** An execution has already been recorded for this Day (so the block no longer waits on one). */
 export function dayHasExecution(game: StorytellerLobbyRecord): boolean {
@@ -30,10 +30,10 @@ export function advanceToNight(ctx: V6Ctx): boolean {
   if (round?.status === "voting") { voting?.show(); flash("Finish the vote first."); return false; }
   if (round?.mode === "exile" && round.result === "exilePassed") { voting?.show(); flash("Resolve the supported exile first."); return false; }
   if (round && voting && !voting.run({ kind: "acknowledge", roundId: round.id }, captureVotingContext())) { voting.show(); return false; }
-  const result = useStorytellerStore.getState().advancePhase(captureVotingContext());
-  if (!result.ok) { flash(result.message); return false; }
-  const ui = useV6Ui.getState();
-  ui.set({ panel: "night", slay: null, card: false, popMode: "main" });
-  showVeil(`Night ${roman(game.day + 1)}`, "The town sleeps", false);
-  return true;
+  return veilChange(`Night ${roman(game.day + 1)}`, "The town sleeps", false, () => {
+    const result = useStorytellerStore.getState().advancePhase(captureVotingContext());
+    if (!result.ok) { flash(result.message); return false; }
+    useV6Ui.getState().set({ panel: "night", slay: null, card: false, popMode: "main" });
+    return true;
+  });
 }

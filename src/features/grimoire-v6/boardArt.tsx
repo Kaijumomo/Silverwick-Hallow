@@ -1,5 +1,6 @@
 import { createElement as E, useRef, type CSSProperties, type ReactNode } from "react";
 import type { RingLayout } from "./ringLayout";
+import { stutterFlags, type MistMode } from "@/diag/stutterDiag";
 
 // Backdrop sky and the Crescent Ring centrepiece of the V2 Grimoire design, ported from the prototype.
 
@@ -10,7 +11,7 @@ const rn = () => (starSeed = (starSeed * 16807) % 2147483647) / 2147483647;
 const STARS = Array.from({ length: 90 }, () => ({ x: rn() * 100, y: rn() * 70, r: rn() < 0.15 ? 1.7 : rn() < 0.5 ? 1.15 : 0.75, d: 2.5 + rn() * 5, dl: -rn() * 8 }));
 
 /** Night sky (or its dimmed dawn variant) behind the board. */
-export function moonBackdrop(night: boolean): ReactNode {
+export function moonBackdrop(night: boolean, mistMode: MistMode = stutterFlags.mist): ReactNode {
   const fade: CSSProperties = { transition: "opacity 1.6s ease" };
   const SKY = `url("${publicUrl("silverwick-night-sky-v3.png")}")`;
   const sky = E("div", { key: "sky", style: { position: "absolute", inset: 0, backgroundImage: SKY, backgroundSize: "cover", backgroundPosition: "center", filter: night ? "none" : "saturate(.6) brightness(.75)", ...fade, transition: "filter 1.6s ease" } });
@@ -29,14 +30,27 @@ export function moonBackdrop(night: boolean): ReactNode {
   const glow = E("div", { key: "glow", style: { position: "absolute", inset: 0, backgroundImage: SKY, backgroundSize: "cover", backgroundPosition: "center", mixBlendMode: "screen", filter: "blur(6px) brightness(1.6)", animation: night ? "swNebula 9s ease-in-out infinite" : "none", opacity: 0 } });
   const shoot = (k: string, l: string, tp: string, dl: number, dur?: number) => E("div", { key: k, style: { position: "absolute", left: l, top: tp, width: 140, height: 1.5, borderRadius: 1, background: "linear-gradient(90deg, #f2f5fb, rgba(200,215,245,0))", boxShadow: "0 0 6px rgba(220,230,250,.8)", opacity: 0, transformOrigin: "0 50%", animation: night ? `swShoot ${dur || 14}s linear ${dl}s infinite` : "none" } });
   const stars = STARS.map((p, i) => E("div", { key: "s" + i, style: { position: "absolute", left: p.x + "%", top: p.y + "%", width: p.r * 2, height: p.r * 2, borderRadius: "50%", background: "#e4e9f4", boxShadow: p.r > 1.2 ? "0 0 6px rgba(200,215,245,.8)" : "none", opacity: 0.55, animation: `swTwinkle ${p.d}s ease-in-out ${p.dl}s infinite` } }));
-  const mist = (k: string, top: string, h: string, op: number, dur: number, dir: boolean, tint: string) => E("div", { key: k, style: { position: "absolute", left: "-20%", right: "-20%", top, height: h, pointerEvents: "none", opacity: op, filter: "blur(28px)", background: `radial-gradient(ellipse 50% 50% at 30% 50%, ${tint}, transparent 70%), radial-gradient(ellipse 40% 45% at 75% 55%, ${tint}, transparent 70%)`, animation: `swDrift ${dur}s ease-in-out infinite ${dir ? "alternate-reverse" : "alternate"}`, ...fade } });
+  // Preview-only ?mist= switch (src/diag/stutterDiag.ts). "v2" is the design's two-ellipse gradients under a live
+  // blur(28px), redrawn every frame while the bands drift. "soft" draws each ellipse already softened: a taller ellipse
+  // whose stops follow the blurred falloff (fitted on the 1480 x 924 board; at most about one colour level away on the
+  // tablet and two in portrait). Stops are fractions of the tint's alpha at every tenth of the radius. "off" omits them.
+  const soft = (rgb: string, a: number, at: string, rx: number, ry: number, stops: number[]) =>
+    `radial-gradient(ellipse ${rx}% ${ry}% at ${at}, ${stops.map((f, i) => `rgba(${rgb},${+(f * a).toFixed(3)}) ${i * 10}%`).join(", ")}, rgba(${rgb},0) ${stops.length * 10}%)`;
+  const mist = (k: string, top: string, h: string, op: number, dur: number, dir: boolean, rgb: string, a: number, [ry1, ry2]: [number, number], [s1, s2]: [number[], number[]]) => {
+    if (mistMode === "off") return null;
+    const tint = `rgba(${rgb},${a})`;
+    const look: CSSProperties = mistMode === "soft"
+      ? { background: `${soft(rgb, a, "30% 50%", 50, ry1, s1)}, ${soft(rgb, a, "75% 55%", 40, ry2, s2)}` }
+      : { filter: "blur(28px)", background: `radial-gradient(ellipse 50% 50% at 30% 50%, ${tint}, transparent 70%), radial-gradient(ellipse 40% 45% at 75% 55%, ${tint}, transparent 70%)` };
+    return E("div", { key: k, style: { position: "absolute", left: "-20%", right: "-20%", top, height: h, pointerEvents: "none", opacity: op, ...look, animation: `swDrift ${dur}s ease-in-out infinite ${dir ? "alternate-reverse" : "alternate"}`, ...fade } });
+  };
   return E("div", { "aria-hidden": true, style: { position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" } },
     sky, swirl, glow, ...ember, moonGlow, shoot("sh1", "78%", "12%", 3), shoot("sh2", "30%", "8%", 10), shoot("sh3", "58%", "4%", 6, 17), shoot("sh4", "92%", "22%", 13, 19), shoot("sh5", "44%", "16%", 1, 23),
     E("div", { key: "st", style: { position: "absolute", inset: 0, opacity: night ? 0.8 : 0.1, ...fade } }, ...stars),
     E("div", { key: "beam", style: { position: "absolute", left: "-10%", top: "-30%", width: "70%", height: "120%", transform: "rotate(-24deg)", transformOrigin: "0 0", background: "linear-gradient(90deg, transparent 0%, rgba(190,205,240,.07) 35%, rgba(210,222,250,.11) 50%, rgba(190,205,240,.06) 65%, transparent 100%)", filter: "blur(10px)", opacity: night ? 1 : 0, ...fade } }),
     E("div", { key: "dawn", style: { position: "absolute", left: 0, right: 0, bottom: 0, height: "55%", background: "linear-gradient(0deg, rgba(210,150,90,.16), rgba(170,120,80,.05) 55%, transparent)", opacity: night ? 0 : 1, ...fade } }),
-    mist("m1", "58%", "46%", night ? 0.5 : 0.35, 70, false, night ? "rgba(150,165,200,.35)" : "rgba(225,200,170,.3)"),
-    mist("m2", "-8%", "34%", night ? 0.32 : 0.22, 90, true, night ? "rgba(130,145,185,.3)" : "rgba(225,200,170,.25)"),
+    mist("m1", "58%", "46%", night ? 0.5 : 0.35, 70, false, night ? "150,165,200" : "225,200,170", night ? 0.35 : 0.3, [53.75, 49.5], [[.86, .79, .67, .53, .39, .25, .12, .03], [.84, .78, .66, .52, .38, .24, .11, .03]]),
+    mist("m2", "-8%", "34%", night ? 0.32 : 0.22, 90, true, night ? "130,145,185" : "225,200,170", night ? 0.3 : 0.25, [57.5, 52.88], [[.8, .75, .64, .5, .36, .22, .11, .03, .01], [.78, .73, .62, .49, .35, .22, .11, .03, .01]]),
     E("div", { key: "rim", style: { position: "absolute", inset: 0, background: "radial-gradient(ellipse 90% 80% at 50% 50%, transparent 55%, rgba(2,3,6,.55) 85%, rgba(0,0,0,.85) 100%)" } }),
   );
 }

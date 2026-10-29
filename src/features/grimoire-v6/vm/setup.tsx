@@ -10,7 +10,7 @@ import { setupPresentation } from "@/features/setup/setupPresentation";
 import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 import type { V6Ctx } from "../ctx";
 import { roman } from "../ringLayout";
-import { confirmAsk, flash, showVeil, useV6Ui } from "../v6Store";
+import { confirmAsk, flash, useV6Ui, veilChange } from "../v6Store";
 import { isDraftGame } from "../setup/draft";
 import { endGathering, goInPerson, goOnline, useSetupFlow } from "../setup/flow";
 import { buildPrepTasks, commitPrep, orderedTasks, prepTap, type PrepTask } from "../setup/prepare";
@@ -31,14 +31,16 @@ const store = () => useStorytellerStore.getState();
 
 /** Roles revealed → Begin Night 1. Entering the Grimoire never starts the night by itself. */
 function beginNightOne(ctx: V6Ctx, refusal: string) {
-  const result = store().beginNightOne(captureCharacterActionContext());
-  if (!result.ok) {
-    flash(refusal);
-    ctx.ui.set({ panel: "players" });
-    return;
-  }
-  showVeil("Night I", "The first night falls", false);
-  ctx.ui.set({ panel: "night", prepEdit: null, picker: null, seatMode: false, wiz: null });
+  veilChange("Night I", "The first night falls", false, () => {
+    const result = store().beginNightOne(captureCharacterActionContext());
+    if (!result.ok) {
+      flash(refusal);
+      ctx.ui.set({ panel: "players" });
+      return false;
+    }
+    ctx.ui.set({ panel: "night", prepEdit: null, picker: null, seatMode: false, wiz: null });
+    return true;
+  });
 }
 
 /** Everything the New Game wizard, the Prepare the Town card and guided seating draw. */
