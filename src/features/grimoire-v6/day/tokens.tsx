@@ -1,7 +1,8 @@
-import { createElement as E, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { currentVotingState } from "@/stores/voting";
 import type { PlayerId } from "@/stores/types";
 import type { V6Ctx } from "../ctx";
+import { seatGlow } from "../boardArt";
 import { flash } from "../v6Store";
 import { blockNominee } from "./advance";
 import { slayerTap } from "./slayer";
@@ -55,7 +56,7 @@ export function dayTokenDecor(ctx: V6Ctx): Record<PlayerId, DayTokenDecor> {
       if (id === nominatorId) Object.assign(d, { ringOn: true, ringColor: "rgba(232,88,74,.9)", tagOn: true, tagText: "Nominator", tagColor: "#ffb4a6" });
       if (id === nomineeId) Object.assign(d, { ringOn: true, ringColor: "rgba(232,110,95,.95)", tagOn: true, tagText: resultBlock ? `On the block · ${round!.tally}` : "On trial", tagColor: "#f4a595" });
       if (round?.responses.some((r) => r.voter.playerId === id && r.choice === "yes")) d.handOn = true;
-      if (id === voterId) d.glow = E("div", { key: "g", style: { position: "absolute", inset: -7, borderRadius: "50%", animation: "swGlow 1.8s ease-in-out infinite", pointerEvents: "none" } });
+      if (id === voterId) d.glow = seatGlow(1.8);
     }
     if (block && block.nominee.playerId === id && id !== nomineeId) {
       Object.assign(d, { tagOn: true, tagText: `On the block · ${block.tally}`, tagColor: "#f4a595" });

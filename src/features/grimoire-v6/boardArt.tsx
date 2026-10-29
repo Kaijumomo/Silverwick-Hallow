@@ -17,13 +17,21 @@ export function moonBackdrop(night: boolean): ReactNode {
   const cloudMask = "linear-gradient(180deg, transparent 30%, #000 62%)";
   const swirl = E("div", { key: "swirl", style: { position: "absolute", inset: "-6%", backgroundImage: SKY, backgroundSize: "cover", backgroundPosition: "center", mixBlendMode: "screen", filter: "blur(1.5px)", opacity: night ? 0.32 : 0.14, WebkitMaskImage: cloudMask, maskImage: cloudMask, ...fade } });
   const moonGlow = E("div", { key: "moon", style: { position: "absolute", left: "74%", top: "-6%", width: "24%", aspectRatio: "1", borderRadius: "50%", background: "radial-gradient(closest-side, rgba(225,232,250,.22), rgba(200,212,240,.08) 55%, transparent)", mixBlendMode: "screen", animation: "swHaunt 7s ease-in-out infinite", opacity: night ? 1 : 0.2, ...fade } });
-  const ember = E("div", { key: "ember", style: { position: "absolute", inset: 0, background: "radial-gradient(ellipse 30% 22% at 12% 52%, rgba(220,160,100,.12), transparent 70%), radial-gradient(ellipse 32% 18% at 66% 72%, rgba(220,160,100,.1), transparent 70%)", mixBlendMode: "screen", animation: "swEmber 9s ease-in-out infinite" } });
+  // The ember glow's two gradients are transparent beyond 70% of their ellipses. Each is drawn in a layer cropped to
+  // that area (left, top, width, height in % of the board) instead of one full-board layer, so the browser keeps less
+  // of it in graphics memory. The gradient is laid out on the full board inside the crop, so every pixel is unchanged.
+  const emberCrop = (k: string, gradient: string, [l, t, w, h]: [number, number, number, number]) => E("div", { key: k, style: { position: "absolute", left: `${l}%`, top: `${t}%`, width: `${w}%`, height: `${h}%`, overflow: "hidden", mixBlendMode: "screen", animation: "swEmber 9s ease-in-out infinite" } },
+    E("div", { style: { position: "absolute", left: `${(-l / w) * 100}%`, top: `${(-t / h) * 100}%`, width: `${(100 / w) * 100}%`, height: `${(100 / h) * 100}%`, background: gradient } }));
+  const ember = [
+    emberCrop("ember1", "radial-gradient(ellipse 30% 22% at 12% 52%, rgba(220,160,100,.12), transparent 70%)", [0, 36, 34, 32]),
+    emberCrop("ember2", "radial-gradient(ellipse 32% 18% at 66% 72%, rgba(220,160,100,.1), transparent 70%)", [43, 59, 46, 27]),
+  ];
   const glow = E("div", { key: "glow", style: { position: "absolute", inset: 0, backgroundImage: SKY, backgroundSize: "cover", backgroundPosition: "center", mixBlendMode: "screen", filter: "blur(6px) brightness(1.6)", animation: night ? "swNebula 9s ease-in-out infinite" : "none", opacity: 0 } });
   const shoot = (k: string, l: string, tp: string, dl: number, dur?: number) => E("div", { key: k, style: { position: "absolute", left: l, top: tp, width: 140, height: 1.5, borderRadius: 1, background: "linear-gradient(90deg, #f2f5fb, rgba(200,215,245,0))", boxShadow: "0 0 6px rgba(220,230,250,.8)", opacity: 0, transformOrigin: "0 50%", animation: night ? `swShoot ${dur || 14}s linear ${dl}s infinite` : "none" } });
   const stars = STARS.map((p, i) => E("div", { key: "s" + i, style: { position: "absolute", left: p.x + "%", top: p.y + "%", width: p.r * 2, height: p.r * 2, borderRadius: "50%", background: "#e4e9f4", boxShadow: p.r > 1.2 ? "0 0 6px rgba(200,215,245,.8)" : "none", opacity: 0.55, animation: `swTwinkle ${p.d}s ease-in-out ${p.dl}s infinite` } }));
   const mist = (k: string, top: string, h: string, op: number, dur: number, dir: boolean, tint: string) => E("div", { key: k, style: { position: "absolute", left: "-20%", right: "-20%", top, height: h, pointerEvents: "none", opacity: op, filter: "blur(28px)", background: `radial-gradient(ellipse 50% 50% at 30% 50%, ${tint}, transparent 70%), radial-gradient(ellipse 40% 45% at 75% 55%, ${tint}, transparent 70%)`, animation: `swDrift ${dur}s ease-in-out infinite ${dir ? "alternate-reverse" : "alternate"}`, ...fade } });
   return E("div", { "aria-hidden": true, style: { position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" } },
-    sky, swirl, glow, ember, moonGlow, shoot("sh1", "78%", "12%", 3), shoot("sh2", "30%", "8%", 10), shoot("sh3", "58%", "4%", 6, 17), shoot("sh4", "92%", "22%", 13, 19), shoot("sh5", "44%", "16%", 1, 23),
+    sky, swirl, glow, ...ember, moonGlow, shoot("sh1", "78%", "12%", 3), shoot("sh2", "30%", "8%", 10), shoot("sh3", "58%", "4%", 6, 17), shoot("sh4", "92%", "22%", 13, 19), shoot("sh5", "44%", "16%", 1, 23),
     E("div", { key: "st", style: { position: "absolute", inset: 0, opacity: night ? 0.8 : 0.1, ...fade } }, ...stars),
     E("div", { key: "beam", style: { position: "absolute", left: "-10%", top: "-30%", width: "70%", height: "120%", transform: "rotate(-24deg)", transformOrigin: "0 0", background: "linear-gradient(90deg, transparent 0%, rgba(190,205,240,.07) 35%, rgba(210,222,250,.11) 50%, rgba(190,205,240,.06) 65%, transparent 100%)", filter: "blur(10px)", opacity: night ? 1 : 0, ...fade } }),
     E("div", { key: "dawn", style: { position: "absolute", left: 0, right: 0, bottom: 0, height: "55%", background: "linear-gradient(0deg, rgba(210,150,90,.16), rgba(170,120,80,.05) 55%, transparent)", opacity: night ? 0 : 1, ...fade } }),
@@ -31,6 +39,22 @@ export function moonBackdrop(night: boolean): ReactNode {
     mist("m2", "-8%", "34%", night ? 0.32 : 0.22, 90, true, night ? "rgba(130,145,185,.3)" : "rgba(225,200,170,.25)"),
     E("div", { key: "rim", style: { position: "absolute", inset: 0, background: "radial-gradient(ellipse 90% 80% at 50% 50%, transparent 55%, rgba(2,3,6,.55) 85%, rgba(0,0,0,.85) 100%)" } }),
   );
+}
+
+/**
+ * The pulsing glow around the acting seat (Night) and the current voter (Day). The V2 design animates a box shadow
+ * (swGlow), which the browser repaints on the page every frame. Here the two end states of that animation are drawn
+ * once and cross-faded with opacity, which the graphics chip animates without repainting: the rest and peak frames
+ * are unchanged, frames in between differ slightly. The ring is split from the halo so it brightens steadily: its
+ * peak layer (alpha .8 over the resting .75) composes to the design's .95.
+ */
+export function seatGlow(seconds: number): ReactNode {
+  const layer = (boxShadow: string, animation?: string) => E("div", { style: { position: "absolute", inset: 0, borderRadius: "50%", boxShadow, ...(animation ? { animation: `${animation} ${seconds}s ease-in-out infinite` } : {}) } });
+  return E("div", { key: "g", style: { position: "absolute", inset: -7, borderRadius: "50%", pointerEvents: "none" } },
+    layer("0 0 22px 4px rgba(214,224,245,.3)", "swGlowRest"),
+    layer("0 0 40px 12px rgba(214,224,245,.48)", "swGlowPeak"),
+    layer("0 0 0 2px rgba(226,234,250,.75)"),
+    layer("0 0 0 2px rgba(240,245,255,.8)", "swGlowPeak"));
 }
 
 const star4 = (x: number, y: number, r: number, fill: string) =>

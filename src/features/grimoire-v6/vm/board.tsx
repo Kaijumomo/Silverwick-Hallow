@@ -1,4 +1,4 @@
-import { createElement as E, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { iconUrlFor } from "@/data/iconUrl";
 import { deriveAlignment } from "@/data/roleRegistry";
 import { revokePlayerAndCommit, storytellerOccupancyCompletion } from "@/firebase/membershipCommands";
@@ -14,6 +14,7 @@ import type { PlayerId, RoleDef, STPlayerRecord } from "@/stores/types";
 import type { V6Ctx } from "../ctx";
 import { ICON, TEAM_COLOR, TEAM_LABEL } from "../icons";
 import { roman } from "../ringLayout";
+import { seatGlow } from "../boardArt";
 import { flash, useV6Ui } from "../v6Store";
 import { presentPlayerToken, report } from "../info/actions";
 import { mergedDecoration, offerTokenTap, useTokenDecorations } from "../board/overlay";
@@ -170,7 +171,7 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
     const dimName = wizPre || unnamed;
     const dead = !p.alive;
     const acting = id === litActorId;
-    const glow = deco.glow ?? (acting ? E("div", { key: "g", style: { position: "absolute", inset: -7, borderRadius: "50%", animation: "swGlow 2.6s ease-in-out infinite", pointerEvents: "none" } }) : null);
+    const glow = deco.glow ?? (acting ? seatGlow(2.6) : null);
     const dragging = drag.ghost?.id === id;
     const markSummary = marks.length ? `, ${marks.length} reminder${marks.length === 1 ? "" : "s"}` : "";
     const aria = `Seat ${i + 1}, ${p.name || "empty name"}${role ? `, ${role.name}` : ""}${dead ? ", dead" : ""}${!privacy && p.abilityUsed ? ", ability used" : ""}${markSummary}`;

@@ -3,6 +3,7 @@
 import { Fragment } from 'react';
 import { css, T } from './designRuntime';
 import { REVEAL_BACKDROP } from './revealGrain';
+import { useBoardRest } from './boardRest';
 
 const S0: React.CSSProperties = { "position": "absolute", "inset": "0", "display": "flex", "overflow": "hidden", "background": "#0b0909", "fontFamily": "'Source Sans 3', system-ui, sans-serif", "fontVariantNumeric": "lining-nums tabular-nums", "color": "#ddd6c8" };
 const S1: React.CSSProperties = { "position": "relative", "flex": "1", "minWidth": "0", "height": "100%", "overflow": "hidden" };
@@ -546,10 +547,11 @@ const S541: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "f
 const S542: React.CSSProperties = { "position": "absolute", "zIndex": "2", "right": "44px", "bottom": "44px", "minHeight": "48px", "padding": "0 20px", "borderRadius": "12px", "border": "1px solid rgba(176,186,204,.25)", "background": "rgba(14,9,10,.75)", "color": "#ddd6c8", "fontFamily": "'IM Fell English', serif", "fontSize": "19px", "fontWeight": "400", "cursor": "pointer", "display": "flex", "alignItems": "center", "gap": "8px", "whiteSpace": "nowrap" };
 
 export function GrimoireV6View({ vm }: { vm: any }) {
+  const rest = useBoardRest(!!vm.show?.open, !!vm.win?.open);
   return (
     <>
       <div id="grim-screen" style={S0}>
-        <div ref={vm.boardRef} style={S1}>
+        <div ref={vm.boardRef} style={rest.boardStyle(S1)}>
           {vm.themeClock && (
             <>
             <div style={S2} />
@@ -3020,7 +3022,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
         </div>
         {vm.win?.open && (
           <>
-          <div role="dialog" aria-label={vm.win?.title} style={css(`position:absolute; inset:0; z-index:95; overflow:hidden; background:${vm.win?.base ?? ''}; display:flex; align-items:center; justify-content:center; animation:swRise .6s ease-out;`)}>
+          <div role="dialog" aria-label={vm.win?.title} onAnimationEnd={rest.settleWin} style={css(`position:absolute; inset:0; z-index:95; overflow:hidden; background:${vm.win?.base ?? ''}; display:flex; align-items:center; justify-content:center; animation:swRise .6s ease-out;`)}>
             <div style={css(`position:absolute; inset:0; background:${vm.win?.light ?? ''};`)} />
             <div style={css(`position:absolute; left:50%; top:42%; width:1100px; height:1100px; margin:-550px 0 0 -550px; border-radius:50%; background:${vm.win?.rays ?? ''}; opacity:.55; pointer-events:none;`)} />
             <div style={S403} />
@@ -3559,7 +3561,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
         )}
         {vm.show?.open && (
           <>
-          <div role="dialog" aria-label={vm.show?.aria} style={S503}>
+          <div role="dialog" aria-label={vm.show?.aria} onAnimationEnd={rest.settleReveal} style={S503}>
             <div style={S504} />
             {T(vm.show?.glow)}
             <div style={S508} />
