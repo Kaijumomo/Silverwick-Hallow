@@ -17,6 +17,9 @@ import "@/styles/tablet-grimoire.css";
 import "@/styles/storyteller-shell.css";
 import "@/styles/shell-ending.css";
 import "@/styles/player-phone.css";
+import { installStutterDiag } from "@/diag/stutterDiag";
+
+installStutterDiag();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

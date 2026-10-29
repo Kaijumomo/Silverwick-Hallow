@@ -3,9 +3,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useBoardRest } from "./boardRest";
 
-function Harness({ keepOpener = true }: { keepOpener?: boolean }) {
+function Harness({ keepOpener = true, restOff = false }: { keepOpener?: boolean; restOff?: boolean }) {
   const [reveal, setReveal] = useState(false);
-  const rest = useBoardRest(reveal, false);
+  const rest = useBoardRest(reveal, false, restOff);
   return <>
     <div data-testid="board" style={rest.boardStyle({ position: "relative" })}>
       {(keepOpener || !reveal) && <button type="button" onClick={() => setReveal(true)}>Show</button>}
@@ -69,5 +69,12 @@ describe("board rest under a full-screen scene", () => {
     act(() => { ended(screen.getByRole("dialog")); });
     fireEvent.click(screen.getByRole("button", { name: "Close from outside" }));
     expect(document.activeElement).toBe(document.body);
+  });
+
+  it("keeps the board drawn with the preview-only rest=off switch", () => {
+    render(<Harness restOff />);
+    fireEvent.click(screen.getByRole("button", { name: "Show" }));
+    act(() => { ended(screen.getByRole("dialog")); });
+    expect(screen.getByTestId("board").style.visibility).toBe("");
   });
 });

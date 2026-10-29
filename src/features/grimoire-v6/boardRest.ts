@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, type AnimationEvent, type CSSProperties } from "react";
+import { stutterFlags } from "@/diag/stutterDiag";
 
 /**
  * Stops drawing the board while a solid full-screen scene (the Reveal or the victory scene) covers all of it.
@@ -15,10 +16,11 @@ import { useLayoutEffect, useRef, useState, type AnimationEvent, type CSSPropert
  * A hidden button loses keyboard focus, so the focus a scene was opened from is given back when it closes, unless
  * focus moved into the scene meanwhile (closing from there leaves focus on the page, as before).
  */
-export function useBoardRest(revealOpen: boolean, winOpen: boolean) {
+export function useBoardRest(revealOpen: boolean, winOpen: boolean, restOff = stutterFlags.restOff) {
   const [settled, setSettled] = useState({ reveal: false, win: false });
   if ((settled.reveal && !revealOpen) || (settled.win && !winOpen)) setSettled({ reveal: settled.reveal && revealOpen, win: settled.win && winOpen });
-  const rest = (revealOpen && settled.reveal) || (winOpen && settled.win);
+  // Preview-only ?rest=off (src/diag/stutterDiag.ts) keeps the board drawn under the scenes.
+  const rest = !restOff && ((revealOpen && settled.reveal) || (winOpen && settled.win));
   const focus = useRef<HTMLElement | null>(null);
 
   const settle = (scene: "reveal" | "win") => (event: AnimationEvent<HTMLElement>) => {

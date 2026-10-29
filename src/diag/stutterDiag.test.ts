@@ -3,17 +3,19 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { moonBackdrop } from "@/features/grimoire-v6/boardArt";
 import { useV6Ui, veilChange } from "@/features/grimoire-v6/v6Store";
-import { parseStutter, stutterFlags, VEIL_LATE_MS } from "./stutterDiag";
+import { calmCss, parseStutter, stutterFlags, VEIL_LATE_MS } from "./stutterDiag";
 
 afterEach(() => { vi.useRealTimers(); useV6Ui.getState().set({ veil: null }); });
 
 describe("stutter test switches (preview-only)", () => {
   it("are all off unless the URL asks", () => {
-    expect(parseStutter("")).toEqual({ mist: "v2", veilLate: false });
-    expect(parseStutter("?mist=bogus&veil=early")).toEqual({ mist: "v2", veilLate: false });
-    expect(parseStutter("?mist=soft&veil=late")).toEqual({ mist: "soft", veilLate: true });
-    expect(parseStutter("?mist=off")).toEqual({ mist: "off", veilLate: false });
-    expect(stutterFlags).toEqual({ mist: "v2", veilLate: false });
+    expect(parseStutter("")).toEqual({ mist: "v2", veilLate: false, restOff: false, calm: false, meter: false });
+    expect(parseStutter("?mist=bogus&veil=early&rest=on&calm=0&meter=yes")).toEqual({ mist: "v2", veilLate: false, restOff: false, calm: false, meter: false });
+    expect(parseStutter("?mist=soft&veil=late&rest=off&calm=1&meter=1")).toEqual({ mist: "soft", veilLate: true, restOff: true, calm: true, meter: true });
+    expect(parseStutter("?mist=off")).toEqual({ ...{ mist: "v2", veilLate: false, restOff: false, calm: false, meter: false }, mist: "off" });
+    expect(stutterFlags).toEqual({ mist: "v2", veilLate: false, restOff: false, calm: false, meter: false });
+    expect(calmCss(stutterFlags)).toBe("");
+    expect(calmCss({ ...stutterFlags, calm: true })).toContain('[style*="swTwinkle"]');
   });
 
   it("draws the V2 mist by default, a filter-free mist with soft, and none with off", () => {
