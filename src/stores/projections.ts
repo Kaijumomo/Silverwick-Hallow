@@ -1,5 +1,5 @@
 import { isCanonicalRole } from "@/data/canonical";
-import { deriveAlignment, ownedScriptCharacters, type RoleRegistry } from "@/data/roleRegistry";
+import { deriveAlignment, isOrdinaryRoleType, ownedScriptCharacters, type RoleRegistry } from "@/data/roleRegistry";
 import { PlayerSelfRecordSchema } from "./schemas";
 import { isInitialRevealComplete } from "./identity";
 import { publicTravelerRole } from "./travelers";
@@ -142,13 +142,14 @@ export type OnlineMap = Record<PlayerId, boolean>;
  * The script's public face: its name and the ids of its verified official
  * characters, in script order. Only ids, so a custom script reaches a phone
  * without any definition crossing the boundary. A homebrew or modified
- * definition is never listed: a phone resolves ids against the official
+ * definition is never listed, nor is a Fabled, Loric or Traveller (those are
+ * revealed by the Storyteller in play, not by the script sheet): a phone resolves ids against the official
  * catalogue and must not show the wrong ability for it.
  */
 export function publicScriptFields(script: Script | undefined): Pick<PublicLobbyRecord, "scriptName" | "scriptCharacters"> {
   if (!script) return {};
-  const ids = ownedScriptCharacters(script).filter(isCanonicalRole).map((role) => role.id);
-  const name = script.name.trim().slice(0, 60);
+  const ids = ownedScriptCharacters(script).filter((role) => isCanonicalRole(role) && isOrdinaryRoleType(role.type)).map((role) => role.id);
+  const name = Array.from(script.name.trim()).slice(0, 60).join("");
   return { ...(name ? { scriptName: name } : {}), ...(ids.length ? { scriptCharacters: ids } : {}) };
 }
 

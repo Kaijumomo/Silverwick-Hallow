@@ -42,6 +42,11 @@ describe("publicScriptFields", () => {
     expect(publicScriptFields(none)).toEqual({ scriptName: "Y" });
   });
 
+  it("never lists a Fabled, Loric or Traveller, which the Storyteller reveals only in play", () => {
+    const script: Script = { id: "z", name: "Z", characters: canonicalRoles(["empath", "djinn", "pope", "thief"]) };
+    expect(publicScriptFields(script).scriptCharacters).toEqual(["empath"]);
+  });
+
   it("is empty without a script and clips an overlong name", () => {
     expect(publicScriptFields(undefined)).toEqual({});
     expect(publicScriptFields({ ...imported, name: "N".repeat(90) }).scriptName).toHaveLength(60);
