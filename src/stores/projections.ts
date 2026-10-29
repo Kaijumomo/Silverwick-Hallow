@@ -1,4 +1,5 @@
-import { deriveAlignment, type RoleRegistry } from "@/data/roleRegistry";
+import { isCanonicalRole } from "@/data/canonical";
+import { deriveAlignment, ownedScriptCharacters, type RoleRegistry } from "@/data/roleRegistry";
 import { PlayerSelfRecordSchema } from "./schemas";
 import { isInitialRevealComplete } from "./identity";
 import { publicTravelerRole } from "./travelers";
@@ -12,6 +13,7 @@ import type {
   PlayerSelfLife,
   PlayerSelfRecord,
   PublicLobbyRecord,
+  Script,
   STPlayerRecord,
   StorytellerLobbyRecord,
 } from "./types";
@@ -136,10 +138,25 @@ export function projectToPublic(
 
 export type OnlineMap = Record<PlayerId, boolean>;
 
+/**
+ * The script's public face: its name and the ids of its verified official
+ * characters, in script order. Only ids, so a custom script reaches a phone
+ * without any definition crossing the boundary. A homebrew or modified
+ * definition is never listed: a phone resolves ids against the official
+ * catalogue and must not show the wrong ability for it.
+ */
+export function publicScriptFields(script: Script | undefined): Pick<PublicLobbyRecord, "scriptName" | "scriptCharacters"> {
+  if (!script) return {};
+  const ids = ownedScriptCharacters(script).filter(isCanonicalRole).map((role) => role.id);
+  const name = script.name.trim().slice(0, 60);
+  return { ...(name ? { scriptName: name } : {}), ...(ids.length ? { scriptCharacters: ids } : {}) };
+}
+
 export function projectLobbyToPublic(
   st: StorytellerLobbyRecord,
   online: OnlineMap,
-  arrivals?: readonly string[]
+  arrivals?: readonly string[],
+  script?: Script
 ): PublicLobbyRecord {
   const players: Record<PlayerId, PlayerPublicRecord> = {};
   for (const id of Object.keys(st.players)) {
@@ -156,6 +173,7 @@ export function projectLobbyToPublic(
     players,
     fabled: [...st.fabled],
     lorics: [...(st.lorics ?? [])],
+    ...publicScriptFields(script),
   };
   // Package 3 (A1): the waiting lobby's public arrivals. Setup only; names
   // only (computed by firebase/arrivals.ts from currently-present players).

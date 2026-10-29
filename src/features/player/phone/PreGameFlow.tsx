@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { lookupOfficialRole } from "@/data/officialRoles";
-import { getBuiltinScript } from "@/data/scripts";
+import { publicScriptOf } from "@/data/publicScript";
 import { iconUrlFor } from "@/data/iconUrl";
 import { travellerArt } from "@/data/localArt";
 import { GENERIC_TEAM_ICON } from "@/features/home/art";
@@ -95,7 +95,7 @@ export function PreGameFlow({
       .sort((a, b) => a.seat - b.seat),
     [publicLobby],
   );
-  const scriptName = getBuiltinScript(publicLobby.scriptId)?.name;
+  const scriptName = publicScriptOf(publicLobby).name;
   const ownSeat = mine ? mine.seat + 1 : 0;
 
   const role = self ? lookupOfficialRole(self.shownRole) : undefined;
