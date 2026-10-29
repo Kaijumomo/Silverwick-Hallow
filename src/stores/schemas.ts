@@ -1287,6 +1287,8 @@ export const PublicLobbyRecordSchema = z.object({
   players: z.record(z.string().min(1), PlayerPublicRecordSchema),
   fabled: z.array(z.string().min(1)),
   lorics: z.array(z.string().min(1)).default([]),
+  scriptName: z.string().min(1).max(60).optional(),
+  scriptCharacters: z.array(z.string().min(1).max(40)).max(200).optional(),
   winner: AlignmentSchema.optional(),
   status: z.literal("ended").optional(),
   arrivals: z.array(z.string().min(1).max(60)).max(40).optional(),

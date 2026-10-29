@@ -179,7 +179,10 @@ describe("independent B4 adverse death and succession sequences", () => {
       const compound = structuredClone(store.getState().game!);
       const checkpoint = JSON.parse(await backend.get(`lobbies/${code}/checkpoint`) as string);
       expect(checkpoint.game).toEqual(compound);
-      expect(JSON.stringify(await backend.get(`lobbies/${code}/public`))).not.toMatch(/actualRole|scarletwoman|imp|resolutionId/);
+      // The published script list (name + character ids) is the table's script sheet, public by
+      // design; everything else on the public node must still carry no role or resolution data.
+      const { scriptName: _name, scriptCharacters: _characters, ...publicRest } = (await backend.get(`lobbies/${code}/public`)) as Record<string, unknown>;
+      expect(JSON.stringify(publicRest)).not.toMatch(/actualRole|scarletwoman|imp|resolutionId/);
       manager.stop(); await first.dispose();
       store.setState({ game: null, undoStack: [], localSeq: 0, sync: null });
       const second = new SessionWriter(backend, code, session.id); writers.push(second);
