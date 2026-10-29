@@ -19,6 +19,8 @@ The tablet's real allowance has not been read from the device.
   stops keeping it in tile memory, and it is shown again in the frame the scene closes. Layout, state and animations
   are untouched. Keyboard focus taken from the board is given back on close. Without the fade-in (no `animationend`)
   the board stays drawn.
+  Both scenes carry `will-change: transform`: without it Chrome folded the scene back into the page when the board
+  under it was hidden and repainted it, which showed as a black frame on a small allowance.
 - **Ember crop** (`moonBackdrop` in `boardArt.tsx`). The ember glow was a full-board blend layer whose gradients are
   transparent beyond 70% of their ellipses. Each gradient now sits in a layer cropped to its area, laid out on the full
   board inside the crop, so every pixel is the same.
@@ -38,4 +40,7 @@ glow, the keyboard behaviour, game logic and data. Lightening those changes the 
 Node Playwright against a local `vite preview`, Chromium launched with and without `--force-gpu-mem-available-mb`:
 screenshot the Reveal (open and after closing), Night to Day and the victory scene at fixed times, and compare each
 frame with the same build at the desktop allowance. Freeze infinite animations at time 0 before comparing board frames.
-Scripts and results: Library `package4/tablet-rendering/tablet-first/`.
+Results at 256 MB: Reveal, board return, Night to Day and victory complete from the first or second capture. At 128 MB
+the Reveal and victory are complete from 0.7 s; Night to Day still leaves faint sky patches (about 10% of pixels at
+2.6 s, against 24% before). The seat glow differs from V2 only between its end states (at most 1.6% of the glow area by
+more than 4 levels). Scripts and results: Library `package4/tablet-rendering/tablet-first/`.
