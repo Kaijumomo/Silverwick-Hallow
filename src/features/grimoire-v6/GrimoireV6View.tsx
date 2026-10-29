@@ -508,7 +508,7 @@ const S499: React.CSSProperties = { "width": "34px", "height": "44px", "display"
 const S500: React.CSSProperties = { "width": "6px", "height": "2px", "borderRadius": "1px", "background": "rgba(232,88,74,.5)" };
 const S501: React.CSSProperties = { "flex": "1", "minHeight": "44px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.3)", "background": "transparent", "color": "#ddd6c8", "fontFamily": "inherit", "fontSize": "14px", "cursor": "pointer" };
 const S502: React.CSSProperties = { "flex": "1", "minHeight": "44px", "borderRadius": "10px", "border": "1px solid #c0392e", "background": "rgba(176,186,204,.14)", "color": "#ffb4a6", "fontFamily": "inherit", "fontSize": "14px", "fontWeight": "600", "cursor": "pointer" };
-const S503: React.CSSProperties = { "position": "absolute", "inset": "0", "zIndex": "90", "overflow": "hidden", "background": "#0d0607", "display": "flex", "alignItems": "center", "justifyContent": "center", "animation": "swRise .25s ease-out" };
+const S503: React.CSSProperties = { "position": "absolute", "inset": "0", "zIndex": "90", "overflow": "hidden", "background": "#0d0607", "display": "flex", "alignItems": "center", "justifyContent": "center", "animation": "swRise .25s ease-out", "willChange": "transform" };
 const S504: React.CSSProperties = REVEAL_BACKDROP;
 const S508: React.CSSProperties = { "position": "absolute", "inset": "0", "pointerEvents": "none", "background": "radial-gradient(ellipse 95% 85% at 50% 50%, transparent 45%, rgba(0,0,0,.72) 100%)" };
 const S509: React.CSSProperties = { "position": "absolute", "inset": "12px", "border": "1px solid rgba(176,186,204,.14)", "borderRadius": "16px", "pointerEvents": "none" };
@@ -3022,7 +3022,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
         </div>
         {vm.win?.open && (
           <>
-          <div role="dialog" aria-label={vm.win?.title} onAnimationEnd={rest.settleWin} style={css(`position:absolute; inset:0; z-index:95; overflow:hidden; background:${vm.win?.base ?? ''}; display:flex; align-items:center; justify-content:center; animation:swRise .6s ease-out;`)}>
+          <div role="dialog" aria-label={vm.win?.title} onAnimationEnd={rest.settleWin} style={css(`position:absolute; inset:0; z-index:95; overflow:hidden; background:${vm.win?.base ?? ''}; display:flex; align-items:center; justify-content:center; animation:swRise .6s ease-out; will-change:transform;`)}>
             <div style={css(`position:absolute; inset:0; background:${vm.win?.light ?? ''};`)} />
             <div style={css(`position:absolute; left:50%; top:42%; width:1100px; height:1100px; margin:-550px 0 0 -550px; border-radius:50%; background:${vm.win?.rays ?? ''}; opacity:.55; pointer-events:none;`)} />
             <div style={S403} />

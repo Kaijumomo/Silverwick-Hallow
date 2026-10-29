@@ -9,6 +9,8 @@ import { useLayoutEffect, useRef, useState, type AnimationEvent, type CSSPropert
  * everything on the board, so once a scene has finished fading in the board cannot be seen. It is then hidden with
  * visibility, which keeps its layout, state and animations as they are, and shown again in the frame the scene closes.
  * Without the fade-in (no animationend) the board simply stays drawn.
+ * Both scenes carry will-change: transform so they keep their own layer when the board under them disappears;
+ * otherwise Chrome folds them back into the page and repaints them, which showed as a black frame on a small allowance.
  *
  * A hidden button loses keyboard focus, so the focus a scene was opened from is given back when it closes, unless
  * focus moved into the scene meanwhile (closing from there leaves focus on the page, as before).
