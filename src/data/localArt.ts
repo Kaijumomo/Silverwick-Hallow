@@ -21,6 +21,9 @@ const LOCAL_CHARACTER_ART: Record<string, string> = {
   ),
 };
 
+// Treacherous 30th: the two Carousel characters it uses that no built-in script covers.
+for (const id of ["golem", "marionette"]) LOCAL_CHARACTER_ART[id] = `${ART_BASE}/characters/carousel/${id}.png`;
+
 // Package 3: the three built-in scripts and the Travellers (default icon per id).
 const SET_IDS: Record<"tb" | "snv" | "bmr" | "travellers", readonly string[]> = {"tb": ["washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "monk", "ravenkeeper", "virgin", "slayer", "soldier", "mayor", "butler", "drunk", "recluse", "saint", "poisoner", "spy", "scarletwoman", "baron", "imp"], "snv": ["clockmaker", "dreamer", "snakecharmer", "mathematician", "flowergirl", "towncrier", "oracle", "savant", "seamstress", "philosopher", "artist", "juggler", "sage", "mutant", "sweetheart", "barber", "klutz", "eviltwin", "witch", "cerenovus", "pithag", "fanggu", "vigormortis", "nodashii", "vortox"], "bmr": ["grandmother", "sailor", "chambermaid", "exorcist", "innkeeper", "gambler", "gossip", "courtier", "professor", "minstrel", "tealady", "pacifist", "fool", "tinker", "moonchild", "goon", "lunatic", "godfather", "devilsadvocate", "assassin", "mastermind", "zombuul", "pukka", "shabaloth", "po"], "travellers": ["scapegoat", "gunslinger", "beggar", "bureaucrat", "thief", "butcher", "cacklejack", "bonecollector", "harlot", "barista", "deviant", "apprentice", "matron", "voudon", "judge", "bishop", "gangster", "gnome"]};
 for (const [dir, list] of Object.entries(SET_IDS)) {
