@@ -1,17 +1,21 @@
 /**
  * Preview-only switches for the scene-opening stutter test (branch package4-stutter-diag, never merged).
  *
- * Everything is off unless the URL asks for it, so the default page is identical to PR #12 at 8626a2d:
+ * The sky is drawn on one canvas by default (skyCanvas.ts, branch package4-sky-canvas). Everything else is off unless
+ * the URL asks for it:
+ *   ?sky=v2      draw the sky with the V2 design's page layers, as PR #12 at 8626a2d does (?mist applies only here)
+ *   ?sky=main    draw the canvas sky on the page's main thread instead of in a worker
  *   ?mist=soft   draw the board's two mist bands already softened instead of under a live blur(28px)
  *   ?mist=off    leave the mist bands out (test only: shows whether they cause the stutter)
  *   ?veil=late   change the board under the Night/Day veil once it is dark (650 ms after the tap) instead of at the tap
  *   ?rest=off    keep drawing the board under the Reveal and the victory scene (test only: the blank areas may return)
- *   ?calm=1      freeze the sky's movement: mist, stars, nebula, moon glow, embers, shooting stars (test only)
+ *   ?calm=1      freeze the sky's movement: mist, stars, nebula, moon glow, embers, shooting stars (test only; the canvas
+ *                sky holds them at their first frame)
  *   ?meter=1     on-screen frame meter: frame rate, longest pause in the last 5 s, and the longest pause within 3 s of each tap
  * Switches combine: ?mist=soft&veil=late&meter=1
  */
 export type MistMode = "v2" | "soft" | "off";
-export type StutterFlags = { mist: MistMode; veilLate: boolean; restOff: boolean; calm: boolean; meter: boolean };
+export type StutterFlags = { mist: MistMode; veilLate: boolean; restOff: boolean; calm: boolean; meter: boolean; sky: "canvas" | "main" | "v2" };
 
 export function parseStutter(search: string): StutterFlags {
   const q = new URLSearchParams(search);
@@ -22,6 +26,7 @@ export function parseStutter(search: string): StutterFlags {
     restOff: q.get("rest") === "off",
     calm: q.get("calm") === "1",
     meter: q.get("meter") === "1",
+    sky: q.get("sky") === "v2" || q.get("sky") === "main" ? (q.get("sky") as "v2" | "main") : "canvas",
   };
 }
 
@@ -54,7 +59,7 @@ function installMeter(flags: StutterFlags) {
   box.setAttribute("aria-hidden", "true");
   box.style.cssText = "position:fixed;left:6px;top:6px;z-index:2147483647;margin:0;padding:6px 8px;border-radius:6px;background:rgba(0,0,0,.8);color:#9fe3a0;font:12px/1.4 ui-monospace,monospace;pointer-events:none;white-space:pre";
   document.body.appendChild(box);
-  const on = Object.entries({ mist: flags.mist !== "v2" ? flags.mist : "", veil: flags.veilLate ? "late" : "", rest: flags.restOff ? "off" : "", calm: flags.calm ? "1" : "" }).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(" ") || "no switches";
+  const on = Object.entries({ sky: flags.sky === "canvas" ? "" : flags.sky, mist: flags.mist !== "v2" ? flags.mist : "", veil: flags.veilLate ? "late" : "", rest: flags.restOff ? "off" : "", calm: flags.calm ? "1" : "" }).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(" ") || "no switches";
   const gaps: [number, number][] = [];
   const taps: { at: number; worst: number; slow: number }[] = [];
   let last = performance.now(), drawn = 0;

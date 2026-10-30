@@ -1,6 +1,8 @@
-import { createElement as E, useRef, type CSSProperties, type ReactNode } from "react";
+import { createElement as E, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { RingLayout } from "./ringLayout";
 import { stutterFlags, type MistMode } from "@/diag/stutterDiag";
+import { SkyPainter } from "./skyCanvas";
+import type { SkyMessage } from "./skyWorker";
 
 // Backdrop sky and the Crescent Ring centrepiece of the V2 Grimoire design, ported from the prototype.
 
@@ -10,10 +12,77 @@ let starSeed = 7;
 const rn = () => (starSeed = (starSeed * 16807) % 2147483647) / 2147483647;
 const STARS = Array.from({ length: 90 }, () => ({ x: rn() * 100, y: rn() * 70, r: rn() < 0.15 ? 1.7 : rn() < 0.5 ? 1.15 : 0.75, d: 2.5 + rn() * 5, dl: -rn() * 8 }));
 
-/** Night sky (or its dimmed dawn variant) behind the board. */
-export function moonBackdrop(night: boolean, mistMode: MistMode = stutterFlags.mist): ReactNode {
+/**
+ * Night sky (or its dimmed dawn variant) behind the board, drawn on one canvas (skyCanvas.ts). Where a canvas cannot
+ * be drawn (no 2D context, or the worker fails), and with the preview-only ?sky=v2 switch, the V2 design's own layers
+ * are used instead.
+ */
+export function moonBackdrop(night: boolean, mistMode: MistMode = stutterFlags.mist, canvas = stutterFlags.sky !== "v2"): ReactNode {
+  return canvas ? E(SkyCanvas, { night, fallback: () => layeredBackdrop(night, mistMode) }) : layeredBackdrop(night, mistMode);
+}
+
+const SKY_IMAGE = "silverwick-night-sky-v3.png";
+
+/**
+ * The canvas the sky is drawn on. The drawing runs in a worker when the browser can hand a canvas to one, otherwise
+ * on the page (and always on the page with the preview-only ?sky=main switch). The board's rest (boardRest.ts) hides
+ * the board with visibility; the canvas then stops drawing until the board shows again.
+ */
+function SkyCanvas({ night, fallback }: { night: boolean; fallback: () => ReactNode }): ReactNode {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const setNight = useRef<((night: boolean) => void) | null>(null);
+  const [failed, setFailed] = useState(false);
+  useLayoutEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const size = () => { const r = canvas.getBoundingClientRect(); return { w: r.width, h: r.height, dpr: window.devicePixelRatio || 1 }; };
+    const shown = () => (canvas.checkVisibility ? canvas.checkVisibility({ visibilityProperty: true }) : true);
+    const image = new URL(publicUrl(SKY_IMAGE), window.location.href).href;
+    let send: (message: SkyMessage) => void;
+    let end: () => void;
+    if (stutterFlags.sky !== "main" && typeof Worker !== "undefined" && "transferControlToOffscreen" in canvas) {
+      const worker = new Worker(new URL("./skyWorker.ts", import.meta.url), { type: "module" });
+      worker.onerror = () => setFailed(true);
+      const offscreen = canvas.transferControlToOffscreen();
+      worker.postMessage({ type: "start", canvas: offscreen, night, calm: stutterFlags.calm, image, ...size() } satisfies SkyMessage, [offscreen]);
+      send = (message) => worker.postMessage(message);
+      end = () => { worker.postMessage({ type: "stop" } satisfies SkyMessage); };
+    } else {
+      let painter: SkyPainter;
+      try { painter = new SkyPainter(canvas, night, stutterFlags.calm); } catch { setFailed(true); return; }
+      const { w, h, dpr } = size();
+      painter.setSize(w, h, dpr);
+      const art = new Image();
+      art.decoding = "async";
+      art.onload = () => painter.setArt({ image: art });
+      art.src = image;
+      painter.run();
+      send = (message) => {
+        if (message.type === "size") painter.setSize(message.w, message.h, message.dpr);
+        else if (message.type === "night") painter.setNight(message.night);
+        else if (message.type === "paused") painter.setPaused(message.paused);
+      };
+      end = () => painter.stop();
+    }
+    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => send({ type: "size", ...size() }));
+    resize?.observe(canvas);
+    // The board's rest changes the style attribute of one of the canvas's ancestors.
+    const rest = new MutationObserver(() => send({ type: "paused", paused: !shown() }));
+    for (let node = canvas.parentElement; node; node = node.parentElement) rest.observe(node, { attributes: true, attributeFilter: ["style"] });
+    send({ type: "paused", paused: !shown() });
+    setNight.current = (value) => send({ type: "night", night: value });
+    return () => { resize?.disconnect(); rest.disconnect(); setNight.current = null; end(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [failed]);
+  useEffect(() => { setNight.current?.(night); }, [night]);
+  if (failed) return fallback();
+  return E("canvas", { ref, "aria-hidden": true, style: { position: "absolute", inset: 0, width: "100%", height: "100%", display: "block", pointerEvents: "none" } });
+}
+
+/** The V2 design's sky as page layers: the reference the canvas reproduces. */
+function layeredBackdrop(night: boolean, mistMode: MistMode): ReactNode {
   const fade: CSSProperties = { transition: "opacity 1.6s ease" };
-  const SKY = `url("${publicUrl("silverwick-night-sky-v3.png")}")`;
+  const SKY = `url("${publicUrl(SKY_IMAGE)}")`;
   const sky = E("div", { key: "sky", style: { position: "absolute", inset: 0, backgroundImage: SKY, backgroundSize: "cover", backgroundPosition: "center", filter: night ? "none" : "saturate(.6) brightness(.75)", ...fade, transition: "filter 1.6s ease" } });
   const cloudMask = "linear-gradient(180deg, transparent 30%, #000 62%)";
   const swirl = E("div", { key: "swirl", style: { position: "absolute", inset: "-6%", backgroundImage: SKY, backgroundSize: "cover", backgroundPosition: "center", mixBlendMode: "screen", filter: "blur(1.5px)", opacity: night ? 0.32 : 0.14, WebkitMaskImage: cloudMask, maskImage: cloudMask, ...fade } });

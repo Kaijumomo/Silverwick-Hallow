@@ -30,10 +30,23 @@ The tablet's real allowance has not been read from the device.
   between differ slightly and were shown to the PO side by side. The ring is a separate layer (alpha .8 over .75,
   composing to V2's .95) so it brightens steadily.
 
+- **Canvas sky** (`skyCanvas.ts`, `skyWorker.ts`, `SkyCanvas` in `boardArt.tsx`). The tablet still stuttered on
+  Night/Day, on Night order cards and on the victory scene after the changes above. The V2 sky was about a hundred
+  page layers (sky, swirl, nebula, embers, moon glow, five shooting stars, ninety stars, beam, dawn wash, two mist
+  bands, rim), two of them blurred again on every frame and the sky's colour change a 1.6 s filter animation on a
+  full-screen layer. The same layers, in the same order, with the same gradients, blend modes, blurs and animation
+  curves, are now painted into one canvas the size of the board, 30 times a second, in a worker where the browser
+  allows it (otherwise on the page). Blurred pieces are blurred once per board size. The canvas stops drawing while
+  the board rests. Where no 2D canvas is available, or the worker fails, the V2 layers are used as before.
+  Every number in `skyCanvas.ts` is copied from `layeredBackdrop` and `grimoire-v6.css`; keep them in step (the unit
+  test checks the stars). Frames compared with the V2 layers at the same animation times: 99% of pixels within 5 of
+  255 levels; the remaining ones are star and shooting-star edges. The mid-change frames of Night/Day use the same
+  filter values as V2 at each moment.
+
 ## Not changed
 
-The Night sky noise overlay (deferred importer defect), the mist, nebula, beam and vignettes, the stars, the Reveal
-glow, the keyboard behaviour, game logic and data. Lightening those changes the look and needs PO approval.
+The Night sky noise overlay (deferred importer defect), the two vignettes above the sky, the Reveal glow, the keyboard
+behaviour, game logic and data.
 
 ## Checking it
 
