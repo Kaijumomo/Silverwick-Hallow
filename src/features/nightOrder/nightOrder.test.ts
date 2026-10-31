@@ -3,6 +3,7 @@ import { computeNightOrder } from "./nightOrder";
 import type { NightStep } from "./nightOrder";
 import { makeSTPlayer } from "@/test/fixtures";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
+import { sectsAndViolets } from "@/data/scripts/sectsAndViolets";
 import { canonicalOrder } from "@/data/canonical";
 import type { STPlayerRecord } from "@/stores/types";
 
@@ -279,5 +280,24 @@ describe("Traveler night-order integration", () => {
       (s) => s.effectiveRoleId === "scapegoat"
     );
     expect(hasScapegoat).toBe(false);
+  });
+});
+
+describe("Vigormortis: dead Minion keeps its ability only if the Vigormortis killed it", () => {
+  it("lists a dead Minion on later nights with the wake conditions, and drops it once the Vigormortis is dead", () => {
+    const sv = sectsAndViolets;
+    const withViggy = makePlayers([
+      { id: "p-witch", role: "witch", seat: 0, over: { alive: false } },
+      { id: "p-vigormortis", role: "vigormortis", seat: 1 },
+      { id: "p-clock", role: "clockmaker", seat: 2 },
+    ]);
+    const open = playerSteps(computeNightOrder(withViggy.players, withViggy.seatOrder, sv, false)).find(s => s.actualRoleId === "witch");
+    expect(open?.advisory).toMatch(/ONLY if the Vigormortis killed them at night/);
+    const lost = makePlayers([
+      { id: "p-witch", role: "witch", seat: 0, over: { alive: false } },
+      { id: "p-vigormortis", role: "vigormortis", seat: 1, over: { alive: false } },
+      { id: "p-clock", role: "clockmaker", seat: 2 },
+    ]);
+    expect(playerSteps(computeNightOrder(lost.players, lost.seatOrder, sv, false)).some(s => s.actualRoleId === "witch")).toBe(false);
   });
 });

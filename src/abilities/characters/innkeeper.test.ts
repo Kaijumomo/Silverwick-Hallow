@@ -103,3 +103,21 @@ describe("Innkeeper -- end to end with a Demon attack", () => {
     expect(query(next).abilityFunctions(bind(next, "p2"))).toEqual({ known: true, value: true });
   });
 });
+
+describe("Innkeeper -- chooses themself (official example)", () => {
+  it("a self-drunk Innkeeper has no ability and neither protection holds", () => {
+    const g = proofGame(ROLES);
+    const next = planned(run(g, ["p0", "p1"], "p0"));
+    expect(query(next).impaired(bind(next, "p0"))).toEqual({ known: true, value: true });
+    expect(query(next).abilityFunctions(bind(next, "p0"))).toEqual({ known: true, value: false });
+    expect(query(next).protectedFrom(bind(next, "p1"), "demon")).toEqual({ known: true, value: false });
+    expect(query(next).protectedFrom(bind(next, "p0"), "demon")).toEqual({ known: true, value: false });
+  });
+
+  it("choosing themself but making the other player drunk keeps the Innkeeper protected", () => {
+    const g = proofGame(ROLES);
+    const next = planned(run(g, ["p0", "p1"], "p1"));
+    expect(query(next).protectedFrom(bind(next, "p0"), "demon")).toEqual({ known: true, value: true });
+    expect(query(next).protectedFrom(bind(next, "p1"), "demon")).toEqual({ known: true, value: true });
+  });
+});

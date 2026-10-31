@@ -179,8 +179,12 @@ export function computeNightOrder(
       continue;
     }
     if (!isFirstNight && roleId === "poppygrower" && !isDeceived) continue;
-    const afterDeath = !isFirstNight && (DEATH_CHECKS.has(roleId) || roleId === "zombuul" ||
-      registry.get(player.actualRole)?.type === "minion" && seated.some(p => p.alive && p.actualRole === "vigormortis"));
+    // https://wiki.bloodontheclocktower.com/Vigormortis : a Minion the Vigormortis kills at night keeps its
+    // ability while the Vigormortis lives. Which Minions were killed that way is not tracked, so the row is
+    // shown for any dead Minion and the Storyteller is told exactly when to wake it.
+    const keptMinion = !isFirstNight && !player.alive && registry.get(player.actualRole)?.type === "minion" &&
+      seated.some(p => p.alive && p.actualRole === "vigormortis");
+    const afterDeath = !isFirstNight && (DEATH_CHECKS.has(roleId) || roleId === "zombuul" || keptMinion);
     if (!player.alive && !afterDeath) continue;
     // SOL-10F-L6: no generic suppression from prose-derived `oncePerGame`.
     // Usage authority is a verified AbilityDescriptor (enforced by the
@@ -199,7 +203,8 @@ export function computeNightOrder(
         "Different custom characters share a night position. Choose their relative order manually.", order - 0.01, { participantId: player.participantId });
     }
     if (!canonical) customOrders.set(order, roleId);
-    if (DEATH_CHECKS.has(roleId) || !player.alive) advisory += " Check the ability's death/event condition tonight; historical triggers are not tracked.";
+    if (keptMinion) advisory += " Vigormortis: wake this dead Minion ONLY if the Vigormortis killed them at night (a Minion who died by execution or any other way has lost the ability), they are still a Minion, and they are not drunk or poisoned. Otherwise skip this step.";
+    else if (DEATH_CHECKS.has(roleId) || !player.alive) advisory += " Check the ability's death/event condition tonight; historical triggers are not tracked.";
     if (hasEffect(player, "poisoned") || hasEffect(player, "drunk") || player.behaviorMode === "poisoned")
       advisory += " Impaired: simulate the procedure as appropriate; do not apply a functioning ability or assume truthful information.";
     if (COMPLEX_ABILITIES.has(player.actualRole))
