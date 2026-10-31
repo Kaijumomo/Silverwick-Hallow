@@ -93,5 +93,5 @@ export const REVIEWED_INTERACTION_ROLES: ReadonlySet<string> = new Set([
   "butler", "drunk", "recluse", "saint", "poisoner", "spy", "scarletwoman", "baron", "imp",
   "cultleader", "pithag", "alhadikhia", "harlot", "vortox",
   // Treacherous 30th: Innkeeper -- its cannotDie / drunk Effects are read through the shared protection and impairment queries.
-  "innkeeper", "nodashii", "vigormortis", "gambler", "shabaloth", "witch",
+  "innkeeper", "nodashii", "vigormortis", "gambler", "shabaloth", "witch", "godfather", "moonchild", "golem",
 ]);

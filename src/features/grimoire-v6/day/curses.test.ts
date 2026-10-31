@@ -29,3 +29,38 @@ describe("Witch curse notice on the nomination card", () => {
     expect(curseNotice(ctxOf(impair(g, "p0")), ref(g, "p1"))).toBeNull();
   });
 });
+
+import { golemNotice } from "./curses";
+
+describe("Golem nomination notice", () => {
+  const roles = ["golem", "chef", "empath", "monk", "imp", "saint", "poisoner"];
+  it("a Golem nominating a non-Demon: that player dies, and the nomination is spent in one action", () => {
+    const g = proofGame(roles, "day", 2);
+    const notice = golemNotice(ctxOf(g), ref(g, "p0"), ref(g, "p1"));
+    expect(notice?.note).toContain("who is not the Demon");
+    expect(notice?.actions.map((a) => a.label)).toEqual(["Player 1 dies (Golem)"]);
+  });
+
+  it("the Demon survives the nomination but the nomination is spent", () => {
+    const g = proofGame(roles, "day", 2);
+    const notice = golemNotice(ctxOf(g), ref(g, "p0"), ref(g, "p4"));
+    expect(notice?.note).toContain("is the Demon: nothing happens");
+    expect(notice?.actions).toHaveLength(1);
+  });
+
+  it("a Recluse nominee is the Storyteller's call, an impaired Golem kills no one, a used Golem only gets a note", () => {
+    const g = proofGame(["golem", "recluse", "empath", "monk", "imp", "saint", "poisoner"], "day", 2);
+    expect(golemNotice(ctxOf(g), ref(g, "p0"), ref(g, "p1"))?.actions).toHaveLength(2);
+    const base = proofGame(roles, "day", 2);
+    expect(golemNotice(ctxOf(impair(base, "p0")), ref(base, "p0"), ref(base, "p1"))?.note).toContain("does not function");
+    const used = patchPlayer(base, "p0", { abilityUsed: true });
+    expect(golemNotice(ctxOf(used), ref(base, "p0"), ref(base, "p1"))).toMatchObject({ actions: [] });
+  });
+
+  it("says nothing for a non-Golem nominator, a dead Golem or at night", () => {
+    const g = proofGame(roles, "day", 2);
+    expect(golemNotice(ctxOf(g), ref(g, "p2"), ref(g, "p1"))).toBeNull();
+    expect(golemNotice(ctxOf(patchPlayer(g, "p0", { alive: false })), ref(g, "p0"), ref(g, "p1"))).toBeNull();
+    expect(golemNotice(ctxOf(proofGame(roles, "night", 2)), ref(g, "p0"), ref(g, "p1"))).toBeNull();
+  });
+});

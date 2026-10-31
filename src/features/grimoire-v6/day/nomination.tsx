@@ -7,7 +7,7 @@ import { flash } from "../v6Store";
 import { advanceToNight, blockNominee } from "./advance";
 import { blockBefore, pipBackground, resultCopy, roundOrdinal, votesNeeded } from "./dayModel";
 import { nominationExtras, type ExtraAction } from "./NominationExtras";
-import { curseNotice } from "./curses";
+import { curseNotice, golemNotice } from "./curses";
 
 /** The faces the nomination card takes. The V2 design draws pick / accuse / vote / result; the rest reuse its result face. */
 type Stage = "nominator" | "nominee" | "accuse" | "vote" | "result" | "virgin" | "context" | "finish" | "history";
@@ -66,7 +66,10 @@ export function buildNominations(ctx: V6Ctx): { ns: Record<string, unknown>; nom
     nextText: "Next nomination", next: voting.next, extraOn: false, extra: null,
   };
 
-  const curse = round ? curseNotice(ctx, round.nominator) : voting.draft?.nominator && voting.draft.nominee ? curseNotice(ctx, voting.draft.nominator) : null;
+  const nominatorRef = round ? round.nominator : voting.draft?.nominator && voting.draft.nominee ? voting.draft.nominator : null;
+  const nomineeRef = round ? round.nominee : voting.draft?.nominee ?? null;
+  const notices = [curseNotice(ctx, nominatorRef), golemNotice(ctx, nominatorRef, nomineeRef)].filter((n): n is NonNullable<typeof n> => !!n);
+  const curse = notices.length ? { note: notices.map((n) => n.note).join(" "), actions: notices.flatMap((n) => n.actions) } : null;
   const extra = (actions: ExtraAction[] = [], note: string | null = null) => ({ extraOn: true, extra: nominationExtras(
     curse ? [...actions, ...curse.actions] : actions, curse ? (note ? `${note} ${curse.note}` : curse.note) : note) });
   const finish = (title: string, sub: string, color: string, nextText: string, onNext: () => void, actions: ExtraAction[] = []) =>
