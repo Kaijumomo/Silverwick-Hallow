@@ -14,6 +14,10 @@ export type RandomSetupInput = {
   fabledIds?: RoleId[];
   loricIds?: RoleId[];
   random?: () => number;
+  /** The composition the Storyteller picked after a "multiple-candidates" failure. */
+  chosenComposition?: BagCounts;
+  /** The evil characters from that failure's `drawn`, so the same draw resumes. */
+  drawn?: RoleId[];
 };
 
 function shuffled<T>(items: readonly T[], random: () => number): T[] {
@@ -41,7 +45,7 @@ const manualFailure = (): Extract<FillBagResult, { ok: false }> => ({ ok: false,
  * setups and additional modifiers must never produce a claimed valid bag.
  */
 export function randomSetup(input: RandomSetupInput): FillBagResult {
-  const { scriptCharacters, targetPlayerCount, fabledIds = [], loricIds = [], random = Math.random } = input;
+  const { scriptCharacters, targetPlayerCount, fabledIds = [], loricIds = [], random = Math.random, chosenComposition, drawn } = input;
   const characters = ownedScriptCharacters({ characters: scriptCharacters }).filter(r => isBagType(r.type));
   const modifiers: RoleDef[] = [];
   for (const id of new Set([...fabledIds, ...loricIds])) {
@@ -60,11 +64,16 @@ export function randomSetup(input: RandomSetupInput): FillBagResult {
       } };
       return manualFailure();
     }
-    if (result.candidates.length !== 1) return { ok: false, failure: {
-      reason: "multiple-candidates",
-      message: "This selection allows more than one composition. Choose the composition and characters manually before distributing.",
-      candidates: result.candidates,
-    } };
+    if (result.candidates.length !== 1) {
+      const chosen = chosenComposition && result.candidates.find(c => sameCounts(c, chosenComposition));
+      if (chosen) return { ok: true, composition: chosen };
+      return { ok: false, failure: {
+        reason: "multiple-candidates",
+        message: "This selection allows more than one composition. Choose the composition and characters manually before distributing.",
+        candidates: result.candidates,
+        ...(roles.length ? { drawn: roles.map(r => r.id) } : {}),
+      } };
+    }
     return { ok: true, composition: result.candidates[0]! };
   }
 
@@ -80,9 +89,19 @@ export function randomSetup(input: RandomSetupInput): FillBagResult {
     selected.push(...shuffled(eligible, random).slice(0, count));
   }
 
-  for (const type of ["demon", "minion"] as const) {
-    const failure = draw(type, initial.composition[type]);
-    if (failure) return failure;
+  if (drawn) {
+    // Resume a draw the Storyteller was asked about: the same evil characters, nothing re-rolled.
+    const resumed = drawn.map(id => characters.find(r => r.id === id));
+    if (resumed.some(r => !r || (r.type !== "demon" && r.type !== "minion"))) return manualFailure();
+    selected.push(...(resumed as RoleDef[]));
+    const evil = emptyCounts();
+    for (const role of selected) if (isBagType(role.type)) evil[role.type]++;
+    if (evil.demon !== initial.composition.demon || evil.minion !== initial.composition.minion) return manualFailure();
+  } else {
+    for (const type of ["demon", "minion"] as const) {
+      const failure = draw(type, initial.composition[type]);
+      if (failure) return failure;
+    }
   }
   const adjusted = analyze(selected);
   if (!adjusted.ok) return adjusted;

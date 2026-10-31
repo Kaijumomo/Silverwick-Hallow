@@ -111,6 +111,36 @@ describe("randomSetup", () => {
     ] } });
   });
 
+  it("offers the drawn evil characters with a Godfather choice and resumes the same draw with either composition", () => {
+    const characters = [...canonicalRoles(["godfather"]), ...TB];
+    const first = randomSetup({ scriptCharacters: characters, targetPlayerCount: 8, random: identityRandom });
+    expect(first.ok).toBe(false);
+    if (first.ok || first.failure.reason !== "multiple-candidates") throw new Error("expected a composition choice");
+    const { candidates, drawn } = first.failure;
+    expect(drawn).toBeDefined();
+    expect(drawn).toContain("godfather");
+    for (const chosen of candidates) {
+      const result = randomSetup({ scriptCharacters: characters, targetPlayerCount: 8, random: identityRandom, chosenComposition: chosen, drawn });
+      expect(result.ok).toBe(true);
+      if (!result.ok) continue;
+      expect(result.composition).toEqual(chosen);
+      expect(result.pool).toHaveLength(8);
+      expect(new Set(result.pool).size).toBe(8);
+      expect(result.pool).toEqual(expect.arrayContaining(drawn!));
+      expect(countsOf(result.pool, characters)).toEqual(chosen);
+    }
+  });
+
+  it("refuses a resumed draw that is not valid evil characters for the composition", () => {
+    const characters = [...canonicalRoles(["godfather"]), ...TB];
+    const chosenComposition = { townsfolk: 6, outsider: 0, minion: 1, demon: 1 };
+    for (const drawn of [["godfather", "chef"], ["godfather"], ["nonexistent", "imp"], ["godfather", "baron", "imp"]]) {
+      const result = randomSetup({ scriptCharacters: characters, targetPlayerCount: 8, random: identityRandom, chosenComposition, drawn });
+      expect(result.ok).toBe(false);
+      expect(result).not.toHaveProperty("pool");
+    }
+  });
+
   it("validates good characters after the draw, including uncertain setups and jinxes", () => {
     for (const characters of [
       [...canonicalRoles(["atheist"]), ...TB],

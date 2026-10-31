@@ -17,7 +17,7 @@ const UNSUPPORTED_MESSAGE =
 export type FillBagFailure =
   | { reason: "unsupported-count" | "uncertain-setup" | "insufficient-roles"; message: string }
   | { reason: "overfilled"; message: string; excess: Partial<BagCounts> }
-  | { reason: "multiple-candidates"; message: string; candidates: BagCounts[] };
+  | { reason: "multiple-candidates"; message: string; candidates: BagCounts[]; /** Evil characters already drawn, so a choice can resume the same draw. */ drawn?: RoleId[] };
 
 export type FillBagResult =
   | { ok: true; pool: RoleId[]; generated: RoleId[]; composition: BagCounts }
