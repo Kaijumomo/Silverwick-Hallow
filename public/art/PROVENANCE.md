@@ -212,3 +212,21 @@ were not recorded with the supplied files, so only the file hashes are listed.
 | `nightsheet/demoninfo.png` | e2ec4f5657278ff5 | 28398 |
 | `nightsheet/dusk.png` | 097a6b28097cd98f | 28056 |
 | `nightsheet/minioninfo.png` | 833647e48d9a8410 | 28864 |
+
+## Treacherous 30th additions (2026-10-29): Golem and Marionette
+Decision (2026-10-29): the project owner approved adding all missing icons for Golem and Marionette (the two Carousel characters of the
+Treacherous 30th custom script that had no committed art) with provenance and usage terms recorded. They are byte-identical to the collection's
+`Silverwick-Hollow-Personal-PNG-Assets.zip` entries (SHA-256 equals `local_sha256` in the collection's `manifest.json`); source is the pinned official
+WebP named below. The default icon is the one the app uses; the opposite-alignment variants are committed for completeness and are not referenced by code.
+
+**Usage terms, stated plainly:** the collection manifest records `permission_status: personal_use_only` for these files (TPI Community Created
+Content Policy, "personal use"). That policy is not a licence and **public redistribution was not cleared**. This repository is public, so committing
+them is the project owner's decision under the same caveat as every file above, not a permission from The Pandemonium Institute. Removing `public/art/`
+(the app then falls back to the release.botc.app CDN, as for any character without a local file) removes all of it.
+
+| File | Official source (pinned) | Source git blob SHA-1 | File SHA-256 (first 16) | Bytes |
+|---|---|---|---|---|
+| `characters/carousel/golem.png` | resources/characters/carousel/golem_g.webp | `14ff3a479d6d062f427499ab75ecc1883472681d` | `13abf239e445467b` | 118590 |
+| `characters/carousel/marionette.png` | resources/characters/carousel/marionette_e.webp | `aa47c2dd91b9fa88a064e63a9db4caedf035fa51` | `e2b846cf7a6f6b1f` | 71964 |
+| `characters/carousel/variants/golem-evil.png` | resources/characters/carousel/golem_e.webp | `beb642f4be328339bd1ba427f04867bdfff362bb` | `1b2ec88a2b63d827` | 110403 |
+| `characters/carousel/variants/marionette-good.png` | resources/characters/carousel/marionette_g.webp | `023b541e37953bf90634061218f76a92b4c9a17f` | `4ce65ef405804e26` | 76788 |
