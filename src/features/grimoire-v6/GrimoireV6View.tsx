@@ -477,20 +477,20 @@ const S468: React.CSSProperties = { "minWidth": "0", "padding": "10px 10px 8px",
 const S469: React.CSSProperties = { "display": "flex", "alignItems": "baseline", "justifyContent": "space-between", "gap": "10px", "padding": "0 4px" };
 const S470: React.CSSProperties = { "display": "flex", "alignItems": "baseline", "gap": "10px", "minWidth": "0" };
 const S471: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "13px", "color": "rgba(222,216,204,.5)", "whiteSpace": "nowrap", "overflow": "hidden", "textOverflow": "ellipsis" };
-const S472: React.CSSProperties = { "display": "grid", "minWidth": "0", "gridTemplateColumns": "repeat(auto-fill, minmax(70px, 1fr))", "gap": "8px 2px" };
+const S472: React.CSSProperties = { "display": "grid", "minWidth": "0", "gridTemplateColumns": "repeat(auto-fit, minmax(86px, 1fr))", "gap": "8px 2px", "alignContent": "start" };
 const S473: React.CSSProperties = { "position": "relative", "width": "52px", "height": "52px", "transition": "transform .18s" };
 const S474: React.CSSProperties = { "display": "flex", "flexWrap": "wrap", "alignItems": "center", "flex": "none", "gap": "12px 24px", "padding": "12px 22px 14px", "borderTop": "1px solid rgba(176,186,204,.12)", "background": "rgba(0,0,0,.2)" };
-const S475: React.CSSProperties = { "flex": "1 1 380px", "minWidth": "0", "display": "flex", "gap": "14px", "alignItems": "center", "minHeight": "76px" };
+const S475: React.CSSProperties = { "flex": "1 1 460px", "minWidth": "0", "display": "flex", "gap": "14px", "alignItems": "center", "flexWrap": "wrap", "minHeight": "76px" };
 const S476: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "4px", "minWidth": "0", "flex": "1" };
 const S477: React.CSSProperties = { "display": "flex", "alignItems": "baseline", "gap": "10px" };
 const S478: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "21px", "fontWeight": "400", "lineHeight": "1", "color": "#f2ece0" };
 const S479: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontSize": "14px", "lineHeight": "1.35", "color": "rgba(236,230,218,.82)", "textWrap": "pretty" };
-const S480: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "6px", "flex": "none" };
+const S480: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "4px", "flex": "1 1 100%", "paddingLeft": "70px" };
 const S481: React.CSSProperties = { "fontSize": "11px", "letterSpacing": ".18em", "textTransform": "uppercase", "fontWeight": "600", "color": "rgba(222,216,204,.45)" };
-const S482: React.CSSProperties = { "display": "flex", "gap": "8px", "minHeight": "48px", "alignItems": "flex-start" };
+const S482: React.CSSProperties = { "display": "flex", "gap": "6px", "minHeight": "44px", "alignItems": "flex-start" };
 const S483: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "13px", "color": "rgba(222,216,204,.45)", "paddingTop": "8px" };
-const S484: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "3px", "width": "58px" };
-const S485: React.CSSProperties = { "position": "relative", "flex": "none", "width": "52px", "height": "52px", "borderRadius": "50%", "overflow": "hidden", "background": "radial-gradient(circle at 50% 28%, #f4ecd6 0%, #e3d4b0 58%, #b9a072 100%)", "boxShadow": "0 3px 8px rgba(0,0,0,.5), inset 0 0 0 1px rgba(90,60,25,.35), inset 0 -3px 6px rgba(90,60,25,.22)" };
+const S484: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "3px", "width": "46px" };
+const S485: React.CSSProperties = { "position": "relative", "flex": "none", "width": "44px", "height": "44px", "borderRadius": "50%", "overflow": "hidden", "background": "radial-gradient(circle at 50% 28%, #f4ecd6 0%, #e3d4b0 58%, #b9a072 100%)", "boxShadow": "0 3px 8px rgba(0,0,0,.5), inset 0 0 0 1px rgba(90,60,25,.35), inset 0 -3px 6px rgba(90,60,25,.22)" };
 const S486: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "16px", "marginLeft": "auto", "flexWrap": "wrap", "justifyContent": "flex-end" };
 const S487: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "2px", "alignItems": "flex-end" };
 const S488: React.CSSProperties = { "fontSize": "14px", "fontWeight": "600", "color": "#ece6da" };
@@ -3387,7 +3387,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                                         </>
                                       )}
                                     </span>
-                                    <span style={css(`max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:600; color:${t?.nameColor ?? ''};`)}>
+                                    <span style={css(`max-width:100%; overflow-wrap:anywhere; text-align:center; text-wrap:balance; line-height:1.15; font-size:13px; font-weight:600; color:${t?.nameColor ?? ''};`)}>
                                       {T(t?.name)}
                                     </span>
                                   </button>

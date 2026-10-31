@@ -84,6 +84,9 @@ const shownInstruction = (role?: RoleId | null) =>
     : role === "marionette" ? "The Marionette · choose a good character"
       : "The Drunk · choose a Townsfolk that is not in play";
 
+/** Column widths follow how many characters each box holds (at least 3 shares), so no box wraps while another sits empty. */
+const lowerCols = (groups: { tiles: unknown[] }[]) => groups.map((g) => `minmax(0,${Math.max(3, g.tiles.length)}fr)`).join(" ");
+
 export function buildPicker(env: PickerEnv): Record<string, unknown> {
   const { game, script, registry, ui } = env;
   const picker = ui.picker;
@@ -158,11 +161,12 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
   const G = Object.fromEntries([...TYPES, "traveler"].map((t) => [t, group(t as RoleType)])) as Record<string, ReturnType<typeof group>>;
   const present = (g: ReturnType<typeof group> | undefined) => (g && g.tiles.length ? [g] : []);
   const wide = typeof window === "undefined" || window.innerWidth >= 900;
+  const lowerGroups = [...present(G.outsider), ...present(G.minion), ...present(G.demon)];
   const rows = (mode === "drunk"
     ? [{ cols: "minmax(0,1fr)", groups: (["townsfolk", "outsider", "demon"] as const).filter((t) => shownChoices.some((r) => r.type === t)).flatMap((t) => present(G[t])) }]
     : [
       { cols: "minmax(0,1fr)", groups: present(G.townsfolk) },
-      { cols: wide ? "minmax(0,4fr) minmax(0,4fr) minmax(0,1.3fr)" : "minmax(0,1fr)", groups: [...present(G.outsider), ...present(G.minion), ...present(G.demon)] },
+      { cols: wide ? lowerCols(lowerGroups) : "minmax(0,1fr)", groups: lowerGroups },
       ...(dist ? [] : [{ cols: "minmax(0,1fr)", groups: present(G.traveler) }]),
     ]).filter((r) => r.groups.length);
 
