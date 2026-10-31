@@ -1150,6 +1150,13 @@ export type PublicLobbyRecord = {
   players: Record<PlayerId, PlayerPublicRecord>;
   fabled: RoleId[];
   lorics: RoleId[];
+  /** The script's display name and the ids of its verified official characters
+   * (never definitions, abilities or anything Storyteller-only): what the
+   * physical script sheet tells every player. It lets a phone show a custom
+   * (imported) script, which it cannot look up by id. Absent from older
+   * writers and when the script has no verified official character. */
+  scriptName?: string;
+  scriptCharacters?: RoleId[];
   winner?: Alignment;
   /** Legacy projection marker; lifecycle state is authoritative in session. */
   status?: "ended";

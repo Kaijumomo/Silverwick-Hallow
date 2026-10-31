@@ -83,7 +83,7 @@ export async function publishPrivatePacket(playerId: string, preview: ReturnType
       if (!projectLobbyToSelfMap(snapshot, registry)[playerId]) {
         throw new Error("Set the identity every player will see before sending information.");
       }
-      await writeProjections({ backend: inner, code: lobby.code, stState: snapshot, registry,
+      await writeProjections({ backend: inner, code: lobby.code, stState: snapshot, registry, script,
         online: useSessionRuntime.getState().online,
         // Package 3 (A1): keep the waiting list on the public node this write replaces.
         arrivals: computeArrivals(snapshot, useSessionRuntime.getState().joined, {}), membership: roster });
