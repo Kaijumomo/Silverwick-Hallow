@@ -50,6 +50,12 @@ describe("publicScriptFields", () => {
   it("is empty without a script and clips an overlong name", () => {
     expect(publicScriptFields(undefined)).toEqual({});
     expect(publicScriptFields({ ...imported, name: "N".repeat(90) }).scriptName).toHaveLength(60);
+    // Emoji are two UTF-16 units: the clipped name still passes the decoder's max(60).
+    const emoji = publicScriptFields({ ...imported, name: "\u{1F319}".repeat(40) }).scriptName!;
+    expect(emoji.length).toBeLessThanOrEqual(60);
+    expect(emoji).toBe("\u{1F319}".repeat(30));
+    const decoded = decodePublicSnapshot(JSON.parse(JSON.stringify(projectLobbyToPublic(lobby("x"), {}, undefined, { ...imported, name: "\u{1F319}".repeat(40) }))), "ABCD12");
+    expect(decoded.status).toBe("ready");
   });
 });
 
