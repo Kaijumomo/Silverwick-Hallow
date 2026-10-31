@@ -1,5 +1,5 @@
 import type { AbilityDescriptor } from "../semantics";
-import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nothing, outcome, requireLivingActor, subjectId } from "./shared";
+import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nothing, tokenOutcome, requireLivingActor, subjectId } from "./shared";
 
 /**
  * Gambler -- GUIDED (Treacherous 30th, owner-authorized; shared protection rules
@@ -52,6 +52,6 @@ export const GAMBLER: AbilityDescriptor = {
     const death = deathAttempt(context, context.actor.binding, "any");
     if (death.kind === "ask") return ask(death.message, death.requirement);
     if (death.kind === "survives") return nothing();
-    return outcome([lifeOperation([{ kind: "death", target: context.actor.binding }])]);
+    return tokenOutcome(context, "gambler", [lifeOperation([{ kind: "death", target: context.actor.binding }])]);
   },
 };

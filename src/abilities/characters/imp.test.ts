@@ -25,7 +25,8 @@ describe("Imp -- killing another player", () => {
   it("an unprotected living target dies (Demon-caused)", () => {
     const result = kill(base(), "p4");
     expect(planned(result).players.p4!.alive).toBe(false);
-    expect(domains(result)).toEqual(["life"]);
+    expect(domains(result)).toEqual(["life", "reminder"]);
+    expect(planned(result).players.p4!.reminders).toMatchObject([{ label: "Dead", sourceCharacter: "imp" }]);
   });
 
   it("a Monk-protected target does not die; generic Protected makes the whole action Manual", () => {
@@ -62,7 +63,7 @@ describe("Imp -- star-pass", () => {
     const g = base();
     const result = kill(g, "p0");
     const next = planned(result);
-    expect(domains(result)).toEqual(["life", "role", "nightStep"]);
+    expect(domains(result)).toEqual(["life", "role", "nightStep", "reminder"]);
     expect(next.players.p0!.alive).toBe(false);
     expect(next.players.p2).toMatchObject({ actualRole: "imp", shownRole: "imp", alive: true, actualAlignment: "evil" });
     expect(next.players.p1!.actualRole).toBe("poisoner");
@@ -113,7 +114,7 @@ describe("Imp -- star-pass", () => {
   it("dead Minions are not eligible; no living Minion -> the Imp dies with no star-pass", () => {
     const g = killAll(proofGame(["imp", "poisoner", "monk", "chef", "empath", "saint", "washerwoman"]), ["p1"]);
     const result = kill(g, "p0");
-    expect(domains(result)).toEqual(["life"]);
+    expect(domains(result)).toEqual(["life", "reminder"]);
     expect(planned(result).players.p1!.actualRole).toBe("poisoner");
   });
 

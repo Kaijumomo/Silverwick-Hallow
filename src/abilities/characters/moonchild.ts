@@ -1,6 +1,6 @@
 import { isDeathEvent } from "@/stores/lifeEvents";
 import type { AbilityDescriptor } from "../semantics";
-import { ask, deathAttempt, firstParticipant, lifeOperation, nothing, outcome } from "./shared";
+import { ask, deathAttempt, firstParticipant, lifeOperation, nothing, tokenOutcome } from "./shared";
 
 /**
  * Moonchild -- GUIDED-PARTIAL (Treacherous 30th, owner-authorized; shared protection
@@ -59,6 +59,6 @@ export const MOONCHILD: AbilityDescriptor = {
     const death = deathAttempt(context, target, "any");
     if (death.kind === "ask") return ask(death.message, death.requirement);
     if (death.kind === "survives") return nothing();
-    return outcome([lifeOperation([{ kind: "death", target }])]);
+    return tokenOutcome(context, "moonchild", [lifeOperation([{ kind: "death", target }])]);
   },
 };

@@ -1,6 +1,6 @@
 import type { AbilityDescriptor } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
-import { ask, deathAttempt, firstParticipant, followUpParticipant, lifeOperation, nameOf, nothing, outcome, requireLivingActor, subjectId } from "./shared";
+import { ask, deathAttempt, firstParticipant, followUpParticipant, lifeOperation, nameOf, nothing, tokenOutcome, requireLivingActor, subjectId } from "./shared";
 import { scarletWomanSuccession } from "./scarletWoman";
 
 /**
@@ -51,7 +51,7 @@ export const VIGORMORTIS: AbilityDescriptor = {
 
     const isMinion = query.registersAsType(target, "minion", "vigormortis");
     if (!isMinion.known) return { kind: "unsupported", message: isMinion.reason };
-    if (!isMinion.value) return outcome([kill]);
+    if (!isMinion.value) return tokenOutcome(context, "vigormortis", [kill]);
 
     const neighbours = query.nearestTownsfolk(target);
     if (!neighbours.known) return { kind: "unsupported", message: neighbours.reason };
@@ -59,7 +59,7 @@ export const VIGORMORTIS: AbilityDescriptor = {
     for (const side of [neighbours.value.clockwise, neighbours.value.counterclockwise]) {
       if (side && !candidates.some((c) => c.participantId === side.participantId)) candidates.push(side);
     }
-    if (!candidates.length) return outcome([kill]);
+    if (!candidates.length) return tokenOutcome(context, "vigormortis", [kill]);
     let poisoned = candidates[0]!;
     if (candidates.length > 1) {
       const id = subjectId(POISONED_NEIGHBOUR, target);
@@ -72,7 +72,7 @@ export const VIGORMORTIS: AbilityDescriptor = {
       }
       poisoned = chosen.binding;
     }
-    return outcome([kill, { domain: "effect", intents: [{ kind: "apply", target: poisoned, effect: {
+    return tokenOutcome(context, "vigormortis", [kill, { domain: "effect", intents: [{ kind: "apply", target: poisoned, effect: {
       type: "poisoned", source: context.actor.binding, sourceCharacter: "vigormortis", lifetime: { kind: "manual" },
     } }] }], true);
   },

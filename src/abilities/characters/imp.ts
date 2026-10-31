@@ -4,7 +4,7 @@ import { toldRoleChangeIntents } from "@/stores/roleResolution";
 import type { AbilityDescriptor, AbilityEvaluation, AbilityEvaluationContext } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
-import { ask, deathAttempt, firstParticipant, followUpParticipant, lifeOperation, nameOf, nothing, outcome, requireLivingActor } from "./shared";
+import { ask, deathAttempt, firstParticipant, followUpParticipant, lifeOperation, nameOf, nothing, tokenOutcome, requireLivingActor } from "./shared";
 import { scarletWomanSuccession } from "./scarletWoman";
 
 /**
@@ -107,19 +107,19 @@ export const IMP: AbilityDescriptor = {
     if (!self) {
       const succession = scarletWomanSuccession(context.query, target);
       if (succession.kind === "manual") return { kind: "unsupported", message: succession.reason };
-      return outcome(succession.kind === "successor"
+      return tokenOutcome(context, "imp", succession.kind === "successor"
         ? [kill, { domain: "role", intents: toldRoleChangeIntents(context.query.participant(succession.target)!, "imp") }]
         : [kill], succession.kind === "successor");
     }
 
     const next = successor(context);
-    if (!next) return outcome([kill]);
+    if (!next) return tokenOutcome(context, "imp", [kill]);
     if ("evaluation" in next) return next.evaluation;
     const heir = context.query.participant(next.binding)!;
     if (!ordinaryPerception(context.query, next.binding)) {
       return { kind: "unsupported", message: `${nameOf(context, next.binding)} has a concealed identity: what they are told on becoming the Imp is not modeled -- resolve manually.` };
     }
-    return outcome([
+    return tokenOutcome(context, "imp", [
       kill,
       { domain: "role", intents: toldRoleChangeIntents(heir, "imp") },
       { domain: "nightStep", day: context.query.game.day, stepKey: participantStepKey(next.binding.participantId, "imp"), status: "skipped" },

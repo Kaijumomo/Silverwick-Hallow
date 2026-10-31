@@ -1,5 +1,5 @@
 import type { AbilityDescriptor } from "../semantics";
-import { firstParticipant, lifeOperation, outcome, requireLivingActor } from "./shared";
+import { firstParticipant, lifeOperation, tokenOutcome, requireLivingActor } from "./shared";
 
 /**
  * Professor -- GUIDED (Treacherous 30th, owner-authorized; shared life rules of
@@ -22,15 +22,15 @@ export const PROFESSOR: AbilityDescriptor = {
   evaluator: (context) => {
     const dead = requireLivingActor(context);
     if (dead) return dead;
-    if (context.simulated) return outcome([]);
+    if (context.simulated) return tokenOutcome(context, "professor", []);
     const use = { kind: "useAbility" as const, target: context.actor.binding };
-    const spent = () => outcome([lifeOperation([use])]);
+    const spent = () => tokenOutcome(context, "professor", [lifeOperation([use])]);
     if (!context.functioning) return spent();
     const target = firstParticipant(context.inputs, "target");
     if (context.query.participant(target)?.alive) return { kind: "illegal", message: "The Professor chooses a dead player." };
     const registered = context.query.registersAsType(target, "townsfolk", "professor");
     if (!registered.known) return { kind: "unsupported", message: registered.reason };
     if (!registered.value) return spent();
-    return outcome([lifeOperation([use, { kind: "resurrection", target }])]);
+    return tokenOutcome(context, "professor", [lifeOperation([use, { kind: "resurrection", target }])]);
   },
 };

@@ -108,6 +108,9 @@ const ALLOWED = new Set([
   "stores/butlerSelection.ts",
   "stores/butlerReminders.ts",
   "stores/abilityUseReminders.ts",
+  // Write-only: a guided kill or revival draws the acting character's own official Dead / Alive token.
+  // Nothing here reads a Reminder; the token is notation after the resolved Life change.
+  "abilities/characters/shared.ts",
   // Identity preparation writes inert, self-owned Drunk notation only; its
   // reads deduplicate/remove exact notes, never determine actual identity.
   "stores/drunkReminders.ts",

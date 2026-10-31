@@ -1,5 +1,5 @@
 import type { AbilityDescriptor } from "../semantics";
-import { ask, deathAttempt, firstParticipant, lifeOperation, nothing, outcome, requireLivingActor } from "./shared";
+import { ask, deathAttempt, firstParticipant, lifeOperation, nothing, tokenOutcome, requireLivingActor } from "./shared";
 import { scarletWomanSuccession } from "./scarletWoman";
 
 /**
@@ -39,6 +39,6 @@ export const NO_DASHII: AbilityDescriptor = {
     if (death.kind === "survives") return nothing();
     const succession = scarletWomanSuccession(context.query, target);
     if (succession.kind !== "none") return { kind: "unsupported", message: succession.kind === "manual" ? succession.reason : "A Scarlet Woman succession for this Demon is not modeled -- resolve manually." };
-    return outcome([lifeOperation([{ kind: "death", target }])]);
+    return tokenOutcome(context, "nodashii", [lifeOperation([{ kind: "death", target }])]);
   },
 };

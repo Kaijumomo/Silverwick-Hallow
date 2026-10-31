@@ -1,5 +1,5 @@
 import type { AbilityDescriptor } from "../semantics";
-import { ask, deathAttempt, lifeOperation, nothing, outcome, participantsOf, requireLivingActor } from "./shared";
+import { ask, deathAttempt, lifeOperation, nothing, tokenOutcome, participantsOf, requireLivingActor } from "./shared";
 import { scarletWomanSuccession } from "./scarletWoman";
 
 /**
@@ -54,6 +54,6 @@ export const SHABALOTH: AbilityDescriptor = {
       }
       query = query.assumingAlive(target, false);
     }
-    return deaths.length ? outcome([lifeOperation(deaths)], deaths.length > 1) : nothing();
+    return deaths.length ? tokenOutcome(context, "shabaloth", [lifeOperation(deaths)], deaths.length > 1) : nothing();
   },
 };
