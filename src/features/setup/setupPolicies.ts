@@ -31,10 +31,25 @@ export function compositionCandidates(target: number | null, roles: RoleDef[], m
   const effects = all.filter(r => isCanonicalRole(r) && hasCountPolicy(r.id));
   const limited = roles.some(r => !isCanonicalRole(r)) ||
     all.some(r => isCanonicalRole(r) && uncertainComposition.has(r.id)) || hasJinx;
-  if (effects.length > 1) return { candidates: null, reason: "interaction" as const };
+  // Reviewed pair (owner-approved 2026-10-31): the wiki does not cover Godfather + Vigormortis, so both
+  // setup changes are applied in turn with the zero floor. The result is the same in either order.
+  const godfatherAndVigormortis = effects.length === 2 && effects.some(r => r.id === "godfather") && effects.some(r => r.id === "vigormortis");
+  if (effects.length > 1 && !godfatherAndVigormortis) return { candidates: null, reason: "interaction" as const };
   if (limited) return { candidates: null, reason: "manual" as const };
   const base = target === null ? undefined : SETUP_COUNTS[target];
   if (!base) return { candidates: null, reason: "population" as const };
+  if (godfatherAndVigormortis) {
+    const candidates: BagCounts[] = [];
+    for (const godfather of outsiderChoices.godfather!) {
+      let candidate = { ...base };
+      for (const requested of [outsiderChoices.vigormortis![0]!, godfather]) {
+        const delta = Math.max(-candidate.outsider, requested);
+        candidate = { ...candidate, outsider: candidate.outsider + delta, townsfolk: candidate.townsfolk - delta };
+      }
+      if (candidate.townsfolk >= 0 && !candidates.some(c => sameCounts(c, candidate))) candidates.push(candidate);
+    }
+    return { candidates, reason: undefined };
+  }
   const choices = effects[0] ? outsiderChoices[effects[0].id]! : [0];
   const candidates: BagCounts[] = [];
   for (const requested of choices) {
