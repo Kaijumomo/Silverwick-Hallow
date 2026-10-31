@@ -149,7 +149,9 @@ export type OnlineMap = Record<PlayerId, boolean>;
 export function publicScriptFields(script: Script | undefined): Pick<PublicLobbyRecord, "scriptName" | "scriptCharacters"> {
   if (!script) return {};
   const ids = ownedScriptCharacters(script).filter((role) => isCanonicalRole(role) && isOrdinaryRoleType(role.type)).map((role) => role.id);
-  const name = Array.from(script.name.trim()).slice(0, 60).join("");
+  // Clip by UTF-16 length, the schema's max(60), without splitting a surrogate pair.
+  let name = "";
+  for (const ch of script.name.trim()) { if (name.length + ch.length > 60) break; name += ch; }
   return { ...(name ? { scriptName: name } : {}), ...(ids.length ? { scriptCharacters: ids } : {}) };
 }
 
