@@ -1,7 +1,7 @@
 // Treacherous 30th slice 2C -- Gambler. Production semantics.
 import { describe, expect, it } from "vitest";
 import { bind, homebrewEnv, impair, patchPlayer, pick, plan, planned, proofGame, request } from "@/test/proofFixtures";
-import type { AbilityInputValue } from "@/stores/abilityResolution";
+import type { AbilityInputValue } from "@/abilities/semantics";
 
 // Seats: p0 gambler, p1 chef, p2 empath, p3 monk, p4 imp, p5 saint, p6 poisoner
 const ROLES = ["gambler", "chef", "empath", "monk", "imp", "saint", "poisoner"];

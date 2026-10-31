@@ -7,6 +7,7 @@ import { flash } from "../v6Store";
 import { advanceToNight, blockNominee } from "./advance";
 import { blockBefore, pipBackground, resultCopy, roundOrdinal, votesNeeded } from "./dayModel";
 import { nominationExtras, type ExtraAction } from "./NominationExtras";
+import { curseNotice } from "./curses";
 
 /** The faces the nomination card takes. The V2 design draws pick / accuse / vote / result; the rest reuse its result face. */
 type Stage = "nominator" | "nominee" | "accuse" | "vote" | "result" | "virgin" | "context" | "finish" | "history";
@@ -65,7 +66,9 @@ export function buildNominations(ctx: V6Ctx): { ns: Record<string, unknown>; nom
     nextText: "Next nomination", next: voting.next, extraOn: false, extra: null,
   };
 
-  const extra = (actions: ExtraAction[] = [], note: string | null = null) => ({ extraOn: true, extra: nominationExtras(actions, note) });
+  const curse = round ? curseNotice(ctx, round.nominator) : voting.draft?.nominator && voting.draft.nominee ? curseNotice(ctx, voting.draft.nominator) : null;
+  const extra = (actions: ExtraAction[] = [], note: string | null = null) => ({ extraOn: true, extra: nominationExtras(
+    curse ? [...actions, ...curse.actions] : actions, curse ? (note ? `${note} ${curse.note}` : curse.note) : note) });
   const finish = (title: string, sub: string, color: string, nextText: string, onNext: () => void, actions: ExtraAction[] = []) =>
     ({ result: true, resultTitle: title, resultSub: sub, resultColor: color, nextText, next: onNext, ...extra(actions) });
 

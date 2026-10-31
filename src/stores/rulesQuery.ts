@@ -53,7 +53,7 @@ const unknown = <T,>(reason: string): QueryAnswer<T> => ({ known: false, reason 
  *    any source functioning; only the evaluator that owns the fact decides
  *    when it matters. It is never a Reminder.
  */
-export type EffectSemantics = "impairment" | "noAbility" | "demonProtection" | "deathImmunity" | "genericProtection" | "judgment" | "storytellerFact";
+export type EffectSemantics = "impairment" | "noAbility" | "demonProtection" | "deathImmunity" | "genericProtection" | "judgment" | "storytellerFact" | "curse";
 export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>> = {
   drunk: "impairment",
   poisoned: "impairment",
@@ -64,6 +64,8 @@ export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>
   soberHealthy: "judgment",
   registersFalsely: "judgment",
   fortuneTellerRedHerring: "storytellerFact",
+  /** The Witch's curse: applies while its source functions; the Day nomination prompt reads it. */
+  witchCurse: "curse",
 };
 export const effectSemanticsOf = (type: string): EffectSemantics | undefined =>
   Object.prototype.hasOwnProperty.call(APPROVED_EFFECT_SEMANTICS, type) ? APPROVED_EFFECT_SEMANTICS[type] : undefined;

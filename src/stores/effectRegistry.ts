@@ -51,6 +51,7 @@ const INDICATORS: Record<string, EffectIndicatorDefinition> = {
   abilityLost: { key: "abilityLost", label: "No ability", family: "abilityState" },
   mad: { key: "mad", label: "Mad", family: "obligation" },
   marked: { key: "marked", label: "Marked", family: "conditional" },
+  cursed: { key: "cursed", label: "Cursed", family: "conditional" },
   registration: { key: "registration", label: "Registers falsely", family: "registration" },
   redHerring: { key: "redHerring", label: "Red Herring", family: "registration" },
 };
@@ -63,6 +64,8 @@ const DEFINITIONS: Record<string, EffectDefinition> = {
     description: "Generic protection marker. Storyteller bookkeeping only -- Silverwick draws no rules conclusion from it." },
   safeFromDemon: { type: "safeFromDemon", label: "Safe from the Demon", indicator: "protected" },
   cannotDie: { type: "cannotDie", label: "Cannot die", indicator: "protected" },
+  witchCurse: { type: "witchCurse", label: "Cursed by the Witch", indicator: "cursed",
+    description: "Dies if they nominate before the next Night, while the Witch still has the ability." },
   soberHealthy: { type: "soberHealthy", label: "Sober & healthy", indicator: "soberHealthy" },
   abilityLost: { type: "abilityLost", label: "No ability", indicator: "abilityLost" },
   mad: { type: "mad", label: "Mad", indicator: "mad" },

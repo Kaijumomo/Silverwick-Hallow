@@ -68,7 +68,7 @@ describe("Independent Character Intelligence rules review", () => {
   it("inventory reports all 181 characters independently of jinxes without expanding evaluators", () => {
     const entries = buildCoverageManifest();
     expect(coverageSummary(entries)).toMatchObject({ characterTotal: 181, jinxTotal: 131, total: 312 });
-    expect(entries.filter(entry => entry.kind !== "jinx" && entry.capabilities?.some(c => c.owner === "abilities" && c.boundary.startsWith("Registered")))).toHaveLength(18); // B5a adds Chef; Treacherous 30th adds Innkeeper, No Dashii, Vigormortis, Gambler and Shabaloth.
+    expect(entries.filter(entry => entry.kind !== "jinx" && entry.capabilities?.some(c => c.owner === "abilities" && c.boundary.startsWith("Registered")))).toHaveLength(19); // B5a adds Chef; Treacherous 30th adds Innkeeper, No Dashii, Vigormortis, Gambler, Shabaloth and Witch.
     expect(entries.find(entry => entry.id === "bureaucrat")?.capabilities?.map(c => c.owner)).toContain("voting");
   });
 });
