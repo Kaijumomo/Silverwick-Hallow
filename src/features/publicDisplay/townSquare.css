@@ -1,0 +1,517 @@
+/* Package 4G: the Public Display, ported from the Town Square Display v5
+   prototype. A fixed 1920x1080 stage scaled to the screen (--ts-k) and
+   letterboxed on #04050a. Sizes, positions, colours and motion are the
+   prototype's; the layout never reflows, it only scales. */
+
+/* ---- message screens (loading, errors that are not "not linked") -------- */
+.public-display {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg, #0a0a0d);
+  color: var(--text);
+}
+.public-display-message {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px;
+  gap: 16px;
+  font-family: var(--font-body);
+}
+.public-display-message h2 {
+  font-family: var(--font-display);
+  color: var(--gold-soft);
+  letter-spacing: 0.08em;
+  font-size: clamp(28px, 4vmin, 56px);
+  margin: 0;
+}
+.public-display-message p {
+  color: var(--text-dim);
+  max-width: 60ch;
+  line-height: 1.5;
+}
+
+/* ---- viewport and stage ------------------------------------------------- */
+.ts-viewport {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #04050a;
+  color: #eadcb8;
+  font-family: "Source Sans 3", sans-serif;
+}
+.ts-stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1920px;
+  height: 1080px;
+  transform: translate(-50%, -50%) scale(var(--ts-k, 1));
+  overflow: hidden;
+  background: #070912;
+  /* The stage is typeset exactly as the prototype is, whatever the app's
+     global body rules say. */
+  line-height: normal;
+  letter-spacing: normal;
+  text-transform: none;
+  font-weight: 400;
+
+  /* phase lighting (night is the default) */
+  --ts-img-filter: brightness(0.92) saturate(1);
+  --ts-tint: linear-gradient(180deg, rgba(10, 16, 48, 0.25), rgba(4, 6, 20, 0.35));
+  --ts-lamp-op: 1;
+  --ts-star-op: 1;
+  --ts-moon-op: 1;
+  --ts-kicker: rgba(208, 215, 228, 0.7);
+  --ts-title: rgba(236, 240, 247, 0.92);
+  --ts-title-glow: 0 0 22px rgba(160, 185, 230, 0.4), 0 2px 8px rgba(0, 0, 0, 0.7);
+  --ts-sub: rgba(208, 215, 228, 0.66);
+}
+.ts-stage[data-tone="day"] {
+  --ts-img-filter: brightness(1.32) saturate(0.82) sepia(0.18);
+  --ts-tint: linear-gradient(180deg, rgba(150, 120, 70, 0.18), rgba(110, 80, 40, 0.2));
+  --ts-lamp-op: 0.4;
+  --ts-star-op: 0;
+  --ts-moon-op: 0.25;
+  --ts-kicker: rgba(240, 214, 150, 0.8);
+  --ts-title: rgba(250, 234, 196, 0.95);
+  --ts-title-glow: 0 0 22px rgba(240, 190, 110, 0.4), 0 2px 8px rgba(0, 0, 0, 0.7);
+  --ts-sub: rgba(236, 220, 184, 0.7);
+}
+.ts-stage[data-mode="evil"] {
+  --ts-tint: radial-gradient(ellipse 70% 60% at 50% 50%, rgba(120, 20, 16, 0.22), rgba(40, 6, 6, 0.55) 70%, rgba(14, 2, 2, 0.72));
+  --ts-title: #f0b4a4;
+  --ts-title-glow: 0 0 30px rgba(200, 40, 30, 0.55), 0 2px 8px rgba(0, 0, 0, 0.7);
+}
+.ts-stage[data-mode="good"] {
+  --ts-title: #f3dfa6;
+  --ts-title-glow: 0 0 30px rgba(240, 200, 120, 0.45), 0 2px 8px rgba(0, 0, 0, 0.7);
+}
+.ts-stage[data-mode="none"] {
+  --ts-img-filter: brightness(0.8) saturate(0.6);
+  --ts-star-op: 0.5;
+}
+.ts-stage[data-mode="notLinked"] {
+  --ts-img-filter: brightness(0.7) saturate(0.6);
+  --ts-lamp-op: 0.5;
+}
+
+/* ---- background --------------------------------------------------------- */
+.ts-pan {
+  position: absolute;
+  left: -40px;
+  top: 0;
+  width: 2000px;
+  height: 1250px;
+  animation: tsPan 70s ease-in-out infinite;
+}
+.ts-art {
+  position: absolute;
+  inset: 0;
+  background-image: url(/town-square-night-2.png);
+  background-size: 100% 100%;
+  filter: var(--ts-img-filter);
+  transition: filter 2.4s ease;
+}
+.ts-moon {
+  position: absolute;
+  left: 1677px;
+  top: 202px;
+  width: 300px;
+  height: 300px;
+  margin: -150px 0 0 -150px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(210, 225, 255, 0.55), rgba(160, 185, 240, 0.18) 45%, transparent 70%);
+  animation: tsPulse 7s ease-in-out infinite;
+  opacity: var(--ts-moon-op);
+  transition: opacity 2s;
+}
+.ts-lamps {
+  position: absolute;
+  inset: 0;
+  opacity: var(--ts-lamp-op);
+  transition: opacity 2.4s;
+}
+.ts-lamp {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 190, 100, 0.55), rgba(255, 150, 60, 0.12) 50%, transparent 70%);
+  animation: tsFlicker var(--ts-flicker, 3.1s) var(--ts-delay, 0s) infinite;
+}
+.ts-stars {
+  position: absolute;
+  inset: 0;
+  opacity: var(--ts-star-op);
+  transition: opacity 2s;
+}
+.ts-star {
+  position: absolute;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
+  animation: tsTwinkle var(--ts-twinkle, 3s) var(--ts-delay, 0s) ease-in-out infinite;
+}
+.ts-fog {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  top: 560px;
+  height: 340px;
+  background:
+    radial-gradient(ellipse 45% 50% at 30% 50%, rgba(120, 140, 190, 0.16), transparent 70%),
+    radial-gradient(ellipse 40% 45% at 75% 55%, rgba(120, 140, 190, 0.12), transparent 70%);
+  filter: blur(10px);
+  animation: tsFog 46s ease-in-out infinite;
+  pointer-events: none;
+}
+.ts-tint {
+  position: absolute;
+  inset: 0;
+  background: var(--ts-tint);
+  transition: background 2.4s ease;
+  pointer-events: none;
+}
+.ts-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 62% 58% at 50% 54%, rgba(4, 5, 10, 0.55), rgba(4, 5, 10, 0.2) 60%, transparent 85%),
+    linear-gradient(180deg, rgba(4, 5, 10, 0.55), transparent 16%, transparent 84%, rgba(4, 5, 10, 0.6));
+  pointer-events: none;
+}
+.ts-stage[data-motion="paused"] .ts-pan,
+.ts-stage[data-motion="paused"] .ts-fog { animation-play-state: paused; }
+
+/* ---- header and Fabled / Loric glow ring -------------------------------- */
+.ts-header {
+  position: absolute;
+  left: 64px;
+  right: 64px;
+  top: 22px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.ts-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+}
+.ts-brand-name {
+  font-family: "Cinzel Decorative", serif;
+  font-size: 34px;
+  font-weight: 700;
+  color: #ecd9a8;
+  letter-spacing: 0.04em;
+}
+.ts-brand-script {
+  font-family: "IM Fell English", serif;
+  font-style: italic;
+  font-size: 26px;
+  color: rgba(234, 220, 184, 0.7);
+}
+.ts-glow-ring {
+  position: absolute;
+  right: 0;
+  top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 30px;
+}
+.ts-glow-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.ts-glow-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
+}
+.ts-glow-kind {
+  font-size: 13px;
+  letter-spacing: 0.3em;
+  margin-right: -0.3em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+.ts-glow-name {
+  font-family: "IM Fell English", serif;
+  font-style: italic;
+  font-size: 24px;
+  line-height: 1.1;
+  color: #ecd9a8;
+  white-space: nowrap;
+}
+.ts-glow-token {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: radial-gradient(circle at 38% 30%, #f1e6c9 0%, #dccaa0 48%, #b09566 100%);
+  box-shadow: 0 0 0 3px #14151d, 0 0 0 5px var(--ts-rim), 0 0 26px var(--ts-rim), inset 0 -6px 12px rgba(90, 60, 25, 0.38);
+}
+.ts-glow-item[data-kind="fabled"] { --ts-rim: rgba(224, 185, 106, 0.75); --ts-kind: rgba(240, 214, 150, 0.85); }
+.ts-glow-item[data-kind="loric"] { --ts-rim: rgba(143, 207, 149, 0.7); --ts-kind: rgba(170, 220, 175, 0.85); }
+.ts-glow-kind { color: var(--ts-kind); }
+.ts-art-img {
+  position: absolute;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 2px 2px rgba(60, 35, 10, 0.35));
+}
+.ts-glow-token .ts-art-img { inset: 6px; }
+
+/* ---- seats --------------------------------------------------------------- */
+.ts-seat {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+.ts-seat-anchor {
+  position: absolute;
+}
+.ts-disc {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: radial-gradient(circle at 38% 30%, #f1e6c9 0%, #dccaa0 48%, #b09566 100%);
+  box-shadow: 0 0 0 4px #14151d, 0 0 0 6px var(--ts-seat-rim), 0 16px 30px rgba(0, 0, 0, 0.65), inset 0 0 0 1px rgba(255, 240, 210, 0.4), inset 0 -10px 20px rgba(90, 60, 25, 0.38);
+  transition: filter 0.6s, box-shadow 1.2s;
+  --ts-seat-rim: rgba(176, 186, 204, 0.42);
+}
+.ts-seat[data-kind="traveller"] .ts-disc { --ts-seat-rim: rgba(185, 148, 212, 0.7); }
+.ts-seat[data-dead="true"] .ts-disc { filter: grayscale(0.8) brightness(0.8); }
+.ts-disc-ring {
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  border: 2px solid rgba(120, 90, 50, 0.5);
+  opacity: 0.5;
+}
+.ts-seat[data-kind="traveller"] .ts-disc-ring { border-color: #b994d4; }
+.ts-disc-mark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Cinzel Decorative", serif;
+  font-weight: 700;
+  color: rgba(90, 62, 30, 0.42);
+}
+.ts-seat .ts-art-img {
+  left: 13%;
+  top: 5%;
+  width: 74%;
+  height: 74%;
+}
+.ts-arc {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.ts-arc text {
+  font-family: "Cormorant Garamond", serif;
+  font-weight: 700;
+  font-size: 12.5px;
+  letter-spacing: 0.6px;
+  fill: #3b2a17;
+}
+.ts-shroud {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.ts-plate {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translate(-50%, 2px);
+  display: flex;
+  width: max-content;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 14px 5px;
+  border-radius: 14px;
+  background: rgba(14, 10, 12, 0.86);
+  border: 1px solid rgba(196, 158, 80, 0.16);
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+.ts-seat[data-kind="traveller"] .ts-plate { border-color: rgba(185, 148, 212, 0.4); }
+.ts-seat[data-kind="empty"] .ts-plate { border-color: rgba(196, 158, 80, 0.1); }
+.ts-plate-seat {
+  color: rgba(216, 201, 164, 0.5);
+  font-weight: 600;
+  flex: none;
+}
+.ts-plate-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #eadcb8;
+}
+.ts-seat[data-dead="true"] .ts-plate-name,
+.ts-seat[data-kind="empty"] .ts-plate-name { color: rgba(216, 201, 164, 0.5); }
+.ts-empty-disc {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px dashed rgba(234, 220, 184, 0.3);
+  background: radial-gradient(circle, rgba(14, 10, 12, 0.55), rgba(14, 10, 12, 0.25));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  font-family: "Cinzel Decorative", serif;
+  font-weight: 700;
+  color: rgba(234, 220, 184, 0.22);
+}
+.ts-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- the Crescent Ring and centre text ---------------------------------- */
+.ts-crescent {
+  position: absolute;
+  pointer-events: none;
+}
+.ts-crescent-glow {
+  position: absolute;
+  inset: 5%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(4, 6, 12, 0.72), rgba(4, 6, 12, 0.4) 55%, transparent 75%);
+}
+.ts-crescent svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+.ts-sun, .ts-moon-ring { transition: opacity 1.4s; }
+.ts-sun { opacity: 0; }
+.ts-moon-ring {
+  opacity: 1;
+  filter: drop-shadow(0 0 12px rgba(200, 215, 250, 0.65)) drop-shadow(0 0 34px rgba(150, 175, 230, 0.4));
+}
+.ts-stage[data-tone="day"] .ts-sun { opacity: 1; }
+.ts-stage[data-tone="day"] .ts-moon-ring { opacity: 0; }
+.ts-sun-rim { filter: drop-shadow(0 0 12px rgba(255, 200, 110, 0.7)) drop-shadow(0 0 34px rgba(240, 160, 70, 0.4)); }
+
+.ts-centre {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+  pointer-events: none;
+}
+.ts-eyebrow {
+  font-size: 22px;
+  letter-spacing: 0.42em;
+  margin-right: -0.42em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--ts-kicker);
+  transition: color 1.4s;
+}
+.ts-title {
+  font-family: "Cinzel Decorative", serif;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1.05;
+  color: var(--ts-title);
+  white-space: nowrap;
+  text-shadow: var(--ts-title-glow);
+  transition: color 1.4s, text-shadow 1.4s;
+}
+.ts-sub {
+  font-family: "IM Fell English", serif;
+  font-style: italic;
+  font-size: 30px;
+  line-height: 1.25;
+  text-wrap: balance;
+  color: var(--ts-sub);
+  transition: color 1.4s;
+}
+.ts-qr {
+  padding: 12px;
+  border-radius: 14px;
+  background: #f2ece0;
+  box-shadow: 0 0 0 1px rgba(192, 57, 46, 0.5), 0 14px 34px rgba(0, 0, 0, 0.6);
+}
+.ts-qr svg {
+  display: block;
+  width: 120px;
+  height: 120px;
+}
+
+/* ---- reconnecting ------------------------------------------------------- */
+.ts-reconnect {
+  position: absolute;
+  left: 50%;
+  bottom: 44px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 28px;
+  border-radius: 40px;
+  background: rgba(14, 10, 12, 0.88);
+  border: 1px solid rgba(231, 163, 91, 0.4);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.6);
+}
+.ts-reconnect-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #e7a35b;
+  box-shadow: 0 0 12px #e7a35b;
+  animation: tsDot 1.8s ease-in-out infinite;
+  flex: none;
+}
+.ts-reconnect-title { font-size: 24px; font-weight: 600; color: #f0c58e; }
+.ts-reconnect-sub {
+  font-family: "IM Fell English", serif;
+  font-style: italic;
+  font-size: 24px;
+  color: rgba(234, 220, 184, 0.66);
+}
+
+/* ---- motion ------------------------------------------------------------- */
+@keyframes tsPan { 0% { transform: translate(0, -70px) scale(1.02); } 50% { transform: translate(-28px, -110px) scale(1.05); } 100% { transform: translate(0, -70px) scale(1.02); } }
+@keyframes tsFog { 0% { transform: translateX(-6%); } 50% { transform: translateX(6%); } 100% { transform: translateX(-6%); } }
+@keyframes tsFlicker { 0%, 100% { opacity: 0.85; } 12% { opacity: 0.7; } 20% { opacity: 0.95; } 46% { opacity: 0.78; } 52% { opacity: 1; } 80% { opacity: 0.82; } }
+@keyframes tsTwinkle { 0%, 100% { opacity: 0.15; } 50% { opacity: 0.95; } }
+@keyframes tsPulse { 0%, 100% { opacity: 0.55; transform: scale(1); } 50% { opacity: 0.9; transform: scale(1.08); } }
+@keyframes tsDot { 0%, 100% { opacity: 0.35; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ts-pan, .ts-fog, .ts-moon, .ts-lamp, .ts-star, .ts-reconnect-dot { animation: none; }
+  .ts-stage, .ts-stage * { transition-duration: 0.01s !important; }
+}

@@ -1,0 +1,19 @@
+[
+  {
+    "note": "4F: the Reference header names the game's script, not the sample 'Trouble Brewing'.",
+    "regex": ">Trouble Brewing</span>(<span style=\"font-size:13px;[^>]*>\\{\\{ refM\\.count \\}\\} characters)",
+    "replace": ">{{ refM.script }}</span>$1"
+  },
+  {
+    "note": "4F: only a genuine official character has a wiki page; homebrew characters must not link to someone else's.",
+    "regex": "(<a href=\"\\{\\{ refM\\.sel\\.wiki \\}\\}\".*?</svg></a>)",
+    "replace": "<sc-if value=\"{{ refM.sel.hasWiki }}\">$1</sc-if>",
+    "flags": "s"
+  },
+  {
+    "note": "4F: End dialog. Interrupted-ending notice and error line, the recovery retry (only the recorded outcome may be retried), and the minimal End-without-a-result choice (decision 12: no dedicated visual).",
+    "regex": "(<div style=\"display:grid; grid-template-columns:minmax\\(0,1fr\\) minmax\\(0,1fr\\); gap:10px;\">\\s*<button onClick=\"\\{\\{ endDlg\\.good \\}\\}\".*?Evil wins</button>\\s*</div>)(\\s*<button onClick=\"\\{\\{ endDlg\\.close \\}\\}\"[^>]*>Keep playing</button>)",
+    "replace": "<sc-if value=\"{{ endDlg.notice }}\"><div style=\"font-size:13px; line-height:1.45; color:rgba(222,216,204,.65);\">{{ endDlg.notice }}</div></sc-if><sc-if value=\"{{ endDlg.choices }}\">$1</sc-if><sc-if value=\"{{ endDlg.recovery }}\"><button onClick=\"{{ endDlg.retry }}\" style=\"min-height:52px; border-radius:14px; border:1px solid rgba(224,200,140,.5); background:rgba(224,200,140,.08); color:#ecd9a8; font-family:'IM Fell English', serif; font-size:22px; font-weight:400; cursor:pointer;\" style-hover=\"background:rgba(224,200,140,.16);\">Retry saving result</button></sc-if><sc-if value=\"{{ endDlg.error }}\"><div role=\"alert\" style=\"font-size:13px; line-height:1.4; color:#f4a595;\">{{ endDlg.error }}</div></sc-if>$2<sc-if value=\"{{ endDlg.choices }}\"><button onClick=\"{{ endDlg.noResult }}\" style=\"align-self:center; margin-top:-12px; min-height:36px; padding:0 18px; border:none; background:transparent; color:rgba(222,216,204,.45); font-family:inherit; font-size:12px; cursor:pointer;\" style-hover=\"color:#ece6da;\">End without a result</button></sc-if>",
+    "flags": "s"
+  }
+]

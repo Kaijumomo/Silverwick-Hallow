@@ -49,13 +49,36 @@ export function usePublicLobby(
     let cancelled = false;
     let terminal = false;
     let unsub: (() => void) | undefined;
+    let finalReads = 0;
+    // Package 4 (PO-approved public winner delivery): once the game ends the
+    // live listener stops, and the final public record is read once -- the
+    // last Day/Night-correct projection plus the declared winner the terminal
+    // commit adds. Rules let an enrolled display read it after the end; an
+    // older deployment refuses, and the neutral ended scene stays.
+    const readFinal = () => {
+      const read = ++finalReads;
+      void backend.get(publicPath(code)).then(raw => {
+        if (cancelled || read !== finalReads) return;
+        const snapshot = decodePublicSnapshot(raw, code);
+        if (snapshot.status === "ready" && snapshot.data.status === "ended") setPublicLobby(snapshot.data);
+      }).catch(() => {});
+    };
     const markEnded = () => {
-      terminal = true;
-      unsub?.();
-      setLoading(false); setPublicLobby(null); setError(null); setEnded(true);
+      if (!terminal) {
+        terminal = true;
+        unsub?.(); unsub = undefined;
+        setLoading(false); setPublicLobby(null); setError(null); setEnded(true);
+      }
+      readFinal();
     };
     const offSession = backend.subscribe(sessionPath(code), raw => {
-      if (cancelled || terminal) return;
+      if (cancelled) return;
+      if (terminal) {
+        // The public signal can precede the commit that carries the winner:
+        // read the final record again when the session itself ends.
+        try { if (decodeSession(raw)?.state === "ended") readFinal(); } catch { /* keep the ended scene */ }
+        return;
+      }
       try {
         const session = decodeSession(raw);
         if (!session) {

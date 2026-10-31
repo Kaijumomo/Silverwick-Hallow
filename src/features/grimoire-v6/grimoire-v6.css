@@ -1,0 +1,36 @@
+/* Keyframes and base rules from the Storyteller Grimoire v6 design handoff. Component rules live in GrimoireV6View.tsx. */
+@keyframes swGlow{0%,100%{box-shadow:0 0 22px 4px rgba(214,224,245,.3),0 0 0 2px rgba(226,234,250,.75)}50%{box-shadow:0 0 40px 12px rgba(214,224,245,.48),0 0 0 2px rgba(240,245,255,.95)}}
+/* swGlow's two end states, cross-faded by seatGlow() in boardArt.tsx. */
+@keyframes swGlowRest{0%,100%{opacity:1}50%{opacity:0}}
+@keyframes swGlowPeak{0%,100%{opacity:0}50%{opacity:1}}
+@keyframes swBreath{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
+@keyframes swFlicker{0%,100%{opacity:.85;transform:scale(1)}30%{opacity:1;transform:scale(1.03)}55%{opacity:.78;transform:scale(.99)}75%{opacity:.95;transform:scale(1.02)}}
+@keyframes swSpin{to{transform:rotate(360deg)}}
+@keyframes swInk{from{clip-path:inset(0 0 100% 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes swEmber{0%,100%{opacity:.85}50%{opacity:1}}
+@keyframes swSmoke{0%{opacity:0;transform:translate(0,0) scale(.6)}20%{opacity:1}100%{opacity:0;transform:translate(10px,-70px) scale(2.2)}}
+@keyframes swHaunt{0%,100%{opacity:.7}50%{opacity:1}}
+@keyframes swDrift{0%{transform:translate3d(-6%,0,0)}100%{transform:translate3d(6%,-2%,0)}}
+@keyframes swSkyPan{0%{transform:scale(1.08) translate3d(-3%,-2%,0)}100%{transform:scale(1.2) translate3d(3%,2%,0)}}
+@keyframes swNebula{0%,100%{opacity:0}50%{opacity:.45}}
+@keyframes swShoot{0%{opacity:0;transform:rotate(-32deg) translateX(0)}2%{opacity:1}8%{opacity:0;transform:rotate(-32deg) translateX(-520px)}100%{opacity:0;transform:rotate(-32deg) translateX(-520px)}}
+@keyframes swSkyTurn{0%{transform:scale(1.5) rotate(0deg)}100%{transform:scale(1.5) rotate(360deg)}}
+@keyframes swCutOut{from{transform:translate(0,0)}to{transform:translate(140px,-150px)}}
+@keyframes swCutIn{from{transform:translate(140px,-150px)}to{transform:translate(0,0)}}
+@keyframes swOut{from{opacity:1}to{opacity:0}}
+@keyframes swIn{from{opacity:0}to{opacity:1}}
+@keyframes swDim{from{fill-opacity:1}to{fill-opacity:0}}
+@keyframes swRaysIn{from{opacity:0;transform:scale(.72)}to{opacity:1;transform:scale(1)}}
+@keyframes swRaysOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:scale(.72)}}
+@keyframes swTwinkle{0%,100%{opacity:.12;transform:scale(.6)}50%{opacity:1;transform:scale(1.25)}}
+@keyframes swPop{0%{opacity:0;transform:scale(.2)}100%{opacity:1;transform:scale(1)}}
+@keyframes swVeil{0%{opacity:0}20%{opacity:1}72%{opacity:1}100%{opacity:0}}
+@keyframes swVeilText{0%{opacity:0;letter-spacing:.5em;transform:translateY(10px)}30%{opacity:1;letter-spacing:.08em;transform:none}100%{opacity:1;letter-spacing:.04em}}
+@keyframes swHandTip{0%,100%{box-shadow:0 0 10px rgba(214,224,245,.8)}50%{box-shadow:0 0 22px rgba(232,240,255,1)}}
+@keyframes swRise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes swDock{from{opacity:0;transform:translate(-50%,18px)}to{opacity:1;transform:translateX(-50%)}}
+
+.gv-root *,.gv-root *::before,.gv-root *::after { box-sizing: border-box; }
+.gv-root a { color: #e8584a; text-decoration: none; }
+.gv-root a:hover { color: #ff7a68; }
+.gv-settle-on *, .gv-settle-hide * { transition: none !important; }

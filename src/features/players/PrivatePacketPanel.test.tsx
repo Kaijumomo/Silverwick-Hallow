@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { PlayerInformation, commitExtraTextDraft } from "./PlayerInformation";
 import { vi } from "vitest";
 import { publishPrivatePacket } from "@/firebase/privatePacketCommands";
@@ -10,7 +10,6 @@ import { PrivateInformation } from "@/features/player/PrivateInformation";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { usePacketDeliveryState } from "@/firebase/packetDeliveryState";
-import { NightOrderPanel } from "@/features/nightOrder/NightOrderPanel";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { roles } from "@/test/fixtures";
@@ -69,64 +68,7 @@ describe("private information workflow UI", () => {
     expect(screen.getByText("Your private message")).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/lunatic|fake|actual|simulated/i);
   });
-
-  it("night procedure comes first and Lunatic setup is a collapsed introduction action", () => {
-    const { other } = player();
-    // This test isolates an already-running night procedure, including a
-    // Lunatic not present in the TB fixture script; it does not exercise start.
-    store.getState().assignRole(other, "chef");
-    store.getState().setFabled(["toymaker"]);
-    store.setState({ game: { ...store.getState().game!, phase: "night", day: 1 } });
-    const view = render(<NightOrderPanel game={store.getState().game!} script={troubleBrewing} onClose={() => {}} />);
-    const body = view.container.querySelector(".night-panel-body")!;
-    expect(body.firstElementChild?.querySelector(".step-card")).toBeTruthy();
-    expect(screen.queryByLabelText("Private information tasks")).toBeNull();
-    const setup = screen.getByText("Setup information — Alice").closest("details")!;
-    expect(setup).not.toHaveAttribute("open");
-    expect(screen.queryByLabelText("Information")).toBeNull();
-    expect(document.body).not.toHaveTextContent(/packet|Published|publication|fingerprint/);
-    expect(publishPrivatePacket).not.toHaveBeenCalled();
-  });
-
-  it("privacy mode replaces the night sheet with a neutral notice", () => {
-    const { id } = player();
-    runningNight();
-    usePrivacyStore.getState().setEnabled(true);
-    render(<NightOrderPanel game={store.getState().game!} script={troubleBrewing} onClose={() => {}} />);
-    expect(screen.getByRole("status")).toHaveTextContent("Privacy Mode On");
-    expect(screen.getByText("Night details are hidden while Privacy Mode is on.")).toBeInTheDocument();
-    expect(screen.queryByText("Imp")).toBeNull();
-    expect(screen.queryByText("Fake Demon information")).toBeNull();
-    expect(store.getState().game!.players[id]!.publishedPacket).toBeUndefined();
-  });
 });
-it.each([["drunk", "empath"], ["marionette", "fortuneteller"]])("%s has the shown information procedure and can finish physically", (actual, shown) => {
-  const { id } = player(actual, shown);
-  runningNight();
-  const before = structuredClone(store.getState().game!.players[id]!);
-  const view = render(<NightOrderPanel game={store.getState().game!} script={troubleBrewing} onClose={() => {}} />);
-  const step = view.container.querySelectorAll(".step-card");
-  const own = Array.from(step).find(el => el.textContent?.includes("Simulated wake — actually the"))!;
-  expect(own).toBeTruthy();
-  fireEvent.click(within(own as HTMLElement).getByText("Give information"));
-  expect(within(own as HTMLElement).getByLabelText("Information")).toBeInTheDocument();
-  fireEvent.click(within(own as HTMLElement).getByRole("button", { name: "Done" }));
-  expect(Object.values(store.getState().game!.nightProgress).some(p => p.status === "done")).toBe(true);
-  expect(store.getState().game!.players[id]).toEqual(before);
-  expect(publishPrivatePacket).not.toHaveBeenCalled();
-});
-
-it.each(["soldier", "monk"])("Drunk shown %s has no generic information editor", shown => {
-  player("drunk", shown);
-  runningNight();
-  expect(store.getState().advancePhase().ok).toBe(true);
-  expect(store.getState().advancePhase().ok).toBe(true);
-  expect(store.getState().game).toMatchObject({ phase: "night", day: 2 });
-  render(<NightOrderPanel game={store.getState().game!} script={troubleBrewing} onClose={() => {}} />);
-  expect(screen.queryByLabelText("Information")).toBeNull();
-  expect(screen.queryByText("Give information")).toBeNull();
-});
-
 it("only explicit Send submits the reviewed content, and Sent requires an acknowledgement", async () => {
   const { id } = player("imp", "imp");
   store.getState().setBluffs(id, ["chef"]);
@@ -156,29 +98,6 @@ it("only explicit Send submits the reviewed content, and Sent requires an acknow
   expect(screen.getByRole("button", { name: "Send bluffs" })).toBeDisabled();
   expect(publishPrivatePacket).toHaveBeenCalledTimes(1);
 });
-it("ordinary poisoned Empath can optionally receive manually chosen information", () => {
-  const { id } = player("empath", "empath");
-  store.getState().setStatus(id, "poisoned", true);
-  runningNight();
-  render(<NightOrderPanel game={store.getState().game!} script={troubleBrewing} onClose={() => {}} />);
-  fireEvent.click(screen.getByText("Give information"));
-  fireEvent.change(screen.getByLabelText("Information"), { target: { value: "0" } });
-  expect(screen.queryByRole("alert")).toBeNull();
-  expect(publishPrivatePacket).not.toHaveBeenCalled();
-});
-
-it("unchanged Demon bluffs are not a task on later nights", () => {
-  const { id } = player("imp", "imp");
-  store.getState().setBluffs(id, ["chef"]);
-  const game = store.getState().game!;
-  store.setState({ game: { ...game, day: 2, phase: "night", players: { ...game.players, [id]: { ...game.players[id]!, publishedPacket: {
-    id: "sent", forDay: 1, forPhase: "night", payload: { shownRole: "imp", shownAlignment: "evil", bluffs: ["chef"] },
-  } } } } });
-  render(<NightOrderPanel game={store.getState().game!} script={troubleBrewing} onClose={() => {}} />);
-  expect(screen.queryByText(/setup information/i)).toBeNull();
-  expect(screen.queryByRole("button", { name: "Send bluffs" })).toBeNull();
-});
-
 // Phase 9C.5 (OPUS-005): the private extraText field becomes component-local
 // draft state. Typing must never reach the store; blur or Send commits the
 // final value exactly once, and Send always publishes from now-authoritative

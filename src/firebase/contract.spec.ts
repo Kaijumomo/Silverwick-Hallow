@@ -2306,7 +2306,10 @@ describe("Phase 9C.6 (OPUS-002): real separate-device Public Display contract", 
     await expect(displayBackend.get(`lobbies/${code}/public`)).resolves.toMatchObject({ code });
   });
 
-  test("CONTRACT-OPUS002-5: ending the session through the real fenced lifecycle path (writer.close) revokes display /public authorization", async () => {
+  // Package 4 (PO-approved public winner delivery) amends this contract: after
+  // the end the enrolled display may still READ the final public record (to
+  // show the result over the final seats); it still can never write.
+  test("CONTRACT-OPUS002-5: after the real fenced close (writer.close) the enrolled display reads only the final public record, read-only", async () => {
     const code = "PD5AAAAA", st = "pd5-storyteller", displayUid = "pd5-display";
     const { writer, displayBackend } = await establishAuthorizedDisplay(code, st, displayUid);
     disposals.push(() => writer.dispose());
@@ -2315,7 +2318,9 @@ describe("Phase 9C.6 (OPUS-002): real separate-device Public Display contract", 
 
     await writer.close([]);
 
-    await expect(displayBackend.get(`lobbies/${code}/public`)).rejects.toThrow(/permission[_ ]denied/i);
+    await expect(displayBackend.get(`lobbies/${code}/public`)).resolves.toMatchObject({ code, status: "ended" });
+    await expect(displayBackend.set(`lobbies/${code}/public/winner`, "good")).rejects.toThrow(/permission[_ ]denied/i);
+    await expect(displayBackend.get(`lobbies/${code}/session`)).resolves.toMatchObject({ state: "ended" });
   });
 });
 

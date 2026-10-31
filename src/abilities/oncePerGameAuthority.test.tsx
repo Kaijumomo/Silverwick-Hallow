@@ -4,10 +4,11 @@
 // because ability prose matched "Once per game".
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
 import { computeNightOrder } from "@/features/nightOrder/nightOrder";
-import { NightOrderPanel } from "@/features/nightOrder/NightOrderPanel";
+import { NightScreen, resetNightUi, selectNightStep } from "@/features/grimoire-v6/night/port/v6Night";
+import { useStorytellerStore } from "@/stores/storytellerStore";
 import { canonicalRoles } from "@/data/canonical";
 import { buildRegistry } from "@/data/roleRegistry";
 import { makeSTPlayer } from "@/test/fixtures";
@@ -38,10 +39,15 @@ describe("SOL-10F-L6: oncePerGame authority", () => {
     const steps = computeNightOrder(g.players, g.seatOrder, script, false, g);
     expect(steps).toContainEqual(expect.objectContaining({ kind: "player", effectiveRoleId: "seamstress", abilityUsed: true }));
     usePrivacyStore.setState({ enabled: false });
-    render(<NightOrderPanel game={g} script={script} onClose={() => {}} />);
-    const row = screen.getAllByText("Seamstress", { selector: ".step-role-name" })[0]!.closest(".step-card") as HTMLElement;
-    expect(within(row).getByText("used")).toBeInTheDocument();
-    expect(within(row).getByRole("button", { name: "Resolve manually / unmodeled interaction" })).toBeInTheDocument();
+    // The unified Night card keeps the step visible and wholly manual: official text, no guided action.
+    vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+    useStorytellerStore.setState({ game: g, lobby: null, undoStack: [], localSeq: 0, customScripts: { [script.id]: script } });
+    resetNightUi();
+    render(<NightScreen />);
+    selectNightStep("p0");
+    expect(screen.getByText(registry.get("seamstress")!.ability!)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Continue action" })).toBeNull();
+    vi.unstubAllGlobals();
   });
 
   it("a VERIFIED descriptor with usage oncePerGame is notApplicable once used (descriptor authority)", () => {

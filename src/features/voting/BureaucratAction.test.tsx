@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { BureaucratAction } from "./BureaucratAction";
-import { ReminderControls } from "@/features/reminders/ReminderControls";
-import { useStorytellerStore as store } from "@/stores/storytellerStore";
+import { captureVotingContext, useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
@@ -15,7 +14,6 @@ function Panel({ visible = true }: { visible?: boolean }) {
   const g = store(s => s.game)!;
   return <BureaucratAction source={bind(g, "p0")} visible={visible} />;
 }
-function Reminders() { const g = store(s => s.game)!; return <ReminderControls player={g.players.p1!} />; }
 beforeEach(() => {
   store.setState({ game: proofGame(["bureaucrat", "chef", "imp", "empath", "monk"]), lobby: null, undoStack: [], localSeq: 0,
     terminalClose: null, customScripts: { [proofScript.id]: proofScript } });
@@ -40,24 +38,26 @@ it("source cannot choose self; hidden or privacy-suppressed callbacks cannot wri
   view.rerender(<Panel />); act(() => usePrivacyStore.getState().setEnabled(true));
   expect(screen.queryByLabelText("Bureaucrat voting ability")).toBeNull(); expect(useTargetPicker.getState().active).toBeNull();
 });
-it("official reminder action invokes the ability, while typing the same label stays inert", () => {
-  render(<Reminders />);
-  fireEvent.change(screen.getByRole("textbox", { name: "Reminder text" }), { target: { value: "3 Votes" } });
-  fireEvent.click(screen.getByRole("button", { name: "Add" }));
+const apply = () => store.getState().resolveVoting({ kind: "bureaucrat", modifierId: "mod-1", source: bind(game(), "p0"), target: bind(game(), "p1"),
+  code: game().code, day: game().day, expectedRevision: game().voting?.revision ?? 0 } as never, captureVotingContext());
+
+// Package 4: the Reminder controls panel is retired; the ability command and the linked-token removal (board/marks.ts) are
+// the same coordinator commands, so they are driven directly.
+it("official ability invokes the voting adjustment, while a typed reminder with the same label stays inert", () => {
+  store.getState().addReminder("p1", { label: "3 Votes" });
+  expect(game().players.p1!.reminders).toHaveLength(1);
   expect(game().voting).toBeUndefined();
-  fireEvent.click(screen.getByRole("button", { name: "Bureaucrat · 3 Votes" }));
-  fireEvent.click(screen.getByRole("button", { name: "Apply 3 Votes from Player 0" }));
+  expect(apply().ok).toBe(true);
   expect(voteWeight(game(), bind(game(), "p1"), { registry: buildRegistry(proofScript), script: proofScript })).toEqual({ known: true, value: 3 });
   expect(game().players.p1!.reminders).toHaveLength(2);
 });
 
 it("removing the linked official token stops its voting adjustment in the same Undo action", () => {
-  render(<Reminders />);
-  fireEvent.click(screen.getByRole("button", { name: "Bureaucrat · 3 Votes" }));
-  fireEvent.click(screen.getByRole("button", { name: "Apply 3 Votes from Player 0" }));
+  expect(apply().ok).toBe(true);
   const before = game(); const count = store.getState().undoStack.length;
-  fireEvent.click(screen.getByRole("button", { name: "Remove 3 Votes reminder" }));
-  fireEvent.click(screen.getByRole("button", { name: "Remove 3 Votes reminder" }));
+  const modifier = game().voting!.modifiers[0]!;
+  const result = store.getState().resolveVoting({ kind: "removeModifier", modifierId: modifier.id, code: game().code, day: game().day, expectedRevision: game().voting!.revision } as never, captureVotingContext());
+  expect(result.ok).toBe(true);
   expect(game().voting!.modifiers).toEqual([]); expect(game().players.p1!.reminders).toEqual([]);
   expect(store.getState().undoStack).toHaveLength(count + 1);
   act(() => store.getState().undo()); expect(game().voting).toEqual(before.voting); expect(game().players.p1!.reminders).toEqual(before.players.p1!.reminders);

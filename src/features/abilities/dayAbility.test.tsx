@@ -1,13 +1,11 @@
-// SOL-10F-L3: the Storyteller-private Day ability entry point. The Player
-// Drawer's progressively disclosed Abilities -> Use ability... opens the SAME
+// SOL-10F-L3: the Storyteller-private Day ability entry point opens the SAME
 // AbilityWorkspace and commits through the SAME one-commit resolveAbility --
 // no second (Day) resolver. Rules-neutral fixtures only (no Slayer semantics).
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { AbilityEntry } from "./AbilityEntry";
-import { PlayerDrawer } from "@/features/players/PlayerDrawer";
+import { AbilityWorkspace } from "./AbilityWorkspace";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { canonicalRoles } from "@/data/canonical";
@@ -39,23 +37,23 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-function Entry({ id }: { id: string }) {
-  const player = store((s) => s.game?.players[id]);
-  return player ? <AbilityEntry player={player} semantics={FIXTURE_SEMANTICS} /> : null;
+/** The Day ability workspace, exactly as the unified Grimoire opens it for a Day action. */
+function Entry({ id, roleId = "slayer", manual = false }: { id: string; roleId?: string; manual?: boolean }) {
+  const current = store((s) => s.game)!;
+  const descriptor = manual ? null : FIXTURE_SEMANTICS.get(roleId) ?? null;
+  return <AbilityWorkspace game={current} script={script} registry={registry} semantics={FIXTURE_SEMANTICS} descriptor={descriptor} manualReason={descriptor ? "" : "no verified rules"} strictGameplay={roleId === "slayer"}
+    target={{ actorId: id, roleId, roleName: registry.get(roleId)!.name, invocationPath: "dayEntry" }} onClose={() => {}} onResolved={() => {}} />;
 }
-const openAbilities = () => fireEvent.click(screen.getByText("Abilities"));
 
-describe("SOL-10F-L3: Day ability entry through the same workspace / coordinator", () => {
+// Package 4: the Player Drawer's Abilities -> Use ability... / Record outcome... entries are retired (the Slayer
+// face-off in grimoire-v6/day issues the Day request). The shared workspace and the one-commit coordinator are unchanged.
+describe("SOL-10F-L3: Day ability through the same workspace / coordinator", () => {
   it("a verified Day descriptor launches the guided flow and commits once through resolveAbility (no direct writer)", () => {
     const resolveSpy = vi.spyOn(state(), "resolveAbility");
     const otherCommands = (["resolveLife", "resolveEffects", "resolveRoles", "resolveAlignments", "resolveReminders", "setAbilityUsed", "recordDeath"] as const)
       .map((name) => { const spy = vi.fn(); store.setState({ [name]: spy } as never); return spy; });
     store.setState({ resolveAbility: resolveSpy as never });
     render(<Entry id="p0" />);
-    // Progressive disclosure: nothing actionable until Abilities is opened.
-    expect(screen.queryByRole("button", { name: /Use ability/ })).not.toBeVisible();
-    openAbilities();
-    fireEvent.click(screen.getByRole("button", { name: "Use ability… (Slayer)" }));
     const dialog = screen.getByRole("dialog", { name: "Slayer" });
     const before = { undo: state().undoStack.length, seq: state().localSeq };
     choose("the chosen player", "p3", dialog);
@@ -66,24 +64,11 @@ describe("SOL-10F-L3: Day ability entry through the same workspace / coordinator
     expect(game().players.p3!.alive).toBe(false);
     expect(state().undoStack).toHaveLength(before.undo + 1);
     expect(state().localSeq).toBe(before.seq + 1);
-    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("a Night-only verified descriptor is NOT offered as a Day ability; Manual stays available", () => {
-    render(<Entry id="p2" />); // the Monk fixture is otherNight-only
-    openAbilities();
-    expect(screen.queryByRole("button", { name: /Use ability/ })).toBeNull();
-    expect(screen.getByText(registry.get("monk")!.ability!)).toBeInTheDocument();
-    fireEvent.click(screen.getByText("Advanced corrections"));
-    expect(screen.getByRole("button", { name: "Record outcome…" })).toBeInTheDocument();
-  });
-
-  it("an unsupported Role reaches the explicit Manual flow and commits once", () => {
-    render(<Entry id="p1" />); // Chef: canonical, descriptor-only in fixtures (no Day timing)
-    openAbilities();
-    fireEvent.click(screen.getByText("Advanced corrections"));
-    fireEvent.click(screen.getByRole("button", { name: "Record outcome…" }));
-    const dialog = screen.getByRole("dialog", { name: /Resolve manually \/ unmodeled interaction/ });
+  it("an unmodeled Role reaches the explicit Manual flow and commits once", () => {
+    render(<Entry id="p1" roleId="chef" manual />); // Chef: canonical, no verified Day semantics in fixtures
+    const dialog = screen.getByRole("dialog");
     fireEvent.change(within(dialog).getByRole("textbox", { name: "Reason for manual resolution" }), { target: { value: "Public claim, unmodeled" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "+ Death" }));
     choose("Step 1 player", "p4", dialog);
@@ -94,35 +79,10 @@ describe("SOL-10F-L3: Day ability entry through the same workspace / coordinator
 
   it("a Role / participant change while the workspace is open makes it stale (never applied)", () => {
     render(<Entry id="p0" />);
-    openAbilities();
-    fireEvent.click(screen.getByRole("button", { name: "Use ability… (Slayer)" }));
     act(() => { store.setState({ game: { ...game(), players: { ...game().players, p0: { ...game().players.p0!, participantId: "a-new-person" } } } }); });
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByRole("alert")).toHaveTextContent(/out of date/);
     expect(within(dialog).queryByRole("button", { name: /^(Confirm and record|Resolve)$/ })).toBeNull();
-  });
-
-  it("is reachable from the Player Drawer during Day, and Privacy Mode unmounts it (and it never reopens stale)", () => {
-    function Drawer() {
-      const player = store((s) => s.game?.players.p1);
-      return player ? <PlayerDrawer player={player} /> : null;
-    }
-    render(<Drawer />);
-    openAbilities();
-    fireEvent.click(screen.getByText("Advanced corrections"));
-    fireEvent.click(screen.getByRole("button", { name: "Record outcome…" }));
-    expect(screen.getByRole("dialog", { name: /Resolve manually/ })).toBeInTheDocument();
-    act(() => usePrivacyStore.getState().setEnabled(true));
-    expect(screen.queryByRole("dialog", { name: /Resolve manually/ })).toBeNull();
-    expect(screen.queryByText("Abilities")).toBeNull();
-    act(() => usePrivacyStore.getState().setEnabled(false));
-    expect(screen.queryByRole("dialog", { name: /Resolve manually/ })).toBeNull();
-  });
-
-  it("is not offered outside Live Play", () => {
-    store.setState({ game: { ...game(), phase: "setup", day: 0 } });
-    render(<Entry id="p0" />);
-    expect(screen.queryByText("Abilities")).toBeNull();
   });
 });
 
@@ -140,10 +100,12 @@ describe("architecture: no second Day ability engine", () => {
   it("only the coordinator runs evaluators; the entry point only opens the shared workspace", () => {
     const runners = productionSources().filter((m) => /\.evaluator\s*\(|\bevaluator\s*\(\s*\{/.test(stripComments(readFileSync(join(SRC, m), "utf8"))));
     expect(runners).toEqual(["abilities/automationEligibility.ts", "stores/abilityResolution.ts"]);
-    const entry = stripComments(readFileSync(join(SRC, "features/abilities/AbilityEntry.tsx"), "utf8"));
-    expect(entry).toMatch(/<AbilityWorkspace\b/);
-    for (const forbidden of [/planAbilityResolution/, /composeAbilityOutcome/, /plan(Life|Effect|Reminder|Role|Alignment)Transaction/, /resolve(Life|Effects|Reminders|Roles|Alignments)\b/, /\bset\(/]) {
-      expect(entry).not.toMatch(forbidden);
+    // The Day entry points (the Slayer face-off and the workspace) only route through the coordinator.
+    for (const file of ["features/abilities/AbilityWorkspace.tsx", "features/grimoire-v6/day/slayer.tsx"]) {
+      const entry = stripComments(readFileSync(join(SRC, file), "utf8"));
+      for (const forbidden of [/composeAbilityOutcome/, /plan(Life|Effect|Reminder|Role|Alignment)Transaction/, /resolve(Life|Effects|Reminders|Roles|Alignments)\b/]) {
+        expect(entry, file).not.toMatch(forbidden);
+      }
     }
   });
 });

@@ -1,7 +1,7 @@
 import { PlayerResultRecordSchema } from "@/stores/schemas";
 import type { GameResult, PlayerId, StorytellerLobbyRecord } from "@/stores/types";
 import type { Json, RoomBackend } from "./backend";
-import { resultPath, resultsPath, rosterParticipantsPath, rosterPath, storytellerUidPath } from "./paths";
+import { publicWinnerPath, resultPath, resultsPath, rosterParticipantsPath, rosterPath, storytellerUidPath } from "./paths";
 import { decodeRoster, decodeRosterParticipants, SnapshotValidationError, type RosterParticipantRecord } from "./snapshots";
 import type { TerminalPublicationBuilder } from "./writer";
 
@@ -70,7 +70,8 @@ export function coherentResultRecipients(
  * The close-time builder for SessionWriter.close: freshly reads the lobby's
  * Storyteller uid, the roster and its participant records under the held
  * lease and returns the results updates -- the Storyteller's receipt plus one
- * record per coherent recipient. `result` null (End Without Result) publishes
+ * record per coherent recipient, plus the declared winner on the public node
+ * for the Public Display. `result` null (End Without Result) publishes
  * nothing and reads nothing. An unreadable/invalid read aborts the close
  * (retryable), never a partial publication.
  */
@@ -94,6 +95,8 @@ export function terminalPublication(
     for (const uid of coherentResultRecipients(game, roster.data, participants.data)) {
       updates[resultPath(code, uid)] = { ...payload, declaredAt: { ...payload.declaredAt } } as unknown as Json;
     }
+    // The Public Display's copy: the winner only, in the same atomic commit (Package 4, PO-approved).
+    updates[publicWinnerPath(code)] = payload.winner;
     return updates;
   };
 }

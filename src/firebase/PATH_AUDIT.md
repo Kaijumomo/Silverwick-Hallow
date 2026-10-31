@@ -47,7 +47,11 @@ never authorizes private projections, `storyteller`, `checkpoint`, `roster`,
 `joinRequests`, the `presence` parent, `displayAccess`, the `displayMembers`
 collection, or another display's own binding. A UID authorized as a display
 gains exactly one additional read branch on `/public`; every other rule is
-unchanged for it.
+unchanged for it. Package 4 (PO-approved public winner delivery) extends that
+branch past the end: once `session.state = ended` and `public/status = ended`,
+the same enrolled display (current token, same session) may still read the
+final `/public` record, read-only. `public/winner` (`good` or `evil`) is
+written only inside the terminal commit, create-only.
 
 `displayAccess` is Storyteller-owned security metadata, not game state — it
 never enters `useStorytellerStore.game`, Zustand persistence, checkpoint

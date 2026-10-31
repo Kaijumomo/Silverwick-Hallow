@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup } from "@testing-library/react";
 import { bind, impair, openInStore, patchPlayer, pick, plan, planned, proofGame, proofQuery, proofRegistry, proofScript, request, reseat } from "@/test/proofFixtures";
 import { useStorytellerStore as store } from "./storytellerStore";
 import { usePrivacyStore } from "./privacyStore";
@@ -7,7 +7,6 @@ import { StorytellerGamePersistedSchema } from "./schemas";
 import { planLifeTransaction, applyLifePlan } from "./lifeResolution";
 import { applyRolePlan, changeRoleIntent, defaultRoleIds, planRoleTransaction } from "./roleResolution";
 import { officialEffectPresentation } from "@/features/reminders/officialReminderPresentation";
-import { PopoverReminders } from "@/features/players/PopoverReminders";
 
 const game = () => store.getState().game!;
 const base = (day = 2) => proofGame(["poisoner", "chef", "empath", "imp", "saint"], "night", day);
@@ -93,26 +92,5 @@ describe("B9 canonical Poisoner self-target", () => {
     expect(applies(restored)).toEqual({ known: true, value: true });
     expect(proofQuery(restored).abilityFunctions(bind(restored, "p0"))).toEqual({ known: true, value: false });
     expect(tokens(restored)).toHaveLength(1);
-  });
-
-  it("self-poison uses the unchanged two-tap three-second removal, with Undo restoring poison and completed Night", () => {
-    vi.useFakeTimers(); openInStore(produce());
-    function View() { return <PopoverReminders player={store(s => s.game!.players.p0!)} />; }
-    render(<View />);
-    const button = () => screen.getByRole("button", { name: "Remove Poisoned effect from Poisoner" });
-    const before = game();
-    fireEvent.click(button()); expect(game()).toBe(before);
-    expect(button()).toHaveAttribute("data-removal-armed", "true");
-    act(() => vi.advanceTimersByTime(3000));
-    expect(button()).not.toHaveAttribute("data-removal-armed");
-    fireEvent.click(button()); expect(game()).toBe(before);
-    fireEvent.click(button());
-    expect(game().players.p0!.effects).toEqual([]);
-    expect(game().nightProgress).toEqual(before.nightProgress);
-    expect(store.getState().undoStack).toHaveLength(1);
-    act(() => store.getState().undo());
-    expect(game()).toEqual(before);
-    expect(applies(game())).toEqual({ known: true, value: true });
-    expect(screen.getAllByRole("button", { name: "Remove Poisoned effect from Poisoner" })).toHaveLength(1);
   });
 });

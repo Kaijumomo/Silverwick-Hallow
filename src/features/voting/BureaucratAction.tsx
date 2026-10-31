@@ -25,7 +25,7 @@ export function BureaucratAction({ source, target, visible = true, completeStep,
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ name: string; game: StorytellerLobbyRecord } | null>(null);
   const mounted = useRef(true);
-  const active = useTargetPicker(s => s.active);
+  useTargetPicker(s => s.active);
   const context = captureVotingContext();
   const live = useRef({ game, visible, privacy });
   live.current = { game, visible, privacy };
@@ -61,16 +61,9 @@ export function BureaucratAction({ source, target, visible = true, completeStep,
   if (!allowed) return null;
   return <div className="bureaucrat-action" aria-label="Bureaucrat voting ability">
     {success ? <p className="modern-night-result" role="status">3 Votes recorded for {success.name}.</p> : target ?
-      <button type="button" className="btn btn-sm" onClick={() => choose(target)}>Apply 3 Votes from {actor!.name || "Bureaucrat"}</button> : <>
-        <p className="modern-night-pick">Choose another player for 3 Votes on Day {game!.day}.</p>
-        <div className="modern-night-pick-controls"><button type="button" className="btn btn-sm" onClick={() => {
-          if (active?.owner === owner) { useTargetPicker.getState().cancel(); setPaused(true); } else setPaused(false);
-        }}>{active?.owner === owner ? "Cancel selection" : "Choose on board"}</button></div>
-        <details className="modern-night-guidance"><summary>Choose from roster</summary><div className="modern-night-roster">
-          {candidates.map(p => <button type="button" className="btn btn-sm" key={p.participantId}
-            onClick={() => choose({ playerId: p.id, participantId: p.participantId! })}>{p.name || `Seat ${p.seat + 1}`}</button>)}
-        </div></details>
-      </>}
+      <button type="button" className="btn btn-sm" onClick={() => choose(target)}>Apply 3 Votes from {actor!.name || "Bureaucrat"}</button> :
+      // PO review C08/C13: the Bureaucrat chooses on the Grimoire only (no roster list, no cancel control).
+      <p className="modern-night-pick">Choose another player for 3 Votes on Day {game!.day}.</p>}
     {error && <p role="alert" className="life-error">{error}</p>}
   </div>;
 }
