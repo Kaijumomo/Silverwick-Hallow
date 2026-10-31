@@ -14,7 +14,7 @@ import { TRAVELERS } from "@/data/travelers";
 import { ConnectingScreen, FailureScreen, formatCode, KnockingScreen, LeavingScreen, ReconnectingScreen, RejectedScreen, RevokedScreen } from "./phone/PhoneStates";
 import type { RoomBackend } from "@/firebase/backend";
 import { lookupOfficialRole } from "@/data/officialRoles";
-import { getBuiltinScript } from "@/data/scripts";
+import { publicScriptOf } from "@/data/publicScript";
 import type { PublicLobbyRecord, RoleDef } from "@/stores/types";
 import { RemoteScreenBoundary } from "@/features/remote/RemoteScreenBoundary";
 import { DATA_ERROR_MESSAGE, CONNECTION_ERROR_MESSAGE } from "@/firebase/snapshots";
@@ -122,9 +122,8 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
 
   // Script characters — used by Town note popup and Almanac tab.
   const scriptCharacters = useMemo((): RoleDef[] => {
-    if (!publicLobby?.scriptId) return [];
-    return getBuiltinScript(publicLobby.scriptId)?.characters ?? [];
-  }, [publicLobby?.scriptId]);
+    return publicScriptOf(publicLobby).characters;
+  }, [publicLobby?.scriptId, publicLobby?.scriptCharacters]);
 
   // Almanac roles: script + active Fabled + active Lorics + seated Travelers.
   const playerAlmanacRoles = useMemo((): RoleDef[] => {
@@ -382,7 +381,7 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
         name={ownName}
         phaseLabel={milestone.phase}
         {...(travellerChoice ? { character: travellerChoice } : {})}
-        scriptName={getBuiltinScript(publicLobby.scriptId)?.name ?? "Script"}
+        scriptName={publicScriptOf(publicLobby).name ?? "Script"}
         scriptCharacters={scriptCharacters}
         referenceRoles={playerAlmanacRoles}
         leaving={leaving}
