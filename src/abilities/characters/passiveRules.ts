@@ -24,7 +24,7 @@ export const passiveRegistrationOptions = (roleId: RoleId) =>
  * Other protections below deliberately have NO resolver. No token text is read.
  */
 const TARGET_DEATH_GAPS = new Set(["fool", "sailor", "mayor", "lleech", "zombuul"]);
-const EXTERNAL_PROTECTION_GAPS = new Set(["tealady", "innkeeper"]);
+const EXTERNAL_PROTECTION_GAPS = new Set(["tealady"]);
 
 export function passiveProtection(query: RulesQuery, target: ParticipantBinding, cause: "demon" | "any"): QueryAnswer<boolean> {
   const player = query.participant(target);
@@ -87,4 +87,6 @@ export const REVIEWED_INTERACTION_ROLES: ReadonlySet<string> = new Set([
   "washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "monk", "ravenkeeper", "virgin", "slayer", "soldier", "mayor",
   "butler", "drunk", "recluse", "saint", "poisoner", "spy", "scarletwoman", "baron", "imp",
   "cultleader", "pithag", "alhadikhia", "harlot", "vortox",
+  // Treacherous 30th: Innkeeper -- its cannotDie / drunk Effects are read through the shared protection and impairment queries.
+  "innkeeper",
 ]);

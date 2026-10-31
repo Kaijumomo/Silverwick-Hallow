@@ -109,7 +109,7 @@ describe("B2c: supported protection does not broaden unverified interactions", (
     expect(proofQuery(game).protectedFrom(bind(game, "p3"), "any")).toMatchObject({ known: false });
   });
 
-  it.each(["tealady", "innkeeper"])("preserves the existing external %s protection boundary", role => {
+  it.each(["tealady"])("preserves the existing external %s protection boundary", role => {
     const game = patchPlayer(protect(proofGame(roles), "p3"), "p5", { actualRole: role });
     expect(proofQuery(game).protectedFrom(bind(game, "p3"), "demon")).toMatchObject({ known: false });
     expect(attack(game, "p3")).toMatchObject({ ok: false, code: "unsupported" });

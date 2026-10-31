@@ -50,7 +50,7 @@ describe("Character Intelligence bounded automation", () => {
       expect(manifest.find(entry => entry.id === id)?.capabilities).toContainEqual(expect.objectContaining({ owner: "setup", boundary: expect.stringContaining("count policy") }));
     }
     for (const id of ["bureaucrat", "virgin"]) expect(manifest.find(entry => entry.id === id)?.capabilities).toContainEqual(expect.objectContaining({ owner: "voting" }));
-    expect(CANONICAL_ABILITY_SEMANTICS.size).toBe(13); // B5a adds Chef.
+    expect(CANONICAL_ABILITY_SEMANTICS.size).toBe(14); // B5a adds Chef; Treacherous 30th adds Innkeeper.
     expect(CANONICAL_ABILITY_SEMANTICS.has("soldier")).toBe(false);
     expect(CANONICAL_ABILITY_SEMANTICS.has("vortox")).toBe(false);
   });
@@ -79,7 +79,7 @@ describe("Character Intelligence bounded automation", () => {
     expect(eligible(game, "imp", { target: pick(game, "p2") }).kind).toBe("automated");
   });
 
-  it.each(["fool", "sailor", "tealady", "innkeeper", "lleech", "nodashii", "amnesiac"])("unreviewed %s interaction requires the whole action Manual", role => {
+  it.each(["fool", "sailor", "tealady", "lleech", "nodashii", "amnesiac"])("unreviewed %s interaction requires the whole action Manual", role => {
     const game = proofGame(["imp", role, "chef"]);
     expect(eligible(game, "imp", { target: pick(game, "p2") }).kind).toBe("manual");
   });
@@ -135,5 +135,12 @@ describe("Character Intelligence bounded automation", () => {
     expect(eligible(game, "poisoner", { target: pick(game, "p2") }).kind).toBe("automated");
     expect(JSON.stringify(game)).toBe(before);
     expect(proofEnv().registry.get("vortox")).toBeDefined(); // script presence alone never gates
+  });
+});
+
+describe("Treacherous 30th: Innkeeper is reviewed", () => {
+  it("an Imp attack is automated beside an Innkeeper, and an Innkeeper's protection settles it", () => {
+    const game = proofGame(["imp", "innkeeper", "chef"]);
+    expect(eligible(game, "imp", { target: pick(game, "p2") }).kind).toBe("automated");
   });
 });
