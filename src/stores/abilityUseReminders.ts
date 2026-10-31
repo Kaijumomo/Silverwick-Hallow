@@ -3,7 +3,9 @@ import type { RoleRegistry } from "@/data/roleRegistry";
 import { applyReminderPlan, planReminderTransaction, type ReminderIntent } from "./reminderResolution";
 import type { ReminderRecord, STPlayerRecord, StorytellerLobbyRecord } from "./types";
 
-const supported = (role: string) => role === "virgin" || role === "slayer";
+/** The once-per-game characters whose spent ability is noted with their own official reminder token. */
+const USED_LABEL: Record<string, string> = { virgin: "No Ability", slayer: "No Ability", professor: "No Ability", golem: "May Not Nominate" };
+const supported = (role: string) => role in USED_LABEL;
 export const abilityUseReminderId = (player: STPlayerRecord) =>
   `ability-use:${JSON.stringify([player.participantId, player.actualRole, player.packetEpoch ?? null])}`;
 
@@ -30,7 +32,7 @@ export function planAbilityUseReminders(previous: StorytellerLobbyRecord, next: 
     const definition = registry?.get(player.actualRole);
     if (!old.abilityUsed && player.abilityUsed && supported(player.actualRole) && definition && isCanonicalRole(definition)) {
       const source = { playerId: player.id, participantId: player.participantId };
-      intents.push({ kind: "place", target: source, reminder: { id: abilityUseReminderId(player), label: "No Ability", sourceCharacter: player.actualRole, source } });
+      intents.push({ kind: "place", target: source, reminder: { id: abilityUseReminderId(player), label: USED_LABEL[player.actualRole]!, sourceCharacter: player.actualRole, source } });
     }
   }
   if (!intents.length) return { ok: true, game: next };

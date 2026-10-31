@@ -146,9 +146,9 @@ function HomeTablet({ navigate = defaultNavigate }: Props) {
     <main className="hv-root" style={root} data-path={path}>
       <HomeV6View vm={vm} />
       {configSource !== "env" && (
-        <button className="btn btn-sm hv-gear" onClick={() => setConfigOpen(true)}
-          aria-label={configSource === "localStorage" ? "Reconfigure Firebase" : "Configure Firebase"}
-          title={configSource === "localStorage" ? "Reconfigure Firebase" : "Configure Firebase"}>⚙</button>
+        // The gear that sat over the artwork is gone: online settings are a quiet text link in the footer, level with the disclaimer.
+        <button type="button" className="hv-settings-link" onClick={() => setConfigOpen(true)}
+          title={configSource === "localStorage" ? "Reconfigure Firebase" : "Configure Firebase"}>Online settings</button>
       )}
       {toast && <div className="toast" role="status">{toast}</div>}
       {reference && (

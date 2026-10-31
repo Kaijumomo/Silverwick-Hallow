@@ -196,6 +196,18 @@ const InformationAction = forwardRef<NightInformationHandle, Props>(function Inf
     {value && <div className="night-information-answer" role="status" aria-label="Information to communicate">
       {value.kind === "boolean" ? value.value ? "YES" : "NO" : value.kind === "number" ? value.value : ""}
     </div>}
+    {step.effectiveRoleId === "fortuneteller" && value?.kind === "boolean" && (() => {
+      // Say why: a Demon, the Red Herring, or neither. The Storyteller is never left to guess where a YES came from.
+      const chosen = values?.find(item => item.kind === "player");
+      const people = chosen?.kind === "player" ? chosen.participants.map(item => game.players[item.playerId]).filter(Boolean) : [];
+      if (!people.length) return null;
+      const demons = people.filter(p => registry.get(p!.actualRole ?? "")?.type === "demon").map(p => p!.name || "Seat " + (p!.seat + 1));
+      const herrings = people.filter(p => p!.effects.some(effect => effect.type === "fortuneTellerRedHerring" && effect.state === "active")).map(p => p!.name || "Seat " + (p!.seat + 1));
+      const why = [...demons.map(name => `${name} is the Demon`), ...herrings.map(name => `${name} is the Red Herring`)];
+      const text = value.value ? (why.length ? `Why YES: ${why.join("; ")}.` : "Why YES: the Storyteller chose this answer (this Fortune Teller is drunk, poisoned or only shown as one).")
+        : why.length ? "The Storyteller chose NO although a chosen player registers as a Demon or Red Herring." : "Why NO: neither chosen player is the Demon or the Red Herring.";
+      return <p className="night-information-why" style={{ margin: "4px 0 0", opacity: 0.85, fontSize: 13 }}>{text}</p>;
+    })()}
     {!resolved && requirement?.source === "storyteller" && ["number", "boolean"].includes(requirement.kind) && <>
       <div className="night-information-choices" role="group" aria-label="Information to communicate">{choices.map(choice =>
         <button className="btn" key={String(choice)} type="button" onClick={() => commit({ ...inputs,

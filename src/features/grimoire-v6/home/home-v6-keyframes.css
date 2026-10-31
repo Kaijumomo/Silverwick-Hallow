@@ -10,4 +10,6 @@
 .hv-root a:hover { color: #f2cf7e; }
 .hv-root *::-webkit-scrollbar { display: none; }
 .hv-root input::placeholder { color: rgba(234, 220, 184, .35); }
-.hv-gear { position: absolute; top: 14px; right: 14px; z-index: 5; }
+.hv-settings-link { position: absolute; bottom: 18px; right: 22px; z-index: 5; background: none; border: none; padding: 4px 2px; cursor: pointer;
+  font: inherit; font-size: 11px; letter-spacing: .04em; color: rgba(222,216,204,.45); text-decoration: underline; text-underline-offset: 3px; }
+.hv-settings-link:hover, .hv-settings-link:focus-visible { color: rgba(222,216,204,.85); }

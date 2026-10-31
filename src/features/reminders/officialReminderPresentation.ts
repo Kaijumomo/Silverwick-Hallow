@@ -19,6 +19,11 @@ export type OfficialEffectToken = {
 const EFFECT_TOKENS = [
   { source: "poisoner", type: "poisoned", label: "Poisoned" },
   { source: "monk", type: "safeFromDemon", label: "Safe" },
+  // Treacherous 30th: each sourced Effect is drawn with its own character's official reminder token.
+  { source: "innkeeper", type: "cannotDie", label: "Safe" },
+  { source: "innkeeper", type: "drunk", label: "Drunk" },
+  { source: "witch", type: "witchCurse", label: "Cursed" },
+  { source: "vigormortis", type: "poisoned", label: "Poisoned" },
   // This existing Storyteller fact deliberately has no functioning source.
   { source: "fortuneteller", type: "fortuneTellerRedHerring", label: "Red Herring" },
 ] as const;
