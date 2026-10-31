@@ -57,7 +57,7 @@ describe("Pit-Hag -- Manual boundaries", () => {
     const next = planned(hag(g, "p1", "vortox"));
     expect(next.players.p1).toMatchObject({ actualRole: "vortox", actualAlignment: "good" });
     expect(next.gameRuleFacts).toEqual([expect.objectContaining({ type: "pitHagArbitraryDeaths", expiresAt: { phase: "day", day: 2 } })]);
-    expect(hag(g, "p1", "vigormortis")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(hag(g, "p1", "fanggu")).toMatchObject({ ok: false, code: "unsupported" });
   });
 
   it("Traveller destination or target (optional rule) -> Manual", () => {

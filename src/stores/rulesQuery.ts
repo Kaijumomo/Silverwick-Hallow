@@ -1,5 +1,5 @@
 import { isCanonicalRole } from "@/data/canonical";
-import { passiveProtection, passiveInformationModifiers, passiveRegistrationOptions } from "@/abilities/characters/passiveRules";
+import { isNeighbourPoisoner, passiveProtection, passiveInformationModifiers, passiveRegistrationOptions } from "@/abilities/characters/passiveRules";
 import { isPoisonerSelfEffect } from "@/abilities/characters/poisonerRules";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { activeModifiers, gateEvaluation, type HookScope, type ModifierDefinition, type ModifierGate } from "@/abilities/modifiers";
@@ -138,6 +138,10 @@ export type RulesQuery = {
   /** The nearest living participants on each side (skipping empty seats and
    * the dead), or null when there is none. */
   aliveNeighbours: (binding: ParticipantBinding) => QueryAnswer<{ left: ParticipantBinding | null; right: ParticipantBinding | null }>;
+  /** The nearest Townsfolk each way round the table (dead included; Outsiders,
+   * Minions, Travellers and empty seats skipped), or UNKNOWN where a registration
+   * could change who counts. A null side means there is no Townsfolk. */
+  nearestTownsfolk: (binding: ParticipantBinding) => QueryAnswer<{ clockwise: ParticipantBinding | null; counterclockwise: ParticipantBinding | null }>;
   /** Phase 10F Slice 7: the ACTIVE registry's definition of `roleId` (its
    * character type, canonical ownership...), or undefined. Definitions only --
    * never ability prose interpretation. */
@@ -226,10 +230,65 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     return known(functioning.value);
   };
 
+  /**
+   * Treacherous 30th: the nearest Townsfolk to `origin` in one seating direction,
+   * dead players included and non-Townsfolk / Travellers / empty seats skipped
+   * (https://wiki.bloodontheclocktower.com/No_Dashii). A skipped seat that could
+   * register as Townsfolk (optional Spy registration), or a counted Townsfolk that
+   * could register as something else, makes the answer UNKNOWN -- never guessed.
+   */
+  const nearestTownsfolk = (origin: STPlayerRecord, step: 1 | -1): QueryAnswer<STPlayerRecord | null> => {
+    const order = game.seatOrder;
+    const start = order.indexOf(origin.id);
+    if (start < 0) return unknown("The seat is not in the seating order.");
+    for (let offset = 1; offset < order.length; offset++) {
+      const other = game.players[order[(start + step * offset + order.length * order.length) % order.length]!];
+      if (!other || other.isEmpty || !other.participantId || other.isTraveler) continue;
+      const role = environment.registry.get(other.actualRole);
+      if (!role) return unknown("A seat holds a character the rules do not know: the Storyteller decides.");
+      const optional = isCanonicalRole(role) ? passiveRegistrationOptions(other.actualRole) : undefined;
+      if (role.type === "townsfolk") {
+        if (optional && optional.types.some((type) => type !== "townsfolk")) return unknown(`The ${role.name} may register as another type: the Storyteller decides.`);
+        return known(other);
+      }
+      if (optional?.types.includes("townsfolk")) return unknown(`The ${role.name} may register as a Townsfolk: the Storyteller decides.`);
+    }
+    return known(null);
+  };
+
+  /** The No Dashii's passive: its two nearest Townsfolk neighbours are poisoned
+   * while it is alive and its ability functions. Derived from the seating and
+   * actual characters on every query, so it follows Pit-Hag / seat changes
+   * immediately and is never stored. */
+  const noDashiiPoison = (holder: STPlayerRecord, visiting: Set<string>): QueryAnswer<boolean> => {
+    let undetermined: string | null = null;
+    for (const source of seated()) {
+      if (!isNeighbourPoisoner(source.actualRole) || !source.alive || source.id === holder.id) continue;
+      const role = environment.registry.get(source.actualRole);
+      if (!role || !isCanonicalRole(role)) continue;
+      const key = `nodashii:${source.participantId}:${holder.participantId}`;
+      if (visiting.has(key)) { undetermined ??= "These Effects depend on each other: the Storyteller decides."; continue; }
+      const functioning = functions(source, new Set(visiting).add(key));
+      if (!functioning.known) { undetermined ??= functioning.reason; continue; }
+      if (!functioning.value) continue;
+      for (const step of [1, -1] as const) {
+        const neighbour = nearestTownsfolk(source, step);
+        if (!neighbour.known) { undetermined ??= neighbour.reason; continue; }
+        if (neighbour.value?.participantId === holder.participantId) return known(true);
+      }
+    }
+    return undetermined ? unknown(undetermined) : known(false);
+  };
+
   /** Impairment of `player`: any applicable impairment Effect -> impaired;
    * any unknown one -> unknown; none -> not impaired. */
   const impairedOf = (player: STPlayerRecord, visiting: Set<string>, kinds: readonly EffectSemantics[]): QueryAnswer<boolean> => {
     let undetermined: string | null = null;
+    if (kinds.includes("impairment") && player.participantId) {
+      const derived = noDashiiPoison(player, visiting);
+      if (!derived.known) undetermined = derived.reason;
+      else if (derived.value) return known(true);
+    }
     for (const effect of player.effects) {
       const semantics = effectSemanticsOf(effect.type);
       if (!semantics || !kinds.includes(semantics)) continue;
@@ -289,6 +348,8 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     return [resolved.kind, resolved.kind === "supported" ? resolved.descriptor.sourcedEffects?.find((entry) => entry.type === effect.type)?.persistence ?? null : null];
   };
   const protectionDependencies = (): string => dependencySnapshot ??= JSON.stringify(["protection-dependency-v1",
+    // The No Dashii's poison follows the seating, so a seating change is a relevant change.
+    Object.values(game.players).some((p) => !p.isEmpty && isNeighbourPoisoner(p.actualRole)) ? game.seatOrder : null,
     Object.keys(game.players).sort().flatMap((playerId) => {
       const player = game.players[playerId];
       if (!player || player.isEmpty || !player.participantId) return [];
@@ -343,6 +404,13 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     moment: () => currentLiveMoment(game),
     participant,
     isAlive: (binding) => require(binding, (player) => known(player.alive)),
+    nearestTownsfolk: (binding) => require(binding, (player) => {
+      const sides = ([1, -1] as const).map((step) => nearestTownsfolk(player, step));
+      const unsure = sides.find((side) => !side.known);
+      if (unsure && !unsure.known) return unknown(unsure.reason);
+      const [clockwise, counterclockwise] = sides.map((side) => side.known && side.value ? bindingOf(side.value) : null);
+      return known({ clockwise: clockwise ?? null, counterclockwise: counterclockwise ?? null });
+    }),
     effectApplies: (holder, effect) => require(holder, (player) => applies(player, effect, new Set())),
     impaired: (binding) => require(binding, (player) => impairedOf(player, new Set(), ["impairment"])),
     abilityFunctions: (binding) => require(binding, (player) => functions(player, new Set())),

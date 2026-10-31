@@ -26,6 +26,11 @@ export const passiveRegistrationOptions = (roleId: RoleId) =>
 const TARGET_DEATH_GAPS = new Set(["fool", "sailor", "mayor", "lleech", "zombuul"]);
 const EXTERNAL_PROTECTION_GAPS = new Set(["tealady"]);
 
+/** Characters whose ability passively poisons their nearest Townsfolk neighbours
+ * (derived by the Rules Query from the seating, never stored).
+ * https://wiki.bloodontheclocktower.com/No_Dashii */
+export const isNeighbourPoisoner = (roleId: RoleId): boolean => roleId === "nodashii";
+
 export function passiveProtection(query: RulesQuery, target: ParticipantBinding, cause: "demon" | "any"): QueryAnswer<boolean> {
   const player = query.participant(target);
   const role = player && query.roleOf(player.actualRole);
@@ -88,5 +93,5 @@ export const REVIEWED_INTERACTION_ROLES: ReadonlySet<string> = new Set([
   "butler", "drunk", "recluse", "saint", "poisoner", "spy", "scarletwoman", "baron", "imp",
   "cultleader", "pithag", "alhadikhia", "harlot", "vortox",
   // Treacherous 30th: Innkeeper -- its cannotDie / drunk Effects are read through the shared protection and impairment queries.
-  "innkeeper",
+  "innkeeper", "nodashii", "vigormortis",
 ]);

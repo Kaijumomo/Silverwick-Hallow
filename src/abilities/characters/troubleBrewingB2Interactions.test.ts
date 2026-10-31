@@ -122,7 +122,7 @@ describe("B2c: supported protection does not broaden unverified interactions", (
     expect(attack(game, "p3")).toMatchObject({ ok: false, code: "unsupported" });
   });
 
-  it.each(["pukka", "nodashii", "fanggu"])("%s harmful effects outside supported coverage keep the whole action manual", role => {
+  it.each(["pukka", "fanggu"])("%s harmful effects outside supported coverage keep the whole action manual", role => {
     const game = patchPlayer(protect(proofGame(roles), "p5"), "p2", { actualRole: role });
     const before = JSON.stringify(game);
     expect(plan(game, request(game, "p0", "monk", { target: pick(game, "p4") }))).toMatchObject({ ok: false, code: "unsupported" });
