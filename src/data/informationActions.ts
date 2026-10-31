@@ -148,6 +148,32 @@ export const INFORMATION_ACTIONS: Record<RoleId, InformationAction[]> = {
     },
   ],
 
+  // "Each night*, you learn if a Minion nominated today." -- Boolean, other nights only.
+  // Treacherous 30th (owner-authorized Silverwick-authored metadata; no pinned action existed).
+  towncrier: [
+    {
+      id: "towncrier-other-night",
+      timing: { kind: "otherNight" },
+      instruction: "Nod if a Minion nominated today, shake your head if not.",
+      requirements: [
+        { id: "minionNominated", kind: "boolean", label: "Whether a Minion nominated today" },
+      ],
+    },
+  ],
+
+  // "Each night*, you learn how many dead players are evil." -- Number, other nights only.
+  // Treacherous 30th (owner-authorized Silverwick-authored metadata; no pinned action existed).
+  oracle: [
+    {
+      id: "oracle-other-night",
+      timing: { kind: "otherNight" },
+      instruction: "Give a finger signal for the number of dead players who are evil.",
+      requirements: [
+        { id: "deadEvil", kind: "number", label: "Number of dead evil players" },
+      ],
+    },
+  ],
+
   ravenkeeper: [
     {
       id: "ravenkeeper-triggered",
