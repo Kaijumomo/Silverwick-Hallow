@@ -17,16 +17,28 @@ import type { NightStep } from "@/features/nightOrder/nightOrder";
 import { NIGHT_INFORMATION_ROLES, type NightInformationHandle } from "@/features/nightOrder/NightInformationAction";
 import { FIRST_INFORMATION_CHARACTERS } from "@/features/setup/FirstInformationPreparation";
 import type { V6Ctx } from "../ctx";
-import { flash, showVeil } from "../v6Store";
+import { flash, showVeil, useV6Ui } from "../v6Store";
+import { guardGesture } from "./gestureGuard";
 import { roman } from "../ringLayout";
 import { activeCheckpoint, useNightPos, type NightCheckpoint } from "./nightPos";
 import { dawnFlash, nightDeaths, resolvePosition, type NightPosition } from "./nightSteps";
 import { useScoped } from "./useScoped";
 
 const semantics = CANONICAL_ABILITY_SEMANTICS;
-const simpleTarget = (descriptor: AbilityDescriptor) => descriptor.presentation.complexity === "simple"
-  && descriptor.inputs.length === 1 && descriptor.inputs[0]!.kind === "participant"
-  && (descriptor.inputs[0]!.count ?? 1) === 1 && descriptor.inputs[0]!.source !== "judgment";
+/** Characters whose whole action is tapped on the board (T30 design). Others keep the ability workspace. */
+const BOARD_ROLES = new Set(["innkeeper", "shabaloth", "gambler", "godfather", "professor", "moonchild", "vigormortis"]);
+/**
+ * A simple single-player choice is always tapped on the board. The BOARD_ROLES also tap a fixed count of players
+ * (Innkeeper, Shabaloth) or a player then a character guess (Gambler). A needsInput the board cannot answer
+ * still falls back to the ability workspace in `choose`.
+ */
+const boardTarget = (descriptor: AbilityDescriptor) => {
+  const [first, ...rest] = descriptor.inputs;
+  if (!first || first.kind !== "participant" || first.source === "judgment") return false;
+  if (descriptor.presentation.complexity === "simple") return descriptor.inputs.length === 1 && (first.count ?? 1) === 1;
+  return BOARD_ROLES.has(descriptor.roleId) && rest.length <= 1 && rest.every((input) => input.kind === "character" && input.source !== "judgment");
+};
+const pickCount = (descriptor: AbilityDescriptor) => descriptor.inputs[0]?.count ?? 1;
 
 export type NightWorkspace = { target: WorkspaceTarget; ability: StepAbility; inputs?: Record<string, AbilityInputValue>; key: number };
 export type SuccessorChoice = { game: StorytellerLobbyRecord; stepKey: string; inputs: Record<string, AbilityInputValue>; id: string; eligible: Set<string> };
@@ -62,6 +74,10 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   const [success, setSuccess] = useScoped<Success | null>(scope, null);
   const [manualAction, setManualAction] = useScoped<string | null>(scope, null);
   const [successorChoice, setSuccessorChoice] = useScoped<SuccessorChoice | null>(scope, null);
+  // Players tapped so far for a step that takes several (Innkeeper, Shabaloth), and the player the Gambler chose
+  // while the guess is being picked.
+  const [picks, setPicks] = useScoped<ParticipantBinding[]>(scope, EMPTY_PICKS);
+  const [guessFor, setGuessFor] = useScoped<ParticipantBinding | null>(scope, null);
   const sequence = useRef(0);
   const actionContext = captureCharacterActionContext();
 
@@ -96,9 +112,10 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   const butlerTurn = current?.kind === "player" && current.effectiveRoleId === "butler";
   const inlineInformation = !!(butlerTurn || preparedInformation || current?.kind === "player" && NIGHT_INFORMATION_ROLES.has(current.effectiveRoleId)
     && ability?.kind === "guided" && (!!eligible || resolved || manualRavenkeeper));
-  const direct = !inlineInformation && eligible && ability?.kind === "guided" && !ability.invocationPath && simpleTarget(ability.descriptor);
+  const direct = !inlineInformation && eligible && ability?.kind === "guided" && !ability.invocationPath && boardTarget(ability.descriptor);
+  const needed = ability?.kind === "guided" ? pickCount(ability.descriptor) : 1;
   const correction = current && resolved ? getNightActionCorrection(game, game.day, current.stepKey) : null;
-  const canTarget = !!direct && (!resolved || !!correction?.canCorrect);
+  const canTarget = !!direct && (!resolved || needed === 1 && !!correction?.canCorrect);
   const role = current?.kind === "player" ? registry.get(current.effectiveRoleId) : actor?.actualRole ? registry.get(actor.actualRole) : undefined;
   const bureaucrat = !!(actor?.actualRole === "bureaucrat" && actor.participantId && script
     && bureaucratActionEligibility(game, bindingOf(actor), { script, registry, semantics }).known
@@ -110,11 +127,32 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   const live = useRef({ visible, current, game, successorChoice });
   live.current = { visible, current, game, successorChoice };
 
+  // T30 design: a step the rules say does not wake shows why (no Outsider died today, no execution today, ...).
+  const skipReason: string | null = useMemo(() => {
+    if (script?.id !== "treacherous-30th" || !current || current.kind !== "player" || resolved || !ability || ability.kind !== "guided") return null;
+    if (current.advisory?.includes("Vigormortis")) return null;
+    const fingerprint = captureFingerprint(game, current.playerId, { day: game.day, stepKey: current.stepKey });
+    if (!fingerprint || !script) return null;
+    // The rules answer "does not act tonight" before they read any choice, so probe with placeholder choices.
+    const actorSeat = actor && actor.participantId ? bindingOf(actor) : null;
+    const probe: Record<string, AbilityInputValue> = {};
+    for (const input of ability.descriptor.inputs) {
+      if (input.kind === "participant" && actorSeat) {
+        const pool = seatedParticipants(game).filter((p) => participantAllowed(p, input, actorSeat)).slice(0, input.count ?? 1);
+        probe[input.id] = { kind: "participant", participants: pool.map(bindingOf) };
+      } else if (input.kind === "character") probe[input.id] = { kind: "character", roleIds: [script.characters[0]?.id ?? ""] };
+    }
+    const plan = planAbilityResolution(game, { mode: "guided", invocationPath: "nightOrder", fingerprint, roleId: current.effectiveRoleId, inputs: probe, completeStep: true },
+      { script, registry, semantics });
+    return !plan.ok && plan.code === "notApplicable" ? plan.message : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game, current?.stepKey, resolved, script]);
+
   const unfinished: UnfinishedNightWork | null = useMemo(() => work ? unfinishedNightWork(game, work) : null, [work, game]);
 
   // ── navigation ────────────────────────────────────────────────────────────
   const settle = () => {
-    setSuccessorChoice(null);
+    setSuccessorChoice(null); setPicks(EMPTY_PICKS); closeGuess(); setGuessFor(null);
     useTargetPicker.getState().cancel();
     setWorkspace(null); setSuccess(null); setError(null); setPaused(false);
     setManualAction(null);
@@ -178,6 +216,13 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
       return;
     }
     const input = ability.descriptor.inputs[0]!;
+    if (needed > 1 && !successorChoice) {
+      const chosen = [...picks, target];
+      if (chosen.length < needed) { setPicks(chosen); return; }
+      setPicks(EMPTY_PICKS);
+      commitPicks(chosen, input.id); return;
+    }
+    if (current.effectiveRoleId === "gambler" && !successorChoice) { chooseGuess(target, input.id); return; }
     if (successorChoice && (live.current.successorChoice !== successorChoice || successorChoice.game !== game || successorChoice.stepKey !== current.stepKey)) return;
     const inputs = successorChoice
       ? { ...successorChoice.inputs, [successorChoice.id]: { kind: "participant" as const, participants: [target] } }
@@ -188,7 +233,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     const plan = planAbilityResolution(game, request, { script, registry, semantics });
     if (!plan.ok && plan.code === "unsupported") { requireManual(); return; }
     if (!plan.ok && plan.code === "needsInput") {
-      if (current.effectiveRoleId === "imp") {
+      if (current.effectiveRoleId === "imp" || current.effectiveRoleId === "vigormortis") {
         const requirement = plan.requirements?.[0];
         // A verified successor choice stays on the board. Rule judgments
         // never become a guided fallback and no partial death is committed.
@@ -212,6 +257,60 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     finish(useStorytellerStore.getState().game!);
   };
 
+  /** Several players tapped: the Innkeeper's drunk player is the first one tapped (T30 design), never asked. */
+  const commitPicks = (chosen: ParticipantBinding[], inputId: string) => {
+    if (!current || current.kind !== "player" || ability?.kind !== "guided" || !script) return;
+    const fingerprint = captureFingerprint(game, current.playerId, { day: game.day, stepKey: current.stepKey });
+    if (!fingerprint) { setError("This player is no longer seated."); return; }
+    let inputs: Record<string, AbilityInputValue> = { [inputId]: { kind: "participant", participants: chosen } };
+    const env = { script, registry, semantics };
+    const make = () => ({ mode: "guided" as const, invocationPath: "nightOrder" as const, fingerprint, roleId: current.effectiveRoleId, inputs, completeStep: true });
+    let plan = planAbilityResolution(game, make(), env);
+    if (!plan.ok && plan.code === "needsInput" && current.effectiveRoleId === "innkeeper") {
+      const requirement = plan.requirements?.length === 1 ? plan.requirements[0] : undefined;
+      if (requirement?.source === "storyteller" && requirement.kind === "participant") {
+        inputs = { ...inputs, [requirement.id]: { kind: "participant", participants: [chosen[0]!] } };
+        plan = planAbilityResolution(game, make(), env);
+      }
+    }
+    if (!plan.ok && plan.code === "unsupported") { requireManual(); return; }
+    if (!plan.ok && plan.code === "needsInput") { openWorkspace(inputs); return; }
+    if (!plan.ok) { setError(plan.message); return; }
+    const result = useStorytellerStore.getState().resolveAbility(make(), semantics, actionContext);
+    if (!result.ok) { setError(result.message); return; }
+    finish(useStorytellerStore.getState().game!);
+  };
+  /** The Gambler taps the player, then the guess is picked from the board's character picker. */
+  const closeGuess = () => { const picker = useV6Ui.getState().picker; if (picker?.mode === "show" && picker.onPick) useV6Ui.getState().set({ picker: null }); };
+  const chooseGuess = (target: ParticipantBinding, inputId: string) => {
+    if (!current || current.kind !== "player" || !script) return;
+    setGuessFor(target);
+    const base = current;
+    guardGesture();
+    const gambler = game.players[base.playerId];
+    useV6Ui.getState().set({ pickHover: null, picker: { mode: "show", title: "What does the Gambler guess?",
+      kicker: `The Gambler · guess ${game.players[target.playerId]?.name || "the player"}’s character`,
+      onPick: (roleId) => {
+        const fingerprint = captureFingerprint(game, base.playerId, { day: game.day, stepKey: base.stepKey });
+        if (!fingerprint || !gambler) return "This player is no longer seated.";
+        const inputs: Record<string, AbilityInputValue> = { [inputId]: { kind: "participant", participants: [target] }, guess: { kind: "character", roleIds: [roleId] } };
+        const request = { mode: "guided" as const, invocationPath: "nightOrder" as const, fingerprint, roleId: base.effectiveRoleId, inputs, completeStep: true };
+        const plan = planAbilityResolution(game, request, { script, registry, semantics });
+        if (!plan.ok && plan.code === "needsInput") { closeGuess(); setGuessFor(null); openWorkspace(inputs); return undefined; }
+        if (!plan.ok) return plan.message;
+        const result = useStorytellerStore.getState().resolveAbility(request, semantics, actionContext);
+        if (!result.ok) return result.message;
+        closeGuess(); setGuessFor(null);
+        finish(useStorytellerStore.getState().game!);
+        return undefined;
+      } } });
+    // Closing the picker without a guess returns to tapping a player.
+    const stop = useV6Ui.subscribe((state) => {
+      if (state.picker?.mode === "show" && state.picker.onPick) return;
+      stop(); setGuessFor(null);
+    });
+  };
+
   // ── effects (ported from the guided Night panel) ──────────────────────────
   useEffect(() => {
     if (!current || cursor?.day === game.day && cursor.stepKey === current.stepKey) return;
@@ -222,13 +321,14 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
       ? { playerId: actor.id, participantId: actor.participantId, stepKey: current.stepKey } : null);
   }, [active, actor?.id, actor?.participantId, current?.stepKey]);
   useEffect(() => {
-    if (!visible || paused || workspace || !canTarget || !actor || ability?.kind !== "guided") return;
+    if (!visible || paused || workspace || !canTarget || !actor || ability?.kind !== "guided" || guessFor || skipReason) return;
     const input = ability.descriptor.inputs[0]!;
-    const eligibleTargets = successorChoice?.eligible ?? new Set(seatedParticipants(game).filter((p) => participantAllowed(p, input, bindingOf(actor))).map((p) => p.participantId!));
-    useTargetPicker.getState().start(successorChoice ? "Choose the new Imp" : resolved ? "Correct target" : ability.descriptor.presentation.action, choose, { owner, eligible: eligibleTargets });
+    const eligibleTargets = successorChoice?.eligible ?? new Set(seatedParticipants(game).filter((p) => participantAllowed(p, input, bindingOf(actor))
+      && !picks.some((chosen) => chosen.participantId === p.participantId)).map((p) => p.participantId!));
+    useTargetPicker.getState().start(successorChoice ? current?.effectiveRoleId === "vigormortis" ? "Choose the poisoned neighbour" : "Choose the new Imp" : resolved ? "Correct target" : needed > 1 ? `Choose player ${picks.length + 1} of ${needed}` : ability.descriptor.presentation.action, choose, { owner, eligible: eligibleTargets });
     return () => { if (useTargetPicker.getState().active?.owner === owner) useTargetPicker.getState().cancel(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game, current?.stepKey, visible, paused, workspace, canTarget, successorChoice]);
+  }, [game, current?.stepKey, visible, paused, workspace, canTarget, successorChoice, picks, guessFor, skipReason]);
   useEffect(() => { if (!visible) { useTargetPicker.getState().cancel(); setSuccess(null); } else setPaused(false); }, [visible]);
   useEffect(() => {
     if (!active) {
@@ -328,7 +428,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
 
   return {
     active, visible, work, steps, unfinished, pos, current, currentIndex, resolved, actor, role, ability, query,
-    eligible, direct, canTarget, inlineInformation, preparedInformation, butlerTurn, bureaucrat, manual, manualRavenkeeper, correction,
+    eligible, direct, canTarget, skipReason, needed, picks, guessFor, inlineInformation, preparedInformation, butlerTurn, bureaucrat, manual, manualRavenkeeper, correction,
     workspace, setWorkspace, setPaused, error, setError, success, successorChoice, picker, refused, owner, actionContext,
     navigate, gotoCheckpoint, prev, next, beginDay, openWorkspace, openTrigger, requireManual, finish,
   };
@@ -337,6 +437,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
 export type NightEngine = ReturnType<typeof useNightEngine>;
 
 const EMPTY_STEPS: NightStep[] = [];
+const EMPTY_PICKS: ParticipantBinding[] = [];
 
 /** A workspace opened for a trigger that has no Night row keeps its own owner step. */
 function isTriggerWorkspace(workspace: NightWorkspace, work: NightWork | null): boolean {

@@ -19,7 +19,9 @@ import type { PlayerId, ReminderRecord, RoleDef, Script, STPlayerRecord, Storyte
  */
 export type MarkRemoval =
   | { type: "effect"; token: OfficialEffectToken }
-  | { type: "notation"; group: ReminderRecord[]; modifierId?: string };
+  | { type: "notation"; group: ReminderRecord[]; modifierId?: string }
+  /** A condition the rules derive from the table (the No Dashii's poison): drawn, never stored, so nothing to remove. */
+  | { type: "derived"; reason: string };
 
 export type Mark = {
   key: string;
@@ -52,6 +54,13 @@ export function playerMarks(env: MarkEnv, player: STPlayerRecord): Mark[] {
   for (const token of effects.tokens) {
     const label = times(token.label, token.instances.length);
     marks.push({ key: `effect:${token.key}`, kind: "effect", label, title: `${token.role.name}: ${label}`, src: iconUrlFor(token.role), size: ROLE_SIZE, removal: { type: "effect", token } });
+  }
+  // The No Dashii's neighbours are poisoned by its passive. Drawn with its official Poisoned token, but read-only.
+  const poisoned = query.noDashiiPoisoned({ playerId: player.id, participantId: player.participantId });
+  if (poisoned.known && poisoned.value) {
+    const source = officialNotationRole("nodashii", "Poisoned") ?? registry.get("nodashii");
+    marks.push({ key: "derived:nodashii-poison", kind: "effect", label: "Poisoned", title: "No Dashii: Poisoned", src: source ? iconUrlFor(source) : "", size: ROLE_SIZE,
+      removal: { type: "derived", reason: "This follows the No Dashii. It ends when the No Dashii dies or loses its ability." } });
   }
   const voting = currentVotingState(game);
   const linked = (id: string) => voting.modifiers.find((m) => m.target.playerId === player.id && m.target.participantId === player.participantId && `voting-${m.id}` === id);
@@ -87,6 +96,7 @@ export function removeMark(playerId: PlayerId, participantId: string | undefined
   const { current, game, player, target } = ctx;
   const context = captureVotingContext();
   const removal = mark.removal;
+  if (removal.type === "derived") return { ok: false, message: removal.reason };
   if (removal.type === "effect") {
     const instances = removal.token.instances;
     // Grouping is presentation only: never choose a source implicitly or cancel independent effects together.

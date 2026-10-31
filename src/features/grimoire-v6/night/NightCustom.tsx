@@ -15,6 +15,7 @@ import type { V6Ctx } from "../ctx";
 import { useV6Ui } from "../v6Store";
 import { presentCharacter, presentSetup, report } from "../info/actions";
 import { INFO_TOKENS } from "../info/tokens";
+import { guardGesture } from "./gestureGuard";
 import type { NightEngine } from "./useNightEngine";
 import "./night-custom.css";
 
@@ -34,25 +35,6 @@ function StepNotes({ day, stepKey, notes }: { day: number; stepKey: string; note
 }
 
 const REVEAL = INFO_TOKENS.find((t) => t.label === "Reveal a Token")!;
-
-/**
- * The board chooses a target on pointerup, and the picker can open under the same finger. The browser's
- * following compatibility click must not pick the token that appeared there: until a new pointer gesture
- * starts, pointer clicks are swallowed. Keyboard activation (detail 0) is always deliberate.
- */
-function guardGesture() {
-  let armed = false;
-  const arm = () => { armed = true; };
-  const swallow = (event: MouseEvent) => { if (!armed && event.detail > 0) { event.preventDefault(); event.stopPropagation(); } };
-  window.addEventListener("pointerdown", arm, true);
-  window.addEventListener("click", swallow, true);
-  const stop = useV6Ui.subscribe((state) => {
-    if (state.picker?.mode === "show" && state.picker.onPick) return;
-    window.removeEventListener("pointerdown", arm, true);
-    window.removeEventListener("click", swallow, true);
-    stop();
-  });
-}
 
 /** PO review (C06/C12): a Night card reveals a token with the Information panel's character picker
  * (the board picker, as Distribute roles) and the same player view. */

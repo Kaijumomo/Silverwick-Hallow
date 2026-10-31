@@ -3366,6 +3366,12 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                                 <span style={S471}>
                                   {T(g?.note)}
                                 </span>
+                                {g?.gf && (
+                                  <span role="group" aria-label="Godfather: Outsiders" style={{ display: 'flex', padding: 2, gap: 2, borderRadius: 8, border: '1px solid rgba(148,194,154,.3)', marginLeft: 8 }}>
+                                    <button type="button" onClick={g.gf.minus} aria-pressed={g.gf.minusOn} aria-label="One fewer Outsider" style={{ minWidth: 34, height: 24, padding: '0 8px', borderRadius: 6, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer', fontFamily: 'inherit', opacity: g.gf.minusOpacity, background: g.gf.minusOn ? 'rgba(148,194,154,.22)' : 'transparent', color: g.gf.minusOn ? '#cfe6d2' : 'rgba(222,216,204,.5)' }}>−1</button>
+                                    <button type="button" onClick={g.gf.plus} aria-pressed={g.gf.plusOn} aria-label="One more Outsider" style={{ minWidth: 34, height: 24, padding: '0 8px', borderRadius: 6, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: g.gf.plusOn ? 'rgba(148,194,154,.22)' : 'transparent', color: g.gf.plusOn ? '#cfe6d2' : 'rgba(222,216,204,.5)' }}>+1</button>
+                                  </span>
+                                )}
                               </div>
                               <span style={css(`font-family:'IM Fell English', serif; font-size:18px; font-weight:400; color:${g?.countColor ?? ''};`)}>
                                 {T(g?.count)}

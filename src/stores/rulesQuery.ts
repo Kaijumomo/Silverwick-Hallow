@@ -120,6 +120,8 @@ export type RulesQuery = {
    * Death is reported separately (isAlive); whether an ability works while
    * dead is character semantics. */
   abilityFunctions: (binding: ParticipantBinding) => QueryAnswer<boolean>;
+  /** Whether a living, functioning No Dashii poisons this player through its passive (derived, never stored). */
+  noDashiiPoisoned: (binding: ParticipantBinding) => QueryAnswer<boolean>;
   /** Protection against a death of `cause`. `generic` Protected never answers
    * "protected" automatically. */
   protectedFrom: (binding: ParticipantBinding, cause: "demon" | "any") => QueryAnswer<boolean>;
@@ -417,6 +419,7 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     effectApplies: (holder, effect) => require(holder, (player) => applies(player, effect, new Set())),
     impaired: (binding) => require(binding, (player) => impairedOf(player, new Set(), ["impairment"])),
     abilityFunctions: (binding) => require(binding, (player) => functions(player, new Set())),
+    noDashiiPoisoned: (binding) => require(binding, (player) => noDashiiPoison(player, new Set())),
     protectedFrom: (binding, cause) => require(binding, (player) => {
       const passive = passiveProtection(self, binding, cause);
       if (!passive.known || passive.value) return passive;

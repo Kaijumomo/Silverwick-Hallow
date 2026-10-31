@@ -7,12 +7,12 @@ import { changeRoleIntent, ordinaryRoleChoices } from "@/stores/roleResolution";
 import { isPostDeal, selectSetupContext, type SetupContext } from "@/features/setup/setupContext";
 import { analyzeSetup } from "@/features/setup/setupAnalyzer";
 import { canRefineSetup } from "@/features/setup/setupRefinement";
-import { SETUP_COUNTS } from "@/data/setupCounts";
+import { type BagCounts } from "@/data/setupCounts";
 import { randomSetup } from "@/features/setup/randomSetup";
 import { isInitialRevealComplete, shownRoleFilter } from "@/stores/identity";
 import type { PlayerId, RoleDef, RoleId, RoleType, Script, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 import { TEAM_COLOR, TEAM_LABEL } from "../icons";
-import { chooseAsk, flash, useV6Ui, type PickerState, type V6UiActions, type V6UiState } from "../v6Store";
+import { flash, useV6Ui, type PickerState, type V6UiActions, type V6UiState } from "../v6Store";
 import { presentCharacter, report } from "../info/actions";
 import { remArc, remFs } from "./remArc";
 import { bluffHolderId, bluffsOf } from "./bluffs";
@@ -110,7 +110,12 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
   const draft = ui.pickSel;
   const draftContext = dist ? selectSetupContext({ ...game, rolePool: draft }, script) : null;
   const draftAnalysis = draftContext ? analyzeSetup(draftContext) : null;
-  const single = draftAnalysis?.pool.candidates?.length === 1 ? draftAnalysis.pool.candidates[0]! : null;
+  const candidates = draftAnalysis?.pool.candidates ?? null;
+  const single = candidates?.length === 1 ? candidates[0]! : null;
+  // T30 design: with the Godfather in the bag the Storyteller picks one Outsider more or fewer (a slider on the Outsiders header).
+  const gfOptions = dist && draft.includes("godfather") && candidates?.length === 2 ? gfCandidates(candidates) : null;
+  const gfChosen = gfOptions ? (ui.gfMod === -1 ? gfOptions.fewer : gfOptions.more) : null;
+  const target = gfChosen ?? single;
   const residents = context.population.targetNonTravelerCount ?? context.ordinary.length;
   const privateSetup = game.phase === "setup" && !isInitialRevealComplete(game);
   const slot = picker.mode === "bluff" ? picker.slot : -1;
@@ -124,7 +129,7 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
   const group = (type: RoleType) => {
     const members = roles.filter((r) => r.type === type);
     const have = members.filter((r) => draft.includes(r.id)).length;
-    const need = single ? ((single as Record<string, number>)[type] ?? 0) : 0;
+    const need = target ? ((target as Record<string, number>)[type] ?? 0) : 0;
     const tiles = members.map((role) => {
       const on = draft.includes(role.id);
       const holder = heldBy(role.id);
@@ -154,9 +159,15 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
     return {
       label: type === "traveler" ? "Travelers" : type === "townsfolk" ? "Townsfolk" : type === "demon" ? "Demon" : `${roleTypeLabel(type)}s`,
       color: TEAM_COLOR[type], tiles,
-      count: dist ? (single ? `${have} / ${need}` : `${have}`) : "",
-      countColor: single && have === need ? TEAM_COLOR[type] : "#e7a35b",
-      note: dist && type === "outsider" && draft.includes("baron") ? "Baron adds 2" : "",
+      count: dist ? (target ? `${have} / ${need}` : `${have}`) : "",
+      countColor: target && have === need ? TEAM_COLOR[type] : "#e7a35b",
+      note: dist && type === "outsider" ? outsiderNote(draft) : "",
+      gf: dist && type === "outsider" && draft.includes("godfather") ? {
+        minusOn: ui.gfMod === -1 && !!gfOptions, plusOn: ui.gfMod !== -1 || !gfOptions,
+        minusOpacity: gfOptions ? 1 : 0.35,
+        minus: () => { if (!gfOptions) { flash("No Outsiders to remove at this player count."); return; } set({ gfMod: -1 }); },
+        plus: () => set({ gfMod: 1 }),
+      } : null,
     };
   };
   const G = Object.fromEntries([...TYPES, "traveler"].map((t) => [t, group(t as RoleType)])) as Record<string, ReturnType<typeof group>>;
@@ -178,7 +189,8 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
       rems: (detail.reminders ?? []).map((label, i) => ({ label, fs: remFs(label), arc: remArc(label, `pk-${detail.id}-${i}`) as ReactNode, size: 100, src: iconUrlFor(detail) })), noRems: !(detail.reminders ?? []).length }
     : { name: "", type: "", color: "#ddd6c8", ability: "", img: "", rems: [], noRems: true };
 
-  const ok = !!(privateSetup && draftAnalysis?.readiness.deal.ok);
+  const countsMatch = !gfChosen || TYPES.every((t) => draft.filter((id) => roles.find((r) => r.id === id)?.type === t).length === gfChosen[t]);
+  const ok = !!(privateSetup && draftAnalysis?.readiness.deal.ok && countsMatch);
   const firstFinding = draftAnalysis?.findings.find((f) => f.severity !== "info")?.message;
   const name = player ? player.name || `Seat ${player.seat + 1}` : "";
   const heading = {
@@ -215,14 +227,11 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
       const input = { scriptCharacters: script.characters, targetPlayerCount: context.population.targetNonTravelerCount, fabledIds: game.fabled, loricIds: game.lorics };
       let result = randomSetup(input);
       if (!result.ok && result.failure.reason === "multiple-candidates" && result.failure.drawn) {
+        // The Outsiders slider answers the Godfather's Add / Remove choice; no question is asked.
         const { candidates, drawn } = result.failure;
-        const baseOutsiders = SETUP_COUNTS[input.targetPlayerCount ?? 0]?.outsider;
-        const more = candidates.find(c => baseOutsiders !== undefined && c.outsider > baseOutsiders);
-        const fewer = candidates.find(c => baseOutsiders !== undefined && c.outsider < baseOutsiders);
-        if (candidates.length === 2 && more && fewer) {
-          const pick = await chooseAsk("Godfather in the bag", "The Godfather changes the Outsider count by one. Which setup do you want?", "Add an Outsider", "Remove an Outsider");
-          if (!pick) return;
-          result = randomSetup({ ...input, drawn, chosenComposition: pick === "first" ? more : fewer });
+        if (candidates.length === 2) {
+          const { more, fewer } = gfCandidates(candidates);
+          result = randomSetup({ ...input, drawn, chosenComposition: useV6Ui.getState().gfMod === -1 ? fewer : more });
         }
       }
       if (result.ok) set({ pickSel: result.pool }); else flash(result.failure.message);
@@ -231,6 +240,14 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
     close,
   };
 }
+
+/** The Godfather's two compositions: the one with more Outsiders and the one with fewer. */
+const gfCandidates = (candidates: BagCounts[]) => {
+  const sorted = [...candidates].sort((a, b) => b.outsider - a.outsider);
+  return { more: sorted[0]!, fewer: sorted[sorted.length - 1]! };
+};
+const outsiderNote = (draft: RoleId[]) => [draft.includes("godfather") && "Godfather", draft.includes("vigormortis") && "Vigormortis −1", draft.includes("baron") && "Baron adds 2"]
+  .filter(Boolean).join(" · ").replace("Godfather · Vigormortis −1", "Godfather · Vigormortis −1");
 
 type PickContext = { holders: Record<RoleId, string[]>; shownChoices: RoleDef[]; bluffHolder: PlayerId | null; bluffs: RoleId[]; context: ReturnType<typeof selectSetupContext> };
 

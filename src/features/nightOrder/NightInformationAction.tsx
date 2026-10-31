@@ -16,7 +16,7 @@ import { RoleChooser } from "@/features/players/RoleChooser";
 import { isDeathEvent } from "@/stores/lifeEvents";
 import { TokenInformationAction } from "@/features/info/TokenInformationAction";
 
-export const CALCULATED_INFORMATION_ROLES = new Set(["chef", "empath", "fortuneteller"]);
+export const CALCULATED_INFORMATION_ROLES = new Set(["chef", "empath", "fortuneteller", "towncrier", "oracle"]);
 export const NIGHT_INFORMATION_ROLES = new Set([...CALCULATED_INFORMATION_ROLES, "undertaker", "ravenkeeper"]);
 const EMPTY_INPUTS: AbilityInputs = {};
 export type NightInformationHandle = { next: () => boolean };

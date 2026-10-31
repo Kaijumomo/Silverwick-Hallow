@@ -56,6 +56,8 @@ export type V6UiState = {
   picker: PickerState | null;
   pickSel: RoleId[];
   pickHover: RoleId | null;
+  /** Distribute Roles: the Storyteller's Godfather choice, one Outsider more (+1) or fewer (-1). */
+  gfMod: 1 | -1;
   // ── setup (4C) ────────────────────────────────────────────────────────────
   wiz: { step: WizardStep; script: string | null; customName: string | null; count: number; extras: string[]; focus: string | null; xtab: "fabled" | "loric" } | null;
   townCur: number | null;
@@ -84,7 +86,7 @@ export type V6UiActions = {
 const INITIAL: V6UiState = {
   panel: null, qrOpen: false, toast: null, veil: null, settle: null,
   popMode: "main", card: false, swapFrom: null, remAll: false, remArm: null,
-  picker: null, pickSel: [], pickHover: null,
+  picker: null, pickSel: [], pickHover: null, gfMod: 1,
   wiz: null, townCur: null, seatMode: false, seatCur: 0, lobbyName: "", prepEdit: null,
   shownNumber: null, slay: null,
   show: null, refQuery: "", refSel: null, endOpen: false, winScene: false, ask: null,

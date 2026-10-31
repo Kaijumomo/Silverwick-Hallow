@@ -4,6 +4,7 @@ import { stepResolved } from "@/features/nightOrder/nightWork";
 import { hasEffect } from "@/stores/effects";
 import type { V6Ctx } from "../ctx";
 import { renderNightCustom } from "../night/NightCustom";
+import { T30_VERBS, godfatherInfoVerb } from "../night/t30Verbs";
 import { dawnText, duskText, MARKER_ICON, stepIcon, stepLabel, stepWho, stripItem } from "../night/nightSteps";
 import { useNightEngine } from "../night/useNightEngine";
 import { EMPTY, type SliceResult } from "./types";
@@ -67,10 +68,15 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
     const { picker, correction, success, direct, canTarget, resolved, inlineInformation, successorChoice } = engine;
     const targetName = correction?.target ? game.players[correction.target.playerId]?.name || "The chosen player" : "";
     const player = current.kind === "player";
+    const roleKey = current.kind === "player" ? current.effectiveRoleId : "";
+    const t30Verb = ctx.script?.id === "treacherous-30th" && roleKey
+      ? engine.skipReason ? `${engine.skipReason.replace(/\.$/, "")}. This character does not wake.` : roleKey === "godfather" && game.day === 1 ? godfatherInfoVerb(game, ctx.registry)
+        : !inlineInformation ? T30_VERBS[roleKey] : undefined
+      : undefined;
     const verb = player
-      ? successorChoice ? "Choose the Minion who becomes the new Imp."
-        : engine.manual || inlineInformation ? engine.role?.ability ?? current.prompt
-        : engine.ability?.kind === "guided" ? engine.ability.descriptor.presentation.action : current.prompt
+      ? successorChoice ? roleKey === "vigormortis" ? "Which neighbouring Townsfolk is poisoned? The Minion keeps their ability." : "Choose the Minion who becomes the new Imp."
+        : t30Verb ?? (engine.manual || inlineInformation ? engine.role?.ability ?? current.prompt
+        : engine.ability?.kind === "guided" ? engine.ability.descriptor.presentation.action : current.prompt)
       : current.prompt;
     // PO review A03/C07: an impaired player is named by the pill beside the name, and the routine procedure lines
     // (manual prompt, impairment, death check) are not repeated in amber. Rarer Storyteller checks still show.
@@ -81,13 +87,14 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
       player && current.isDeceived && !drunk ? `Follow the shown character’s procedure. This player is actually the ${current.actualRoleName}.` : undefined,
       quietAdvisory(current.advisory),
     ]);
-    const waiting = canTarget && !resolved && !!picker && picker.owner === engine.owner || !!successorChoice;
+    const waiting = !engine.skipReason && canTarget && !resolved && !!picker && picker.owner === engine.owner || !!successorChoice;
     const celebrated = success?.key === current.stepKey && success.game === game;
     let result = "", resultHint = "";
     if (!inlineInformation) {
       if (direct && resolved) {
         result = targetName ? `${targetName} chosen.` : celebrated ? "Resolved." : "Completed";
-        resultHint = canTarget ? "Tap another player to change." : correction?.message ?? "This action cannot be safely retargeted here. Open the player’s settings to correct its result.";
+        resultHint = engine.needed > 1 ? roleKey === "innkeeper" ? "Tap order sets who is drunk." : ""
+          : canTarget ? "Tap another player to change." : correction?.message ?? (ctx.script?.id === "treacherous-30th" ? "" : "This action cannot be safely retargeted here. Open the player’s settings to correct its result.");
       } else if (celebrated) {
         result = "Resolved.";
         resultHint = steps.slice(engine.currentIndex + 1).some((step) => !stepResolved(game, step)) ? "Continuing…" : "";
@@ -99,7 +106,9 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
       // PO review C09/C10: the Minion and Demon information steps carry only their title and the show row.
       verb: current.stepKey === "minionInfo" || current.stepKey === "demonInfo" ? "" : verb,
       impOn: drunk || poisoned, impLabel: drunk ? "Drunk" : "Poisoned",
-      waiting, waitText: successorChoice ? "Choose the new Imp on the board" : "Tap a player on the board", picks: [],
+      waiting, waitText: successorChoice ? roleKey === "vigormortis" ? "Tap the neighbouring Townsfolk who is poisoned" : "Choose the new Imp on the board"
+        : engine.needed > 1 ? engine.picks.length ? "Choose one more player on the board" : "Tap two players on the board" : "Tap a player on the board",
+      picks: engine.picks.map((pick) => ({ name: game.players[pick.playerId]?.name ?? "" })),
       hasNumber: false, numberOpts: [], hasToken: false,
       hasResult: !!result, result, resultHint,
       hasNote: !!note, note,
