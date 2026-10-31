@@ -176,7 +176,9 @@ function askVm(ui: { ask: AskState | null; set: (patch: Partial<V6UiState>) => v
     ui.set({ ask: null });
     a.run(value);
   };
+  const alt = () => { if (!a?.alt) return; const run = a.alt.run; ui.set({ ask: null }); run(); };
   return {
+    hasAlt: !!a?.alt, altText: a?.alt?.text ?? "", onAlt: alt,
     open: !!a, title: a?.title ?? "", body: a?.body ?? "", okText: a?.okText ?? "OK",
     hasInput: !!a?.input, value: a?.input?.value ?? "", placeholder: a?.input?.placeholder ?? "", maxLength: a?.input?.maxLength ?? 20,
     onInput: (e: { target: { value: string } }) => { if (a?.input) ui.set({ ask: { ...a, input: { ...a.input, value: e.target.value } } }); },

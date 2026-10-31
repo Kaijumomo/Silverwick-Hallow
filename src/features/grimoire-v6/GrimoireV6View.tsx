@@ -3110,6 +3110,11 @@ export function GrimoireV6View({ vm }: { vm: any }) {
               <button onClick={vm.askDlg?.ok} disabled={vm.askDlg?.okDisabled} className={["", "gv-h13"].filter(Boolean).join(' ')} style={S418}>
                 {T(vm.askDlg?.okText)}
               </button>
+              {vm.askDlg?.hasAlt && (
+                <button onClick={vm.askDlg?.onAlt} className={["", "gv-h13"].filter(Boolean).join(' ')} style={S418}>
+                  {T(vm.askDlg?.altText)}
+                </button>
+              )}
               <button onClick={vm.askDlg?.close} className={["", "gv-h14"].filter(Boolean).join(' ')} style={S419}>
                 Cancel
               </button>

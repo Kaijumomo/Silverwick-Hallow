@@ -7,11 +7,12 @@ import { changeRoleIntent, ordinaryRoleChoices } from "@/stores/roleResolution";
 import { isPostDeal, selectSetupContext, type SetupContext } from "@/features/setup/setupContext";
 import { analyzeSetup } from "@/features/setup/setupAnalyzer";
 import { canRefineSetup } from "@/features/setup/setupRefinement";
+import { SETUP_COUNTS } from "@/data/setupCounts";
 import { randomSetup } from "@/features/setup/randomSetup";
 import { isInitialRevealComplete, shownRoleFilter } from "@/stores/identity";
 import type { PlayerId, RoleDef, RoleId, RoleType, Script, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 import { TEAM_COLOR, TEAM_LABEL } from "../icons";
-import { flash, useV6Ui, type PickerState, type V6UiActions, type V6UiState } from "../v6Store";
+import { chooseAsk, flash, useV6Ui, type PickerState, type V6UiActions, type V6UiState } from "../v6Store";
 import { presentCharacter, report } from "../info/actions";
 import { remArc, remFs } from "./remArc";
 import { bluffHolderId, bluffsOf } from "./bluffs";
@@ -210,8 +211,20 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
       close();
       flash("Roles distributed privately. Review preparation before revealing.");
     },
-    random: () => {
-      const result = randomSetup({ scriptCharacters: script.characters, targetPlayerCount: context.population.targetNonTravelerCount, fabledIds: game.fabled, loricIds: game.lorics });
+    random: async () => {
+      const input = { scriptCharacters: script.characters, targetPlayerCount: context.population.targetNonTravelerCount, fabledIds: game.fabled, loricIds: game.lorics };
+      let result = randomSetup(input);
+      if (!result.ok && result.failure.reason === "multiple-candidates" && result.failure.drawn) {
+        const { candidates, drawn } = result.failure;
+        const baseOutsiders = SETUP_COUNTS[input.targetPlayerCount ?? 0]?.outsider;
+        const more = candidates.find(c => baseOutsiders !== undefined && c.outsider > baseOutsiders);
+        const fewer = candidates.find(c => baseOutsiders !== undefined && c.outsider < baseOutsiders);
+        if (candidates.length === 2 && more && fewer) {
+          const pick = await chooseAsk("Godfather in the bag", "The Godfather changes the Outsider count by one. Which setup do you want?", "Add an Outsider", "Remove an Outsider");
+          if (!pick) return;
+          result = randomSetup({ ...input, drawn, chosenComposition: pick === "first" ? more : fewer });
+        }
+      }
       if (result.ok) set({ pickSel: result.pool }); else flash(result.failure.message);
     },
     clear: () => set({ pickSel: [] }),

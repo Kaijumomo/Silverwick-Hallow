@@ -32,6 +32,8 @@ export type AskState = {
   title: string; body: string; okText: string; danger?: boolean;
   input?: { placeholder: string; value: string; maxLength?: number };
   run: (value: string) => void;
+  /** A second answer button beside OK, for a question with two real options. */
+  alt?: { text: string; run: () => void };
   /** Called when the Storyteller dismisses the question without answering it. */
   cancel?: () => void;
 };
@@ -109,6 +111,13 @@ export function showVeil(label: string, sub: string, day: boolean) {
   clearTimeout(veilTimer);
   useV6Ui.getState().set({ veil: { key: `v${veilSeq++}`, label, sub, day } });
   veilTimer = setTimeout(() => useV6Ui.getState().set({ veil: null }), 2100);
+}
+
+/** A two-option question: resolves "first", "second", or null when dismissed. */
+export function chooseAsk(title: string, body: string, first: string, second: string): Promise<"first" | "second" | null> {
+  return new Promise((resolve) => useV6Ui.getState().set({
+    ask: { title, body, okText: first, run: () => resolve("first"), alt: { text: second, run: () => resolve("second") }, cancel: () => resolve(null) },
+  }));
 }
 
 /** A yes/no question in the Grimoire's own dialog, in place of window.confirm. Resolves false when dismissed. */
