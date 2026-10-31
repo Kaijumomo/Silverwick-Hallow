@@ -144,3 +144,21 @@ describe("Treacherous 30th: Innkeeper is reviewed", () => {
     expect(eligible(game, "imp", { target: pick(game, "p2") }).kind).toBe("automated");
   });
 });
+
+describe("Treacherous 30th: every character of the script is reviewed", () => {
+  it("a Marionette beside an Imp attack keeps it automated", () => {
+    const game = proofGame(["imp", "marionette", "chef"]);
+    expect(eligible(game, "imp", { target: pick(game, "p2") }).kind).toBe("automated");
+  });
+});
+
+import t30 from "@/data/customScripts/treacherous-30th.json";
+import { REVIEWED_INTERACTION_ROLES } from "./passiveRules";
+
+describe("Treacherous 30th: no character forces whole-action Manual", () => {
+  it("every character of the script is in the reviewed interaction set", () => {
+    const ids = (t30 as unknown[]).filter((entry): entry is string => typeof entry === "string");
+    expect(ids).toHaveLength(25);
+    expect(ids.filter((id) => !REVIEWED_INTERACTION_ROLES.has(id))).toEqual([]);
+  });
+});
