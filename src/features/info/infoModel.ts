@@ -40,6 +40,7 @@ export function bluffChoiceError(game: StorytellerLobbyRecord, script: Script, p
   if (!role || !["townsfolk", "outsider"].includes(role.type)) return "Choose a Townsfolk or Outsider character.";
   const policy = evilInformationPolicy(seatedPlayers(game), registry, game);
   if (player.behaviorMode !== "fake_demon_behavior" && !policy.allowInPlayBluffs && seatedPlayers(game).some(p => p.actualRole === roleId)) return `${role.name} is in play. Choose an out-of-play character.`;
+  if (seatedPlayers(game).some(p => p.behaviorMode === "marionette_fake_good_behavior" && p.shownRole === roleId)) return `${role.name} is what the Marionette believes. Choose a different character.`;
   return undefined;
 }
 
@@ -82,7 +83,7 @@ export function setupPayload(game: StorytellerLobbyRecord, script: Script, view:
   const policyWarning = setupInformationWarning(players, registry, game);
   if (policyWarning) throw new Error(policyWarning);
   // A generic custom definition must not inherit automatic canonical team rules.
-  if (!policy.automaticTeamInfo || players.some(p => ["minion", "demon"].includes(registry.get(p.actualRole)?.type ?? "") && p.behaviorMode !== "normal") || players.some(p => !registry.get(p.actualRole) || !isCanonicalRole(registry.get(p.actualRole)!))) {
+  if (!policy.automaticTeamInfo || players.some(p => ["minion", "demon"].includes(registry.get(p.actualRole)?.type ?? "") && p.behaviorMode !== "normal" && p.behaviorMode !== "marionette_fake_good_behavior") || players.some(p => !registry.get(p.actualRole) || !isCanonicalRole(registry.get(p.actualRole)!))) {
     throw new Error("This setup needs a Storyteller check before showing teammates. Use the existing private-information procedure.");
   }
   // Setup display describes current character holders, not tonight's living
@@ -96,8 +97,9 @@ export function setupPayload(game: StorytellerLobbyRecord, script: Script, view:
       { heading: "These Characters Are Not in Play", characters: bluffs },
     ] };
   }
+  // The Marionette believes they are good: they are not woken and learn no teammates, nor are they shown to the other Minions.
   return { kind: "setup", groups: [
     { heading: "Your Demon", names: names([...team("demon"), ...magician]) },
-    { heading: "Your Minions", names: names(team("minion")) },
+    { heading: "Your Minions", names: names(team("minion").filter(id => game.players[id]?.actualRole !== "marionette")) },
   ] };
 }

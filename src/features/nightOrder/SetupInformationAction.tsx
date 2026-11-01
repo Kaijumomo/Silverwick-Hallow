@@ -1,7 +1,9 @@
 import { useRef, useState } from "react";
 import { InfoPresentationBoundary, useInfoPresentation } from "@/features/info/InfoPresentationBoundary";
 import { captureInfoContext, infoContextCurrent, type InfoContext } from "@/features/info/infoCommands";
-import { setupPayload, type SetupView } from "@/features/info/infoModel";
+import { bluffChoiceError, setupPayload, type SetupView } from "@/features/info/infoModel";
+import { useStorytellerStore } from "@/stores/storytellerStore";
+import { useV6Ui } from "@/features/grimoire-v6/v6Store";
 import { buildRegistry } from "@/data/roleRegistry";
 import { evilInformationPolicy } from "./nightRules";
 import type { Script, StorytellerLobbyRecord } from "@/stores/types";
@@ -40,7 +42,26 @@ function SetupInformation({ game, script, step, visible, resolved, present: host
   const rows = view === "minion" ? recipients.slice(0, 1) : recipients;
   const title = view === "minion" ? "Minion Information" : view === "demon" ? "Demon Information" : "Demon Bluffs";
   const sub = view === "minion" ? "Demon and fellow Minions" : view === "demon" ? "Minions and 3 bluffs" : "3 characters not in play";
+  // The Demon's three bluffs are the Storyteller's choice: choose them here, or let the app draw them.
+  const registry = buildRegistry(script);
+  const demon = view === "minion" ? undefined : recipients[0];
+  const bluffIds = demon?.privateInfo?.bluffs ?? [];
+  const openBluff = (slot: number) => useV6Ui.getState().set({ picker: { mode: "bluff", slot }, pickHover: bluffIds[slot] ?? null });
+  const drawBluffs = () => {
+    if (!demon) return;
+    const pool = script.characters.filter(role => ["townsfolk", "outsider"].includes(role.type) && !bluffIds.includes(role.id) && !bluffChoiceError(game, script, demon.id, role.id));
+    const picks = [...bluffIds];
+    while (picks.length < 3 && pool.length) picks.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]!.id);
+    useStorytellerStore.getState().setBluffs(demon.id, picks);
+  };
   return <div className="night-setup-information">
+    {demon && <div className="gvn-bluffs" role="group" aria-label="Demon bluffs">
+      <span className="gvn-bluffs-label">Bluffs</span>
+      {[0, 1, 2].map(slot => <button type="button" key={slot} className={`gvn-bluff${bluffIds[slot] ? " set" : ""}`} onClick={() => openBluff(slot)}
+        aria-label={bluffIds[slot] ? `Bluff ${slot + 1}: ${registry.get(bluffIds[slot]!)?.name ?? bluffIds[slot]}. Change` : `Choose bluff ${slot + 1}`}>
+        {bluffIds[slot] ? registry.get(bluffIds[slot]!)?.name ?? bluffIds[slot] : `Choose ${slot + 1}`}</button>)}
+      {bluffIds.length < 3 && <button type="button" className="gvn-bluff random" onClick={drawBluffs}>Pick for me</button>}
+    </div>}
     {rows.map(player => <button type="button" className="gvn-show" key={player.participantId ?? player.id} onClick={() => show(player)}
       aria-label={rows.length > 1 ? `${label} to ${player.name || `Seat ${player.seat + 1}`}` : label}>
       <span className="gvn-show-eye" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg></span>

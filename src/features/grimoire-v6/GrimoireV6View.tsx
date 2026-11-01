@@ -1155,13 +1155,13 @@ export function GrimoireV6View({ vm }: { vm: any }) {
             </>
           )}
           <div style={css(`position:absolute; left:24px; top:20px; display:${vm.chromeDisp ?? ''}; align-items:center; gap:14px; z-index:20;`)}>
-            <div style={S84}>
+            <button type="button" onClick={vm.goHome} aria-label="Back to Home" title="Back to Home" style={{ ...S84, padding: 0, cursor: "pointer", font: "inherit", color: "inherit" }}>
               {vm.scriptEmblem && (
                 <>
                 <img src={vm.scriptEmblem} alt="" style={S85} />
                 </>
               )}
-            </div>
+            </button>
             <div style={S86}>
               <div style={S87}>
                 <div style={S88}>

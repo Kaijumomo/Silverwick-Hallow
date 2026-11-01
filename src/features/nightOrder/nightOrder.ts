@@ -152,7 +152,11 @@ export function computeNightOrder(
         registry.get(player.actualRole)?.provenance?.status !== "homebrew" &&
         !["poppygrower", "magician"].includes(player.actualRole)) {
       const actual = canonicalRolesIfKnown(player.actualRole);
-      if (actual) global(participantScopedStepKey("admin", player.participantId, actual.id), actual.name + " — Storyteller procedure",
+      const demon = actual?.id === "marionette" ? seated.find(q => q.alive && registry.get(q.actualRole)?.type === "demon") : undefined;
+      if (actual && demon) global(participantScopedStepKey("admin", player.participantId, actual.id), actual.name + " — wakes the Demon",
+        `Wake ${demon.name} (the Demon). Show THIS PLAYER IS, then the Marionette token, and point to ${player.name}. The Marionette is not woken and does not learn the Demon.`, at(actual.id),
+        { participantId: player.participantId });
+      else if (actual) global(participantScopedStepKey("admin", player.participantId, actual.id), actual.name + " — Storyteller procedure",
         (actual.firstNightPrompt ?? actual.ability ?? "") +
         " This is not a wake of " + player.name + ". Check suppression, impairment and jinxes before delivery.", at(actual.id),
         { participantId: player.participantId });

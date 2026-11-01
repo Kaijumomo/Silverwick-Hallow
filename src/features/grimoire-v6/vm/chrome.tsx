@@ -12,6 +12,7 @@ import { ICON } from "../icons";
 import { roman } from "../ringLayout";
 import { crescentArt, moonBackdrop, useCrescentMemory } from "../boardArt";
 import { flash, type AskState, type V6UiState } from "../v6Store";
+import { wizardHome } from "../setup/flow";
 import { useUndo } from "./undo";
 import type { SliceResult } from "./types";
 
@@ -130,6 +131,8 @@ export function useChromeVm(ctx: V6Ctx, slices: { advance?: SliceResult["advance
     chromeDisp: "flex",
     scriptName: script?.name ?? "Grimoire",
     scriptEmblem: scriptEmblemUrl,
+    // The emblem is the way back to Home from anywhere. The game is kept, and Home offers Resume.
+    goHome: () => { if (ctx.ui.wiz) wizardHome(); else useStorytellerStore.getState().setView("home"); },
     extrasLine: extras.length ? extras.map((x) => x.name).join(" · ") : "No Fabled or Loric",
     phaseLabel, chapter, chapterColor: isNight ? "#dfe5f2" : "#f2c46a",
     headerMeta: `${seated.length} players · ${alive} alive · ${votes} votes`,

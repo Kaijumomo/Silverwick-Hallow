@@ -29,7 +29,8 @@ function importScript(event: { target: { files?: FileList | null; value?: string
     try { parsed = JSON.parse(text); } catch (error) { flash(`Invalid JSON: ${error instanceof Error ? error.message : String(error)}`); return; }
     const result = parseClocktowerScript(parsed);
     if (!result.ok) { flash(result.error); return; }
-    const added = useStorytellerStore.getState().addCustomScript(result.script);
+    // Importing the same script again replaces the saved copy, so a file can always be loaded again.
+    const added = useStorytellerStore.getState().addCustomScript(result.script, { replace: true });
     if (!added.ok) { flash(added.error); return; }
     patchWiz({ script: "custom", customName: result.script.id });
   });

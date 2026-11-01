@@ -9,6 +9,7 @@ import { useStorytellerStore } from "@/stores/storytellerStore";
 import { useShellStore } from "@/stores/shellStore";
 import { litActorIdOf } from "@/features/grimoire/seatTap";
 import { createRulesQuery } from "@/stores/rulesQuery";
+import { currentLiveMoment, isDeathEvent, lifeEventsAt } from "@/stores/lifeEvents";
 import { arrivalsAreTravelers, publicTravelerRole } from "@/stores/travelers";
 import type { PlayerId, RoleDef, STPlayerRecord } from "@/stores/types";
 import type { V6Ctx } from "../ctx";
@@ -131,6 +132,17 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
 
   // ── Tokens ────────────────────────────────────────────────────────────────
   const { S, crowded, nameMax } = layout;
+  // A night's kills resolve at dawn: while the tokens are hidden (the grimoire may be shown to a player),
+  // tonight's victims still look alive. The Storyteller's own view shows them dead with the official Dead token.
+  const unrevealedDeaths = new Set<PlayerId>();
+  if (privacy && game.phase === "night") {
+    const moment = currentLiveMoment(game);
+    const tonight = moment ? lifeEventsAt(game, moment, isDeathEvent) : null;
+    for (const event of tonight ? (tonight.status === "known" ? tonight.events : tonight.recorded) : []) {
+      const victim = Object.values(game.players).find((q) => q.participantId === event.subject.participantId);
+      if (victim) unrevealedDeaths.add(victim.id);
+    }
+  }
   const tokens = game.seatOrder.flatMap((id, i) => {
     const p = game.players[id];
     const pos = at(id);
@@ -169,7 +181,7 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
     const ringColor = deco.ringOn && deco.ringColor ? deco.ringColor : seatHere ? RING_SEAT : swapHere ? RING_SWAP : RING_DEFAULT;
     const unnamed = !p.name;
     const dimName = wizPre || unnamed;
-    const dead = !p.alive;
+    const dead = !p.alive && !unrevealedDeaths.has(id);
     const acting = id === litActorId;
     const glow = deco.glow ?? (acting ? seatGlow(2.6) : null);
     const dragging = drag.ghost?.id === id;
@@ -186,7 +198,7 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
       filter: deco.filter ?? (dead ? DIM : "none"),
       dead, ghost: dead && p.ghostVote,
       dsOriginal: false, dsInk: false, dsStrike: false, dsShatter: false, dsTorn: dead, dsBurnt: false, dsClawed: false, dsRipped: false, dsCorner: false,
-      nameColor: dimName ? (wizPre ? "rgba(216,201,164,.4)" : "rgba(216,201,164,.45)") : p.alive ? "#eadcb8" : "rgba(216,201,164,.5)",
+      nameColor: dimName ? (wizPre ? "rgba(216,201,164,.4)" : "rgba(216,201,164,.45)") : !dead ? "#eadcb8" : "rgba(216,201,164,.5)",
       cursor: deco.cursor ?? (picking ? "crosshair" : ctx.voting?.open ? "pointer" : "grab"),
       ringOn: ring, ringColor, glow,
       handOn: !!deco.handOn, tagOn: !!deco.tagOn, tagText: deco.tagText ?? "", tagColor: deco.tagColor ?? "#f4a595",

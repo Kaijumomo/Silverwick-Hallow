@@ -90,6 +90,7 @@ import { isTabletTrial } from "@/config/trial";
 import { useShellStore, type NightCursor } from "./shellStore";
 import { deriveNightWork } from "@/features/nightOrder/nightWork";
 import { planPreparedInformation, planPreparedInformationDelivery, reconcilePreparedInformation, type PrepareInformationRequest, type DeliverPreparedInformationRequest, type PreparedInformationResult } from "./preparedInformation";
+import { seatMarionetteBesideDemon } from "@/features/setup/marionetteSeating";
 import { planAbilityUseReminders } from "./abilityUseReminders";
 import { planDrunkPreparationReminders, reconcileDrunkReminders } from "./drunkReminders";
 import { planButlerSelection, reconcileButlerReminders, type ButlerSelectionRequest, type ButlerSelectionResult } from "./butlerSelection";
@@ -575,7 +576,7 @@ export type StorytellerStore = {
   clearTerminalClose: () => void;
   setView: (view: "home" | "game" | "newgame") => void;
   selectPlayer: (id: PlayerId | null) => void;
-  addCustomScript: (script: Script) => AddScriptResult;
+  addCustomScript: (script: Script, options?: { replace?: boolean }) => AddScriptResult;
   removeCustomScript: (id: string) => void;
   /**
    * Attaches (or, with null, detaches) the multiplayer lobby. ASTRA-10G-001:
@@ -1911,11 +1912,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
         }
 
         const registry = context.registry!;
+        // The Marionette always starts beside the Demon.
+        const seated = seatMarionetteBesideDemon(shuffled, registry).roles;
         const newPlayers = { ...game.players };
         nonTravelerSeats.forEach((playerId, idx) => {
           const existing = newPlayers[playerId];
           if (!existing) return;
-          newPlayers[playerId] = freshAssignment(existing, shuffled[idx]!, registry);
+          newPlayers[playerId] = freshAssignment(existing, seated[idx]!, registry);
         });
 
         const unsafe = commitAuthoritativeState({
@@ -2003,9 +2006,10 @@ export const useStorytellerStore = create<StorytellerStore>()(
           const j = Math.floor(Math.random() * (i + 1));
           [bag[i], bag[j]] = [bag[j]!, bag[i]!];
         }
+        const seatedBag = seatMarionetteBesideDemon(bag, registry).roles;
         const newPlayers = { ...game.players };
         context.ordinary.forEach((p, idx) => {
-          newPlayers[p.id] = freshAssignment(newPlayers[p.id]!, bag[idx]!, registry);
+          newPlayers[p.id] = freshAssignment(newPlayers[p.id]!, seatedBag[idx]!, registry);
         });
         // Phase 9R.4 (B8): a draw that hands every player back exactly the
         // fresh assignment they already hold changes nothing.
@@ -2399,7 +2403,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         set({ game: { ...game, pendingPlayers: newPending } });
       },
 
-      addCustomScript: (script) => {
+      addCustomScript: (script, options) => {
         if (BUILTIN_SCRIPT_IDS.has(script.id)) {
           return {
             ok: false,
@@ -2407,7 +2411,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           };
         }
         const { customScripts } = get();
-        if (customScripts[script.id]) {
+        if (customScripts[script.id] && !options?.replace) {
           return {
             ok: false,
             error: `A custom script with id "${script.id}" is already imported. Remove it first to replace.`,

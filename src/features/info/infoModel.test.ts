@@ -136,9 +136,13 @@ describe("Recipient-safe local information", () => {
     expect(JSON.stringify(setupPayload(candidate, setupScript, "demon", "p6"))).toContain("Player 5");
     expect(JSON.stringify(setupPayload(candidate, setupScript, "minion", "p5"))).toContain("Player 6");
   });
-  it("does not mistake Minion wake recipients for a complete team with a concealed Marionette", () => {
-    const candidate = { ...game(), players: { ...game().players, p5: { ...game().players.p5!, actualRole: "marionette", shownRole: "chef", behaviorMode: "marionette_fake_good_behavior" as const } } };
-    expect(() => setupPayload(candidate, setupScript, "demon", demon())).toThrow(/Storyteller check/);
+  // PO 2026-11-01: the Demon learns the concealed Marionette; the Marionette is not woken, learns no team and is not listed to the other Minions.
+  it("shows the Demon the concealed Marionette among its Minions, and keeps the Marionette out of the Minion view", () => {
+    const id = demon(); store.getState().setBluffs(id, ["monk", "virgin", "soldier"]);
+    const base = game();
+    const candidate = { ...base, players: { ...base.players, p5: { ...base.players.p5!, actualRole: "marionette", shownRole: "chef", behaviorMode: "marionette_fake_good_behavior" as const } } };
+    expect(JSON.stringify(setupPayload(candidate, setupScript, "demon", id))).toContain("Player 5");
+    expect(() => setupPayload(candidate, setupScript, "minion", "p5")).toThrow();
   });
   it("renders selected bluffs only with no unrelated private fields or mutation", () => {
     const id = demon(); store.getState().setBluffs(id, ["monk", "virgin", "soldier"]);

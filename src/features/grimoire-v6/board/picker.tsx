@@ -63,6 +63,8 @@ function holdersOf(game: StorytellerLobbyRecord): Record<RoleId, string[]> {
   for (const id of game.seatOrder) {
     const p = game.players[id];
     if (p && !p.isEmpty && p.actualRole) (out[p.actualRole] ??= []).push(p.name || `Seat ${p.seat + 1}`);
+    // A Marionette is shown a good character that stays out of play, so it can be neither a bluff nor another's choice.
+    if (p && !p.isEmpty && p.behaviorMode === "marionette_fake_good_behavior" && p.shownRole) (out[p.shownRole] ??= []).push(`${p.name || `Seat ${p.seat + 1}`}, the Marionette`);
   }
   return out;
 }

@@ -465,3 +465,10 @@
 .gv-night-custom .gvn-show-go { flex: none; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #ff8a78; }
 .gv-night-custom .gvn-show-go svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
+
+.gv-night-custom .gvn-bluffs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0 8px; }
+.gv-night-custom .gvn-bluffs-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.6; margin-right: 2px; }
+.gv-night-custom .gvn-bluff { min-height: 34px; padding: 0 12px; border-radius: 999px; border: 1px dashed rgba(222, 216, 204, 0.3); background: transparent; color: rgba(222, 216, 204, 0.75); font: inherit; font-size: 13px; cursor: pointer; }
+.gv-night-custom .gvn-bluff.set { border-style: solid; border-color: rgba(232, 88, 74, 0.5); color: #f3e8d2; }
+.gv-night-custom .gvn-bluff.random { border-style: solid; background: rgba(232, 88, 74, 0.1); }
+.gv-night-custom .gvn-bluff:hover { border-color: rgba(232, 88, 74, 0.7); }
