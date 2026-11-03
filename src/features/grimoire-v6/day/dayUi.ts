@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { onGameScopeReset } from "@/stores/shellStore";
 
 /**
  * Session-local UI memory of the Day slice that v6Store has no field for. Never persisted and never
@@ -20,3 +21,6 @@ export const useDayUi = create<DayUi>()((set) => ({
   setMore: (more) => set({ more }),
   addLog: (entry) => set((s) => ({ log: [...s.log, entry].slice(-24) })),
 }));
+
+/** A new, discarded or ended game starts with no shots on record (Offline games all share the room code ""). */
+onGameScopeReset(() => useDayUi.setState({ more: false, log: [] }));

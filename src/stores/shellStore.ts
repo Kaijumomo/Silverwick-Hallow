@@ -59,6 +59,15 @@ const INITIAL = {
   actionRequest: 0,
 };
 
+/**
+ * Session-local UI stores that live outside this module (the Day slice's Slayer log, the Night strip's
+ * checkpoint, the shown-information overlay) register here, so the same new-game / end-game boundary that
+ * clears the Night cursor also clears them. Offline games all carry the empty room code, so a store keyed
+ * by `code` cannot tell one game from the next.
+ */
+const gameScopeListeners = new Set<() => void>();
+export function onGameScopeReset(listener: () => void): void { gameScopeListeners.add(listener); }
+
 export const useShellStore = create<ShellState>()((set) => ({
   ...INITIAL,
   setLens: (lens) => set({ lens }),
@@ -68,7 +77,10 @@ export const useShellStore = create<ShellState>()((set) => ({
   setLitActor: (litActor) => set((s) => (sameActor(s.litActor, litActor) ? s : { litActor })),
   setActionOpen: (actionOpen) => set({ actionOpen }),
   requestAction: () => set((s) => ({ actionOpen: true, actionRequest: s.actionRequest + 1 })),
-  resetGameScope: () => set({ nightCursor: null, litActor: null, actionOpen: false }),
+  resetGameScope: () => {
+    set({ nightCursor: null, litActor: null, actionOpen: false });
+    gameScopeListeners.forEach((listener) => listener());
+  },
   reset: () => set(INITIAL),
 }));
 

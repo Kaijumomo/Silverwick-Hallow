@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { NightCursor } from "@/stores/shellStore";
+import { onGameScopeReset, type NightCursor } from "@/stores/shellStore";
 
 /**
  * Where the Night strip is when it rests on Dusk or Dawn (the two transition checkpoints of the V2 design).
@@ -28,3 +28,6 @@ export const useNightPos = create<NightPosState>()((set) => ({
 export function activeCheckpoint(pos: Pick<NightPosState, "day" | "at" | "cursor">, day: number, cursor: NightCursor | null): NightCheckpoint | null {
   return pos.at && pos.day === day && pos.cursor === cursor ? pos.at : null;
 }
+
+/** The previous game's Dusk/Dawn rest never carries into the next game. */
+onGameScopeReset(() => useNightPos.setState({ day: 0, at: null, cursor: null }));
