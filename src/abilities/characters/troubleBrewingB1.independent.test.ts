@@ -125,10 +125,10 @@ describe("independent B1 contextual registration review", () => {
     expect(next.informationDeliveries.at(-1)?.values).toContainEqual({ requirementId: "role", kind: "role", roleId: role });
   });
 
-  it.each(["spy", "recluse"])("Imp self-pass keeps relevant %s registration manual but skips it for protected or impaired Imp", role => {
+  it.each(["spy", "recluse"])("Imp self-pass keeps relevant %s registration a Storyteller choice but skips it for protected or impaired Imp", role => {
     const g = proofGame(["imp", role, "chef", "monk", "empath"]);
     const req = (state: StorytellerLobbyRecord) => request(state, "p0", "imp", { target: pick(state, "p0") });
-    expect(plan(g, req(g))).toMatchObject({ ok: false, code: "unsupported" });
+    expect(plan(g, req(g))).toMatchObject({ ok: false, code: "needsInput" }); // WP-1: asked, never refused or auto-chosen
     for (const effect of ["poisoned", "cannotDie", "safeFromDemon"]) {
       const blocked = impair(g, "p0", effect); expect(plan(blocked, req(blocked))).toEqual({ ok: true, changed: false });
     }
@@ -139,14 +139,16 @@ describe("independent B1 contextual registration review", () => {
     expect(next.nightProgress[`2:${participantStepKey(priority.players.p2!.participantId!, "imp")}`]?.status).toBe("skipped");
   });
 
-  it.each(["spy", "recluse"])("an explicit definite Imp successor makes other %s registration irrelevant without granting an uncertain successor", role => {
+  it.each(["spy", "recluse"])("an explicit definite Imp successor makes other %s registration irrelevant and an explicit choice of it is the Storyteller's ruling", role => {
     const g = proofGame(["imp", "poisoner", "baron", role, "chef"]);
     const req = (target?: string) => request(g, "p0", "imp", { target: pick(g, "p0"), ...(target ? { successor: pick(g, target) } : {}) });
-    expect(plan(g, req())).toMatchObject({ ok: false, code: "unsupported" });
-    expect(plan(g, req("p3"))).toMatchObject({ ok: false, code: "unsupported" });
+    expect(plan(g, req())).toMatchObject({ ok: false, code: "needsInput" });
     const next = planned(plan(g, req("p1")));
     expect(next.players.p0!.alive).toBe(false); expect(next.players.p1!.actualRole).toBe("imp");
     expect(next.players.p3).toEqual(g.players.p3);
+    // WP-1: choosing the possible Minion is the Storyteller's explicit ruling.
+    const ruled = planned(plan(g, req("p3")));
+    expect(ruled.players.p3!.actualRole).toBe("imp"); expect(ruled.players.p1).toEqual(g.players.p1);
     const priority = patchPlayer(g, "p2", { actualRole: "scarletwoman", shownRole: "scarletwoman" });
     const result = plan(priority, request(priority, "p0", "imp", { target: pick(priority, "p0"), successor: pick(priority, "p1") }));
     // Existing mandatory priority may ignore or reject an extraneous choice;

@@ -171,11 +171,13 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     if (next) navigate(next);
     else gotoCheckpoint("dawn");
   };
-  const requireManual = () => {
+  /** The automatic route stops here; the Storyteller is told why (never a silent no-op). */
+  const stopAutomation = (reason?: string) => {
     setSuccessorChoice(null);
     if (current) setManualAction(current.stepKey);
-    useTargetPicker.getState().cancel(); setWorkspace(null); setError(null); setPaused(true);
+    useTargetPicker.getState().cancel(); setWorkspace(null); setError(reason ?? null); setPaused(true);
   };
+  const requireManual = () => stopAutomation();
   const finish = (committed: StorytellerLobbyRecord) => {
     setSuccessorChoice(null);
     if (!current || !stepResolved(committed, current)) return;
@@ -231,21 +233,21 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     if (!fingerprint) { setError("This player is no longer seated."); return; }
     const request = { mode: "guided" as const, invocationPath: "nightOrder" as const, fingerprint, roleId: current.effectiveRoleId, inputs, completeStep: true };
     const plan = planAbilityResolution(game, request, { script, registry, semantics });
-    if (!plan.ok && plan.code === "unsupported") { requireManual(); return; }
+    if (!plan.ok && plan.code === "unsupported") { stopAutomation(plan.message); return; }
     if (!plan.ok && plan.code === "needsInput") {
       if (current.effectiveRoleId === "imp" || current.effectiveRoleId === "vigormortis") {
         const requirement = plan.requirements?.[0];
         // A verified successor choice stays on the board. Rule judgments
         // never become a guided fallback and no partial death is committed.
         if (successorChoice || plan.requirements?.length !== 1 || requirement?.source !== "storyteller" || requirement.kind !== "participant") {
-          requireManual(); return;
+          stopAutomation(plan.message); return;
         }
         const eligibleSuccessors = new Set(seatedParticipants(game).filter((player) => {
           const candidate = planAbilityResolution(game, { ...request, inputs: { ...inputs,
             [requirement.id]: { kind: "participant", participants: [bindingOf(player)] } } }, { script, registry, semantics });
           return candidate.ok;
         }).map((player) => player.participantId!));
-        if (!eligibleSuccessors.size) { requireManual(); return; }
+        if (!eligibleSuccessors.size) { stopAutomation(plan.message); return; }
         setSuccessorChoice({ game, stepKey: current.stepKey, inputs, id: requirement.id, eligible: eligibleSuccessors });
         setPaused(false); return;
       }
@@ -273,7 +275,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
         plan = planAbilityResolution(game, make(), env);
       }
     }
-    if (!plan.ok && plan.code === "unsupported") { requireManual(); return; }
+    if (!plan.ok && plan.code === "unsupported") { stopAutomation(plan.message); return; }
     if (!plan.ok && plan.code === "needsInput") { openWorkspace(inputs); return; }
     if (!plan.ok) { setError(plan.message); return; }
     const result = useStorytellerStore.getState().resolveAbility(make(), semantics, actionContext);

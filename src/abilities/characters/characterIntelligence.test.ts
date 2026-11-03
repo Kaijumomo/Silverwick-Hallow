@@ -90,9 +90,9 @@ describe("Character Intelligence bounded automation", () => {
     expect(eligible(game, "imp", { target: pick(game, "p2") }).kind).toBe("automated");
   });
 
-  it("ambiguous successor registration keeps a star-pass wholly Manual", () => {
+  it("ambiguous successor registration is put to the Storyteller, never decided or refused", () => {
     const game = proofGame(["imp", "recluse", "poisoner"]);
-    expect(eligible(game, "imp", { target: pick(game, "p0") }).kind).toBe("manual");
+    expect(eligible(game, "imp", { target: pick(game, "p0") }).kind).toBe("automated");
     expect(eligible(game, "imp", { target: pick(game, "p2") }).kind).toBe("automated");
   });
 

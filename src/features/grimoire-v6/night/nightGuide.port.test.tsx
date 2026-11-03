@@ -61,18 +61,19 @@ it("Imp chooses a successor on the board before one atomic self-pass and retains
   expect(screen.getByText("Resolved.")).toBeInTheDocument();
 });
 
-it("an uncertain Imp succession stays wholly manual without a workspace", () => {
+it("an uncertain Imp succession (a Spy that may register as a Minion) is put to the Storyteller on the board", () => {
   store.setState({ game: proofGame(["imp", "spy", "baron", "chef", "monk"]) });
   useShellStore.getState().setNightCursor({ day: 2, stepKey: key("p0") });
   render(<Guide />);
   const before = game(); tap("p0");
   expect(game()).toBe(before);
-  expect(useTargetPicker.getState().active).toBeNull();
+  expect(useTargetPicker.getState().active?.label).toBe("Choose the new Imp");
   expect(screen.queryByRole("dialog")).toBeNull();
-  expect(screen.queryByRole("button", { name: "Continue action" })).toBeNull();
-  expect(screen.getByText(/Each night\*, choose a player: they die/)).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Next" }));
-  expect(game().players).toEqual(before.players);
+  tap("p3"); // not a possible Minion
+  expect(game()).toBe(before);
+  tap("p2"); // the definite Minion
+  expect(game().players.p2!.actualRole).toBe("imp");
+  expect(game().players.p1!.actualRole).toBe("spy");
 });
 
 it("Next closes the final self-pass result without granting the successor another attack", () => {
@@ -356,4 +357,23 @@ it("the first-night Minion and Demon info steps carry the official night-sheet i
   const art = [...container.querySelectorAll<HTMLElement>('[role="img"]')].map((el) => el.style.backgroundImage);
   expect(art.some((value) => value.includes("/nightsheet/minioninfo.png"))).toBe(true);
   expect(art.some((value) => value.includes("/nightsheet/demoninfo.png"))).toBe(true);
+});
+
+it("WP-1: Imp taps itself with a living Recluse: the board asks for the successor (never a silent no-op) and the Recluse can be chosen", () => {
+  store.setState({ game: proofGame(["imp", "godfather", "recluse", "chef", "monk"]) });
+  useShellStore.getState().setNightCursor({ day: 2, stepKey: key("p0") });
+  render(<Guide />);
+  const before = game();
+  tap("p0");
+  expect(game()).toBe(before);
+  expect(useTargetPicker.getState().active?.label).toBe("Choose the new Imp");
+  expect(screen.queryByRole("alert")).toBeNull();
+  tap("p3"); // a Townsfolk is not a possible Minion
+  expect(game()).toBe(before);
+  tap("p2"); // the Recluse, the Storyteller's ruling
+  expect(game().players.p0!.alive).toBe(false);
+  expect(game().players.p2!.actualRole).toBe("imp");
+  expect(game().players.p1!.actualRole).toBe("godfather");
+  expect(game().nightProgress[`2:${key("p2")}`]?.status).toBe("skipped");
+  expect(store.getState().undoStack).toHaveLength(1);
 });

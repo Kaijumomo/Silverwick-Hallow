@@ -105,7 +105,7 @@ describe("B1 relevant cross-character results", () => {
 
   it.each(["spy", "recluse"])("Imp checks %s succession only when an actual self-death needs it", role => {
     const game = proofGame(["imp", role, "poisoner"]);
-    expect(selfKill(game)).toMatchObject({ ok: false, code: "unsupported" });
+    expect(selfKill(game)).toMatchObject({ ok: false, code: "needsInput" });
     expect(selfKill(impair(game, "p0"))).toEqual({ ok: true, changed: false });
     expect(selfKill(impair(game, "p0", "cannotDie"))).toEqual({ ok: true, changed: false });
     const dead = patchPlayer(game, "p1", { alive: false });

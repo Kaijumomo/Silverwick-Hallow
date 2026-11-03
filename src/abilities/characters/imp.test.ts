@@ -175,3 +175,42 @@ describe("Imp -- one commit and Undo", () => {
     expect(withoutRevealTokens(store.getState().game)).toEqual(withoutRevealTokens(g));
   });
 });
+
+describe("Imp -- star-pass with a possible Minion (WP-1)", () => {
+  const T30 = ["imp", "godfather", "recluse", "monk", "chef", "saint"];
+  const own = (g: StorytellerLobbyRecord, extra = {}) => kill(g, "p0", extra);
+
+  it("a living Recluse is never skipped or refused: the Storyteller is asked who becomes the Imp", () => {
+    const g = proofGame(T30);
+    const result = own(g);
+    expect(result).toMatchObject({ ok: false, code: "needsInput" });
+    expect(requirementIds(result)).toEqual([SUCCESSOR]);
+  });
+
+  it("choosing the definite Minion makes it the Imp, leaves the Recluse alone, and skips its Imp step tonight", () => {
+    const g = proofGame(T30);
+    const next = planned(own(g, { inputs: { target: pick(g, "p0"), [SUCCESSOR]: pick(g, "p1") } }));
+    expect(next.players.p0!.alive).toBe(false);
+    expect(next.players.p1).toMatchObject({ actualRole: "imp", alive: true });
+    expect(next.players.p2!.actualRole).toBe("recluse");
+    expect(next.nightProgress[`2:${participantStepKey(g.players.p1!.participantId!, "imp")}`]?.status).toBe("skipped");
+  });
+
+  it("choosing the Recluse is the Storyteller's ruling: it becomes the Imp and stays good", () => {
+    const g = proofGame(T30);
+    const next = planned(own(g, { inputs: { target: pick(g, "p0"), [SUCCESSOR]: pick(g, "p2") } }));
+    expect(next.players.p2).toMatchObject({ actualRole: "imp", shownRole: "imp", shownAlignment: "good", alive: true });
+    expect(next.nightProgress[`2:${participantStepKey(g.players.p2!.participantId!, "imp")}`]?.status).toBe("skipped");
+  });
+
+  it("a player who cannot be a Minion is refused, and a Recluse alone is still offered", () => {
+    const g = proofGame(T30);
+    expect(own(g, { inputs: { target: pick(g, "p0"), [SUCCESSOR]: pick(g, "p3") } })).toMatchObject({ ok: false, code: "illegal" });
+    const onlyRecluse = patchPlayer(g, "p1", { alive: false });
+    expect(own(onlyRecluse)).toMatchObject({ ok: false, code: "needsInput" });
+  });
+
+  it("a protected Imp that does not die passes nothing on, even with a Recluse", () => {
+    expect(own(monkSafe(proofGame(T30), "p0"))).toEqual({ ok: true, changed: false });
+  });
+});

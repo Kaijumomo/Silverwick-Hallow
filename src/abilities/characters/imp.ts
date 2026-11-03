@@ -65,13 +65,20 @@ function successor(context: AbilityEvaluationContext): { binding: ParticipantBin
     // every possible candidate matters to the automatic selection.
     const relevant = chosen ? possible.filter(player => player!.participantId === chosen.binding.participantId) : possible;
     if (chosen && !relevant.length) return { evaluation: { kind: "illegal", message: "The new Imp must be an eligible living Minion." } };
+    // A character that MAY register as a Minion (a Recluse) is never decided here: the Storyteller's explicit
+    // choice of it is the ruling; with none made, it is offered as a possible successor and never skipped.
+    const uncertain: ParticipantBinding[] = [];
     for (const player of relevant) {
       const target = binding(player);
       const registered = query.registersAsType(target, "minion", "imp");
-      if (!registered.known) return { evaluation: { kind: "unsupported", message: registered.reason } };
+      if (!registered.known) { if (chosen) candidates.push(target); else uncertain.push(target); continue; }
       if (registered.value) candidates.push(target);
     }
     if (chosen && !candidates.length) return { evaluation: { kind: "illegal", message: "The new Imp must be an eligible living Minion." } };
+    if (uncertain.length) {
+      return { evaluation: ask("The Imp died by its own ability: the Storyteller chooses which living Minion becomes the Imp (a Recluse may register as one).",
+        { id: SUCCESSOR, kind: "participant", source: "storyteller", label: "The Minion who becomes the Imp" }) };
+    }
   }
   if (!candidates.length) return null;
   const chosen = followUpParticipant(context, context.inputs, SUCCESSOR);
