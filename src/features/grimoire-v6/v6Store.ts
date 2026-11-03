@@ -15,7 +15,9 @@ export type PanelKind = "players" | "night" | "info" | "reference";
 export type PickerState =
   | { mode: "distribute" }
   | { mode: "choose"; playerId: PlayerId }
-  | { mode: "show"; title: string; kicker?: string; types?: RoleType[]; onPick?: (roleId: RoleId) => string | undefined }
+  | { mode: "show"; title: string; kicker?: string; types?: RoleType[]; onPick?: (roleId: RoleId) => string | undefined;
+      /** Character tokens only: no "who holds it" names and no bluff marks (the Gambler guesses without being told who is in play). */
+      tokensOnly?: boolean }
   | { mode: "bluff"; slot: number }
   | { mode: "drunk"; playerId: PlayerId };
 

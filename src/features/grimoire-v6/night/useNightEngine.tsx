@@ -306,7 +306,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     const base = current;
     guardGesture();
     const gambler = game.players[base.playerId];
-    useV6Ui.getState().set({ pickHover: null, picker: { mode: "show", title: "What does the Gambler guess?",
+    useV6Ui.getState().set({ pickHover: null, picker: { mode: "show", tokensOnly: true, title: "What does the Gambler guess?",
       kicker: `The Gambler · guess ${game.players[target.playerId]?.name || "the player"}’s character`,
       onPick: (roleId) => {
         const fingerprint = captureFingerprint(game, base.playerId, { day: game.day, stepKey: base.stepKey });

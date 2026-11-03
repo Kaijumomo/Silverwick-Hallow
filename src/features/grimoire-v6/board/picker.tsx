@@ -128,6 +128,7 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
     pickTile(env, picker, role, { holders, shownChoices, bluffHolder, bluffs, context });
   };
 
+  const tokensOnly = picker.mode === "show" && !!picker.tokensOnly;
   const group = (type: RoleType) => {
     const members = roles.filter((r) => r.type === type);
     const have = members.filter((r) => draft.includes(r.id)).length;
@@ -143,8 +144,8 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
         if (on) { ring = TEAM_COLOR[type]; glow = `0 0 16px ${TEAM_COLOR[type]}66`; } else { filter = GRAY; nameColor = "rgba(222,216,204,.42)"; }
       } else if (mine) { ring = "#e8584a"; glow = "0 0 18px rgba(232,88,74,.5)"; tag = "Current"; tagKind = "mine"; }
       else if (used) { filter = USED; nameColor = "rgba(222,216,204,.48)"; tag = holder.join(", "); }
-      else if (mode === "show" && holder.length) tag = holder.join(", ");
-      const bi = bluffs.indexOf(role.id);
+      else if (mode === "show" && holder.length && !tokensOnly) tag = holder.join(", ");
+      const bi = tokensOnly ? -1 : bluffs.indexOf(role.id);
       if (bi >= 0 && !tag && !dist) {
         tag = mode === "bluff" && bi === slot ? "This slot" : "Bluff"; tagKind = "bluff";
         if (mode === "bluff") { ring = TEAM_COLOR.demon; glow = `0 0 16px ${TEAM_COLOR.demon}66`; }

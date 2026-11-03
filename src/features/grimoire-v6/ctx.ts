@@ -6,6 +6,7 @@ import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { useVotingInteraction } from "@/features/voting/VotingWorkspace";
 import type { PlayerId, Script, StorytellerLobbyRecord } from "@/stores/types";
 import { useV6Ui, type V6UiActions, type V6UiState } from "./v6Store";
+import { useInfoShow } from "./info/showStore";
 import { computeRing, type RingLayout } from "./ringLayout";
 import { seatPositions, type Point } from "./positions";
 
@@ -72,6 +73,14 @@ export function useV6Ctx(game: StorytellerLobbyRecord): V6Ctx {
   const voting = useVotingInteraction();
   const boardRef = useRef<HTMLDivElement>(null);
   const { w, h } = useBoardSize(boardRef, privacy);
+  // Hide Tokens keeps the full lock: anything that was open when it went on (a player card, a character picker, a full-screen reveal)
+  // is closed, so nothing identity-bearing is waiting underneath to reappear when the Storyteller switches it off.
+  useEffect(() => {
+    if (!privacy) return;
+    useV6Ui.getState().set({ card: false, picker: null, show: null });
+    useInfoShow.getState().clear();
+    useStorytellerStore.getState().selectPlayer(null);
+  }, [privacy]);
   const seats = game.seatOrder.length;
   const layout = useMemo(() => computeRing(w, h, seats, game.phase === "setup" ? 5 : 0), [w, h, seats, game.phase]);
   const positions = useMemo(() => seatPositions(game.seatOrder, layout, tokenPositions), [game.seatOrder, layout, tokenPositions]);

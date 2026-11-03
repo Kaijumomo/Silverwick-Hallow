@@ -528,3 +528,11 @@ it("WP-9: the End control carries the discreet '!' once every Demon is dead, wit
   expect(game().phase).toBe("day");
   expect(game().result).toBeFalsy();
 });
+
+it("F-20: the Gambler's guess picker opens in character-tokens-only mode", () => {
+  store.setState({ game: proofGame(["gambler", "chef", "empath", "monk", "imp", "saint", "poisoner"], "night", 2), undoStack: [] });
+  useShellStore.getState().setNightCursor({ day: 2, stepKey: key("p0") });
+  render(<Guide />);
+  tap("p1");
+  expect(useV6Ui.getState().picker).toMatchObject({ mode: "show", tokensOnly: true, title: "What does the Gambler guess?" });
+});
