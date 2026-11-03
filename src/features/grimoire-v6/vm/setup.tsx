@@ -245,6 +245,7 @@ export function useSetupVm(ctx: V6Ctx): SliceResult {
     okOp: okEdit ? 1 : 0.45, confirm: commitPrep, cancel: () => ui.set({ prepEdit: null }),
   } : { on: false, off: true };
 
+  const apart = view.checks.some((finding) => finding.code.startsWith("marionette-neighbor:"));
   const setupKey = setupOn && dealt && !revealed ? {
     count: `${tasks.filter((t) => t.done).length} of ${tasks.length} prepared`,
     segs: tasks.map((t) => ({ bg: t.done ? "#94c29a" : t.req ? "rgba(244,165,149,.6)" : "rgba(176,186,204,.18)" })),
@@ -253,8 +254,9 @@ export function useSetupVm(ctx: V6Ctx): SliceResult {
       const result = store().revealRoles(captureCharacterActionContext());
       if (!result.ok) flash(result.message ?? "Setup changed. Review the next step before continuing.");
     },
-    hint: reqLeft ? "Finish the required preparations to continue." : "Anything left unprepared is asked for tonight.",
-    hintColor: reqLeft ? "#f4a595" : "rgba(222,216,204,.5)",
+    // The analyzer already checks the completed seating; the card now says so (it is advice, never a blocker, and no role is moved).
+    hint: reqLeft ? "Finish the required preparations to continue." : apart ? "The Marionette is not sitting next to the Demon. Swap seats, or carry on." : "Anything left unprepared is asked for tonight.",
+    hintColor: reqLeft ? "#f4a595" : apart ? "#f2c46a" : "rgba(222,216,204,.5)",
   } : { count: "", segs: [], locked: true, reveal: () => {}, hint: "", hintColor: "rgba(222,216,204,.5)", revBorder: OFF.b, revBg: OFF.bg, revColor: OFF.c, revCursor: "default" };
 
   // The dock's advance control while the game is in Setup.

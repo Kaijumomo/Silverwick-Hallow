@@ -30,7 +30,9 @@ const PreparedAction = forwardRef<NightInformationHandle, Props>(function Prepar
   const source = bindingOf(actor);
   const record = game.preparedInformation.find(item => item.source.participantId === step.participantId && item.character === character);
   const validation = record && !resolved ? validatePreparedInformation(game, record, environment) : null;
-  const availability = record && !resolved ? preparationAvailability(game, source, character, environment) : null;
+  // A shown (Drunk / Marionette) Investigator, Librarian or Washerwoman has no prepared clue: the Storyteller makes the false one
+  // here, with the same direct player selection and the same Reveal as a true clue.
+  const availability = !resolved && (record || step.isDeceived) ? preparationAvailability(game, source, character, environment) : null;
   const choosing = availability?.ok && availability.mode === "storyteller";
   const [chooser, setChooser] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,8 +67,8 @@ const PreparedAction = forwardRef<NightInformationHandle, Props>(function Prepar
     if (reveal) show(reveal, useStorytellerStore.getState().game!);
   };
   const chooseCharacter = (shownCharacter: string) => {
-    if (!safe() || !record) return;
-    if (record.clue.kind === "pair") {
+    if (!safe()) return;
+    if (record?.clue.kind === "pair") {
       replace({ kind: "pair", candidates: record.clue.candidates.map(candidate => ({ playerId: candidate.participant.playerId, participantId: candidate.participant.participantId })) as [ParticipantBinding, ParticipantBinding],
         qualifyingParticipantId: record.clue.qualifyingParticipantId, shownCharacter }, shownCharacter);
       return;

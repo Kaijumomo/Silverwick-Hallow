@@ -104,10 +104,22 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
       } else if (!done && !engine.manual && !engine.canTarget) {
         rows.push(<button key="continue" type="button" className="btn btn-gold" onClick={() => engine.openWorkspace()}>Continue action</button>);
       }
+      // T30: the Godfather's first night shows the tokens of the Outsiders in play, one safe reveal each.
+      if (current.effectiveRoleId === "godfather" && game.day === 1 && !current.isDeceived && !engine.settled.has(current.stepKey)) {
+        const outsiders = [...new Set(Object.values(game.players).filter((p) => !p.isEmpty && !p.isTraveler && p.actualRole && registry.get(p.actualRole)?.type === "outsider").map((p) => p.actualRole!))];
+        for (const roleId of outsiders) {
+          const role = registry.get(roleId);
+          if (role) rows.push(<TokenInformationAction key={`in-play:${roleId}`} role={role} label="Show this token" onClick={() => report(presentCharacter("This Character Is in Play", roleId))} />);
+        }
+      }
       // PO review C15: no "Give information" form in the Night card; the Storyteller tells the player in person.
     } else if (!done && engine.bureaucrat && engine.actor?.participantId) {
       rows.push(<BureaucratAction key={`${engine.actor.participantId}:${current.stepKey}`} source={{ playerId: engine.actor.id, participantId: engine.actor.participantId }}
         visible={engine.visible} completeStep={{ day: game.day, stepKey: current.stepKey }} onResolved={engine.finish} />);
+    } else if (current.participantId && current.label.endsWith("wakes the Demon") && game.players[Object.keys(game.players).find((id) => game.players[id]!.participantId === current.participantId) ?? ""]?.actualRole === "marionette") {
+      // T30: the Demon is woken and shown THIS PLAYER IS and the Marionette token (the design's show button).
+      const marionette = registry.get("marionette");
+      if (marionette) rows.push(<TokenInformationAction key="marionette-reveal" role={marionette} label="This Player Is" onClick={() => report(presentCharacter("This Player Is", "marionette"))} />);
     } else if (["minionInfo", "demonInfo"].includes(current.stepKey)) {
       // PO 2026-10-28: Minion and Demon information open the same V2 Reveal as the Information panel.
       rows.push(<SetupInformationAction key={current.stepKey} game={game} script={script} step={current} visible={engine.visible} resolved={done}

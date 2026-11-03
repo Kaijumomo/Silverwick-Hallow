@@ -11,10 +11,10 @@ import { useShellStore } from "@/stores/shellStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { clearNightActionCorrections } from "@/stores/nightActionCorrection";
-import { participantStepKey, travelerArrivalStepKey } from "@/stores/nightProgress";
+import { participantScopedStepKey, participantStepKey, travelerArrivalStepKey } from "@/stores/nightProgress";
 import { newTravelerArrival } from "@/stores/travelers";
 import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
-import { pick, plan, planned, proofGame, proofScript, request } from "@/test/proofFixtures";
+import { patchPlayer, pick, plan, planned, proofGame, proofScript, request } from "@/test/proofFixtures";
 import { deriveNightWork } from "@/features/nightOrder/nightWork";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import { buildRegistry } from "@/data/roleRegistry";
@@ -473,3 +473,49 @@ function deriveFor() {
   const script = { ...proofScript, id: "treacherous-30th" };
   return deriveNightWork(game(), { script, registry: buildRegistry(script), semantics: CANONICAL_ABILITY_SEMANTICS });
 }
+
+it("WP-8: a Marionette shown as the Investigator gets the same pair picker and Reveal as a true clue, chosen by the Storyteller", () => {
+  const base = patchPlayer(proofGame(["imp", "marionette", "chef", "monk", "saint", "baron", "poisoner"], "night", 1), "p1",
+    { shownRole: "investigator", shownAlignment: "good", behaviorMode: "marionette_fake_good_behavior" });
+  const withEpochs = { ...base, players: Object.fromEntries(Object.entries(base.players).map(([id, p]) => [id, { ...p, packetEpoch: `ep-${id}` }])) } as typeof base;
+  store.setState({ game: withEpochs, undoStack: [] });
+  useShellStore.getState().setNightCursor({ day: 1, stepKey: participantStepKey(withEpochs.players.p1!.participantId!, "investigator") });
+  render(<Guide />);
+  expect(screen.getByText(/This player is actually the Marionette/)).toBeInTheDocument();
+  const reveal = screen.getAllByRole("button").find((b) => /Reveal/i.test(b.getAttribute("aria-label") ?? b.textContent ?? ""));
+  expect(reveal).toBeTruthy();
+  act(() => { fireEvent.click(reveal!); });
+  const picker = useV6Ui.getState().picker as { onPick?: (id: string) => string | undefined } | null;
+  expect(picker?.onPick).toBeTruthy();
+  // Only a Minion token can be shown by the Investigator; the Storyteller picks which, then the two players.
+  let refusal: string | undefined;
+  act(() => { refusal = picker!.onPick!("chef"); });
+  expect(refusal).toBeTruthy();
+  act(() => { refusal = picker!.onPick!("poisoner"); });
+  expect(refusal).toBeUndefined();
+  tap("p2"); tap("p4");
+  expect(game().preparedInformation).toHaveLength(1);
+  expect(game().preparedInformation[0]!.clue).toMatchObject({ kind: "pair", shownCharacter: "poisoner" });
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  expect(game().informationDeliveries.some((d) => d.informationActionId === "investigator-first-night")).toBe(true);
+  expect(game().nightProgress[`1:${participantStepKey(game().players.p1!.participantId!, "investigator")}`]?.status).toBe("done");
+});
+
+it("WP-8: the Godfather's first night offers one safe reveal per Outsider in play", () => {
+  store.setState({ game: proofGame(["godfather", "saint", "recluse", "chef", "monk", "imp", "poisoner"], "night", 1), undoStack: [] });
+  useShellStore.getState().setNightCursor({ day: 1, stepKey: key("p0") });
+  render(<Guide />);
+  const buttons = screen.getAllByRole("button", { name: "Show this token" });
+  expect(buttons).toHaveLength(2);
+  act(() => { fireEvent.click(buttons[0]!); });
+  expect(useV6Ui.getState().show).toMatchObject({ kind: "char", roleId: "saint" });
+});
+
+it("WP-8: the Marionette step shows THIS PLAYER IS with the Marionette token to the woken Demon", () => {
+  store.setState({ game: proofGame(["imp", "marionette", "chef", "monk", "saint", "baron", "poisoner"], "night", 1), undoStack: [] });
+  const adminKey = participantScopedStepKey("admin", game().players.p1!.participantId!, "marionette");
+  useShellStore.getState().setNightCursor({ day: 1, stepKey: adminKey });
+  render(<Guide />);
+  act(() => { fireEvent.click(screen.getByRole("button", { name: "This Player Is" })); });
+  expect(useV6Ui.getState().show).toMatchObject({ kind: "char", title: "This Player Is", roleId: "marionette" });
+});
