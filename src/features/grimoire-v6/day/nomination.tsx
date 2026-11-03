@@ -68,8 +68,17 @@ export function buildNominations(ctx: V6Ctx): { ns: Record<string, unknown>; nom
 
   const nominatorRef = round ? round.nominator : voting.draft?.nominator && voting.draft.nominee ? voting.draft.nominator : null;
   const nomineeRef = round ? round.nominee : voting.draft?.nominee ?? null;
-  const notices = [curseNotice(ctx, nominatorRef), golemNotice(ctx, nominatorRef, nomineeRef)].filter((n): n is NonNullable<typeof n> => !!n);
+  const golem = golemNotice(ctx, nominatorRef, nomineeRef, !!round);
+  const notices = [curseNotice(ctx, nominatorRef), golem].filter((n): n is NonNullable<typeof n> => !!n);
   const curse = notices.length ? { note: notices.map((n) => n.note).join(" "), actions: notices.flatMap((n) => n.actions) } : null;
+  // The Golem's first nomination spends itself and applies its consequence once the vote has begun; a spent Golem cannot begin one.
+  if (golem?.blocked) { base.beginOff = true; }
+  if (!round && (golem?.auto || golem?.blocked)) {
+    base.begin = () => {
+      if (golem.blocked) return;
+      if (voting.begin() !== false) golem.auto?.();
+    };
+  }
   const extra = (actions: ExtraAction[] = [], note: string | null = null) => ({ extraOn: true, extra: nominationExtras(
     curse ? [...actions, ...curse.actions] : actions, curse ? (note ? `${note} ${curse.note}` : curse.note) : note) });
   const finish = (title: string, sub: string, color: string, nextText: string, onNext: () => void, actions: ExtraAction[] = []) =>

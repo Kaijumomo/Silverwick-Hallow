@@ -1365,7 +1365,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                       <button onClick={vm.ns?.change} className={["", "gv-he"].filter(Boolean).join(' ')} style={S130}>
                         Change
                       </button>
-                      <button onClick={vm.ns?.begin} className={["", "gv-hf"].filter(Boolean).join(' ')} style={S131}>
+                      <button onClick={vm.ns?.begin} disabled={vm.ns?.beginOff} data-nom-begin="1" className={["", "gv-hf"].filter(Boolean).join(' ')} style={S131}>
                         Begin the vote
                       </button>
                     </div>
@@ -1475,7 +1475,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                   <button onClick={vm.ns?.change} className={["", "gv-hj"].filter(Boolean).join(' ')} style={S155}>
                     Change
                   </button>
-                  <button onClick={vm.ns?.begin} className={["", "gv-ak"].filter(Boolean).join(' ')} style={S156}>
+                  <button onClick={vm.ns?.begin} disabled={vm.ns?.beginOff} data-nom-begin="1" className={["", "gv-ak"].filter(Boolean).join(' ')} style={S156}>
                     Call
                     <br />
                     vote
@@ -1574,7 +1574,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                 <button onClick={vm.ns?.change} className={["", "gv-h8"].filter(Boolean).join(' ')} style={S178}>
                   Change
                 </button>
-                <button onClick={vm.ns?.begin} className={["", "gv-ho"].filter(Boolean).join(' ')} style={S179}>
+                <button onClick={vm.ns?.begin} disabled={vm.ns?.beginOff} data-nom-begin="1" className={["", "gv-ho"].filter(Boolean).join(' ')} style={S179}>
                   Light the candles
                 </button>
                 </>
@@ -1753,7 +1753,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                   <button onClick={vm.ns?.change} className={["", "gv-he"].filter(Boolean).join(' ')} style={S130}>
                     Change
                   </button>
-                  <button onClick={vm.ns?.begin} className={["", "gv-hf"].filter(Boolean).join(' ')} style={S214}>
+                  <button onClick={vm.ns?.begin} disabled={vm.ns?.beginOff} data-nom-begin="1" className={["", "gv-hf"].filter(Boolean).join(' ')} style={S214}>
                     Begin the vote
                   </button>
                   </>

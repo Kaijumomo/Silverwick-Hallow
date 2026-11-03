@@ -21,7 +21,7 @@ type VotingUI = {
   round: VotingRound | null; voter: ReturnType<typeof currentVoter>;
   show: (surface?: Surface) => void; close: () => void; tap: (id: string) => boolean;
   run: (action: Action, context?: VotingCommandContext, finishAfter?: boolean) => boolean;
-  change: () => void; next: () => void; begin: () => void;
+  change: () => void; next: () => void; begin: () => boolean;
   confirmation: { message: string; accept: () => void } | null;
 };
 const VotingInteraction = createContext<VotingUI | null>(null);
@@ -109,11 +109,12 @@ export function VotingProvider({ children }: { children: ReactNode }) {
     setDraft(d.nominator ? { ...d, nominee: bind(p) } : { ...d, nominator: bind(p) });
     setError(null); return true;
   };
-  const begin = () => {
-    if (!game || !draft?.nominator || !draft.nominee) return;
+  const begin = (): boolean => {
+    if (!game || !draft?.nominator || !draft.nominee) return false;
     const nominee = game.players[draft.nominee.playerId];
     if (run({ kind: "begin", roundId: historyId(), mode: nominee?.isTraveler ? "exile" : "nomination",
-      nominator: draft.nominator, nominee: draft.nominee, confirmUnknown: true }, draft.context)) setDraft(null);
+      nominator: draft.nominator, nominee: draft.nominee, confirmUnknown: true }, draft.context)) { setDraft(null); return true; }
+    return false;
   };
   return <VotingInteraction.Provider value={{ surface, open: valid && surface !== "closed", draft, error, round, voter,
     show, close, tap, run, next, begin, change: () => setDraft(d => d ? { ...d, nominee: null } : d), confirmation }}>

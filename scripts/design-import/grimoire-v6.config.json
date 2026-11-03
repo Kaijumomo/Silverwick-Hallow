@@ -6,6 +6,11 @@
   ],
   "templatePatches": [
     {
+      "_why": "A Golem whose one nomination is spent cannot begin another vote: the four Begin the vote / Call vote / Light the candles buttons grey out (ns.beginOff). Styled by button[data-nom-begin]:disabled in grimoire-v6.css.",
+      "regex": "<button onClick=\"\\{\\{ ns\\.begin \\}\\}\" ",
+      "replace": "<button onClick=\"{{ ns.begin }}\" disabled=\"{{ ns.beginOff }}\" data-nom-begin=\"1\" "
+    },
+    {
       "regex": "WICK(<span style=\"color:rgba\\(232,88,74,\\.7\\); letter-spacing:0; margin:0 \\.3em 0 \\.1em;\">\u2013</span>)7Q3M",
       "replace": "{{ code.head }}$1{{ code.tail }}"
     },

@@ -34,27 +34,44 @@ import { golemNotice } from "./curses";
 
 describe("Golem nomination notice", () => {
   const roles = ["golem", "chef", "empath", "monk", "imp", "saint", "poisoner"];
-  it("a Golem nominating a non-Demon: that player dies, and the nomination is spent in one action", () => {
+  it("a Golem nominating a non-Demon: the death and the spent nomination are applied by themselves, with no button", () => {
     const g = proofGame(roles, "day", 2);
     const notice = golemNotice(ctxOf(g), ref(g, "p0"), ref(g, "p1"));
     expect(notice?.note).toContain("who is not the Demon");
-    expect(notice?.actions.map((a) => a.label)).toEqual(["Player 1 dies (Golem)"]);
+    expect(notice?.actions).toEqual([]);
+    expect(notice?.auto).toBeTypeOf("function");
+    expect(notice?.blocked).toBeUndefined();
   });
 
-  it("the Demon survives the nomination but the nomination is spent", () => {
+  it("the Demon survives the nomination but the nomination is spent, automatically", () => {
     const g = proofGame(roles, "day", 2);
     const notice = golemNotice(ctxOf(g), ref(g, "p0"), ref(g, "p4"));
     expect(notice?.note).toContain("is the Demon: nothing happens");
-    expect(notice?.actions).toHaveLength(1);
+    expect(notice?.auto).toBeTypeOf("function");
   });
 
-  it("a Recluse nominee is the Storyteller's call, an impaired Golem kills no one, a used Golem only gets a note", () => {
+  it("a Recluse nominee is the Storyteller's call: no automatic action, both rulings offered once the vote has begun", () => {
     const g = proofGame(["golem", "recluse", "empath", "monk", "imp", "saint", "poisoner"], "day", 2);
-    expect(golemNotice(ctxOf(g), ref(g, "p0"), ref(g, "p1"))?.actions).toHaveLength(2);
+    const before = golemNotice(ctxOf(g), ref(g, "p0"), ref(g, "p1"));
+    expect(before?.auto).toBeUndefined();
+    expect(before?.actions).toEqual([]);
+    const during = golemNotice(ctxOf(g), ref(g, "p0"), ref(g, "p1"), true);
+    expect(during?.auto).toBeUndefined();
+    expect(during?.actions).toHaveLength(2);
+  });
+
+  it("an impaired Golem still spends its one nomination automatically", () => {
     const base = proofGame(roles, "day", 2);
-    expect(golemNotice(ctxOf(impair(base, "p0")), ref(base, "p0"), ref(base, "p1"))?.note).toContain("does not function");
+    const notice = golemNotice(ctxOf(impair(base, "p0")), ref(base, "p0"), ref(base, "p1"));
+    expect(notice?.note).toContain("does not function");
+    expect(notice?.auto).toBeTypeOf("function");
+  });
+
+  it("a spent Golem cannot begin another nomination; once a vote is under way there is nothing to say", () => {
+    const base = proofGame(roles, "day", 2);
     const used = patchPlayer(base, "p0", { abilityUsed: true });
-    expect(golemNotice(ctxOf(used), ref(base, "p0"), ref(base, "p1"))).toMatchObject({ actions: [] });
+    expect(golemNotice(ctxOf(used), ref(base, "p0"), ref(base, "p1"))).toMatchObject({ actions: [], blocked: true });
+    expect(golemNotice(ctxOf(used), ref(base, "p0"), ref(base, "p1"), true)).toBeNull();
   });
 
   it("says nothing for a non-Golem nominator, a dead Golem or at night", () => {

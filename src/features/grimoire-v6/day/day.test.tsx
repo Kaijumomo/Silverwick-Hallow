@@ -11,6 +11,7 @@ import { useGrimoireVm } from "../useGrimoireVm";
 import { useDayVm } from "../vm/day";
 import { dayTokenDecor, dayTokenTap } from "./tokens";
 import { evaluateSlayerShot } from "./slayer";
+import { proofGame, proofScript } from "@/test/proofFixtures";
 import { buildDayTown, type DayTown } from "./test/dayFixture";
 
 const wrapper = ({ children }: { children: ReactNode }) => <VotingProvider>{children}</VotingProvider>;
@@ -314,5 +315,73 @@ describe("end of game hints", () => {
     act(() => { (m.result.current.sv as any).confirm(); });
     expect(m.result.current.winHint).toBe(true);
     expect(m.result.current.endTitle).toBe("End game · The Demon is dead. Good wins");
+  });
+});
+
+describe("Golem (WP-3)", () => {
+  // p0 golem, p1 chef, p2 empath, p3 monk, p4 imp, p5 saint, p6 poisoner (Day 2)
+  const ROLES = ["golem", "chef", "empath", "monk", "imp", "saint", "poisoner"];
+  beforeEach(() => {
+    useStorytellerStore.setState({ game: proofGame(ROLES, "day", 2), lobby: null, undoStack: [], localSeq: 0, customScripts: { [proofScript.id]: proofScript } });
+  });
+  const open = (m: Mounted) => { if (!m.result.current.ctx.voting!.open) nominate(m); };
+  const tapId = (m: Mounted, id: string) => act(() => { m.result.current.ctx.voting!.tap(id); });
+  const alive = (id: string) => game().players[id]!.alive;
+  const rounds = () => currentVotingState(game()).rounds.length;
+
+  it("the first nomination kills a non-Demon and spends the ability by itself; Undo reverses the consequence, then the nomination", () => {
+    const m = mount(); open(m); tapId(m, "p0"); tapId(m, "p1");
+    expect(ns(m).beginOff).toBeUndefined();
+    act(() => { ns(m).begin(); });
+    expect(rounds()).toBe(1);
+    expect(alive("p1")).toBe(false);
+    expect(game().players.p0!.abilityUsed).toBe(true);
+    expect(game().players.p0!.reminders.map((r) => r.label)).toContain("May Not Nominate");
+    act(() => { store().undo(); });
+    expect(alive("p1")).toBe(true);
+    expect(game().players.p0!.abilityUsed).toBeFalsy();
+    expect(rounds()).toBe(1);
+    act(() => { store().undo(); });
+    expect(rounds()).toBe(0);
+  });
+
+  it("nominating the Demon spends the ability and nobody dies", () => {
+    const m = mount(); open(m); tapId(m, "p0"); tapId(m, "p4");
+    act(() => { ns(m).begin(); });
+    expect(alive("p4")).toBe(true);
+    expect(game().players.p0!.abilityUsed).toBe(true);
+  });
+
+  it("a spent Golem who tries again: Begin the vote is greyed out and nothing is recorded", () => {
+    const m = mount(); open(m); tapId(m, "p0"); tapId(m, "p4");
+    act(() => { ns(m).begin(); });
+    const voters = currentVotingState(game()).rounds.at(-1)!.order.length;
+    for (let i = 0; i < voters; i++) respond(m, "no");
+    act(() => { ns(m).next(); });
+    tapId(m, "p0"); tapId(m, "p2");
+    expect(ns(m).beginOff).toBe(true);
+    const before = rounds();
+    act(() => { ns(m).begin(); });
+    expect(rounds()).toBe(before);
+    expect(alive("p2")).toBe(true);
+  });
+
+  it("a Recluse nominee is the Storyteller's ruling: nothing is applied until they rule", () => {
+    useStorytellerStore.setState({ game: proofGame(["golem", "recluse", "empath", "monk", "imp", "saint", "poisoner"], "day", 2) });
+    const m = mount(); open(m); tapId(m, "p0"); tapId(m, "p1");
+    act(() => { ns(m).begin(); });
+    expect(rounds()).toBe(1);
+    expect(alive("p1")).toBe(true);
+    expect(game().players.p0!.abilityUsed).toBeFalsy();
+  });
+
+  it("a nomination the vote engine refuses does not spend the Golem", () => {
+    const m = mount(); open(m); tapId(m, "p2"); tapId(m, "p3");
+    act(() => { ns(m).begin(); });
+    act(() => { ns(m).next(); });
+    tapId(m, "p0"); tapId(m, "p3"); // p3 was already nominated today
+    act(() => { ns(m).begin(); });
+    expect(game().players.p0!.abilityUsed).toBeFalsy();
+    expect(alive("p3")).toBe(true);
   });
 });
