@@ -11,7 +11,7 @@ import { useGrimoireVm } from "../useGrimoireVm";
 import { useDayVm } from "../vm/day";
 import { dayTokenDecor, dayTokenTap } from "./tokens";
 import { evaluateSlayerShot } from "./slayer";
-import { proofGame, proofScript } from "@/test/proofFixtures";
+import { patchPlayer, proofGame, proofScript } from "@/test/proofFixtures";
 import { buildDayTown, type DayTown } from "./test/dayFixture";
 
 const wrapper = ({ children }: { children: ReactNode }) => <VotingProvider>{children}</VotingProvider>;
@@ -190,7 +190,8 @@ describe("executing and beginning the Night", () => {
     runVote(m, "Bram", "Greta", (i) => i < 7);
     act(() => { ns(m).next(); });
     act(() => { m.result.current.day.advance!.run(); });
-    expect(ns(m)).toMatchObject({ kicker: "Day 2 · Finish day", resultTitle: "Did Greta die?", nextText: "Yes · died", result: true });
+    expect(ns(m)).toMatchObject({ kicker: "Day 2 · Finish day", resultTitle: "Did Greta die?", nextText: "Yes · died", result: true,
+      resultSub: expect.stringContaining("No execution: nobody is executed today") });
     act(() => { ns(m).next(); });
     expect(game().players[town.ids.Greta!]!.alive).toBe(false);
     expect(m.result.current.day.advance!.text).toBe("Begin Night 3");
@@ -383,5 +384,39 @@ describe("Golem (WP-3)", () => {
     act(() => { ns(m).begin(); });
     expect(game().players.p0!.abilityUsed).toBeFalsy();
     expect(alive("p3")).toBe(true);
+  });
+});
+
+describe("Witch's curse (WP-9)", () => {
+  // p0 witch, p1 chef (cursed), p2 empath, p3 monk, p4 imp, p5 saint, p6 poisoner (Day 2)
+  const ROLES = ["witch", "chef", "empath", "monk", "imp", "saint", "poisoner"];
+  const base = proofGame(ROLES, "day", 2);
+  const cursed = patchPlayer(base, "p1", { effects: [{
+    id: "curse", type: "witchCurse", sourceCharacter: "witch", lifetime: { kind: "throughFollowingDay" }, state: "active",
+    sourceParticipant: { kind: "participant", playerId: "p0", participantId: base.players.p0!.participantId!, nameAtTime: "Player 0" },
+    expiry: { kind: "at", moment: { phase: "night", day: 3 } }, appliedAt: { phase: "night", day: 2 } } as never] });
+  beforeEach(() => {
+    useStorytellerStore.setState({ game: cursed, lobby: null, undoStack: [], localSeq: 0, customScripts: { [proofScript.id]: proofScript } });
+  });
+  const open = (m: Mounted) => { if (!m.result.current.ctx.voting!.open) nominate(m); };
+  const tapId = (m: Mounted, id: string) => act(() => { m.result.current.ctx.voting!.tap(id); });
+
+  it("the cursed nominator dies by themselves as the vote begins, the nomination counts, and Undo restores them first", () => {
+    const m = mount(); open(m); tapId(m, "p1"); tapId(m, "p2");
+    expect(ns(m).extraOn).toBe(true);
+    act(() => { ns(m).begin(); });
+    expect(game().players.p1!.alive).toBe(false);
+    expect(currentVotingState(game()).rounds).toHaveLength(1);
+    act(() => { useStorytellerStore.getState().undo(); });
+    expect(game().players.p1!.alive).toBe(true);
+    expect(currentVotingState(game()).rounds).toHaveLength(1);
+    act(() => { useStorytellerStore.getState().undo(); });
+    expect(currentVotingState(game()).rounds).toHaveLength(0);
+  });
+
+  it("nobody else dies, and an uncursed nominator is untouched", () => {
+    const m = mount(); open(m); tapId(m, "p3"); tapId(m, "p2");
+    act(() => { ns(m).begin(); });
+    expect(Object.values(game().players).filter((p) => !p.alive)).toHaveLength(0);
   });
 });

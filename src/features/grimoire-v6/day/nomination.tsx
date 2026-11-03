@@ -69,14 +69,15 @@ export function buildNominations(ctx: V6Ctx): { ns: Record<string, unknown>; nom
   const nominatorRef = round ? round.nominator : voting.draft?.nominator && voting.draft.nominee ? voting.draft.nominator : null;
   const nomineeRef = round ? round.nominee : voting.draft?.nominee ?? null;
   const golem = golemNotice(ctx, nominatorRef, nomineeRef, !!round);
-  const notices = [curseNotice(ctx, nominatorRef), golem].filter((n): n is NonNullable<typeof n> => !!n);
+  const notices = [curseNotice(ctx, nominatorRef, !!round), golem].filter((n): n is NonNullable<typeof n> => !!n);
   const curse = notices.length ? { note: notices.map((n) => n.note).join(" "), actions: notices.flatMap((n) => n.actions) } : null;
   // The Golem's first nomination spends itself and applies its consequence once the vote has begun; a spent Golem cannot begin one.
   if (golem?.blocked) { base.beginOff = true; }
-  if (!round && (golem?.auto || golem?.blocked)) {
+  const autos = notices.flatMap((n) => n.auto ? [n.auto] : []);
+  if (!round && (autos.length || golem?.blocked)) {
     base.begin = () => {
-      if (golem.blocked) return;
-      if (voting.begin() !== false) golem.auto?.();
+      if (golem?.blocked) return;
+      if (voting.begin() !== false) for (const apply of autos) apply();
     };
   }
   const extra = (actions: ExtraAction[] = [], note: string | null = null) => ({ extraOn: true, extra: nominationExtras(
@@ -173,7 +174,9 @@ function buildFinish(ctx: V6Ctx, finish: FinishFn): Record<string, unknown> {
   };
   if (player) {
     const pacifist = Object.values(game.players).some((p) => !p.isEmpty && p.alive && p.actualRole === "pacifist");
-    const note = pacifist ? "Pacifist may apply. You decide whether an executed good player survives." : "Record what actually happened to them.";
+    // The three outcomes, said plainly: executed and died, executed but survived, or no execution at all.
+    const outcomes = "Yes: the execution happened and they died. No: it happened and they lived on. No execution: nobody is executed today.";
+    const note = pacifist ? `${outcomes} Pacifist may apply: you decide whether an executed good player survives.` : outcomes;
     if (!player.alive) return finish(`${player.name} is already dead`, "Record the execution as it stands.", "#f4a595", "Record execution", record("alreadyDead"), [{ label: "No execution", tone: "quiet", onClick: begin }]);
     return finish(`Did ${player.name} die?`, note, "#f4a595", "Yes · died", record("died"), [{ label: "No · survived", onClick: record("survived") }, { label: "No execution", tone: "quiet", onClick: begin }]);
   }

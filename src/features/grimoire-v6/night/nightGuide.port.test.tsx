@@ -519,3 +519,12 @@ it("WP-8: the Marionette step shows THIS PLAYER IS with the Marionette token to 
   act(() => { fireEvent.click(screen.getByRole("button", { name: "This Player Is" })); });
   expect(useV6Ui.getState().show).toMatchObject({ kind: "char", title: "This Player Is", roleId: "marionette" });
 });
+
+it("WP-9: the End control carries the discreet '!' once every Demon is dead, without declaring a winner", () => {
+  store.setState({ game: patchPlayer(proofGame(["imp", "chef", "empath", "monk", "saint", "baron", "poisoner"], "day", 2), "p0", { alive: false }), undoStack: [] });
+  render(<VotingProvider><GrimoireV6Screen /></VotingProvider>);
+  expect(screen.getByLabelText("Win condition met")).toBeInTheDocument();
+  expect(screen.getByTitle(/End game · The Demon is dead\. Check whether the game has ended/)).toBeInTheDocument();
+  expect(game().phase).toBe("day");
+  expect(game().result).toBeFalsy();
+});

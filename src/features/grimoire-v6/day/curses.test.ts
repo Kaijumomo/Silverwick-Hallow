@@ -12,10 +12,22 @@ const ctxOf = (game: ReturnType<typeof proofGame>) => ({ game, script: proofScri
 const ref = (g: ReturnType<typeof proofGame>, id: string) => ({ playerId: id, participantId: g.players[id]!.participantId! });
 
 describe("Witch curse notice on the nomination card", () => {
-  it("tells the Storyteller a cursed nominator dies and offers the death", () => {
+  it("a certain curse (it applies, nothing protects them) is applied by itself when the vote begins: no button", () => {
     const g = cursed(proofGame(ROLES, "day", 2));
     const notice = curseNotice(ctxOf(g), ref(g, "p1"));
     expect(notice?.note).toContain("cursed by the Witch");
+    expect(notice?.actions).toEqual([]);
+    expect(notice?.auto).toBeTypeOf("function");
+  });
+
+  it("a vote already begun, or a nominator who may be protected, keeps the Storyteller's button instead", () => {
+    const g = cursed(proofGame(ROLES, "day", 2));
+    const begun = curseNotice(ctxOf(g), ref(g, "p1"), true);
+    expect(begun?.actions).toHaveLength(1);
+    expect(begun?.auto).toBeUndefined();
+    const guarded = patchPlayer(g, "p1", { effects: [...g.players.p1!.effects, { id: "inn", type: "cannotDie", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "day", day: 2 } } as never] });
+    const notice = curseNotice(ctxOf(guarded), ref(g, "p1"));
+    expect(notice?.auto).toBeUndefined();
     expect(notice?.actions).toHaveLength(1);
   });
 

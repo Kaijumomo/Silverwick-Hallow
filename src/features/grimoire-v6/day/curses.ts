@@ -15,7 +15,9 @@ import type { ExtraAction } from "./NominationExtras";
  * nothing here blocks or edits the vote. With just three living players the Witch has lost the
  * ability, so no prompt is made.
  */
-export function curseNotice(ctx: V6Ctx, nominator: CurrentParticipantRef | { playerId: string; participantId: string } | null | undefined): { note: string; actions: ExtraAction[] } | null {
+export type CurseNotice = { note: string; actions: ExtraAction[]; auto?: () => void };
+
+export function curseNotice(ctx: V6Ctx, nominator: CurrentParticipantRef | { playerId: string; participantId: string } | null | undefined, inRound = false): CurseNotice | null {
   const { game } = ctx;
   if (!nominator || game.phase !== "day") return null;
   const player = game.players[nominator.playerId];
@@ -23,15 +25,23 @@ export function curseNotice(ctx: V6Ctx, nominator: CurrentParticipantRef | { pla
   const curse = player.effects.find((effect) => effect.type === "witchCurse" && effect.state === "active");
   if (!curse || livingNonTravellers(game.players) <= 3) return null;
   const query = createRulesQuery(game, { registry: ctx.registry, script: ctx.script ?? null, semantics: CANONICAL_ABILITY_SEMANTICS });
-  const applies = query.effectApplies({ playerId: player.id, participantId: player.participantId! }, curse);
+  const binding = { playerId: player.id, participantId: player.participantId! };
+  const applies = query.effectApplies(binding, curse);
   if (applies.known && !applies.value) return null;
+  const die = () => {
+    const message = runLifeAction(player.id, player.participantId, "die");
+    flash(message ?? `${player.name} dies from the Witch's curse.`);
+  };
+  // Certain (the curse applies and nothing protects them): once the vote begins the death is recorded by itself, as one Life command
+  // that Undo reverses. Anything the rules cannot settle stays a button for the Storyteller; a vote already begun keeps the button too.
+  const protectedNow = query.protectedFrom(binding, "any");
+  if (applies.known && protectedNow.known && !protectedNow.value && !inRound) {
+    return { note: `${player.name} is cursed by the Witch: they die as the vote begins. The nomination still counts.`, actions: [], auto: die };
+  }
   const note = applies.known
     ? `${player.name} is cursed by the Witch and has nominated: they die now. The nomination still counts.`
     : `${player.name} may be cursed by the Witch (${applies.reason}). If the curse applies, they die now.`;
-  return { note, actions: [{ label: `${player.name} dies (Witch's curse)`, onClick: () => {
-    const message = runLifeAction(player.id, player.participantId, "die");
-    flash(message ?? `${player.name} dies from the Witch's curse.`);
-  } }] };
+  return { note, actions: [{ label: `${player.name} dies (Witch's curse)`, onClick: die }] };
 }
 
 /**

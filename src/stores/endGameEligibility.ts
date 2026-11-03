@@ -36,3 +36,19 @@ export function endGameEligibility(game: StorytellerLobbyRecord, environment: Ru
   if (demons.length > 1) return unknown("Multiple Demons need manual adjudication.");
   return living.length <= 2 ? { kind: "verified", team: "evil", reason: "twoAlive" } : { kind: "none" };
 }
+
+/**
+ * A reminder only (it never says who wins and records nothing): every Demon is dead but the rules cannot prove the game is over --
+ * a Scarlet Woman or Mastermind is still alive, or the death's succession was not recorded. Lets the End control carry its
+ * discreet "!" so the Storyteller checks, instead of the cue silently missing.
+ */
+export function demonGoneAdvisory(game: StorytellerLobbyRecord, environment: RulesQueryEnvironment): string | null {
+  if (game.phase !== "day" && game.phase !== "night") return null;
+  const players = Object.values(game.players).filter(player => !player.isEmpty && !!player.participantId && !player.isTraveler);
+  const demon = (player: (typeof players)[number]) => environment.registry.get(player.actualRole)?.type === "demon";
+  if (players.some(player => player.alive && demon(player)) || !players.some(player => !player.alive && demon(player))) return null;
+  const living = (role: string) => players.some(player => player.alive && player.actualRole === role);
+  if (living("scarletwoman")) return "The Demon is dead, but a Scarlet Woman is alive. Check before ending the game";
+  if (living("mastermind")) return "The Demon is dead, but the Mastermind is alive. Check before ending the game";
+  return "The Demon is dead. Check whether the game has ended";
+}

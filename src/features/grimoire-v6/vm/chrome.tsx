@@ -3,7 +3,7 @@ import { useStorytellerStore } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { formatCode } from "@/firebase/lobby";
 import { buildPlayerJoinLink, qrModules } from "@/features/newgame/qr";
-import { endGameEligibility } from "@/stores/endGameEligibility";
+import { demonGoneAdvisory, endGameEligibility } from "@/stores/endGameEligibility";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
 import { iconUrlFor } from "@/data/iconUrl";
@@ -23,7 +23,7 @@ function endHint(ctx: V6Ctx): string {
   const { game, script, registry } = ctx;
   if (!script || game.phase === "setup" || game.phase === "ended") return "";
   const e = endGameEligibility(game, { registry, script });
-  if (e.kind !== "verified") return "";
+  if (e.kind !== "verified") return demonGoneAdvisory(game, { registry, script }) ?? "";
   const side = e.team === "good" ? "Good wins" : "Evil wins";
   if (e.reason === "demonDeath") return "The Demon is dead. Good wins";
   if (e.reason === "twoAlive") return "Only two players live. Evil wins";
