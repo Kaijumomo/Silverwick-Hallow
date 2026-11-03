@@ -15,6 +15,9 @@ import { participantStepKey, travelerArrivalStepKey } from "@/stores/nightProgre
 import { newTravelerArrival } from "@/stores/travelers";
 import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
 import { pick, plan, planned, proofGame, proofScript, request } from "@/test/proofFixtures";
+import { deriveNightWork } from "@/features/nightOrder/nightWork";
+import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
+import { buildRegistry } from "@/data/roleRegistry";
 
 /** The V6 Grimoire with its Night card open (or closed): the same scenarios the guided Night panel was held to. */
 function Guide({ visible = true }: { visible?: boolean }) {
@@ -427,3 +430,46 @@ it("WP-6: Dusk offers nothing when no dead player was chosen last night", () => 
   expect(screen.queryByText(/regurgitate/)).toBeNull();
   expect(useTargetPicker.getState().active).toBeNull();
 });
+
+// ── WP-7: Night-card consistency ──────────────────────────────────────────────────────────────────
+const t30Script = { ...proofScript, id: "treacherous-30th", name: "Treacherous 30th" };
+const t30Night = (roles: string[], day = 3) => {
+  store.setState({ game: proofGame(roles, "night", day, { scriptId: t30Script.id }), lobby: null, undoStack: [], localSeq: 0, customScripts: { [t30Script.id]: t30Script } });
+};
+const stripLabels = () => screen.getAllByRole("button").map((b) => b.textContent);
+
+it("WP-7: a player poisoned by the No Dashii shows the Poisoned pill on the Night card", () => {
+  // p0 nodashii, p1 empath (a neighbouring Townsfolk is poisoned), p2 chef
+  t30Night(["nodashii", "empath", "chef", "monk", "saint", "baron", "poisoner"]);
+  useShellStore.getState().setNightCursor({ day: 3, stepKey: key("p1") });
+  render(<Guide />);
+  expect(screen.getByText(/· any info/)).toBeInTheDocument();
+});
+
+it("WP-7: Next and Previous pass over steps that do not wake tonight, which stay reachable on the strip with their reason", () => {
+  // Day 3, no execution and no Outsider death: the Undertaker does not wake.
+  t30Night(["imp", "undertaker", "empath", "monk", "saint", "baron", "poisoner"]);
+  render(<Guide />);
+  const order = () => (document.body.textContent ?? "");
+  expect(order()).toMatch(/Undertaker/);
+  const { steps } = deriveFor();
+  const undertaker = steps.find((step) => step.kind === "player" && step.effectiveRoleId === "undertaker")!;
+  const before = steps[steps.indexOf(undertaker) - 1]!;
+  expect(steps.at(-1)).toBe(undertaker);
+  act(() => { useShellStore.getState().setNightCursor({ day: 3, stepKey: before.stepKey }); });
+  // Next passes over the Undertaker (nobody was executed): straight to Dawn. Previous comes back to the step before it.
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  expect(screen.getByText(/No one died tonight/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Previous" }));
+  expect(current()).toBe(before.stepKey);
+  // One tap on the strip still opens the collapsed step and says why it does not wake.
+  for (const button of screen.getAllByRole("button", { name: /Undertaker/ })) { fireEvent.click(button); if (current() === undertaker.stepKey) break; }
+  expect(current()).toBe(undertaker.stepKey);
+  expect(screen.getByText(/This character does not wake/)).toBeInTheDocument();
+  expect(stripLabels().length).toBeGreaterThan(0);
+});
+
+function deriveFor() {
+  const script = { ...proofScript, id: "treacherous-30th" };
+  return deriveNightWork(game(), { script, registry: buildRegistry(script), semantics: CANONICAL_ABILITY_SEMANTICS });
+}

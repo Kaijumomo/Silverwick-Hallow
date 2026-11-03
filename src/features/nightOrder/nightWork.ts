@@ -2,7 +2,7 @@ import type { RoleRegistry } from "@/data/roleRegistry";
 import type { AbilitySemanticsRegistry } from "@/abilities/semantics";
 import { createRulesQuery, type RulesQuery } from "@/stores/rulesQuery";
 import { nightTriggerStepKey } from "@/stores/nightProgress";
-import { isDeathEvent } from "@/stores/lifeEvents";
+import { isDeathEvent, lifeEventsAt } from "@/stores/lifeEvents";
 import { wakeIdentity } from "@/stores/wakeIdentity";
 import { bindingOf, seatedParticipants, triggerAbility, type StepAbility } from "@/features/abilities/abilityUi";
 import { computeNightOrder, type NightStep } from "./nightOrder";
@@ -50,6 +50,8 @@ export type NightWork = {
   steps: NightStep[];
   triggered: TriggeredNightWork[];
   query: RulesQuery;
+  /** Rows of players brought back tonight AFTER their turn had passed: they act from the next Night, so the row counts as settled. */
+  late: ReadonlySet<string>;
 };
 
 export const CUSTOM_STEP_PREFIX = "manual:";
@@ -113,10 +115,25 @@ export function deriveNightWork(game: StorytellerLobbyRecord, environment: Night
       : ability.trigger.kind === "notTriggered" ? [] : [step];
   });
   steps.sort((a, b) => a.order - b.order);
-  return { steps, triggered, query };
+  return { steps, triggered, query, late: revivedAfterTheirTurn(game, steps) };
 }
 
-export const stepResolved = (game: Pick<StorytellerLobbyRecord, "nightProgress" | "day">, step: NightStep): boolean => {
+/**
+ * A character resurrected tonight (Professor, Shabaloth, ...) whose place in the Night order was already behind the
+ * Storyteller when they came back has missed it: its row is not unfinished work (no wake is owed until tomorrow night).
+ * A resurrection before the turn (e.g. at Dusk) leaves the row owed, as for any living player.
+ */
+export function revivedAfterTheirTurn(game: StorytellerLobbyRecord, steps: readonly NightStep[]): Set<string> {
+  const back = game.phase === "night" ? lifeEventsAt(game, { phase: "night", day: game.day }, (event) => event.kind === "resurrection") : null;
+  if (!back || back.status !== "known" || !back.events.length) return new Set();
+  const revived = new Set(back.events.map((event) => event.subject.participantId));
+  const passed = Math.max(-1, ...steps.filter((step) => stepResolved(game, step)).map((step) => step.order));
+  return new Set(steps.filter((step) => step.kind === "player" && revived.has(step.participantId ?? "") && !stepResolved(game, step) && step.order < passed)
+    .map((step) => step.stepKey));
+}
+
+export const stepResolved = (game: Pick<StorytellerLobbyRecord, "nightProgress" | "day">, step: NightStep, late?: ReadonlySet<string>): boolean => {
+  if (late?.has(step.stepKey)) return true;
   const status = game.nightProgress?.[`${game.day}:${step.stepKey}`]?.status;
   return status === "done" || status === "skipped";
 };
@@ -134,8 +151,8 @@ export type UnfinishedNightWork = {
 };
 
 /** What Dawn Review reports: every unfinished item of the derived Night work. */
-export function unfinishedNightWork(game: StorytellerLobbyRecord, work: NightWork): UnfinishedNightWork {
-  const open = work.steps.filter((step) => !stepResolved(game, step));
+export function unfinishedNightWork(game: StorytellerLobbyRecord, work: NightWork, idle?: ReadonlyMap<string, string>): UnfinishedNightWork {
+  const open = work.steps.filter((step) => !stepResolved(game, step, work.late) && !idle?.has(step.stepKey));
   const isCustom = (step: NightStep) => step.stepKey.startsWith(CUSTOM_STEP_PREFIX);
   const triggerKeys = new Set(work.triggered.map(item => item.stepKey));
   const rows = open.filter((step) => !isCustom(step) && !triggerKeys.has(step.stepKey));

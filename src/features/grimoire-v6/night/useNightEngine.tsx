@@ -83,18 +83,6 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   const sequence = useRef(0);
   const actionContext = captureCharacterActionContext();
 
-  const checkpoint = activeCheckpoint(nightPos, game.day, cursor);
-  const pos: NightPosition = resolvePosition({
-    game, steps, checkpoint,
-    cursorKey: cursor?.day === game.day ? cursor.stepKey : undefined,
-    held: success?.game === game ? success.step : undefined,
-  });
-  const current = pos.kind === "step" ? pos.step : undefined;
-  const currentIndex = current ? steps.findIndex((step) => step.stepKey === current.stepKey) : -1;
-  const resolved = current ? stepResolved(game, current) : false;
-  const actor = current?.kind === "player" ? game.players[current.playerId]
-    : current?.travelerArrivalId ? game.players[current.travelerArrivalId] : undefined;
-
   const abilityOf = (step: NightStep): StepAbility | null => {
     if (step.kind !== "player") return null;
     const ordinary = pathAbility(step.effectiveRoleId, registry, semantics, "nightOrder", game);
@@ -102,6 +90,53 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     const player = game.players[step.playerId];
     return (query && player?.participantId && triggerAbility(step.effectiveRoleId, registry, semantics, query, bindingOf(player))) || ordinary;
   };
+  // T30 design: a step the rules say does not wake shows why (no Outsider died today, no execution today, ...). Those steps are
+  // collapsed: Next and Previous pass over them, Dawn does not count them, and the strip dims them -- but each stays one tap away
+  // on the strip, where its reason is shown.
+  const idleReasons: ReadonlyMap<string, string> = useMemo(() => {
+    const out = new Map<string, string>();
+    if (script?.id !== "treacherous-30th") return out;
+    for (const step of steps) {
+      if (step.kind !== "player" || stepResolved(game, step)) continue;
+      const stepAbility = abilityOf(step);
+      if (!stepAbility || stepAbility.kind !== "guided" || step.advisory?.includes("Vigormortis")) continue;
+      const fingerprint = captureFingerprint(game, step.playerId, { day: game.day, stepKey: step.stepKey });
+      if (!fingerprint) continue;
+      // The rules answer "does not act tonight" before they read any choice, so probe with placeholder choices.
+      const stepActor = game.players[step.playerId];
+      const actorSeat = stepActor?.participantId ? bindingOf(stepActor) : null;
+      const probe: Record<string, AbilityInputValue> = {};
+      for (const input of stepAbility.descriptor.inputs) {
+        if (input.kind === "participant" && actorSeat) {
+          const pool = seatedParticipants(game).filter((p) => participantAllowed(p, input, actorSeat)).slice(0, input.count ?? 1);
+          probe[input.id] = { kind: "participant", participants: pool.map(bindingOf) };
+        } else if (input.kind === "character") probe[input.id] = { kind: "character", roleIds: [script.characters[0]?.id ?? ""] };
+      }
+      const plan = planAbilityResolution(game, { mode: "guided", invocationPath: "nightOrder", fingerprint, roleId: step.effectiveRoleId, inputs: probe, completeStep: true },
+        { script, registry, semantics });
+      if (!plan.ok && plan.code === "notApplicable") out.set(step.stepKey, plan.message);
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game, steps, script]);
+  /** Rows that need no wake tonight: revived after their turn, or the rules say they do not act. */
+  const settled: ReadonlySet<string> = useMemo(() => new Set([...(work?.late ?? []), ...idleReasons.keys()]), [work, idleReasons]);
+
+  const checkpoint = activeCheckpoint(nightPos, game.day, cursor);
+  const pos: NightPosition = resolvePosition({
+    game, steps, checkpoint,
+    cursorKey: cursor?.day === game.day ? cursor.stepKey : undefined,
+    held: success?.game === game ? success.step : undefined,
+    late: settled,
+  });
+  const current = pos.kind === "step" ? pos.step : undefined;
+  const currentIndex = current ? steps.findIndex((step) => step.stepKey === current.stepKey) : -1;
+  const resolved = current ? stepResolved(game, current) : false;
+  const lateReason = "They were brought back after their turn tonight, so they act from tomorrow night";
+  const skipReason: string | null = current && !resolved ? work?.late.has(current.stepKey) ? lateReason : idleReasons.get(current.stepKey) ?? null : null;
+  const actor = current?.kind === "player" ? game.players[current.playerId]
+    : current?.travelerArrivalId ? game.players[current.travelerArrivalId] : undefined;
+
   const ability = current ? abilityOf(current) : null;
   const eligible = !!(query && ability?.kind === "guided" && actor?.participantId && current?.kind === "player"
     && (!current.isDeceived || NIGHT_INFORMATION_ROLES.has(current.effectiveRoleId))
@@ -129,28 +164,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   const live = useRef({ visible, current, game, successorChoice });
   live.current = { visible, current, game, successorChoice };
 
-  // T30 design: a step the rules say does not wake shows why (no Outsider died today, no execution today, ...).
-  const skipReason: string | null = useMemo(() => {
-    if (script?.id !== "treacherous-30th" || !current || current.kind !== "player" || resolved || !ability || ability.kind !== "guided") return null;
-    if (current.advisory?.includes("Vigormortis")) return null;
-    const fingerprint = captureFingerprint(game, current.playerId, { day: game.day, stepKey: current.stepKey });
-    if (!fingerprint || !script) return null;
-    // The rules answer "does not act tonight" before they read any choice, so probe with placeholder choices.
-    const actorSeat = actor && actor.participantId ? bindingOf(actor) : null;
-    const probe: Record<string, AbilityInputValue> = {};
-    for (const input of ability.descriptor.inputs) {
-      if (input.kind === "participant" && actorSeat) {
-        const pool = seatedParticipants(game).filter((p) => participantAllowed(p, input, actorSeat)).slice(0, input.count ?? 1);
-        probe[input.id] = { kind: "participant", participants: pool.map(bindingOf) };
-      } else if (input.kind === "character") probe[input.id] = { kind: "character", roleIds: [script.characters[0]?.id ?? ""] };
-    }
-    const plan = planAbilityResolution(game, { mode: "guided", invocationPath: "nightOrder", fingerprint, roleId: current.effectiveRoleId, inputs: probe, completeStep: true },
-      { script, registry, semantics });
-    return !plan.ok && plan.code === "notApplicable" ? plan.message : null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game, current?.stepKey, resolved, script]);
-
-  const unfinished: UnfinishedNightWork | null = useMemo(() => work ? unfinishedNightWork(game, work) : null, [work, game]);
+  const unfinished: UnfinishedNightWork | null = useMemo(() => work ? unfinishedNightWork(game, work, idleReasons) : null, [work, game, idleReasons]);
 
   // ── navigation ────────────────────────────────────────────────────────────
   const settle = () => {
@@ -169,7 +183,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     useNightPos.getState().go(game.day, at, useShellStore.getState().nightCursor);
   };
   const advance = () => {
-    const next = steps.slice(currentIndex + 1).find((step) => !stepResolved(game, step));
+    const next = steps.slice(currentIndex + 1).find((step) => !stepResolved(game, step, settled));
     if (next) navigate(next);
     else gotoCheckpoint("dawn");
   };
@@ -415,14 +429,17 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   const prev = () => {
     if (!active) return;
     if (pos.kind === "dusk") return;
-    if (pos.kind === "dawn") { const last = steps.at(-1); if (last) navigate(last); else goDusk(); return; }
-    if (currentIndex <= 0) { goDusk(); return; }
-    navigate(steps[currentIndex - 1]!);
+    // Collapsed steps (no wake tonight) are passed over; each stays reachable from the strip.
+    const waking = (step: NightStep) => !settled.has(step.stepKey);
+    if (pos.kind === "dawn") { const last = [...steps].reverse().find(waking); if (last) navigate(last); else goDusk(); return; }
+    const before = currentIndex <= 0 ? undefined : steps.slice(0, currentIndex).reverse().find(waking);
+    if (!before) { goDusk(); return; }
+    navigate(before);
   };
   const next = () => {
     if (!active) return;
     if (pos.kind === "dawn") return;
-    if (pos.kind === "dusk") { const first = steps[0]; if (first) navigate(first); else gotoCheckpoint("dawn"); return; }
+    if (pos.kind === "dusk") { const first = steps.find((step) => !settled.has(step.stepKey)); if (first) navigate(first); else gotoCheckpoint("dawn"); return; }
     if (!current) return;
     // Calculated information is communicated by Next: the pending answer is recorded first, and a
     // refusal keeps the Storyteller on the step.
@@ -432,7 +449,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
       const result = useStorytellerStore.getState().setNightStepStatus(game.day, current.stepKey, "done", actionContext);
       if (!result.ok) { setError(result.message); return; }
     }
-    const following = currentIndex < 0 ? steps.find((step) => !stepResolved(game, step)) : steps[currentIndex + 1];
+    const following = currentIndex < 0 ? steps.find((step) => !stepResolved(game, step, settled)) : steps.slice(currentIndex + 1).find((step) => !settled.has(step.stepKey));
     if (following) navigate(following);
     else gotoCheckpoint("dawn");
   };
@@ -459,7 +476,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
 
   return {
     active, visible, work, steps, unfinished, pos, current, currentIndex, resolved, actor, role, ability, query,
-    eligible, direct, canTarget, skipReason, moonchildChoice, regurgitation, needed, picks, guessFor, inlineInformation, preparedInformation, butlerTurn, bureaucrat, manual, manualRavenkeeper, correction,
+    eligible, direct, canTarget, skipReason, settled, moonchildChoice, regurgitation, needed, picks, guessFor, inlineInformation, preparedInformation, butlerTurn, bureaucrat, manual, manualRavenkeeper, correction,
     workspace, setWorkspace, setPaused, error, setError, success, successorChoice, picker, refused, owner, actionContext,
     navigate, gotoCheckpoint, prev, next, beginDay, openWorkspace, openTrigger, requireManual, finish,
   };

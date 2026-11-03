@@ -36,7 +36,7 @@ export function useUndo(ctx: V6Ctx) {
       const after = useStorytellerStore.getState().game;
       if (after && after !== before && after.phase === "night") {
         const work = deriveNightWork(after, { script: script ?? null, registry, semantics: CANONICAL_ABILITY_SEMANTICS });
-        const reopened = work.steps.find((step) => !stepResolved(after, step) && (before.day !== after.day || before.phase !== "night" || stepResolved(before, step)));
+        const reopened = work.steps.find((step) => !stepResolved(after, step, work.late) && (before.day !== after.day || before.phase !== "night" || stepResolved(before, step)));
         if (reopened) useShellStore.getState().setNightCursor({ day: after.day, stepKey: reopened.stepKey });
       }
       flash("Undone.");

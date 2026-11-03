@@ -76,7 +76,7 @@ export function invocationEligibility(
   if (!descriptor.timing.includes(timing)) {
     const untriggered = descriptor.timing.some((t) => t === "triggered" || t === "passive");
     return { eligible: false, reason: untriggered
-      ? "Triggered and passive abilities have no verified invocation path yet -- resolve manually."
+      ? "This ability acts when something triggers it (such as the Ravenkeeper dying tonight), so it has no place of its own in the Night order. Run it from its trigger, or resolve it by hand."
       : path === "dayEntry" ? "This ability does not act during the Day." : "This ability does not act on this Night." };
   }
   if (!PATH_INVOCATIONS[path].includes(descriptor.invocation)) {
@@ -142,7 +142,7 @@ export function nightTriggerStatus(
       if (deaths.status === "unknown") {
         const event = events.find(candidate => !consumed(candidate.id));
         if (!event && (consumed(null) || events.length > 0)) return { kind: "notTriggered", reason: "This trigger was already resolved tonight." };
-        return { kind: "unknown", eventId: event?.id ?? null, reason: "Silverwick cannot verify tonight's complete Life Event record. Resolve this wake manually." };
+        return { kind: "unknown", eventId: event?.id ?? null, reason: "Silverwick cannot confirm who died tonight. Check whether this player died, then resolve it by hand." };
       }
       const current = query.participant(actor)?.actualRole;
       let resolved = false;

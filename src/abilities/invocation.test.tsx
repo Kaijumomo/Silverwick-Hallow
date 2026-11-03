@@ -129,7 +129,7 @@ describe("SOL-10F-L3-R1: the required timing x invocation regressions", () => {
     expect(invocationEligibility(descriptor("slayer", ["passive"], "none"), "dayEntry", g))
       .toEqual({ eligible: false, reason: "This ability is never directly invoked -- resolve its consequences manually." });
     expect(invocationEligibility(descriptor("slayer", ["triggered"], "procedure"), "dayEntry", g))
-      .toEqual({ eligible: false, reason: "Triggered and passive abilities have no verified invocation path yet -- resolve manually." });
+      .toEqual({ eligible: false, reason: "This ability acts when something triggers it (such as the Ravenkeeper dying tonight), so it has no place of its own in the Night order. Run it from its trigger, or resolve it by hand." });
   });
 });
 

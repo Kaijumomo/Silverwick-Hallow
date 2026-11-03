@@ -86,8 +86,9 @@ export const MARKER_ICON = { dusk: ICON.moon, dawn: ICON.sun, step: ICON.moon } 
 /** Where the strip rests, given the Night work, the Night cursor and any checkpoint the Storyteller moved to. */
 export function resolvePosition(opts: {
   game: StorytellerLobbyRecord; steps: NightStep[]; cursorKey: string | undefined; checkpoint: "dusk" | "dawn" | null; held: NightStep | undefined;
+  late?: ReadonlySet<string>;
 }): NightPosition {
-  const { game, steps, cursorKey, checkpoint, held } = opts;
+  const { game, steps, cursorKey, checkpoint, held, late } = opts;
   if (checkpoint === "dusk") return { kind: "dusk" };
   if (checkpoint === "dawn") return { kind: "dawn" };
   const heldStep = held && !steps.some((step) => step.stepKey === held.stepKey) ? held : undefined;
@@ -95,6 +96,6 @@ export function resolvePosition(opts: {
   if (pinned) return { kind: "step", step: pinned };
   if (!steps.length) return { kind: "dusk" };
   if (!steps.some((step) => stepResolved(game, step))) return { kind: "dusk" };
-  const open = steps.find((step) => !stepResolved(game, step));
+  const open = steps.find((step) => !stepResolved(game, step, late));
   return open ? { kind: "step", step: open } : { kind: "dawn" };
 }

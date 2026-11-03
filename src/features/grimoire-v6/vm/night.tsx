@@ -57,7 +57,9 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
     stripItem({ label: "Dusk", img: "", marker: true, markerIcon: MARKER_ICON.dusk, done: false, index: 0, cursor: index, jump: () => engine.gotoCheckpoint("dusk") }),
     ...steps.map((step, i) => {
       const img = stepIcon(step, ctx.registry);
-      return stripItem({ label: stepLabel(step), img, marker: !img, markerIcon: MARKER_ICON.step, done: stepResolved(game, step), index: i + 1, cursor: index, jump: () => engine.navigate(step) });
+      const item = stripItem({ label: stepLabel(step), img, marker: !img, markerIcon: MARKER_ICON.step, done: stepResolved(game, step, engine.settled), index: i + 1, cursor: index, jump: () => engine.navigate(step) });
+      // A step that does not wake tonight is dimmed along the strip (its reason shows when it is opened).
+      return engine.settled.has(step.stepKey) && i + 1 !== index ? { ...item, op: Math.min(item.op, 0.4) } : item;
     }),
     stripItem({ label: "Dawn", img: "", marker: true, markerIcon: MARKER_ICON.dawn, done: false, index: steps.length + 1, cursor: index, jump: () => engine.gotoCheckpoint("dawn") }),
   ];
@@ -83,7 +85,9 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
     // (manual prompt, impairment, death check) are not repeated in amber. Rarer Storyteller checks still show.
     const seat = player ? game.players[current.playerId] : undefined;
     const drunk = player && !!seat && (current.isDeceived && current.actualRoleId === "drunk" || hasEffect(seat, "drunk"));
-    const poisoned = !!seat && !drunk && (hasEffect(seat, "poisoned") || seat.behaviorMode === "poisoned");
+    // A player poisoned by the No Dashii's passive holds no Effect (it is derived live), so the card asks the rules for the effective state.
+    const noDashii = !!seat?.participantId && engine.query?.noDashiiPoisoned({ playerId: seat.id, participantId: seat.participantId });
+    const poisoned = !!seat && !drunk && (hasEffect(seat, "poisoned") || seat.behaviorMode === "poisoned" || !!noDashii && noDashii.known && noDashii.value);
     const note = lines([
       player && current.isDeceived && !drunk ? `Follow the shown character’s procedure. This player is actually the ${current.actualRoleName}.` : undefined,
       quietAdvisory(current.advisory),
@@ -98,7 +102,7 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
           : canTarget ? "Tap another player to change." : correction?.message ?? (ctx.script?.id === "treacherous-30th" ? "" : "This action cannot be safely retargeted here. Open the player’s settings to correct its result.");
       } else if (celebrated) {
         result = "Resolved.";
-        resultHint = steps.slice(engine.currentIndex + 1).some((step) => !stepResolved(game, step)) ? "Continuing…" : "";
+        resultHint = steps.slice(engine.currentIndex + 1).some((step) => !stepResolved(game, step, engine.settled)) ? "Continuing…" : "";
       } else if (resolved) result = "Completed";
     }
     cur = {
