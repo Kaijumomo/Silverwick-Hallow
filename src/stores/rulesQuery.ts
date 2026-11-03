@@ -72,6 +72,10 @@ export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>
   /** A Minion the Vigormortis killed keeps its ability (the official HAS ABILITY token): applies while that Vigormortis functions
    * and the holder is still a Minion. Holds the dead Minion's ability for the dead-actor rule and its sourced Effects. */
   retainsAbility: "retainedAbility",
+  /** The Shabaloth's two chosen players (official DEAD token) and a regurgitated player (official ALIVE token): Storyteller facts that
+   * record last night's choice; the Dusk regurgitation reads them through factHolders. They move or end only when the Shabaloth acts. */
+  shabalothChosen: "storytellerFact",
+  shabalothAlive: "storytellerFact",
 };
 export const effectSemanticsOf = (type: string): EffectSemantics | undefined =>
   Object.prototype.hasOwnProperty.call(APPROVED_EFFECT_SEMANTICS, type) ? APPROVED_EFFECT_SEMANTICS[type] : undefined;

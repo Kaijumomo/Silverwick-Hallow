@@ -165,13 +165,18 @@ export function computeNightOrder(
     if (!resolved) continue;
     const { role: roleDef, shownRoleId: roleId, simulated: isDeceived } = resolved;
     const canonical = isCanonicalRole(roleDef);
-    let order = isFirstNight ? roleDef.firstNight : roleDef.otherNight;
+    // A player the Shabaloth regurgitated tonight has their ability back: a character whose ability only works on the first night
+    // (no other-night wake) is listed at its first-night position with its first-night instruction.
+    const reborn = !isFirstNight && !!roleDef.firstNight && !roleDef.otherNight && player.alive && hasEffect(player, "shabalothAlive") &&
+      player.effects.some((effect) => effect.type === "shabalothAlive" && effect.appliedAt?.phase === "night" && effect.appliedAt.day === context.day);
+    const firstPass = isFirstNight || reborn;
+    let order = firstPass ? roleDef.firstNight : roleDef.otherNight;
     if (!canonical && order === undefined && (isFirstNight ? roleDef.firstNightPrompt : roleDef.otherNightPrompt)) {
       global(participantScopedStepKey("missingOrder", player.participantId), "Night reference — Storyteller check required",
         player.name + ": instruction has no night position. Place a custom step manually.", 0.3, { participantId: player.participantId });
     }
     if (order === undefined || order === 0) continue;
-    let prompt = isFirstNight
+    let prompt = firstPass
       ? (roleDef.firstNightPrompt ?? roleDef.firstNightReminder ?? roleDef.ability ?? "")
       : (roleDef.otherNightPrompt ?? roleDef.otherNightReminder ?? roleDef.ability ?? "");
     if (!Number.isFinite(order) || order < 0 || !prompt.trim()) {

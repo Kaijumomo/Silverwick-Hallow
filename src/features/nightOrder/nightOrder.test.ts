@@ -313,3 +313,20 @@ describe("Vigormortis: dead Minion keeps its ability only if the Vigormortis kil
     expect(row?.advisory).not.toMatch(/Vigormortis|historical triggers/);
   });
 });
+
+describe("Shabaloth: a regurgitated first-night character (WP-6)", () => {
+  const alive = (day: number) => ({ id: "fx", type: "shabalothAlive", sourceCharacter: "shabaloth", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day } }) as never;
+  const rows = (over: Partial<STPlayerRecord>) => {
+    const g = makePlayers([
+      { id: "p-ww", role: "washerwoman", seat: 0, over },
+      { id: "p-imp", role: "imp", seat: 1 },
+      { id: "p-chef", role: "chef", seat: 2 },
+    ]);
+    return playerSteps(computeNightOrder(g.players, g.seatOrder, troubleBrewing, false, { day: 3 } as never)).map((s) => s.actualRoleId);
+  };
+  it("is listed tonight at its first-night position only the night it came back", () => {
+    expect(rows({ effects: [alive(3)] })).toContain("washerwoman");
+    expect(rows({ effects: [alive(2)] })).not.toContain("washerwoman");
+    expect(rows({})).not.toContain("washerwoman");
+  });
+});

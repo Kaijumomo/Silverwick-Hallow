@@ -116,7 +116,7 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
       showOn: false,
     };
   } else if (pos.kind === "dusk") {
-    cur = { isRole: false, isMarker: true, title: "Dusk", text: duskText(game.day) };
+    cur = { isRole: false, isMarker: true, title: "Dusk", text: duskText(game.day) + (engine.regurgitation ? " The Shabaloth may regurgitate one of the dead players it chose last night: tap them on the board, or just continue." : "") };
   } else {
     cur = { isRole: false, isMarker: true, isDawn: true, title: "Dawn", text: dawnText(game) };
   }

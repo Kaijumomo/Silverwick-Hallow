@@ -14,7 +14,7 @@ export const T30_VERBS: Record<string, string> = {
   gambler: "The Gambler chooses a player & guesses their character. Tap the player, then pick the guess.",
   monk: "The Monk chooses a player (not themselves): safe from the Demon tonight.",
   imp: "The Imp chooses a player. If the Imp chooses themselves, an alive Minion becomes the Imp: wake them and show YOU ARE and the Imp token.",
-  shabaloth: "A player chosen last night might be regurgitated (use the Alive reminder). The Shabaloth chooses 2 players.",
+  shabaloth: "The Shabaloth chooses 2 players.",
   nodashii: "The No Dashii chooses a player.",
   vigormortis: "The Vigormortis chooses a player. If that player is a Minion, they keep their ability and poison a neighbouring Townsfolk.",
   godfather: "An Outsider died today. The Godfather chooses a player: they die.",

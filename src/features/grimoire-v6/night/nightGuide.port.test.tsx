@@ -14,7 +14,7 @@ import { clearNightActionCorrections } from "@/stores/nightActionCorrection";
 import { participantStepKey, travelerArrivalStepKey } from "@/stores/nightProgress";
 import { newTravelerArrival } from "@/stores/travelers";
 import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
-import { proofGame, proofScript } from "@/test/proofFixtures";
+import { pick, plan, planned, proofGame, proofScript, request } from "@/test/proofFixtures";
 
 /** The V6 Grimoire with its Night card open (or closed): the same scenarios the guided Night panel was held to. */
 function Guide({ visible = true }: { visible?: boolean }) {
@@ -401,4 +401,29 @@ it("WP-4: a Moonchild's public Day choice resolves its death by itself when the 
   expect(game().players.p2!.effects.some((e) => e.type === "moonchildChoice" && e.state === "active")).toBe(true);
   // Not resolved a second time: the Storyteller may tap the player again or move on.
   expect(game().players.p2!.alive).toBe(true);
+});
+
+it("WP-6: at Dusk the Storyteller taps one of last night's chosen dead players to regurgitate them, or just goes on", () => {
+  const n2 = proofGame(["shabaloth", "chef", "empath", "monk", "saint", "baron", "poisoner"], "night", 2);
+  const killed = planned(plan(n2, request(n2, "p0", "shabaloth", { targets: pick(n2, "p1", "p2") })));
+  store.setState({ game: { ...killed, day: 3 }, undoStack: [] });
+  render(<Guide />);
+  expect(screen.getByText(/may regurgitate one of the dead players it chose last night/)).toBeInTheDocument();
+  expect(useTargetPicker.getState().active?.label).toBe("Regurgitate a player (optional)");
+  const before = game();
+  tap("p3");
+  expect(game()).toBe(before);
+  tap("p1");
+  expect(game().players.p1!.alive).toBe(true);
+  expect(game().players.p1!.effects.some((e) => e.type === "shabalothAlive" && e.state === "active")).toBe(true);
+  expect(game().players.p2!.alive).toBe(false);
+  expect(useTargetPicker.getState().active).toBeNull();
+  expect(screen.queryByText(/may regurgitate/)).toBeNull();
+});
+
+it("WP-6: Dusk offers nothing when no dead player was chosen last night", () => {
+  store.setState({ game: proofGame(["shabaloth", "chef", "empath", "monk", "saint", "baron", "poisoner"], "night", 3), undoStack: [] });
+  render(<Guide />);
+  expect(screen.queryByText(/regurgitate/)).toBeNull();
+  expect(useTargetPicker.getState().active).toBeNull();
 });

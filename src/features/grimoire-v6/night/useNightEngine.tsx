@@ -24,6 +24,7 @@ import { roman } from "../ringLayout";
 import { activeCheckpoint, useNightPos, type NightCheckpoint } from "./nightPos";
 import { dawnFlash, nightDeaths, resolvePosition, type NightPosition } from "./nightSteps";
 import { useScoped } from "./useScoped";
+import { duskRegurgitation, regurgitate } from "./regurgitate";
 
 const semantics = CANONICAL_ABILITY_SEMANTICS;
 /** Characters whose whole action is tapped on the board (T30 design). Others keep the ability workspace. */
@@ -345,6 +346,20 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     choose(moonchildChoice.target);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [moonchildChoice?.effectId, visible, paused, workspace, canTarget, resolved, skipReason, current?.stepKey]);
+  // Dusk: the Shabaloth may regurgitate one of last night's chosen dead players. The Storyteller taps them on the board, or simply
+  // goes on; it is settled before the Shabaloth's own step, so a returning player acts tonight like any living player.
+  const regurgitation = pos.kind === "dusk" && query ? duskRegurgitation(game, query) : null;
+  useEffect(() => {
+    if (!visible || !regurgitation || !query) return;
+    const duskOwner = `shabaloth-dusk:${game.code}:${game.day}`;
+    useTargetPicker.getState().start("Regurgitate a player (optional)", (target) => {
+      if (game !== useStorytellerStore.getState().game || usePrivacyStore.getState().enabled) return;
+      const result = regurgitate(query, game, target);
+      flash(result.ok ? `${game.players[target.playerId]?.name || "The player"} is alive again.` : result.message);
+    }, { owner: duskOwner, eligible: new Set(regurgitation.candidates.map((item) => item.target.participantId)) });
+    return () => { if (useTargetPicker.getState().active?.owner === duskOwner) useTargetPicker.getState().cancel(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game, visible, !!regurgitation]);
   useEffect(() => { if (!visible) { useTargetPicker.getState().cancel(); setSuccess(null); } else setPaused(false); }, [visible]);
   useEffect(() => {
     if (!active) {
@@ -444,7 +459,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
 
   return {
     active, visible, work, steps, unfinished, pos, current, currentIndex, resolved, actor, role, ability, query,
-    eligible, direct, canTarget, skipReason, moonchildChoice, needed, picks, guessFor, inlineInformation, preparedInformation, butlerTurn, bureaucrat, manual, manualRavenkeeper, correction,
+    eligible, direct, canTarget, skipReason, moonchildChoice, regurgitation, needed, picks, guessFor, inlineInformation, preparedInformation, butlerTurn, bureaucrat, manual, manualRavenkeeper, correction,
     workspace, setWorkspace, setPaused, error, setError, success, successorChoice, picker, refused, owner, actionContext,
     navigate, gotoCheckpoint, prev, next, beginDay, openWorkspace, openTrigger, requireManual, finish,
   };
