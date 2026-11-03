@@ -23,6 +23,7 @@ const EFFECT_TOKENS = [
   { source: "innkeeper", type: "cannotDie", label: "Safe" },
   { source: "innkeeper", type: "drunk", label: "Drunk" },
   { source: "witch", type: "witchCurse", label: "Cursed" },
+  { source: "moonchild", type: "moonchildChoice", label: "Dead" },
   { source: "vigormortis", type: "poisoned", label: "Poisoned" },
   // This existing Storyteller fact deliberately has no functioning source.
   { source: "fortuneteller", type: "fortuneTellerRedHerring", label: "Red Herring" },

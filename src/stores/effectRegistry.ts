@@ -66,6 +66,8 @@ const DEFINITIONS: Record<string, EffectDefinition> = {
   cannotDie: { type: "cannotDie", label: "Cannot die", indicator: "protected" },
   witchCurse: { type: "witchCurse", label: "Cursed by the Witch", indicator: "cursed",
     description: "Dies if they nominate before the next Night, while the Witch still has the ability." },
+  moonchildChoice: { type: "moonchildChoice", label: "Moonchild's choice", indicator: "marked",
+    description: "The good player the Moonchild publicly chose: they die tonight unless protected, if the Moonchild still has the ability." },
   soberHealthy: { type: "soberHealthy", label: "Sober & healthy", indicator: "soberHealthy" },
   abilityLost: { type: "abilityLost", label: "No ability", indicator: "abilityLost" },
   mad: { type: "mad", label: "Mad", indicator: "mad" },

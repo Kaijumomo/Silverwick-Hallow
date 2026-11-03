@@ -377,3 +377,28 @@ it("WP-1: Imp taps itself with a living Recluse: the board asks for the successo
   expect(game().nightProgress[`2:${key("p2")}`]?.status).toBe("skipped");
   expect(store.getState().undoStack).toHaveLength(1);
 });
+
+it("WP-4: a Moonchild's public Day choice resolves its death by itself when the wake is reached, once, and Undo leaves the step open", () => {
+  const base = proofGame(["godfather", "saint", "chef", "moonchild", "imp", "empath", "baron"], "night", 3);
+  const p3 = base.players.p3!;
+  const withChoice = {
+    ...base,
+    players: { ...base.players,
+      p3: { ...p3, alive: false },
+      p2: { ...base.players.p2!, effects: [{ id: "mc1", type: "moonchildChoice", sourceCharacter: "moonchild", lifetime: { kind: "untilDawn" }, state: "active",
+        sourceParticipant: { kind: "participant", playerId: "p3", participantId: p3.participantId!, nameAtTime: "Player 3" },
+        expiry: { kind: "at", moment: { phase: "day", day: 4 } }, appliedAt: { phase: "day", day: 3 } }] },
+    },
+  } as unknown as typeof base;
+  store.setState({ game: withChoice, undoStack: [] });
+  useShellStore.getState().setNightCursor({ day: 3, stepKey: participantStepKey(p3.participantId!, "moonchild") });
+  render(<Guide />);
+  expect(game().players.p2!.alive).toBe(false);
+  expect(game().players.p2!.effects.filter((e) => e.type === "moonchildChoice" && e.state === "active")).toHaveLength(0);
+  expect(store.getState().undoStack).toHaveLength(1);
+  act(() => { store.getState().undo(); });
+  expect(game().players.p2!.alive).toBe(true);
+  expect(game().players.p2!.effects.some((e) => e.type === "moonchildChoice" && e.state === "active")).toBe(true);
+  // Not resolved a second time: the Storyteller may tap the player again or move on.
+  expect(game().players.p2!.alive).toBe(true);
+});

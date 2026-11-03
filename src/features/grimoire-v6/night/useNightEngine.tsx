@@ -12,6 +12,7 @@ import type { StorytellerLobbyRecord } from "@/stores/types";
 import type { WorkspaceTarget } from "@/features/abilities/AbilityWorkspace";
 import { bindingOf, pathAbility, seatedParticipants, triggerAbility, useTargetPicker, type StepAbility } from "@/features/abilities/abilityUi";
 import { participantAllowed } from "@/features/abilities/RequirementInput";
+import { pendingMoonchildChoice } from "@/abilities/characters/moonchild";
 import { deriveNightWork, stepResolved, unfinishedNightWork, type NightWork, type TriggeredNightWork, type UnfinishedNightWork } from "@/features/nightOrder/nightWork";
 import type { NightStep } from "@/features/nightOrder/nightOrder";
 import { NIGHT_INFORMATION_ROLES, type NightInformationHandle } from "@/features/nightOrder/NightInformationAction";
@@ -331,6 +332,19 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     return () => { if (useTargetPicker.getState().active?.owner === owner) useTargetPicker.getState().cancel(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game, current?.stepKey, visible, paused, workspace, canTarget, successorChoice, picks, guessFor, skipReason]);
+  // The Moonchild chose publicly during the Day: the death is resolved by itself when the wake is reached (once per choice,
+  // so an Undo of it leaves the step open for the Storyteller instead of resolving it again).
+  const moonchildChoice = current?.kind === "player" && current.effectiveRoleId === "moonchild" && query && actor?.participantId
+    ? pendingMoonchildChoice(query, bindingOf(actor)) : null;
+  const autoResolved = useRef(new Set<string>());
+  useEffect(() => {
+    if (!moonchildChoice || !visible || paused || workspace || !canTarget || resolved || skipReason || !current) return;
+    const key = `${current.stepKey}:${moonchildChoice.effectId}`;
+    if (autoResolved.current.has(key)) return;
+    autoResolved.current.add(key);
+    choose(moonchildChoice.target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moonchildChoice?.effectId, visible, paused, workspace, canTarget, resolved, skipReason, current?.stepKey]);
   useEffect(() => { if (!visible) { useTargetPicker.getState().cancel(); setSuccess(null); } else setPaused(false); }, [visible]);
   useEffect(() => {
     if (!active) {
@@ -430,7 +444,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
 
   return {
     active, visible, work, steps, unfinished, pos, current, currentIndex, resolved, actor, role, ability, query,
-    eligible, direct, canTarget, skipReason, needed, picks, guessFor, inlineInformation, preparedInformation, butlerTurn, bureaucrat, manual, manualRavenkeeper, correction,
+    eligible, direct, canTarget, skipReason, moonchildChoice, needed, picks, guessFor, inlineInformation, preparedInformation, butlerTurn, bureaucrat, manual, manualRavenkeeper, correction,
     workspace, setWorkspace, setPaused, error, setError, success, successorChoice, picker, refused, owner, actionContext,
     navigate, gotoCheckpoint, prev, next, beginDay, openWorkspace, openTrigger, requireManual, finish,
   };

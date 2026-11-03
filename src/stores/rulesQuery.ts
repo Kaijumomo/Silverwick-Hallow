@@ -66,6 +66,9 @@ export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>
   fortuneTellerRedHerring: "storytellerFact",
   /** The Witch's curse: applies while its source functions; the Day nomination prompt reads it. */
   witchCurse: "curse",
+  /** The Moonchild's public Day choice (a good player): the dead Moonchild has no functioning source, so it applies as recorded
+   * and the Night wake reads it through factHolders. Whether the Moonchild still has the ability tonight is decided by the wake. */
+  moonchildChoice: "storytellerFact",
 };
 export const effectSemanticsOf = (type: string): EffectSemantics | undefined =>
   Object.prototype.hasOwnProperty.call(APPROVED_EFFECT_SEMANTICS, type) ? APPROVED_EFFECT_SEMANTICS[type] : undefined;

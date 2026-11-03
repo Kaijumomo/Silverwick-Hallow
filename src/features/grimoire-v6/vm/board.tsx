@@ -5,6 +5,7 @@ import { revokePlayerAndCommit, storytellerOccupancyCompletion } from "@/firebas
 import { friendlyFirebaseError } from "@/firebase/errors";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
+import { moonchildAwaitingChoice, startMoonchildChoice } from "../day/moonchild";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { useShellStore } from "@/stores/shellStore";
 import { litActorIdOf } from "@/features/grimoire/seatTap";
@@ -266,6 +267,7 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
       ? { label: "Kill", icon: RADIAL_ICON.kill, onClick: life("die"), color: "#ff8a78", border: "rgba(232,88,74,.6)" }
       : { label: "Revive", icon: RADIAL_ICON.revive, onClick: life("revive"), color: "#8fcf95", border: "rgba(143,207,149,.55)" });
     if (!ended && live && !sel.alive) list.push({ label: sel.ghostVote ? "Spend vote" : "Give vote", icon: RADIAL_ICON.ghost, onClick: life(sel.ghostVote ? "spendVote" : "restoreVote"), color: "#e6ecf8", border: "rgba(230,236,248,.4)" });
+    if (moonchildAwaitingChoice(ctx, sel)) list.push({ label: "Moonchild", icon: RADIAL_ICON.change, onClick: () => { selectPlayer(null); startMoonchildChoice(ctx, sel); }, color: "#f2c46a", border: "rgba(242,196,106,.5)" });
     if (!ended && !privacy) list.push({ label: "Character", icon: RADIAL_ICON.change, onClick: () => openChoosePicker(sel.id), ...plain });
     if (!privacy && sel.shownRole) list.push({ label: "Show", icon: RADIAL_ICON.show, onClick: showPlayer, ...plain });
     if (!ended) list.push({ label: "Swap seat", icon: RADIAL_ICON.swap, onClick: startSwap, ...plain });

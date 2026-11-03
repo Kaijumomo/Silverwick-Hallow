@@ -71,6 +71,7 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
     const roleKey = current.kind === "player" ? current.effectiveRoleId : "";
     const t30Verb = ctx.script?.id === "treacherous-30th" && roleKey
       ? engine.skipReason ? `${engine.skipReason.replace(/\.$/, "")}. This character does not wake.` : roleKey === "godfather" && game.day === 1 ? godfatherInfoVerb(game, ctx.registry)
+        : roleKey === "moonchild" && engine.moonchildChoice ? `${game.players[engine.moonchildChoice.target.playerId]?.name || "The chosen player"} was chosen. If they are good, they die tonight.`
         : !inlineInformation ? T30_VERBS[roleKey] : undefined
       : undefined;
     const verb = player

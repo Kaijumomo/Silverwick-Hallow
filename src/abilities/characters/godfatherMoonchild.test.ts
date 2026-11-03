@@ -112,3 +112,43 @@ describe("Moonchild", () => {
     expect(plan(g, request(g, "p3", "moonchild", { target: pick(g, "p2") }), homebrewEnv("moonchild"))).toMatchObject({ ok: false, code: "unsupported" });
   });
 });
+
+describe("Moonchild -- the public Day choice (WP-4)", () => {
+  const night = () => proofGame(ROLES, "night", 3);
+  const choice = (g: StorytellerLobbyRecord, holder: string, id = "mc1"): StorytellerLobbyRecord => patchPlayer(g, holder, { effects: [{
+    id, type: "moonchildChoice", sourceCharacter: "moonchild", lifetime: { kind: "untilDawn" }, state: "active",
+    sourceParticipant: { kind: "participant", playerId: "p3", participantId: g.players.p3!.participantId!, nameAtTime: "Player 3" },
+    expiry: { kind: "at", moment: { phase: "day", day: 4 } }, appliedAt: { phase: "day", day: 3 } } as never] });
+  // The Moonchild died during the previous NIGHT and chose in the Day: the old death window no longer sees it.
+  const decided = () => choice(patchPlayer(night(), "p3", { alive: false }), "p2");
+  const run = (g: StorytellerLobbyRecord, target: string) => plan(g, request(g, "p3", "moonchild", { target: pick(g, target) }));
+
+  it("resolves the chosen player's death on the Night after the Day choice, without any death in the window, and consumes the choice", () => {
+    const next = planned(run(decided(), "p2"));
+    expect(next.players.p2!.alive).toBe(false);
+    expect(next.players.p2!.effects.filter((e) => e.type === "moonchildChoice" && e.state === "active")).toEqual([]);
+  });
+
+  it("an impaired Moonchild tonight kills no one (their state tonight decides)", () => {
+    expect(run(impair(decided(), "p3"), "p2")).toEqual({ ok: true, changed: false });
+  });
+
+  it("a protected chosen player survives and the choice is still consumed", () => {
+    const g = patchPlayer(decided(), "p2", { effects: [...decided().players.p2!.effects, { id: "cd", type: "cannotDie", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 3 } } as never] });
+    const next = planned(run(g, "p2"));
+    expect(next.players.p2!.alive).toBe(true);
+    expect(next.players.p2!.effects.filter((e) => e.type === "moonchildChoice" && e.state === "active")).toEqual([]);
+  });
+
+  it("a Moonchild choice does not make a different target die without the window and alignment checks (fallback unchanged)", () => {
+    expect(run(decided(), "p5")).toMatchObject({ ok: false, code: "notApplicable" });
+  });
+
+  it("a choice sourced from another participant is ignored", () => {
+    const base = patchPlayer(night(), "p3", { alive: false });
+    const other = patchPlayer(base, "p2", { effects: [{ id: "x", type: "moonchildChoice", sourceCharacter: "moonchild", lifetime: { kind: "untilDawn" }, state: "active",
+      sourceParticipant: { kind: "participant", playerId: "p0", participantId: base.players.p0!.participantId!, nameAtTime: "Player 0" },
+      expiry: { kind: "at", moment: { phase: "day", day: 4 } }, appliedAt: { phase: "day", day: 3 } } as never] });
+    expect(run(other, "p2")).toMatchObject({ ok: false, code: "notApplicable" });
+  });
+});
