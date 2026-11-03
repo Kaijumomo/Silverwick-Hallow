@@ -54,13 +54,20 @@ export function planRemovedVotingReminders(game: StorytellerLobbyRecord, removed
  * https://wiki.bloodontheclocktower.com/Abilities */
 export function planSourceAbilityLoss(
   game: StorytellerLobbyRecord,
-  lost: ReadonlySet<ParticipantId>,
+  lostIn: ReadonlySet<ParticipantId>,
   environment: RulesQueryEnvironment | undefined,
   nextHistoryId: () => string,
   resolutionId?: string,
 ): { ok: true; plan: SourceAbilityLossPlan } | { ok: false; message: string } {
   let working = game;
   const effects: EffectPlan[] = [];
+  // A Minion the Vigormortis just killed keeps its ability: dying does not end what it sourced (its HAS ABILITY Effect, held
+  // while that Vigormortis lives, is checked against the pre-death state of this very plan).
+  const keeps = (id: ParticipantId): boolean => Object.values(game.players).some((holder) => !holder.isEmpty && holder.participantId === id &&
+    holder.effects.some((effect) => effect.type === "retainsAbility" && effect.state === "active" && effect.sourceCharacter === "vigormortis" &&
+      effect.sourceParticipant?.kind === "participant" && game.players[effect.sourceParticipant.playerId]?.participantId === effect.sourceParticipant.participantId &&
+      !!game.players[effect.sourceParticipant.playerId]?.alive && lostIn.has(id) && !lostIn.has(effect.sourceParticipant.participantId)));
+  const lost: ReadonlySet<ParticipantId> = new Set([...lostIn].filter((id) => !keeps(id)));
   for (const player of Object.values(game.players)) {
     if (player.isEmpty || !player.participantId) continue;
     for (const effect of player.effects) {
@@ -74,7 +81,7 @@ export function planSourceAbilityLoss(
       // the source changes back to the recorded character.
       const supported = effect.sourceCharacter === "poisoner" && effect.type === "poisoned" || effect.sourceCharacter === "monk" && effect.type === "safeFromDemon" ||
         effect.sourceCharacter === "innkeeper" && (effect.type === "cannotDie" || effect.type === "drunk") ||
-        effect.sourceCharacter === "vigormortis" && effect.type === "poisoned" || effect.sourceCharacter === "witch" && effect.type === "witchCurse";
+        effect.sourceCharacter === "vigormortis" && (effect.type === "poisoned" || effect.type === "retainsAbility") || effect.sourceCharacter === "witch" && effect.type === "witchCurse";
       const definition = effect.sourceCharacter ? environment?.registry.get(effect.sourceCharacter) : undefined;
       if (!supported || !definition || !isCanonicalRole(definition)) continue;
       const result = planEffectTransaction(working, { intents: [{ kind: "remove", target: { playerId: player.id, participantId: player.participantId }, effectId: effect.id }],

@@ -82,7 +82,11 @@ export function followUpParticipant(context: AbilityEvaluationContext, values: A
  * keeps the coordinator authoritative for a crafted request.
  */
 export function requireLivingActor(context: AbilityEvaluationContext): AbilityEvaluation | null {
-  return context.actor.player.alive ? null : { kind: "notApplicable", message: "Dead players have no ability -- this cannot be resolved for a dead player." };
+  if (context.actor.player.alive) return null;
+  // A Minion the Vigormortis killed keeps its ability (derived from the official HAS ABILITY Effect, never assumed).
+  const kept = context.query.retainsAbility(context.actor.binding);
+  if (kept.known && kept.value) return null;
+  return { kind: "notApplicable", message: "Dead players have no ability -- this cannot be resolved for a dead player." };
 }
 
 export type DeathCause = "demon" | "any";

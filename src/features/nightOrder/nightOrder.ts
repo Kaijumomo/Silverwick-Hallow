@@ -188,6 +188,9 @@ export function computeNightOrder(
     // shown for any dead Minion and the Storyteller is told exactly when to wake it.
     const keptMinion = !isFirstNight && !player.alive && registry.get(player.actualRole)?.type === "minion" &&
       seated.some(p => p.alive && p.actualRole === "vigormortis");
+    // WP-5: a Minion the Vigormortis killed carries the official HAS ABILITY reminder, which already
+    // says it keeps the ability: that row needs no advisory. Only an unmarked dead Minion keeps the old note.
+    const markedKept = keptMinion && hasEffect(player, "retainsAbility");
     const afterDeath = !isFirstNight && (DEATH_CHECKS.has(roleId) || roleId === "zombuul" || keptMinion);
     if (!player.alive && !afterDeath) continue;
     // SOL-10F-L6: no generic suppression from prose-derived `oncePerGame`.
@@ -207,7 +210,8 @@ export function computeNightOrder(
         "Different custom characters share a night position. Choose their relative order manually.", order - 0.01, { participantId: player.participantId });
     }
     if (!canonical) customOrders.set(order, roleId);
-    if (keptMinion) advisory += " Vigormortis: wake this dead Minion ONLY if the Vigormortis killed them at night (a Minion who died by execution or any other way has lost the ability), they are still a Minion, and they are not drunk or poisoned. Otherwise skip this step.";
+    if (markedKept) { /* the reminder token on the board carries the reason */ }
+    else if (keptMinion) advisory += " Vigormortis: wake this dead Minion ONLY if the Vigormortis killed them at night (a Minion who died by execution or any other way has lost the ability), they are still a Minion, and they are not drunk or poisoned. Otherwise skip this step.";
     else if (DEATH_CHECKS.has(roleId) || !player.alive) advisory += " Check the ability's death/event condition tonight; historical triggers are not tracked.";
     if (hasEffect(player, "poisoned") || hasEffect(player, "drunk") || player.behaviorMode === "poisoned")
       advisory += " Impaired: simulate the procedure as appropriate; do not apply a functioning ability or assume truthful information.";

@@ -19,8 +19,11 @@ import { scarletWomanSuccession } from "./scarletWoman";
  *    sides differ the Storyteller chooses which one (follow-up bound to that
  *    Minion). The poison ends when the Vigormortis dies or loses the ability.
  *  - the -1 Outsider setup change lives in the setup count policy.
- *  - NOT modeled: the dead Minion's retained ability (the Storyteller wakes and
- *    resolves it by hand), and the poison following later seating changes.
+ *  - the killed Minion keeps its ability: it receives the official HAS ABILITY token (a sourced
+ *    `retainsAbility` Effect), applied in the same outcome BEFORE the death so that dying does not end
+ *    what it sourced. It lasts while this Vigormortis lives and functions and the holder is still a
+ *    Minion; the poison is attached to that Minion and ends with it.
+ *  - NOT modeled: the poison following later seating changes.
  *  - a victim whose registration as a Minion is ambiguous -> Storyteller judgment.
  */
 export const POISONED_NEIGHBOUR = "vigormortis:poisoned";
@@ -32,7 +35,7 @@ export const VIGORMORTIS: AbilityDescriptor = {
   usage: { kind: "unlimited" },
   inputs: [{ id: "target", kind: "participant", source: "player", label: "The player to kill" }],
   hooks: ["targeting", "death", "registration"],
-  sourcedEffects: [{ type: "poisoned", persistence: "whileSourceFunctions" }],
+  sourcedEffects: [{ type: "poisoned", persistence: "whileSourceFunctions" }, { type: "retainsAbility", persistence: "whileSourceFunctions" }],
   presentation: { complexity: "complex", action: "Choose a player to kill (a Minion keeps its ability)" },
   evaluator: (context) => {
     const dead = requireLivingActor(context);
@@ -59,7 +62,10 @@ export const VIGORMORTIS: AbilityDescriptor = {
     for (const side of [neighbours.value.clockwise, neighbours.value.counterclockwise]) {
       if (side && !candidates.some((c) => c.participantId === side.participantId)) candidates.push(side);
     }
-    if (!candidates.length) return tokenOutcome(context, "vigormortis", [kill]);
+    const retain = { kind: "apply" as const, target, effect: {
+      type: "retainsAbility", source: context.actor.binding, sourceCharacter: "vigormortis", lifetime: { kind: "manual" as const },
+    } };
+    if (!candidates.length) return tokenOutcome(context, "vigormortis", [{ domain: "effect", intents: [retain] }, kill], true);
     let poisoned = candidates[0]!;
     if (candidates.length > 1) {
       const id = subjectId(POISONED_NEIGHBOUR, target);
@@ -72,8 +78,9 @@ export const VIGORMORTIS: AbilityDescriptor = {
       }
       poisoned = chosen.binding;
     }
-    return tokenOutcome(context, "vigormortis", [kill, { domain: "effect", intents: [{ kind: "apply", target: poisoned, effect: {
+    return tokenOutcome(context, "vigormortis", [{ domain: "effect", intents: [retain, { kind: "apply", target: poisoned, effect: {
       type: "poisoned", source: context.actor.binding, sourceCharacter: "vigormortis", lifetime: { kind: "manual" },
-    } }] }], true);
+      parameters: { minion: { kind: "participant", participants: [target] } },
+    } }] }, kill], true);
   },
 };

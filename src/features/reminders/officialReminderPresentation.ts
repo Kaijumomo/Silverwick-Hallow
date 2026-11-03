@@ -25,6 +25,7 @@ const EFFECT_TOKENS = [
   { source: "witch", type: "witchCurse", label: "Cursed" },
   { source: "moonchild", type: "moonchildChoice", label: "Dead" },
   { source: "vigormortis", type: "poisoned", label: "Poisoned" },
+  { source: "vigormortis", type: "retainsAbility", label: "Has Ability" },
   // This existing Storyteller fact deliberately has no functioning source.
   { source: "fortuneteller", type: "fortuneTellerRedHerring", label: "Red Herring" },
 ] as const;

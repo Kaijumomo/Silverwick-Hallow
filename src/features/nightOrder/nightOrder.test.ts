@@ -300,4 +300,16 @@ describe("Vigormortis: dead Minion keeps its ability only if the Vigormortis kil
     ]);
     expect(playerSteps(computeNightOrder(lost.players, lost.seatOrder, sv, false)).some(s => s.actualRoleId === "witch")).toBe(false);
   });
+
+  it("WP-5: a Minion carrying the HAS ABILITY effect is listed without the yellow advisory", () => {
+    const fx = { id: "fx", type: "retainsAbility", sourceCharacter: "vigormortis", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } } as never;
+    const marked = makePlayers([
+      { id: "p-witch", role: "witch", seat: 0, over: { alive: false, effects: [fx] } },
+      { id: "p-vigormortis", role: "vigormortis", seat: 1 },
+      { id: "p-clock", role: "clockmaker", seat: 2 },
+    ]);
+    const row = playerSteps(computeNightOrder(marked.players, marked.seatOrder, sectsAndViolets, false)).find(s => s.actualRoleId === "witch");
+    expect(row).toBeTruthy();
+    expect(row?.advisory).not.toMatch(/Vigormortis|historical triggers/);
+  });
 });

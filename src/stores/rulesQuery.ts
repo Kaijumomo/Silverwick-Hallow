@@ -53,7 +53,7 @@ const unknown = <T,>(reason: string): QueryAnswer<T> => ({ known: false, reason 
  *    any source functioning; only the evaluator that owns the fact decides
  *    when it matters. It is never a Reminder.
  */
-export type EffectSemantics = "impairment" | "noAbility" | "demonProtection" | "deathImmunity" | "genericProtection" | "judgment" | "storytellerFact" | "curse";
+export type EffectSemantics = "impairment" | "noAbility" | "demonProtection" | "deathImmunity" | "genericProtection" | "judgment" | "storytellerFact" | "curse" | "retainedAbility";
 export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>> = {
   drunk: "impairment",
   poisoned: "impairment",
@@ -69,6 +69,9 @@ export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>
   /** The Moonchild's public Day choice (a good player): the dead Moonchild has no functioning source, so it applies as recorded
    * and the Night wake reads it through factHolders. Whether the Moonchild still has the ability tonight is decided by the wake. */
   moonchildChoice: "storytellerFact",
+  /** A Minion the Vigormortis killed keeps its ability (the official HAS ABILITY token): applies while that Vigormortis functions
+   * and the holder is still a Minion. Holds the dead Minion's ability for the dead-actor rule and its sourced Effects. */
+  retainsAbility: "retainedAbility",
 };
 export const effectSemanticsOf = (type: string): EffectSemantics | undefined =>
   Object.prototype.hasOwnProperty.call(APPROVED_EFFECT_SEMANTICS, type) ? APPROVED_EFFECT_SEMANTICS[type] : undefined;
@@ -117,6 +120,8 @@ export type RulesQuery = {
   isAlive: (binding: ParticipantBinding) => QueryAnswer<boolean>;
   /** Whether a stored Effect currently applies MECHANICALLY (derived). */
   effectApplies: (holder: ParticipantBinding, effect: EffectRecord) => QueryAnswer<boolean>;
+  /** Whether a (dead) Minion still has its ability because a living, functioning Vigormortis killed it (derived, never stored). */
+  retainsAbility: (binding: ParticipantBinding) => QueryAnswer<boolean>;
   /** Drunk/Poisoned impairment (derived from applicable Effects). */
   impaired: (binding: ParticipantBinding) => QueryAnswer<boolean>;
   /** Whether the participant's ability functions: not impaired and not lost.
@@ -195,11 +200,24 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
   const seated = () => game.seatOrder.map((id) => game.players[id]).filter((p): p is STPlayerRecord => !!p && !p.isEmpty && !!p.participantId);
 
   /** Applicability with cycle detection: a revisited Effect is UNKNOWN. */
+  const retained = (player: STPlayerRecord, visiting: Set<string>): QueryAnswer<boolean> => {
+    let undetermined: string | null = null;
+    for (const effect of player.effects) {
+      if (effectSemanticsOf(effect.type) !== "retainedAbility") continue;
+      const answer = applies(player, effect, visiting);
+      if (!answer.known) undetermined ??= answer.reason;
+      else if (answer.value) return known(true);
+    }
+    return undetermined ? unknown(undetermined) : known(false);
+  };
+
   const applies = (holder: STPlayerRecord, effect: EffectRecord, visiting: Set<string>): QueryAnswer<boolean> => {
     if (effect.state !== "active") return known(false); // a lifecycle DECISION, not derived
     const semantics = effectSemanticsOf(effect.type);
     if (!semantics) return unknown(`"${effect.type}" is a custom Effect: Silverwick applies no rule to it by name.`);
     if (semantics === "storytellerFact") return known(true); // as recorded; no source dependence
+    // Vigormortis: the retained ability stops if the holder is no longer a Minion (derived, nothing is rewritten).
+    if (semantics === "retainedAbility" && environment.registry.get(holder.actualRole)?.type !== "minion") return known(false);
     const key = `${holder.participantId}:${effect.id}`;
     if (visiting.has(key)) return unknown("These Effects depend on each other: the Storyteller decides.");
     // A Storyteller's manual Effect (no origin participant) applies as recorded.
@@ -225,8 +243,19 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     // SOL-10F-A5: a KNOWN dead source no longer has its ability -- decisive
     // before any impairment / functioning uncertainty is even consulted. (A
     // departed / unseated source stays unknown, above.)
-    if (!sourcePlayer.alive) return known(false);
     const next = new Set(visiting).add(key);
+    if (!sourcePlayer.alive) {
+      // A dead Minion the Vigormortis killed keeps its ability, so what it sourced still applies.
+      const kept = retained(sourcePlayer, next);
+      if (!kept.known || !kept.value) return kept.known ? known(false) : kept;
+    }
+    // The Vigormortis poison lasts only while the Minion it is attached to keeps its ability.
+    const attached = effect.type === "poisoned" ? effect.parameters?.minion : undefined;
+    if (attached && attached.kind === "participant" && attached.participants[0]) {
+      const minion = boundParticipant(game, attached.participants[0]);
+      const kept = minion ? retained(minion, next) : known(false);
+      if (!kept.known || !kept.value) return kept.known ? known(false) : kept;
+    }
     // The character-domain self-effect exception is only a query overlay;
     // it never rewrites stored applicability or solves other source cycles.
     const sourceRole = sourceCharacter ? environment.registry.get(sourceCharacter) : undefined;
@@ -421,6 +450,7 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     }),
     effectApplies: (holder, effect) => require(holder, (player) => applies(player, effect, new Set())),
     impaired: (binding) => require(binding, (player) => impairedOf(player, new Set(), ["impairment"])),
+    retainsAbility: (binding) => require(binding, (player) => retained(player, new Set())),
     abilityFunctions: (binding) => require(binding, (player) => functions(player, new Set())),
     noDashiiPoisoned: (binding) => require(binding, (player) => noDashiiPoison(player, new Set())),
     protectedFrom: (binding, cause) => require(binding, (player) => {
