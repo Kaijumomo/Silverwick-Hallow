@@ -2851,6 +2851,29 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                     </div>
                     </>
                   )}
+                  {vm.dayC?.moonOn && (
+                    <>
+                    <div style={S372}>
+                      <div role="img" aria-hidden="true" style={css(`width:44px; height:44px; flex:none; border-radius:50%; background:url(${vm.dayC?.moonImg ?? ''}) center/78% no-repeat, radial-gradient(circle at 38% 30%, #f1e6c9, #b09566); box-shadow:0 0 0 2px #14151d, 0 0 0 3px rgba(176,186,204,.35);`)} />
+                      <div style={S350}>
+                        <div style={S41}>
+                          <span style={S298}>
+                            Moonchild
+                          </span>
+                          <span style={css(`font-size:12px; font-weight:600; color:#f2c46a;`)}>
+                            {T(vm.dayC?.moonStatus)}
+                          </span>
+                        </div>
+                        <span style={S352}>
+                          {T(vm.dayC?.moonText)}
+                        </span>
+                      </div>
+                      <button onClick={vm.dayC?.moonAct} className={["", "gv-hu"].filter(Boolean).join(' ')} style={S373}>
+                        Choose a player
+                      </button>
+                    </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

@@ -69,6 +69,8 @@ export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>
   /** The Moonchild's public Day choice (a good player): the dead Moonchild has no functioning source, so it applies as recorded
    * and the Night wake reads it through factHolders. Whether the Moonchild still has the ability tonight is decided by the wake. */
   moonchildChoice: "storytellerFact",
+  /** The Moonchild's public choice of an EVIL player (nothing happens): a recorded Storyteller fact with no token. */
+  moonchildUnaffected: "storytellerFact",
   /** A Minion the Vigormortis killed keeps its ability (the official HAS ABILITY token): applies while that Vigormortis functions
    * and the holder is still a Minion. Holds the dead Minion's ability for the dead-actor rule and its sourced Effects. */
   retainsAbility: "retainedAbility",

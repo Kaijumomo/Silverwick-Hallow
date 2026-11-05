@@ -54,10 +54,11 @@ describe("Moonchild public Day choice", () => {
     expect(moonchildAwaitingChoice(mount().result.current, game().players.p3)).toBe(false);
   });
 
-  it("a good chosen player gets the Moonchild's DEAD token; Undo removes it; the Day card points the Storyteller to it", () => {
+  it("a good chosen player gets the Moonchild's DEAD token; Undo removes it; the Day card carries the Moonchild's action", () => {
     dayWithDeadMoonchild();
     const m = mount();
-    expect((buildDayCard({ ...m.result.current, cards: { ...m.result.current.cards, day: true } }) as { text: string }).text).toContain("learned they died");
+    const card = () => buildDayCard({ ...mount().result.current, cards: { ...m.result.current.cards, day: true } }) as { moonOn: boolean; moonText: string; moonAct: () => void };
+    expect(card()).toMatchObject({ moonOn: true, moonText: expect.stringContaining("learned they died") });
     choose(m, "p2");
     expect(choices("p2")).toHaveLength(1);
     expect(choices("p2")[0]).toMatchObject({ sourceCharacter: "moonchild", lifetime: { kind: "untilDawn" } });
@@ -65,18 +66,27 @@ describe("Moonchild public Day choice", () => {
     const tokens = officialEffectPresentation(game().players.p2!).tokens;
     expect(tokens.map((t) => `${t.role.id}:${t.label}`)).toContain("moonchild:Dead");
     expect(moonchildAwaitingChoice(mount().result.current, game().players.p3)).toBe(false);
+    expect(card().moonOn).toBe(false);
     act(() => { store.getState().undo(); });
     expect(choices("p2")).toHaveLength(0);
     expect(moonchildAwaitingChoice(mount().result.current, game().players.p3)).toBe(true);
+    expect(card().moonOn).toBe(true);
   });
 
-  it("an evil chosen player is unaffected: nothing is recorded and the prompt is not repeated", () => {
+  it("an evil chosen player is unaffected: it is recorded with no token, Undo reverses it, and the Moonchild may then choose again", () => {
     dayWithDeadMoonchild();
     const m = mount();
     choose(m, "p4"); // the Imp
     expect(choices("p4")).toHaveLength(0);
-    expect(store.getState().undoStack).toHaveLength(0);
+    expect(game().players.p4!.effects.filter((e) => e.type === "moonchildUnaffected" && e.state === "active")).toHaveLength(1);
+    expect(officialEffectPresentation(game().players.p4!).tokens).toEqual([]);
+    expect(store.getState().undoStack).toHaveLength(1);
     expect(moonchildAwaitingChoice(mount().result.current, game().players.p3)).toBe(false);
+    act(() => { store.getState().undo(); });
+    expect(game().players.p4!.effects.filter((e) => e.type === "moonchildUnaffected")).toHaveLength(0);
+    expect(moonchildAwaitingChoice(mount().result.current, game().players.p3)).toBe(true);
+    choose(mount(), "p2");
+    expect(choices("p2")).toHaveLength(1);
   });
 
   it("a Goon, a dead player or a Traveller cannot be chosen; Privacy Mode and a living Moonchild offer nothing", () => {

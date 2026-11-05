@@ -72,15 +72,12 @@ describe("Moonchild", () => {
     return withEvents(patchPlayer(base, "p3", { alive: false }), [executed(base, "p3", "moonchild", 2)]);
   };
 
-  it("kills a good chosen player after the Moonchild died during the Day", () => {
-    const g = afterExecution();
-    expect(planned(run(g, "p2")).players.p2!.alive).toBe(false);
-  });
-
-  it("an evil chosen player is unharmed", () => {
-    const g = afterExecution();
-    expect(run(g, "p6")).toEqual({ ok: true, changed: false });
-    expect(run(g, "p4")).toEqual({ ok: true, changed: false });
+  it("the Moonchild chooses in the Day, so with no recorded choice there is nothing to do at Night, however they died", () => {
+    expect(run(afterExecution(), "p2")).toMatchObject({ ok: false, code: "notApplicable" });
+    const base = night3();
+    const tonight = withEvents(patchPlayer(base, "p3", { alive: false }), [died(base, "p3", "moonchild", { phase: "night", day: 3 })]);
+    expect(run(tonight, "p2")).toMatchObject({ ok: false, code: "notApplicable" });
+    expect(run(tonight, "p6")).toMatchObject({ ok: false, code: "notApplicable" });
   });
 
   it("is refused for a living Moonchild and when the Moonchild died earlier", () => {
@@ -88,28 +85,6 @@ describe("Moonchild", () => {
     expect(run(base, "p2")).toMatchObject({ ok: false, code: "notApplicable" });
     const earlier = patchPlayer(base, "p3", { alive: false }); // dead, but no death event in the window
     expect(run(earlier, "p2")).toMatchObject({ ok: false, code: "notApplicable" });
-  });
-
-  it("a death during tonight's Night counts too", () => {
-    const base = night3();
-    const g = withEvents(patchPlayer(base, "p3", { alive: false }), [died(base, "p3", "moonchild", { phase: "night", day: 3 })]);
-    expect(planned(run(g, "p2")).players.p2!.alive).toBe(false);
-  });
-
-  it("an impaired Moonchild kills no one; a chosen dead player and a Goon are not decided", () => {
-    const g = afterExecution();
-    expect(run(impair(g, "p3"), "p2")).toEqual({ ok: true, changed: false });
-    const dead = patchPlayer(g, "p2", { alive: false });
-    expect(run(dead, "p2")).toMatchObject({ ok: false });
-    const goon = patchPlayer(g, "p2", { actualRole: "goon" });
-    expect(run(goon, "p2")).toMatchObject({ ok: false, code: "unsupported" });
-  });
-
-  it("the Innkeeper-protected target survives; homebrew inherits nothing", () => {
-    const g = afterExecution();
-    const guarded = patchPlayer(g, "p2", { effects: [{ id: "cd", type: "cannotDie", sourceCharacter: "innkeeper", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "never" } } as never] });
-    expect(run(guarded, "p2")).toEqual({ ok: true, changed: false });
-    expect(plan(g, request(g, "p3", "moonchild", { target: pick(g, "p2") }), homebrewEnv("moonchild"))).toMatchObject({ ok: false, code: "unsupported" });
   });
 });
 
@@ -140,8 +115,9 @@ describe("Moonchild -- the public Day choice (WP-4)", () => {
     expect(next.players.p2!.effects.filter((e) => e.type === "moonchildChoice" && e.state === "active")).toEqual([]);
   });
 
-  it("a Moonchild choice does not make a different target die without the window and alignment checks (fallback unchanged)", () => {
-    expect(run(decided(), "p5")).toMatchObject({ ok: false, code: "notApplicable" });
+  it("the death is the player the Moonchild publicly chose, never a different target", () => {
+    expect(run(decided(), "p5")).toMatchObject({ ok: false });
+    expect(planned(run(decided(), "p2")).players.p5!.alive).toBe(true);
   });
 
   it("a choice sourced from another participant is ignored", () => {

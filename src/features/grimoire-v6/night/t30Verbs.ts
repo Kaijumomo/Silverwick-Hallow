@@ -19,7 +19,7 @@ export const T30_VERBS: Record<string, string> = {
   vigormortis: "The Vigormortis chooses a player. If that player is a Minion, they keep their ability and poison a neighbouring Townsfolk.",
   godfather: "An Outsider died today. The Godfather chooses a player: they die.",
   professor: "The Professor might choose a dead player. If they are a Townsfolk, they are resurrected.",
-  moonchild: "Tap the player the Moonchild chose. If they are good, they die tonight.",
+  moonchild: "The Moonchild chose a good player in the Day: they die tonight unless protected.",
   ravenkeeper: "The Ravenkeeper died tonight and chooses a player. Show that player’s character token.",
   empath: "Give a finger signal: how many alive neighbours are evil.",
   fortuneteller: "The Fortune Teller chooses 2 players. Nod if either is the Demon (or the RED HERRING).",

@@ -70,6 +70,8 @@ const DEFINITIONS: Record<string, EffectDefinition> = {
     description: "A Minion the Vigormortis killed keeps its ability while that Vigormortis lives and functions." },
   moonchildChoice: { type: "moonchildChoice", label: "Moonchild's choice", indicator: "marked",
     description: "The good player the Moonchild publicly chose: they die tonight unless protected, if the Moonchild still has the ability." },
+  moonchildUnaffected: { type: "moonchildUnaffected", label: "Moonchild's choice (no effect)", indicator: "marked",
+    description: "The Moonchild publicly chose an evil player: nothing happens. Kept so the Day does not ask for the same choice twice; it draws no token." },
   shabalothChosen: { type: "shabalothChosen", label: "Chosen by the Shabaloth", indicator: "marked",
     description: "One of the two players the Shabaloth chose on its last night; if dead, it may be regurgitated at the next Dusk." },
   shabalothAlive: { type: "shabalothAlive", label: "Regurgitated", indicator: "abilityState",

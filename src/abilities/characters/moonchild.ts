@@ -1,4 +1,3 @@
-import { isDeathEvent } from "@/stores/lifeEvents";
 import type { AbilityDescriptor } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
@@ -6,6 +5,20 @@ import type { AbilityOperation } from "@/stores/abilityResolution";
 import { ask, deathAttempt, firstParticipant, lifeOperation, nothing, outcome, tokenOutcome } from "./shared";
 
 export const MOONCHILD_CHOICE = "moonchildChoice";
+/** A choice the Storyteller recorded for an EVIL player: nothing happens, so it draws no token, but it is kept in the game (Undo reverses it)
+ * so the Day does not offer the same Moonchild a second choice. Ends at dawn like the good choice. */
+export const MOONCHILD_UNAFFECTED = "moonchildUnaffected";
+
+/** True once this Moonchild's public choice for the Day is recorded, whichever way it went (a good player, or an evil one that changes nothing). */
+export function moonchildHasChosen(query: RulesQuery, moonchild: ParticipantBinding): boolean {
+  if (pendingMoonchildChoice(query, moonchild)) return true;
+  const holders = query.factHolders(MOONCHILD_UNAFFECTED);
+  if (!holders.known) return false;
+  return holders.value.some(({ holder, effectId }) => {
+    const effect = query.participant(holder)?.effects.find((candidate) => candidate.id === effectId);
+    return effect?.sourceParticipant?.kind === "participant" && effect.sourceParticipant.participantId === moonchild.participantId;
+  });
+}
 
 /** The player this Moonchild publicly chose during the Day (authoritative `moonchildChoice` Effect), with its Effect id. */
 export function pendingMoonchildChoice(query: RulesQuery, moonchild: ParticipantBinding): { target: ParticipantBinding; effectId: string } | null {
@@ -55,33 +68,19 @@ export const MOONCHILD: AbilityDescriptor = {
     const moment = query.moment();
     if (!moment || moment.phase !== "night") return { kind: "notApplicable", message: "The Moonchild's choice resolves at Night." };
 
-    // A choice made publicly during the Day (the Effect) is the Moonchild learning they died: it needs no death window,
-    // and it was judged GOOD when it was made. Without one (the Night fallback) the old window and alignment checks apply.
+    // The Moonchild chooses publicly, in the Day, right after learning they died; the Storyteller records it then (the Effect). The only thing the
+    // Moonchild does at Night is that choice killing a good player, so without a recorded good choice there is nothing to wake for.
     const pending = pendingMoonchildChoice(query, context.actor.binding);
+    if (!pending) return { kind: "notApplicable", message: "The Moonchild chose no good player: nobody dies tonight." };
     const target = firstParticipant(context.inputs, "target");
     const chosen = query.participant(target);
     if (!chosen?.alive) return { kind: "illegal", message: "The Moonchild chooses a player who is alive." };
-    const decided = !!pending && pending.target.participantId === target.participantId;
-    if (!decided) {
-      const mine = (event: { subject: { participantId: string } }) => event.subject.participantId === actor.participantId;
-      let died: boolean | null = true;
-      const windows = [query.lifeEvents({ phase: "day", day: moment.day - 1 }, (e) => isDeathEvent(e) && mine(e)), query.lifeEvents(moment, (e) => isDeathEvent(e) && mine(e))];
-      if (moment.day < 2) windows.shift();
-      if (windows.every((w) => w.status === "known")) died = windows.some((w) => w.status === "known" && w.events.length > 0);
-      else if (windows.some((w) => w.status === "known" && w.events.length > 0 && w.events.some((e) => e.actualRoleAtEvent === "moonchild"))) died = true;
-      else died = null;
-      if (died === null) return { kind: "unsupported", message: "Silverwick cannot verify when the Moonchild died -- resolve this wake manually." };
-      if (!died) return { kind: "notApplicable", message: "The Moonchild did not die since the last Night: their choice was already resolved." };
-      if (chosen.actualRole === "goon") return { kind: "unsupported", message: "A chosen Goon dies by the alignment they had when chosen: resolve this manually." };
-      const alignment = query.registration(target, "moonchild").alignment;
-      if (!alignment.known) return { kind: "unsupported", message: alignment.reason };
-      if (alignment.value !== "good") return nothing();
-    }
+    if (pending.target.participantId !== target.participantId) return { kind: "illegal", message: "Tonight's death is the player the Moonchild publicly chose." };
     const death = deathAttempt(context, target, "any");
     if (death.kind === "ask") return ask(death.message, death.requirement);
     // The choice is spent tonight whatever happens to it (protected, or not killed): it never lingers into another night.
-    const spent: AbilityOperation[] = pending ? [{ domain: "effect", intents: [{ kind: "remove", target: pending.target, effectId: pending.effectId }] }] : [];
-    if (death.kind === "survives") return spent.length ? outcome(spent) : nothing();
-    return tokenOutcome(context, "moonchild", [lifeOperation([{ kind: "death", target }]), ...spent], spent.length > 0);
+    const spent: AbilityOperation[] = [{ domain: "effect", intents: [{ kind: "remove", target: pending.target, effectId: pending.effectId }] }];
+    if (death.kind === "survives") return outcome(spent);
+    return tokenOutcome(context, "moonchild", [lifeOperation([{ kind: "death", target }]), ...spent], true);
   },
 };

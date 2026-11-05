@@ -5,7 +5,7 @@ import type { V6Ctx } from "../ctx";
 import { roman } from "../ringLayout";
 import { blockNominee } from "./advance";
 import { nominationsToday, toExecute } from "./dayModel";
-import { moonchildAwaitingChoice } from "./moonchild";
+import { moonchildAwaitingChoice, startMoonchildChoice } from "./moonchild";
 
 /** The Day card (Day I / "N nominated today" / who is on the block), opened from the dock's Day button. */
 export function buildDayCard(ctx: V6Ctx): Record<string, unknown> {
@@ -16,14 +16,18 @@ export function buildDayCard(ctx: V6Ctx): Record<string, unknown> {
   const def = holder?.actualRole ? registry.get(holder.actualRole) : undefined;
   const nominated = nominationsToday(currentVotingState(game)).length;
   const moonchild = Object.values(game.players).find((p) => moonchildAwaitingChoice(ctx, p));
-  const moonchildLine = moonchild ? ` ${moonchild.name || "The Moonchild"} learned they died: tap them, then Moonchild, to enter the player they chose.` : "";
+  const moonDef = registry.get("moonchild");
   return {
     on: true,
     w: Math.round(Math.max(360, Math.min(520, 2 * (layout.rx - layout.S / 2 - 60)))),
     kicker: `Day ${roman(game.day)}`, sub: `${nominated} nominated today`,
     hasBlock: !!holder, blockImg: def ? iconUrlFor(def) : "",
     title: holder ? `${holder.name} is on the block` : "No one is on the block", titleColor: holder ? "#ff8a78" : "#f2ece0",
-    text: (block ? `${block.tally} votes. More votes on a later nomination replaces them; a tie clears the block.` : `${toExecute(game)} votes are needed to put a nominee on the block.`) + moonchildLine,
+    text: (block ? `${block.tally} votes. More votes on a later nomination replaces them; a tie clears the block.` : `${toExecute(game)} votes are needed to put a nominee on the block.`),
+    // The Moonchild's public choice sits with the other Day actions (a row in the Slayer row's own style), not in a menu.
+    moonOn: !!moonchild, moonImg: moonDef ? iconUrlFor(moonDef) : "",
+    moonText: moonchild ? `${moonchild.name || "The Moonchild"} learned they died` : "", moonStatus: "Awaiting choice",
+    moonAct: () => { if (!moonchild) return; ctx.ui.set({ panel: ctx.ui.panel === "night" ? "night" : null }); startMoonchildChoice(ctx, moonchild); },
   };
 }
 

@@ -1,9 +1,8 @@
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
-import { MOONCHILD_CHOICE, pendingMoonchildChoice } from "@/abilities/characters/moonchild";
+import { MOONCHILD_CHOICE, MOONCHILD_UNAFFECTED, moonchildHasChosen } from "@/abilities/characters/moonchild";
 import { isDeathEvent } from "@/stores/lifeEvents";
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { useStorytellerStore } from "@/stores/storytellerStore";
-import { onGameScopeReset } from "@/stores/shellStore";
 import { useTargetPicker, seatedParticipants } from "@/features/abilities/abilityUi";
 import type { STPlayerRecord } from "@/stores/types";
 import type { V6Ctx } from "../ctx";
@@ -14,22 +13,17 @@ import { flash } from "../v6Store";
  * choose 1 alive player. Tonight, if it was a good player, they die." The Storyteller taps the chosen player on the
  * grimoire during the Day. A good player gets an authoritative `moonchildChoice` Effect (drawn with the Moonchild's own
  * official DEAD token, expiring at dawn); the Night wake reads it, so the death resolves tonight with the timing and
- * impairment rules of the wake. An evil player is simply unaffected, so nothing is recorded for them.
+ * impairment rules of the wake. An evil player is unaffected: the choice is still recorded (Undo reverses it, and the Day stops asking) but draws no token.
+ * The Moonchild chooses only in the Day, so the Night has no entry for it: the wake exists to resolve a recorded good choice.
  */
-
-/** Moonchilds the Storyteller has already ruled on this Day (an evil choice leaves no Effect). Session-only, never saved. */
-const ruled = new Set<string>();
-onGameScopeReset(() => ruled.clear());
-const ruledKey = (ctx: V6Ctx, p: STPlayerRecord) => `${ctx.game.day}:${p.participantId}`;
 
 /** The dead Moonchild who learned of their death during last night or today, and has not chosen yet. */
 export function moonchildAwaitingChoice(ctx: V6Ctx, player: STPlayerRecord | undefined): boolean {
   const { game } = ctx;
   if (game.phase !== "day" || ctx.privacy || ctx.ended || !player || player.isEmpty || player.alive || player.actualRole !== "moonchild" || !player.participantId) return false;
-  if (ruled.has(ruledKey(ctx, player))) return false;
   const query = createRulesQuery(game, { registry: ctx.registry, script: ctx.script ?? null, semantics: CANONICAL_ABILITY_SEMANTICS });
   const me = { playerId: player.id, participantId: player.participantId };
-  if (pendingMoonchildChoice(query, me)) return false;
+  if (moonchildHasChosen(query, me)) return false;
   const mine = (event: { subject: { participantId: string } }) => event.subject.participantId === player.participantId;
   const windows = (["night", "day"] as const).map((phase) => query.lifeEvents({ phase, day: game.day }, (event) => isDeathEvent(event) && mine(event)));
   // An unverifiable window is the Storyteller's call, so the choice stays available.
@@ -50,12 +44,20 @@ export function startMoonchildChoice(ctx: V6Ctx, player: STPlayerRecord): void {
     const chosen = game.players[target.playerId];
     const name = chosen?.name || "That player";
     if (!chosen || chosen.participantId !== target.participantId || !chosen.alive) { flash("Choose a living player."); return; }
-    if (chosen.actualRole === "goon") { flash(`${name} is the Goon: their alignment when chosen decides. Use the Night wake to rule on it.`); return; }
+    const record = (type: string) => useStorytellerStore.getState().resolveEffects({ intents: [{ kind: "apply", target,
+      effect: { type, source: moonchild, sourceCharacter: "moonchild", lifetime: { kind: "untilDawn" } } }] });
+    // The Goon's alignment when chosen, or a character that may register either way, is the Storyteller's ruling: the choice is recorded with the
+    // official DEAD token on them, and the Storyteller takes that token away if they register as evil (an ordinary reminder removal).
     const alignment = query.registration(target, "moonchild").alignment;
-    if (!alignment.known) { flash(`${name} may register as good or evil (${alignment.reason}). You decide at Night.`); return; }
-    if (alignment.value !== "good") { ruled.add(ruledKey(ctx, player)); flash(`${name} is evil: nothing happens.`); return; }
-    const result = useStorytellerStore.getState().resolveEffects({ intents: [{ kind: "apply", target,
-      effect: { type: MOONCHILD_CHOICE, source: moonchild, sourceCharacter: "moonchild", lifetime: { kind: "untilDawn" } } }] });
-    flash(result.ok ? `${name} will die tonight unless protected.` : result.message);
+    if (chosen.actualRole === "goon" || !alignment.known) {
+      const result = record(MOONCHILD_CHOICE);
+      flash(!result.ok ? result.message : chosen.actualRole === "goon"
+        ? `${name} is the Goon: their alignment when chosen decides. The DEAD token is on them; remove it if they were evil.`
+        : `${name} may register as good or evil (${(alignment as { reason?: string }).reason ?? "Storyteller ruling"}). The DEAD token is on them; remove it if they register as evil.`);
+      return;
+    }
+    // An evil player is unaffected: recorded (so Undo can reverse it and the Day stops asking), but nothing is drawn.
+    const result = record(alignment.value === "good" ? MOONCHILD_CHOICE : MOONCHILD_UNAFFECTED);
+    flash(!result.ok ? result.message : alignment.value === "good" ? `${name} will die tonight unless protected.` : `${name} is evil: nothing happens.`);
   }, { owner: "moonchild-choice", eligible });
 }
