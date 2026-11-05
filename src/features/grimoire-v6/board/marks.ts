@@ -5,6 +5,7 @@ import type { RulesQuery } from "@/stores/rulesQuery";
 import { currentVotingState } from "@/stores/voting";
 import { ownsAbilityUseReminder } from "@/stores/abilityUseReminders";
 import { butlerReminderOrigin } from "@/stores/butlerSelection";
+import { isDeathEvent } from "@/stores/lifeEvents";
 import {
   firstInformationReminderGroups, officialEffectPresentation, officialNotationRole, redHerringNotationCovered,
   type OfficialEffectToken,
@@ -46,6 +47,17 @@ const ROLE_SIZE = 100;
 
 const times = (label: string, n: number) => (n > 1 ? `${label} ×${n}` : label);
 
+function diedToday({ game, registry, query }: MarkEnv, player: STPlayerRecord): boolean {
+  if (!query || player.alive || registry.get(player.actualRole)?.type !== "outsider") return false;
+  if (!Object.values(game.players).some((other) => !other.isEmpty && other.alive && other.actualRole === "godfather")) return false;
+  const moment = query.moment();
+  if (!moment) return false;
+  const day = moment.phase === "day" ? moment.day : moment.phase === "night" ? moment.day - 1 : 0;
+  if (day < 1) return false;
+  const deaths = query.lifeEvents({ phase: "day", day }, (event) => isDeathEvent(event) && event.subject.participantId === player.participantId);
+  return deaths.status === "known" && deaths.events.length > 0;
+}
+
 export function playerMarks(env: MarkEnv, player: STPlayerRecord): Mark[] {
   const { game, script, registry, query } = env;
   if (player.isEmpty || !player.participantId || !script || !query) return [];
@@ -61,6 +73,13 @@ export function playerMarks(env: MarkEnv, player: STPlayerRecord): Mark[] {
     const source = officialNotationRole("nodashii", "Poisoned") ?? registry.get("nodashii");
     marks.push({ key: "derived:nodashii-poison", kind: "effect", label: "Poisoned", title: "No Dashii: Poisoned", src: source ? iconUrlFor(source) : "", size: ROLE_SIZE,
       removal: { type: "derived", reason: "This follows the No Dashii. It ends when the No Dashii dies or loses its ability." } });
+  }
+  // The Godfather's official DIED TODAY token: a dead Outsider whose death was during the Day the Godfather is acting on (this Day, or
+  // the Day just ended once Night falls). Drawn from the Life Event Window, never stored, so Undo and reload need nothing.
+  if (diedToday(env, player)) {
+    const source = officialNotationRole("godfather", "Died Today") ?? registry.get("godfather");
+    marks.push({ key: "derived:godfather-died-today", kind: "effect", label: "Died Today", title: "Godfather: Died Today", src: source ? iconUrlFor(source) : "", size: ROLE_SIZE,
+      removal: { type: "derived", reason: "This follows the Day's deaths. It ends at dawn." } });
   }
   const voting = currentVotingState(game);
   const linked = (id: string) => voting.modifiers.find((m) => m.target.playerId === player.id && m.target.participantId === player.participantId && `voting-${m.id}` === id);
