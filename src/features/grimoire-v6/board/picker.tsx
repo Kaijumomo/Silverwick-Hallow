@@ -3,13 +3,13 @@ import { iconUrlFor } from "@/data/iconUrl";
 import { TRAVELERS } from "@/data/travelers";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { captureCharacterActionContext, selectScriptById, useStorytellerStore } from "@/stores/storytellerStore";
-import { changeRoleIntent, ordinaryRoleChoices } from "@/stores/roleResolution";
+import { changeRoleIntent, ordinaryRoleChoices, toldRoleChangeIntents } from "@/stores/roleResolution";
 import { isPostDeal, selectSetupContext, type SetupContext } from "@/features/setup/setupContext";
 import { analyzeSetup } from "@/features/setup/setupAnalyzer";
 import { canRefineSetup } from "@/features/setup/setupRefinement";
 import { type BagCounts } from "@/data/setupCounts";
 import { randomSetup } from "@/features/setup/randomSetup";
-import { isInitialRevealComplete, shownRoleFilter } from "@/stores/identity";
+import { isInitialRevealComplete, needsShownIdentity, shownRoleFilter } from "@/stores/identity";
 import type { PlayerId, RoleDef, RoleId, RoleType, Script, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 import { TEAM_COLOR, TEAM_LABEL } from "../icons";
 import { flash, useV6Ui, type PickerState, type V6UiActions, type V6UiState } from "../v6Store";
@@ -309,10 +309,28 @@ function pickTile(env: PickerEnv, picker: PickerState, role: RoleDef, p: PickCon
     if (holders.length) note = `${name} and ${holders[0]!.name || "the other player"} swapped characters.`;
   } else {
     if (!player.isTraveler && game.phase === "setup") { flash("Deal roles before changing an assignment; revealed setup is locked until Night 1."); return; }
-    result = current.resolveRoles({ intents: [changeRoleIntent(player, role.id)] });
+    result = current.resolveRoles({ intents: midGameChange(player, role) });
   }
   if (!result.ok) { flash(result.message ?? "Review setup before continuing."); return; }
   close();
   flash(note);
   void script;
+}
+
+const CONCEALED_MODES = ["drunk_fake_role_behavior", "marionette_fake_good_behavior", "fake_demon_behavior"];
+
+/**
+ * A Storyteller's mid-game "Change character". An ordinary player (shown what they are, no concealed identity) is TOLD the change,
+ * so the shown token follows the real character in the same transaction (the way the Pit-Hag's change works) and the board never keeps
+ * the old token. A Drunk, a Marionette or any other concealed identity keeps its shown character: that is the Storyteller's to set.
+ */
+function midGameChange(player: STPlayerRecord, role: RoleDef) {
+  const concealed = player.shownRole !== player.actualRole || needsShownIdentity(player.actualRole) || needsShownIdentity(role.id)
+    || CONCEALED_MODES.includes(player.behaviorMode);
+  if (player.isTraveler || concealed) return [changeRoleIntent(player, role.id)];
+  // The player-facing alignment stays as it is (a new character never changes a player's alignment).
+  const defaultAlignment = role.type === "townsfolk" || role.type === "outsider" ? "good" : "evil";
+  const shownAlignment = player.shownAlignment === null && player.actualAlignment && player.actualAlignment !== defaultAlignment
+    ? player.actualAlignment : player.shownAlignment;
+  return toldRoleChangeIntents(player, role.id, shownAlignment);
 }
