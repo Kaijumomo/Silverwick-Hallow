@@ -35,7 +35,7 @@ export function buildShowVm(current: ActiveShow | null, close: () => void): Reco
     const style = TEXT_STYLE[payload.symbol]!;
     return { ...base, title: payload.heading, aria: payload.heading, isChar: false, isText: true, isSetup: false, icon: ICON_OF[payload.symbol], ...style };
   }
-  const label = !stale && current.setup ? SETUP_LABEL[current.setup] : "Information changed";
+  const label = stale ? "Information changed" : current.setup ? SETUP_LABEL[current.setup] : current.title ?? "Information changed";
   const cols = payload.groups.map((group, i) => {
     const players = (group.names ?? []).map((name) => ({ name }));
     const chars = (group.characters ?? []).map((c) => ({ name: c.name, img: c.icon }));

@@ -13,7 +13,7 @@ import { CUSTOM_STEP_PREFIX, nightStepName } from "@/features/nightOrder/nightWo
 import { TokenInformationAction } from "@/features/info/TokenInformationAction";
 import type { V6Ctx } from "../ctx";
 import { useV6Ui } from "../v6Store";
-import { presentCharacter, presentSetup, report } from "../info/actions";
+import { presentCharacter, presentCharacters, presentSetup, report } from "../info/actions";
 import { INFO_TOKENS } from "../info/tokens";
 import { guardGesture } from "./gestureGuard";
 import { newImpToWake } from "./newImp";
@@ -105,13 +105,12 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
       } else if (!done && !engine.manual && !engine.canTarget) {
         rows.push(<button key="continue" type="button" className="btn btn-gold" onClick={() => engine.openWorkspace()}>Continue action</button>);
       }
-      // T30: the Godfather's first night shows the tokens of the Outsiders in play, one safe reveal each.
+      // T30: the Godfather's first night shows the Outsiders in play on ONE screen, like the Demon's bluffs.
       if (current.effectiveRoleId === "godfather" && game.day === 1 && !current.isDeceived && !engine.settled.has(current.stepKey)) {
         const outsiders = [...new Set(Object.values(game.players).filter((p) => !p.isEmpty && !p.isTraveler && p.actualRole && registry.get(p.actualRole)?.type === "outsider").map((p) => p.actualRole!))];
-        for (const roleId of outsiders) {
-          const role = registry.get(roleId);
-          if (role) rows.push(<TokenInformationAction key={`in-play:${roleId}`} role={role} label="Show this token" onClick={() => report(presentCharacter("This Character Is in Play", roleId))} />);
-        }
+        const first = registry.get(outsiders[0] ?? "");
+        if (first) rows.push(<TokenInformationAction key="in-play" role={outsiders.length === 1 ? first : undefined} label={outsiders.length === 1 ? "Show this token" : "Show these tokens"}
+          onClick={() => report(presentCharacters("Godfather Information", outsiders))} />);
       }
       // The new Imp (the Imp's own death tonight, or a Scarlet Woman who took over): wake them, show YOU ARE, then the Imp token.
       if (current.effectiveRoleId === "imp" && !current.isDeceived) {

@@ -1,3 +1,4 @@
+import { useInfoShow } from "../info/showStore";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useEffect } from "react";
@@ -501,14 +502,17 @@ it("WP-8: a Marionette shown as the Investigator gets the same pair picker and R
   expect(game().nightProgress[`1:${participantStepKey(game().players.p1!.participantId!, "investigator")}`]?.status).toBe("done");
 });
 
-it("WP-8: the Godfather's first night offers one safe reveal per Outsider in play", () => {
+it("the Godfather's first night shows every Outsider in play on ONE screen, like the bluff screen", () => {
   store.setState({ game: proofGame(["godfather", "saint", "recluse", "chef", "monk", "imp", "poisoner"], "night", 1), undoStack: [] });
   useShellStore.getState().setNightCursor({ day: 1, stepKey: key("p0") });
   render(<Guide />);
-  const buttons = screen.getAllByRole("button", { name: "Show this token" });
-  expect(buttons).toHaveLength(2);
+  const buttons = screen.getAllByRole("button", { name: "Show these tokens" });
+  expect(buttons).toHaveLength(1);
   act(() => { fireEvent.click(buttons[0]!); });
-  expect(useV6Ui.getState().show).toMatchObject({ kind: "char", roleId: "saint" });
+  expect(useV6Ui.getState().show).toMatchObject({ kind: "setup" });
+  const shown = useInfoShow.getState().current;
+  expect(shown?.title).toBe("Godfather Information");
+  expect(shown?.payload).toMatchObject({ kind: "setup", groups: [{ heading: "These Characters Are in Play", characters: [{ id: "saint" }, { id: "recluse" }] }] });
 });
 
 it("WP-8: the Marionette step shows THIS PLAYER IS with the Marionette token to the woken Demon", () => {

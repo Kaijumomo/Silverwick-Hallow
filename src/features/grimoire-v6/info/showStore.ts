@@ -9,7 +9,7 @@ import type { SetupView } from "@/features/info/infoModel";
  * ownership, no delivery record), and the captured context lets the view refuse to show anything
  * once the game, connection, script or Privacy Mode has changed underneath it.
  */
-export type ActiveShow = { context: InfoContext; payload: PresentationPayload; setup?: SetupView };
+export type ActiveShow = { context: InfoContext; payload: PresentationPayload; setup?: SetupView; /** Overrides the screen title of a setup-style view that is not one of the four setup views. */ title?: string };
 
 type ShowStore = {
   current: ActiveShow | null;

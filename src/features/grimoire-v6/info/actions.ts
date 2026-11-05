@@ -20,8 +20,8 @@ import { SETUP_LABEL } from "./tokens";
 
 const STALE = "The game or connection changed. Review the information again.";
 
-function open(context: InfoContext, payload: PresentationPayload, ui: ShowState, setup?: SetupView) {
-  useInfoShow.getState().open({ context, payload, ...(setup ? { setup } : {}) });
+function open(context: InfoContext, payload: PresentationPayload, ui: ShowState, setup?: SetupView, title?: string) {
+  useInfoShow.getState().open({ context, payload, ...(setup ? { setup } : {}), ...(title ? { title } : {}) });
   useV6Ui.getState().set({ show: ui, picker: null, card: false });
   useStorytellerStore.getState().selectPlayer(null);
 }
@@ -29,6 +29,17 @@ function open(context: InfoContext, payload: PresentationPayload, ui: ShowState,
 export function closeShow() {
   useInfoShow.getState().clear();
   useV6Ui.getState().set({ show: null });
+}
+
+/** Several characters on one screen, in the bluff screen's layout ("This Character Is in Play" / "These Characters Are in Play"). */
+export function presentCharacters(title: string, roleIds: readonly string[], context: InfoContext = captureInfoContext()): string | undefined {
+  if (!infoContextCurrent(context)) return STALE;
+  const registry = context.script ? buildRegistry(context.script) : undefined;
+  const roles = roleIds.map((id) => registry?.get(id));
+  if (!registry || !roles.length || roles.some((role) => !role)) return "A character is not on this script.";
+  const heading = roles.length === 1 ? "This Character Is in Play" : "These Characters Are in Play";
+  open(context, { kind: "setup", groups: [{ heading, characters: roles.map((role) => characterCard(role!)) }] }, { kind: "setup", key: "bluffs" }, undefined, title);
+  return undefined;
 }
 
 /** "You Are", "This Player Is", "Selected You", "This Character": a token with a chosen character. */
