@@ -43,12 +43,28 @@ describe("Godfather", () => {
     expect(Object.values(next.players).filter((p) => !p.alive)).toHaveLength(1);
   });
 
-  it("a Spy death, or a missing role record, is never guessed (Manual)", () => {
+  it("a missing role record is never guessed (Manual)", () => {
     const base = night3();
-    const spy = withEvents(base, [executed(base, "p1", "spy", 2)]);
-    expect(run(spy, "p2")).toMatchObject({ ok: false, code: "unsupported", message: expect.stringContaining("cannot verify") });
     const unrecorded = withEvents(base, [{ ...executed(base, "p1", "saint", 2), actualRoleAtEvent: undefined } as LifeEvent]);
-    expect(run(unrecorded, "p2")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(run(unrecorded, "p2")).toMatchObject({ ok: false, code: "unsupported", message: expect.stringContaining("cannot verify") });
+  });
+
+  // Game 2 report: a Recluse killed in the Day (here by the Golem) left the wake stuck on "cannot verify". The Storyteller is now asked once.
+  it.each(["recluse", "spy"])("a %s death in the Day is put to the Storyteller as one question, and the wake follows the answer", (role) => {
+    const base = proofGame(["godfather", role, "chef", "moonchild", "imp", "empath", "baron"], "night", 2);
+    const g = withEvents(patchPlayer(base, "p1", { alive: false }), [died(base, "p1", role, { phase: "day", day: 1 })]);
+    const first = run(g, "p2");
+    expect(first).toMatchObject({ ok: false, code: "needsInput", requirements: [{ kind: "boolean", source: "storyteller" }] });
+    const id = !first.ok && first.code === "needsInput" ? first.requirements![0]!.id : "";
+    const answer = (value: boolean) => plan(g, request(g, "p0", "godfather", { target: pick(g, "p2"), [id]: { kind: "boolean", value } }));
+    expect(planned(answer(true)).players.p2!.alive).toBe(false);
+    expect(answer(false)).toMatchObject({ ok: false, code: "notApplicable" });
+  });
+
+  it("a Recluse death beside a certain Outsider death needs no question", () => {
+    const base = proofGame(["godfather", "recluse", "chef", "moonchild", "imp", "empath", "baron"], "night", 2);
+    const g = withEvents(base, [died(base, "p1", "recluse", { phase: "day", day: 1 }), died(base, "p3", "moonchild", { phase: "day", day: 1 })]);
+    expect(planned(run(g, "p2")).players.p2!.alive).toBe(false);
   });
 
   it("Night 2 follows Day 1; Night 1 never acts; impaired Godfather kills no one; homebrew inherits nothing", () => {

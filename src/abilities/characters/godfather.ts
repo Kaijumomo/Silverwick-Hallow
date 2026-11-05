@@ -1,7 +1,8 @@
 import { isDeathEvent } from "@/stores/lifeEvents";
 import { passiveRegistrationOptions } from "./passiveRules";
 import type { AbilityDescriptor } from "../semantics";
-import { ask, deathAttempt, firstParticipant, lifeOperation, nothing, tokenOutcome, requireLivingActor } from "./shared";
+import type { ParticipantBinding } from "@/stores/abilityResolution";
+import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, nothing, subjectId, tokenOutcome, requireLivingActor } from "./shared";
 
 /**
  * Godfather -- GUIDED-PARTIAL (Treacherous 30th, owner-authorized; shared protection
@@ -15,8 +16,9 @@ import { ask, deathAttempt, firstParticipant, lifeOperation, nothing, tokenOutco
  * ended (an execution or any other Day death; Outsiders that die at night do not count,
  * and two Outsider deaths still allow ONE kill). The Life Event Window holds that Day, so
  * the answer is read from authoritative state: a known "no" ends the wake with nothing to
- * do; a Spy or Recluse death (who may register as another type) or a window that cannot
- * be verified keeps the whole action Manual. The kill is a non-Demon death (protection for "any").
+ * do; a Spy or Recluse death (who may register as another type) is put to the Storyteller as ONE
+ * question ("did an Outsider die today?") and the wake follows the answer; an unrecorded character
+ * or a window that cannot be verified keeps the whole action Manual. The kill is a non-Demon death (protection for "any").
  * The first-night Outsider information and the +1/-1 setup change are not abilities of
  * this wake (Night Order and the setup count policy own them). Impaired / simulated:
  * the choice is simulated; nobody dies.
@@ -39,20 +41,28 @@ export const GODFATHER: AbilityDescriptor = {
 
     const deaths = query.lifeEvents({ phase: "day", day: moment.day - 1 }, isDeathEvent);
     let happened: boolean | null = null;
+    // Day deaths whose character may register as a non-Outsider (a Recluse, a Spy): whether they count is the Storyteller's ruling, never guessed.
+    const doubtful: ParticipantBinding[] = [];
     if (deaths.status === "known") {
-      let uncertain = false;
+      let unrecorded = false;
       happened = false;
       for (const event of deaths.events) {
         const role = event.actualRoleAtEvent;
-        if (!role) { uncertain = true; continue; }
-        const definition = query.roleOf(role);
-        if (!definition) { uncertain = true; continue; }
-        if (passiveRegistrationOptions(role)) { uncertain = true; continue; }
+        const definition = role ? query.roleOf(role) : undefined;
+        if (!role || !definition) { unrecorded = true; continue; }
+        if (passiveRegistrationOptions(role)) { doubtful.push({ playerId: event.subject.playerId, participantId: event.subject.participantId }); continue; }
         if (definition.type === "outsider") happened = true;
       }
-      if (!happened && uncertain) happened = null;
+      if (!happened && unrecorded) happened = null;
+      else if (!happened && doubtful.length) {
+        const id = subjectId("godfather:outsiderDied", ...doubtful);
+        const ruled = answerOf(context.inputs, id, "boolean");
+        if (!ruled) return ask(`${doubtful.map((who) => nameOf(context, who)).join(" and ")} died during the Day and may register as something other than an Outsider. Did an Outsider die today?`,
+          { id, kind: "boolean", source: "storyteller", label: `An Outsider died during the Day (Yes: the Godfather kills tonight; No: the Godfather sleeps)` });
+        happened = ruled.value;
+      }
     }
-    // A Spy / Recluse death or an unverifiable window is never guessed: the whole action is Manual.
+    // An unrecorded character or an unverifiable window is never guessed: the whole action is Manual.
     if (happened === null) return { kind: "unsupported", message: "Silverwick cannot verify whether an Outsider died during the Day -- resolve this wake manually." };
     if (!happened) return { kind: "notApplicable", message: "No Outsider died during the Day: the Godfather does not act tonight." };
 

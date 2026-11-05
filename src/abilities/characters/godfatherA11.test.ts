@@ -38,9 +38,9 @@ describe("Godfather after an execution (A11)", () => {
     expect(godfatherPlan("p2")).toMatchObject({ ok: false, code: "notApplicable" });
   });
 
-  it("a Recluse dying in the Day is the Storyteller's call, never guessed", () => {
+  it("a Recluse dying in the Day is the Storyteller's call, asked once and never guessed", () => {
     store.setState({ game: patchPlayer(proofGame(["godfather", "recluse", "chef", "monk", "imp", "saint", "poisoner"], "day", 2), "p1", {}), undoStack: [] });
     store.getState().recordExecution("p1", "died"); toNight();
-    expect(godfatherPlan("p2")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(godfatherPlan("p2")).toMatchObject({ ok: false, code: "needsInput", requirements: [{ kind: "boolean", source: "storyteller" }] });
   });
 });
