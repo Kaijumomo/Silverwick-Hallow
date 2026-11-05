@@ -536,3 +536,11 @@ it("F-20: the Gambler's guess picker opens in character-tokens-only mode", () =>
   tap("p1");
   expect(useV6Ui.getState().picker).toMatchObject({ mode: "show", tokensOnly: true, title: "What does the Gambler guess?" });
 });
+
+it("a finished Demon information step says Completed once, not twice", () => {
+  const base = proofGame(["imp", "poisoner", "baron", "chef", "monk", "empath", "saint"], "night", 1);
+  store.setState({ game: { ...base, nightProgress: { ...base.nightProgress, "1:demonInfo": { status: "done", notes: "" } } } });
+  useShellStore.getState().setNightCursor({ day: 1, stepKey: "demonInfo" });
+  render(<Guide />);
+  expect(screen.getAllByText("Completed")).toHaveLength(1);
+});

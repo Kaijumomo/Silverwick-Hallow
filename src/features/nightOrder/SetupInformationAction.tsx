@@ -20,7 +20,7 @@ export function SetupInformationAction(props: Props) {
   return <InfoPresentationBoundary><SetupInformation {...props} /></InfoPresentationBoundary>;
 }
 
-function SetupInformation({ game, script, step, visible, resolved, present: host }: Props) {
+function SetupInformation({ game, script, step, visible, present: host }: Props) {
   const present = useInfoPresentation();
   const [error, setError] = useState<string | null>(null);
   const live = useRef({ game, visible });
@@ -69,7 +69,6 @@ function SetupInformation({ game, script, step, visible, resolved, present: host
       <span className="gvn-show-go" aria-hidden="true">Show<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg></span>
     </button>)}
     {!recipients.length && <p>No eligible recipients. Review Additional night controls.</p>}
-    {resolved && <p className="modern-night-result">Completed</p>}
     {error && <p role="alert" className="behavior-help">{error}</p>}
   </div>;
 }
