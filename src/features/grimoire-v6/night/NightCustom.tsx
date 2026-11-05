@@ -16,6 +16,7 @@ import { useV6Ui } from "../v6Store";
 import { presentCharacter, presentSetup, report } from "../info/actions";
 import { INFO_TOKENS } from "../info/tokens";
 import { guardGesture } from "./gestureGuard";
+import { newImpToWake } from "./newImp";
 import type { NightEngine } from "./useNightEngine";
 import "./night-custom.css";
 
@@ -111,6 +112,13 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
           const role = registry.get(roleId);
           if (role) rows.push(<TokenInformationAction key={`in-play:${roleId}`} role={role} label="Show this token" onClick={() => report(presentCharacter("This Character Is in Play", roleId))} />);
         }
+      }
+      // The new Imp (the Imp's own death tonight, or a Scarlet Woman who took over): wake them, show YOU ARE, then the Imp token.
+      if (current.effectiveRoleId === "imp" && !current.isDeceived) {
+        const heir = newImpToWake(game, game.players[current.playerId], done || engine.settled.has(current.stepKey));
+        const imp = registry.get("imp");
+        if (heir && imp) rows.push(<TokenInformationAction key={`new-imp:${heir.id}`} role={imp} label={`Wake ${heir.name || `Seat ${heir.seat + 1}`}: You Are`}
+          onClick={() => report(presentCharacter("You Are", "imp"))} />);
       }
       // PO review C15: no "Give information" form in the Night card; the Storyteller tells the player in person.
     } else if (!done && engine.bureaucrat && engine.actor?.participantId) {
