@@ -12,6 +12,7 @@ const BUTTON: CSSProperties = { minHeight: 44, padding: "0 16px", borderRadius: 
 const QUIET: CSSProperties = { minHeight: 36, padding: "0 10px", border: "none", background: "transparent", color: "rgba(222,216,204,.6)", fontFamily: "inherit", fontSize: 13, cursor: "pointer" };
 const ROW: CSSProperties = { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 };
 const NOTE: CSSProperties = { margin: 0, fontSize: 13, color: "#f4a595" };
+const QUIET_NOTE: CSSProperties = { margin: 0, fontSize: 14, fontFamily: "'IM Fell English', serif", fontStyle: "italic", color: "rgba(236,230,218,.75)" };
 
 function Row({ children }: { children: ReactNode }) {
   return <div style={ROW}>{children}</div>;
@@ -25,7 +26,7 @@ export function NominationExtras({ actions, contextNote }: { actions: ExtraActio
   if (!flow) return null;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {contextNote && <p style={NOTE}>{contextNote}</p>}
+      {contextNote && <p style={QUIET_NOTE}>{contextNote}</p>}
       {ui.error && <p role="alert" style={NOTE}>{ui.error}</p>}
       {ui.confirmation && <button style={BUTTON} onClick={ui.confirmation.accept}>{ui.confirmation.message} Confirm</button>}
       {actions.length > 0 && (

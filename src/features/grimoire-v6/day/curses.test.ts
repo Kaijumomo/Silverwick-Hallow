@@ -15,20 +15,20 @@ describe("Witch curse notice on the nomination card", () => {
   it("a certain curse (it applies, nothing protects them) is applied by itself when the vote begins: no button", () => {
     const g = cursed(proofGame(ROLES, "day", 2));
     const notice = curseNotice(ctxOf(g), ref(g, "p1"));
-    expect(notice?.note).toContain("cursed by the Witch");
+    expect(notice?.note).toBe("");
     expect(notice?.actions).toEqual([]);
     expect(notice?.auto).toBeTypeOf("function");
   });
 
-  it("a vote already begun, or a nominator who may be protected, keeps the Storyteller's button instead", () => {
+  it("after an Undo inside the round a certain curse offers no spare button; a doubtful one asks a short question", () => {
     const g = cursed(proofGame(ROLES, "day", 2));
-    const begun = curseNotice(ctxOf(g), ref(g, "p1"), true);
-    expect(begun?.actions).toHaveLength(1);
-    expect(begun?.auto).toBeUndefined();
+    expect(curseNotice(ctxOf(g), ref(g, "p1"), true)).toBeNull();
     const guarded = patchPlayer(g, "p1", { effects: [...g.players.p1!.effects, { id: "inn", type: "cannotDie", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "day", day: 2 } } as never] });
-    const notice = curseNotice(ctxOf(guarded), ref(g, "p1"));
-    expect(notice?.auto).toBeUndefined();
-    expect(notice?.actions).toHaveLength(1);
+    expect(curseNotice(ctxOf(guarded), ref(g, "p1"))).toBeNull();
+    const doubtful = curseNotice(ctxOf(guarded), ref(g, "p1"), true);
+    expect(doubtful?.auto).toBeUndefined();
+    expect(doubtful?.note).toMatch(/^Does /);
+    expect(doubtful?.actions).toHaveLength(1);
   });
 
   it("says nothing for an uncursed nominator, a dead one, at night, with three left, or once the Witch is impaired", () => {
@@ -49,7 +49,7 @@ describe("Golem nomination notice", () => {
   it("a Golem nominating a non-Demon: the death and the spent nomination are applied by themselves, with no button", () => {
     const g = proofGame(roles, "day", 2);
     const notice = golemNotice(ctxOf(g), ref(g, "p0"), ref(g, "p1"));
-    expect(notice?.note).toContain("who is not the Demon");
+    expect(notice?.note).toBe("");
     expect(notice?.actions).toEqual([]);
     expect(notice?.auto).toBeTypeOf("function");
     expect(notice?.blocked).toBeUndefined();
@@ -58,7 +58,7 @@ describe("Golem nomination notice", () => {
   it("the Demon survives the nomination but the nomination is spent, automatically", () => {
     const g = proofGame(roles, "day", 2);
     const notice = golemNotice(ctxOf(g), ref(g, "p0"), ref(g, "p4"));
-    expect(notice?.note).toContain("is the Demon: nothing happens");
+    expect(notice?.note).toBe("");
     expect(notice?.auto).toBeTypeOf("function");
   });
 
@@ -70,12 +70,13 @@ describe("Golem nomination notice", () => {
     const during = golemNotice(ctxOf(g), ref(g, "p0"), ref(g, "p1"), true);
     expect(during?.auto).toBeUndefined();
     expect(during?.actions).toHaveLength(2);
+    expect(during?.note).toMatch(/^Does /);
   });
 
   it("an impaired Golem still spends its one nomination automatically", () => {
     const base = proofGame(roles, "day", 2);
     const notice = golemNotice(ctxOf(impair(base, "p0")), ref(base, "p0"), ref(base, "p1"));
-    expect(notice?.note).toContain("does not function");
+    expect(notice?.note).toBe("");
     expect(notice?.auto).toBeTypeOf("function");
   });
 

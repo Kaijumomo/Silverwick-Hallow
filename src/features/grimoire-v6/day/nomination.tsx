@@ -70,7 +70,9 @@ export function buildNominations(ctx: V6Ctx): { ns: Record<string, unknown>; nom
   const nomineeRef = round ? round.nominee : voting.draft?.nominee ?? null;
   const golem = golemNotice(ctx, nominatorRef, nomineeRef, !!round);
   const notices = [curseNotice(ctx, nominatorRef, !!round), golem].filter((n): n is NonNullable<typeof n> => !!n);
-  const curse = notices.length ? { note: notices.map((n) => n.note).join(" "), actions: notices.flatMap((n) => n.actions) } : null;
+  // A certain outcome is applied by itself and says nothing; only a ruling the Storyteller must make (or a refusal) carries words.
+  const spoken = notices.filter((n) => n.note);
+  const curse = spoken.length || notices.some((n) => n.actions.length) ? { note: spoken.map((n) => n.note).join(" "), actions: notices.flatMap((n) => n.actions) } : null;
   // The Golem's first nomination spends itself and applies its consequence once the vote has begun; a spent Golem cannot begin one.
   if (golem?.blocked) { base.beginOff = true; }
   const autos = notices.flatMap((n) => n.auto ? [n.auto] : []);
@@ -81,7 +83,7 @@ export function buildNominations(ctx: V6Ctx): { ns: Record<string, unknown>; nom
     };
   }
   const extra = (actions: ExtraAction[] = [], note: string | null = null) => ({ extraOn: true, extra: nominationExtras(
-    curse ? [...actions, ...curse.actions] : actions, curse ? (note ? `${note} ${curse.note}` : curse.note) : note) });
+    curse ? [...actions, ...curse.actions] : actions, curse?.note ? (note ? `${note} ${curse.note}` : curse.note) : note) });
   const finish = (title: string, sub: string, color: string, nextText: string, onNext: () => void, actions: ExtraAction[] = []) =>
     ({ result: true, resultTitle: title, resultSub: sub, resultColor: color, nextText, next: onNext, ...extra(actions) });
 
@@ -136,8 +138,10 @@ export function buildNominations(ctx: V6Ctx): { ns: Record<string, unknown>; nom
   }
 
   if (stage === "context" && round) {
-    return { stage, nomDim: 1, ns: { ...base, ...finish("The table changed", "Review the players and living count before continuing.", "#f4a595", "Use current table",
-      () => { voting.run({ kind: "acknowledgeContext", roundId: round.id }); }) } };
+    // The table changed mid-nomination (the Golem's or the Witch's death, or any other): ask plainly. No ends the nomination (it still counts).
+    return { stage, nomDim: 1, ns: { ...base, ...finish("Continue with this nomination?", "", "#f4a595", "Yes",
+      () => { voting.run({ kind: "acknowledgeContext", roundId: round.id }); },
+      [{ label: "No", onClick: () => { if (voting.run({ kind: "abandon", roundId: round.id })) voting.close(); } }]) } };
   }
 
   if (stage === "history") return { stage, nomDim: 1, ns: { ...base, ...extra() } };

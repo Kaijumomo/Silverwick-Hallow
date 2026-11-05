@@ -33,15 +33,13 @@ export function curseNotice(ctx: V6Ctx, nominator: CurrentParticipantRef | { pla
     flash(message ?? `${player.name} dies from the Witch's curse.`);
   };
   // Certain (the curse applies and nothing protects them): once the vote begins the death is recorded by itself, as one Life command
-  // that Undo reverses. Anything the rules cannot settle stays a button for the Storyteller; a vote already begun keeps the button too.
+  // that Undo reverses. After an Undo inside the round there is no spare button: the Storyteller can use the ordinary Life controls.
+  // Anything the rules cannot settle stays a short question with a button for the Storyteller once the vote has begun.
   const protectedNow = query.protectedFrom(binding, "any");
-  if (applies.known && protectedNow.known && !protectedNow.value && !inRound) {
-    return { note: `${player.name} is cursed by the Witch: they die as the vote begins. The nomination still counts.`, actions: [], auto: die };
-  }
-  const note = applies.known
-    ? `${player.name} is cursed by the Witch and has nominated: they die now. The nomination still counts.`
-    : `${player.name} may be cursed by the Witch (${applies.reason}). If the curse applies, they die now.`;
-  return { note, actions: [{ label: `${player.name} dies (Witch's curse)`, onClick: die }] };
+  if (applies.known && protectedNow.known && !protectedNow.value) return inRound ? null : { note: "", actions: [], auto: die };
+  if (!inRound) return null;
+  const why = !applies.known ? applies.reason : !protectedNow.known ? protectedNow.reason : "protected";
+  return { note: `Does ${player.name} die? The Witch's curse may not apply (${why}).`, actions: [{ label: `${player.name} dies`, onClick: die }] };
 }
 
 /**
@@ -87,18 +85,18 @@ export function golemNotice(
   const spend = (label: string): ExtraAction => ({ label, onClick: run(spendIntents, spendDone) });
   const kill = (label: string): ExtraAction => ({ label, onClick: run(killIntents, killDone) });
   // Certain outcomes need no button: the vote begins and the consequence is applied by itself.
-  const certain = (note: string, intents: { kind: "death" | "useAbility"; playerId: string }[], done: string): GolemNotice => ({ note, actions: [], auto: run(intents, done) });
+  const certain = (_why: string, intents: { kind: "death" | "useAbility"; playerId: string }[], done: string): GolemNotice => ({ note: "", actions: [], auto: run(intents, done) });
 
   const functioning = query.abilityFunctions(golemBinding);
   if (functioning.known && !functioning.value) return certain(`${golem.name}'s ability does not function: nothing happens, but this is their one nomination.`, spendIntents, spendDone);
-  if (!functioning.known) return { note: `Whether the Golem's ability works is unclear (${functioning.reason}). Begin the vote, then rule.`, actions: inRound ? [kill(`${target.name} dies (Golem)`), spend("Nothing happens · spend nomination")] : [] };
+  if (!functioning.known) return { note: inRound ? `Does ${target.name} die? The Golem's ability may not work (${functioning.reason}).` : "", actions: inRound ? [kill(`${target.name} dies`), spend(`${target.name} survives`)] : [] };
   if (!target.alive) return certain(`${target.name} is already dead: nothing happens, but this is the Golem's one nomination.`, spendIntents, spendDone);
 
   const demon = query.registersAsType(targetBinding, "demon", "golem");
   if (demon.known && demon.value) return certain(`${target.name} is the Demon: nothing happens. This is the Golem's one nomination.`, spendIntents, spendDone);
-  if (!demon.known) return { note: `${target.name} may register as the Demon (${demon.reason}). Begin the vote, then rule whether they die.`, actions: inRound ? [kill(`${target.name} dies (Golem)`), spend("Nothing happens · spend nomination")] : [] };
+  if (!demon.known) return { note: inRound ? `Does ${target.name} die? They may register as the Demon (${demon.reason}).` : "", actions: inRound ? [kill(`${target.name} dies`), spend(`${target.name} survives`)] : [] };
   const safe = query.protectedFrom(targetBinding, "any");
   if (safe.known && safe.value) return certain(`${target.name} cannot die right now: they are protected. Nothing happens, but this is the Golem's one nomination.`, spendIntents, spendDone);
-  if (!safe.known) return { note: `${target.name} may be protected (${safe.reason}). Begin the vote, then rule whether they die.`, actions: inRound ? [kill(`${target.name} dies (Golem)`), spend("Protected · spend nomination")] : [] };
+  if (!safe.known) return { note: inRound ? `Does ${target.name} die? They may be protected (${safe.reason}).` : "", actions: inRound ? [kill(`${target.name} dies`), spend(`${target.name} survives`)] : [] };
   return certain(`${golem.name} nominated ${target.name}, who is not the Demon: they die when the vote begins. The nomination still counts.`, killIntents, killDone);
 }
