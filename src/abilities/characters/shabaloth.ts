@@ -109,7 +109,9 @@ export const SHABALOTH: AbilityDescriptor = {
       ...chosen.map((target) => ({ kind: "apply" as const, target,
         effect: { type: SHABALOTH_CHOSEN, source: context.actor.binding, sourceCharacter: "shabaloth", lifetime: { kind: "manual" as const } } })),
     ];
-    const operations: AbilityOperation[] = [...(deaths.length ? [lifeOperation(deaths)] : []), { domain: "effect", intents }];
+    // Both chosen players survived (protected) with none already dead and no earlier tokens: there is no token to move, so no effect step.
+    const operations: AbilityOperation[] = [...(deaths.length ? [lifeOperation(deaths)] : []), ...(intents.length ? [{ domain: "effect" as const, intents }] : [])];
+    if (!operations.length) return nothing();
     return outcome(operations, operations.length > 1);
   },
 };

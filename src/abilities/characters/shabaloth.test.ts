@@ -41,6 +41,22 @@ describe("Shabaloth", () => {
     expect(next.players.p2!.alive).toBe(false);
   });
 
+  it("both chosen players protected, none already dead: the wake completes with no death and no token (no empty effect step)", () => {
+    const g = proofGame(ROLES);
+    const monk = planned(plan(g, request(g, "p3", "monk", { target: pick(g, "p1") })));
+    const guarded = patchPlayer(monk, "p2", { effects: [...monk.players.p2!.effects, { id: "inn", type: "cannotDie", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as never] });
+    const result = run(guarded, "p1", "p2");
+    // Completed, nothing changed: nobody died and no token was placed.
+    expect(result).toEqual({ ok: true, changed: false });
+  });
+
+  it("a Monk-protected player chosen twice survives and the wake completes", () => {
+    const g = proofGame(ROLES);
+    const monk = planned(plan(g, request(g, "p3", "monk", { target: pick(g, "p1") })));
+    const result = run(monk, "p1", "p1");
+    expect(result).toEqual({ ok: true, changed: false });
+  });
+
   it("an impaired Shabaloth kills no one; Night 1 and homebrew are refused", () => {
     const g = impair(proofGame(ROLES), "p0");
     expect(run(g, "p1", "p2")).toEqual({ ok: true, changed: false });
