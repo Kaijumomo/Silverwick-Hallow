@@ -60,10 +60,3 @@ export function dealtIdentity(role: RoleId, registry: RoleRegistry): Pick<STPlay
     actualAlignment: alignment,
   };
 }
-
-/** A seat nobody has placed a character on: the blank identity, with no actual alignment. Sits beside dealtIdentity, the other writer of these fields. */
-export function unplacedSeat(existing: STPlayerRecord): STPlayerRecord {
-  const next: STPlayerRecord = { ...existing, actualRole: "", shownRole: null, shownAlignment: null, behaviorMode: "normal" };
-  delete next.actualAlignment;
-  return next;
-}

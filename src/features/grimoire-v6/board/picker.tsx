@@ -25,20 +25,26 @@ const GRAY = "grayscale(.8) brightness(.5)";
 const USED = "grayscale(.7) brightness(.55)";
 
 /** Opens the Distribute Roles picker with the bag the Storyteller would deal now. */
-export function openDistributePicker() {
+export function openDistributePicker(seat?: PlayerId) {
   const state = useStorytellerStore.getState();
   const { game, selectPlayer } = state;
   if (!game) return;
   const ui = useV6Ui.getState();
   const script = selectScriptById(state, game.scriptId);
   const context = selectSetupContext(game, script);
-  ui.set({ picker: { mode: "distribute" }, pickSel: isPostDeal(game) ? [...context.assigned] : [...game.rolePool], pickHover: null, card: false });
+  // Before the Deal the draft (bag and pins) survives closing the modal, so a seat can be pinned from the board and the modal reopened.
+  const keep = !isPostDeal(game) && (ui.pickSel.length > 0 || Object.keys(ui.pins).length > 0);
+  ui.set({ picker: seat ? { mode: "distribute", seat } : { mode: "distribute" }, pickSel: isPostDeal(game) ? [...context.assigned] : keep ? ui.pickSel : [...game.rolePool], pins: isPostDeal(game) ? {} : ui.pins, pickHover: null, card: false });
   selectPlayer(null);
 }
 
 /** Opens the character chooser for one seat (not available once the game has ended). */
 export function openChoosePicker(playerId: PlayerId) {
-  if (useStorytellerStore.getState().game?.phase === "ended") return;
+  const game = useStorytellerStore.getState().game;
+  if (game?.phase === "ended") return;
+  // Before the Deal there is one flow: the Distribute Roles modal, with this seat ready to take the next token tapped.
+  const seated = game?.players[playerId];
+  if (game && game.phase === "setup" && !isPostDeal(game) && seated && !seated.isTraveler && !seated.isEmpty) { openDistributePicker(playerId); return; }
   useV6Ui.getState().set({ picker: { mode: "choose", playerId }, pickHover: null });
 }
 
@@ -142,6 +148,8 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
       let tagKind: "bluff" | "mine" | "plain" = "plain";
       if (dist) {
         if (on) { ring = TEAM_COLOR[type]; glow = `0 0 16px ${TEAM_COLOR[type]}66`; } else { filter = GRAY; nameColor = "rgba(222,216,204,.42)"; }
+        const pinnedTo = Object.entries(ui.pins).filter(([, id]) => id === role.id).map(([seat]) => game.players[seat]?.name || `Seat ${(game.players[seat]?.seat ?? 0) + 1}`);
+        if (pinnedTo.length) { tag = pinnedTo.join(", "); tagKind = "mine"; }
       } else if (mine) { ring = "#e8584a"; glow = "0 0 18px rgba(232,88,74,.5)"; tag = "Current"; tagKind = "mine"; }
       else if (used) { filter = USED; nameColor = "rgba(222,216,204,.48)"; tag = holder.join(", "); }
       else if (mode === "show" && holder.length && !tokensOnly) tag = holder.join(", ");
@@ -201,6 +209,7 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
       : mode === "show" ? (picker as Extract<PickerState, { mode: "show" }>).title : `Choose a character for ${name}`,
     kicker: mode === "drunk" ? shownInstruction(player?.actualRole) : mode === "bluff" ? "Choose a character that is not in play"
       : mode === "show" ? (picker as Extract<PickerState, { mode: "show" }>).kicker ?? "Information token · choose a character to show"
+      : dist && picker.mode === "distribute" && picker.seat ? `Seat ${(game.players[picker.seat]?.seat ?? 0) + 1} · ${game.players[picker.seat]?.name || "this seat"} · tap the token they get`
       : dist ? `${script.name} · ${residents} residents${context.travelers.length ? ` · ${context.travelers.length} traveler${context.travelers.length === 1 ? "" : "s"}` : ""}`
       : `Seat ${player ? player.seat + 1 : ""} · ${player?.actualRole ? registry.get(player.actualRole)?.name ?? "Unassigned" : "Unassigned"}`,
   };
@@ -221,8 +230,9 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
     goFg: ok ? "#ffb4a6" : "rgba(222,216,204,.35)", goCursor: ok ? "pointer" : "not-allowed",
     go: () => {
       if (!ok) { flash(firstFinding ?? "Select one role per seat to continue."); return; }
-      const result = store().dealRolePool(draft, captureCharacterActionContext());
+      const result = store().dealRolePool(draft, captureCharacterActionContext(), ui.pins);
       if (!result.ok) { flash(result.message ?? "Review setup before continuing."); return; }
+      set({ pins: {}, pickSel: [] });
       close();
       flash("Roles distributed privately. Review preparation before revealing.");
     },
@@ -239,7 +249,7 @@ export function buildPicker(env: PickerEnv): Record<string, unknown> {
       }
       if (result.ok) set({ pickSel: result.pool }); else flash(result.failure.message);
     },
-    clear: () => set({ pickSel: [] }),
+    clear: () => set({ pickSel: [], pins: {} }),
     close,
   };
 }
@@ -260,7 +270,18 @@ function pickTile(env: PickerEnv, picker: PickerState, role: RoleDef, p: PickCon
   const store = () => useStorytellerStore.getState();
   const close = () => ui.set({ picker: null });
   if (picker.mode === "distribute") {
-    ui.set({ pickSel: ui.pickSel.includes(role.id) ? ui.pickSel.filter((x) => x !== role.id) : [...ui.pickSel, role.id] });
+    if (picker.seat) {
+      // Pin this token to the seat: it joins the bag, and any earlier pin of the seat or of this token is replaced.
+      const pins = Object.fromEntries(Object.entries(ui.pins).filter(([seat, id]) => seat !== picker.seat && id !== role.id));
+      pins[picker.seat] = role.id;
+      const who = game.players[picker.seat];
+      ui.set({ pins, pickSel: ui.pickSel.includes(role.id) ? ui.pickSel : [...ui.pickSel, role.id], picker: { mode: "distribute" } });
+      flash(`${who?.name || "That seat"} will be the ${role.name}. Distribute deals the rest at random.`);
+      return;
+    }
+    const removing = ui.pickSel.includes(role.id);
+    ui.set({ pickSel: removing ? ui.pickSel.filter((x) => x !== role.id) : [...ui.pickSel, role.id],
+      ...(removing ? { pins: Object.fromEntries(Object.entries(ui.pins).filter(([, id]) => id !== role.id)) } : {}) });
     return;
   }
   // A Night card's Reveal a Token answers its own ability first; the Information panel just shows the token.
@@ -308,12 +329,8 @@ function pickTile(env: PickerEnv, picker: PickerState, role: RoleDef, p: PickCon
     result = holders.length ? current.swapSetupRoles(player.id, holders[0]!.id) : current.replaceSetupRole(player.id, role.id);
     if (holders.length) note = `${name} and ${holders[0]!.name || "the other player"} swapped characters.`;
   } else {
-    if (!player.isTraveler && game.phase === "setup" && !isPostDeal(game)) {
-      // Before the Deal: put the character on this seat. The Deal then shuffles only the rest of the bag onto the open seats.
-      result = current.placeSetupRole(player.id, role.id);
-      note = `${name} will be the ${role.name}. Deal roles to place the rest at random.`;
-    } else if (!player.isTraveler && game.phase === "setup") { flash("Revealed setup is locked until Night 1."); return; }
-    else result = current.resolveRoles({ intents: midGameChange(player, role) });
+    if (!player.isTraveler && game.phase === "setup") { flash("Revealed setup is locked until Night 1."); return; }
+    result = current.resolveRoles({ intents: midGameChange(player, role) });
   }
   if (!result.ok) { flash(result.message ?? "Review setup before continuing."); return; }
   close();

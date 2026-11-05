@@ -5,7 +5,7 @@ import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
 import { MAX_NIGHT_STEP_NOTES, MAX_ST_NOTES, StorytellerGamePersistedSchema, StorytellerStateSchema, type SeatSwapUndo } from "./schemas";
 import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
-import { dealtIdentity, isInitialRevealComplete, needsShownIdentity, unplacedSeat } from "./identity";
+import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { manualEffectId } from "./effects";
 import { redHerringSetup, RED_HERRING_EFFECT } from "@/features/setup/redHerringSetup";
 import { cloneOwned, historyId, type MutationContext, sameSnapshot } from "./history";
@@ -504,7 +504,8 @@ export type StorytellerStore = {
    * still serves. Stays on the current view.
    */
   discardSetupGame: (expectedLifecycle: number) => boolean;
-  dealRolePool: (stagedPool?: RoleId[], actionContext?: CharacterActionContext) => SetupCommandResult;
+  /** `pins` puts a character on a seat by hand (seat id -> character, all drawn from the staged bag); the rest of the bag is shuffled onto the open seats. */
+  dealRolePool: (stagedPool?: RoleId[], actionContext?: CharacterActionContext, pins?: Record<PlayerId, RoleId>) => SetupCommandResult;
   /** Explicitly publishes the private Deal to players. Never required to be
    * online: a local/offline game still records that the Storyteller
    * completed the initial reveal step. See revealReadiness.ts. */
@@ -527,8 +528,6 @@ export type StorytellerStore = {
    * composition-invalid — that is preserved as explicit Storyteller intent
    * and surfaced by the analyzer rather than silently corrected. */
   replaceSetupRole: (playerId: PlayerId, roleId: RoleId) => SetupCommandResult;
-  /** Before the Deal: puts a character on a seat directly (the Deal then shuffles only the rest of the bag onto the open seats). */
-  placeSetupRole: (playerId: PlayerId, roleId: RoleId | null) => SetupCommandResult;
   /** Applies a fully-staged edited bag (exactly one role per occupied
    * ordinary seat). Preserves every existing assignment whose role
    * occurrence survives in the new bag; only seats whose occurrence was
@@ -1114,13 +1113,6 @@ const patchPlayer = (
  * pre-Reveal Setup refinement command (Shuffle/Swap/Manual Override/Edit
  * Bag Apply) so this reset has exactly one implementation.
  */
-/** A seat with no character placed on it yet, for undoing a hand placement before the Deal. */
-const clearedSeat = (existing: STPlayerRecord): STPlayerRecord => {
-  const next = unplacedSeat(existing);
-  delete next.privateInfo;
-  return invalidatePrivatePacket(next);
-};
-
 const freshAssignment = (existing: STPlayerRecord, role: RoleId, registry: RoleRegistry): STPlayerRecord => {
   const next: STPlayerRecord = { ...existing, ...dealtIdentity(role, registry), abilityUsed: false };
   delete next.privateInfo;
@@ -1895,7 +1887,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
         return true;
       },
 
-      dealRolePool: (stagedPool, actionContext) => {
+      dealRolePool: (stagedPool, actionContext, pins) => {
         const state = get();
         const { game } = state;
         if (!game) return { ok: false, message: "No game is open." };
@@ -1913,14 +1905,17 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const pool = proposed.rolePool ?? [];
         const nonTravelerSeats = context.ordinary.map(p => p.id);
 
-        // Characters the Storyteller placed on seats before the Deal stay where they are; only the rest of the bag is shuffled.
-        const placed = isPostDeal(game) ? [] : context.ordinary.filter(p => !!p.actualRole && !!context.registry?.get(p.actualRole));
+        // Characters the Storyteller pinned to seats stay there; only the rest of the bag is shuffled onto the open seats.
+        const pinned: Record<PlayerId, RoleId> = {};
         const remaining = [...pool];
-        for (const p of placed) {
-          const at = remaining.indexOf(p.actualRole!);
-          if (at < 0) return { ok: false, message: `The bag has no ${context.registry?.get(p.actualRole!)?.name ?? p.actualRole} for the seat you placed it on. Add it to the bag or take it off the seat.` };
+        for (const [seatId, roleId] of Object.entries(pins ?? {})) {
+          if (!nonTravelerSeats.includes(seatId)) return { ok: false, message: "A seat you pinned a character to is no longer in the town. Pin it again." };
+          const at = remaining.indexOf(roleId);
+          if (at < 0) return { ok: false, message: `The bag has no ${context.registry?.get(roleId)?.name ?? roleId} left for the seat you pinned it to. Add it to the bag or unpin it.` };
           remaining.splice(at, 1);
+          pinned[seatId] = roleId;
         }
+        const hasPins = Object.keys(pinned).length > 0;
         // Fisher-Yates shuffle
         const shuffled = [...remaining];
         for (let i = shuffled.length - 1; i > 0; i--) {
@@ -1929,14 +1924,14 @@ export const useStorytellerStore = create<StorytellerStore>()(
         }
 
         const registry = context.registry!;
-        // The Marionette always starts beside the Demon (when nothing was placed by hand).
-        const seated = placed.length ? shuffled : seatMarionetteBesideDemon(shuffled, registry).roles;
+        // The Marionette always starts beside the Demon (unless seats were pinned by hand).
+        const seated = hasPins ? shuffled : seatMarionetteBesideDemon(shuffled, registry).roles;
         const newPlayers = { ...game.players };
         let next = 0;
         nonTravelerSeats.forEach((playerId) => {
           const existing = newPlayers[playerId];
           if (!existing) return;
-          newPlayers[playerId] = freshAssignment(existing, placed.some(p => p.id === playerId) ? existing.actualRole : seated[next++]!, registry);
+          newPlayers[playerId] = freshAssignment(existing, pinned[playerId] ?? seated[next++]!, registry);
         });
 
         const unsafe = commitAuthoritativeState({
@@ -2063,33 +2058,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
           undoStack: pushUndo(game, undoStack),
           game: { ...game, players: { ...game.players, [playerIdA]: newA, [playerIdB]: newB } },
         });
-        return { ok: true };
-      },
-
-      placeSetupRole: (playerId, roleId) => {
-        const { game, undoStack } = get();
-        if (!game) return { ok: false, message: "No game is open." };
-        if (game.phase !== "setup" || isPostDeal(game)) return { ok: false, message: "Placing a character on a seat is only available before roles are dealt." };
-        const player = ownPlayer(game, playerId);
-        if (!player || player.isEmpty) return { ok: false, message: "This player is not seated." };
-        if (player.isTraveler) return { ok: false, message: "Travelers are not placed from the bag." };
-        if (roleId === null) {
-          if (!player.actualRole) return { ok: true };
-                    set({ undoStack: pushUndo(game, undoStack), game: { ...game, players: { ...game.players, [playerId]: clearedSeat(player) } } });
-          return { ok: true };
-        }
-        const script = selectScriptById(get(), game.scriptId);
-        const role = script?.characters.find(r => r.id === roleId);
-        if (!role || !isBagType(role.type)) return { ok: false, message: "Choose a valid ordinary character for this script." };
-        if (player.actualRole === roleId) return { ok: true };
-        const holder = Object.values(game.players).find(p => !p.isEmpty && !p.isTraveler && p.id !== playerId && p.actualRole === roleId);
-        // A character already placed on another seat moves here: the bag holds it once.
-        const registry = buildRegistry(script!);
-        const players = { ...game.players, [playerId]: freshAssignment(player, roleId, registry) };
-        if (holder && (game.rolePool ?? []).filter(id => id === roleId).length < 2) {
-          players[holder.id] = clearedSeat(holder);
-        }
-        set({ undoStack: pushUndo(game, undoStack), game: { ...game, players } });
         return { ok: true };
       },
 
