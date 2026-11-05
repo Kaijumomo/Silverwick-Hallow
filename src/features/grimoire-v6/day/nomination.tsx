@@ -82,8 +82,8 @@ export function buildNominations(ctx: V6Ctx): { ns: Record<string, unknown>; nom
       if (voting.begin() !== false) for (const apply of autos) apply();
     };
   }
-  const extra = (actions: ExtraAction[] = [], note: string | null = null) => ({ extraOn: true, extra: nominationExtras(
-    curse ? [...actions, ...curse.actions] : actions, curse?.note ? (note ? `${note} ${curse.note}` : curse.note) : note) });
+  const extra = (actions: ExtraAction[] = [], note: string | null = null, heading?: string) => ({ extraOn: true, extra: nominationExtras(
+    curse ? [...actions, ...curse.actions] : actions, curse?.note ? (note ? `${note} ${curse.note}` : curse.note) : note, heading) });
   const finish = (title: string, sub: string, color: string, nextText: string, onNext: () => void, actions: ExtraAction[] = []) =>
     ({ result: true, resultTitle: title, resultSub: sub, resultColor: color, nextText, next: onNext, ...extra(actions) });
 
@@ -139,9 +139,12 @@ export function buildNominations(ctx: V6Ctx): { ns: Record<string, unknown>; nom
 
   if (stage === "context" && round) {
     // The table changed mid-nomination (the Golem's or the Witch's death, or any other): ask plainly. No ends the nomination (it still counts).
-    return { stage, nomDim: 1, ns: { ...base, ...finish("Continue with this nomination?", "", "#f4a595", "Yes",
-      () => { voting.run({ kind: "acknowledgeContext", roundId: round.id }); },
-      [{ label: "No", onClick: () => { if (voting.run({ kind: "abandon", roundId: round.id })) voting.close(); } }]) } };
+    // The question and its two answers sit together: the heading above, Yes and No on one row.
+    const answers: ExtraAction[] = [
+      { label: "No", onClick: () => { if (voting.run({ kind: "abandon", roundId: round.id })) voting.close(); } },
+      { label: "Yes", onClick: () => { voting.run({ kind: "acknowledgeContext", roundId: round.id }); } },
+    ];
+    return { stage, nomDim: 1, ns: { ...base, ...extra(answers, null, "Continue with this nomination?") } };
   }
 
   if (stage === "history") return { stage, nomDim: 1, ns: { ...base, ...extra() } };
