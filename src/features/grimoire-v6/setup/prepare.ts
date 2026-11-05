@@ -10,7 +10,7 @@ import { initialRevealReadiness } from "@/features/setup/revealReadiness";
 import { redHerringSetup } from "@/features/setup/redHerringSetup";
 import { FIRST_INFORMATION_CHARACTERS, informationCategory } from "@/features/setup/FirstInformationPreparation";
 import type { SetupContext } from "@/features/setup/setupContext";
-import type { PlayerId, PreparedInformationCharacter, RoleDef, Script, StorytellerLobbyRecord } from "@/stores/types";
+import type { PlayerId, PreparedInformationCharacter, RoleDef, Script, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 import { flash, useV6Ui } from "../v6Store";
 
 /**
@@ -46,6 +46,13 @@ const seatName = (game: StorytellerLobbyRecord, id: PlayerId) => {
 };
 
 const TEAM_WORD: Record<PreparedInformationCharacter, string> = { washerwoman: "Townsfolk", librarian: "Outsider", investigator: "Minion" };
+
+/** The first-night information character a player prepares for: their own, or -- for a Drunk or Marionette whose clue is false -- the character they believe they are. */
+export function prepRole(player: Pick<STPlayerRecord, "actualRole" | "shownRole" | "behaviorMode">): PreparedInformationCharacter | undefined {
+  if (player.actualRole && FIRST_INFORMATION_CHARACTERS.has(player.actualRole)) return player.actualRole as PreparedInformationCharacter;
+  const concealed = player.behaviorMode === "drunk_fake_role_behavior" || player.behaviorMode === "marionette_fake_good_behavior";
+  return concealed && player.shownRole && FIRST_INFORMATION_CHARACTERS.has(player.shownRole) ? player.shownRole as PreparedInformationCharacter : undefined;
+}
 
 export function buildPrepTasks(game: StorytellerLobbyRecord, script: Script | undefined, registry: RoleRegistry, context: SetupContext): PrepTask[] {
   const tasks: PrepTask[] = [];
@@ -85,8 +92,8 @@ export function buildPrepTasks(game: StorytellerLobbyRecord, script: Script | un
   // First-night information the Storyteller may prepare ahead (optional).
   if (script) {
     for (const p of context.ordinary) {
-      const role = p.actualRole as PreparedInformationCharacter | undefined;
-      if (!role || !FIRST_INFORMATION_CHARACTERS.has(role) || !p.participantId) continue;
+      const role = prepRole(p);
+      if (!role || !p.participantId) continue;
       if (!preparationAvailability(game, bindingOf(p), role, { script, registry }).ok) continue;
       const prepared = game.preparedInformation.find((item) => item.source.participantId === p.participantId && item.character === role);
       const clue = prepared?.clue;
@@ -199,7 +206,7 @@ export function commitPrep(): void {
   const a = edit.a ? game.players[edit.a] : undefined;
   const b = edit.b ? game.players[edit.b] : undefined;
   if (!owner?.participantId || !a?.participantId || !b?.participantId || !edit.token) { flash("Tap the player who holds the token, then a decoy."); return; }
-  const result = state.prepareInformation({ source: bindingOf(owner), character: owner.actualRole as PreparedInformationCharacter,
+  const result = state.prepareInformation({ source: bindingOf(owner), character: prepRole(owner) as PreparedInformationCharacter,
     clue: { kind: "pair", candidates: [bindingOf(a), bindingOf(b)], shownCharacter: edit.token, qualifyingParticipantId: a.participantId },
     expected: preparedInformationContext(game, scriptOf(game)) }, captureCharacterActionContext());
   if (!result.ok) { flash(result.message); return; }
@@ -227,7 +234,8 @@ export function prepTap(id: PlayerId): boolean {
   const owner = ownerId ? game.players[ownerId] : undefined;
   const script = scriptOf(game);
   const registry = buildRegistry(script ?? { id: game.scriptId, name: "", characters: [] });
-  const wanted = owner?.actualRole ? informationCategory(owner.actualRole as PreparedInformationCharacter) : null;
+  const heldRole = owner ? prepRole(owner) : undefined;
+  const wanted = heldRole ? informationCategory(heldRole) : null;
   if (slot === "a" && wanted && tapped.actualRole && registry.get(tapped.actualRole)?.type === wanted) next.token = tapped.actualRole;
   next.slot = other;
   ui().set({ prepEdit: next });

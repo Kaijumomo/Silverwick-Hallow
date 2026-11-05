@@ -1955,6 +1955,9 @@ export const useStorytellerStore = create<StorytellerStore>()(
         // leave the setup composition-invalid, and that must still block
         // Reveal even once every shown identity is otherwise complete.
         const analysis = analyzeSetup(context);
+        // Official rule: the Marionette starts next to the Demon. Setup holds the reveal until the seating satisfies it.
+        const apart = analysis.findings.find(finding => finding.code.startsWith("marionette-neighbor:"));
+        if (apart) return { ok: false, message: apart.message };
         if (!assignedBagIsCoherent(context, analysis))
           return { ok: false, message: "Setup needs correction before revealing roles." };
         const readiness = initialRevealReadiness(context);

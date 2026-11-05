@@ -101,6 +101,17 @@ describe("shown-identity policy (P1)", () => {
     expect(readiness().pendingIds).not.toContain(ids[0]);
   });
 
+  it("a Marionette who believes they are the Investigator prepares the false clue in setup, like the Drunk", () => {
+    const ids = dealt(["marionette", "imp", "chef", "empath", "monk", "saint", "slayer", "baron"]);
+    expect(tasks().some((t) => t.key === `info:${ids[0]}`)).toBe(false);
+    open(ids[0]!);
+    tile("Chef").click(); // no information of its own: nothing to prepare
+    expect(tasks().some((t) => t.key === `info:${ids[0]}`)).toBe(false);
+    store.getState().setPerception(ids[0]!, { shownRole: "investigator", shownAlignment: null });
+    const task = tasks().find((t) => t.key === `info:${ids[0]}`);
+    expect(task).toMatchObject({ roleId: "investigator", done: false, req: false });
+  });
+
   it("keeps the Trouble Brewing Drunk exactly as before: Townsfolk not in play only", () => {
     const ids = dealt(["drunk", "imp", "chef", "empath", "monk", "slayer", "baron", "saint"], "tb");
     open(ids[0]!);
