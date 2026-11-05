@@ -308,8 +308,12 @@ function pickTile(env: PickerEnv, picker: PickerState, role: RoleDef, p: PickCon
     result = holders.length ? current.swapSetupRoles(player.id, holders[0]!.id) : current.replaceSetupRole(player.id, role.id);
     if (holders.length) note = `${name} and ${holders[0]!.name || "the other player"} swapped characters.`;
   } else {
-    if (!player.isTraveler && game.phase === "setup") { flash("Deal roles before changing an assignment; revealed setup is locked until Night 1."); return; }
-    result = current.resolveRoles({ intents: midGameChange(player, role) });
+    if (!player.isTraveler && game.phase === "setup" && !isPostDeal(game)) {
+      // Before the Deal: put the character on this seat. The Deal then shuffles only the rest of the bag onto the open seats.
+      result = current.placeSetupRole(player.id, role.id);
+      note = `${name} will be the ${role.name}. Deal roles to place the rest at random.`;
+    } else if (!player.isTraveler && game.phase === "setup") { flash("Revealed setup is locked until Night 1."); return; }
+    else result = current.resolveRoles({ intents: midGameChange(player, role) });
   }
   if (!result.ok) { flash(result.message ?? "Review setup before continuing."); return; }
   close();
