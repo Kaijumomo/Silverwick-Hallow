@@ -56,13 +56,19 @@ const chosen = (g: StorytellerLobbyRecord) => Object.keys(g.players).filter((id)
 const night = (g: StorytellerLobbyRecord, day: number) => ({ ...g, day }) as StorytellerLobbyRecord;
 
 describe("Shabaloth -- the DEAD tokens (WP-6)", () => {
-  it("both chosen players get the Shabaloth's DEAD token, even when one was protected and survived", () => {
+  it("a chosen player who dies carries the DEAD token; a protected survivor carries none", () => {
     const g = proofGame(ROLES);
     const safe = planned(plan(g, request(g, "p3", "monk", { target: pick(g, "p1") })));
     const next = planned(run(safe, "p1", "p2"));
     expect(next.players.p1!.alive).toBe(true);
+    expect(chosen(next)).toEqual(["p2"]);
+    expect(next.players.p2!.effects.find((e) => e.type === "shabalothChosen")).toMatchObject({ sourceCharacter: "shabaloth", lifetime: { kind: "manual" } });
+  });
+
+  it("a chosen player who was already dead still carries the DEAD token (they can be regurgitated)", () => {
+    const g = patchPlayer(proofGame(ROLES), "p1", { alive: false });
+    const next = planned(run(g, "p1", "p2"));
     expect(chosen(next).sort()).toEqual(["p1", "p2"]);
-    expect(next.players.p1!.effects.find((e) => e.type === "shabalothChosen")).toMatchObject({ sourceCharacter: "shabaloth", lifetime: { kind: "manual" } });
   });
 
   it("the same player twice carries one token", () => {

@@ -60,9 +60,8 @@ export function regurgitable(query: RulesQuery, shabaloth: ParticipantBinding): 
  *    is judged against the state after the first.
  *  - if protection of the second target would differ depending on whether the
  *    first death happened, the order matters and the whole action stays Manual.
- *  - the two chosen players carry the Shabaloth's official DEAD token (an authoritative
- *    Effect, so it also marks a player who was already dead or protected). It MOVES to the new
- *    targets each time the Shabaloth acts. The Dusk regurgitation reads it (regurgitable()).
+ *  - a chosen player who dies, or was already dead, carries the Shabaloth's official DEAD token (an authoritative
+ *    Effect); a protected survivor does not. It MOVES to the new targets each time the Shabaloth acts. The Dusk regurgitation reads it (regurgitable()).
  *  - regurgitation itself is the Storyteller's optional Dusk choice (see the Night engine);
  *    a Scarlet Woman that could take over a dying Shabaloth stays Manual.
  *  - impaired / simulated: the choices are simulated; nobody dies.
@@ -100,8 +99,11 @@ export const SHABALOTH: AbilityDescriptor = {
       }
       query = query.assumingAlive(target, false);
     }
-    // The DEAD tokens move to tonight's two players (the same player twice carries one), whatever the attacks did.
-    const chosen = [first!, second!].filter((target, index, all) => all.findIndex((other) => other.participantId === target.participantId) === index);
+    // The DEAD tokens move to the chosen players who died tonight or were already dead (the same player twice carries one). Per the wiki
+    // only a chosen player who dies is marked DEAD; a protected survivor keeps no token, and nothing is regurgitable from it.
+    const died = new Set(deaths.map((death) => death.target.participantId));
+    const chosen = [first!, second!].filter((target, index, all) => all.findIndex((other) => other.participantId === target.participantId) === index
+      && (died.has(target.participantId) || !context.query.participant(target)?.alive));
     const intents = [
       ...shabalothTokens(context.query, context.actor.binding).map(({ holder, effectId }) => ({ kind: "remove" as const, target: holder, effectId })),
       ...chosen.map((target) => ({ kind: "apply" as const, target,
