@@ -11,7 +11,7 @@
       "replace": "<button onClick=\"{{ ns.begin }}\" disabled=\"{{ ns.beginOff }}\" data-nom-begin=\"1\" "
     },
     {
-      "regex": "WICK(<span style=\"color:rgba\\(232,88,74,\\.7\\); letter-spacing:0; margin:0 \\.3em 0 \\.1em;\">\u2013</span>)7Q3M",
+      "regex": "WICK(<span style=\"color:rgba\\(232,88,74,\\.7\\); letter-spacing:0; margin:0 \\.3em 0 \\.1em;\">–</span>)7Q3M",
       "replace": "{{ code.head }}$1{{ code.tail }}"
     },
     {
@@ -45,7 +45,7 @@
       "flags": "s"
     },
     {
-      "_why": "The Card nomination result button names the next step (Next nomination / Exiled \u00b7 died / Execute \u00b7 died / Begin Night N / Use current table ...). Default text stays 'Next nomination'.",
+      "_why": "The Card nomination result button names the next step (Next nomination / Exiled · died / Execute · died / Begin Night N / Use current table ...). Default text stays 'Next nomination'.",
       "regex": "(style=\"flex:none; min-height:48px; padding:0 22px; border-radius:12px; border:1px solid #c0392e;[^\"]*\"[^>]*>)Next nomination(</button>)",
       "replace": "$1{{ ns.nextText }}$2"
     },
@@ -70,9 +70,14 @@
       "replace": "$1auto 150px auto; translate:{{ dockShift }}px 0;"
     },
     {
-      "_why": "PO review A03 (reference 'v6-selection'): an impaired (drunk or poisoned) player shows a 'Poisoned \u00b7 any info' pill beside their name on the Night card.",
+      "_why": "PO review A03 (reference 'v6-selection'): an impaired (drunk or poisoned) player shows a 'Poisoned · any info' pill beside their name on the Night card.",
       "regex": "(<span style=\"font-size:13px; color:rgba\\(222,216,204,\\.6\\);\">\\{\\{ night\\.cur\\.who \\}\\}</span>)",
-      "replace": "$1<sc-if value=\"{{ night.cur.impOn }}\" hint-placeholder-val=\"{{ false }}\"><span style=\"align-self:center; display:inline-flex; align-items:center; gap:6px; padding:3px 10px; border-radius:99px; border:1px solid rgba(180,140,224,.55); background:rgba(120,80,170,.2); font-size:13px; color:rgba(222,216,204,.7);\"><span style=\"width:7px; height:7px; border-radius:50%; background:#b48ce0;\"></span><span style=\"font-weight:700; color:#efe6fa;\">{{ night.cur.impLabel }}</span>\u00b7 any info</span></sc-if>"
+      "replace": "$1<sc-if value=\"{{ night.cur.impOn }}\" hint-placeholder-val=\"{{ false }}\"><span style=\"align-self:center; display:inline-flex; align-items:center; gap:6px; padding:3px 10px; border-radius:99px; border:1px solid rgba(180,140,224,.55); background:rgba(120,80,170,.2); font-size:13px; color:rgba(222,216,204,.7);\"><span style=\"width:7px; height:7px; border-radius:50%; background:#b48ce0;\"></span><span style=\"font-weight:700; color:#efe6fa;\">{{ night.cur.impLabel }}</span>· any info</span></sc-if>"
+    },
+    {
+      "_why": "The Moonchild's public choice is a Day action beside the Slayer's, in the same row style (not hidden in a menu). Offered only while a dead Moonchild awaits their choice (dayC.moonOn).",
+      "regex": "(<sc-if value=\"\\{\\{ sv\\.hasLog \\}\\}\" hint-placeholder-val=\"\\{\\{ false \\}\\}\">\\s*<div style=\"display:flex; flex-direction:column; gap:4px; padding-left:56px;\">[\\s\\S]*?</sc-if>)(\\s*</div>\\s*</div>\\s*</div>\\s*</sc-if>\\s*<sc-if value=\"\\{\\{ infoC\\.on \\}\\}\")",
+      "replace": "$1\n          <sc-if value=\"{{ dayC.moonOn }}\" hint-placeholder-val=\"{{ false }}\"><div style=\"display:flex; align-items:center; gap:12px;\"><div role=\"img\" aria-hidden=\"true\" style=\"width:44px; height:44px; flex:none; border-radius:50%; background:url({{ dayC.moonImg }}) center/78% no-repeat, radial-gradient(circle at 38% 30%, #f1e6c9, #b09566); box-shadow:0 0 0 2px #14151d, 0 0 0 3px rgba(176,186,204,.35);\"></div><div style=\"flex:1; min-width:0; display:flex; flex-direction:column; gap:2px;\"><div style=\"display:flex; align-items:baseline; gap:8px;\"><span style=\"font-family:'IM Fell English', serif; font-size:20px; line-height:1; color:#f2ece0;\">Moonchild</span><span style=\"font-size:12px; font-weight:600; color:#f2c46a;\">{{ dayC.moonStatus }}</span></div><span style=\"font-size:12px; color:rgba(222,216,204,.55); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;\">{{ dayC.moonText }}</span></div><button onClick=\"{{ dayC.moonAct }}\" style=\"min-height:40px; padding:0 14px; border-radius:10px; border:1px solid rgba(176,186,204,.26); background:rgba(9,10,15,.5); color:#ece6da; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap;\" style-hover=\"border-color:#c0392e;\">Choose a player</button></div></sc-if>$2"
     }
   ]
 }
