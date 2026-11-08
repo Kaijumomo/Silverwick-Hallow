@@ -25,6 +25,7 @@ import { placeReminder, playerMarks, reminderPalette, removeMark, type Mark, typ
 import { toStoredPosition } from "../positions";
 import { runLifeAction } from "../board/life";
 import { buildPicker, openChoosePicker } from "../board/picker";
+import { dealGo, dealRing, dealSeatIndex, dealingNow } from "../setup/deal";
 import { useTokenDrag } from "../board/useTokenDrag";
 import { EMPTY, type SliceResult } from "./types";
 
@@ -78,6 +79,10 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
   const selectedId = selectedRaw && game.players[selectedRaw] && !game.players[selectedRaw]!.isEmpty ? selectedRaw : null;
   const seatIndex = (id: PlayerId) => game.seatOrder.indexOf(id);
   const wizPre = !!(ui.wiz && setupPhase && ui.wiz.step !== "town");
+  // "The Deal": each seat shows the token it has been handed so far, and the seat that is up is ringed.
+  const dealing = dealingNow(ui, game);
+  const dealRingIds = dealing ? dealRing(game) : [];
+  const dealUp = dealing ? dealRingIds[Math.min(ui.deal!.cur, Math.max(0, dealRingIds.length - 1))] : undefined;
   const litActorId = litActorIdOf(game, privacy, litActor);
   const query = useMemo(() => (script ? createRulesQuery(game, { script, registry }) : null), [game, script, registry]);
   const env: MarkEnv = { game, script, registry, query };
@@ -117,6 +122,11 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
     const current = store.getState().game;
     if (!current) return;
     if (ui.seatMode && setupPhase) { const i = seatIndex(id); if (i >= 0) ui.set({ seatCur: i }); return; }
+    if (dealing) {
+      const i = dealSeatIndex(id);
+      if (i >= 0) dealGo(i); else flash("A Traveller chooses a character from the seat's Character button.");
+      return;
+    }
     if (ctx.voting?.tap(id)) return;
     if (ui.swapFrom) {
       if (ui.swapFrom === id) ui.set({ swapFrom: null }); else swapSeats(ui.swapFrom, id);
@@ -173,10 +183,10 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
       return { ...r, x: Math.round(Math.cos(a2) * rr), y: Math.round(Math.sin(a2) * rr) };
     });
 
-    const role = displayRoleOf(p, ctx);
+    const role = dealing ? (ui.deal!.assign[id] ? registry.get(ui.deal!.assign[id]!) : undefined) : displayRoleOf(p, ctx);
     const deco = mergedDecoration(decorations, id);
     const selected = selectedId === id;
-    const seatHere = ui.seatMode && setupPhase && i === ui.seatCur;
+    const seatHere = (ui.seatMode && setupPhase && i === ui.seatCur) || (dealing && id === dealUp);
     const swapHere = ui.swapFrom === id;
     const ring = deco.ringOn || selected || swapHere || seatHere;
     const ringColor = deco.ringOn && deco.ringColor ? deco.ringColor : seatHere ? RING_SEAT : swapHere ? RING_SWAP : RING_DEFAULT;

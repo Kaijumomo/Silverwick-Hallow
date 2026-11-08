@@ -7,6 +7,7 @@ import { useVotingInteraction } from "@/features/voting/VotingWorkspace";
 import type { PlayerId, Script, StorytellerLobbyRecord } from "@/stores/types";
 import { useV6Ui, type V6UiActions, type V6UiState } from "./v6Store";
 import { useInfoShow } from "./info/showStore";
+import { dealingNow } from "./setup/deal";
 import { computeRing, type RingLayout } from "./ringLayout";
 import { seatPositions, type Point } from "./positions";
 
@@ -88,7 +89,7 @@ export function useV6Ctx(game: StorytellerLobbyRecord): V6Ctx {
   const panel = ui.panel;
   const noOverlay = !ui.picker && !ui.show;
   const cards = {
-    town: panel === "players" && !ui.picker && !ui.seatMode && !ui.prepEdit,
+    town: panel === "players" && !ui.picker && !ui.seatMode && !ui.prepEdit && !dealingNow(ui, game),
     strip: panel === "night" && phase === "night" && !privacy,
     day: panel === "night" && phase === "day" && !privacy && !voting?.open && !ui.slay && noOverlay,
     info: panel === "info" && noOverlay,

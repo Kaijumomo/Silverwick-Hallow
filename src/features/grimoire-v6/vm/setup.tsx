@@ -17,6 +17,7 @@ import { buildPrepTasks, commitPrep, isFalseClueOwner, orderedTasks, prepRole, p
 import { useTokenTapInterceptor } from "../board/overlay";
 import { openDistributePicker as openDistribute } from "../board/picker";
 import { TEAM_COLOR } from "../icons";
+import { dealBack, dealGather, dealGo, dealPick, dealReturn, dealRing, dealSeal, dealShuffle, dealingNow, marionetteApart, tokensLeft } from "../setup/deal";
 import { beginOffline, changeSeatCount, emptySeats, nameNextSeat, seatInArrivalOrder, seatPersonAtCursor, waitingOf } from "../setup/seating";
 import { wizardSteps, wizardVm } from "../setup/wizard";
 import type { SliceResult } from "./types";
@@ -70,7 +71,7 @@ export function useSetupVm(ctx: V6Ctx): SliceResult {
   if (draft && wiz) {
     // Steps I and II: a draft table behind the wizard. No dock, no centre text, no invitation.
     return { vm: {
-      wiz: wizardVm(ctx, wiz, true), wizSteps: wizardSteps(wiz), town: { on: false }, seatC: { on: false, btnOn: false }, pe: { on: false, off: true }, setup: { segs: [] },
+      wiz: wizardVm(ctx, wiz, true), wizSteps: wizardSteps(wiz), town: { on: false }, seatC: { on: false, btnOn: false }, dealC: { on: false }, pe: { on: false, off: true }, setup: { segs: [] },
       composition: [], rosterMeta: "",
       dockOn: false, centerKicker: "", centerTitle: "", centerSub: "", inviteDisp: "none",
       scriptName: wiz.script ? script?.name ?? "New game" : "New game",
@@ -230,6 +231,41 @@ export function useSetupVm(ctx: V6Ctx): SliceResult {
     };
   })();
 
+  // "The Deal": hand the tokens of the chosen composition to the seats one at a time (the Role Dealing design).
+  const dealC = (() => {
+    if (!setupOn || !dealingNow(ui, game) || !ui.deal) return { on: false };
+    const ring = dealRing(game);
+    if (!ring.length) return { on: false };
+    const assign = ui.deal.assign;
+    const k = Math.min(ui.deal.cur, ring.length - 1);
+    const seatId = ring[k]!;
+    const seat = game.players[seatId]!;
+    const bag = ui.pickSel;
+    const pool = tokensLeft(bag, assign);
+    const done = ring.filter((id) => assign[id]).length;
+    const all = done === ring.length;
+    const held = assign[seatId] ? registry.get(assign[seatId]!) : undefined;
+    const rank = (id: string) => TEAM_ORDER.indexOf((registry.get(id)?.type ?? "townsfolk") as (typeof TEAM_ORDER)[number]);
+    const fits = pool.filter((id) => !!registry.get(id)).sort((a, b) => rank(a) - rank(b));
+    const apartNow = marionetteApart(assign, ring, registry);
+    const name = seat.name || `Seat ${roman(game.seatOrder.indexOf(seatId) + 1)}`;
+    const sealable = all && !apartNow;
+    return {
+      on: true, w: Math.round(Math.max(360, Math.min(540, 2 * (layout.rx - layout.S / 2 - 60)))),
+      meta: `${done} / ${ring.length}`, seatNum: roman(game.seatOrder.indexOf(seatId) + 1), name,
+      pips: ring.map((id, j) => ({ bg: assign[id] ? "#e8584a" : "rgba(176,186,204,.22)", ring: j === k ? "0 0 0 2px #14151d, 0 0 0 3.5px #f2ece0" : "none" })),
+      hasRole: !!held, noRole: !held, roleImg: held ? iconOf(held) : "", roleName: held ? held.name : "awaiting a token", roleStyle: held ? "normal" : "italic",
+      roleColor: held ? TEAM_COLOR[held.type] ?? "#ddd6c8" : "rgba(222,216,204,.45)",
+      hint: apartNow ? "The Marionette must sit next to the Demon" : !pool.length ? (all ? "Every player holds a token" : "Return a token to move it") : held ? "Draw again to swap" : fits.length ? "Draw a token from the bag" : "No tokens fit this seat",
+      hintColor: apartNow ? "#f4a595" : "rgba(222,216,204,.6)",
+      hasPool: fits.length > 0, restOn: pool.length > 0 && !all, anyDealt: done > 0,
+      tokens: fits.map((id) => { const def = registry.get(id)!; return { name: def.name, img: iconOf(def), color: TEAM_COLOR[def.type] ?? "#ddd6c8", aria: `Give ${def.name} to ${name}`, pick: () => dealPick(id) }; }),
+      prev: () => dealGo(k - 1), next: () => dealGo(k + 1), ret: dealReturn, rest: dealShuffle, clear: dealGather, finish: () => { dealSeal(); }, back: dealBack,
+      doneBorder: sealable ? "#c0392e" : "rgba(176,186,204,.16)", doneBg: sealable ? "rgba(192,57,46,.22)" : "transparent", doneColor: sealable ? "#ffb4a6" : "rgba(222,216,204,.4)",
+      doneCursor: sealable ? "pointer" : "not-allowed", doneLabel: all ? "Seal the Grimoire" : `${ring.length - done} left to deal`,
+    };
+  })();
+
   // Preparation of the town (tap-on-the-board edit).
   const edit = ui.prepEdit;
   const editTask = edit ? tasks.find((t) => t.key === edit.key) : undefined;
@@ -286,7 +322,7 @@ export function useSetupVm(ctx: V6Ctx): SliceResult {
     vm: {
       wiz: wiz ? wizardVm(ctx, wiz, false) : { on: false },
       wizSteps: wiz && setupOn ? wizardSteps(wiz) : [],
-      town, rosterMeta, composition, setup: setupKey, seatC, pe,
+      town, rosterMeta, composition, setup: setupKey, seatC, dealC, pe,
       distribute: () => { if (offlineGathering && !beginOffline()) return; openDistribute(); },
       ...(lobby && setupOn && !gathering && waiting.length ? { queueCount: waiting.length } : {}),
     },

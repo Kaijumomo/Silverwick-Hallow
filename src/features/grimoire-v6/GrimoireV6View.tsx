@@ -1971,6 +1971,130 @@ export function GrimoireV6View({ vm }: { vm: any }) {
             </div>
             </>
           )}
+          {vm.dealC?.on && (
+            <>
+            <div style={css(`position:absolute; left:${vm.ring?.cx ?? ''}px; top:${vm.ring?.cy ?? ''}px; translate:-50% -50%; z-index:22; width:${vm.dealC?.w ?? ''}px; display:flex; flex-direction:column; align-items:center;`)}>
+              <div aria-hidden="true" style={css(`position:absolute; left:-18%; right:-18%; top:-24%; bottom:-24%; border-radius:50%; background:radial-gradient(closest-side, rgba(5,6,10,.8), rgba(5,6,10,.45) 60%, transparent); pointer-events:none;`)} />
+              <div role="dialog" aria-label="The Deal" style={css(`position:relative; width:100%; display:flex; flex-direction:column; gap:12px; padding:12px 18px 14px; border-radius:18px; background:radial-gradient(120% 70% at 50% 0%, rgba(192,57,46,.12), transparent 60%), linear-gradient(180deg, rgba(20,21,30,.97), rgba(10,11,16,.98)); border:1px solid rgba(176,186,204,.18); box-shadow:0 24px 60px rgba(0,0,0,.65), inset 0 1px 0 rgba(236,230,218,.06);`)}>
+                <div style={css(`display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center; gap:8px;`)}>
+                  <button onClick={vm.dealC?.back} style={css(`justify-self:start; min-height:32px; padding:0 6px 0 2px; border:none; background:transparent; color:rgba(222,216,204,.55); font-family:inherit; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:4px;`)}>
+                    <svg viewBox="0 0 24 24" style={css(`width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round;`)}>
+                      <path d="M15 6l-6 6 6 6" />
+                    </svg>
+                    Composition
+                  </button>
+                  <span style={css(`font-family:'Cinzel Decorative', serif; font-size:12px; font-weight:700; letter-spacing:.32em; text-transform:uppercase; color:rgba(236,230,218,.75);`)}>
+                    The Deal
+                  </span>
+                  <span style={css(`justify-self:end; font-family:'IM Fell English', serif; font-size:16px; color:rgba(222,216,204,.6);`)}>
+                    {T(vm.dealC?.meta)}
+                  </span>
+                </div>
+                <div aria-hidden="true" style={css(`display:flex; justify-content:center; flex-wrap:wrap; gap:5px; margin-top:-6px;`)}>
+                  {(vm.dealC?.pips ?? []).map((pp: any, pp$i: number) => (
+                    <Fragment key={pp$i}>
+                      <span style={css(`width:7px; height:7px; border-radius:50%; background:${pp?.bg ?? ''}; box-shadow:${pp?.ring ?? ''};`)} />
+                    </Fragment>
+                  ))}
+                </div>
+                <div style={css(`display:grid; grid-template-columns:44px minmax(0,1fr) 44px; align-items:center; gap:8px;`)}>
+                  <button onClick={vm.dealC?.prev} aria-label="Previous seat" className={["", "gv-hu"].filter(Boolean).join(' ')} style={S240}>
+                    <svg viewBox="0 0 24 24" style={S241}>
+                      <path d="M15 6l-6 6 6 6" />
+                    </svg>
+                  </button>
+                  <div style={css(`display:flex; flex-direction:column; align-items:center; gap:6px; min-width:0;`)}>
+                    <span style={css(`position:relative; width:64px; height:64px; flex:none;`)}>
+                      {vm.dealC?.hasRole && (
+                        <>
+                        <span style={css(`position:absolute; inset:0; border-radius:50%; overflow:hidden; background:radial-gradient(circle at 38% 30%, #f1e6c9 0%, #dccaa0 48%, #b09566 100%); box-shadow:0 0 0 2px #14151d, 0 0 0 3.5px ${vm.dealC?.roleColor ?? ''}, 0 10px 24px rgba(0,0,0,.6), inset 0 -6px 12px rgba(90,60,25,.35);`)}>
+                          <span role="img" aria-hidden="true" style={css(`position:absolute; left:10%; top:8%; width:80%; height:80%; background-image:url(${vm.dealC?.roleImg ?? ''}); background-size:contain; background-position:center; background-repeat:no-repeat;`)} />
+                        </span>
+                        </>
+                      )}
+                      {vm.dealC?.noRole && (
+                        <>
+                        <span style={css(`position:absolute; inset:0; border-radius:50%; border:1.5px dashed rgba(232,88,74,.55); background:radial-gradient(circle, rgba(192,57,46,.1), transparent 70%); display:flex; align-items:center; justify-content:center; font-family:'IM Fell English', serif; font-size:22px; color:rgba(255,138,120,.8);`)}>
+                          {T(vm.dealC?.seatNum)}
+                        </span>
+                        </>
+                      )}
+                    </span>
+                    <div style={css(`display:flex; flex-direction:column; align-items:center; gap:2px; min-width:0; max-width:100%;`)}>
+                      <span style={css(`font-family:'IM Fell English', serif; font-size:26px; line-height:1.05; color:#f2ece0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;`)}>
+                        {T(vm.dealC?.name)}
+                      </span>
+                      <div style={css(`display:flex; align-items:baseline; gap:8px; min-height:22px;`)}>
+                        <span style={css(`font-family:'IM Fell English', serif; font-style:${vm.dealC?.roleStyle ?? ''}; font-size:16px; color:${vm.dealC?.roleColor ?? ''};`)}>
+                          {T(vm.dealC?.roleName)}
+                        </span>
+                        {vm.dealC?.hasRole && (
+                          <>
+                          <button onClick={vm.dealC?.ret} style={css(`min-height:32px; padding:0 2px; border:none; background:transparent; color:rgba(222,216,204,.5); font-family:inherit; font-size:12px; text-decoration:underline; text-underline-offset:3px; cursor:pointer;`)}>
+                            return
+                          </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <button onClick={vm.dealC?.next} aria-label="Next seat" className={["", "gv-hu"].filter(Boolean).join(' ')} style={S240}>
+                    <svg viewBox="0 0 24 24" style={S241}>
+                      <path d="M9 6l6 6-6 6" />
+                    </svg>
+                  </button>
+                </div>
+                <div style={css(`display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center; gap:12px;`)}>
+                  <span style={css(`height:1px; background:linear-gradient(90deg, transparent, rgba(176,186,204,.25));`)} />
+                  <span role="status" style={css(`font-family:'IM Fell English', serif; font-style:italic; font-size:15px; color:${vm.dealC?.hintColor ?? ''};`)}>
+                    {T(vm.dealC?.hint)}
+                  </span>
+                  <span style={css(`height:1px; background:linear-gradient(90deg, rgba(176,186,204,.25), transparent);`)} />
+                </div>
+                {vm.dealC?.hasPool && (
+                  <>
+                  <div style={css(`display:flex; flex-wrap:wrap; justify-content:center; gap:8px 4px; max-height:200px; overflow-y:auto; padding:2px 0;`)}>
+                    {(vm.dealC?.tokens ?? []).map((t: any, t$i: number) => (
+                      <Fragment key={t$i}>
+                        <button onClick={t?.pick} aria-label={t?.aria} style={css(`width:68px; padding:2px; border:none; background:transparent; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:6px; font-family:inherit; outline:none; -webkit-tap-highlight-color:transparent;`)}>
+                          <span style={css(`position:relative; width:44px; height:44px; border-radius:50%; overflow:hidden; background:radial-gradient(circle at 38% 30%, #f1e6c9 0%, #dccaa0 48%, #b09566 100%); box-shadow:0 6px 14px rgba(0,0,0,.55), inset 0 -5px 10px rgba(90,60,25,.35);`)}>
+                            <span role="img" aria-hidden="true" style={css(`position:absolute; left:10%; top:8%; width:80%; height:80%; background-image:url(${t?.img ?? ''}); background-size:contain; background-position:center; background-repeat:no-repeat;`)} />
+                          </span>
+                          <span style={css(`max-width:100%; font-size:12px; line-height:1.2; font-weight:600; text-align:center; text-wrap:balance; color:${t?.color ?? ''};`)}>
+                            {T(t?.name)}
+                          </span>
+                        </button>
+                      </Fragment>
+                    ))}
+                  </div>
+                  </>
+                )}
+                <div style={css(`display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding-top:10px; border-top:1px solid rgba(176,186,204,.1);`)}>
+                  {vm.dealC?.restOn && (
+                    <>
+                    <button onClick={vm.dealC?.rest} className={["", "gv-hu"].filter(Boolean).join(' ')} style={css(`min-height:44px; padding:0 14px; border-radius:10px; border:1px solid rgba(176,186,204,.26); background:rgba(9,10,15,.5); color:#ece6da; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:8px;`)}>
+                      <svg viewBox="0 0 24 24" style={css(`width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round;`)}>
+                        <path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
+                      </svg>
+                      Shuffle the rest
+                    </button>
+                    </>
+                  )}
+                  {vm.dealC?.anyDealt && (
+                    <>
+                    <button onClick={vm.dealC?.clear} style={css(`min-height:44px; padding:0 10px; border:none; background:transparent; color:rgba(222,216,204,.6); font-family:inherit; font-size:13px; cursor:pointer;`)}>
+                      Gather all
+                    </button>
+                    </>
+                  )}
+                  <button onClick={vm.dealC?.finish} aria-disabled={vm.dealC?.doneCursor === "not-allowed"} style={css(`margin-left:auto; min-height:44px; padding:0 18px; border-radius:10px; border:1px solid ${vm.dealC?.doneBorder ?? ''}; background:${vm.dealC?.doneBg ?? ''}; color:${vm.dealC?.doneColor ?? ''}; font-family:inherit; font-size:14px; font-weight:700; cursor:${vm.dealC?.doneCursor ?? ''}; white-space:nowrap;`)}>
+                    {T(vm.dealC?.doneLabel)}
+                  </button>
+                </div>
+              </div>
+            </div>
+            </>
+          )}
           {vm.wiz?.on && (
             <>
             <div style={css(`position:absolute; left:${vm.ring?.cx ?? ''}px; top:${vm.ring?.cy ?? ''}px; translate:-50% -50%; z-index:22; width:${vm.wiz?.w ?? ''}px; display:flex; flex-direction:column; align-items:center; transition:left .5s, top .5s; animation:swRise .45s ease-out;`)}>
@@ -3520,11 +3644,14 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                       <button onClick={vm.pk?.random} className={["", "gv-h1c"].filter(Boolean).join(' ')} style={S491}>
                         Random setup
                       </button>
+                      <button onClick={vm.pk?.place} aria-disabled={vm.pk?.blocked} className={["", "gv-h1c"].filter(Boolean).join(' ')} style={css(`min-height:44px; padding:0 16px; border-radius:10px; border:1px solid rgba(176,186,204,.3); background:transparent; color:#ddd6c8; font-family:inherit; font-size:14px; font-weight:600; cursor:${vm.pk?.goCursor ?? ''}; white-space:nowrap; opacity:${vm.pk?.blocked ? 0.45 : 1};`)}>
+                        Place one by one
+                      </button>
                       <button onClick={vm.pk?.go} aria-disabled={vm.pk?.blocked} style={css(`min-height:44px; padding:0 20px; border-radius:10px; border:1px solid ${vm.pk?.goBorder ?? ''}; background:${vm.pk?.goBg ?? ''}; color:${vm.pk?.goFg ?? ''}; font-family:inherit; font-size:14px; font-weight:700; cursor:${vm.pk?.goCursor ?? ''}; display:flex; align-items:center; gap:8px; white-space:nowrap;`)}>
                         <svg viewBox="0 0 24 24" style={S241}>
                           <path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
                         </svg>
-                         Distribute to {T(vm.pk?.seatCount)}
+                         Deal randomly to {T(vm.pk?.seatCount)}
                       </button>
                     </div>
                   </div>

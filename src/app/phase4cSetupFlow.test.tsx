@@ -98,7 +98,7 @@ describe("offline New Game flow in the unified Grimoire", () => {
     for (const role of ["Washerwoman", "Chef", "Empath", "Poisoner", "Imp"]) {
       fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${role}`) }));
     }
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Distribute to/ })); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Deal randomly to/ })); });
     expect(state().game!.setupRolesDealt).toBe(true);
     expect(Object.values(state().game!.players).filter((p) => !p.isEmpty).map((p) => p.actualRole).sort())
       .toEqual(["chef", "empath", "imp", "poisoner", "washerwoman"]);
