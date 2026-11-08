@@ -7,7 +7,10 @@ import { EXPERIMENTAL_CHARACTERS } from "@/data/scripts/experimental";
 import type { PreparedInformationCharacter, RoleId, Script } from "@/stores/types";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { useV6Ui } from "../v6Store";
-import { commitPrep, prepTap, startPrep } from "./prepare";
+import { buildRegistry } from "@/data/roleRegistry";
+import { selectSetupContext } from "@/features/setup/setupContext";
+import { redHerringSetup } from "@/features/setup/redHerringSetup";
+import { buildPrepTasks, commitPrep, prepTap, startPrep } from "./prepare";
 
 const ui = () => useV6Ui.getState();
 const game = () => store.getState().game!;
@@ -84,5 +87,33 @@ describe("a working Investigator still tells the truth", () => {
     commitPrep();
     expect(ui().toast).toMatch(/One of the two must be a Minion/);
     expect(game().preparedInformation).toHaveLength(0);
+  });
+});
+
+describe("a Drunk or Marionette shown the Fortune Teller may keep a Red Herring as a reminder", () => {
+  it("places one inert reminder token, replaces it on Change, and never disturbs a real Fortune Teller's Red Herring", () => {
+    const ids = deal(["marionette", "imp", "fortuneteller", "empath", "monk", "saint", "slayer", "baron"]);
+    store.getState().setPerception(ids[0]!, { shownRole: "fortuneteller", shownAlignment: null });
+    const tasks = () => buildPrepTasks(game(), SCRIPT, buildRegistry(SCRIPT), selectSetupContext(game(), SCRIPT));
+    const task = () => tasks().find((t) => t.key === `fakeherring:${ids[0]}`);
+    expect(task()).toMatchObject({ req: false, done: false });
+    // The real Fortune Teller's own Red Herring is prepared first.
+    startPrep("redherring", "fortuneteller"); prepTap(ids[3]!); commitPrep();
+    expect(redHerringSetup(selectSetupContext(game(), SCRIPT)).status).toBe("ready");
+    const effectsBefore = Object.values(game().players).map((p) => p.effects.length);
+    task()!.act();
+    prepTap(ids[0]!); // the owner cannot carry it
+    expect(ui().toast).toMatch(/another player/);
+    prepTap(ids[4]!); commitPrep();
+    const carrying = (id: string) => game().players[id]!.reminders.filter((r) => r.label === "Red Herring" && r.sourceCharacter === "fortuneteller");
+    expect(carrying(ids[4]!)).toHaveLength(1);
+    expect(task()).toMatchObject({ done: true });
+    // Change moves it; nothing else is added.
+    task()!.act(); prepTap(ids[5]!); commitPrep();
+    expect(carrying(ids[4]!)).toHaveLength(0);
+    expect(carrying(ids[5]!)).toHaveLength(1);
+    // The real Fortune Teller's fact is untouched: still exactly one, still ready; no Effect was written.
+    expect(Object.values(game().players).map((p) => p.effects.length)).toEqual(effectsBefore);
+    expect(redHerringSetup(selectSetupContext(game(), SCRIPT)).status).toBe("ready");
   });
 });

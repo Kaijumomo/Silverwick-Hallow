@@ -4,6 +4,7 @@ import { shownRoleFilter } from "@/stores/identity";
 import { changeAlignmentIntent } from "@/stores/alignmentResolution";
 import { travelerHasUnresolvedArrival, travelerNeedsArrivalCheck } from "@/stores/travelers";
 import { preparationAvailability, preparedInformationContext } from "@/stores/preparedInformation";
+import { concealedRedHerringHolder, concealedRedHerringIntents } from "@/stores/concealedRedHerring";
 import { captureCharacterActionContext, selectScriptById, useStorytellerStore } from "@/stores/storytellerStore";
 import { bindingOf } from "@/features/abilities/abilityUi";
 import { initialRevealReadiness } from "@/features/setup/revealReadiness";
@@ -106,6 +107,21 @@ export function buildPrepTasks(game: StorytellerLobbyRecord, script: Script | un
       open: herring.status === "missing", actLabel: "Choose",
       act: () => startPrep("redherring", "fortuneteller"),
       undo: () => flash("The Red Herring is fixed once chosen. Use Undo to take it back."),
+    });
+  }
+
+  // A Drunk or Marionette shown the Fortune Teller has no Red Herring of their own; the Storyteller may still keep one as a reminder
+  // (a plain notation token, never the Fortune Teller's fact, so a real Fortune Teller in play is untouched).
+  for (const p of context.ordinary) {
+    if (!p.participantId || p.shownRole !== "fortuneteller" || p.actualRole === "fortuneteller" || !shownRoleFilter(p.behaviorMode)) continue;
+    const holder = concealedRedHerringHolder(game, p.participantId);
+    tasks.push({
+      key: `fakeherring:${p.id}`, roleId: "fortuneteller", roleName: `${nameOf("fortuneteller")} · Red Herring`, who: seatName(game, p.id), img: iconOf("fortuneteller"), type: "townsfolk",
+      done: !!holder, req: false,
+      sub: holder ? `Red Herring: ${holder.name || "selected player"} · only a reminder` : "Optional · keep a Red Herring as a reminder; the answer is still yours to give",
+      open: true, actLabel: holder ? "Change" : "Choose",
+      act: () => startPrep(`fakeherring:${p.id}`, "fortuneteller"),
+      undo: () => startPrep(`fakeherring:${p.id}`, "fortuneteller"),
     });
   }
 
@@ -223,6 +239,16 @@ export function commitPrep(): void {
     ui().set({ prepEdit: null });
     return;
   }
+  if (edit.key.startsWith("fakeherring:")) {
+    const holderOwner = game.players[edit.key.slice("fakeherring:".length)];
+    const target = edit.a ? game.players[edit.a] : undefined;
+    if (!holderOwner?.participantId || !target?.participantId) { flash("Tap the player who carries the Red Herring."); return; }
+    const intents = concealedRedHerringIntents(game, bindingOf(holderOwner), bindingOf(target));
+    const result = state.resolveReminders({ intents }, captureCharacterActionContext());
+    if (!result.ok) { flash(result.message ?? "The setup changed. Choose again."); return; }
+    ui().set({ prepEdit: null });
+    return;
+  }
   const ownerId = prepOwner(edit.key);
   const owner = ownerId ? game.players[ownerId] : undefined;
   const a = edit.a ? game.players[edit.a] : undefined;
@@ -250,6 +276,11 @@ export function prepTap(id: PlayerId): boolean {
   if (!tapped || tapped.isEmpty) return true;
   if (edit.key === "redherring") {
     if (tapped.actualAlignment !== "good") { flash("Choose a good player for the red herring."); return true; }
+    ui().set({ prepEdit: { ...edit, a: id } });
+    return true;
+  }
+  if (edit.key.startsWith("fakeherring:")) {
+    if (edit.key === `fakeherring:${id}`) { flash("Choose another player."); return true; }
     ui().set({ prepEdit: { ...edit, a: id } });
     return true;
   }

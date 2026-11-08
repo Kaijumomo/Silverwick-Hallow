@@ -234,16 +234,17 @@ export function useSetupVm(ctx: V6Ctx): SliceResult {
   const edit = ui.prepEdit;
   const editTask = edit ? tasks.find((t) => t.key === edit.key) : undefined;
   const editOwner = edit?.key.startsWith("info:") ? game.players[edit.key.slice(5)] : undefined;
-  const editRole = edit?.key === "redherring" ? "fortuneteller" : editOwner ? prepRole(editOwner) : undefined;
+  const fakeHerring = !!edit?.key.startsWith("fakeherring:");
+  const editRole = edit?.key === "redherring" || fakeHerring ? "fortuneteller" : editOwner ? prepRole(editOwner) : undefined;
   const editDef = editRole ? registry.get(editRole) : undefined;
   const A = edit?.a ? game.players[edit.a] : undefined;
   const B = edit?.b ? game.players[edit.b] : undefined;
-  const ft = edit?.key === "redherring";
+  const ft = edit?.key === "redherring" || fakeHerring;
   const okEdit = ft ? !!A : !!(A && B && edit?.token);
   const wanted = editRole === "washerwoman" ? "Townsfolk" : editRole === "librarian" ? "Outsider" : "Minion";
   const pe = edit && setupOn ? {
     on: true, off: false, role: editDef?.name ?? editTask?.roleName ?? "", img: edit.token ? (registry.get(edit.token) ? iconOf(registry.get(edit.token)!) : "") : editDef ? iconOf(editDef) : "",
-    prompt: ft ? "Tap a good player on the circle"
+    prompt: fakeHerring ? "Tap the player who carries the Red Herring. It is only a reminder." : ft ? "Tap a good player on the circle"
       : isFalseClueOwner(editOwner) ? (!edit.token ? `Choose the ${wanted} to show first` : (edit.slot ?? "a") === "a" ? `Tap the player you show as the ${wanted}` : "Tap the other player. The clue may be false.")
       : (edit.slot ?? "a") === "a" ? `Tap the ${wanted}, then any other player` : "Tap the other player",
     okOp: okEdit ? 1 : 0.45, confirm: commitPrep, cancel: () => ui.set({ prepEdit: null }),

@@ -140,6 +140,9 @@ const ALLOWED = new Set([
   // Phase 10H: the Roster / Labels readers of the Table (Storyteller-only
   // presentation via reminderPresentation; DOM-absent under Privacy Mode).
   "features/grimoire/RosterView.tsx",
+  // A Drunk or Marionette shown the Fortune Teller may keep a reminder-only Red Herring: written through the Reminder seam, read only by
+  // exact source-participant link to replace it; no rule reads it (checked precisely below).
+  "stores/concealedRedHerring.ts",
   "features/grimoire-v6/board/marks.ts", // Package 4: token reminder discs, presentation of notation and Effects only
   "features/grimoire-v6/board/picker.tsx", // Package 4: the picker detail shows a character's catalogue reminder labels
   // Package 1: Home Character Reference detail. Definition-only RoleDef.reminders
@@ -202,6 +205,20 @@ describe("Phase 10C architecture guard: Reminders are notation, never mechanics 
     expect(code).not.toMatch(/\bplayers\s*:|\.reminders\s*=(?!=)|\.(label|note)\s*\.\s*(match|includes|startsWith|endsWith|toLowerCase|search|split)\b/);
     expect(code).toContain("planReminderTransaction(next, { intents, resolutionId: id })");
     expect(code).toContain("applyReminderPlan(next, reminders.plan)");
+  });
+
+  it("the concealed Fortune Teller's Red Herring is notation only: no rules query, no Effect, no label parsing", () => {
+    const code = stripComments(readFileSync(join(SRC, "stores/concealedRedHerring.ts"), "utf8"));
+    expect(code).not.toMatch(/rulesQuery|effectResolution|\.reminders\s*=(?!=)|\.(label|note)\s*\.\s*(match|includes|startsWith|endsWith|toLowerCase|search|split)\b/);
+    expect(code).not.toMatch(/^import (?!type)[^\n]*abilityResolution/m);
+    expect(code).toContain('kind: "place"');
+    expect(code).toContain('kind: "remove"');
+    // Only the Storyteller-facing prepare screen uses it, and rules modules never import it.
+    for (const module of productionSources()) {
+      if (module === "stores/concealedRedHerring.ts") continue;
+      const source = stripComments(readFileSync(join(SRC, module), "utf8"));
+      if (/concealedRedHerring/.test(source)) expect(module).toBe("features/grimoire-v6/setup/prepare.ts");
+    }
   });
 
   it("B7 Butler rules never read notation; selection and cleanup use only the Reminder seam", () => {
