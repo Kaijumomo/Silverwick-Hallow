@@ -1819,6 +1819,13 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                           <span style={S225} />
                           </>
                         )}
+                        {b?.badge && (
+                          <>
+                          <span aria-label={b?.badgeLabel} style={S232}>
+                            !
+                          </span>
+                          </>
+                        )}
                       </button>
                     </Fragment>
                   ))}
@@ -1855,6 +1862,13 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                         {b?.active && (
                           <>
                           <span style={S225} />
+                          </>
+                        )}
+                        {b?.badge && (
+                          <>
+                          <span aria-label={b?.badgeLabel} style={S232}>
+                            !
+                          </span>
                           </>
                         )}
                       </button>
