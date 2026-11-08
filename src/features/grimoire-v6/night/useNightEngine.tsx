@@ -80,6 +80,8 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   // while the guess is being picked.
   const [picks, setPicks] = useScoped<ParticipantBinding[]>(scope, EMPTY_PICKS);
   const [guessFor, setGuessFor] = useScoped<ParticipantBinding | null>(scope, null);
+  // A ruling the Storyteller gives BEFORE any player is tapped (the Godfather's "did an Outsider die today?"), by step.
+  const [rulings, setRulings] = useScoped<Record<string, Record<string, AbilityInputValue>>>(scope, EMPTY_RULINGS);
   const sequence = useRef(0);
   const actionContext = captureCharacterActionContext();
 
@@ -93,9 +95,10 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   // T30 design: a step the rules say does not wake shows why (no Outsider died today, no execution today, ...). Those steps are
   // collapsed: Next and Previous pass over them, Dawn does not count them, and the strip dims them -- but each stays one tap away
   // on the strip, where its reason is shown.
-  const idleReasons: ReadonlyMap<string, string> = useMemo(() => {
+  const probed = useMemo(() => {
     const out = new Map<string, string>();
-    if (script?.id !== "treacherous-30th") return out;
+    const questions = new Map<string, NightQuestion>();
+    if (script?.id !== "treacherous-30th") return { out, questions };
     for (const step of steps) {
       if (step.kind !== "player" || stepResolved(game, step)) continue;
       const stepAbility = abilityOf(step);
@@ -112,13 +115,18 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
           probe[input.id] = { kind: "participant", participants: pool.map(bindingOf) };
         } else if (input.kind === "character") probe[input.id] = { kind: "character", roleIds: [script.characters[0]?.id ?? ""] };
       }
-      const plan = planAbilityResolution(game, { mode: "guided", invocationPath: "nightOrder", fingerprint, roleId: step.effectiveRoleId, inputs: probe, completeStep: true },
+      const plan = planAbilityResolution(game, { mode: "guided", invocationPath: "nightOrder", fingerprint, roleId: step.effectiveRoleId, inputs: { ...probe, ...rulings[step.stepKey] }, completeStep: true },
         { script, registry, semantics });
       if (!plan.ok && plan.code === "notApplicable") out.set(step.stepKey, plan.message);
+      // A yes/no ruling the rules need before anything is chosen (a Spy or Recluse died in the Day: did an Outsider die?) is asked first.
+      const requirement = !plan.ok && plan.code === "needsInput" && plan.requirements?.length === 1 ? plan.requirements[0] : undefined;
+      if (!plan.ok && requirement && requirement.kind === "boolean" && requirement.source === "storyteller" && requirement.id.startsWith("godfather:outsiderDied"))
+        questions.set(step.stepKey, { id: requirement.id, heading: "Did an Outsider die today?", note: plan.message.replace(/\s*Did an Outsider die today\?$/, "") });
     }
-    return out;
+    return { out, questions };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game, steps, script]);
+  }, [game, steps, script, rulings]);
+  const idleReasons: ReadonlyMap<string, string> = probed.out;
   /** Rows that need no wake tonight: revived after their turn, or the rules say they do not act. */
   const settled: ReadonlySet<string> = useMemo(() => new Set([...(work?.late ?? []), ...idleReasons.keys()]), [work, idleReasons]);
 
@@ -152,7 +160,12 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   const direct = !inlineInformation && eligible && ability?.kind === "guided" && !ability.invocationPath && boardTarget(ability.descriptor);
   const needed = ability?.kind === "guided" ? pickCount(ability.descriptor) : 1;
   const correction = current && resolved ? getNightActionCorrection(game, game.day, current.stepKey) : null;
-  const canTarget = !!direct && (!resolved || needed === 1 && !!correction?.canCorrect);
+  const question = current && !resolved ? probed.questions.get(current.stepKey) ?? null : null;
+  const canTarget = !!direct && !question && (!resolved || needed === 1 && !!correction?.canCorrect);
+  const answerQuestion = (yes: boolean) => {
+    if (!current || !question) return;
+    setRulings({ ...rulings, [current.stepKey]: { ...rulings[current.stepKey], [question.id]: { kind: "boolean", value: yes } } });
+  };
   const role = current?.kind === "player" ? registry.get(current.effectiveRoleId) : actor?.actualRole ? registry.get(actor.actualRole) : undefined;
   const bureaucrat = !!(actor?.actualRole === "bureaucrat" && actor.participantId && script
     && bureaucratActionEligibility(game, bindingOf(actor), { script, registry, semantics }).known
@@ -244,7 +257,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     if (successorChoice && (live.current.successorChoice !== successorChoice || successorChoice.game !== game || successorChoice.stepKey !== current.stepKey)) return;
     const inputs = successorChoice
       ? { ...successorChoice.inputs, [successorChoice.id]: { kind: "participant" as const, participants: [target] } }
-      : { [input.id]: { kind: "participant" as const, participants: [target] } };
+      : { ...rulings[current.stepKey], [input.id]: { kind: "participant" as const, participants: [target] } };
     const fingerprint = captureFingerprint(game, current.playerId, { day: game.day, stepKey: current.stepKey });
     if (!fingerprint) { setError("This player is no longer seated."); return; }
     const request = { mode: "guided" as const, invocationPath: "nightOrder" as const, fingerprint, roleId: current.effectiveRoleId, inputs, completeStep: true };
@@ -476,7 +489,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
 
   return {
     active, visible, work, steps, unfinished, pos, current, currentIndex, resolved, actor, role, ability, query,
-    eligible, direct, canTarget, skipReason, settled, moonchildChoice, regurgitation, needed, picks, guessFor, inlineInformation, preparedInformation, butlerTurn, bureaucrat, manual, manualRavenkeeper, correction,
+    eligible, direct, canTarget, question, answerQuestion, skipReason, settled, moonchildChoice, regurgitation, needed, picks, guessFor, inlineInformation, preparedInformation, butlerTurn, bureaucrat, manual, manualRavenkeeper, correction,
     workspace, setWorkspace, setPaused, error, setError, success, successorChoice, picker, refused, owner, actionContext,
     navigate, gotoCheckpoint, prev, next, beginDay, openWorkspace, openTrigger, requireManual, finish,
   };
@@ -486,6 +499,9 @@ export type NightEngine = ReturnType<typeof useNightEngine>;
 
 const EMPTY_STEPS: NightStep[] = [];
 const EMPTY_PICKS: ParticipantBinding[] = [];
+const EMPTY_RULINGS: Record<string, Record<string, AbilityInputValue>> = {};
+/** A yes/no the Storyteller answers before the step asks for any player. */
+export type NightQuestion = { id: string; heading: string; note: string };
 
 /** A workspace opened for a trigger that has no Night row keeps its own owner step. */
 function isTriggerWorkspace(workspace: NightWorkspace, work: NightWork | null): boolean {

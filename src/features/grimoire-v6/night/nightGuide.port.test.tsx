@@ -548,3 +548,43 @@ it("a finished Demon information step says Completed once, not twice", () => {
   render(<Guide />);
   expect(screen.getAllByText("Completed")).toHaveLength(1);
 });
+
+// The Godfather asks FIRST (Guillermo, Game 3b): when a Spy or Recluse died in the Day, the card asks "Did an Outsider die today?" before any player is
+// tapped, in the Grimoire's prompt style. No leaves the Godfather asleep; Yes goes on to choosing the victim on the board.
+const godfatherAfterRecluse = () => {
+  const base = proofGame(["godfather", "recluse", "chef", "monk", "imp", "empath", "baron"], "night", 3, { scriptId: t30Script.id });
+  const died = { id: "d-p1", kind: "death", moment: { phase: "day", day: 2 }, actualRoleAtEvent: "recluse",
+    subject: { kind: "participant", playerId: "p1", participantId: base.players.p1!.participantId!, nameAtTime: "Player 1" } };
+  store.setState({ game: { ...patchPlayer(base, "p1", { alive: false }), lifeEventWindow: { ...base.lifeEventWindow, events: [died] } } as typeof base,
+    lobby: null, undoStack: [], localSeq: 0, customScripts: { [t30Script.id]: t30Script } });
+  useShellStore.getState().setNightCursor({ day: 3, stepKey: key("p0") });
+};
+
+it("the Godfather asks 'Did an Outsider die today?' before any player is tapped; Yes then chooses the victim", () => {
+  godfatherAfterRecluse();
+  render(<Guide />);
+  expect(screen.getByText("Did an Outsider die today?")).toBeInTheDocument();
+  expect(screen.getByText(/may register as something other than an Outsider/)).toBeInTheDocument();
+  // Nothing is asked of the board yet, and no legacy workspace is open.
+  expect(useTargetPicker.getState().active).toBeNull();
+  expect(screen.queryByText(/Further choices/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Yes" }));
+  expect(screen.queryByText("Did an Outsider die today?")).toBeNull();
+  expect(useTargetPicker.getState().active?.label).toBeTruthy();
+  const before = game();
+  tap("p2");
+  expect(game().players.p2!.alive).toBe(false);
+  expect(game().players.p3!.alive).toBe(true);
+  expect(before.players.p2!.alive).toBe(true);
+  expect(screen.queryByText(/Further choices/)).toBeNull();
+});
+
+it("the Godfather's No leaves them asleep with the reason, and nobody dies", () => {
+  godfatherAfterRecluse();
+  render(<Guide />);
+  fireEvent.click(screen.getByRole("button", { name: "No" }));
+  expect(screen.queryByText("Did an Outsider die today?")).toBeNull();
+  expect(screen.getByText(/does not act tonight/)).toBeInTheDocument();
+  expect(useTargetPicker.getState().active).toBeNull();
+  expect(Object.values(game().players).filter((p) => !p.alive)).toHaveLength(1);
+});

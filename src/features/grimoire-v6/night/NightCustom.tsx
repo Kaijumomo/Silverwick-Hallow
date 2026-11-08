@@ -18,6 +18,7 @@ import { INFO_TOKENS } from "../info/tokens";
 import { guardGesture } from "./gestureGuard";
 import { newImpToWake } from "./newImp";
 import type { NightEngine } from "./useNightEngine";
+import { QuestionBlock } from "../day/NominationExtras";
 import "./night-custom.css";
 
 const SEMANTICS = CANONICAL_ABILITY_SEMANTICS;
@@ -88,6 +89,9 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
 
   if (current && !workspace) {
     const done = engine.resolved;
+    // A ruling the rules need before any player is tapped, in the Grimoire's prompt style (the heading above, the answers on one row).
+    if (engine.question) rows.push(<QuestionBlock key="question" heading={engine.question.heading} note={engine.question.note}
+      actions={[{ label: "Yes", onClick: () => engine.answerQuestion(true) }, { label: "No", onClick: () => engine.answerQuestion(false) }]} />);
     const source = current.kind === "player" ? { playerId: current.playerId, participantId: current.participantId } : null;
     if (current.kind === "player") {
       if (engine.butlerTurn && source) {
