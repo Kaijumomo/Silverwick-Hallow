@@ -182,10 +182,12 @@ describe("B5b independent authoritative event information", () => {
     expect(invoke(g, "ravenkeeper", { target: pick(g, "p2") })).toMatchObject({ ok: false }); expect(store.getState()).toBe(before);
   });
 
-  it("Drunk shown Ravenkeeper has no automatic death-trigger authority", () => {
-    const g = ravenkeeper("drunk"); const before = store.getState();
-    expect(invoke(g, "ravenkeeper", { target: pick(g, "p2"), [subjectId("shown", bind(g, "p2"))]: character("imp") })).toMatchObject({ ok: false });
-    expect(store.getState()).toBe(before); expect(game().informationDeliveries).toEqual([]);
+  // PO decision (Nov 8): a poisoned, Drunk or Marionette Ravenkeeper is asked the same way and is told whatever the Storyteller shows; nothing else changes.
+  it("Drunk shown Ravenkeeper is treated like a poisoned one: the Storyteller's chosen character is shown and no player changes", () => {
+    const g = ravenkeeper("drunk"); openInStore(g);
+    expect(invoke(g, "ravenkeeper", { target: pick(g, "p2"), [subjectId("shown", bind(g, "p2"))]: character("imp") })).toMatchObject({ ok: true });
+    expect(shown()).toMatchObject({ roleId: "imp" });
+    expect(game().players).toEqual(g.players);
   });
 
   it("manually simulated Drunk Ravenkeeper records chosen information without trigger or life mechanics", async () => {
