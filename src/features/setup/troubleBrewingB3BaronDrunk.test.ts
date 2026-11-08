@@ -187,15 +187,21 @@ describe("B3 all thirteen Drunk disguises", () => {
     expect(proofQuery(g).protectedFrom(bind(g, "p0"), "demon")).toEqual({ known: true, value: false });
   });
 
-  it("simulated Monk never applies protection; simulated Slayer never kills or spends a real ability", () => {
+  it("simulated Monk never applies protection; simulated Slayer never kills, and its own shot is spent like a poisoned Slayer's", () => {
     for (const shown of ["monk", "slayer"]) {
       const g = patchPlayer(proofGame(["drunk", "imp", "chef", "baron", "saint"], shown === "slayer" ? "day" : "night"), "p0",
         { shownRole: shown, behaviorMode: "drunk_fake_role_behavior" });
-      expect(plan(g, request(g, "p0", shown, { target: pick(g, "p1") }))).toEqual({ ok: true, changed: false });
+      const result = plan(g, request(g, "p0", shown, { target: pick(g, "p1") }));
       expect(g.players.p1!.alive).toBe(true);
       expect(g.players.p1!.effects).toEqual([]);
       expect(g.players.p0!.abilityUsed).toBe(false);
       expect(g.informationDeliveries).toEqual([]);
+      if (shown === "monk") { expect(result).toEqual({ ok: true, changed: false }); continue; }
+      // Only the shown player's OWN use is recorded; nobody else is touched.
+      if (!result.ok || !result.changed) throw new Error("the shot should be recorded");
+      expect(result.plan.game.players.p0!.abilityUsed).toBe(true);
+      expect(result.plan.game.players.p1!.alive).toBe(true);
+      expect(result.plan.game.players.p1!.effects).toEqual([]);
     }
   });
 });
