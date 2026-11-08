@@ -30,9 +30,9 @@ type Evaluation = {
   kind: "plan" | "judgment" | "manual" | "none";
   judgmentId?: string;
   /**
-   * The Storyteller may set the rules' result aside. Only the REAL Slayer's shot can ever kill, so a bluff, a Drunk or a Marionette
-   * gets no override (nothing happens, always). A healthy real Slayer's shot is ruled by the rules; the override is for a poisoned
-   * Slayer, and for a shot the rules cannot judge (a Recluse, an uncovered table), where it is how the Storyteller rules.
+   * The Storyteller has a choice to make. Official rules: only a healthy, real Slayer's shot can kill. A poisoned Slayer, a Drunk, a
+   * Marionette and a bluff never do, so they get no override at all. The choice exists only where the rules leave it to the
+   * Storyteller: a healthy Slayer's shot at a Recluse (who may register as the Demon), or a table Silverwick cannot rule on.
    */
   overridable: boolean;
 };
@@ -87,21 +87,21 @@ function evaluate(ctx: V6Ctx, shooterId: PlayerId, targetId: PlayerId | undefine
   const ability = pathAbility("slayer", registry, CANONICAL_ABILITY_SEMANTICS, "dayEntry", game);
   const query = createRulesQuery(game, { script, registry, semantics: CANONICAL_ABILITY_SEMANTICS });
   const automated = ability.kind === "guided" && automationEligibility({ query, descriptor: ability.descriptor, actor: bindingOf(shooter), roleId, simulated: wake?.simulated }).kind === "automated";
-  const manual = (why: string): Evaluation => ({ real: true, used: false, dies: false, why, kind: "manual", overridable: genuine });
+  const manual = (why: string): Evaluation => ({ real: true, used: false, dies: false, why, kind: "manual", overridable: genuine && !poisoned });
   if (!automated) return manual(ability.kind === "manual" ? ability.reason : "Silverwick cannot rule on this shot.");
 
   const built = request(ctx, shooter, target);
   if (!built) return none("");
   const plan = planAbilityResolution(game, built.request, { script, registry, semantics: CANONICAL_ABILITY_SEMANTICS });
   if (plan.ok) {
-    if (!plan.changed) return { real: true, used: false, dies: false, why: `${target.name} is not the Demon.`, kind: "none", overridable: genuine && poisoned };
+    if (!plan.changed) return { real: true, used: false, dies: false, why: `${target.name} is not the Demon.`, kind: "none", overridable: false };
     const dies = plan.plan.outcome.operations.some((op) => op.domain === "life" && op.intents.some((i) => i.kind === "death" && i.target.playerId === target.id));
     const demon = registry.get(target.actualRole)?.type === "demon";
-    return { real: true, used: false, dies, kind: "plan", overridable: genuine && poisoned, why: dies ? `${target.name} is the Demon.` : demon ? "The shot has no effect. The Slayer’s ability is spent." : `${target.name} is not the Demon.` };
+    return { real: true, used: false, dies, kind: "plan", overridable: false, why: dies ? `${target.name} is the Demon.` : demon ? "The shot has no effect. The Slayer’s ability is spent." : `${target.name} is not the Demon.` };
   }
   const judgmentId = registersAsDemonJudgment(target.participantId!);
   const recluse = plan.code === "needsInput" && plan.requirements?.length === 1 && plan.requirements[0]?.id === judgmentId;
-  if (recluse) return { real: true, used: false, dies: false, kind: "judgment", judgmentId, overridable: genuine, why: `${target.name} may register as the Demon. Rule on it with the override.` };
+  if (recluse) return { real: true, used: false, dies: false, kind: "judgment", judgmentId, overridable: genuine && !poisoned, why: `${target.name} may register as the Demon. Rule on it with the override.` };
   if (plan.code === "unsupported" || plan.code === "needsInput") return manual(`${plan.message} Rule on it yourself.`);
   return none(plan.message);
 }

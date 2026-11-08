@@ -270,18 +270,42 @@ describe("the Slayer's shot", () => {
     expect(game().players[town.ids.Kestrel!]!.abilityUsed).toBe(false);
   });
 
-  it("a poisoned Slayer's shot is spent and nothing happens; the Storyteller may rule it a death, recorded as a labelled override", () => {
+  it("a poisoned Slayer's shot is spent and nothing happens, exactly as the rules say; there is no way to make it kill", () => {
     useStorytellerStore.setState({ game: impair(game(), town.ids.Kestrel!) });
     const m = mount();
     shoot(m, "Kestrel", "Hollis");
     let sv = m.result.current.day.vm.sv as Record<string, any>;
+    expect(sv).toMatchObject({ resTitle: "Nothing happens", overrideOn: false });
+    act(() => { sv.override(); });
+    sv = m.result.current.day.vm.sv as Record<string, any>;
+    expect(sv.resTitle).toBe("Nothing happens");
+    act(() => { sv.confirm(); });
+    expect(game().players[town.ids.Hollis!]!.alive).toBe(true);
+    expect(game().players[town.ids.Kestrel!]!.abilityUsed).toBe(true);
+  });
+
+  it("the one Storyteller choice left: a healthy Slayer's shot at a Recluse (who may register as the Demon)", () => {
+    const withRecluse = () => patchPlayer(game(), town.ids.Ada!, { actualRole: "recluse", shownRole: "recluse" } as never);
+    useStorytellerStore.setState({ game: withRecluse() });
+    let m = mount();
+    shoot(m, "Kestrel", "Ada");
+    expect(evaluateSlayerShot(m.result.current.ctx, town.ids.Kestrel!, town.ids.Ada!)).toMatchObject({ kind: "judgment", overridable: true });
+    let sv = m.result.current.day.vm.sv as Record<string, any>;
     expect(sv).toMatchObject({ resTitle: "Nothing happens", overrideOn: true, overrideText: "They die" });
     act(() => { sv.override(); });
     sv = m.result.current.day.vm.sv as Record<string, any>;
-    expect(sv).toMatchObject({ resTitle: "Hollis dies", resSub: "Storyteller override.", overrideText: "Undo override" });
+    expect(sv.resTitle).toBe("Ada dies");
     act(() => { sv.confirm(); });
-    expect(game().players[town.ids.Hollis!]!.alive).toBe(false);
+    expect(game().players[town.ids.Ada!]!.alive).toBe(false);
     expect(game().players[town.ids.Kestrel!]!.abilityUsed).toBe(true);
+    // A poisoned Slayer has no such choice: the shot is spent and the Recluse lives.
+    useV6Ui.getState().reset();
+    town = buildDayTown(2, { traveler: false });
+    useStorytellerStore.setState({ game: impair(withRecluse(), town.ids.Kestrel!) });
+    m = mount();
+    shoot(m, "Kestrel", "Ada");
+    sv = m.result.current.day.vm.sv as Record<string, any>;
+    expect(sv).toMatchObject({ resTitle: "Nothing happens", overrideOn: false });
   });
 
   it("a healthy real Slayer's shot is ruled by the rules alone: no override is offered, and a forced one is ignored", () => {
