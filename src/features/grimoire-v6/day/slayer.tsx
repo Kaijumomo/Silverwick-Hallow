@@ -29,6 +29,12 @@ type Evaluation = {
   /** "plan": engine outcome. "judgment": a Recluse-style ruling is pending. "manual": Silverwick cannot rule on it. "none": nothing to record. */
   kind: "plan" | "judgment" | "manual" | "none";
   judgmentId?: string;
+  /**
+   * The Storyteller may set the rules' result aside. Only the REAL Slayer's shot can ever kill, so a bluff, a Drunk or a Marionette
+   * gets no override (nothing happens, always). A healthy real Slayer's shot is ruled by the rules; the override is for a poisoned
+   * Slayer, and for a shot the rules cannot judge (a Recluse, an uncovered table), where it is how the Storyteller rules.
+   */
+  overridable: boolean;
 };
 
 const seated = (game: V6Ctx["game"]) => game.seatOrder.map((id) => game.players[id]).filter((p): p is STPlayerRecord => !!p && !p.isEmpty && !!p.participantId);
@@ -66,33 +72,36 @@ function evaluate(ctx: V6Ctx, shooterId: PlayerId, targetId: PlayerId | undefine
   const { game, registry, script } = ctx;
   const shooter = game.players[shooterId];
   const target = targetId ? game.players[targetId] : undefined;
-  const none = (why: string, used = false): Evaluation => ({ real: false, used, dies: false, why, kind: "none" });
+  const none = (why: string, used = false): Evaluation => ({ real: false, used, dies: false, why, kind: "none", overridable: false });
   if (!shooter || shooter.isEmpty) return none("");
   const wake = wakeIdentity(shooter, registry);
   const roleId = wake?.simulated ? wake.shownRoleId : shooter.actualRole;
   if (roleId !== "slayer") return none(`${shooter.name} is not the Slayer.`);
   if (!shooter.alive) return none(`${shooter.name} is dead.`);
   if (shooter.abilityUsed) return none("Ability already used.", true);
-  if (!target || !script) return { real: true, used: false, dies: false, why: "", kind: "plan" };
+  // A Drunk or Marionette shown the Slayer has no ability: the shot is spent and nothing happens.
+  const genuine = !wake?.simulated;
+  const poisoned = hasEffect(shooter, "poisoned") || hasEffect(shooter, "drunk");
+  if (!target || !script) return { real: true, used: false, dies: false, why: "", kind: "plan", overridable: false };
 
   const ability = pathAbility("slayer", registry, CANONICAL_ABILITY_SEMANTICS, "dayEntry", game);
   const query = createRulesQuery(game, { script, registry, semantics: CANONICAL_ABILITY_SEMANTICS });
   const automated = ability.kind === "guided" && automationEligibility({ query, descriptor: ability.descriptor, actor: bindingOf(shooter), roleId, simulated: wake?.simulated }).kind === "automated";
-  const manual = (why: string): Evaluation => ({ real: true, used: false, dies: false, why, kind: "manual" });
+  const manual = (why: string): Evaluation => ({ real: true, used: false, dies: false, why, kind: "manual", overridable: genuine });
   if (!automated) return manual(ability.kind === "manual" ? ability.reason : "Silverwick cannot rule on this shot.");
 
   const built = request(ctx, shooter, target);
   if (!built) return none("");
   const plan = planAbilityResolution(game, built.request, { script, registry, semantics: CANONICAL_ABILITY_SEMANTICS });
   if (plan.ok) {
-    if (!plan.changed) return { real: true, used: false, dies: false, why: `${target.name} is not the Demon.`, kind: "none" };
+    if (!plan.changed) return { real: true, used: false, dies: false, why: `${target.name} is not the Demon.`, kind: "none", overridable: genuine && poisoned };
     const dies = plan.plan.outcome.operations.some((op) => op.domain === "life" && op.intents.some((i) => i.kind === "death" && i.target.playerId === target.id));
     const demon = registry.get(target.actualRole)?.type === "demon";
-    return { real: true, used: false, dies, kind: "plan", why: dies ? `${target.name} is the Demon.` : demon ? "The shot has no effect. The Slayer’s ability is spent." : `${target.name} is not the Demon.` };
+    return { real: true, used: false, dies, kind: "plan", overridable: genuine && poisoned, why: dies ? `${target.name} is the Demon.` : demon ? "The shot has no effect. The Slayer’s ability is spent." : `${target.name} is not the Demon.` };
   }
   const judgmentId = registersAsDemonJudgment(target.participantId!);
   const recluse = plan.code === "needsInput" && plan.requirements?.length === 1 && plan.requirements[0]?.id === judgmentId;
-  if (recluse) return { real: true, used: false, dies: false, kind: "judgment", judgmentId, why: `${target.name} may register as the Demon. Rule on it with the override.` };
+  if (recluse) return { real: true, used: false, dies: false, kind: "judgment", judgmentId, overridable: genuine, why: `${target.name} may register as the Demon. Rule on it with the override.` };
   if (plan.code === "unsupported" || plan.code === "needsInput") return manual(`${plan.message} Rule on it yourself.`);
   return none(plan.message);
 }
@@ -128,7 +137,7 @@ function confirm(ctx: V6Ctx, ev: Evaluation, dies: boolean): void {
   const shooter = sl?.shooter ? game.players[sl.shooter] : undefined;
   const target = sl?.target ? game.players[sl.target] : undefined;
   if (!sl || !shooter || !target || shooter.isEmpty || target.isEmpty) return;
-  const override = !!sl.override;
+  const override = !!sl.override && ev.overridable;
   const finish = () => {
     useDayUi.getState().addLog({ code: game.code, day: game.day, shooter: shooter.name, target: target.name, dies, real: ev.real });
     ui.set({ slay: null });
@@ -184,7 +193,8 @@ export function buildSlayer(ctx: V6Ctx): Record<string, unknown> {
   const target = sl.target ? game.players[sl.target] : undefined;
   const ev = shooter ? evaluate(ctx, shooter.id, target?.id) : null;
   const roleName = (p?: STPlayerRecord) => (p?.actualRole ? registry.get(p.actualRole)?.name ?? "" : "");
-  const dies = !!ev && (sl.override ? !ev.dies : ev.dies);
+  const overriding = !!sl.override && !!ev?.overridable;
+  const dies = !!ev && (overriding ? !ev.dies : ev.dies);
   const holderNote = !holder ? "No Slayer in play. Any shot is a bluff." : `${holder.name} is the Slayer${holder.abilityUsed ? " · ability used" : " · ability unused"}.`;
   const demonTarget = target && registry.get(target.actualRole)?.type === "demon";
   return {
@@ -199,10 +209,11 @@ export function buildSlayer(ctx: V6Ctx): Record<string, unknown> {
     noteColor: ev && !ev.real ? RED : "rgba(222,216,204,.6)",
     result: sl.stage === "result",
     resTitle: dies ? `${target?.name ?? ""} dies` : "Nothing happens", resColor: dies ? RED : "#e8584a",
-    resSub: sl.override ? "Storyteller override." : ev?.real && !ev.used ? "The Slayer’s ability is now spent." : "Announce that nothing happens.",
+    resSub: overriding ? "Storyteller override." : ev?.real && !ev.used ? "The Slayer’s ability is now spent." : "Announce that nothing happens.",
     confirm: () => { if (ev) confirm(ctx, ev, dies); }, confirmText: dies ? "Confirm death" : "Confirm",
     override: () => ui.set({ slay: { ...sl, override: !sl.override } }),
-    overrideText: sl.override ? "Undo override" : dies ? "They survive" : "They die",
+    overrideOn: !!ev?.overridable,
+    overrideText: overriding ? "Undo override" : dies ? "They survive" : "They die",
   };
 }
 

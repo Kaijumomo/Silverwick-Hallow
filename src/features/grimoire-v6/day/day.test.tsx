@@ -11,7 +11,7 @@ import { useGrimoireVm } from "../useGrimoireVm";
 import { useDayVm } from "../vm/day";
 import { dayTokenDecor, dayTokenTap } from "./tokens";
 import { evaluateSlayerShot } from "./slayer";
-import { patchPlayer, proofGame, proofScript } from "@/test/proofFixtures";
+import { impair, patchPlayer, proofGame, proofScript } from "@/test/proofFixtures";
 import { buildDayTown, type DayTown } from "./test/dayFixture";
 
 const wrapper = ({ children }: { children: ReactNode }) => <VotingProvider>{children}</VotingProvider>;
@@ -270,15 +270,52 @@ describe("the Slayer's shot", () => {
     expect(game().players[town.ids.Kestrel!]!.abilityUsed).toBe(false);
   });
 
-  it("the Storyteller's override of the rules is recorded as a labelled ruling", () => {
+  it("a poisoned Slayer's shot is spent and nothing happens; the Storyteller may rule it a death, recorded as a labelled override", () => {
+    useStorytellerStore.setState({ game: impair(game(), town.ids.Kestrel!) });
     const m = mount();
     shoot(m, "Kestrel", "Hollis");
-    act(() => { (m.result.current.day.vm.sv as any).override(); });
-    const sv = m.result.current.day.vm.sv as Record<string, any>;
-    expect(sv).toMatchObject({ resTitle: "Nothing happens", resSub: "Storyteller override.", overrideText: "Undo override" });
+    let sv = m.result.current.day.vm.sv as Record<string, any>;
+    expect(sv).toMatchObject({ resTitle: "Nothing happens", overrideOn: true, overrideText: "They die" });
+    act(() => { sv.override(); });
+    sv = m.result.current.day.vm.sv as Record<string, any>;
+    expect(sv).toMatchObject({ resTitle: "Hollis dies", resSub: "Storyteller override.", overrideText: "Undo override" });
     act(() => { sv.confirm(); });
-    expect(game().players[town.ids.Hollis!]!.alive).toBe(true);
+    expect(game().players[town.ids.Hollis!]!.alive).toBe(false);
     expect(game().players[town.ids.Kestrel!]!.abilityUsed).toBe(true);
+  });
+
+  it("a healthy real Slayer's shot is ruled by the rules alone: no override is offered, and a forced one is ignored", () => {
+    const m = mount();
+    shoot(m, "Kestrel", "Hollis");
+    let sv = m.result.current.day.vm.sv as Record<string, any>;
+    expect(sv).toMatchObject({ resTitle: "Hollis dies", overrideOn: false });
+    act(() => { sv.override(); });
+    sv = m.result.current.day.vm.sv as Record<string, any>;
+    expect(sv).toMatchObject({ resTitle: "Hollis dies", resSub: "The Slayer’s ability is now spent." });
+    act(() => { sv.confirm(); });
+    expect(game().players[town.ids.Hollis!]!.alive).toBe(false);
+  });
+
+  it("anyone else claiming the Slayer (a bluff, a Drunk, a Marionette) never kills and is never offered the override", () => {
+    const concealed = (role: "drunk" | "marionette") => {
+      const base = game();
+      const next = patchPlayer(base, town.ids.Ada!, { actualRole: role, shownRole: "slayer", behaviorMode: role === "drunk" ? "drunk_fake_role_behavior" : "marionette_fake_good_behavior" } as never);
+      useStorytellerStore.setState({ game: next });
+    };
+    for (const who of ["bluff", "drunk", "marionette"] as const) {
+      useV6Ui.getState().reset();
+      town = buildDayTown(2, { traveler: false });
+      if (who !== "bluff") concealed(who);
+      const m = mount();
+      shoot(m, "Ada", "Hollis");
+      let sv = m.result.current.day.vm.sv as Record<string, any>;
+      expect(sv, who).toMatchObject({ resTitle: "Nothing happens", overrideOn: false });
+      act(() => { sv.override(); });
+      sv = m.result.current.day.vm.sv as Record<string, any>;
+      expect(sv.resTitle, who).toBe("Nothing happens");
+      act(() => { sv.confirm(); });
+      expect(game().players[town.ids.Hollis!]!.alive, who).toBe(true);
+    }
   });
 
   it("the dead may not shoot, and Privacy Mode closes the card", () => {

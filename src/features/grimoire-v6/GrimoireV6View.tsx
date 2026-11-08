@@ -1298,9 +1298,13 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                       </span>
                     </div>
                     <div style={S117}>
-                      <button onClick={vm.sv?.override} className={["", "gv-hc"].filter(Boolean).join(' ')} style={S118}>
-                        {T(vm.sv?.overrideText)}
-                      </button>
+                      {vm.sv?.overrideOn && (
+                        <>
+                        <button onClick={vm.sv?.override} className={["", "gv-hc"].filter(Boolean).join(' ')} style={S118}>
+                          {T(vm.sv?.overrideText)}
+                        </button>
+                        </>
+                      )}
                       <button onClick={vm.sv?.confirm} className={["", "gv-hd"].filter(Boolean).join(' ')} style={S119}>
                         {T(vm.sv?.confirmText)}
                       </button>
