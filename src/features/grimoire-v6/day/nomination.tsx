@@ -150,13 +150,13 @@ export function buildNominations(ctx: V6Ctx): { ns: Record<string, unknown>; nom
   if (stage === "history") return { stage, nomDim: 1, ns: { ...base, ...extra() } };
 
   // finish: the day's execution, confirmed against what actually happened (died / survived).
-  return { stage: "finish", nomDim: 1, ns: { ...base, ...buildFinish(ctx, finish) } };
+  return { stage: "finish", nomDim: 1, ns: { ...base, ...buildFinish(ctx, finish, extra) } };
 }
 
 type FinishFn = (title: string, sub: string, color: string, nextText: string, onNext: () => void, actions?: ExtraAction[]) => Record<string, unknown>;
 
 /** The Execute / Begin Night confirmation the dock opens: records the actual outcome, then Night waits on the dock. */
-function buildFinish(ctx: V6Ctx, finish: FinishFn): Record<string, unknown> {
+function buildFinish(ctx: V6Ctx, finish: FinishFn, extra: (actions?: ExtraAction[], note?: string | null, heading?: string) => Record<string, unknown>): Record<string, unknown> {
   const { game, voting } = ctx;
   const begin = () => { advanceToNight(ctx); };
   const round = voting?.round;
@@ -181,11 +181,10 @@ function buildFinish(ctx: V6Ctx, finish: FinishFn): Record<string, unknown> {
   };
   if (player) {
     const pacifist = Object.values(game.players).some((p) => !p.isEmpty && p.alive && p.actualRole === "pacifist");
-    // The three outcomes, said plainly: executed and died, executed but survived, or no execution at all.
-    const outcomes = "Yes: the execution happened and they died. No: it happened and they lived on. No execution: nobody is executed today.";
-    const note = pacifist ? `${outcomes} Pacifist may apply: you decide whether an executed good player survives.` : outcomes;
-    if (!player.alive) return finish(`${player.name} is already dead`, "Record the execution as it stands.", "#f4a595", "Record execution", record("alreadyDead"), [{ label: "No execution", tone: "quiet", onClick: begin }]);
-    return finish(`Did ${player.name} die?`, note, "#f4a595", "Yes · died", record("died"), [{ label: "No · survived", onClick: record("survived") }, { label: "No execution", tone: "quiet", onClick: begin }]);
+    // The question and its answers sit together like every other prompt: the heading above, the answers on one row.
+    if (!player.alive) return extra([{ label: "Record execution", onClick: record("alreadyDead") }, { label: "No execution", onClick: begin }], null, `${player.name} is already dead`);
+    return extra([{ label: "Yes · died", onClick: record("died") }, { label: "No · survived", onClick: record("survived") }, { label: "No execution", onClick: begin }],
+      pacifist ? "Pacifist may apply: you decide whether an executed good player survives." : null, `Did ${player.name} die?`);
   }
   return finish("No execution", query.status === "unknown" ? "Earlier execution coverage is unknown. Confirm the actual outcome." : "No one will be executed today.", "#ddd6c8", `No execution · Begin Night ${game.day + 1}`, begin);
 }

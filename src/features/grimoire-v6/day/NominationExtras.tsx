@@ -19,6 +19,23 @@ function Row({ children }: { children: ReactNode }) {
   return <div style={ROW}>{children}</div>;
 }
 
+/** The answers to a question under its heading: one row, equal widths and even gaps, larger than the ordinary follow-up buttons. */
+const ANSWER: CSSProperties = { ...BUTTON, minHeight: 52, padding: "0 12px", fontSize: 18, background: "rgba(176,186,204,.08)", color: "#ece6da" };
+function Answers({ actions }: { actions: ExtraAction[] }) {
+  return <div style={{ display: "grid", gridTemplateColumns: `repeat(${actions.length}, minmax(0, 1fr))`, gap: 10 }}>
+    {actions.map((a) => <button key={a.label} style={ANSWER} onClick={a.onClick}>{a.label}</button>)}
+  </div>;
+}
+
+/** A question in the Grimoire's prompt style: the heading above, its answers on one row. Used by the Day cards and the Night card. */
+export function QuestionBlock({ heading, note, actions }: { heading: string; note?: string | null; actions: ExtraAction[] }) {
+  return <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    <p style={HEADING}>{heading}</p>
+    {note && <p style={QUIET_NOTE}>{note}</p>}
+    <Answers actions={actions} />
+  </div>;
+}
+
 export function NominationExtras({ actions, contextNote, heading }: { actions: ExtraAction[]; contextNote: string | null; heading?: string }) {
   const ui = useVotingInteraction();
   const game = useStorytellerStore((s) => s.game);
@@ -31,7 +48,8 @@ export function NominationExtras({ actions, contextNote, heading }: { actions: E
       {contextNote && <p style={QUIET_NOTE}>{contextNote}</p>}
       {ui.error && <p role="alert" style={NOTE}>{ui.error}</p>}
       {ui.confirmation && <button style={BUTTON} onClick={ui.confirmation.accept}>{ui.confirmation.message} Confirm</button>}
-      {actions.length > 0 && (
+      {actions.length > 0 && heading && <Answers actions={actions} />}
+      {actions.length > 0 && !heading && (
         <Row>{actions.map((a) => <button key={a.label} style={a.tone === "quiet" ? QUIET : BUTTON} onClick={a.onClick}>{a.label}</button>)}</Row>
       )}
     </div>

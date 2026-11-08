@@ -190,9 +190,13 @@ describe("executing and beginning the Night", () => {
     runVote(m, "Bram", "Greta", (i) => i < 7);
     act(() => { ns(m).next(); });
     act(() => { m.result.current.day.advance!.run(); });
-    expect(ns(m)).toMatchObject({ kicker: "Day 2 · Finish day", resultTitle: "Did Greta die?", nextText: "Yes · died", result: true,
-      resultSub: expect.stringContaining("No execution: nobody is executed today") });
-    act(() => { ns(m).next(); });
+    // The question sits under its heading with all three answers on one row; no explanatory sentence.
+    const asked = ns(m).extra as { props: { heading: string; actions: Array<{ label: string; onClick: () => void }> } };
+    expect(ns(m)).toMatchObject({ kicker: "Day 2 · Finish day", extraOn: true });
+    expect(ns(m).result).toBeFalsy();
+    expect(asked.props.heading).toBe("Did Greta die?");
+    expect(asked.props.actions.map((a) => a.label)).toEqual(["Yes · died", "No · survived", "No execution"]);
+    act(() => { asked.props.actions[0]!.onClick(); });
     expect(game().players[town.ids.Greta!]!.alive).toBe(false);
     expect(m.result.current.day.advance!.text).toBe("Begin Night 3");
     act(() => { m.result.current.day.advance!.run(); });
