@@ -5,7 +5,7 @@ import { selectScriptById, useStorytellerStore as store } from "@/stores/storyte
 import { setupScript, standardRoles } from "@/test/setupFixtures";
 import { useV6Ui } from "../v6Store";
 import { buildPicker, openDistributePicker, type PickerEnv } from "../board/picker";
-import { dealBack, dealGather, dealGo, dealPick, dealReturn, dealSeal, dealShuffle, dealRing, marionetteApart, shuffleRest, tokensLeft } from "./deal";
+import { dealingNow, dealBack, dealGather, dealGo, dealPick, dealReturn, dealSeal, dealShuffle, dealRing, marionetteApart, shuffleRest, tokensLeft } from "./deal";
 
 const ui = () => useV6Ui.getState();
 const game = () => store.getState().game!;
@@ -38,14 +38,14 @@ describe("Distribute Roles: Place one by one", () => {
     selectBag();
     pk().place();
     expect(ui().picker).toBeNull();
-    expect(ui().deal).toEqual({ cur: 0, assign: {} });
+    expect(ui().deal).toMatchObject({ cur: 0, assign: {} });
     expect(game().setupRolesDealt).not.toBe(true);
   });
 
   it("gives each token to the seat that is up, moves on to the next empty seat, and swaps when a seat draws again", () => {
     selectBag(); pk().place();
     dealPick("imp");
-    expect(ui().deal).toEqual({ cur: 1, assign: { [seat(0)]: "imp" } });
+    expect(ui().deal).toMatchObject({ cur: 1, assign: { [seat(0)]: "imp" } });
     dealPick("empath");
     dealGo(0); // back to Ana: she draws again, so the Imp returns to the bag
     dealPick("chef");
@@ -70,7 +70,7 @@ describe("Distribute Roles: Place one by one", () => {
     expect(ui().deal!.assign[seat(0)]).toBe("imp");
     expect(game().setupRolesDealt).not.toBe(true);
     dealGather();
-    expect(ui().deal).toEqual({ cur: 0, assign: {} });
+    expect(ui().deal).toMatchObject({ cur: 0, assign: {} });
   });
 
   it("Seal is refused until every seat holds a token, then deals exactly the draft in one commit", () => {
@@ -86,6 +86,16 @@ describe("Distribute Roles: Place one by one", () => {
     expect(game().seatOrder.map((_, i) => roleOf(i))).toEqual(["imp", ...order]);
     expect(ui().deal).toBeNull();
     expect(ui().pickSel).toEqual([]);
+  });
+
+  it("a draft made for other seats is dropped: a seat that leaves the town ends the Deal and nothing stale is dealt", () => {
+    selectBag(); pk().place();
+    dealPick("imp");
+    expect(dealingNow(ui(), game())).toBe(true);
+    store.getState().removePlayer(seat(6));
+    expect(dealingNow(ui(), game())).toBe(false);
+    expect(dealSeal()).toBe(false);
+    expect(game().setupRolesDealt).not.toBe(true);
   });
 
   it("‹ Composition returns every token and reopens the picker with the same bag", () => {

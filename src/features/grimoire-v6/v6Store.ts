@@ -58,7 +58,7 @@ export type V6UiState = {
   picker: PickerState | null;
   pickSel: RoleId[];
   /** "The Deal": the tokens handed to seats one by one so far, and the seat that is up. Never persisted; dealt only when sealed. */
-  deal: { cur: number; assign: Record<PlayerId, RoleId> } | null;
+  deal: { cur: number; assign: Record<PlayerId, RoleId>; ring: string } | null;
   pickHover: RoleId | null;
   /** Distribute Roles: the Storyteller's Godfather choice, one Outsider more (+1) or fewer (-1). */
   gfMod: 1 | -1;

@@ -9,13 +9,16 @@ import { flash, useV6Ui, type V6UiState } from "../v6Store";
  * The draft lives only in the Grimoire's UI state. Nothing reaches the game until "Seal the Grimoire", which deals the whole
  * draft in the one command that already owns the Deal, so Undo, persistence and privacy are exactly those of a random deal.
  */
-export type DealDraft = { cur: number; assign: Record<PlayerId, RoleId> };
+export type DealDraft = { cur: number; assign: Record<PlayerId, RoleId>;
+  /** The ring the draft was made for (seat ids in order). A different ring (a seat added, removed or swapped, or another game) drops the draft. */
+  ring: string };
 
 const ui = () => useV6Ui.getState();
 const store = () => useStorytellerStore.getState();
 
 /** The card is showing: a draft exists and the town has not been dealt yet. */
-export const dealingNow = (state: Pick<V6UiState, "deal">, game: StorytellerLobbyRecord): boolean => !!state.deal && game.phase === "setup" && !isPostDeal(game);
+export const dealingNow = (state: Pick<V6UiState, "deal">, game: StorytellerLobbyRecord): boolean =>
+  !!state.deal && game.phase === "setup" && !isPostDeal(game) && state.deal.ring === dealRing(game).join("|");
 
 /** The residents in ring order: the seats The Deal hands tokens to (Travellers choose theirs separately). */
 export const dealRing = (game: StorytellerLobbyRecord): PlayerId[] => game.seatOrder.filter((id) => { const p = game.players[id]; return !!p && !p.isEmpty && !p.isTraveler; });
@@ -74,7 +77,7 @@ function env() {
   const state = store();
   const game = state.game;
   const draft = ui().deal;
-  if (!game || !draft) return null;
+  if (!game || !draft || !dealingNow({ deal: draft }, game)) return null;
   const script = selectScriptById(state, game.scriptId);
   const context = selectSetupContext(game, script);
   const registry = context.registry;
@@ -86,7 +89,9 @@ const at = (cur: number, ring: readonly PlayerId[]) => Math.min(Math.max(0, cur)
 
 /** "Place one by one": the composition in the picker is the bag, the first seat is up, and the picker closes. */
 export function openDeal(): void {
-  ui().set({ deal: { cur: 0, assign: {} }, picker: null, card: false, swapFrom: null, panel: "players", pickHover: null });
+  const game = store().game;
+  if (!game) return;
+  ui().set({ deal: { cur: 0, assign: {}, ring: dealRing(game).join("|") }, picker: null, card: false, swapFrom: null, panel: "players", pickHover: null });
   store().selectPlayer(null);
 }
 

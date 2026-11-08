@@ -233,7 +233,8 @@ export function useSetupVm(ctx: V6Ctx): SliceResult {
 
   // "The Deal": hand the tokens of the chosen composition to the seats one at a time (the Role Dealing design).
   const dealC = (() => {
-    if (!setupOn || !dealingNow(ui, game) || !ui.deal) return { on: false };
+    // Hide tokens hides the draft too: the card and the dealt tokens return when the tokens are shown again.
+    if (!setupOn || ctx.privacy || !dealingNow(ui, game) || !ui.deal) return { on: false };
     const ring = dealRing(game);
     if (!ring.length) return { on: false };
     const assign = ui.deal.assign;

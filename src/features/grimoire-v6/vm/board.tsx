@@ -80,7 +80,7 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
   const seatIndex = (id: PlayerId) => game.seatOrder.indexOf(id);
   const wizPre = !!(ui.wiz && setupPhase && ui.wiz.step !== "town");
   // "The Deal": each seat shows the token it has been handed so far, and the seat that is up is ringed.
-  const dealing = dealingNow(ui, game);
+  const dealing = dealingNow(ui, game) && !privacy;
   const dealRingIds = dealing ? dealRing(game) : [];
   const dealUp = dealing ? dealRingIds[Math.min(ui.deal!.cur, Math.max(0, dealRingIds.length - 1))] : undefined;
   const litActorId = litActorIdOf(game, privacy, litActor);

@@ -93,4 +93,18 @@ describe("The Deal card", () => {
     expect(useV6Ui.getState().pickSel).toHaveLength(5);
     expect(state().game!.setupRolesDealt).not.toBe(true);
   });
+
+  it("Hide tokens hides the card and every dealt token, and showing them again restores the draft", async () => {
+    await toDistribute();
+    click("Place one by one");
+    click("Give Imp to Ada");
+    expect(screen.getByRole("button", { name: /Seat 1, Ada, Imp/ })).toBeInTheDocument();
+    act(() => { usePrivacyStore.setState({ enabled: true }); });
+    expect(screen.queryByRole("dialog", { name: "The Deal" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Imp/ })).toBeNull();
+    expect(screen.queryByText("Give Chef to Bram")).toBeNull();
+    act(() => { usePrivacyStore.setState({ enabled: false }); });
+    expect(screen.getByRole("dialog", { name: "The Deal" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Seat 1, Ada, Imp/ })).toBeInTheDocument();
+  });
 });
