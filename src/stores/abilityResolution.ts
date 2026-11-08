@@ -448,7 +448,13 @@ export function composeAbilityOutcome(
   }
   const ordering = checkOrdering(outcome);
   if (ordering) return ordering;
-  if (options.simulated && outcome.operations.some((operation) => isMechanical(operation.domain))) {
+  // A simulated wake (a Drunk or Marionette shown a character) has no ability: it never changes Life, Effects, Role or
+  // Alignment. The one exception is the shown player's OWN once-per-game use, recorded exactly as a poisoned player's
+  // spent ability is, so being Poisoned, Drunk or the Marionette behave the same for that ability.
+  const selfSpend = (operation: AbilityOperation) => operation.domain === "life" && operation.intents.length > 0 &&
+    operation.intents.every((intent) => intent.kind === "useAbility" && isBinding(intent.target) &&
+      intent.target.participantId === options.automaticAction?.actor.participantId);
+  if (options.simulated && outcome.operations.some((operation) => isMechanical(operation.domain) && !selfSpend(operation))) {
     return refuse("illegal", "A simulated wake has no ability: it never changes Life, Effects, Role or Alignment.");
   }
   const ids = environment.ids ?? {};
@@ -904,7 +910,7 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   // a crafted request cannot reach an ability its path may not invoke.
   const eligibility = invocationEligibility(descriptor, request.invocationPath, game);
   if (!eligibility.eligible) return refuse("notApplicable", eligibility.reason);
-  if (descriptor.usage.kind === "oncePerGame" && actor.abilityUsed && !simulated) return refuse("notApplicable", "This ability has already been used.");
+  if (descriptor.usage.kind === "oncePerGame" && actor.abilityUsed) return refuse("notApplicable", "This ability has already been used.");
   // Slice 7: participant-scoped Night progress is the authority for "already
   // acted tonight" -- a step this participation instance already completed or
   // had skipped (e.g. a new Imp after a star-pass) is never re-granted by the

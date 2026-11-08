@@ -22,10 +22,10 @@ export const PROFESSOR: AbilityDescriptor = {
   evaluator: (context) => {
     const dead = requireLivingActor(context);
     if (dead) return dead;
-    if (context.simulated) return tokenOutcome(context, "professor", []);
     const use = { kind: "useAbility" as const, target: context.actor.binding };
     const spent = () => tokenOutcome(context, "professor", [lifeOperation([use])]);
-    if (!context.functioning) return spent();
+    // A Drunk or Marionette shown the Professor has no ability: the use is spent and nobody returns, exactly as when poisoned.
+    if (context.simulated || !context.functioning) return spent();
     const target = firstParticipant(context.inputs, "target");
     if (context.query.participant(target)?.alive) return { kind: "illegal", message: "The Professor chooses a dead player." };
     const registered = context.query.registersAsType(target, "townsfolk", "professor");

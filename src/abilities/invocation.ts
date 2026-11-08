@@ -118,9 +118,10 @@ export const nightTriggerProgressKey = (day: number, actor: ParticipantBinding, 
  * actorDiedTonight: the first not-yet-consumed death event of this
  * participant tonight whose `actualRoleAtEvent` is this ability's character.
  * An event with no Role evidence is UNKNOWN (judgment). For a simulated wake
- * (e.g. a Drunk shown this character) an event recorded under the actor's
- * unchanged Actual Role is UNKNOWN too -- what they were shown at that moment
- * is not recorded -- never assumed. A death under another character never
+ * (a Drunk or Marionette currently shown this character) an event recorded
+ * under the actor's unchanged Actual Role is TRIGGERED: the Storyteller shows
+ * whatever they choose, exactly as for a poisoned holder. Any other shown
+ * character leaves it UNKNOWN -- never assumed. A death under another character never
  * fires it.
  */
 export function nightTriggerStatus(
@@ -144,7 +145,8 @@ export function nightTriggerStatus(
         if (!event && (consumed(null) || events.length > 0)) return { kind: "notTriggered", reason: "This trigger was already resolved tonight." };
         return { kind: "unknown", eventId: event?.id ?? null, reason: "Silverwick cannot confirm who died tonight. Check whether this player died, then resolve it by hand." };
       }
-      const current = query.participant(actor)?.actualRole;
+      const holder = query.participant(actor);
+      const current = holder?.actualRole;
       let resolved = false;
       for (const event of events) {
         if (consumed(event.id)) { resolved = true; continue; }
@@ -152,6 +154,9 @@ export function nightTriggerStatus(
         if (!evidence) return { kind: "unknown", eventId: event.id, reason: "This death has no recorded character evidence: the Storyteller decides whether it triggered this ability." };
         if (evidence === descriptor.roleId) return { kind: "triggered", eventId: event.id };
         if (current !== descriptor.roleId && evidence === current) {
+          // A simulated wake (a Drunk or Marionette shown this character, like a poisoned holder) is triggered by the
+          // death of that exact participant tonight. What it shows is the Storyteller's choice, so it needs no recorded evidence.
+          if (holder?.shownRole === descriptor.roleId) return { kind: "triggered", eventId: event.id };
           return { kind: "unknown", eventId: event.id, reason: "A simulated wake: what this player was shown when they died is not recorded -- the Storyteller decides." };
         }
       }

@@ -35,7 +35,8 @@ const seated = (game: V6Ctx["game"]) => game.seatOrder.map((id) => game.players[
 
 /** The living-or-dead player who holds the Slayer, if one is in play. */
 export function slayerHolder(ctx: V6Ctx): STPlayerRecord | null {
-  const all = seated(ctx.game).filter((p) => p.actualRole === "slayer");
+  // A Drunk or Marionette who believes they are the Slayer is the Slayer for the table: their shot is recorded (and spent) too.
+  const all = seated(ctx.game).filter((p) => p.actualRole === "slayer" || (wakeIdentity(p, ctx.registry)?.simulated && p.shownRole === "slayer"));
   return all.find((p) => p.alive) ?? all[0] ?? null;
 }
 
@@ -44,7 +45,8 @@ function slayerStatus(holder: STPlayerRecord | null): { status: string; color: s
   if (!holder.alive) return { status: "Dead", color: "rgba(222,216,204,.5)", unused: false };
   if (holder.abilityUsed) return { status: "Used", color: "rgba(222,216,204,.5)", unused: false };
   if (hasEffect(holder, "poisoned")) return { status: "Poisoned", color: "#e7a35b", unused: false };
-  if (hasEffect(holder, "drunk")) return { status: "Drunk", color: "#e7a35b", unused: false };
+  if (hasEffect(holder, "drunk") || holder.actualRole === "drunk") return { status: "Drunk", color: "#e7a35b", unused: false };
+  if (holder.actualRole === "marionette") return { status: "Marionette", color: "#e7a35b", unused: false };
   return { status: "Unused", color: "#8fcf95", unused: true };
 }
 

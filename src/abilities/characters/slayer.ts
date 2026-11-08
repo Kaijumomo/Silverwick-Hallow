@@ -2,7 +2,7 @@ import type { AbilityDescriptor } from "../semantics";
 import { toldRoleChangeIntents } from "@/stores/roleResolution";
 import { scarletWomanSuccession } from "./scarletWoman";
 import { recluseRegistrationChoice } from "./informationSupport";
-import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, nothing, outcome } from "./shared";
+import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, outcome } from "./shared";
 
 /**
  * Slayer -- GUIDED Day public claim. docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md
@@ -20,8 +20,8 @@ import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, n
  *    ambiguity is an explicit Storyteller judgment).
  *  - Registers as a Demon and alive -> protectedFrom(target, "any") (Section 3):
  *    protected -> no death; unknown -> judgment; otherwise death.
- *  - Impaired: the use is spent, nobody dies. A simulated Slayer wake (e.g. a
- *    Drunk) has no ability, so nothing is recorded.
+ *  - Impaired: the use is spent, nobody dies. A simulated Slayer wake (a Drunk
+ *    or Marionette shown the Slayer) is the same: the shot is spent, nobody dies.
  */
 export const registersAsDemonJudgment = (participantId: string) => `registersAsDemon:${participantId}`;
 
@@ -35,10 +35,10 @@ export const SLAYER: AbilityDescriptor = {
   presentation: { complexity: "simple", action: "Publicly choose a player" },
   evaluator: (context) => {
     if (!context.actor.player.alive) return { kind: "notApplicable", message: "A dead Slayer has no ability -- there is no real Slayer shot to record." };
-    if (context.simulated) return nothing();
     const use = { kind: "useAbility" as const, target: context.actor.binding };
     const spent = () => outcome([lifeOperation([use])]);
-    if (!context.functioning) return spent();
+    // A Drunk or Marionette shown the Slayer has no ability: the shot is spent and nobody dies, exactly as when poisoned.
+    if (context.simulated || !context.functioning) return spent();
     const target = firstParticipant(context.inputs, "target");
     const alive = context.query.isAlive(target);
     if (!alive.known || !alive.value) return spent();
