@@ -54,6 +54,26 @@ export function prepRole(player: Pick<STPlayerRecord, "actualRole" | "shownRole"
   return concealed && player.shownRole && FIRST_INFORMATION_CHARACTERS.has(player.shownRole) ? player.shownRole as PreparedInformationCharacter : undefined;
 }
 
+/** A Drunk or Marionette shown Washerwoman, Librarian or Investigator: their ability does not work, so the clue they get may be false. */
+export const isFalseClueOwner = (player: Pick<STPlayerRecord, "actualRole"> | undefined): boolean => !!player?.actualRole && !FIRST_INFORMATION_CHARACTERS.has(player.actualRole);
+
+/** The picker that chooses the token for a false clue: the Information panel's own character picker, limited to the clue's team. */
+function openClueTokenPicker(ownerId: PlayerId, role: PreparedInformationCharacter) {
+  const team = informationCategory(role);
+  ui().set({
+    pickHover: null,
+    picker: {
+      mode: "show", title: "This Character", kicker: `${TEAM_WORD[role]} to show · it does not have to be true`, types: [team],
+      onPick: (roleId) => {
+        const edit = ui().prepEdit;
+        if (!edit || edit.key !== `info:${ownerId}`) return "Setup changed. Start the preparation again.";
+        ui().set({ prepEdit: { ...edit, token: roleId, slot: "a" }, picker: null });
+        return undefined;
+      },
+    },
+  });
+}
+
 export function buildPrepTasks(game: StorytellerLobbyRecord, script: Script | undefined, registry: RoleRegistry, context: SetupContext): PrepTask[] {
   const tasks: PrepTask[] = [];
   const iconOf = (id: string) => { const def = registry.get(id); return def ? iconUrlFor(def) : ""; };
@@ -99,7 +119,7 @@ export function buildPrepTasks(game: StorytellerLobbyRecord, script: Script | un
       const clue = prepared?.clue;
       const sub = prepared
         ? clue?.kind === "pair" ? `${nameOf(clue.shownCharacter)} · ${game.players[clue.candidates[0].participant.playerId]?.name ?? "—"} or ${game.players[clue.candidates[1].participant.playerId]?.name ?? "—"}` : "Shown 0 Outsiders"
-        : `Pick a ${TEAM_WORD[role]} and a decoy · optional`;
+        : isFalseClueOwner(p) ? `May be false · pick a ${TEAM_WORD[role]}, then any two players · optional` : `Pick a ${TEAM_WORD[role]} and a decoy · optional`;
       tasks.push({
         key: `info:${p.id}`, roleId: role, roleName: nameOf(role), who: seatName(game, p.id), img: iconOf(role), type: registry.get(role)?.type ?? "townsfolk",
         done: !!prepared, req: false, sub, open: true, actLabel: prepared ? "Change" : "Prepare",
@@ -168,6 +188,8 @@ export function startPrep(key: string, roleId: string, ownerId?: PlayerId) {
     },
   });
   store().selectPlayer(null);
+  const owner = ownerId ? game?.players[ownerId] : undefined;
+  if (owner && ownerId && !clue && isFalseClueOwner(owner) && FIRST_INFORMATION_CHARACTERS.has(roleId)) openClueTokenPicker(ownerId, roleId as PreparedInformationCharacter);
 }
 
 function zeroOutsiders(ownerId: PlayerId) {
@@ -205,7 +227,13 @@ export function commitPrep(): void {
   const owner = ownerId ? game.players[ownerId] : undefined;
   const a = edit.a ? game.players[edit.a] : undefined;
   const b = edit.b ? game.players[edit.b] : undefined;
-  if (!owner?.participantId || !a?.participantId || !b?.participantId || !edit.token) { flash("Tap the player who holds the token, then a decoy."); return; }
+  if (!owner?.participantId || !a?.participantId || !b?.participantId || !edit.token) {
+    const role = owner ? prepRole(owner) : undefined;
+    const team = role ? TEAM_WORD[role] : "token holder";
+    flash(a && b && owner && !isFalseClueOwner(owner) ? `One of the two must be ${/^[AEIOU]/.test(team) ? "an" : "a"} ${team}, because this ability works.`
+      : owner && isFalseClueOwner(owner) ? (edit.token ? "Tap two players." : `Choose the ${team} to show first.`) : "Tap the player who holds the token, then a decoy.");
+    return;
+  }
   const result = state.prepareInformation({ source: bindingOf(owner), character: prepRole(owner) as PreparedInformationCharacter,
     clue: { kind: "pair", candidates: [bindingOf(a), bindingOf(b)], shownCharacter: edit.token, qualifyingParticipantId: a.participantId },
     expected: preparedInformationContext(game, scriptOf(game)) }, captureCharacterActionContext());
@@ -236,7 +264,17 @@ export function prepTap(id: PlayerId): boolean {
   const registry = buildRegistry(script ?? { id: game.scriptId, name: "", characters: [] });
   const heldRole = owner ? prepRole(owner) : undefined;
   const wanted = heldRole ? informationCategory(heldRole) : null;
-  if (slot === "a" && wanted && tapped.actualRole && registry.get(tapped.actualRole)?.type === wanted) next.token = tapped.actualRole;
+  if (isFalseClueOwner(owner) && heldRole) {
+    // Their ability does not work, so the clue may be false: the token is the Storyteller's own choice and any two players may be shown.
+    if (!edit.token) { openClueTokenPicker(ownerId!, heldRole); flash(`Choose the ${TEAM_WORD[heldRole]} to show first.`); return true; }
+  } else if (wanted) {
+    // A working ability tells the truth: the token is the character of whichever tapped player really is of that team, in either tap order.
+    const holds = (playerId: PlayerId | null) => { const role = playerId ? game.players[playerId]?.actualRole : undefined; return role && registry.get(role)?.type === wanted ? role : null; };
+    const first = holds(next.a), second = holds(next.b);
+    if (first) next.token = first;
+    else if (second) { next.token = second; [next.a, next.b] = [next.b, next.a]; }
+    else next.token = null;
+  }
   next.slot = other;
   ui().set({ prepEdit: next });
   return true;

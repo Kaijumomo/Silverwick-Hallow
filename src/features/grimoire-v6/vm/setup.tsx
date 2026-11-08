@@ -13,7 +13,7 @@ import { roman } from "../ringLayout";
 import { confirmAsk, flash, showVeil, useV6Ui } from "../v6Store";
 import { isDraftGame } from "../setup/draft";
 import { endGathering, goInPerson, goOnline, useSetupFlow } from "../setup/flow";
-import { buildPrepTasks, commitPrep, orderedTasks, prepRole, prepTap, type PrepTask } from "../setup/prepare";
+import { buildPrepTasks, commitPrep, isFalseClueOwner, orderedTasks, prepRole, prepTap, type PrepTask } from "../setup/prepare";
 import { useTokenTapInterceptor } from "../board/overlay";
 import { openDistributePicker as openDistribute } from "../board/picker";
 import { TEAM_COLOR } from "../icons";
@@ -243,7 +243,9 @@ export function useSetupVm(ctx: V6Ctx): SliceResult {
   const wanted = editRole === "washerwoman" ? "Townsfolk" : editRole === "librarian" ? "Outsider" : "Minion";
   const pe = edit && setupOn ? {
     on: true, off: false, role: editDef?.name ?? editTask?.roleName ?? "", img: edit.token ? (registry.get(edit.token) ? iconOf(registry.get(edit.token)!) : "") : editDef ? iconOf(editDef) : "",
-    prompt: ft ? "Tap a good player on the circle" : (edit.slot ?? "a") === "a" ? `Tap the player who holds the ${wanted}` : "Tap the decoy",
+    prompt: ft ? "Tap a good player on the circle"
+      : isFalseClueOwner(editOwner) ? (!edit.token ? `Choose the ${wanted} to show first` : (edit.slot ?? "a") === "a" ? `Tap the player you show as the ${wanted}` : "Tap the other player. The clue may be false.")
+      : (edit.slot ?? "a") === "a" ? `Tap the ${wanted}, then any other player` : "Tap the other player",
     okOp: okEdit ? 1 : 0.45, confirm: commitPrep, cancel: () => ui.set({ prepEdit: null }),
   } : { on: false, off: true };
 

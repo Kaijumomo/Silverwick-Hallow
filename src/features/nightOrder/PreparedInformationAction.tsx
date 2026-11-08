@@ -41,6 +41,9 @@ const PreparedAction = forwardRef<NightInformationHandle, Props>(function Prepar
   const live = useRef({ game, visible });
   live.current = { game, visible };
   const owner = `prepared-information:${step.stepKey}`;
+  // After the token is chosen the Storyteller taps two players on the board: say so, so the choice never seems to do nothing.
+  const picking = useTargetPicker(state => state.active?.owner === owner ? state.active.label : null);
+  const team = informationCategory(character);
   const authority = captureCharacterActionContext();
   const safe = () => live.current.visible && live.current.game === game && useStorytellerStore.getState().game === game
     && !usePrivacyStore.getState().enabled;
@@ -124,6 +127,8 @@ const PreparedAction = forwardRef<NightInformationHandle, Props>(function Prepar
       };
       return host ? host.button({ role, onClick }) : <TokenInformationAction role={role} label="Reveal a Token" onClick={onClick} />;
     })()}
+    {picking && <p className="night-information-recipients" role="status">{picking === "Choose the first player"
+      ? `Now tap the player you show as the ${team} on the board` : "Now tap the other player on the board"}</p>}
     {choosing && character === "librarian" && <button className="btn" onClick={() => replace({ kind: "zero-outsiders" })}>Show 0 Outsiders</button>}
     {resolved && <p className="modern-night-result">Completed</p>}
     {error && <p role="alert">{error}</p>}
