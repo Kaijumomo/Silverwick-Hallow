@@ -87,9 +87,11 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
     const drunk = player && !!seat && (current.isDeceived && current.actualRoleId === "drunk" || hasEffect(seat, "drunk"));
     // A player poisoned by the No Dashii's passive holds no Effect (it is derived live), so the card asks the rules for the effective state.
     const noDashii = !!seat?.participantId && engine.query?.noDashiiPoisoned({ playerId: seat.id, participantId: seat.participantId });
-    const poisoned = !!seat && !drunk && (hasEffect(seat, "poisoned") || seat.behaviorMode === "poisoned" || !!noDashii && noDashii.known && noDashii.value);
+    // The Marionette is shown the same pill, in the same style: the card names who they really are beside the name.
+    const marionette = !!player && !!seat && current.isDeceived && current.actualRoleId === "marionette";
+    const poisoned = !!seat && !drunk && !marionette && (hasEffect(seat, "poisoned") || seat.behaviorMode === "poisoned" || !!noDashii && noDashii.known && noDashii.value);
     const note = lines([
-      player && current.isDeceived && !drunk ? `Follow the shown character’s procedure. This player is actually the ${current.actualRoleName}.` : undefined,
+      player && current.isDeceived && !drunk && !marionette ? `Follow the shown character’s procedure. This player is actually the ${current.actualRoleName}.` : undefined,
       quietAdvisory(current.advisory),
     ]);
     const waiting = !engine.skipReason && canTarget && !resolved && !!picker && picker.owner === engine.owner || !!successorChoice;
@@ -110,7 +112,7 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
       role: stepLabel(current), who: stepWho(current, game),
       // PO review C09/C10: the Minion and Demon information steps carry only their title and the show row.
       verb: current.stepKey === "minionInfo" || current.stepKey === "demonInfo" ? "" : verb,
-      impOn: drunk || poisoned, impLabel: drunk ? "Drunk" : "Poisoned",
+      impOn: drunk || marionette || poisoned, impLabel: drunk ? "Drunk" : marionette ? "Marionette" : "Poisoned",
       waiting, waitText: successorChoice ? roleKey === "vigormortis" ? "Tap the neighbouring Townsfolk who is poisoned" : "Choose the new Imp on the board"
         : engine.needed > 1 ? engine.picks.length ? "Choose one more player on the board" : "Tap two players on the board" : "Tap a player on the board",
       picks: engine.picks.map((pick) => ({ name: game.players[pick.playerId]?.name ?? "" })),

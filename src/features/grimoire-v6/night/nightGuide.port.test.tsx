@@ -482,7 +482,9 @@ it("WP-8: a Marionette shown as the Investigator gets the same pair picker and R
   store.setState({ game: withEpochs, undoStack: [] });
   useShellStore.getState().setNightCursor({ day: 1, stepKey: participantStepKey(withEpochs.players.p1!.participantId!, "investigator") });
   render(<Guide />);
-  expect(screen.getByText(/This player is actually the Marionette/)).toBeInTheDocument();
+  // The Marionette is named by the same pill as the Drunk and the poisoned, beside the name.
+  expect(screen.getByText("Marionette")).toBeInTheDocument();
+  expect(screen.getByText(/· any info/)).toBeInTheDocument();
   const reveal = screen.getAllByRole("button").find((b) => /Reveal/i.test(b.getAttribute("aria-label") ?? b.textContent ?? ""));
   expect(reveal).toBeTruthy();
   act(() => { fireEvent.click(reveal!); });
