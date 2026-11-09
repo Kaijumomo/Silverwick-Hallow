@@ -9,6 +9,7 @@ import { projectToSelf } from "./projections";
 import { migrateStoreState, useStorytellerStore as store } from "./storytellerStore";
 import { StorytellerGamePersistedSchema } from "./schemas";
 import { decodeSelfSnapshot } from "@/firebase/snapshots";
+import { storeCommands } from "@/test/storeCommands";
 
 const scriptWithDeceivers = { ...troubleBrewing, id: "tbx", characters: [...troubleBrewing.characters, roles.marionette!, roles.lunatic!] };
 const registry = buildRegistry(scriptWithDeceivers);
@@ -167,7 +168,7 @@ describe("AUD-027 private packet boundary and lifecycle", () => {
       publishedPacket: { id: "ack", payload: previewPrivatePacket(p(), game(), registry).payload } } } } });
     if (change === "shown") store.getState().setShownRole(id, "chef");
     if (change === "actual") store.getState().assignRole(id, "drunk");
-    if (change === "alignment") store.getState().setShownAlignment(id, "good");
+    if (change === "alignment") storeCommands.setShownAlignment(id, "good");
     if (change === "behavior") store.getState().setBehaviorMode(id, "custom");
     expect(p()).not.toHaveProperty("packetPreview");
     expect(p().publishedPacket).toBeUndefined();

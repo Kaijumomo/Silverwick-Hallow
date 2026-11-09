@@ -94,8 +94,10 @@ describe("Phase 10E architecture guard: no writer bypasses the Alignment seam", 
     expect(stripComments(code)).not.toMatch(/alignmentHistoryValue/);
   });
 
-  it("both legacy setters are thin adapters over resolveAlignments -- no parallel mutation path", () => {
-    for (const name of ["setActualAlignment", "setTravelerAlignment"]) {
+  it("the legacy setter is a thin adapter over resolveAlignments -- no parallel mutation path", () => {
+    // setActualAlignment had no production caller; it is a test helper now (src/test/storeCommands.ts, F-04).
+    expect(stripComments(source("stores/storytellerStore.ts"))).not.toMatch(/^\s*setActualAlignment:/m);
+    for (const name of ["setTravelerAlignment"]) {
       const text = storeBody(name);
       expect(text, name).toMatch(/resolveAlignments\(/);
       expect(text, name).toMatch(/changeAlignmentIntent\(/);

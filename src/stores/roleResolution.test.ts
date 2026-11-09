@@ -37,6 +37,7 @@ import { isCanonicalRole } from "@/data/canonical";
 import { parseClocktowerScript } from "@/data/customScript";
 import type { PlayerId, RoleDef, Script, StorytellerLobbyRecord, STPlayerRecord } from "./types";
 import { withoutRevealTokens } from "@/test/revealTokens";
+import { storeCommands } from "@/test/storeCommands";
 
 /** One displayed definition per RoleId (SOL-10D-C03): the first owner, then the Travellers. (The retired Grimoire circle exported this.) */
 const buildRoleDisplayMap = (script: Script | undefined): Map<string, RoleDef> => {
@@ -216,7 +217,7 @@ describe("participant + expected-state stale safety", () => {
     liveGame();
     const id = chef();
     const intent = setPerceptionIntent(player(id), { shownRole: "librarian", shownAlignment: null });
-    state().setShownAlignment(id, "evil");
+    storeCommands.setShownAlignment(id, "evil");
     expect(resolve([intent])).toMatchObject({ ok: false, code: "stale" });
   });
 });
@@ -334,7 +335,7 @@ describe("strict hostile runtime input -- structured refusals, never a throw", (
     expect(state().assignRole(id, "saint")).toMatchObject({ ok: false, code: "phase" });
     expect(state().correctRole(id, "saint")).toMatchObject({ ok: false, code: "phase" });
     expect(state().setShownRole(id, "librarian")).toMatchObject({ ok: false, code: "phase" });
-    expect(state().setShownAlignment(id, "evil")).toMatchObject({ ok: false, code: "phase" });
+    expect(storeCommands.setShownAlignment(id, "evil")).toMatchObject({ ok: false, code: "phase" });
     expect(state().setBehaviorMode(id, "custom")).toMatchObject({ ok: false, code: "phase" });
     expect(state().showAssignedRole(id)).toMatchObject({ ok: false, code: "phase" });
     expectInert(b);
@@ -526,7 +527,7 @@ describe("gameplay Actual Role transition", () => {
     liveGame();
     const id = chef();
     const participantId = player(id).participantId;
-    state().setAbilityUsed(id, true);
+    storeCommands.setAbilityUsed(id, true);
     state().setPrivateText(id, "draft");
     state().resolveEffects({ intents: [{ kind: "apply", target: { playerId: id, participantId: participantId! }, effect: { type: "drunk", lifetime: { kind: "manual" } } }] });
     state().resolveReminders({ intents: [{ kind: "place", target: { playerId: id, participantId: participantId! }, reminder: { label: "Knows" } }] });
@@ -568,7 +569,7 @@ describe("gameplay Actual Role transition", () => {
   it("choosing the SAME Role is a true no-op: nothing reset, cleared, withdrawn, recorded, pushed or advanced", () => {
     liveGame();
     const id = chef();
-    state().setAbilityUsed(id, true);
+    storeCommands.setAbilityUsed(id, true);
     state().setPrivateText(id, "draft");
     const b = baseline();
     expect(state().assignRole(id, "chef")).toEqual({ ok: true, changed: false });
@@ -650,7 +651,7 @@ describe("Actual Role correction", () => {
   it("preserves abilityUsed and every unrelated domain, carries correction History, clears the draft and invalidates the packet only when the Role really changes", () => {
     liveGame();
     const id = chef();
-    state().setAbilityUsed(id, true);
+    storeCommands.setAbilityUsed(id, true);
     state().setPrivateText(id, "draft");
     state().recordDeath(id);
     const before = player(id);
@@ -707,7 +708,7 @@ describe("explicit perception", () => {
   it("an identical bundle is a TRUE no-op: no packet/draft loss, no override clear, no Undo, no localSeq, no History", () => {
     liveGame();
     const id = chef();
-    state().setShownAlignment(id, "evil");
+    storeCommands.setShownAlignment(id, "evil");
     state().setPrivateText(id, "draft");
     store.setState({ game: { ...game(), players: { ...game().players, [id]: { ...player(id),
       publishedPacket: { id: "sent", payload: { shownRole: "chef", shownAlignment: "evil" } } } } } });
@@ -716,7 +717,7 @@ describe("explicit perception", () => {
     expect(resolve([setPerceptionIntent(before, { shownRole: before.shownRole, shownAlignment: before.shownAlignment })])).toEqual({ ok: true, changed: false });
     expect(resolve([setPerceptionIntent(before, { shownRole: before.shownRole, shownAlignment: before.shownAlignment, behaviorMode: before.behaviorMode })])).toEqual({ ok: true, changed: false });
     expect(state().setShownRole(id, before.shownRole)).toEqual({ ok: true, changed: false });
-    expect(state().setShownAlignment(id, before.shownAlignment)).toEqual({ ok: true, changed: false });
+    expect(storeCommands.setShownAlignment(id, before.shownAlignment)).toEqual({ ok: true, changed: false });
     expect(state().setBehaviorMode(id, before.behaviorMode)).toEqual({ ok: true, changed: false });
     expectInert(b);
     expect(player(id)).toBe(before);
@@ -761,7 +762,7 @@ describe("explicit perception", () => {
   it("the compatibility wrapper setShownRole keeps the alignment when the role is unchanged and derives it when the role changes", () => {
     liveGame();
     const id = chef();
-    state().setShownAlignment(id, "evil");
+    storeCommands.setShownAlignment(id, "evil");
     expect(state().setShownRole(id, "chef")).toEqual({ ok: true, changed: false });
     expect(player(id).shownAlignment).toBe("evil");
     expect(state().setShownRole(id, "librarian")).toMatchObject({ ok: true, changed: true });
@@ -1294,7 +1295,7 @@ describe("ordinary <-> Traveler transitions (live play)", () => {
   it("ordinary -> Traveler: the character is public (Actual / Shown / public together), Actual Alignment kept, abilityUsed reset, fresh arrival, starting-population plan untouched", () => {
     liveGame();
     const id = chef();
-    state().setAbilityUsed(id, true);
+    storeCommands.setAbilityUsed(id, true);
     const before = game();
     const beforeAlignment = player(id).actualAlignment;
     expect(resolve([changeRoleIntent(player(id), "thief")])).toEqual({ ok: true, changed: true });
@@ -1310,7 +1311,7 @@ describe("ordinary <-> Traveler transitions (live play)", () => {
 
   it("Traveler -> Traveler keeps Actual / Shown / public in sync; gameplay resets abilityUsed and gives a fresh arrival", () => {
     const zed = liveGameWithTraveler("thief");
-    state().setAbilityUsed(zed, true);
+    storeCommands.setAbilityUsed(zed, true);
     state().completeTravelerArrivalCheck(zed);
     store.setState({ game: { ...game(), players: { ...game().players, [zed]: { ...player(zed), actualAlignment: "good",
       travelerArrival: { demonInfoComplete: true, firstNightComplete: true, completedAtNight: 1 } } } } });
@@ -1725,7 +1726,7 @@ describe("compatibility wrappers route through the ONE authoritative seam", () =
     ["correctRole", (id: PlayerId) => state().correctRole(id, "saint", { travelerArrivalPolicy: "restart" }), ["correctActualRole"]],
     ["showAssignedRole", (id: PlayerId) => state().showAssignedRole(id), ["setPerception"]],
     ["setShownRole", (id: PlayerId) => state().setShownRole(id, "librarian"), ["setPerception"]],
-    ["setShownAlignment", (id: PlayerId) => state().setShownAlignment(id, "evil"), ["setPerception"]],
+    ["setShownAlignment", (id: PlayerId) => storeCommands.setShownAlignment(id, "evil"), ["setPerception"]],
     ["setBehaviorMode", (id: PlayerId) => state().setBehaviorMode(id, "custom"), ["setPerception"]],
     ["setPerception", (id: PlayerId) => state().setPerception(id, { shownRole: "librarian", shownAlignment: null }), ["setPerception"]],
   ] as const)("%s submits exactly one transaction to resolveRoles and writes nothing itself", (name, call, kinds) => {
@@ -1757,7 +1758,7 @@ describe("compatibility wrappers route through the ONE authoritative seam", () =
     liveGame();
     const b = baseline();
     for (const result of [state().assignRole("nope", "saint"), state().setShownRole("nope", "chef"), state().setBehaviorMode("__proto__", "custom"),
-      state().setShownAlignment("toString", "good"), state().correctRole("constructor", "chef"), state().showAssignedRole("nope")]) {
+      storeCommands.setShownAlignment("toString", "good"), state().correctRole("constructor", "chef"), state().showAssignedRole("nope")]) {
       expect(result).toMatchObject({ ok: expect.any(Boolean) });
     }
     expect(state().assignRole("nope", "saint")).toMatchObject({ ok: false, code: "notSeated" });

@@ -7,6 +7,7 @@ import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
 import { selectSetupContext } from "./setupContext";
 import { analyzeSetup } from "./setupAnalyzer";
 import { initialRevealReadiness } from "./revealReadiness";
+import { storeCommands } from "@/test/storeCommands";
 
 beforeEach(() => {
   localStorage.clear();
@@ -312,7 +313,7 @@ describe("population and persisted history", () => {
   });
   it("presence/reconnect does not alter setup population", () => {
     prepare();const before=selectSetupContext(game(),setupScript).population;
-    state().setLobby({code:"ABCD2345",uid:"st",status:"live"});state().setLobbyStatus("reconnecting");
+    state().setLobby({code:"ABCD2345",uid:"st",status:"live"});storeCommands.setLobbyStatus("reconnecting");
     expect(selectSetupContext(game(),setupScript).population).toEqual(before);
   });
   it("starting count survives attendance changes and phase advancement", () => {

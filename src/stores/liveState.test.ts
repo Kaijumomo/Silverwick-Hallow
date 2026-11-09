@@ -5,6 +5,7 @@ import { buildRegistry } from "@/data/roleRegistry";
 import { setupScript, standardRoles } from "@/test/setupFixtures";
 import { projectToPublic, projectToSelf } from "./projections";
 import { hasEffect } from "./effects";
+import { storeCommands } from "@/test/storeCommands";
 
 // Phase 9D.1: core live-state schema -- universal actual alignment,
 // structured effects (replacing bare status booleans), and structured
@@ -65,7 +66,7 @@ describe("Phase 9D.1: universal actual alignment", () => {
     const id = game().seatOrder[0]!;
     const before = game().players[id]!.actualAlignment;
     const next = before === "evil" ? "good" : "evil";
-    state().setActualAlignment(id, next);
+    storeCommands.setActualAlignment(id, next);
     expect(game().players[id]!.actualAlignment).toBe(next);
   });
 
@@ -87,7 +88,7 @@ describe("Phase 9D.1: universal actual alignment", () => {
     for (let i = 0; i < 6; i++) state().addPlayerToSeat("Player " + i);
     const id = game().seatOrder[0]!;
     state().setIsTraveler(id, true);
-    state().setActualAlignment(id, "good");
+    storeCommands.setActualAlignment(id, "good");
     expect(game().players[id]!.actualAlignment).toBe("good");
   });
 
@@ -168,7 +169,7 @@ describe("Phase 9D.1: structured active effects", () => {
     const id = game().seatOrder[0]!;
     const a = state().addEffect(id, { type: "custom-a", lifetime: { kind: "manual" } })!;
     const b = state().addEffect(id, { type: "custom-b", lifetime: { kind: "manual" } })!;
-    state().removeEffect(id, a);
+    storeCommands.removeEffect(id, a);
     expect(game().players[id]!.effects.map((e) => e.id)).toEqual([b]);
   });
 
@@ -203,7 +204,7 @@ describe("Phase 9D.1: structured reminder tokens", () => {
     const id = game().seatOrder[0]!;
     const a = state().addReminder(id, { label: "Chosen" })!;
     const b = state().addReminder(id, { label: "Protected" })!;
-    state().removeReminder(id, a);
+    storeCommands.removeReminder(id, a);
     expect(game().players[id]!.reminders.map((r) => r.id)).toEqual([b]);
   });
 

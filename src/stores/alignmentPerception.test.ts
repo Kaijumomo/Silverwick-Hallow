@@ -12,6 +12,7 @@ import { decodeSelfSnapshot } from "@/firebase/snapshots";
 import { PlayerSelfRecordSchema, STPlayerRecordSchema } from "./schemas";
 import { buildRegistry } from "@/data/roleRegistry";
 import type { PlayerId, STPlayerRecord } from "./types";
+import { storeCommands } from "@/test/storeCommands";
 
 const registry = buildRegistry(setupScript);
 const state = () => store.getState();
@@ -166,7 +167,7 @@ describe("Perception seam (Phase 10D setPerception) admits the v23 domain", () =
         expect(state().localSeq).toBe(seq);
       }
     }
-    expect(state().setShownAlignment(chef, "undisclosed")).toMatchObject({ ok: true, changed: true });
+    expect(storeCommands.setShownAlignment(chef, "undisclosed")).toMatchObject({ ok: true, changed: true });
     expect(game().history.filter((h) => h.category === "alignment")).toEqual([]);
     expect(player(chef).actualAlignment).toBe("good");
   });
@@ -174,7 +175,7 @@ describe("Perception seam (Phase 10D setPerception) admits the v23 domain", () =
   it("stale-binds the observed undisclosed value, refuses unknown values, and still needs a character for an ordinary alignment", () => {
     liveGame();
     const chef = holder("chef");
-    state().setShownAlignment(chef, "undisclosed");
+    storeCommands.setShownAlignment(chef, "undisclosed");
     const rendered = player(chef);
     expect(state().resolveRoles({ intents: [{ ...shownAlignmentIntent(rendered, "good"), expectedShownAlignment: null }] })).toMatchObject({ ok: false, code: "stale" });
     expect(state().resolveRoles({ intents: [{ ...shownAlignmentIntent(rendered, "good"), shownAlignment: "neutral" as never }] })).toMatchObject({ ok: false, code: "invalid" });
@@ -187,12 +188,12 @@ describe("Perception seam (Phase 10D setPerception) admits the v23 domain", () =
     liveGame();
     const chef = holder("chef");
     store.setState({ game: { ...game(), players: { ...game().players, [chef]: { ...player(chef), publishedPacket: { id: "k", payload: { shownRole: "chef", shownAlignment: "good" } } } } } });
-    state().setShownAlignment(chef, "undisclosed");
+    storeCommands.setShownAlignment(chef, "undisclosed");
     expect(player(chef).publishedPacket).toBeUndefined();
     state().addPlayer("Zed");
     const zed = idOf("Zed");
     state().assignRole(zed, "thief");
-    state().setShownAlignment(zed, "evil");
+    storeCommands.setShownAlignment(zed, "evil");
     state().assignRole(zed, "scapegoat");
     expect(player(zed).shownAlignment).toBe("evil");
   });
@@ -212,12 +213,12 @@ describe("10E-AC-36: privacy and public leakage", () => {
     state().assignRole(zed, "thief");
     state().setTravelerAlignment(zed, "evil");
     const chef = holder("chef");
-    state().setActualAlignment(chef, "evil");
+    storeCommands.setActualAlignment(chef, "evil");
     store.setState({ game: { ...game(), players: { ...game().players,
       [chef]: { ...player(chef), privateInfo: { extraText: "secret draft" } },
       [zed]: { ...player(zed), privateInfo: { travelerDemon: holder("imp") } } } } });
     for (const value of [null, "good", "evil", "undisclosed"] as const) {
-      for (const id of [chef, zed]) state().setShownAlignment(id, value);
+      for (const id of [chef, zed]) storeCommands.setShownAlignment(id, value);
       const publicJson = JSON.stringify(projectLobbyToPublic(game(), {}));
       for (const forbidden of ["actualAlignment", "shownAlignment", "\"good\"", "\"evil\"", "undisclosed", "participantId"]) {
         expect(publicJson).not.toContain(forbidden);
@@ -233,7 +234,7 @@ describe("10E-AC-36: privacy and public leakage", () => {
       }
     }
     // An Evil Chef shown Normal is told the derived Good, never their Actual Evil.
-    state().setShownAlignment(chef, null);
+    storeCommands.setShownAlignment(chef, null);
     expect(projectToSelf(player(chef), registry)).toEqual({ shownRole: "chef", shownAlignment: "good" });
   });
 });

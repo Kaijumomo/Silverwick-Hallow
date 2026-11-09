@@ -113,7 +113,6 @@ import type {
   EffectId,
   EffectInput,
   ExecutionOutcome,
-  ExileOutcome,
   GameResult,
   GrimoireMode,
   GuardStamp,
@@ -590,10 +589,6 @@ export type StorytellerStore = {
    * late an asynchronous Go Live continuation arrives. Detaching always works.
    */
   setLobby: (lobby: LobbyConnection | null) => boolean;
-  setLobbyStatus: (status: LobbyConnection["status"]) => void;
-  setPendingKnocks: (knocks: { uid: string; name: string }[]) => void;
-  seatPlayerFromKnock: (uid: string, name: string) => PlayerId | null;
-  bindRosterUid: (uid: string, playerId: PlayerId) => void;
   addToPendingQueue: (uid: string, name: string) => void;
   /** Phase 9R.2 (Astra R1): `participantId`, when given, is the identity the
    * membership seating command already recorded server-side for this
@@ -662,7 +657,6 @@ export type StorytellerStore = {
    * recorded. A different Shown Role derives its alignment (null) unless the
    * role is unchanged. */
   setShownRole: (id: PlayerId, roleId: RoleId | null) => RoleCommandResult;
-  setShownAlignment: (id: PlayerId, alignment: ShownAlignment | null) => RoleCommandResult;
   setBehaviorMode: (id: PlayerId, mode: BehaviorMode) => RoleCommandResult;
   setPerception: (
     id: PlayerId,
@@ -726,11 +720,6 @@ export type StorytellerStore = {
    * ordinary participant). Routes through resolveAlignments; callers may
    * ignore the result. Optional Mutation Context supplies Provenance. */
   setTravelerAlignment: (id: PlayerId, alignment: Alignment, context?: MutationContext) => AlignmentCommandResult;
-  /** Compatibility adapter: one gameplay Actual Alignment change of any
-   * participant, bound to whoever occupies `id` right now and the alignment /
-   * Traveler status observed at call time. Routes through resolveAlignments;
-   * never inferred, never called automatically. */
-  setActualAlignment: (id: PlayerId, alignment: Alignment, context?: MutationContext) => AlignmentCommandResult;
   prepareTravelerDemon: (id: PlayerId) => void;
   completeTravelerInformation: (id: PlayerId) => void;
   completeTravelerArrivalCheck: (id: PlayerId) => void;
@@ -764,8 +753,6 @@ export type StorytellerStore = {
     context?: MutationContext,
     actionContext?: CharacterActionContext,
   ) => LifeCommandResult;
-  /** A Traveler exile (Day only); may be survived. */
-  recordExile: (id: PlayerId, outcome: ExileOutcome, context?: MutationContext) => LifeCommandResult;
   /** A true resurrection (not a correction): alive, vote held, exile
    * cleared, ability restored. */
   resurrect: (id: PlayerId, context?: MutationContext) => LifeCommandResult;
@@ -785,12 +772,6 @@ export type StorytellerStore = {
    * (never a resurrection). Refused outside Night/Day like every life
    * command. New code uses the semantic commands above. */
   setAlive: (id: PlayerId, alive: boolean, context?: MutationContext) => void;
-  /** @deprecated Phase 10A compatibility adapter: `false` is
-   * spendGhostVote, `true` is restoreGhostVote -- both legal only while
-   * dead. */
-  setGhostVote: (id: PlayerId, ghostVote: boolean, context?: MutationContext) => void;
-  /** Phase 10F: an adapter over resolveLife (useAbility / correctAbilityUsed). */
-  setAbilityUsed: (id: PlayerId, used: boolean, context?: MutationContext) => LifeCommandResult;
   // --- Phase 10B: Effects -----------------------------------------------------
   /** THE authoritative Effect writer. Plans one atomic EffectTransaction
    * (effectResolution.ts) -- one or more ordered, already-resolved Effect
@@ -816,9 +797,6 @@ export type StorytellerStore = {
    * including different content under an existing id (never an upsert), a
    * timed lifetime during Setup, or an `appliedAt` other than now. */
   addEffect: (id: PlayerId, effect: EffectInput) => EffectId | null;
-  /** @deprecated Phase 10B compatibility adapter over the Remove intent:
-   * removes exactly that one Effect instance. */
-  removeEffect: (id: PlayerId, effectId: EffectId) => void;
   // --- Phase 10C: Reminders ----------------------------------------------------
   /** THE Reminder writer. Plans one atomic ReminderTransaction
    * (reminderResolution.ts) -- ordered place/amend/remove intents, gameplay
@@ -835,9 +813,6 @@ export type StorytellerStore = {
    * content under an existing id (never an upsert), an ended game, or any
    * smuggled durable field (sourceParticipant, createdAt, cleanupCue...). */
   addReminder: (id: PlayerId, reminder: ReminderInput) => ReminderId | null;
-  /** Compatibility adapter over one Remove intent: removes exactly that one
-   * Reminder instance of the current occupant. */
-  removeReminder: (id: PlayerId, reminderId: ReminderId) => ReminderCommandResult;
   /** Phase 9D.3: the single Authoritative Information command. Resolves
    * the Recipient's Actual Role and its Information Actions from Role
    * data (never a Role-id branch), structurally validates the supplied
@@ -877,10 +852,6 @@ export type StorytellerStore = {
   undo: () => void | SetupCommandResult;
   /** Package 3 (C3): silently replaces what a delivered entry shows the player. */
   correctPlayerInfo: (entryId: string, content: PlayerInfoContent) => { ok: true } | { ok: false; message: string };
-
-  setGrimoireMode: (mode: GrimoireMode) => void;
-  setTokenPosition: (id: PlayerId, x: number, y: number) => void;
-  clearTokenPositions: () => void;
 
   // --- Phase 9C.2A (OPUS-001) reconnect/acknowledgement plumbing ---------
   /** Establish (or preserve) sync metadata for exactly this scope. A no-op
@@ -2382,26 +2353,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
         return true;
       },
 
-      setLobbyStatus: (status) => {
-        const { lobby } = get();
-        if (!lobby) return;
-        set({ lobby: { ...lobby, status } });
-      },
-
-      setPendingKnocks: (knocks) => set({ pendingKnocks: knocks }),
-
-      seatPlayerFromKnock: (uid, name) => {
-        // Legacy path: used when there are no pre-allocated empty seats.
-        // Routes to pending queue; returns null since no seat is assigned yet.
-        get().addToPendingQueue(uid, name);
-        return null;
-      },
-
-      bindRosterUid: (_uid, _playerId) => {
-        // No-op in local store. The actual roster→playerId binding lives
-        // in the Firebase write done by the sync engine.
-      },
-
       addToPendingQueue: (uid, name) => {
         const { game } = get();
         // ASTRA-10G-002: the waiting queue is closed once the game has ended
@@ -3071,12 +3022,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
-      setShownAlignment: (id, alignment) => {
-        const player = currentOccupant(get().game, id);
-        if (!player) return notSeatedRefusal();
-        return get().setPerception(id, { shownRole: player.shownRole, shownAlignment: alignment });
-      },
-
       setBehaviorMode: (id, mode) => {
         const player = currentOccupant(get().game, id);
         if (!player) return notSeatedRefusal();
@@ -3281,12 +3226,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
         return get().resolveAlignments({ intents: [changeAlignmentIntent(player, alignment)], ...(context ? { context } : {}) });
       },
 
-      setActualAlignment: (id, alignment, context) => {
-        const player = currentOccupant(get().game, id);
-        if (!player) return alignmentNotSeated();
-        return get().resolveAlignments({ intents: [changeAlignmentIntent(player, alignment)], ...(context ? { context } : {}) });
-      },
-
       prepareTravelerDemon: (id) => {
         const { game, undoStack } = get();
         const p = game ? ownPlayer(game, id) : undefined;
@@ -3311,7 +3250,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       // Phase 10A: exile is its own Life Event kind (never collapsed into a
       // generic death) recorded through the life-resolution boundary.
-      exileTraveler: (id) => { get().recordExile(id, "died"); },
+      exileTraveler: (id) => { get().resolveLife({ intents: [{ kind: "exile", playerId: id, outcome: "died" }] }); },
 
       completeTravelerArrivalCheck: (id) => {
         const { game, undoStack } = get();
@@ -3424,9 +3363,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
         commitLifeOutcome({ intents: [{ kind: "execution", playerId: id, outcome,
           ...(options?.confirmations?.length ? { confirmations: options.confirmations } : {}) }], context }, actionContext, true),
 
-      recordExile: (id, outcome, context) =>
-        get().resolveLife({ intents: [{ kind: "exile", playerId: id, outcome }], context }),
-
       resurrect: (id, context) =>
         get().resolveLife({ intents: [{ kind: "resurrection", playerId: id }], context }),
 
@@ -3451,28 +3387,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
       setAlive: (id, alive, context) => {
         if (alive) get().correctLifeStatus(id, { alive: true }, context);
         else get().recordDeath(id, context);
-      },
-
-      setGhostVote: (id, ghostVote, context) => {
-        if (ghostVote) get().restoreGhostVote(id, context);
-        else get().spendGhostVote(id, context);
-      },
-
-      // Phase 10F (Section 6): a compatibility adapter over the authoritative
-      // Life boundary -- never a second abilityUsed writer. Marking the ability
-      // used is a gameplay `useAbility`; clearing it is a `correctAbilityUsed`
-      // correction (a true resurrection's reset is Life's own). Like every
-      // Life intent it is refused outside Night/Day. Phase 9R.4 (B8): an
-      // unknown player or the already-current value is completely inert.
-      setAbilityUsed: (id, abilityUsed, context) => {
-        const game = get().game;
-        const existing = game ? ownPlayer(game, id) : undefined;
-        if (!game || !existing || existing.isEmpty) return { ok: false, code: "refused", message: "That seat has no player." };
-        if (existing.abilityUsed === abilityUsed) return { ok: true, changed: false, eventIds: [] };
-        return get().resolveLife({
-          intents: [abilityUsed ? { kind: "useAbility", playerId: id } : { kind: "correctAbilityUsed", playerId: id, used: false }],
-          ...(context ? { context } : {}),
-        });
       },
 
       resolveEffects: (transaction, actionContext) => {
@@ -3544,12 +3458,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
         return result.ok ? id_ : null;
       },
 
-      removeEffect: (id, effectId) => {
-        const target = currentBinding(get().game, id);
-        if (!target) return;
-        get().resolveEffects({ intents: [{ kind: "remove", target, effectId }] });
-      },
-
       resolveReminders: (transaction, actionContext) => {
         const state = get();
         const { game } = state;
@@ -3592,12 +3500,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const result = get().resolveReminders({ intents: [{ kind: "place", target,
           reminder: { ...rest, id: id_, ...(source ? { source } : {}) } as never }] });
         return result.ok ? id_ : null;
-      },
-
-      removeReminder: (id, reminderId) => {
-        const target = currentBinding(get().game, id);
-        if (!target) return { ok: false, code: "notSeated", message: "This player is not seated." };
-        return get().resolveReminders({ intents: [{ kind: "remove", target, reminderId }] });
       },
 
       recordInformationDelivery: (recipientPlayerId, informationActionId, values, context) => {
@@ -3862,15 +3764,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
           ...(layout ? { tokenPositions: { ...get().tokenPositions, ...clone(layout) } } : {}),
         });
       },
-
-      setGrimoireMode: (mode) => set({ grimoireMode: mode }),
-
-      setTokenPosition: (id, x, y) =>
-        set((s) => ({
-          tokenPositions: { ...s.tokenPositions, [id]: { x, y } },
-        })),
-
-      clearTokenPositions: () => set({ tokenPositions: {} }),
       moveToken: (id, x, y) => {
         if (!get().game || !Object.hasOwn(get().game!.players, id) || !Number.isFinite(x) || !Number.isFinite(y))
           return { ok: false, message: "Choose a current token and a valid position." };

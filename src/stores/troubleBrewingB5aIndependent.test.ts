@@ -7,6 +7,7 @@ import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { projectLobbyToPublic, projectLobbyToSelfMap } from "./projections";
 import type { AbilityInputs } from "@/abilities/semantics";
 import type { StorytellerLobbyRecord } from "./types";
+import { storeCommands } from "@/test/storeCommands";
 
 // Independently derived from official Chef/Empath/Fortune Teller almanacs,
 // not evaluator outputs. In particular pairs are edges, not evil groups;
@@ -35,8 +36,8 @@ describe("B5a independent authoritative information verification", () => {
     g = { ...g, seatOrder: ["p0", "p4", "p1", "p2", "p3"] };
     g = { ...g, players: Object.fromEntries(g.seatOrder.map((id, seat) => [id, { ...g.players[id]!, seat }])) };
     openInStore(g);
-    store.getState().setTokenPosition("p4", 999, 4);
-    store.getState().setTokenPosition("p1", 0, 0);
+    storeCommands.setTokenPosition("p4", 999, 4);
+    storeCommands.setTokenPosition("p1", 0, 0);
     expect(use(g, "chef")).toMatchObject({ ok: true, changed: true });
     expect(number()).toMatchObject({ value: 3 });
     expect(store.getState().game!.players).toEqual(g.players);

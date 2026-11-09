@@ -4,6 +4,7 @@
 // the reconnect machinery in storytellerSync.ts relies on.
 import { beforeEach, describe, expect, it } from "vitest";
 import { useStorytellerStore } from "./storytellerStore";
+import { storeCommands } from "@/test/storeCommands";
 
 const CODE = "WMRK2345";
 const SESSION = "session-wm-1";
@@ -75,13 +76,13 @@ describe("localSeq: UI-only/local-layout mutations never advance it", () => {
   });
   it("setGrimoireMode does not advance localSeq", () => {
     const before = useStorytellerStore.getState().localSeq;
-    useStorytellerStore.getState().setGrimoireMode("freeRoam");
+    storeCommands.setGrimoireMode("freeRoam");
     expect(useStorytellerStore.getState().localSeq).toBe(before);
   });
   it("setTokenPosition/clearTokenPositions do not advance localSeq", () => {
     const before = useStorytellerStore.getState().localSeq;
-    useStorytellerStore.getState().setTokenPosition("p1", 10, 20);
-    useStorytellerStore.getState().clearTokenPositions();
+    storeCommands.setTokenPosition("p1", 10, 20);
+    storeCommands.clearTokenPositions();
     expect(useStorytellerStore.getState().localSeq).toBe(before);
   });
 });

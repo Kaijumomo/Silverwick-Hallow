@@ -5,6 +5,7 @@ import { detectLegacyGameVersion, migrateGameEntry } from "./gameMigration";
 import { setupScript } from "@/test/setupFixtures";
 import type { HistoryRecord, PlayerId, StorytellerLobbyRecord } from "./types";
 import { asV19 } from "@/test/v20Migration";
+import { storeCommands } from "@/test/storeCommands";
 
 // Phase 9R.2 Luna remediation: History snapshot schema closure. An
 // Effect/Reminder snapshot stored inside an added/removed History record
@@ -51,10 +52,10 @@ function realV17Game(): StorytellerLobbyRecord {
   state().setStatus(carol, "poisoned", false);
   const effectId = state().addEffect(carol, { type: "poisoned", sourceCharacter: "poisoner", sourcePlayer: alice, lifetime: { kind: "untilDawn" } })!;
   state().addEffect(carol, { type: "protected", lifetime: { kind: "manual" } });
-  state().removeEffect(carol, effectId);
+  storeCommands.removeEffect(carol, effectId);
   const reminderId = state().addReminder(carol, { label: "Townsfolk", sourceCharacter: "washerwoman", sourcePlayer: alice })!;
   state().addReminder(carol, { label: "Chosen" });
-  state().removeReminder(carol, reminderId);
+  storeCommands.removeReminder(carol, reminderId);
   return JSON.parse(JSON.stringify(game()));
 }
 

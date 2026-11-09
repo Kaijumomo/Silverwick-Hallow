@@ -8,6 +8,7 @@ import { useShellStore } from "./shellStore";
 import { projectLobbyToPublic, projectLobbyToSelfMap } from "./projections";
 import { StorytellerGamePersistedSchema } from "./schemas";
 import type { PreparedInformationCharacter, StorytellerLobbyRecord } from "./types";
+import { storeCommands } from "@/test/storeCommands";
 
 // Independent expectations: official wiki How to Run sections bind the qualifying
 // character and any OTHER player, not an opposite-team/category player.
@@ -135,7 +136,7 @@ describe("B6 independent official rules and authoritative lifecycle", () => {
     openInStore(setup()); expect(store.getState().resolveReminders({ intents: [{ kind: "place", target: bind(game(), "p1"), reminder: { label: "Townsfolk" } }] })).toMatchObject({ ok: true });
     const manual = game().players.p1!.reminders[0]!; expect(prepare()).toMatchObject({ ok: true }); const prepared = game();
     const linked = prepared.players.p1!.reminders.find(r => r.id !== manual.id)!;
-    expect(store.getState().removeReminder("p1", linked.id)).toMatchObject({ ok: true }); expect(game().preparedInformation).toEqual([]);
+    expect(storeCommands.removeReminder("p1", linked.id)).toMatchObject({ ok: true }); expect(game().preparedInformation).toEqual([]);
     expect(game().players.p1!.reminders).toContainEqual(manual); store.getState().undo(); expect(game()).toEqual(prepared);
   });
 
@@ -143,7 +144,7 @@ describe("B6 independent official rules and authoritative lifecycle", () => {
     openInStore(setup()); expect(prepare()).toMatchObject({ ok: true }); toNight(); expect(deliver()).toMatchObject({ ok: true });
     const delivered = game().informationDeliveries; const wrong = game().players.p2!.reminders[0]!; const first = game().players.p1!.reminders[0]!;
     expect(first.sourceParticipant).toMatchObject({ kind: "participant", participantId: game().players.p0!.participantId });
-    expect(store.getState().removeReminder("p1", first.id)).toMatchObject({ ok: true });
+    expect(storeCommands.removeReminder("p1", first.id)).toMatchObject({ ok: true });
     expect(game().informationDeliveries).toEqual(delivered); expect(game().players.p2!.reminders).toEqual([wrong]);
   });
 

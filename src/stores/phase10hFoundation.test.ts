@@ -13,6 +13,7 @@ import { asV25, withV26ToCurrent } from "@/test/v20Migration";
 import { withoutRevealTokens } from "@/test/revealTokens";
 import { buildRegistry } from "@/data/roleRegistry";
 import type { StorytellerLobbyRecord } from "./types";
+import { storeCommands } from "@/test/storeCommands";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -171,11 +172,11 @@ describe("10H-AC-031..033: reveal-token lifecycle at the one commit seam", () =>
     const t1 = player(id).revealToken;
     expect(t1).toMatch(REVEAL_TOKEN_PATTERN);
     expect(t1).not.toBe(t0);
-    expect(state().setShownAlignment(id, "evil")).toMatchObject({ ok: true });
+    expect(storeCommands.setShownAlignment(id, "evil")).toMatchObject({ ok: true });
     const t2 = player(id).revealToken;
     expect(t2).not.toBe(t1);
     // Not Told: the alignment disappears from the player view -- also visible.
-    expect(state().setShownAlignment(id, "undisclosed")).toMatchObject({ ok: true });
+    expect(storeCommands.setShownAlignment(id, "undisclosed")).toMatchObject({ ok: true });
     expect(player(id).revealToken).not.toBe(t2);
   });
 
@@ -204,7 +205,7 @@ describe("10H-AC-031..033: reveal-token lifecycle at the one commit seam", () =>
   it("AC-032: hidden Actual / mechanical changes never rotate the token (Actual Role, Actual Alignment, Life, notes)", () => {
     const id = holder("empath");
     const before = tokensOf(game());
-    expect(state().setActualAlignment(id, "evil")).toMatchObject({ ok: true });
+    expect(storeCommands.setActualAlignment(id, "evil")).toMatchObject({ ok: true });
     expect(state().recordDeath(id)).toMatchObject({ ok: true });
     state().setNotes(id, "hidden bookkeeping");
     expect(tokensOf(game())).toEqual(before);
@@ -212,7 +213,7 @@ describe("10H-AC-031..033: reveal-token lifecycle at the one commit seam", () =>
     const drunk = holder("drunk");
     const tDrunk = player(drunk).revealToken;
     expect(player(drunk).shownRole).toBe("chef");
-    state().setShownAlignment(drunk, null); // unchanged derived alignment: no-op or same identity
+    storeCommands.setShownAlignment(drunk, null); // unchanged derived alignment: no-op or same identity
     expect(player(drunk).revealToken).toBe(tDrunk);
   });
 

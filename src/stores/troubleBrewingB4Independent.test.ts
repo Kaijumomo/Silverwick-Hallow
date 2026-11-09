@@ -11,6 +11,7 @@ import { SessionWriter } from "@/firebase/writer";
 import { createLobby } from "@/firebase/lobby";
 import { requireActiveSession } from "@/firebase/lifecycle";
 import type { StorytellerLobbyRecord } from "./types";
+import { storeCommands } from "@/test/storeCommands";
 
 // Independent adversarial acceptance cases. Rules oracle: official wiki pages
 // Scarlet_Woman (pre-death threshold), Imp (self-pass and no repeat attack),
@@ -77,7 +78,7 @@ describe("independent B4 adverse death and succession sequences", () => {
     expect(next.lifeEventWindow.events).toEqual([]);
     expect(store.getState().resolveReminders({ intents: [{ kind: "place", target: bind(next, "p0"), reminder: { label: "No Ability", sourceCharacter: "slayer" } }] })).toMatchObject({ ok: true });
     const reminder = store.getState().game!.players.p0!.reminders.find(r => r.label === "No Ability")!;
-    expect(store.getState().removeReminder("p0", reminder.id)).toMatchObject({ ok: true });
+    expect(storeCommands.removeReminder("p0", reminder.id)).toMatchObject({ ok: true });
     const afterRemoval = store.getState().game!;
     expect(afterRemoval.players.p0!.abilityUsed).toBe(true);
     expect(store.getState().resolveAbility(shot(afterRemoval))).toMatchObject({ ok: false });

@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { useStorytellerStore as store } from "./storytellerStore";
 import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
 import type { GameHistoryRecord as HistoryRecord, PlayerId, StorytellerLobbyRecord } from "./types";
+import { storeCommands } from "@/test/storeCommands";
 
 // Phase 9R.4 (B8 remediation): `game.players` is a plain object, so an
 // indexed lookup `game.players[id]` also "finds" inherited Object.prototype
@@ -132,27 +133,27 @@ const COMMANDS: [string, (id: PlayerId) => unknown][] = [
   ["assignRole", (id) => state().assignRole(id, "chef")],
   ["showAssignedRole", (id) => state().showAssignedRole(id)],
   ["setShownRole", (id) => state().setShownRole(id, "chef")],
-  ["setShownAlignment", (id) => state().setShownAlignment(id, "evil")],
+  ["setShownAlignment", (id) => storeCommands.setShownAlignment(id, "evil")],
   ["setBehaviorMode", (id) => state().setBehaviorMode(id, "fake_demon_behavior")],
   ["setBluffs", (id) => state().setBluffs(id, ["chef"])],
   ["setFakeMinions", (id) => state().setFakeMinions(id, [])],
   ["setPrivateText", (id) => state().setPrivateText(id, "text")],
   ["setIsTraveler", (id) => expect(state().setIsTraveler(id, true).ok).toBe(false)],
   ["setTravelerAlignment", (id) => state().setTravelerAlignment(id, "evil")],
-  ["setActualAlignment", (id) => state().setActualAlignment(id, "evil")],
+  ["setActualAlignment", (id) => storeCommands.setActualAlignment(id, "evil")],
   ["prepareTravelerDemon", (id) => state().prepareTravelerDemon(id)],
   ["completeTravelerInformation", (id) => state().completeTravelerInformation(id)],
   ["completeTravelerArrivalCheck", (id) => state().completeTravelerArrivalCheck(id)],
   ["exileTraveler", (id) => state().exileTraveler(id)],
   ["setAlive(false)", (id) => state().setAlive(id, false)],
   ["setAlive(true)", (id) => state().setAlive(id, true)],
-  ["setGhostVote", (id) => state().setGhostVote(id, false)],
-  ["setAbilityUsed", (id) => state().setAbilityUsed(id, true)],
+  ["setGhostVote", (id) => storeCommands.setGhostVote(id, false)],
+  ["setAbilityUsed", (id) => storeCommands.setAbilityUsed(id, true)],
   ["setStatus", (id) => state().setStatus(id, "poisoned", true)],
   ["addEffect", (id) => expect(state().addEffect(id, { type: "poisoned", lifetime: { kind: "manual" } })).toBeNull()],
-  ["removeEffect", (id) => state().removeEffect(id, "manual:poisoned")],
+  ["removeEffect", (id) => storeCommands.removeEffect(id, "manual:poisoned")],
   ["addReminder", (id) => expect(state().addReminder(id, { label: "Mark" })).toBeNull()],
-  ["removeReminder", (id) => state().removeReminder(id, "r1")],
+  ["removeReminder", (id) => storeCommands.removeReminder(id, "r1")],
   ["recordInformationDelivery", (id) => expect(state().recordInformationDelivery(id, "chef-first-night", []).ok).toBe(false)],
   ["setNotes", (id) => state().setNotes(id, "notes")],
   ["swapSetupRoles(a)", (id) => expect(state().swapSetupRoles(id, game().seatOrder[1]!).ok).toBe(false)],
@@ -402,7 +403,7 @@ describe("Phase 9R.4 (B8 remediation): representative families -- inherited ids 
   it("3. setShownAlignment -- never reaches packet invalidation for an inherited id", () =>
     // Deal is random: contrast with a player currently shown "good", so the
     // valid call is a genuine change rather than the accepted B8 no-op.
-    inertThenValid(setupFixture, (id) => state().setShownAlignment(id, "evil"),
+    inertThenValid(setupFixture, (id) => storeCommands.setShownAlignment(id, "evil"),
       () => Object.values(game().players).find((p) => p.shownAlignment === "good")!.id, {},
       (id) => expect(player(id).shownAlignment).toBe("evil")));
 
@@ -413,7 +414,7 @@ describe("Phase 9R.4 (B8 remediation): representative families -- inherited ids 
   // Phase 10F: setAbilityUsed is an adapter over the Life boundary -- a Live
   // Play gameplay use with one Life History record (Setup refuses it, like
   // every Life change).
-  it("5. setAbilityUsed", () => inertThenValid(liveFixture, (id) => state().setAbilityUsed(id, true), first, { history: 1 },
+  it("5. setAbilityUsed", () => inertThenValid(liveFixture, (id) => storeCommands.setAbilityUsed(id, true), first, { history: 1 },
     (id) => expect(player(id).abilityUsed).toBe(true)));
 
   it("6. setNotes", () => inertThenValid(setupFixture, (id) => state().setNotes(id, "watch"), first, {},

@@ -77,10 +77,11 @@ const ALLOWED_STORE_UNITS = new Set([
   // Delivery record's Actual Role snapshot moved into the pure planner,
   // informationDelivery.ts, so recordInformationDelivery writes none.)
   "setShownRole",
-  // SOL-10F-L7: the strengthened detector now also sees these two adapters'
-  // perception SPECs (`setPerception(id, { ...: x })`). Same reason as
+  // SOL-10F-L7: the strengthened detector now also sees this adapter's
+  // perception SPEC (`setPerception(id, { ...: x })`). Same reason as
   // setShownRole; each flagged line is asserted below to be ONLY that call.
-  "setShownAlignment", "setBehaviorMode",
+  // (setShownAlignment, test-only, moved to src/test/storeCommands.ts: F-04.)
+  "setBehaviorMode",
 ]);
 
 /** SOL-10F-L7: the Phase 10F read-only snapshot modules above are admitted
@@ -94,7 +95,7 @@ const SNAPSHOT_SITES: Record<string, readonly string[]> = {
 };
 
 /** Units whose only write shape is a perception spec handed to setPerception. */
-const PERCEPTION_SPEC_UNITS = new Set(["setShownRole", "setShownAlignment", "setBehaviorMode"]);
+const PERCEPTION_SPEC_UNITS = new Set(["setShownRole", "setBehaviorMode"]);
 
 const enclosingUnit = enclosingUnitFor;
 
@@ -159,7 +160,7 @@ describe("Phase 10D architecture guard: no writer bypasses the Role seam", () =>
       const next = rest.search(/\n {6}\w+: (?:\(|async \()/);
       return rest.slice(0, next < 0 ? undefined : next);
     };
-    for (const name of ["assignRole", "correctRole", "showAssignedRole", "setShownRole", "setShownAlignment", "setBehaviorMode", "setPerception"]) {
+    for (const name of ["assignRole", "correctRole", "showAssignedRole", "setShownRole", "setBehaviorMode", "setPerception"]) {
       const text = body(name);
       expect(text, name).toMatch(/resolveRoles|setPerception|setShownRole/);
       for (const forbidden of [/\bset\(/, /patchPlayer/, /players:/, /pushUndo/, /recordIfLive/, /invalidatePrivatePacket/, /pruneInapplicablePrivateInfo/]) {

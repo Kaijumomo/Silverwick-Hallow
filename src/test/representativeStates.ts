@@ -1,5 +1,6 @@
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import type { PlayerId } from "@/stores/types";
+import { storeCommands } from "@/test/storeCommands";
 
 /**
  * Phase 10H (contract §21): the representative states RS-15 and RS-20, built
@@ -91,14 +92,14 @@ export function buildRS15(): RepresentativeHandles {
   store().addReminder(empath, { label: "Chosen" });
   store().addReminder(empath, { label: "Knows" });
   store().addReminder(chef, { label: "Safe tonight" });
-  ok(store().setActualAlignment(saint, "evil", { provenance: { reason: "Storyteller selection" } }), "alignment exception");
+  ok(storeCommands.setActualAlignment(saint, "evil", { provenance: { reason: "Storyteller selection" } }), "alignment exception");
 
   // Day 1: an execution the executee survives; Night 2 begins.
   ok(store().advancePhase(), "advance to Day 1");
   ok(store().recordExecution(holder("investigator"), "survived"), "execution");
   ok(store().spendGhostVote(ravenkeeper), "spend vote");
   ok(store().advancePhase(), "advance to Night 2");
-  ok(store().setAbilityUsed(holder("undertaker"), true), "ability used");
+  ok(storeCommands.setAbilityUsed(holder("undertaker"), true), "ability used");
   ok(store().recordDeath(holder("washerwoman"), { provenance: { reason: "killed by the Demon" } }), "night 2 death");
   store().selectPlayer(chef);
   return { ids, drunkId, impId, travelerIds: [] };

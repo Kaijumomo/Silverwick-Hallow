@@ -4,6 +4,7 @@ import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
 import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
 import type { GameHistoryRecord as HistoryRecord, PlayerId, STPlayerRecord, StorytellerLobbyRecord } from "./types";
+import { storeCommands } from "@/test/storeCommands";
 
 // Phase 9R.4 (B8): a rejected command, or one whose complete intended result
 // equals Current State, must leave EVERYTHING untouched -- the same game
@@ -108,10 +109,10 @@ function travelerGame(role: string, alignment: "good" | "evil", over: Partial<St
 describe("Phase 9R.4 (B8): a player-targeted command naming a missing PlayerId is completely inert", () => {
   const MISSING = "no-such-player";
   const commands: [string, () => void][] = [
-    ["setShownAlignment", () => state().setShownAlignment(MISSING, "evil")],
+    ["setShownAlignment", () => storeCommands.setShownAlignment(MISSING, "evil")],
     ["setBehaviorMode", () => state().setBehaviorMode(MISSING, "fake_demon_behavior")],
     ["renamePlayer", () => state().renamePlayer(MISSING, "Mallory")],
-    ["setAbilityUsed", () => state().setAbilityUsed(MISSING, true)],
+    ["setAbilityUsed", () => storeCommands.setAbilityUsed(MISSING, true)],
     ["setNotes", () => state().setNotes(MISSING, "notes")],
     ["setShownRole", () => state().setShownRole(MISSING, "chef")],
     ["setBluffs", () => state().setBluffs(MISSING, ["chef"])],
@@ -137,11 +138,11 @@ describe("Phase 9R.4 (B8): a player-targeted command naming a missing PlayerId i
     dealtGame();
     const id = seat(0);
     const before = baseline();
-    state().setShownAlignment(MISSING, "evil");
+    storeCommands.setShownAlignment(MISSING, "evil");
     expectInert(before);
 
     const contrast = baseline();
-    state().setShownAlignment(id, player(id).shownAlignment === "evil" ? "good" : "evil");
+    storeCommands.setShownAlignment(id, player(id).shownAlignment === "evil" ? "good" : "evil");
     expectOneMutation(contrast);
   });
 
@@ -170,17 +171,17 @@ describe("Phase 9R.4 (B8): scalar setters with the already-current value are com
     const id = seat(0);
     expect(player(id).abilityUsed).toBe(false);
     const before = baseline();
-    state().setAbilityUsed(id, false);
+    storeCommands.setAbilityUsed(id, false);
     expectInert(before);
 
     const contrast = baseline();
-    state().setAbilityUsed(id, true);
+    storeCommands.setAbilityUsed(id, true);
     // Phase 10F: through the Life boundary -- one truthful "life" History record.
     expectOneMutation(contrast, { history: 1 });
     expect(player(id).abilityUsed).toBe(true);
     expect(game().history.at(-1)).toMatchObject({ category: "life", change: { kind: "value", from: { abilityUsed: false }, to: { abilityUsed: true } } });
     const again = baseline();
-    state().setAbilityUsed(id, true);
+    storeCommands.setAbilityUsed(id, true);
     expectInert(again);
   });
 
@@ -430,7 +431,7 @@ describe("Phase 9R.4 (B8): identity/perception commands compare their COMPLETE i
     expectInert(same);
     expect(player(id).shownAlignment).toBe("good");
 
-    state().setShownAlignment(id, "evil");
+    storeCommands.setShownAlignment(id, "evil");
     const override = baseline();
     state().setShownRole(id, "chef");
     expectInert(override);
@@ -464,17 +465,17 @@ describe("Phase 9R.4 (B8): identity/perception commands compare their COMPLETE i
   it("setShownAlignment(current alignment) is inert and manufactures no packet invalidation; a real change still invalidates", () => {
     dealtGame();
     const id = holderOf("chef");
-    state().setShownAlignment(id, "evil");
+    storeCommands.setShownAlignment(id, "evil");
     patch(id, { publishedPacket: { id: "sent", payload: { shownRole: "chef", shownAlignment: "evil" } } });
     const epoch = player(id).packetEpoch;
     const before = baseline();
-    state().setShownAlignment(id, "evil");
+    storeCommands.setShownAlignment(id, "evil");
     expectInert(before);
     expect(player(id).packetEpoch).toBe(epoch);
     expect(player(id).publishedPacket).toBeDefined();
 
     const contrast = baseline();
-    state().setShownAlignment(id, null);
+    storeCommands.setShownAlignment(id, null);
     expectOneMutation(contrast);
     expect(player(id).packetEpoch).not.toBe(epoch);
     expect(player(id).publishedPacket).toBeUndefined();
@@ -701,7 +702,7 @@ describe("Phase 9R.4 (B8): Setup commands skip only a provably identical complet
     expectInert(before);
 
     // Deceptive configuration makes the same-role override a real reset.
-    state().setShownAlignment(id, "evil");
+    storeCommands.setShownAlignment(id, "evil");
     const reset = baseline();
     expect(state().replaceSetupRole(id, "chef").ok).toBe(true);
     expectOneMutation(reset);
@@ -768,13 +769,13 @@ describe("Phase 9R.4 (B8): commands already implementing true no-ops keep them",
     state().addReminder(id, { id: "r1", label: "Mark" });
     const before = baseline();
     state().assignRole(id, player(id).actualRole);
-    state().setActualAlignment(id, player(id).actualAlignment!);
+    storeCommands.setActualAlignment(id, player(id).actualAlignment!);
     state().setAlive(id, true);
-    state().setGhostVote(id, true);
+    storeCommands.setGhostVote(id, true);
     state().setStatus(id, "poisoned", false);
     expect(state().addReminder(id, { id: "r1", label: "Mark" })).toBe("r1");
-    state().removeReminder(id, "no-such-reminder");
-    state().removeEffect(id, "no-such-effect");
+    storeCommands.removeReminder(id, "no-such-reminder");
+    storeCommands.removeEffect(id, "no-such-effect");
     state().removeInformationDelivery("no-such-delivery");
     expectInert(before);
   });
@@ -801,7 +802,7 @@ describe("Phase 9R.4 (B9): addReminder/removeReminder are the only Reminder muta
     expect(game().history.at(-1)).toMatchObject({ category: "reminder", change: { kind: "added", item: { id: "r1", label: "Red Herring" } } });
 
     const removed = baseline();
-    state().removeReminder(id, "r1");
+    storeCommands.removeReminder(id, "r1");
     expectOneMutation(removed, { history: 1 });
     expect(game().history.at(-1)).toMatchObject({ category: "reminder", change: { kind: "removed", item: { id: "r1" } } });
     expect(player(id).reminders).toEqual([]);
@@ -816,7 +817,7 @@ describe("Phase 9R.4 (B9): addReminder/removeReminder are the only Reminder muta
     expect(player(id).reminders.map((r) => r.id)).toEqual(["r1"]);
 
     const removed = baseline();
-    state().removeReminder(id, "r1");
+    storeCommands.removeReminder(id, "r1");
     expectOneMutation(removed, { history: 0 });
     expect(game().history).toEqual([]);
   });

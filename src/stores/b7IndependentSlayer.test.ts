@@ -6,6 +6,7 @@ import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { changeRoleIntent, correctRoleIntent } from "./roleResolution";
 import { projectLobbyToPublic, projectLobbyToSelfMap } from "./projections";
 import { StorytellerGamePersistedSchema } from "./schemas";
+import { storeCommands } from "@/test/storeCommands";
 
 // Independent oracle: https://wiki.bloodontheclocktower.com/Slayer
 // Official ability use is spent after any valid shot, even impaired or failed.
@@ -53,7 +54,7 @@ describe("B7 independent Slayer ability and notation boundary", () => {
 
   it("removing notation does not refund or recreate it on unrelated changes", () => {
     expect(shoot()).toMatchObject({ ok: true });
-    expect(state().removeReminder("p0", tokens()[0]!.id)).toMatchObject({ ok: true });
+    expect(storeCommands.removeReminder("p0", tokens()[0]!.id)).toMatchObject({ ok: true });
     expect(game().players.p0!.abilityUsed).toBe(true); expect(tokens()).toEqual([]);
     state().setNotes("p4", "Discussion"); expect(tokens()).toEqual([]);
     const before = game(); expect(shoot()).toMatchObject({ ok: false }); expect(game()).toBe(before);
@@ -88,7 +89,7 @@ describe("B7 independent Slayer ability and notation boundary", () => {
 
   it("reminder removal and reload retain spent authority and private projections", async () => {
     const publicBefore = projectLobbyToPublic(game(), {}); const selfBefore = projectLobbyToSelfMap(game(), proofRegistry);
-    expect(shoot()).toMatchObject({ ok: true }); expect(state().removeReminder("p0", tokens()[0]!.id)).toMatchObject({ ok: true });
+    expect(shoot()).toMatchObject({ ok: true }); expect(storeCommands.removeReminder("p0", tokens()[0]!.id)).toMatchObject({ ok: true });
     const saved = localStorage.getItem("new-blood-st")!; const expected = game();
     store.setState({ game: null, undoStack: [] }); localStorage.setItem("new-blood-st", saved); await store.persist.rehydrate();
     expect(game()).toEqual(expected); expect(shoot()).toMatchObject({ ok: false });

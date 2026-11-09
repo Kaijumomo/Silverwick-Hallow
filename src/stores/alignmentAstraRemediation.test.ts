@@ -22,6 +22,7 @@ import { SessionWriter } from "@/firebase/writer";
 import { startStorytellerSession, useSessionRuntime } from "@/firebase/storytellerSync";
 import { SnapshotValidationError } from "@/firebase/snapshots";
 import type { PlayerId, StorytellerLobbyRecord, STPlayerRecord } from "./types";
+import { storeCommands } from "@/test/storeCommands";
 
 const code = "ASTR2345";
 const root = `lobbies/${code}`;
@@ -109,7 +110,7 @@ describe("SOL-10E-A1 (ASTRA-10E-001): setIsTraveler is Setup-only", () => {
   it("an ENDED snapshot whose Reveal never happened refuses before any mutation (no alignment deletion, no plan change, no Undo, no localSeq)", () => {
     seatSeven();
     const alice = idOf("Alice");
-    expect(state().setActualAlignment(alice, "evil")).toMatchObject({ ok: true, changed: true });
+    expect(storeCommands.setActualAlignment(alice, "evil")).toMatchObject({ ok: true, changed: true });
     state().setPrivateText(alice, "draft");
     expect(state().setPhase("ended").ok).toBe(true);
     expect(game().setupRolesRevealed).not.toBe(true);
@@ -265,7 +266,7 @@ describe("SOL-10E-A3 (ASTRA-10E-003): Live Play requires a valid live Game Momen
 
   it("normal Night 1 / Day 1 mutation still commits with its History", () => {
     liveGame();
-    expect(state().setActualAlignment(holder("chef"), "evil")).toMatchObject({ ok: true, changed: true });
+    expect(storeCommands.setActualAlignment(holder("chef"), "evil")).toMatchObject({ ok: true, changed: true });
     state().advancePhase();
     expect(state().assignRole(holder("monk") ?? holder("empath"), "saint")).toMatchObject({ ok: true, changed: true });
     expect(game().history.map((h) => [h.category, h.moment])).toEqual([["alignment", { phase: "night", day: 1 }], ["role", { phase: "day", day: 1 }]]);
@@ -332,7 +333,7 @@ describe("SOL-10E-A5 (ASTRA-10E-005): raw v23 Alignment History snapshots reject
   it("valid v23 and legacy Alignment History still round-trip through local persistence", async () => {
     liveGame();
     state().resolveAlignments({ intents: [correctAlignmentIntent(player(holder("chef")), "evil")], resolutionId: "r1" });
-    state().setActualAlignment(holder("imp"), "good");
+    storeCommands.setActualAlignment(holder("imp"), "good");
     const legacy = { id: "legacy-a", category: "alignment" as const, participant: { kind: "legacy" as const, playerId: "a" },
       change: { kind: "value" as const, from: { actualAlignment: "good", legacyExtra: 1 }, to: { actualAlignment: "evil" } } };
     store.setState({ game: { ...game(), history: [...game().history, legacy] } });
@@ -351,7 +352,7 @@ describe("SOL-10E-A5 (ASTRA-10E-005): raw v23 Alignment History snapshots reject
 describe("PHASE10E.md 26 semantic question 1: Traveler -> Traveler Role changes preserve alignment perception", () => {
   function seedTraveler(shownAlignment: STPlayerRecord["shownAlignment"]) {
     const zed = liveTraveler("thief");
-    if (shownAlignment !== null) expect(state().setShownAlignment(zed, shownAlignment)).toMatchObject({ ok: true });
+    if (shownAlignment !== null) expect(storeCommands.setShownAlignment(zed, shownAlignment)).toMatchObject({ ok: true });
     store.setState({ game: { ...game(), players: { ...game().players, [zed]: { ...player(zed),
       privateInfo: { extraText: "draft" }, publishedPacket: { id: "k", payload: { shownRole: "thief" } }, packetEpoch: "epoch-before" } } } });
     return zed;
@@ -399,7 +400,7 @@ describe("PHASE10E.md 26 semantic question 1: Traveler -> Traveler Role changes 
   it("ordinary -> Traveler starts at Normal unless the same resolution sets a perception; Traveler -> ordinary still needs an ordinary perception", () => {
     liveGame();
     const chef = holder("chef");
-    state().setShownAlignment(chef, "evil");
+    storeCommands.setShownAlignment(chef, "evil");
     expect(state().resolveRoles({ intents: [changeRoleIntent(player(chef), "thief")] })).toMatchObject({ ok: true, changed: true });
     expect(player(chef)).toMatchObject({ isTraveler: true, shownRole: "thief", shownAlignment: null });
     const imp = holder("imp");

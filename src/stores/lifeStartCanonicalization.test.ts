@@ -6,6 +6,7 @@ import { StorytellerGamePersistedSchema } from "./schemas";
 import { canonicalizeStartingLife } from "./lifeResolution";
 import type { PlayerId, STPlayerRecord, StorytellerLobbyRecord } from "./types";
 import { asV19 } from "@/test/v20Migration";
+import { storeCommands } from "@/test/storeCommands";
 
 // Phase 10A Luna blocker 10A-LUNA-001: Setup life state is never gameplay.
 // Every occupied participant enters Night 1 with canonical starting life
@@ -229,7 +230,7 @@ describe("10A-LUNA-001: later phase changes never reset live life state", () => 
     state().assignRole(traveler, "thief");
     expect(state().recordDeath(ids[0]!).ok).toBe(true);
     expect(state().advancePhase().ok).toBe(true); // Night 1 -> Day 1
-    expect(state().recordExile(traveler, "died").ok).toBe(true);
+    expect(storeCommands.recordExile(traveler, "died").ok).toBe(true);
     expect(state().spendGhostVote(ids[0]!).ok).toBe(true);
     const snapshot = { dead: { ...player(ids[0]!) }, exiled: { ...player(traveler) } };
     expect(state().advancePhase().ok).toBe(true); // Day 1 -> Night 2
@@ -314,7 +315,7 @@ describe("10A-LUNA-RV-001: Live Play never returns to Setup through the phase AP
   it("a legitimate exile survives the attempted regression and later phase changes", () => {
     const { traveler } = liveNight();
     state().advancePhase();
-    expect(state().recordExile(traveler, "died").ok).toBe(true);
+    expect(storeCommands.recordExile(traveler, "died").ok).toBe(true);
     expect(state().setPhase("setup").ok).toBe(false);
     state().advancePhase(); state().advancePhase();
     expect(player(traveler)).toMatchObject({ alive: false, ghostVote: true, exiled: true });

@@ -12,6 +12,7 @@ import { decodeSelfSnapshot } from "@/firebase/snapshots";
 import { computeNightOrder } from "@/features/nightOrder/nightOrder";
 import { selectSetupContext } from "@/features/setup/setupContext";
 import { analyzeSetup } from "@/features/setup/setupAnalyzer";
+import { storeCommands } from "@/test/storeCommands";
 
 const registry = buildRegistry(setupScript);
 const game = () => store.getState().game!;
@@ -44,7 +45,7 @@ describe("Phase 9B Traveler identity and population", () => {
     expect(decodeSelfSnapshot(projectToSelf(p(), registry)).status).toBe("ready");
   });
   it.each(["good", "evil"] as const)("keeps actual %s distinct from shown alignment and survives undo", alignment => {
-    traveler(); store.getState().setShownAlignment("t", "evil");
+    traveler(); storeCommands.setShownAlignment("t", "evil");
     expect(p().actualAlignment).toBeUndefined();
     store.getState().setTravelerAlignment("t", alignment);
     expect(p().actualAlignment).toBe(alignment); expect(p().shownAlignment).toBe("evil");
@@ -155,7 +156,7 @@ describe("Phase 9B personal first night", () => {
       expect(store.getState().recordDeath("t").ok).toBe(true);
     } else {
       store.setState({ game: { ...game(), phase: "day", day: 3 } });
-      expect(store.getState().recordExile("t", "died").ok).toBe(true);
+      expect(storeCommands.recordExile("t", "died").ok).toBe(true);
       store.setState({ game: { ...game(), phase: "night", day: 4 } });
     }
     expect(p()).toBeDefined(); expect(p().alive).toBe(false);
@@ -175,7 +176,7 @@ describe("Phase 9B permitted Demon information", () => {
     expect(projectToSelf(p(), registry)).not.toHaveProperty("demon");
   });
   it.each([undefined, "good"] as const)("shown evil never substitutes for actual %s", alignment => {
-    traveler(); store.getState().setShownAlignment("t", "evil");
+    traveler(); storeCommands.setShownAlignment("t", "evil");
     if (alignment) store.getState().setTravelerAlignment("t", alignment);
     expect(travelerDemonInformation(p(), game(), registry).demon).toBeUndefined();
     store.getState().prepareTravelerDemon("t"); expect(p().privateInfo).toBeUndefined();
@@ -207,7 +208,7 @@ describe("Phase 9B permitted Demon information", () => {
     traveler(); store.getState().setTravelerAlignment("t", "evil"); store.getState().prepareTravelerDemon("t");
     p().publishedPacket = { id: "sent", payload: previewPrivatePacket(p(), game(), registry).payload };
     store.getState().completeTravelerInformation("t");
-    expect(store.getState().setShownAlignment("t", "evil")).toEqual({ ok: true, changed: true });
+    expect(storeCommands.setShownAlignment("t", "evil")).toEqual({ ok: true, changed: true });
     // The packet is withdrawn, but packet invalidation cannot smuggle an
     // arrival-state reset: the Storyteller's recorded completion stands.
     expect(p().publishedPacket).toBeUndefined();
@@ -223,7 +224,7 @@ describe("Phase 9B persistence", () => {
     store.getState().completeTravelerInformation("t");
     // Phase 10A: exile is recorded during the Day.
     store.setState({ game: { ...game(), phase: "day", day: 1 } });
-    expect(store.getState().recordExile("t", "died").ok).toBe(true);
+    expect(storeCommands.recordExile("t", "died").ok).toBe(true);
     const expected = JSON.parse(JSON.stringify(p()));
     expect(expected).toMatchObject({ alive: false, exiled: true });
     const saved = localStorage.getItem("new-blood-st")!;
@@ -234,7 +235,7 @@ describe("Phase 9B persistence", () => {
   it("round trips current fields and owner checkpoint without undefined values", () => {
     traveler(); store.getState().setTravelerAlignment("t", "evil");
     store.setState({ game: { ...game(), phase: "day", day: 1 } });
-    expect(store.getState().recordExile("t", "died").ok).toBe(true);
+    expect(storeCommands.recordExile("t", "died").ok).toBe(true);
     const decoded = StorytellerGamePersistedSchema.parse(JSON.parse(JSON.stringify(game())));
     expect(decoded.players.t).toEqual(p());
     const verify = (value: unknown): void => { expect(value).not.toBeUndefined(); if (value && typeof value === "object") Object.values(value).forEach(verify); };

@@ -11,6 +11,7 @@ import { writeProjections } from "@/firebase/sync";
 import { MemoryRoomBackend } from "@/firebase/memoryBackend";
 import { buildRegistry } from "@/data/roleRegistry";
 import type { EffectRecord, PlayerId, StorytellerLobbyRecord } from "./types";
+import { storeCommands } from "@/test/storeCommands";
 
 const STORAGE_KEY = "new-blood-st";
 const state = () => store.getState();
@@ -184,7 +185,7 @@ describe("ASTRA-10B-002: v20 evidence blocks every legacy migration step for tha
     // Always a real change (the random Deal may already have made Alice
     // evil, which would make this a no-op with no History to corrupt).
     const alice = idOf("Alice");
-    state().setActualAlignment(alice, game().players[alice]!.actualAlignment === "evil" ? "good" : "evil");
+    storeCommands.setActualAlignment(alice, game().players[alice]!.actualAlignment === "evil" ? "good" : "evil");
     const g = persisted(game()) as unknown as { history: { category: string }[] };
     g.history[g.history.length - 1]!.category = "identity";
     const result = migrateStoreState({ game: g, undoStack: [] }, 17) as { game: unknown };

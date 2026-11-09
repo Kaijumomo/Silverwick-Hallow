@@ -16,6 +16,7 @@ import { usePacketDeliveryState } from "./packetDeliveryState";
 import { revokePlayerAndCommit, storytellerOccupancyCompletion } from "./membershipCommands";
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
 import { withoutSelfEnvelope } from "@/test/revealTokens";
+import { storeCommands } from "@/test/storeCommands";
 
 /** Package 3 (C10): a seating binds the participation the game records at the seat. */
 const seatedAs = (playerId: string) => { const p = store.getState().game!.players[playerId]!; return { participantId: p.participantId!, name: p.name }; };
@@ -76,8 +77,8 @@ describe("Phase 9B membership and private delivery", () => {
     const { b, id, other, writer } = await setup();
     store.getState().showAssignedRole(other);
     store.setState({ game: { ...store.getState().game!, phase: "night", day: 4 } });
-    expect(store.getState().setShownAlignment(other, "undisclosed")).toMatchObject({ ok: true, changed: true });
-    expect(store.getState().setShownAlignment(id, "undisclosed")).toMatchObject({ ok: true, changed: true });
+    expect(storeCommands.setShownAlignment(other, "undisclosed")).toMatchObject({ ok: true, changed: true });
+    expect(storeCommands.setShownAlignment(id, "undisclosed")).toMatchObject({ ok: true, changed: true });
     await knockOnLobby(b, code, "bob", "Demon"); await seatPlayer(writer, code, "bob", other, null, seatedAs(other));
     usePlayerStore.getState().setSession({ code, uid: "bob", requestedName: "Demon" });
     disposals.push(startPlayerHandshake(b, code, "bob"));

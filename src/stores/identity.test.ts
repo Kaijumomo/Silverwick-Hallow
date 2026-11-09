@@ -5,6 +5,7 @@ import { dealtIdentity } from "./identity";
 import { projectToSelf } from "./projections";
 import { useStorytellerStore as store } from "./storytellerStore";
 import { StorytellerGamePersistedSchema } from "./schemas";
+import { storeCommands } from "@/test/storeCommands";
 
 const registry = buildRegistry(tbScript);
 const cases = [
@@ -119,7 +120,7 @@ describe("AUD-004 identity boundary", () => {
     const { id, current } = seated();
     store.getState().assignRole(id, "lunatic");
     store.getState().setShownRole(id, "imp");
-    store.getState().setShownAlignment(id, "evil");
+    storeCommands.setShownAlignment(id, "evil");
     store.getState().setBluffs(id, ["saint"]);
     store.getState().setShownRole(id, "chef");
     expect(projectToSelf(current(), registry)).toEqual({ shownRole: "chef", shownAlignment: "good" });

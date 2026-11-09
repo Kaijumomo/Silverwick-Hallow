@@ -1,5 +1,6 @@
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import type { PlayerId } from "@/stores/types";
+import { storeCommands } from "@/test/storeCommands";
 
 /**
  * Phase 9D.5: builds a single, deliberately rich authoritative game --
@@ -136,7 +137,7 @@ export function buildRichPhase9Game(): RichGameHandles {
   lifeOk(store().recordExecution(investigatorId, "survived"), "recordExecution");
   // Exile flips alive/exiled together; its own exile Life Event, distinct
   // from a generic kill.
-  lifeOk(store().recordExile(travelerId, "died"), "recordExile");
+  lifeOk(storeCommands.recordExile(travelerId, "died"), "recordExile");
   // The dead player spends their vote token.
   const ghostVoteToggledId = deadOrdinaryId;
   lifeOk(store().spendGhostVote(ghostVoteToggledId), "spendGhostVote");
