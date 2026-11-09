@@ -694,4 +694,22 @@ it("an Undo back into the Day and a replay asks the Godfather's question again (
   // And the same Day's answer still stands while that Day is the one on the record.
   fireEvent.click(screen.getByRole("button", { name: "Yes" }));
   expect(screen.queryByText("Did an Outsider die today?")).toBeNull();
+  expect(useTargetPicker.getState().active?.label).toBeTruthy();
+  tap("p2");
+  expect(game().players.p2!.alive).toBe(false);
+});
+
+it("a certain Outsider death (a Moonchild) beside a Recluse death asks no question: the Godfather goes straight to choosing the victim", () => {
+  const base = proofGame(["godfather", "recluse", "chef", "moonchild", "imp", "empath", "baron"], "night", 3, { scriptId: t30Script.id });
+  const ev = (id: string, p: string, role: string) => ({ id, kind: "death", moment: { phase: "day", day: 2 }, actualRoleAtEvent: role,
+    subject: { kind: "participant", playerId: p, participantId: base.players[p]!.participantId!, nameAtTime: p } });
+  const g0 = patchPlayer(patchPlayer(base, "p1", { alive: false }), "p3", { alive: false });
+  store.setState({ game: { ...g0, lifeEventWindow: { ...base.lifeEventWindow, events: [ev("d1", "p3", "moonchild"), ev("d2", "p1", "recluse")] } } as typeof base,
+    lobby: null, undoStack: [], localSeq: 0, customScripts: { [t30Script.id]: t30Script } });
+  useShellStore.getState().setNightCursor({ day: 3, stepKey: key("p0") });
+  render(<Guide />);
+  expect(screen.queryByText("Did an Outsider die today?")).toBeNull();
+  expect(useTargetPicker.getState().active?.label).toBeTruthy();
+  tap("p2");
+  expect(game().players.p2!.alive).toBe(false);
 });
