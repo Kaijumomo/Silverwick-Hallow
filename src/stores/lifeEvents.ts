@@ -195,25 +195,3 @@ export const lifeEventsForParticipantAt = (
   participantId: ParticipantId,
   moment: LiveGameMoment,
 ) => lifeEventsAt(game, moment, (event) => event.subject.participantId === participantId);
-
-/** Every retained event about one participation instance, any moment, in
- * acceptance order. A plain read of the window -- no completeness claim. */
-export function retainedLifeEventsFor(
-  game: Pick<StorytellerLobbyRecord, "lifeEventWindow">,
-  participantId: ParticipantId,
-): LifeEvent[] {
-  return game.lifeEventWindow.events.filter((event) => event.subject.participantId === participantId);
-}
-
-export function findLifeEvent(
-  game: Pick<StorytellerLobbyRecord, "lifeEventWindow">,
-  eventId: string,
-): LifeEvent | undefined {
-  return game.lifeEventWindow.events.find((event) => event.id === eventId);
-}
-
-/** Short Storyteller-facing description of a moment: "Night 2", "Day 3". */
-export function momentLabel(moment: Pick<GameMoment, "phase" | "day">): string {
-  if (moment.phase === "setup") return "Setup";
-  return `${moment.phase === "night" ? "Night" : "Day"} ${moment.day}`;
-}

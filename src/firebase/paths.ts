@@ -1,6 +1,4 @@
 import type { PlayerId } from "@/stores/types";
-
-export const lobbyPath = (code: string) => `lobbies/${code}`;
 export const storytellerUidPath = (code: string) =>
   `lobbies/${code}/storytellerUid`;
 export const rosterPath = (code: string) => `lobbies/${code}/roster`;

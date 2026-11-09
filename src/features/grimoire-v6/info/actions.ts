@@ -9,7 +9,6 @@ import type { STPlayerRecord, StorytellerLobbyRecord, Script } from "@/stores/ty
 import { flash, useV6Ui, type ShowState } from "../v6Store";
 import { ICON } from "../icons";
 import { useInfoShow } from "./showStore";
-import { SETUP_LABEL } from "./tokens";
 
 /**
  * The Info slice's commands. Everything here is a presentation or a thin wrapper over an existing
@@ -98,8 +97,6 @@ export function presentSetup(view: SetupView, recipientId?: string, context: Inf
     return error instanceof Error ? error.message : "Review the information before showing it.";
   }
 }
-
-export const setupLabel = (view: SetupView) => SETUP_LABEL[view];
 
 /** Sets (or clears, when `roleId` is omitted) one of the Demon's three bluffs. */
 export function applyBluff(slot: number, roleId?: string): string | undefined {

@@ -23,15 +23,6 @@ export function canRefineSetup(game: StorytellerLobbyRecord): RefinementGateResu
 }
 
 /**
- * The current dealt bag: the ordinary assigned actual-role multiset,
- * excluding Travelers, in seat order. rolePool is empty after Deal — this
- * derives the bag from live assignments instead of rehydrating it.
- */
-export function currentDealtBag(context: SetupContext): RoleId[] {
-  return context.assigned;
-}
-
-/**
  * Whether the current assigned composition is coherent enough to shuffle
  * safely: every occupied ordinary player has an actual role, no structural
  * blocker exists for the assigned set, and the composition matches a

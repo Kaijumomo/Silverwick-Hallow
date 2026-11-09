@@ -48,14 +48,6 @@ export type StartOutcome =
   | { kind: "error"; message: string }
   | { kind: "created" };
 
-/** Offline "Seat the town": one atomic newGame with the seat names, opening the Grimoire. */
-export async function startOffline(plan: SetupPlan, names: string[]): Promise<StartOutcome> {
-  const prepared = await retirePreviousGame();
-  if (!prepared.ok) return prepared.cancelled ? { kind: "cancelled" } : { kind: "error", message: prepared.message ?? "Could not start the game." };
-  const created = useStorytellerStore.getState().newGame(plan.scriptId, { ...planOptions(plan), plannedSeatNames: names });
-  return created ? { kind: "created" } : { kind: "error", message: "A game is being finished. Try again in a moment." };
-}
-
 /** Live "Invite to phones", first half: the pristine setup game is created
  * while the flow stays on screen. The caller then shows the Live screen and
  * runs `retryLive` (the shared Go Live) so connecting is visible. */

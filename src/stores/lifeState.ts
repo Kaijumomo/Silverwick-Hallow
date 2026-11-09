@@ -123,18 +123,6 @@ export function lifeHeadline(state: LifeState): string {
   return isExiledState(state) ? "Exiled" : "Dead";
 }
 
-/** Vote-token wording for a dead player, or null while alive. */
-export function voteTokenLabel(state: LifeState): string | null {
-  if (state === "alive") return null;
-  return hasVoteAvailable(state) ? "vote available" : "vote used";
-}
-
-export const LIFE_ANOMALY_LABEL: Record<LifeAnomaly, string> = {
-  aliveButExiled: "Alive but marked exiled",
-  aliveWithoutVote: "Alive without a vote token",
-  emptySeatLifeState: "Empty seat carries a life state",
-};
-
 /** Accessible name for a seat: "Alice, seat 3, dead, vote available". The
  * Storyteller-only `needsCheck` suffix is added only when asked for. */
 export function lifeAccessibleLabel(name: string, seatNumber: number, state: LifeState | null, needsCheck = false): string {
