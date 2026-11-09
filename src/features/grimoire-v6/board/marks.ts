@@ -58,6 +58,28 @@ function diedToday({ game, registry, query }: MarkEnv, player: STPlayerRecord): 
   return deaths.status === "known" && deaths.events.length > 0;
 }
 
+/**
+ * The Town Crier's official tokens, drawn from the Day's nomination record: "Minions Not Nominated" from dawn, swapped for
+ * "Minion Nominated" once a Minion has nominated. Only for a living, real Town Crier. A nomination whose nominator's
+ * registration is the Storyteller's call (a Spy or Recluse) or a record that cannot be verified draws nothing.
+ */
+function townCrierToken({ game, query }: MarkEnv, player: STPlayerRecord): "Minion Nominated" | "Minions Not Nominated" | null {
+  if (!query || !player.alive || player.actualRole !== "towncrier") return null;
+  const moment = query.moment();
+  if (!moment) return null;
+  const day = moment.phase === "day" ? moment.day : moment.phase === "night" ? moment.day - 1 : 0;
+  if (day < 1 || game.voting?.day !== day || game.voting.coverage !== "known") return null;
+  for (const round of game.voting.rounds) {
+    if (round.mode !== "nomination") continue;
+    const nominator = { playerId: round.nominator.playerId, participantId: round.nominator.participantId };
+    if (!query.participant(nominator)) return null;
+    const registered = query.registersAsType(nominator, "minion", "towncrier");
+    if (!registered.known) return null;
+    if (registered.value) return "Minion Nominated";
+  }
+  return "Minions Not Nominated";
+}
+
 export function playerMarks(env: MarkEnv, player: STPlayerRecord): Mark[] {
   const { game, script, registry, query } = env;
   if (player.isEmpty || !player.participantId || !script || !query) return [];
@@ -80,6 +102,12 @@ export function playerMarks(env: MarkEnv, player: STPlayerRecord): Mark[] {
     const source = officialNotationRole("godfather", "Died Today") ?? registry.get("godfather");
     marks.push({ key: "derived:godfather-died-today", kind: "effect", label: "Died Today", title: "Godfather: Died Today", src: source ? iconUrlFor(source) : "", size: ROLE_SIZE,
       removal: { type: "derived", reason: "This follows the Day's deaths. It ends at dawn." } });
+  }
+  const crier = townCrierToken(env, player);
+  if (crier) {
+    const source = officialNotationRole("towncrier", crier) ?? registry.get("towncrier");
+    marks.push({ key: "derived:towncrier-nominations", kind: "effect", label: crier, title: `Town Crier: ${crier}`, src: source ? iconUrlFor(source) : "", size: ROLE_SIZE,
+      removal: { type: "derived", reason: "This follows the Day's nominations. It ends at dawn." } });
   }
   const voting = currentVotingState(game);
   const linked = (id: string) => voting.modifiers.find((m) => m.target.playerId === player.id && m.target.participantId === player.participantId && `voting-${m.id}` === id);
