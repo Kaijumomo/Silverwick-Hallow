@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Treacherous 30th slice 2C -- Witch (night half). Production semantics.
 import { describe, expect, it } from "vitest";
 import { createRulesQuery } from "@/stores/rulesQuery";

@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10F Slice 7: the small GENERIC seams added for the proof characters,
 // tested independently of any character (rules-neutral where possible).
 import { describe, expect, it } from "vitest";

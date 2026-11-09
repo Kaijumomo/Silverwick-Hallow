@@ -13,6 +13,8 @@ export default defineConfig({
     // Fast tests intentionally exclude the required emulator-only *.spec suite.
     include: ["src/**/*.test.{ts,tsx}", "scripts/**/*.test.mjs"],
     globals: true,
+    // Default for component tests. Pure-logic test files opt into the faster plain Node environment with a
+    // `// @vitest-environment node` first line; add it only to a file that passes without a DOM.
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
   },

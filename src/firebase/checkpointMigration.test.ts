@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 9R.1 (Finding B1): remote checkpoint recovery must support the same
 // intentionally-supported legacy game evolution (v13->v16) local persisted
 // state already migrates through -- see gameMigration.ts and

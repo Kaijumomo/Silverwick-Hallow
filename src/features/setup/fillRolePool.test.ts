@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { fillRolePool } from "./fillRolePool";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";

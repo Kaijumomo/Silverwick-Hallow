@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { beforeEach, describe, expect, it } from "vitest";
 import { setupGame, setupScript } from "@/test/setupFixtures";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";

@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10F Slice 7 -- Monk (matrix Section 5). Production semantics.
 // The Imp / Al-Hadikhia suites additionally prove Monk protection blocking
 // real Demon deaths end-to-end.

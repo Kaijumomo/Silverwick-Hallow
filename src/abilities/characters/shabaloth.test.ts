@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Treacherous 30th slice 2C -- Shabaloth. Production semantics.
 import { describe, expect, it } from "vitest";
 import { bind, homebrewEnv, impair, patchPlayer, pick, plan, planned, proofGame, proofRegistry, proofScript, request } from "@/test/proofFixtures";

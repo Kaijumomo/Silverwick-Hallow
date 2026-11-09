@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Package 3 (A5): the player phone uses self-hosted official art first.
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";

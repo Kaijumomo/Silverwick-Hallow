@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10F Slice 7 -- Harlot (matrix Section 15). Production semantics.
 // The `harlot-other-night` Information Action is Silverwick-authored
 // structured metadata (src/data/informationActions.ts) with explicit

@@ -1,3 +1,4 @@
+// @vitest-environment node
 // A Storyteller's mid-game Change character: an ordinary player is told it (the shown token follows); a concealed identity keeps its shown character.
 import { beforeEach, describe, expect, it } from "vitest";
 import { buildPicker, type PickerEnv } from "./picker";

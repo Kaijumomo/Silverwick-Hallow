@@ -1,3 +1,4 @@
+// @vitest-environment node
 // WP-9 (F-16): the End control's discreet "!" when every Demon is dead; never a verdict.
 import { describe, expect, it } from "vitest";
 import { demonGoneAdvisory, endGameEligibility } from "./endGameEligibility";

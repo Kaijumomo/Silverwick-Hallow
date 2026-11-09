@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { computeNightOrder, type NightStep } from "./nightOrder";
 import { canonicalRoles, NIGHT_SHEET, roleAuthority } from "@/data/canonical";

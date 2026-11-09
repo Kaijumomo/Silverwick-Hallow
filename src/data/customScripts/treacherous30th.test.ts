@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Treacherous 30th (import-only custom script): pins the committed JSON to the
 // author's script sheet (character list, teams, night orders) and to verified
 // canonical definitions. The expectations are typed from the sheet, not

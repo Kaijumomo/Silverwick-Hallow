@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import {
   crescentRadius, plateMaxWidth, seatAngles, seatPoints, seatSizeFor, seatsAreClear, STAGE_HEIGHT, STAGE_WIDTH, tableRadii,

@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10E architecture guard: NO LIVE/GENERAL WRITER BYPASSES THE ALIGNMENT
 // SEAM, and perception stays owned by the Phase 10D seam.
 //

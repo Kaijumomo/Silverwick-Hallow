@@ -1,3 +1,4 @@
+// @vitest-environment node
 // feature/missing-characters: the eight official characters that were in the
 // pinned canonical data but not in any shipped roster. They are reference and
 // manual-play characters only: no new rules, schema or ability behaviour.

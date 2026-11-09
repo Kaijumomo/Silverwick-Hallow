@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10H (contract §§2.2, 8.4; 10H-AC-014 / AC-027): core gameplay is never
 // dropdown-driven. Participant choice is Table / Roster, role choice is the
 // searchable RolePicker, finite choices are explicit buttons. A <select> may

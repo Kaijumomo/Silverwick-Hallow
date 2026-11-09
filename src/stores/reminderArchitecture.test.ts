@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10C architecture guard: REMINDERS ARE NOTATION, NEVER MECHANICS INPUT.
 //
 // A Reminder is Storyteller-private, non-authoritative bookkeeping. No

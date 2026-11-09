@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 9R.2 Astra remediation R2: v17 identity evidence must be recognized
 // wherever the v17 schema put it -- including current Effect/Reminder
 // sourceParticipant -- so malformed CURRENT-version state is always judged

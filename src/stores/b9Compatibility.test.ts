@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { canonicalRoles } from "@/data/canonical";

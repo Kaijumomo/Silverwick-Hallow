@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Treacherous 30th slice 2C -- Godfather and Moonchild. Production semantics.
 import { describe, expect, it } from "vitest";
 import { homebrewEnv, impair, patchPlayer, pick, plan, planned, proofGame, request } from "@/test/proofFixtures";

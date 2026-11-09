@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 9C.6 (OPUS-002) unit suite for the Public Display capability module.
 // MemoryRoomBackend-level tests exercise the pure decode/ensure/rotate/
 // authorize logic in isolation; one SessionWriter-backed test proves the

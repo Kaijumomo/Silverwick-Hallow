@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
 import {
   SETUP_COUNTS, MIN_PLAYERS, MAX_PLAYERS, MAX_TRAVELERS, MAX_TOTAL_PLAYERS,

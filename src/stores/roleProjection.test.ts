@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10D: projection safety. An unresolvable / unsafe Shown Role fails
 // CLOSED per participant -- it never throws (so it cannot block the table's
 // checkpoint or anyone else's public/self projection), never exposes the

@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 9C.2A.2A (OPUS-001) remediation, Finding H1 — SessionWriter's own
 // continuous-authority bookkeeping (leaseEpoch/leaseExpiresAt,
 // reconfirmAuthority, holdsAuthority), tested directly against

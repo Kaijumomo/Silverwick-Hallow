@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Package 3 (A1): public arrival names for the waiting lobby. Pure derivation
 // and projection; the live writer path is covered in setupFlowLifecycle.test.tsx.
 import { describe, expect, it } from "vitest";

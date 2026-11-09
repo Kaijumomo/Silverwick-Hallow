@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { initialRevealReadiness } from "./revealReadiness";
 import { selectSetupContext } from "./setupContext";

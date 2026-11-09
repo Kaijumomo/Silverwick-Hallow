@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10F Slice 7 -- Poisoner (matrix Section 4). Production semantics.
 import { describe, expect, it } from "vitest";
 import { createRulesQuery } from "@/stores/rulesQuery";

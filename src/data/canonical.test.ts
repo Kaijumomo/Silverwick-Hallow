@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { CANONICAL_REVISION, canonicalRoles, isCanonicalRole, roleAuthority } from "./canonical";
 import raw from "./canonical/roles.json";

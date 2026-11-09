@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { homebrewEnv, impair, num, patchPlayer, plan, planned, proofGame, request } from "@/test/proofFixtures";
 import type { StorytellerLobbyRecord } from "@/stores/types";

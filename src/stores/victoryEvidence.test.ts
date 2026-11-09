@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { impair, patchPlayer, proofEnv, proofGame } from "@/test/proofFixtures";
 import { participantRefOf } from "./participants";

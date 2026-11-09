@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { buildRegistry } from "@/data/roleRegistry";
 import { makePublishedSTPlayer, tbScript } from "@/test/fixtures";

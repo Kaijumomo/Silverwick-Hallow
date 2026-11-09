@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10G Astra remediation (test-strength gap): hypothetical Rules Query
 // overlays (`assumingAlive`) must preserve Game Rule Facts. Production already
 // does; these tests pin it, so dropping the facts from a hypothetical snapshot

@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10F Slice 7 -- the verified-Manual / Setup-owned boundaries:
 // Tinker (matrix 14), Toymaker (matrix 16), Baron (matrix 17), and the other
 // deliberately Manual branches (Cult Leader vote, Pit-Hag Demon / Traveller).

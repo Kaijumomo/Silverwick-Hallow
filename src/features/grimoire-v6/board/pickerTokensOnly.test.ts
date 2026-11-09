@@ -1,3 +1,4 @@
+// @vitest-environment node
 // F-20: the Gambler's guess picker shows character tokens only; every other "show" picker keeps the holders and bluff marks.
 import { beforeEach, describe, expect, it } from "vitest";
 import { buildPicker, type PickerEnv } from "./picker";

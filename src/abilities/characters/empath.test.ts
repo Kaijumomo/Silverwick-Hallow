@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10F Slice 7 -- Empath support semantic + Drunk shown as the Empath
 // (matrix Sections 8 and 18.2). Production semantics.
 import { describe, expect, it } from "vitest";

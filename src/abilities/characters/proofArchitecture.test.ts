@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10F Slice 7: architecture guards for the proof-character semantics
 // modules and the new authority boundaries (Red Herring fact, verified Night
 // trigger, star-pass bookkeeping, Toymaker hook, Setup-owned Baron).

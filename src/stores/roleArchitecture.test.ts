@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10D architecture guard: NO LIVE/GENERAL WRITER BYPASSES THE ROLE SEAM.
 //
 // Every live/general change to actualRole, shownRole, shownAlignment,
