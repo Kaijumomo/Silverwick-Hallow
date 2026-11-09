@@ -42,7 +42,7 @@ Silverwick has no image-generation tool or API in Claude Code. This skill is a m
    - `public/status/*.png`: current Effect presentation art (drunk, poisoned, protected; 1254×1254);
    - `public/tokens/*.png`: public life-state tokens;
    - `public/bg/*.png`: menu backgrounds;
-   - repository-root `*.png`: screenshots of the current UI.
+   - `docs/archive/screenshots/*.png`: older screenshots of the UI (archived; the app has changed since).
 4. Ask one short question only when the asset's purpose or subject is genuinely unknown. Otherwise write the brief.
 
 ## Brief format

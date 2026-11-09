@@ -20,7 +20,7 @@ const binding = (id: PlayerId) => {
   const player = occupant(s().game, id);
   return player ? { playerId: player.id, participantId: player.participantId! } : null;
 };
-const notSeated = { ok: false as const, code: "notSeated" as const, message: "This player is not seated." };
+const notSeated = () => ({ ok: false as const, code: "notSeated" as const, message: "This player is not seated." });
 
 export const storeCommands = {
   recordExile: (id: PlayerId, outcome: ExileOutcome, context?: MutationContext) =>
@@ -51,19 +51,19 @@ export const storeCommands = {
 
   removeReminder: (id: PlayerId, reminderId: ReminderId) => {
     const target = binding(id);
-    if (!target) return notSeated;
+    if (!target) return notSeated();
     return s().resolveReminders({ intents: [{ kind: "remove", target, reminderId }] });
   },
 
   setActualAlignment: (id: PlayerId, alignment: Alignment, context?: MutationContext) => {
     const player = occupant(s().game, id);
-    if (!player) return notSeated;
+    if (!player) return notSeated();
     return s().resolveAlignments({ intents: [changeAlignmentIntent(player, alignment)], ...(context ? { context } : {}) });
   },
 
   setShownAlignment: (id: PlayerId, alignment: ShownAlignment | null) => {
     const player = occupant(s().game, id);
-    if (!player) return notSeated;
+    if (!player) return notSeated();
     return s().setPerception(id, { shownRole: player.shownRole, shownAlignment: alignment });
   },
 

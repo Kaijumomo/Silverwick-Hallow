@@ -717,8 +717,8 @@ export type StorytellerStore = {
   prepareTravelerDemon: (id: PlayerId) => void;
   completeTravelerInformation: (id: PlayerId) => void;
   completeTravelerArrivalCheck: (id: PlayerId) => void;
-  /** @deprecated Phase 10A compatibility adapter -- exactly
-   * recordExile(id, "died"). New callers use recordExile. */
+  /** @deprecated Phase 10A compatibility adapter -- exactly an exile Life
+   * intent with outcome "died" through resolveLife. New callers use resolveLife. */
   exileTraveler: (id: PlayerId) => void;
   setFabled: (fabled: RoleId[]) => void;
   setLorics: (lorics: RoleId[]) => void;
@@ -1000,8 +1000,8 @@ const ownPlayer = (game: Pick<StorytellerLobbyRecord, "players">, id: PlayerId):
 
 /**
  * Phase 10B: binds a live PlayerId to the participation instance occupying
- * it RIGHT NOW -- how the compatibility adapters (setStatus/addEffect/
- * removeEffect) centrally capture the ParticipantId the Effect planner
+ * it RIGHT NOW -- how the compatibility adapters (setStatus/addEffect)
+ * centrally capture the ParticipantId the Effect planner
  * requires. Null for a nonexistent/inherited id or an empty seat. UI callers
  * bind the participant they rendered instead, so a seat replaced in between
  * is refused as stale.

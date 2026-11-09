@@ -67,7 +67,7 @@ describe("SOL-10F-L6: oncePerGame authority", () => {
     });
     const code = (m: string) => stripComments(readFileSync(join(SRC, m), "utf8"));
     expect(sources().filter((m) => /\.oncePerGame\b|\[\s*["']oncePerGame["']\s*\]/.test(code(m)))).toEqual([]);
-    const generic = sources().filter((m) => m.startsWith("features/nightOrder/") || m.startsWith("features/abilities/") || m.startsWith("abilities/") ||
+    const generic = sources().filter((m) => m.startsWith("features/nightOrder/") || m.startsWith("rules/night/") || m.startsWith("features/abilities/") || m.startsWith("abilities/") ||
       ["stores/abilityResolution.ts", "stores/rulesQuery.ts", "stores/wakeIdentity.ts"].includes(m));
     for (const m of generic) {
       const bare = [...code(m).matchAll(/oncePerGame/g)].filter((match) => code(m)[match.index! - 1] !== '"');

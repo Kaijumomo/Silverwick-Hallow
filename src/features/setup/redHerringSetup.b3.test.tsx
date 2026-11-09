@@ -11,7 +11,7 @@ import { redHerringSetup } from "@/rules/setup/redHerringSetup";
 import { selectSetupContext } from "@/rules/setup/setupContext";
 
 // Package 4: the Setup panel's "Choose Red Herring" picker, the Players workspace and the PopoverReminders token are
-// retired; the v6 setup wizard picks the Red Herring through setSetupRedHerring (see grimoire-v6/day/test/dayFixture).
+// retired; the v6 setup wizard picks the Red Herring through setSetupRedHerring (see src/test/dayFixture.ts).
 // The command, the readiness derivation and the Night fail-closed eligibility are unchanged and asserted here.
 const game = () => store.getState().game!;
 beforeEach(() => {
