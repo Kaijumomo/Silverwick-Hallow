@@ -1,16 +1,7 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { isTabletTrial } from "@/config/trial";
-import { useStorytellerStore } from "@/stores/storytellerStore";
-import { takeMigrationResetFlag } from "@/stores/storytellerStore";
-import { HomeV6 } from "@/features/grimoire-v6/home/HomeV6";
-import { GrimoireV6Screen } from "@/features/grimoire-v6/GrimoireV6Screen";
-import { VotingProvider } from "@/features/voting/VotingWorkspace";
-import { useV6Ui } from "@/features/grimoire-v6/v6Store";
-import { PlayerScreen } from "@/features/player/PlayerScreen";
-import { PublicDisplayScreen } from "@/features/publicDisplay/PublicDisplayScreen";
 import { isFirebaseConfigured } from "@/firebase/config";
 import { connectFirebase } from "@/firebase/session";
-import { StorytellerSession, UnattachedLobbyWarnings } from "@/firebase/StorytellerSession";
 
 function readJoinCodeFromUrl(): string | null {
   if (typeof window === "undefined") return null;
@@ -29,6 +20,10 @@ function readPublicDisplayCodeFromUrl(): string | null {
 }
 
 const TabletTrial = lazy(() => import("@/trial/TabletTrial"));
+// F-13: each route loads only its own screens, so a player's phone never downloads the Storyteller's Grimoire.
+const StorytellerApp = lazy(() => import("./StorytellerApp"));
+const PlayerScreen = lazy(() => import("@/features/player/PlayerScreen").then((m) => ({ default: m.PlayerScreen })));
+const PublicDisplayScreen = lazy(() => import("@/features/publicDisplay/PublicDisplayScreen").then((m) => ({ default: m.PublicDisplayScreen })));
 
 export function App() {
   return isTabletTrial
@@ -39,14 +34,6 @@ export function App() {
 function NormalApp() {
   const publicCode = readPublicDisplayCodeFromUrl();
   const joinCode = readJoinCodeFromUrl();
-  const view = useStorytellerStore((s) => s.view);
-  const hasGame = useStorytellerStore((s) => !!s.game);
-  const wizarding = useV6Ui((s) => !!s.wiz);
-  const [migrationResetBanner, setMigrationResetBanner] = useState(false);
-
-  useEffect(() => {
-    if (takeMigrationResetFlag()) setMigrationResetBanner(true);
-  }, []);
 
   // Auto-init Firebase if config is present (.env.local or saved manually).
   // Lazy-loads the SDK chunk; errors surface in the action UI on retry.
@@ -58,36 +45,19 @@ function NormalApp() {
     });
   }, []);
 
-  // The unified Grimoire carries Setup too: New Game opens it on the wizard, Resume on the saved game.
-  const showGrimoire = (view === "game" && hasGame) || (view === "newgame" && (wizarding || hasGame));
-
   if (publicCode !== null) {
     return (
       <div className="app">
-        <PublicDisplayScreen code={publicCode} />
+        <Suspense fallback={null}><PublicDisplayScreen code={publicCode} /></Suspense>
       </div>
     );
   }
   if (joinCode !== null) {
     return (
       <div className="app">
-        <PlayerScreen initialCode={joinCode} />
+        <Suspense fallback={null}><PlayerScreen initialCode={joinCode} /></Suspense>
       </div>
     );
   }
-  return (
-    <div className="app">
-      <StorytellerSession />
-      {/* ASTRA-10G-R1-001: shell-level, so it survives Storyteller navigation. */}
-      {view !== "newgame" && <UnattachedLobbyWarnings />}
-      {migrationResetBanner && (
-        <div className="error-list" role="alert" style={{ position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 9999, maxWidth: 480 }}>
-          <strong>Save data reset</strong>
-          <p>Your saved game was incompatible with this version and was cleared.</p>
-          <button className="btn btn-sm" onClick={() => setMigrationResetBanner(false)}>dismiss</button>
-        </div>
-      )}
-      {showGrimoire ? <VotingProvider><GrimoireV6Screen /></VotingProvider> : <HomeV6 />}
-    </div>
-  );
+  return <Suspense fallback={null}><StorytellerApp /></Suspense>;
 }

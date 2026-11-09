@@ -1,7 +1,8 @@
 // Package 4C: the lobby lifecycle inside Prepare the Town, against the in-memory room backend (never Firebase).
 // The lobby is created only by "Players join by code" and is closed again by "In person".
+import { renderApp } from "@/test/renderApp";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import type { RoomBackend } from "@/firebase/backend";
 
 const connect = vi.fn<() => Promise<{ backend: RoomBackend; uid: string }>>();
@@ -14,7 +15,6 @@ vi.mock("@/firebase/config", async (importOriginal) => {
   return { ...actual, isFirebaseConfigured: () => true };
 });
 
-import { App } from "./App";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
@@ -43,7 +43,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 async function openTown() {
-  render(<App />);
+  await renderApp();
   click(/New game/);
   click(/Trouble Brewing/);
   click(/Fabled & Loric ›/);

@@ -1,8 +1,8 @@
 // Package 4C: Home v6 -> New Game -> script -> Fabled & Loric -> Prepare the town -> seat -> distribute -> reveal ->
 // Begin Night 1, rendered through the real App shell, offline. Nothing here reaches Firebase.
+import { renderApp } from "@/test/renderApp";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { App } from "./App";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
@@ -33,8 +33,8 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("Home v6 routing", () => {
-  it("shows Home with no Resume row while no game exists, and New game opens the wizard in the Grimoire", () => {
-    render(<App />);
+  it("shows Home with no Resume row while no game exists, and New game opens the wizard in the Grimoire", async () => {
+    await renderApp();
     home();
     expect(screen.queryByText("Resume game")).toBeNull();
     click(/New game/);
@@ -44,35 +44,35 @@ describe("Home v6 routing", () => {
     expect(screen.queryByText("Resume game")).toBeNull();
   });
 
-  it("offers Resume for a game in progress, a review row for a finished one, and clears the wizard", () => {
+  it("offers Resume for a game in progress, a review row for a finished one, and clears the wizard", async () => {
     store.getState().newGame("tb", { plannedPlayerCount: 5, keepView: true });
     store.setState({ view: "home" });
     useV6Ui.getState().set({ wiz: { step: "town", script: "tb", customName: null, count: 5, extras: [], focus: null, xtab: "fabled" } });
-    render(<App />);
+    await renderApp();
     expect(screen.getByText("Resume game")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Resume game"));
     expect(state().view).toBe("game");
     expect(useV6Ui.getState().wiz).toBeNull();
   });
 
-  it("returns to Home when the wizard's Home button is pressed", () => {
-    render(<App />);
+  it("returns to Home when the wizard's Home button is pressed", async () => {
+    await renderApp();
     click(/New game/);
     click(/‹ Home/);
     expect(state().view).toBe("home");
     home();
   });
 
-  it("falls back to Home instead of an empty screen when the view is a game that no longer exists", () => {
+  it("falls back to Home instead of an empty screen when the view is a game that no longer exists", async () => {
     store.setState({ view: "game", game: null });
-    render(<App />);
+    await renderApp();
     home();
   });
 });
 
 describe("offline New Game flow in the unified Grimoire", () => {
   it("Home -> script -> extras -> Prepare the town -> seat -> distribute -> reveal -> Begin Night 1", async () => {
-    render(<App />);
+    await renderApp();
     click(/New game/);
     click(/Trouble Brewing/);
     for (let i = 0; i < 5; i++) click("One fewer player");

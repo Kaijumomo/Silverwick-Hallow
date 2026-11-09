@@ -1,7 +1,7 @@
 // The Deal card (Role Dealing design), rendered through the real App shell, offline. Nothing here reaches Firebase.
+import { renderApp } from "@/test/renderApp";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { App } from "./App";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
@@ -30,7 +30,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 async function toDistribute() {
-  render(<App />);
+  await renderApp();
   click(/New game/);
   click(/Trouble Brewing/);
   for (let i = 0; i < 5; i++) click("One fewer player");
