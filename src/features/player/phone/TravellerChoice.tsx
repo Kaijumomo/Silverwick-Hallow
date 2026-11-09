@@ -1,8 +1,5 @@
 import type { RoleDef } from "@/stores/types";
-import { iconUrlFor } from "@/data/iconUrl";
-import { travellerArt } from "@/data/localArt";
-
-const art = (r: RoleDef) => travellerArt(r.id) ?? iconUrlFor(r);
+import { roleArt as art } from "./roleArt";
 
 /** Choose your Traveler (design screens 37-40), the content of the in-game
  * frame's Character tab: the grid, the sending pill,
