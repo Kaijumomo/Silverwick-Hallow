@@ -1,6 +1,6 @@
 import { Fragment, isValidElement, type CSSProperties, type ReactNode } from "react";
 
-// Helpers used by the view generated from the Claude Design handoff template (scripts/design-import).
+// Helpers used by the view generated from the Claude Design handoff template (importer archived in docs/archive/design-import).
 
 const parsed = new Map<string, CSSProperties>();
 
