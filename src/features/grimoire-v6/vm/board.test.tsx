@@ -256,6 +256,10 @@ describe("slice 4B: board view-model", () => {
   });
 
   describe("free token dragging", () => {
+    /** The seat furthest left: dragging it right and down never reaches the board's edge, wherever the deal put
+     * each character (holder("chef") could sit at the right edge, where the drop is clamped). */
+    const leftmost = (positions: Record<PlayerId, { x: number; y: number }>) =>
+      (Object.entries(positions) as [PlayerId, { x: number }][]).sort((a, b) => a[1].x - b[1].x)[0]![0];
     const fire = (type: string, x: number, y: number) => {
       const event = new MouseEvent(type, { clientX: x, clientY: y, bubbles: true });
       Object.defineProperty(event, "pointerId", { value: 1 });
@@ -267,7 +271,7 @@ describe("slice 4B: board view-model", () => {
     it("saves the dropped position through the layout command, relative to the board centre", () => {
       seed15();
       const { result } = mount();
-      const id = holder("chef");
+      const id = leftmost(result.current.ctx.positions);
       const start = result.current.ctx.positions[id]!;
       const { w, h } = result.current.ctx.layout;
       act(() => press(result.current.board, id, 500, 400));
@@ -294,7 +298,7 @@ describe("slice 4B: board view-model", () => {
     it("F-02: once the seat is drawn as dragged, later moves place its box directly without redrawing the Grimoire, and the drop is saved as before", () => {
       seed15();
       const { result } = mount();
-      const id = holder("chef");
+      const id = leftmost(result.current.ctx.positions);
       const start = result.current.ctx.positions[id]!;
       const { w, h } = result.current.ctx.layout;
       const { box, disc } = seatBox();
@@ -323,7 +327,7 @@ describe("slice 4B: board view-model", () => {
     it("F-02: a box React has not drawn as the dragged seat is never moved directly (the seat is redrawn instead)", () => {
       seed15();
       const { result } = mount();
-      const id = holder("chef");
+      const id = leftmost(result.current.ctx.positions);
       const start = result.current.ctx.positions[id]!;
       const { box, disc } = seatBox();
       box.style.zIndex = "10";
@@ -340,7 +344,7 @@ describe("slice 4B: board view-model", () => {
     it("F-02: the selected seat is redrawn on every move, so its radial menu follows it as before", () => {
       seed15();
       const { result } = mount();
-      const id = holder("chef");
+      const id = leftmost(result.current.ctx.positions);
       act(() => store().selectPlayer(id));
       const start = result.current.ctx.positions[id]!;
       const { box, disc } = seatBox();
