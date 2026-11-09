@@ -294,7 +294,8 @@ describe("C. local v17 -> v18 migration of every Undo snapshot", () => {
 
     const v17Blob = {
       version: 17,
-      state: { ...current.state, game: asV17(current.state.game), undoStack: (current.state.undoStack as unknown[]).map(asV17) },
+      // A v17 writer saved every Undo snapshot in full (F-01 compaction is v29+ only).
+      state: { ...current.state, game: asV17(current.state.game), undoStack: (before.undoStack as unknown[]).map(asV17) },
     };
     expect(JSON.stringify(v17Blob)).toContain("\"category\":\"identity\"");
     store.setState({ game: null, undoStack: [], localSeq: 0, sync: null });

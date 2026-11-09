@@ -61,6 +61,7 @@ import {
 } from "./gameRuleFacts";
 import { CANONICAL_ABILITY_SEMANTICS, type AbilitySemanticsRegistry } from "@/abilities/semantics";
 import { detectLegacyGameVersion, migrateGameEntry } from "./gameMigration";
+import { compactUndoStack, expandUndoStack } from "./undoPersistence";
 import { freshLifeEventWindow, pruneLifeEventWindow } from "./lifeEvents";
 import {
   applyLifePlan,
@@ -1201,7 +1202,18 @@ function isMigratableUndoStack(value: unknown): value is unknown[] {
 }
 
 export function migrateStoreState(state: unknown, fromVersion: number): unknown {
-  const s = state as { game?: Record<string, unknown>; undoStack?: unknown; lobby?: unknown };
+  const s = state as { game?: Record<string, unknown>; undoStack?: unknown; lobby?: unknown; finishedGameUndo?: unknown };
+  // F-01: Undo snapshots are saved with their History shared with their base
+  // game (undoPersistence.ts). Restore the complete snapshots first, so every
+  // step below sees exactly the games that were saved.
+  if (s && typeof s === "object") {
+    if ("undoStack" in s) s.undoStack = expandUndoStack(s.undoStack, s.game);
+    const recovery = s.finishedGameUndo;
+    if (recovery && typeof recovery === "object" && !Array.isArray(recovery) && "undoStack" in recovery) {
+      const envelope = recovery as { undoStack?: unknown; live?: unknown };
+      s.finishedGameUndo = { ...envelope, undoStack: expandUndoStack(envelope.undoStack, envelope.live) };
+    }
+  }
   // Phase 10C (ASTRA-10C-003): per-entry routing BEFORE any old step. A
   // game-shaped entry's OWN version/evidence -- not the outer persisted
   // envelope's -- decides which game-content migrations may touch it. Each
@@ -3914,14 +3926,15 @@ export const useStorytellerStore = create<StorytellerStore>()(
       partialize: (s) => ({
         game: s.game,
         view: s.view,
-        undoStack: s.undoStack,
+        // F-01: saved with History shared with `game` (undoPersistence.ts).
+        undoStack: compactUndoStack(s.undoStack, s.game),
         customScripts: s.customScripts,
         lobby: s.lobby,
         grimoireMode: s.grimoireMode,
         tokenPositions: s.tokenPositions,
         seatSwapUndo: s.seatSwapUndo,
         localLayoutUndo: s.localLayoutUndo,
-        finishedGameUndo: s.finishedGameUndo,
+        finishedGameUndo: s.finishedGameUndo && { ...s.finishedGameUndo, undoStack: compactUndoStack(s.finishedGameUndo.undoStack, s.finishedGameUndo.live) },
         localSeq: s.localSeq,
         sync: s.sync,
       }),
