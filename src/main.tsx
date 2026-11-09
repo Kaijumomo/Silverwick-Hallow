@@ -9,7 +9,6 @@ import "@/styles/newgame.css";
 import "@/styles/setupFlow.css";
 import "@/styles/system.css";
 import "@/styles/reference.css";
-import "@/styles/players.css";
 import "@/styles/roleChooser.css";
 import "@/styles/player-popover.css";
 import "@/styles/tablet-grimoire.css";

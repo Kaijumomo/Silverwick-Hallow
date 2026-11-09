@@ -519,11 +519,6 @@
 .swp-evt-bluff { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .swp-evt-btoken { position: relative; width: 54px; height: 54px; border-radius: 50%; overflow: hidden; background: radial-gradient(circle at 38% 30%, #f1e6c9, #dccaa0 48%, #b09566); box-shadow: 0 0 0 1px rgba(134, 183, 212, .5), 0 12px 24px rgba(0, 0, 0, .55); }
 .swp-evt-bname { font-family: "Cormorant Garamond", serif; font-size: 16px; font-weight: 700; color: #86b7d4; }
-.swp-bluff { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.swp-bluff-token { position: relative; width: 60px; height: 60px; flex: none; border-radius: 50%; overflow: hidden; background: radial-gradient(circle at 38% 30%, #f1e6c9, #dccaa0 48%, #b09566); box-shadow: 0 14px 30px rgba(0, 0, 0, .55), inset 0 -10px 20px rgba(90, 60, 25, .35); }
-.swp-bluff-name { font-family: "Cormorant Garamond", serif; font-size: 16px; font-weight: 700; color: #86b7d4; }
-
-.swp-trav-page { padding: 8px 24px 16px; overflow-y: auto; }
 .swp-trav { display: flex; flex-direction: column; gap: 16px; padding-top: 6px; }
 .swp-trav-head { display: flex; flex-direction: column; gap: 6px; }
 .swp-trav-eyebrow { font-size: 11px; letter-spacing: .24em; text-transform: uppercase; font-weight: 700; color: #b994d4; }
@@ -641,7 +636,7 @@
 .swp-legend-item { display: inline-flex; align-items: center; gap: 6px; }
 .swp-legend-swatch { width: 10px; height: 10px; border-radius: 50%; }
 .swp-legend-alive { background: #d6c290; } .swp-legend-dead { background: #2a2224; border: 1px solid rgba(234, 220, 184, .3); }
-.swp-legend-trav { background: transparent; border: 1.5px solid #b994d4; } .swp-legend-you { background: transparent; border: 2px solid #e0b96a; }
+.swp-legend-trav { background: transparent; border: 1.5px solid #b994d4; }
 .swp-comp { align-self: stretch; display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; border-radius: 14px; background: rgba(0, 0, 0, .3); border: 1px solid rgba(196, 158, 80, .12); }
 .swp-comp-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .swp-comp-note { font-size: 12px; color: rgba(216, 201, 164, .55); }
@@ -837,7 +832,6 @@ li.swp-rs-nrow { list-style: none; }
 .swp-orn-line:last-child { background: linear-gradient(90deg, rgba(224, 185, 106, .6), transparent); }
 .swp-orn-d { width: 4px; height: 4px; transform: rotate(45deg); background: rgba(224, 185, 106, .6); }
 .swp-orn-d-big { width: 8px; height: 8px; background: none; border: 1px solid rgba(224, 185, 106, .6); }
-.swp-tarot-back .swp-orn { margin: 0; }
 
 .swp-tarot-front { gap: 0; padding: 26px 22px 22px; }
 .swp-tarot-front .swp-tarot-bar { opacity: .75; }
