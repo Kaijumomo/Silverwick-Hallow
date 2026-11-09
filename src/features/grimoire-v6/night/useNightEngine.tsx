@@ -82,6 +82,10 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   const [guessFor, setGuessFor] = useScoped<ParticipantBinding | null>(scope, null);
   // A ruling the Storyteller gives BEFORE any player is tapped (the Godfather's "did an Outsider die today?"), by step.
   const [rulings, setRulings] = useScoped<Record<string, Record<string, AbilityInputValue>>>(scope, EMPTY_RULINGS);
+  // A ruling belongs to the Day it was given about: it is keyed by that Day's recorded events, which are new every time the Day is replayed
+  // (an Undo back into the Day), so a replayed Day asks again instead of reusing an answer from the undone one.
+  const dayEvents = game.lifeEventWindow.events.filter((event) => event.moment.phase === "day" && event.moment.day === game.day - 1).map((event) => event.id).join(",");
+  const rulingKey = (stepKey: string) => `${stepKey}|${dayEvents}`;
   const sequence = useRef(0);
   const actionContext = captureCharacterActionContext();
 
@@ -115,7 +119,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
           probe[input.id] = { kind: "participant", participants: pool.map(bindingOf) };
         } else if (input.kind === "character") probe[input.id] = { kind: "character", roleIds: [script.characters[0]?.id ?? ""] };
       }
-      const plan = planAbilityResolution(game, { mode: "guided", invocationPath: "nightOrder", fingerprint, roleId: step.effectiveRoleId, inputs: { ...probe, ...rulings[step.stepKey] }, completeStep: true },
+      const plan = planAbilityResolution(game, { mode: "guided", invocationPath: "nightOrder", fingerprint, roleId: step.effectiveRoleId, inputs: { ...probe, ...rulings[rulingKey(step.stepKey)] }, completeStep: true },
         { script, registry, semantics });
       if (!plan.ok && plan.code === "notApplicable") out.set(step.stepKey, plan.message);
       // A yes/no ruling the rules need before anything is chosen (a Spy or Recluse died in the Day: did an Outsider die?) is asked first.
@@ -164,7 +168,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   const canTarget = !!direct && !question && (!resolved || needed === 1 && !!correction?.canCorrect);
   const answerQuestion = (yes: boolean) => {
     if (!current || !question) return;
-    setRulings({ ...rulings, [current.stepKey]: { ...rulings[current.stepKey], [question.id]: { kind: "boolean", value: yes } } });
+    setRulings({ ...rulings, [rulingKey(current.stepKey)]: { ...rulings[rulingKey(current.stepKey)], [question.id]: { kind: "boolean", value: yes } } });
   };
   const role = current?.kind === "player" ? registry.get(current.effectiveRoleId) : actor?.actualRole ? registry.get(actor.actualRole) : undefined;
   const bureaucrat = !!(actor?.actualRole === "bureaucrat" && actor.participantId && script
@@ -257,7 +261,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     if (successorChoice && (live.current.successorChoice !== successorChoice || successorChoice.game !== game || successorChoice.stepKey !== current.stepKey)) return;
     const inputs = successorChoice
       ? { ...successorChoice.inputs, [successorChoice.id]: { kind: "participant" as const, participants: [target] } }
-      : { ...rulings[current.stepKey], [input.id]: { kind: "participant" as const, participants: [target] } };
+      : { ...rulings[rulingKey(current.stepKey)], [input.id]: { kind: "participant" as const, participants: [target] } };
     const fingerprint = captureFingerprint(game, current.playerId, { day: game.day, stepKey: current.stepKey });
     if (!fingerprint) { setError("This player is no longer seated."); return; }
     const request = { mode: "guided" as const, invocationPath: "nightOrder" as const, fingerprint, roleId: current.effectiveRoleId, inputs, completeStep: true };

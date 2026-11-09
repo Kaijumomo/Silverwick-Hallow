@@ -592,3 +592,19 @@ it("the Godfather's No leaves them asleep with the reason, and nobody dies", () 
   expect(useTargetPicker.getState().active).toBeNull();
   expect(Object.values(game().players).filter((p) => !p.alive)).toHaveLength(1);
 });
+
+it("an Undo back into the Day and a replay asks the Godfather's question again (the new Day has new death records)", () => {
+  godfatherAfterRecluse();
+  render(<Guide />);
+  fireEvent.click(screen.getByRole("button", { name: "Yes" }));
+  expect(screen.queryByText("Did an Outsider die today?")).toBeNull();
+  // The Day is replayed: the same Recluse dies again, but as a new event.
+  const g = game();
+  const replayed = { ...g.lifeEventWindow.events[0]!, id: "d-p1-replay" };
+  act(() => { store.setState({ game: { ...g, lifeEventWindow: { ...g.lifeEventWindow, events: [replayed] } } as typeof g }); });
+  expect(screen.getByText("Did an Outsider die today?")).toBeInTheDocument();
+  expect(useTargetPicker.getState().active).toBeNull();
+  // And the same Day's answer still stands while that Day is the one on the record.
+  fireEvent.click(screen.getByRole("button", { name: "Yes" }));
+  expect(screen.queryByText("Did an Outsider die today?")).toBeNull();
+});
