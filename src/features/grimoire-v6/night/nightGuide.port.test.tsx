@@ -559,6 +559,26 @@ it.each([["drunk", "innkeeper"], ["marionette", "innkeeper"], ["drunk", "gambler
     expect(game().nightProgress[`2:${step}`]?.status).toBe("done");
   });
 
+it("a Recluse nominator puts one Yes/No question to the Storyteller on the Town Crier's card, and the answer is the information delivered", () => {
+  t30Night(["towncrier", "recluse", "chef", "monk", "imp", "empath", "baron"]);
+  const g = game();
+  const ref = (id: string) => ({ kind: "participant" as const, playerId: id, participantId: g.players[id]!.participantId!, nameAtTime: id });
+  const order = [ref("p1"), ref("p2")];
+  const nomination = { id: "r-p1-p2", mode: "nomination", nominator: ref("p1"), nominee: ref("p2"), order,
+    responses: order.map((voter) => ({ voter, choice: "no", weight: 0, spentGhostVote: false, refundSafe: false, lifeSafe: true })),
+    threshold: 3, status: "acknowledged", result: "belowThreshold", tally: 0, virginPending: false, contextStamp: "", executionEventIds: [] };
+  store.setState({ game: { ...g, voting: { day: 2, revision: 1, coverage: "known", rounds: [nomination], activeRoundId: null, block: null, modifiers: [] } } as unknown as typeof g });
+  useShellStore.getState().setNightCursor({ day: 3, stepKey: key("p0") });
+  render(<Guide />);
+  expect(screen.getByText("Did a Minion nominate today?")).toBeInTheDocument();
+  expect(screen.getByText(/Player 1 nominated during the Day and may register as a Minion\./)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Yes" }));
+  expect(screen.getByRole("status", { name: "Information to communicate" })).toHaveTextContent("YES");
+  expect(screen.queryByText("Did a Minion nominate today?")).toBeNull();
+  expect(game().informationDeliveries).toHaveLength(1);
+  expect(JSON.stringify(game().informationDeliveries)).toContain('"value":true');
+});
+
 function deriveFor() {
   const script = { ...proofScript, id: "treacherous-30th" };
   return deriveNightWork(game(), { script, registry: buildRegistry(script), semantics: CANONICAL_ABILITY_SEMANTICS });

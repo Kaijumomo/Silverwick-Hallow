@@ -15,6 +15,7 @@ import { characterCard } from "@/features/info/infoModel";
 import { RoleChooser } from "@/features/players/RoleChooser";
 import { isDeathEvent } from "@/stores/lifeEvents";
 import { TokenInformationAction } from "@/features/info/TokenInformationAction";
+import { QuestionBlock } from "@/features/grimoire-v6/day/NominationExtras";
 
 export const CALCULATED_INFORMATION_ROLES = new Set(["chef", "empath", "fortuneteller", "towncrier", "oracle"]);
 export const NIGHT_INFORMATION_ROLES = new Set([...CALCULATED_INFORMATION_ROLES, "undertaker", "ravenkeeper"]);
@@ -208,7 +209,11 @@ const InformationAction = forwardRef<NightInformationHandle, Props>(function Inf
         : why.length ? "The Storyteller chose NO although a chosen player registers as a Demon or Red Herring." : "Why NO: neither chosen player is the Demon or the Red Herring.";
       return <p className="night-information-why" style={{ margin: "4px 0 0", opacity: 0.85, fontSize: 13 }}>{text}</p>;
     })()}
-    {!resolved && requirement?.source === "storyteller" && ["number", "boolean"].includes(requirement.kind) && <>
+    {/* A Spy or Recluse nominated: whether they count as a Minion is the Storyteller's ruling, asked in the Godfather's prompt style. */}
+    {!resolved && requirement?.source === "storyteller" && requirement.kind === "boolean" && requirement.id.startsWith("towncrier:minionNominated") && preview && !preview.ok &&
+      <QuestionBlock heading="Did a Minion nominate today?" note={preview.message.replace(/\s*Did a Minion nominate today\?$/, "")}
+        actions={[true, false].map((choice) => ({ label: choice ? "Yes" : "No", onClick: () => { commit({ ...inputs, [requirement.id]: { kind: "boolean", value: choice } }); } }))} />}
+    {!resolved && requirement?.source === "storyteller" && ["number", "boolean"].includes(requirement.kind) && !requirement.id.startsWith("towncrier:minionNominated") && <>
       <div className="night-information-choices" role="group" aria-label="Information to communicate">{choices.map(choice =>
         <button className="btn" key={String(choice)} type="button" onClick={() => commit({ ...inputs,
           [requirement.id]: typeof choice === "boolean" ? { kind: "boolean", value: choice } : { kind: "number", value: choice } })}>

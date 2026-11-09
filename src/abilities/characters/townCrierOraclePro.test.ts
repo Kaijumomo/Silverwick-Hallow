@@ -34,13 +34,31 @@ describe("Town Crier", () => {
     }
   });
 
-  it("is Manual when the nomination record is missing, from another day, or a Spy nominated", () => {
+  it("is Manual when the nomination record is missing, from another day, or incomplete", () => {
     const base = proofGame(TC, "night", 3);
     expect(crier(base)).toMatchObject({ ok: false, code: "unsupported" });
     expect(crier(withVoting(base, 1, []))).toMatchObject({ ok: false, code: "unsupported" });
     expect(crier(withVoting(base, 2, [], "unknown"))).toMatchObject({ ok: false, code: "unsupported" });
+  });
+
+  it("asks the Storyteller ONE question when a Spy nominated, like the Godfather, and tells the Town Crier that answer", () => {
+    const base = proofGame(TC, "night", 3);
     const spy = patchPlayer(withVoting(base, 2, [round(base, "p6", "p1")]), "p6", { actualRole: "spy" });
-    expect(crier(spy)).toMatchObject({ ok: false, code: "unsupported" });
+    const asked = crier(spy);
+    expect(asked).toMatchObject({ ok: false, code: "needsInput" });
+    expect(asked.ok ? "" : asked.message).toMatch(/may register as a Minion\. Did a Minion nominate today\?/);
+    const id = asked.ok ? "" : asked.requirements![0]!.id;
+    expect(asked.ok ? 0 : asked.requirements).toHaveLength(1);
+    for (const [answer, value] of [[true, "true"], [false, "false"]] as const) {
+      const told = plan(spy, request(spy, "p0", "towncrier", { [id]: { kind: "boolean", value: answer } }));
+      expect(JSON.stringify(planned(told).informationDeliveries)).toContain(`"value":${value}`);
+    }
+  });
+
+  it("a certain Minion nomination answers YES without asking, even beside a Spy's", () => {
+    const base = proofGame(TC, "night", 3);
+    const g = patchPlayer(withVoting(base, 2, [round(base, "p1", "p2"), round(base, "p6", "p1")]), "p1", { actualRole: "spy" });
+    expect(JSON.stringify(planned(crier(g)).informationDeliveries)).toContain('"value":true');
   });
 
   it("an impaired Town Crier is told what the Storyteller chooses; Night 1 and homebrew are refused", () => {
