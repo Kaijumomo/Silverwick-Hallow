@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import { persist, createJSONStorage, type PersistStorage } from "zustand/middleware";
 import { BUILTIN_SCRIPTS, BUILTIN_SCRIPT_IDS } from "@/data/scripts";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
@@ -61,7 +61,7 @@ import {
 } from "./gameRuleFacts";
 import { CANONICAL_ABILITY_SEMANTICS, type AbilitySemanticsRegistry } from "@/abilities/semantics";
 import { detectLegacyGameVersion, migrateGameEntry } from "./gameMigration";
-import { compactUndoStack, expandUndoStack } from "./undoPersistence";
+import { compactUndoStack, expandUndoStack, SHARED_UNDO_KEY } from "./undoPersistence";
 import { freshLifeEventWindow, pruneLifeEventWindow } from "./lifeEvents";
 import {
   applyLifePlan,
@@ -158,7 +158,10 @@ export const gameLifecycleToken = (): number => gameLifecycle;
 const STORE_VERSION = 29;
 const STORE_KEY = isTabletTrial ? "silverwick-voting-tablet-trial" : "new-blood-st";
 const TERMINAL_JOURNAL_KEY = `${STORE_KEY}-ending`;
-let prewrittenVotingSave: { name: string; value: string } | null = null;
+/** A save already written by a commit. `state` is the exact persisted object
+ * it serialised: the persist middleware skips serialising again when it is
+ * handed that same object (F-03), and still compares bytes otherwise. */
+let prewrittenVotingSave: { name: string; value: string; state: unknown } | null = null;
 
 let _migrationResetFlag = false;
 /** Returns true (once) when migrate() discarded incompatible persisted state. */
@@ -1202,12 +1205,16 @@ function isMigratableUndoStack(value: unknown): value is unknown[] {
 }
 
 export function migrateStoreState(state: unknown, fromVersion: number): unknown {
-  const s = state as { game?: Record<string, unknown>; undoStack?: unknown; lobby?: unknown; finishedGameUndo?: unknown };
+  const s = state as { game?: Record<string, unknown>; undoStack?: unknown; lobby?: unknown; finishedGameUndo?: unknown; [SHARED_UNDO_KEY]?: unknown };
   // F-01: Undo snapshots are saved with their History shared with their base
   // game (undoPersistence.ts). Restore the complete snapshots first, so every
   // step below sees exactly the games that were saved.
   if (s && typeof s === "object") {
-    if ("undoStack" in s) s.undoStack = expandUndoStack(s.undoStack, s.game);
+    // A save holds one of the two keys; a full `undoStack` (an older writer) is never overridden.
+    if (SHARED_UNDO_KEY in s) {
+      if (!("undoStack" in s)) s.undoStack = expandUndoStack(s[SHARED_UNDO_KEY], s.game);
+      delete s[SHARED_UNDO_KEY];
+    }
     const recovery = s.finishedGameUndo;
     if (recovery && typeof recovery === "object" && !Array.isArray(recovery) && "undoStack" in recovery) {
       const envelope = recovery as { undoStack?: unknown; live?: unknown };
@@ -1650,6 +1657,55 @@ export function buildSetupGame(script: Script, opts: NewGameOpts = {}): Storytel
   return seated;
 }
 
+/** The fields saved to the browser, in their saved form. */
+function buildPersistedForm(s: StorytellerStore) {
+  return {
+    game: s.game,
+    view: s.view,
+    // F-01: saved with History shared with `game` (undoPersistence.ts), under
+    // its own key so a build that cannot read it drops only Undo, never the game.
+    [SHARED_UNDO_KEY]: compactUndoStack(s.undoStack, s.game),
+    customScripts: s.customScripts,
+    lobby: s.lobby,
+    grimoireMode: s.grimoireMode,
+    tokenPositions: s.tokenPositions,
+    seatSwapUndo: s.seatSwapUndo,
+    localLayoutUndo: s.localLayoutUndo,
+    finishedGameUndo: s.finishedGameUndo && { ...s.finishedGameUndo, undoStack: compactUndoStack(s.finishedGameUndo.undoStack, s.finishedGameUndo.live) },
+    localSeq: s.localSeq,
+    sync: s.sync,
+  };
+}
+const persistedSources = (s: StorytellerStore): readonly unknown[] => [s.game, s.view, s.undoStack, s.customScripts, s.lobby,
+  s.grimoireMode, s.tokenPositions, s.seatSwapUndo, s.localLayoutUndo, s.finishedGameUndo, s.localSeq, s.sync];
+let lastPersisted: { sources: readonly unknown[]; form: ReturnType<typeof buildPersistedForm> } | null = null;
+/** F-03: the same saved-form object for the same saved fields (compared by
+ * identity), so a commit's prewritten save is recognised by the persist
+ * middleware without serialising the whole state a second time. Read-only. */
+function persistedForm(s: StorytellerStore): ReturnType<typeof buildPersistedForm> {
+  const sources = persistedSources(s);
+  if (lastPersisted && sources.every((value, index) => value === lastPersisted!.sources[index])) return lastPersisted.form;
+  lastPersisted = { sources, form: buildPersistedForm(s) };
+  return lastPersisted.form;
+}
+/** F-03: the persist middleware's write of exactly the object a commit has
+ * already saved is skipped before it is serialised again. Any other write
+ * (or a different object) goes through the byte comparison as before. */
+function skipPrewrittenSave<S>(storage: PersistStorage<S> | undefined): PersistStorage<S> | undefined {
+  if (!storage) return storage;
+  return {
+    ...storage,
+    setItem: (name, value) => {
+      const prewritten = prewrittenVotingSave;
+      if (prewritten && prewritten.name === name && prewritten.state === value.state && value.version === STORE_VERSION) {
+        prewrittenVotingSave = null;
+        return;
+      }
+      return storage.setItem(name, value);
+    },
+  };
+}
+
 export const useStorytellerStore = create<StorytellerStore>()(
   persist(
     (rawSet, get) => {
@@ -1749,14 +1805,16 @@ export const useStorytellerStore = create<StorytellerStore>()(
           finishedGameUndo: null, canUndoFinishedGame: false, localSeq: state.localSeq + 1 };
         if (votingAuthorityToken(state.lobby) !== authority) return "The connection changed. Nothing was recorded.";
         let value: string;
+        let persisted: unknown;
         try {
           const options = useStorytellerStore.persist.getOptions();
-          value = JSON.stringify({ state: options.partialize ? options.partialize(candidate) : candidate, version: STORE_VERSION });
+          persisted = options.partialize ? options.partialize(candidate) : candidate;
+          value = JSON.stringify({ state: persisted, version: STORE_VERSION });
           localStorage.setItem(STORE_KEY, value);
         } catch {
           return "This device could not save the change. Free browser storage or allow site storage, then try again. Nothing was recorded.";
         }
-        prewrittenVotingSave = { name: STORE_KEY, value };
+        prewrittenVotingSave = { name: STORE_KEY, value, state: persisted };
         preparedAuthoritativeGame = prepared;
         try { set({ game: prepared, undoStack, seatSwapUndo, localLayoutUndo }); }
         finally { prewrittenVotingSave = null; preparedAuthoritativeGame = null; }
@@ -1802,13 +1860,15 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const candidate = { ...state, ...patch, localSeq: state.localSeq + 1 };
         const options = useStorytellerStore.persist.getOptions();
         let value: string;
+        let persisted: unknown;
         try {
-          value = JSON.stringify({ state: options.partialize ? options.partialize(candidate) : candidate, version: STORE_VERSION });
+          persisted = options.partialize ? options.partialize(candidate) : candidate;
+          value = JSON.stringify({ state: persisted, version: STORE_VERSION });
           localStorage.setItem(STORE_KEY, value);
         } catch {
           return "This device could not save the change. Allow site storage or free browser storage, then try again.";
         }
-        prewrittenVotingSave = { name: STORE_KEY, value };
+        prewrittenVotingSave = { name: STORE_KEY, value, state: persisted };
         gameLifecycle++;
         clearNightActionCorrections();
         try { set(() => ({ ...patch, [TERMINAL_COMMIT]: true, [SKIP_LOCAL_SEQ]: true, localSeq: candidate.localSeq })); }
@@ -1822,11 +1882,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const options = useStorytellerStore.persist.getOptions();
         const candidate = { ...state, ...patch };
         let value: string;
+        let persisted: unknown;
         try {
-          value = JSON.stringify({ state: options.partialize ? options.partialize(candidate) : candidate, version: STORE_VERSION });
+          persisted = options.partialize ? options.partialize(candidate) : candidate;
+          value = JSON.stringify({ state: persisted, version: STORE_VERSION });
           localStorage.setItem(STORE_KEY, value);
         } catch { return { ok: false, message: "This device could not save the token layout. Nothing was changed." }; }
-        prewrittenVotingSave = { name: STORE_KEY, value };
+        prewrittenVotingSave = { name: STORE_KEY, value, state: persisted };
         try { set(patch); } finally { prewrittenVotingSave = null; }
         return { ok: true };
       };
@@ -3886,7 +3948,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
     {
       name: STORE_KEY,
       version: STORE_VERSION,
-      storage: createJSONStorage(() => {
+      storage: skipPrewrittenSave(createJSONStorage(() => {
         // Preserve Zustand's unavailable-storage behavior in non-browser
         // environments by resolving storage while its getter is guarded.
         const storage = localStorage;
@@ -3898,7 +3960,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           storage.setItem(name, value);
         },
         };
-      }),
+      })),
       migrate: migrateStoreState,
       // Phase 9C.2B.2 (hardening): Zustand only invokes `migrate` above when
       // the persisted version differs from STORE_VERSION — a persisted blob
@@ -3923,21 +3985,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           ...(journal ? { lobby: journal.lobby, terminalClose: { intent: journal.intent, status: "failed" as const, recoveryPending: true as const,
             message: "An online ending needs recovery. Retry finishing to confirm the session's recorded result." } } : {}) };
       },
-      partialize: (s) => ({
-        game: s.game,
-        view: s.view,
-        // F-01: saved with History shared with `game` (undoPersistence.ts).
-        undoStack: compactUndoStack(s.undoStack, s.game),
-        customScripts: s.customScripts,
-        lobby: s.lobby,
-        grimoireMode: s.grimoireMode,
-        tokenPositions: s.tokenPositions,
-        seatSwapUndo: s.seatSwapUndo,
-        localLayoutUndo: s.localLayoutUndo,
-        finishedGameUndo: s.finishedGameUndo && { ...s.finishedGameUndo, undoStack: compactUndoStack(s.finishedGameUndo.undoStack, s.finishedGameUndo.live) },
-        localSeq: s.localSeq,
-        sync: s.sync,
-      }),
+      partialize: persistedForm,
     }
   )
 );

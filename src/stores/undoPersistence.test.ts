@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildDayTown } from "@/features/grimoire-v6/day/test/dayFixture";
 import { takeMigrationResetFlag, useStorytellerStore as store } from "./storytellerStore";
-import { compactUndoStack, expandUndoStack, SHARED_HISTORY_PREFIX } from "./undoPersistence";
+import { compactUndoStack, expandUndoStack, SHARED_HISTORY_PREFIX, SHARED_UNDO_KEY } from "./undoPersistence";
+import { StorytellerStateSchema } from "./schemas";
 import type { PlayerId, StorytellerLobbyRecord } from "./types";
 
 const KEY = "new-blood-st";
@@ -65,7 +66,7 @@ describe("F-01 compact saved Undo snapshots (store)", () => {
     const before = structuredClone(state().undoStack);
     expect(before).toHaveLength(20);
 
-    const stored = saved().state.undoStack as Record<string, unknown>[];
+    const stored = saved().state[SHARED_UNDO_KEY] as Record<string, unknown>[];
     expect(stored).toHaveLength(20);
     for (const entry of stored) expect(entry.history).toEqual({ [SHARED_HISTORY_PREFIX]: expect.any(Number) });
 
@@ -96,18 +97,30 @@ describe("F-01 compact saved Undo snapshots (store)", () => {
     store.setState({ undoStack: [...state().undoStack, foreign] });
     // Any later save (a layout-only change here) writes the stack.
     store.setState({ tokenPositions: { ...state().tokenPositions } });
-    const stored = saved().state.undoStack as Record<string, unknown>[];
+    const stored = saved().state[SHARED_UNDO_KEY] as Record<string, unknown>[];
     expect(stored.at(-1)!.history).toEqual(foreign.history);
     const before = structuredClone(state().undoStack);
     await reload();
     expect(state().undoStack).toEqual(before);
   });
 
+  it("a build that cannot read the compact stack keeps the saved game and only loses Undo", () => {
+    const { ids } = buildDayTown(2);
+    toggle(ids.Ada!, true);
+    const raw = saved().state;
+    expect(raw.undoStack).toBeUndefined();
+    // What the previous build does on load: validate the saved fields it knows.
+    const previous = StorytellerStateSchema.safeParse(raw);
+    expect(previous.success).toBe(true);
+    expect(previous.success && previous.data.game).toEqual(JSON.parse(JSON.stringify(game())));
+    expect(previous.success && previous.data.undoStack).toBeUndefined();
+  });
+
   it("resets a save whose marker has been tampered with, exactly like any other corrupt Undo snapshot", async () => {
     const { ids } = buildDayTown(2);
     toggle(ids.Ada!, true);
     const raw = saved();
-    raw.state.undoStack[0].history = { [SHARED_HISTORY_PREFIX]: game().history.length + 5 };
+    raw.state[SHARED_UNDO_KEY][0].history = { [SHARED_HISTORY_PREFIX]: game().history.length + 5 };
     takeMigrationResetFlag();
     await reload(JSON.stringify(raw));
     expect(state().game).toBeNull();
@@ -129,5 +142,35 @@ describe("F-01 compact saved Undo snapshots (store)", () => {
     expect(state().undoFinishedGame()).toMatchObject({ ok: true });
     expect(game()).toEqual(live);
     expect(state().undoStack).toEqual(liveUndo);
+  });
+});
+
+describe("F-03 one serialisation of the saved state per Storyteller action", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    store.setState({ game: null, lobby: null, undoStack: [], localSeq: 0, terminalClose: null, finishedGameUndo: null, canUndoFinishedGame: false, sync: null });
+  });
+
+  it("serialises the whole saved state once, writes it once, and the saved bytes match the published state", async () => {
+    const { ids } = buildDayTown(2);
+    const whole = (value: unknown) => !!value && typeof value === "object" && "state" in value && "version" in value;
+    const stringify = vi.spyOn(JSON, "stringify");
+    const write = vi.spyOn(Storage.prototype, "setItem");
+    try {
+      toggle(ids.Ada!, true);
+      expect(stringify.mock.calls.filter(([value]) => whole(value))).toHaveLength(1);
+      expect(write.mock.calls.filter(([name]) => name === KEY)).toHaveLength(1);
+    } finally { stringify.mockRestore(); write.mockRestore(); }
+    const published = structuredClone({ game: game(), undoStack: state().undoStack });
+    await reload();
+    expect({ game: game(), undoStack: state().undoStack }).toEqual(published);
+  });
+
+  it("still saves a change made outside a commit (the ordinary persist path)", async () => {
+    buildDayTown(2);
+    store.setState({ view: "home" });
+    expect(saved().state.view).toBe("home");
+    store.setState({ view: "game" });
+    expect(saved().state.view).toBe("game");
   });
 });

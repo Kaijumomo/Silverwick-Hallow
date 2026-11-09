@@ -24,11 +24,13 @@ import type { StorytellerLobbyRecord } from "./types";
  * The bases are never compacted: `game` for the Undo stack and the recovery
  * envelope's `live` game for its Undo stack.
  *
- * A build from before this change cannot read the marker, so a save written
- * by this build would be reset by such a build (its existing invalid-save
- * path), never misread.
+ * The compact stack is saved under SHARED_UNDO_KEY, never `undoStack`. A build
+ * from before this change ignores that key, so it keeps the saved game and
+ * simply has no Undo; it can never misread a marker or reset the save.
  */
 export const SHARED_HISTORY_PREFIX = "sharedHistoryPrefix";
+/** The saved key of the compact Undo stack. */
+export const SHARED_UNDO_KEY = "undoStackShared";
 
 type HistoryRecords = StorytellerLobbyRecord["history"];
 

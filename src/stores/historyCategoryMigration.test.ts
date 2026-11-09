@@ -23,6 +23,12 @@ const state = () => store.getState();
 type Raw = Record<string, unknown>;
 type RawHistory = { category: string } & Raw;
 
+/** The saved state without this build's compact Undo stack (F-01), which no v17 writer had. */
+function withoutSharedUndo(saved: Raw): Raw {
+  const { undoStackShared: _shared, ...rest } = saved as Raw & { undoStackShared?: unknown };
+  return rest as Raw;
+}
+
 /** Deep copy of a game-shaped entry with every "role" History category
  * renamed to the v17 name "identity" -- exactly what a v17 writer stored.
  * Phase 10A: a v17 writer also never stored anything v19-only -- no Life
@@ -294,8 +300,8 @@ describe("C. local v17 -> v18 migration of every Undo snapshot", () => {
 
     const v17Blob = {
       version: 17,
-      // A v17 writer saved every Undo snapshot in full (F-01 compaction is v29+ only).
-      state: { ...current.state, game: asV17(current.state.game), undoStack: (before.undoStack as unknown[]).map(asV17) },
+      // A v17 writer saved every Undo snapshot in full, as `undoStack` (F-01 compaction is v29+ only).
+      state: { ...withoutSharedUndo(current.state), game: asV17(current.state.game), undoStack: (before.undoStack as unknown[]).map(asV17) },
     };
     expect(JSON.stringify(v17Blob)).toContain("\"category\":\"identity\"");
     store.setState({ game: null, undoStack: [], localSeq: 0, sync: null });

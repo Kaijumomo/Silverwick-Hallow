@@ -272,7 +272,7 @@ describe("Phase 9R.5 B: a malformed CURRENT-version (v18) local save never hydra
     sevenPlayerGame();
     state().setNotes(game().seatOrder[0]!, "creates an Undo entry");
     const blob = await persistedBlob();
-    const undo = blob.state.undoStack as StorytellerLobbyRecord[];
+    const undo = blob.state.undoStackShared as StorytellerLobbyRecord[]; // F-01: the saved (compact) Undo stack
     expect(undo.length).toBeGreaterThan(0);
     const snapshot = undo[undo.length - 1]!;
     snapshot.seatOrder = snapshot.seatOrder.slice(0, -1);
