@@ -10,7 +10,7 @@ This document does not close the audit. Phase 10 stays blocked until Sol closes 
   `claude/silverwick-terminology-audit` also points at the same checkpoint and
   was not modified).
 - Persisted schema: store v17 → **v18**.
-- Canonical vocabulary: [TERMINOLOGY.md](TERMINOLOGY.md).
+- Canonical vocabulary: [TERMINOLOGY.md](../TERMINOLOGY.md).
 
 ## 1. What changed
 

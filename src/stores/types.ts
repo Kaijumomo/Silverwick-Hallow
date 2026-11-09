@@ -465,7 +465,7 @@ export type HistoryId = string;
  *
  * "role" is a change to a player's Actual Role -- deliberately not a
  * generic "identity" category: participant identity (ParticipantRef) and
- * Actual/Shown perception are different concepts (see TERMINOLOGY.md).
+ * Actual/Shown perception are different concepts (see docs/TERMINOLOGY.md).
  * v17 persisted this value as "identity"; the v17 -> v18 migration
  * (gameMigration.ts) renames it, and the v18 schema rejects the old name. */
 export type HistoryCategory = "role" | "alignment" | "life" | "effect" | "reminder";

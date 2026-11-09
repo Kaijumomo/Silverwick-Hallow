@@ -1,5 +1,7 @@
 # Silverwick Hollow — Master Implementation Plan
 
+> Phase contracts (`PHASE*.md`) now live in `docs/phases/`. Current status is in `docs/ai/handoffs/CURRENT_HANDOFF.md`.
+
 **Status:** Active canonical roadmap  
 **Updated:** 2026-10-06\
 **Integrated branch:** `main`  

@@ -22,22 +22,22 @@ Silverwick has no image-generation tool or API in Claude Code. This skill is a m
   - Never ask ChatGPT to reproduce or imitate official *Blood on the Clocktower* art, character icons, tokens, logo or trade dress.
   - Never ask for the style of a named living artist.
   - Never present output as official. Publisher data is used under the publisher's community content policy (`src/data/canonical/README.md`); that is not a license to its artwork.
-- **Keep product meaning intact** (see `TERMINOLOGY.md`):
+- **Keep product meaning intact** (see `docs/TERMINOLOGY.md`):
   - **Effects and Reminders stay visually distinct.** An Effect is an authoritative condition; a Reminder is non-authoritative notation. A Reminder symbol must never read as an Effect state.
   - **Use fictional sample data.** Concept images of Storyteller or player screens use clearly fictional names and data. They must never suggest private Storyteller information on a public or player surface (Privacy Mode and projection boundaries).
   - **Escalate conflicts.** If the requested visual conflicts with a frozen invariant in the active phase contract, raise it for Sol instead of briefing around it.
-- **Images are direction, not specification.** A generated UI concept is input to design direction. Layout, responsive behavior, accessibility and interaction are decided in code, against `PHASE10H.md` and `docs/ai/design/WEB_INTERFACE_GUIDELINES_PINNED.md`.
+- **Images are direction, not specification.** A generated UI concept is input to design direction. Layout, responsive behavior, accessibility and interaction are decided in code, against `docs/phases/PHASE10H.md` and `docs/ai/design/WEB_INTERFACE_GUIDELINES_PINNED.md`.
 - **Using an image in the app is a production change.** Placing a returned image in `public/` or `src/` needs explicit authorization. Until then, candidates stay in scratch or review locations.
 
 ## Gather context (check, don't assume)
 
 1. **Visual direction**, in order:
    - `.claude/skills/silverwick-ui-design/`, the approved direction once it exists;
-   - the visual north star status in `PHASE10H.md` (§8 and 10H-A);
+   - the visual north star status in `docs/phases/PHASE10H.md` (§8 and 10H-A);
    - `docs/ai/handoffs/CURRENT_HANDOFF.md`.
 
    A direction is approved only when those sources say the project owner approved it.
-2. **Meaning:** `TERMINOLOGY.md` for any game concept the image depicts.
+2. **Meaning:** `docs/TERMINOLOGY.md` for any game concept the image depicts.
 3. **Candidate references.** These show what exists today, not an approved style, unless a source says otherwise:
    - `public/status/*.png`: current Effect presentation art (drunk, poisoned, protected; 1254×1254);
    - `public/tokens/*.png`: public life-state tokens;

@@ -43,7 +43,7 @@ next step.
 ## 5. Deploy the security rules
 
 Before deploying the AUD-001 membership change to an existing project, follow
-[the migration procedure](src/firebase/MEMBERSHIP_MIGRATION.md). Old roster
+[the migration procedure](../src/firebase/MEMBERSHIP_MIGRATION.md). Old roster
 values were client-writable and cannot be treated as trusted memberships.
 
 ```
