@@ -124,19 +124,19 @@ it("R2 successor targeting exposes only eligible board players without a duplica
   expect(store.getState().undoStack).toHaveLength(1);
 });
 
-it.each(["monk"])("Drunk shown as %s uses official instructions and Next without a simulated action workspace", shownRole => {
+it.each(["monk"])("Drunk shown as %s gets the same board picker as a poisoned player and changes nothing", shownRole => {
   const next = proofGame(["drunk", "chef", "imp", "soldier", "poisoner"]);
   next.players.p0 = { ...next.players.p0!, shownRole, shownAlignment: "good", behaviorMode: "drunk_fake_role_behavior" };
   store.setState({ game: next });
   useShellStore.getState().setNightCursor({ day: next.day, stepKey: participantStepKey(next.players.p0.participantId!, shownRole) });
   render(<Guide />);
-  expect(screen.getByText(proofScript.characters.find(role => role.id === "monk")!.ability!)).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Continue action" })).not.toBeInTheDocument();
-  expect(useTargetPicker.getState().active).toBeNull();
+  expect(useTargetPicker.getState().active).not.toBeNull();
   const before = game();
-  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  tap("p1");
   expect(game().informationDeliveries).toEqual(before.informationDeliveries);
-  expect(game().players).toEqual(before.players);
+  // Nothing is protected, killed or changed: only the step is completed.
+  expect(Object.values(game().players).map((p) => [p.id, p.alive, p.actualRole, p.effects.length])).toEqual(Object.values(before.players).map((p) => [p.id, p.alive, p.actualRole, p.effects.length]));
   expect(game().nightProgress[`${next.day}:${participantStepKey(next.players.p0.participantId!, shownRole)}`]?.status).toBe("done");
 });
 
@@ -513,6 +513,51 @@ it("a Ravenkeeper killed tonight is not passed over by Next: its wake is by trig
   expect(current()).toBe(ravenkeeper.stepKey);
   expect(screen.queryByText(/This character does not wake/)).toBeNull();
 });
+
+it.each([["drunk", "drunk_fake_role_behavior"], ["marionette", "marionette_fake_good_behavior"]] as const)(
+  "a %s shown as the Professor gets the board picker, revives no one, spends the use, and is not offered it again", (actual, behaviorMode) => {
+    t30Night([actual, "chef", "empath", "monk", "imp", "saint", "baron"]);
+    const seeded = game();
+    store.setState({ game: { ...seeded, players: { ...seeded.players,
+      p0: { ...seeded.players.p0!, actualRole: actual, shownRole: "professor", shownAlignment: "good", behaviorMode },
+      p1: { ...seeded.players.p1!, alive: false } } }, undoStack: [] });
+    const step = participantStepKey(game().players.p0!.participantId!, "professor");
+    useShellStore.getState().setNightCursor({ day: 3, stepKey: step });
+    render(<Guide />);
+    expect(useTargetPicker.getState().active).not.toBeNull();
+    tap("p1");
+    expect(game().players.p1!.alive).toBe(false);
+    expect(game().players.p0!.abilityUsed).toBe(true);
+    expect(game().nightProgress[`3:${step}`]?.status).toBe("done");
+    // A later night: the use is already spent, so the step does not wake and no picker is offered.
+    cleanup();
+    store.setState({ game: { ...game(), day: 4, nightProgress: {} }, undoStack: [] });
+    useTargetPicker.getState().cancel();
+    useShellStore.getState().setNightCursor({ day: 4, stepKey: step });
+    render(<Guide />);
+    expect(useTargetPicker.getState().active).toBeNull();
+    expect(screen.getByText(/This ability has already been used/)).toBeInTheDocument();
+  });
+
+it.each([["drunk", "innkeeper"], ["marionette", "innkeeper"], ["drunk", "gambler"], ["marionette", "gambler"]] as const)(
+  "a %s shown as the %s taps the board like a poisoned player and changes nothing in the game", (actual, shown) => {
+    t30Night([actual, "chef", "empath", "monk", "imp", "saint", "baron"], 2);
+    const seeded = game();
+    const behaviorMode = actual === "drunk" ? "drunk_fake_role_behavior" : "marionette_fake_good_behavior";
+    store.setState({ game: { ...seeded, players: { ...seeded.players,
+      p0: { ...seeded.players.p0!, actualRole: actual, shownRole: shown, shownAlignment: "good", behaviorMode } } }, undoStack: [] });
+    const step = participantStepKey(game().players.p0!.participantId!, shown);
+    useShellStore.getState().setNightCursor({ day: 2, stepKey: step });
+    render(<Guide />);
+    expect(useTargetPicker.getState().active).not.toBeNull();
+    const before = game();
+    tap("p1");
+    if (shown === "innkeeper") tap("p3");
+    else fireEvent.click(screen.getByRole("button", { name: "Chef" }));
+    const snapshot = (g: typeof before) => Object.values(g.players).map((p) => [p.id, p.alive, p.actualRole, p.shownRole, p.effects.map((e) => e.type)]);
+    expect(snapshot(game())).toEqual(snapshot(before));
+    expect(game().nightProgress[`2:${step}`]?.status).toBe("done");
+  });
 
 function deriveFor() {
   const script = { ...proofScript, id: "treacherous-30th" };

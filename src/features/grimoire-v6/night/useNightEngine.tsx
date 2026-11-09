@@ -153,7 +153,6 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
 
   const ability = current ? abilityOf(current) : null;
   const eligible = !!(query && ability?.kind === "guided" && actor?.participantId && current?.kind === "player"
-    && (!current.isDeceived || NIGHT_INFORMATION_ROLES.has(current.effectiveRoleId))
     && (!ability.trigger || ability.trigger.kind === "triggered")
     && automationEligibility({ query, descriptor: ability.descriptor, actor: bindingOf(actor),
       roleId: current.effectiveRoleId, simulated: current.isDeceived }).kind === "automated"
