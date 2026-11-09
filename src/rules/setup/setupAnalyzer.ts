@@ -5,9 +5,9 @@ import { activeJinxesFor } from "@/data/jinxes";
 import type { BagCounts } from "@/data/setupCounts";
 import { MIN_PLAYERS, MAX_PLAYERS, MAX_TOTAL_PLAYERS } from "@/data/setupCounts";
 import type { RoleDef } from "@/stores/types";
-import type { SetupContext, SetupFinding, SetupSource, SetupAction } from "./setupContext";
-import { compositionCandidates, emptyCounts, formatCounts, hasCountPolicy, isBagType, sameCounts } from "./setupPolicies";
-import { readinessFindings, setupReadiness } from "./setupReadiness";
+import type { SetupContext, SetupFinding, SetupSource, SetupAction } from "@/rules/setup/setupContext";
+import { compositionCandidates, emptyCounts, formatCounts, hasCountPolicy, isBagType, sameCounts } from "@/rules/setup/setupPolicies";
+import { readinessFindings, setupReadiness } from "@/rules/setup/setupReadiness";
 import { travelerHasUnresolvedArrival } from "@/stores/travelers";
 
 export type CompositionAnalysis = {

@@ -2,7 +2,7 @@ import { useInfoShow } from "../info/showStore";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useEffect } from "react";
-import { computeNightOrder } from "@/features/nightOrder/nightOrder";
+import { computeNightOrder } from "@/rules/night/nightOrder";
 import { VotingProvider } from "@/features/voting/VotingWorkspace";
 import { GrimoireV6Screen } from "../GrimoireV6Screen";
 import { useV6Ui } from "../v6Store";

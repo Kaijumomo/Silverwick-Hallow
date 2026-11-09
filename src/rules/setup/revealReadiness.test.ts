@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { initialRevealReadiness } from "./revealReadiness";
-import { selectSetupContext } from "./setupContext";
+import { initialRevealReadiness } from "@/rules/setup/revealReadiness";
+import { selectSetupContext } from "@/rules/setup/setupContext";
 import { setupScript } from "@/test/setupFixtures";
 import { makeSTPlayer } from "@/test/fixtures";
 import type { StorytellerLobbyRecord } from "@/stores/types";

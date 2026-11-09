@@ -4,9 +4,9 @@ import { bluffChoiceError, type SetupView } from "@/features/info/infoModel";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { useV6Ui } from "@/features/grimoire-v6/v6Store";
 import { buildRegistry } from "@/data/roleRegistry";
-import { evilInformationPolicy } from "./nightRules";
+import { evilInformationPolicy } from "@/rules/night/nightRules";
 import type { Script, StorytellerLobbyRecord } from "@/stores/types";
-import type { NightStep } from "./nightOrder";
+import type { NightStep } from "@/rules/night/nightOrder";
 
 /** How a host screen shows the information: its own player view, given the same view, recipient and captured
  * context. Answers with a refusal message, or undefined once the view is on screen. */

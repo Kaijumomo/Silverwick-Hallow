@@ -6,7 +6,7 @@ import { usePrivacyStore } from "@/stores/privacyStore";
 import { buildRegistry } from "@/data/roleRegistry";
 import { seatedParticipants, useTargetPicker, type StepAbility } from "@/features/abilities/abilityUi";
 import type { RoleDef, RoleType, Script, StorytellerLobbyRecord } from "@/stores/types";
-import type { NightStep } from "./nightOrder";
+import type { NightStep } from "@/rules/night/nightOrder";
 import { chefMaximumPairs } from "@/abilities/characters/chef";
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { captureInfoContext, infoContextCurrent } from "@/features/info/infoCommands";

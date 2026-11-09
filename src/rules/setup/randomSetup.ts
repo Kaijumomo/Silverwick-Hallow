@@ -4,8 +4,8 @@ import { activeJinxesFor } from "@/data/jinxes";
 import { ownedScriptCharacters } from "@/data/roleRegistry";
 import type { BagCounts } from "@/data/setupCounts";
 import type { RoleDef, RoleId } from "@/stores/types";
-import type { FillBagResult } from "./fillRolePool";
-import { compositionCandidates, emptyCounts, isBagType, sameCounts } from "./setupPolicies";
+import type { FillBagResult } from "@/rules/setup/fillRolePool";
+import { compositionCandidates, emptyCounts, isBagType, sameCounts } from "@/rules/setup/setupPolicies";
 
 export type RandomSetupInput = {
   scriptCharacters: RoleDef[];

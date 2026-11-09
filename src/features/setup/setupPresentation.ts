@@ -1,6 +1,6 @@
-import type { SetupAnalysis } from "./setupAnalyzer";
-import { isPostDeal, type SetupContext } from "./setupContext";
-import { initialRevealReadiness, type RevealReadiness } from "./revealReadiness";
+import type { SetupAnalysis } from "@/rules/setup/setupAnalyzer";
+import { isPostDeal, type SetupContext } from "@/rules/setup/setupContext";
+import { initialRevealReadiness, type RevealReadiness } from "@/rules/setup/revealReadiness";
 import { isInitialRevealComplete } from "@/stores/identity";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 

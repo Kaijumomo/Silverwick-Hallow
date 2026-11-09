@@ -7,7 +7,7 @@ import { MAX_NIGHT_STEP_NOTES, MAX_ST_NOTES, StorytellerGamePersistedSchema, Sto
 import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { manualEffectId } from "./effects";
-import { redHerringSetup, RED_HERRING_EFFECT } from "@/features/setup/redHerringSetup";
+import { redHerringSetup, RED_HERRING_EFFECT } from "@/rules/setup/redHerringSetup";
 import { cloneOwned, historyId, type MutationContext, sameSnapshot } from "./history";
 import {
   applyEffectPlan,
@@ -78,7 +78,7 @@ import {
   applyInformationDeliveryPlan,
   planInformationDelivery,
 } from "./informationDelivery";
-import { initialRevealReadiness } from "@/features/setup/revealReadiness";
+import { initialRevealReadiness } from "@/rules/setup/revealReadiness";
 import { invalidatePrivatePacket } from "./privatePackets";
 import { withRevealTokens } from "./revealTokens";
 import { usePrivacyStore } from "./privacyStore";
@@ -91,14 +91,14 @@ import { isTabletTrial } from "@/config/trial";
 import { useShellStore, type NightCursor } from "./shellStore";
 import { deriveNightWork } from "@/features/nightOrder/nightWork";
 import { planPreparedInformation, planPreparedInformationDelivery, reconcilePreparedInformation, type PrepareInformationRequest, type DeliverPreparedInformationRequest, type PreparedInformationResult } from "./preparedInformation";
-import { seatMarionetteBesideDemon } from "@/features/setup/marionetteSeating";
+import { seatMarionetteBesideDemon } from "@/rules/setup/marionetteSeating";
 import { planAbilityUseReminders } from "./abilityUseReminders";
 import { planDrunkPreparationReminders, reconcileDrunkReminders } from "./drunkReminders";
 import { planButlerSelection, reconcileButlerReminders, type ButlerSelectionRequest, type ButlerSelectionResult } from "./butlerSelection";
-import { analyzeSetup } from "@/features/setup/setupAnalyzer";
-import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
-import { assignedBagIsCoherent, canRefineSetup, matchBagToAssignments } from "@/features/setup/setupRefinement";
-import { isBagType } from "@/features/setup/setupPolicies";
+import { analyzeSetup } from "@/rules/setup/setupAnalyzer";
+import { isPostDeal, selectSetupContext } from "@/rules/setup/setupContext";
+import { assignedBagIsCoherent, canRefineSetup, matchBagToAssignments } from "@/rules/setup/setupRefinement";
+import { isBagType } from "@/rules/setup/setupPolicies";
 import { arrivalsAreTravelers, newTravelerArrival, publicTravelerRole, travelerDemonInformation, travelerNeedsArrivalCheck } from "./travelers";
 import { getTraveler } from "@/data/travelers";
 import { MAX_PLAYERS, MAX_TOTAL_PLAYERS, MIN_PLAYERS } from "@/data/setupCounts";
@@ -106,7 +106,7 @@ import { validateCheckpointEnvelope } from "@/firebase/checkpoint";
 import { validateFirebaseWritableValue } from "@/firebase/firebaseWriteCompatibility";
 import { storytellerPathSegments } from "@/firebase/paths";
 import { MAX_ROOM_CODE_SHAPE } from "@/firebase/roomCode";
-import type { SetupCommandResult } from "@/features/setup/setupReadiness";
+import type { SetupCommandResult } from "@/rules/setup/setupReadiness";
 import type {
   Alignment,
   BehaviorMode,
@@ -511,7 +511,7 @@ export type StorytellerStore = {
   // --- Pre-Reveal Setup refinement (Phase 9 Setup finalization B3) -------
   // Administration of the private Deal only — available strictly between a
   // completed initial Deal and a completed initial Reveal (see
-  // canRefineSetup in features/setup/setupRefinement.ts). Distinct from the
+  // canRefineSetup in rules/setup/setupRefinement.ts). Distinct from the
   // generic assignRole()/setShownRole(), which remain unchanged and keep
   // serving later in-game character-change mechanics.
   /** Fresh random redistribution of the current ordinary dealt bag across

@@ -3,7 +3,7 @@ import { isInitialRevealComplete } from "@/stores/identity";
 import { iconUrlFor } from "@/data/iconUrl";
 import { isCanonicalRole } from "@/data/canonical";
 import { buildRegistry } from "@/data/roleRegistry";
-import { evilInformationPolicy, setupInformationWarning } from "@/features/nightOrder/nightRules";
+import { evilInformationPolicy, setupInformationWarning } from "@/rules/night/nightRules";
 import { getPrivateInfoApplicability, previewPrivatePacket } from "@/stores/privatePackets";
 import { travelerDemonInformation } from "@/stores/travelers";
 import type { RoleDef, Script, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";

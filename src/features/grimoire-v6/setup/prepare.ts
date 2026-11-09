@@ -7,10 +7,10 @@ import { preparationAvailability, preparedInformationContext } from "@/stores/pr
 import { concealedRedHerringHolder, concealedRedHerringIntents } from "@/stores/concealedRedHerring";
 import { captureCharacterActionContext, selectScriptById, useStorytellerStore } from "@/stores/storytellerStore";
 import { bindingOf } from "@/features/abilities/abilityUi";
-import { initialRevealReadiness } from "@/features/setup/revealReadiness";
-import { redHerringSetup } from "@/features/setup/redHerringSetup";
+import { initialRevealReadiness } from "@/rules/setup/revealReadiness";
+import { redHerringSetup } from "@/rules/setup/redHerringSetup";
 import { FIRST_INFORMATION_CHARACTERS, informationCategory } from "@/features/setup/FirstInformationPreparation";
-import type { SetupContext } from "@/features/setup/setupContext";
+import type { SetupContext } from "@/rules/setup/setupContext";
 import type { PlayerId, PreparedInformationCharacter, RoleDef, Script, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 import { flash, useV6Ui } from "../v6Store";
 

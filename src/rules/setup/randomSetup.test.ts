@@ -5,8 +5,8 @@ import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { SETUP_COUNTS } from "@/data/setupCounts";
 import { TRAVELERS } from "@/data/travelers";
 import type { RoleDef } from "@/stores/types";
-import { emptyCounts, isBagType } from "./setupPolicies";
-import { randomSetup } from "./randomSetup";
+import { emptyCounts, isBagType } from "@/rules/setup/setupPolicies";
+import { randomSetup } from "@/rules/setup/randomSetup";
 
 const TB = troubleBrewing.characters;
 const identityRandom = () => 0.999999;

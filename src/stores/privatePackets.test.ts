@@ -4,7 +4,7 @@ import { buildRegistry } from "@/data/roleRegistry";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { makeSTPlayer, roles } from "@/test/fixtures";
 import { wakeIdentity } from "./wakeIdentity";
-import { computeNightOrder } from "@/features/nightOrder/nightOrder";
+import { computeNightOrder } from "@/rules/night/nightOrder";
 import { getPrivateInfoApplicability, previewPrivatePacket } from "./privatePackets";
 import { projectToSelf } from "./projections";
 import { migrateStoreState, useStorytellerStore as store } from "./storytellerStore";

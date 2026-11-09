@@ -5,7 +5,7 @@ import { ownedScriptCharacters } from "@/data/roleRegistry";
 import { activeJinxesFor } from "@/data/jinxes";
 import {
   compositionCandidates, hasCountPolicy, hasUncertainComposition, isBagType, sameCounts,
-} from "./setupPolicies";
+} from "@/rules/setup/setupPolicies";
 import type { BagCounts } from "@/data/setupCounts";
 import type { RoleDef, RoleId } from "@/stores/types";
 

@@ -7,8 +7,8 @@ import { CANONICAL_ABILITY_SEMANTICS, resolveAbilitySemantics } from "@/abilitie
 import { activeModifiers } from "@/abilities/modifiers";
 import { buildCoverageManifest } from "@/abilities/coverage";
 import { pathAbility } from "@/features/abilities/abilityUi";
-import { computeNightOrder } from "@/features/nightOrder/nightOrder";
-import { evilInformationPolicy } from "@/features/nightOrder/nightRules";
+import { computeNightOrder } from "@/rules/night/nightOrder";
+import { evilInformationPolicy } from "@/rules/night/nightRules";
 import { INVOCATION_PATHS } from "@/abilities/invocation";
 import { TOYMAKER_ATTACK_MESSAGE } from "./modifierHooks";
 import { choiceId } from "./alhadikhia";

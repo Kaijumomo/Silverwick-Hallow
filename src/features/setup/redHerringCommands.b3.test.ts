@@ -7,8 +7,8 @@ import { projectLobbyToPublic, projectLobbyToSelfMap } from "@/stores/projection
 import { buildRegistry } from "@/data/roleRegistry";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { bind, pick, plan, proofEnv, request } from "@/test/proofFixtures";
-import { redHerringSetup, RED_HERRING_EFFECT } from "./redHerringSetup";
-import { selectSetupContext } from "./setupContext";
+import { redHerringSetup, RED_HERRING_EFFECT } from "@/rules/setup/redHerringSetup";
+import { selectSetupContext } from "@/rules/setup/setupContext";
 
 const state = () => store.getState();
 const game = () => state().game!;

@@ -18,7 +18,7 @@ import { publicLifeStateOf } from "./lifeState";
 import { buildRegistry } from "@/data/roleRegistry";
 import { setupGame, setupScript } from "@/test/setupFixtures";
 import { asV23, withV24Guided, withV24ToCurrent } from "@/test/v20Migration";
-import { computeNightOrder } from "@/features/nightOrder/nightOrder";
+import { computeNightOrder } from "@/rules/night/nightOrder";
 import { decodePublicSnapshot } from "@/firebase/snapshots";
 import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "@/firebase/lobby";

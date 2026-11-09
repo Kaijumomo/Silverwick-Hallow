@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
-import { selectSetupContext } from "@/features/setup/setupContext";
+import { selectSetupContext } from "@/rules/setup/setupContext";
 import { travelerGuidance } from "@/stores/travelers";
 import { SeatAssignPopup } from "./SeatAssignPopup";
 import { usePrivacyStore } from "@/stores/privacyStore";

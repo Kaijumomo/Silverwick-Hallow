@@ -10,7 +10,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { useStorytellerStore as store, takeMigrationResetFlag } from "./storytellerStore";
 import { StorytellerGamePersistedSchema, StorytellerStateSchema } from "./schemas";
-import { selectSetupContext } from "@/features/setup/setupContext";
+import { selectSetupContext } from "@/rules/setup/setupContext";
 import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
 import { makeSTPlayer } from "@/test/fixtures";
 import { needsShownIdentity } from "./identity";

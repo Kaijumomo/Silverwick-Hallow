@@ -3,8 +3,8 @@ import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
 import { makeSTPlayer } from "@/test/fixtures";
 import { buildRegistry } from "@/data/roleRegistry";
-import { selectSetupContext } from "./setupContext";
-import { analyzeSetup } from "./setupAnalyzer";
+import { selectSetupContext } from "@/rules/setup/setupContext";
+import { analyzeSetup } from "@/rules/setup/setupAnalyzer";
 import { projectLobbyToSelfMap } from "@/stores/projections";
 
 const state = () => store.getState();

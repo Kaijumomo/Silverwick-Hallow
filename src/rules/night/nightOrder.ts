@@ -2,7 +2,7 @@ import type { PlayerId, RoleId, RoleType, STPlayerRecord, Script } from "@/store
 import { buildRegistry } from "@/data/roleRegistry";
 import { canonicalOrder, canonicalRoles, isCanonicalRole, roleAuthority } from "@/data/canonical";
 import { wakeIdentity } from "@/stores/wakeIdentity";
-import { evilInformationPolicy, type NightContext } from "./nightRules";
+import { evilInformationPolicy, type NightContext } from "@/rules/night/nightRules";
 import { publicTravelerRole, travelerNeedsFirstNight } from "@/stores/travelers";
 import { hasEffect } from "@/stores/effects";
 import { TOYMAKER_DEMON_SKIP_OCCURRED } from "@/stores/gameRuleFacts";

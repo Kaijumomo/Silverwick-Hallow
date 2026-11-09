@@ -1,6 +1,6 @@
 import { isCanonicalRole } from "@/data/canonical";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
-import type { SetupContext } from "./setupContext";
+import type { SetupContext } from "@/rules/setup/setupContext";
 
 export const RED_HERRING_EFFECT = "fortuneTellerRedHerring";
 export type RedHerringSetup = {

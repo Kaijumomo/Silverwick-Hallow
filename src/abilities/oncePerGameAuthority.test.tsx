@@ -6,7 +6,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { computeNightOrder } from "@/features/nightOrder/nightOrder";
+import { computeNightOrder } from "@/rules/night/nightOrder";
 import { NightScreen, resetNightUi, selectNightStep } from "@/test/v6Night";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { canonicalRoles } from "@/data/canonical";

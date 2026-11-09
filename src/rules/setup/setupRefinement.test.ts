@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { canRefineSetup, matchBagToAssignments } from "./setupRefinement";
+import { canRefineSetup, matchBagToAssignments } from "@/rules/setup/setupRefinement";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
 const baseGame = (over: Partial<StorytellerLobbyRecord> = {}): StorytellerLobbyRecord => ({

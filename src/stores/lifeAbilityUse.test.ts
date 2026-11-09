@@ -217,13 +217,13 @@ const ALLOWED: Record<string, string> = {
   "stores/roleResolution.ts": "10D gameplay Role change reset (ROLE_PLAN_FIELDS)",
   "stores/storytellerStore.ts": "blankPlayer construction and Setup freshAssignment reset (audited below)",
   "stores/schemas.ts": "persisted shape",
-  "features/nightOrder/nightOrder.ts": "copies the value into a READ-ONLY Night step view, never Current State",
+  "rules/night/nightOrder.ts": "copies the value into a READ-ONLY Night step view, never Current State",
   "stores/abilityResolution.ts": "captureFingerprint snapshots the OBSERVED value into a read-only workflow fingerprint, never Current State",
 };
 /** SOL-10F-L7: the read-only snapshot modules are admitted ONLY at their
  * reviewed unit and only as the verbatim observed copy. */
 const SNAPSHOT_SITES: Record<string, string> = {
-  "features/nightOrder/nightOrder.ts": "computeNightOrder",
+  "rules/night/nightOrder.ts": "computeNightOrder",
   "stores/abilityResolution.ts": "captureFingerprint",
 };
 

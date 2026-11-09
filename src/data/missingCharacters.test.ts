@@ -10,7 +10,7 @@ import { FABLED } from "./fabled";
 import { EXPERIMENTAL_CHARACTERS } from "./scripts/experimental";
 import { RoleDefSchema } from "@/stores/schemas";
 import { buildReferenceCategories } from "@/features/home/referenceCategories";
-import { computeNightOrder } from "@/features/nightOrder/nightOrder";
+import { computeNightOrder } from "@/rules/night/nightOrder";
 import { canonicalRoles } from "./canonical";
 import { makeSTPlayer } from "@/test/fixtures";
 import type { Script } from "@/stores/types";

@@ -8,7 +8,7 @@ import { captureCharacterActionContext, useStorytellerStore } from "@/stores/sto
 import { usePrivacyStore } from "@/stores/privacyStore";
 import type { PreparedInformationCharacter, Script, StorytellerLobbyRecord } from "@/stores/types";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
-import type { NightStep } from "./nightOrder";
+import type { NightStep } from "@/rules/night/nightOrder";
 import type { NightInformationHandle, RevealHost } from "./NightInformationAction";
 
 type Props = { game: StorytellerLobbyRecord; script: Script; step: Extract<NightStep, { kind: "player" }>;

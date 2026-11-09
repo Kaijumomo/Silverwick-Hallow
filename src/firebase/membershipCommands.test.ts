@@ -5,7 +5,7 @@ import { usePlayerStore } from "@/stores/playerStore";
 import { MemoryRoomBackend } from "@/test/memoryBackend";
 import type { Json } from "./backend";
 import { joinRequestPath, playerPath, rosterEntryPath, rosterParticipantPath } from "./paths";
-import { selectSetupContext } from "@/features/setup/setupContext";
+import { selectSetupContext } from "@/rules/setup/setupContext";
 import { needsShownIdentity } from "@/stores/identity";
 import { newParticipantId } from "@/stores/participants";
 import { setupScript, standardRoles } from "@/test/setupFixtures";

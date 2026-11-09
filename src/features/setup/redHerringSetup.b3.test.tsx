@@ -7,8 +7,8 @@ import { withRedHerring } from "@/test/redHerringFixture";
 import { bind, proofGame, proofQuery } from "@/test/proofFixtures";
 import { automationEligibility } from "@/abilities/automationEligibility";
 import { FORTUNE_TELLER } from "@/abilities/characters/fortuneteller";
-import { redHerringSetup } from "./redHerringSetup";
-import { selectSetupContext } from "./setupContext";
+import { redHerringSetup } from "@/rules/setup/redHerringSetup";
+import { selectSetupContext } from "@/rules/setup/setupContext";
 
 // Package 4: the Setup panel's "Choose Red Herring" picker, the Players workspace and the PopoverReminders token are
 // retired; the v6 setup wizard picks the Red Herring through setSetupRedHerring (see grimoire-v6/day/test/dayFixture).

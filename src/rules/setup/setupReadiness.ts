@@ -1,7 +1,7 @@
 import { isInitialRevealComplete } from "@/stores/identity";
-import { redHerringSetup } from "./redHerringSetup";
-import { conflictingDrunkDisguise } from "./revealReadiness";
-import { isPostDeal, type SetupAction, type SetupContext, type SetupFinding } from "./setupContext";
+import { redHerringSetup } from "@/rules/setup/redHerringSetup";
+import { conflictingDrunkDisguise } from "@/rules/setup/revealReadiness";
+import { isPostDeal, type SetupAction, type SetupContext, type SetupFinding } from "@/rules/setup/setupContext";
 
 export type SetupCommandResult = { ok: true } | { ok: false; message: string };
 export function setupReadiness(findings: SetupFinding[], action: SetupAction): SetupCommandResult {

@@ -2,7 +2,7 @@ import { shownRoleFilter } from "@/stores/identity";
 import { isCanonicalRole } from "@/data/canonical";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import type { PlayerId, STPlayerRecord } from "@/stores/types";
-import type { SetupContext } from "./setupContext";
+import type { SetupContext } from "@/rules/setup/setupContext";
 
 export type RevealReadiness = {
   ready: boolean;

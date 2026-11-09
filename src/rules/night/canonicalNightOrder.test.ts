@@ -1,13 +1,13 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { computeNightOrder, type NightStep } from "./nightOrder";
+import { computeNightOrder, type NightStep } from "@/rules/night/nightOrder";
 import { canonicalRoles, NIGHT_SHEET, roleAuthority } from "@/data/canonical";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { sectsAndViolets } from "@/data/scripts/sectsAndViolets";
 import { badMoonRising } from "@/data/scripts/badMoonRising";
 import { makeSTPlayer } from "@/test/fixtures";
 import type { Script, STPlayerRecord } from "@/stores/types";
-import { evilInformationPolicy, type NightContext } from "./nightRules";
+import { evilInformationPolicy, type NightContext } from "@/rules/night/nightRules";
 import { buildRegistry } from "@/data/roleRegistry";
 import { projectToSelf } from "@/stores/projections";
 

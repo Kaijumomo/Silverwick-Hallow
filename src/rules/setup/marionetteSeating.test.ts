@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { buildRegistry } from "@/data/roleRegistry";
 import { canonicalRoles } from "@/data/canonical";
-import { seatMarionetteBesideDemon } from "./marionetteSeating";
+import { seatMarionetteBesideDemon } from "@/rules/setup/marionetteSeating";
 
 const ids = ["imp", "marionette", "poisoner", "monk", "empath", "chef", "washerwoman", "undertaker"];
 const registry = buildRegistry({ id: "t", name: "t", characters: canonicalRoles(ids) });

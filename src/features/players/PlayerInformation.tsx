@@ -8,7 +8,7 @@ import { publishPrivatePacket } from "@/firebase/privatePacketCommands";
 import { packetKey, usePacketDeliveryState } from "@/firebase/packetDeliveryState";
 import { PrivateInformation } from "@/features/player/PrivateInformation";
 import { usePrivacyStore } from "@/stores/privacyStore";
-import { setupInformationWarning } from "@/features/nightOrder/nightRules";
+import { setupInformationWarning } from "@/rules/night/nightRules";
 import type { STPlayerRecord } from "@/stores/types";
 
 /** A sibling-owned extra-text draft (e.g. LunaticInfo's own "Additional

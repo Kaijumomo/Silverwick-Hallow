@@ -4,9 +4,9 @@ import { StorytellerGamePersistedSchema, StorytellerStateSchema } from "@/stores
 import { projectLobbyToPublic, projectLobbyToSelfMap } from "@/stores/projections";
 import { buildRegistry } from "@/data/roleRegistry";
 import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
-import { selectSetupContext } from "./setupContext";
-import { analyzeSetup } from "./setupAnalyzer";
-import { initialRevealReadiness } from "./revealReadiness";
+import { selectSetupContext } from "@/rules/setup/setupContext";
+import { analyzeSetup } from "@/rules/setup/setupAnalyzer";
+import { initialRevealReadiness } from "@/rules/setup/revealReadiness";
 import { storeCommands } from "@/test/storeCommands";
 
 beforeEach(() => {

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { computeNightOrder } from "./nightOrder";
-import type { NightStep } from "./nightOrder";
+import { computeNightOrder } from "@/rules/night/nightOrder";
+import type { NightStep } from "@/rules/night/nightOrder";
 import { makeSTPlayer } from "@/test/fixtures";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { sectsAndViolets } from "@/data/scripts/sectsAndViolets";

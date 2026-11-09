@@ -9,9 +9,9 @@ import { travelerDemonInformation, travelerGuidance } from "./travelers";
 import { previewPrivatePacket } from "./privatePackets";
 import { StorytellerGamePersistedSchema } from "./schemas";
 import { decodeSelfSnapshot } from "@/firebase/snapshots";
-import { computeNightOrder } from "@/features/nightOrder/nightOrder";
-import { selectSetupContext } from "@/features/setup/setupContext";
-import { analyzeSetup } from "@/features/setup/setupAnalyzer";
+import { computeNightOrder } from "@/rules/night/nightOrder";
+import { selectSetupContext } from "@/rules/setup/setupContext";
+import { analyzeSetup } from "@/rules/setup/setupAnalyzer";
 import { storeCommands } from "@/test/storeCommands";
 
 const registry = buildRegistry(setupScript);

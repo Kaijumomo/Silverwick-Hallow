@@ -1,7 +1,7 @@
 import { isInitialRevealComplete } from "@/stores/identity";
-import { isPostDeal, type SetupContext } from "./setupContext";
-import { sameCounts } from "./setupPolicies";
-import type { SetupAnalysis } from "./setupAnalyzer";
+import { isPostDeal, type SetupContext } from "@/rules/setup/setupContext";
+import { sameCounts } from "@/rules/setup/setupPolicies";
+import type { SetupAnalysis } from "@/rules/setup/setupAnalyzer";
 import { MIN_PLAYERS, MAX_PLAYERS } from "@/data/setupCounts";
 import type { PlayerId, RoleId, StorytellerLobbyRecord } from "@/stores/types";
 

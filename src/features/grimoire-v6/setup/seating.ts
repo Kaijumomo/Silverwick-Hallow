@@ -4,7 +4,7 @@ import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { lifecycleMessage } from "@/firebase/lifecycle";
 import { newParticipantId } from "@/stores/participants";
 import { MIN_PLAYERS } from "@/data/setupCounts";
-import { selectSetupContext } from "@/features/setup/setupContext";
+import { selectSetupContext } from "@/rules/setup/setupContext";
 import { flash, useV6Ui } from "../v6Store";
 import { useSetupFlow } from "./flow";
 

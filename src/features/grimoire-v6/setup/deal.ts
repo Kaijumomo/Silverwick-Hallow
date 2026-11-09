@@ -1,6 +1,6 @@
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { captureCharacterActionContext, selectScriptById, useStorytellerStore } from "@/stores/storytellerStore";
-import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
+import { isPostDeal, selectSetupContext } from "@/rules/setup/setupContext";
 import type { PlayerId, RoleId, StorytellerLobbyRecord } from "@/stores/types";
 import { flash, useV6Ui, type V6UiState } from "../v6Store";
 

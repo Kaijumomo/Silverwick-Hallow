@@ -1,13 +1,13 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { analyzeSetup } from "./setupAnalyzer";
-import { selectSetupContext } from "./setupContext";
+import { analyzeSetup } from "@/rules/setup/setupAnalyzer";
+import { selectSetupContext } from "@/rules/setup/setupContext";
 import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
 import { SETUP_COUNTS } from "@/data/setupCounts";
 import { makeSTPlayer } from "@/test/fixtures";
 import { canonicalRoles } from "@/data/canonical";
 import { buildRegistry } from "@/data/roleRegistry";
-import { assignedBagIsCoherent } from "./setupRefinement";
+import { assignedBagIsCoherent } from "@/rules/setup/setupRefinement";
 import type { RoleDef, StorytellerLobbyRecord, Script } from "@/stores/types";
 import { withRedHerring } from "@/test/redHerringFixture";
 
