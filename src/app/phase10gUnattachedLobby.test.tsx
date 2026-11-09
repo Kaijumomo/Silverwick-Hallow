@@ -27,7 +27,7 @@ import { usePrivacyStore } from "@/stores/privacyStore";
 import { goLive } from "@/firebase/goLive";
 import { endGameWithIntent } from "@/firebase/terminal";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { formatCode } from "@/firebase/lobby";
 import { buildRegistry } from "@/data/roleRegistry";
 import { setupGame, setupScript } from "@/test/setupFixtures";

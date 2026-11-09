@@ -1,4 +1,4 @@
-import type { Json, RoomBackend, Unsubscribe } from "./backend";
+import type { Json, RoomBackend, Unsubscribe } from "@/firebase/backend";
 
 // In-process backend used by vitest tests. Maintains the data tree as a
 // single nested object, with the same path semantics as RTDB ("a/b/c").

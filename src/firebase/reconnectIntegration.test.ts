@@ -13,7 +13,7 @@ import { buildRegistry } from "@/data/roleRegistry";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { setupScript, standardRoles } from "@/test/setupFixtures";
 import { buildRichPhase9Game } from "@/test/phase9RichState";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby, revokePlayerMembership } from "./lobby";
 import { writeProjections } from "./sync";
 import { SessionWriter, LEASE_MS, FENCE_MARGIN_MS } from "./writer";

@@ -5,7 +5,7 @@
 // ackedGameSeq must not) without needing the Firebase emulator — see
 // rules.spec.ts/contract.spec.ts for the real-rules/real-writer proofs.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "./lobby";
 import { requireActiveSession } from "./lifecycle";
 import { SessionWriter } from "./writer";

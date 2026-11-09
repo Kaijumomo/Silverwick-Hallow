@@ -16,11 +16,11 @@ vi.mock("@/firebase/session", async (importOriginal) => {
 });
 
 import { acknowledgeReveal } from "@/firebase/playerSync";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "@/firebase/lobby";
 import { requireActiveSession, sessionPath } from "@/firebase/lifecycle";
 import { PlayerScreen, playerMilestone, revealModeOf } from "./PlayerScreen";
-import { enterSealed, enterTown, receiveCharacter, turnToken } from "./phone/ceremonyTestUtils";
+import { enterSealed, enterTown, receiveCharacter, turnToken } from "@/test/phoneCeremony";
 import { PlayerEnded } from "./PlayerTerminal";
 import type { PublicLobbyRecord } from "@/stores/types";
 

@@ -8,7 +8,7 @@ import type { EffectIntent, EffectParticipantBinding, EffectTransaction } from "
 import { StorytellerGamePersistedSchema, StorytellerStateSchema } from "./schemas";
 import { participantRefOf } from "./participants";
 import { writeProjections } from "@/firebase/sync";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { buildRegistry } from "@/data/roleRegistry";
 import type { EffectRecord, PlayerId, StorytellerLobbyRecord } from "./types";
 import { storeCommands } from "@/test/storeCommands";

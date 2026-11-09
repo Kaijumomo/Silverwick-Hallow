@@ -13,7 +13,7 @@ import {
   watchRoster,
   watchJoinRequests,
 } from "./lobby";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 
 describe("generateCode", () => {
   it("produces an 8-char string from the safe alphabet", () => {

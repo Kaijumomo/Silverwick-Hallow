@@ -1,6 +1,6 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { publicPath } from "./paths";
 import { subscribeToPublicLobby, usePublicLobby } from "./publicSync";
 import {

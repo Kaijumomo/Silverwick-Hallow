@@ -2,7 +2,7 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { usePlayerStore } from "@/stores/playerStore";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import type { Json } from "./backend";
 import { joinRequestPath, playerPath, rosterEntryPath, rosterParticipantPath } from "./paths";
 import { selectSetupContext } from "@/features/setup/setupContext";

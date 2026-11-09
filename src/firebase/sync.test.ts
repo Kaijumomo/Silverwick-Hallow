@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { writeProjections } from "./sync";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { buildRegistry } from "@/data/roleRegistry";
 import { tbScript, makePublishedSTPlayer } from "@/test/fixtures";
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";

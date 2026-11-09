@@ -12,7 +12,7 @@ import { useDayVm } from "../vm/day";
 import { dayTokenDecor, dayTokenTap } from "./tokens";
 import { evaluateSlayerShot } from "./slayer";
 import { impair, patchPlayer, proofGame, proofScript } from "@/test/proofFixtures";
-import { buildDayTown, type DayTown } from "./test/dayFixture";
+import { buildDayTown, type DayTown } from "@/test/dayFixture";
 
 const wrapper = ({ children }: { children: ReactNode }) => <VotingProvider>{children}</VotingProvider>;
 const store = () => useStorytellerStore.getState();

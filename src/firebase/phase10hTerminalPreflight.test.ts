@@ -14,7 +14,7 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { withRevealTokens } from "@/stores/revealTokens";
 import type { Json, RoomBackend } from "./backend";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "./lobby";
 import { requireActiveSession } from "./lifecycle";
 import { useSessionRuntime, useStorytellerSync } from "./storytellerSync";

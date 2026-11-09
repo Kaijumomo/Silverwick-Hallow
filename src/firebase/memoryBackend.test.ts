@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 
 describe("MemoryRoomBackend — basic ops", () => {
   it("set + get round-trips", async () => {

@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { ModernNightPanel } from "./testGuide";
+import { ModernNightPanel } from "@/test/nightTestGuide";
 import { deriveNightWork } from "@/features/nightOrder/nightWork";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { useShellStore } from "@/stores/shellStore";

@@ -18,7 +18,7 @@ vi.mock("@/firebase/config", async (importOriginal) => {
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { useV6Ui } from "@/features/grimoire-v6/v6Store";
 import { useSetupFlow } from "@/features/grimoire-v6/setup/flow";
 

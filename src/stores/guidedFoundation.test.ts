@@ -20,7 +20,7 @@ import { setupGame, setupScript } from "@/test/setupFixtures";
 import { asV23, withV24Guided, withV24ToCurrent } from "@/test/v20Migration";
 import { computeNightOrder } from "@/features/nightOrder/nightOrder";
 import { decodePublicSnapshot } from "@/firebase/snapshots";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "@/firebase/lobby";
 import { requireActiveSession } from "@/firebase/lifecycle";
 import { SessionWriter } from "@/firebase/writer";

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { waitFor } from "@testing-library/react";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePlayerStore } from "@/stores/playerStore";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby, knockOnLobby, seatPlayer } from "./lobby";
 import { SessionWriter } from "./writer";
 import { requireActiveSession } from "./lifecycle";

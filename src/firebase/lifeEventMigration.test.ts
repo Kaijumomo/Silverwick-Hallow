@@ -9,7 +9,7 @@ import { usePlayerStore } from "@/stores/playerStore";
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
 import { detectLegacyGameVersion, hasV19LifeEvidence, migrateGameEntry } from "@/stores/gameMigration";
 import { migratedLifeEventCoverage } from "@/stores/lifeEvents";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "./lobby";
 import { requireActiveSession } from "./lifecycle";
 import { SessionWriter } from "./writer";

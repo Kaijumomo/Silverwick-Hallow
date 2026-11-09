@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { usePlayerStore } from "@/stores/playerStore";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "./lobby";
 import { requireActiveSession } from "./lifecycle";
 import { retryStorytellerSession, useSessionRuntime, useStorytellerSync } from "./storytellerSync";

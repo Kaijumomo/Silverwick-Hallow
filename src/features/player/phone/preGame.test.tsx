@@ -17,11 +17,11 @@ vi.mock("@/firebase/session", async (importOriginal) => {
 });
 
 import { acknowledgeReveal } from "@/firebase/playerSync";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { PlayerScreen } from "../PlayerScreen";
 import { SeatedChart } from "./SeatedChart";
 import { teamOf } from "./PreGameFlow";
-import { enterTown, receiveCharacter, turnToken } from "./ceremonyTestUtils";
+import { enterTown, receiveCharacter, turnToken } from "@/test/phoneCeremony";
 import type { PlayerSelfEnvelope, PublicLobbyRecord } from "@/stores/types";
 
 const TOKEN = "tok_aaaaaaaaaaaaaaaaaaaaaa";

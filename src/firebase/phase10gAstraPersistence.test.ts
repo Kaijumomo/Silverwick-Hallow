@@ -16,7 +16,7 @@ import { asV24 } from "@/test/v20Migration";
 import { setupGame, setupScript } from "@/test/setupFixtures";
 import { buildRegistry } from "@/data/roleRegistry";
 import type { GameRuleFactRecord, StorytellerLobbyRecord } from "@/stores/types";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "./lobby";
 import { requireActiveSession } from "./lifecycle";
 import { SessionWriter } from "./writer";

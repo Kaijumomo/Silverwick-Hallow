@@ -12,7 +12,7 @@ import { usePlayerStore, migratePlayerState } from "@/stores/playerStore";
 import { revealViewed } from "@/stores/revealTokens";
 import { withRevealTokens } from "@/stores/revealTokens";
 import type { RoomBackend } from "./backend";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "./lobby";
 import { requireActiveSession } from "./lifecycle";
 import { closeMultiplayerSession, useSessionRuntime, useStorytellerSync } from "./storytellerSync";

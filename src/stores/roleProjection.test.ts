@@ -10,7 +10,7 @@ import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
 import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
 import { makeSTPlayer } from "@/test/fixtures";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { writeProjections } from "@/firebase/sync";
 import { identityNeedsCheck, projectIdentity, projectLobbyToPublic, projectLobbyToSelfMap, projectToSelf } from "./projections";
 import { previewPrivatePacket } from "./privatePackets";

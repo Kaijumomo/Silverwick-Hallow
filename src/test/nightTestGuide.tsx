@@ -5,9 +5,9 @@ import { useShellStore } from "@/stores/shellStore";
 import { deriveNightWork, stepResolved } from "@/features/nightOrder/nightWork";
 import { VotingProvider } from "@/features/voting/VotingWorkspace";
 import type { Script, StorytellerLobbyRecord } from "@/stores/types";
-import { GrimoireV6Screen } from "../../GrimoireV6Screen";
-import { useV6Ui } from "../../v6Store";
-import { useNightPos } from "../nightPos";
+import { GrimoireV6Screen } from "@/features/grimoire-v6/GrimoireV6Screen";
+import { useV6Ui } from "@/features/grimoire-v6/v6Store";
+import { useNightPos } from "@/features/grimoire-v6/night/nightPos";
 
 type Props = { game: StorytellerLobbyRecord; script: Script; visible: boolean; onClose: () => void };
 

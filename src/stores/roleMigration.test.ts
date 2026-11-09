@@ -17,7 +17,7 @@ import { asV20, asV21, asV22, withV21Reminders, withV22Roles, withV23Alignment, 
 // v22 -> v23; these fixtures carry no Traveler explicit Shown Alignment, so it
 // is the marker advance only.
 const toCurrent = (v22: Raw): Raw => withV24ToCurrent(withV23Alignment(v22));
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "@/firebase/lobby";
 import { requireActiveSession } from "@/firebase/lifecycle";
 import { SessionWriter } from "@/firebase/writer";

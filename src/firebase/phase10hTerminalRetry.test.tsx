@@ -14,7 +14,7 @@ import { useShellStore } from "@/stores/shellStore";
 import { usePlayerStore } from "@/stores/playerStore";
 import { withRevealTokens } from "@/stores/revealTokens";
 import type { RoomBackend } from "./backend";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "./lobby";
 import { requireActiveSession } from "./lifecycle";
 import { closeMultiplayerSession, FINISH_GAME_PENDING, useSessionRuntime, useStorytellerSync } from "./storytellerSync";

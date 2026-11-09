@@ -11,7 +11,7 @@ import { detectLegacyGameVersion, hasV19LifeEvidence, hasV20Evidence, hasV23Evid
 import { correctAlignmentIntent, changeAlignmentIntent } from "./alignmentResolution";
 import { setupScript, standardRoles } from "@/test/setupFixtures";
 import { asV20, asV21, asV22, withV22Roles, withV21Reminders, withV23Alignment, withV24ToCurrent } from "@/test/v20Migration";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "@/firebase/lobby";
 import { requireActiveSession } from "@/firebase/lifecycle";
 import { SessionWriter } from "@/firebase/writer";

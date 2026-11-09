@@ -4,11 +4,11 @@ import { useShellStore } from "@/stores/shellStore";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { participantStepKey } from "@/stores/nightProgress";
 import { VotingProvider } from "@/features/voting/VotingWorkspace";
-import { GrimoireV6Screen } from "../../GrimoireV6Screen";
-import { useV6Ctx } from "../../ctx";
-import { playerMarks, removeMark, type Mark } from "../../board/marks";
-import { useV6Ui } from "../../v6Store";
-import { useNightPos } from "../nightPos";
+import { GrimoireV6Screen } from "@/features/grimoire-v6/GrimoireV6Screen";
+import { useV6Ctx } from "@/features/grimoire-v6/ctx";
+import { playerMarks, removeMark, type Mark } from "@/features/grimoire-v6/board/marks";
+import { useV6Ui } from "@/features/grimoire-v6/v6Store";
+import { useNightPos } from "@/features/grimoire-v6/night/nightPos";
 
 /**
  * Test helpers for scenarios written against the retired Night Order rows: they drive the unified

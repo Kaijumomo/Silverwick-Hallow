@@ -6,7 +6,7 @@ import { currentVotingState, planVoting } from "./voting";
 import { usePrivacyStore } from "./privacyStore";
 import { projectLobbyToPublic, projectLobbyToSelfMap } from "./projections";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { SessionWriter } from "@/firebase/writer";
 import { createLobby } from "@/firebase/lobby";
 import { requireActiveSession } from "@/firebase/lifecycle";

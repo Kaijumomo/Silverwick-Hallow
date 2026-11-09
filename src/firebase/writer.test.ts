@@ -4,7 +4,7 @@
 // MemoryRoomBackend with Date.now mocked so lease-expiry/reclaim scenarios
 // are deterministic and instantaneous — no real or fake-timer waiting.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "./lobby";
 import { requireActiveSession } from "./lifecycle";
 import { SessionWriter, LEASE_MS, FENCE_MARGIN_MS } from "./writer";

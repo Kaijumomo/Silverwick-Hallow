@@ -1,7 +1,7 @@
 import { useV6Ui } from "../../v6Store";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { ModernNightPanel } from "./testGuide";
+import { ModernNightPanel } from "@/test/nightTestGuide";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { useShellStore } from "@/stores/shellStore";
 import { usePrivacyStore } from "@/stores/privacyStore";

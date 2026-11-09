@@ -7,7 +7,7 @@ import { join, relative, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { computeNightOrder } from "@/features/nightOrder/nightOrder";
-import { NightScreen, resetNightUi, selectNightStep } from "@/features/grimoire-v6/night/port/v6Night";
+import { NightScreen, resetNightUi, selectNightStep } from "@/test/v6Night";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { canonicalRoles } from "@/data/canonical";
 import { buildRegistry } from "@/data/roleRegistry";

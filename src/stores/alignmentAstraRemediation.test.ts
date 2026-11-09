@@ -15,7 +15,7 @@ import { setupScript, standardRoles } from "@/test/setupFixtures";
 import { makeSTPlayer } from "@/test/fixtures";
 import { asV22 } from "@/test/v20Migration";
 import { buildRegistry } from "@/data/roleRegistry";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "@/firebase/lobby";
 import { requireActiveSession } from "@/firebase/lifecycle";
 import { SessionWriter } from "@/firebase/writer";

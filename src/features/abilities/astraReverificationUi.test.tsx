@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { RequirementInput } from "./RequirementInput";
-import { NightScreen, continueAction, resetNightUi, selectNightStep, workspace } from "@/features/grimoire-v6/night/port/v6Night";
+import { NightScreen, continueAction, resetNightUi, selectNightStep, workspace } from "@/test/v6Night";
 import { AL_HADIKHIA } from "@/abilities/characters/alhadikhia";
 import { FORTUNE_TELLER } from "@/abilities/characters/fortuneteller";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";

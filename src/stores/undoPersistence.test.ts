@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { buildDayTown } from "@/features/grimoire-v6/day/test/dayFixture";
+import { buildDayTown } from "@/test/dayFixture";
 import { takeMigrationResetFlag, useStorytellerStore as store } from "./storytellerStore";
 import { compactUndoStack, expandUndoStack, SHARED_HISTORY_PREFIX, SHARED_UNDO_KEY } from "./undoPersistence";
 import { StorytellerStateSchema } from "./schemas";

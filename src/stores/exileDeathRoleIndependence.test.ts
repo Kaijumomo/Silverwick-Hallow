@@ -17,7 +17,7 @@ import { applyRolePlan, changeRoleIntent, correctRoleIntent, planRoleTransaction
 import { lifeHeadline, lifeStatusOf, publicLifeOf, publicLifeStateOf } from "./lifeState";
 import { projectToPublic } from "./projections";
 import { StorytellerGamePersistedSchema } from "./schemas";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "@/firebase/lobby";
 import { requireActiveSession } from "@/firebase/lifecycle";
 import { SessionWriter } from "@/firebase/writer";

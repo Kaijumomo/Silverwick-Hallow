@@ -6,7 +6,7 @@ import { projectLobbyToPublic, projectLobbyToSelfMap } from "./projections";
 import { usePrivacyStore } from "./privacyStore";
 import { startStorytellerSession, useSessionRuntime } from "@/firebase/storytellerSync";
 import { withoutRevealTokens } from "@/test/revealTokens";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { SessionWriter } from "@/firebase/writer";
 import { createLobby } from "@/firebase/lobby";
 import { requireActiveSession } from "@/firebase/lifecycle";

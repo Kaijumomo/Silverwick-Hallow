@@ -6,7 +6,7 @@ import { needsShownIdentity } from "./identity";
 import { projectLobbyToPublic, projectLobbyToSelfMap } from "./projections";
 import { lifeAccessibleLabel, lifeStatusOf, publicLifeOf, publicLifeStateOf, LIFE_STATE_LABEL } from "./lifeState";
 import { makeSTPlayer } from "@/test/fixtures";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { writeProjections } from "@/firebase/sync";
 import type { PlayerId } from "./types";
 import { storeCommands } from "@/test/storeCommands";

@@ -23,7 +23,7 @@ import { SetupOverlays } from "@/features/grimoire-v6/setup/SetupOverlays";
 import { useStorytellerStore as store, takeMigrationResetFlag } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { closeMultiplayerSession, startStorytellerSession, useSessionRuntime, useStorytellerSync } from "@/firebase/storytellerSync";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "@/firebase/lobby";
 import { LifecycleError, requireActiveSession } from "@/firebase/lifecycle";
 import { SessionWriter } from "@/firebase/writer";

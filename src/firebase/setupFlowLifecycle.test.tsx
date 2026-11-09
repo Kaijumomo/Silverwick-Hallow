@@ -10,7 +10,7 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { useStorytellerStore, gameLifecycleToken } from "@/stores/storytellerStore";
 import { usePlayerStore } from "@/stores/playerStore";
 import type { RoomBackend } from "./backend";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { cancelJoinRequest, knockOnLobby } from "./lobby";
 import { presencePath, rosterEntryPath } from "./paths";
 import { sessionPath } from "./lifecycle";

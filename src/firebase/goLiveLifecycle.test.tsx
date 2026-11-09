@@ -17,7 +17,7 @@ import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@t
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { usePlayerStore } from "@/stores/playerStore";
 import type { RoomBackend } from "./backend";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { attributeFirebaseError } from "./firebaseBackend";
 import { createLobby } from "./lobby";
 import { classifyStorytellerError, isTransient, LifecycleError, requireActiveSession } from "./lifecycle";

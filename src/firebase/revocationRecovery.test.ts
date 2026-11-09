@@ -30,7 +30,7 @@ import { usePlayerStore } from "@/stores/playerStore";
 import { newParticipantId } from "@/stores/participants";
 import type { ParticipantRef, PlayerId, StorytellerLobbyRecord } from "@/stores/types";
 import type { Json, RoomBackend } from "./backend";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby, knockOnLobby, MembershipConflictError, revokePlayerMembership, seatPlayer } from "./lobby";
 import { leavePath, requireActiveSession } from "./lifecycle";
 import { SessionWriter } from "./writer";
