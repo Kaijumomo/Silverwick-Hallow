@@ -498,6 +498,22 @@ it("WP-7: Next and Previous pass over steps that do not wake tonight, which stay
   expect(stripLabels().length).toBeGreaterThan(0);
 });
 
+it("a Ravenkeeper killed tonight is not passed over by Next: its wake is by trigger, not an idle step", () => {
+  t30Night(["imp", "ravenkeeper", "empath", "monk", "saint", "baron", "poisoner"]);
+  expect(store.getState().resolveLife({ intents: [{ kind: "death", playerId: "p1" }] }).ok).toBe(true);
+  store.setState({ undoStack: [] });
+  expect(game().players.p1!.alive).toBe(false);
+  const { steps } = deriveFor();
+  const ravenkeeper = steps.find((step) => step.kind === "player" && step.effectiveRoleId === "ravenkeeper")!;
+  expect(ravenkeeper).toBeTruthy();
+  const before = steps[steps.indexOf(ravenkeeper) - 1]!;
+  render(<Guide />);
+  act(() => { useShellStore.getState().setNightCursor({ day: 3, stepKey: before.stepKey }); });
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  expect(current()).toBe(ravenkeeper.stepKey);
+  expect(screen.queryByText(/This character does not wake/)).toBeNull();
+});
+
 function deriveFor() {
   const script = { ...proofScript, id: "treacherous-30th" };
   return deriveNightWork(game(), { script, registry: buildRegistry(script), semantics: CANONICAL_ABILITY_SEMANTICS });
