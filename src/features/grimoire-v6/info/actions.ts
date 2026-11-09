@@ -4,7 +4,7 @@ import { endGameWithIntent } from "@/firebase/terminal";
 import { useStorytellerStore, type TerminalIntent } from "@/stores/storytellerStore";
 import { captureInfoContext, changeInfoBluff, infoContextCurrent, type InfoContext } from "@/features/info/infoCommands";
 import { characterCard, infoRecipients, setupPayload, seatedPlayers, type SetupView } from "@/features/info/infoModel";
-import type { PresentationPayload } from "@/features/info/PlayerPresentation";
+import type { PresentationPayload } from "@/features/info/presentationPayload";
 import type { STPlayerRecord, StorytellerLobbyRecord, Script } from "@/stores/types";
 import { flash, useV6Ui, type ShowState } from "../v6Store";
 import { ICON } from "../icons";

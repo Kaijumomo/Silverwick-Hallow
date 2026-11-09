@@ -3,7 +3,7 @@ import { iconUrlFor } from "@/data/iconUrl";
 import "./token-information.css";
 
 /** Shared Storyteller preview only. The owner retains preparation, delivery,
- * privacy and stale-context checks; player-safe reveal uses PlayerPresentation. */
+ * privacy and stale-context checks; the player-safe reveal is the Grimoire's Show. */
 export function TokenInformationAction({ role, label, onClick, compact = false }: { role?: RoleDef; label: string; onClick: () => void; compact?: boolean }) {
   return <div className={`token-information-action${compact ? " token-information-action-compact" : ""}`}>
     {role && <div className="token-information-preview">

@@ -7,7 +7,7 @@ import { evilInformationPolicy, setupInformationWarning } from "@/features/night
 import { getPrivateInfoApplicability, previewPrivatePacket } from "@/stores/privatePackets";
 import { travelerDemonInformation } from "@/stores/travelers";
 import type { RoleDef, Script, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
-import type { PresentationPayload } from "./PlayerPresentation";
+import type { PresentationPayload } from "./presentationPayload";
 
 export type SetupView = "traveler" | "demon" | "minion" | "bluffs";
 export const characterCard = (role: RoleDef) => ({ id: role.id, name: role.name, type: role.type, ability: role.ability, icon: iconUrlFor(role) });

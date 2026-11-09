@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { InfoContext } from "@/features/info/infoCommands";
-import type { PresentationPayload } from "@/features/info/PlayerPresentation";
+import type { PresentationPayload } from "@/features/info/presentationPayload";
 import type { SetupView } from "@/features/info/infoModel";
 
 /**

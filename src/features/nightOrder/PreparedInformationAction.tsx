@@ -1,10 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { buildRegistry, resolvedCharacters } from "@/data/roleRegistry";
+import { buildRegistry } from "@/data/roleRegistry";
 import { bindingOf, seatedParticipants, useTargetPicker } from "@/features/abilities/abilityUi";
-import { InfoPresentationBoundary, useInfoPresentation } from "@/features/info/InfoPresentationBoundary";
 import { captureInfoContext, infoContextCurrent } from "@/features/info/infoCommands";
-import { characterCard } from "@/features/info/infoModel";
-import { RoleChooser } from "@/features/players/RoleChooser";
 import { informationCategory } from "@/features/setup/FirstInformationPreparation";
 import { preparationAvailability, preparedInformationContext, validatePreparedInformation, type PrepareInformationRequest } from "@/stores/preparedInformation";
 import { captureCharacterActionContext, useStorytellerStore } from "@/stores/storytellerStore";
@@ -13,16 +10,12 @@ import type { PreparedInformationCharacter, Script, StorytellerLobbyRecord } fro
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { NightStep } from "./nightOrder";
 import type { NightInformationHandle, RevealHost } from "./NightInformationAction";
-import { TokenInformationAction } from "@/features/info/TokenInformationAction";
 
 type Props = { game: StorytellerLobbyRecord; script: Script; step: Extract<NightStep, { kind: "player" }>;
-  visible: boolean; resolved: boolean; onResolved: (game: StorytellerLobbyRecord) => void; reveal?: RevealHost };
+  visible: boolean; resolved: boolean; onResolved: (game: StorytellerLobbyRecord) => void; reveal: RevealHost };
 
-export const PreparedInformationAction = forwardRef<NightInformationHandle, Props>(function PreparedInformationAction(props, ref) {
-  return <InfoPresentationBoundary><PreparedAction {...props} ref={ref} /></InfoPresentationBoundary>;
-});
-
-const PreparedAction = forwardRef<NightInformationHandle, Props>(function PreparedAction({ game, script, step, visible, resolved, onResolved, reveal: host }, ref) {
+/** The host (the Grimoire's Night card) owns the token button, the character picker and the player view. */
+export const PreparedInformationAction = forwardRef<NightInformationHandle, Props>(function PreparedInformationAction({ game, script, step, visible, resolved, onResolved, reveal: host }, ref) {
   const registry = useMemo(() => buildRegistry(script), [script]);
   const environment = useMemo(() => ({ registry, script }), [registry, script]);
   const actor = game.players[step.playerId]!;
@@ -34,10 +27,8 @@ const PreparedAction = forwardRef<NightInformationHandle, Props>(function Prepar
   // here, with the same direct player selection and the same Reveal as a true clue.
   const availability = !resolved && (record || step.isDeceived) ? preparationAvailability(game, source, character, environment) : null;
   const choosing = availability?.ok && availability.mode === "storyteller";
-  const [chooser, setChooser] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [presented, setPresented] = useState<StorytellerLobbyRecord | null>(null);
-  const present = useInfoPresentation();
   const live = useRef({ game, visible });
   live.current = { game, visible };
   const owner = `prepared-information:${step.stepKey}`;
@@ -51,22 +42,20 @@ const PreparedAction = forwardRef<NightInformationHandle, Props>(function Prepar
     live.current.visible = visible;
     return () => { live.current.visible = false; if (useTargetPicker.getState().active?.owner === owner) useTargetPicker.getState().cancel(); };
   }, [visible, game, owner]);
-  useEffect(() => { setChooser(false); setError(null); }, [game]);
+  useEffect(() => { setError(null); }, [game]);
 
   const show = (roleId: string, expectedGame = game) => {
     const context = captureInfoContext();
     const role = registry.get(roleId);
     if (!role || !live.current.visible || context.game !== expectedGame || !infoContextCurrent(context)) return;
     setPresented(expectedGame);
-    if (host) { host.show(roleId); return; }
-    present({ context, payload: { kind: "character", heading: "This Character", character: characterCard(role) } });
+    host.show(roleId);
   };
   const replace = (clue: PrepareInformationRequest["clue"], reveal?: string) => {
     if (!safe()) return;
     const result = useStorytellerStore.getState().prepareInformation({ source, character, clue,
       expected: preparedInformationContext(game, script) }, authority);
     if (!result.ok) { setError(result.message); return; }
-    setChooser(false);
     if (reveal) show(reveal, useStorytellerStore.getState().game!);
   };
   const chooseCharacter = (shownCharacter: string) => {
@@ -76,7 +65,6 @@ const PreparedAction = forwardRef<NightInformationHandle, Props>(function Prepar
         qualifyingParticipantId: record.clue.qualifyingParticipantId, shownCharacter }, shownCharacter);
       return;
     }
-    setChooser(false);
     const players = seatedParticipants(game);
     useTargetPicker.getState().start("Choose the first player", first => {
       if (!safe()) return;
@@ -116,24 +104,20 @@ const PreparedAction = forwardRef<NightInformationHandle, Props>(function Prepar
       const role = !choosing && roleId ? registry.get(roleId) : undefined;
       const onClick = () => {
         if (!safe()) return;
-        if (choosing && host) host.choose(id => {
+        if (choosing) host.choose(id => {
           if (!safe()) return "The game changed. Review this step again.";
           if (registry.get(id)?.type !== informationCategory(character)) return "Choose a character of the type this ability shows.";
           chooseCharacter(id);
           return undefined;
         }, [informationCategory(character)]);
-        else if (choosing) setChooser(true);
         else if (roleId) show(roleId);
       };
-      return host ? host.button({ role, onClick }) : <TokenInformationAction role={role} label="Reveal a Token" onClick={onClick} />;
+      return host.button({ role, onClick });
     })()}
     {picking && <p className="night-information-recipients" role="status">{picking === "Choose the first player"
       ? `Now tap the player you show as the ${team} on the board` : "Now tap the other player on the board"}</p>}
     {choosing && character === "librarian" && <button className="btn" onClick={() => replace({ kind: "zero-outsiders" })}>Show 0 Outsiders</button>}
     {resolved && <p className="modern-night-result">Completed</p>}
     {error && <p role="alert">{error}</p>}
-    {chooser && visible && <RoleChooser mode="select" roles={resolvedCharacters(script).filter(role => role.type === informationCategory(character))}
-      scriptName={script.name} title="This Character" instruction="Choose the character token to reveal."
-      onChoose={chooseCharacter} onClose={() => setChooser(false)} error={error ?? undefined} />}
   </div>;
 });
