@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import type { PlayerId } from "@/stores/types";
@@ -56,8 +56,11 @@ export function useTokenDrag({ boardRef, layout, positions, onTap, enabled, anch
   latest.current = { layout, positions, onTap, enabled, anchored };
   const active = useRef<{ id: PlayerId; pointerId: number; startX: number; startY: number; base: Point; scale: number; exceeded: boolean } | null>(null);
   const cleanup = useRef<(() => void) | null>(null);
+  const afterRender = useRef<(() => void) | null>(null);
+  // Every render during a drag re-checks that the directly placed box still belongs to the dragged seat.
+  useLayoutEffect(() => { afterRender.current?.(); });
 
-  const finish = useCallback(() => { cleanup.current?.(); cleanup.current = null; active.current = null; setGhost(null); }, []);
+  const finish = useCallback(() => { cleanup.current?.(); cleanup.current = null; afterRender.current = null; active.current = null; setGhost(null); }, []);
   useEffect(() => finish, [finish]);
 
   const onDown = useCallback((id: PlayerId, e: React.PointerEvent) => {
@@ -77,21 +80,41 @@ export function useTokenDrag({ boardRef, layout, positions, onTap, enabled, anch
     const pressed = e.currentTarget as unknown;
     const box = pressed instanceof HTMLElement && pressed.parentElement instanceof HTMLElement ? pressed.parentElement : null;
     let ghosted = false;
+    /** The last point drawn through React, the last point placed directly, and the exact values written. */
+    let drawn: Point | null = null;
     let placed: Point | null = null;
+    let wrote: { left: string; top: string } | null = null;
+    const px = (v: number) => `${Math.round(v)}px`;
+    const ours = () => !!box && box.isConnected && box.style.zIndex === DRAGGED_Z && !latest.current.anchored?.(id);
     /** Moves the seat without a redraw when its box is provably the one React drew as dragged. */
     const place = (p: Point): boolean => {
-      if (!box || !ghosted || !box.isConnected || box.style.zIndex !== DRAGGED_Z || latest.current.anchored?.(id)) return false;
-      box.style.left = `${Math.round(p.x)}px`;
-      box.style.top = `${Math.round(p.y)}px`;
+      if (!ghosted || !ours()) return false;
+      wrote = { left: px(p.x), top: px(p.y) };
+      box!.style.left = wrote.left;
+      box!.style.top = wrote.top;
       placed = p;
       return true;
     };
+    const draw = (p: Point) => { ghosted = true; drawn = p; setGhost({ id, ...p }); };
+    /** The box stopped being the dragged seat's (seats re-ordered, or the seat became selected): give back
+     * any value React did not overwrite, and draw the dragged seat at the pointer through React. */
+    const release = () => {
+      if (!placed || ours()) return;
+      const last = placed;
+      if (box && wrote && drawn) {
+        if (box.style.left === wrote.left) box.style.left = px(drawn.x);
+        if (box.style.top === wrote.top) box.style.top = px(drawn.y);
+      }
+      placed = null; wrote = null;
+      draw(last);
+    };
+    afterRender.current = release;
     /** After direct moves, draws the final point through React too, so React's record of the seat
      * matches the page again before the drop (or cancel) render compares against it. */
     const settle = (p: Point | null) => {
       if (!placed || !p) return;
-      place(p);
-      flushSync(() => setGhost({ id, ...p }));
+      place(p); // the page shows the final point (the release need not match the last move)
+      flushSync(() => setGhost({ id, ...p })); // and React's record holds it too
     };
     const at = (ev: PointerEvent): Point => clampToBoard({ x: base.x + (ev.clientX - drag.startX) / drag.scale, y: base.y + (ev.clientY - drag.startY) / drag.scale }, latest.current.layout);
     const move = (ev: PointerEvent) => {
@@ -100,9 +123,8 @@ export function useTokenDrag({ boardRef, layout, positions, onTap, enabled, anch
       if (!drag.exceeded || !movable) return;
       const p = at(ev);
       if (place(p)) return;
-      ghosted = true;
-      placed = null;
-      setGhost({ id, ...p });
+      release();
+      draw(p);
     };
     const up = (ev: PointerEvent) => {
       if (ev.pointerId !== drag.pointerId) return;

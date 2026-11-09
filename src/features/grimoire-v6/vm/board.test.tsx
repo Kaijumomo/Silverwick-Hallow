@@ -298,7 +298,6 @@ describe("slice 4B: board view-model", () => {
       const start = result.current.ctx.positions[id]!;
       const { w, h } = result.current.ctx.layout;
       const { box, disc } = seatBox();
-      let renders = 0;
       act(() => pressOn(result.current.board, id, 500, 400, disc));
       act(() => fire("pointermove", 520, 410));
       const first = tokenOf(result.current.board, id);
@@ -306,9 +305,9 @@ describe("slice 4B: board view-model", () => {
       expect(first.x).toBe(Math.round(start.x + 20));
       // What the view does with that render: the dragged seat's box is drawn on top.
       box.style.zIndex = String(first.z);
-      const vmBefore = result.current.board;
-      act(() => { fire("pointermove", 540, 430); renders += result.current.board === vmBefore ? 0 : 1; });
-      expect(renders).toBe(0);
+      act(() => fire("pointermove", 540, 430));
+      // No redraw: the view-model still holds the first move's point.
+      expect(tokenOf(result.current.board, id).x).toBe(first.x);
       expect(box.style.left).toBe(`${Math.round(start.x + 40)}px`);
       expect(box.style.top).toBe(`${Math.round(start.y + 30)}px`);
       act(() => fire("pointerup", 560, 450));
