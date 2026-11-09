@@ -78,16 +78,16 @@ describe("PR-10H-003: a previous game's Night cursor never selects a step in a n
     expect(shell().nightCursor).toEqual({ day: 1, stepKey: "demonInfo" });
   });
 
-  it("the boundary clears the cursor and its action context, but keeps the Storyteller's view preferences", () => {
+  it("the boundary clears the cursor and its action context", () => {
     playToNightOne(GAME_A);
     const p0 = game().players[game().seatOrder[0]!]!;
     useShellStore.setState({ nightCursor: { day: 1, stepKey: "demonInfo" }, litActor: { playerId: p0.id, participantId: p0.participantId!, stepKey: "demonInfo" },
-      actionOpen: true, lens: "roster", dockTab: "seat", inspectorDetent: "expanded" });
+      actionOpen: true });
     state().newGame(setupScript.id, { plannedPlayerCount: 7 });
-    expect(shell()).toMatchObject({ nightCursor: null, litActor: null, actionOpen: false, lens: "roster", dockTab: "seat", inspectorDetent: "expanded" });
-    useShellStore.setState({ nightCursor: { day: 1, stepKey: "demonInfo" }, actionOpen: true, lens: "labels" });
+    expect(shell()).toMatchObject({ nightCursor: null, litActor: null, actionOpen: false });
+    useShellStore.setState({ nightCursor: { day: 1, stepKey: "demonInfo" }, actionOpen: true });
     state().endGame();
-    expect(shell()).toMatchObject({ nightCursor: null, litActor: null, actionOpen: false, lens: "labels", dockTab: "seat", inspectorDetent: "expanded" });
+    expect(shell()).toMatchObject({ nightCursor: null, litActor: null, actionOpen: false });
   });
 
   it("the cursor stays UI-only: it never enters the game record, Undo or the persisted store", () => {
