@@ -364,16 +364,18 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     return () => { if (useTargetPicker.getState().active?.owner === owner) useTargetPicker.getState().cancel(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game, current?.stepKey, visible, paused, workspace, canTarget, successorChoice, picks, guessFor, skipReason]);
-  // The Moonchild chose publicly during the Day: the death is resolved by itself when the wake is reached (once per choice,
-  // so an Undo of it leaves the step open for the Storyteller instead of resolving it again).
+  // The Moonchild chose publicly during the Day: the death is resolved by itself when the wake is reached. An Undo of it while the
+  // step stays open leaves it for the Storyteller; the guard lasts only while this step is current, so reaching the step again
+  // (an Undo back to the start of the Night and a replay) resolves the choice again.
   const moonchildChoice = current?.kind === "player" && current.effectiveRoleId === "moonchild" && query && actor?.participantId
     ? pendingMoonchildChoice(query, bindingOf(actor)) : null;
-  const autoResolved = useRef(new Set<string>());
+  const autoResolved = useRef<{ step: string | undefined; keys: Set<string> }>({ step: undefined, keys: new Set() });
   useEffect(() => {
+    if (autoResolved.current.step !== current?.stepKey) autoResolved.current = { step: current?.stepKey, keys: new Set() };
     if (!moonchildChoice || !visible || paused || workspace || !canTarget || resolved || skipReason || !current) return;
     const key = `${current.stepKey}:${moonchildChoice.effectId}`;
-    if (autoResolved.current.has(key)) return;
-    autoResolved.current.add(key);
+    if (autoResolved.current.keys.has(key)) return;
+    autoResolved.current.keys.add(key);
     choose(moonchildChoice.target);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [moonchildChoice?.effectId, visible, paused, workspace, canTarget, resolved, skipReason, current?.stepKey]);

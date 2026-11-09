@@ -409,6 +409,32 @@ it("WP-4: a Moonchild's public Day choice resolves its death by itself when the 
   expect(game().players.p2!.alive).toBe(true);
 });
 
+it("a Moonchild's public Day choice resolves again when the step is reached again (an Undo back to the start of the Night and a replay)", () => {
+  const base = proofGame(["godfather", "saint", "chef", "moonchild", "imp", "empath", "baron"], "night", 3);
+  const p3 = base.players.p3!;
+  const withChoice = {
+    ...base,
+    players: { ...base.players,
+      p3: { ...p3, alive: false },
+      p2: { ...base.players.p2!, effects: [{ id: "mc1", type: "moonchildChoice", sourceCharacter: "moonchild", lifetime: { kind: "untilDawn" }, state: "active",
+        sourceParticipant: { kind: "participant", playerId: "p3", participantId: p3.participantId!, nameAtTime: "Player 3" },
+        expiry: { kind: "at", moment: { phase: "day", day: 4 } }, appliedAt: { phase: "day", day: 3 } }] },
+    },
+  } as unknown as typeof base;
+  store.setState({ game: withChoice, undoStack: [] });
+  const moonchildStep = participantStepKey(p3.participantId!, "moonchild");
+  useShellStore.getState().setNightCursor({ day: 3, stepKey: moonchildStep });
+  render(<Guide />);
+  expect(game().players.p2!.alive).toBe(false);
+  act(() => { store.getState().undo(); });
+  expect(game().players.p2!.alive).toBe(true);
+  // Leave the step and come back to it: the public choice is resolved again, with no tap.
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  fireEvent.click(screen.getByRole("button", { name: "Previous" }));
+  expect(game().players.p2!.alive).toBe(false);
+  expect(game().players.p2!.effects.filter((e) => e.type === "moonchildChoice" && e.state === "active")).toHaveLength(0);
+});
+
 it("WP-6: at Dusk the Storyteller taps one of last night's chosen dead players to regurgitate them, or just goes on", () => {
   const n2 = proofGame(["shabaloth", "chef", "empath", "monk", "saint", "baron", "poisoner"], "night", 2);
   const killed = planned(plan(n2, request(n2, "p0", "shabaloth", { targets: pick(n2, "p1", "p2") })));
