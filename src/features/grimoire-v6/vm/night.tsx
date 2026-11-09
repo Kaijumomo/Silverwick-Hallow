@@ -101,7 +101,7 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
       if (direct && resolved) {
         result = targetName ? `${targetName} chosen.` : celebrated ? "Resolved." : "Completed";
         resultHint = engine.needed > 1 ? roleKey === "innkeeper" ? "Tap order sets who is drunk." : ""
-          : canTarget ? "Tap another player to change." : correction?.message ?? (ctx.script?.id === "treacherous-30th" ? "" : "This action cannot be safely retargeted here. Open the player’s settings to correct its result.");
+          : canTarget ? "Tap another player to change." : correction?.message ?? "";
       } else if (celebrated) {
         result = "Resolved.";
         resultHint = steps.slice(engine.currentIndex + 1).some((step) => !stepResolved(game, step, engine.settled)) ? "Continuing…" : "";

@@ -238,7 +238,9 @@ it("later resolved work prevents an unsafe retarget while Previous remains usabl
   fireEvent.click(screen.getByRole("button", { name: "Previous" }));
   expect(current()).toBe(key("p0"));
   expect(useTargetPicker.getState().active).toBeNull();
-  expect(screen.getByText(/game changed after this action|cannot be safely retargeted/i)).toBeInTheDocument();
+  expect(screen.getByText(/game changed after this action/i)).toBeInTheDocument();
+  // The generic "open the player's settings" sentence is gone on every script.
+  expect(screen.queryByText(/cannot be safely retargeted/i)).toBeNull();
 });
 
 it("Undo during the result restores targeting without an old delayed advance", () => {
