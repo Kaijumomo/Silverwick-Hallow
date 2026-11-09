@@ -106,7 +106,6 @@ export function useInfoVm(ctx: V6Ctx): SliceResult {
   return {
     ...EMPTY,
     vm: {
-      stop: (e: { stopPropagation: () => void }) => e.stopPropagation(),
       infoC: { on: infoOn, w: Math.round(Math.max(720, Math.min(900, 2 * ax * squeeze, layout.w - 60))) },
       stats: [{ n: stats.alive, label: "Alive" }, { n: stats.votes, label: "Votes" }, { n: stats.toExecute, label: "To execute" }],
       ...(composition ? { composition } : {}),

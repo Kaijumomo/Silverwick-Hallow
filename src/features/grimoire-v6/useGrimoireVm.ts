@@ -26,5 +26,24 @@ export function useGrimoireVm(ctx: V6Ctx): Record<string, unknown> {
     acting: (night.vm.actingName as string | null | undefined) ?? null,
     center: (day.vm.center as { kicker: string; title: string; sub: string } | undefined) ?? null,
   });
-  return { ...chrome, ...board.vm, ...setup.vm, ...night.vm, ...day.vm, ...info.vm };
+  return mergeSlices({ chrome, board: board.vm, setup: setup.vm, night: night.vm, day: day.vm, info: info.vm });
+}
+
+/**
+ * Spreads the slices into one view-model. Each top-level key must come from exactly one slice: a key two slices
+ * both return would silently let the later one win, so in development and tests that is an error. Production
+ * skips the check.
+ */
+export function mergeSlices(slices: Record<string, Record<string, unknown>>): Record<string, unknown> {
+  if (import.meta.env.DEV) {
+    const owner = new Map<string, string>();
+    for (const [name, slice] of Object.entries(slices)) {
+      for (const key of Object.keys(slice)) {
+        const previous = owner.get(key);
+        if (previous) throw new Error(`Grimoire view-model key "${key}" is returned by both the ${previous} and ${name} slices`);
+        owner.set(key, name);
+      }
+    }
+  }
+  return Object.assign({}, ...Object.values(slices));
 }
