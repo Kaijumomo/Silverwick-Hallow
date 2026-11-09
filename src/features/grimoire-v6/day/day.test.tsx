@@ -247,7 +247,9 @@ describe("the Slayer's shot", () => {
     expect(game().players[town.ids.Hollis!]!.alive).toBe(false);
     expect(game().players[town.ids.Kestrel!]!.abilityUsed).toBe(true);
     expect(useV6Ui.getState().slay).toBeNull();
-    expect((m.result.current.day.vm.sv as any)).toMatchObject({ status: "Used", hasLog: true });
+    expect((m.result.current.day.vm.sv as any)).toMatchObject({ status: "Used" });
+    // The Slayer row carries no shot history: the status says Used, and Undo cannot leave a stale line behind.
+    expect(m.result.current.day.vm.sv as any).not.toHaveProperty("log");;
   });
 
   it("a shot at a non-Demon spends the ability and nothing happens", () => {

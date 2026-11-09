@@ -4,7 +4,6 @@ import type { V6Ctx } from "../ctx";
 import { flash } from "../v6Store";
 import { advanceToNight, blockNominee } from "../day/advance";
 import { buildDayCard, buildNominationArt } from "../day/dayCard";
-import { useDayUi } from "../day/dayUi";
 import { buildNominations } from "../day/nomination";
 import { buildSlayer } from "../day/slayer";
 import { dayTokenDecor, dayTokenTap } from "../day/tokens";
@@ -20,7 +19,6 @@ import type { SliceResult } from "./types";
 export function useDayVm(ctx: V6Ctx): SliceResult {
   const { game, ui, privacy, voting } = ctx;
   const day = game.phase === "day";
-  useDayUi((s) => s.log);
 
   // The Day's overlays belong to the Day: leaving it, or hiding the tokens, puts the shot away.
   useEffect(() => { if (!day && ui.slay) ui.set({ slay: null }); }, [day, ui.slay]);

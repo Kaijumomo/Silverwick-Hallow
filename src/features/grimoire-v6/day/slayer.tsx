@@ -11,7 +11,6 @@ import { wakeIdentity } from "@/stores/wakeIdentity";
 import type { PlayerId, STPlayerRecord } from "@/stores/types";
 import type { V6Ctx } from "../ctx";
 import { flash } from "../v6Store";
-import { useDayUi } from "./dayUi";
 
 const RED = "#f4a595";
 const DIM = "rgba(222,216,204,.45)";
@@ -139,7 +138,6 @@ function confirm(ctx: V6Ctx, ev: Evaluation, dies: boolean): void {
   if (!sl || !shooter || !target || shooter.isEmpty || target.isEmpty) return;
   const override = !!sl.override && ev.overridable;
   const finish = () => {
-    useDayUi.getState().addLog({ code: game.code, day: game.day, shooter: shooter.name, target: target.name, dies, real: ev.real });
     ui.set({ slay: null });
     flash(dies ? `${target.name} dies.` : "Nothing happens.");
   };
@@ -178,13 +176,12 @@ export function buildSlayer(ctx: V6Ctx): Record<string, unknown> {
   const { status, color, unused } = slayerStatus(holder);
   const slayerDef = registry.get("slayer");
   const imgOf = (id?: string) => iconUrlFor(id ? registry.get(id) ?? id : "slayer");
-  const log = useDayUi.getState().log.filter((l) => l.code === game.code).map((l) => ({ who: `Day ${l.day} · ${l.shooter} → ${l.target}`, out: l.dies ? "Died" : "Nothing", color: l.dies ? RED : "rgba(222,216,204,.6)" }));
   const base = {
     img: imgOf("slayer"), ability: slayerDef?.ability ?? SLAYER_TEXT,
     toggle: () => (sl ? ui.set({ slay: null }) : openSlayer(ctx)),
     pillColor: sl ? "#ff7a68" : unused ? "rgba(222,216,204,.7)" : "rgba(222,216,204,.4)",
     dayOn: game.phase === "day", holderText: holder ? holder.name : "Any shot is a bluff", status, statusColor: color,
-    rowFilter: unused ? "none" : "grayscale(.7) brightness(.8)", log, hasLog: log.length > 0,
+    rowFilter: unused ? "none" : "grayscale(.7) brightness(.8)",
     btnText: sl ? "Cancel shot" : "Take a shot", btnBg: sl ? "rgba(176,186,204,.2)" : "rgba(176,186,204,.1)",
   };
   if (!sl || game.phase !== "day") return { ...base, open: false };

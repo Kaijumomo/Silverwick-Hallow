@@ -379,9 +379,6 @@ const S370: React.CSSProperties = { "display": "flex", "flexDirection": "column"
 const S371: React.CSSProperties = { "fontSize": "11px", "letterSpacing": ".2em", "textTransform": "uppercase", "fontWeight": "700", "color": "rgba(222,216,204,.5)" };
 const S372: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "12px" };
 const S373: React.CSSProperties = { "minHeight": "40px", "padding": "0 14px", "borderRadius": "10px", "border": "1px solid rgba(176,186,204,.26)", "background": "rgba(9,10,15,.5)", "color": "#ece6da", "fontFamily": "inherit", "fontSize": "13px", "fontWeight": "600", "cursor": "pointer", "whiteSpace": "nowrap" };
-const S374: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "4px", "paddingLeft": "56px" };
-const S375: React.CSSProperties = { "display": "flex", "justifyContent": "space-between", "gap": "10px", "fontSize": "12px" };
-const S376: React.CSSProperties = { "color": "rgba(222,216,204,.7)" };
 const S377: React.CSSProperties = { "position": "absolute", "left": "-14%", "right": "-14%", "top": "-24%", "bottom": "-24%", "borderRadius": "50%", "background": "radial-gradient(closest-side, rgba(5,6,10,.78), rgba(5,6,10,.45) 60%, transparent)", "pointerEvents": "none" };
 const S378: React.CSSProperties = { "position": "relative", "width": "100%", "display": "flex", "flexDirection": "column", "gap": "14px", "padding": "12px 18px 16px", "borderRadius": "16px", "background": "linear-gradient(180deg, rgba(20,21,30,.98), rgba(10,11,16,.99))", "border": "1px solid rgba(176,186,204,.22)", "boxShadow": "0 20px 50px rgba(0,0,0,.6), inset 0 2px 0 rgba(192,57,46,.55)", "animation": "swRise .3s ease-out", "boxSizing": "border-box" };
 const S379: React.CSSProperties = { "display": "flex", "alignItems": "baseline", "gap": "12px", "minWidth": "0" };
@@ -2975,24 +2972,6 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                       {T(vm.sv?.btnText)}
                     </button>
                   </div>
-                  {vm.sv?.hasLog && (
-                    <>
-                    <div style={S374}>
-                      {(vm.sv?.log ?? []).map((l: any, l$i: number) => (
-                        <Fragment key={l$i}>
-                          <div style={S375}>
-                            <span style={S376}>
-                              {T(l?.who)}
-                            </span>
-                            <span style={css(`color:${l?.color ?? ''};`)}>
-                              {T(l?.out)}
-                            </span>
-                          </div>
-                        </Fragment>
-                      ))}
-                    </div>
-                    </>
-                  )}
                   {vm.dayC?.moonOn && (
                     <>
                     <div style={S372}>
