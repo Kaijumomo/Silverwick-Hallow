@@ -90,13 +90,15 @@ function setupFixture() {
 }
 
 /** Night 1 of the same game, with real History already recorded. */
-function liveFixture() {
+function liveFixture(initialDeathRole?: string) {
   setupFixture();
   for (const id of game().seatOrder) state().showAssignedRole(id);
   expect(state().revealRoles().ok).toBe(true);
   expect(state().beginNightOne().ok).toBe(true);
   store.setState({ undoStack: [] });
-  state().setAlive(game().seatOrder[0]!, false);
+  state().setAlive(initialDeathRole
+    ? Object.values(game().players).find(p => p.actualRole === initialDeathRole)!.id
+    : game().seatOrder[0]!, false);
   expect(game().history.length).toBeGreaterThan(0);
 }
 
@@ -378,11 +380,14 @@ describe("Phase 9R.4 (B8 remediation): representative families -- inherited ids 
     expect(state().undoStack).toBe(setupBefore.undoStack);
     expect(state().localSeq).toBe(setupBefore.localSeq);
     expect(player(first()).alive).toBe(true);
-    inertThenValid(liveFixture, (id) => state().setAlive(id, false), first, { history: 1 }, (id) => {
+    // This boundary test counts Life History only. A randomly dealt Imp also
+    // records B8 ending evidence; keep both deaths on distinct Townsfolk.
+    const ordinary = () => Object.values(game().players).find(p => p.actualRole === "chef")!.id;
+    inertThenValid(() => liveFixture("washerwoman"), (id) => state().setAlive(id, false), ordinary, { history: 1 }, (id) => {
       expect(player(id).alive).toBe(false);
       expect(game().history.at(-1)).toMatchObject({ category: "life", change: { from: { alive: true }, to: { alive: false } } });
     });
-    const id = first();
+    const id = ordinary();
     for (const bad of INHERITED) {
       const before = baseline();
       state().setAlive(bad, true);

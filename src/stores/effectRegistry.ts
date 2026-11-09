@@ -31,8 +31,6 @@ export type EffectIndicatorDefinition = {
   key: string;
   label: string;
   family: EffectVisualFamily;
-  /** Decorative artwork; the indicator is always also labelled in text. */
-  icon?: string;
 };
 
 export type EffectDefinition = {
@@ -46,13 +44,14 @@ export type EffectDefinition = {
 };
 
 const INDICATORS: Record<string, EffectIndicatorDefinition> = {
-  drunk: { key: "drunk", label: "Drunk", family: "impairment", icon: "/status/drunk.png" },
-  poisoned: { key: "poisoned", label: "Poisoned", family: "impairment", icon: "/status/poisoned.png" },
-  protected: { key: "protected", label: "Protected", family: "protection", icon: "/status/protected.png" },
+  drunk: { key: "drunk", label: "Drunk", family: "impairment" },
+  poisoned: { key: "poisoned", label: "Poisoned", family: "impairment" },
+  protected: { key: "protected", label: "Protected", family: "protection" },
   soberHealthy: { key: "soberHealthy", label: "Sober & healthy", family: "abilityState" },
   abilityLost: { key: "abilityLost", label: "No ability", family: "abilityState" },
   mad: { key: "mad", label: "Mad", family: "obligation" },
   marked: { key: "marked", label: "Marked", family: "conditional" },
+  cursed: { key: "cursed", label: "Cursed", family: "conditional" },
   registration: { key: "registration", label: "Registers falsely", family: "registration" },
   redHerring: { key: "redHerring", label: "Red Herring", family: "registration" },
 };
@@ -65,6 +64,18 @@ const DEFINITIONS: Record<string, EffectDefinition> = {
     description: "Generic protection marker. Storyteller bookkeeping only -- Silverwick draws no rules conclusion from it." },
   safeFromDemon: { type: "safeFromDemon", label: "Safe from the Demon", indicator: "protected" },
   cannotDie: { type: "cannotDie", label: "Cannot die", indicator: "protected" },
+  witchCurse: { type: "witchCurse", label: "Cursed by the Witch", indicator: "cursed",
+    description: "Dies if they nominate before the next Night, while the Witch still has the ability." },
+  retainsAbility: { type: "retainsAbility", label: "Has ability", indicator: "abilityState",
+    description: "A Minion the Vigormortis killed keeps its ability while that Vigormortis lives and functions." },
+  moonchildChoice: { type: "moonchildChoice", label: "Moonchild's choice", indicator: "marked",
+    description: "The good player the Moonchild publicly chose: they die tonight unless protected, if the Moonchild still has the ability." },
+  moonchildUnaffected: { type: "moonchildUnaffected", label: "Moonchild's choice (no effect)", indicator: "marked",
+    description: "The Moonchild publicly chose an evil player: nothing happens. Kept so the Day does not ask for the same choice twice; it draws no token." },
+  shabalothChosen: { type: "shabalothChosen", label: "Chosen by the Shabaloth", indicator: "marked",
+    description: "One of the two players the Shabaloth chose on its last night; if dead, it may be regurgitated at the next Dusk." },
+  shabalothAlive: { type: "shabalothAlive", label: "Regurgitated", indicator: "abilityState",
+    description: "A player the Shabaloth regurgitated: alive again with their ability." },
   soberHealthy: { type: "soberHealthy", label: "Sober & healthy", indicator: "soberHealthy" },
   abilityLost: { type: "abilityLost", label: "No ability", indicator: "abilityLost" },
   mad: { type: "mad", label: "Mad", indicator: "mad" },

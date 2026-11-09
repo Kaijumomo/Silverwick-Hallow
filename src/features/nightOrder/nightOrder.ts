@@ -152,7 +152,11 @@ export function computeNightOrder(
         registry.get(player.actualRole)?.provenance?.status !== "homebrew" &&
         !["poppygrower", "magician"].includes(player.actualRole)) {
       const actual = canonicalRolesIfKnown(player.actualRole);
-      if (actual) global(participantScopedStepKey("admin", player.participantId, actual.id), actual.name + " — Storyteller procedure",
+      const demon = actual?.id === "marionette" ? seated.find(q => q.alive && registry.get(q.actualRole)?.type === "demon") : undefined;
+      if (actual && demon) global(participantScopedStepKey("admin", player.participantId, actual.id), actual.name + " — wakes the Demon",
+        `Wake ${demon.name} (the Demon). Show THIS PLAYER IS, then the Marionette token, and point to ${player.name}. The Marionette is not woken and does not learn the Demon.`, at(actual.id),
+        { participantId: player.participantId });
+      else if (actual) global(participantScopedStepKey("admin", player.participantId, actual.id), actual.name + " — Storyteller procedure",
         (actual.firstNightPrompt ?? actual.ability ?? "") +
         " This is not a wake of " + player.name + ". Check suppression, impairment and jinxes before delivery.", at(actual.id),
         { participantId: player.participantId });
@@ -161,13 +165,18 @@ export function computeNightOrder(
     if (!resolved) continue;
     const { role: roleDef, shownRoleId: roleId, simulated: isDeceived } = resolved;
     const canonical = isCanonicalRole(roleDef);
-    let order = isFirstNight ? roleDef.firstNight : roleDef.otherNight;
+    // A player the Shabaloth regurgitated tonight has their ability back: a character whose ability only works on the first night
+    // (no other-night wake) is listed at its first-night position with its first-night instruction.
+    const reborn = !isFirstNight && !!roleDef.firstNight && !roleDef.otherNight && player.alive && hasEffect(player, "shabalothAlive") &&
+      player.effects.some((effect) => effect.type === "shabalothAlive" && effect.appliedAt?.phase === "night" && effect.appliedAt.day === context.day);
+    const firstPass = isFirstNight || reborn;
+    let order = firstPass ? roleDef.firstNight : roleDef.otherNight;
     if (!canonical && order === undefined && (isFirstNight ? roleDef.firstNightPrompt : roleDef.otherNightPrompt)) {
       global(participantScopedStepKey("missingOrder", player.participantId), "Night reference — Storyteller check required",
         player.name + ": instruction has no night position. Place a custom step manually.", 0.3, { participantId: player.participantId });
     }
     if (order === undefined || order === 0) continue;
-    let prompt = isFirstNight
+    let prompt = firstPass
       ? (roleDef.firstNightPrompt ?? roleDef.firstNightReminder ?? roleDef.ability ?? "")
       : (roleDef.otherNightPrompt ?? roleDef.otherNightReminder ?? roleDef.ability ?? "");
     if (!Number.isFinite(order) || order < 0 || !prompt.trim()) {
@@ -179,8 +188,15 @@ export function computeNightOrder(
       continue;
     }
     if (!isFirstNight && roleId === "poppygrower" && !isDeceived) continue;
-    const afterDeath = !isFirstNight && (DEATH_CHECKS.has(roleId) || roleId === "zombuul" ||
-      registry.get(player.actualRole)?.type === "minion" && seated.some(p => p.alive && p.actualRole === "vigormortis"));
+    // https://wiki.bloodontheclocktower.com/Vigormortis : a Minion the Vigormortis kills at night keeps its
+    // ability while the Vigormortis lives. Which Minions were killed that way is not tracked, so the row is
+    // shown for any dead Minion and the Storyteller is told exactly when to wake it.
+    const keptMinion = !isFirstNight && !player.alive && registry.get(player.actualRole)?.type === "minion" &&
+      seated.some(p => p.alive && p.actualRole === "vigormortis");
+    // WP-5: a Minion the Vigormortis killed carries the official HAS ABILITY reminder, which already
+    // says it keeps the ability: that row needs no advisory. Only an unmarked dead Minion keeps the old note.
+    const markedKept = keptMinion && hasEffect(player, "retainsAbility");
+    const afterDeath = !isFirstNight && (DEATH_CHECKS.has(roleId) || roleId === "zombuul" || keptMinion);
     if (!player.alive && !afterDeath) continue;
     // SOL-10F-L6: no generic suppression from prose-derived `oncePerGame`.
     // Usage authority is a verified AbilityDescriptor (enforced by the
@@ -199,7 +215,9 @@ export function computeNightOrder(
         "Different custom characters share a night position. Choose their relative order manually.", order - 0.01, { participantId: player.participantId });
     }
     if (!canonical) customOrders.set(order, roleId);
-    if (DEATH_CHECKS.has(roleId) || !player.alive) advisory += " Check the ability's death/event condition tonight; historical triggers are not tracked.";
+    if (markedKept) { /* the reminder token on the board carries the reason */ }
+    else if (keptMinion) advisory += " Vigormortis: wake this dead Minion ONLY if the Vigormortis killed them at night (a Minion who died by execution or any other way has lost the ability), they are still a Minion, and they are not drunk or poisoned. Otherwise skip this step.";
+    else if (DEATH_CHECKS.has(roleId) || !player.alive) advisory += " Check the ability's death/event condition tonight; historical triggers are not tracked.";
     if (hasEffect(player, "poisoned") || hasEffect(player, "drunk") || player.behaviorMode === "poisoned")
       advisory += " Impaired: simulate the procedure as appropriate; do not apply a functioning ability or assume truthful information.";
     if (COMPLEX_ABILITIES.has(player.actualRole))

@@ -25,15 +25,17 @@ describe("Imp -- killing another player", () => {
   it("an unprotected living target dies (Demon-caused)", () => {
     const result = kill(base(), "p4");
     expect(planned(result).players.p4!.alive).toBe(false);
-    expect(domains(result)).toEqual(["life"]);
+    expect(domains(result)).toEqual(["life", "reminder"]);
+    expect(planned(result).players.p4!.reminders).toMatchObject([{ label: "Dead", sourceCharacter: "imp" }]);
   });
 
-  it("a Monk-protected target does not die; generic Protected -> judgment", () => {
+  it("a Monk-protected target does not die; generic Protected makes the whole action Manual", () => {
     expect(kill(monkSafe(base(), "p4"), "p4")).toEqual({ ok: true, changed: false });
     const generic = patchPlayer(base(), "p4", { effects: [{ id: "gp", type: "protected", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as EffectRecord] });
     const id = protectionId(generic, "demon", "p4");
-    expect(requirementIds(kill(generic, "p4"))).toEqual([id]);
-    expect(planned(kill(generic, "p4", { judgments: { [id]: yes(false) } })).players.p4!.alive).toBe(false);
+    expect(kill(generic, "p4")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(kill(generic, "p4", { judgments: { [id]: yes(false) } })).toMatchObject({ ok: false, code: "unsupported" });
+    expect(generic.players.p4!.alive).toBe(true);
   });
 
   it("the Monk's protection stops if the Monk lost the ability first", () => {
@@ -61,7 +63,7 @@ describe("Imp -- star-pass", () => {
     const g = base();
     const result = kill(g, "p0");
     const next = planned(result);
-    expect(domains(result)).toEqual(["life", "role", "nightStep"]);
+    expect(domains(result)).toEqual(["life", "role", "nightStep", "reminder"]);
     expect(next.players.p0!.alive).toBe(false);
     expect(next.players.p2).toMatchObject({ actualRole: "imp", shownRole: "imp", alive: true, actualAlignment: "evil" });
     expect(next.players.p1!.actualRole).toBe("poisoner");
@@ -81,11 +83,12 @@ describe("Imp -- star-pass", () => {
     expect(kill(g, "p0", { inputs: { target: pick(g, "p0"), [SUCCESSOR]: pick(g, "p4") } })).toMatchObject({ ok: false, code: "illegal" }); // dead, not a Minion
   });
 
-  it("the threshold counts only NON-Traveller living players", () => {
+  it("unreviewed Traveller interactions keep the whole star-pass Manual", () => {
     // 4 ordinary alive + 2 alive Travellers = 6 alive, but only 4 count.
     let g = killAll(proofGame([...ROLES, "beggar", "gunslinger"]), ["p4", "p5", "p6"]);
     for (const id of ["p7", "p8"]) g = patchPlayer(g, id, { isTraveler: true, actualAlignment: "good" });
-    expect(requirementIds(kill(g, "p0"))).toEqual([SUCCESSOR]);
+    expect(kill(g, "p0")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(g.players.p0!.alive).toBe(true);
   });
 
   it("an impaired Scarlet Woman has no priority: ordinary candidate", () => {
@@ -94,12 +97,13 @@ describe("Imp -- star-pass", () => {
     expect(planned(kill(g, "p0", { inputs: { target: pick(g, "p0"), [SUCCESSOR]: pick(g, "p2") } })).players.p2!.actualRole).toBe("imp");
   });
 
-  it("unknown Scarlet Woman functioning -> judgment", () => {
+  it("unknown Scarlet Woman functioning keeps the whole star-pass Manual", () => {
     const g = patchPlayer(base(), "p2", { effects: [{ id: "c", type: "customThing", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as EffectRecord,
       { id: "sh", type: "soberHealthy", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as EffectRecord] });
     const id = swFunctionsJudgment(g.players.p2!.participantId!);
-    expect(requirementIds(kill(g, "p0"))).toEqual([id]);
-    expect(planned(kill(g, "p0", { judgments: { [id]: yes(true) } })).players.p2!.actualRole).toBe("imp");
+    expect(kill(g, "p0")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(kill(g, "p0", { judgments: { [id]: yes(true) } })).toMatchObject({ ok: false, code: "unsupported" });
+    expect(g.players.p0!.alive).toBe(true);
   });
 
   it("exactly one living Minion -> deterministic", () => {
@@ -110,12 +114,12 @@ describe("Imp -- star-pass", () => {
   it("dead Minions are not eligible; no living Minion -> the Imp dies with no star-pass", () => {
     const g = killAll(proofGame(["imp", "poisoner", "monk", "chef", "empath", "saint", "washerwoman"]), ["p1"]);
     const result = kill(g, "p0");
-    expect(domains(result)).toEqual(["life"]);
+    expect(domains(result)).toEqual(["life", "reminder"]);
     expect(planned(result).players.p1!.actualRole).toBe("poisoner");
   });
 
   it("several living Minions -> the Storyteller's choice (stale successor refused)", () => {
-    const g = proofGame(["imp", "poisoner", "spy", "chef", "empath", "saint", "washerwoman"]);
+    const g = proofGame(["imp", "poisoner", "baron", "chef", "empath", "saint", "washerwoman"]);
     expect(requirementIds(kill(g, "p0"))).toEqual([SUCCESSOR]);
     const req = request(g, "p0", "imp", { target: pick(g, "p0"), [SUCCESSOR]: pick(g, "p2") });
     expect(plan(reseat(g, "p2"), req)).toMatchObject({ ok: false, code: "stale" });
@@ -138,7 +142,7 @@ describe("Imp -- star-pass", () => {
     const script = homebrewScript("scarletwoman");
     const env = proofEnv({ script, registry: buildRegistry(script) });
     const g = base();
-    expect(requirementIds(plan(g, request(g, "p0", "imp", { target: pick(g, "p0") }), env))).toEqual([SUCCESSOR]);
+    expect(plan(g, request(g, "p0", "imp", { target: pick(g, "p0") }), env)).toMatchObject({ ok: false, code: "unsupported" });
   });
 
   it("a homebrew Imp reusing the official id inherits no semantics", () => {
@@ -169,5 +173,44 @@ describe("Imp -- one commit and Undo", () => {
     // Phase 10H: every field restored exactly; a reverted visible identity
     // carries a freshly minted reveal token (contract §12.2).
     expect(withoutRevealTokens(store.getState().game)).toEqual(withoutRevealTokens(g));
+  });
+});
+
+describe("Imp -- star-pass with a possible Minion (WP-1)", () => {
+  const T30 = ["imp", "godfather", "recluse", "monk", "chef", "saint"];
+  const own = (g: StorytellerLobbyRecord, extra = {}) => kill(g, "p0", extra);
+
+  it("a living Recluse is never skipped or refused: the Storyteller is asked who becomes the Imp", () => {
+    const g = proofGame(T30);
+    const result = own(g);
+    expect(result).toMatchObject({ ok: false, code: "needsInput" });
+    expect(requirementIds(result)).toEqual([SUCCESSOR]);
+  });
+
+  it("choosing the definite Minion makes it the Imp, leaves the Recluse alone, and skips its Imp step tonight", () => {
+    const g = proofGame(T30);
+    const next = planned(own(g, { inputs: { target: pick(g, "p0"), [SUCCESSOR]: pick(g, "p1") } }));
+    expect(next.players.p0!.alive).toBe(false);
+    expect(next.players.p1).toMatchObject({ actualRole: "imp", alive: true });
+    expect(next.players.p2!.actualRole).toBe("recluse");
+    expect(next.nightProgress[`2:${participantStepKey(g.players.p1!.participantId!, "imp")}`]?.status).toBe("skipped");
+  });
+
+  it("choosing the Recluse is the Storyteller's ruling: it becomes the Imp and stays good", () => {
+    const g = proofGame(T30);
+    const next = planned(own(g, { inputs: { target: pick(g, "p0"), [SUCCESSOR]: pick(g, "p2") } }));
+    expect(next.players.p2).toMatchObject({ actualRole: "imp", shownRole: "imp", shownAlignment: "good", alive: true });
+    expect(next.nightProgress[`2:${participantStepKey(g.players.p2!.participantId!, "imp")}`]?.status).toBe("skipped");
+  });
+
+  it("a player who cannot be a Minion is refused, and a Recluse alone is still offered", () => {
+    const g = proofGame(T30);
+    expect(own(g, { inputs: { target: pick(g, "p0"), [SUCCESSOR]: pick(g, "p3") } })).toMatchObject({ ok: false, code: "illegal" });
+    const onlyRecluse = patchPlayer(g, "p1", { alive: false });
+    expect(own(onlyRecluse)).toMatchObject({ ok: false, code: "needsInput" });
+  });
+
+  it("a protected Imp that does not die passes nothing on, even with a Recluse", () => {
+    expect(own(monkSafe(proofGame(T30), "p0"))).toEqual({ ok: true, changed: false });
   });
 });

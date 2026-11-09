@@ -1,4 +1,4 @@
-// @vitest-environment node
+// @vitest-environment jsdom
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { deleteApp, initializeApp, setLogLevel } from "firebase/app";
 import { getDatabase, goOffline, ref, update } from "firebase/database";
@@ -12,6 +12,7 @@ import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import type { AbilityResolutionRequest } from "@/stores/abilityResolution";
 import { bind, openInStore, patchPlayer, pick, plan, planned, proofEnv, proofGame, request } from "@/test/proofFixtures";
 import type { StorytellerLobbyRecord } from "@/stores/types";
+import { registerVotingAuthorityReader } from "./votingAuthority";
 
 // Phase 10F -- SOL-10F-C3 (PHASE10F Section 39): an accepted ability plan is
 // committed only if the production writer can project the resulting
@@ -54,7 +55,12 @@ function killedBy(eventId: string, ravenkeeperParticipantId?: string): Storytell
 const trigger = (g: StorytellerLobbyRecord): AbilityResolutionRequest =>
   request(g, "p0", "ravenkeeper", { target: pick(g, "p2") }, { invocationPath: "nightTrigger" });
 const triggerKey = (g: StorytellerLobbyRecord, eventId: string) => `${g.day}:${nightTriggerStepKey(bind(g, "p0").participantId, "ravenkeeper", eventId)}`;
-const live = (code: string) => store.setState({ lobby: { code, uid: "st-uid", status: "live" } });
+// This SDK oracle isolates serialization; actual writer ownership is exercised
+// by characterAuthority and emulator contract suites.
+const live = (code: string) => {
+  registerVotingAuthorityReader(() => "sdk-compatibility-writer");
+  store.setState({ game: { ...store.getState().game!, code, storytellerUid: "st-uid" }, lobby: { code, uid: "st-uid", status: "live" } });
+};
 const snapshot = () => {
   const s = store.getState();
   return { game: s.game, undo: s.undoStack.length, localSeq: s.localSeq };
@@ -158,8 +164,8 @@ describe("SOL-10F-C3 -- the store refuses an accepted plan the production writer
     const g = proofGame(["monk", "chef", "imp", "empath", "saint", "poisoner", "washerwoman"]);
     openInStore(g);
     expect(store.getState().resolveAbility(request(g, "p0", "monk", { target: pick(g, "p1") }))).toMatchObject({ ok: true, changed: true });
-    live(generateCode());
     store.getState().undo();
+    live(generateCode());
     expect(store.getState().resolveAbility(request(g, "p0", "monk", { target: pick(g, "p1") }))).toMatchObject({ ok: true, changed: true });
     expect(sdkAccepts(store.getState().lobby!.code, store.getState().game)).toBe(true);
   });
@@ -172,7 +178,8 @@ describe("SOL-10F-C3 -- the preflight matches the installed SDK at the exact 768
     const killed = killedBy("a".repeat(length));
     openInStore(killed);
     if (code !== null) live(code);
-    return { killed, result: store.getState().resolveAbility(trigger(killed)) };
+    const current = store.getState().game!;
+    return { killed: current, result: store.getState().resolveAbility(trigger(current)) };
   };
   /** The first id length whose planned game the shared helper refuses at `code`. */
   function boundary(code: string): number {

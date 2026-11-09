@@ -1,5 +1,6 @@
 import type { AbilityEvaluation, AbilityEvaluationContext, AbilityInputRequirement, AbilityInputs, AbilityInputValue } from "../semantics";
 import type { AbilityOperation, AbilityOutcome, ParticipantBinding } from "@/stores/abilityResolution";
+import type { ReminderIntent } from "@/stores/reminderResolution";
 import { PIT_HAG_ARBITRARY_DEATHS } from "@/stores/gameRuleFacts";
 
 /**
@@ -81,7 +82,11 @@ export function followUpParticipant(context: AbilityEvaluationContext, values: A
  * keeps the coordinator authoritative for a crafted request.
  */
 export function requireLivingActor(context: AbilityEvaluationContext): AbilityEvaluation | null {
-  return context.actor.player.alive ? null : { kind: "notApplicable", message: "Dead players have no ability -- this cannot be resolved for a dead player." };
+  if (context.actor.player.alive) return null;
+  // A Minion the Vigormortis killed keeps its ability (derived from the official HAS ABILITY Effect, never assumed).
+  const kept = context.query.retainsAbility(context.actor.binding);
+  if (kept.known && kept.value) return null;
+  return { kind: "notApplicable", message: "Dead players have no ability -- this cannot be resolved for a dead player." };
 }
 
 export type DeathCause = "demon" | "any";
@@ -191,3 +196,23 @@ export function deathAttempt(
 
 export const lifeOperation = (intents: { kind: "death" | "resurrection" | "useAbility"; target: ParticipantBinding }[]): AbilityOperation =>
   ({ domain: "life", intents });
+
+/**
+ * Draws the acting character's own official "Dead" / "Alive" reminder token on each player its ability
+ * just killed or revived. Notation only (a reminder operation after the mechanics); never read back.
+ */
+export function withLifeTokens(context: AbilityEvaluationContext, roleId: string, operations: AbilityOperation[]): AbilityOperation[] {
+  const intents: ReminderIntent[] = [];
+  for (const operation of operations) {
+    if (operation.domain !== "life") continue;
+    for (const intent of operation.intents) {
+      const label = intent.kind === "death" ? "Dead" : intent.kind === "resurrection" ? "Alive" : undefined;
+      if (!label || !("target" in intent) || !intent.target) continue;
+      intents.push({ kind: "place", target: intent.target, reminder: { label, sourceCharacter: roleId, source: context.actor.binding } });
+    }
+  }
+  return intents.length ? [...operations, { domain: "reminder", intents }] : operations;
+}
+
+export const tokenOutcome = (context: AbilityEvaluationContext, roleId: string, operations: AbilityOperation[], declared = false): AbilityEvaluation =>
+  outcome(withLifeTokens(context, roleId, operations), declared);

@@ -145,6 +145,9 @@ textarea,
 [role="button"],
 summary {
   touch-action: manipulation;
+  /* Touch feedback uses the control's styled state, not a browser-painted
+     rectangle over its larger tap target. Keyboard focus remains below. */
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* One visible keyboard-focus treatment, distinct from selected and acting. */
@@ -171,16 +174,17 @@ summary {
   }
 }
 
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* Scrollbars are hidden everywhere (Character Reference design handoff).
+   Scrolling by touch, wheel and keyboard is unaffected. !important so the
+   per-component scrollbar-width / scrollbar-color rules cannot bring them back. */
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none;
 }
-::-webkit-scrollbar-thumb {
-  background: rgba(196, 158, 80, 0.25);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 /* Typography */

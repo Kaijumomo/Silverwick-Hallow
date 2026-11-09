@@ -8,6 +8,7 @@ import { canonicalRoles } from "@/data/canonical";
 import { buildRegistry } from "@/data/roleRegistry";
 import { assignedBagIsCoherent } from "./setupRefinement";
 import type { RoleDef, StorytellerLobbyRecord, Script } from "@/stores/types";
+import { withRedHerring } from "@/test/redHerringFixture";
 
 // Composition/provenance/structural analysis is this file's concern, not deal
 // policy (covered in setupCommands.test.ts), so games analyzed here are
@@ -27,7 +28,9 @@ describe("normalized setup population", () => {
     expect(a.readiness.begin.ok).toBe(false);
   });
   it.each(Array.from({length:11},(_,i)=>i+5))("%i-player baseline", count => {
-    const a=analyze(setupGame(standardRoles(count)));
+    const game = setupGame(standardRoles(count));
+    const teller = Object.values(game.players).find(player => player.actualRole === "fortuneteller");
+    const a = analyze(teller ? withRedHerring(game, teller.id, teller.id) : game);
     expect(a.assigned.actual).toEqual(SETUP_COUNTS[count]);
     expect(a.assigned.candidates).toEqual([SETUP_COUNTS[count]]);
     expect(a.readiness.begin.ok).toBe(true);
@@ -100,11 +103,19 @@ describe("reviewed whole composition policies", () => {
       .toEqual([candidate(5,0),candidate(4,1)]);
   });
   it.each([
-    ["baron","fanggu"], ["godfather","vigormortis"], ["balloonist","baron"],
+    ["baron","fanggu"], ["balloonist","baron"],
   ])("unreviewed %s + %s combination has no exact expectations", (a,b) => {
     const result=analyze(setupGame(["chef","empath","washerwoman","drunk","saint",a,b]));
     expect(result.assigned.candidates).toBeNull();
     expect(result.findings.filter(f=>f.code==="interaction:assigned")).toHaveLength(1);
+  });
+  it("Godfather + Vigormortis applies both changes with the zero floor", () => {
+    // 9 players: base 5T/2O. Vigormortis -1 O, then Godfather remove (-1 O) or add (+1 O).
+    expect(analyze(setupGame(["chef","empath","washerwoman","librarian","undertaker","drunk","saint","godfather","vigormortis"])).assigned.candidates)
+      .toEqual([candidate(7,0),candidate(5,2)]);
+    // 7 players: base 5T/0O. Nothing to remove, so only the Godfather's add differs.
+    expect(analyze(setupGame(["chef","empath","washerwoman","librarian","undertaker","godfather","vigormortis"])).assigned.candidates)
+      .toEqual([candidate(5,0),candidate(4,1)]);
   });
   it("Sentinel plus a character count modifier also requires review", () => {
     expect(analyze(setupGame(["chef","empath","washerwoman","drunk","saint","baron","imp"],{fabled:["sentinel"]})).assigned.candidates).toBeNull();

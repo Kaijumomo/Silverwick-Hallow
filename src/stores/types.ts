@@ -174,6 +174,8 @@ export type PrivateInfo = {
   bluffs?: RoleId[];
   fakeMinions?: PlayerId[];
   extraText?: string;
+  /** Package 3 (C2): show this Minion/Demon the evil team (see teamInformation.ts). */
+  team?: true;
 };
 
 export type PrivatePacket = {
@@ -653,7 +655,26 @@ export type GameRuleFactHistoryRecord = {
 
 /** Phase 10G (v25): every History Record a game can hold -- the participant
  * categories plus the one game-scoped variant. */
-export type GameHistoryRecord = HistoryRecord | GameRuleFactHistoryRecord;
+export type VotingHistoryRecord = {
+  id: HistoryId;
+  category: "voting";
+  moment: LiveGameMoment;
+  operation: import("./votingTypes").VotingIntent["kind"];
+  summary: string;
+  roundId?: string;
+  participant?: ParticipantRef;
+  correction?: true;
+  change?: never;
+  lifeEvent?: never;
+  effectOperation?: never;
+  reminderOperation?: never;
+  ruleFactType?: never;
+  ruleFactOperation?: never;
+  provenance?: never;
+  note?: never;
+  resolutionId?: never;
+};
+export type GameHistoryRecord = HistoryRecord | GameRuleFactHistoryRecord | VotingHistoryRecord;
 export type GameHistoryCategory = GameHistoryRecord["category"];
 
 /** Phase 10C: the Reminder operation a v21 "reminder" History Record
@@ -774,6 +795,40 @@ export type ManualInformationDeliveryRecord = {
 
 /** Phase 10G (v25): every Information Delivery a game can hold. */
 export type GameInformationDeliveryRecord = InformationDeliveryRecord | ManualInformationDeliveryRecord;
+
+/** B6: private pending intent, never a record of information already told. */
+export type PreparedInformationCharacter = "washerwoman" | "librarian" | "investigator";
+export type PreparedInformationCandidate = {
+  participant: CurrentParticipantRef;
+  actualRole: RoleId;
+  shownRole: RoleId | null;
+  identityEpoch: string;
+};
+export type PreparedInformationReminder = {
+  id: ReminderId;
+  participant: CurrentParticipantRef;
+  label: "Townsfolk" | "Outsider" | "Minion" | "Wrong";
+};
+export type PreparedInformationRecord = {
+  id: string;
+  character: PreparedInformationCharacter;
+  informationActionId: InformationActionId;
+  source: CurrentParticipantRef;
+  actualRole: RoleId;
+  shownRole: RoleId | null;
+  sourceIdentityEpoch: string;
+  gameCode: string;
+  scriptId: string;
+  scriptFingerprint: string;
+  mode: "verified" | "storyteller";
+  clue: {
+    kind: "pair";
+    candidates: [PreparedInformationCandidate, PreparedInformationCandidate];
+    shownCharacter: RoleId;
+    qualifyingParticipantId: ParticipantId;
+    reminders: [PreparedInformationReminder, PreparedInformationReminder];
+  } | { kind: "zero-outsiders" };
+};
 
 export type GrimoireMode = "ring" | "freeRoam";
 export type TokenPosition = { x: number; y: number };
@@ -935,9 +990,12 @@ export type StorytellerLobbyRecord = {
    * dropped, never reassigned).
    * Phase 10G: the current version is 25; marker 24 receives v24 -> v25 (an
    * empty Game Rule Fact collection; nothing else is touched).
-   * Phase 10H: the current version is 26; marker 25 receives v25 -> v26 (a
-   * stamp: no reveal token and no Game Result is invented). */
-  gameSchemaVersion: 26;
+   * Phase 10H: marker 25 receives v25 -> v26 (a stamp: no reveal token and
+   * no Game Result is invented). Voting v27 stamps v26; absent voting means
+   * unknown legacy coverage, never a known day with no nominations.
+   * B6 v28 adds an empty prepared-information collection to older saves;
+   * preparation intent is never reconstructed from tokens or History. */
+  gameSchemaVersion: 29;
   code: string;
   storytellerUid: string;
   scriptId: string;
@@ -992,6 +1050,12 @@ export type StorytellerLobbyRecord = {
    * Never used to reconstruct Actual Role, Actual Alignment, Effects,
    * Reminders, or Life State; Current State alone remains authoritative. */
   informationDeliveries: GameInformationDeliveryRecord[];
+  /** Pending first-night clues; consumed on delivery. Never inferred from tokens. */
+  preparedInformation: PreparedInformationRecord[];
+  /** Package 3 (v29): Storyteller-authoritative, per-participation record of
+   * the information actually shown to each player (see PlayerInfoEntry).
+   * Never pushed into Undo snapshots; only the `shown` content is projected. */
+  playerInfoLog: PlayerInfoEntry[];
   /** Phase 10A (store v19): Storyteller-private, authoritative temporary
    * gameplay state -- recent Life Events of the current and immediately
    * previous phase, plus the coverage bound that says when their absence is
@@ -1004,6 +1068,8 @@ export type StorytellerLobbyRecord = {
    * an ability resolution, or by deterministic expiry in the phase rollover.
    * Never projected. */
   gameRuleFacts: GameRuleFactRecord[];
+  /** Private authoritative voting state. Absence means untracked, never no nominations. */
+  voting?: import("./votingTypes").VotingDayState;
   /** Phase 10H (v26): the Storyteller-declared Game Result -- valid ONLY
    * while `phase === "ended"` (the persisted schema rejects it otherwise).
    * Written only by the one terminal seam (finishGame), never by Undo or any
@@ -1044,7 +1110,15 @@ export type PlayerSelfLife = { alive: boolean; ghostVote: boolean; exiled?: true
 export type PlayerSelfEnvelope = PlayerSelfRecord & {
   revealToken?: string;
   life?: PlayerSelfLife;
+  /** Package 3 (C6): this participation's information history, shown content
+   * only, oldest first. Absent when nothing was delivered. */
+  infoHistory?: PlayerInfoView[];
+  /** Client-only (never written): some history entries failed to decode. */
+  infoHistoryPartial?: true;
 };
+
+/** Package 3 (C6): one history entry as the player receives it. */
+export type PlayerInfoView = PlayerInfoContent & { id: string; moment?: { phase: "night" | "day"; day: number } };
 
 /** Phase 10F (v24): `alive` / `ghostVote` / `exiled` are public table
  * information outside Night only. While the public phase is Night they are
@@ -1079,4 +1153,30 @@ export type PublicLobbyRecord = {
   winner?: Alignment;
   /** Legacy projection marker; lifecycle state is authoritative in session. */
   status?: "ended";
+  /** Package 3 (A1): names of the players currently joined to the lobby, in
+   * arrival order, published only during Setup. Names only -- never a uid,
+   * role or seat binding. Absent outside Setup and from older writers. */
+  arrivals?: string[];
+  /** Package 3 (A1): the Storyteller's planned player count (the "of M" in
+   * "N of M arrived"). Published only during Setup. */
+  plannedPlayers?: number;
 };
+
+/** Package 3 (C1): player-visible information content. */
+export interface PlayerInfoSeat { id: string; name: string; seat: number }
+export interface PlayerInfoContent {
+  text?: string;
+  demon?: PlayerInfoSeat;
+  minions?: PlayerInfoSeat[];
+  bluffs?: string[];
+}
+/** Package 3 (C1): one delivered piece of information. `shown` is what the
+ * player sees; `versions` keeps the superseded originals privately. */
+export interface PlayerInfoEntry {
+  id: string;
+  packetId: string;
+  recipient: CurrentParticipantRef;
+  moment?: { phase: "night" | "day"; day: number };
+  shown: PlayerInfoContent;
+  versions: PlayerInfoContent[];
+}

@@ -20,12 +20,12 @@ export function withoutRevealTokens<T extends StorytellerLobbyRecord | null | un
 /**
  * Phase 10H test helper: the allowlisted self record inside a delivered
  * player/{id} value -- the value with exactly the envelope fields (the
- * participation's reveal token and the player's own Life) removed. Pre-10H
+ * participation's reveal token, the player's own Life and their information history) removed. Pre-10H
  * assertions about WHICH identity/packet was delivered compare through this;
  * the envelope itself is asserted separately (phase10hFoundation tests).
  */
 export function withoutSelfEnvelope<T>(value: T): T {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-  const { revealToken: _token, life: _life, ...identity } = value as Record<string, unknown>;
+  const { revealToken: _token, life: _life, infoHistory: _history, ...identity } = value as Record<string, unknown>;
   return identity as T;
 }

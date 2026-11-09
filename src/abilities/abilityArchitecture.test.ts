@@ -118,13 +118,13 @@ describe("10F architecture guards", () => {
     // informationDelivery.ts reads an Information ACTION's timing (a different type), never an ability descriptor's.
     expect(read("stores/informationDelivery.ts").match(/[\w.]+\.(timing|invocation)\b/g)).toEqual(["action.timing"]);
     for (const module of ["stores/abilityResolution.ts", "features/abilities/abilityUi.ts"]) expect(read(module), module).toMatch(/\binvocationEligibility\(/);
-    for (const module of ["features/abilities/AbilityEntry.tsx", "features/nightOrder/NightOrderPanel.tsx"]) expect(read(module), module).toMatch(/\bpathAbility\(/);
+    for (const module of ["features/grimoire-v6/day/slayer.tsx", "features/grimoire-v6/night/useNightEngine.tsx"]) expect(read(module), module).toMatch(/\bpathAbility\(/);
     expect(read("stores/abilityResolution.ts")).not.toMatch(/timingAllows/);
   });
 
   it("production semantics are EXACTLY the matrix-authorized guided proof / support characters (Slice 7)", () => {
     expect([...CANONICAL_ABILITY_SEMANTICS.keys()].sort()).toEqual(
-      ["alhadikhia", "cultleader", "empath", "fortuneteller", "harlot", "imp", "monk", "pithag", "poisoner", "ravenkeeper", "slayer"]);
+      ["alhadikhia", "chef", "cultleader", "empath", "fortuneteller", "gambler", "godfather", "harlot", "imp", "innkeeper", "monk", "moonchild", "nodashii", "oracle", "pithag", "poisoner", "professor", "ravenkeeper", "shabaloth", "slayer", "towncrier", "undertaker", "vigormortis", "witch"]);
     // Negative proofs: Setup-owned, verified-Manual and dependency-only ids are never live semantics.
     for (const id of ["baron", "tinker", "toymaker", "drunk", "scarletwoman"]) expect(CANONICAL_ABILITY_SEMANTICS.has(id), id).toBe(false);
   });

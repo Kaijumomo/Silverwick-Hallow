@@ -656,3 +656,74 @@ describe("R3-CLOSURE-001: multi-attempt irreversible boundary (enforced rules + 
     } finally { await writer.dispose().catch(() => {}); }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Package 4 (PO-approved public winner delivery): the declared winner rides the
+// same fenced terminal commit as public/winner, and an enrolled Public Display
+// may read the final public node after the end. Nobody else gains access.
+describe("Package 4: public winner for the Public Display (enforced rules + real SessionWriter.close)", () => {
+  const screen = "uid-display";
+  const DISPLAY_TOKEN = "D".repeat(43);
+  const display = { displayAccess: { version: 1, sessionId: SESSION, token: DISPLAY_TOKEN }, displayMembers: { [screen]: DISPLAY_TOKEN } };
+  async function closeWith(result: Parameters<typeof terminalPublication>[2], extra: Record<string, unknown> = {}) {
+    await seed({ writer: { token: "fixture-writer", expiresAt: 0 }, ...display, ...extra });
+    const writer = new SessionWriter(raw(st), code, SESSION);
+    try {
+      await writer.start();
+      await writer.close(["p-alice", "p-bob"], terminalPublication(code, SESSION, result, finalGame()));
+    } finally { await writer.dispose(); }
+  }
+
+  test("Declare Good: public/winner is written in the terminal commit and the enrolled display reads it after the end", async () => {
+    await closeWith({ winner: "good", declaredAt: { phase: "day", day: 3 } });
+    expect(await val("session/state")).toBe("ended");
+    expect(await val("public/winner")).toBe("good");
+    const seen = (await ref(screen, "public").once("value")).val();
+    expect(seen).toMatchObject({ status: "ended", winner: "good", phase: "day", day: 3 });
+  });
+
+  test("Declare Evil at Night: the winner is public, nothing else is added to public", async () => {
+    await closeWith({ winner: "evil", declaredAt: { phase: "night", day: 2 } });
+    expect(await val("public")).toEqual({ code, scriptId: "tb", phase: "day", day: 3, status: "ended", winner: "evil" });
+  });
+
+  test("End Without Result writes no winner; the display reads the neutral final record", async () => {
+    await closeWith(null);
+    expect(await val("public/winner")).toBeNull();
+    expect((await ref(screen, "public").once("value")).val()).toMatchObject({ status: "ended" });
+  });
+
+  test("after the end, seated phones, join requests, unrelated users and anonymous readers still cannot read public", async () => {
+    await closeWith({ winner: "good", declaredAt: { phase: "day", day: 3 } });
+    for (const uid of [alice, bob, carol, mallory]) await assertFails(ref(uid, "public").once("value"));
+    await assertFails(env.unauthenticatedContext().database().ref(path("public")).once("value"));
+  });
+
+  test("a rotated or foreign display token, or a token from another session, is refused after the end", async () => {
+    await closeWith({ winner: "good", declaredAt: { phase: "day", day: 3 } }, { displayMembers: { [screen]: DISPLAY_TOKEN, [mallory]: "M".repeat(43) } });
+    await assertFails(ref(mallory, "public").once("value"));
+    await env.withSecurityRulesDisabled(async (ctx) => { await ctx.database().ref(path("displayAccess/token")).set("R".repeat(43)); });
+    await assertFails(ref(screen, "public").once("value"));
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.database().ref(path("displayAccess")).set({ version: 1, sessionId: "another-session", token: DISPLAY_TOKEN });
+    });
+    await assertFails(ref(screen, "public").once("value"));
+  });
+
+  test("the display cannot read public after the session ended unless public/status is ended too", async () => {
+    await seed({ ...display, session: { version: 2, id: SESSION, state: "ended" } });
+    await assertFails(ref(screen, "public").once("value"));
+  });
+
+  test("public/winner is refused outside an ending, with any other value, and cannot be changed", async () => {
+    await seed();
+    await assertFails(fenced({ [path("public/winner")]: "good" }));
+    await assertFails(fenced({ ...endSession, [path("public/winner")]: "none" }));
+    await assertFails(fenced({ ...endSession, [path("public/winner")]: 1 }));
+    expect(await val("session/state")).toBe("active");
+    await assertSucceeds(fenced({ ...endSession, [path("public/winner")]: "evil" }));
+    await assertFails(fenced({ [path("public/winner")]: "good" }));
+    await assertFails(ref(mallory, "public/winner").set("good"));
+    expect(await val("public/winner")).toBe("evil");
+  });
+});

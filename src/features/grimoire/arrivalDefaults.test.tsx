@@ -4,11 +4,8 @@ import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
 import { selectSetupContext } from "@/features/setup/setupContext";
 import { travelerGuidance } from "@/stores/travelers";
-import { GrimoireCircle } from "./GrimoireCircle";
 import { SeatAssignPopup } from "./SeatAssignPopup";
-import { PlayerDrawer } from "@/features/players/PlayerDrawer";
 import { usePrivacyStore } from "@/stores/privacyStore";
-import { hasChoice } from "@/test/pickers";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -132,26 +129,4 @@ it("occupied ordinary seats reject arrival assignment and keep identity", () => 
   state().bindRosterUid("uid", id);
   expect(game().players[id]).toEqual(before);
   expect(game().players[id]!.isTraveler).toBe(false);
-});
-
-it("setup offers ordinary addition and explicit Traveler addition", () => {
-  vi.spyOn(window, "prompt").mockReturnValue("Visitor");
-  render(<GrimoireCircle />);
-  fireEvent.click(screen.getByRole("button", { name: "Add player" }));
-  expect(game().players[game().seatOrder.at(-1)!]!.isTraveler).toBe(false);
-  fireEvent.click(screen.getByRole("button", { name: "Add Traveler" }));
-  expect(game().players[game().seatOrder.at(-1)!]!.isTraveler).toBe(true);
-  expect(state().selectedPlayerId).toBe(game().seatOrder.at(-1));
-});
-
-it.each(["day", "night"] as const)("%s generic add opens Traveler onboarding", phase => {
-  store.setState({ game: { ...game(), phase, day: 4 } });
-  vi.spyOn(window, "prompt").mockReturnValue("Visitor");
-  function View() { const p = store(s => s.selectedPlayerId ? s.game?.players[s.selectedPlayerId] : undefined);
-    return <><GrimoireCircle />{p && <PlayerDrawer player={p} />}</>; }
-  render(<View />);
-  fireEvent.click(screen.getAllByRole("button", { name: "Add Traveler" })[0]!);
-  expect(hasChoice("Public character")).toBe(true);
-  expect(screen.getByRole("group", { name: /Actual Traveler alignment/ })).toBeInTheDocument();
-  expect(game().plannedPlayerCount).toBe(5); expect(game().phase).toBe(phase);
 });

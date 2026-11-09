@@ -22,6 +22,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { enclosingUnitFor } from "@/test/writerGuard";
 
 const SRC = resolve(__dirname, "..");
 
@@ -75,7 +76,6 @@ const MECHANICS_MODULES = [
   "features/setup/revealReadiness.ts",
   "features/nightOrder/nightOrder.ts",
   "features/nightOrder/nightRules.ts",
-  "features/publicDisplay/presenters.ts",
   // Phase 10F: the Rules Query and the ability semantics / modifier contract
   // answer rules questions -- they never touch Reminders at all.
   "stores/rulesQuery.ts",
@@ -93,9 +93,42 @@ const ALLOWED = new Set([
   "stores/history.ts",
   "stores/reminderResolution.ts",
   "stores/storytellerStore.ts",
+  // Source-loss cleanup removes exactly voting-linked notation after its
+  // authoritative modifier ends; notation never determines a game effect.
+  "stores/sourceAbilityLifecycle.ts",
+  // Correction eligibility deliberately EXCLUDES notation from its comparison;
+  // it never reads labels or uses reminders to calculate an effect.
+  "stores/nightActionCorrection.ts",
+  // B6 coordinates prepared intent with exact generated notation IDs. Its
+  // rules assessment never reads notation; lifecycle integrity and replacement
+  // use the authoritative Reminder seam, asserted separately below.
+  "stores/preparedInformation.ts",
+  // B7 selection and ability-use notation read exact generated ownership only;
+  // availability remains a RulesQuery/Life decision. No voting rule reads it.
+  "stores/butlerSelection.ts",
+  "stores/butlerReminders.ts",
+  "stores/abilityUseReminders.ts",
+  // Write-only: a guided kill or revival draws the acting character's own official Dead / Alive token.
+  // Nothing here reads a Reminder; the token is notation after the resolved Life change.
+  "abilities/characters/shared.ts",
+  // Identity preparation writes inert, self-owned Drunk notation only; its
+  // reads deduplicate/remove exact notes, never determine actual identity.
+  "stores/drunkReminders.ts",
   "features/reminders/reminderPresentation.ts",
+  // Read-only canonical token metadata and sourced Effect presentation;
+  // player notation never supplies rules or mechanical state.
+  "features/reminders/officialReminderPresentation.ts",
   "features/reminders/ReminderControls.tsx",
   "features/players/PlayerDrawer.tsx",
+  // Storyteller-only notation summary and the existing ReminderControls
+  // editor; privacy removes the entire popover. No rules use these labels.
+  "features/players/PlayerPopover.tsx",
+  "features/players/PopoverReminders.tsx", // presentation and participant-bound notation commands only
+  // Displays the already-recorded private Master choice; no rule reads it.
+  "features/nightOrder/ButlerNightAction.tsx",
+  // Definition-only RoleDef.reminders catalogue in the chooser footer;
+  // receives no player ReminderRecord or authoritative mechanics state.
+  "features/players/RoleChooser.tsx",
   "features/grimoire/GrimoireCircle.tsx",
   // Phase 10F: the ability coordinator WRITES notation through the 10C seam
   // (planReminderTransaction / applyReminderPlan) -- never reads Reminders;
@@ -107,6 +140,14 @@ const ALLOWED = new Set([
   // Phase 10H: the Roster / Labels readers of the Table (Storyteller-only
   // presentation via reminderPresentation; DOM-absent under Privacy Mode).
   "features/grimoire/RosterView.tsx",
+  // A Drunk or Marionette shown the Fortune Teller may keep a reminder-only Red Herring: written through the Reminder seam, read only by
+  // exact source-participant link to replace it; no rule reads it (checked precisely below).
+  "stores/concealedRedHerring.ts",
+  "features/grimoire-v6/board/marks.ts", // Package 4: token reminder discs, presentation of notation and Effects only
+  "features/grimoire-v6/board/picker.tsx", // Package 4: the picker detail shows a character's catalogue reminder labels
+  // Package 1: Home Character Reference detail. Definition-only RoleDef.reminders
+  // token labels (like the RoleChooser footer); no game or ReminderRecord state.
+  "features/home/reference/referenceData.ts",
 ]);
 
 function productionSources(dir = SRC): string[] {
@@ -150,6 +191,58 @@ describe("Phase 10C architecture guard: Reminders are notation, never mechanics 
     for (const forbidden of [/\.effects\b/, /\.alive\b/, /\.ghostVote\b/, /\.abilityUsed\b/, /\.actualRole\b/, /\.actualAlignment\b/, /\.(label|note)\s*(===|!==)\s*["'`]/, /\.(label|note)\s*\.\s*(match|includes|startsWith|endsWith|toLowerCase|search|split)\b/]) {
       expect(code).not.toMatch(forbidden);
     }
+  });
+
+  it("B6 reads exact notation links only for integrity/replacement and writes through the existing Reminder seam", () => {
+    const source = readFileSync(join(SRC, "stores/preparedInformation.ts"), "utf8");
+    const code = stripComments(source);
+    const rules = code.slice(code.indexOf("export function preparationAvailability"), code.indexOf("const currentRef"));
+    expect(rules).toContain("query.registration");
+    expect(reminderCoupling(rules)).toEqual([]);
+    expect(rules).not.toMatch(/remindersMatch|planReminderTransaction|applyReminderPlan/);
+    const readerUnits = new Set([...code.matchAll(/\.reminders\b/g)].map(match => enclosingUnitFor(source, code.slice(0, match.index).split("\n").length)));
+    expect(readerUnits).toEqual(new Set(["remindersMatch", "planPreparedInformation"]));
+    expect(code).not.toMatch(/\bplayers\s*:|\.reminders\s*=(?!=)|\.(label|note)\s*\.\s*(match|includes|startsWith|endsWith|toLowerCase|search|split)\b/);
+    expect(code).toContain("planReminderTransaction(next, { intents, resolutionId: id })");
+    expect(code).toContain("applyReminderPlan(next, reminders.plan)");
+  });
+
+  it("the concealed Fortune Teller's Red Herring is notation only: no rules query, no Effect, no label parsing", () => {
+    const code = stripComments(readFileSync(join(SRC, "stores/concealedRedHerring.ts"), "utf8"));
+    expect(code).not.toMatch(/rulesQuery|effectResolution|\.reminders\s*=(?!=)|\.(label|note)\s*\.\s*(match|includes|startsWith|endsWith|toLowerCase|search|split)\b/);
+    expect(code).not.toMatch(/^import (?!type)[^\n]*abilityResolution/m);
+    expect(code).toContain('kind: "place"');
+    expect(code).toContain('kind: "remove"');
+    // Only the Storyteller-facing prepare screen uses it, and rules modules never import it.
+    for (const module of productionSources()) {
+      if (module === "stores/concealedRedHerring.ts") continue;
+      const source = stripComments(readFileSync(join(SRC, module), "utf8"));
+      if (/concealedRedHerring/.test(source)) expect(module).toBe("features/grimoire-v6/setup/prepare.ts");
+    }
+  });
+
+  it("B7 Butler rules never read notation; selection and cleanup use only the Reminder seam", () => {
+    const code = stripComments(readFileSync(join(SRC, "stores/butlerSelection.ts"), "utf8"));
+    const availability = code.slice(code.indexOf("export function butlerSelectionAvailability"), code.indexOf("export function planButlerSelection"));
+    expect(reminderCoupling(availability)).toEqual([]);
+    expect(availability).toContain("query.abilityFunctions");
+    expect(code).not.toMatch(/\bplayers\s*:|\.reminders\s*=(?!=)|\.label\s*(===|!==)|\.(label|note)\s*\.\s*(match|includes|startsWith|endsWith|toLowerCase|search|split)\b/);
+    expect(code).toContain("planReminderTransaction");
+    expect(code).toContain("applyReminderPlan");
+    const voting = stripComments(readFileSync(join(SRC, "stores/voting.ts"), "utf8"));
+    expect(voting).not.toMatch(/butlerSelection|butlerReminder|butler-master/);
+    const lifecycle = stripComments(readFileSync(join(SRC, "stores/butlerReminders.ts"), "utf8"));
+    expect(lifecycle).not.toMatch(/from ["'].*(?:rulesQuery|preparedInformation|abilityResolution|semantics|butlerSelection)["']/);
+    expect(lifecycle).not.toMatch(/\bplayers\s*:|\.reminders\s*=(?!=)|\.label\s*(===|!==)/);
+    expect(lifecycle).toContain("planReminderTransaction");
+  });
+
+  it("B7 No Ability notation reflects Life state through the Reminder seam without writing ability availability", () => {
+    const code = stripComments(readFileSync(join(SRC, "stores/abilityUseReminders.ts"), "utf8"));
+    expect(code).toContain("!old.abilityUsed && player.abilityUsed");
+    expect(code).toContain("planReminderTransaction");
+    expect(code).toContain("applyReminderPlan");
+    expect(code).not.toMatch(/\.abilityUsed\s*=(?!=)|abilityUsed\s*:|\.reminders\s*=(?!=)|\.(label|note)\s*(===|!==)|resolveLife|planLifeTransaction/);
   });
 
   it("the detector itself works (planted violations are caught; prose and role-data lists are not)", () => {

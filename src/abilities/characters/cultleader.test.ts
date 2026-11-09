@@ -45,10 +45,11 @@ describe("Cult Leader -- nightly alignment", () => {
     expect(planned(run(evilBeyond)).players.p0!.actualAlignment).toBe("evil");
   });
 
-  it("an ambiguous registration asks for the Storyteller's judgment", () => {
+  it("ambiguous registration keeps the whole action Manual even with a legacy judgment", () => {
     const g = base("spy", "imp");
-    expect(requirementIds(run(g))).toEqual([ALIGNMENT_JUDGMENT]);
-    expect(planned(run(g, { judgments: { [ALIGNMENT_JUDGMENT]: evil } })).players.p0!.actualAlignment).toBe("evil");
+    expect(run(g)).toMatchObject({ ok: false, code: "unsupported" });
+    expect(run(g, { judgments: { [ALIGNMENT_JUDGMENT]: evil } })).toMatchObject({ ok: false, code: "unsupported" });
+    expect(g.players.p0!.actualAlignment).toBe("good");
   });
 
   it("an evil Cult Leader between two good neighbours becomes good again", () => {

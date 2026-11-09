@@ -7,6 +7,7 @@ import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { bind, openInStore, patchPlayer, pick, plan, planned, proofGame, proofQuery, protectionId, request, requirementIds } from "@/test/proofFixtures";
 import type { AbilityInputValue } from "@/abilities/semantics";
 import type { StorytellerLobbyRecord } from "@/stores/types";
+import { evaluateFixture } from "@/test/evaluatorFixture";
 
 type Fx = StorytellerLobbyRecord["players"][string]["effects"][number];
 type Ref = NonNullable<Fx["sourceParticipant"]>;
@@ -24,7 +25,7 @@ function base(ref?: (g: StorytellerLobbyRecord) => Ref): StorytellerLobbyRecord 
   return g;
 }
 const kill = (opened: StorytellerLobbyRecord, now = opened, judgments: Record<string, AbilityInputValue> = {}) =>
-  plan(now, request(opened, "p0", "imp", { target: pick(opened, "p1") }, { judgments }));
+  evaluateFixture(now, request(opened, "p0", "imp", { target: pick(opened, "p1") }, { judgments }));
 const onlyAsked = (result: ReturnType<typeof plan>): string => {
   const asked = requirementIds(result);
   expect(asked).toHaveLength(1);
@@ -36,6 +37,12 @@ const amendSafe = (amendment: Record<string, unknown>) => store.getState().resol
 
 describe("SOL-10F-D2 -- protection dependency identity excludes display-only ParticipantRef prose", () => {
   beforeEach(() => store.setState({ game: null, undoStack: [], localSeq: 0 }));
+
+  it("the authoritative action stays wholly Manual while these low-level queries are uncertain", () => {
+    const g = base();
+    expect(plan(g, request(g, "p0", "imp", { target: pick(g, "p1") }, { judgments: { [protectionId(g, "demon", "p1")]: N } }))).toMatchObject({ ok: false, code: "unsupported" });
+    expect(g.players.p1!.alive).toBe(true);
+  });
 
   it("Astra's reproduction: refreshing ONLY the source's nameAtTime through the real Effect correction seam keeps the judgment id", () => {
     const g = base();

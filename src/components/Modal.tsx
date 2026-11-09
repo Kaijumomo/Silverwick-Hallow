@@ -1,11 +1,18 @@
-import { useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
+import { createContext, useContext, useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
+import { createPortal } from "react-dom";
 
-type ModalEntry = { layer: HTMLElement; dialog: HTMLElement };
+const ModalParent = createContext<RefObject<HTMLElement> | null>(null);
+type ModalEntry = { layer: HTMLElement; dialog: HTMLElement; parent: RefObject<HTMLElement> | null };
 const modalStack: ModalEntry[] = [];
 let isolated: { element: HTMLElement; inert: string | null }[] = [];
 let bodyOverflow = "";
 
 function refreshIsolation() {
+  // Portaled nested dialogs can mount before their parents; paint in the same
+  // order as the focus stack rather than relying on body insertion order.
+  modalStack.forEach(({ layer }, index) => {
+    if (layer.classList.contains("dialog-layer")) layer.style.zIndex = String(60 + index);
+  });
   for (const { element, inert } of isolated) {
     if (inert === null) element.removeAttribute("inert");
     else element.setAttribute("inert", inert);
@@ -49,6 +56,7 @@ export function useModalBehavior(
   initialFocusRef?: RefObject<HTMLElement>,
   returnFocusRef?: RefObject<HTMLElement>,
 ) {
+  const parent = useContext(ModalParent);
   const closeRef = useRef(onClose);
   const initialRef = useRef(initialFocusRef);
   const returnRef = useRef(returnFocusRef);
@@ -61,13 +69,13 @@ export function useModalBehavior(
     const layer = layerRef.current;
     if (!dialog || !layer) return;
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const entry = { dialog, layer };
+    const entry = { dialog, layer, parent };
     if (modalStack.length === 0) {
       bodyOverflow = document.body.style.overflow;
       document.body.style.overflow = "hidden";
     }
     // Child effects mount before their parents; a nested dialog must stay on top.
-    const childIndex = modalStack.findIndex(item => layer.contains(item.layer));
+    const childIndex = modalStack.findIndex(item => layer.contains(item.layer) || item.parent?.current === layer);
     if (childIndex < 0) modalStack.push(entry);
     else modalStack.splice(childIndex, 0, entry);
     refreshIsolation();
@@ -117,7 +125,7 @@ export function useModalBehavior(
         if (remaining) (focusableControls(remaining)[0] ?? remaining).focus({ preventScroll: true });
       }
     };
-  }, [dialogRef, layerRef]);
+  }, [dialogRef, layerRef, parent]);
 
   // Privacy mode or a completed action can remove the currently focused control.
   useEffect(() => {
@@ -145,16 +153,21 @@ export function Modal({ title, onClose, children, className = "", closeLabel = "
   const layerRef = useRef<HTMLDivElement>(null);
   useModalBehavior(dialogRef, layerRef, onClose, initialFocusRef, returnFocusRef);
 
-  return (
-    <div ref={layerRef} className="dialog-layer">
-      <div className="dialog-backdrop" onClick={onClose} aria-hidden="true" />
-      <div ref={dialogRef} className={`dialog ${className}`.trim()} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
-        <header className="dialog-header">
-          <h2 id={titleId} className="dialog-title">{title}</h2>
-          <button className="btn btn-sm dialog-close" onClick={onClose} aria-label={closeLabel}>✕</button>
-        </header>
-        {children}
+  // Panel filters/transforms establish fixed-position containing blocks. Keep
+  // dialogs at the viewport root while retaining their logical modal ancestry.
+  return createPortal(
+    <ModalParent.Provider value={layerRef}>
+      <div ref={layerRef} className="dialog-layer">
+        <div className="dialog-backdrop" onClick={onClose} aria-hidden="true" />
+        <div ref={dialogRef} className={`dialog ${className}`.trim()} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
+          <header className="dialog-header">
+            <h2 id={titleId} className="dialog-title">{title}</h2>
+            <button className="btn btn-sm dialog-close" onClick={onClose} aria-label={closeLabel}>✕</button>
+          </header>
+          {children}
+        </div>
       </div>
-    </div>
+    </ModalParent.Provider>,
+    document.body,
   );
 }

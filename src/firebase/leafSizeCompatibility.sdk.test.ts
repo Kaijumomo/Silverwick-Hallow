@@ -1,4 +1,5 @@
-// @vitest-environment node
+// @vitest-environment jsdom
+// @vitest-environment-options {"storageQuota":100000000}
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { deleteApp, initializeApp, setLogLevel } from "firebase/app";
 import { getDatabase, goOffline, ref, update } from "firebase/database";

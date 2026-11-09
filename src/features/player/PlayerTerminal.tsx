@@ -1,8 +1,11 @@
-import { useMemo } from "react";
-import { usePlayerStore, type PlayerTerminalResult, type TownNote, type TownNoteConfidence } from "@/stores/playerStore";
+import { useMemo, useState } from "react";
+import { usePlayerStore, type PlayerTerminalResult, type SeatVerdict } from "@/stores/playerStore";
+import { iconUrlFor } from "@/data/iconUrl";
 import { lookupOfficialRole } from "@/data/officialRoles";
 import { getBuiltinScript } from "@/data/scripts";
-import { CONFIDENCE_CLASS } from "./SeatNotePreview";
+import { MoonEmblem } from "./phone/PhoneParts";
+import { StatusScreen } from "./phone/StatusScreen";
+import { EndingScreen, formatCode } from "./phone/PhoneStates";
 
 /**
  * Phase 10H (contract §16): the player's terminal states.
@@ -16,12 +19,8 @@ import { CONFIDENCE_CLASS } from "./SeatNotePreview";
  * No "you won/lost" is derived: the result names only the winning team.
  */
 export function PlayerEnding() {
-  return (
-    <div className="player player-status" role="status" aria-live="polite">
-      <h2 className="title">Ending…</h2>
-      <p className="behavior-help">The Storyteller is ending the game.</p>
-    </div>
-  );
+  const code = usePlayerStore((s) => s.code);
+  return <EndingScreen code={code ?? ""} />;
 }
 
 const WINNER_TITLE = { good: "Good wins", evil: "Evil wins" } as const;
@@ -31,118 +30,135 @@ export function PlayerEnded({ result, onRetry, onBack }: {
   onRetry: () => void;
   onBack: () => void;
 }) {
+  const code = usePlayerStore((s) => s.code) ?? "";
+  const back = { label: "Back to start", onClick: onBack };
   // ASTRA-10H-007: only an explicit pending read shows "Reading..."; an ended
   // state with no result state at all is the generic Game Ended below.
   if (result?.status === "pending") {
+    // ASTRA-10H-007: leaving never waits on the read. Back to Start clears
+    // the terminal context; the read's own context guard (playerSync)
+    // then discards its late answer, so nothing old reappears.
     return (
-      <div className="player player-status" role="status" aria-live="polite">
-        <h2 className="title">Game ended</h2>
-        <p className="behavior-help">Reading the final result…</p>
-        {/* ASTRA-10H-007: leaving never waits on the read. Back to Start clears
-            the terminal context; the read's own context guard (playerSync)
-            then discards its late answer, so nothing old reappears. */}
-        <button className="btn" onClick={onBack}>Back to start</button>
-      </div>
+      <StatusScreen
+        label="ended-pending"
+        pin
+        reserve={46}
+        emblem={<MoonEmblem lit spin={16} />}
+        eyebrow={code ? formatCode(code) : "Silverwick Hollow"}
+        title="Game ended"
+        body="Reading the final result…"
+        primary={back}
+      />
     );
   }
   if (result?.status === "error") {
     return (
-      <div className="player player-status" role="alert">
-        <h2 className="title">Game ended</h2>
-        <p className="behavior-help">We couldn't read the final result. {result.message}</p>
-        <button className="btn" onClick={onRetry}>Try again</button>
-        <button className="btn" onClick={onBack}>Back to start</button>
-      </div>
+      <StatusScreen
+        label="ended-error"
+        pin
+        tone="error"
+        emblem={<MoonEmblem lit={false} tone="error" spin={0} />}
+        eyebrow={code ? formatCode(code) : "Silverwick Hollow"}
+        title="Game ended"
+        message={`We couldn't read the final result. ${result.message}`}
+        primary={{ label: "Try again", onClick: onRetry }}
+        secondary={back}
+      />
     );
   }
   if (result?.status === "ready") {
     const { winner, declaredAt } = result.result;
     return (
-      <div className={`player player-status player-result player-result-${winner}`} role="status">
-        <div className="player-result-light" aria-hidden="true" />
-        <p className="player-result-eyebrow">The game is over</p>
-        <h2 className="title player-result-title">{WINNER_TITLE[winner]}</h2>
-        <p className="behavior-help">
-          The Storyteller declared {winner === "good" ? "Good" : "Evil"} victory on {declaredAt.phase === "night" ? "Night" : "Day"} {declaredAt.day}.
-        </p>
+      <StatusScreen
+        label={`ended-${winner}`}
+        big
+        tone={winner}
+        eyebrow="The game is over"
+        title={WINNER_TITLE[winner]}
+        body={`The Storyteller declared ${winner === "good" ? "Good" : "Evil"} victory on ${declaredAt.phase === "night" ? "Night" : "Day"} ${declaredAt.day}.`}
+        primary={back}
+      >
         <TownNotesReview />
-        <button className="btn btn-gold" onClick={onBack}>Back to start</button>
-      </div>
+      </StatusScreen>
     );
   }
   return (
-    <div className="player player-status player-result player-result-none" role="status">
-      <p className="player-result-eyebrow">The game is over</p>
-      <h2 className="title player-result-title">Game ended</h2>
-      <p className="behavior-help">The Storyteller has ended the game. Thanks for playing!</p>
+    <StatusScreen
+      label="ended-none"
+      pin
+      emblem={<MoonEmblem lit={false} spin={0} />}
+      eyebrow="The game is over"
+      title="Game ended"
+      body="The Storyteller has ended the game. Thanks for playing!"
+      primary={back}
+    >
       <TownNotesReview />
-      <button className="btn btn-gold" onClick={onBack}>Back to start</button>
-    </div>
+    </StatusScreen>
   );
 }
 
-const CONFIDENCE_TEXT: Record<TownNoteConfidence, string> = { suspect: "Suspect", likely: "Likely", confirm: "Confirm" };
+const VERDICT_LABEL: Record<SeatVerdict, string> = { good: "Good", unsure: "?", evil: "Evil" };
+const VERDICT_RGB: Record<SeatVerdict, string> = { good: "134,183,212", unsure: "224,185,106", evil: "232,138,122" };
 
-/** PR-10H-002: a saved note is reviewable when ANY of its three dimensions
- * holds content -- a confidence, a role guess, or non-whitespace text. */
-const hasContent = (note: TownNote): boolean =>
-  note.confidence !== null || note.roles.length > 0 || note.text.trim().length > 0;
-
-/** F10 (10H-AC-058): this game's Town notes stay readable through the
- * post-game review and are cleared by Back to Start. Local only.
+/** F10 (10H-AC-058): this game's notes stay readable through the post-game
+ * review and are cleared by Back to Start. Local only.
  *
- * PR-10H-002: every non-empty note is listed with everything the player
- * recorded -- confidence, role guesses (named from the player-side script /
- * official catalogue, with a readable fallback for an unknown id) and text.
- * These are the player's own guesses: nothing here reads Storyteller state. */
+ * Package 3 (3D): the review lists each seat that has a verdict or character
+ * guesses (named from the player-side script / official catalogue, with a
+ * readable fallback for an unknown id). These are the player's own guesses:
+ * nothing here reads Storyteller state. Legacy free-text notes are kept on the
+ * device but are no longer shown. */
 function TownNotesReview() {
   const code = usePlayerStore((s) => s.code);
-  const notes = usePlayerStore((s) => s.townNotes);
+  const notes = usePlayerStore((s) => s.seatGuesses);
   const publicLobby = usePlayerStore((s) => s.publicLobby);
+  const [open, setOpen] = useState(false);
   const scriptId = publicLobby?.scriptId;
-  const roleName = useMemo(() => {
-    const names = new Map((scriptId ? getBuiltinScript(scriptId)?.characters ?? [] : []).map((role) => [role.id, role.name]));
-    return (id: string) => names.get(id) ?? lookupOfficialRole(id)?.name ?? `Unrecognized character (${id})`;
-  }, [scriptId]);
+  const roles = useMemo(() => new Map((scriptId ? getBuiltinScript(scriptId)?.characters ?? [] : []).map((role) => [role.id, role])), [scriptId]);
+  const roleOf = (id: string) => roles.get(id) ?? lookupOfficialRole(id);
   const prefix = code ? `${code}:` : null;
   const seatOf = (seatId: string) => publicLobby?.players[seatId]?.seat ?? Number.POSITIVE_INFINITY;
   const mine = prefix
     ? Object.entries(notes)
-      .filter(([key, note]) => key.startsWith(prefix) && hasContent(note))
+      .filter(([key, note]) => key.startsWith(prefix) && (note.verdict !== null || note.guesses.length > 0))
       .sort(([a], [b]) => seatOf(a.slice(prefix.length)) - seatOf(b.slice(prefix.length)))
     : [];
   if (mine.length === 0) return null;
   return (
-    <details className="player-notes-review">
-      <summary>Your Town notes ({mine.length})</summary>
-      <p className="behavior-help">Your own notes and guesses, not confirmed game information.</p>
-      <ul>
-        {mine.map(([key, note]) => {
-          const player = publicLobby?.players[key.slice(prefix!.length)];
-          const text = note.text.trim() ? note.text : null;
-          return (
-            <li key={key} className="player-notes-review-item">
-              <span className="player-notes-review-seat">
-                <strong>{player?.name ?? "A seat"}</strong>
-                {player && <span className="label"> seat {player.seat + 1}</span>}
-              </span>
-              {note.confidence && (
-                <span className="player-notes-review-line">
-                  Your confidence:{" "}
-                  <span className={`sn-preview-confidence ${CONFIDENCE_CLASS[note.confidence]}`}>{CONFIDENCE_TEXT[note.confidence]}</span>
-                </span>
-              )}
-              {note.roles.length > 0 && (
-                <span className="player-notes-review-line">
-                  Your role {note.roles.length === 1 ? "guess" : "guesses"}: {note.roles.map(roleName).join(", ")}
-                </span>
-              )}
-              {text && <span className="player-notes-review-line player-notes-review-text">{text}</span>}
-            </li>
-          );
-        })}
-      </ul>
-      <p className="behavior-help">These notes stay on this phone until you go Back to start.</p>
-    </details>
+    <section className={`swp-nr${open ? " swp-nr-open" : ""}`} aria-label="Your town notes">
+      <button type="button" className="swp-nr-head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <span>Your town notes ({mine.length})</span>
+        <span className="swp-nr-chev" aria-hidden="true">›</span>
+      </button>
+      {open && (
+        <div className="swp-nr-body">
+          <p className="swp-fell swp-nr-help">Your own notes and guesses, not confirmed game information.</p>
+          <ul className="swp-nr-list">
+            {mine.map(([key, note]) => {
+              const player = publicLobby?.players[key.slice(prefix!.length)];
+              return (
+                <li key={key} className="swp-nr-item">
+                  <span className="swp-nr-seat">{player ? player.seat + 1 : "–"}</span>
+                  <span className="swp-nr-name">{player?.name ?? "A seat"}</span>
+                  {note.guesses.length > 0 && (
+                    <span className="swp-nr-guesses">
+                      {note.guesses.map((id) => {
+                        const r = roleOf(id);
+                        return <span key={id} className="swp-mini-token swp-nr-token" role="img" aria-label={r?.name ?? id}><span className="swp-token-art" style={{ backgroundImage: `url(${iconUrlFor(r ?? id)})`, left: 1, top: 1, width: 20, height: 20 }} /></span>;
+                      })}
+                      <span className="swp-nr-names">{note.guesses.map((id) => roleOf(id)?.name ?? `Unrecognized character (${id})`).join(", ")}</span>
+                    </span>
+                  )}
+                  {note.verdict && (
+                    <span className="swp-nr-verdict" style={{ color: `rgb(${VERDICT_RGB[note.verdict]})`, borderColor: `rgb(${VERDICT_RGB[note.verdict]})`, background: `rgba(${VERDICT_RGB[note.verdict]},.18)` }}>{VERDICT_LABEL[note.verdict]}</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <p className="swp-fell swp-nr-help">These notes stay on this phone until you go Back to start.</p>
+        </div>
+      )}
+    </section>
   );
 }

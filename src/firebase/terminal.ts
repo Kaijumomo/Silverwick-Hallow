@@ -50,11 +50,11 @@ export async function endGameWithIntent(intent: TerminalIntent): Promise<SetupCo
   const declared = declaredResult(intent, game);
   if (declared === "invalid") return { ok: false, message: "Choose Good victory, Evil victory or End Without Result." };
   if (!store.beginTerminalClose(intent)) {
-    return { ok: false, message: "This game is already being ended." };
+    return { ok: false, message: useStorytellerStore.getState().terminalClose?.message ?? "This game is already being ended." };
   }
+  const lobby = useStorytellerStore.getState().lobby;
   try {
-    let recovery: TerminalRecovery = { kind: "fresh" };
-    const lobby = useStorytellerStore.getState().lobby;
+    let recovery: TerminalRecovery = store.terminalClose?.confirmedRecovery ?? { kind: "fresh" };
     if (lobby) {
       const outcome = await closeMultiplayerSession({
         terminal: terminalPublication(lobby.code, lobby.sessionId ?? "", declared, game),
@@ -69,10 +69,29 @@ export async function endGameWithIntent(intent: TerminalIntent): Promise<SetupCo
       }
     }
     const result = useStorytellerStore.getState().finishGame(intent, recovery);
-    if (!result.ok) useStorytellerStore.getState().failTerminalClose(result.message);
+    if (!result.ok) {
+      // Once the server has closed, a browser-storage refusal cannot turn it
+      // back into a live session or allow a different retry winner. Retain
+      // the confirmed outcome and retry only the local final save.
+      const confirmed = recovery.kind !== "fresh" ? recovery
+        : lobby ? (declared ? { kind: "endedWithResult" as const, result: declared } : { kind: "endedWithoutResult" as const })
+        : undefined;
+      useStorytellerStore.getState().failTerminalClose(result.message, confirmed);
+    }
     return result;
   } catch (error) {
-    const message = `The game could not be ended: ${lifecycleMessage(error)} It is still live -- try again.`;
+    if (lobby && !useStorytellerStore.getState().lobby) {
+      // Detachment runs after remote closure. Zustand updates memory before
+      // persistence, so a failed detach save can throw before the close's
+      // confirmed receipt returns. Keep the exact session for read-back;
+      // neither this request's winner nor a detached lobby proves its result.
+      const message = `Ending needs recovery: ${lifecycleMessage(error)} Retry to confirm the saved result.`;
+      useStorytellerStore.getState().failTerminalClose(message, undefined, lobby);
+      return { ok: false, message };
+    }
+    const message = useStorytellerStore.getState().terminalClose?.recoveryPending
+      ? `Ending recovery is still pending: ${lifecycleMessage(error)} Retry to confirm the saved result.`
+      : `The game could not be ended: ${lifecycleMessage(error)} It is still live -- try again.`;
     useStorytellerStore.getState().failTerminalClose(message);
     return { ok: false, message };
   }

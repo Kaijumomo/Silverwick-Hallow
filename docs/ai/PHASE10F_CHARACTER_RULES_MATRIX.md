@@ -108,6 +108,33 @@ Do not remove/rewrite the stored Effect merely because source applicability beco
 
 Wake/simulate the choice, but produce no poisoned Effect.
 
+### B9 self-target amendment (2026-10-11)
+
+The approved B9 self-target scope extends the source-function rule for the
+canonical Poisoner's own poison. A functioning Poisoner selecting themself
+receives the ordinary sourced poison through the following Day. It makes
+their ability nonfunctioning without recursively cancelling itself.
+
+This is a bounded inference from the publisher's [Poisoner](https://wiki.bloodontheclocktower.com/Poisoner)
+choice/duration rules, the explicit [Widow](https://wiki.bloodontheclocktower.com/Widow)
+self-poison example (self-poison prevents the Widow announcement), and the
+[Abilities](https://wiki.bloodontheclocktower.com/Abilities) source lifecycle rules.
+The Poisoner page does not itself state this recursion exception.
+
+Implementation excludes only that exact self-sourced Effect when deriving
+its source's functioning. Other impairment and ability loss still suspend
+its applicability; removing those conditions resumes the same retained Effect.
+An already impaired Poisoner creates no new Effect. Source death or character
+loss uses the existing source-loss cleanup, so resurrection or changing back
+does not revive the terminated poison. Expiry remains entry to Night N+1.
+Other dependency cycles remain unknown and the entire action stays manual.
+
+The existing authoritative transaction owns the effect, official token,
+Night completion, Undo and persistence. No applicability flag is stored and
+no alternate reminder appearance or gameplay control is introduced. Evidence:
+`src/abilities/characters/poisonerRules.ts`, `src/stores/b9PoisonerSelf.test.tsx`,
+and the Poisoner, Night correction and Night-panel regression suites.
+
 ---
 
 # 5. Monk — GUIDED

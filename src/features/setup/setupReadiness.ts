@@ -1,4 +1,6 @@
 import { isInitialRevealComplete } from "@/stores/identity";
+import { redHerringSetup } from "./redHerringSetup";
+import { conflictingDrunkDisguise } from "./revealReadiness";
 import { isPostDeal, type SetupAction, type SetupContext, type SetupFinding } from "./setupContext";
 
 export type SetupCommandResult = { ok: true } | { ok: false; message: string };
@@ -34,5 +36,12 @@ export function readinessFindings(context: SetupContext): SetupFinding[] {
   // Traveler missing their character must never block dealing the ordinary
   // bag, only beginning Night 1.
   if (travelers.some(p => !p.actualRole)) block("missing-traveler-role", "Assign an actual Traveler role before beginning Night 1.", ["begin"]);
+  if (isPostDeal(game)) {
+    if (conflictingDrunkDisguise(context))
+      block("drunk-shown-in-play", "Choose an unused Townsfolk as the Drunk's shown role for ordinary Trouble Brewing setup.", ["begin"]);
+    const herring = redHerringSetup(context);
+    if (herring.status === "missing" || herring.status === "invalid")
+      block("red-herring", herring.message, ["begin"]);
+  }
   return out;
 }

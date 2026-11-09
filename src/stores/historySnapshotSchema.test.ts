@@ -41,6 +41,8 @@ function realV17Game(): StorytellerLobbyRecord {
   state().setRolePool(["washerwoman", "fortuneteller", "investigator", "chef", "empath", "poisoner", "imp"]);
   expect(state().dealRolePool().ok).toBe(true);
   for (const id of game().seatOrder) state().showAssignedRole(id);
+  const teller = Object.values(game().players).find(p => p.actualRole === "fortuneteller")!;
+  expect(state().setSetupRedHerring({ playerId: teller.id, participantId: teller.participantId! }).ok).toBe(true);
   expect(state().revealRoles().ok).toBe(true);
   expect(state().beginNightOne().ok).toBe(true);
   const alice = idOf("Alice");
@@ -103,7 +105,7 @@ describe("Section 6: the exact v17 regression -- a retired sourcePlayer inside a
     expect(StorytellerGamePersistedSchema.safeParse(base).success).toBe(true); // control: otherwise valid
     // This is already-current data (Phase 10B: its explicit gameSchemaVersion
     // is v20 evidence): remote recovery would never migrate it.
-    expect(detectLegacyGameVersion(base as unknown as Record<string, unknown>)).toBe(26);
+    expect(detectLegacyGameVersion(base as unknown as Record<string, unknown>)).toBe(29);
     const index = indexOf(base, category, kind);
     const bad = withItemField(base, index, "sourcePlayer", "a");
 
@@ -228,6 +230,8 @@ describe("Section 12: an all-empty, markerless v17 game is harmlessly detected a
     delete (v17 as Partial<StorytellerLobbyRecord>).lifeEventWindow;
     delete (v17 as Partial<StorytellerLobbyRecord>).gameSchemaVersion;
     delete (v17 as Partial<StorytellerLobbyRecord>).gameRuleFacts; // Phase 10G: v25-only
+    delete (v17 as Partial<StorytellerLobbyRecord>).preparedInformation;
+    delete (v17 as Partial<StorytellerLobbyRecord>).playerInfoLog;
     // Genuinely markerless: every seat empty, no History, no deliveries.
     expect(Object.values(v17.players).every((p) => p.isEmpty && !("participantId" in p))).toBe(true);
     expect(v17.history).toEqual([]);
@@ -241,8 +245,9 @@ describe("Section 12: an all-empty, markerless v17 game is harmlessly detected a
     // Every identity/category step is a no-op; only the v19 window (and the
     // v20 marker -- there are no Effects; Phase 10G: and the v25 EMPTY Rule
     // Fact collection) is added.
-    const { lifeEventWindow, gameSchemaVersion, gameRuleFacts, ...rest } = entry;
-    expect(gameSchemaVersion).toBe(26);
+    const { lifeEventWindow, gameSchemaVersion, gameRuleFacts, preparedInformation, playerInfoLog, ...rest } = entry;
+    expect(preparedInformation).toEqual([]);
+    expect(gameSchemaVersion).toBe(29);
     expect(gameRuleFacts).toEqual([]);
     expect(lifeEventWindow).toEqual({ coverageFrom: { phase: "night", day: 1 }, events: [] });
     expect(JSON.stringify(rest)).toBe(before);

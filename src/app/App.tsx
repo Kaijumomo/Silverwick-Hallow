@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { isTabletTrial } from "@/config/trial";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { takeMigrationResetFlag } from "@/stores/storytellerStore";
-import { HomeScreen } from "@/features/home/HomeScreen";
-import { GameScreen } from "@/features/game/GameScreen";
-import { NewGameScreen } from "@/features/newgame/NewGameScreen";
+import { HomeV6 } from "@/features/grimoire-v6/home/HomeV6";
+import { GrimoireV6Screen } from "@/features/grimoire-v6/GrimoireV6Screen";
+import { VotingProvider } from "@/features/voting/VotingWorkspace";
+import { useV6Ui } from "@/features/grimoire-v6/v6Store";
 import { PlayerScreen } from "@/features/player/PlayerScreen";
 import { PublicDisplayScreen } from "@/features/publicDisplay/PublicDisplayScreen";
 import { isFirebaseConfigured } from "@/firebase/config";
@@ -26,10 +28,20 @@ function readPublicDisplayCodeFromUrl(): string | null {
   return code.length > 0 ? code : null;
 }
 
+const TabletTrial = lazy(() => import("@/trial/TabletTrial"));
+
 export function App() {
+  return isTabletTrial
+    ? <Suspense fallback={<p role="status">Opening the local tablet trial…</p>}><TabletTrial /></Suspense>
+    : <NormalApp />;
+}
+
+function NormalApp() {
   const publicCode = readPublicDisplayCodeFromUrl();
   const joinCode = readJoinCodeFromUrl();
   const view = useStorytellerStore((s) => s.view);
+  const hasGame = useStorytellerStore((s) => !!s.game);
+  const wizarding = useV6Ui((s) => !!s.wiz);
   const [migrationResetBanner, setMigrationResetBanner] = useState(false);
 
   useEffect(() => {
@@ -45,6 +57,9 @@ export function App() {
       console.warn("[firebase auto-connect]", e instanceof Error ? e.message : e);
     });
   }, []);
+
+  // The unified Grimoire carries Setup too: New Game opens it on the wizard, Resume on the saved game.
+  const showGrimoire = (view === "game" && hasGame) || (view === "newgame" && (wizarding || hasGame));
 
   if (publicCode !== null) {
     return (
@@ -64,7 +79,7 @@ export function App() {
     <div className="app">
       <StorytellerSession />
       {/* ASTRA-10G-R1-001: shell-level, so it survives Storyteller navigation. */}
-      <UnattachedLobbyWarnings />
+      {view !== "newgame" && <UnattachedLobbyWarnings />}
       {migrationResetBanner && (
         <div className="error-list" role="alert" style={{ position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 9999, maxWidth: 480 }}>
           <strong>Save data reset</strong>
@@ -72,13 +87,7 @@ export function App() {
           <button className="btn btn-sm" onClick={() => setMigrationResetBanner(false)}>dismiss</button>
         </div>
       )}
-      {view === "game" ? (
-        <GameScreen />
-      ) : view === "newgame" ? (
-        <NewGameScreen />
-      ) : (
-        <HomeScreen />
-      )}
+      {showGrimoire ? <VotingProvider><GrimoireV6Screen /></VotingProvider> : <HomeV6 />}
     </div>
   );
 }

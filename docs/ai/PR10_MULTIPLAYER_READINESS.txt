@@ -1,0 +1,86 @@
+PR #10 multiplayer readiness corrections — October 16, 2026
+
+Starting source: 061cce160e39ca72f6ce846ed42c076be4bd0fdb.
+Development-only work; no hosted configuration change, identity creation,
+grant renewal, preview deployment, gameplay, production change or PR merge.
+
+SECURITY RECONCILIATION
+The development multiplayer Rules, deny-all rollback Rules/configuration,
+generator, and original emulator suites are restored from reviewed
+e79c758bbc1402ff943882641f7be041cea15a37. This restoration preserves the
+reviewed authorization expressions and schema. It does not replace the
+development policy with generic production Rules.
+
+The client guards reconciled in 92ccb06 are retained: all development Firebase
+identifiers must match silverwick-hollow, browser overrides are rejected, and
+the guard runs before SDK initialization or cache reuse. No connection gate
+is removed by this change. A connected build can automatically sign in on app
+mount, so do not open one without explicit identity/test authorization.
+
+LOCAL COMMANDS
+npm run rules:development:prepare
+  Generates the local development multiplayer Rules only. No network/deploy.
+  Unit tests compare the artifact to the generator and preserve all validators.
+npm run test:full
+  Typecheck, unit/regression tests, and isolated demo-project emulator suites.
+npm run build:development
+  Local development build only. Does not publish or authorize loading it.
+
+test:rules uses demo-silverwick-rules and a loopback database emulator. Security
+suites run sequentially; every test must pass with no skips. Development
+tests use synthetic anonymous token contexts and emulator-only admin fixtures.
+They do not create hosted Authentication users or access production records.
+
+ROLLBACK / HOSTED TOOLING CAUTION
+firebase.development.json pins silverwick-hollow-default-rtdb and the deny-all
+development.locked.rules.json. It is the preserved rollback configuration,
+not the active multiplayer deployment configuration. Do not deploy it merely
+to repeat a test. Its deny-all behavior is tested locally for authenticated
+and unauthenticated clients.
+rules:development:verify is the historical read-only HOSTED DENY-ALL verifier.
+It is not part of the local suite and will intentionally fail if multiplayer
+Rules are deployed. Do not interpret that failure alone as unexpected drift.
+rules:deploy uses the generic firebase.json and must never be used to replace
+the reviewed development ACL policy. No hosted command was run by this work.
+
+PREVIEW AND NEXT AUTHORIZATION
+The prior PR #10 preview b05edf35 is an offline artifact of the starting source,
+with a rejected API-key sentinel and connect-src 'none'. Corrections on this
+branch do not update that preview. The open 972ce27e preview is older (73c3c85).
+After independent review and local verification, connected-preview preparation
+still requires an explicitly approved protected development artifact and test
+plan. Retain all development target guards and owner-only Access unless a
+specific tester cohort is separately approved.
+Full Begin acceptance needs one Storyteller and at least five distinct player
+UIDs. Each needs an explicit role/enabled/expiry grant. Players also need exact
+game-code/session membership grants after lobby creation. Old grants expired;
+no grant is renewed automatically. No self-enrollment or gameplay approval is
+implied by local test success.
+
+Readiness review correction: the starting source already had a 15-second
+stale-presence poll. The bug was delayed expiration between polls and Begin
+trusting rendered arrivals when timers were delayed, not a complete absence
+of periodic recomputation.
+
+LOCAL VERIFICATION RESULTS
+- Targeted presence/setup/lifecycle regression: 86 tests passed.
+- Full unit/regression suite: 6,046 tests across 307 files passed.
+- Isolated demo-project emulator: 325 security tests across 8 files passed,
+  with zero skips. Includes the original 70 development-admission tests,
+  two deny-all rollback tests and two new actual setup-flow integration tests.
+- Typecheck and development build passed. Existing Vite large-chunk warning
+  and Firebase CLI's future Java 21 advisory remain; dependencies unchanged.
+- Restored Rules, deny-all rollback/config, generator, original security tests
+  and hosted locked verifier match reviewed e79c758 Git blobs exactly.
+- Static built-JavaScript scan: silverwick-hollow configuration and browser
+  override guard present; mobile-botc absent. Build was not opened or deployed.
+- The sandbox initially blocked emulator hub loopback access. The same suite
+  passed with local networking permitted. No test assertion was weakened.
+
+Security probes included unauthorized/expired/malformed grants, cross-game
+and stale-session access, private views, writer fencing, revocation, terminal
+cleanup and real create/join/seat/revoke/close. New setup tests exercise five
+distinct arrivals, duplicate joins, real SDK disconnect, silent timeout,
+reconnect, same-session hook recovery and close-before-discard. Unit tests
+verify that expiration preserves roster identity, game state and Undo, and
+that Begin rechecks freshness and writer authority even with delayed timers.

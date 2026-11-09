@@ -52,6 +52,8 @@ function liveGame(roles: Partial<Record<Name, string>> = { Alice: "washerwoman",
   expect(state().dealRolePool().ok).toBe(true);
   for (const [name, role] of Object.entries(roles)) placeRole(idOf(name), role);
   for (const id of game().seatOrder) state().showAssignedRole(id);
+  const teller = Object.values(game().players).find(p => p.actualRole === "fortuneteller")!;
+  expect(state().setSetupRedHerring({ playerId: teller.id, participantId: teller.participantId! }).ok).toBe(true);
   expect(state().revealRoles().ok).toBe(true);
   expect(state().beginNightOne().ok).toBe(true);
 }
@@ -535,7 +537,7 @@ describe("Phase 9R.2: local persistence / rehydrate", () => {
     state().setStatus(alice, "drunk", true);
     await new Promise((resolve) => setTimeout(resolve, 0));
     const raw = localStorage.getItem(STORAGE_KEY)!;
-    expect(JSON.parse(raw).version).toBe(26);
+    expect(JSON.parse(raw).version).toBe(29);
     const beforeGame = structuredClone(game());
     const beforeUndo = structuredClone(state().undoStack);
 

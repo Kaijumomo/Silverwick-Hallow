@@ -5,7 +5,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render } from "@testing-library/react";
 import { PublicSeat } from "./PublicSeat";
-import { TownView } from "@/features/player/PlayerScreen";
+import { NotesTab } from "@/features/player/phone/NotesTab";
+import { TownTab } from "@/features/player/phone/TownTab";
 import { projectLobbyToPublic } from "@/stores/projections";
 import { setupGame } from "@/test/setupFixtures";
 import type { StorytellerLobbyRecord } from "@/stores/types";
@@ -40,17 +41,17 @@ describe("10F-AC-29: Night public-Life withholding in the DOM", () => {
     expect(html).not.toContain("PublicDead");
   });
 
-  it("the player town list renders no Life text, count, label or class at Night; Day shows them again", () => {
-    const night = render(<TownView publicLobby={table("night")} ownPlayerId="p0" code="NITE" scriptCharacters={[]} />);
+  it("the player Town and Notes tabs render no Life text, count, label or class at Night; Day shows it again", () => {
+    const night = render(<><TownTab lobby={table("night")} ownId="p0" /><NotesTab lobby={table("night")} ownId="p0" code="NITE" scriptCharacters={[]} onGuess={() => {}} /></>);
     expect(night.container.textContent).not.toMatch(LIFE_WORDS);
-    expect(night.container.querySelectorAll(".town-row.dead, .life-state-text")).toHaveLength(0);
-    for (const row of night.container.querySelectorAll(".town-row")) expect(row.className).toContain("life-withheld");
-    for (const button of night.container.querySelectorAll(".town-row-main")) expect(button.getAttribute("aria-label")).not.toMatch(LIFE_WORDS);
+    expect(night.container.textContent).not.toMatch(/votes to execute/);
+    expect(night.container.querySelectorAll(".swp-note-dead")).toHaveLength(0);
+    for (const el of night.container.querySelectorAll("[aria-label]")) expect(el.getAttribute("aria-label")).not.toMatch(LIFE_WORDS);
     night.unmount();
 
-    const day = render(<TownView publicLobby={table("day")} ownPlayerId="p0" code="NITE" scriptCharacters={[]} />);
-    expect(day.container.textContent).toMatch(/5\/7 alive/);
-    expect(day.container.querySelectorAll(".town-row.dead")).toHaveLength(2);
-    expect(day.container.textContent).toMatch(/Dead · vote used/);
+    const day = render(<><TownTab lobby={table("day")} ownId="p0" /><NotesTab lobby={table("day")} ownId="p0" code="NITE" scriptCharacters={[]} onGuess={() => {}} /></>);
+    expect(day.container.querySelector(".swp-ring-centre")).toHaveTextContent("5");
+    expect(day.container.querySelector(".swp-ring-centre")).toHaveTextContent("alive");
+    expect(day.container.querySelectorAll(".swp-note-dead")).toHaveLength(2);
   });
 });

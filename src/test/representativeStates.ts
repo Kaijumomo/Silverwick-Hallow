@@ -68,6 +68,8 @@ export function buildRS15(): RepresentativeHandles {
     if (id === drunkId) store().setShownRole(id, "virgin"); // Actual ≠ Shown
     else store().showAssignedRole(id);
   }
+  const redHerring = holder("fortuneteller");
+  ok(store().setSetupRedHerring({ playerId: redHerring, participantId: store().game!.players[redHerring]!.participantId! }), "prepare chosen Red Herring");
   ok(store().revealRoles(), "reveal");
   ok(store().beginNightOne(), "begin Night 1");
 

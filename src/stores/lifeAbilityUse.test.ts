@@ -18,6 +18,7 @@ import type { PlayerId, StorytellerLobbyRecord } from "./types";
 
 const state = () => store.getState();
 const game = () => state().game!;
+const lifeHistory = () => game().history.filter(record => record.category === "life");
 const player = (id: PlayerId) => game().players[id]!;
 const ROLES = ["slayer", "chef", "empath", "fortuneteller", "monk", "poisoner", "imp"];
 
@@ -52,11 +53,13 @@ describe("10F-AC-15: useAbility / correctAbilityUsed are Life intents", () => {
       .toEqual({ ok: true, changed: true, eventIds: [] });
     expectOneCommit(b);
     expect(player(slayer).abilityUsed).toBe(true);
-    const record = game().history.at(-1)!;
+    const record = lifeHistory().at(-1)!;
     expect(record).toMatchObject({ category: "life", change: { kind: "value", from: { abilityUsed: false }, to: { abilityUsed: true } },
       provenance: { sourceCharacter: "slayer", reason: "ability" }, moment: { phase: "day", day: 2 } });
     expect(record.correction).toBeUndefined();
     expect(record.lifeEvent).toBeUndefined(); // ability use is not a Life Event
+    expect(game().history.at(-1)).toMatchObject({ category: "reminder", change: { kind: "added" } });
+    expect(player(slayer).reminders).toEqual([expect.objectContaining({ label: "No Ability", sourceCharacter: "slayer" })]);
     expect(game().lifeEventWindow).toBe(b.game.lifeEventWindow);
     expect(StorytellerGamePersistedSchema.safeParse(game()).success).toBe(true);
   });
@@ -80,10 +83,11 @@ describe("10F-AC-15: useAbility / correctAbilityUsed are Life intents", () => {
     const b = baseline();
     expect(state().resolveLife({ intents: [{ kind: "correctAbilityUsed", playerId: slayer, used: true }] }).ok).toBe(true);
     expectOneCommit(b);
-    expect(game().history.at(-1)).toMatchObject({ category: "life", correction: true, change: { from: { abilityUsed: false }, to: { abilityUsed: true } } });
+    expect(lifeHistory().at(-1)).toMatchObject({ category: "life", correction: true, change: { from: { abilityUsed: false }, to: { abilityUsed: true } } });
     expect(state().resolveLife({ intents: [{ kind: "correctAbilityUsed", playerId: slayer, used: false }] }).ok).toBe(true);
     expect(player(slayer).abilityUsed).toBe(false);
-    expect(game().history.at(-1)).toMatchObject({ correction: true, change: { from: { abilityUsed: true }, to: { abilityUsed: false } } });
+    expect(lifeHistory().at(-1)).toMatchObject({ correction: true, change: { from: { abilityUsed: true }, to: { abilityUsed: false } } });
+    expect(player(slayer).reminders).toHaveLength(0);
   });
 
   it("a correction never mixes with gameplay (the History correction flag stays truthful)", () => {
@@ -126,8 +130,10 @@ describe("10F-AC-15 / AC-16: composition in one Life transaction", () => {
     expect(player(chef).alive).toBe(false);
     expect(game().lifeEventWindow.events).toHaveLength(1);
     expect(game().lifeEventWindow.events[0]).toMatchObject({ kind: "death", resolutionId: "res-slay" });
-    // One record per affected participant, in first-touched order.
-    expect(game().history.slice(-2).map((h) => h.participant!.playerId)).toEqual([slayer, chef]);
+    // Life records keep their first-touched order; B7 adds a separate truthful
+    // notation record inside the same accepted transaction and Undo entry.
+    expect(lifeHistory().slice(-2).map((h) => h.participant!.playerId)).toEqual([slayer, chef]);
+    expect(game().history.at(-1)).toMatchObject({ category: "reminder", participant: { playerId: slayer }, change: { kind: "added" } });
   });
 
   it("plans purely against an evolving working snapshot (no store write; deterministic ids)", () => {
@@ -173,9 +179,9 @@ describe("existing resets stay distinct and unchanged", () => {
     expect(state().setAbilityUsed(slayer, false)).toEqual({ ok: true, changed: false, eventIds: [] });
     expectInert(b);
     expect(state().setAbilityUsed(slayer, true).ok).toBe(true);
-    expect(game().history.at(-1)!.correction).toBeUndefined();
+    expect(lifeHistory().at(-1)!.correction).toBeUndefined();
     expect(state().setAbilityUsed(slayer, false).ok).toBe(true);
-    expect(game().history.at(-1)!.correction).toBe(true);
+    expect(lifeHistory().at(-1)!.correction).toBe(true);
     const source = stripComments(readFileSync(resolve(__dirname, "storytellerStore.ts"), "utf8"));
     const start = source.search(/^ {6}setAbilityUsed: \(/m);
     const body = source.slice(start, source.indexOf("\n      resolveEffects:", start));

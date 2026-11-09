@@ -20,7 +20,7 @@ import { useShellLayout } from "./useShellLayout";
 export const ACTION_CARD_STAGE_HOST = "action-card-stage-host";
 export const ACTION_CARD_DOCK_HOST = "action-card-dock-host";
 
-export function ActionCard({ title, subtitle, hidden = false, onHide, onClose, children, className = "" }: {
+export function ActionCard({ title, subtitle, hidden = false, onHide, onClose, children, className = "", dockHostId }: {
   title: string;
   subtitle?: ReactNode;
   hidden?: boolean;
@@ -30,8 +30,11 @@ export function ActionCard({ title, subtitle, hidden = false, onHide, onClose, c
   onClose: () => void;
   children: ReactNode;
   className?: string;
+  /** A containing workflow can keep its controls in its own panel at every width. */
+  dockHostId?: string;
 }) {
-  const layout = useShellLayout();
+  const shellLayout = useShellLayout();
+  const layout = dockHostId ? "tablet" : shellLayout;
   const titleId = useId();
   const cardRef = useRef<HTMLElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -44,8 +47,8 @@ export function ActionCard({ title, subtitle, hidden = false, onHide, onClose, c
   useLayoutEffect(() => {
     // Docked layouts with no Night dock (a Day ability from the Inspector)
     // render the card in place -- inside the one dock -- never floating.
-    setHost(document.getElementById(layout === "desktop" ? ACTION_CARD_STAGE_HOST : ACTION_CARD_DOCK_HOST));
-  }, [layout]);
+    setHost(document.getElementById(dockHostId ?? (layout === "desktop" ? ACTION_CARD_STAGE_HOST : ACTION_CARD_DOCK_HOST)));
+  }, [layout, dockHostId]);
   const resolved = host !== undefined;
   useEffect(() => {
     if (!resolved) return;
@@ -86,7 +89,7 @@ export function ActionCard({ title, subtitle, hidden = false, onHide, onClose, c
           {subtitle && <div className="action-card-subtitle">{subtitle}</div>}
         </div>
         <div className="action-card-controls">
-          {onHide && (layout === "desktop"
+          {onHide && (layout === "desktop" || dockHostId
             ? <button type="button" className="btn btn-sm" onClick={onHide} aria-label="Hide the action card (keeps your choices)">Hide</button>
             // ASTRA-10H-002: in the one dock, Hide is the way back to the Night list.
             : <button type="button" className="btn btn-sm" onClick={onHide} aria-label="Back to the Night list (keeps your choices)">← Night list</button>)}

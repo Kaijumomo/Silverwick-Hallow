@@ -1,6 +1,9 @@
 node_modules
 dist
+dist-development
 dist-ssr
+dist-tablet-trial/
+silverwick-tablet-trial.zip
 *.local
 .env
 .env.local
@@ -37,3 +40,4 @@ database-debug.log
 **/.impeccable/live/deferred-svelte-component-accepts.json
 **/.impeccable/live/*.png
 # impeccable-ignore-end
+

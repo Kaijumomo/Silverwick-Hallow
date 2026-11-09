@@ -208,7 +208,7 @@ export function analyzeSetup(context: SetupContext): SetupAnalysis {
         for (const p of order.filter(p => p.actualRole === "marionette")) {
           const i = order.indexOf(p);
           if (![order[(i + order.length - 1) % order.length]?.id, order[(i + 1) % order.length]?.id].includes(demons[0]!.id))
-            add("marionette-neighbor:" + p.id, "warning", "Marionette does not neighbor the Demon in the completed ordinary seating. Review placement.", source, undefined, p.id);
+            add("marionette-neighbor:" + p.id, "blocker", "The Marionette must sit next to the Demon. Swap seats before revealing roles.", source, ["begin"], p.id);
         }
       }
     }

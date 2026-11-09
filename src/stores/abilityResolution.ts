@@ -11,7 +11,10 @@ import {
   type InformationConstraint,
   type InformationConstraintValue,
 } from "@/abilities/semantics";
-import { invocationEligibility, isInvocationPath, nightTriggerJudgmentId, nightTriggerStatus, type InvocationPath } from "@/abilities/invocation";
+import { invocationEligibility, isInvocationPath, nightTriggerStatus, type InvocationPath } from "@/abilities/invocation";
+import { automationEligibility } from "@/abilities/automationEligibility";
+import { incompleteSuccessionReason } from "@/abilities/completeActionSafety";
+import { captureResolvedDemonDeath, automaticDemonDeathEvidenceMode } from "./victoryEvidence";
 import { activeModifiers, prospectiveJinxes, type ModifierDefinition } from "@/abilities/modifiers";
 import { applyAlignmentPlan, defaultAlignmentIds, planAlignmentTransaction, type AlignmentIdSource, type AlignmentIntent } from "./alignmentResolution";
 import { applyEffectPlan, planEffectTransaction, type EffectIdSource, type EffectIntent } from "./effectResolution";
@@ -415,6 +418,7 @@ function checkOrdering(outcome: AbilityOutcome): AbilityRefusal | null {
 }
 
 type ComposeOptions = {
+  automaticAction?: { actor: ParticipantBinding; roleId: RoleId };
   context?: MutationContext;
   resolutionId: string;
   completeStep?: AbilityWorkflowFingerprint["step"];
@@ -444,12 +448,20 @@ export function composeAbilityOutcome(
   }
   const ordering = checkOrdering(outcome);
   if (ordering) return ordering;
-  if (options.simulated && outcome.operations.some((operation) => isMechanical(operation.domain))) {
+  // A simulated wake (a Drunk or Marionette shown a character) has no ability: it never changes Life, Effects, Role or
+  // Alignment. The one exception is the shown player's OWN once-per-game use, recorded exactly as a poisoned player's
+  // spent ability is, so being Poisoned, Drunk or the Marionette behave the same for that ability.
+  const selfSpend = (operation: AbilityOperation) => operation.domain === "life" && operation.intents.length > 0 &&
+    operation.intents.every((intent) => intent.kind === "useAbility" && isBinding(intent.target) &&
+      intent.target.participantId === options.automaticAction?.actor.participantId);
+  if (options.simulated && outcome.operations.some((operation) => isMechanical(operation.domain) && !selfSpend(operation))) {
     return refuse("illegal", "A simulated wake has no ability: it never changes Life, Effects, Role or Alignment.");
   }
   const ids = environment.ids ?? {};
   const { context, resolutionId } = options;
   let working = game;
+  const deathEvidenceMode = automaticDemonDeathEvidenceMode(options.automaticAction?.roleId);
+  const deathEvidence: { before: StorytellerLobbyRecord; eventId: string }[] = [];
 
   for (const [operationIndex, operation] of outcome.operations.entries()) {
     const domainRefusal = (domain: AbilityDomain, result: { code: string; message: string; intentIndex?: number }): AbilityRefusal =>
@@ -476,9 +488,20 @@ export function composeAbilityOutcome(
           if ("ok" in translated) return { ...translated, operationIndex, intentIndex };
           intents.push(translated);
         }
-        const result = planLifeTransaction(working, { intents, resolutionId, ...(context ? { context } : {}) }, ids.life);
+        const result = planLifeTransaction(working, { intents, resolutionId, ...(context ? { context } : {}) }, ids.life, environment);
         if (!result.ok) return domainRefusal("life", result);
-        if (result.changed) working = applyLifePlan(working, result.plan);
+        const next = result.changed ? applyLifePlan(working, result.plan) : working;
+        if (options.automaticAction) {
+          const incomplete = incompleteSuccessionReason(createRulesQuery(working, environment), outcome,
+            options.automaticAction, operation.intents, createRulesQuery(next, environment));
+          if (incomplete) return refuse("unsupported", incomplete, { operationIndex });
+          if (result.changed && !options.simulated && !options.manualWorkflow &&
+              (!environment.semantics || environment.semantics === CANONICAL_ABILITY_SEMANTICS) &&
+              deathEvidenceMode) {
+            for (const eventId of result.plan.addedEventIds) deathEvidence.push({ before: working, eventId });
+          }
+        }
+        working = next;
         break;
       }
       case "effect": {
@@ -571,6 +594,15 @@ export function composeAbilityOutcome(
   if (working === game) return { ok: true, changed: false };
 
   // Final validation of the WHOLE composed snapshot (10F-AC-05).
+  // Evidence is added only after the supported outcome's full consequence
+  // chain, while its pre-Life snapshot remains available. No intermediate
+  // death or pending successor is ever published or reconstructed later.
+  if (deathEvidence.length === 1 && deathEvidenceMode) {
+    const candidate = deathEvidence[0]!;
+    const evidence = captureResolvedDemonDeath(candidate.before, working, candidate.eventId, environment, deathEvidenceMode);
+    if (!evidence.ok) return refuse("invalidComposition", evidence.message);
+    working = evidence.game;
+  }
   const parsed = StorytellerGamePersistedSchema.safeParse(working);
   if (!parsed.success) {
     return refuse("invalidComposition", "The combined result failed validation -- nothing was recorded.");
@@ -878,7 +910,7 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   // a crafted request cannot reach an ability its path may not invoke.
   const eligibility = invocationEligibility(descriptor, request.invocationPath, game);
   if (!eligibility.eligible) return refuse("notApplicable", eligibility.reason);
-  if (descriptor.usage.kind === "oncePerGame" && actor.abilityUsed && !simulated) return refuse("notApplicable", "This ability has already been used.");
+  if (descriptor.usage.kind === "oncePerGame" && actor.abilityUsed) return refuse("notApplicable", "This ability has already been used.");
   // Slice 7: participant-scoped Night progress is the authority for "already
   // acted tonight" -- a step this participation instance already completed or
   // had skipped (e.g. a new Imp after a star-pass) is never re-granted by the
@@ -906,6 +938,8 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
 
   const query = createRulesQuery(game, { registry: environment.registry, script: environment.script, ...(environment.semantics ? { semantics: environment.semantics } : {}),
     modifiers: environment.modifiers ?? activeModifiers(game, environment.registry) });
+  const automation = automationEligibility({ query, descriptor, actor: actorBinding, roleId: request.roleId, simulated, inputs });
+  if (automation.kind === "manual") return refuse("unsupported", automation.reason);
   let judgmentUsed = false;
   // 10F-AC-12: impairment is derived, never guessed. Unknown -> an explicit
   // Storyteller judgment; a simulated wake never functions.
@@ -913,15 +947,7 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   if (!simulated) {
     const answer = query.abilityFunctions(actorBinding);
     if (answer.known) functioning = answer.value;
-    else {
-      const judged = judgments[FUNCTIONING_JUDGMENT];
-      if (!isObject(judged) || judged.kind !== "boolean") {
-        return refuse("needsInput", answer.reason, { requirements: [{ id: FUNCTIONING_JUDGMENT, kind: "boolean", source: "judgment",
-          label: `${actor.name || "This player"}'s ability is functioning` }] });
-      }
-      functioning = judged.value;
-      judgmentUsed = true;
-    }
+    else return refuse("unsupported", answer.reason);
   }
   // Slice 7: the verified trigger must be established from authoritative state
   // (Life Event Window with coverage); unknown is an explicit Storyteller
@@ -937,15 +963,7 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
       return refuse("stale", "The trigger this workflow was opened for is no longer open -- review and resolve again.");
     }
     consumeTrigger = { day: game.day, stepKey: nightTriggerStepKey(actorBinding.participantId, request.roleId, trigger.eventId), status: "done" };
-    if (trigger.kind === "unknown") {
-      const id = nightTriggerJudgmentId(descriptor.nightTrigger!, trigger.eventId);
-      const judged = judgments[id];
-      if (!isObject(judged) || judged.kind !== "boolean") {
-        return refuse("needsInput", trigger.reason, { requirements: [{ id, kind: "boolean", source: "judgment", label: "This ability triggered tonight" }] });
-      }
-      if (!judged.value) return refuse("notApplicable", "The Storyteller judged that this ability did not trigger.");
-      judgmentUsed = true;
-    }
+    if (trigger.kind === "unknown") return refuse("unsupported", trigger.reason);
   }
   // SOL-10F-A3: the gate carries BOTH the reaching unverified modifiers and
   // every reaching verified hook result; all of them are enforced together --
@@ -978,7 +996,9 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   const evaluation = descriptor.evaluator({ actor: { binding: actorBinding, player: actor }, roleId: request.roleId, simulated, functioning,
     inputs, judgments, query, constraints });
   switch (evaluation.kind) {
-    case "needsInput": return refuse("needsInput", evaluation.message, { requirements: evaluation.requirements });
+    case "needsInput": return evaluation.requirements.some(requirement => requirement.source === "judgment")
+      ? refuse("unsupported", evaluation.message)
+      : refuse("needsInput", evaluation.message, { requirements: evaluation.requirements });
     case "notApplicable": return refuse("notApplicable", evaluation.message);
     case "unsupported": return refuse("unsupported", evaluation.message);
     case "illegal": return refuse("illegal", evaluation.message);
@@ -1044,12 +1064,29 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   }
   const judgmentAnswered = judgmentUsed || descriptor.inputs.some((requirement) => requirement.source === "judgment") || Object.keys(judgments).length > 0;
   const result = composeAbilityOutcome(game, outcome, environment, {
+    automaticAction: { actor: actorBinding, roleId: request.roleId },
     resolutionId,
     ...(request.context ? { context: request.context } : {}),
     ...(completeStep ? { completeStep } : {}),
     ...(consumeTrigger ? { consumeTrigger } : {}),
     ...(simulated ? { simulated: { performedRole: request.roleId } } : {}),
   });
+  // A modeled choice must not create an unresolved dependency cycle. Check
+  // newly produced sourced effects against the tentative authoritative state
+  // before returning ANY part of the action for commitment.
+  if (result.ok && result.changed) {
+    const after = createRulesQuery(result.plan.game, environment);
+    for (const player of Object.values(result.plan.game.players)) {
+      if (!player.participantId || player.isEmpty) continue;
+      const previous = game.players[player.id];
+      for (const effect of player.effects) {
+        if (!effect.sourceParticipant || previous?.effects.some(old => old.id === effect.id) ||
+            !descriptor.sourcedEffects?.some(declaration => declaration.type === effect.type)) continue;
+        const applies = after.effectApplies({ playerId: player.id, participantId: player.participantId }, effect);
+        if (!applies.known) return refuse("unsupported", applies.reason);
+      }
+    }
+  }
   if (result.ok && result.changed) result.plan.needsConfirmation = outcomeNeedsConfirmation(outcome, judgmentAnswered);
   return result;
 }

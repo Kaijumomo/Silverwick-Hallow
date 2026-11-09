@@ -1,16 +1,15 @@
 // SOL-10F-L3-R1 (PHASE10F Section 23): invocation eligibility = WHEN an
 // ability acts (timing) AND HOW it may be invoked (invocation), through ONE
 // shared contract (src/abilities/invocation.ts) used by the Day entry, the
-// ordinary Night Order AND the coordinator. UI visibility is not authority: a
+// ordinary Night Order AND the coordinator. (Package 4: the rendered Day drawer and Night Order
+// rows are retired; the shared helper, entry-point decision and coordinator are still compared.) UI visibility is not authority: a
 // crafted guided request is refused (notApplicable) without mutation.
 // Rules-neutral fixtures only -- no character mechanics.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup } from "@testing-library/react";
 import { INVOCATION_PATHS, invocationEligibility, type InvocationPath } from "./invocation";
 import type { AbilityDescriptor, AbilityInvocation, AbilitySemanticsRegistry, AbilityTiming } from "./semantics";
-import { AbilityEntry } from "@/features/abilities/AbilityEntry";
 import { pathAbility } from "@/features/abilities/abilityUi";
-import { NightOrderPanel } from "@/features/nightOrder/NightOrderPanel";
 import { canonicalRoles } from "@/data/canonical";
 import { buildRegistry } from "@/data/roleRegistry";
 import { captureFingerprint, planAbilityResolution, type AbilityResolutionRequest } from "@/stores/abilityResolution";
@@ -40,7 +39,7 @@ function gameAt(moment: Moment): StorytellerLobbyRecord {
   const roles = [subjectFor(moment), "imp", "empath"];
   const players = roles.map((actualRole, seat) => makeSTPlayer({ id: `p${seat}`, name: ["Ann", "Ben", "Cat"][seat]!, seat,
     actualRole, shownRole: actualRole, actualAlignment: registry.alignmentOf(actualRole) }));
-  return { gameSchemaVersion: 26, gameRuleFacts: [], code: "", storytellerUid: "local", scriptId: script.id, phase: moment.phase, day: moment.day,
+  return { gameSchemaVersion: 29, preparedInformation: [], playerInfoLog: [], gameRuleFacts: [], code: "", storytellerUid: "local", scriptId: script.id, phase: moment.phase, day: moment.day,
     players: Object.fromEntries(players.map((p) => [p.id, p])), seatOrder: players.map((p) => p.id), plannedPlayerCount: 3, plannedTravelerCount: 0,
     rolePool: [], fabled: [], lorics: [], bluffs: [], notes: "", nightProgress: {}, pendingPlayers: {}, history: [], informationDeliveries: [],
     lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] }, setupRolesDealt: true, setupRolesRevealed: true };
@@ -130,7 +129,7 @@ describe("SOL-10F-L3-R1: the required timing x invocation regressions", () => {
     expect(invocationEligibility(descriptor("slayer", ["passive"], "none"), "dayEntry", g))
       .toEqual({ eligible: false, reason: "This ability is never directly invoked -- resolve its consequences manually." });
     expect(invocationEligibility(descriptor("slayer", ["triggered"], "procedure"), "dayEntry", g))
-      .toEqual({ eligible: false, reason: "Triggered and passive abilities have no verified invocation path yet -- resolve manually." });
+      .toEqual({ eligible: false, reason: "This ability acts when something triggers it (such as the Ravenkeeper dying tonight), so it has no place of its own in the Night order. Run it from its trigger, or resolve it by hand." });
   });
 });
 
@@ -159,60 +158,6 @@ describe("SOL-10F-L3-R1: exhaustive timing x invocation x path x moment agreemen
     // later Night x {otherNight, firstNight+otherNight, otherNight+passive} x 2 = 6;
     // Day x {day, day+triggered} x {publicClaim, procedure} = 4.
     expect(eligibleCount).toBe(14);
-  });
-});
-
-describe("SOL-10F-L3-R1: rendered entry points use the same contract", () => {
-  function renderDayEntry(d: AbilityDescriptor) {
-    const g = gameAt(DAY2);
-    store.setState({ game: g, undoStack: [], localSeq: 0, customScripts: { [script.id]: script } });
-    render(<AbilityEntry player={g.players.p0!} semantics={semanticsOf(d)} />);
-    fireEvent.click(screen.getByText("Abilities"));
-  }
-
-  it.each(TIMINGS.flatMap((timing) => INVOCATIONS.map((invocation) => [timing, invocation] as const)))(
-    "Day entry: %s/%s is offered exactly when the coordinator accepts it, and Manual stays available", (timing, invocation) => {
-      const d = descriptor("slayer", [timing], invocation);
-      renderDayEntry(d);
-      const offered = screen.queryByRole("button", { name: "Use ability… (Slayer)" }) !== null;
-      expect(offered).toBe(plan(gameAt(DAY2), d, "dayEntry").ok);
-      expect(offered).toBe(timing === "day" && (invocation === "publicClaim" || invocation === "procedure"));
-      // 11: the Manual path remains wherever the Day entry exists.
-      expect(screen.getByRole("button", { name: "Resolve manually / unmodeled interaction" })).toBeInTheDocument();
-    });
-
-  it("the Day entry offers no guided action at Night (the Night Order owns Night invocations); Manual remains", () => {
-    const g = gameAt(NIGHT2);
-    store.setState({ game: g, undoStack: [], localSeq: 0, customScripts: { [script.id]: script } });
-    render(<AbilityEntry player={g.players.p0!} semantics={semanticsOf(descriptor("monk", ["otherNight"], "wake"))} />);
-    fireEvent.click(screen.getByText("Abilities"));
-    expect(screen.queryByRole("button", { name: /Use ability/ })).toBeNull();
-    expect(screen.getByText("Monk: The Day entry acts only during the Day; Night abilities are resolved from the Night Order.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Resolve manually / unmodeled interaction" })).toBeInTheDocument();
-  });
-
-  it.each([
-    [NIGHT2, ["otherNight"], "wake", true],
-    [NIGHT2, ["otherNight"], "procedure", true],
-    [NIGHT2, ["otherNight"], "publicClaim", false],
-    [NIGHT2, ["otherNight"], "none", false],
-    [NIGHT2, ["triggered"], "procedure", false],
-    [NIGHT2, ["passive"], "none", false],
-    [NIGHT1, ["firstNight"], "wake", true],
-    [NIGHT1, ["otherNight"], "wake", false],
-  ] as [Moment, AbilityTiming[], AbilityInvocation, boolean][])("Night Order row @ %s: %s/%s guided = %s; otherwise Manual", (moment, timing, invocation, guided) => {
-    const g = gameAt(moment);
-    const d = descriptor(subjectFor(moment), timing, invocation);
-    store.setState({ game: g, undoStack: [], localSeq: 0, customScripts: { [script.id]: script } });
-    render(<NightOrderPanel game={g} script={script} semantics={semanticsOf(d)} onClose={() => {}} />);
-    const roleName = registry.get(d.roleId)!.name;
-    const row = screen.getAllByText(roleName, { selector: ".step-role-name" })[0]!.closest(".step-card") as HTMLElement;
-    expect(within(row).queryByRole("button", { name: "Guide" }) !== null).toBe(guided);
-    expect(guided).toBe(plan(g, d, "nightOrder").ok);
-    if (!guided) {
-      expect(within(row).getByText((invocationEligibility(d, "nightOrder", g) as { reason: string }).reason)).toBeInTheDocument();
-      expect(within(row).getByRole("button", { name: "Resolve manually / unmodeled interaction" })).toBeInTheDocument();
-    }
   });
 });
 

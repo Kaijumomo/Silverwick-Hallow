@@ -3,6 +3,7 @@ import { computeNightOrder } from "./nightOrder";
 import type { NightStep } from "./nightOrder";
 import { makeSTPlayer } from "@/test/fixtures";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
+import { sectsAndViolets } from "@/data/scripts/sectsAndViolets";
 import { canonicalOrder } from "@/data/canonical";
 import type { STPlayerRecord } from "@/stores/types";
 
@@ -279,5 +280,53 @@ describe("Traveler night-order integration", () => {
       (s) => s.effectiveRoleId === "scapegoat"
     );
     expect(hasScapegoat).toBe(false);
+  });
+});
+
+describe("Vigormortis: dead Minion keeps its ability only if the Vigormortis killed it", () => {
+  it("lists a dead Minion on later nights with the wake conditions, and drops it once the Vigormortis is dead", () => {
+    const sv = sectsAndViolets;
+    const withViggy = makePlayers([
+      { id: "p-witch", role: "witch", seat: 0, over: { alive: false } },
+      { id: "p-vigormortis", role: "vigormortis", seat: 1 },
+      { id: "p-clock", role: "clockmaker", seat: 2 },
+    ]);
+    const open = playerSteps(computeNightOrder(withViggy.players, withViggy.seatOrder, sv, false)).find(s => s.actualRoleId === "witch");
+    expect(open?.advisory).toMatch(/ONLY if the Vigormortis killed them at night/);
+    const lost = makePlayers([
+      { id: "p-witch", role: "witch", seat: 0, over: { alive: false } },
+      { id: "p-vigormortis", role: "vigormortis", seat: 1, over: { alive: false } },
+      { id: "p-clock", role: "clockmaker", seat: 2 },
+    ]);
+    expect(playerSteps(computeNightOrder(lost.players, lost.seatOrder, sv, false)).some(s => s.actualRoleId === "witch")).toBe(false);
+  });
+
+  it("WP-5: a Minion carrying the HAS ABILITY effect is listed without the yellow advisory", () => {
+    const fx = { id: "fx", type: "retainsAbility", sourceCharacter: "vigormortis", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" } } as never;
+    const marked = makePlayers([
+      { id: "p-witch", role: "witch", seat: 0, over: { alive: false, effects: [fx] } },
+      { id: "p-vigormortis", role: "vigormortis", seat: 1 },
+      { id: "p-clock", role: "clockmaker", seat: 2 },
+    ]);
+    const row = playerSteps(computeNightOrder(marked.players, marked.seatOrder, sectsAndViolets, false)).find(s => s.actualRoleId === "witch");
+    expect(row).toBeTruthy();
+    expect(row?.advisory).not.toMatch(/Vigormortis|historical triggers/);
+  });
+});
+
+describe("Shabaloth: a regurgitated first-night character (WP-6)", () => {
+  const alive = (day: number) => ({ id: "fx", type: "shabalothAlive", sourceCharacter: "shabaloth", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day } }) as never;
+  const rows = (over: Partial<STPlayerRecord>) => {
+    const g = makePlayers([
+      { id: "p-ww", role: "washerwoman", seat: 0, over },
+      { id: "p-imp", role: "imp", seat: 1 },
+      { id: "p-chef", role: "chef", seat: 2 },
+    ]);
+    return playerSteps(computeNightOrder(g.players, g.seatOrder, troubleBrewing, false, { day: 3 } as never)).map((s) => s.actualRoleId);
+  };
+  it("is listed tonight at its first-night position only the night it came back", () => {
+    expect(rows({ effects: [alive(3)] })).toContain("washerwoman");
+    expect(rows({ effects: [alive(2)] })).not.toContain("washerwoman");
+    expect(rows({})).not.toContain("washerwoman");
   });
 });

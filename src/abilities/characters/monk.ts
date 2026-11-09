@@ -21,7 +21,7 @@ export const MONK: AbilityDescriptor = {
   inputs: [{ id: "target", kind: "participant", source: "player", constraints: ["notSelf"], label: "The player to protect" }],
   hooks: ["targeting", "death"],
   sourcedEffects: [{ type: "safeFromDemon", persistence: "whileSourceFunctions" }],
-  presentation: { complexity: "simple", action: "Choose a player to protect from the Demon" },
+  presentation: { complexity: "simple", action: "Choose a player to protect." },
   evaluator: (context) => {
     const dead = requireLivingActor(context);
     if (dead) return dead;

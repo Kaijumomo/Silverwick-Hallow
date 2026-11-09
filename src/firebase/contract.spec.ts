@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // OPUS-007 contract suite. rules.spec.ts already proves the Storyteller
 // projection/writer/membership-write path against enforced rules.json. This
 // file proves the remaining half: the real PLAYER read handshake
@@ -1651,10 +1652,9 @@ describe("Phase 9R.6 P1: interrupted revocation recovery, real client + enforced
     return { stBackend, session, lobby, writer, manager, p1, PA, unbound, displayBackend, history: structuredClone(store().game!.history) };
   }
 
-  /** The crashed tab reopening: exactly the fields the store persists (its
-   * persist partialization; this node environment has no localStorage, so
-   * the image is round-tripped through JSON here -- the jsdom suite
-   * revocationRecovery.test.ts covers the real localStorage reload). */
+  /** The crashed tab reopening: the store's persisted fields round-tripped
+   * through JSON. revocationRecovery.test.ts separately exercises the
+   * middleware's actual browser-storage reload. */
   function reloadPersistedImage() {
     const { game, view, undoStack, customScripts, lobby, grimoireMode, tokenPositions, localSeq, sync } = store();
     const image = JSON.stringify({ game, view, undoStack, customScripts, lobby, grimoireMode, tokenPositions, localSeq, sync });
@@ -2306,7 +2306,10 @@ describe("Phase 9C.6 (OPUS-002): real separate-device Public Display contract", 
     await expect(displayBackend.get(`lobbies/${code}/public`)).resolves.toMatchObject({ code });
   });
 
-  test("CONTRACT-OPUS002-5: ending the session through the real fenced lifecycle path (writer.close) revokes display /public authorization", async () => {
+  // Package 4 (PO-approved public winner delivery) amends this contract: after
+  // the end the enrolled display may still READ the final public record (to
+  // show the result over the final seats); it still can never write.
+  test("CONTRACT-OPUS002-5: after the real fenced close (writer.close) the enrolled display reads only the final public record, read-only", async () => {
     const code = "PD5AAAAA", st = "pd5-storyteller", displayUid = "pd5-display";
     const { writer, displayBackend } = await establishAuthorizedDisplay(code, st, displayUid);
     disposals.push(() => writer.dispose());
@@ -2315,7 +2318,9 @@ describe("Phase 9C.6 (OPUS-002): real separate-device Public Display contract", 
 
     await writer.close([]);
 
-    await expect(displayBackend.get(`lobbies/${code}/public`)).rejects.toThrow(/permission[_ ]denied/i);
+    await expect(displayBackend.get(`lobbies/${code}/public`)).resolves.toMatchObject({ code, status: "ended" });
+    await expect(displayBackend.set(`lobbies/${code}/public/winner`, "good")).rejects.toThrow(/permission[_ ]denied/i);
+    await expect(displayBackend.get(`lobbies/${code}/session`)).resolves.toMatchObject({ state: "ended" });
   });
 });
 

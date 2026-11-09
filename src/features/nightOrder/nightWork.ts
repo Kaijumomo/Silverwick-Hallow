@@ -1,7 +1,8 @@
 import type { RoleRegistry } from "@/data/roleRegistry";
 import type { AbilitySemanticsRegistry } from "@/abilities/semantics";
 import { createRulesQuery, type RulesQuery } from "@/stores/rulesQuery";
-import { participantStepKey } from "@/stores/nightProgress";
+import { nightTriggerStepKey } from "@/stores/nightProgress";
+import { isDeathEvent, lifeEventsAt } from "@/stores/lifeEvents";
 import { wakeIdentity } from "@/stores/wakeIdentity";
 import { bindingOf, seatedParticipants, triggerAbility, type StepAbility } from "@/features/abilities/abilityUi";
 import { computeNightOrder, type NightStep } from "./nightOrder";
@@ -49,6 +50,8 @@ export type NightWork = {
   steps: NightStep[];
   triggered: TriggeredNightWork[];
   query: RulesQuery;
+  /** Rows of players brought back tonight AFTER their turn had passed: they act from the next Night, so the row counts as settled. */
+  late: ReadonlySet<string>;
 };
 
 export const CUSTOM_STEP_PREFIX = "manual:";
@@ -65,22 +68,72 @@ export function customNightSteps(game: Pick<StorytellerLobbyRecord, "nightProgre
 
 export function deriveNightWork(game: StorytellerLobbyRecord, environment: NightWorkEnvironment): NightWork {
   const { script, registry, semantics } = environment;
-  const steps = script ? computeNightOrder(game.players, game.seatOrder, script, game.day === 1, game) : [];
+  let steps = script ? computeNightOrder(game.players, game.seatOrder, script, game.day === 1, game) : [];
   steps.push(...customNightSteps(game, game.day));
   const query = createRulesQuery(game, { registry, script, semantics });
   const triggered = seatedParticipants(game).flatMap((player): TriggeredNightWork[] => {
     const wake = wakeIdentity(player, registry);
     if (!wake || !player.participantId) return [];
+    // A simulated death wake has no persisted shown-role-at-death evidence.
+    // Keep its ordinary reference row for deliberate Storyteller initiation;
+    // never invent an automatic trigger or an outstanding triggered task.
+    if (wake.simulated) return [];
     const ability = triggerAbility(wake.shownRoleId, registry, semantics, query, bindingOf(player));
     // SOL-10F-A10: open = the trigger status (consumption is per trigger event).
     if (!ability || ability.kind !== "guided" || !ability.trigger || ability.trigger.kind === "notTriggered") return [];
-    return [{ player, roleId: wake.shownRoleId, roleName: wake.role.name, stepKey: participantStepKey(player.participantId, wake.shownRoleId),
+    return [{ player, roleId: wake.shownRoleId, roleName: wake.role.name, stepKey: nightTriggerStepKey(player.participantId, wake.shownRoleId, ability.trigger.eventId),
       ability, eventId: ability.trigger.eventId, needsCheck: ability.trigger.kind === "unknown" }];
   });
-  return { steps, triggered, query };
+  // Normally TB cannot kill on Night 1. A recorded death nevertheless has the
+  // same explicit trigger, including its completed row after recovery.
+  if (script && game.day === 1) {
+    const extra = computeNightOrder(game.players, game.seatOrder, script, false, game).filter(step => {
+      if (step.kind !== "player" || step.isDeceived || steps.some(existing => existing.stepKey === step.stepKey)) return false;
+      const ability = triggerAbility(step.effectiveRoleId, registry, semantics, query, bindingOf(game.players[step.playerId]!));
+      return ability?.kind === "guided" && !!ability.trigger;
+    });
+    steps.push(...extra);
+  }
+  // A death-trigger row is owned by its event, not by a once-per-Night wake.
+  // A second genuine death after resurrection must not inherit the first
+  // event's completed row. Retain the latest completed event row for Next and
+  // reload display after the open trigger disappears.
+  steps = steps.flatMap((step): NightStep[] => {
+    if (step.kind !== "player" || step.isDeceived) return [step];
+    const open = triggered.find(item => item.player.participantId === step.participantId && item.roleId === step.effectiveRoleId);
+    if (open) return [{ ...step, stepKey: open.stepKey }];
+    const ability = triggerAbility(step.effectiveRoleId, registry, semantics, query, bindingOf(game.players[step.playerId]!));
+    if (!ability || ability.kind !== "guided" || !ability.trigger) return [step];
+    const deaths = query.lifeEvents({ phase: "night", day: game.day }, event => isDeathEvent(event) && event.subject.participantId === step.participantId && event.actualRoleAtEvent === step.effectiveRoleId);
+    // Recorded-but-uncovered events cannot grant a trigger, but their manual
+    // completion marker can still preserve the row the Storyteller just left.
+    const completed = [...(deaths.status === "known" ? deaths.events : deaths.recorded)].reverse().find(event => {
+      const status = game.nightProgress[`${game.day}:${nightTriggerStepKey(step.participantId, step.effectiveRoleId, event.id)}`]?.status;
+      return status === "done" || status === "skipped";
+    });
+    return completed ? [{ ...step, stepKey: nightTriggerStepKey(step.participantId, step.effectiveRoleId, completed.id) }]
+      : ability.trigger.kind === "notTriggered" ? [] : [step];
+  });
+  steps.sort((a, b) => a.order - b.order);
+  return { steps, triggered, query, late: revivedAfterTheirTurn(game, steps) };
 }
 
-export const stepResolved = (game: Pick<StorytellerLobbyRecord, "nightProgress" | "day">, step: NightStep): boolean => {
+/**
+ * A character resurrected tonight (Professor, Shabaloth, ...) whose place in the Night order was already behind the
+ * Storyteller when they came back has missed it: its row is not unfinished work (no wake is owed until tomorrow night).
+ * A resurrection before the turn (e.g. at Dusk) leaves the row owed, as for any living player.
+ */
+export function revivedAfterTheirTurn(game: StorytellerLobbyRecord, steps: readonly NightStep[]): Set<string> {
+  const back = game.phase === "night" ? lifeEventsAt(game, { phase: "night", day: game.day }, (event) => event.kind === "resurrection") : null;
+  if (!back || back.status !== "known" || !back.events.length) return new Set();
+  const revived = new Set(back.events.map((event) => event.subject.participantId));
+  const passed = Math.max(-1, ...steps.filter((step) => stepResolved(game, step)).map((step) => step.order));
+  return new Set(steps.filter((step) => step.kind === "player" && revived.has(step.participantId ?? "") && !stepResolved(game, step) && step.order < passed)
+    .map((step) => step.stepKey));
+}
+
+export const stepResolved = (game: Pick<StorytellerLobbyRecord, "nightProgress" | "day">, step: NightStep, late?: ReadonlySet<string>): boolean => {
+  if (late?.has(step.stepKey)) return true;
   const status = game.nightProgress?.[`${game.day}:${step.stepKey}`]?.status;
   return status === "done" || status === "skipped";
 };
@@ -98,10 +151,11 @@ export type UnfinishedNightWork = {
 };
 
 /** What Dawn Review reports: every unfinished item of the derived Night work. */
-export function unfinishedNightWork(game: StorytellerLobbyRecord, work: NightWork): UnfinishedNightWork {
-  const open = work.steps.filter((step) => !stepResolved(game, step));
+export function unfinishedNightWork(game: StorytellerLobbyRecord, work: NightWork, idle?: ReadonlyMap<string, string>): UnfinishedNightWork {
+  const open = work.steps.filter((step) => !stepResolved(game, step, work.late) && !idle?.has(step.stepKey));
   const isCustom = (step: NightStep) => step.stepKey.startsWith(CUSTOM_STEP_PREFIX);
-  const rows = open.filter((step) => !isCustom(step));
+  const triggerKeys = new Set(work.triggered.map(item => item.stepKey));
+  const rows = open.filter((step) => !isCustom(step) && !triggerKeys.has(step.stepKey));
   const customSteps = open.filter(isCustom);
   const triggers = work.triggered.filter((item) => !item.needsCheck);
   const triggerChecks = work.triggered.filter((item) => item.needsCheck);

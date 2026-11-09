@@ -1,0 +1,8 @@
+.tablet-trial { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+.tablet-trial > .game { height: auto; flex: 1; min-height: 0; }
+.tablet-trial-banner { min-height: 44px; padding: 2px 16px; display: flex; gap: 12px; align-items: center; justify-content: space-between; color: #e3d4b8; background: #251d17; border-bottom: 1px solid #6d5534; font-size: 13px; flex: none; }
+.tablet-trial-actions { display: flex; gap: 8px; }
+.tablet-trial-actions button { min-height: 44px; min-width: 70px; padding: 6px 12px; background: #392c20; color: #fff1d1; border: 1px solid #80643d; border-radius: 6px; font: inherit; cursor: pointer; }
+.tablet-trial-actions button:focus-visible { outline: 2px solid #f8d585; outline-offset: 2px; }
+.tablet-trial-error { padding: 8px 16px; background: #571e28; color: white; }
+@media (max-width: 720px) { .tablet-trial-hint { display: none; } .tablet-trial-banner { padding-inline: 8px; } }

@@ -25,7 +25,7 @@ export const COVERAGE_NOTES: Readonly<Record<RoleId, string>> = {
   fortuneteller: "Red Herring is authoritative Effect state; a Fortune Teller first created mid-game without one stays Manual (matrix 7 / 19).",
   cultleader: "GUIDED-PARTIAL: nightly alignment only; the Day cult vote / win stays Manual (matrix 11).",
   pithag: "GUIDED-PARTIAL: ordinary transformation, and (Phase 10G) Demon creation with the game-scoped arbitrary-deaths Rule Fact; the optional Traveller rule and concealed identities stay Manual (matrix 12).",
-  imp: "Includes the narrow Scarlet Woman star-pass priority (matrix 6 / 18.1).",
-  scarletwoman: "Only the Imp star-pass priority dependency is verified (matrix 18.1); full coverage is Phase 11A.",
+  imp: "B4: ordinary kills and star-pass, mandatory Scarlet Woman priority and no second attack that Night. Uncertain registration and discretionary death remain manual.",
+  scarletwoman: "B4: supported Imp death and star-pass succession, Slayer and execution, using pre-death functioning and five living non-Travellers. No invokable descriptor; exceptional succession remains manual.",
   harlot: "Information Action 'harlot-other-night' is Silverwick-authored with explicit owner authorization (no pinned action existed).",
 };

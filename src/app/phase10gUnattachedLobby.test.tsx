@@ -9,6 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { Json, RoomBackend } from "@/firebase/backend";
+import { useV6Ui } from "@/features/grimoire-v6/v6Store";
 
 const connect = vi.fn<() => Promise<{ backend: RoomBackend; uid: string }>>();
 vi.mock("@/firebase/session", async (importOriginal) => {
@@ -23,13 +24,14 @@ vi.mock("@/firebase/config", async (importOriginal) => {
 import { App } from "./App";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
+import { goLive } from "@/firebase/goLive";
+import { endGameWithIntent } from "@/firebase/terminal";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { MemoryRoomBackend } from "@/firebase/memoryBackend";
 import { formatCode } from "@/firebase/lobby";
 import { buildRegistry } from "@/data/roleRegistry";
 import { setupGame, setupScript } from "@/test/setupFixtures";
 import type { StorytellerLobbyRecord } from "@/stores/types";
-import { finishGame } from "@/test/finishGame";
 
 const state = () => store.getState();
 const registry = buildRegistry(setupScript);
@@ -75,15 +77,25 @@ function liveGame(over: Partial<StorytellerLobbyRecord> = {}): StorytellerLobbyR
   for (const p of Object.values(g.players)) p.actualAlignment = registry.alignmentOf(p.actualRole);
   return g;
 }
+/** Ends the game through the real terminal command (the unified Grimoire's End dialog belongs to another slice). */
+async function finishGame() {
+  await act(async () => { expect((await endGameWithIntent({ kind: "noResult" })).ok).toBe(true); });
+}
+/** The live Grimoire offers no Home (the design has none), so tests step out through the shell's own navigation. */
+const goHome = () => act(() => state().setView("home"));
 const warnings = () => document.querySelectorAll("[data-unattached-lobby]");
 const warningFor = (code: string) => document.querySelector(`[data-unattached-lobby="${code}"]`) as HTMLElement | null;
 const settle = async () => { await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 
+let offAsk: () => void = () => {};
+afterEach(() => { offAsk(); });
 beforeEach(() => {
   localStorage.clear();
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
   vi.stubGlobal("matchMedia", vi.fn((query: string) => ({ media: query, matches: false, addEventListener() {}, removeEventListener() {} })));
   vi.spyOn(window, "confirm").mockReturnValue(true);
+  // "Start a new game?" is the Grimoire's own dialog now; these flows always confirm it.
+  offAsk = useV6Ui.subscribe((state) => { if (state.ask) { const ask = state.ask; useV6Ui.getState().set({ ask: null }); ask.run(""); } });
   vi.spyOn(console, "error").mockImplementation(() => {});
   connect.mockReset();
   // The App shell auto-connects on mount; each test sets its own Go Live backend.
@@ -99,9 +111,22 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 async function goLiveHeldBeforeAdoption(b: CleanupBackend): Promise<{ release: () => void; code: () => string }> {
   const release = b.holdSessionRead();
   connect.mockResolvedValue({ backend: b, uid: UID });
-  fireEvent.click(screen.getByRole("button", { name: "Go live" }));
+  act(() => { void goLive(); }); // the New Game flow's "Invite to phones" runs this same sequence
   await waitFor(() => expect(b.lobbyCodes()).toHaveLength(1));
   return { release, code: () => b.lobbyCodes()[0]! };
+}
+
+/** Home -> New Game -> script -> Fabled & Loric -> Prepare the town (In person) -> five names -> Begin the night. */
+async function startOfflineGame() {
+  fireEvent.click(screen.getByRole("button", { name: /Trouble Brewing/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Fabled & Loric ›/ }));
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: /Skip to the town/ })); });
+  fireEvent.click(screen.getByRole("button", { name: "In person" }));
+  for (let i = 1; i <= 5; i++) {
+    fireEvent.change(screen.getByPlaceholderText(/Name for seat|Add another player/), { target: { value: `Seat ${i}` } });
+    fireEvent.click(screen.getByRole("button", { name: "Name seat" }));
+  }
+  await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Begin the night" })); });
 }
 
 describe("ASTRA-10G-R1-001-A: Finish game -> Home, then the superseded cleanup fails", () => {
@@ -112,9 +137,9 @@ describe("ASTRA-10G-R1-001-A: Finish game -> Home, then the superseded cleanup f
     const code = held.code();
     await finishGame();
     expect(state().game!.phase).toBe("ended");
-    fireEvent.click(screen.getByRole("button", { name: "← Home" }));
-    expect(screen.getByRole("button", { name: "Review finished game" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Finish game" })).toBeNull(); // GameScreen is gone
+    goHome();
+    expect(screen.getByText("Review finished game")).toBeInTheDocument();
+    expect(screen.queryByTitle("End game")).toBeNull(); // the Grimoire is gone
     b.failLease = true;
     await act(async () => { held.release(); });
     await waitFor(() => expect(warningFor(code)).not.toBeNull());
@@ -135,23 +160,25 @@ describe("ASTRA-10G-R1-001-A: Finish game -> Home, then the superseded cleanup f
     expect(useSessionRuntime.getState().unattachedCleanupFailures).toEqual([{ code, message: expect.stringContaining(formatCode(code)) }]);
 
     // It survives further navigation (back to the review, Home again).
-    fireEvent.click(screen.getByRole("button", { name: "Review finished game" }));
-    expect(screen.getByRole("status")).toHaveTextContent("Finished game");
+    fireEvent.click(screen.getByText("Review finished game"));
+    expect(state().view).toBe("game");
     expect(warningFor(code)).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "← Home" }));
+    goHome();
     expect(warningFor(code)).not.toBeNull();
   });
 });
 
-describe("ASTRA-10G-R1-001-B: Home -> New Game -> Create setup, then the old cleanup fails", () => {
+describe("ASTRA-10G-R1-001-B: Home -> New Game -> Seat the town, then the old cleanup fails", () => {
   it("the old lobby never attaches to Game B, no old writer starts, and the new flow shows the old room code", async () => {
     const b = new CleanupBackend();
     render(<App />);
     const held = await goLiveHeldBeforeAdoption(b);
     const oldCode = held.code();
-    fireEvent.click(screen.getByRole("button", { name: "← Home" }));
-    fireEvent.click(screen.getByRole("button", { name: "New Game" }));
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^Create setup/ })); });
+    // Simulate the navigation/lifecycle boundary while the asynchronous
+    // connection is pending; the live grimoire no longer offers Home.
+    act(() => state().setView("home"));
+    fireEvent.click(screen.getByRole("button", { name: /New game/ }));
+    await startOfflineGame();
     const gameB = state().game!;
     expect(gameB.phase).toBe("setup");
     b.failLease = true;
@@ -166,16 +193,16 @@ describe("ASTRA-10G-R1-001-B: Home -> New Game -> Create setup, then the old cle
     expect(warningFor(oldCode)).toHaveTextContent(formatCode(oldCode));
 
     // Still visible across the new flow: Home, then back to Game B's setup.
-    fireEvent.click(screen.getByRole("button", { name: "← Home" }));
+    act(() => state().setView("home"));
     expect(warningFor(oldCode)).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Continue current game/ }));
+    fireEvent.click(screen.getByText("Resume game"));
     expect(warningFor(oldCode)).not.toBeNull();
 
     // A later valid Go Live for Game B starts a real session; the unresolved
     // warning for the OLD lobby is not erased by it.
     b.failLease = false;
     connect.mockResolvedValue({ backend: b, uid: UID });
-    fireEvent.click(screen.getByRole("button", { name: "Go live" }));
+    act(() => { void goLive(); });
     await waitFor(() => expect(useSessionRuntime.getState().status).toBe("live"));
     expect(state().lobby!.code).not.toBe(oldCode);
     expect(b.writerEverActive(state().lobby!.code)).toBe(true); // the helper detects a real writer
@@ -191,7 +218,7 @@ describe("ASTRA-10G-R1-001: controls", () => {
     const held = await goLiveHeldBeforeAdoption(b);
     const code = held.code();
     await finishGame();
-    fireEvent.click(screen.getByRole("button", { name: "← Home" }));
+    goHome();
     await act(async () => { held.release(); });
     await waitFor(async () => expect(await b.get(`lobbies/${code}/session`)).toMatchObject({ state: "ended" }));
     await settle();
@@ -216,10 +243,10 @@ describe("ASTRA-10G-R1-001: controls", () => {
     expect(useSessionRuntime.getState().status).toBe(before.status);
   });
 
-  it("an ordinary current-game Go Live error stays on the game screen and creates no unattached-lobby warning", async () => {
+  it("an ordinary current-game Go Live error creates no unattached-lobby warning", async () => {
     connect.mockRejectedValue(new Error("network down"));
     render(<App />);
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Go live" })); });
+    await act(async () => { expect((await goLive()).kind).toBe("failed"); });
     await settle();
     expect(warnings()).toHaveLength(0);
     expect(useSessionRuntime.getState().unattachedCleanupFailures).toEqual([]);

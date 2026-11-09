@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { MemoryRoomBackend } from "./memoryBackend";
-import { subscribeToPublicLobby } from "./publicSync";
+import { subscribeToPublicLobby, usePublicLobby } from "./publicSync";
+import { sessionPath } from "./lifecycle";
 import { publicPath } from "./paths";
 import { endLobby } from "./lobby";
 import type { PublicLobbyRecord } from "@/stores/types";
@@ -118,5 +120,66 @@ describe("subscribeToPublicLobby — path safety + behavior", () => {
     expect(await backend.get("lobbies/ABCD/player/p2")).toBeUndefined();
     // public/status was written, not deleted.
     expect(await backend.get("lobbies/ABCD/public/status")).toBe("ended");
+  });
+});
+
+// Package 4 (PO-approved public winner delivery): after the end the display
+// keeps the final public record, with the declared winner once the terminal
+// commit lands, and falls back to the neutral scene when it cannot read it.
+describe("usePublicLobby — the final record after the end", () => {
+  const code = "ABCD";
+  const active = { version: 2, id: "s1", state: "active" };
+  const ended = { version: 2, id: "s1", state: "ended" };
+  async function liveBackend() {
+    const backend = new MemoryRoomBackend();
+    await backend.set(sessionPath(code), active as never);
+    await backend.set(publicPath(code), makePublic({ code, phase: "day", day: 3 }) as never);
+    return backend;
+  }
+
+  it("keeps the seats after the public signal, then shows the winner the terminal commit adds", async () => {
+    const backend = await liveBackend();
+    const { result } = renderHook(() => usePublicLobby(backend, code));
+    await waitFor(() => expect(result.current.publicLobby?.phase).toBe("day"));
+    await act(async () => { await backend.set(`${publicPath(code)}/status`, "ended"); });
+    await waitFor(() => expect(result.current.ended).toBe(true));
+    await waitFor(() => expect(result.current.publicLobby?.status).toBe("ended"));
+    expect(result.current.publicLobby?.winner).toBeUndefined();
+    await act(async () => {
+      await backend.update({ [`${publicPath(code)}/winner`]: "evil", [sessionPath(code)]: ended } as never);
+    });
+    await waitFor(() => expect(result.current.publicLobby?.winner).toBe("evil"));
+    expect(result.current.publicLobby?.seatOrder).toEqual(["p1"]);
+  });
+
+  it("a display opened after the end reads the final record once", async () => {
+    const backend = await liveBackend();
+    await backend.update({ [`${publicPath(code)}/status`]: "ended", [`${publicPath(code)}/winner`]: "good", [sessionPath(code)]: ended } as never);
+    const { result } = renderHook(() => usePublicLobby(backend, code));
+    await waitFor(() => expect(result.current.publicLobby?.winner).toBe("good"));
+    expect(result.current.ended).toBe(true);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("a Night-declared ending still withholds every Life field from the final record", async () => {
+    const backend = new MemoryRoomBackend();
+    await backend.set(sessionPath(code), ended as never);
+    await backend.set(publicPath(code), makePublic({ code, phase: "night", day: 2, status: "ended", winner: "good" }) as never);
+    const { result } = renderHook(() => usePublicLobby(backend, code));
+    await waitFor(() => expect(result.current.publicLobby?.winner).toBe("good"));
+    const seat = result.current.publicLobby!.players.p1!;
+    expect("alive" in seat || "ghostVote" in seat).toBe(false);
+  });
+
+  it("a refused final read (older Rules) leaves the neutral ended scene, never an invented winner", async () => {
+    const backend = await liveBackend();
+    await backend.update({ [`${publicPath(code)}/status`]: "ended", [sessionPath(code)]: ended } as never);
+    const get = backend.get.bind(backend);
+    backend.get = async (target: string) => { if (target === publicPath(code)) throw new Error("PERMISSION_DENIED"); return get(target); };
+    const { result } = renderHook(() => usePublicLobby(backend, code));
+    await waitFor(() => expect(result.current.ended).toBe(true));
+    await act(async () => {});
+    expect(result.current.publicLobby).toBeNull();
+    expect(result.current.error).toBeNull();
   });
 });

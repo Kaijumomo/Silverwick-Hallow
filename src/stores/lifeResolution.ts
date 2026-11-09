@@ -1,5 +1,7 @@
 import { cloneOwned, durableProvenance, historyId, type MutationContext } from "./history";
 import { participantRefOf } from "./participants";
+import { applySourceAbilityLossPlan, planSourceAbilityLoss, type SourceAbilityLossPlan } from "./sourceAbilityLifecycle";
+import type { RulesQueryEnvironment } from "./rulesQuery";
 import { currentLiveMoment, previousLiveMoment, sameMoment } from "./lifeEvents";
 import type {
   CurrentParticipantRef,
@@ -171,6 +173,7 @@ export type LifeRefusal =
 
 /** What an accepted transaction changes -- nothing is applied yet. */
 export type LifePlan = {
+  sourceAbilityLoss?: SourceAbilityLossPlan;
   /** The complete next life fields of every player whose fields change. */
   playerPatches: Record<PlayerId, LifeFieldPatch>;
   lifeEventWindow: StorytellerLobbyRecord["lifeEventWindow"];
@@ -272,12 +275,12 @@ export function applyLifePlan(game: StorytellerLobbyRecord, plan: LifePlan): Sto
   for (const [playerId, patch] of Object.entries(plan.playerPatches)) {
     players[playerId] = applyLifeFieldPatch(players[playerId]!, patch);
   }
-  return {
+  return applySourceAbilityLossPlan({
     ...game,
     players,
     lifeEventWindow: plan.lifeEventWindow,
     history: [...game.history, ...plan.history],
-  };
+  }, plan.sourceAbilityLoss, game);
 }
 
 // ---------------------------------------------------------------------------
@@ -321,6 +324,7 @@ export function planLifeTransaction(
   game: StorytellerLobbyRecord,
   transaction: LifeTransaction,
   ids: LifeIdSource = DEFAULT_IDS,
+  environment?: RulesQueryEnvironment,
 ): LifePlanResult {
   // --- Guards --------------------------------------------------------------
   const current = currentLiveMoment(game);
@@ -341,6 +345,7 @@ export function planLifeTransaction(
 
   // --- Working state -------------------------------------------------------
   const working = new Map<PlayerId, LifeFields>();
+  const lostAbilities = new Set<ParticipantId>();
   const fieldsOf = (p: STPlayerRecord) => working.get(p.id) ?? lifeFieldsOf(p);
   let events = [...game.lifeEventWindow.events];
   const touched = new Map<ParticipantId, Touched>();
@@ -359,6 +364,10 @@ export function planLifeTransaction(
     return entry;
   };
   const setFields = (player: STPlayerRecord, participant: CurrentParticipantRef, next: LifeFields) => {
+    // Remember intermediate loss even when death + resurrection restores the
+    // starting life fields. Resurrection gains a new ability, never the old
+    // persistent effect; this set is plan-local, not stored game state.
+    if (fieldsOf(player).alive !== next.alive) lostAbilities.add(participant.participantId);
     working.set(player.id, next);
     touch(participant, player).after = next;
   };
@@ -615,11 +624,14 @@ export function planLifeTransaction(
   }
   // True no-op: nothing about Current State, the window or History changes.
   if (history.length === 0) return { ok: true, changed: false };
+  const loss = planSourceAbilityLoss(game, lostAbilities, environment, ids.historyId, resolutionId);
+  if (!loss.ok) return refuse(loss.message);
   return {
     ok: true,
     changed: true,
     plan: {
       playerPatches,
+      sourceAbilityLoss: loss.plan,
       // The window object is replaced only when an event was added or
       // removed; a vote-token change or status correction leaves it as is.
       lifeEventWindow: [...touched.values()].some((entry) => entry.operations.length > 0)

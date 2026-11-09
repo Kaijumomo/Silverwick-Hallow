@@ -14,6 +14,7 @@ import {
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import { attemptScope, choiceId } from "./alhadikhia";
 import { protectionJudgmentId } from "./shared";
+import { evaluateFixture } from "@/test/evaluatorFixture";
 
 type Fx = StorytellerLobbyRecord["players"][string]["effects"][number];
 const fx = (id: string, type: string, extra: Partial<Fx> = {}): Fx =>
@@ -85,7 +86,7 @@ describe("SOL-10F-C1 -- every answer is an inert DEEP snapshot; validation and c
     const g = uncertainImp();
     let gets = 0;
     const answer = new Proxy({ kind: "boolean", value: false }, { get: (target, key) => (key === "value" ? ++gets > 1 : Reflect.get(target, key)) });
-    expect(attack(g, { "actor:functioning": answer })).toEqual({ ok: true, changed: false }); // impaired Imp: nothing
+    expect(attack(g, { "actor:functioning": answer })).toMatchObject({ ok: false, code: "unsupported" }); // uncertainty stays wholly Manual
     expect(gets).toBe(0);
   });
 
@@ -156,7 +157,7 @@ describe("SOL-10F-C1 -- every answer is an inert DEEP snapshot; validation and c
       chosen.participants[0] = bind(g, "p2");
       return undefined;
     } });
-    expect(attack(g, { "actor:functioning": judged }, { target: chosen }, env)).toEqual({ ok: true, changed: false }); // canonical false: impaired
+    expect(attack(g, { "actor:functioning": judged }, { target: chosen }, env)).toMatchObject({ ok: false, code: "unsupported" });
     expect(hooked).toBe(true);
 
     // Functioning known: the mutated target is never the consumed one either.
@@ -180,13 +181,13 @@ describe("SOL-10F-C1 -- every answer is an inert DEEP snapshot; validation and c
   });
 
   it("own valid ordinary objects, null-prototype maps and null-prototype nested values still work; inherited answers stay absent", () => {
-    const g = uncertainImp();
+    const g = proofGame(["imp", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"]);
     expect(planned(attack(g, { "actor:functioning": { kind: "boolean", value: true } })).players.p1!.alive).toBe(false);
     const nullProtoMap = Object.assign(Object.create(null), { "actor:functioning": Object.assign(Object.create(null), { kind: "boolean", value: true }) });
     const nullProtoInputs = Object.assign(Object.create(null), { target: Object.assign(Object.create(null), {
       kind: "participant", participants: [Object.assign(Object.create(null), bind(g, "p1"))] }) });
     expect(planned(attack(g, nullProtoMap, nullProtoInputs)).players.p1!.alive).toBe(false);
-    expect(requirementIds(attack(g, Object.create({ "actor:functioning": { kind: "boolean", value: true } })))).toEqual(["actor:functioning"]);
+    expect(attack(uncertainImp(), Object.create({ "actor:functioning": { kind: "boolean", value: true } }))).toMatchObject({ ok: false, code: "unsupported" });
     // Extra (non-payload) fields on a binding are not part of the canonical copy.
     expect(planned(attack(g, { "actor:functioning": Y }, { target: { kind: "participant", participants: [{ ...bind(g, "p1"), note: "x" }] } })).players.p1!.alive).toBe(false);
   });
@@ -280,7 +281,8 @@ describe("SOL-10F-C1 -- every answer is an inert DEEP snapshot; validation and c
 // SOL-10F-C2 -- unknown protection judgments carry the dependency stamp
 // ---------------------------------------------------------------------------
 
-describe("SOL-10F-C2 -- an UNKNOWN protection judgment binds the authoritative protection-dependency stamp", () => {
+describe("SOL-10F-C2 -- low-level evaluator protection-dependency stamps (uncertain gameplay remains Manual)", () => {
+  const plan = evaluateFixture;
   beforeEach(() => store.setState({ game: null, undoStack: [], localSeq: 0 }));
   const ROLES = ["imp", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"]; // p1 Chef, p2 Monk
   /** Astra's state: the Chef holds a generic Protected AND the Monk's Safe from
@@ -312,10 +314,14 @@ describe("SOL-10F-C2 -- an UNKNOWN protection judgment binds the authoritative p
     expect(idParts(fresh)[1]).toBe(idParts(before)[1]);
     // The store refuses the stale judgment too: nothing committed.
     const [game, undo, seq] = [store.getState().game, store.getState().undoStack.length, store.getState().localSeq];
-    expect(store.getState().resolveAbility(request(g, "p0", "imp", { target: pick(g, "p1") }, { judgments: { [before]: N } }))).toMatchObject({ ok: false, code: "needsInput" });
+    expect(store.getState().resolveAbility(request(g, "p0", "imp", { target: pick(g, "p1") }, { judgments: { [before]: N } }))).toMatchObject({ ok: false, code: "unsupported" });
     expect([store.getState().game, store.getState().undoStack.length, store.getState().localSeq]).toEqual([game, undo, seq]);
-    // A NEW Storyteller judgment settles it, in one commit.
-    expect(store.getState().resolveAbility(request(g, "p0", "imp", { target: pick(g, "p1") }, { judgments: { [fresh]: N } }))).toMatchObject({ ok: true, changed: true });
+    // Even a fresh judgment cannot authorize automation. The Storyteller's
+    // explicit manual outcome still uses the existing atomic domain seam.
+    expect(store.getState().resolveAbility(request(g, "p0", "imp", { target: pick(g, "p1") }, { judgments: { [fresh]: N } }))).toMatchObject({ ok: false, code: "unsupported" });
+    const adjudicated = kill(g, now, { [fresh]: N });
+    if (!adjudicated.ok || !adjudicated.changed) throw new Error("Expected evaluator outcome");
+    expect(store.getState().resolveAbility({ mode: "manual", reason: "Storyteller adjudication", outcome: adjudicated.plan.outcome })).toMatchObject({ ok: true, changed: true });
     expect(store.getState().game!.players.p1!.alive).toBe(false);
     expect(store.getState().undoStack).toHaveLength(undo + 1);
   });
@@ -349,12 +355,15 @@ describe("SOL-10F-C2 -- an UNKNOWN protection judgment binds the authoritative p
       expect([scopeAfter, whoAfter]).toEqual([scopeBefore, whoBefore]); // the attempt prefix alone could not tell
       expect(stampAfter).not.toBe(stampBefore);
       const undo = store.getState().undoStack.length;
-      expect(store.getState().resolveAbility(alRequest(g, [false, true, true], { [initial]: N }))).toMatchObject({ ok: false, code: "needsInput" });
+      expect(store.getState().resolveAbility(alRequest(g, [false, true, true], { [initial]: N }))).toMatchObject({ ok: false, code: "unsupported" });
       expect(store.getState().undoStack).toHaveLength(undo);
       // Judged protected: the Chef counts as alive -> all three alive -> the FINAL attempts (a separate judgment).
       const final = onlyAsked(plan(now, alRequest(g, [false, true, true], { [initial]: N, [fresh]: Y })));
       expect(JSON.parse(idParts(final)[0]!)[0]).toBe("final");
-      expect(store.getState().resolveAbility(alRequest(g, [false, true, true], { [fresh]: N }))).toMatchObject({ ok: true, changed: true });
+      expect(store.getState().resolveAbility(alRequest(g, [false, true, true], { [fresh]: N }))).toMatchObject({ ok: false, code: "unsupported" });
+      const adjudicated = plan(now, alRequest(g, [false, true, true], { [fresh]: N }));
+      if (!adjudicated.ok || !adjudicated.changed) throw new Error("Expected evaluator outcome");
+      expect(store.getState().resolveAbility({ mode: "manual", reason: "Storyteller adjudication", outcome: adjudicated.plan.outcome })).toMatchObject({ ok: true, changed: true });
       expect(store.getState().undoStack).toHaveLength(undo + 1);
       expect(store.getState().game!.players.p1!.alive).toBe(false);
     });
@@ -507,9 +516,8 @@ describe("SOL-10F-C2 -- an UNKNOWN protection judgment binds the authoritative p
     expect(planned(kill(dead, dead, Object.fromEntries([protectionId(dead, "demon", "p1")].map((id) => [id, Y])))).players.p1!.alive).toBe(false);
   });
 
-  it("Harlot's order probe compares protection itself: a judged unknown protection still resolves (no spurious Manual)", () => {
-    // Covered in depth by harlot.test.ts; here: the probe reads no judgment, so a
-    // crafted judgment under the hypothetical's id cannot steer it either.
+  it("Harlot's hypothetical actor death has a distinct protection stamp", () => {
+    // This checks query identity only; harlot.test.ts covers authoritative refusal.
     const g = patchPlayer(proofGame(["harlot", "chef", "imp", "monk", "empath", "saint", "poisoner"]), "p1", { effects: [fx("gp", "protected")] });
     const hypothetical = protectionId(g, "any", "p1", undefined, proofQuery(g).assumingAlive(bind(g, "p0"), false));
     expect(hypothetical).not.toBe(protectionId(g, "any", "p1"));
@@ -539,7 +547,7 @@ describe("SOL-10F-C1 x C2 -- both defenses hold independently", () => {
   it("an old protection judgment whose nested Boolean is getter-backed: refused by C1 before AND after the source change; plain data is refused by C2 after it", () => {
     const g = astra();
     openInStore(g);
-    const old = onlyAsked(kill(g, g, {}));
+    const old = protectionId(g, "demon", "p1");
     let reads = 0;
     const getterBacked = () => {
       const answer: Record<string, unknown> = { kind: "boolean" };
@@ -553,7 +561,8 @@ describe("SOL-10F-C1 x C2 -- both defenses hold independently", () => {
     // Both: still invalid (C1 refuses before C2 is even consulted).
     expect(kill(g, now, { [old]: getterBacked() })).toMatchObject({ ok: false, code: "invalid" });
     // C2 alone (plain data): the old id no longer matches -> a new judgment is asked.
-    const fresh = onlyAsked(kill(g, now, { [old]: N }));
+    expect(kill(g, now, { [old]: N })).toMatchObject({ ok: false, code: "unsupported" });
+    const fresh = protectionId(now, "demon", "p1");
     expect(fresh).not.toBe(old);
     expect(reads).toBe(0);
   });
@@ -561,14 +570,15 @@ describe("SOL-10F-C1 x C2 -- both defenses hold independently", () => {
   it("a caller mutating the NEW judgment's nested value mid-planning cannot alter the canonical answer", () => {
     const g = astra();
     openInStore(g);
-    const old = onlyAsked(kill(g, g, {}));
+    const old = protectionId(g, "demon", "p1");
     expect(store.getState().resurrect("p2")).toMatchObject({ ok: true, changed: true });
     const now = store.getState().game!;
-    const fresh = onlyAsked(kill(g, now, { [old]: N }));
+    expect(kill(g, now, { [old]: N })).toMatchObject({ ok: false, code: "unsupported" });
+    const fresh = protectionId(now, "demon", "p1");
     const answer = { kind: "boolean" as const, value: true }; // judged protected
     const env = proofEnv();
     Object.defineProperty(env, "modifiers", { enumerable: true, get: () => { (answer as { value: boolean }).value = false; return undefined; } });
-    expect(kill(g, now, { [fresh]: answer }, env)).toEqual({ ok: true, changed: false }); // canonical true: the Chef survives
+    expect(kill(g, now, { [fresh]: answer }, env)).toMatchObject({ ok: false, code: "unsupported" }); // no judgment authorizes uncertain automation
     expect(answer.value).toBe(false); // the caller's object did change -- the consumed snapshot did not
   });
 });

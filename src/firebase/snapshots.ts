@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { PlayerResultRecordSchema, PlayerSelfEnvelopeSchema, PlayerSelfRecordSchema, PublicLobbyRecordSchema } from "@/stores/schemas";
-import type { PlayerSelfEnvelope, PublicLobbyRecord } from "@/stores/types";
+import { PlayerInfoViewSchema, PlayerResultRecordSchema, PlayerSelfEnvelopeSchema, PlayerSelfRecordSchema, PublicLobbyRecordSchema } from "@/stores/schemas";
+import type { PlayerInfoView, PlayerSelfEnvelope, PublicLobbyRecord } from "@/stores/types";
 import { publicLifeWithheld } from "@/stores/lifeState";
 import type { RoomBackend, Unsubscribe } from "./backend";
 
@@ -121,7 +121,26 @@ export function decodeSelfSnapshot(raw: unknown): Snapshot<PlayerSelfEnvelope> {
   const partial = selfShape.partial().safeParse(raw);
   if (!partial.success) return invalid(partial.error);
   if (partial.data.shownRole === undefined) return WAITING;
-  return parse(selfShape, raw);
+  const decoded = parse(selfShape, raw);
+  if (decoded.status !== "ready") return decoded;
+  // Package 3 (C6): the history is decoded per entry. A bad entry is dropped
+  // (the player is told some earlier information could not be shown) and never
+  // invalidates the identity or the other entries. The key is read from the
+  // raw node because the envelope schema strips unknown keys.
+  const rawHistory = (raw as Record<string, unknown>).infoHistory;
+  if (rawHistory === undefined || rawHistory === null) return decoded;
+  const entries: unknown[] = Array.isArray(rawHistory) ? rawHistory
+    : typeof rawHistory === "object" ? Object.values(rawHistory as Record<string, unknown>) : [null];
+  const good: PlayerInfoView[] = [];
+  const seen = new Set<string>();
+  let dropped = entries.length > 200;
+  for (const entry of entries.slice(0, 200)) {
+    const view = PlayerInfoViewSchema.safeParse(entry);
+    if (!view.success || seen.has(view.data.id)) { dropped = true; continue; }
+    seen.add(view.data.id);
+    good.push(view.data);
+  }
+  return { status: "ready", data: { ...decoded.data, ...(good.length ? { infoHistory: good } : {}), ...(dropped ? { infoHistoryPartial: true as const } : {}) } };
 }
 /**
  * Phase 10H: this player's own results/{uid} -- the immutable player-safe

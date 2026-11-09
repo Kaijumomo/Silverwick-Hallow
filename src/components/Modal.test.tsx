@@ -58,7 +58,7 @@ describe("Modal accessibility", () => {
     outside.setAttribute("inert", "existing");
     document.body.append(outside);
     const trigger = openExample();
-    expect(trigger).toHaveAttribute("inert");
+    expect(trigger.closest("[inert]")).not.toBeNull();
     expect(document.body.style.overflow).toBe("hidden");
     trigger.focus();
     expect(screen.getByRole("button", { name: "Close" })).toHaveFocus();
@@ -90,7 +90,7 @@ describe("Modal accessibility", () => {
     fireEvent.keyDown(document.activeElement!, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "Inner" })).toBeNull();
     expect(innerTrigger).toHaveFocus();
-    expect(outerTrigger).toHaveAttribute("inert");
+    expect(outerTrigger.closest("[inert]")).not.toBeNull();
     expect(document.body.style.overflow).toBe("hidden");
     fireEvent.keyDown(innerTrigger, { key: "Escape" });
     expect(outerTrigger).toHaveFocus();
@@ -136,10 +136,42 @@ describe("Modal accessibility", () => {
 
   it("keeps backdrop dismissal available", () => {
     const close = vi.fn();
-    const view = render(<Modal title="Assign player to seat 1" onClose={close}><button>Assign</button></Modal>);
-    const backdrop = view.container.querySelector(".dialog-backdrop")!;
+    render(<Modal title="Assign player to seat 1" onClose={close}><button>Assign</button></Modal>);
+    const backdrop = document.body.querySelector(".dialog-backdrop")!;
     expect(backdrop.closest("[inert]")).toBeNull();
     fireEvent.click(backdrop);
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("escapes filtered or transformed side panels so the chooser is viewport anchored", () => {
+    const close = vi.fn();
+    const view = render(<aside style={{ backdropFilter: "blur(14px)", transform: "translateX(0)", overflow: "hidden" }}>
+      <Modal title="Demon bluff 1 of 3" className="role-chooser" onClose={close}><button>Choose Washerwoman</button></Modal>
+    </aside>);
+    const dialog = screen.getByRole("dialog", { name: "Demon bluff 1 of 3" });
+    expect(dialog.parentElement?.parentElement).toBe(document.body);
+    expect(view.container.querySelector(".dialog-layer")).toBeNull();
+    expect(dialog.closest("[inert]")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("keeps an initially nested portal above its parent and restores parent focus on dismissal", () => {
+    function InitiallyNested() {
+      const [inner, setInner] = useState(true);
+      return <Modal title="Outer" onClose={() => {}}><button>Outer action</button>
+        {inner && <Modal title="Inner" onClose={() => setInner(false)}><button>Inner action</button></Modal>}
+      </Modal>;
+    }
+    render(<InitiallyNested />);
+    const inner = screen.getByRole("dialog", { name: "Inner" });
+    const outer = screen.getByRole("dialog", { name: "Outer", hidden: true });
+    expect(inner).toContainElement(document.activeElement as HTMLElement);
+    expect(Number(inner.parentElement!.style.zIndex)).toBeGreaterThan(Number(outer.parentElement!.style.zIndex));
+    expect(outer.closest("[inert]")).not.toBeNull();
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Inner" })).toBeNull();
+    expect(outer.closest("[inert]")).toBeNull();
+    expect(outer).toContainElement(document.activeElement as HTMLElement);
   });
 });

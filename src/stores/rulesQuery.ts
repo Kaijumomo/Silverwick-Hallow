@@ -1,11 +1,13 @@
 import { isCanonicalRole } from "@/data/canonical";
+import { isNeighbourPoisoner, passiveProtection, passiveInformationModifiers, passiveRegistrationOptions } from "@/abilities/characters/passiveRules";
+import { isInnkeeperSelfEffect, isPoisonerSelfEffect } from "@/abilities/characters/poisonerRules";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { activeModifiers, gateEvaluation, type HookScope, type ModifierDefinition, type ModifierGate } from "@/abilities/modifiers";
 import { resolveAbilitySemantics, type AbilitySemanticsRegistry } from "@/abilities/semantics";
 import { currentLiveMoment, lifeEventsAt, type LifeEventQueryResult } from "./lifeEvents";
 import { gameRuleFactActive, gameRuleFactDefinition } from "./gameRuleFacts";
 import type { ParticipantBinding } from "./abilityResolution";
-import type { Alignment, EffectRecord, LifeEvent, LiveGameMoment, RoleDef, RoleId, STPlayerRecord, Script, StorytellerLobbyRecord } from "./types";
+import type { Alignment, EffectRecord, LifeEvent, LiveGameMoment, RoleDef, RoleId, RoleType, STPlayerRecord, Script, StorytellerLobbyRecord } from "./types";
 
 /**
  * Phase 10F: the Rules Query layer (PHASE10F Section 3.2) -- pure, DERIVED
@@ -51,7 +53,7 @@ const unknown = <T,>(reason: string): QueryAnswer<T> => ({ known: false, reason 
  *    any source functioning; only the evaluator that owns the fact decides
  *    when it matters. It is never a Reminder.
  */
-export type EffectSemantics = "impairment" | "noAbility" | "demonProtection" | "deathImmunity" | "genericProtection" | "judgment" | "storytellerFact";
+export type EffectSemantics = "impairment" | "noAbility" | "demonProtection" | "deathImmunity" | "genericProtection" | "judgment" | "storytellerFact" | "curse" | "retainedAbility";
 export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>> = {
   drunk: "impairment",
   poisoned: "impairment",
@@ -62,6 +64,20 @@ export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>
   soberHealthy: "judgment",
   registersFalsely: "judgment",
   fortuneTellerRedHerring: "storytellerFact",
+  /** The Witch's curse: applies while its source functions; the Day nomination prompt reads it. */
+  witchCurse: "curse",
+  /** The Moonchild's public Day choice (a good player): the dead Moonchild has no functioning source, so it applies as recorded
+   * and the Night wake reads it through factHolders. Whether the Moonchild still has the ability tonight is decided by the wake. */
+  moonchildChoice: "storytellerFact",
+  /** The Moonchild's public choice of an EVIL player (nothing happens): a recorded Storyteller fact with no token. */
+  moonchildUnaffected: "storytellerFact",
+  /** A Minion the Vigormortis killed keeps its ability (the official HAS ABILITY token): applies while that Vigormortis functions
+   * and the holder is still a Minion. Holds the dead Minion's ability for the dead-actor rule and its sourced Effects. */
+  retainsAbility: "retainedAbility",
+  /** The Shabaloth's two chosen players (official DEAD token) and a regurgitated player (official ALIVE token): Storyteller facts that
+   * record last night's choice; the Dusk regurgitation reads them through factHolders. They move or end only when the Shabaloth acts. */
+  shabalothChosen: "storytellerFact",
+  shabalothAlive: "storytellerFact",
 };
 export const effectSemanticsOf = (type: string): EffectSemantics | undefined =>
   Object.prototype.hasOwnProperty.call(APPROVED_EFFECT_SEMANTICS, type) ? APPROVED_EFFECT_SEMANTICS[type] : undefined;
@@ -110,12 +126,16 @@ export type RulesQuery = {
   isAlive: (binding: ParticipantBinding) => QueryAnswer<boolean>;
   /** Whether a stored Effect currently applies MECHANICALLY (derived). */
   effectApplies: (holder: ParticipantBinding, effect: EffectRecord) => QueryAnswer<boolean>;
+  /** Whether a (dead) Minion still has its ability because a living, functioning Vigormortis killed it (derived, never stored). */
+  retainsAbility: (binding: ParticipantBinding) => QueryAnswer<boolean>;
   /** Drunk/Poisoned impairment (derived from applicable Effects). */
   impaired: (binding: ParticipantBinding) => QueryAnswer<boolean>;
   /** Whether the participant's ability functions: not impaired and not lost.
    * Death is reported separately (isAlive); whether an ability works while
    * dead is character semantics. */
   abilityFunctions: (binding: ParticipantBinding) => QueryAnswer<boolean>;
+  /** Whether a living, functioning No Dashii poisons this player through its passive (derived, never stored). */
+  noDashiiPoisoned: (binding: ParticipantBinding) => QueryAnswer<boolean>;
   /** Protection against a death of `cause`. `generic` Protected never answers
    * "protected" automatically. */
   protectedFrom: (binding: ParticipantBinding, cause: "demon" | "any") => QueryAnswer<boolean>;
@@ -130,9 +150,16 @@ export type RulesQuery = {
   protectionDependencyStamp: (binding: ParticipantBinding, cause: "demon" | "any") => string;
   /** What the participant registers as, to an `observer` character. */
   registration: (binding: ParticipantBinding, observer?: RoleId) => RegistrationAnswer;
+  /** Whether every possible registration gives the same answer to THIS type
+   * question. Optional registration is never selected or stored here. */
+  registersAsType: (binding: ParticipantBinding, type: RoleType, observer?: RoleId) => QueryAnswer<boolean>;
   /** The nearest living participants on each side (skipping empty seats and
    * the dead), or null when there is none. */
   aliveNeighbours: (binding: ParticipantBinding) => QueryAnswer<{ left: ParticipantBinding | null; right: ParticipantBinding | null }>;
+  /** The nearest Townsfolk each way round the table (dead included; Outsiders,
+   * Minions, Travellers and empty seats skipped), or UNKNOWN where a registration
+   * could change who counts. A null side means there is no Townsfolk. */
+  nearestTownsfolk: (binding: ParticipantBinding) => QueryAnswer<{ clockwise: ParticipantBinding | null; counterclockwise: ParticipantBinding | null }>;
   /** Phase 10F Slice 7: the ACTIVE registry's definition of `roleId` (its
    * character type, canonical ownership...), or undefined. Definitions only --
    * never ability prose interpretation. */
@@ -179,11 +206,24 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
   const seated = () => game.seatOrder.map((id) => game.players[id]).filter((p): p is STPlayerRecord => !!p && !p.isEmpty && !!p.participantId);
 
   /** Applicability with cycle detection: a revisited Effect is UNKNOWN. */
+  const retained = (player: STPlayerRecord, visiting: Set<string>): QueryAnswer<boolean> => {
+    let undetermined: string | null = null;
+    for (const effect of player.effects) {
+      if (effectSemanticsOf(effect.type) !== "retainedAbility") continue;
+      const answer = applies(player, effect, visiting);
+      if (!answer.known) undetermined ??= answer.reason;
+      else if (answer.value) return known(true);
+    }
+    return undetermined ? unknown(undetermined) : known(false);
+  };
+
   const applies = (holder: STPlayerRecord, effect: EffectRecord, visiting: Set<string>): QueryAnswer<boolean> => {
     if (effect.state !== "active") return known(false); // a lifecycle DECISION, not derived
     const semantics = effectSemanticsOf(effect.type);
     if (!semantics) return unknown(`"${effect.type}" is a custom Effect: Silverwick applies no rule to it by name.`);
     if (semantics === "storytellerFact") return known(true); // as recorded; no source dependence
+    // Vigormortis: the retained ability stops if the holder is no longer a Minion (derived, nothing is rewritten).
+    if (semantics === "retainedAbility" && environment.registry.get(holder.actualRole)?.type !== "minion") return known(false);
     const key = `${holder.participantId}:${effect.id}`;
     if (visiting.has(key)) return unknown("These Effects depend on each other: the Storyteller decides.");
     // A Storyteller's manual Effect (no origin participant) applies as recorded.
@@ -209,17 +249,89 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     // SOL-10F-A5: a KNOWN dead source no longer has its ability -- decisive
     // before any impairment / functioning uncertainty is even consulted. (A
     // departed / unseated source stays unknown, above.)
-    if (!sourcePlayer.alive) return known(false);
     const next = new Set(visiting).add(key);
-    const functioning = functions(sourcePlayer, next);
+    if (!sourcePlayer.alive) {
+      // A dead Minion the Vigormortis killed keeps its ability, so what it sourced still applies.
+      const kept = retained(sourcePlayer, next);
+      if (!kept.known || !kept.value) return kept.known ? known(false) : kept;
+    }
+    // The Vigormortis poison lasts only while the Minion it is attached to keeps its ability.
+    const attached = effect.type === "poisoned" ? effect.parameters?.minion : undefined;
+    if (attached && attached.kind === "participant" && attached.participants[0]) {
+      const minion = boundParticipant(game, attached.participants[0]);
+      const kept = minion ? retained(minion, next) : known(false);
+      if (!kept.known || !kept.value) return kept.known ? known(false) : kept;
+    }
+    // The character-domain self-effect exception is only a query overlay;
+    // it never rewrites stored applicability or solves other source cycles.
+    const sourceRole = sourceCharacter ? environment.registry.get(sourceCharacter) : undefined;
+    const selfPoison = isPoisonerSelfEffect(holder, effect, sourceRole) || isInnkeeperSelfEffect(holder, effect, sourceRole);
+    const functioning = functions(selfPoison
+      ? { ...sourcePlayer, effects: sourcePlayer.effects.filter(candidate => candidate.id !== effect.id) }
+      : sourcePlayer, next);
     if (!functioning.known) return functioning;
     return known(functioning.value);
+  };
+
+  /**
+   * Treacherous 30th: the nearest Townsfolk to `origin` in one seating direction,
+   * dead players included and non-Townsfolk / Travellers / empty seats skipped
+   * (https://wiki.bloodontheclocktower.com/No_Dashii). A skipped seat that could
+   * register as Townsfolk (optional Spy registration), or a counted Townsfolk that
+   * could register as something else, makes the answer UNKNOWN -- never guessed.
+   */
+  const nearestTownsfolk = (origin: STPlayerRecord, step: 1 | -1): QueryAnswer<STPlayerRecord | null> => {
+    const order = game.seatOrder;
+    const start = order.indexOf(origin.id);
+    if (start < 0) return unknown("The seat is not in the seating order.");
+    for (let offset = 1; offset < order.length; offset++) {
+      const other = game.players[order[(start + step * offset + order.length * order.length) % order.length]!];
+      if (!other || other.isEmpty || !other.participantId || other.isTraveler) continue;
+      const role = environment.registry.get(other.actualRole);
+      if (!role) return unknown("A seat holds a character the rules do not know: the Storyteller decides.");
+      const optional = isCanonicalRole(role) ? passiveRegistrationOptions(other.actualRole) : undefined;
+      if (role.type === "townsfolk") {
+        if (optional && optional.types.some((type) => type !== "townsfolk")) return unknown(`The ${role.name} may register as another type: the Storyteller decides.`);
+        return known(other);
+      }
+      if (optional?.types.includes("townsfolk")) return unknown(`The ${role.name} may register as a Townsfolk: the Storyteller decides.`);
+    }
+    return known(null);
+  };
+
+  /** The No Dashii's passive: its two nearest Townsfolk neighbours are poisoned
+   * while it is alive and its ability functions. Derived from the seating and
+   * actual characters on every query, so it follows Pit-Hag / seat changes
+   * immediately and is never stored. */
+  const noDashiiPoison = (holder: STPlayerRecord, visiting: Set<string>): QueryAnswer<boolean> => {
+    let undetermined: string | null = null;
+    for (const source of seated()) {
+      if (!isNeighbourPoisoner(source.actualRole) || !source.alive || source.id === holder.id) continue;
+      const role = environment.registry.get(source.actualRole);
+      if (!role || !isCanonicalRole(role)) continue;
+      const key = `nodashii:${source.participantId}:${holder.participantId}`;
+      if (visiting.has(key)) { undetermined ??= "These Effects depend on each other: the Storyteller decides."; continue; }
+      const functioning = functions(source, new Set(visiting).add(key));
+      if (!functioning.known) { undetermined ??= functioning.reason; continue; }
+      if (!functioning.value) continue;
+      for (const step of [1, -1] as const) {
+        const neighbour = nearestTownsfolk(source, step);
+        if (!neighbour.known) { undetermined ??= neighbour.reason; continue; }
+        if (neighbour.value?.participantId === holder.participantId) return known(true);
+      }
+    }
+    return undetermined ? unknown(undetermined) : known(false);
   };
 
   /** Impairment of `player`: any applicable impairment Effect -> impaired;
    * any unknown one -> unknown; none -> not impaired. */
   const impairedOf = (player: STPlayerRecord, visiting: Set<string>, kinds: readonly EffectSemantics[]): QueryAnswer<boolean> => {
     let undetermined: string | null = null;
+    if (kinds.includes("impairment") && player.participantId) {
+      const derived = noDashiiPoison(player, visiting);
+      if (!derived.known) undetermined = derived.reason;
+      else if (derived.value) return known(true);
+    }
     for (const effect of player.effects) {
       const semantics = effectSemanticsOf(effect.type);
       if (!semantics || !kinds.includes(semantics)) continue;
@@ -279,6 +391,8 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     return [resolved.kind, resolved.kind === "supported" ? resolved.descriptor.sourcedEffects?.find((entry) => entry.type === effect.type)?.persistence ?? null : null];
   };
   const protectionDependencies = (): string => dependencySnapshot ??= JSON.stringify(["protection-dependency-v1",
+    // The No Dashii's poison follows the seating, so a seating change is a relevant change.
+    Object.values(game.players).some((p) => !p.isEmpty && isNeighbourPoisoner(p.actualRole)) ? game.seatOrder : null,
     Object.keys(game.players).sort().flatMap((playerId) => {
       const player = game.players[playerId];
       if (!player || player.isEmpty || !player.participantId) return [];
@@ -292,15 +406,62 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     return player ? run(player) : unknown("That participant is no longer in this seat.");
   };
 
+  // Spy/Recluse registration is optional per interaction, including while
+  // dead (official almanacs). Known impairment removes that ability. Possible
+  // types are internal derived bounds, not a selected identity or saved state.
+  const registrationAnswers = (binding: ParticipantBinding, observer?: RoleId): RegistrationAnswer & { types: QueryAnswer<readonly RoleType[]> } => {
+    const judgment = (reason: string) => ({ character: unknown<RoleId>(reason), alignment: unknown<Alignment>(reason), types: unknown<readonly RoleType[]>(reason) });
+    const player = participant(binding);
+    if (!player) return judgment("That participant is no longer in this seat.");
+    const role = environment.registry.get(player.actualRole);
+    if (!role || !isCanonicalRole(role)) return judgment("Registration of a non-canonical character is the Storyteller's decision.");
+    if (player.effects.some(effect => effect.state === "active" && effect.type === "registersFalsely")) {
+      return judgment("A Registers falsely Effect applies: the Storyteller decides.");
+    }
+    const good = player.actualAlignment === "good";
+    for (const other of seated()) {
+      const scope = REGISTRATION_ALTERING[other.actualRole];
+      if (scope === "anyGood" && good) return judgment(`The ${environment.registry.get(other.actualRole)?.name ?? other.actualRole} may make a good player register falsely: the Storyteller decides.`);
+      if (scope === "observerGood" && good && observer === other.actualRole) return judgment("A good player may register falsely to this character: the Storyteller decides.");
+    }
+    const gate = gateEvaluation(modifiers, observer ?? player.actualRole, ["registration"], game);
+    if (gate.kind !== "clear") return judgment("A modifier may change registration: the Storyteller decides.");
+    const actual = { character: known(player.actualRole), alignment: player.actualAlignment ? known(player.actualAlignment) : unknown<Alignment>("The Actual Alignment is unresolved."), types: known<readonly RoleType[]>([role.type]) };
+    const optional = passiveRegistrationOptions(player.actualRole);
+    if (optional && (player.alive || optional.whileDead)) {
+      const functioning = functions(player, new Set());
+      if (functioning.known && !functioning.value) return actual;
+      const reason = functioning.known ? `The ${role.name} may register falsely: the Storyteller decides.` : functioning.reason;
+      return {
+        character: unknown(reason),
+        alignment: player.actualAlignment === optional.alignment ? known(optional.alignment) : unknown(reason),
+        types: known([role.type, ...optional.types]),
+      };
+    }
+    if (REGISTRATION_ALTERING[player.actualRole] === "self") return judgment(`The ${role.name} may register falsely: the Storyteller decides.`);
+    return actual;
+  };
+
   const self: RulesQuery = {
     game,
     moment: () => currentLiveMoment(game),
     participant,
     isAlive: (binding) => require(binding, (player) => known(player.alive)),
+    nearestTownsfolk: (binding) => require(binding, (player) => {
+      const sides = ([1, -1] as const).map((step) => nearestTownsfolk(player, step));
+      const unsure = sides.find((side) => !side.known);
+      if (unsure && !unsure.known) return unknown(unsure.reason);
+      const [clockwise, counterclockwise] = sides.map((side) => side.known && side.value ? bindingOf(side.value) : null);
+      return known({ clockwise: clockwise ?? null, counterclockwise: counterclockwise ?? null });
+    }),
     effectApplies: (holder, effect) => require(holder, (player) => applies(player, effect, new Set())),
     impaired: (binding) => require(binding, (player) => impairedOf(player, new Set(), ["impairment"])),
+    retainsAbility: (binding) => require(binding, (player) => retained(player, new Set())),
     abilityFunctions: (binding) => require(binding, (player) => functions(player, new Set())),
+    noDashiiPoisoned: (binding) => require(binding, (player) => noDashiiPoison(player, new Set())),
     protectedFrom: (binding, cause) => require(binding, (player) => {
+      const passive = passiveProtection(self, binding, cause);
+      if (!passive.known || passive.value) return passive;
       let undetermined: string | null = null;
       for (const effect of player.effects) {
         const semantics = effectSemanticsOf(effect.type);
@@ -319,31 +480,15 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     }),
     protectionDependencyStamp: () => protectionDependencies(),
     registration: (binding, observer) => {
-      const player = participant(binding);
-      if (!player) {
-        const stale = unknown<never>("That participant is no longer in this seat.");
-        return { character: stale, alignment: stale };
-      }
-      const judgment = (reason: string): RegistrationAnswer => ({ character: unknown(reason), alignment: unknown(reason) });
-      const role = environment.registry.get(player.actualRole);
-      if (!role || !isCanonicalRole(role)) return judgment("Registration of a non-canonical character is the Storyteller's decision.");
-      if (player.effects.some((effect) => effect.state === "active" && effect.type === "registersFalsely")) {
-        return judgment("A Registers falsely Effect applies: the Storyteller decides.");
-      }
-      if (REGISTRATION_ALTERING[player.actualRole] === "self") return judgment(`The ${role.name} may register falsely: the Storyteller decides.`);
-      const good = player.actualAlignment === "good";
-      for (const other of seated()) {
-        const scope = REGISTRATION_ALTERING[other.actualRole];
-        if (!scope || scope === "self") continue;
-        if (scope === "anyGood" && good) return judgment(`The ${environment.registry.get(other.actualRole)?.name ?? other.actualRole} may make a good player register falsely: the Storyteller decides.`);
-        if (scope === "observerGood" && good && observer === other.actualRole) return judgment("A good player may register falsely to this character: the Storyteller decides.");
-      }
-      const gate = gateEvaluation(modifiers, observer ?? player.actualRole, ["registration"], game);
-      if (gate.kind !== "clear") return judgment("A modifier may change registration: the Storyteller decides.");
-      return {
-        character: known(player.actualRole),
-        alignment: player.actualAlignment ? known(player.actualAlignment) : unknown("The Actual Alignment is unresolved."),
-      };
+      const { character, alignment } = registrationAnswers(binding, observer);
+      return { character, alignment };
+    },
+    registersAsType: (binding, type, observer) => {
+      const answers = registrationAnswers(binding, observer);
+      if (!answers.types.known) return answers.types;
+      if (answers.types.value.every(value => value === type)) return known(true);
+      if (answers.types.value.every(value => value !== type)) return known(false);
+      return unknown(answers.character.known ? "The Storyteller decides this registration." : answers.character.reason);
     },
     aliveNeighbours: (binding) => require(binding, (player) => {
       const ring = seated();
@@ -367,7 +512,7 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     gameRuleFact: (type) => gameRuleFactDefinition(type)
       ? known(gameRuleFactActive(game, type))
       : unknown(`"${typeof type === "string" ? type : "?"}" is not a registered Rule Fact: Silverwick applies no rule to it.`),
-    modifierGate: (roleId, scopes) => gateEvaluation(modifiers, roleId, scopes, game),
+    modifierGate: (roleId, scopes) => gateEvaluation([...modifiers, ...passiveInformationModifiers(self, roleId)], roleId, scopes, game),
     assumingAlive: (binding, alive) => {
       const player = participant(binding);
       if (!player) return self;

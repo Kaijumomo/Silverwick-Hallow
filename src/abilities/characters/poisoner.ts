@@ -9,8 +9,10 @@ import { firstParticipant, nothing, outcome, requireLivingActor } from "./shared
  * applies ONE sourced `poisoned` Effect (lifetime throughFollowingDay: expires
  * on entry to the next Night). Its persistence is `whileSourceFunctions`: the
  * Rules Query derives that it stops applying when the Poisoner dies, is
- * impaired or changes character -- the stored Effect is never rewritten for
- * that. An impaired / simulated Poisoner chooses, but produces no Effect.
+ * externally impaired or changes character. Self-poison persists without
+ * recursively cancelling itself; the Rules Query excludes only that exact
+ * self-effect while checking its source. An already impaired / simulated
+ * Poisoner chooses, but produces no Effect.
  */
 export const POISONER: AbilityDescriptor = {
   roleId: "poisoner",
@@ -20,7 +22,7 @@ export const POISONER: AbilityDescriptor = {
   inputs: [{ id: "target", kind: "participant", source: "player", label: "The player to poison" }],
   hooks: ["targeting"],
   sourcedEffects: [{ type: "poisoned", persistence: "whileSourceFunctions" }],
-  presentation: { complexity: "simple", action: "Choose a player to poison" },
+  presentation: { complexity: "simple", action: "Choose a player to poison." },
   evaluator: (context) => {
     const dead = requireLivingActor(context);
     if (dead) return dead;

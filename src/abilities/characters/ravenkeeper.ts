@@ -1,7 +1,8 @@
 import type { AbilityDescriptor, AbilityEvaluation, AbilityEvaluationContext } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RoleId } from "@/stores/types";
-import { answerOf, ask, firstParticipant, nameOf, outcome, subjectId } from "./shared";
+import { answerOf, ask, firstParticipant, outcome, subjectId } from "./shared";
+import { informationAbilityRefusal } from "./informationSupport";
 
 /**
  * Ravenkeeper -- GUIDED triggered ability. docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md
@@ -40,8 +41,10 @@ export const RAVENKEEPER: AbilityDescriptor = {
   inputs: [{ id: "target", kind: "participant", source: "player", label: "The player chosen" }],
   hooks: ["information", "registration", "wake"],
   informationActions: ["ravenkeeper-triggered"],
-  presentation: { complexity: "complex", action: "Died tonight: choose a player to learn their character" },
+  presentation: { complexity: "simple", action: "Choose a player to learn their character" },
   evaluator: (context) => {
+    const refusal = informationAbilityRefusal(context);
+    if (refusal) return refusal;
     const target = firstParticipant(context.inputs, "target");
     if (context.simulated || !context.functioning) {
       const shown = answerOf(context.inputs, subjectId(SHOWN, target), "character");
@@ -51,9 +54,6 @@ export const RAVENKEEPER: AbilityDescriptor = {
     }
     const registered = context.query.registration(target, "ravenkeeper").character;
     if (registered.known) return inform(context, target, registered.value);
-    const judged = answerOf(context.judgments, subjectId(CHARACTER_JUDGMENT, target), "character");
-    if (!judged || judged.roleIds.length !== 1) return ask(registered.reason,
-      { id: subjectId(CHARACTER_JUDGMENT, target), kind: "character", source: "judgment", label: `The character ${nameOf(context, target)} registers as to the Ravenkeeper` });
-    return inform(context, target, judged.roleIds[0]!);
+    return { kind: "unsupported", message: registered.reason };
   },
 };

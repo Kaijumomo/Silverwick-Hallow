@@ -9,7 +9,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const SRC = join(__dirname, "..");
-const ADMINISTRATIVE = new Set(["features/activity/ActivityPanel.tsx"]);
+// The Activity review filters were the only administrative <select>; that panel is retired (Package 4), so none remain.
+const ADMINISTRATIVE = new Set<string>();
 
 function components(dir = SRC): string[] {
   const out: string[] = [];
@@ -22,7 +23,7 @@ function components(dir = SRC): string[] {
 }
 
 describe("10H-AC-014: no gameplay dropdowns", () => {
-  it("only the administrative Activity filters render a <select>", () => {
+  it("no production component renders a <select>", () => {
     const withSelect = components().filter((file) => /<select\b/.test(readFileSync(join(SRC, file), "utf8")));
     expect(withSelect.sort()).toEqual([...ADMINISTRATIVE]);
   });

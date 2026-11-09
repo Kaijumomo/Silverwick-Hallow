@@ -1,0 +1,146 @@
+/* In-game Reference slice. Other workspaces retain their existing behavior. */
+.reference-workspace {
+  --reference-width: clamp(320px, 28vw, 392px);
+  --reference-rail-width: 56px;
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.reference-workspace[data-reference-pinned] { padding-right: calc(var(--reference-width) + var(--reference-rail-width)); }
+.reference-workspace > .game-body { width: 100%; }
+.reference-edge {
+  position: absolute;
+  z-index: 25;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 1px solid rgba(196, 158, 80, .14);
+  border-right: 0;
+  border-radius: 16px 0 0 16px;
+  background: rgba(18, 13, 16, .94);
+}
+.reference-workspace[data-reference-open] .reference-edge { right: var(--reference-width); }
+.reference-edge-button {
+  position: relative;
+  width: var(--reference-rail-width);
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 2px;
+  background: transparent;
+  border: 0;
+  border-radius: inherit;
+  color: var(--text-dim);
+  font: 11px var(--font-op);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.reference-edge-button[aria-expanded="true"] { color: var(--gold-bright); background: rgba(196, 160, 80, .12); }
+.reference-edge-button[aria-expanded="true"]::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 2px; background: var(--gold); }
+.reference-edge-button:disabled { opacity: .5; cursor: default; }
+.reference-panel {
+  position: absolute;
+  z-index: 25;
+  inset: 0 0 0 auto;
+  width: var(--reference-width);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: linear-gradient(rgba(24, 18, 22, .97), rgba(16, 12, 14, .98));
+  backdrop-filter: blur(14px);
+  color: var(--text);
+  border-left: 1px solid rgba(196, 158, 80, .14);
+  box-shadow: -24px 0 60px rgba(0, 0, 0, .35);
+  padding-bottom: var(--safe-bottom);
+  padding-right: var(--safe-right);
+  animation: reference-enter 160ms ease-out;
+}
+.reference-panel[hidden] { display: none; }
+.reference-night-content { display: flex; flex: 1; min-height: 0; min-width: 0; flex-direction: column; }
+.reference-night-content[hidden] { display: none; }
+.reference-header { display: flex; align-items: flex-start; gap: 2px; padding: 20px 12px 14px 22px; }
+.reference-workspace[data-panel="night"] .reference-header { padding: 10px 12px 0 22px; align-items: center; }
+.reference-workspace[data-panel="night"] .reference-title h2 { font: 600 11px var(--font-op); text-transform: uppercase; letter-spacing: .25em; color: #b994d4; }
+.reference-workspace[data-panel="night"] .modern-night-kicker { display: none; }
+.reference-title { min-width: 0; flex: 1; }
+.reference-title h2 { margin: 0; color: #eadcb8; font: 700 26px/1.1 var(--font-display); }
+.reference-title p { margin: 4px 0 0; font: 12px/1.4 var(--font-op); color: var(--text-dim); overflow-wrap: anywhere; }
+.reference-icon-button {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  font: 24px var(--font-op);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.reference-icon-button[aria-pressed="true"] { color: var(--gold-bright); background: rgba(196, 160, 80, .15); border-color: var(--border); }
+.reference-icon-button:hover, .reference-edge-button:not(:disabled):hover { color: var(--gold-bright); background: rgba(196, 160, 80, .1); }
+.reference-search-area { padding: 0 18px 8px; }
+.reference-search-row { display: flex; gap: 4px; }
+.reference-search-row input { min-width: 0; width: 100%; min-height: 44px; border-radius: 10px; padding: 0 14px; font: 14px var(--font-op); background: rgba(0, 0, 0, .3); }
+.reference-search-row input::-webkit-search-cancel-button { display: none; }
+.reference-count { margin: 6px 0 0; color: var(--text-dim); font: 12px var(--font-op); }
+.reference-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 12px 20px; scrollbar-width: thin; }
+.reference-scroll > p { font: 15px/1.5 var(--font-op); }
+.reference-group h3 { font: 600 11px var(--font-op); text-transform: uppercase; letter-spacing: .18em; margin: 0; padding: 14px 10px 6px; }
+.reference-group .type-townsfolk { color: #86b7d4; }
+.reference-group .type-outsider { color: #94c29a; }
+.reference-group .type-minion { color: #d97a6c; }
+.reference-group .type-demon { color: #e3894c; }
+.reference-group .type-traveler { color: #b994d4; }
+.reference-group ul { list-style: none; margin: 0; padding: 0; }
+.reference-character { display: grid; grid-template-columns: minmax(0, 1fr) 44px; align-items: start; border-radius: 10px; content-visibility: auto; contain-intrinsic-size: auto 100px; }
+.reference-character:hover { background: rgba(196, 158, 80, .05); }
+.reference-character-main { display: flex; align-items: flex-start; gap: 12px; width: 100%; min-height: 44px; padding: 8px 4px 8px 10px; border: 0; border-radius: 10px; background: transparent; color: inherit; text-align: left; cursor: pointer; touch-action: manipulation; }
+.reference-art { display: flex; align-items: center; justify-content: center; flex: none; width: 38px; height: 38px; border-radius: 50%; overflow: hidden; background: radial-gradient(circle at 38% 30%, #efe3c4, #b39b6c); box-shadow: inset 0 0 0 1px rgba(255, 240, 210, .35), 0 2px 4px rgba(0, 0, 0, .25); }
+.reference-art img { object-fit: contain; }
+.reference-character-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.reference-character-name { display: block; color: #eadcb8; font: 700 17px/1.15 var(--font-display); }
+.reference-character-name > span { margin-left: 4px; color: var(--text-dim); font: 12px var(--font-op); }
+.reference-character-main:hover .reference-character-name { color: var(--gold-bright); }
+.reference-ability { display: block; color: var(--text); font: 14px/1.4 var(--font-prose); }
+.reference-wiki { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; border-radius: 8px; color: var(--gold-soft); font: 11px var(--font-op); text-underline-offset: 3px; touch-action: manipulation; }
+.reference-wiki:hover { color: var(--gold-bright); background: rgba(196, 158, 80, .08); }
+.reference-details { grid-column: 1 / -1; padding: 0 10px 8px 60px; color: var(--text-dim); font: 12px/1.45 var(--font-op); overflow-wrap: anywhere; }
+.reference-details p { margin: 0 0 8px; }
+.reference-flavor { font-family: var(--font-prose); font-style: italic; }
+.reference-workspace :is(button, a, input, summary, h2):focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+@keyframes reference-enter { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }
+@media (prefers-reduced-motion: reduce) { .reference-panel { animation: none; } }
+/* Landscape tablets share the desktop panel composition. Smaller widths keep
+   a defensive fit; portrait is not a Storyteller validation target. */
+@media (max-width: 900px) { .reference-workspace { --reference-width: min(320px, 42vw); } }
+/* A pinned Reference must not leave a second side dock competing for the
+   tablet's board width. Keep that workspace mounted below the board so its
+   actions/drafts and inspection remain accessible. Closing/unpinning restores it. */
+@media (max-width: 1100px) {
+  .reference-workspace[data-reference-pinned] > .game-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    grid-template-areas: "stage" "tabs" "dock";
+  }
+  .reference-workspace[data-reference-pinned] .shell-rail,
+  .reference-workspace[data-reference-pinned] .shell-inspector { max-height: 28dvh; }
+  .reference-workspace[data-reference-pinned] > .game-body .shell-inspector:has(.inspector[data-detent]),
+  .reference-workspace[data-reference-pinned] > .game-body .inspector[data-detent] { max-height: 28dvh; }
+  .reference-workspace[data-reference-pinned] :is(.night-panel, .inspector) { max-height: inherit; }
+  .reference-workspace[data-reference-pinned] .shell-stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); }
+  .reference-workspace[data-reference-pinned] .stage-toolbar { grid-column: 1; grid-row: 1; }
+  .reference-workspace[data-reference-pinned] .grimoire-mode-controls { grid-column: 1; grid-row: 2; justify-content: flex-start; flex-wrap: nowrap; overflow-x: auto; padding: 0 12px 8px; }
+  .reference-workspace[data-reference-pinned] .grimoire-mode-btn { flex: none; white-space: nowrap; }
+  .reference-workspace[data-reference-pinned] .grimoire-stage { grid-row: 3; }
+  .reference-workspace[data-reference-pinned] .shell-stage > :is(.roster, .labels-view) { grid-row: 3; }
+}

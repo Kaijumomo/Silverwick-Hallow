@@ -1,11 +1,11 @@
-import { isCanonicalRole } from "@/data/canonical";
 import { needsShownIdentity } from "@/stores/identity";
 import { participantStepKey } from "@/stores/nightProgress";
 import { toldRoleChangeIntents } from "@/stores/roleResolution";
 import type { AbilityDescriptor, AbilityEvaluation, AbilityEvaluationContext } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
-import { answerOf, ask, deathAttempt, firstParticipant, followUpParticipant, lifeOperation, nameOf, nothing, outcome, requireLivingActor } from "./shared";
+import { ask, deathAttempt, firstParticipant, followUpParticipant, lifeOperation, nameOf, nothing, tokenOutcome, requireLivingActor } from "./shared";
+import { scarletWomanSuccession } from "./scarletWoman";
 
 /**
  * Imp -- GUIDED, with the narrow Scarlet Woman dependency.
@@ -35,7 +35,6 @@ import { answerOf, ask, deathAttempt, firstParticipant, followUpParticipant, lif
  */
 export const SUCCESSOR = "successor";
 export const swFunctionsJudgment = (participantId: string) => `scarletWoman:functions:${participantId}`;
-const SCARLET_WOMAN_THRESHOLD = 5;
 
 /** Ordinary perception the seam can update truthfully: shown as their own
  * character, no concealed identity. Anything else is not invented here. */
@@ -48,33 +47,48 @@ const ordinaryPerception = (query: RulesQuery, binding: ParticipantBinding) => {
 function successor(context: AbilityEvaluationContext): { binding: ParticipantBinding } | { evaluation: AbilityEvaluation } | null {
   const { query } = context;
   const seated = query.game.seatOrder.map((id) => query.game.players[id]).filter((p) => !!p && !p.isEmpty && !!p.participantId);
-  const aliveNonTravellers = seated.filter((p) => p!.alive && !p!.isTraveler).length; // immediately BEFORE the Demon death
   const binding = (p: (typeof seated)[number]): ParticipantBinding => ({ playerId: p!.id, participantId: p!.participantId! });
-  const minions = seated.filter((p) => p!.alive && !p!.isTraveler && p!.participantId !== context.actor.binding.participantId &&
-    query.roleOf(p!.actualRole)?.type === "minion").map(binding);
-  let candidates = minions;
-  const scarletWoman = query.roleOf("scarletwoman");
-  if (aliveNonTravellers >= SCARLET_WOMAN_THRESHOLD && scarletWoman && isCanonicalRole(scarletWoman)) {
-    const priority: ParticipantBinding[] = [];
-    for (const sw of minions.filter((b) => query.participant(b)?.actualRole === "scarletwoman")) {
-      const functions = query.abilityFunctions(sw);
-      if (functions.known) { if (functions.value) priority.push(sw); continue; }
-      const judged = answerOf(context.judgments, swFunctionsJudgment(sw.participantId), "boolean");
-      if (!judged) return { evaluation: ask(functions.reason, { id: swFunctionsJudgment(sw.participantId), kind: "boolean", source: "judgment",
-        label: `${nameOf(context, sw)}'s Scarlet Woman ability is functioning` }) };
-      if (judged.value) priority.push(sw);
+  let candidates: ParticipantBinding[] | undefined;
+  const priority = scarletWomanSuccession(query, context.actor.binding);
+  if (priority.kind === "manual") return { evaluation: { kind: "unsupported", message: priority.reason } };
+  if (priority.kind === "successor") candidates = [priority.target];
+  // Only an actual, unprevented self-death reaches here. A functioning
+  // Scarlet Woman has mandatory priority; otherwise optional Minion
+  // registration can change the eligible set and remains wholly Manual.
+  if (!candidates) {
+    candidates = [];
+    const chosen = followUpParticipant(context, context.inputs, SUCCESSOR);
+    if (chosen && "refusal" in chosen) return { evaluation: chosen.refusal };
+    const possible = seated.filter(player => player!.alive && !player!.isTraveler && player!.participantId !== context.actor.binding.participantId);
+    // An existing explicit Storyteller choice of a definite Minion does not
+    // depend on how an unchosen Spy/Recluse registers. With no such choice,
+    // every possible candidate matters to the automatic selection.
+    const relevant = chosen ? possible.filter(player => player!.participantId === chosen.binding.participantId) : possible;
+    if (chosen && !relevant.length) return { evaluation: { kind: "illegal", message: "The new Imp must be an eligible living Minion." } };
+    // A character that MAY register as a Minion (a Recluse) is never decided here: the Storyteller's explicit
+    // choice of it is the ruling; with none made, it is offered as a possible successor and never skipped.
+    const uncertain: ParticipantBinding[] = [];
+    for (const player of relevant) {
+      const target = binding(player);
+      const registered = query.registersAsType(target, "minion", "imp");
+      if (!registered.known) { if (chosen) candidates.push(target); else uncertain.push(target); continue; }
+      if (registered.value) candidates.push(target);
     }
-    if (priority.length) candidates = priority;
+    if (chosen && !candidates.length) return { evaluation: { kind: "illegal", message: "The new Imp must be an eligible living Minion." } };
+    if (uncertain.length) {
+      return { evaluation: ask("The Imp died by its own ability: the Storyteller chooses which living Minion becomes the Imp (a Recluse may register as one).",
+        { id: SUCCESSOR, kind: "participant", source: "storyteller", label: "The Minion who becomes the Imp" }) };
+    }
   }
   if (!candidates.length) return null;
-  if (candidates.length === 1) return { binding: candidates[0]! };
   const chosen = followUpParticipant(context, context.inputs, SUCCESSOR);
-  if (!chosen) return { evaluation: ask("The Imp died by its own ability: the Storyteller chooses which living Minion becomes the Imp.",
-    { id: SUCCESSOR, kind: "participant", source: "storyteller", label: "The Minion who becomes the Imp" }) };
-  if ("refusal" in chosen) return { evaluation: chosen.refusal };
-  if (!candidates.some((c) => c.participantId === chosen.binding.participantId)) {
+  if (chosen && "refusal" in chosen) return { evaluation: chosen.refusal };
+  if (chosen && !candidates.some(c => c.participantId === chosen.binding.participantId)) {
     return { evaluation: { kind: "illegal", message: "The new Imp must be one of the eligible living Minions (a functioning Scarlet Woman first)." } };
   }
+  if (candidates.length === 1) return { binding: candidates[0]! };
+  if (!chosen) return { evaluation: ask("The Imp died by its own ability: the Storyteller chooses which living Minion becomes the Imp.",
+    { id: SUCCESSOR, kind: "participant", source: "storyteller", label: "The Minion who becomes the Imp" }) };
   return { binding: chosen.binding };
 }
 
@@ -85,7 +99,7 @@ export const IMP: AbilityDescriptor = {
   usage: { kind: "unlimited" },
   inputs: [{ id: "target", kind: "participant", source: "player", label: "The player to kill" }],
   hooks: ["targeting", "death", "role"],
-  presentation: { complexity: "complex", action: "Choose a player to kill" },
+  presentation: { complexity: "simple", action: "Choose a player to kill" },
   evaluator: (context) => {
     const dead = requireLivingActor(context);
     if (dead) return dead;
@@ -97,16 +111,22 @@ export const IMP: AbilityDescriptor = {
     if (death.kind === "ask") return ask(death.message, death.requirement);
     if (death.kind === "survives") return nothing();
     const kill = lifeOperation([{ kind: "death", target }]);
-    if (!self) return outcome([kill]);
+    if (!self) {
+      const succession = scarletWomanSuccession(context.query, target);
+      if (succession.kind === "manual") return { kind: "unsupported", message: succession.reason };
+      return tokenOutcome(context, "imp", succession.kind === "successor"
+        ? [kill, { domain: "role", intents: toldRoleChangeIntents(context.query.participant(succession.target)!, "imp") }]
+        : [kill], succession.kind === "successor");
+    }
 
     const next = successor(context);
-    if (!next) return outcome([kill]);
+    if (!next) return tokenOutcome(context, "imp", [kill]);
     if ("evaluation" in next) return next.evaluation;
     const heir = context.query.participant(next.binding)!;
     if (!ordinaryPerception(context.query, next.binding)) {
       return { kind: "unsupported", message: `${nameOf(context, next.binding)} has a concealed identity: what they are told on becoming the Imp is not modeled -- resolve manually.` };
     }
-    return outcome([
+    return tokenOutcome(context, "imp", [
       kill,
       { domain: "role", intents: toldRoleChangeIntents(heir, "imp") },
       { domain: "nightStep", day: context.query.game.day, stepKey: participantStepKey(next.binding.participantId, "imp"), status: "skipped" },

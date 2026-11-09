@@ -138,9 +138,19 @@ export function withV26Stamp<T>(entry: T): T {
   return copy as unknown as T;
 }
 
+/** Current result from v26: voting remains untracked, v28 adds no clues and
+ * v29 adds an empty log (no delivered packet exists to backfill). */
+export function withV26ToCurrent<T>(entry: T): T {
+  const copy = structuredClone(entry) as unknown as Record<string, unknown>;
+  copy.gameSchemaVersion = 29;
+  copy.preparedInformation = [];
+  copy.playerInfoLog = [];
+  return copy as unknown as T;
+}
+
 /** A v24 entry's expected CURRENT result: v24 -> v25, then v25 -> v26. */
 export function withV25ToCurrent<T>(entry: T): T {
-  return withV26Stamp(withV25RuleFacts(entry));
+  return withV26ToCurrent(withV26Stamp(withV25RuleFacts(entry)));
 }
 
 /** A v23-step result's expected CURRENT result: v23 -> v24, then v24 -> v25
@@ -163,6 +173,10 @@ export function withCurrentMigration<T>(entry: T): T {
  */
 export function asV25<T>(entry: T): T {
   const copy = structuredClone(entry) as unknown as Record<string, unknown>;
+  delete copy.preparedInformation;
+  delete copy.playerInfoLog;
+  delete copy.voting;
+  if (Array.isArray(copy.history)) copy.history = copy.history.filter(record => record.category !== "voting");
   delete copy.result;
   for (const player of Object.values((copy.players ?? {}) as Record<string, Record<string, unknown>>)) delete player.revealToken;
   copy.gameSchemaVersion = 25;

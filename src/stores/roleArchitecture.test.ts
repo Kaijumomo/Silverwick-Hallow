@@ -59,6 +59,7 @@ const ALLOWED_MODULES: Record<string, string> = {
   "stores/projections.ts": "builds projection RECORDS (public/self), never Current State",
   "stores/informationDelivery.ts": "an Information Delivery RECORD snapshots the recipient's Actual Role (Phase 10F pure planner), never Current State",
   "stores/abilityResolution.ts": "captureFingerprint snapshots the OBSERVED Role/perception into a read-only workflow fingerprint (Phase 10F), never Current State",
+  "stores/preparedInformation.ts": "B6 prepared intent snapshots observed source/candidate identity, never patches a player's Role/perception",
   // SOL-10F-L7: admitted ONLY at its AlignmentChange log entry (the observed
   // Traveler status), asserted below; ALIGNMENT_PLAN_FIELDS forbids isTraveler.
   "stores/alignmentResolution.ts": "the Alignment seam's AlignmentChange record carries the OBSERVED Traveler status, never a player patch",
@@ -89,6 +90,7 @@ const SNAPSHOT_SITES: Record<string, readonly string[]> = {
   // Phase 10G: the Manual delivery planner snapshots the recipient's Actual
   // Role exactly like the structured one (an observed copy, never a write).
   "stores/informationDelivery.ts": ["planInformationDelivery", "planManualInformationDelivery"],
+  "stores/preparedInformation.ts": ["planPreparedInformation"],
 };
 
 /** Units whose only write shape is a perception spec handed to setPerception. */

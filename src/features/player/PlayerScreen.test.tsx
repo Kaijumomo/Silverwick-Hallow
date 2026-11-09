@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { usePlayerStore } from "@/stores/playerStore";
 import { __setEnvOverrideForTests, clearFirebaseConfig, saveFirebaseConfig } from "@/firebase/config";
 
@@ -26,6 +26,7 @@ vi.mock("@/firebase/session", async (importOriginal) => {
 import { chooseTraveler, leaveLobby } from "@/firebase/playerSync";
 import { MemoryRoomBackend } from "@/firebase/memoryBackend";
 import { travelerChoicePath } from "@/firebase/lifecycle";
+import { enterTown } from "./phone/ceremonyTestUtils";
 import { PlayerScreen } from "./PlayerScreen";
 
 const validCfg = {
@@ -73,10 +74,16 @@ function seedSeatedTraveler(publicDisplayRole?: string) {
   }));
 }
 
-/** Phase 10H: Reference and Leave live under the bottom-navigation More tab. */
-async function openMore() {
-  fireEvent.click(await screen.findByRole("button", { name: "More" }));
-  await screen.findByText("Request to leave lobby");
+/** Package 3 (3B): the Traveller's circle offers "Choose your Traveler". */
+async function openTravellerChoice() {
+  fireEvent.click(await screen.findByRole("button", { name: "Choose your Traveler" }));
+  await screen.findByRole("heading", { name: /Choose your Traveler|Your Traveler/ }).catch(() => screen.findByText(/waiting for Storyteller/));
+}
+
+/** Package 3 (3C): Reference and the Request to Leave link live on the Script tab. */
+async function openScript() {
+  fireEvent.click(await screen.findByRole("button", { name: "Script" }));
+  await screen.findByRole("button", { name: "Request to leave" });
 }
 
 let memory: MemoryRoomBackend;
@@ -100,9 +107,10 @@ afterEach(() => {
 describe("PlayerScreen leave confirmation (Phase 9C.3, OPUS-003)", () => {
   it("requires explicit confirmation, and a cancelled confirmation invokes no leave command", async () => {
     render(<PlayerScreen />);
-    // Phase 10H (§11.2): Leave is secondary -- under More.
-    await openMore();
-    fireEvent.click(screen.getByText("Request to leave lobby"));
+    await enterTown();
+    // Leave is secondary: a small link on the Script tab.
+    await openScript();
+    fireEvent.click(screen.getByRole("button", { name: "Request to leave" }));
     expect(await screen.findByText("Request to leave?")).toBeInTheDocument();
     expect(screen.getByText(/You will remain seated in the game/)).toBeInTheDocument();
 
@@ -115,9 +123,10 @@ describe("PlayerScreen leave confirmation (Phase 9C.3, OPUS-003)", () => {
 
   it("only the affirmative action calls the existing leave-request command", async () => {
     render(<PlayerScreen />);
-    await openMore();
-    fireEvent.click(screen.getByText("Request to leave lobby"));
-    fireEvent.click(await screen.findByRole("button", { name: "Request to leave" }));
+    await enterTown();
+    await openScript();
+    fireEvent.click(screen.getByRole("button", { name: "Request to leave" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Request to leave" }));
 
     await waitFor(() => expect(leaveLobby).toHaveBeenCalledTimes(1));
     await act(async () => {});
@@ -128,14 +137,17 @@ describe("PlayerScreen leave confirmation (Phase 9C.3, OPUS-003)", () => {
 describe("PlayerScreen Traveler choice (Phase 9 Setup finalization B4)", () => {
   it("an ordinary player never sees the Traveler picker", async () => {
     render(<PlayerScreen />);
-    await screen.findByRole("button", { name: "More" });
+    await screen.findByRole("button", { name: "Receive your character" });
+    expect(screen.queryByText("Choose your Traveler")).toBeNull();
+    await enterTown();
+    await screen.findByRole("button", { name: "Script" });
     expect(screen.queryByText("Choose your Traveler")).toBeNull();
   });
 
   it("a designated Traveler with no chosen character sees the picker, restricted to the Traveler catalogue", async () => {
     seedSeatedTraveler(undefined);
     render(<PlayerScreen />);
-    await screen.findByText("Choose your Traveler");
+    await openTravellerChoice();
     // Restricted to the supported Traveler catalogue -- never an ordinary role.
     expect(screen.getByRole("button", { name: /Scapegoat/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Chef$/ })).toBeNull();
@@ -145,7 +157,7 @@ describe("PlayerScreen Traveler choice (Phase 9 Setup finalization B4)", () => {
   it("choosing a character calls the self-scoped chooseTraveler command, never a Storyteller-only path", async () => {
     seedSeatedTraveler(undefined);
     render(<PlayerScreen />);
-    await screen.findByText("Choose your Traveler");
+    await openTravellerChoice();
     fireEvent.click(screen.getByRole("button", { name: /Scapegoat/ }));
     await waitFor(() => expect(chooseTraveler).toHaveBeenCalledWith(expect.anything(), "scapegoat"));
   });
@@ -154,17 +166,17 @@ describe("PlayerScreen Traveler choice (Phase 9 Setup finalization B4)", () => {
     vi.mocked(chooseTraveler).mockRejectedValueOnce(new Error("offline"));
     seedSeatedTraveler(undefined);
     render(<PlayerScreen />);
-    await screen.findByText("Choose your Traveler");
+    await openTravellerChoice();
     fireEvent.click(screen.getByRole("button", { name: /Scapegoat/ }));
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
     // Still showing the picker -- nothing was silently applied.
-    expect(screen.getByText("Choose your Traveler")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Choose your Traveler" })).toBeInTheDocument();
   });
 
   it("once a character is publicly assigned, the picker no longer shows (Storyteller override or applied choice alike)", async () => {
     seedSeatedTraveler("thief");
     render(<PlayerScreen />);
-    await screen.findByRole("button", { name: "More" });
+    await screen.findByRole("heading", { name: "Your place in the circle" });
     expect(screen.queryByText("Choose your Traveler")).toBeNull();
   });
 });
@@ -180,6 +192,7 @@ describe("CLOSURE-01 IMM-7: the player's pending Traveler request locks the choi
     const writesBefore = requestWrites();
     seedSeatedTraveler(undefined);
     render(<PlayerScreen />);
+    await openTravellerChoice();
     expect(await screen.findByText("Thief selected · waiting for Storyteller")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Scapegoat/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /Thief/ })).toBeNull();
@@ -197,7 +210,7 @@ describe("CLOSURE-01 IMM-7: the player's pending Traveler request locks the choi
     vi.mocked(chooseTraveler).mockImplementation(async (b, roleId) => { await b.set(request, roleId); });
     seedSeatedTraveler(undefined);
     render(<PlayerScreen />);
-    await screen.findByText("Choose your Traveler");
+    await openTravellerChoice();
     fireEvent.click(screen.getByRole("button", { name: /Scapegoat/ }));
     expect(await screen.findByText("Scapegoat selected · waiting for Storyteller")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Thief/ })).toBeNull();
@@ -210,19 +223,23 @@ describe("CLOSURE-01 IMM-7: the player's pending Traveler request locks the choi
 // player sees that character with no alignment label -- never the waiting
 // state, and never an invented alignment.
 describe("PlayerScreen: identity without an alignment (Phase 10E undisclosed)", () => {
+  // Package 3 (3B): the identity is shown on the turned token.
   it("an ordinary identity with no alignment renders the character and no alignment label", async () => {
-    usePlayerStore.setState({ self: { shownRole: "chef" }, revealed: true });
-    const { container } = render(<PlayerScreen />);
-    await screen.findByRole("button", { name: "More" });
-    expect(container.querySelector(".sealed-card-name")).toHaveTextContent("Chef");
-    expect(container.querySelector("[class*='alignment-']")).toBeNull();
+    usePlayerStore.setState({ self: { shownRole: "chef" } });
+    render(<PlayerScreen />);
+    fireEvent.click(await screen.findByRole("button", { name: "Receive your character" }));
+    fireEvent.click(screen.getByRole("button", { name: "Turn your token over" }));
+    expect(screen.getByRole("heading", { name: "Chef" })).toBeInTheDocument();
+    expect(screen.getByText("Townsfolk")).toBeInTheDocument();
+    expect(screen.queryByText(/^(Good|Evil)$/)).toBeNull();
     expect(screen.queryByText(/Still waiting/)).toBeNull();
   });
 
   it("a told alignment still renders its label (control)", async () => {
-    usePlayerStore.setState({ self: { shownRole: "chef", shownAlignment: "evil" }, revealed: true });
-    const { container } = render(<PlayerScreen />);
-    await screen.findByRole("button", { name: "More" });
-    expect(container.querySelector(".label.alignment-evil")).toHaveTextContent("evil");
+    usePlayerStore.setState({ self: { shownRole: "chef", shownAlignment: "evil" } });
+    render(<PlayerScreen />);
+    fireEvent.click(await screen.findByRole("button", { name: "Receive your character" }));
+    fireEvent.click(screen.getByRole("button", { name: "Turn your token over" }));
+    expect(screen.getByText("Evil")).toBeInTheDocument();
   });
 });

@@ -10,7 +10,7 @@ import { composeAbilityOutcome, MECHANICAL_DOMAINS } from "@/stores/abilityResol
 import { changeRoleIntent } from "@/stores/roleResolution";
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
 import { stripCommentsForGuard as stripComments } from "@/test/writerGuard";
-import { bind, impair, openInStore, patchPlayer, pick, plan, planned, proofEnv, proofGame, proofQuery, proofRegistry, request, requirementIds, yes } from "@/test/proofFixtures";
+import { bind, impair, openInStore, patchPlayer, pick, plan, planned, proofEnv, proofGame, proofQuery, proofRegistry, request, yes } from "@/test/proofFixtures";
 import { arbitraryDeathJudgmentId, deathAttempt } from "./shared";
 import { choiceId } from "./alhadikhia";
 import { TOYMAKER_ATTACK_MESSAGE } from "./modifierHooks";
@@ -35,7 +35,7 @@ describe("10G-AC-08: GameRuleFact composes inside the one coordinator", () => {
     expect(MECHANICAL_DOMAINS).toContain("gameRuleFact");
     const g = proofGame(ROLES);
     const result = composeAbilityOutcome(g, { operations: [
-      { domain: "role", intents: [changeRoleIntent(g.players.p1!, "vigormortis")] },
+      { domain: "role", intents: [changeRoleIntent(g.players.p1!, "vortox")] },
       { domain: "gameRuleFact", intents: [{ kind: "apply", type: PIT_HAG_ARBITRARY_DEATHS }] },
     ] }, proofEnv(), { resolutionId: "r-1" });
     expect(result).toMatchObject({ ok: false, code: "unsupported" });
@@ -44,7 +44,7 @@ describe("10G-AC-08: GameRuleFact composes inside the one coordinator", () => {
   it("the fact is planned against the evolving working snapshot and correlated with the resolution", () => {
     const g = proofGame(ROLES);
     const result = composeAbilityOutcome(g, { mechanicalOrder: "declared", operations: [
-      { domain: "role", intents: [changeRoleIntent(g.players.p1!, "vigormortis")] },
+      { domain: "role", intents: [changeRoleIntent(g.players.p1!, "vortox")] },
       { domain: "gameRuleFact", intents: [{ kind: "apply", type: PIT_HAG_ARBITRARY_DEATHS }] },
     ] }, proofEnv(), { resolutionId: "r-1" });
     const next = planned(result);
@@ -58,7 +58,7 @@ describe("10G-AC-08: GameRuleFact composes inside the one coordinator", () => {
     expect(composeAbilityOutcome(g, { operations: [{ domain: "gameRuleFact", intents: [{ kind: "apply", type: PIT_HAG_ARBITRARY_DEATHS }] }] },
       proofEnv(), { resolutionId: "r", simulated: { performedRole: "pithag" } })).toMatchObject({ ok: false, code: "illegal" });
     const impaired = impair(g, "p0");
-    expect(plan(impaired, hagRequest(impaired, "p1", "vigormortis"))).toEqual({ ok: true, changed: false });
+    expect(plan(impaired, hagRequest(impaired, "p1", "vortox"))).toEqual({ ok: true, changed: false });
   });
 });
 
@@ -66,11 +66,11 @@ describe("10G-AC-09: Pit-Hag Demon creation is atomic (proof area 3)", () => {
   it("a functioning Pit-Hag making a Demon: Role change (Alignment preserved, player told) + arbitrary-deaths fact, one commit", () => {
     const g = proofGame(ROLES);
     openInStore(g);
-    const result = state().resolveAbility(hagRequest(g, "p1", "vigormortis"));
+    const result = state().resolveAbility(hagRequest(g, "p1", "vortox"));
     expect(result).toMatchObject({ ok: true, changed: true });
     expect(state().undoStack).toHaveLength(1);
     expect(state().localSeq).toBe(6);
-    expect(game().players.p1).toMatchObject({ actualRole: "vigormortis", shownRole: "vigormortis", actualAlignment: "good" });
+    expect(game().players.p1).toMatchObject({ actualRole: "vortox", shownRole: "vortox", actualAlignment: "good" });
     expect(game().gameRuleFacts).toEqual([expect.objectContaining({ type: PIT_HAG_ARBITRARY_DEATHS, recordedAt: { phase: "night", day: 2 }, expiresAt: { phase: "day", day: 2 } })]);
     const resolutionId = (result as { resolutionId: string }).resolutionId;
     expect(game().history.map((h) => [h.category, h.resolutionId])).toEqual([["role", resolutionId], ["gameRuleFact", resolutionId]]);
@@ -93,7 +93,7 @@ describe("10G-AC-09: Pit-Hag Demon creation is atomic (proof area 3)", () => {
       openInStore(g);
       const before = { game: game(), undo: state().undoStack, seq: state().localSeq };
       const result = state().resolveAbility({ mode: "manual", reason: "test", outcome: { mechanicalOrder: "declared", operations: [
-        { domain: "role", intents: [changeRoleIntent(g.players.p1!, "vigormortis")] },
+        { domain: "role", intents: [changeRoleIntent(g.players.p1!, "vortox")] },
         { domain: "gameRuleFact", intents: [{ kind: "apply", type }] },
       ] } });
       expect(result).toMatchObject({ ok: false, code: "domain", domain: "gameRuleFact" });
@@ -104,19 +104,25 @@ describe("10G-AC-09: Pit-Hag Demon creation is atomic (proof area 3)", () => {
     }
   });
 
-  it("a second Demon creation the same Night keeps one singleton fact", () => {
-    const first = planned(plan(proofGame(ROLES), hagRequest(proofGame(ROLES), "p1", "vigormortis")));
-    const second = planned(plan(first, hagRequest(first, "p6", "nodashii")));
-    expect(second.players.p6!.actualRole).toBe("nodashii");
+  it("a second Demon creation is Manual; its explicit domain outcome keeps one singleton fact", () => {
+    const first = planned(plan(proofGame(ROLES), hagRequest(proofGame(ROLES), "p1", "vortox")));
+    const before = JSON.stringify(first);
+    expect(plan(first, hagRequest(first, "p6", "alhadikhia"))).toMatchObject({ ok: false, code: "unsupported" });
+    expect(JSON.stringify(first)).toBe(before);
+    const second = planned(composeAbilityOutcome(first, { mechanicalOrder: "declared", operations: [
+      { domain: "role", intents: [changeRoleIntent(first.players.p6!, "alhadikhia")] },
+      { domain: "gameRuleFact", intents: [{ kind: "apply", type: PIT_HAG_ARBITRARY_DEATHS }] },
+    ] }, proofEnv(), { resolutionId: "manual-second-demon" }));
+    expect(second.players.p6!.actualRole).toBe("alhadikhia");
     expect(second.gameRuleFacts).toHaveLength(1);
     expect(second.history.filter((h) => h.category === "gameRuleFact")).toHaveLength(1);
   });
 
   it("branches that were Manual stay Manual (Traveller, concealed identity)", () => {
     const traveller = patchPlayer(proofGame([...ROLES, "gunslinger"]), "p7", { isTraveler: true, actualAlignment: "good" });
-    expect(plan(traveller, hagRequest(traveller, "p7", "vigormortis"))).toMatchObject({ ok: false, code: "unsupported" });
+    expect(plan(traveller, hagRequest(traveller, "p7", "vortox"))).toMatchObject({ ok: false, code: "unsupported" });
     const drunk = patchPlayer(proofGame([...ROLES.slice(0, 6), "drunk"]), "p6", { shownRole: "chef", behaviorMode: "drunk_fake_role_behavior" });
-    expect(plan(drunk, hagRequest(drunk, "p6", "vigormortis"))).toMatchObject({ ok: false, code: "unsupported" });
+    expect(plan(drunk, hagRequest(drunk, "p6", "vortox"))).toMatchObject({ ok: false, code: "unsupported" });
   });
 
   it("a Demon already in play: nothing happens, no fact", () => {
@@ -128,10 +134,10 @@ describe("10G-AC-10: the fact expires on entry to the following Day", () => {
   it("Night -> Day removes it (with expiry History) and keeps the new Demon", () => {
     const g = proofGame(ROLES);
     openInStore(g);
-    state().resolveAbility(hagRequest(g, "p1", "vigormortis"));
+    state().resolveAbility(hagRequest(g, "p1", "vortox"));
     state().advancePhase();
     expect(game()).toMatchObject({ phase: "day", day: 2, gameRuleFacts: [] });
-    expect(game().players.p1!.actualRole).toBe("vigormortis");
+    expect(game().players.p1!.actualRole).toBe("vortox");
     expect(game().history.at(-1)).toMatchObject({ category: "gameRuleFact", ruleFactOperation: "expire", moment: { phase: "day", day: 2 } });
     expect(StorytellerGamePersistedSchema.safeParse(game()).success).toBe(true);
   });
@@ -152,28 +158,29 @@ describe("10G-AC-11: one shared arbitrary-death gate (proof area 4)", () => {
     expect(deathAttempt({ ...context, query: proofQuery(proofGame(IMP_ROLES)) } as never, bind(g, "p1"), "demon")).toEqual({ kind: "dies" });
   });
 
-  it("the Imp's attack asks the Storyteller, and the answer decides (Yes: spared; No: dies)", () => {
+  it("arbitrary deaths keep the Imp's whole action Manual despite supplied legacy judgments", () => {
     const g = arbitrary(proofGame(IMP_ROLES));
+    const before = JSON.stringify(g);
     const asked = plan(g, request(g, "p0", "imp", { target: pick(g, "p1") }));
-    expect(asked).toMatchObject({ ok: false, code: "needsInput", message: expect.stringMatching(/arbitrary/) });
-    const [id] = requirementIds(asked);
+    expect(asked).toMatchObject({ ok: false, code: "unsupported", message: expect.stringMatching(/arbitrary/) });
+    const id = arbitraryDeathJudgmentId("demon", bind(g, "p1"), proofQuery(g).protectionDependencyStamp(bind(g, "p1"), "demon"));
     expect(id).toMatch(/^arbitraryDeath:demon:/);
-    expect(plan(g, request(g, "p0", "imp", { target: pick(g, "p1") }, { judgments: { [id!]: yes(true) } }))).toEqual({ ok: true, changed: false });
-    expect(planned(plan(g, request(g, "p0", "imp", { target: pick(g, "p1") }, { judgments: { [id!]: yes(false) } }))).players.p1!.alive).toBe(false);
+    for (const answer of [true, false]) expect(plan(g, request(g, "p0", "imp", { target: pick(g, "p1") }, { judgments: { [id]: yes(answer) } }))).toMatchObject({ ok: false, code: "unsupported" });
+    expect(JSON.stringify(g)).toBe(before);
   });
 
   it("a known protection is not treated as forced either (Monk-protected target still asked)", () => {
     const protectedGame = arbitrary(planned(plan(proofGame(IMP_ROLES), request(proofGame(IMP_ROLES), "p2", "monk", { target: pick(proofGame(IMP_ROLES), "p1") }))));
     expect(proofQuery(protectedGame).protectedFrom(bind(protectedGame, "p1"), "demon")).toEqual({ known: true, value: true });
     const asked = plan(protectedGame, request(protectedGame, "p0", "imp", { target: pick(protectedGame, "p1") }));
-    expect(requirementIds(asked)[0]).toMatch(/^arbitraryDeath:/);
+    expect(asked).toMatchObject({ ok: false, code: "unsupported" });
   });
 
   it("other death-touching evaluators reach the same gate (Al-Hadikhia's all-live deaths)", () => {
     const al = arbitrary(proofGame(["alhadikhia", "chef", "monk", "empath", "saint", "poisoner", "washerwoman"]));
     const req = request(al, "p0", "alhadikhia", { chosen: pick(al, "p1", "p2", "p3"),
       ...Object.fromEntries(["p1", "p2", "p3"].map((id, index) => [choiceId(index, bind(al, id)), yes(true)])) });
-    expect(requirementIds(plan(al, req)).every((id) => id.startsWith("arbitraryDeath:"))).toBe(true);
+    expect(plan(al, req)).toMatchObject({ ok: false, code: "unsupported" });
   });
 
   it("architecture: no character module consults the Pit-Hag fact except its creator and the shared gate", () => {
@@ -202,7 +209,7 @@ describe("10G-AC-12 / AC-13 / AC-14: Toymaker skip bookkeeping (proof area 5)", 
   it("skip recorded -> the Demon's attack is no longer gated; not recorded -> explicit judgment", () => {
     const g = toy(proofGame(IMP_ROLES));
     const env = () => proofEnv({ modifiers: activeModifiers(g, proofRegistry) });
-    expect(plan(g, request(g, "p0", "imp", { target: pick(g, "p3") }), env())).toMatchObject({ ok: false, code: "needsInput", message: TOYMAKER_ATTACK_MESSAGE });
+    expect(plan(g, request(g, "p0", "imp", { target: pick(g, "p3") }), env())).toMatchObject({ ok: false, code: "unsupported", message: TOYMAKER_ATTACK_MESSAGE });
     const satisfied = { ...g, gameRuleFacts: [{ type: TOYMAKER_DEMON_SKIP_OCCURRED, recordedAt: { phase: "night", day: 2 } } as GameRuleFactRecord] };
     const result = plan(satisfied, request(satisfied, "p0", "imp", { target: pick(satisfied, "p3") }), proofEnv({ modifiers: activeModifiers(satisfied, proofRegistry) }));
     expect(planned(result).players.p3!.alive).toBe(false);

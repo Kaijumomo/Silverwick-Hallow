@@ -99,7 +99,10 @@ describe("SOL-10B-R1: empty seats cannot own Effects", () => {
     expect(planEffectExpiry(crafted, { phase: "day", day: 1 })).toBeNull();
     store.setState({ game: crafted });
     const count = effectHistory().length;
-    expect(state().advancePhase().ok).toBe(true);
+    // B8 phase changes now share the authoritative persisted-state check.
+    // A crafted invalid seat is refused wholesale, never silently repaired.
+    expect(state().advancePhase().ok).toBe(false);
+    expect(game()).toBe(crafted);
     expect(player(alice).effects).toEqual([due]);
     expect(effectHistory()).toHaveLength(count);
   });
@@ -219,16 +222,18 @@ describe("SOL-10B-R4: temporal validity at the schema boundary", () => {
 
 // ---------------------------------------------------------------------------
 describe("SOL-10B-R5: suppression is an explicit decision, never derived applicability", () => {
-  it("the source dying or being poisoned never changes the Effect's stored state; hasEffect keeps meaning 'stored active'", () => {
+  it("source impairment does not rewrite state; source death terminates verified Poisoner effects", () => {
     liveGame();
     const alice = idOf("Alice");
     resolve(apply("Carol", { id: "p", type: "poisoned", source: bind(alice), sourceCharacter: "poisoner", lifetime: { kind: "throughFollowingDay" } }));
     const snapshot = effectOf("Carol", "p");
     state().setManualEffect(bind(alice), "poisoned", true);
-    expect(state().recordDeath(alice).ok).toBe(true);
     expect(effectOf("Carol", "p")).toEqual(snapshot);
     expect(effectOf("Carol", "p").state).toBe("active");
     expect(hasEffect(player(idOf("Carol")), "poisoned")).toBe(true);
+    expect(state().recordDeath(alice).ok).toBe(true);
+    expect(effectOf("Carol", "p")).toBeUndefined();
+    expect(hasEffect(player(idOf("Carol")), "poisoned")).toBe(false);
     expect(effectHistory().filter((h) => h.effectOperation === "suppress")).toEqual([]);
   });
 });

@@ -24,19 +24,19 @@ describe("Storyteller privacy presentation state", () => {
     expect(storyteller.getState().undoStack).toHaveLength(undoCount);
   });
 
-  it("reveals current state after hidden updates and resets for a new game", () => {
+  it("reveals current state, refuses hidden reminder commands, and resets for a new game", () => {
     storyteller.getState().newGame("tb");
     storyteller.getState().addPlayer("Alice");
     const id = storyteller.getState().game!.seatOrder[0]!;
     usePrivacyStore.getState().setEnabled(true);
 
     storyteller.getState().assignRole(id, "chef");
-    storyteller.getState().addReminder(id, { id: "r1", label: "Updated while hidden" });
+    expect(storyteller.getState().addReminder(id, { id: "r1", label: "Updated while hidden" })).toBeNull();
     expect(usePrivacyStore.getState().enabled).toBe(true);
 
     usePrivacyStore.getState().setEnabled(false);
     expect(storyteller.getState().game!.players[id]!.actualRole).toBe("chef");
-    expect(storyteller.getState().game!.players[id]!.reminders).toEqual([{ id: "r1", label: "Updated while hidden", createdAt: { phase: "setup", day: 0 } }]);
+    expect(storyteller.getState().game!.players[id]!.reminders).toEqual([]);
 
     usePrivacyStore.getState().setEnabled(true);
     storyteller.getState().newGame("tb");

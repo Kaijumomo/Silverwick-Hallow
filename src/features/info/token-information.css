@@ -1,0 +1,13 @@
+.token-information-action { display: grid; justify-items: center; gap: 12px; margin: 14px 0; text-align: center; min-width: 0; }
+.token-information-preview { display: grid; justify-items: center; gap: 10px; min-width: 0; max-width: 100%; }
+.token-information-disc { display: grid; place-items: center; width: clamp(92px, 10vw, 136px); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 38% 30%,#f1e6c9,#dccaa0 48%,#b09566); border: 2px solid #c49e508c; box-shadow: 0 4px 18px #0004; }
+.token-information-disc img { width: 82%; height: 82%; object-fit: contain; }
+.token-information-preview strong { color: #eadcb8; font: 700 24px/1.15 "Cormorant Garamond",serif; overflow-wrap: anywhere; }
+.token-information-action > button { min-height: 48px; min-width: 150px; max-width: 100%; white-space: normal; }
+.setup-prep-row .token-information-action { margin: 8px 0; }
+.token-information-action-compact { grid-template-columns: minmax(0,1fr) minmax(130px,1fr); align-items: center; gap: 8px; }
+.token-information-action-compact .token-information-preview { align-items: center; gap: 4px; justify-self: center; }
+.token-information-action-compact .token-information-disc { width: clamp(64px,6vw,88px); }
+.token-information-action-compact .token-information-preview strong { font-size: 19px; }
+.token-information-action-compact > button { min-width: 0; min-height: 44px; }
+.token-information-action-compact > button:only-child { grid-column: 1 / -1; }

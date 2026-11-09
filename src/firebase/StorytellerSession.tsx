@@ -34,8 +34,9 @@ export function StorytellerSession() {
   }, [lobby?.code, retry]);
   useStorytellerSync(backend);
   useApplyTravelerChoices(lobby?.code);
-  // The Grimoire renders its own status in-flow beneath its header.
-  return view === "game" ? null : <ConnectionStatus />;
+  // The Grimoire and the New Game flow render their own status (the New Game
+  // screen is a full-screen overlay that would cover a shell-level banner).
+  return view === "game" || view === "newgame" ? null : <ConnectionStatus />;
 }
 
 /**

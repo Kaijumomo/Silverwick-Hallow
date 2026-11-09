@@ -21,6 +21,21 @@ import type { InformationAction, RoleId } from "@/stores/types";
  * final report for the full coverage/gap list.
  */
 export const INFORMATION_ACTIONS: Record<RoleId, InformationAction[]> = {
+  librarian: [
+    { id: "librarian-first-night", timing: { kind: "firstNight" }, instruction: "Show the Outsider character token and point to the two players.", requirements: [
+      { id: "players", kind: "player", cardinality: { kind: "exactly", count: 2 }, label: "The two players shown" },
+      { id: "role", kind: "role", label: "The Outsider character shown" },
+    ] },
+    { id: "librarian-first-night-zero", timing: { kind: "firstNight" }, instruction: "Show that there are zero Outsiders in play.", requirements: [
+      { id: "outsiders", kind: "number", label: "Zero Outsiders" },
+    ] },
+  ],
+  investigator: [
+    { id: "investigator-first-night", timing: { kind: "firstNight" }, instruction: "Show the Minion character token and point to the two players.", requirements: [
+      { id: "players", kind: "player", cardinality: { kind: "exactly", count: 2 }, label: "The two players shown" },
+      { id: "role", kind: "role", label: "The Minion character shown" },
+    ] },
+  ],
   // "You start knowing that 1 of 2 players is a particular Townsfolk."
   // Players + Role -- the two-player-plus-one-role shape shared by
   // Librarian/Investigator (not separately structured here; see the
@@ -129,6 +144,32 @@ export const INFORMATION_ACTIONS: Record<RoleId, InformationAction[]> = {
       requirements: [
         { id: "chosenPlayer", kind: "player", cardinality: { kind: "exactly", count: 1 }, label: "The consenting player the Harlot chose" },
         { id: "role", kind: "role", cardinality: { kind: "exactly", count: 1 }, label: "The character shown to the Harlot" },
+      ],
+    },
+  ],
+
+  // "Each night*, you learn if a Minion nominated today." -- Boolean, other nights only.
+  // Treacherous 30th (owner-authorized Silverwick-authored metadata; no pinned action existed).
+  towncrier: [
+    {
+      id: "towncrier-other-night",
+      timing: { kind: "otherNight" },
+      instruction: "Nod if a Minion nominated today, shake your head if not.",
+      requirements: [
+        { id: "minionNominated", kind: "boolean", label: "Whether a Minion nominated today" },
+      ],
+    },
+  ],
+
+  // "Each night*, you learn how many dead players are evil." -- Number, other nights only.
+  // Treacherous 30th (owner-authorized Silverwick-authored metadata; no pinned action existed).
+  oracle: [
+    {
+      id: "oracle-other-night",
+      timing: { kind: "otherNight" },
+      instruction: "Give a finger signal for the number of dead players who are evil.",
+      requirements: [
+        { id: "deadEvil", kind: "number", label: "Number of dead evil players" },
       ],
     },
   ],

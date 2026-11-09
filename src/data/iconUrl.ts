@@ -12,6 +12,7 @@
 // If a RoleDef carries its own iconUrl, that always wins.
 
 import type { RoleDef } from "@/stores/types";
+import { localCharacterArt } from "./localArt";
 
 const DEFAULT_BASE = "https://release.botc.app/resources/characters/";
 
@@ -58,11 +59,15 @@ function cdnUrlForRole(role: RoleDef): string {
 export function iconUrlFor(roleOrId: string | RoleDef): string {
   if (typeof roleOrId !== "string") {
     if (roleOrId.iconUrl) return roleOrId.iconUrl;
-    return cdnUrlForRole(roleOrId);
+    // Package 3: self-hosted official art wins; the CDN is only the fallback
+    // for characters with no local file.
+    return localCharacterArt(roleOrId.id) ?? cdnUrlForRole(roleOrId);
   }
   // String-only path: no RoleDef available (e.g. unknown custom role).
   // Fall back to a best-guess TB townsfolk path; the img's onError hides it.
   const base = readBaseUrl();
   const id = roleOrId.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+  const local = localCharacterArt(id);
+  if (local) return local;
   return `${base}tb/${id}_g.webp`;
 }

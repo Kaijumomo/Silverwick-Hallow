@@ -204,7 +204,12 @@ describe("10H-AC-050: lost-response recovery never duplicates or contradicts the
       if (lose && Object.keys(updates).includes(`${root}/session`)) { lose = false; throw new Error("unexpected response failure"); }
     };
     await act(async () => { expect(await endGameWithIntent({ kind: "declare", winner: "good" })).toMatchObject({ ok: false }); });
-    expect(st().advancePhase()).toMatchObject({ ok: true }); // Day 3 -> Night 4, locally
+    // B8's authoritative phase boundary refuses a writer whose close landed.
+    expect(st().advancePhase()).toMatchObject({ ok: false });
+    expect(game().day).toBe(3);
+    // Still exercise recovery of an older client snapshot that advanced
+    // locally before this guard existed; the earlier published result wins.
+    useStorytellerStore.setState({ game: { ...game(), phase: "night", day: 4 } });
     expect(game().day).toBe(4);
     await act(async () => { expect(await endGameWithIntent({ kind: "noResult" })).toEqual({ ok: true }); });
     expect(game().result).toEqual({ winner: "good", declaredAt: { phase: "day", day: 3 } });
@@ -376,7 +381,7 @@ describe("10H-AC-030 / AC-031 / AC-056..058: player reveal, acknowledgement and 
     expect(usePlayerStore.getState().revealed).toBe(false);
     stop2();
     // A v3 blob that stored revealed:true never re-opens the card.
-    expect(migratePlayerState({ revealed: true, townNotes: {} }, 3)).toEqual({ townNotes: {} });
+    expect(migratePlayerState({ revealed: true, townNotes: {} }, 3)).toEqual({ townNotes: {}, seatGuesses: {} });
   });
 
   it("AC-031: a visible-identity change re-seals the card; the player's own Life is in their envelope", async () => {

@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { gameRuleFactDefinition, registeredGameRuleFactExpiry } from "./gameRuleFactRegistry";
+import { gameRuleFactDefinition, registeredGameRuleFactExpiry, victoryEvidenceInvalidReason, victoryEvidenceCollectionInvalidReason, isVictoryEvidenceType } from "./gameRuleFactRegistry";
+import { VotingDayStateSchema } from "./votingSchema";
 
 export const AlignmentSchema = z.enum(["good", "evil"]);
 /** Phase 10E (v23): STORED player-facing alignment perception. `undisclosed`
@@ -104,6 +105,8 @@ export const PrivateInfoSchema = z.object({
   bluffs: z.array(z.string().min(1)).optional(),
   fakeMinions: z.array(z.string().min(1)).optional(),
   extraText: z.string().optional(),
+  /** Package 3 (C2): the Storyteller chose to show this Minion/Demon the evil team. */
+  team: z.literal(true).optional(),
 });
 
 export const StatusesSchema = z.record(z.string().min(1), z.boolean());
@@ -159,6 +162,66 @@ export const LiveGameMomentSchema = z.object({
 }).strict();
 /** A ParticipantRef naming a real participation instance (never "legacy"). */
 export const CurrentParticipantRefSchema = ParticipantRefSchema.options[0];
+
+const PreparedInformationCandidateSchema = z.object({
+  participant: CurrentParticipantRefSchema,
+  actualRole: z.string().min(1),
+  shownRole: z.string().min(1).nullable(),
+  identityEpoch: z.string().min(1),
+}).strict();
+const PreparedInformationReminderSchema = z.object({
+  id: z.string().min(1),
+  participant: CurrentParticipantRefSchema,
+  label: z.enum(["Townsfolk", "Outsider", "Minion", "Wrong"]),
+}).strict();
+/** Pending preparation has no delivered state: communication uses the existing
+ * InformationDelivery contract and removes this record in the same transaction. */
+export const PreparedInformationRecordSchema = z.object({
+  id: z.string().min(1),
+  character: z.enum(["washerwoman", "librarian", "investigator"]),
+  informationActionId: z.string().min(1),
+  source: CurrentParticipantRefSchema,
+  actualRole: z.string().min(1),
+  shownRole: z.string().min(1).nullable(),
+  sourceIdentityEpoch: z.string().min(1),
+  gameCode: z.string(),
+  scriptId: z.string().min(1),
+  scriptFingerprint: z.string().min(1),
+  mode: z.enum(["verified", "storyteller"]),
+  clue: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("pair"),
+      candidates: z.tuple([PreparedInformationCandidateSchema, PreparedInformationCandidateSchema]),
+      shownCharacter: z.string().min(1),
+      qualifyingParticipantId: z.string().min(1),
+      reminders: z.tuple([PreparedInformationReminderSchema, PreparedInformationReminderSchema]),
+    }).strict(),
+    z.object({ kind: z.literal("zero-outsiders") }).strict(),
+  ]),
+}).strict().superRefine((record, ctx) => {
+  const issue = (message: string, path: (string | number)[]) => ctx.addIssue({ code: z.ZodIssueCode.custom, message, path });
+  const actionId = record.clue.kind === "zero-outsiders" ? "librarian-first-night-zero" : `${record.character}-first-night`;
+  if (record.informationActionId !== actionId)
+    issue("prepared information action must belong to its character", ["informationActionId"]);
+  if (record.clue.kind === "zero-outsiders") {
+    if (record.character !== "librarian") issue("only Librarian can prepare zero Outsiders", ["clue"]);
+    return;
+  }
+  const { candidates, qualifyingParticipantId, reminders } = record.clue;
+  if (candidates[0].participant.participantId === candidates[1].participant.participantId ||
+      candidates[0].participant.playerId === candidates[1].participant.playerId)
+    issue("prepared candidates must be distinct participants and seats", ["clue", "candidates"]);
+  if (!candidates.some(candidate => candidate.participant.participantId === qualifyingParticipantId))
+    issue("qualifying participant must belong to the pair", ["clue", "qualifyingParticipantId"]);
+  if (reminders[0].id === reminders[1].id) issue("generated reminder IDs must be distinct", ["clue", "reminders"]);
+  const qualifyingLabel = { washerwoman: "Townsfolk", librarian: "Outsider", investigator: "Minion" }[record.character];
+  candidates.forEach((candidate, index) => {
+    const links = reminders.filter(reminder => reminder.participant.participantId === candidate.participant.participantId &&
+      reminder.participant.playerId === candidate.participant.playerId);
+    const expectedLabel = candidate.participant.participantId === qualifyingParticipantId ? qualifyingLabel : "Wrong";
+    if (links.length !== 1 || links[0]?.label !== expectedLabel)
+      issue("each candidate must own its exact qualifying or Wrong reminder", ["clue", "candidates", index]);
+  });
+});
 
 /**
  * Phase 10B (store v20): the authoritative Effect lifecycle.
@@ -803,12 +866,19 @@ const forwardIssues = (ctx: z.RefinementCtx, issues: z.ZodIssue[]) => {
  * is judged by the unchanged participant contract (which requires
  * `participant` and rejects rule-fact metadata).
  */
+export const VotingHistoryRecordSchema = z.object({
+  id: z.string().min(1), category: z.literal("voting"), moment: LiveGameMomentSchema,
+  operation: z.enum(["begin", "respond", "undoLast", "correctResponse", "abandon", "acknowledge", "acknowledgeContext", "bureaucrat", "removeModifier", "virgin", "execution", "exileOutcome"]),
+  summary: z.string().min(1).max(1000), roundId: z.string().min(1).max(200).optional(),
+  participant: ParticipantRefSchema.optional(), correction: z.literal(true).optional(),
+  change: z.never().optional(),
+}).strict();
 export const HistoryRecordSchema = z.unknown().transform((raw, ctx) => {
-  const schema: z.ZodTypeAny = isPlainRecord(raw) && raw.category === "gameRuleFact"
-    ? GameRuleFactHistoryRecordSchema : ParticipantHistoryRecordSchema;
+  const schema: z.ZodTypeAny = isPlainRecord(raw) && raw.category === "voting" ? VotingHistoryRecordSchema :
+    isPlainRecord(raw) && raw.category === "gameRuleFact" ? GameRuleFactHistoryRecordSchema : ParticipantHistoryRecordSchema;
   const parsed = schema.safeParse(raw);
   if (!parsed.success) { forwardIssues(ctx, parsed.error.issues); return z.NEVER; }
-  return parsed.data as z.infer<typeof ParticipantHistoryRecordSchema> | z.infer<typeof GameRuleFactHistoryRecordSchema>;
+  return parsed.data as z.infer<typeof ParticipantHistoryRecordSchema> | z.infer<typeof GameRuleFactHistoryRecordSchema> | z.infer<typeof VotingHistoryRecordSchema>;
 });
 
 // The non-Player Information Value variants are shared verbatim by the
@@ -1000,6 +1070,51 @@ export const PrivatePacketSchema = z.object({
   forPhase: z.enum(["setup", "night", "day", "ended"]).optional(),
 });
 
+/** Package 3 (C1): one piece of player-visible information. Strict, at least
+ * one field, no unknown keys -- the content a participant is shown, never a
+ * Storyteller draft or note. */
+const PlayerInfoSeatSchema = z.object({ id: z.string().min(1), name: z.string().min(1), seat: z.number().int().nonnegative() }).strict();
+export const MAX_PLAYER_INFO_TEXT = 4000;
+export const MAX_PLAYER_INFO_VERSIONS = 10;
+export const MAX_PLAYER_INFO_ENTRIES_PER_PARTICIPANT = 100;
+/** The whole per-game log must stay within this many Firebase string bytes. */
+export const MAX_PLAYER_INFO_LOG_BYTES = 1024 * 1024;
+const PlayerInfoContentShape = z.object({
+  text: z.string().min(1).max(MAX_PLAYER_INFO_TEXT).optional(),
+  demon: PlayerInfoSeatSchema.optional(),
+  minions: z.array(PlayerInfoSeatSchema).max(20).optional(),
+  bluffs: z.array(z.string().min(1)).max(5).optional(),
+}).strict();
+const hasInfoField = (c: { text?: unknown; demon?: unknown; minions?: unknown; bluffs?: unknown }) =>
+  c.text !== undefined || c.demon !== undefined || c.minions !== undefined || c.bluffs !== undefined;
+export const PlayerInfoContentSchema = PlayerInfoContentShape.refine(hasInfoField, { message: "player information needs at least one field" });
+/** What the player's own phone receives for one entry: the shown content only
+ * (never packet ids, recipients or superseded versions). */
+export const PlayerInfoViewSchema = PlayerInfoContentShape.extend({
+  id: z.string().min(1),
+  moment: LiveGameMomentSchema.optional(),
+}).refine(hasInfoField, { message: "player information needs at least one field" });
+export const PlayerInfoEntrySchema = z.object({
+  id: z.string().min(1),
+  packetId: z.string().min(1),
+  recipient: CurrentParticipantRefSchema,
+  moment: LiveGameMomentSchema.optional(),
+  shown: PlayerInfoContentSchema,
+  versions: z.array(PlayerInfoContentSchema).max(MAX_PLAYER_INFO_VERSIONS),
+}).strict();
+export const PlayerInfoLogSchema = z.array(PlayerInfoEntrySchema).superRefine((log, ctx) => {
+  const ids = new Set<string>();
+  const perRecipient = new Map<string, number>();
+  log.forEach((entry, index) => {
+    if (ids.has(entry.id)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "duplicate player information id", path: [index, "id"] });
+    ids.add(entry.id);
+    const key = entry.recipient.participantId;
+    const n = (perRecipient.get(key) ?? 0) + 1;
+    perRecipient.set(key, n);
+    if (n > MAX_PLAYER_INFO_ENTRIES_PER_PARTICIPANT) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "too many information entries for one participant", path: [index] });
+  });
+});
+
 export const STPlayerRecordSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -1075,16 +1190,17 @@ export const NightStepRecordSchema = z.object({
 
 /** Phase 10B: the current game snapshot schema version (see
  * StorytellerLobbyRecord.gameSchemaVersion). Phase 10C: v21. Phase 10D: v22.
- * Phase 10E: v23. Phase 10F: v24. Phase 10G: v25. Phase 10H: v26. */
-export const GAME_SCHEMA_VERSION = 26 as const;
-/** Phase 10H: the explicit markers migration still accepts, routed PER ENTRY
- * (see migrateGameEntry): 20 receives v20 -> ... -> v26, ..., 24 receives
- * v24 -> v25 -> v26, 25 receives v25 -> v26, 26 is current and receives
+ * Phase 10E: v23. Phase 10F: v24. Phase 10G: v25. Phase 10H: v26. Voting: v27.
+ * B6: v28 prepared first-night information. Package 3: v29 player information log. */
+export const GAME_SCHEMA_VERSION = 29 as const;
+/** Explicit markers migration still accepts, routed PER ENTRY
+ * (see migrateGameEntry): 20 receives v20 -> ... -> v29, ..., 28 receives
+ * v28 -> v29. 29 is current and receives
  * nothing. Any other marker is never reinterpreted as legacy -- the current
  * schema rejects it. */
-export const MIGRATABLE_GAME_SCHEMA_VERSIONS = [20, 21, 22, 23, 24, 25] as const;
-/** The immediately previous explicit marker (v25 -> v26). */
-export const PREVIOUS_GAME_SCHEMA_VERSION = 25 as const;
+export const MIGRATABLE_GAME_SCHEMA_VERSIONS = [20, 21, 22, 23, 24, 25, 26, 27, 28] as const;
+/** The immediately previous explicit marker (v28 -> v29). */
+export const PREVIOUS_GAME_SCHEMA_VERSION = 28 as const;
 
 export const StorytellerLobbyRecordSchema = z.object({
   // Phase 10B (v20) / 10C (v21) / 10D (v22) / 10E (v23) / 10F (v24) / 10G (v25): required explicit version evidence, NO
@@ -1113,6 +1229,27 @@ export const StorytellerLobbyRecordSchema = z.object({
   pendingPlayers: z.record(z.string(), z.string()).default({}),
   history: z.array(HistoryRecordSchema).default([]),
   informationDeliveries: z.array(InformationDeliveryRecordSchema).default([]),
+  // Required without a default: only actual older versions receive an empty
+  // collection from migration; malformed v28 state must remain rejected.
+  preparedInformation: z.array(PreparedInformationRecordSchema).superRefine((records, ctx) => {
+    const ids = new Set<string>();
+    const owners = new Set<string>();
+    const reminders = new Set<string>();
+    records.forEach((record, index) => {
+      // Librarian pair and zero are two result shapes of ONE ability.
+      const owner = JSON.stringify([record.source.participantId, record.character]);
+      if (ids.has(record.id) || owners.has(owner)) ctx.addIssue({ code: z.ZodIssueCode.custom,
+        message: "duplicate prepared identity or source ability", path: [index] });
+      ids.add(record.id); owners.add(owner);
+      if (record.clue.kind === "pair") record.clue.reminders.forEach((reminder, offset) => {
+        if (reminders.has(reminder.id)) ctx.addIssue({ code: z.ZodIssueCode.custom,
+          message: "a generated reminder cannot belong to multiple preparations", path: [index, "clue", "reminders", offset] });
+        reminders.add(reminder.id);
+      });
+    });
+  }),
+  // Package 3 (v29): required, no default; only migration supplies [].
+  playerInfoLog: PlayerInfoLogSchema,
   // Phase 10A (v19): required, with NO default -- a v19 game missing it is
   // incomplete current-version data and fails here; genuine v18 data gets it
   // from migration (gameMigration.ts), never from this schema.
@@ -1138,6 +1275,7 @@ export const StorytellerLobbyRecordSchema = z.object({
   // Phase 10H (v26): optional; valid only on an ended game (checked below and
   // in StorytellerGamePersistedSchema).
   result: GameResultSchema.optional(),
+  voting: VotingDayStateSchema.optional(),
 });
 
 export const PublicLobbyRecordSchema = z.object({
@@ -1151,6 +1289,8 @@ export const PublicLobbyRecordSchema = z.object({
   lorics: z.array(z.string().min(1)).default([]),
   winner: AlignmentSchema.optional(),
   status: z.literal("ended").optional(),
+  arrivals: z.array(z.string().min(1).max(60)).max(40).optional(),
+  plannedPlayers: z.number().int().positive().max(40).optional(),
 });
 
 // Looser variants for validating persisted (localStorage) state.
@@ -1421,6 +1561,8 @@ export const StorytellerGamePersistedSchema = z.preprocess((raw, ctx) => {
   players: z.record(z.string(), STPlayerRecordPersistedSchema),
   pendingPlayers: z.record(z.string(), z.string()).default({}),
 }).superRefine((game, ctx) => {
+  if (game.voting && (game.voting.day > game.day || (game.phase === "day" && game.voting.day !== game.day)))
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Voting must belong to the current Day or an earlier retained Night result.", path: ["voting", "day"] });
   // SOL-10E-A3 (ASTRA-10E-003): Live Play has a valid live Game Moment --
   // Night/Day are day >= 1. Setup may be day 0; an ended snapshot keeps the
   // day it ended at. Rejected, never repaired.
@@ -1440,9 +1582,43 @@ export const StorytellerGamePersistedSchema = z.preprocess((raw, ctx) => {
   }
   checkSeatGeometry(game, ctx);
   checkCurrentParticipantIdentityUniqueness(game, ctx);
+  // Pending intent must remain attached to the precise live participants and
+  // generated tokens. Impairment/registration truth is revalidated by commands,
+  // never repaired or inferred during snapshot recovery.
+  game.preparedInformation.forEach((record, index) => {
+    const issue = (message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom,
+      message, path: ["preparedInformation", index] });
+    const matches = (ref: z.infer<typeof CurrentParticipantRefSchema>) => {
+      const player = game.players[ref.playerId];
+      return player && !player.isEmpty && player.participantId === ref.participantId;
+    };
+    if (record.gameCode !== game.code || record.scriptId !== game.scriptId)
+      issue("prepared information belongs to a different game or script");
+    if (!matches(record.source)) issue("prepared information source is no longer the bound participant");
+    if (record.clue.kind === "pair") {
+      record.clue.candidates.forEach(candidate => {
+        if (!matches(candidate.participant)) issue("prepared information candidate is no longer the bound participant");
+      });
+      record.clue.reminders.forEach(link => {
+        const reminder = game.players[link.participant.playerId]?.reminders.find(item => item.id === link.id);
+        if (!matches(link.participant) || !reminder || reminder.label !== link.label ||
+            reminder.sourceCharacter !== record.character || reminder.sourceParticipant?.kind !== "participant" ||
+            reminder.sourceParticipant.participantId !== record.source.participantId ||
+            reminder.sourceParticipant.playerId !== record.source.playerId)
+          issue("prepared information generated reminder linkage is contradictory");
+      });
+    }
+  });
   checkEffectTemporalCoherence(game, ctx);
   checkReminderTemporalCoherence(game, ctx);
   checkGameRuleFactTemporalCoherence(game, ctx);
+  const evidenceCollectionError = victoryEvidenceCollectionInvalidReason(game.gameRuleFacts, game.lifeEventWindow.events);
+  if (evidenceCollectionError) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["gameRuleFacts"], message: evidenceCollectionError });
+  game.gameRuleFacts.forEach((fact, index) => {
+    if (!isVictoryEvidenceType(fact.type)) return;
+    const reason = victoryEvidenceInvalidReason(game, fact);
+    if (reason) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["gameRuleFacts", index], message: reason });
+  });
 }));
 
 export const GuardStampSchema = z.object({
@@ -1458,10 +1634,21 @@ export const SyncMetaSchema = z.object({
   lastAttempt: GuardStampSchema.nullable(),
 });
 
+const SeatSwapLayoutPlayerSchema = z.object({
+  playerId: z.string().min(1), participantId: z.string().min(1),
+  seat: z.number().int().nonnegative(),
+  x: z.number().finite(), y: z.number().finite(),
+}).strict();
+// Optional local layout history. A malformed value is discarded without
+// invalidating the authoritative game or its ordinary Undo history.
+export const SeatSwapUndoSchema = z.array(z.tuple([SeatSwapLayoutPlayerSchema, SeatSwapLayoutPlayerSchema]).nullable()).max(20).catch([]);
+export type SeatSwapUndo = z.infer<typeof SeatSwapUndoSchema>;
+
 export const StorytellerStateSchema = z.object({
   game: StorytellerGamePersistedSchema.nullable().optional(),
   view: z.enum(["home", "game", "newgame"]).optional(),
   undoStack: z.array(StorytellerGamePersistedSchema).optional(),
+  seatSwapUndo: SeatSwapUndoSchema.optional(),
   customScripts: z.record(z.string(), ScriptSchema).optional(),
   lobby: z
     .object({

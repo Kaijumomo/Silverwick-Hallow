@@ -5,12 +5,14 @@
 // preview) don't pay the ~150kB gzipped Firebase cost.
 
 import { loadFirebaseConfig } from "./config";
+import { isTabletTrial, TABLET_TRIAL_OFFLINE_MESSAGE } from "@/config/trial";
 import type { RoomBackend } from "./backend";
 
 let activeBackend: RoomBackend | null = null;
 let activeUid: string | null = null;
 
 export function getActiveBackend(): RoomBackend {
+  if (isTabletTrial) throw new Error(TABLET_TRIAL_OFFLINE_MESSAGE);
   if (!activeBackend) {
     throw new Error(
       "No active Firebase backend. Configure Firebase first via the Configure dialog."
@@ -20,6 +22,7 @@ export function getActiveBackend(): RoomBackend {
 }
 
 export function getActiveUid(): string {
+  if (isTabletTrial) throw new Error(TABLET_TRIAL_OFFLINE_MESSAGE);
   if (!activeUid) {
     throw new Error("Not authenticated. Call connectFirebase() first.");
   }
@@ -33,6 +36,7 @@ export function getActiveUid(): string {
  */
 let connecting: Promise<{ backend: RoomBackend; uid: string }> | null = null;
 export function connectFirebase(): Promise<{ backend: RoomBackend; uid: string }> {
+  if (isTabletTrial) return Promise.reject(new Error(TABLET_TRIAL_OFFLINE_MESSAGE));
   if (!connecting) connecting = establishFirebase().finally(() => { connecting = null; });
   return connecting;
 }

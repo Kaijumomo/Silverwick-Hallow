@@ -9,6 +9,7 @@ import type { GuardStamp, ParticipantId, PlayerId } from "@/stores/types";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import { buildRegistry } from "@/data/roleRegistry";
 import { writeProjections } from "./sync";
+import { computeArrivals } from "./arrivals";
 import { formatCode, revokePlayerMembership } from "./lobby";
 import type { RoomBackend } from "./backend";
 import type { OnlineMap } from "@/stores/projections";
@@ -16,6 +17,7 @@ import { decodeMembershipRevocations, decodePresence, decodeRoster, decodeRoster
 import { membershipRevocationsPath, rosterParticipantsPath, storytellerPathSegments } from "./paths";
 import type { RevocationAction } from "./lobby";
 import { SessionWriter, FENCE_MARGIN_MS, type AuthorityHandle, type TerminalPublicationBuilder } from "./writer";
+import { registerVotingAuthorityReader } from "./votingAuthority";
 import { readPublishedResult } from "./terminalResults";
 import { revealAcksPath } from "./paths";
 import { classifyStorytellerError, decodeSession, guardSchema, isTransient, leaseSchema, LifecycleError, sessionPath, type SessionFailure } from "./lifecycle";
@@ -56,6 +58,15 @@ type Runtime = {
   presence: "unknown" | "ready" | "error";
   online: OnlineMap;
   pending: number;
+  /** Distinct players CURRENTLY joined to this lobby, in arrival order: every
+   * uid that holds a join request (waiting) or a roster binding (seated) AND
+   * whose presence is online and fresh right now. Counted by distinct uid, so
+   * a re-knock or a duplicate request is one player, and a player who
+   * disconnects or cancels drops out. Empty until presence is ready. Runtime
+   * only -- derived, observational, never persisted or authoritative; it
+   * seats nobody (seating stays the Storyteller's explicit act). `playerId`
+   * is the seat the roster binds the uid to, or null while still waiting. */
+  joined: JoinedPlayer[];
   retry: number;
   reconnect: ReconnectRuntimeStatus;
   /** Phase 9C.3 (OPUS-003): observational-only view of leaveRequests, keyed
@@ -103,7 +114,17 @@ type Runtime = {
 };
 /** A superseded lobby whose authoritative cleanup failed (see above). */
 export type UnattachedCleanupFailure = { code: string; message: string };
-export const useSessionRuntime = create<Runtime>(() => ({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, retry: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {}, revealAcks: {}, status: "idle", failure: null, closeFailed: false, leaveOffer: null, unattachedCleanupFailures: [] }));
+export type JoinedPlayer = { uid: string; playerId: string | null; expiresAt: number };
+/** How long a presence heartbeat stays fresh (shared with the online map). */
+const PRESENCE_FRESH_MS = 45_000;
+export const useSessionRuntime = create<Runtime>(() => ({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, joined: [], pending: 0, retry: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {}, revealAcks: {}, status: "idle", failure: null, closeFailed: false, leaveOffer: null, unattachedCleanupFailures: [] }));
+registerVotingAuthorityReader(scope => {
+  const runtime = useSessionRuntime.getState();
+  const writer = runtime.backend;
+  return scope.status === "live" && runtime.status === "live" && writer &&
+    writer.code === scope.code && writer.sessionId === scope.sessionId &&
+    !writer.leaseMayHaveLapsed() ? writer.token : null;
+});
 /** ASTRA-10G-R1-001: removes exactly this lobby's cleanup warning; changes no
  * game, lobby or session state. */
 export function dismissUnattachedCleanupFailure(code: string) {
@@ -392,7 +413,7 @@ export function useStorytellerSync(backend: RoomBackend | null) {
     let stop: (() => void) | undefined;
     const writer = new SessionWriter(backend, lobby.code, lobby.sessionId ?? "", error =>
       reportRuntimeError("write", error ? noteFailure(error, liveWriters.has(writer) ? "live" : "startup").message : null));
-    useSessionRuntime.setState({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, pending: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {}, revealAcks: {}, status: initialConnectionStatus(lobby), failure: null, closeFailed: false, leaveOffer: null });
+    useSessionRuntime.setState({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, joined: [], pending: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {}, revealAcks: {}, status: initialConnectionStatus(lobby), failure: null, closeFailed: false, leaveOffer: null });
     // Resume hardening: a backgrounded tab's throttled timers can skip lease
     // renewals. When the tab resumes (or the network returns) and this live
     // writer's own bookkeeping can no longer prove its lease, revalidate
@@ -468,7 +489,7 @@ export function useStorytellerSync(backend: RoomBackend | null) {
           reportRuntimeError("write", classifyStorytellerError(error, "startup").message);
         })
       );
-      useSessionRuntime.setState({ backend: null, presence: "unknown", online: {}, pending: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {}, revealAcks: {} });
+      useSessionRuntime.setState({ backend: null, presence: "unknown", online: {}, joined: [], pending: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {}, revealAcks: {} });
     };
   }, [backend, lobby?.code, lobby?.sessionId, retry]);
 }
@@ -741,6 +762,7 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   // lock (which drops game mutations while a close is in flight) is released.
   let resyncRequests = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let presenceExpiry: ReturnType<typeof setTimeout> | undefined;
   let roster: Record<string, string> = {};
   let presence: Record<string, { online: boolean; lastSeen: number }> = {};
   let requests: Record<string, string> = {};
@@ -762,9 +784,10 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
     if (stopped) return;
     stopped = true;
     clearTimeout(timer);
+    clearTimeout(presenceExpiry);
     cleanups.splice(0).forEach(off => off());
     writer.stop();
-    useSessionRuntime.setState({ backend: null, presence: "unknown", online: {}, leaveRequests: {}, travelerChoices: {}, revealAcks: {},
+    useSessionRuntime.setState({ backend: null, presence: "unknown", online: {}, joined: [], pending: 0, leaveRequests: {}, travelerChoices: {}, revealAcks: {},
       ...(liveWriters.has(writer) && !closing && useSessionRuntime.getState().status === "live" ? { status: "stopped" as const } : {}) });
   }
   // Wired here — before the checkpoint read/restore/reconcile window below,
@@ -774,13 +797,48 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
   // so once this is wired, no watcher can be installed after a stop.
   writer.onStop = stop;
 
+  // Package 3 (A1): derived from the runtime `joined` view the instant it is
+  // read; empty outside Setup. Never contains a uid.
+  let lastArrivalsSignature = "[]";
+  const currentArrivals = (): string[] => {
+    const game = useStorytellerStore.getState().game;
+    if (!game || game.code !== lobby.code) return [];
+    return computeArrivals(game, useSessionRuntime.getState().joined, requests);
+  };
   const updateOnline = () => {
+    clearTimeout(presenceExpiry);
+    if (stopped || !sameSession()) return;
+    const now = Date.now();
+    const ready = useSessionRuntime.getState().presence === "ready";
+    const here = (uid: string) => { const p = presence[uid]; return ready && !!p && p.online && now - p.lastSeen < PRESENCE_FRESH_MS; };
     const online: OnlineMap = {};
-    for (const [uid, id] of Object.entries(useSessionRuntime.getState().presence === "ready" ? roster : {})) {
+    for (const [uid, id] of Object.entries(ready ? roster : {})) {
       const p = presence[uid];
-      if (p && (!p.online || Date.now() - p.lastSeen < 45_000)) online[id] = p.online;
+      if (p && (!p.online || now - p.lastSeen < PRESENCE_FRESH_MS)) online[id] = p.online;
     }
-    useSessionRuntime.setState({ online, pending: Object.keys(requests).filter(uid => presence[uid]?.online).length });
+    const joined: JoinedPlayer[] = [];
+    if (ready) {
+      const seen = new Set<string>();
+      for (const uid of [...Object.keys(requests), ...Object.keys(roster)]) {
+        if (seen.has(uid) || !here(uid)) continue;
+        seen.add(uid);
+        joined.push({ uid, playerId: roster[uid] ?? null, expiresAt: presence[uid]!.lastSeen + PRESENCE_FRESH_MS });
+      }
+    }
+    useSessionRuntime.setState({ online, joined, pending: Object.keys(requests).filter(here).length });
+    // Package 3 (A1): the public arrivals list follows presence, which is not
+    // part of the game record, so a change in who is here must trigger its own
+    // projection write -- including a silent heartbeat expiry (this function is
+    // also the expiry timer's callback). `schedule` coalesces with other flushes.
+    const arrivalsSignature = JSON.stringify(currentArrivals());
+    if (arrivalsSignature !== lastArrivalsSignature) { lastArrivalsSignature = arrivalsSignature; schedule(); }
+    // Recompute at the first heartbeat deadline, even if Firebase is silent.
+    // This only expires the observational view; it never removes membership,
+    // changes a participant identity, or writes authoritative game state.
+    if (joined.length) {
+      const nextExpiry = Math.min(...joined.map(player => player.expiresAt));
+      presenceExpiry = setTimeout(updateOnline, Math.min(PRESENCE_FRESH_MS, Math.max(1, nextExpiry - now)));
+    }
   };
   // Phase 9C.3 (OPUS-003): derive the runtime pending-leave view from the two
   // snapshots it depends on. Roster and leaveRequests watch() callbacks may
@@ -831,7 +889,7 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
       if (!script) throw new SnapshotValidationError();
       const membership = decodeRoster(await inner.get(`lobbies/${lobby.code}/roster`));
       if (membership.status !== "ready") throw new SnapshotValidationError();
-      await writeProjections({ backend: inner, code: lobby.code, stState: state.game, registry: buildRegistry(script), online: useSessionRuntime.getState().online, membership: membership.data });
+      await writeProjections({ backend: inner, code: lobby.code, stState: state.game, registry: buildRegistry(script), online: useSessionRuntime.getState().online, arrivals: currentArrivals(), membership: membership.data });
     }).then(() => {
       // This flush's commit may have been in flight before a terminal stop
       // (e.g. a real lease-renewal denial) landed it successfully afterward.
@@ -883,12 +941,12 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
         try { receive(value); report(suffix); }
         catch (error) {
           report(suffix, error);
-          if (suffix === "presence") useSessionRuntime.setState({ presence: "error", online: {} });
+          if (suffix === "presence") useSessionRuntime.setState({ presence: "error", online: {}, joined: [], pending: 0 });
         }
       }, error => {
         if (stopped) return;
         report(suffix, error, "read");
-        if (suffix === "presence") useSessionRuntime.setState({ presence: "error", online: {} });
+        if (suffix === "presence") useSessionRuntime.setState({ presence: "error", online: {}, joined: [], pending: 0 });
         if (isTransient(error) && attempts++ < 3) {
           retryTimer = setTimeout(() => { off(); listen(); }, 250 * 2 ** (attempts - 1));
         }
@@ -995,7 +1053,7 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
     }
     // A stop occurring specifically during the seven watch() installations
     // just above (e.g. an immediately-observed ended session) is caught
-    // here, before unsubStore/stalePresence go live and before the initial
+    // here, before unsubStore goes live and before the initial
     // flush.
     if (stopped) throw new LifecycleError("cancelled", "Session stopped during reconnect.");
     const unsubStore = useStorytellerStore.subscribe((state, previous) => {
@@ -1004,8 +1062,6 @@ export async function startStorytellerSession(raw: RoomBackend, lobby: LobbyConn
       if (resyncRequests) resyncPendingQueue();
     });
     cleanups.push(unsubStore);
-    const stalePresence = setInterval(updateOnline, 15_000);
-    cleanups.push(() => clearInterval(stalePresence));
     // Establish the first acknowledged checkpoint before exposing membership
     // controls. A takeover must always have a remote recovery point.
     clearTimeout(timer); timer = undefined;
