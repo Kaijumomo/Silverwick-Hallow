@@ -56,6 +56,7 @@ const ALLOWED_MODULES: Record<string, string> = {
   "stores/identity.ts": "dealtIdentity: the Setup Deal's fresh assignment",
   "stores/schemas.ts": "the persisted-shape schemas",
   "stores/gameMigration.ts": "legacy migration",
+  "stores/storeMigration.ts": "legacy migration of a saved store (migrateStoreState, moved out of storytellerStore.ts by F-05; unit audited below)",
   "stores/projections.ts": "builds projection RECORDS (public/self), never Current State",
   "stores/informationDelivery.ts": "an Information Delivery RECORD snapshots the recipient's Actual Role (Phase 10F pure planner), never Current State",
   "stores/abilityResolution.ts": "captureFingerprint snapshots the OBSERVED Role/perception into a read-only workflow fingerprint (Phase 10F), never Current State",
@@ -113,6 +114,11 @@ describe("Phase 10D architecture guard: no writer bypasses the Role seam", () =>
     // The Setup Deal / refinement commands write through the one reviewed
     // builder (freshAssignment -> dealtIdentity), never field by field.
     expect(units.has("freshAssignment")).toBe(false);
+  });
+
+  it("F-05: in the saved-store migration module, only migrateStoreState writes them (as it did inside the store)", () => {
+    const source = readFileSync(join(SRC, "stores/storeMigration.ts"), "utf8");
+    expect([...new Set(writeLines(source).map((line) => enclosingUnit(source, line)))]).toEqual(["migrateStoreState"]);
   });
 
   it("SOL-10F-L7: the 10F snapshot modules write Role fields only as observed copies inside their reviewed unit", () => {
