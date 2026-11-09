@@ -6,6 +6,8 @@ export type SliceResult = {
   advance?: { text: string; run: () => void };
   /** Extra "block"/nominate state the dock pill shows during the Day. */
   pill?: Record<string, unknown>;
+  /** Chrome keys this slice deliberately replaces (the setup wizard hides the dock and centre text). */
+  chrome?: Record<string, unknown>;
 };
 
 export const EMPTY: SliceResult = { vm: {} };

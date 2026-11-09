@@ -26,15 +26,16 @@ export function useGrimoireVm(ctx: V6Ctx): Record<string, unknown> {
     acting: (night.vm.actingName as string | null | undefined) ?? null,
     center: (day.vm.center as { kicker: string; title: string; sub: string } | undefined) ?? null,
   });
-  return mergeSlices({ chrome, board: board.vm, setup: setup.vm, night: night.vm, day: day.vm, info: info.vm });
+  return mergeSlices({ chrome, board: board.vm, setup: setup.vm, night: night.vm, day: day.vm, info: info.vm }, setup.chrome);
 }
 
 /**
  * Spreads the slices into one view-model. Each top-level key must come from exactly one slice: a key two slices
- * both return would silently let the later one win, so in development and tests that is an error. Production
- * skips the check.
+ * both return would silently let the later one win, so in development and tests that is an error. A deliberate
+ * replacement of a chrome key goes in `chromeOverrides` instead, applied last; each of its keys must be one the
+ * chrome slice returns. Production skips the checks.
  */
-export function mergeSlices(slices: Record<string, Record<string, unknown>>): Record<string, unknown> {
+export function mergeSlices(slices: Record<string, Record<string, unknown>>, chromeOverrides: Record<string, unknown> = {}): Record<string, unknown> {
   if (import.meta.env.DEV) {
     const owner = new Map<string, string>();
     for (const [name, slice] of Object.entries(slices)) {
@@ -44,6 +45,9 @@ export function mergeSlices(slices: Record<string, Record<string, unknown>>): Re
         owner.set(key, name);
       }
     }
+    for (const key of Object.keys(chromeOverrides)) {
+      if (owner.get(key) !== "chrome") throw new Error(`Grimoire view-model override "${key}" is not a chrome key`);
+    }
   }
-  return Object.assign({}, ...Object.values(slices));
+  return Object.assign({}, ...Object.values(slices), chromeOverrides);
 }

@@ -73,6 +73,7 @@ export function useSetupVm(ctx: V6Ctx): SliceResult {
     return { vm: {
       wiz: wizardVm(ctx, wiz, true), wizSteps: wizardSteps(wiz), town: { on: false }, seatC: { on: false, btnOn: false }, dealC: { on: false }, pe: { on: false, off: true }, setup: { segs: [] },
       composition: [], rosterMeta: "",
+    }, chrome: {
       dockOn: false, centerKicker: "", centerTitle: "", centerSub: "", inviteDisp: "none",
       scriptName: wiz.script ? script?.name ?? "New game" : "New game",
     } };
