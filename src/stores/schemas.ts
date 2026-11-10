@@ -1279,7 +1279,7 @@ export const StorytellerLobbyRecordSchema = z.object({
 });
 
 const PublicHomebrewRoleSchema = z.object({
-  id: z.string().min(1).max(40),
+  id: z.string().min(1).max(100),
   name: z.string().min(1).max(40),
   type: z.enum(["townsfolk", "outsider", "minion", "demon"]),
   ability: z.string().max(400).optional(),
@@ -1296,7 +1296,7 @@ export const PublicLobbyRecordSchema = z.object({
   lorics: z.array(z.string().min(1)).default([]),
   scriptName: z.string().min(1).max(60).optional(),
   scriptCharacters: z.array(z.string().min(1).max(40)).max(200).optional(),
-  scriptHomebrew: z.array(PublicHomebrewRoleSchema).max(60).optional(),
+  scriptHomebrew: z.array(PublicHomebrewRoleSchema).max(200).optional(),
   winner: AlignmentSchema.optional(),
   status: z.literal("ended").optional(),
   arrivals: z.array(z.string().min(1).max(60)).max(40).optional(),

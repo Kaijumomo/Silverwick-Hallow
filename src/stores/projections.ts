@@ -139,6 +139,9 @@ export function projectToPublic(
 
 export type OnlineMap = Record<PlayerId, boolean>;
 
+/** The most homebrew characters one lobby publishes: the schema's limit, and the same as the official-id list's. */
+const MAX_PUBLIC_HOMEBREW = 200;
+
 /** Clip by UTF-16 length, as the schema's max() counts, without splitting a surrogate pair. */
 function clipText(text: string, max: number): string {
   let out = "";
@@ -161,9 +164,11 @@ export function publicScriptFields(script: Script | undefined): Pick<PublicLobby
   const ids = ordinary.filter(isCanonicalRole).map((role) => role.id);
   const homebrew: PublicHomebrewRole[] = [];
   for (const role of ordinary) {
-    if (isCanonicalRole(role) || homebrew.length >= 60) continue;
-    const name = clipText(role.name, 40);
-    if (!name || !role.id || role.id.length > 40) continue;
+    if (isCanonicalRole(role) || homebrew.length >= MAX_PUBLIC_HOMEBREW) continue;
+    // A blank name falls back to the id, so a player is never shown nothing; only an id beyond the schema's
+    // limit (which cannot be shortened without changing who the character is) leaves a character out.
+    const name = clipText(role.name, 40) || clipText(role.id, 40);
+    if (!name || !role.id || role.id.length > 100) continue;
     const ability = typeof role.ability === "string" ? clipText(role.ability, 400) : "";
     homebrew.push({ id: role.id, name, type: role.type as PublicHomebrewRole["type"], ...(ability ? { ability } : {}) });
   }

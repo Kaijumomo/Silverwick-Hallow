@@ -56,6 +56,8 @@ export function PlayerInformation({ playerId, purpose, pendingExtraText }: {
   const script = game && selectScriptById(state, game.scriptId);
   if (hidden || !game || !p || p.isEmpty || !script) return null;
   const registry = buildRegistry(script);
+  // The player view names a character from this game's own script first (a homebrew character is on no catalogue).
+  const roleNameOf = (id: string) => registry.get(id)?.name;
   const setupWarning = purpose === "setup" ? setupInformationWarning(Object.values(game.players), registry, game) : undefined;
   // The preview reflects any live, uncommitted draft so the Storyteller sees
   // the Player View update immediately while typing. This transient overlay
@@ -93,7 +95,7 @@ export function PlayerInformation({ playerId, purpose, pendingExtraText }: {
     </label>}
     {preview && <details className="information-review">
       <summary>Player view</summary>
-      <PrivateInformation payload={preview.payload} showIdentity showBluffs />
+      <PrivateInformation payload={preview.payload} showIdentity showBluffs roleNameOf={roleNameOf} />
     </details>}
     {purpose === "setup" && !hasPrivateDraft(previewPlayer) && <p className="behavior-help">Choose setup information before sending.</p>}
     <button className="btn btn-sm" disabled={!backend || !!queued || !preview || !!sent}
@@ -126,7 +128,7 @@ export function PlayerInformation({ playerId, purpose, pendingExtraText }: {
     {current && <details className="information-review">
       <summary>Currently shown to player</summary>
       {!backend && <p className="behavior-help">Saved player view; reconnect to verify.</p>}
-      <PrivateInformation payload={current} showIdentity showBluffs />
+      <PrivateInformation payload={current} showIdentity showBluffs roleNameOf={roleNameOf} />
     </details>}
   </div>;
 }

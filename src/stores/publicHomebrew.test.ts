@@ -49,28 +49,34 @@ describe("publicScriptFields: homebrew characters", () => {
     expect(publicScriptFields(extras).scriptHomebrew?.map((r) => r.id)).toEqual(["clockwinder"]);
   });
 
-  it("clips to the schema's limits, drops what cannot fit, and still decodes on a phone", () => {
+  it("clips long text, falls back to the id for a blank name, keeps long ids, and still decodes on a phone", () => {
     const long: Script = {
       id: "long", name: "Long",
       characters: [
-        homebrew({ id: "a".repeat(41), name: "TooLongId", type: "townsfolk" }),
+        homebrew({ id: "a".repeat(41), name: "LongId", type: "townsfolk" }),
         homebrew({ id: "blank", name: "   ", type: "townsfolk" }),
         homebrew({ id: "wordy", name: "\u{1F319}".repeat(50), type: "outsider", ability: "x".repeat(900) }),
         homebrew({ id: "noability", name: "Quiet", type: "minion" }),
       ],
     };
     const fields = publicScriptFields(long);
-    expect(fields.scriptHomebrew?.map((r) => r.id)).toEqual(["wordy", "noability"]);
-    expect(fields.scriptHomebrew![0]!.name.length).toBeLessThanOrEqual(40);
-    expect(fields.scriptHomebrew![0]!.ability).toHaveLength(400);
-    expect(fields.scriptHomebrew![1]).toEqual({ id: "noability", name: "Quiet", type: "minion" });
+    expect(fields.scriptHomebrew?.map((r) => r.id)).toEqual(["a".repeat(41), "blank", "wordy", "noability"]);
+    expect(fields.scriptHomebrew![1]).toEqual({ id: "blank", name: "blank", type: "townsfolk" });
+    expect(fields.scriptHomebrew![2]!.name.length).toBeLessThanOrEqual(40);
+    expect(fields.scriptHomebrew![2]!.ability).toHaveLength(400);
+    expect(fields.scriptHomebrew![3]).toEqual({ id: "noability", name: "Quiet", type: "minion" });
     const record = { code: "ABCD2345", scriptId: "long", phase: "setup", day: 0, seatOrder: [], players: {}, fabled: [], lorics: [], ...fields };
     expect(decodePublicSnapshot(JSON.parse(JSON.stringify(record)), "ABCD2345").status).toBe("ready");
   });
 
-  it("caps the list at 60 characters", () => {
-    const many: Script = { id: "m", name: "M", characters: Array.from({ length: 75 }, (_, i) => homebrew({ id: `hb${i}`, name: `Hb ${i}`, type: "townsfolk" })) };
-    expect(publicScriptFields(many).scriptHomebrew).toHaveLength(60);
+  it("leaves out only an id longer than 100 characters, which cannot be shortened, and anything past 200 characters", () => {
+    const edge: Script = { id: "e", name: "E", characters: [homebrew({ id: "i".repeat(101), name: "Huge", type: "demon" }), homebrew({ id: "i".repeat(100), name: "Max", type: "demon" })] };
+    expect(publicScriptFields(edge).scriptHomebrew?.map((r) => r.name)).toEqual(["Max"]);
+    const many: Script = { id: "m", name: "M", characters: Array.from({ length: 230 }, (_, i) => homebrew({ id: `hb${i}`, name: `Hb ${i}`, type: "townsfolk", ability: "y".repeat(400) })) };
+    const fields = publicScriptFields(many);
+    expect(fields.scriptHomebrew).toHaveLength(200);
+    const record = { code: "ABCD2345", scriptId: "m", phase: "setup", day: 0, seatOrder: [], players: {}, fabled: [], lorics: [], ...fields };
+    expect(decodePublicSnapshot(JSON.parse(JSON.stringify(record)), "ABCD2345").status).toBe("ready");
   });
 
   it("publishes a parsed script file the same way", () => {
