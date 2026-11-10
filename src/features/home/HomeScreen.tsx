@@ -6,6 +6,7 @@ import { PhoneReferenceScript } from "@/features/player/phone/PhoneReferenceScri
 import { PhoneReferencePicker } from "@/features/player/phone/PhoneReferencePicker";
 import { PhoneFrame } from "@/features/player/phone/PhoneParts";
 import { HowToPlayPhone } from "@/features/howto/HowToPlay";
+import { displayCode, rejoinUrl, savedGameCode } from "@/features/player/phone/rejoin";
 
 type Props = {
   /** Page navigation; injectable for tests. Defaults to a normal page load. */
@@ -25,11 +26,14 @@ export function HomeScreen({ navigate = defaultNavigate }: Props) {
   const [reference, setReference] = useState<ReferenceCategory | null>(null);
   const [phoneReference, setPhoneReference] = useState(false);
   const [howStep, setHowStep] = useState<number | null>(null);
+  // A game saved on this phone (e.g. the installed app was closed and reopened at Home).
+  const [savedCode] = useState(() => (isTabletTrial ? null : savedGameCode()));
   return (
     <>
       {!reference && !phoneReference && howStep === null && (
         <PhoneHome
           trial={isTabletTrial}
+          {...(savedCode ? { rejoin: { label: `Game ${displayCode(savedCode)}`, onRejoin: () => navigate(rejoinUrl(savedCode)) } } : {})}
           onPick={(id) => {
             if (id === "player") navigate("?join=");
             else if (id === "howto") setHowStep(0);

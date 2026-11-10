@@ -11,7 +11,7 @@ export type PhonePath = (typeof PATHS)[number]["id"];
 /** Phone Home (design screen 01). Per the Package 3 decision the phone shows
  * only the two player paths; the Storyteller remains part of the app, just not
  * offered on a phone Home. */
-export function PhoneHome({ onPick, trial }: { onPick: (path: PhonePath) => void; trial?: boolean }) {
+export function PhoneHome({ onPick, trial, rejoin }: { onPick: (path: PhonePath) => void; trial?: boolean; rejoin?: { label: string; onRejoin: () => void } }) {
   return (
     <PhoneFrame glow="join" label="home">
       <main className="swp-page">
@@ -21,6 +21,15 @@ export function PhoneHome({ onPick, trial }: { onPick: (path: PhonePath) => void
           <p className="swp-home-tag">Light the candles. The town is gathering.</p>
         </header>
         <nav className="swp-paths" aria-label="Choose how to begin">
+          {rejoin && (
+            <button type="button" className="swp-path swp-path-primary" onClick={rejoin.onRejoin}>
+              <span className="swp-path-text">
+                <span className="swp-path-title">Rejoin game</span>
+                <span className="swp-path-desc">{rejoin.label}</span>
+              </span>
+              <span className="swp-path-chev" aria-hidden="true">›</span>
+            </button>
+          )}
           {PATHS.map((p) => (
             <button key={p.id} type="button" className={`swp-path${p.primary ? " swp-path-primary" : ""}`} onClick={() => onPick(p.id)} disabled={trial && p.id === "player"}>
               <span className="swp-path-text">
