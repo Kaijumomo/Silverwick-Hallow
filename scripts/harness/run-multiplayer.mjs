@@ -2,6 +2,7 @@
 // One command for the Milestone 4 internal multiplayer game (docs/TEST_FIREBASE.md):
 //
 //   npm run harness:multiplayer [-- --out=<dir>] [-- --skip-prod-check]
+//   npm run harness:multiplayer -- --script=<custom-script.json> --cast=Alice:Clockwinder,Bob:Dread,...
 //
 // 1. Production check: an ordinary `vite build` must contain no emulator code.
 // 2. Builds the app in test mode with SILVERWICK_EMULATOR_HOST=127.0.0.1 into a temporary folder.
@@ -79,7 +80,8 @@ async function main() {
     server = spawn(process.execPath, [vite, "preview", "--outDir", build, "--port", String(PORT), "--strictPort", "--host", "127.0.0.1"], { cwd: root, stdio: "ignore" });
     await waitForServer(`http://127.0.0.1:${PORT}/`);
 
-    const game = `node scripts/harness/multiplayer-game.mjs --url=http://127.0.0.1:${PORT}/ --out=${JSON.stringify(out).slice(1, -1)}`;
+    const passOn = argv.filter((a) => /^--(script|cast)=/.test(a)).map((a) => a.startsWith("--script=") ? `--script=${resolve(a.slice(9))}` : a);
+    const game = ["node", "scripts/harness/multiplayer-game.mjs", `--url=http://127.0.0.1:${PORT}/`, `--out=${out}`, ...passOn].map((a) => JSON.stringify(a)).join(" ");
     const r = spawnSync(process.execPath, [firebase, "emulators:exec", "--project", "demo-silverwick-harness", "--config", "firebase.harness.json", "--only", "auth,database", game], {
       cwd: root, stdio: "inherit", env: { ...process.env, CI: "true", NO_UPDATE_NOTIFIER: "1" },
     });

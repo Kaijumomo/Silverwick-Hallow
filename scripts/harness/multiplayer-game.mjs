@@ -9,9 +9,13 @@
 // reveals, the Display, Undo, an offline phone, phone and Storyteller refreshes and the game end between
 // separate devices. What it does not prove: real phone hardware and browsers (iOS Safari, installed app),
 // real mobile networks, QR scanning, the on-screen keyboard, or the hosted test project.
+//
+// --script=<file.json> --cast=Alice:Clockwinder,Bob:Dread,... plays the same game with an imported custom script
+// instead of Trouble Brewing, and adds a step that checks each phone's character and Script tab show the
+// script's own names and ability text (homebrew and modified characters).
 import { createRequire } from "node:module";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright");
@@ -25,14 +29,24 @@ mkdirSync(OUT, { recursive: true });
 
 // Fixed characters so every run is the same game (a legal 5-player Trouble Brewing setup: 3 Townsfolk,
 // 0 Outsiders, 1 Minion, 1 Demon).
-const CAST = [
-  { name: "Alice", role: "Chef" },
-  { name: "Bob", role: "Imp" },
-  { name: "Carol", role: "Empath" },
-  { name: "Dan", role: "Poisoner" },
-  { name: "Eve", role: "Washerwoman" },
-];
-const ROLE_IDS = CAST.map((c) => c.role.toLowerCase());
+const CAST = args.cast
+  ? args.cast.split(",").map((pair) => { const [name, role] = pair.split(":"); return { name, role }; })
+  : [
+    { name: "Alice", role: "Chef" },
+    { name: "Bob", role: "Imp" },
+    { name: "Carol", role: "Empath" },
+    { name: "Dan", role: "Poisoner" },
+    { name: "Eve", role: "Washerwoman" },
+  ];
+/** Character id as the script spells it: "Hollow Bell" -> "hollowbell" (official ids follow the same rule). */
+const roleId = (role) => role.toLowerCase().replace(/[^a-z0-9]/g, "");
+const ROLE_IDS = CAST.map((c) => roleId(c.role));
+// Imported custom script (optional): its character objects, by id, for the phone checks.
+const SCRIPT = args.script ? resolve(args.script) : null;
+const SCRIPT_OBJECTS = SCRIPT
+  ? Object.fromEntries(JSON.parse(readFileSync(SCRIPT, "utf8")).filter((e) => e && typeof e === "object" && e.id !== "_meta").map((e) => [e.id, e]))
+  : {};
+for (const [i, c] of CAST.entries()) if (!c.name || !c.role) throw new Error(`--cast entry ${i + 1} must be Name:Role`);
 
 const results = [];
 let shot = 0;
@@ -132,10 +146,11 @@ async function main() {
   const ids = {}; // name -> playerId, read from the public node
 
   try {
-    await step("Storyteller creates an online Trouble Brewing game", "Invite to Phones must create a live lobby on Firebase", async () => {
+    await step(`Storyteller creates an online ${SCRIPT ? "custom script" : "Trouble Brewing"} game`, "Invite to Phones must create a live lobby on Firebase", async () => {
       await st.goto(BASE);
       await click(st, /New game/);
-      await st.locator('button[title="Trouble Brewing"]').click();
+      if (SCRIPT) await st.locator('label[title="Import a custom script"] input[type=file]').setInputFiles(SCRIPT);
+      else await st.locator('button[title="Trouble Brewing"]').click();
       for (let i = 0; i < 5; i++) await click(st, "One fewer player");
       await click(st, /Fabled & Loric ›/);
       await click(st, /Skip to the town/);
@@ -215,6 +230,32 @@ async function main() {
       await snap(CAST.map((c) => c.name), "reveal");
       for (const { name } of CAST) await click(phones[name], /Enter the town/i);
       return CAST.map((c) => `${c.name} ${c.role}`).join(", ");
+    });
+
+    if (SCRIPT) await step("Phones show the script's own characters", "Homebrew and modified characters must reach phones as the script sheet prints them, with no wake line for homebrew", async () => {
+      const seen = [];
+      for (const { name, role } of CAST) {
+        const def = SCRIPT_OBJECTS[roleId(role)];
+        if (!def) continue; // an official character, already checked by name above
+        const page = phones[name];
+        const text = (await page.locator("body").innerText()).replace(/\s+/g, " ");
+        expect(text.toUpperCase().includes(def.name.toUpperCase()), `${name}'s character tab does not name ${def.name}`);
+        expect(text.includes(def.ability), `${name}'s character tab does not show the script's ability text for ${def.name}`);
+        expect(!/\bwakes?\b|does not wake/i.test(text), `${name}'s character tab shows a wake line for ${def.name}`);
+        seen.push(`${name} ${def.name}`);
+      }
+      await snap(CAST.filter((c) => SCRIPT_OBJECTS[roleId(c.role)]).map((c) => c.name), "own-character");
+      const viewer = CAST[0].name;
+      await phones[viewer].getByRole("button", { name: /^Script$/ }).click({ timeout: 8000 });
+      await phones[viewer].waitForTimeout(800);
+      const sheet = (await phones[viewer].locator("body").innerText()).replace(/\s+/g, " ");
+      for (const def of Object.values(SCRIPT_OBJECTS)) {
+        if (!["townsfolk", "outsider", "minion", "demon"].includes(def.team)) continue;
+        expect(sheet.includes(def.name) && sheet.includes(def.ability), `${viewer}'s Script tab does not list ${def.name} with the script's ability text`);
+      }
+      await snap([viewer], "script-tab");
+      await phones[viewer].getByRole("button", { name: /^Character$/ }).click({ timeout: 8000 });
+      return `character tabs show the script's name and ability with no wake line: ${seen.join(", ")}; ${viewer}'s Script tab lists all ${Object.keys(SCRIPT_OBJECTS).length} script-defined characters with their text`;
     });
 
     await step("Night 1, then Day 1", "Phase changes must reach the phones and the Display", async () => {
@@ -345,7 +386,8 @@ async function main() {
  * asked for them):
  * - the path must be on that device's allowlist (shared public paths, or its own uid / player id);
  * - outside the device's own player view, no value may be an assigned character id and no key may name a
- *   role or alignment (the public script list, scriptCharacters, is removed first: it is the public sheet);
+ *   role or alignment (the public script sheet, scriptCharacters and scriptHomebrew, is removed first; each
+ *   scriptHomebrew entry may carry only id, name, type and ability);
  * - each phone must have received its own character in its own view (proves the capture works);
  * - planted leaks of each kind must be flagged by the same code (proves the checks can fail).
  */
@@ -359,9 +401,13 @@ function privacyCheck(code, ids) {
   const ROLE_KEY = /(^|[a-z])(role|alignment|reminders?|notes?)$/i;
   // Exact keys of the public node and its player entries (PublicLobbyRecordSchema, PlayerPublicRecordSchema in
   // src/stores/schemas.ts). A new public field fails here until it is reviewed and added.
-  const PUBLIC_KEYS = new Set(["code", "scriptId", "phase", "day", "seatOrder", "players", "fabled", "lorics", "scriptName", "scriptCharacters", "winner", "status", "arrivals", "plannedPlayers"]);
+  const PUBLIC_KEYS = new Set(["code", "scriptId", "phase", "day", "seatOrder", "players", "fabled", "lorics", "scriptName", "scriptCharacters", "scriptHomebrew", "winner", "status", "arrivals", "plannedPlayers"]);
   const PUBLIC_PLAYER_KEYS = new Set(["id", "name", "seat", "alive", "ghostVote", "online", "joinedAt", "isTraveler", "publicDisplayRole", "exiled"]);
   const SESSION_KEYS = new Set(["id", "state", "version"]);
+  // The public script sheet: official ids (scriptCharacters) and script-defined characters (scriptHomebrew, custom
+  // scripts Stage 3, privacy-reviewed 2026-11-10). Each homebrew entry may carry only these fields.
+  const SHEET = new Set(["scriptCharacters", "scriptHomebrew"]);
+  const HOMEBREW_KEYS = new Set(["id", "name", "type", "ability"]);
   const WORDS = [...ROLE_IDS, "good", "evil"];
   const PROTOCOL_ACTIONS = new Set(["auth", "gauth", "unauth", "s"]);
 
@@ -388,7 +434,7 @@ function privacyCheck(code, ids) {
 
   const withoutScript = (v) => {
     if (Array.isArray(v)) return v.map(withoutScript);
-    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).filter(([k]) => k !== "scriptCharacters").map(([k, x]) => [k, withoutScript(x)]));
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).filter(([k]) => !SHEET.has(k)).map(([k, x]) => [k, withoutScript(x)]));
     return v;
   };
   const roleKeys = (v, out = []) => {
@@ -407,6 +453,15 @@ function privacyCheck(code, ids) {
       if (path.length === 1 && !PUBLIC_KEYS.has(path[0])) bad.push(path[0]);
       if (path.length === 3 && path[0] === "players" && !PUBLIC_PLAYER_KEYS.has(path[2])) bad.push(path.join(".").replace(/[A-Za-z0-9_-]{20,}/g, "<id>"));
       if (path.length > 3 && path[0] === "players") bad.push(path.join(".").replace(/[A-Za-z0-9_-]{20,}/g, "<id>"));
+      if (path[0] === "scriptHomebrew") {
+        // Firebase may deliver the list whole, one entry at a time, or one field at a time.
+        const fieldsOf = (entry) => (entry && typeof entry === "object" && !Array.isArray(entry) ? Object.keys(entry) : ["(not an object)"]);
+        const entries = path.length === 1 ? (value && typeof value === "object" ? Object.values(value) : [value]) : path.length === 2 ? [value] : [];
+        for (const entry of entries) for (const k of fieldsOf(entry)) if (!HOMEBREW_KEYS.has(k)) bad.push(`scriptHomebrew.${k}`);
+        if (path.length === 3 && !HOMEBREW_KEYS.has(path[2])) bad.push(`scriptHomebrew.${path[2]}`);
+        if (path.length > 3) bad.push(path.join("."));
+        return;
+      }
       if (value && typeof value === "object" && !Array.isArray(value) && !(path.length === 1 && path[0] === "scriptCharacters")) {
         for (const [k, v] of Object.entries(value)) visit([...path, k], v);
       }
@@ -510,7 +565,8 @@ function privacyCheck(code, ids) {
       const rel = path.slice(lobby.length + 1);
       if (!allowed(label, uid, rel)) { problems.push(`${label} received ${kind} for /${rel.replace(/[A-Za-z0-9_-]{20,}/g, "<id>")}`); continue; }
       if (label !== "display" && rel.startsWith(`player/${ids[label]}`)) {
-        const own = CAST.find((c) => c.name === label)?.role.toLowerCase();
+        const role = CAST.find((c) => c.name === label)?.role;
+        const own = role && roleId(role);
         if (own && JSON.stringify(data).includes(`"${own}"`)) ownRole = true;
         continue;
       }
@@ -553,6 +609,7 @@ function privacyCheck(code, ids) {
     "another player's view over long polling": plant("Alice", [{ dir: "lp", url: "http://127.0.0.1/.lp?id=1", text: `pRTLPCB(9,[${JSON.stringify({ t: "d", d: { a: "d", b: { p: `${lobby}/player/${ids.Dan}`, d: { seat: 4 } } } })}]);` }]) > base.Alice,
     "Storyteller data": plant("Alice", [msg("in", 0, { a: "d", b: { p: `${lobby}/storyteller`, d: { phase: "day" } } })]) > base.Alice,
     "another phone's records": plant("Alice", [msg("in", 0, { a: "d", b: { p: `${lobby}/roster/some-other-uid`, d: "x" } })]) > base.Alice,
+    "a night-order field on a public homebrew character": plant("display", [msg("in", 0, { a: "d", b: { p: `${lobby}/public/scriptHomebrew`, d: [{ id: "x", name: "X", type: "demon", ability: "A.", firstNight: 3 }] } })]) > base.display,
     "a player view on the Display": plant("display", [msg("in", 0, { a: "d", b: { p: `${lobby}/player/${ids.Carol}`, d: { seat: 3 } } })]) > base.display,
   };
   for (const [what, caught] of Object.entries(controls)) if (!caught) problems.push(`control failed: a planted leak (${what}) was not flagged`);
