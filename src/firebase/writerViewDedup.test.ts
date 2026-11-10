@@ -112,4 +112,14 @@ describe("SessionWriter: unchanged views are not uploaded again (F-14)", () => {
     expect((w as unknown as { committedViews: Map<string, string> }).committedViews.size).toBe(0);
     expect(seen).toHaveLength(1);
   });
+  it("after a renewal that finds a gap in its lease (another writer may have written meanwhile), every view goes out again", async () => {
+    const { b, start, last } = await setup();
+    const w = await start();
+    await w.update({ [pub]: { phase: "day" }, [alice]: { seat: 1 } });
+    // The lease lapsed: another writer held it, wrote, and let it expire.
+    await b.set(`${root}/writer`, { token: "other-tab", expiresAt: Date.now() - 1 });
+    await w.reconfirmAuthority(); // the same renewal transaction the interval runs; this one is discontinuous
+    await w.update({ [pub]: { phase: "day" }, [alice]: { seat: 1 } });
+    expect(last()).toEqual([alice, pub].sort());
+  });
 });

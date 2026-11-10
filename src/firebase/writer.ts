@@ -250,7 +250,11 @@ export class SessionWriter implements RoomBackend {
     // Synchronous — no await/Promise boundary between this decision and the
     // expiry it commits alongside it — so nothing else can observe one
     // updated without the other.
-    if (!settled.continuous) this.leaseEpoch++;
+    if (!settled.continuous) {
+      this.leaseEpoch++;
+      // Another writer may have held the lease in the gap and written newer views: send every view in full again.
+      this.committedViews.clear();
+    }
     this.leaseExpiresAt = settled.expiresAt;
   }
   /** Synchronously re-proves current server writer authority by reusing the
@@ -395,6 +399,7 @@ export class SessionWriter implements RoomBackend {
     // retry-oriented (terminalSignalAttempted, R3-CLOSURE-001).
     const signalEnded = async () => {
       this.terminalSignalAttempted = true;
+      this.committedViews.clear(); // public/status below bypasses commit()
       const signalRevision = ++this.revision;
       await retryTransient(() => this.raw.update({
         [`${this.root}/public/status`]: "ended",
