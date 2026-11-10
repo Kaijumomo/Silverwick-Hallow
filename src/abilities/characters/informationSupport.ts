@@ -13,9 +13,20 @@ export function recluseInformationChoice(context: AbilityEvaluationContext, targ
 /** Optional canonical registration for one supported interaction only. This
  * proves eligibility for a choice, never a persistent registration override. */
 export function recluseRegistrationChoice(query: RulesQuery, target: ParticipantBinding): boolean {
+  return optionalRegistrationChoice(query, target, "recluse");
+}
+
+/** The same per-interaction choice for a healthy canonical Spy, who "might register as good and as a Townsfolk or
+ * Outsider" (https://wiki.bloodontheclocktower.com/Spy). A drunk or poisoned Spy registers as itself, so it never
+ * gets this choice. Eligibility only: no registration is saved. */
+export function spyRegistrationChoice(query: RulesQuery, target: ParticipantBinding): boolean {
+  return optionalRegistrationChoice(query, target, "spy");
+}
+
+function optionalRegistrationChoice(query: RulesQuery, target: ParticipantBinding, roleId: "recluse" | "spy"): boolean {
   const player = query.participant(target);
   const role = player && query.roleOf(player.actualRole);
-  if (!player || !player.actualAlignment || role?.id !== "recluse" || !isCanonicalRole(role)
+  if (!player || !player.actualAlignment || role?.id !== roleId || !isCanonicalRole(role)
     || player.effects.some(effect => effect.state === "active" && effect.type === "registersFalsely")) return false;
   const functioning = query.abilityFunctions(target);
   return functioning.known && functioning.value;

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { isCanonicalRole } from "@/data/canonical";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { interactionCoverageEligibility } from "@/abilities/automationEligibility";
-import { recluseRegistrationChoice } from "@/abilities/characters/informationSupport";
+import { recluseRegistrationChoice, spyRegistrationChoice } from "@/abilities/characters/informationSupport";
 import { createRulesQuery, boundParticipant } from "./rulesQuery";
 import { wakeIdentity } from "./wakeIdentity";
 import { participantRefOf } from "./participants";
@@ -86,7 +86,10 @@ export function assessPreparation(game: StorytellerLobbyRecord, input: PrepareIn
     if (request.character !== "librarian") return refuse("Only the Librarian can learn that there are no Outsiders.");
     if (available.mode === "verified") for (const player of Object.values(game.players)) {
       if (player.isEmpty || !player.participantId) continue;
-      const registered = query.registersAsType({ playerId: player.id, participantId: player.participantId }, "outsider", "librarian");
+      const target = { playerId: player.id, participantId: player.participantId };
+      const registered = query.registersAsType(target, "outsider", "librarian");
+      // A healthy Spy may or may not register as an Outsider: showing 0 is the Storyteller's choice that it does not.
+      if (!registered.known && spyRegistrationChoice(query, target)) continue;
       if (!registered.known) return refuse(registered.reason);
       if (registered.value) return refuse("An Outsider is in play.");
     }
@@ -108,7 +111,10 @@ export function assessPreparation(game: StorytellerLobbyRecord, input: PrepareIn
         // no participant identity or general registration override is written.
         const recluseClue = recluseRegistrationChoice(query, qualifying) &&
           (request.character === "librarian" && shown.id === "recluse" || request.character === "investigator" && shown.type === "minion");
-        if (!recluseClue) return refuse(registration.reason);
+        // A healthy Spy may register as any Townsfolk or Outsider, or simply as the Spy.
+        const spyClue = spyRegistrationChoice(query, qualifying) && (request.character === "washerwoman" && shown.type === "townsfolk"
+          || request.character === "librarian" && shown.type === "outsider" || request.character === "investigator" && shown.id === "spy");
+        if (!recluseClue && !spyClue) return refuse(registration.reason);
       } else if (registration.value !== clue.shownCharacter) return refuse("The qualifying player does not register as the selected character.");
     }
   }
