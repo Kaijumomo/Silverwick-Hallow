@@ -186,7 +186,8 @@ export class SessionWriter implements RoomBackend {
     const guard = await this.raw.get(`${this.root}/writeGuard`);
     this.assertActive();
     if (!this.holdsAuthority(authorityHandle, FENCE_MARGIN_MS)) {
-      throw new LeaseHeldError();
+      // This writer's own lease lapsed during the read; not another tab's lease, so no automatic reclaim.
+      throw new LifecycleError("conflict", "Another Storyteller tab controls this lobby. Close it, then retry after 30 seconds.");
     }
     const observed = guard != null ? guardSchema.parse(guard) : null;
     if (observed) this.revision = observed.revision;

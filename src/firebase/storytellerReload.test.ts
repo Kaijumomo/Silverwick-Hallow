@@ -79,6 +79,7 @@ describe("Storyteller reload (WP 4-3a)", () => {
   });
 
   it("beforeunload hands the lease back too, and a page that stays after all takes control back by itself", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
     const b = new MemoryRoomBackend();
     await setup(b);
     renderHook(() => useStorytellerSync(b));
@@ -89,11 +90,15 @@ describe("Storyteller reload (WP 4-3a)", () => {
     await waitFor(async () => expect(await b.get(`${root}/writer`)).toEqual({ token: writer.token, expiresAt: 0 }));
     expect(writer.isStopped()).toBe(true);
 
-    // No unload followed (for example a cancelled navigation): a new writer goes live within EXIT_RECOVERY_MS.
+    // No unload followed (for example a cancelled navigation): nothing happens until EXIT_RECOVERY_MS, then a new
+    // writer goes live.
+    await act(async () => { vi.advanceTimersByTime(EXIT_RECOVERY_MS - 100); });
+    expect(useSessionRuntime.getState().backend).toBeNull();
+    await act(async () => { vi.advanceTimersByTime(200); });
     await waitFor(() => {
       expect(useSessionRuntime.getState().status).toBe("live");
       expect(useSessionRuntime.getState().backend).not.toBe(writer);
-    }, { timeout: EXIT_RECOVERY_MS + 2000 });
+    });
     expect(await b.get(`${root}/writer`)).toMatchObject({ token: (useSessionRuntime.getState().backend as SessionWriter).token });
     expect(useSessionRuntime.getState().errors.session).toBeUndefined();
   });
@@ -172,5 +177,21 @@ describe("Storyteller reload (WP 4-3a)", () => {
     expect(useSessionRuntime.getState().failure?.category).toBe("authority");
     expect(useSessionRuntime.getState().errors.session).toMatch(/Another Storyteller tab controls this lobby/);
     expect(await b.get(`${root}/writer`)).toMatchObject({ token: "other-tab" });
+  });
+  it("leaving the lobby while waiting makes no further attempt", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    const b = new MemoryRoomBackend();
+    await setup(b);
+    await b.set(`${root}/writer`, { token: "other-tab", expiresAt: Date.now() + 10 * 60_000 });
+    enforceLeaseRule(b);
+    let tries = 0;
+    const transaction = b.transaction.bind(b);
+    b.transaction = (path, change) => { if (path === `${root}/writer`) tries++; return transaction(path, change); };
+    const hook = renderHook(() => useStorytellerSync(b));
+    await waitFor(() => expect(tries).toBe(1));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+    hook.unmount();
+    await act(async () => { vi.advanceTimersByTime(RECLAIM_DELAY_MS * (RECLAIM_ATTEMPTS + 1)); });
+    expect(tries).toBe(1);
   });
 });

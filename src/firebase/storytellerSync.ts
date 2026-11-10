@@ -183,7 +183,7 @@ function noteFailure(error: unknown, phase: "startup" | "live", access?: "read" 
 export const RECLAIM_DELAY_MS = LEASE_MS / 3;
 export const RECLAIM_ATTEMPTS = 4;
 /** After handing the lease back on beforeunload/pagehide, a page still running this much later was not unloaded. */
-export const EXIT_RECOVERY_MS = 1000;
+export const EXIT_RECOVERY_MS = 5000;
 const reclaimAttempts = new Map<string, number>();
 function takeReclaimAttempt(lobby: LobbyScope): boolean {
   const used = reclaimAttempts.get(scopeKey(lobby)) ?? 0;
@@ -446,8 +446,9 @@ export function useStorytellerSync(backend: RoomBackend | null) {
     // Reload or close: hand the lease back at once (best effort) so the reloaded tab need not wait for it to
     // expire. beforeunload comes first, while the connection can still send (in Chromium a write made in pagehide
     // is dropped as the page unloads); pagehide covers browsers without beforeunload, such as iOS Safari. A page
-    // that stays after all (a cancelled navigation, a link that only downloads) takes control back a moment
-    // later; one kept in the back-forward cache is frozen first and comes back through onResume.
+    // that stays after all (a cancelled navigation, a link that only downloads) takes control back through the
+    // exitRecovery timer below; so does a page restored from the back-forward cache, whose timers were frozen
+    // while it was hidden. The delay is long enough that an ordinary slow navigation unloads first.
     let exitRecovery: ReturnType<typeof setTimeout> | undefined;
     const onExit = () => {
       if (writer.releaseOnExit()) exitRecovery = setTimeout(retryStorytellerSession, EXIT_RECOVERY_MS);
@@ -488,7 +489,9 @@ export function useStorytellerSync(backend: RoomBackend | null) {
       if (!cancelled && error instanceof LeaseHeldError && takeReclaimAttempt(lobby)) {
         // Usually this tablet's own lease from before a reload: wait for it to expire, then retry by itself.
         warnFailure(classifyStorytellerError(error, "startup"));
-        useSessionRuntime.setState({ backend: null, status: initialConnectionStatus(lobby), failure: null });
+        // Kept like any failed startup, so End multiplayer can still close the lobby authoritatively meanwhile.
+        failedStart = { backend, lobby, writer };
+        useSessionRuntime.setState({ backend: null, status: initialConnectionStatus(lobby), failure: null, errors: {}, error: null });
         reclaimTimer = setTimeout(retryStorytellerSession, RECLAIM_DELAY_MS);
         return;
       }
