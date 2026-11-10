@@ -1,7 +1,8 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { isTabletTrial } from "@/config/trial";
 import { isFirebaseConfigured } from "@/firebase/config";
 import { connectFirebase } from "@/firebase/session";
+import { LaunchSplash, shouldPlaySplash } from "@/features/splash/LaunchSplash";
 
 function readJoinCodeFromUrl(): string | null {
   if (typeof window === "undefined") return null;
@@ -26,9 +27,16 @@ const PlayerScreen = lazy(() => import("@/features/player/PlayerScreen").then((m
 const PublicDisplayScreen = lazy(() => import("@/features/publicDisplay/PublicDisplayScreen").then((m) => ({ default: m.PublicDisplayScreen })));
 
 export function App() {
-  return isTabletTrial
-    ? <Suspense fallback={<p role="status">Opening the local tablet trial…</p>}><TabletTrial /></Suspense>
-    : <NormalApp />;
+  // Design v7 Launch Orbit: plays over the app while it loads, once per tab, never from a join link or the Public Display.
+  const [splash, setSplash] = useState(shouldPlaySplash);
+  return (
+    <>
+      {isTabletTrial
+        ? <Suspense fallback={<p role="status">Opening the local tablet trial…</p>}><TabletTrial /></Suspense>
+        : <NormalApp />}
+      {splash && <LaunchSplash onDone={() => setSplash(false)} />}
+    </>
+  );
 }
 
 function NormalApp() {
