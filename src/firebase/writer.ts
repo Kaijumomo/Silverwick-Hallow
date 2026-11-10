@@ -42,6 +42,12 @@ export type StartupSnapshot = {
   authorityHandle: AuthorityHandle;
 };
 
+/** Another writer's lease is still valid, so this one could not take control. A reloaded Storyteller tab meets this
+ * when its own previous page could not hand the lease back; the old lease then expires within LEASE_MS. */
+export class LeaseHeldError extends LifecycleError {
+  constructor() { super("conflict", "Another Storyteller tab controls this lobby. Close it, then retry after 30 seconds."); }
+}
+
 function isPermissionDenied(error: unknown): boolean {
   if (error instanceof LifecycleError) return false;
   const code = typeof error === "object" && error !== null ? String((error as { code?: unknown }).code ?? "") : "";
@@ -180,7 +186,7 @@ export class SessionWriter implements RoomBackend {
     const guard = await this.raw.get(`${this.root}/writeGuard`);
     this.assertActive();
     if (!this.holdsAuthority(authorityHandle, FENCE_MARGIN_MS)) {
-      throw new LifecycleError("conflict", "Another Storyteller tab controls this lobby. Close it, then retry after 30 seconds.");
+      throw new LeaseHeldError();
     }
     const observed = guard != null ? guardSchema.parse(guard) : null;
     if (observed) this.revision = observed.revision;
@@ -221,7 +227,7 @@ export class SessionWriter implements RoomBackend {
       observation = { continuous, expiresAt };
       return { token: this.token, expiresAt };
     });
-    if (!acquired) throw new LifecycleError("conflict", "Another Storyteller tab controls this lobby. Close it, then retry after 30 seconds.");
+    if (!acquired) throw new LeaseHeldError();
     // TS cannot narrow `observation` itself across the closure that mutates
     // it (it stays typed as the pre-transaction `null` at this point), so
     // this asserts the declared type back so `if (!settled)` below narrows
@@ -319,6 +325,22 @@ export class SessionWriter implements RoomBackend {
     // write was still denied: the release did not genuinely happen.
     throw new LifecycleError("conflict", "Could not confirm the writer lease was released.");
   }
+  /** The page is going away (reload, tab closed, navigation): stop at once and hand the lease back with one
+   * immediate write, instead of leaving it to expire, so the same tablet reloaded takes control straight back.
+   * Best effort and never awaited: if the page is gone before the write leaves, the lease expires as before.
+   * Returns whether it released now (false if this writer never held a lease, is closing, or already did).
+   * Fencing is unchanged, by the same Rules release() relies on: this token may always release itself and a foreign
+   * valid lease cannot be overwritten. Once stopped this writer starts no new write; a commit already sent arrives
+   * first (one connection, in order), and one still in flight is refused, because writeGuard requires an unexpired
+   * lease. Not during close(), whose final commit needs the lease; that close keeps its own recovery path. */
+  releaseOnExit(): boolean {
+    if (this.leaseExpiresAt === 0 || this.closing || this.exitReleased) return false;
+    this.exitReleased = true;
+    this.stop();
+    this.raw.set(`${this.root}/writer`, { token: this.token, expiresAt: 0 }).catch(() => {});
+    return true;
+  }
+  private exitReleased = false;
   stop() {
     if (this.stopped) return;
     this.stopped = true;

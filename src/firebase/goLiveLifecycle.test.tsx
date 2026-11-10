@@ -142,14 +142,20 @@ describe("Go Live startup", () => {
     expect(useSessionRuntime.getState().error).toMatch(/database rules/);
   });
 
-  it("3a. writer acquisition blocked by another tab's valid lease: authority conflict, never live", async () => {
+  it("3a. writer acquisition blocked by another tab's valid lease: never live, the other lease untouched", async () => {
     const b = new MemoryRoomBackend();
+    let attempts = 0;
+    const transaction = b.transaction.bind(b);
+    b.transaction = (path, change) => { if (path === `${root}/writer`) attempts++; return transaction(path, change); };
     const { exposed } = await goLive(b, () => { void b.set(`${root}/writer`, { token: "other-tab", expiresAt: Date.now() + LEASE_MS }); });
-    await settled();
-    expect(useSessionRuntime.getState().status).toBe("failed");
+    await waitFor(() => expect(attempts).toBe(1));
+    await new Promise(resolve => setTimeout(resolve, 50));
+    // WP 4-3a: a lease held elsewhere is first waited out with automatic retries (it is usually this tablet's own,
+    // from before a reload), so the status stays "connecting" with no error; only when the retries run out is it an
+    // authority failure with Retry (storytellerReload.test.ts covers that end, and the lease being kept throughout).
+    expect(useSessionRuntime.getState().status).toBe("connecting");
+    expect(useSessionRuntime.getState().failure).toBeNull();
     expect(exposed).toEqual([]);
-    expect(useSessionRuntime.getState().failure?.category).toBe("authority");
-    expect(useSessionRuntime.getState().error).toMatch(/Another Storyteller tab/);
     expect(await b.get(`${root}/writer`)).toMatchObject({ token: "other-tab" });
   });
 

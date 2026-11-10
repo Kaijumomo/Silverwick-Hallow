@@ -22,6 +22,11 @@ renews every ten seconds, expires after thirty seconds, and carries its token
 and an increasing revision on every projection or lifecycle update. Firebase
 rules reject an expired token, an old token, or an older revision. A second tab
 gets a controlled conflict; it can reclaim only after the lease expires.
+When a Storyteller page unloads (reload, close, navigation) its live writer stops and releases the lease at once
+(`expiresAt: 0`, on `beforeunload` and `pagehide`, best effort), so a reloaded tab takes control straight back. If
+that release never reached the server, a startup refused by a still-valid lease retries automatically every ten
+seconds, four times, which covers the old lease's expiry; a lease another tab keeps renewing is never taken, and
+the Storyteller then gets the usual conflict with Retry.
 
 ## Request and membership paths
 

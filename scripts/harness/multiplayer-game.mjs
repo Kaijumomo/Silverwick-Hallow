@@ -330,25 +330,22 @@ async function main() {
       await st.reload();
       await st.getByLabel(/^Seat 5, Eve/).first().waitFor({ timeout: 20000 });
       const reloadedAt = Date.now();
-      // Observed: the reloaded tab cannot prove it held the writer lease, so it waits for the old lease to expire
-      // (30 seconds, PROTOCOL.md) and shows "Multiplayer is not live" with Retry. A Storyteller who keeps playing
-      // meanwhile changes only their own tablet until Retry succeeds.
-      const banner = await st.getByText(/Multiplayer is not live/i).first().waitFor({ state: "visible", timeout: 8000 }).then(() => true, () => false);
+      // WP 4-3a: the closing page hands its writer lease back (pagehide), so the reloaded tab takes control at once:
+      // no "Multiplayer is not live" banner and no Retry. (Before 4-3a it waited about 30 s for the old lease to
+      // expire and the Storyteller had to press Retry.) Retry is never pressed here.
       await st.keyboard.press("Escape");
-      await click(st, /^Undo$/); // Eve's death, undone while not live
-      await sleep(1500);
-      const meanwhile = await alive("Eve");
-      await snap(["storyteller", "Alice"], "while-not-live");
-      let retries = 0;
+      await click(st, /^Undo$/); // Eve's death, undone right after the reload
+      const notLive = async () => (await st.getByText(/Multiplayer is not live/i).count()) > 0;
+      let bannerSeen = await notLive();
       await until(async () => {
-        if ((await alive("Eve")) === true) return true;
-        const retry = button(st, /^Retry$/);
-        if (await retry.isVisible().catch(() => false)) { retries++; await retry.click().catch(() => {}); }
-        await sleep(2500);
-        return false;
-      }, "after the reload and Retry, Eve's undone death never reached the server", 75000);
-      const secs = Math.round((Date.now() - reloadedAt) / 1000);
-      return `${banner ? '"Multiplayer is not live" shown after the reload' : "no banner after the reload"}; 1.5 s after the Undo on the tablet the server still had Eve ${meanwhile === false ? "dead" : "alive"}; the Undo reached the server ${secs} s after the reload (${retries} Retry press${retries === 1 ? "" : "es"})`;
+        if (await notLive()) bannerSeen = true;
+        return (await alive("Eve")) === true;
+      }, "after the reload, Eve's undone death did not reach the server within 15 seconds (without Retry)", 15000);
+      const secs = ((Date.now() - reloadedAt) / 1000).toFixed(1);
+      await snap(["storyteller", "Alice"], "after-reload");
+      expect(!bannerSeen, '"Multiplayer is not live" appeared after the reload');
+      expect(!(await button(st, /^Retry$/).isVisible().catch(() => false)), "a Retry button is showing after the reload");
+      return `no "not live" banner and no Retry; the Undo made right after the reload reached the server ${secs} s after the reload`;
     }, ["storyteller", "display"]);
 
     await step("Storyteller ends the game; the Display shows the winner", "The online winner screen (deferred from Milestone 3)", async () => {
