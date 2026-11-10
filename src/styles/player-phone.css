@@ -39,7 +39,9 @@
 .swp-wash-dark { position: fixed; inset: 0; background: linear-gradient(180deg, rgba(13, 10, 10, .5), rgba(13, 10, 10, .85) 55%); }
 .swp-wash-evil { position: fixed; inset: 0; background: radial-gradient(ellipse 90% 60% at 50% 38%, rgba(120, 24, 22, .45), transparent 70%); }
 .swp-wash-ref { position: fixed; inset: 0; background: radial-gradient(ellipse 80% 50% at 50% 30%, rgba(232, 88, 74, .14), transparent 70%), rgba(8, 6, 4, .84); }
-.swp-topgap { position: relative; height: 47px; flex: none; }
+/* The design reserves 47px for the status bar. In an installed iPhone app the status bar is translucent and the page runs
+   under it, so the gap grows to the real inset (59px on Dynamic Island phones). Zero inset elsewhere keeps the design 47px. */
+.swp-topgap { position: relative; height: max(47px, var(--safe-top)); flex: none; }
 
 .swp-glow {
   position: absolute;
@@ -53,7 +55,7 @@
 .swp-glow-join { top: 90px; background: radial-gradient(closest-side, rgba(232, 88, 74, .24), rgba(232, 88, 74, .07) 58%, transparent); }
 .swp-glow-status { top: 100px; background: radial-gradient(closest-side, var(--swp-glow, rgba(196, 204, 220, .17)), transparent 72%); }
 
-.swp-page { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px 28px 34px; }
+.swp-page { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 8px max(28px, var(--safe-right)) max(34px, var(--safe-bottom)) max(28px, var(--safe-left)); }
 
 /* Shared parts ----------------------------------------------------------- */
 .swp-rule { display: flex; align-items: center; gap: 14px; width: 200px; align-self: center; flex: none; }
