@@ -234,3 +234,60 @@ them is the project owner's decision under the same caveat as every file above, 
 
 ## Brand badge
 The Community Created Content badge lives in `public/brand/` with its own note (`public/brand/PROVENANCE.md`).
+
+Added for custom scripts (Stage 2 art): the remaining Carousel (experimental) default icons, so any of the 181 official characters has self-hosted art. Each file is a lossless PNG conversion of the pinned official WebP named; its decoded RGBA pixels were checked identical to that WebP's (SHA-256 of row-major 8-bit RGBA, shown truncated). Same rights status as above: personal use, not cleared for redistribution.
+
+| File | Official source (pinned) | Source git blob SHA-1 | RGBA SHA-256 (first 16) | Bytes |
+|---|---|---|---|---|
+| `characters/carousel/acrobat.png` | resources/characters/carousel/acrobat_g.webp | `935522ad40b07c5763f97d1b6af7f8a6de18a1a8` | `0062818a4dada0df` | 96364 |
+| `characters/carousel/alchemist.png` | resources/characters/carousel/alchemist_g.webp | `c3d4a00e0a2b8c43341035ee736bbbadc0282976` | `ac1b3f7302dbc052` | 126592 |
+| `characters/carousel/alsaahir.png` | resources/characters/carousel/alsaahir_g.webp | `6a33fe0fc32fdb32bba4ea8a626f1e4d32f2db58` | `6d9a2cc0a3a44de9` | 97153 |
+| `characters/carousel/amnesiac.png` | resources/characters/carousel/amnesiac_g.webp | `65c7e8fb46c21a9be714aa21d8227f9d9ca67660` | `fcf55a6e89bc0fec` | 105305 |
+| `characters/carousel/atheist.png` | resources/characters/carousel/atheist_g.webp | `56ffd401e10321b1a96dbfb9ba78571db7368d81` | `b42a6401b4e598ab` | 93340 |
+| `characters/carousel/banshee.png` | resources/characters/carousel/banshee_g.webp | `ea2b9fe26e46b5d1b68f5ae5f9c96df3f406112d` | `0cfcc8177aee9c8d` | 82778 |
+| `characters/carousel/bountyhunter.png` | resources/characters/carousel/bountyhunter_g.webp | `698478bd4e692e07ae3bf50aac56b90ca32cb5d9` | `e097d186f9cded79` | 91418 |
+| `characters/carousel/cannibal.png` | resources/characters/carousel/cannibal_g.webp | `5242e267007eaebe6a6c51f89df5f986304fe532` | `2d893630eb4a23b1` | 92785 |
+| `characters/carousel/choirboy.png` | resources/characters/carousel/choirboy_g.webp | `3af58d49a98d625254b4c49c5773026691a69222` | `55b670eafb09810f` | 96881 |
+| `characters/carousel/cultleader.png` | resources/characters/carousel/cultleader_g.webp | `6a492ac3561a1c7bf11adcfeb8b27af58cb5da67` | `ce35d59078ddd0f2` | 101110 |
+| `characters/carousel/engineer.png` | resources/characters/carousel/engineer_g.webp | `f8c2adae6130c840a37a5fa2ded569c7e09d007c` | `3da46f54a3b073bc` | 119193 |
+| `characters/carousel/farmer.png` | resources/characters/carousel/farmer_g.webp | `599a597bdd7ee3be3ad72b0be59c83f0a853ff25` | `7d8b66a1443682e9` | 92311 |
+| `characters/carousel/fisherman.png` | resources/characters/carousel/fisherman_g.webp | `94bb42185e550e61742a975958967fac67d0a211` | `8bbf4142bb3c4202` | 92685 |
+| `characters/carousel/general.png` | resources/characters/carousel/general_g.webp | `9620f8ccf44bf532de4c835a9545c01db6c27791` | `bfde6945de342da9` | 95044 |
+| `characters/carousel/highpriestess.png` | resources/characters/carousel/highpriestess_g.webp | `de2b3c92d96360d4195d1f821c61020f45fbbacb` | `0ee540e89b83a31f` | 76657 |
+| `characters/carousel/knight.png` | resources/characters/carousel/knight_g.webp | `773918b344a00f412f902f854a89cd708d36aea2` | `16845d5622b90cbe` | 121915 |
+| `characters/carousel/lycanthrope.png` | resources/characters/carousel/lycanthrope_g.webp | `948c3db3444a4ede352083ca676faa9938f8ba91` | `8111058461785596` | 118781 |
+| `characters/carousel/magician.png` | resources/characters/carousel/magician_g.webp | `310efe730fa9caf506de1d864737000fb2ba2bf5` | `f021b8b2b7258552` | 123623 |
+| `characters/carousel/nightwatchman.png` | resources/characters/carousel/nightwatchman_g.webp | `fa64434564788bfb74322c9044d2897b87b2880f` | `00fcd0fa2568cb0e` | 65120 |
+| `characters/carousel/noble.png` | resources/characters/carousel/noble_g.webp | `85b55acfb364cfcc27b10fba2d46c2edaa2e42ca` | `8cc4d3886d5a8132` | 158465 |
+| `characters/carousel/poppygrower.png` | resources/characters/carousel/poppygrower_g.webp | `d26ea0d0f9a03f9b4bf0c712cce97433463e69b6` | `293de71f0412f5b3` | 123334 |
+| `characters/carousel/preacher.png` | resources/characters/carousel/preacher_g.webp | `03c1f1273115aec6596be3a9cbcb9fa2564ea3a4` | `99e808b9d9b52f2a` | 128216 |
+| `characters/carousel/princess.png` | resources/characters/carousel/princess_g.webp | `fa64d9f6ec3a2567c35fefd2424e571375b5b4e8` | `a7514786deff335a` | 96213 |
+| `characters/carousel/steward.png` | resources/characters/carousel/steward_g.webp | `99c93a634f27a3f7a5ccc1398e466610c85091a3` | `3ac7391da84ee327` | 103254 |
+| `characters/carousel/villageidiot.png` | resources/characters/carousel/villageidiot_g.webp | `355e7bf4948aef6d21e2d67d022b12c399644d41` | `d299e1d33e8bf763` | 84381 |
+| `characters/carousel/damsel.png` | resources/characters/carousel/damsel_g.webp | `e6f876bec2a13c09f8d61ba00f08259b33de4fcb` | `5b73e050f24324f1` | 85755 |
+| `characters/carousel/hatter.png` | resources/characters/carousel/hatter_g.webp | `10dc68019deb33381767759b8234ab7b475df692` | `bc7e8ee8b6908d52` | 97674 |
+| `characters/carousel/heretic.png` | resources/characters/carousel/heretic_g.webp | `3f657e91a75c1e0067716cdfee4e3b1eeaea9df2` | `c13ef537bf4f760d` | 87810 |
+| `characters/carousel/hermit.png` | resources/characters/carousel/hermit_g.webp | `1a26a3dc952dc7f77ef096531432114084e70f86` | `fc5b8045fa46fed0` | 62408 |
+| `characters/carousel/ogre.png` | resources/characters/carousel/ogre_g.webp | `c3794374869dabed336e376e71e8b76d41735e2d` | `e3b0d0f944593bc1` | 51458 |
+| `characters/carousel/plaguedoctor.png` | resources/characters/carousel/plaguedoctor_g.webp | `0bd12cbf8478b2b808ea1280ff3521687f20f944` | `22a0c2ee3855f691` | 91777 |
+| `characters/carousel/politician.png` | resources/characters/carousel/politician_g.webp | `8d647b75c16cadf4c322318e2c2f4022c1592a2c` | `fe9c42f4f250ad1c` | 104468 |
+| `characters/carousel/puzzlemaster.png` | resources/characters/carousel/puzzlemaster_g.webp | `48f1ad774489ceb61f22cf6bc3551b6e08a39198` | `545aa7f6e47b0f77` | 133958 |
+| `characters/carousel/snitch.png` | resources/characters/carousel/snitch_g.webp | `ad3770391f928511c9117dca148cc12de078ba65` | `73c4593788e315ab` | 109612 |
+| `characters/carousel/zealot.png` | resources/characters/carousel/zealot_g.webp | `5aaf16d5e4c26c337b282b3e5e568ed363c23162` | `be9596f157b1c19e` | 87607 |
+| `characters/carousel/boomdandy.png` | resources/characters/carousel/boomdandy_e.webp | `b0908bc51e41858f58f217da5f6cf6e3c3a3ce80` | `8f61ab6d6fd42b63` | 103295 |
+| `characters/carousel/fearmonger.png` | resources/characters/carousel/fearmonger_e.webp | `190997564e55b4e32d1898bbefb6486a8652fc4f` | `c7eb3bf1eff15247` | 91906 |
+| `characters/carousel/goblin.png` | resources/characters/carousel/goblin_e.webp | `f28f2b7f2a0b8da8f5e127fd1ea29d3affc308cc` | `d4e47d4dd35a103f` | 79337 |
+| `characters/carousel/mezepheles.png` | resources/characters/carousel/mezepheles_e.webp | `cfe5b8182a9c393b9f14104ae2ebe192e529b3d2` | `4b79b2ae92c56d41` | 84233 |
+| `characters/carousel/organgrinder.png` | resources/characters/carousel/organgrinder_e.webp | `40e9f4500ad0af5f209b519cb4e45a3ecdf3cda0` | `2d4bfac83911e052` | 110425 |
+| `characters/carousel/psychopath.png` | resources/characters/carousel/psychopath_e.webp | `ab79a31e5fee4041977d41901000fce546fb0483` | `fe5ec7a808c162be` | 73154 |
+| `characters/carousel/vizier.png` | resources/characters/carousel/vizier_e.webp | `675df78de0817d91ec13d4377b427c3159fe3bcc` | `f6929e6c868d4c58` | 113637 |
+| `characters/carousel/widow.png` | resources/characters/carousel/widow_e.webp | `2dbc7f750e22afedaa87987ba1996de8c0fcd5a2` | `f4ad88b4d97388d6` | 118703 |
+| `characters/carousel/wizard.png` | resources/characters/carousel/wizard_e.webp | `22d7e41919dabb85116a7f330bab8bb7ae83479c` | `f9f5c5f245e41af8` | 150897 |
+| `characters/carousel/wraith.png` | resources/characters/carousel/wraith_e.webp | `5bd4c115ed66eb12cf1fe592b747fcd1fba0391f` | `38a66ff5def8742f` | 136715 |
+| `characters/carousel/xaan.png` | resources/characters/carousel/xaan_e.webp | `b16ee45084f7aec614ef9ed912ba2900caea0689` | `6ef88dd2041635a4` | 101752 |
+| `characters/carousel/alhadikhia.png` | resources/characters/carousel/alhadikhia_e.webp | `7e0d64404b68d1d8a9c173f3bb2ac5aab91273d5` | `c1607b98a7c1792d` | 109690 |
+| `characters/carousel/legion.png` | resources/characters/carousel/legion_e.webp | `ae978cbe72503c37bd8ddbda3ad3a7b42e1830f0` | `f82b8b61937996df` | 122897 |
+| `characters/carousel/lilmonsta.png` | resources/characters/carousel/lilmonsta_e.webp | `07eff177240b9d52d6c944fd8dab21d71ac0fb51` | `51bbce7afe67f277` | 109424 |
+| `characters/carousel/ojo.png` | resources/characters/carousel/ojo_e.webp | `f74aab145a1b0e3f620ef4309e4c03bb0fe61106` | `904e0fef9e6064ce` | 106640 |
+| `characters/carousel/riot.png` | resources/characters/carousel/riot_e.webp | `91d75efb816643d98c125df7f351314a6d83afff` | `0a43e1915d1dfc89` | 112088 |
+| `characters/carousel/yaggababble.png` | resources/characters/carousel/yaggababble_e.webp | `1fc020261969b935c7a019ecd58bac84efc87ea2` | `72e3e76343fe1e3f` | 117455 |

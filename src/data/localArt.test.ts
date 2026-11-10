@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { listBuiltinScripts } from "@/data/scripts";
+import { listOfficialRoles } from "@/data/officialRoles";
 import { TRAVELERS } from "@/data/travelers";
 import { iconUrlFor } from "./iconUrl";
 import { localCharacterArt } from "./localArt";
@@ -38,5 +39,21 @@ describe("local official character art (Package 3 A5)", () => {
       const sha = createHash("sha256").update(readFileSync(resolve(PUBLIC, "." + url))).digest("hex");
       expect(sha.startsWith(prefix!), rel).toBe(true);
     }
+  });
+});
+
+describe("self-hosted art for all 181 official characters (custom scripts, Stage 2)", () => {
+  const all = listOfficialRoles();
+
+  it("every official character has a committed local icon, so no custom script needs the CDN", () => {
+    expect(all).toHaveLength(181);
+    const missing = all.filter((r) => !localCharacterArt(r.id) || !existsSync(resolve(PUBLIC, "." + localCharacterArt(r.id)!)));
+    expect(missing.map((r) => r.id)).toEqual([]);
+    expect(all.filter((r) => /^https:/.test(iconUrlFor(r))).map((r) => r.id)).toEqual([]);
+  });
+
+  it("every one of those files is listed in PROVENANCE.md", () => {
+    const unlisted = all.map((r) => localCharacterArt(r.id)!.replace(/^\/art\//, "")).filter((rel) => !provenance.includes(`| \`${rel}\``));
+    expect(unlisted).toEqual([]);
   });
 });
