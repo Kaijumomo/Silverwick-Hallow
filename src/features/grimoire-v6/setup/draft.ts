@@ -46,6 +46,23 @@ export function wizardScript(wiz: Wizard, customScripts: Record<string, Script>)
  * laid out exactly as the real game's seats will be. It is built by the store's own pristine-game builder and is
  * never written to the store, a lobby or Firebase.
  */
+/**
+ * The script a draft is laid out from. Before the wizard has a script the preview is Trouble Brewing, which is
+ * the design's empty-table default. A chosen script that cannot be found (a custom script deleted or not yet
+ * loaded) is also drawn as Trouble Brewing, because the preview only needs seats, but it is reported rather
+ * than passed off as the chosen script. No screen text changes; the report is a console warning.
+ */
+export function draftBaseScript(
+  wiz: Pick<Wizard, "script" | "customName"> | null,
+  scriptId: string | null,
+  customScripts: Record<string, Script>,
+): { script: Script; missing: boolean } {
+  const found = scriptId ? BUILTIN_SCRIPTS[scriptId] ?? customScripts[scriptId] : undefined;
+  if (found) return { script: found, missing: false };
+  const chosen = !!wiz?.script && (wiz.script !== "custom" || !!wiz.customName);
+  return { script: BUILTIN_SCRIPTS["tb"]!, missing: chosen };
+}
+
 export function useDraftGame(wiz: Wizard | null, enabled: boolean): StorytellerLobbyRecord | null {
   const customScripts = useStorytellerStore((s) => s.customScripts);
   const script = wiz ? wizardScript(wiz, customScripts) : null;
@@ -54,7 +71,8 @@ export function useDraftGame(wiz: Wizard | null, enabled: boolean): StorytellerL
   const extrasKey = (wiz?.extras ?? []).join("|");
   return useMemo(() => {
     if (!enabled || !wiz) return null;
-    const base = (scriptId ? BUILTIN_SCRIPTS[scriptId] ?? customScripts[scriptId] : undefined) ?? BUILTIN_SCRIPTS["tb"]!;
+    const { script: base, missing } = draftBaseScript(wiz, scriptId, customScripts);
+    if (missing) console.warn(`[setup] The chosen script "${wiz.script === "custom" ? wiz.customName : wiz.script}" was not found; the seat preview uses Trouble Brewing.`);
     const game = buildSetupGame(base, { plannedPlayerCount: count, plannedTravelerCount: travellersOf(count), ...planExtras(wiz.extras) });
     DRAFTS.add(game);
     return game;
