@@ -4,6 +4,7 @@ import type { ReferenceCategory } from "./referenceCategories";
 import { PhoneHome } from "@/features/player/phone/PhoneHome";
 import { PhoneReferenceScript } from "@/features/player/phone/PhoneReferenceScript";
 import { PhoneReferencePicker } from "@/features/player/phone/PhoneReferencePicker";
+import { displayCode, rejoinUrl, savedGameCode } from "@/features/player/phone/rejoin";
 
 type Props = {
   /** Page navigation; injectable for tests. Defaults to a normal page load. */
@@ -22,11 +23,14 @@ function defaultNavigate(url: string) {
 export function HomeScreen({ navigate = defaultNavigate }: Props) {
   const [reference, setReference] = useState<ReferenceCategory | null>(null);
   const [phoneReference, setPhoneReference] = useState(false);
+  // A game saved on this phone (e.g. the installed app was closed and reopened at Home).
+  const [savedCode] = useState(() => (isTabletTrial ? null : savedGameCode()));
   return (
     <>
       {!reference && !phoneReference && (
         <PhoneHome
           trial={isTabletTrial}
+          {...(savedCode ? { rejoin: { label: `Game ${displayCode(savedCode)}`, onRejoin: () => navigate(rejoinUrl(savedCode)) } } : {})}
           onPick={(id) => {
             if (id === "player") navigate("?join=");
             else setPhoneReference(true);
