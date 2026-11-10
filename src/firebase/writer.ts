@@ -464,6 +464,7 @@ export class SessionWriter implements RoomBackend {
     if (this.stopped) throw new LifecycleError("cancelled", "Session stopped.");
     if (Object.keys(updates).some(path => !path.startsWith(this.root + "/"))) throw new LifecycleError("invalid", "A write targeted another lobby.");
     const { sending, views } = this.withoutUnchangedViews(updates);
+    const epoch = this.leaseEpoch; // a lease gap while this commit is in flight means: remember nothing from it
     const revision = ++this.revision;
     const guardPath = `${this.root}/writeGuard`;
     const stamp: GuardStamp = { token: this.token, revision };
@@ -488,7 +489,7 @@ export class SessionWriter implements RoomBackend {
       if (!this.closing) this.stop();
       throw error;
     }
-    for (const [path, json] of views) this.committedViews.set(path, json);
+    if (this.leaseEpoch === epoch) for (const [path, json] of views) this.committedViews.set(path, json);
     // A commit sent before a terminal stop (e.g. a real lease-renewal denial)
     // can still land successfully afterward. That belated success belongs to
     // this one write, not to the writer's lifetime — it must not clear an
