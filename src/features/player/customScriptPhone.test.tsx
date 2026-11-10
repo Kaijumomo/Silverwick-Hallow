@@ -15,9 +15,9 @@ vi.mock("@/firebase/session", async (importOriginal) => {
   return { ...actual, connectFirebase: async () => ({ backend: connection.backend as never, uid: "alice" }) };
 });
 
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { PlayerScreen } from "./PlayerScreen";
-import { enterTown } from "./phone/ceremonyTestUtils";
+import { enterTown } from "@/test/phoneCeremony";
 import type { PublicLobbyRecord } from "@/stores/types";
 
 const TOKEN = "tok_aaaaaaaaaaaaaaaaaaaaaa";
