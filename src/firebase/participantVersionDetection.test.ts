@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 9R.2 Astra remediation R2: v17 identity evidence must be recognized
 // wherever the v17 schema put it -- including current Effect/Reminder
 // sourceParticipant -- so malformed CURRENT-version state is always judged
@@ -18,7 +19,7 @@ import { usePlayerStore } from "@/stores/playerStore";
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
 import { detectLegacyGameVersion, hasV17IdentityEvidence, migrateGameEntry } from "@/stores/gameMigration";
 import type { StorytellerLobbyRecord } from "@/stores/types";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "./lobby";
 import { requireActiveSession } from "./lifecycle";
 import { SessionWriter } from "./writer";

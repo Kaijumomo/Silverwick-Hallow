@@ -1,3 +1,4 @@
+// @vitest-environment node
 // FirebaseRoomBackend error attribution (Go Live hotfix): a failed request is
 // tagged with its operation and path for developer diagnostics, without
 // changing how the error settles, its identity, message or code.

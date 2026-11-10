@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { EffectRecord } from "@/stores/types";
 import { officialEffectPresentation, officialNotationRole } from "./officialReminderPresentation";

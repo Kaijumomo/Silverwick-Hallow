@@ -15,6 +15,7 @@ import { StorytellerGamePersistedSchema } from "./schemas";
 import { snapshotViolations, stripCommentsForGuard as stripComments, writeLinesFor } from "@/test/writerGuard";
 import { setupGame, setupScript } from "@/test/setupFixtures";
 import type { PlayerId, StorytellerLobbyRecord } from "./types";
+import { storeCommands } from "@/test/storeCommands";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -113,7 +114,7 @@ describe("10F-AC-15: useAbility / correctAbilityUsed are Life intents", () => {
       store.setState({ game: { ...game(), phase } });
       const b = baseline();
       expect(state().resolveLife({ intents: [{ kind: "useAbility", playerId: "p0" }] })).toMatchObject({ ok: false });
-      expect(state().setAbilityUsed("p0", true)).toMatchObject({ ok: false });
+      expect(storeCommands.setAbilityUsed("p0", true)).toMatchObject({ ok: false });
       expectInert(b);
     }
   });
@@ -165,8 +166,8 @@ describe("10F-AC-15 / AC-16: composition in one Life transaction", () => {
 describe("existing resets stay distinct and unchanged", () => {
   it("a gameplay Role change resets abilityUsed; a Role correction preserves it", () => {
     const { chef, empath } = live("night");
-    expect(state().setAbilityUsed(chef, true).ok).toBe(true);
-    expect(state().setAbilityUsed(empath, true).ok).toBe(true);
+    expect(storeCommands.setAbilityUsed(chef, true).ok).toBe(true);
+    expect(storeCommands.setAbilityUsed(empath, true).ok).toBe(true);
     expect(state().resolveRoles({ intents: [changeRoleIntent(player(chef), "monk")] }).ok).toBe(true);
     expect(player(chef).abilityUsed).toBe(false);
     expect(state().resolveRoles({ intents: [correctRoleIntent(player(empath), "monk")] }).ok).toBe(true);
@@ -176,17 +177,16 @@ describe("existing resets stay distinct and unchanged", () => {
   it("setAbilityUsed is a thin adapter: true -> gameplay useAbility, false -> correction, current value inert", () => {
     const { slayer } = live();
     const b = baseline();
-    expect(state().setAbilityUsed(slayer, false)).toEqual({ ok: true, changed: false, eventIds: [] });
+    expect(storeCommands.setAbilityUsed(slayer, false)).toEqual({ ok: true, changed: false, eventIds: [] });
     expectInert(b);
-    expect(state().setAbilityUsed(slayer, true).ok).toBe(true);
+    expect(storeCommands.setAbilityUsed(slayer, true).ok).toBe(true);
     expect(lifeHistory().at(-1)!.correction).toBeUndefined();
-    expect(state().setAbilityUsed(slayer, false).ok).toBe(true);
+    expect(storeCommands.setAbilityUsed(slayer, false).ok).toBe(true);
     expect(lifeHistory().at(-1)!.correction).toBe(true);
+    // The adapter had no production caller and now lives with the tests (src/test/storeCommands.ts, F-04);
+    // the store keeps no extra abilityUsed writer.
     const source = stripComments(readFileSync(resolve(__dirname, "storytellerStore.ts"), "utf8"));
-    const start = source.search(/^ {6}setAbilityUsed: \(/m);
-    const body = source.slice(start, source.indexOf("\n      resolveEffects:", start));
-    expect(body).toMatch(/resolveLife\(/);
-    for (const forbidden of [/\bset\(/, /patchPlayer/, /pushUndo/, /abilityUsed:\s*(true|false|abilityUsed)\b/]) expect(body).not.toMatch(forbidden);
+    expect(source).not.toMatch(/^ {6}setAbilityUsed: \(/m);
   });
 });
 
@@ -217,13 +217,13 @@ const ALLOWED: Record<string, string> = {
   "stores/roleResolution.ts": "10D gameplay Role change reset (ROLE_PLAN_FIELDS)",
   "stores/storytellerStore.ts": "blankPlayer construction and Setup freshAssignment reset (audited below)",
   "stores/schemas.ts": "persisted shape",
-  "features/nightOrder/nightOrder.ts": "copies the value into a READ-ONLY Night step view, never Current State",
+  "rules/night/nightOrder.ts": "copies the value into a READ-ONLY Night step view, never Current State",
   "stores/abilityResolution.ts": "captureFingerprint snapshots the OBSERVED value into a read-only workflow fingerprint, never Current State",
 };
 /** SOL-10F-L7: the read-only snapshot modules are admitted ONLY at their
  * reviewed unit and only as the verbatim observed copy. */
 const SNAPSHOT_SITES: Record<string, string> = {
-  "features/nightOrder/nightOrder.ts": "computeNightOrder",
+  "rules/night/nightOrder.ts": "computeNightOrder",
   "stores/abilityResolution.ts": "captureFingerprint",
 };
 

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { chooseAsk, useV6Ui } from "./v6Store";
 

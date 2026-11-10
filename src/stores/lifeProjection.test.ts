@@ -6,9 +6,10 @@ import { needsShownIdentity } from "./identity";
 import { projectLobbyToPublic, projectLobbyToSelfMap } from "./projections";
 import { lifeAccessibleLabel, lifeStatusOf, publicLifeOf, publicLifeStateOf, LIFE_STATE_LABEL } from "./lifeState";
 import { makeSTPlayer } from "@/test/fixtures";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { writeProjections } from "@/firebase/sync";
 import type { PlayerId } from "./types";
+import { storeCommands } from "@/test/storeCommands";
 
 // Phase 10A: life is public table information; Life Events, Provenance,
 // ParticipantIds and Actual Alignment are not.
@@ -40,7 +41,7 @@ function dayWithEverything(): { ids: PlayerId[]; traveler: PlayerId } {
   state().recordDeath(ids[0]!, { provenance: { sourcePlayer: ids[1]!, sourceCharacter: "imp", reason: "SENTINEL-PROVENANCE" } });
   state().advancePhase();
   state().recordExecution(ids[1]!, "survived");
-  state().recordExile(traveler, "died");
+  storeCommands.recordExile(traveler, "died");
   state().spendGhostVote(traveler);
   return { ids, traveler };
 }

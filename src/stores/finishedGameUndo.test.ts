@@ -4,6 +4,7 @@ import { setupGame, setupScript } from "@/test/setupFixtures";
 import { StorytellerGamePersistedSchema } from "./schemas";
 import { useShellStore } from "./shellStore";
 import { participantStepKey } from "./nightProgress";
+import { storeCommands } from "@/test/storeCommands";
 
 const state = () => store.getState();
 const key = store.persist.getOptions().name!;
@@ -22,7 +23,7 @@ afterEach(() => vi.restoreAllMocks());
 describe("local finished-game recovery", () => {
   it.each(["good", "evil"] as const)("restores the complete live snapshot and prior Undo after %s wins", winner => {
     state().recordDeath("p0");
-    state().setTokenPosition("p0", 28, 42);
+    storeCommands.setTokenPosition("p0", 28, 42);
     const live = structuredClone(state().game);
     const undo = structuredClone(state().undoStack);
     const lifecycle = gameLifecycleToken();

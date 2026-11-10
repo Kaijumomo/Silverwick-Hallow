@@ -256,6 +256,10 @@ describe("slice 4B: board view-model", () => {
   });
 
   describe("free token dragging", () => {
+    /** The seat furthest left: dragging it right and down never reaches the board's edge, wherever the deal put
+     * each character (holder("chef") could sit at the right edge, where the drop is clamped). */
+    const leftmost = (positions: Record<PlayerId, { x: number; y: number }>) =>
+      (Object.entries(positions) as [PlayerId, { x: number }][]).sort((a, b) => a[1].x - b[1].x)[0]![0];
     const fire = (type: string, x: number, y: number) => {
       const event = new MouseEvent(type, { clientX: x, clientY: y, bubbles: true });
       Object.defineProperty(event, "pointerId", { value: 1 });
@@ -267,7 +271,7 @@ describe("slice 4B: board view-model", () => {
     it("saves the dropped position through the layout command, relative to the board centre", () => {
       seed15();
       const { result } = mount();
-      const id = holder("chef");
+      const id = leftmost(result.current.ctx.positions);
       const start = result.current.ctx.positions[id]!;
       const { w, h } = result.current.ctx.layout;
       act(() => press(result.current.board, id, 500, 400));
@@ -278,6 +282,82 @@ describe("slice 4B: board view-model", () => {
       expect(saved.x).toBeCloseTo(start.x + 60 - w / 2, 5);
       expect(saved.y).toBeCloseTo(start.y + 50 - h / 2 + SAVED_Y_OFFSET, 5);
       expect(store().selectedPlayerId).toBeNull();
+    });
+
+    /** A seat box and disc as the view draws them: the disc is the pressed element, the box its parent. */
+    const seatBox = () => {
+      const box = document.createElement("div");
+      const disc = document.createElement("div");
+      box.appendChild(disc);
+      document.body.appendChild(box);
+      return { box, disc };
+    };
+    const pressOn = (vm: Record<string, any>, id: PlayerId, x: number, y: number, disc: HTMLElement) =>
+      vm.tokens.find((t: any) => t.id === id).onDown({ button: 0, pointerType: "mouse", pointerId: 1, isPrimary: true, clientX: x, clientY: y, currentTarget: disc, preventDefault() {} });
+
+    it("F-02: once the seat is drawn as dragged, later moves place its box directly without redrawing the Grimoire, and the drop is saved as before", () => {
+      seed15();
+      const { result } = mount();
+      const id = leftmost(result.current.ctx.positions);
+      const start = result.current.ctx.positions[id]!;
+      const { w, h } = result.current.ctx.layout;
+      const { box, disc } = seatBox();
+      act(() => pressOn(result.current.board, id, 500, 400, disc));
+      act(() => fire("pointermove", 520, 410));
+      const first = tokenOf(result.current.board, id);
+      expect(first.z).toBe(30);
+      expect(first.x).toBe(Math.round(start.x + 20));
+      // What the view does with that render: the dragged seat's box is drawn on top.
+      box.style.zIndex = String(first.z);
+      act(() => fire("pointermove", 540, 430));
+      // No redraw: the view-model still holds the first move's point.
+      expect(tokenOf(result.current.board, id).x).toBe(first.x);
+      expect(box.style.left).toBe(`${Math.round(start.x + 40)}px`);
+      expect(box.style.top).toBe(`${Math.round(start.y + 30)}px`);
+      act(() => fire("pointerup", 560, 450));
+      const saved = store().tokenPositions[id]!;
+      expect(saved.x).toBeCloseTo(start.x + 60 - w / 2, 5);
+      expect(saved.y).toBeCloseTo(start.y + 50 - h / 2 + SAVED_Y_OFFSET, 5);
+      const dropped = tokenOf(result.current.board, id);
+      expect(dropped.z).toBe(10);
+      expect(dropped.x).toBe(Math.round(start.x + 60));
+      box.remove();
+    });
+
+    it("F-02: a box React has not drawn as the dragged seat is never moved directly (the seat is redrawn instead)", () => {
+      seed15();
+      const { result } = mount();
+      const id = leftmost(result.current.ctx.positions);
+      const start = result.current.ctx.positions[id]!;
+      const { box, disc } = seatBox();
+      box.style.zIndex = "10";
+      box.style.left = "1px";
+      act(() => pressOn(result.current.board, id, 500, 400, disc));
+      act(() => fire("pointermove", 520, 410));
+      act(() => fire("pointermove", 540, 430));
+      expect(box.style.left).toBe("1px");
+      expect(tokenOf(result.current.board, id).x).toBe(Math.round(start.x + 40));
+      act(() => fire("pointerup", 540, 430));
+      box.remove();
+    });
+
+    it("F-02: the selected seat is redrawn on every move, so its radial menu follows it as before", () => {
+      seed15();
+      const { result } = mount();
+      const id = leftmost(result.current.ctx.positions);
+      act(() => store().selectPlayer(id));
+      const start = result.current.ctx.positions[id]!;
+      const { box, disc } = seatBox();
+      act(() => pressOn(result.current.board, id, 500, 400, disc));
+      act(() => fire("pointermove", 520, 410));
+      box.style.zIndex = "30";
+      box.style.left = "1px";
+      act(() => fire("pointermove", 540, 430));
+      expect(box.style.left).toBe("1px");
+      expect(tokenOf(result.current.board, id).x).toBe(Math.round(start.x + 40));
+      expect(result.current.board.rad.x).toBe(Math.round(start.x + 40));
+      act(() => fire("pointerup", 540, 430));
+      box.remove();
     });
 
     it("reads a previously saved position back where the old Grimoire drew it (footprint centre, 12px below the disc)", () => {

@@ -6,7 +6,7 @@ import { captureCharacterActionContext, useStorytellerStore as store } from "@/s
 import { preparedInformationContext } from "@/stores/preparedInformation";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { usePlayerStore } from "@/stores/playerStore";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "./lobby";
 import { requireActiveSession } from "./lifecycle";
 import { LEASE_MS, SessionWriter } from "./writer";

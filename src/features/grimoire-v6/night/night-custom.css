@@ -98,7 +98,6 @@
   animation: swBreath 1.8s ease-in-out infinite;
 }
 .gv-night-custom .modern-night-pick + .behavior-help { font-size: 13px; color: var(--gvn-soft); }
-.gv-night-custom .modern-night-pick-controls { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* ── The information the Storyteller gives: number selector, answer, token ──────────────────────────────── */
 .gv-night-custom .night-information,
@@ -277,22 +276,9 @@
 }
 
 /* ── Setup information: one Show row per recipient ──────────────────────────────────────────────────────── */
-.gv-night-custom .night-setup-recipient {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 56px;
-  padding: 8px 8px 8px 14px;
-  border-radius: 12px;
-  border: 1px solid var(--gvn-line);
-  background: rgba(9, 10, 15, .6);
-}
-.gv-night-custom .night-setup-recipient > p { flex: 1; min-width: 0; margin: 0; font-size: 14px; font-weight: 700; color: var(--gvn-text); overflow-wrap: anywhere; }
-.gv-night-custom .night-setup-recipient > .btn { flex: none; max-width: 60%; white-space: normal; }
 .gv-night-custom .night-setup-information > p { margin: 0; font-size: 13px; color: var(--gvn-faint); }
 
 /* ── Bureaucrat: choose on the board or from the roster ─────────────────────────────────────────────────── */
-.gv-night-custom .modern-night-guidance > summary,
 .gv-night-custom details.information-review > summary,
 .gv-night-custom .action-guidance > summary {
   display: flex;
@@ -308,10 +294,8 @@
   text-transform: uppercase;
   color: var(--gvn-faint);
 }
-.gv-night-custom .modern-night-guidance > summary::-webkit-details-marker,
 .gv-night-custom details.information-review > summary::-webkit-details-marker,
 .gv-night-custom .action-guidance > summary::-webkit-details-marker { display: none; }
-.gv-night-custom .modern-night-guidance > summary::before,
 .gv-night-custom details.information-review > summary::before,
 .gv-night-custom .action-guidance > summary::before {
   content: "";
@@ -323,14 +307,10 @@
   transform: rotate(-45deg);
   transition: transform .15s;
 }
-.gv-night-custom .modern-night-guidance[open] > summary::before,
 .gv-night-custom details.information-review[open] > summary::before,
 .gv-night-custom .action-guidance[open] > summary::before { transform: rotate(45deg); }
-.gv-night-custom .modern-night-guidance > summary:hover,
 .gv-night-custom details.information-review > summary:hover,
 .gv-night-custom .action-guidance > summary:hover { color: var(--gvn-text); }
-.gv-night-custom .modern-night-roster { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 6px; }
-.gv-night-custom .modern-night-roster .btn { min-height: 40px; padding: 0 12px; border-color: rgba(232, 88, 74, .45); background: rgba(232, 88, 74, .08); color: var(--gvn-soft); }
 .gv-night-custom .modern-night-roster .btn:hover:not(:disabled) { background: rgba(232, 88, 74, .18); }
 
 /* ── Give information (the manual disclosure) ───────────────────────────────────────────────────────────── */

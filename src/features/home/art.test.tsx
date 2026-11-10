@@ -1,7 +1,7 @@
-// Package 1: official art is used only when it is really installed locally.
+// Package 1: official art is used only when it is really installed locally (tablet Home and its Reference overlay).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { HomeScreen } from "./HomeScreen";
+import { HomeV6 } from "@/features/grimoire-v6/home/HomeV6";
 import { CAROUSEL_ORBIT, EDITION_LOGO } from "./art";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 
@@ -24,40 +24,30 @@ afterEach(() => {
 });
 
 const openReference = async () => {
-  render(<HomeScreen navigate={vi.fn()} />);
+  render(<HomeV6 navigate={vi.fn()} />);
   fireEvent.click(screen.getByRole("button", { name: /^Character Reference/ }));
   await act(async () => {});
 };
+/** The orbit icons drawn on the Carousel button, by file. */
+const orbitIcons = () => [...screen.getByRole("img", { name: "The Carousel" }).querySelectorAll<HTMLElement>("span")]
+  .map((el) => /url\("?([^")]+)"?\)/.exec(el.style.backgroundImage)?.[1]).filter((src): src is string => !!src);
 
-describe("official art on the Reference tiles", () => {
-  it("falls back to the marked temporary marks when no art is installed", async () => {
-    await openReference();
-    expect(document.querySelectorAll('.home-door-tile [data-temporary-art="true"]')).toHaveLength(4);
-    expect(document.querySelector(".home-door-logo")).toBeNull();
-    expect(document.querySelector(".home-door-orbit")).toBeNull();
-  });
-
-  it("shows the edition logos and the Carousel orbit once the files load; unavailable pieces stay temporary", async () => {
-    for (const src of Object.values(EDITION_LOGO)) present.add(src);
+describe("official art on the tablet Home's Reference", () => {
+  it("draws only the Carousel orbit icons whose files really load", async () => {
     for (const src of CAROUSEL_ORBIT.slice(0, 4)) present.add(src);
     await openReference();
-    expect(document.querySelectorAll(".home-door-logo")).toHaveLength(3);
-    expect(document.querySelectorAll(".home-door-orbit-ring img")).toHaveLength(4);
-    expect(document.querySelectorAll('.home-door-tile [data-temporary-art="true"]')).toHaveLength(0);
-    expect(screen.getByRole("img", { name: "The Carousel" })).toBeInTheDocument();
+    expect(orbitIcons()).toEqual(CAROUSEL_ORBIT.slice(0, 4));
   });
 
-  it("only one logo present: the others keep their temporary marks", async () => {
-    present.add(EDITION_LOGO.tb!);
+  it("no orbit icon at all when none is installed", async () => {
     await openReference();
-    expect(document.querySelectorAll(".home-door-logo")).toHaveLength(1);
-    expect(document.querySelectorAll('.home-door-tile [data-temporary-art="true"]')).toHaveLength(3);
+    expect(orbitIcons()).toHaveLength(0);
   });
 
   it("the overlay header uses the logo, named for assistive tech, when it loads", async () => {
     present.add(EDITION_LOGO.tb!);
     await openReference();
-    fireEvent.click(screen.getByRole("button", { name: /Trouble Brewing/ }));
+    fireEvent.click(screen.getAllByRole("button", { name: /characters$/ })[0]!);
     await act(async () => {});
     expect(screen.getByRole("heading", { level: 2, name: "Trouble Brewing" }).querySelector("img")).not.toBeNull();
   });

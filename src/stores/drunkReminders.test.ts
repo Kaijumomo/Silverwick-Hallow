@@ -6,6 +6,7 @@ import { buildRegistry } from "@/data/roleRegistry";
 import { projectLobbyToPublic, projectLobbyToSelfMap } from "./projections";
 import { StorytellerGamePersistedSchema } from "./schemas";
 import { DRUNK_REMINDER_LABEL, ownsDrunkReminder } from "./drunkReminders";
+import { storeCommands } from "@/test/storeCommands";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -45,7 +46,7 @@ it("no-op preparation and a different disguise preserve one record and original 
   expect(state().setShownRole("p0", "monk")).toMatchObject({ ok: true, changed: false });
   expect(game()).toBe(before); expect(state().undoStack).toHaveLength(1);
   state().setShownRole("p0", "soldier"); expect(player().reminders).toEqual([note]);
-  state().setShownAlignment("p0", "evil"); expect(player().reminders).toEqual([note]);
+  storeCommands.setShownAlignment("p0", "evil"); expect(player().reminders).toEqual([note]);
   state().undo(); state().undo(); expect(player().shownRole).toBe("monk"); expect(player().reminders).toEqual([note]);
 });
 
@@ -65,7 +66,7 @@ it("exact removal leaves identity and other notation intact, stays removed on la
   expect(state().resolveReminders({ intents: [{ kind: "remove", target: target(), reminderId: generated.id }] }).ok).toBe(true);
   expect(player().reminders.map(n => n.id)).toEqual(["lookalike"]);
   expect(player()).toMatchObject({ actualRole: "drunk", shownRole: "monk" }); expect(player().effects).toEqual([]);
-  state().setShownAlignment("p0", "evil");
+  storeCommands.setShownAlignment("p0", "evil");
   const after = game(); const persisted = localStorage.getItem("new-blood-st")!;
   store.setState({ game: null }); localStorage.setItem("new-blood-st", persisted); await store.persist.rehydrate();
   expect(game()).toEqual(after); expect(player().reminders.map(n => n.id)).toEqual(["lookalike"]);
@@ -103,7 +104,7 @@ it("loading an older prepared identity does not invent missing notation", async 
   store.setState({ game: { ...value } });
   const saved = localStorage.getItem("new-blood-st")!;
   store.setState({ game: null }); localStorage.setItem("new-blood-st", saved); await store.persist.rehydrate();
-  state().setShownAlignment("p0", "evil");
+  storeCommands.setShownAlignment("p0", "evil");
   expect(player().reminders).toEqual([]);
 });
 

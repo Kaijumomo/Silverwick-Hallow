@@ -10,7 +10,7 @@ import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { buildRichPhase9Game } from "@/test/phase9RichState";
 import { isDeathEvent } from "@/stores/lifeEvents";
 import type { StorytellerLobbyRecord } from "@/stores/types";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "./lobby";
 import { requireActiveSession } from "./lifecycle";
 import { SessionWriter, LEASE_MS } from "./writer";

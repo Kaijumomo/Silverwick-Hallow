@@ -1,8 +1,8 @@
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { ModernNightPanel } from "./testGuide";
-import { marksOn, removeMarkLabelled } from "./v6Night";
+import { ModernNightPanel } from "@/test/nightTestGuide";
+import { marksOn, removeMarkLabelled } from "@/test/v6Night";
 import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";

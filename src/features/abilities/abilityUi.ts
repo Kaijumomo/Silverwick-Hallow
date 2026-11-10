@@ -200,13 +200,6 @@ export const useTargetPicker = create<TargetPickerState>((set) => ({
   cancel: () => set({ active: null, refused: null }),
 }));
 
-/** Whether the current pick admits this seat's CURRENT occupant. */
-export function seatPickable(game: StorytellerLobbyRecord | null, playerId: PlayerId, pick: TargetPick | null = useTargetPicker.getState().active): boolean {
-  if (!pick || !game) return false;
-  const binding = captureBinding(game, playerId);
-  return !!binding && (!pick.eligible || pick.eligible.has(binding.participantId));
-}
-
 /** GrimoireCircle's tap-to-select: a pick while a picker is active, otherwise
  * the ordinary selection. Returns true when the tap was consumed (as a pick,
  * or refused as ineligible while picking). */

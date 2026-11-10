@@ -33,5 +33,4 @@
 .gv-root *,.gv-root *::before,.gv-root *::after { box-sizing: border-box; }
 .gv-root a { color: #e8584a; text-decoration: none; }
 .gv-root a:hover { color: #ff7a68; }
-.gv-settle-on *, .gv-settle-hide * { transition: none !important; }
 button[data-nom-begin]:disabled { opacity: .4; cursor: not-allowed; }

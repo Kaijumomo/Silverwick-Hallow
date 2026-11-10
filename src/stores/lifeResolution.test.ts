@@ -15,6 +15,7 @@ import {
 } from "./lifeEvents";
 import { StorytellerGamePersistedSchema } from "./schemas";
 import type { LifeEvent, PlayerId, StorytellerLobbyRecord } from "./types";
+import { storeCommands } from "@/test/storeCommands";
 
 // Phase 10A: the authoritative life-resolution boundary -- Current State,
 // the Life Event Window and History always change together (one commit, one
@@ -162,9 +163,9 @@ describe("Phase 10A: resurrection", () => {
   it("dead -> alive: vote normalized, exile cleared, ability restored, resurrection event", () => {
     const { traveler } = liveGame();
     toDay();
-    state().recordExile(traveler, "died");
+    storeCommands.recordExile(traveler, "died");
     state().spendGhostVote(traveler);
-    state().setAbilityUsed(traveler, true);
+    storeCommands.setAbilityUsed(traveler, true);
     expect(player(traveler)).toMatchObject({ alive: false, ghostVote: false, exiled: true, abilityUsed: true });
     expect(state().resurrect(traveler).ok).toBe(true);
     expect(player(traveler)).toMatchObject({ alive: true, ghostVote: true, abilityUsed: false });
@@ -186,7 +187,7 @@ describe("Phase 10A: resurrection", () => {
     const { ids } = liveGame();
     const id = ids[0]!;
     state().recordDeath(id);
-    state().setAbilityUsed(id, true);
+    storeCommands.setAbilityUsed(id, true);
     const eventsBefore = events();
     expect(state().correctLifeStatus(id, { alive: true }).ok).toBe(true);
     expect(player(id)).toMatchObject({ alive: true, ghostVote: true, abilityUsed: true });
@@ -201,7 +202,7 @@ describe("Phase 10A: exile", () => {
   it("a living Traveler exiled -> died: dead, exiled, vote granted", () => {
     const { traveler } = liveGame();
     toDay();
-    expect(state().recordExile(traveler, "died").ok).toBe(true);
+    expect(storeCommands.recordExile(traveler, "died").ok).toBe(true);
     expect(player(traveler)).toMatchObject({ alive: false, ghostVote: true, exiled: true });
     expect(events().at(-1)).toMatchObject({ kind: "exile", outcome: "died", moment: DAY1 });
   });
@@ -210,29 +211,29 @@ describe("Phase 10A: exile", () => {
     const { traveler } = liveGame();
     toDay();
     const before = player(traveler);
-    expect(state().recordExile(traveler, "survived").ok).toBe(true);
+    expect(storeCommands.recordExile(traveler, "survived").ok).toBe(true);
     expect(player(traveler)).toEqual(before);
     expect(events().at(-1)).toMatchObject({ kind: "exile", outcome: "survived" });
     const record = game().history.at(-1)!;
     expect(record.change).toBeUndefined();
     expect(addedIn(record)).toMatchObject({ kind: "exile", outcome: "survived" });
     // Several exiles on one Day are allowed.
-    expect(state().recordExile(traveler, "survived").ok).toBe(true);
+    expect(storeCommands.recordExile(traveler, "survived").ok).toBe(true);
     expect(exilesAt(game(), DAY1)).toMatchObject({ status: "known", events: [{ outcome: "survived" }, { outcome: "survived" }] });
   });
 
   it("refused: at Night, for a dead Traveler, and for a non-Traveler", () => {
     const { ids, traveler } = liveGame();
     let before = snap();
-    expect(state().recordExile(traveler, "died").ok).toBe(false); // Night 1
+    expect(storeCommands.recordExile(traveler, "died").ok).toBe(false); // Night 1
     expectUnchanged(before);
     toDay();
     before = snap();
-    expect(state().recordExile(ids[0]!, "died").ok).toBe(false);
+    expect(storeCommands.recordExile(ids[0]!, "died").ok).toBe(false);
     expectUnchanged(before);
-    state().recordExile(traveler, "died");
+    storeCommands.recordExile(traveler, "died");
     before = snap();
-    expect(state().recordExile(traveler, "died").ok).toBe(false);
+    expect(storeCommands.recordExile(traveler, "died").ok).toBe(false);
     expectUnchanged(before);
   });
 
@@ -241,7 +242,7 @@ describe("Phase 10A: exile", () => {
     state().recordDeath(ids[0]!);
     toDay();
     const others = ids.map((id) => ({ ...player(id) }));
-    state().recordExile(traveler, "died");
+    storeCommands.recordExile(traveler, "died");
     ids.forEach((id, i) => expect(player(id)).toEqual(others[i]));
   });
 });
@@ -610,7 +611,7 @@ describe("Phase 10A: corrections", () => {
 
   it("a correction fires no ability semantics: no resurrection event and no ability restoration", () => {
     const { ids, event } = executed();
-    state().setAbilityUsed(ids[0]!, true);
+    storeCommands.setAbilityUsed(ids[0]!, true);
     state().retractLifeEvent(event.id, [{ playerId: ids[0]!, target: { alive: true } }]);
     expect(player(ids[0]!).abilityUsed).toBe(true);
     expect(resurrectionsAt(game(), DAY1)).toEqual({ status: "known", events: [] });
@@ -629,7 +630,7 @@ describe("Phase 10A: legacy compatibility adapters", () => {
     const { ids, traveler } = liveGame();
     state().setAlive(ids[0]!, false);
     expect(events().at(-1)).toMatchObject({ kind: "death" });
-    state().setGhostVote(ids[0]!, false);
+    storeCommands.setGhostVote(ids[0]!, false);
     expect(player(ids[0]!).ghostVote).toBe(false);
     state().setAlive(ids[0]!, true);
     expect(player(ids[0]!)).toMatchObject({ alive: true, ghostVote: true });

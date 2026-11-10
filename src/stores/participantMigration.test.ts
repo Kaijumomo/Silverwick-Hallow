@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { beforeEach, describe, expect, it } from "vitest";
 import { migrateStoreState, takeMigrationResetFlag } from "./storytellerStore";
 import { detectLegacyGameVersion, migrateGameEntry } from "./gameMigration";

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { proofGame, proofRegistry, proofScript, patchPlayer, impair } from "@/test/proofFixtures";
 import { curseNotice } from "./curses";

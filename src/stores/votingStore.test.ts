@@ -6,7 +6,7 @@ import { setupGame, setupScript } from "@/test/setupFixtures";
 import { GAME_SCHEMA_VERSION, StorytellerGamePersistedSchema } from "./schemas";
 import { detectLegacyGameVersion, migrateGameEntry } from "./gameMigration";
 import { startStorytellerSession, useSessionRuntime } from "@/firebase/storytellerSync";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { SessionWriter } from "@/firebase/writer";
 import { createLobby } from "@/firebase/lobby";
 import { requireActiveSession } from "@/firebase/lifecycle";

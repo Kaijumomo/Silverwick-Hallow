@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10F, Slice 3: the pure ability coordinator (PHASE10F Sections 3-5,
 // 7, 12, 14). Rules-neutral fixtures only (src/test/abilityFixtures.ts) --
 // no production character semantics are exercised or implied.

@@ -23,6 +23,7 @@ import { applyLifePlan, planLifeTransaction } from "./lifeResolution";
 import { HistoryRecordSchema, StorytellerGamePersistedSchema } from "./schemas";
 import { participantRefOf } from "./participants";
 import type { HistoryRecord, PlayerId, ReminderRecord, StorytellerLobbyRecord } from "./types";
+import { storeCommands } from "@/test/storeCommands";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -595,7 +596,7 @@ describe("Phase 10C compatibility adapters are thin wrappers over the seam", () 
     const id = state().addReminder(idOf("Carol"), { label: "Chosen", sourcePlayer: idOf("Alice"), cleanup: { kind: "nextPhase" } })!;
     expect(player(idOf("Carol")).reminders[0]).toMatchObject({ id, sourceParticipant: participantRefOf(game(), idOf("Alice")), cleanupCue: { kind: "at" } });
     expect(state().addReminder(idOf("Carol"), { label: "X", sourcePlayer: "nobody" })).toBeNull();
-    expect(state().removeReminder(idOf("Carol"), id)).toMatchObject({ ok: true, changed: true });
+    expect(storeCommands.removeReminder(idOf("Carol"), id)).toMatchObject({ ok: true, changed: true });
     expect(player(idOf("Carol")).reminders).toEqual([]);
   });
 

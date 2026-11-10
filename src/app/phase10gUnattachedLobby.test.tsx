@@ -6,8 +6,9 @@
 // each regression proves the warning is visible after GameScreen is gone.
 // The ASTRA-10G-001 authority invariant is unchanged: the superseded lobby is
 // never attached and no writer starts for it.
+import { renderApp } from "@/test/renderApp";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type { Json, RoomBackend } from "@/firebase/backend";
 import { useV6Ui } from "@/features/grimoire-v6/v6Store";
 
@@ -21,13 +22,12 @@ vi.mock("@/firebase/config", async (importOriginal) => {
   return { ...actual, isFirebaseConfigured: () => true };
 });
 
-import { App } from "./App";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { goLive } from "@/firebase/goLive";
 import { endGameWithIntent } from "@/firebase/terminal";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { formatCode } from "@/firebase/lobby";
 import { buildRegistry } from "@/data/roleRegistry";
 import { setupGame, setupScript } from "@/test/setupFixtures";
@@ -132,7 +132,7 @@ async function startOfflineGame() {
 describe("ASTRA-10G-R1-001-A: Finish game -> Home, then the superseded cleanup fails", () => {
   it("the ended game stays detached, no writer starts, and Home shows the warning with the room code", async () => {
     const b = new CleanupBackend();
-    render(<App />);
+    await renderApp();
     const held = await goLiveHeldBeforeAdoption(b);
     const code = held.code();
     await finishGame();
@@ -171,7 +171,7 @@ describe("ASTRA-10G-R1-001-A: Finish game -> Home, then the superseded cleanup f
 describe("ASTRA-10G-R1-001-B: Home -> New Game -> Seat the town, then the old cleanup fails", () => {
   it("the old lobby never attaches to Game B, no old writer starts, and the new flow shows the old room code", async () => {
     const b = new CleanupBackend();
-    render(<App />);
+    await renderApp();
     const held = await goLiveHeldBeforeAdoption(b);
     const oldCode = held.code();
     // Simulate the navigation/lifecycle boundary while the asynchronous
@@ -214,7 +214,7 @@ describe("ASTRA-10G-R1-001-B: Home -> New Game -> Seat the town, then the old cl
 describe("ASTRA-10G-R1-001: controls", () => {
   it("a successful superseded cleanup creates no warning", async () => {
     const b = new CleanupBackend();
-    render(<App />);
+    await renderApp();
     const held = await goLiveHeldBeforeAdoption(b);
     const code = held.code();
     await finishGame();
@@ -231,7 +231,7 @@ describe("ASTRA-10G-R1-001: controls", () => {
       { code: "AAAA1111", message: "Multiplayer lobby AAAA-1111 may still be open." },
       { code: "BBBB2222", message: "Multiplayer lobby BBBB-2222 may still be open." },
     ] });
-    render(<App />);
+    await renderApp();
     expect(warnings()).toHaveLength(2);
     const before = { game: state().game, lobby: state().lobby, seq: state().localSeq, status: useSessionRuntime.getState().status };
     fireEvent.click(within(warningFor("AAAA1111")!).getByRole("button", { name: "Dismiss" }));
@@ -245,7 +245,7 @@ describe("ASTRA-10G-R1-001: controls", () => {
 
   it("an ordinary current-game Go Live error creates no unattached-lobby warning", async () => {
     connect.mockRejectedValue(new Error("network down"));
-    render(<App />);
+    await renderApp();
     await act(async () => { expect((await goLive()).kind).toBe("failed"); });
     await settle();
     expect(warnings()).toHaveLength(0);

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { ScriptSchema } from "@/stores/schemas";
 import { BUILTIN_SCRIPTS, listBuiltinScripts } from ".";

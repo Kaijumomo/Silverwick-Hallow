@@ -10,7 +10,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { useStorytellerStore as store, takeMigrationResetFlag } from "./storytellerStore";
 import { StorytellerGamePersistedSchema, StorytellerStateSchema } from "./schemas";
-import { selectSetupContext } from "@/features/setup/setupContext";
+import { selectSetupContext } from "@/rules/setup/setupContext";
 import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
 import { makeSTPlayer } from "@/test/fixtures";
 import { needsShownIdentity } from "./identity";
@@ -272,7 +272,7 @@ describe("Phase 9R.5 B: a malformed CURRENT-version (v18) local save never hydra
     sevenPlayerGame();
     state().setNotes(game().seatOrder[0]!, "creates an Undo entry");
     const blob = await persistedBlob();
-    const undo = blob.state.undoStack as StorytellerLobbyRecord[];
+    const undo = blob.state.undoStackShared as StorytellerLobbyRecord[]; // F-01: the saved (compact) Undo stack
     expect(undo.length).toBeGreaterThan(0);
     const snapshot = undo[undo.length - 1]!;
     snapshot.seatOrder = snapshot.seatOrder.slice(0, -1);

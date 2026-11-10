@@ -6,6 +6,7 @@ import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { projectLobbyToPublic, projectLobbyToSelfMap, projectToSelf } from "./projections";
 import { participantRefOf, refersToParticipant } from "./participants";
 import type { ParticipantRef, StorytellerLobbyRecord } from "./types";
+import { storeCommands } from "@/test/storeCommands";
 
 // Phase 9D.5: Recovery & Phase 9 Integration. These are PROOFS, not new
 // feature tests -- each drives one deliberately rich, realistic game
@@ -342,7 +343,7 @@ describe("Phase 9D.5 Proof H: full integrated BOTC lifecycle", () => {
     const librarianId = ordinaryIds.find((id) => store().game!.players[id]!.actualRole === "librarian")!;
     store().setAlive(librarianId, false, { provenance: { reason: "killed by the Demon" } });
     expect(store().game!.history).toHaveLength(1);
-    store().setGhostVote(librarianId, false);
+    storeCommands.setGhostVote(librarianId, false);
     expect(store().game!.history).toHaveLength(2);
     store().addEffect(investigatorId, { type: "poisoned", sourceCharacter: "poisoner", sourcePlayer: impId, lifetime: { kind: "untilDawn" } });
     expect(store().game!.history).toHaveLength(3);

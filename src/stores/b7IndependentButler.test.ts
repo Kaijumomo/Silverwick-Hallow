@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { bind, impair, patchPlayer, proofEnv, proofGame, proofScript, reseat } from "@/test/proofFixtures";
 import { butlerSelectionContext, planButlerSelection, reconcileButlerReminders, type ButlerSelectionRequest } from "./butlerSelection";

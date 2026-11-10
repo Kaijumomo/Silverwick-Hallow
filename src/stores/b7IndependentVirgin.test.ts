@@ -5,6 +5,7 @@ import { usePrivacyStore } from "./privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { currentVotingState, freshVotingDay } from "./voting";
 import type { VotingIntent } from "./votingTypes";
+import { storeCommands } from "@/test/storeCommands";
 
 // Independent rules oracle: official /Virgin, /Spy and /States.
 // Triggering execution and whether execution kills are distinct decisions.
@@ -74,7 +75,7 @@ describe("B7 independent first Virgin nomination", () => {
 
   it("later nomination after removing the token cannot rearm the ability", () => {
     openInStore(base("butler")); expect(begin()).toMatchObject({ ok: true });
-    expect(state().removeReminder("p1", noAbility()[0]!.id)).toMatchObject({ ok: true });
+    expect(storeCommands.removeReminder("p1", noAbility()[0]!.id)).toMatchObject({ ok: true });
     store.setState({ game: { ...game(), day: 3, voting: freshVotingDay(3) } });
     expect(begin("p2", "p1", "later")).toMatchObject({ ok: true });
     expect(game().players.p1!.abilityUsed).toBe(true); expect(round().virginPending).toBe(false); expect(noAbility()).toEqual([]);

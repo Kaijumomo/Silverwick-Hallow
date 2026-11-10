@@ -4,7 +4,7 @@ import { CANONICAL_REVISION } from "@/data/canonical";
 import { CANONICAL_MODIFIER_SCOPES, type HookScope } from "./modifiers";
 import { CANONICAL_ABILITY_SEMANTICS, type AbilitySemanticsRegistry } from "./semantics";
 import { COVERAGE_NOTES, VERIFIED_MANUAL } from "./characters/classification";
-import { hasCountPolicy, hasUncertainComposition } from "@/features/setup/setupPolicies";
+import { hasCountPolicy, hasUncertainComposition } from "@/rules/setup/setupPolicies";
 
 /**
  * Phase 10F: the canonical ability COVERAGE MANIFEST (PHASE10F Section 18,
@@ -54,12 +54,12 @@ export type CoverageCapability = {
 const OWNED_CAPABILITIES: Readonly<Record<string, readonly CoverageCapability[]>> = {
   bureaucrat: [{ owner: "voting", boundary: "Sourced vote weight and linked notation; no ability descriptor", evidence: "src/stores/voting.ts" }],
   virgin: [{ owner: "voting", boundary: "First nomination adjudication and Life usage; no automatic ruling", evidence: "src/stores/voting.ts" }],
-  huntsman: [{ owner: "setup", boundary: "Damsel dependency warning only", evidence: "src/features/setup/setupAnalyzer.ts" }],
-  choirboy: [{ owner: "setup", boundary: "King dependency warning only", evidence: "src/features/setup/setupAnalyzer.ts" }],
-  villageidiot: [{ owner: "setup", boundary: "Duplicate allowance and manual drunkenness warning", evidence: "src/features/setup/setupAnalyzer.ts" }],
-  legion: [{ owner: "setup", boundary: "Duplicate allowance; composition manual", evidence: "src/features/setup/setupAnalyzer.ts" }],
-  pope: [{ owner: "setup", boundary: "Good character duplicate allowance only", evidence: "src/features/setup/setupAnalyzer.ts" }],
-  marionette: [{ owner: "setup", boundary: "Bounded Demon adjacency validation", evidence: "src/features/setup/setupAnalyzer.ts" }],
+  huntsman: [{ owner: "setup", boundary: "Damsel dependency warning only", evidence: "src/rules/setup/setupAnalyzer.ts" }],
+  choirboy: [{ owner: "setup", boundary: "King dependency warning only", evidence: "src/rules/setup/setupAnalyzer.ts" }],
+  villageidiot: [{ owner: "setup", boundary: "Duplicate allowance and manual drunkenness warning", evidence: "src/rules/setup/setupAnalyzer.ts" }],
+  legion: [{ owner: "setup", boundary: "Duplicate allowance; composition manual", evidence: "src/rules/setup/setupAnalyzer.ts" }],
+  pope: [{ owner: "setup", boundary: "Good character duplicate allowance only", evidence: "src/rules/setup/setupAnalyzer.ts" }],
+  marionette: [{ owner: "setup", boundary: "Bounded Demon adjacency validation", evidence: "src/rules/setup/setupAnalyzer.ts" }],
   scarletwoman: [{ owner: "abilities", boundary: "B4 supported Imp death, star-pass, Slayer and execution succession; exceptional interactions manual", evidence: "src/abilities/characters/scarletWoman.ts" }],
   soldier: [{ owner: "rules", boundary: "Canonical functioning Soldier Demon death protection only", evidence: "src/abilities/characters/passiveRules.ts" }],
   vortox: [{ owner: "rules", boundary: "Relevant Townsfolk information goes wholly Manual; no Vortox resolver", evidence: "src/abilities/characters/passiveRules.ts" }],
@@ -68,8 +68,8 @@ const OWNED_CAPABILITIES: Readonly<Record<string, readonly CoverageCapability[]>
 function capabilitiesOf(role: RawRole, semantics: AbilitySemanticsRegistry): CoverageCapability[] {
   const capabilities = [...(OWNED_CAPABILITIES[role.id] ?? [])];
   if (semantics.has(role.id)) capabilities.push({ owner: "abilities", boundary: "Registered bounded evaluator; context must separately pass automation eligibility", evidence: "src/abilities/characters/index.ts" });
-  if (hasCountPolicy(role.id)) capabilities.push({ owner: "setup", boundary: "Single-effect count policy; mixed effects remain manual", evidence: "src/features/setup/setupPolicies.ts" });
-  if (hasUncertainComposition(role.id)) capabilities.push({ owner: "setup", boundary: "Explicit manual composition gate", evidence: "src/features/setup/setupPolicies.ts" });
+  if (hasCountPolicy(role.id)) capabilities.push({ owner: "setup", boundary: "Single-effect count policy; mixed effects remain manual", evidence: "src/rules/setup/setupPolicies.ts" });
+  if (hasUncertainComposition(role.id)) capabilities.push({ owner: "setup", boundary: "Explicit manual composition gate", evidence: "src/rules/setup/setupPolicies.ts" });
   if (["drunk", "marionette", "lunatic"].includes(role.id)) capabilities.push({ owner: "identity", boundary: "Separate actual and shown identity; not full character mechanics", evidence: "src/stores/identity.ts" });
   if (["recluse", "spy", "zombuul", "legion", "lycanthrope"].includes(role.id)) capabilities.push({ owner: "rules", boundary: "Registration uncertainty gate only", evidence: "src/stores/rulesQuery.ts" });
   return capabilities;

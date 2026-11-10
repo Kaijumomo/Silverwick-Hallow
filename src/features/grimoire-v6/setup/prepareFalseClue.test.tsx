@@ -8,8 +8,8 @@ import type { PreparedInformationCharacter, RoleId, Script } from "@/stores/type
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { useV6Ui } from "../v6Store";
 import { buildRegistry } from "@/data/roleRegistry";
-import { selectSetupContext } from "@/features/setup/setupContext";
-import { redHerringSetup } from "@/features/setup/redHerringSetup";
+import { selectSetupContext } from "@/rules/setup/setupContext";
+import { redHerringSetup } from "@/rules/setup/redHerringSetup";
 import { buildPrepTasks, commitPrep, prepTap, startPrep } from "./prepare";
 
 const ui = () => useV6Ui.getState();

@@ -19,7 +19,7 @@ import { useStorytellerStore } from "@/stores/storytellerStore";
 import { newParticipantId } from "@/stores/participants";
 import type { ParticipantId, PlayerId } from "@/stores/types";
 import type { Json } from "./backend";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby, knockOnLobby } from "./lobby";
 import { requireActiveSession, travelerChoicePath } from "./lifecycle";
 import { rosterEntryPath } from "./paths";

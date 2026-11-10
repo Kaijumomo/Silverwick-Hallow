@@ -8,6 +8,7 @@ import { useShellStore } from "./shellStore";
 import { projectLobbyToPublic, projectLobbyToSelfMap } from "./projections";
 import { StorytellerGamePersistedSchema } from "./schemas";
 import type { PreparedInformationCharacter, StorytellerLobbyRecord } from "./types";
+import { storeCommands } from "@/test/storeCommands";
 
 // Independent expectations: official wiki How to Run sections bind the qualifying
 // character and any OTHER player, not an opposite-team/category player.
@@ -78,7 +79,9 @@ describe("B6 independent official rules and authoritative lifecycle", () => {
     toNight(); expect(deliver()).toMatchObject({ ok: true }); expect(game().informationDeliveries).toHaveLength(1); expect(allReminders()).toEqual([]);
   });
 
-  it.each(["drunk", "saint", "recluse", "spy"])("a healthy Librarian cannot silently prepare zero across %s", role => {
+  // 2026-11-10 (PO-approved): the Spy left this list. A healthy Spy only MIGHT register as an Outsider, so showing 0
+  // is a legal Storyteller choice (https://wiki.bloodontheclocktower.com/Spy); see the Spy tests below.
+  it.each(["drunk", "saint", "recluse"])("a healthy Librarian cannot silently prepare zero across %s", role => {
     openInStore(setup(["librarian", role, "chef", "imp", "baron"])); const before = store.getState();
     expect(prepare({ character: "librarian", source: bind(game(), "p0"), expected: preparedInformationContext(game(), proofScript), clue: { kind: "zero-outsiders" } })).toMatchObject({ ok: false }); expect(store.getState()).toBe(before);
   });
@@ -107,11 +110,41 @@ describe("B6 independent official rules and authoritative lifecycle", () => {
     expect(game().players.p1!.actualRole).toBe("saint"); expect(game().players.p2!.actualRole).toBe("drunk");
   });
 
+  // 2026-11-10 (PO-approved): a healthy Spy's registration is the Storyteller's per-clue choice, as for the Recluse.
+  // These cases were refused ("entirely manual") before, which left the Storyteller unable to finish the clue.
   it.each([
     ["washerwoman", "spy", "chef"], ["librarian", "spy", "saint"], ["investigator", "spy", "spy"],
-  ] as const)("%s leaves discretionary %s registration entirely manual", (character, actual, shown) => {
-    openInStore(setup([character, actual, "chef", "imp", "baron"])); const before = store.getState();
+  ] as const)("%s may treat a healthy %s as %s, as a per-clue Storyteller choice", (character, actual, shown) => {
+    openInStore(setup([character, actual, "chef", "imp", "baron"]));
+    expect(prepare(prepareRequest(game(), character, shown))).toMatchObject({ ok: true });
+    expect(game().players.p1!.actualRole).toBe("spy"); expect(game().players.p1!.effects).toEqual([]);
+    toNight(); expect(deliver()).toMatchObject({ ok: true });
+    expect(game().informationDeliveries[0]!.values).toContainEqual({ requirementId: "role", kind: "role", roleId: shown });
+  });
+
+  it.each([
+    ["washerwoman", "baron"], ["librarian", "imp"], ["investigator", "baron"], ["investigator", "chef"],
+  ] as const)("%s still refuses a healthy Spy shown as %s, which a Spy can never register as", (character, shown) => {
+    openInStore(setup([character, "spy", "chef", "imp", "baron"])); const before = store.getState();
     expect(prepare(prepareRequest(game(), character, shown))).toMatchObject({ ok: false }); expect(store.getState()).toBe(before);
+  });
+
+  it.each(["poisoned", "drunk"] as const)("a %s Spy registers only as itself: no Outsider clue from it", effect => {
+    openInStore(impair(setup(["librarian", "spy", "chef", "imp", "baron"]), "p1", effect)); const before = store.getState();
+    expect(prepare(prepareRequest(game(), "librarian", "saint"))).toMatchObject({ ok: false }); expect(store.getState()).toBe(before);
+  });
+
+  it("a healthy Librarian may show 0 when the only possible Outsider is a healthy Spy", () => {
+    openInStore(setup(["librarian", "spy", "chef", "imp", "empath"]));
+    expect(prepare({ character: "librarian", source: bind(game(), "p0"), expected: preparedInformationContext(game(), proofScript), clue: { kind: "zero-outsiders" } })).toMatchObject({ ok: true });
+    expect(game().preparedInformation[0]!.mode).toBe("verified"); toNight(); expect(deliver()).toMatchObject({ ok: true });
+    expect(game().informationDeliveries[0]!.values).toEqual([{ requirementId: "outsiders", kind: "number", value: 0 }]);
+  });
+
+  it("a healthy Spy does not excuse a real Outsider: 0 is still refused with a Spy and a Saint", () => {
+    openInStore(setup(["librarian", "spy", "saint", "imp", "chef"])); const before = store.getState();
+    expect(prepare({ character: "librarian", source: bind(game(), "p0"), expected: preparedInformationContext(game(), proofScript), clue: { kind: "zero-outsiders" } })).toMatchObject({ ok: false });
+    expect(store.getState()).toBe(before);
   });
 
   it("irrelevant Spy on the Wrong candidate does not invalidate a factual Washerwoman clue", () => {
@@ -135,7 +168,7 @@ describe("B6 independent official rules and authoritative lifecycle", () => {
     openInStore(setup()); expect(store.getState().resolveReminders({ intents: [{ kind: "place", target: bind(game(), "p1"), reminder: { label: "Townsfolk" } }] })).toMatchObject({ ok: true });
     const manual = game().players.p1!.reminders[0]!; expect(prepare()).toMatchObject({ ok: true }); const prepared = game();
     const linked = prepared.players.p1!.reminders.find(r => r.id !== manual.id)!;
-    expect(store.getState().removeReminder("p1", linked.id)).toMatchObject({ ok: true }); expect(game().preparedInformation).toEqual([]);
+    expect(storeCommands.removeReminder("p1", linked.id)).toMatchObject({ ok: true }); expect(game().preparedInformation).toEqual([]);
     expect(game().players.p1!.reminders).toContainEqual(manual); store.getState().undo(); expect(game()).toEqual(prepared);
   });
 
@@ -143,7 +176,7 @@ describe("B6 independent official rules and authoritative lifecycle", () => {
     openInStore(setup()); expect(prepare()).toMatchObject({ ok: true }); toNight(); expect(deliver()).toMatchObject({ ok: true });
     const delivered = game().informationDeliveries; const wrong = game().players.p2!.reminders[0]!; const first = game().players.p1!.reminders[0]!;
     expect(first.sourceParticipant).toMatchObject({ kind: "participant", participantId: game().players.p0!.participantId });
-    expect(store.getState().removeReminder("p1", first.id)).toMatchObject({ ok: true });
+    expect(storeCommands.removeReminder("p1", first.id)).toMatchObject({ ok: true });
     expect(game().informationDeliveries).toEqual(delivered); expect(game().players.p2!.reminders).toEqual([wrong]);
   });
 

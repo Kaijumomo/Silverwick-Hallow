@@ -16,7 +16,7 @@ import { buildRichPhase9Game } from "@/test/phase9RichState";
 import { asV20, withV21Reminders, withV22Roles, withV23Alignment, withV24ToCurrent } from "@/test/v20Migration";
 import type { ReminderIntent, ReminderParticipantBinding } from "@/stores/reminderResolution";
 import type { PlayerId, StorytellerLobbyRecord } from "@/stores/types";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "./lobby";
 import { requireActiveSession } from "./lifecycle";
 import { SessionWriter } from "./writer";

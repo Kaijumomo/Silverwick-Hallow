@@ -6,6 +6,7 @@ import { needsShownIdentity } from "./identity";
 import { projectLobbyToPublic, projectLobbyToSelfMap, projectToPublic, projectToSelf } from "./projections";
 import { diffFields, provenanceOf, recordIfLive } from "./history";
 import { participantRefOf } from "./participants";
+import { storeCommands } from "@/test/storeCommands";
 
 // Phase 9D.2: generic live-game history/provenance. Current state remains
 // authoritative -- history is explanatory bookkeeping only. Each `it` below
@@ -76,7 +77,7 @@ describe("Phase 9D.2: generic scalar/state mutation", () => {
     const id = game().seatOrder[0]!;
     const before = game().players[id]!.actualAlignment;
     const next = before === "evil" ? "good" : "evil";
-    state().setActualAlignment(id, next);
+    storeCommands.setActualAlignment(id, next);
     expect(history()).toHaveLength(1);
     expect(history()[0]).toMatchObject({
       category: "alignment", participant: participantOf(id),
@@ -89,7 +90,7 @@ describe("Phase 9D.2: generic scalar/state mutation", () => {
     goLive();
     const id = game().seatOrder[0]!;
     const current = game().players[id]!.actualAlignment!;
-    state().setActualAlignment(id, current);
+    storeCommands.setActualAlignment(id, current);
     expect(history()).toEqual([]);
     state().assignRole(id, game().players[id]!.actualRole);
     expect(history()).toEqual([]);
@@ -132,7 +133,7 @@ describe("Phase 9D.2: structured record mutation (generic across semantic types)
       category: "reminder", participant: participantOf(id),
       change: { kind: "added", item: { id: reminderId, label: "Red Herring" } },
     });
-    state().removeReminder(id, reminderId);
+    storeCommands.removeReminder(id, reminderId);
     expect(history()).toHaveLength(2);
     expect(history()[1]).toMatchObject({
       category: "reminder", participant: participantOf(id),
@@ -154,8 +155,8 @@ describe("Phase 9D.2: structured record mutation (generic across semantic types)
     goLive();
     const id = game().seatOrder[0]!;
     state().setStatus(id, "poisoned", false); // never was on
-    state().removeReminder(id, "not-a-real-id");
-    state().removeEffect(id, "not-a-real-id");
+    storeCommands.removeReminder(id, "not-a-real-id");
+    storeCommands.removeEffect(id, "not-a-real-id");
     expect(history()).toEqual([]);
   });
 });
@@ -179,7 +180,7 @@ describe("Phase 9D.2: provenance", () => {
     const id = game().seatOrder[0]!;
     state().setStatus(id, "poisoned", true); // a manual toggle: no source player/character
     expect(history()[0]!.provenance).toBeUndefined();
-    state().setActualAlignment(id, game().players[id]!.actualAlignment === "evil" ? "good" : "evil");
+    storeCommands.setActualAlignment(id, game().players[id]!.actualAlignment === "evil" ? "good" : "evil");
     expect(history()[1]!.provenance).toBeUndefined();
   });
 });
@@ -231,7 +232,7 @@ describe("Phase 9D.2: semantic action deduplication", () => {
     state().assignRole(id, "thief");
     // Phase 10A: exile is Day-only and is its own Life Event kind.
     expect(state().advancePhase().ok).toBe(true);
-    expect(state().recordExile(id, "died").ok).toBe(true);
+    expect(storeCommands.recordExile(id, "died").ok).toBe(true);
     const lifeEntries = history().filter((h) => h.category === "life");
     expect(lifeEntries).toHaveLength(1);
     const entry = lifeEntries[0]!;
@@ -259,7 +260,7 @@ describe("Phase 9D.2: centralized command behavior", () => {
     goLive();
     const id = game().seatOrder[0]!;
     const rid = state().addReminder(id, { label: "Chosen" })!;
-    state().removeReminder(id, rid);
+    storeCommands.removeReminder(id, rid);
     expect(history()).toHaveLength(2);
     expect(history().map((h) => h.change!.kind)).toEqual(["added", "removed"]);
   });
@@ -343,7 +344,7 @@ describe("Phase 9D.2: privacy", () => {
     const id = game().seatOrder[0]!;
     state().setStatus(id, "poisoned", true);
     state().addReminder(id, { label: "Secret", note: "ST-only" });
-    state().setActualAlignment(id, "evil");
+    storeCommands.setActualAlignment(id, "evil");
     expect(history().length).toBeGreaterThan(0);
 
     const pub = projectLobbyToPublic(game(), {});
@@ -430,7 +431,7 @@ describe("Phase 9D.2 closure: Mutation Context carries Provenance through the au
     const before = game().players[id]!.actualAlignment;
     const target = before === "evil" ? "good" : "evil";
     const provenance = { sourceCharacter: "philosopher", reason: "became evil" };
-    state().setActualAlignment(id, target, { provenance });
+    storeCommands.setActualAlignment(id, target, { provenance });
     expect(game().players[id]!.actualAlignment).toBe(target);
     expect(history()).toHaveLength(1);
     expect(history()[0]).toMatchObject({
@@ -461,7 +462,7 @@ describe("Phase 9D.2 closure: Mutation Context carries Provenance through the au
     const id = game().seatOrder[0]!;
     // Phase 10A: only a dead player has a ghost vote to spend.
     state().setAlive(id, false);
-    state().setGhostVote(id, false, { provenance: { reason: "spent ghost vote" } });
+    storeCommands.setGhostVote(id, false, { provenance: { reason: "spent ghost vote" } });
     expect(history()[1]).toMatchObject({ category: "life", provenance: { reason: "spent ghost vote" },
       change: { kind: "value", from: { ghostVote: true }, to: { ghostVote: false } } });
 
@@ -503,8 +504,8 @@ describe("Phase 9D.2 closure: Mutation Context carries Provenance through the au
     const provenance = { reason: "attempted but nothing actually changed" };
 
     state().assignRole(id, currentRole, { provenance }); // old value -> same value
-    state().setActualAlignment(id, currentAlignment, { provenance });
-    state().setGhostVote(id, game().players[id]!.ghostVote, { provenance });
+    storeCommands.setActualAlignment(id, currentAlignment, { provenance });
+    storeCommands.setGhostVote(id, game().players[id]!.ghostVote, { provenance });
 
     expect(history()).toEqual([]);
     expect(game().players[id]!.actualRole).toBe(currentRole);
@@ -517,7 +518,7 @@ describe("Phase 9D.2 closure: Mutation Context carries Provenance through the au
     const provenance = { reason: "a Setup-time correction" };
     expect(state().replaceSetupRole(id, "imp").ok).toBe(true);
     state().setAlive(id, false, { provenance });
-    state().setActualAlignment(id, "evil", { provenance });
+    storeCommands.setActualAlignment(id, "evil", { provenance });
     expect(history()).toEqual([]);
   });
 });

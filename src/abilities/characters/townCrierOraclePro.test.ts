@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Treacherous 30th slice 2D -- Town Crier, Oracle and Professor. Production semantics.
 import { describe, expect, it } from "vitest";
 import { homebrewEnv, impair, patchPlayer, pick, plan, planned, proofGame, request } from "@/test/proofFixtures";

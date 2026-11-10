@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, afterEach } from "vitest";
 import {
   clearActiveBackend,
@@ -5,7 +6,7 @@ import {
   getActiveUid,
   __setActiveBackendForTests,
 } from "./session";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 
 afterEach(() => {
   // Always reset module state between tests.

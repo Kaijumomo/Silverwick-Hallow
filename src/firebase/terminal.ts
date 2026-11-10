@@ -1,5 +1,5 @@
 import { declaredResult, useStorytellerStore, type TerminalIntent, type TerminalRecovery } from "@/stores/storytellerStore";
-import type { SetupCommandResult } from "@/features/setup/setupReadiness";
+import type { SetupCommandResult } from "@/rules/setup/setupReadiness";
 import { lifecycleMessage } from "./lifecycle";
 import { closeMultiplayerSession } from "./storytellerSync";
 import { terminalPublication } from "./terminalResults";

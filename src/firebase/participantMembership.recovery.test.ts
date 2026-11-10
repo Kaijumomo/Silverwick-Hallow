@@ -22,7 +22,7 @@ import { useStorytellerStore } from "@/stores/storytellerStore";
 import { usePlayerStore } from "@/stores/playerStore";
 import { newParticipantId, refersToParticipant } from "@/stores/participants";
 import type { ParticipantRef, PlayerId, StorytellerLobbyRecord } from "@/stores/types";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby, knockOnLobby, revokePlayerMembership, seatPlayer } from "./lobby";
 import { requireActiveSession } from "./lifecycle";
 import { SessionWriter } from "./writer";

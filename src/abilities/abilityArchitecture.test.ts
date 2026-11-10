@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10F architecture guards + coverage manifest.
 //
 // Guards that future code cannot silently violate the frozen contract:

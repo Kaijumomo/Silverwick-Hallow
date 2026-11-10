@@ -13,12 +13,6 @@ import type {
  * place that names the third state. */
 export type ActualAlignment = Alignment | "unresolved";
 
-export function actualAlignmentOf(
-  player: Pick<STPlayerRecord, "actualAlignment">
-): ActualAlignment {
-  return player.actualAlignment ?? "unresolved";
-}
-
 /** The current game moment for a fresh effect/reminder, or undefined when
  * the game has ended (never invented). Never wall-clock. */
 export function currentGameMoment(

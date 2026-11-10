@@ -6,7 +6,7 @@
 // Fortune Teller, Ravenkeeper and Slayer scenarios live in grimoire-v6/night/port and grimoire-v6/day.
 import { cleanup, fireEvent, render, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { NightScreen, continueAction, resetNightUi, selectNightStep, workspace } from "@/features/grimoire-v6/night/port/v6Night";
+import { NightScreen, continueAction, resetNightUi, selectNightStep, workspace } from "@/test/v6Night";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";

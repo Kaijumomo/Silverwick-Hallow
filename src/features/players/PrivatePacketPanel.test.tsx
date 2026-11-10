@@ -4,7 +4,7 @@ import { PlayerInformation, commitExtraTextDraft } from "./PlayerInformation";
 import { vi } from "vitest";
 import { publishPrivatePacket } from "@/firebase/privatePacketCommands";
 import { SessionWriter } from "@/firebase/writer";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 vi.mock("@/firebase/privatePacketCommands", () => ({ publishPrivatePacket: vi.fn() }));
 import { PrivateInformation } from "@/features/player/PrivateInformation";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";

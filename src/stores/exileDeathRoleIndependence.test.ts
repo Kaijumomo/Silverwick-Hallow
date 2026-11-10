@@ -17,13 +17,14 @@ import { applyRolePlan, changeRoleIntent, correctRoleIntent, planRoleTransaction
 import { lifeHeadline, lifeStatusOf, publicLifeOf, publicLifeStateOf } from "./lifeState";
 import { projectToPublic } from "./projections";
 import { StorytellerGamePersistedSchema } from "./schemas";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "@/firebase/lobby";
 import { requireActiveSession } from "@/firebase/lifecycle";
 import { SessionWriter } from "@/firebase/writer";
 import { startStorytellerSession } from "@/firebase/storytellerSync";
 import type { PlayerId, StorytellerLobbyRecord, STPlayerRecord } from "./types";
 import { withoutRevealTokens } from "@/test/revealTokens";
+import { storeCommands } from "@/test/storeCommands";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -66,7 +67,7 @@ function exiledTraveler() {
   expect(player(tess).isTraveler).toBe(true);
   expect(state().assignRole(tess, "thief")).toMatchObject({ ok: true, changed: true });
   expect(state().advancePhase().ok).toBe(true); // Day 1
-  expect(state().recordExile(tess, "died")).toMatchObject({ ok: true, changed: true });
+  expect(storeCommands.recordExile(tess, "died")).toMatchObject({ ok: true, changed: true });
   store.setState({ undoStack: [] });
   expect(lifeOf(player(tess))).toEqual({ alive: false, ghostVote: true, exiled: true });
   return { tess, ordinary };
@@ -255,20 +256,20 @@ describe("ASTRA-10D-C01: Life gameplay exile and status correction", () => {
     const { tess, ordinary } = exiledTraveler();
     const alive = ordinary[0]!;
     const before = game();
-    expect(state().recordExile(alive, "died")).toMatchObject({ ok: false, message: "Only a Traveler can be exiled." });
+    expect(storeCommands.recordExile(alive, "died")).toMatchObject({ ok: false, message: "Only a Traveler can be exiled." });
     expect(game()).toBe(before);
     // A later Traveler is exiled (survives) exactly as before.
     state().addPlayerToSeat("Uma");
     const uma = game().seatOrder.at(-1)!;
     expect(player(uma).isTraveler).toBe(true);
     expect(state().assignRole(uma, "gunslinger")).toMatchObject({ ok: true });
-    expect(state().recordExile(uma, "survived")).toMatchObject({ ok: true, changed: true });
+    expect(storeCommands.recordExile(uma, "survived")).toMatchObject({ ok: true, changed: true });
     expect(game().lifeEventWindow.events.at(-1)).toMatchObject({ kind: "exile", outcome: "survived" });
     expect(player(uma).alive).toBe(true);
     // Tess, once a Traveler and now ordinary (and resurrected), cannot be exiled by gameplay.
     expect(state().resolveRoles({ intents: toOrdinary(player(tess), "chef") })).toMatchObject({ ok: true });
     expect(state().resurrect(tess)).toMatchObject({ ok: true });
-    expect(state().recordExile(tess, "died")).toMatchObject({ ok: false, message: "Only a Traveler can be exiled." });
+    expect(storeCommands.recordExile(tess, "died")).toMatchObject({ ok: false, message: "Only a Traveler can be exiled." });
   });
 
   it("a currently ORDINARY dead participant may be explicitly corrected to an Exiled state: status-only correction History, no fake exile Life Event", () => {

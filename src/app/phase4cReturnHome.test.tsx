@@ -1,7 +1,7 @@
 // Package 4 Gate 2: Return Home from a finished game keeps the game stored and reviewable, offline, through the real App shell.
+import { renderApp } from "@/test/renderApp";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { App } from "./App";
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useV6Ui } from "@/features/grimoire-v6/v6Store";
@@ -26,7 +26,7 @@ describe("Return Home after a finished game", () => {
     const g = store.getState().game!;
     store.setState({ view: "game", game: { ...g, phase: "ended", day: 2, result: { winner: "good", declaredAt: { phase: "day", day: 2 } } } });
     useV6Ui.getState().set({ winScene: true });
-    render(<App />);
+    await renderApp();
 
     const scene = screen.getByRole("dialog", { name: "Good Wins" });
     expect(within(scene).getByRole("button", { name: "Review the Grimoire" })).toBeTruthy();

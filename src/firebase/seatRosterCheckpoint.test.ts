@@ -15,7 +15,7 @@ import { StorytellerGamePersistedSchema } from "@/stores/schemas";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 import { buildRegistry } from "@/data/roleRegistry";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "./lobby";
 import { lifecycleMessage, requireActiveSession } from "./lifecycle";
 import { SessionWriter } from "./writer";

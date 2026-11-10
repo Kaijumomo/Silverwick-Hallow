@@ -1,3 +1,4 @@
+// @vitest-environment node
 // feature/missing-characters: the eight official characters that were in the
 // pinned canonical data but not in any shipped roster. They are reference and
 // manual-play characters only: no new rules, schema or ability behaviour.
@@ -9,7 +10,7 @@ import { FABLED } from "./fabled";
 import { EXPERIMENTAL_CHARACTERS } from "./scripts/experimental";
 import { RoleDefSchema } from "@/stores/schemas";
 import { buildReferenceCategories } from "@/features/home/referenceCategories";
-import { computeNightOrder } from "@/features/nightOrder/nightOrder";
+import { computeNightOrder } from "@/rules/night/nightOrder";
 import { canonicalRoles } from "./canonical";
 import { makeSTPlayer } from "@/test/fixtures";
 import type { Script } from "@/stores/types";

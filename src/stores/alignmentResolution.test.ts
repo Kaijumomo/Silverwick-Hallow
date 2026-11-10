@@ -23,6 +23,7 @@ import { HistoryRecordSchema, StorytellerGamePersistedSchema } from "./schemas";
 import { projectToSelf } from "./projections";
 import { buildRegistry } from "@/data/roleRegistry";
 import type { PlayerId, PrivatePacket, StorytellerLobbyRecord, STPlayerRecord } from "./types";
+import { storeCommands } from "@/test/storeCommands";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -212,7 +213,7 @@ describe("10E-AC-04 / AC-05: participant binding and expected-state stale checks
   it("an intent observed before another change (rendered stale) is refused, never overwrites", () => {
     liveGame();
     const rendered = player(holder("chef"));
-    expect(state().setActualAlignment(rendered.id, "evil")).toMatchObject({ ok: true, changed: true });
+    expect(storeCommands.setActualAlignment(rendered.id, "evil")).toMatchObject({ ok: true, changed: true });
     const b = baseline();
     expect(state().resolveAlignments({ intents: [changeAlignmentIntent(rendered, "good")] })).toMatchObject({ ok: false, code: "stale" });
     expectInert(b);
@@ -381,7 +382,7 @@ describe("10E-AC-17 / AC-18 / AC-19: Traveler private-packet safety", () => {
     liveGame();
     const chef = holder("chef");
     seed(chef, { publishedPacket: packet("chef", "good"), packetEpoch: "e1", privateInfo: { extraText: "x" } });
-    state().setActualAlignment(chef, "evil");
+    storeCommands.setActualAlignment(chef, "evil");
     expect(player(chef)).toMatchObject({ publishedPacket: packet("chef", "good"), packetEpoch: "e1", privateInfo: { extraText: "x" } });
   });
 });
@@ -391,7 +392,7 @@ describe("10E-AC-20 / AC-21 / AC-22: lifecycle", () => {
     setupTable();
     expect(player(holder("imp")).actualAlignment).toBe("evil"); // Setup derivation unchanged
     expect(player(holder("chef")).actualAlignment).toBe("good");
-    expect(state().setActualAlignment(holder("chef"), "evil")).toMatchObject({ ok: true, changed: true });
+    expect(storeCommands.setActualAlignment(holder("chef"), "evil")).toMatchObject({ ok: true, changed: true });
     expect(state().resolveAlignments({ intents: [correctAlignmentIntent(player(holder("imp")), "good")] })).toMatchObject({ ok: true, changed: true });
     expect(game().history).toEqual([]);
   });
@@ -401,7 +402,7 @@ describe("10E-AC-20 / AC-21 / AC-22: lifecycle", () => {
     const chef = player(holder("chef"));
     const b = baseline();
     expect(state().resolveAlignments({ intents: [changeAlignmentIntent(chef, "evil")] })).toMatchObject({ ok: false, code: "phase" });
-    expect(state().setActualAlignment(chef.id, "evil")).toMatchObject({ ok: false, code: "phase" });
+    expect(storeCommands.setActualAlignment(chef.id, "evil")).toMatchObject({ ok: false, code: "phase" });
     expectInert(b);
     expect(alignmentChangeOpen(game(), chef)).toBe(false);
     expect(state().resolveAlignments({ intents: [correctAlignmentIntent(chef, "evil")] })).toMatchObject({ ok: true, changed: true });
@@ -425,7 +426,7 @@ describe("10E-AC-20 / AC-21 / AC-22: lifecycle", () => {
     for (const result of [
       state().resolveAlignments({ intents: [changeAlignmentIntent(chef, "evil")] }),
       state().resolveAlignments({ intents: [correctAlignmentIntent(chef, "evil")] }),
-      state().setActualAlignment(chef.id, "evil"),
+      storeCommands.setActualAlignment(chef.id, "evil"),
       state().setTravelerAlignment(zed, "evil"),
       resolve("nonsense"),
     ]) expect(result).toMatchObject({ ok: false, code: "phase" });
@@ -492,8 +493,8 @@ describe("10E-AC-23 / AC-24 / AC-25: History, provenance and correlation", () =>
   it("a perception-only change writes no Alignment History", () => {
     liveGame();
     const chef = holder("chef");
-    expect(state().setShownAlignment(chef, "evil")).toMatchObject({ ok: true, changed: true });
-    expect(state().setShownAlignment(chef, "undisclosed")).toMatchObject({ ok: true, changed: true });
+    expect(storeCommands.setShownAlignment(chef, "evil")).toMatchObject({ ok: true, changed: true });
+    expect(storeCommands.setShownAlignment(chef, "undisclosed")).toMatchObject({ ok: true, changed: true });
     expect(alignmentHistory()).toEqual([]);
     expect(player(chef).actualAlignment).toBe("good");
   });
@@ -574,12 +575,12 @@ describe("10E-AC-38: compatibility adapters route through the seam", () => {
     liveGame();
     const chef = holder("chef");
     const b = baseline();
-    expect(state().setActualAlignment(chef, "evil", { provenance: { reason: "adapter" } })).toEqual({ ok: true, changed: true });
+    expect(storeCommands.setActualAlignment(chef, "evil", { provenance: { reason: "adapter" } })).toEqual({ ok: true, changed: true });
     expectOneCommit(b);
     expect(alignmentHistory()[0]).toMatchObject({ provenance: { reason: "adapter" }, change: { from: { actualAlignment: "good" }, to: { actualAlignment: "evil" } } });
-    expect(state().setActualAlignment(chef, "evil")).toEqual({ ok: true, changed: false });
-    expect(state().setActualAlignment("nobody", "evil")).toMatchObject({ ok: false, code: "notSeated" });
-    expect(state().setActualAlignment(chef, "neutral" as never)).toMatchObject({ ok: false, code: "invalid" });
+    expect(storeCommands.setActualAlignment(chef, "evil")).toEqual({ ok: true, changed: false });
+    expect(storeCommands.setActualAlignment("nobody", "evil")).toMatchObject({ ok: false, code: "notSeated" });
+    expect(storeCommands.setActualAlignment(chef, "neutral" as never)).toMatchObject({ ok: false, code: "invalid" });
   });
 
   it("setTravelerAlignment is Traveler-only and follows the same planner (packet withdrawn, completion preserved)", () => {

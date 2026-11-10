@@ -3,7 +3,7 @@ import { iconUrlFor } from "@/data/iconUrl";
 import { nightSheetIconUrl, nightSheetIdOfStep } from "@/data/nightSheetIcon";
 import { lifeEventsAt } from "@/stores/lifeEvents";
 import type { StorytellerLobbyRecord } from "@/stores/types";
-import type { NightStep } from "@/features/nightOrder/nightOrder";
+import type { NightStep } from "@/rules/night/nightOrder";
 import { stepResolved } from "@/features/nightOrder/nightWork";
 import { ICON } from "../icons";
 

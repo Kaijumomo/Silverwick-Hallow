@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { impair, pick, plan, proofGame, request } from "@/test/proofFixtures";
 

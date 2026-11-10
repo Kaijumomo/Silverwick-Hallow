@@ -13,7 +13,7 @@
    - **explicitly approved Node-based Playwright tooling** (`playwright` / `@playwright/test`).
 4. When the skill's text says to write or run a Python script, apply the same technique with the Node API or the MCP tools instead (§3).
 
-This policy narrows how `webapp-testing` is used. It does not remove it from the 10H toolchain listed in `PHASE10H.md` §5.
+This policy narrows how `webapp-testing` is used. It does not remove it from the 10H toolchain listed in `docs/phases/PHASE10H.md` §5.
 
 ## 2. Current availability
 
@@ -48,4 +48,4 @@ This policy narrows how `webapp-testing` is used. It does not remove it from the
 
 - **Data target.** The dev server connects to whatever Firebase project `VITE_FIREBASE_*` in `.env.local` (or the in-app config fallback) points to; the dev app has no emulator wiring. Do not drive flows that write game state against the production project unless the owner explicitly authorizes that run.
 - **Artifacts.** Write screenshots, traces and logs to a scratch location or the git-ignored `.playwright-cli/` / `.playwright-mcp/` (Playwright MCP's default output folder). Commit one only when it is deliberately kept as review evidence.
-- **Standing.** Browser checks are evidence, not approval. Binding 10H UI findings cite `docs/ai/design/WEB_INTERFACE_GUIDELINES_PINNED.md`, and independent verification remains Luna's per `PHASE10H.md`.
+- **Standing.** Browser checks are evidence, not approval. Binding 10H UI findings cite `docs/ai/design/WEB_INTERFACE_GUIDELINES_PINNED.md`, and independent verification remains Luna's per `docs/phases/PHASE10H.md`.

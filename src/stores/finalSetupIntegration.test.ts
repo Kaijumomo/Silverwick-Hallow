@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { useStorytellerStore as store } from "./storytellerStore";
-import { selectSetupContext } from "@/features/setup/setupContext";
-import { analyzeSetup } from "@/features/setup/setupAnalyzer";
+import { selectSetupContext } from "@/rules/setup/setupContext";
+import { analyzeSetup } from "@/rules/setup/setupAnalyzer";
 import { isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { MAX_TOTAL_PLAYERS } from "@/data/setupCounts";
 import { setupScript, standardRoles } from "@/test/setupFixtures";

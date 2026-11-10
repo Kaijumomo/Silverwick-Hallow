@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { useStorytellerStore as store, migrateStoreState, type SeatSwapBinding } from "./storytellerStore";
 import { usePrivacyStore } from "./privacyStore";
 import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
+import { storeCommands } from "@/test/storeCommands";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -89,7 +90,7 @@ describe("positional seat swap", () => {
     const before = structuredClone(game());
     expect(state().swapPlayerSeats(binding("p0"), binding("p1")).ok).toBe(true);
     state().renamePlayer("p2", "Renamed");
-    state().setTokenPosition("p2", 750, 550);
+    storeCommands.setTokenPosition("p2", 750, 550);
     const swapped = structuredClone(state().tokenPositions);
     state().undo();
     expect(state().tokenPositions).toEqual(swapped);
@@ -114,7 +115,7 @@ describe("positional seat swap", () => {
     store.setState({ grimoireMode: "ring" });
     expect(state().swapPlayerSeats(binding("p0"), binding("p1")).ok).toBe(true);
     expect(state().tokenPositions).toEqual({ p0: initialPositions.p1, p1: initialPositions.p0, p2: initialPositions.p2 });
-    state().setGrimoireMode("freeRoam");
+    storeCommands.setGrimoireMode("freeRoam");
     state().undo();
     expect(state().tokenPositions).toEqual(initialPositions);
   });

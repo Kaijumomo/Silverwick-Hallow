@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DEVELOPMENT_FIREBASE_APP_NAME, DEVELOPMENT_FIREBASE_CONFIG as approved } from "./development";
 

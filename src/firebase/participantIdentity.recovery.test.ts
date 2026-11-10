@@ -13,7 +13,7 @@ import { refersToParticipant } from "@/stores/participants";
 import { buildRegistry } from "@/data/roleRegistry";
 import { setupScript } from "@/test/setupFixtures";
 import type { PlayerId, StorytellerLobbyRecord } from "@/stores/types";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "./lobby";
 import { requireActiveSession } from "./lifecycle";
 import { SessionWriter } from "./writer";

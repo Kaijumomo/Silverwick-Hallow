@@ -7,11 +7,12 @@ import { preparedInformationContext } from "./preparedInformation";
 import { usePrivacyStore } from "./privacyStore";
 import { projectLobbyToPublic, projectLobbyToSelfMap } from "./projections";
 import { useSessionRuntime, startStorytellerSession } from "@/firebase/storytellerSync";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { SessionWriter } from "@/firebase/writer";
 import { createLobby } from "@/firebase/lobby";
 import { requireActiveSession } from "@/firebase/lifecycle";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
+import { storeCommands } from "@/test/storeCommands";
 
 const state = () => store.getState();
 const game = () => state().game!;
@@ -47,7 +48,7 @@ describe("B7 independent command, privacy and recovery challenge", () => {
     expect(select()).toMatchObject({ ok: true }); expect(game().preparedInformation).toEqual(pending);
     expect(game().informationDeliveries).toEqual([]); expect(projectLobbyToPublic(game(), {})).toEqual(publicBefore); expect(projectLobbyToSelfMap(game(), proofRegistry)).toEqual(privateBefore);
     const token = game().players.p2!.reminders.find(r => r.sourceCharacter === "butler")!;
-    expect(state().removeReminder("p2", token.id)).toMatchObject({ ok: true }); expect(game().preparedInformation).toEqual(pending);
+    expect(storeCommands.removeReminder("p2", token.id)).toMatchObject({ ok: true }); expect(game().preparedInformation).toEqual(pending);
     state().undo(); expect(game().preparedInformation).toEqual(pending);
   });
 

@@ -6,8 +6,8 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { computeNightOrder } from "@/features/nightOrder/nightOrder";
-import { NightScreen, resetNightUi, selectNightStep } from "@/features/grimoire-v6/night/port/v6Night";
+import { computeNightOrder } from "@/rules/night/nightOrder";
+import { NightScreen, resetNightUi, selectNightStep } from "@/test/v6Night";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { canonicalRoles } from "@/data/canonical";
 import { buildRegistry } from "@/data/roleRegistry";
@@ -67,7 +67,7 @@ describe("SOL-10F-L6: oncePerGame authority", () => {
     });
     const code = (m: string) => stripComments(readFileSync(join(SRC, m), "utf8"));
     expect(sources().filter((m) => /\.oncePerGame\b|\[\s*["']oncePerGame["']\s*\]/.test(code(m)))).toEqual([]);
-    const generic = sources().filter((m) => m.startsWith("features/nightOrder/") || m.startsWith("features/abilities/") || m.startsWith("abilities/") ||
+    const generic = sources().filter((m) => m.startsWith("features/nightOrder/") || m.startsWith("rules/night/") || m.startsWith("features/abilities/") || m.startsWith("abilities/") ||
       ["stores/abilityResolution.ts", "stores/rulesQuery.ts", "stores/wakeIdentity.ts"].includes(m));
     for (const m of generic) {
       const bare = [...code(m).matchAll(/oncePerGame/g)].filter((match) => code(m)[match.index! - 1] !== '"');

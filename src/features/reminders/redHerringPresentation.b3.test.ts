@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { officialEffectPresentation } from "./officialReminderPresentation";
 import { bind, proofGame, proofRegistry, proofScript } from "@/test/proofFixtures";

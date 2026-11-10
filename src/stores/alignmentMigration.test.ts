@@ -11,12 +11,13 @@ import { detectLegacyGameVersion, hasV19LifeEvidence, hasV20Evidence, hasV23Evid
 import { correctAlignmentIntent, changeAlignmentIntent } from "./alignmentResolution";
 import { setupScript, standardRoles } from "@/test/setupFixtures";
 import { asV20, asV21, asV22, withV22Roles, withV21Reminders, withV23Alignment, withV24ToCurrent } from "@/test/v20Migration";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "@/firebase/lobby";
 import { requireActiveSession } from "@/firebase/lifecycle";
 import { SessionWriter } from "@/firebase/writer";
 import { startStorytellerSession, useSessionRuntime } from "@/firebase/storytellerSync";
 import { SnapshotValidationError } from "@/firebase/snapshots";
+import { storeCommands } from "@/test/storeCommands";
 
 const code = "ALGN2345";
 const root = `lobbies/${code}`;
@@ -57,7 +58,7 @@ function currentGame(): Raw {
   expect(state().setTravelerAlignment(yan, "good")).toMatchObject({ ok: true });
   expect(state().resolveAlignments({ intents: [correctAlignmentIntent(game().players[chef]!, "evil")] })).toMatchObject({ ok: true }); // v23: correction
   expect(state().resolveAlignments({ intents: [changeAlignmentIntent(game().players[yan]!, "evil")], resolutionId: "res-1" })).toMatchObject({ ok: true }); // v23: resolutionId
-  expect(state().setShownAlignment(chef, "evil")).toMatchObject({ ok: true }); // ordinary explicit perception
+  expect(storeCommands.setShownAlignment(chef, "evil")).toMatchObject({ ok: true }); // ordinary explicit perception
   return { ...JSON.parse(JSON.stringify(game())), code, storytellerUid: "host" };
 }
 const travelerIds = (g: Raw) => Object.values(g.players as Players).filter((p) => p.isTraveler === true).map((p) => p.id as string);
@@ -317,7 +318,7 @@ describe("10E-AC-32: persisted round-trip", () => {
   it("a valid v23 game with undisclosed perception and correction / correlated Alignment History round-trips schema and localStorage", async () => {
     currentGame();
     const zed = game().seatOrder.at(-2)!;
-    expect(state().setShownAlignment(zed, "undisclosed")).toMatchObject({ ok: true });
+    expect(storeCommands.setShownAlignment(zed, "undisclosed")).toMatchObject({ ok: true });
     const records = game().history.filter((h) => h.category === "alignment");
     expect(records.some((h) => h.correction === true)).toBe(true);
     expect(records.some((h) => h.resolutionId === "res-1")).toBe(true);

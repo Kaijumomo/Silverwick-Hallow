@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10C architecture guard: REMINDERS ARE NOTATION, NEVER MECHANICS INPUT.
 //
 // A Reminder is Storyteller-private, non-authoritative bookkeeping. No
@@ -68,14 +69,14 @@ const MECHANICS_MODULES = [
   "stores/projections.ts",
   "stores/informationDelivery.ts",
   "stores/participants.ts",
-  "features/setup/setupAnalyzer.ts",
-  "features/setup/setupReadiness.ts",
-  "features/setup/setupContext.ts",
-  "features/setup/setupRefinement.ts",
-  "features/setup/setupPolicies.ts",
-  "features/setup/revealReadiness.ts",
-  "features/nightOrder/nightOrder.ts",
-  "features/nightOrder/nightRules.ts",
+  "rules/setup/setupAnalyzer.ts",
+  "rules/setup/setupReadiness.ts",
+  "rules/setup/setupContext.ts",
+  "rules/setup/setupRefinement.ts",
+  "rules/setup/setupPolicies.ts",
+  "rules/setup/revealReadiness.ts",
+  "rules/night/nightOrder.ts",
+  "rules/night/nightRules.ts",
   // Phase 10F: the Rules Query and the ability semantics / modifier contract
   // answer rules questions -- they never touch Reminders at all.
   "stores/rulesQuery.ts",

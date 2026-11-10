@@ -1,3 +1,4 @@
+// @vitest-environment node
 // WP-2 (F-06): session-local Day/Night UI memory never carries into another Offline game.
 import { beforeEach, describe, expect, it } from "vitest";
 import { useNightPos } from "../night/nightPos";

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { bind, homebrewEnv, impair, patchPlayer, pick, plan, proofEnv, proofGame, proofQuery, request } from "@/test/proofFixtures";
 import { createRulesQuery } from "@/stores/rulesQuery";

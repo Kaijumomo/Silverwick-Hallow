@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Treacherous 30th slice 2B -- Innkeeper. Production semantics.
 import { describe, expect, it } from "vitest";
 import { createRulesQuery } from "@/stores/rulesQuery";

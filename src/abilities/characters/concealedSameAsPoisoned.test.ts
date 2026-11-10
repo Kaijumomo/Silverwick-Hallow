@@ -1,3 +1,4 @@
+// @vitest-environment node
 // A Drunk or Marionette shown a character works exactly like a poisoned holder for that character's ability:
 // the use is spent, nothing else changes, and the night trigger fires on their death.
 import { describe, expect, it } from "vitest";

@@ -2,7 +2,7 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { usePlayerStore } from "@/stores/playerStore";
 import { useStorytellerStore } from "@/stores/storytellerStore";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { cancelJoinRequest, knockOnLobby, revokeMembership, seatPlayer } from "./lobby";
 import { joinLobby, usePlayerSync } from "./playerSync";
 import { useStorytellerSync } from "./storytellerSync";

@@ -24,9 +24,9 @@ vi.mock("@/firebase/session", async (importOriginal) => {
 });
 
 import { chooseTraveler, leaveLobby } from "@/firebase/playerSync";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { travelerChoicePath } from "@/firebase/lifecycle";
-import { enterTown } from "./phone/ceremonyTestUtils";
+import { enterTown } from "@/test/phoneCeremony";
 import { PlayerScreen } from "./PlayerScreen";
 
 const validCfg = {

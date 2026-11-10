@@ -7,6 +7,7 @@ import { StorytellerGamePersistedSchema } from "./schemas";
 import { detectLegacyGameVersion } from "./gameMigration";
 import type { GameHistoryRecord as HistoryRecord, PlayerId, StorytellerLobbyRecord } from "./types";
 import { asV19 } from "@/test/v20Migration";
+import { storeCommands } from "@/test/storeCommands";
 
 // Phase 10A Astra remediation, Package A2 (10A-ASTRA-004): one atomic
 // resolution may give ONE participant several ordered Life Events (e.g. a
@@ -114,7 +115,7 @@ describe("10A-ASTRA-004: the Al-Hadikhia-shaped generic resolution", () => {
 
   it("C's resurrection restores the generic ability marker even though C ends dead again", () => {
     const { a, b, c } = nightTwoWithDeadC();
-    state().setAbilityUsed(c, true);
+    storeCommands.setAbilityUsed(c, true);
     const historyBefore = game().history.length;
     expect(state().resolveLife({ intents: [
       { kind: "resurrection", playerId: c }, { kind: "death", playerId: a },

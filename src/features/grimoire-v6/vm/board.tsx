@@ -138,7 +138,8 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
     ui.set({ popMode: "main", card: false });
   };
 
-  const drag = useTokenDrag({ boardRef: ctx.boardRef, layout, positions, onTap: tap, enabled: !mutationLocked });
+  // The radial menu and the Details card are drawn at the selected seat's dragged position.
+  const drag = useTokenDrag({ boardRef: ctx.boardRef, layout, positions, onTap: tap, enabled: !mutationLocked, anchored: (id) => id === selectedId });
   const at = (id: PlayerId) => (drag.ghost?.id === id ? { x: drag.ghost.x, y: drag.ghost.y } : positions[id]);
 
   // ── Tokens ────────────────────────────────────────────────────────────────

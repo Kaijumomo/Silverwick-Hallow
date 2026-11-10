@@ -1,11 +1,11 @@
+import { renderApp } from "@/test/renderApp";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import type { RoomBackend } from "./backend";
 
 const connection = vi.hoisted(() => ({ connect: vi.fn() }));
 vi.mock("./session", async original => ({ ...await original<typeof import("./session")>(), connectFirebase: connection.connect }));
 
-import { App } from "@/app/App";
 import { __setEnvOverrideForTests } from "./config";
 import { DEVELOPMENT_FIREBASE_CONFIG as approved } from "./development";
 import { endGameWithIntent } from "./terminal";
@@ -49,7 +49,7 @@ describe("independent development preview local game isolation", () => {
       connection.connect.mockRejectedValue(new Error("Authentication unavailable"));
       vi.spyOn(console, "warn").mockImplementation(() => {});
     } else connection.connect.mockResolvedValue({ backend, uid: "unapproved-development-user" });
-    render(<App />);
+    await renderApp();
     await waitFor(() => expect(connection.connect).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: /New game/ }));
     fireEvent.click(screen.getByRole("button", { name: /Trouble Brewing/ }));

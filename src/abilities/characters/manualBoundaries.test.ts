@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10F Slice 7 -- the verified-Manual / Setup-owned boundaries:
 // Tinker (matrix 14), Toymaker (matrix 16), Baron (matrix 17), and the other
 // deliberately Manual branches (Cult Leader vote, Pit-Hag Demon / Traveller).
@@ -6,8 +7,8 @@ import { CANONICAL_ABILITY_SEMANTICS, resolveAbilitySemantics } from "@/abilitie
 import { activeModifiers } from "@/abilities/modifiers";
 import { buildCoverageManifest } from "@/abilities/coverage";
 import { pathAbility } from "@/features/abilities/abilityUi";
-import { computeNightOrder } from "@/features/nightOrder/nightOrder";
-import { evilInformationPolicy } from "@/features/nightOrder/nightRules";
+import { computeNightOrder } from "@/rules/night/nightOrder";
+import { evilInformationPolicy } from "@/rules/night/nightRules";
 import { INVOCATION_PATHS } from "@/abilities/invocation";
 import { TOYMAKER_ATTACK_MESSAGE } from "./modifierHooks";
 import { choiceId } from "./alhadikhia";

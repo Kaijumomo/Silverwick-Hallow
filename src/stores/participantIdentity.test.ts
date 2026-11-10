@@ -5,6 +5,7 @@ import { buildRegistry } from "@/data/roleRegistry";
 import { participantRefOf, refersToParticipant } from "./participants";
 import { projectLobbyToPublic, projectLobbyToSelfMap } from "./projections";
 import type { ParticipantRef, PlayerId, StorytellerLobbyRecord } from "./types";
+import { storeCommands } from "@/test/storeCommands";
 
 // Phase 9R.2: Historical Participant Identity. A seat/slot (PlayerId) may be
 // reused; a historical participant identity (ParticipantId) never is. Every
@@ -123,7 +124,7 @@ describe("Phase 9R.2: identity is preserved across ordinary change", () => {
     state().renamePlayer(alice, "Alicia");
     expect(participantIdOf(alice)).toBe(A);
     state().assignRole(alice, "imp");
-    state().setActualAlignment(alice, "evil");
+    storeCommands.setActualAlignment(alice, "evil");
     state().setAlive(alice, false);
     state().setStatus(alice, "drunk", true);
     expect(participantIdOf(alice)).toBe(A);
@@ -309,7 +310,7 @@ describe("Phase 9R.2: Effect/Reminder source references (Poisoner Alice poisons 
     // Effect's ORIGIN -- never re-resolved to Bob through seat P. Phase 10B
     // (Section 16): the removal's own mutation provenance is independent of
     // that origin; with no Mutation Context, none is invented.
-    state().removeEffect(carol, effectId);
+    storeCommands.removeEffect(carol, effectId);
     const removal = game().history.at(-1)!;
     expect(removal.change).toMatchObject({ kind: "removed", item: { id: effectId, sourceCharacter: "poisoner", sourceParticipant: aliceSnapshot(P, A) } });
     expect(removal.provenance).toBeUndefined();
@@ -373,7 +374,7 @@ describe("Phase 9R.2: History / Provenance / Information refusal and atomicity",
     const seq = state().localSeq;
     state().setAlive(alice, false);
     state().setStatus(alice, "poisoned", true);
-    state().setActualAlignment(alice, "evil");
+    storeCommands.setActualAlignment(alice, "evil");
     expect(state().addEffect(alice, { type: "x", lifetime: { kind: "manual" } })).toBeNull();
     expect(game()).toBe(before);
     expect(state().undoStack).toHaveLength(undoDepth);

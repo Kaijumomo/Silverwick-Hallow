@@ -4,10 +4,10 @@ This file only points to other documents. Current phase, status, checkpoints and
 
 ## Read first, when present and applicable
 
-1. `docs/ai/PROMPTING_AND_REVIEW_STANDARD.md`: how work is prompted, reported and reviewed.
+1. `README.md`: what the app is, how to run, test and build it, and where everything lives.
 2. `docs/ai/MASTER_IMPLEMENTATION_PLAN.md`: roadmap, phase workflow and roles.
-3. `docs/ai/handoffs/CURRENT_HANDOFF.md`: current truth, including the active phase and branch.
-4. The active phase contract named in the handoff (for Phase 10H: `PHASE10H.md`).
+3. `docs/ai/handoffs/CURRENT_HANDOFF.md`: current truth, including the active milestone and branch.
+4. The phase or milestone contract the handoff names. Phase contracts (`PHASE*.md`) live in `docs/phases/`.
 5. For UI, design or browser work:
    - `docs/ai/design/BROWSER_CHECK_EXECUTION_POLICY.md`
    - `docs/ai/design/IMPECCABLE_VENDORING.md`

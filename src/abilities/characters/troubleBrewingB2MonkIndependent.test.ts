@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { expect, it } from "vitest";
 import { applyLifePlan, planLifeTransaction } from "@/stores/lifeResolution";
 import { bind, patchPlayer, pick, plan, planned, proofGame, proofQuery, request } from "@/test/proofFixtures";

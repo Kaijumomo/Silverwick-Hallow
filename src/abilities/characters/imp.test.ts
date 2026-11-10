@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { SUCCESSOR, swFunctionsJudgment } from "./imp";
 import { protectionId, homebrewEnv, homebrewScript, impair, openInStore, patchPlayer, pick, plan, planned, proofEnv, proofGame, proofScript, request, requirementIds, reseat, yes } from "@/test/proofFixtures";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
-import { computeNightOrder } from "@/features/nightOrder/nightOrder";
+import { computeNightOrder } from "@/rules/night/nightOrder";
 import { participantStepKey } from "@/stores/nightProgress";
 import { buildRegistry } from "@/data/roleRegistry";
 import type { EffectRecord, StorytellerLobbyRecord } from "@/stores/types";

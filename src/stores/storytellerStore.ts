@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import { persist, createJSONStorage, type PersistStorage } from "zustand/middleware";
 import { BUILTIN_SCRIPTS, BUILTIN_SCRIPT_IDS } from "@/data/scripts";
 import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
@@ -7,7 +7,7 @@ import { MAX_NIGHT_STEP_NOTES, MAX_ST_NOTES, StorytellerGamePersistedSchema, Sto
 import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { manualEffectId } from "./effects";
-import { redHerringSetup, RED_HERRING_EFFECT } from "@/features/setup/redHerringSetup";
+import { redHerringSetup, RED_HERRING_EFFECT } from "@/rules/setup/redHerringSetup";
 import { cloneOwned, historyId, type MutationContext, sameSnapshot } from "./history";
 import {
   applyEffectPlan,
@@ -61,6 +61,7 @@ import {
 } from "./gameRuleFacts";
 import { CANONICAL_ABILITY_SEMANTICS, type AbilitySemanticsRegistry } from "@/abilities/semantics";
 import { detectLegacyGameVersion, migrateGameEntry } from "./gameMigration";
+import { compactUndoStack, SHARED_UNDO_KEY } from "./undoPersistence";
 import { freshLifeEventWindow, pruneLifeEventWindow } from "./lifeEvents";
 import {
   applyLifePlan,
@@ -77,7 +78,7 @@ import {
   applyInformationDeliveryPlan,
   planInformationDelivery,
 } from "./informationDelivery";
-import { initialRevealReadiness } from "@/features/setup/revealReadiness";
+import { initialRevealReadiness } from "@/rules/setup/revealReadiness";
 import { invalidatePrivatePacket } from "./privatePackets";
 import { withRevealTokens } from "./revealTokens";
 import { usePrivacyStore } from "./privacyStore";
@@ -90,14 +91,14 @@ import { isTabletTrial } from "@/config/trial";
 import { useShellStore, type NightCursor } from "./shellStore";
 import { deriveNightWork } from "@/features/nightOrder/nightWork";
 import { planPreparedInformation, planPreparedInformationDelivery, reconcilePreparedInformation, type PrepareInformationRequest, type DeliverPreparedInformationRequest, type PreparedInformationResult } from "./preparedInformation";
-import { seatMarionetteBesideDemon } from "@/features/setup/marionetteSeating";
+import { seatMarionetteBesideDemon } from "@/rules/setup/marionetteSeating";
 import { planAbilityUseReminders } from "./abilityUseReminders";
 import { planDrunkPreparationReminders, reconcileDrunkReminders } from "./drunkReminders";
 import { planButlerSelection, reconcileButlerReminders, type ButlerSelectionRequest, type ButlerSelectionResult } from "./butlerSelection";
-import { analyzeSetup } from "@/features/setup/setupAnalyzer";
-import { isPostDeal, selectSetupContext } from "@/features/setup/setupContext";
-import { assignedBagIsCoherent, canRefineSetup, matchBagToAssignments } from "@/features/setup/setupRefinement";
-import { isBagType } from "@/features/setup/setupPolicies";
+import { analyzeSetup } from "@/rules/setup/setupAnalyzer";
+import { isPostDeal, selectSetupContext } from "@/rules/setup/setupContext";
+import { assignedBagIsCoherent, canRefineSetup, matchBagToAssignments } from "@/rules/setup/setupRefinement";
+import { isBagType } from "@/rules/setup/setupPolicies";
 import { arrivalsAreTravelers, newTravelerArrival, publicTravelerRole, travelerDemonInformation, travelerNeedsArrivalCheck } from "./travelers";
 import { getTraveler } from "@/data/travelers";
 import { MAX_PLAYERS, MAX_TOTAL_PLAYERS, MIN_PLAYERS } from "@/data/setupCounts";
@@ -105,14 +106,13 @@ import { validateCheckpointEnvelope } from "@/firebase/checkpoint";
 import { validateFirebaseWritableValue } from "@/firebase/firebaseWriteCompatibility";
 import { storytellerPathSegments } from "@/firebase/paths";
 import { MAX_ROOM_CODE_SHAPE } from "@/firebase/roomCode";
-import type { SetupCommandResult } from "@/features/setup/setupReadiness";
+import type { SetupCommandResult } from "@/rules/setup/setupReadiness";
 import type {
   Alignment,
   BehaviorMode,
   EffectId,
   EffectInput,
   ExecutionOutcome,
-  ExileOutcome,
   GameResult,
   GrimoireMode,
   GuardStamp,
@@ -135,6 +135,8 @@ import type {
   SyncMeta,
   TokenPosition,
 } from "./types";
+import { migrateStoreState, seatSwapLayout } from "./storeMigration";
+export { migrateStoreState, takeMigrationResetFlag } from "./storeMigration";
 
 const UNDO_LIMIT = 20;
 
@@ -157,15 +159,10 @@ export const gameLifecycleToken = (): number => gameLifecycle;
 const STORE_VERSION = 29;
 const STORE_KEY = isTabletTrial ? "silverwick-voting-tablet-trial" : "new-blood-st";
 const TERMINAL_JOURNAL_KEY = `${STORE_KEY}-ending`;
-let prewrittenVotingSave: { name: string; value: string } | null = null;
-
-let _migrationResetFlag = false;
-/** Returns true (once) when migrate() discarded incompatible persisted state. */
-export function takeMigrationResetFlag(): boolean {
-  const v = _migrationResetFlag;
-  _migrationResetFlag = false;
-  return v;
-}
+/** A save already written by a commit. `state` is the exact persisted object
+ * it serialised: the persist middleware skips serialising again when it is
+ * handed that same object (F-03), and still compares bytes otherwise. */
+let prewrittenVotingSave: { name: string; value: string; state: unknown } | null = null;
 
 const newId = (): PlayerId =>
   globalThis.crypto?.randomUUID?.() ?? `p-${Math.random().toString(36).slice(2, 10)}`;
@@ -514,7 +511,7 @@ export type StorytellerStore = {
   // --- Pre-Reveal Setup refinement (Phase 9 Setup finalization B3) -------
   // Administration of the private Deal only — available strictly between a
   // completed initial Deal and a completed initial Reveal (see
-  // canRefineSetup in features/setup/setupRefinement.ts). Distinct from the
+  // canRefineSetup in rules/setup/setupRefinement.ts). Distinct from the
   // generic assignRole()/setShownRole(), which remain unchanged and keep
   // serving later in-game character-change mechanics.
   /** Fresh random redistribution of the current ordinary dealt bag across
@@ -586,10 +583,6 @@ export type StorytellerStore = {
    * late an asynchronous Go Live continuation arrives. Detaching always works.
    */
   setLobby: (lobby: LobbyConnection | null) => boolean;
-  setLobbyStatus: (status: LobbyConnection["status"]) => void;
-  setPendingKnocks: (knocks: { uid: string; name: string }[]) => void;
-  seatPlayerFromKnock: (uid: string, name: string) => PlayerId | null;
-  bindRosterUid: (uid: string, playerId: PlayerId) => void;
   addToPendingQueue: (uid: string, name: string) => void;
   /** Phase 9R.2 (Astra R1): `participantId`, when given, is the identity the
    * membership seating command already recorded server-side for this
@@ -658,7 +651,6 @@ export type StorytellerStore = {
    * recorded. A different Shown Role derives its alignment (null) unless the
    * role is unchanged. */
   setShownRole: (id: PlayerId, roleId: RoleId | null) => RoleCommandResult;
-  setShownAlignment: (id: PlayerId, alignment: ShownAlignment | null) => RoleCommandResult;
   setBehaviorMode: (id: PlayerId, mode: BehaviorMode) => RoleCommandResult;
   setPerception: (
     id: PlayerId,
@@ -722,16 +714,11 @@ export type StorytellerStore = {
    * ordinary participant). Routes through resolveAlignments; callers may
    * ignore the result. Optional Mutation Context supplies Provenance. */
   setTravelerAlignment: (id: PlayerId, alignment: Alignment, context?: MutationContext) => AlignmentCommandResult;
-  /** Compatibility adapter: one gameplay Actual Alignment change of any
-   * participant, bound to whoever occupies `id` right now and the alignment /
-   * Traveler status observed at call time. Routes through resolveAlignments;
-   * never inferred, never called automatically. */
-  setActualAlignment: (id: PlayerId, alignment: Alignment, context?: MutationContext) => AlignmentCommandResult;
   prepareTravelerDemon: (id: PlayerId) => void;
   completeTravelerInformation: (id: PlayerId) => void;
   completeTravelerArrivalCheck: (id: PlayerId) => void;
-  /** @deprecated Phase 10A compatibility adapter -- exactly
-   * recordExile(id, "died"). New callers use recordExile. */
+  /** @deprecated Phase 10A compatibility adapter -- exactly an exile Life
+   * intent with outcome "died" through resolveLife. New callers use resolveLife. */
   exileTraveler: (id: PlayerId) => void;
   setFabled: (fabled: RoleId[]) => void;
   setLorics: (lorics: RoleId[]) => void;
@@ -760,8 +747,6 @@ export type StorytellerStore = {
     context?: MutationContext,
     actionContext?: CharacterActionContext,
   ) => LifeCommandResult;
-  /** A Traveler exile (Day only); may be survived. */
-  recordExile: (id: PlayerId, outcome: ExileOutcome, context?: MutationContext) => LifeCommandResult;
   /** A true resurrection (not a correction): alive, vote held, exile
    * cleared, ability restored. */
   resurrect: (id: PlayerId, context?: MutationContext) => LifeCommandResult;
@@ -781,12 +766,6 @@ export type StorytellerStore = {
    * (never a resurrection). Refused outside Night/Day like every life
    * command. New code uses the semantic commands above. */
   setAlive: (id: PlayerId, alive: boolean, context?: MutationContext) => void;
-  /** @deprecated Phase 10A compatibility adapter: `false` is
-   * spendGhostVote, `true` is restoreGhostVote -- both legal only while
-   * dead. */
-  setGhostVote: (id: PlayerId, ghostVote: boolean, context?: MutationContext) => void;
-  /** Phase 10F: an adapter over resolveLife (useAbility / correctAbilityUsed). */
-  setAbilityUsed: (id: PlayerId, used: boolean, context?: MutationContext) => LifeCommandResult;
   // --- Phase 10B: Effects -----------------------------------------------------
   /** THE authoritative Effect writer. Plans one atomic EffectTransaction
    * (effectResolution.ts) -- one or more ordered, already-resolved Effect
@@ -812,9 +791,6 @@ export type StorytellerStore = {
    * including different content under an existing id (never an upsert), a
    * timed lifetime during Setup, or an `appliedAt` other than now. */
   addEffect: (id: PlayerId, effect: EffectInput) => EffectId | null;
-  /** @deprecated Phase 10B compatibility adapter over the Remove intent:
-   * removes exactly that one Effect instance. */
-  removeEffect: (id: PlayerId, effectId: EffectId) => void;
   // --- Phase 10C: Reminders ----------------------------------------------------
   /** THE Reminder writer. Plans one atomic ReminderTransaction
    * (reminderResolution.ts) -- ordered place/amend/remove intents, gameplay
@@ -831,9 +807,6 @@ export type StorytellerStore = {
    * content under an existing id (never an upsert), an ended game, or any
    * smuggled durable field (sourceParticipant, createdAt, cleanupCue...). */
   addReminder: (id: PlayerId, reminder: ReminderInput) => ReminderId | null;
-  /** Compatibility adapter over one Remove intent: removes exactly that one
-   * Reminder instance of the current occupant. */
-  removeReminder: (id: PlayerId, reminderId: ReminderId) => ReminderCommandResult;
   /** Phase 9D.3: the single Authoritative Information command. Resolves
    * the Recipient's Actual Role and its Information Actions from Role
    * data (never a Role-id branch), structurally validates the supplied
@@ -873,10 +846,6 @@ export type StorytellerStore = {
   undo: () => void | SetupCommandResult;
   /** Package 3 (C3): silently replaces what a delivered entry shows the player. */
   correctPlayerInfo: (entryId: string, content: PlayerInfoContent) => { ok: true } | { ok: false; message: string };
-
-  setGrimoireMode: (mode: GrimoireMode) => void;
-  setTokenPosition: (id: PlayerId, x: number, y: number) => void;
-  clearTokenPositions: () => void;
 
   // --- Phase 9C.2A (OPUS-001) reconnect/acknowledgement plumbing ---------
   /** Establish (or preserve) sync metadata for exactly this scope. A no-op
@@ -947,21 +916,6 @@ export type RepairTarget = { playerId: PlayerId; target: LifeStatusTarget };
 export type SeatSwapBinding = { playerId: PlayerId; participantId: ParticipantId };
 /** Measured board fallback positions, valid only for the rendered game. */
 export type SeatSwapLayout = { game: StorytellerLobbyRecord; positions: Record<PlayerId, TokenPosition> };
-
-/** Only explicit, correctly bound local swap metadata can restore coordinates.
- * An ordinary two-seat reorder is not evidence that coordinates were swapped. */
-const seatSwapLayout = (
-  entry: SeatSwapUndo[number] | undefined,
-  previous: StorytellerLobbyRecord,
-): Record<PlayerId, TokenPosition> | undefined => {
-  if (!entry || entry[0].playerId === entry[1].playerId) return;
-  for (const saved of entry) {
-    const player = Object.hasOwn(previous.players, saved.playerId) ? previous.players[saved.playerId] : undefined;
-    if (!player || player.isEmpty || player.participantId !== saved.participantId || player.seat !== saved.seat ||
-      previous.seatOrder[saved.seat] !== saved.playerId || !Number.isFinite(saved.x) || !Number.isFinite(saved.y)) return;
-  }
-  return Object.fromEntries(entry.map(({ playerId, x, y }) => [playerId, { x, y }]));
-};
 
 const reindexSeatSwapUndo = (before: StorytellerLobbyRecord[], next: StorytellerLobbyRecord[], entries: SeatSwapUndo): SeatSwapUndo =>
   next.map(snapshot => {
@@ -1046,8 +1000,8 @@ const ownPlayer = (game: Pick<StorytellerLobbyRecord, "players">, id: PlayerId):
 
 /**
  * Phase 10B: binds a live PlayerId to the participation instance occupying
- * it RIGHT NOW -- how the compatibility adapters (setStatus/addEffect/
- * removeEffect) centrally capture the ParticipantId the Effect planner
+ * it RIGHT NOW -- how the compatibility adapters (setStatus/addEffect)
+ * centrally capture the ParticipantId the Effect planner
  * requires. Null for a nonexistent/inherited id or an empty seat. UI callers
  * bind the participant they rendered instead, so a seat replaced in between
  * is refused as stale.
@@ -1166,8 +1120,6 @@ const persistencePreflight = (planned: StorytellerLobbyRecord, current: Storytel
   return null;
 };
 
-const CLEAN_STATE = { game: null, view: "home" as const, undoStack: [] as never[], customScripts: {}, lobby: null };
-
 /** Phase 10F (v24): clears tonight's arrival / guided-wake steps of the
  * participation instance at `id` -- keyed by ParticipantId, never the seat. */
 const resetTravelerNightProgress = (game: StorytellerLobbyRecord, id: PlayerId) => {
@@ -1178,290 +1130,6 @@ const resetTravelerNightProgress = (game: StorytellerLobbyRecord, id: PlayerId) 
   const exact = participantRoleStepEntries(game.day, participantId, [player.actualRole, player.shownRole, player.publicDisplayRole]);
   return Object.fromEntries(Object.entries(game.nightProgress).filter(([key]) => !exact.has(key)));
 };
-
-/** Phase 9R.1 Astra remediation (Finding M2): `undoStack` is untrusted
- * persisted-state data -- it may be genuinely absent (`undefined`), a
- * valid array, or a malformed PRESENT non-array value (e.g. `{}`, a
- * string, a number). Every migration step below that maps or spreads
- * `s.undoStack` previously assumed any truthy value was already an array;
- * `s.undoStack.map(...)` throws "is not a function" and a bare
- * `[...s.undoStack]` throws "is not iterable" for a malformed non-array
- * value instead of failing safely (`??` alone only substitutes for
- * `null`/`undefined`, never for a truthy non-array). A malformed
- * undoStack must never be silently normalized into `[]` here -- every
- * site below leaves it completely untouched when this guard fails, so the
- * final StorytellerStateSchema validation gate (which requires undoStack
- * to be an array or absent -- schemas.ts's
- * `z.array(StorytellerGamePersistedSchema).optional()`) rejects it and
- * triggers the existing reset path below, exactly the established
- * absent-vs-malformed distinction already applied to remote checkpoint
- * migration (see gameMigration.ts's own Finding A3 doc comment). */
-function isMigratableUndoStack(value: unknown): value is unknown[] {
-  return Array.isArray(value);
-}
-
-export function migrateStoreState(state: unknown, fromVersion: number): unknown {
-  const s = state as { game?: Record<string, unknown>; undoStack?: unknown; lobby?: unknown };
-  // Phase 10C (ASTRA-10C-003): per-entry routing BEFORE any old step. A
-  // game-shaped entry's OWN version/evidence -- not the outer persisted
-  // envelope's -- decides which game-content migrations may touch it. Each
-  // entry (Current State and every Undo snapshot, independently) is
-  // classified once, from its untouched content, by the one canonical
-  // detector (detectLegacyGameVersion: explicit marker first, then v21/v20/
-  // v19/v17 evidence, then bounded structure). A game-content step targeting
-  // version N runs on an entry only when BOTH the envelope and the entry
-  // itself are older than N, so an old envelope can never "repair" a marked
-  // current game (e.g. default a malformed `fabled: null`) or delete its
-  // evidence (e.g. `startingNonTravelerCount`) before the entry's own marker
-  // is honoured. A shape too old to detect keeps the envelope's version, so
-  // genuine legacy saves migrate exactly as before. Envelope-only metadata
-  // (lobby, localSeq/sync) is still migrated by the envelope version.
-  const undoEntries: unknown[] = isMigratableUndoStack(s.undoStack) ? s.undoStack : [];
-  const entryVersion = new Map<object, number>();
-  for (const entry of [s.game, ...undoEntries]) {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
-    const detected = detectLegacyGameVersion(entry as Record<string, unknown>);
-    entryVersion.set(entry, detected === null ? fromVersion : Math.max(fromVersion, detected));
-  }
-  const olderThan = (entry: unknown, version: number): entry is Record<string, unknown> =>
-    !!entry && typeof entry === "object" && (entryVersion.get(entry) ?? Number.POSITIVE_INFINITY) < version;
-  /** The game entry, when it is itself older than `version`. */
-  const gameOlderThan = (version: number) => (olderThan(s.game, version) ? s.game : undefined);
-  /** Every Undo entry that is itself older than `version`. */
-  const undoOlderThan = (version: number) => undoEntries.filter((entry) => olderThan(entry, version)) as Record<string, unknown>[];
-
-  if (fromVersion < 2) {
-    const game = gameOlderThan(2);
-    if (game && !game.nightProgress) game.nightProgress = {};
-    for (const e of undoOlderThan(2)) {
-      if (!e.nightProgress) e.nightProgress = {};
-    }
-  }
-  if (fromVersion < 3) {
-    const game = gameOlderThan(3);
-    if (game) {
-      if (!game.fabled) game.fabled = [];
-      if (!game.bluffs) game.bluffs = [];
-    }
-    for (const e of undoOlderThan(3)) {
-      if (!e.fabled) e.fabled = [];
-      if (!e.bluffs) e.bluffs = [];
-    }
-  }
-  if (fromVersion < 4) {
-    const game = gameOlderThan(4);
-    if (game && !game.lorics) game.lorics = [];
-    for (const e of undoOlderThan(4)) {
-      if (!e.lorics) e.lorics = [];
-    }
-  }
-  if (fromVersion < 5) {
-    const game = gameOlderThan(5);
-    if (game) {
-      if (!game.rolePool) game.rolePool = [];
-      if (game.plannedPlayerCount === undefined) game.plannedPlayerCount = 0;
-    }
-    for (const e of undoOlderThan(5)) {
-      if (!e.rolePool) e.rolePool = [];
-      if (e.plannedPlayerCount === undefined) e.plannedPlayerCount = 0;
-    }
-  }
-  // v6: grimoireMode and tokenPositions added — both are top-level optional
-  // fields with Zod defaults, so no data migration is needed; old persisted
-  // states pass validation and receive undefined → initial state provides "ring"/{}.
-
-  if (fromVersion < 7) {
-    const game = gameOlderThan(7);
-    if (game) {
-      if (!game.pendingPlayers) game.pendingPlayers = {};
-      const players = game.players as Record<string, Record<string, unknown>> | undefined;
-      if (players) {
-        for (const p of Object.values(players)) {
-          if (p.isEmpty === undefined) p.isEmpty = false;
-        }
-      }
-    }
-    for (const e of undoOlderThan(7)) {
-      if (!e.pendingPlayers) e.pendingPlayers = {};
-    }
-  }
-
-  if (fromVersion < 8 && s?.lobby) {
-    // Envelope (lobby) + game content (Undo dropped, game code/uid reset).
-    // ASTRA-10C-003: this step cannot run without altering or discarding
-    // game entries, so if any entry is itself v8 or newer the envelope is an
-    // impossible hybrid -- fail closed rather than rewrite current state.
-    const entries = [s.game, ...undoEntries].filter((entry) => !!entry && typeof entry === "object");
-    if (entries.some((entry) => !olderThan(entry, 8))) {
-      // eslint-disable-next-line no-console
-      console.warn("[migrate] a pre-v8 envelope holds a newer game entry; resetting rather than rewriting it");
-      _migrationResetFlag = true;
-      return CLEAN_STATE;
-    }
-    s.lobby = null;
-    s.undoStack = [];
-    if (s.game) { s.game.code = ""; s.game.storytellerUid = "local"; }
-  }
-  // v10 adds an optional starting population. Earlier snapshots cannot prove
-  // this history; never derive it from their current attendance or roles.
-  if (fromVersion < 10) {
-    for (const entry of [gameOlderThan(10), ...undoOlderThan(10)]) {
-      if (entry) delete entry.startingNonTravelerCount;
-    }
-  }
-  // v11 introduces optional current Traveler facts. Leave legacy alignment,
-  // completion and exile unknown. Public character can be recovered from truth.
-  if (fromVersion < 11) {
-    for (const entry of [gameOlderThan(11), ...undoOlderThan(11)]) {
-      const players = (entry as { players?: Record<string, STPlayerRecord> } | undefined)?.players;
-      for (const p of Object.values(players ?? {})) {
-        if (p.isTraveler) p.publicDisplayRole = publicTravelerRole(p)?.id ?? null;
-      }
-    }
-  }
-  // v12 (Phase 9C.2A, OPUS-001) introduces localSeq/sync reconnect
-  // watermarks. A legacy v11 store never tracked them: initialize localSeq
-  // safely at 0 and leave sync null. Never invent acknowledgement evidence
-  // from a legacy game's prior content, timestamps, or size — a valid
-  // remote checkpoint outranks unevidenced legacy local state (see
-  // reconnectDecision's "no sync metadata" rule). Envelope-only.
-  if (fromVersion < 12) {
-    const withSync = s as { localSeq?: number; sync?: unknown };
-    withSync.localSeq = 0;
-    withSync.sync = null;
-  }
-  // v13 (Phase 9 Setup finalization B4) introduces plannedTravelerCount, the
-  // intended Traveler count out of plannedPlayerCount. A legacy game never
-  // planned any Travelers explicitly -- default to 0, mirroring
-  // plannedPlayerCount's own v5 migration default.
-  if (fromVersion < 13) {
-    for (const entry of [gameOlderThan(13), ...undoOlderThan(13)]) {
-      if (entry && entry.plannedTravelerCount === undefined) entry.plannedTravelerCount = 0;
-    }
-  }
-  // v14 (Phase 9D.1) -> v16 (Phase 9D.3): the structured Current State
-  // (Actual Alignment, Effects, Reminders), History, and Information
-  // Delivery evolution. Phase 9R.1 (Finding B1) extracted the actual
-  // per-entry transformation into migrateGameEntry (gameMigration.ts) so
-  // remote checkpoint recovery (readCheckpoint in storytellerSync.ts) can
-  // apply the exact same rules to a bare remote game -- never a second,
-  // divergent copy of them. See that function's own doc comment for what
-  // each version step does and does not invent.
-  //
-  // v17 (Phase 9R.2): historical participant identity -- the same shared
-  // per-entry migration, applied identically to Current State and every
-  // Undo snapshot (deterministic legacy-current ParticipantIds, never
-  // random; every v16 historical PlayerId reference becomes an unresolved
-  // legacy ParticipantRef, never the current occupant's identity).
-  //
-  // v18 (terminology audit): the History category for an Actual Role change
-  // is renamed from "identity" to "role" -- the same shared per-entry
-  // migration, so Current State and every Undo snapshot canonicalize
-  // identically. Only that one category value changes. A store already
-  // labeled v18 never reaches this block (fromVersion is not < 18), so a
-  // stale "identity" in it fails the schema gate below and resets rather
-  // than being treated as v17 data.
-  //
-  // v19 (Phase 10A): the Life Event Window -- the same shared per-entry
-  // migration adds it to Current State and to every Undo snapshot, each with
-  // coverage from ITS OWN phase (never backfilled from History). A store
-  // already labeled v19 never reaches this block, so a v19 game missing or
-  // carrying a malformed window fails the schema gate below and resets
-  // rather than being treated as v18 data. Within this block, any entry that
-  // already carries v19 evidence is likewise left for the gate to judge.
-  //
-  // v20 (Phase 10B): the authoritative Effect lifecycle and explicit game
-  // schema version evidence -- the same shared per-entry migration, applied
-  // identically to Current State and every Undo snapshot (never consulting
-  // History). An entry that already carries v20 evidence is left for the
-  // schema gate below to judge, never "repaired".
-  //
-  // v21 (Phase 10C): non-authoritative Reminder notation -- the same shared
-  // per-entry migration. An entry marked 20 receives v20 -> v21.
-  //
-  // v22 (Phase 10D): authoritative Role transitions -- the same shared
-  // per-entry migration, a stamp on top of v21.
-  //
-  // v23 (Phase 10E): Alignment transitions -- the same shared per-entry
-  // migration: a Traveler's inert explicit Shown Alignment is normalized to
-  // Normal (null). Routing is per entry (Current State and every Undo snapshot
-  // independently, exactly like remote checkpoint recovery): marker 20 -> v20
-  // -> v21 -> v22 -> v23; marker 21 -> v21 -> v22 -> v23; marker 22 -> v22 ->
-  // v23; marker 23 -> nothing; an older marker carrying newer evidence, a
-  // marker-less entry carrying v20+ evidence, or any malformed marker receives
-  // nothing and is rejected by the schema gate below. A marker-less genuine
-  // legacy entry runs the whole chain through v23.
-  //
-  // v24 (Phase 10F): guided ability resolution -- the same shared per-entry
-  // migration: marker 23 -> v24 drops ambiguous seat-addressed participant
-  // Night progress (never re-keyed onto the current occupant) and stamps 24;
-  // Information Delivery is preserved exactly (no performedRole/resolutionId
-  // is invented). Every older marker continues the chain through v24; an
-  // older marker carrying v24 evidence receives nothing and is rejected.
-  //
-  // v25 (Phase 10G): game-scoped Rule Facts -- the same shared per-entry
-  // migration: marker 24 -> v25 initializes an EMPTY `gameRuleFacts`
-  // collection and stamps 25 (no fact, History, delivery or participant state
-  // is invented or rewritten). Every older marker continues the chain through
-  // v25; an older marker carrying v25 evidence receives nothing and is
-  // rejected.
-  //
-  // v26 (Phase 10H): reveal tokens and the declared Game Result -- the same
-  // shared per-entry migration: marker 25 -> v26 is a stamp (no reveal token,
-  // Game Result or winner is invented). Every older marker continues the chain
-  // through v26; an older marker carrying v26 evidence receives nothing and is
-  // rejected.
-  if (fromVersion < 29) {
-    const customScripts = (s as { customScripts?: Record<string, Script> }).customScripts ?? {};
-    // Phase 9R.1 Astra remediation (Finding A2): local persisted migration
-    // uses "trusted" evidence -- this state's OWN saved customScripts,
-    // genuine evidence of what the game actually used (unlike remote
-    // checkpoint recovery, which never has this and uses "canonical-only"
-    // -- see readCheckpoint in storytellerSync.ts and MigrationScriptEvidence's
-    // own doc comment).
-    // ASTRA-10C-003: each entry migrates from its OWN routed version (see
-    // above) -- the same answer checkpoint recovery reaches directly.
-    const migrateOne = (entry: unknown, snapshot: boolean) => {
-      const version = entry && typeof entry === "object" ? entryVersion.get(entry) ?? fromVersion : fromVersion;
-      migrateGameEntry(entry, version, { kind: "trusted", customScripts }, { snapshot });
-    };
-    migrateOne(s.game, false);
-    for (const entry of isMigratableUndoStack(s.undoStack) ? s.undoStack : []) migrateOne(entry, true);
-    // Package 3 (C7): the finished-game recovery envelope is migrated like the
-    // game it was taken from. Its own undo stack holds snapshots (no log).
-    const recovery = (s as { finishedGameUndo?: unknown }).finishedGameUndo;
-    if (recovery && typeof recovery === "object") {
-      const r = recovery as Record<string, unknown>;
-      const migrateLoose = (entry: unknown, snapshot: boolean) => {
-        if (!entry || typeof entry !== "object" || Array.isArray(entry)) return;
-        const detected = detectLegacyGameVersion(entry as Record<string, unknown>);
-        migrateGameEntry(entry, detected === null ? fromVersion : Math.max(fromVersion, detected), { kind: "trusted", customScripts }, { snapshot });
-      };
-      migrateLoose(r.ended, false);
-      migrateLoose(r.live, false);
-      if (Array.isArray(r.undoStack)) for (const entry of r.undoStack) migrateLoose(entry, true);
-    }
-  }
-  const check = StorytellerStateSchema.safeParse(state);
-  if (!check.success) {
-    // eslint-disable-next-line no-console
-    console.warn("[migrate] persisted state failed validation, resetting:", check.error.flatten());
-    _migrationResetFlag = true;
-    return CLEAN_STATE;
-  }
-  // v9 drops obsolete saved previews through the schema allowlist, including
-  // undo snapshots. Drafts, sent information and the active session survive.
-  Object.assign(s, check.data);
-  // Preserve absent metadata in old saves: migration must not change an
-  // otherwise current valid save. The store merge supplies the runtime default.
-  // Present entries must bind to their corresponding validated snapshot.
-  const layoutEntries = check.data.seatSwapUndo;
-  if (layoutEntries !== undefined) Object.assign(s, { seatSwapUndo: (check.data.undoStack ?? []).map((snapshot, index) => {
-    const entry = layoutEntries[index];
-    return seatSwapLayout(entry, snapshot) ? entry : null;
-  }) });
-  return state;
-}
 
 /** Phase 10H: the role registry of a game's script for the reveal-token
  * seam, memoized per Script object (a custom script edit replaces the object).
@@ -1638,6 +1306,55 @@ export function buildSetupGame(script: Script, opts: NewGameOpts = {}): Storytel
   return seated;
 }
 
+/** The fields saved to the browser, in their saved form. */
+function buildPersistedForm(s: StorytellerStore) {
+  return {
+    game: s.game,
+    view: s.view,
+    // F-01: saved with History shared with `game` (undoPersistence.ts), under
+    // its own key so a build that cannot read it drops only Undo, never the game.
+    [SHARED_UNDO_KEY]: compactUndoStack(s.undoStack, s.game),
+    customScripts: s.customScripts,
+    lobby: s.lobby,
+    grimoireMode: s.grimoireMode,
+    tokenPositions: s.tokenPositions,
+    seatSwapUndo: s.seatSwapUndo,
+    localLayoutUndo: s.localLayoutUndo,
+    finishedGameUndo: s.finishedGameUndo && { ...s.finishedGameUndo, undoStack: compactUndoStack(s.finishedGameUndo.undoStack, s.finishedGameUndo.live) },
+    localSeq: s.localSeq,
+    sync: s.sync,
+  };
+}
+const persistedSources = (s: StorytellerStore): readonly unknown[] => [s.game, s.view, s.undoStack, s.customScripts, s.lobby,
+  s.grimoireMode, s.tokenPositions, s.seatSwapUndo, s.localLayoutUndo, s.finishedGameUndo, s.localSeq, s.sync];
+let lastPersisted: { sources: readonly unknown[]; form: ReturnType<typeof buildPersistedForm> } | null = null;
+/** F-03: the same saved-form object for the same saved fields (compared by
+ * identity), so a commit's prewritten save is recognised by the persist
+ * middleware without serialising the whole state a second time. Read-only. */
+function persistedForm(s: StorytellerStore): ReturnType<typeof buildPersistedForm> {
+  const sources = persistedSources(s);
+  if (lastPersisted && sources.every((value, index) => value === lastPersisted!.sources[index])) return lastPersisted.form;
+  lastPersisted = { sources, form: buildPersistedForm(s) };
+  return lastPersisted.form;
+}
+/** F-03: the persist middleware's write of exactly the object a commit has
+ * already saved is skipped before it is serialised again. Any other write
+ * (or a different object) goes through the byte comparison as before. */
+function skipPrewrittenSave<S>(storage: PersistStorage<S> | undefined): PersistStorage<S> | undefined {
+  if (!storage) return storage;
+  return {
+    ...storage,
+    setItem: (name, value) => {
+      const prewritten = prewrittenVotingSave;
+      if (prewritten && prewritten.name === name && prewritten.state === value.state && value.version === STORE_VERSION) {
+        prewrittenVotingSave = null;
+        return;
+      }
+      return storage.setItem(name, value);
+    },
+  };
+}
+
 export const useStorytellerStore = create<StorytellerStore>()(
   persist(
     (rawSet, get) => {
@@ -1737,14 +1454,16 @@ export const useStorytellerStore = create<StorytellerStore>()(
           finishedGameUndo: null, canUndoFinishedGame: false, localSeq: state.localSeq + 1 };
         if (votingAuthorityToken(state.lobby) !== authority) return "The connection changed. Nothing was recorded.";
         let value: string;
+        let persisted: unknown;
         try {
           const options = useStorytellerStore.persist.getOptions();
-          value = JSON.stringify({ state: options.partialize ? options.partialize(candidate) : candidate, version: STORE_VERSION });
+          persisted = options.partialize ? options.partialize(candidate) : candidate;
+          value = JSON.stringify({ state: persisted, version: STORE_VERSION });
           localStorage.setItem(STORE_KEY, value);
         } catch {
           return "This device could not save the change. Free browser storage or allow site storage, then try again. Nothing was recorded.";
         }
-        prewrittenVotingSave = { name: STORE_KEY, value };
+        prewrittenVotingSave = { name: STORE_KEY, value, state: persisted };
         preparedAuthoritativeGame = prepared;
         try { set({ game: prepared, undoStack, seatSwapUndo, localLayoutUndo }); }
         finally { prewrittenVotingSave = null; preparedAuthoritativeGame = null; }
@@ -1790,13 +1509,15 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const candidate = { ...state, ...patch, localSeq: state.localSeq + 1 };
         const options = useStorytellerStore.persist.getOptions();
         let value: string;
+        let persisted: unknown;
         try {
-          value = JSON.stringify({ state: options.partialize ? options.partialize(candidate) : candidate, version: STORE_VERSION });
+          persisted = options.partialize ? options.partialize(candidate) : candidate;
+          value = JSON.stringify({ state: persisted, version: STORE_VERSION });
           localStorage.setItem(STORE_KEY, value);
         } catch {
           return "This device could not save the change. Allow site storage or free browser storage, then try again.";
         }
-        prewrittenVotingSave = { name: STORE_KEY, value };
+        prewrittenVotingSave = { name: STORE_KEY, value, state: persisted };
         gameLifecycle++;
         clearNightActionCorrections();
         try { set(() => ({ ...patch, [TERMINAL_COMMIT]: true, [SKIP_LOCAL_SEQ]: true, localSeq: candidate.localSeq })); }
@@ -1810,11 +1531,13 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const options = useStorytellerStore.persist.getOptions();
         const candidate = { ...state, ...patch };
         let value: string;
+        let persisted: unknown;
         try {
-          value = JSON.stringify({ state: options.partialize ? options.partialize(candidate) : candidate, version: STORE_VERSION });
+          persisted = options.partialize ? options.partialize(candidate) : candidate;
+          value = JSON.stringify({ state: persisted, version: STORE_VERSION });
           localStorage.setItem(STORE_KEY, value);
         } catch { return { ok: false, message: "This device could not save the token layout. Nothing was changed." }; }
-        prewrittenVotingSave = { name: STORE_KEY, value };
+        prewrittenVotingSave = { name: STORE_KEY, value, state: persisted };
         try { set(patch); } finally { prewrittenVotingSave = null; }
         return { ok: true };
       };
@@ -2306,26 +2029,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
         if (lobby?.code !== get().lobby?.code || lobby?.sessionId !== get().lobby?.sessionId) clearNightActionCorrections();
         set(state => ({ lobby, game: state.game && lobby ? { ...state.game, code: lobby.code, storytellerUid: lobby.uid } : state.game, undoStack: [] }));
         return true;
-      },
-
-      setLobbyStatus: (status) => {
-        const { lobby } = get();
-        if (!lobby) return;
-        set({ lobby: { ...lobby, status } });
-      },
-
-      setPendingKnocks: (knocks) => set({ pendingKnocks: knocks }),
-
-      seatPlayerFromKnock: (uid, name) => {
-        // Legacy path: used when there are no pre-allocated empty seats.
-        // Routes to pending queue; returns null since no seat is assigned yet.
-        get().addToPendingQueue(uid, name);
-        return null;
-      },
-
-      bindRosterUid: (_uid, _playerId) => {
-        // No-op in local store. The actual roster→playerId binding lives
-        // in the Firebase write done by the sync engine.
       },
 
       addToPendingQueue: (uid, name) => {
@@ -2997,12 +2700,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
         });
       },
 
-      setShownAlignment: (id, alignment) => {
-        const player = currentOccupant(get().game, id);
-        if (!player) return notSeatedRefusal();
-        return get().setPerception(id, { shownRole: player.shownRole, shownAlignment: alignment });
-      },
-
       setBehaviorMode: (id, mode) => {
         const player = currentOccupant(get().game, id);
         if (!player) return notSeatedRefusal();
@@ -3207,12 +2904,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
         return get().resolveAlignments({ intents: [changeAlignmentIntent(player, alignment)], ...(context ? { context } : {}) });
       },
 
-      setActualAlignment: (id, alignment, context) => {
-        const player = currentOccupant(get().game, id);
-        if (!player) return alignmentNotSeated();
-        return get().resolveAlignments({ intents: [changeAlignmentIntent(player, alignment)], ...(context ? { context } : {}) });
-      },
-
       prepareTravelerDemon: (id) => {
         const { game, undoStack } = get();
         const p = game ? ownPlayer(game, id) : undefined;
@@ -3237,7 +2928,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
 
       // Phase 10A: exile is its own Life Event kind (never collapsed into a
       // generic death) recorded through the life-resolution boundary.
-      exileTraveler: (id) => { get().recordExile(id, "died"); },
+      exileTraveler: (id) => { get().resolveLife({ intents: [{ kind: "exile", playerId: id, outcome: "died" }] }); },
 
       completeTravelerArrivalCheck: (id) => {
         const { game, undoStack } = get();
@@ -3350,9 +3041,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
         commitLifeOutcome({ intents: [{ kind: "execution", playerId: id, outcome,
           ...(options?.confirmations?.length ? { confirmations: options.confirmations } : {}) }], context }, actionContext, true),
 
-      recordExile: (id, outcome, context) =>
-        get().resolveLife({ intents: [{ kind: "exile", playerId: id, outcome }], context }),
-
       resurrect: (id, context) =>
         get().resolveLife({ intents: [{ kind: "resurrection", playerId: id }], context }),
 
@@ -3377,28 +3065,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
       setAlive: (id, alive, context) => {
         if (alive) get().correctLifeStatus(id, { alive: true }, context);
         else get().recordDeath(id, context);
-      },
-
-      setGhostVote: (id, ghostVote, context) => {
-        if (ghostVote) get().restoreGhostVote(id, context);
-        else get().spendGhostVote(id, context);
-      },
-
-      // Phase 10F (Section 6): a compatibility adapter over the authoritative
-      // Life boundary -- never a second abilityUsed writer. Marking the ability
-      // used is a gameplay `useAbility`; clearing it is a `correctAbilityUsed`
-      // correction (a true resurrection's reset is Life's own). Like every
-      // Life intent it is refused outside Night/Day. Phase 9R.4 (B8): an
-      // unknown player or the already-current value is completely inert.
-      setAbilityUsed: (id, abilityUsed, context) => {
-        const game = get().game;
-        const existing = game ? ownPlayer(game, id) : undefined;
-        if (!game || !existing || existing.isEmpty) return { ok: false, code: "refused", message: "That seat has no player." };
-        if (existing.abilityUsed === abilityUsed) return { ok: true, changed: false, eventIds: [] };
-        return get().resolveLife({
-          intents: [abilityUsed ? { kind: "useAbility", playerId: id } : { kind: "correctAbilityUsed", playerId: id, used: false }],
-          ...(context ? { context } : {}),
-        });
       },
 
       resolveEffects: (transaction, actionContext) => {
@@ -3470,12 +3136,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
         return result.ok ? id_ : null;
       },
 
-      removeEffect: (id, effectId) => {
-        const target = currentBinding(get().game, id);
-        if (!target) return;
-        get().resolveEffects({ intents: [{ kind: "remove", target, effectId }] });
-      },
-
       resolveReminders: (transaction, actionContext) => {
         const state = get();
         const { game } = state;
@@ -3518,12 +3178,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
         const result = get().resolveReminders({ intents: [{ kind: "place", target,
           reminder: { ...rest, id: id_, ...(source ? { source } : {}) } as never }] });
         return result.ok ? id_ : null;
-      },
-
-      removeReminder: (id, reminderId) => {
-        const target = currentBinding(get().game, id);
-        if (!target) return { ok: false, code: "notSeated", message: "This player is not seated." };
-        return get().resolveReminders({ intents: [{ kind: "remove", target, reminderId }] });
       },
 
       recordInformationDelivery: (recipientPlayerId, informationActionId, values, context) => {
@@ -3788,15 +3442,6 @@ export const useStorytellerStore = create<StorytellerStore>()(
           ...(layout ? { tokenPositions: { ...get().tokenPositions, ...clone(layout) } } : {}),
         });
       },
-
-      setGrimoireMode: (mode) => set({ grimoireMode: mode }),
-
-      setTokenPosition: (id, x, y) =>
-        set((s) => ({
-          tokenPositions: { ...s.tokenPositions, [id]: { x, y } },
-        })),
-
-      clearTokenPositions: () => set({ tokenPositions: {} }),
       moveToken: (id, x, y) => {
         if (!get().game || !Object.hasOwn(get().game!.players, id) || !Number.isFinite(x) || !Number.isFinite(y))
           return { ok: false, message: "Choose a current token and a valid position." };
@@ -3874,7 +3519,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
     {
       name: STORE_KEY,
       version: STORE_VERSION,
-      storage: createJSONStorage(() => {
+      storage: skipPrewrittenSave(createJSONStorage(() => {
         // Preserve Zustand's unavailable-storage behavior in non-browser
         // environments by resolving storage while its getter is guarded.
         const storage = localStorage;
@@ -3886,7 +3531,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           storage.setItem(name, value);
         },
         };
-      }),
+      })),
       migrate: migrateStoreState,
       // Phase 9C.2B.2 (hardening): Zustand only invokes `migrate` above when
       // the persisted version differs from STORE_VERSION — a persisted blob
@@ -3911,20 +3556,7 @@ export const useStorytellerStore = create<StorytellerStore>()(
           ...(journal ? { lobby: journal.lobby, terminalClose: { intent: journal.intent, status: "failed" as const, recoveryPending: true as const,
             message: "An online ending needs recovery. Retry finishing to confirm the session's recorded result." } } : {}) };
       },
-      partialize: (s) => ({
-        game: s.game,
-        view: s.view,
-        undoStack: s.undoStack,
-        customScripts: s.customScripts,
-        lobby: s.lobby,
-        grimoireMode: s.grimoireMode,
-        tokenPositions: s.tokenPositions,
-        seatSwapUndo: s.seatSwapUndo,
-        localLayoutUndo: s.localLayoutUndo,
-        finishedGameUndo: s.finishedGameUndo,
-        localSeq: s.localSeq,
-        sync: s.sync,
-      }),
+      partialize: persistedForm,
     }
   )
 );

@@ -8,7 +8,7 @@ import { authorizePublicDisplay, parseDisplayTokenFromFragment } from "@/firebas
 import type { RoomBackend } from "@/firebase/backend";
 import { RemoteScreenBoundary } from "@/features/remote/RemoteScreenBoundary";
 import { TownSquare } from "./TownSquare";
-import { joinLinkFor } from "./QrCode";
+import { buildPlayerJoinLink } from "@/features/newgame/qr";
 import { buildTownSquareView } from "./townSquareModel";
 
 /** Phase 9C.6 (OPUS-002): attempt enrollment (if a fragment token is
@@ -143,7 +143,7 @@ function PublicDisplayContent({ code }: Props) {
   const view = buildTownSquareView({
     lobby: publicLobby,
     status: ended ? "ended" : reconnecting ? "reconnecting" : "live",
-    joinUrl: joinLinkFor(window.location, publicLobby.code),
+    joinUrl: buildPlayerJoinLink(window.location, publicLobby.code),
   });
   return <TownSquare view={view} />;
 }

@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10F Slice 7 -- Cult Leader nightly portion (matrix Section 11).
 import { describe, expect, it } from "vitest";
 import { ALIGNMENT_CHOICE, ALIGNMENT_JUDGMENT } from "./cultleader";

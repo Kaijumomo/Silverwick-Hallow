@@ -105,11 +105,10 @@ export function useInfoVm(ctx: V6Ctx): SliceResult {
 
   return {
     ...EMPTY,
+    ...(composition ? { overrides: { composition } } : {}),
     vm: {
-      stop: (e: { stopPropagation: () => void }) => e.stopPropagation(),
       infoC: { on: infoOn, w: Math.round(Math.max(720, Math.min(900, 2 * ax * squeeze, layout.w - 60))) },
       stats: [{ n: stats.alive, label: "Alive" }, { n: stats.votes, label: "Votes" }, { n: stats.toExecute, label: "To execute" }],
-      ...(composition ? { composition } : {}),
       bluffs, showBluffs: () => report(presentSetup("bluffs")), setupInfo, infoTokens,
       refM: ref ? ref.vm : { on: false },
       refEmpty: !!ref?.empty, refQuery: ui.refQuery,

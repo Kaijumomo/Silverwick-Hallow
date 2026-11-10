@@ -3,11 +3,11 @@ import { isInitialRevealComplete } from "@/stores/identity";
 import { iconUrlFor } from "@/data/iconUrl";
 import { isCanonicalRole } from "@/data/canonical";
 import { buildRegistry } from "@/data/roleRegistry";
-import { evilInformationPolicy, setupInformationWarning } from "@/features/nightOrder/nightRules";
+import { evilInformationPolicy, setupInformationWarning } from "@/rules/night/nightRules";
 import { getPrivateInfoApplicability, previewPrivatePacket } from "@/stores/privatePackets";
 import { travelerDemonInformation } from "@/stores/travelers";
 import type { RoleDef, Script, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
-import type { PresentationPayload } from "./PlayerPresentation";
+import type { PresentationPayload } from "./presentationPayload";
 
 export type SetupView = "traveler" | "demon" | "minion" | "bluffs";
 export const characterCard = (role: RoleDef) => ({ id: role.id, name: role.name, type: role.type, ability: role.ability, icon: iconUrlFor(role) });

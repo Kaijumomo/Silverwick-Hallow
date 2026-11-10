@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10D architecture guard: NO LIVE/GENERAL WRITER BYPASSES THE ROLE SEAM.
 //
 // Every live/general change to actualRole, shownRole, shownAlignment,
@@ -56,6 +57,7 @@ const ALLOWED_MODULES: Record<string, string> = {
   "stores/identity.ts": "dealtIdentity: the Setup Deal's fresh assignment",
   "stores/schemas.ts": "the persisted-shape schemas",
   "stores/gameMigration.ts": "legacy migration",
+  "stores/storeMigration.ts": "legacy migration of a saved store (migrateStoreState, moved out of storytellerStore.ts by F-05; unit audited below)",
   "stores/projections.ts": "builds projection RECORDS (public/self), never Current State",
   "stores/informationDelivery.ts": "an Information Delivery RECORD snapshots the recipient's Actual Role (Phase 10F pure planner), never Current State",
   "stores/abilityResolution.ts": "captureFingerprint snapshots the OBSERVED Role/perception into a read-only workflow fingerprint (Phase 10F), never Current State",
@@ -77,10 +79,11 @@ const ALLOWED_STORE_UNITS = new Set([
   // Delivery record's Actual Role snapshot moved into the pure planner,
   // informationDelivery.ts, so recordInformationDelivery writes none.)
   "setShownRole",
-  // SOL-10F-L7: the strengthened detector now also sees these two adapters'
-  // perception SPECs (`setPerception(id, { ...: x })`). Same reason as
+  // SOL-10F-L7: the strengthened detector now also sees this adapter's
+  // perception SPEC (`setPerception(id, { ...: x })`). Same reason as
   // setShownRole; each flagged line is asserted below to be ONLY that call.
-  "setShownAlignment", "setBehaviorMode",
+  // (setShownAlignment, test-only, moved to src/test/storeCommands.ts: F-04.)
+  "setBehaviorMode",
 ]);
 
 /** SOL-10F-L7: the Phase 10F read-only snapshot modules above are admitted
@@ -94,7 +97,7 @@ const SNAPSHOT_SITES: Record<string, readonly string[]> = {
 };
 
 /** Units whose only write shape is a perception spec handed to setPerception. */
-const PERCEPTION_SPEC_UNITS = new Set(["setShownRole", "setShownAlignment", "setBehaviorMode"]);
+const PERCEPTION_SPEC_UNITS = new Set(["setShownRole", "setBehaviorMode"]);
 
 const enclosingUnit = enclosingUnitFor;
 
@@ -112,6 +115,11 @@ describe("Phase 10D architecture guard: no writer bypasses the Role seam", () =>
     // The Setup Deal / refinement commands write through the one reviewed
     // builder (freshAssignment -> dealtIdentity), never field by field.
     expect(units.has("freshAssignment")).toBe(false);
+  });
+
+  it("F-05: in the saved-store migration module, only migrateStoreState writes them (as it did inside the store)", () => {
+    const source = readFileSync(join(SRC, "stores/storeMigration.ts"), "utf8");
+    expect([...new Set(writeLines(source).map((line) => enclosingUnit(source, line)))]).toEqual(["migrateStoreState"]);
   });
 
   it("SOL-10F-L7: the 10F snapshot modules write Role fields only as observed copies inside their reviewed unit", () => {
@@ -159,7 +167,7 @@ describe("Phase 10D architecture guard: no writer bypasses the Role seam", () =>
       const next = rest.search(/\n {6}\w+: (?:\(|async \()/);
       return rest.slice(0, next < 0 ? undefined : next);
     };
-    for (const name of ["assignRole", "correctRole", "showAssignedRole", "setShownRole", "setShownAlignment", "setBehaviorMode", "setPerception"]) {
+    for (const name of ["assignRole", "correctRole", "showAssignedRole", "setShownRole", "setBehaviorMode", "setPerception"]) {
       const text = body(name);
       expect(text, name).toMatch(/resolveRoles|setPerception|setShownRole/);
       for (const forbidden of [/\bset\(/, /patchPlayer/, /players:/, /pushUndo/, /recordIfLive/, /invalidatePrivatePacket/, /pruneInapplicablePrivateInfo/]) {

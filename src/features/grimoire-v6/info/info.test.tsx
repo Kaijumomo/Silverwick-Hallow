@@ -51,6 +51,15 @@ describe("4F Info card", () => {
       expect(within(card).getByRole("button", { name: label })).toBeTruthy();
   });
 
+  it("opens during Setup too, showing the table's actual composition over the setup card's", () => {
+    reset(setupGame(standardRoles(9)));
+    render(<GrimoireV6Screen />);
+    ui({ panel: "info" });
+    const stat = (label: string) => within(document.body).getAllByText(label)[0]!.closest("div")!.textContent;
+    expect(stat("Alive")).toBe("9Alive");
+    expect(stat("Outsiders")).toBe("2Outsiders");
+  });
+
   it("is absent from the DOM in Privacy Mode, even if its panel flag is set", () => {
     usePrivacyStore.setState({ enabled: true });
     render(<GrimoireV6Screen />);

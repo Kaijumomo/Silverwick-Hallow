@@ -14,7 +14,7 @@ import { useShellStore } from "@/stores/shellStore";
 import { usePlayerStore } from "@/stores/playerStore";
 import { withRevealTokens } from "@/stores/revealTokens";
 import type { RoomBackend } from "./backend";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "./lobby";
 import { requireActiveSession } from "./lifecycle";
 import { closeMultiplayerSession, FINISH_GAME_PENDING, useSessionRuntime, useStorytellerSync } from "./storytellerSync";
@@ -208,7 +208,6 @@ describe("PR-10H-004: generic closes and the defense-in-depth boundary", () => {
     });
     usePrivacyStore.setState({ enabled: true });
     useShellStore.setState({
-      lens: "labels", inspectorDetent: "peek", dockTab: "seat",
       nightCursor: { day: 1, stepKey: "demonInfo" },
       litActor: { playerId: live.seatOrder[0]!, participantId: live.players[live.seatOrder[0]!]!.participantId!, stepKey: "demonInfo" },
       actionOpen: true,
@@ -221,8 +220,7 @@ describe("PR-10H-004: generic closes and the defense-in-depth boundary", () => {
       pendingKnocks: st().pendingKnocks, selectedPlayerId: st().selectedPlayerId,
       localSeq: st().localSeq, sync: st().sync, terminalClose: st().terminalClose,
       privacy: usePrivacyStore.getState().enabled, shell: {
-        lens: useShellStore.getState().lens, inspectorDetent: useShellStore.getState().inspectorDetent,
-        dockTab: useShellStore.getState().dockTab, nightCursor: useShellStore.getState().nightCursor,
+        nightCursor: useShellStore.getState().nightCursor,
         litActor: useShellStore.getState().litActor, actionOpen: useShellStore.getState().actionOpen,
       },
     };
@@ -235,8 +233,7 @@ describe("PR-10H-004: generic closes and the defense-in-depth boundary", () => {
       pendingKnocks: st().pendingKnocks, selectedPlayerId: st().selectedPlayerId,
       localSeq: st().localSeq, sync: st().sync, terminalClose: st().terminalClose,
       privacy: usePrivacyStore.getState().enabled, shell: {
-        lens: useShellStore.getState().lens, inspectorDetent: useShellStore.getState().inspectorDetent,
-        dockTab: useShellStore.getState().dockTab, nightCursor: useShellStore.getState().nightCursor,
+        nightCursor: useShellStore.getState().nightCursor,
         litActor: useShellStore.getState().litActor, actionOpen: useShellStore.getState().actionOpen,
       },
     }).toEqual(before);

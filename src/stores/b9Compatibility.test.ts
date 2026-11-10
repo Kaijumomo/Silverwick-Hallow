@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { canonicalRoles } from "@/data/canonical";
@@ -6,7 +7,7 @@ import { bind, impair, patchPlayer, pick, proofEnv, proofGame, request } from "@
 import { planAbilityResolution } from "./abilityResolution";
 import { createRulesQuery } from "./rulesQuery";
 import { projectLobbyToPublic, projectLobbyToSelfMap } from "./projections";
-import { computeNightOrder } from "@/features/nightOrder/nightOrder";
+import { computeNightOrder } from "@/rules/night/nightOrder";
 import { scarletWomanSuccession } from "@/abilities/characters/scarletWoman";
 import type { Script } from "./types";
 import type { EffectRecord, StorytellerLobbyRecord } from "./types";

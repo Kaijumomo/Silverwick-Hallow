@@ -88,9 +88,6 @@ const DEFINITIONS: Record<string, EffectDefinition> = {
 /** The order known indicators appear in; unknown ones follow. */
 const INDICATOR_ORDER = Object.keys(INDICATORS);
 
-/** The types the Storyteller quick controls manage (one tap each). */
-export const QUICK_EFFECT_TYPES = ["drunk", "poisoned", "protected"] as const;
-
 /** Known types offered by the advanced "Add effect" workflow (any other
  * type can still be typed in as a custom Effect). */
 export const KNOWN_EFFECT_TYPES: readonly EffectDefinition[] = Object.values(DEFINITIONS);

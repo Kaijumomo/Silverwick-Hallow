@@ -6,7 +6,7 @@ import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { captureFingerprint } from "@/stores/abilityResolution";
 import { projectLobbyToPublic, projectLobbyToSelfMap } from "@/stores/projections";
 import { participantStepKey } from "@/stores/nightProgress";
-import { computeNightOrder } from "@/features/nightOrder/nightOrder";
+import { computeNightOrder } from "@/rules/night/nightOrder";
 import { planManualInformationDelivery } from "@/stores/informationDelivery";
 import { bind, patchPlayer, pick, plan, planned, proofGame, proofRegistry, proofScript, request, num } from "@/test/proofFixtures";
 import { subjectId } from "@/abilities/characters/shared";

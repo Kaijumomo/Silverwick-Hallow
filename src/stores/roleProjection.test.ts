@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10D: projection safety. An unresolvable / unsafe Shown Role fails
 // CLOSED per participant -- it never throws (so it cannot block the table's
 // checkpoint or anyone else's public/self projection), never exposes the
@@ -10,7 +11,7 @@ import { FABLED } from "@/data/fabled";
 import { LORICS } from "@/data/lorics";
 import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
 import { makeSTPlayer } from "@/test/fixtures";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { writeProjections } from "@/firebase/sync";
 import { identityNeedsCheck, projectIdentity, projectLobbyToPublic, projectLobbyToSelfMap, projectToSelf } from "./projections";
 import { previewPrivatePacket } from "./privatePackets";

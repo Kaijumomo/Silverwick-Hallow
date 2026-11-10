@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 10F: the Rules Query layer -- pure DERIVED answers, never persisted,
 // with explicit unknown/judgment answers for custom, cyclic or unmodeled
 // interactions. Traceability: 10F-AC-12, 10F-AC-13, 10F-AC-14.

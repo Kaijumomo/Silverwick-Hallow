@@ -6,7 +6,7 @@ import { wikiUrlFor } from "@/features/almanac/wikiUrl";
 import { reminderLabels } from "@/features/home/reference/referenceData";
 import { infoContextCurrent } from "@/features/info/infoCommands";
 import { seatedPlayers } from "@/features/info/infoModel";
-import type { PresentationPayload } from "@/features/info/PlayerPresentation";
+import type { PresentationPayload } from "@/features/info/presentationPayload";
 import type { RoleDef, STPlayerRecord } from "@/stores/types";
 import type { V6Ctx } from "../ctx";
 import { ICON, TEAM_COLOR, TEAM_LABEL } from "../icons";

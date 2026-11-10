@@ -1,6 +1,6 @@
-import type { SetupAnalysis } from "./setupAnalyzer";
-import { isPostDeal, type SetupContext, type SetupFinding } from "./setupContext";
-import { initialRevealReadiness, type RevealReadiness } from "./revealReadiness";
+import type { SetupAnalysis } from "@/rules/setup/setupAnalyzer";
+import { isPostDeal, type SetupContext } from "@/rules/setup/setupContext";
+import { initialRevealReadiness, type RevealReadiness } from "@/rules/setup/revealReadiness";
 import { isInitialRevealComplete } from "@/stores/identity";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
@@ -56,18 +56,4 @@ export function setupPresentation(game: StorytellerLobbyRecord, analysis: SetupA
   return { dealt, revealed, findings, next, message, ready, revealReadiness,
     composition: dealt ? analysis.assigned : analysis.pool,
     checks: findings.filter(f => f.severity === "check" || f.severity === "warning") };
-}
-
-/** Short summaries without duplicating character rules or changing findings. */
-export function findingSummary(f: SetupFinding): string {
-  if (f.code.startsWith("manual-roles:")) return f.message.split(".")[0]!.replace("Review character setup: ", "Review setup for ");
-  if (f.code.startsWith("composition:")) return "Review the mix of selected roles";
-  if (f.code.startsWith("interaction:")) return "Confirm how the setup modifiers work together";
-  if (f.code.startsWith("jinxes:")) return "Review character interactions";
-  if (f.code.startsWith("custom:")) return "Review custom character setup";
-  if (f.code.startsWith("traveler-alignment:")) return "Choose each Traveler’s alignment privately";
-  if (f.code.startsWith("missing-perception:")) return "Review the identities players will see";
-  if (f.code === "pool-and-assigned") return "Dealing will replace the roles in the grimoire";
-  if (f.code.startsWith("modifier:")) return `Review ${f.message.split(":")[0]} setup`;
-  return f.message.split(". ")[0]!;
 }

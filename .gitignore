@@ -41,3 +41,6 @@ database-debug.log
 **/.impeccable/live/*.png
 # impeccable-ignore-end
 
+
+# TypeScript incremental build state (rewritten by every typecheck)
+*.tsbuildinfo

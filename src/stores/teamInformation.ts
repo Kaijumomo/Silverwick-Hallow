@@ -1,6 +1,6 @@
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { isCanonicalRole } from "@/data/canonical";
-import { evilInformationPolicy, setupInformationWarning } from "@/features/nightOrder/nightRules";
+import { evilInformationPolicy, setupInformationWarning } from "@/rules/night/nightRules";
 import type { PlayerInfoSeat, StorytellerLobbyRecord } from "./types";
 
 /**

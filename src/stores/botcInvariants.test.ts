@@ -4,6 +4,7 @@ import { buildRegistry } from "@/data/roleRegistry";
 import { setupScript } from "@/test/setupFixtures";
 import { validateInformationValues, validateRequirementsCoherent } from "./informationDelivery";
 import type { InformationAction } from "./types";
+import { storeCommands } from "@/test/storeCommands";
 
 // Phase 9D.4: Authoritative Commands & BOTC Invariants. Silverwick enforces
 // known structural/BOTC invariants; the Storyteller retains judgment over
@@ -327,11 +328,11 @@ describe("Phase 9D.4: existing Authoritative Mutation Command regression", () =>
     atNight(1);
     const current = game().players[id]!.actualAlignment!;
     const beforeGame = game();
-    state().setActualAlignment(id, current); // no-op
+    storeCommands.setActualAlignment(id, current); // no-op
     expect(game()).toBe(beforeGame);
 
     const next = current === "evil" ? "good" : "evil";
-    state().setActualAlignment(id, next);
+    storeCommands.setActualAlignment(id, next);
     expect(game().players[id]!.actualAlignment).toBe(next);
     expect(game().history).toHaveLength(1);
   });
@@ -347,7 +348,7 @@ describe("Phase 9D.4: existing Authoritative Mutation Command regression", () =>
     expect(game()).toBe(beforeGame);
     expect(state().undoStack.length).toBe(beforeUndoLength);
 
-    state().setGhostVote(id, game().players[id]!.ghostVote); // true no-op
+    storeCommands.setGhostVote(id, game().players[id]!.ghostVote); // true no-op
     expect(game()).toBe(beforeGame);
     expect(state().undoStack.length).toBe(beforeUndoLength);
 

@@ -14,7 +14,7 @@ import { bindingOf, pathAbility, seatedParticipants, triggerAbility, useTargetPi
 import { participantAllowed } from "@/features/abilities/RequirementInput";
 import { pendingMoonchildChoice } from "@/abilities/characters/moonchild";
 import { deriveNightWork, stepResolved, unfinishedNightWork, type NightWork, type TriggeredNightWork, type UnfinishedNightWork } from "@/features/nightOrder/nightWork";
-import type { NightStep } from "@/features/nightOrder/nightOrder";
+import type { NightStep } from "@/rules/night/nightOrder";
 import { NIGHT_INFORMATION_ROLES, type NightInformationHandle } from "@/features/nightOrder/NightInformationAction";
 import { FIRST_INFORMATION_CHARACTERS } from "@/features/setup/FirstInformationPreparation";
 import type { V6Ctx } from "../ctx";

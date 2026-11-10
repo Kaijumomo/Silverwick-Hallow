@@ -1,27 +1,22 @@
 import { useRef, useState } from "react";
-import { InfoPresentationBoundary, useInfoPresentation } from "@/features/info/InfoPresentationBoundary";
 import { captureInfoContext, infoContextCurrent, type InfoContext } from "@/features/info/infoCommands";
-import { bluffChoiceError, setupPayload, type SetupView } from "@/features/info/infoModel";
+import { bluffChoiceError, type SetupView } from "@/features/info/infoModel";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { useV6Ui } from "@/features/grimoire-v6/v6Store";
 import { buildRegistry } from "@/data/roleRegistry";
-import { evilInformationPolicy } from "./nightRules";
+import { evilInformationPolicy } from "@/rules/night/nightRules";
 import type { Script, StorytellerLobbyRecord } from "@/stores/types";
-import type { NightStep } from "./nightOrder";
+import type { NightStep } from "@/rules/night/nightOrder";
 
 /** How a host screen shows the information: its own player view, given the same view, recipient and captured
  * context. Answers with a refusal message, or undefined once the view is on screen. */
 export type SetupPresentHost = (view: SetupView, recipientId: string, context: InfoContext) => string | undefined;
-type Props = { game: StorytellerLobbyRecord; script: Script; step: Extract<NightStep, { kind: "global" }>; visible: boolean; resolved: boolean; present?: SetupPresentHost };
+type Props = { game: StorytellerLobbyRecord; script: Script; step: Extract<NightStep, { kind: "global" }>; visible: boolean; resolved: boolean; present: SetupPresentHost };
 
 /** Presentation only, just like Setup Info. Night Next retains its existing
- * authoritative completion command; displaying a card is never a delivery. */
-export function SetupInformationAction(props: Props) {
-  return <InfoPresentationBoundary><SetupInformation {...props} /></InfoPresentationBoundary>;
-}
-
-function SetupInformation({ game, script, step, visible, present: host }: Props) {
-  const present = useInfoPresentation();
+ * authoritative completion command; displaying a card is never a delivery. The host (the Grimoire's Night card)
+ * shows the information in its own player view. */
+export function SetupInformationAction({ game, script, step, visible, present: host }: Props) {
   const [error, setError] = useState<string | null>(null);
   const live = useRef({ game, visible });
   live.current = { game, visible };
@@ -32,11 +27,7 @@ function SetupInformation({ game, script, step, visible, present: host }: Props)
   const show = (player: (typeof recipients)[number]) => {
     const context = captureInfoContext();
     if (!live.current.visible || live.current.game !== game || context.game !== game || !infoContextCurrent(context)) return;
-    if (host) { setError(host(view, player.id, context) ?? null); return; }
-    try {
-      const payload = setupPayload(game, script, view, player.id);
-      setError(null); present({ context, payload });
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Review setup information in Additional night controls."); }
+    setError(host(view, player.id, context) ?? null);
   };
   // PO review C09/C10: the V2 show row. Minions wake together and see the same team, so they share one row.
   const rows = view === "minion" ? recipients.slice(0, 1) : recipients;

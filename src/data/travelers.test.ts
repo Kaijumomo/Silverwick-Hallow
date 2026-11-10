@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { RoleDefSchema } from "@/stores/schemas";
 import { TRAVELERS, getTraveler, listTravelers } from "./travelers";

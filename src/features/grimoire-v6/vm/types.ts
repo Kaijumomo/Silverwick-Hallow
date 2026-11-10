@@ -6,6 +6,12 @@ export type SliceResult = {
   advance?: { text: string; run: () => void };
   /** Extra "block"/nominate state the dock pill shows during the Day. */
   pill?: Record<string, unknown>;
+  /**
+   * Keys this slice deliberately replaces when they are also returned by an earlier slice, applied after every
+   * slice's `vm` (the setup wizard hides the dock and centre text; the open Info card shows the table's actual
+   * composition instead of the setup slice's).
+   */
+  overrides?: Record<string, unknown>;
 };
 
 export const EMPTY: SliceResult = { vm: {} };

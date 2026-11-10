@@ -5,7 +5,7 @@ import { nightTriggerStepKey } from "@/stores/nightProgress";
 import { isDeathEvent, lifeEventsAt } from "@/stores/lifeEvents";
 import { wakeIdentity } from "@/stores/wakeIdentity";
 import { bindingOf, seatedParticipants, triggerAbility, type StepAbility } from "@/features/abilities/abilityUi";
-import { computeNightOrder, type NightStep } from "./nightOrder";
+import { computeNightOrder, type NightStep } from "@/rules/night/nightOrder";
 import type { Script, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 
 /**

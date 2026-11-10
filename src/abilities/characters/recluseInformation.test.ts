@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { bind, impair, num, patchPlayer, pick, plan, planned, proofGame, request, yes } from "@/test/proofFixtures";
 import { withRedHerring } from "@/test/redHerringFixture";

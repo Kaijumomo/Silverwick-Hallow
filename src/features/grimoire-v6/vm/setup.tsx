@@ -4,10 +4,10 @@ import { SETUP_COUNTS, MIN_PLAYERS } from "@/data/setupCounts";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { iconUrlFor as iconOf } from "@/data/iconUrl";
 import { qrModules, buildPlayerJoinLink } from "@/features/newgame/qr";
-import { analyzeSetup } from "@/features/setup/setupAnalyzer";
-import { selectSetupContext } from "@/features/setup/setupContext";
+import { analyzeSetup } from "@/rules/setup/setupAnalyzer";
+import { selectSetupContext } from "@/rules/setup/setupContext";
 import { setupPresentation } from "@/features/setup/setupPresentation";
-import { initialRevealReadiness } from "@/features/setup/revealReadiness";
+import { initialRevealReadiness } from "@/rules/setup/revealReadiness";
 import type { V6Ctx } from "../ctx";
 import { roman } from "../ringLayout";
 import { confirmAsk, flash, showVeil, useV6Ui } from "../v6Store";
@@ -73,6 +73,7 @@ export function useSetupVm(ctx: V6Ctx): SliceResult {
     return { vm: {
       wiz: wizardVm(ctx, wiz, true), wizSteps: wizardSteps(wiz), town: { on: false }, seatC: { on: false, btnOn: false }, dealC: { on: false }, pe: { on: false, off: true }, setup: { segs: [] },
       composition: [], rosterMeta: "",
+    }, overrides: {
       dockOn: false, centerKicker: "", centerTitle: "", centerSub: "", inviteDisp: "none",
       scriptName: wiz.script ? script?.name ?? "New game" : "New game",
     } };

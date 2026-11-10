@@ -25,7 +25,7 @@ vi.mock("@/firebase/session", async (importOriginal) => {
 });
 
 import { joinLobby, leaveLobby } from "@/firebase/playerSync";
-import { MemoryRoomBackend } from "@/firebase/memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { PlayerScreen } from "../PlayerScreen";
 import { PhoneHome } from "./PhoneHome";
 import { arrivalCountText, arrivalRows } from "./WaitingScreen";

@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Phase 9R.1 (Finding B1): remote checkpoint recovery must support the same
 // intentionally-supported legacy game evolution (v13->v16) local persisted
 // state already migrates through -- see gameMigration.ts and
@@ -12,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { usePlayerStore } from "@/stores/playerStore";
 import type { StorytellerLobbyRecord } from "@/stores/types";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { createLobby } from "./lobby";
 import { requireActiveSession } from "./lifecycle";
 import { SessionWriter } from "./writer";

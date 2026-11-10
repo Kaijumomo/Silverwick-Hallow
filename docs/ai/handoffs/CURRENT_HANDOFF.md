@@ -1,5 +1,24 @@
 # Silverwick Hollow — Current Handoff
 
+## Current truth (2026-11-09)
+
+- **Production:** `main` = `14f9acdeffb353bd610a61babf7c7a46ff0420e5` (Milestone 3, the Treacherous 30th single-device
+  work, merged by PR #16). Firebase Rules were deployed to production and verified, and the Cloudflare Pages client was
+  deployed from this commit. The previous `main`, `68ca84c`, is the revert point.
+- **Milestones** (owner decisions, 2026-10-31): 1 T30 single-device and 2 T30 rules complete (done); 3 controlled merge
+  to `main` (done); 4 multiplayer, tested on an isolated Firebase test project (next); 5 automation, Travellers,
+  reminders and CI without auto-deploy; 6 Release 1. Native apps and the advanced Storyteller phone are deferred.
+- **In progress:** the codebase streamlining review (F-01 to F-23) is being applied on branch
+  `claude/project-thread-l704xm`, from `main` `14f9acd`. It needs the owner's retest before any push or merge.
+- **Ways of working:** the project owner approves each work package. No push, PR, merge or deploy without explicit
+  approval. Codex runs previews, production deploys and Firebase operations.
+- **Repository layout:** see `README.md`. Phase contracts (`PHASE*.md`) moved from the repository root to
+  `docs/phases/`; `TERMINOLOGY.md` and `SETUP.md` are in `docs/`. Paths in the history below are as they were then.
+
+Everything below this line is the Phase 10H-era handoff, kept as history.
+
+---
+
 **Date:** 2026-10-06\
 **State:** **Phase 10H — Storyteller UI/UX & Visual Design System is CLOSED AND INTEGRATED** (2026-10-06 UTC).
 - Production RTDB Rules were deployed to `mobile-botc` (instance `mobile-botc-default-rtdb`) and verified **before** `main` integration.

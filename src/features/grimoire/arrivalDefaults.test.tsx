@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { setupGame, setupScript, standardRoles } from "@/test/setupFixtures";
-import { selectSetupContext } from "@/features/setup/setupContext";
+import { selectSetupContext } from "@/rules/setup/setupContext";
 import { travelerGuidance } from "@/stores/travelers";
 import { SeatAssignPopup } from "./SeatAssignPopup";
 import { usePrivacyStore } from "@/stores/privacyStore";
@@ -126,7 +126,6 @@ it("occupied ordinary seats reject arrival assignment and keep identity", () => 
   const id = game().seatOrder[0]!; const before = game().players[id];
   state().addToPendingQueue("uid", "Reconnect");
   expect(state().assignPendingToSeat("uid", id)).toBe(false);
-  state().bindRosterUid("uid", id);
   expect(game().players[id]).toEqual(before);
   expect(game().players[id]!.isTraveler).toBe(false);
 });

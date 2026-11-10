@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { MemoryRoomBackend } from "./memoryBackend";
+import { MemoryRoomBackend } from "@/test/memoryBackend";
 import { subscribeToPublicLobby, usePublicLobby } from "./publicSync";
 import { sessionPath } from "./lifecycle";
 import { publicPath } from "./paths";
