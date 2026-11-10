@@ -73,11 +73,21 @@ sign-in, play a short Trouble Brewing game against the local Firebase emulators 
 Database) running the production Rules. Steps: create the lobby, open the Display, five joins, seating, a fixed
 deal (Chef, Imp, Empath, Poisoner, Washerwoman), reveals, Night 1 and Day 1, a death and its Undo, a phone that
 goes offline and catches up, a phone refresh, a Storyteller refresh, and Good wins on the Display and phones. A
-final check reads every Firebase data message each phone and the Display received (listener pushes and replies to
-one-off reads). It fails on any path outside that device's allowlist (public data, the session, and its own
-records), on any assigned character id or role/alignment key outside the device's own player view (the public
-script list excepted), or if a phone never received its own character. It also plants seven kinds of leak into the
-captured traffic and fails unless every one is flagged.
+final check reads every Firebase data message each phone and the Display received over the websocket (listener
+pushes and replies to one-off reads). It fails when:
+- a path is outside that device's allowlist (public data, the session, and its own records);
+- the public node or the session carries a key that is not in the schema allowlist (a new public field fails
+  until it is reviewed and added to the list in `scripts/harness/multiplayer-game.mjs`);
+- outside the device's own player view, a key names a role, alignment, reminder or note, or a text value names one
+  of the five assigned characters or the words good or evil (a declared winner excepted; the public script list is
+  removed first, because it is the public script sheet);
+- a phone never received its own character, a message cannot be read, or a device fell back to long polling;
+- any of eight planted leaks is not flagged.
+
+Limits: a device's own player view is not scanned, because it may rightly name other characters (for example
+Minion information). Text that reveals a secret without a character name or an alignment word, under an allowed
+key, would not be caught. Messages long enough to be split across websocket frames are handled but have not
+occurred in a run.
 
 The harness tests the Rules file in this repository. It says nothing about the Rules deployed to a hosted project;
 check those with `npm run rules:verify`.

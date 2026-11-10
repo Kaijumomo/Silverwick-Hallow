@@ -39,6 +39,7 @@ let shot = 0;
 const devices = {}; // label -> page
 const frames = {}; // label -> Firebase websocket messages { dir: "in" | "out", text, conn }
 let connections = 0;
+const longPolls = {}; // label -> Firebase long-polling requests (traffic the websocket capture cannot see)
 
 function track(label, page) {
   devices[label] = page;
@@ -59,6 +60,12 @@ function track(label, page) {
     };
     ws.on("framereceived", reader("in"));
     ws.on("framesent", reader("out"));
+  });
+  page.on("request", (req) => { if (/[?&]start=t|\/\.lp\?/.test(req.url())) longPolls[label] = (longPolls[label] ?? 0) + 1; });
+  page.on("response", async (res) => {
+    if (!/\/\.lp\?/.test(res.url())) return;
+    const body = await res.text().catch(() => null);
+    frames[label].push({ dir: "lp", text: body ?? "", url: res.url() });
   });
   page.on("pageerror", (e) => console.log(`[${label}] page error: ${e.message}`));
 }
@@ -349,7 +356,13 @@ function privacyCheck(code, ids) {
   const strip = (p) => String(p ?? "").replace(/^\/+/, "");
   const shared = ["public", "session"];
   const perUid = ["joinRequests", "leaveRequests", "outcomes", "roster", "revealAcks", "results", "travelerChoices", "presence"];
-  const ROLE_KEY = /(^|[a-z])(role|alignment)$/i;
+  const ROLE_KEY = /(^|[a-z])(role|alignment|reminders?|notes?)$/i;
+  // Exact keys of the public node and its player entries (PublicLobbyRecordSchema, PlayerPublicRecordSchema in
+  // src/stores/schemas.ts). A new public field fails here until it is reviewed and added.
+  const PUBLIC_KEYS = new Set(["code", "scriptId", "phase", "day", "seatOrder", "players", "fabled", "lorics", "scriptName", "scriptCharacters", "winner", "status", "arrivals", "plannedPlayers"]);
+  const PUBLIC_PLAYER_KEYS = new Set(["id", "name", "seat", "alive", "ghostVote", "online", "joinedAt", "isTraveler", "publicDisplayRole", "exiled"]);
+  const SESSION_KEYS = new Set(["id", "state", "version"]);
+  const WORDS = [...ROLE_IDS, "good", "evil"];
   const PROTOCOL_ACTIONS = new Set(["auth", "gauth", "unauth", "s"]);
 
   const ownUid = (label) => {
@@ -383,28 +396,99 @@ function privacyCheck(code, ids) {
     return out;
   };
 
+  /** Keys under /public or /session that are not in the schema allowlists, as "a.b.c" paths. */
+  const unknownKeys = (root, prefix, data) => {
+    const bad = [];
+    const visit = (path, value) => {
+      if (root === "session") {
+        if (path.length === 1 && !SESSION_KEYS.has(path[0])) bad.push(path.join("."));
+        return;
+      }
+      if (path.length === 1 && !PUBLIC_KEYS.has(path[0])) bad.push(path[0]);
+      if (path.length === 3 && path[0] === "players" && !PUBLIC_PLAYER_KEYS.has(path[2])) bad.push(path.join(".").replace(/[A-Za-z0-9_-]{20,}/g, "<id>"));
+      if (path.length > 3 && path[0] === "players") bad.push(path.join(".").replace(/[A-Za-z0-9_-]{20,}/g, "<id>"));
+      if (value && typeof value === "object" && !Array.isArray(value) && !(path.length === 1 && path[0] === "scriptCharacters")) {
+        for (const [k, v] of Object.entries(value)) visit([...path, k], v);
+      }
+    };
+    if (data && typeof data === "object" && !Array.isArray(data)) for (const [k, v] of Object.entries(data)) visit([...prefix, k], v);
+    else if (prefix.length) visit(prefix, data);
+    return bad;
+  };
+
+  /** Any text value naming an assigned character or an alignment (whole word, any case), except a "winner"
+   * field, which is announced to everyone at the end. Long id-like strings (ids, tokens) are skipped. */
+  const privateWords = (segs, data) => {
+    const hits = [];
+    const visit = (path, value) => {
+      if (typeof value === "string") {
+        if (/^[A-Za-z0-9_-]{16,}$/.test(value)) return;
+        if (path[path.length - 1] === "winner") return; // the declared result is announced to everyone
+        for (const word of WORDS) if (new RegExp(`\\b${word}\\b`, "i").test(value)) hits.push([path.length ? ` (${path.join(".").replace(/[A-Za-z0-9_-]{20,}/g, "<id>")})` : "", word]);
+      } else if (value && typeof value === "object") for (const [k, v] of Object.entries(value)) visit([...path, k], v);
+    };
+    visit(segs.slice(1), data);
+    return hits;
+  };
+
   /** Data messages a device received: [{ path, data }]. Unparsable frames are reported. */
+  /**
+   * Long-polling traffic (the SDK falls back to it when a websocket cannot connect, e.g. after a phone goes
+   * offline): replies arrive as pRTLPCB(n, [messages]) in the response body; requests travel base64-encoded in
+   * the URL as segN (message id), tsN (parts in that message) and dN (this part).
+   */
+  const expandLongPoll = (f, partial) => {
+    const outFrames = [];
+    let url;
+    try { url = new URL(f.url ?? ""); } catch { url = null; }
+    if (url) {
+      for (const [key, id] of url.searchParams) {
+        const n = key.match(/^seg(\d+)$/)?.[1];
+        if (n === undefined) continue;
+        const total = Number(url.searchParams.get(`ts${n}`));
+        const part = url.searchParams.get(`d${n}`) ?? "";
+        const parts = partial.get(id) ?? [];
+        parts.push(part);
+        partial.set(id, parts);
+        if (parts.length === total) {
+          partial.delete(id);
+          const b64 = parts.join("").replace(/-/g, "+").replace(/_/g, "/").replace(/\./g, "=");
+          outFrames.push({ dir: "out", text: Buffer.from(b64, "base64").toString("utf8") });
+        }
+      }
+    }
+    for (const match of String(f.text).matchAll(/pRTLPCB\(\d+,(\[[\s\S]*?\])\);/g)) {
+      let list;
+      try { list = JSON.parse(match[1]); } catch { outFrames.push({ dir: "in", text: "<unreadable long-poll body>" }); continue; }
+      for (const m of list) outFrames.push({ dir: "in", text: JSON.stringify(m) });
+    }
+    return outFrames;
+  };
+
+  /** Data messages a device received: [{ path, data }], in arrival order. Unparsable messages are reported. */
   const messages = (list) => {
+    // Request ids belong to the SDK's persistent connection: they continue across a websocket/long-poll switch
+    // and restart after a page reload. Replies follow their request, so the latest request with an id wins.
     const sent = new Map();
     const out = [];
     const bad = [];
-    for (const f of list) {
+    const partial = new Map();
+    const flat = list.flatMap((f) => (f.dir === "lp" ? expandLongPoll(f, partial) : [f]));
+    for (const f of flat) {
       let m;
-      try { m = JSON.parse(f.text); } catch { bad.push(f.text.slice(0, 40)); continue; }
+      try { m = JSON.parse(f.text); } catch { bad.push(String(f.text).slice(0, 40)); continue; }
       if (m?.t !== "d" || !m.d || typeof m.d !== "object") continue;
       const b = m.d.b;
       if (f.dir === "out") {
-        if (typeof m.d.r === "number") sent.set(`${f.conn}:${m.d.r}`, { action: m.d.a, path: typeof b?.p === "string" ? strip(b.p) : null });
+        if (typeof m.d.r === "number") sent.set(m.d.r, { action: m.d.a, path: typeof b?.p === "string" ? strip(b.p) : null });
         continue;
       }
       if (!b || typeof b !== "object") continue;
       if (typeof b.p === "string") out.push({ path: strip(b.p), data: b.d, kind: "push" });
       else if (typeof m.d.r === "number" && b.d !== undefined) {
-        const req = sent.get(`${f.conn}:${m.d.r}`);
+        const req = sent.get(m.d.r);
         // Connection-level replies (sign-in token, client stats) carry no game data.
         if (req && PROTOCOL_ACTIONS.has(req.action)) continue;
-        // A sign-in reply whose request the capture missed (seen once across a reconnect): only "auth"/"expires".
-        if (!req && b.d && typeof b.d === "object" && "auth" in b.d && Object.keys(b.d).every((k) => k === "auth" || k === "expires")) continue;
         out.push({ path: req?.path ?? null, data: b.d, kind: "reply" });
       }
     }
@@ -430,10 +514,13 @@ function privacyCheck(code, ids) {
         if (own && JSON.stringify(data).includes(`"${own}"`)) ownRole = true;
         continue;
       }
+      const segs = rel.split("/");
+      if (segs[0] === "public" || segs[0] === "session") {
+        for (const bad of unknownKeys(segs[0], segs.slice(1), data)) problems.push(`${label} saw unexpected key ${bad} in /${segs[0]}`);
+      }
       const clean = withoutScript(data);
-      const text = JSON.stringify(clean);
-      for (const role of ROLE_IDS) if (text.includes(`"${role}"`)) problems.push(`${label} saw "${role}" in /${rel}`);
       for (const k of roleKeys(clean)) problems.push(`${label} saw key "${k}" in /${rel}`);
+      for (const [where, word] of privateWords(segs, clean)) problems.push(`${label} saw "${word}" in /${rel}${where}`);
     }
     return { problems, checked, ownRole };
   };
@@ -451,16 +538,19 @@ function privacyCheck(code, ids) {
     counts.push(`${label} ${r.checked}`);
   }
 
+
   // Controls: plant one leak of each kind into Alice's real traffic and the Display's; every one must be flagged.
   const aliceUid = ownUid("Alice");
   const plant = (label, extra) => scan(label, label === "display" ? ownUid("display") : aliceUid, [...(frames[label] ?? []), ...extra]).problems.length;
   const base = { Alice: plant("Alice", []), display: plant("display", []) };
   const msg = (dir, conn, d) => ({ dir, conn, text: JSON.stringify({ t: "d", d }) });
   const controls = {
-    "role in a public player entry": plant("Alice", [msg("in", 0, { a: "d", b: { p: `${lobby}/public/players/x`, d: { name: "Bob", seat: 2, role: "imp" } } })]) > base.Alice,
-    "a character id in a public value": plant("Alice", [msg("in", 0, { a: "d", b: { p: `${lobby}/public`, d: { note: "poisoner" } } })]) > base.Alice,
+    "an unknown key with a harmless value on a public player": plant("Alice", [msg("in", 0, { a: "d", b: { p: `${lobby}/public/players/x`, d: { name: "Bob", seat: 2, mood: "calm" } } })]) > base.Alice,
+    "a character named inside a sentence under a public key": plant("Alice", [msg("in", 0, { a: "d", b: { p: `${lobby}/public/players/x/name`, d: "Bob is the Imp" } })]) > base.Alice,
+    "an alignment under a public key": plant("display", [msg("in", 0, { a: "d", b: { p: `${lobby}/public/arrivals`, d: ["Evil"] } })]) > base.display,
     "another player's view in a read reply": plant("Alice", [msg("out", 999, { r: 1, a: "g", b: { p: `/${lobby}/player/${ids.Bob}` } }), msg("in", 999, { r: 1, b: { s: "ok", d: { seat: 2 } } })]) > base.Alice,
-    "game data in a reply to an unseen request": plant("Alice", [msg("in", 998, { r: 5, b: { s: "ok", d: { seat: 2, name: "Bob" } } })]) > base.Alice,
+    "game data in a reply to an unseen request": plant("Alice", [msg("in", 998, { r: 99999, b: { s: "ok", d: { seat: 2, name: "Bob" } } })]) > base.Alice,
+    "another player's view over long polling": plant("Alice", [{ dir: "lp", url: "http://127.0.0.1/.lp?id=1", text: `pRTLPCB(9,[${JSON.stringify({ t: "d", d: { a: "d", b: { p: `${lobby}/player/${ids.Dan}`, d: { seat: 4 } } } })}]);` }]) > base.Alice,
     "Storyteller data": plant("Alice", [msg("in", 0, { a: "d", b: { p: `${lobby}/storyteller`, d: { phase: "day" } } })]) > base.Alice,
     "another phone's records": plant("Alice", [msg("in", 0, { a: "d", b: { p: `${lobby}/roster/some-other-uid`, d: "x" } })]) > base.Alice,
     "a player view on the Display": plant("display", [msg("in", 0, { a: "d", b: { p: `${lobby}/player/${ids.Carol}`, d: { seat: 3 } } })]) > base.display,
@@ -470,7 +560,7 @@ function privacyCheck(code, ids) {
   const ok = problems.length === 0;
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}${problems.length ? `: ${problems.slice(0, 5).join("; ")}` : ""}`);
   const note = ok
-    ? `data messages checked (pushes and read replies): ${counts.join(", ")}; every phone received its own character; all ${Object.keys(controls).length} planted leaks were flagged`
+    ? `data messages checked (pushes and read replies, websocket and long polling): ${counts.join(", ")}; every phone received its own character; all ${Object.keys(controls).length} planted leaks were flagged${Object.keys(longPolls).length ? `; long-polling requests read: ${Object.entries(longPolls).map(([l, n]) => `${l} ${n}`).join(", ")}` : ""}`
     : problems.slice(0, 10).join("; ");
   return { name, why, ok, note, ms: 0, files: [] };
 }
