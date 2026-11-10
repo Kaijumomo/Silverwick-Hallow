@@ -109,6 +109,7 @@ export function LaunchSplash({ onDone }: Props) {
   const reduced = useMemo(prefersReducedMotion, []);
   const [land, setLand] = useState(isLandscape);
   const [fit, setFit] = useState(1);
+  const [cover, setCover] = useState(1);
   const [T, setT] = useState(reduced ? SPLASH_END : 0);
   const [fadeOut, setFadeOut] = useState(1);
   const done = useRef(false);
@@ -125,6 +126,11 @@ export function LaunchSplash({ onDone }: Props) {
 
   useEffect(() => {
     try { window.sessionStorage.setItem(SPLASH_SESSION_KEY, "1"); } catch { /* ignore */ }
+    // Browser chrome and status bar take the night colour while the splash shows, then the page colour again.
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    const before = meta?.content;
+    if (meta) meta.content = "#05080e";
+    return () => { if (meta && before) meta.content = before; };
   }, []);
 
   // Contain-fit the composition to the device, centred on the night colour.
@@ -134,6 +140,7 @@ export function LaunchSplash({ onDone }: Props) {
       const g = geometry(l);
       setLand(l);
       setFit(Math.min(window.innerWidth / g.W, window.innerHeight / g.H));
+      setCover(Math.max(window.innerWidth / g.W, window.innerHeight / g.H));
     };
     size();
     window.addEventListener("resize", size);
@@ -197,8 +204,8 @@ export function LaunchSplash({ onDone }: Props) {
       onClick={() => finish.current()}
       style={{ position: "fixed", inset: 0, zIndex: 1000, background: "#05080e", overflow: "hidden", opacity: fadeOut, cursor: "pointer", touchAction: "none" }}
     >
-      <div style={{ position: "absolute", left: "50%", top: "50%", width: W, height: H, transform: `translate(-50%, -50%) scale(${fit})`, transformOrigin: "center center", overflow: "hidden" }}>
-        {/* Sky */}
+      {/* Sky: the composition's sky scaled to COVER the screen, so it reaches every edge on any device. */}
+      <div style={{ position: "absolute", left: "50%", top: "50%", width: W, height: H, transform: `translate(-50%, -50%) scale(${cover})`, transformOrigin: "center center", overflow: "hidden" }}>
         <div style={{ ...layer, background: "#05080e" }}>
           <div style={{ ...layer, opacity: skyOn, background: "radial-gradient(110% 60% at 50% 38%, #22385a 0%, #0c1626 55%, #05080e 100%)" }} />
           {stars.map((st, i) => {
@@ -207,6 +214,9 @@ export function LaunchSplash({ onDone }: Props) {
             return <div key={i} style={{ position: "absolute", left: st.x, top: st.y, width: st.z, height: st.z, borderRadius: "50%", background: "#dbe6f5", opacity: a * tw * skyOn, boxShadow: "0 0 6px rgba(219,230,245,.8)" }} />;
           })}
         </div>
+      </div>
+      {/* Moon, tokens and name: contain-fitted, so nothing is ever cut off. */}
+      <div style={{ position: "absolute", left: "50%", top: "50%", width: W, height: H, transform: `translate(-50%, -50%) scale(${fit})`, transformOrigin: "center center", overflow: "visible" }}>
         <div style={{ ...layer, transform: `translateY(${drift}px)` }}>
           {/* Moon art */}
           <div style={{ ...layer, zIndex: 5 }}>

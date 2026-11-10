@@ -180,7 +180,9 @@ describe("tablet Home How to Play (design v7)", () => {
 
   it("the footer carries the Community Created Content badge and the design's links", () => {
     render(<HomeV6 navigate={vi.fn()} />);
-    expect(screen.getByRole("link", { name: /Community Created Content/ })).toHaveAttribute("href", expect.stringContaining("bloodontheclocktower.com"));
+    // The badge goes to the official website; the buy link goes to the board game itself (PO, 2026-11-10).
+    expect(screen.getByRole("link", { name: /Community Created Content/ })).toHaveAttribute("href", "https://bloodontheclocktower.com/");
+    expect(screen.getByRole("link", { name: "Buy Blood on the Clocktower" })).toHaveAttribute("href", "https://bloodontheclocktower.com/products/blood-on-the-clocktower-the-game");
     expect(screen.getByRole("link", { name: "Buy Blood on the Clocktower" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "GitHub" })).toBeInTheDocument();
   });

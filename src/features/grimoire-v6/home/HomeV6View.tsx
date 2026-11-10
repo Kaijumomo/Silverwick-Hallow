@@ -10,9 +10,11 @@ const RED = '#e8584a';
 const LINE = 'rgba(176,186,204,.18)';
 const FELL = "'IM Fell English', serif";
 const BUY_URL = 'https://bloodontheclocktower.com/products/blood-on-the-clocktower-the-game';
+const SITE_URL = 'https://bloodontheclocktower.com/';
 const GITHUB_URL = 'https://github.com/Kaijumomo/Silverwick-Hallow';
 
-const S0: React.CSSProperties = { "position": "absolute", "left": "50%", "top": "50%", "width": "1480px", "height": "924px", "overflow": "hidden", "background": "#0b0909", "transform": "translate(-50%, -50%) scale(var(--home-fit, 1))", "transformOrigin": "center center", "fontFamily": "'Source Sans 3', system-ui, sans-serif", "fontVariantNumeric": "lining-nums tabular-nums", "color": "#ddd6c8" };
+const S0: React.CSSProperties = { "position": "absolute", "left": "50%", "top": "50%", "width": "1480px", "height": "924px", "overflow": "hidden", "transform": "translate(-50%, -50%) scale(var(--home-fit, 1))", "transformOrigin": "center center", "fontFamily": "'Source Sans 3', system-ui, sans-serif", "fontVariantNumeric": "lining-nums tabular-nums", "color": "#ddd6c8" };
+const SBG: React.CSSProperties = { "position": "absolute", "left": "50%", "top": "50%", "width": "1480px", "height": "924px", "overflow": "hidden", "background": "#0b0909", "transform": "translate(-50%, -50%) scale(var(--home-cover, 1))", "transformOrigin": "center center" };
 const S1: React.CSSProperties = { "position": "absolute", "inset": "0", "background": "linear-gradient(90deg, rgba(9,10,15,.85) 0%, rgba(9,10,15,.5) 42%, rgba(9,10,15,.2) 70%, rgba(9,10,15,.3) 100%), linear-gradient(180deg, rgba(9,10,15,0) 50%, rgba(9,10,15,.8) 100%)" };
 const S2: React.CSSProperties = { "position": "absolute", "inset": "0", "pointerEvents": "none", "background": "radial-gradient(ellipse 100% 90% at 50% 50%, transparent 55%, rgba(0,0,0,.6) 100%)" };
 const S3: React.CSSProperties = { "position": "absolute", "left": "96px", "top": "166px", "width": "560px", "display": "flex", "flexDirection": "column", "justifyContent": "flex-start", "gap": "52px" };
@@ -76,10 +78,14 @@ function Rule() {
 export function HomeV6View({ vm }: { vm: any }) {
   return (
     <>
-      <div id="home-screen" style={S0}>
+      {/* Full-bleed backdrop: the design's 1480x924 scene scaled to COVER the screen, so no device ever shows bars at
+          the edges. The content stage below stays contain-fitted, so at the design's ratio both are identical. */}
+      <div aria-hidden="true" style={SBG}>
         {T(vm.homeBg)}
         <div style={S1} />
         <div style={S2} />
+      </div>
+      <div id="home-screen" style={S0}>
         <div style={S3}>
           <div style={S4}>
             <div style={S5}>
@@ -248,7 +254,7 @@ export function HomeV6View({ vm }: { vm: any }) {
           <Rule />
         </div>
         <div style={SF0}>
-          <a href={BUY_URL} target="_blank" rel="noopener" aria-label="Community Created Content. Buy Blood on the Clocktower" style={SF1}>
+          <a href={SITE_URL} target="_blank" rel="noopener" aria-label="Community Created Content. Blood on the Clocktower website" style={SF1}>
             <img src="/brand/CommunityCreatedContentParchment.png" alt="Community Created Content" style={SF2} />
           </a>
           <div style={SF3}>

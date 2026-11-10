@@ -240,7 +240,10 @@ export function HowPicture({ step, svgId }: { step: number; svgId: string }) {
   );
 }
 
-type Props = { step: number; onStep: (step: number) => void; onClose: () => void };
+type Props = { step: number; onStep: (step: number) => void; onClose: () => void; /** Tablet: false when the host draws a full-bleed backdrop. */ backdrop?: boolean };
+
+/** The tablet overlay's veil over BackgroundMenuTablet. */
+export const HOW_VEIL = "radial-gradient(ellipse 50% 60% at 30% 52%, rgba(232,88,74,.16), transparent 70%), rgba(9,10,15,.86)";
 
 const pillBack: CSSProperties = { minHeight: 56, borderRadius: 28, border: "1px solid rgba(176,186,204,.3)", background: "transparent", fontFamily: FELL, textTransform: "uppercase", letterSpacing: ".12em", fontWeight: 400, color: "rgba(236,230,218,.78)", whiteSpace: "nowrap", cursor: "pointer" };
 const pillNext: CSSProperties = { minHeight: 56, borderRadius: 28, border: "1px solid rgba(255,122,104,.7)", background: "linear-gradient(180deg, rgba(232,88,74,.28), rgba(192,57,46,.18))", boxShadow: "0 0 30px rgba(232,88,74,.22), inset 0 1px 0 rgba(236,230,218,.25)", fontFamily: FELL, textTransform: "uppercase", letterSpacing: ".14em", fontWeight: 400, color: "#ffb4a6", whiteSpace: "nowrap", cursor: "pointer" };
@@ -283,9 +286,9 @@ export function HowToPlayTablet(props: Props) {
     return () => window.removeEventListener("keydown", key);
   }, [onClose]);
   return (
-    <div ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-label="How to Play" style={{ outline: "none", position: "absolute", inset: 0, zIndex: 26, background: "#0b0909", animation: "swRise .35s ease-out", display: "flex", flexDirection: "column" }}>
-      <img src="/bg/BackgroundMenuTablet.png" alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
-      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 50% 60% at 30% 52%, rgba(232,88,74,.16), transparent 70%), rgba(9,10,15,.86)" }} />
+    <div ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-label="How to Play" style={{ outline: "none", position: "absolute", inset: 0, zIndex: 26, background: props.backdrop === false ? "transparent" : "#0b0909", animation: "swRise .35s ease-out", display: "flex", flexDirection: "column" }}>
+      {props.backdrop !== false && <img src="/bg/BackgroundMenuTablet.png" alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
+      {props.backdrop !== false && <div style={{ position: "absolute", inset: 0, background: HOW_VEIL }} />}
       <div style={{ position: "relative", display: "grid", gridTemplateColumns: "200px minmax(0,1fr) 200px", alignItems: "center", gap: 20, padding: "28px 56px 0" }}>
         <button type="button" className="hw-home" onClick={onClose} style={{ justifySelf: "start", display: "flex", alignItems: "center", gap: 10, minHeight: 48, padding: "0 18px 0 12px", borderRadius: 24, border: "1px solid rgba(176,186,204,.3)", background: "transparent", fontFamily: "inherit", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>
           <span style={{ fontSize: 22, lineHeight: 1 }}>‹</span>Home

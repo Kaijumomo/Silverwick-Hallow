@@ -19,7 +19,7 @@ import { useV6Ui } from "../v6Store";
 import { startWizard } from "../setup/flow";
 import { HomeBackdrop } from "./HomeBackdrop";
 import { HomeV6View } from "./HomeV6View";
-import { howRail, HowToPlayTablet } from "@/features/howto/HowToPlay";
+import { HOW_VEIL, howRail, HowToPlayTablet } from "@/features/howto/HowToPlay";
 
 type HomePath = "storyteller" | "reference" | "howto";
 
@@ -43,8 +43,12 @@ export function resumeSummary(game: StorytellerLobbyRecord, scriptName: string |
   return parts.join(" · ");
 }
 
-function useFit(): number {
-  const read = () => Math.min(1.6, window.innerWidth / STAGE_W, window.innerHeight / STAGE_H);
+/** Contain-fit for the content stage, and cover-fit for the backdrop so it always reaches every screen edge. */
+function useFit(): { fit: number; cover: number } {
+  const read = () => ({
+    fit: Math.min(1.6, window.innerWidth / STAGE_W, window.innerHeight / STAGE_H),
+    cover: Math.max(window.innerWidth / STAGE_W, window.innerHeight / STAGE_H),
+  });
   const [fit, setFit] = useState(read);
   useEffect(() => {
     const on = () => setFit(read());
@@ -70,7 +74,7 @@ function HomeTablet({ navigate = defaultNavigate }: Props) {
   // How to Play overlay step (null = closed). Opening it always starts at the step tapped (Begin = step 1).
   const [howStep, setHowStep] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const fit = useFit();
+  const { fit, cover } = useFit();
   const configSource = getConfigSource();
 
   // A hand-off left behind by an abandoned join must never reach a later one.
@@ -123,7 +127,7 @@ function HomeTablet({ navigate = defaultNavigate }: Props) {
     }),
   };
 
-  const root: CSSProperties & Record<"--home-fit", number> = { "--home-fit": fit };
+  const root: CSSProperties & Record<"--home-fit" | "--home-cover", number> = { "--home-fit": fit, "--home-cover": cover };
   return (
     <main className="hv-root" style={root} data-path={path}>
       <HomeV6View vm={vm} />
@@ -134,9 +138,13 @@ function HomeTablet({ navigate = defaultNavigate }: Props) {
       )}
       {toast && <div className="toast" role="status">{toast}</div>}
       {howStep !== null && (
-        // Same 1480x924 stage and fit as the Home, so the overlay matches the design at any tablet size.
+        // Full-bleed backdrop (cover), then the same 1480x924 contain-fitted stage as the Home for the content.
+        <div style={{ position: "absolute", inset: 0, zIndex: 26, background: "#0b0909" }}>
+        <img src="/bg/BackgroundMenuTablet.png" alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+        <div style={{ position: "absolute", inset: 0, background: HOW_VEIL }} />
         <div className="hv-stage" style={{ position: "absolute", left: "50%", top: "50%", width: STAGE_W, height: STAGE_H, overflow: "hidden", transform: "translate(-50%, -50%) scale(var(--home-fit, 1))", transformOrigin: "center center", zIndex: 26, fontFamily: "'Source Sans 3', system-ui, sans-serif", fontVariantNumeric: "lining-nums tabular-nums", color: "#ddd6c8" }}>
-          <HowToPlayTablet step={howStep} onStep={setHowStep} onClose={() => setHowStep(null)} />
+          <HowToPlayTablet step={howStep} onStep={setHowStep} onClose={() => setHowStep(null)} backdrop={false} />
+        </div>
         </div>
       )}
       {reference && (

@@ -1,6 +1,7 @@
 import { PhoneFrame } from "./PhoneParts";
 
 const BUY_URL = "https://bloodontheclocktower.com/products/blood-on-the-clocktower-the-game";
+const SITE_URL = "https://bloodontheclocktower.com/";
 const GITHUB_URL = "https://github.com/Kaijumomo/Silverwick-Hallow";
 
 const PATHS = [
@@ -45,7 +46,7 @@ export function PhoneHome({ onPick, trial, rejoin }: { onPick: (path: PhonePath)
         </nav>
         {/* Community Created Content footer (TPI community content policy; design v7). */}
         <div className="swp-home-foot">
-          <a className="swp-home-badge" href={BUY_URL} target="_blank" rel="noopener" aria-label="Community Created Content. Buy Blood on the Clocktower">
+          <a className="swp-home-badge" href={SITE_URL} target="_blank" rel="noopener" aria-label="Community Created Content. Blood on the Clocktower website">
             <img src="/brand/CommunityCreatedContentParchment.png" alt="Community Created Content" />
           </a>
           <div className="swp-home-credit">
