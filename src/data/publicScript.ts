@@ -1,7 +1,7 @@
 import type { PublicHomebrewRole, PublicLobbyRecord, RoleDef } from "@/stores/types";
 import { getBuiltinScript } from "./scripts";
 import { lookupOfficialRole } from "./officialRoles";
-import { ART_BASE } from "./localArt";
+import { genericTeamArt } from "./localArt";
 
 type PublicScriptFields = Pick<PublicLobbyRecord, "scriptId" | "scriptName" | "scriptCharacters" | "scriptHomebrew">;
 
@@ -16,7 +16,7 @@ const homebrewRole = (entry: PublicHomebrewRole): RoleDef => ({
   type: entry.type,
   ...(entry.ability ? { ability: entry.ability } : {}),
   provenance: { status: "homebrew" },
-  iconUrl: `${ART_BASE}/characters/generic/${entry.type}.png`,
+  iconUrl: genericTeamArt(entry.type)!,
 });
 
 /**

@@ -57,3 +57,20 @@ describe("self-hosted art for all 181 official characters (custom scripts, Stage
     expect(unlisted).toEqual([]);
   });
 });
+
+describe("homebrew characters with no art of their own (custom scripts, Stage 3)", () => {
+  const homebrew = (over: Record<string, unknown>) => ({ id: "clockwinder", name: "Clockwinder", type: "townsfolk", provenance: { status: "homebrew" }, ...over }) as never;
+
+  it("wear their team's generic icon on the grimoire, the same as on the phone, never a CDN address", () => {
+    for (const type of ["townsfolk", "outsider", "minion", "demon"]) {
+      const url = iconUrlFor(homebrew({ type }));
+      expect(url).toBe(`/art/characters/generic/${type}.png`);
+      expect(existsSync(resolve(PUBLIC, "." + url))).toBe(true);
+    }
+  });
+
+  it("keep an author's own image address, and an official id keeps its official art", () => {
+    expect(iconUrlFor(homebrew({ iconUrl: "https://example.test/own.png" }))).toBe("https://example.test/own.png");
+    expect(iconUrlFor(homebrew({ id: "empath" }))).toBe("/art/characters/tb/empath.png");
+  });
+});
