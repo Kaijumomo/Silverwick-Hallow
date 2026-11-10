@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { lookupOfficialRole } from "@/data/officialRoles";
+import { publicRoleOf } from "@/data/publicScript";
 import { iconUrlFor } from "@/data/iconUrl";
 import { travellerArt } from "@/data/localArt";
 import type { PlayerSelfEnvelope, PublicLobbyRecord, RoleDef } from "@/stores/types";
@@ -49,7 +49,7 @@ export function GameScreen({ publicLobby, self, playerId, code, name, phaseLabel
   const [veilSeen, setVeilSeen] = useState(() => readSeen(key));
   const mine = playerId ? publicLobby.players[playerId] : undefined;
   const isTraveller = !!mine?.isTraveler;
-  const role = self ? lookupOfficialRole(self.shownRole) : undefined;
+  const role = self ? publicRoleOf(publicLobby, self.shownRole) : undefined;
   const dead = !!self?.life && !self.life.alive;
   const vote = !!self?.life?.ghostVote;
   const exiled = !!self?.life?.exiled;
@@ -68,7 +68,7 @@ export function GameScreen({ publicLobby, self, playerId, code, name, phaseLabel
 
   const body = tab === "character"
     ? character ?? (self
-      ? <CharacterTab self={self} role={role} isTraveller={isTraveller} art={art} dead={dead} />
+      ? <CharacterTab self={self} role={role} isTraveller={isTraveller} art={art} dead={dead} roleOf={(id) => publicRoleOf(publicLobby, id)} />
       : <p className="swp-char-ability" role="status">Your role isn't ready yet.</p>)
     : tab === "notes" ? <NotesTab lobby={publicLobby} ownId={playerId} code={code} scriptCharacters={scriptCharacters} onGuess={setGuessSeat} />
     : tab === "town" ? <TownTab lobby={publicLobby} ownId={playerId} />

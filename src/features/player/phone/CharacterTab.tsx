@@ -17,12 +17,14 @@ const CONCEAL_MS = 850;
  * for evil players the team panel. Tapping the token turns it face-down; the
  * face and everything under it then leave the page so nothing readable stays
  * behind a face-down token. No information history is shown here. */
-export function CharacterTab({ self, role, isTraveller, art, dead }: {
+export function CharacterTab({ self, role, isTraveller, art, dead, roleOf = lookupOfficialRole }: {
   self: PlayerSelfEnvelope;
   role: RoleDef | undefined;
   isTraveller: boolean;
   art: string;
   dead: boolean;
+  /** How a bluff's id becomes a character: the lobby's published script first, then the official catalogue. */
+  roleOf?: (id: string) => RoleDef | undefined;
 }) {
   const typeKey = isTraveller ? "traveller" : teamKeyOf(role?.type);
   const tone: RevealTone = isTraveller ? "traveller" : self.shownAlignment === "evil" ? "evil" : self.shownAlignment === "good" ? "good" : "plain";
@@ -96,7 +98,7 @@ export function CharacterTab({ self, role, isTraveller, art, dead }: {
               <span className="swp-ctl-bluffs-title">Bluffs</span>
               <div className="swp-ctl-bluffs-row">
                 {bluffs.map((id) => {
-                  const r = lookupOfficialRole(id);
+                  const r = roleOf(id);
                   return (
                     <div key={id} className="swp-ctl-bluff">
                       <span className="swp-ctl-bluff-token"><span role="img" aria-label="" className="swp-ctl-mate-art" style={{ backgroundImage: `url(${iconUrlFor(r ?? id)})` }} /></span>

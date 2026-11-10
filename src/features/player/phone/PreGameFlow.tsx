@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { lookupOfficialRole } from "@/data/officialRoles";
-import { publicScriptOf } from "@/data/publicScript";
+import { publicRoleOf, publicScriptOf } from "@/data/publicScript";
 import { iconUrlFor } from "@/data/iconUrl";
 import { travellerArt } from "@/data/localArt";
 import { GENERIC_TEAM_ICON } from "@/features/home/art";
@@ -34,12 +33,12 @@ const sealsAtToken = (phase: PublicLobbyRecord["phase"], mode: "first" | "update
  * Demon designation only; never a teammate's character), from the player's
  * information history. Travellers never get the team screen: their Demon
  * information is no longer shown on the phone. */
-export function teamOf(self: PlayerSelfEnvelope, isTraveller: boolean): { mates: TeamMate[]; bluffs: TeamBluff[] } {
+export function teamOf(self: PlayerSelfEnvelope, isTraveller: boolean, lobby?: Pick<PublicLobbyRecord, "scriptHomebrew">): { mates: TeamMate[]; bluffs: TeamBluff[] } {
   const { mates, bluffs } = latestTeam(self, isTraveller);
   return {
     mates: mates.map((m) => ({ ...m, icon: m.designation === "Demon" ? GENERIC_TEAM_ICON.demon : GENERIC_TEAM_ICON.minion })),
     bluffs: bluffs.map((id) => {
-      const r = lookupOfficialRole(id);
+      const r = publicRoleOf(lobby, id);
       return { id, name: r?.name ?? id, art: iconUrlFor(r ?? id) };
     }),
   };
@@ -98,8 +97,8 @@ export function PreGameFlow({
   const scriptName = publicScriptOf(publicLobby).name;
   const ownSeat = mine ? mine.seat + 1 : 0;
 
-  const role = self ? lookupOfficialRole(self.shownRole) : undefined;
-  const team = self ? teamOf(self, isTraveller) : { mates: [], bluffs: [] };
+  const role = self ? publicRoleOf(publicLobby, self.shownRole) : undefined;
+  const team = self ? teamOf(self, isTraveller, publicLobby) : { mates: [], bluffs: [] };
   const hasTeam = team.mates.length > 0 || team.bluffs.length > 0;
 
   if (stage === "reveal" && self) {

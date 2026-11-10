@@ -12,6 +12,7 @@ import type {
   PlayerSelfEnvelope,
   PlayerSelfLife,
   PlayerSelfRecord,
+  PublicHomebrewRole,
   PublicLobbyRecord,
   Script,
   STPlayerRecord,
@@ -138,21 +139,40 @@ export function projectToPublic(
 
 export type OnlineMap = Record<PlayerId, boolean>;
 
+/** Clip by UTF-16 length, as the schema's max() counts, without splitting a surrogate pair. */
+function clipText(text: string, max: number): string {
+  let out = "";
+  for (const ch of text.trim()) { if (out.length + ch.length > max) break; out += ch; }
+  return out;
+}
+
 /**
- * The script's public face: its name and the ids of its verified official
- * characters, in script order. Only ids, so a custom script reaches a phone
- * without any definition crossing the boundary. A homebrew or modified
- * definition is never listed, nor is a Fabled, Loric or Traveller (those are
- * revealed by the Storyteller in play, not by the script sheet): a phone resolves ids against the official
- * catalogue and must not show the wrong ability for it.
+ * The script's public face, as the physical script sheet shows it to every player. Its name and the ids of
+ * its verified official characters, in script order, so an official character crosses as an id only. A
+ * homebrew or modified ordinary character crosses as its name, team and ability text and nothing else
+ * (PublicHomebrewRole): a phone cannot look it up by id, and must never show an official character's
+ * ability for a modified one. Fabled, Loric and Travellers are never listed (the Storyteller reveals
+ * those in play). Everything is clipped to the schema's limits here, because a record that breaks them
+ * would make every phone reject the whole lobby.
  */
-export function publicScriptFields(script: Script | undefined): Pick<PublicLobbyRecord, "scriptName" | "scriptCharacters"> {
+export function publicScriptFields(script: Script | undefined): Pick<PublicLobbyRecord, "scriptName" | "scriptCharacters" | "scriptHomebrew"> {
   if (!script) return {};
-  const ids = ownedScriptCharacters(script).filter((role) => isCanonicalRole(role) && isOrdinaryRoleType(role.type)).map((role) => role.id);
-  // Clip by UTF-16 length, the schema's max(60), without splitting a surrogate pair.
-  let name = "";
-  for (const ch of script.name.trim()) { if (name.length + ch.length > 60) break; name += ch; }
-  return { ...(name ? { scriptName: name } : {}), ...(ids.length ? { scriptCharacters: ids } : {}) };
+  const ordinary = ownedScriptCharacters(script).filter((role) => isOrdinaryRoleType(role.type));
+  const ids = ordinary.filter(isCanonicalRole).map((role) => role.id);
+  const homebrew: PublicHomebrewRole[] = [];
+  for (const role of ordinary) {
+    if (isCanonicalRole(role) || homebrew.length >= 60) continue;
+    const name = clipText(role.name, 40);
+    if (!name || !role.id || role.id.length > 40) continue;
+    const ability = typeof role.ability === "string" ? clipText(role.ability, 400) : "";
+    homebrew.push({ id: role.id, name, type: role.type as PublicHomebrewRole["type"], ...(ability ? { ability } : {}) });
+  }
+  const name = clipText(script.name, 60);
+  return {
+    ...(name ? { scriptName: name } : {}),
+    ...(ids.length ? { scriptCharacters: ids } : {}),
+    ...(homebrew.length ? { scriptHomebrew: homebrew } : {}),
+  };
 }
 
 export function projectLobbyToPublic(

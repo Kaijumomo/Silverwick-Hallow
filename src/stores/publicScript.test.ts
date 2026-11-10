@@ -34,12 +34,14 @@ describe("publicScriptFields", () => {
     expect(publicScriptFields(imported)).toEqual({ scriptName: "Treacherous Test", scriptCharacters: ["empath", "golem", "marionette", "imp", "witch"] });
   });
 
-  it("omits a homebrew or modified definition, so a phone never shows the wrong ability for its id", () => {
+  it("keeps a modified definition out of the official ids, so a phone never shows the official ability for it", () => {
     const modified = { ...canonicalRoles(["empath"])[0]!, ability: "Changed text." };
     const script: Script = { id: "x", name: "X", characters: [modified, ...canonicalRoles(["imp"])] };
     expect(publicScriptFields(script).scriptCharacters).toEqual(["imp"]);
+    // It crosses instead as its own name, team and changed ability (see publicHomebrew.test.ts).
+    expect(publicScriptFields(script).scriptHomebrew).toEqual([{ id: "empath", name: "Empath", type: "townsfolk", ability: "Changed text." }]);
     const none: Script = { id: "y", name: "Y", characters: [modified] };
-    expect(publicScriptFields(none)).toEqual({ scriptName: "Y" });
+    expect(publicScriptFields(none)).toEqual({ scriptName: "Y", scriptHomebrew: [{ id: "empath", name: "Empath", type: "townsfolk", ability: "Changed text." }] });
   });
 
   it("never lists a Fabled, Loric or Traveller, which the Storyteller reveals only in play", () => {
