@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Independent review of WP 4-3a (2026-11-10): a page that unloads hands its writer lease back, and fencing holds.
+// WP 4-3a: a page that unloads hands its writer lease back, and writer fencing still holds (production Rules, emulator).
 import { initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
