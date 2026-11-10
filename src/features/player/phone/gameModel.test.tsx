@@ -46,6 +46,8 @@ describe("history rows", () => {
 describe("wake line", () => {
   it("comes from the role's own night order", () => {
     expect(wakeLine({ firstNight: 5, otherNight: 9 }, false)).toBe("Wakes each night");
+    // A published homebrew character carries no night order: nothing is claimed about it.
+    expect(wakeLine({ provenance: { status: "homebrew" } }, false)).toBe("");
     expect(wakeLine({ otherNight: 9 }, false)).toBe("Wakes each night except the first");
     expect(wakeLine({ firstNight: 5 }, false)).toBe("Wakes on the first night only");
     expect(wakeLine({}, false)).toBe("Does not wake at night");

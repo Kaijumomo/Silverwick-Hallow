@@ -36,3 +36,8 @@ export const localCharacterArt = (id: string): string | undefined => LOCAL_CHARA
  * every Traveller with it, whatever their alignment. */
 export const travellerArt = (id: string): string | undefined =>
   SET_IDS.travellers.includes(id) ? `${ART_BASE}/characters/travellers/neutral/${id}.png` : undefined;
+
+/** The self-hosted generic icon of an ordinary team, for a character that has no art of its own (a homebrew
+ * character): the phone and the Storyteller's grimoire both draw it, so the two agree. */
+export const genericTeamArt = (type: unknown): string | undefined =>
+  type === "townsfolk" || type === "outsider" || type === "minion" || type === "demon" ? `${ART_BASE}/characters/generic/${type}.png` : undefined;

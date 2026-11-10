@@ -1141,6 +1141,16 @@ export type PlayerPublicRecord = {
   exiled?: true;
 };
 
+/** A homebrew (or modified) ordinary character as the script sheet shows it to every player: its name,
+ * team and ability text, and nothing else. Never night order, reminders, setup flags, jinxes, flavour,
+ * structured actions or an image URL. */
+export type PublicHomebrewRole = {
+  id: RoleId;
+  name: string;
+  type: "townsfolk" | "outsider" | "minion" | "demon";
+  ability?: string;
+};
+
 export type PublicLobbyRecord = {
   code: string;
   scriptId: string;
@@ -1157,6 +1167,9 @@ export type PublicLobbyRecord = {
    * writers and when the script has no verified official character. */
   scriptName?: string;
   scriptCharacters?: RoleId[];
+  /** The script's homebrew or modified ordinary characters, as printed on the script sheet (see
+   * PublicHomebrewRole). A phone shows these in place of any official character with the same id. */
+  scriptHomebrew?: PublicHomebrewRole[];
   winner?: Alignment;
   /** Legacy projection marker; lifecycle state is authoritative in session. */
   status?: "ended";

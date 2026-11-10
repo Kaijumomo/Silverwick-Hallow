@@ -115,7 +115,8 @@ function TownNotesReview() {
   const [open, setOpen] = useState(false);
   const scriptId = publicLobby?.scriptId;
   const scriptCharacters = publicLobby?.scriptCharacters;
-  const roles = useMemo(() => new Map(publicScriptOf(publicLobby).characters.map((role) => [role.id, role])), [scriptId, scriptCharacters]); // eslint-disable-line react-hooks/exhaustive-deps
+  const scriptHomebrew = publicLobby?.scriptHomebrew;
+  const roles = useMemo(() => new Map(publicScriptOf(publicLobby).characters.map((role) => [role.id, role])), [scriptId, scriptCharacters, scriptHomebrew]); // eslint-disable-line react-hooks/exhaustive-deps
   const roleOf = (id: string) => roles.get(id) ?? lookupOfficialRole(id);
   const prefix = code ? `${code}:` : null;
   const seatOf = (seatId: string) => publicLobby?.players[seatId]?.seat ?? Number.POSITIVE_INFINITY;

@@ -83,8 +83,10 @@ export function latestTeam(self: PlayerSelfEnvelope, isTraveller: boolean): { ma
   return { mates, bluffs: bluffEntry?.bluffs ?? [] };
 }
 
-/** The role's own wake pattern, from its night order. */
-export function wakeLine(role: Pick<RoleDef, "firstNight" | "otherNight"> | undefined, isTraveller: boolean): string {
+/** The role's own wake pattern, from its night order. A published homebrew character carries no night order
+ * (the Storyteller's, never published), so nothing is said about it rather than a wrong "does not wake". */
+export function wakeLine(role: Pick<RoleDef, "firstNight" | "otherNight" | "provenance"> | undefined, isTraveller: boolean): string {
+  if (role?.provenance?.status === "homebrew") return "";
   const first = !!role?.firstNight;
   const other = !!role?.otherNight;
   if (isTraveller) return first || other ? "Wakes at night" : "Does not wake at night";

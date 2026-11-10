@@ -29,10 +29,10 @@ const lobby = (extra: Partial<PublicLobbyRecord>): PublicLobbyRecord => ({
   },
   ...extra,
 });
-function seat(publicLobby: PublicLobbyRecord) {
+function seat(publicLobby: PublicLobbyRecord, shownRole = "empath") {
   usePlayerStore.setState({
     code: "ABCD2345", uid: "alice", playerId: "p-alice", requestedName: "Alice", status: "seated", error: null,
-    self: { shownRole: "empath", shownAlignment: "good", revealToken: TOKEN }, publicLobby,
+    self: { shownRole, shownAlignment: "good", revealToken: TOKEN }, publicLobby,
     revealed: false, ownRevealAck: null, townNotes: {}, seatGuesses: {}, terminalResult: null,
     remoteData: { public: "ready", self: "ready", membership: "ready", request: "ready" },
   });
@@ -64,5 +64,36 @@ describe("custom script on the player phone", () => {
     const nav = await screen.findByRole("navigation", { name: "Player views" });
     fireEvent.click(within(nav).getByRole("button", { name: "Script" }));
     expect(await screen.findByText(/Script · 0 characters/)).toBeInTheDocument();
+  });
+
+  const homebrew = {
+    scriptName: "Homebrew Night", scriptCharacters: ["imp"],
+    scriptHomebrew: [
+      { id: "clockwinder", name: "Clockwinder", type: "townsfolk" as const, ability: "Each night, you learn the hour." },
+      { id: "empath", name: "Empath", type: "townsfolk" as const, ability: "Changed text for this script." },
+    ],
+  };
+
+  it("the Script tab lists homebrew characters with their published ability, and a modified official one with its own", async () => {
+    seat(lobby(homebrew));
+    render(<PlayerScreen />);
+    await enterTown();
+    const nav = await screen.findByRole("navigation", { name: "Player views" });
+    fireEvent.click(within(nav).getByRole("button", { name: "Script" }));
+    expect(await screen.findByText(/Homebrew Night · 3 characters/)).toBeInTheDocument();
+    expect(screen.getByText("Clockwinder")).toBeInTheDocument();
+    expect(screen.getByText("Each night, you learn the hour.")).toBeInTheDocument();
+    expect(screen.getByText("Changed text for this script.")).toBeInTheDocument();
+  });
+
+  it("a player dealt a homebrew character sees its name and ability, not an id", async () => {
+    seat(lobby(homebrew), "clockwinder");
+    render(<PlayerScreen />);
+    await enterTown();
+    expect(await screen.findByText("Clockwinder")).toBeInTheDocument();
+    expect(screen.queryByText("clockwinder")).toBeNull();
+    expect(screen.getByText("Each night, you learn the hour.")).toBeInTheDocument();
+    // Its night order is the Storyteller's and is not published, so the phone says nothing about waking.
+    expect(screen.queryByText(/wake/i)).toBeNull();
   });
 });
