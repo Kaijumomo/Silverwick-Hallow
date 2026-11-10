@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { usePhoneViewportSettle } from "./viewportSettle";
 
 /** The phone surface every player screen sits on (design: "Global frame").
  * `dark` and `evil` add the in-game and evil-team washes; `glow` picks the
@@ -13,6 +14,7 @@ export function PhoneFrame({ dark, evil, reference, glow, glowColor, children, l
   label?: string;
   children: ReactNode;
 }) {
+  usePhoneViewportSettle(label);
   const glowStyle = glowColor ? ({ "--swp-glow": glowColor } as CSSProperties) : undefined;
   return (
     <div className="swp-root" data-screen={label}>
