@@ -19,7 +19,7 @@ describe("local emulator harness switch (WP 4-1b)", () => {
 
   it("uses the ports in firebase.harness.json", async () => {
     const { readFileSync } = await import("node:fs");
-    const config = JSON.parse(readFileSync("firebase.harness.json", "utf8"));
+    const config = JSON.parse(readFileSync(new URL("../../firebase.harness.json", import.meta.url), "utf8"));
     expect(config.emulators.auth.port).toBe(EMULATOR_PORTS.auth);
     expect(config.emulators.database.port).toBe(EMULATOR_PORTS.database);
     expect(config.database[0]).toEqual({ instance: "silverwick-hollow-default-rtdb", rules: "src/firebase/rules.json" });

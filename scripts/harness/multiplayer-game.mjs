@@ -32,25 +32,33 @@ const CAST = [
   { name: "Dan", role: "Poisoner" },
   { name: "Eve", role: "Washerwoman" },
 ];
+const ROLE_IDS = CAST.map((c) => c.role.toLowerCase());
 
 const results = [];
 let shot = 0;
 const devices = {}; // label -> page
-const frames = {}; // label -> received Firebase websocket payloads
+const frames = {}; // label -> Firebase websocket messages { dir: "in" | "out", text, conn }
+let connections = 0;
 
 function track(label, page) {
   devices[label] = page;
   frames[label] ??= [];
   page.on("websocket", (ws) => {
-    let pending = null; // Firebase splits long messages: a frame holding only a count, then that many parts.
-    ws.on("framereceived", ({ payload }) => {
-      const text = typeof payload === "string" ? payload : payload.toString("utf8");
-      if (pending) {
-        pending.parts.push(text);
-        if (pending.parts.length === pending.count) { frames[label].push(pending.parts.join("")); pending = null; }
-      } else if (/^\d+$/.test(text)) pending = { count: Number(text), parts: [] };
-      else frames[label].push(text);
-    });
+    const conn = ++connections; // request ids restart on every connection
+    // Firebase splits long messages: a frame holding only a count, then that many parts.
+    const reader = (dir) => {
+      let pending = null;
+      return ({ payload }) => {
+        const text = typeof payload === "string" ? payload : payload.toString("utf8");
+        if (pending) {
+          pending.parts.push(text);
+          if (pending.parts.length === pending.count) { frames[label].push({ dir, text: pending.parts.join(""), conn }); pending = null; }
+        } else if (/^\d+$/.test(text)) pending = { count: Number(text), parts: [] };
+        else frames[label].push({ dir, text, conn });
+      };
+    };
+    ws.on("framereceived", reader("in"));
+    ws.on("framesent", reader("out"));
   });
   page.on("pageerror", (e) => console.log(`[${label}] page error: ${e.message}`));
 }
@@ -245,9 +253,10 @@ async function main() {
         const t = (await phones.Alice.locator("body").innerText()).replace(/\s+/g, " ");
         return /\b4 ALIVE\b/i.test(t) && /Eve Ghost/.test(t) ? t : null;
       }, "after reconnecting, Alice's Town tab never showed Eve as a ghost with 4 alive");
+      await snap(["Alice"], "alice-town-after-reconnect");
       await click(phones.Alice, /^Character$/).catch(() => {});
       return `Alice's Town tab after reconnecting: "${town.match(/4 ALIVE/i)[0]}", Eve shown as Ghost`;
-    }, ["Alice", "display"]);
+    }, ["display"]);
 
     await step("A phone refresh keeps the player in their seat", "Reloading must not lose the player's seat or character", async () => {
       await phones.Dan.reload();
@@ -273,6 +282,7 @@ async function main() {
       await click(st, /^Undo$/); // Eve's death, undone while not live
       await sleep(1500);
       const meanwhile = await alive("Eve");
+      await snap(["storyteller", "Alice"], "while-not-live");
       let retries = 0;
       await until(async () => {
         if ((await alive("Eve")) === true) return true;
@@ -282,7 +292,7 @@ async function main() {
         return false;
       }, "after the reload and Retry, Eve's undone death never reached the server", 75000);
       const secs = Math.round((Date.now() - reloadedAt) / 1000);
-      return `${banner ? '"Multiplayer is not live" shown after the reload' : "no banner after the reload"}; phones still saw Eve ${meanwhile === false ? "dead" : "alive"} until control came back; Undo reached the server ${secs}s after the reload (${retries} Retry press${retries === 1 ? "" : "es"})`;
+      return `${banner ? '"Multiplayer is not live" shown after the reload' : "no banner after the reload"}; 1.5 s after the Undo on the tablet the server still had Eve ${meanwhile === false ? "dead" : "alive"}; the Undo reached the server ${secs} s after the reload (${retries} Retry press${retries === 1 ? "" : "es"})`;
     }, ["storyteller", "display"]);
 
     await step("Storyteller ends the game; the Display shows the winner", "The online winner screen (deferred from Milestone 3)", async () => {
@@ -306,7 +316,14 @@ async function main() {
   } catch {
     // The failing step is already recorded.
   } finally {
-    if (code) results.push(privacyCheck(code, ids));
+    for (const [label, list] of Object.entries(frames)) {
+      writeFileSync(join(OUT, `frames-${label}.jsonl`), list.map((f) => JSON.stringify(f)).join("\n") + "\n");
+    }
+    writeFileSync(join(OUT, "ids.json"), JSON.stringify({ code, ids }, null, 2));
+    if (code) {
+      try { results.push(privacyCheck(code, ids)); }
+      catch (e) { results.push({ name: "Privacy check", why: "", ok: false, note: `the check itself crashed: ${e.message}`, ms: 0, files: [] }); }
+    }
     writeReport(code);
     await browser.close();
   }
@@ -315,56 +332,145 @@ async function main() {
   process.exitCode = failed ? 1 : 0;
 }
 
-/** What each device actually received over Firebase, checked path by path. */
+/**
+ * What each phone and the Display actually received over Firebase, read from the websocket. Every data
+ * message is checked, both pushes from listeners and replies to one-off reads (matched to the request that
+ * asked for them):
+ * - the path must be on that device's allowlist (shared public paths, or its own uid / player id);
+ * - outside the device's own player view, no value may be an assigned character id and no key may name a
+ *   role or alignment (the public script list, scriptCharacters, is removed first: it is the public sheet);
+ * - each phone must have received its own character in its own view (proves the capture works);
+ * - planted leaks of each kind must be flagged by the same code (proves the checks can fail).
+ */
 function privacyCheck(code, ids) {
   const name = "No device received another player's private data";
-  const why = "Privacy: a phone or the Display must never receive Storyteller data or another player's view";
-  const always = ["/storyteller", "/checkpoint", "/rosterParticipants", "/membershipRevocations", "/writer", "/writeGuard"];
-  const forbiddenFor = (label) => [
-    ...always,
-    ...Object.entries(ids).filter(([n]) => n !== label).map(([, id]) => `/player/${id}`),
-    ...(label === "display" ? ["/player/"] : []),
-  ];
-  const scan = (label, list) => {
-    const out = { messages: 0, problems: [], own: 0 };
-    for (const raw of frames[label] ?? []) {
-      let msg;
-      try { msg = JSON.parse(raw); } catch { continue; }
-      const body = msg?.d?.b;
-      const path = typeof body?.p === "string" ? `/${body.p.replace(/^\//, "")}` : null;
-      if (!path || !path.startsWith(`/lobbies/${code}`)) continue;
-      out.messages++;
-      const rel = path.slice(`/lobbies/${code}`.length);
-      if (ids[label] && rel.startsWith(`/player/${ids[label]}`)) out.own++;
-      if (rel === "" || rel === "/") out.problems.push(`${label} received the whole lobby`);
-      for (const bad of list) if (rel.startsWith(bad)) { out.problems.push(`${label} received ${rel}`); break; }
-      if (rel.startsWith("/public")) {
-        const text = JSON.stringify(body.d ?? null);
-        for (const key of ["actualRole", "shownRole", "alignment", "reminders", "notes"]) {
-          if (text.includes(`"${key}"`)) out.problems.push(`${label} saw "${key}" under ${rel}`);
-        }
-      }
+  const why = "Privacy: a phone or the Display must only receive public data and its own records";
+  const lobby = `lobbies/${code}`;
+  const strip = (p) => String(p ?? "").replace(/^\/+/, "");
+  const shared = ["public", "session"];
+  const perUid = ["joinRequests", "leaveRequests", "outcomes", "roster", "revealAcks", "results", "travelerChoices", "presence"];
+  const ROLE_KEY = /(^|[a-z])(role|alignment)$/i;
+  const PROTOCOL_ACTIONS = new Set(["auth", "gauth", "unauth", "s"]);
+
+  const ownUid = (label) => {
+    const branch = label === "display" ? "displayMembers" : "joinRequests";
+    for (const f of frames[label] ?? []) {
+      if (f.dir !== "out") continue;
+      try {
+        const m = JSON.parse(f.text);
+        const p = strip(m?.d?.b?.p);
+        if (p.startsWith(`${lobby}/${branch}/`)) return p.split("/")[3];
+      } catch { /* ignored here; counted below */ }
     }
+    return null;
+  };
+
+  const allowed = (label, uid, rel) => {
+    const [head, key] = rel.split("/");
+    if (shared.includes(head)) return true;
+    if (label === "display") return head === "displayMembers" && key === uid;
+    if (head === "player") return key === ids[label];
+    return perUid.includes(head) && key === uid && !!uid;
+  };
+
+  const withoutScript = (v) => {
+    if (Array.isArray(v)) return v.map(withoutScript);
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).filter(([k]) => k !== "scriptCharacters").map(([k, x]) => [k, withoutScript(x)]));
+    return v;
+  };
+  const roleKeys = (v, out = []) => {
+    if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) { if (ROLE_KEY.test(k)) out.push(k); roleKeys(x, out); }
     return out;
   };
+
+  /** Data messages a device received: [{ path, data }]. Unparsable frames are reported. */
+  const messages = (list) => {
+    const sent = new Map();
+    const out = [];
+    const bad = [];
+    for (const f of list) {
+      let m;
+      try { m = JSON.parse(f.text); } catch { bad.push(f.text.slice(0, 40)); continue; }
+      if (m?.t !== "d" || !m.d || typeof m.d !== "object") continue;
+      const b = m.d.b;
+      if (f.dir === "out") {
+        if (typeof m.d.r === "number") sent.set(`${f.conn}:${m.d.r}`, { action: m.d.a, path: typeof b?.p === "string" ? strip(b.p) : null });
+        continue;
+      }
+      if (!b || typeof b !== "object") continue;
+      if (typeof b.p === "string") out.push({ path: strip(b.p), data: b.d, kind: "push" });
+      else if (typeof m.d.r === "number" && b.d !== undefined) {
+        const req = sent.get(`${f.conn}:${m.d.r}`);
+        // Connection-level replies (sign-in token, client stats) carry no game data.
+        if (req && PROTOCOL_ACTIONS.has(req.action)) continue;
+        // A sign-in reply whose request the capture missed (seen once across a reconnect): only "auth"/"expires".
+        if (!req && b.d && typeof b.d === "object" && "auth" in b.d && Object.keys(b.d).every((k) => k === "auth" || k === "expires")) continue;
+        out.push({ path: req?.path ?? null, data: b.d, kind: "reply" });
+      }
+    }
+    return { out, bad };
+  };
+
+  const scan = (label, uid, list) => {
+    const problems = [];
+    const { out, bad } = messages(list);
+    if (bad.length) problems.push(`${label}: ${bad.length} unreadable message(s)`);
+    let checked = 0;
+    let ownRole = false;
+    for (const { path, data, kind } of out) {
+      const empty = data === null || data === undefined || data === "" || (typeof data === "object" && Object.keys(data).length === 0);
+      if (empty) continue;
+      checked++;
+      if (path === null) { problems.push(`${label}: a ${kind} with data for an unknown request`); continue; }
+      if (!path.startsWith(`${lobby}/`)) { problems.push(`${label} received data at /${path}`); continue; }
+      const rel = path.slice(lobby.length + 1);
+      if (!allowed(label, uid, rel)) { problems.push(`${label} received ${kind} for /${rel.replace(/[A-Za-z0-9_-]{20,}/g, "<id>")}`); continue; }
+      if (label !== "display" && rel.startsWith(`player/${ids[label]}`)) {
+        const own = CAST.find((c) => c.name === label)?.role.toLowerCase();
+        if (own && JSON.stringify(data).includes(`"${own}"`)) ownRole = true;
+        continue;
+      }
+      const clean = withoutScript(data);
+      const text = JSON.stringify(clean);
+      for (const role of ROLE_IDS) if (text.includes(`"${role}"`)) problems.push(`${label} saw "${role}" in /${rel}`);
+      for (const k of roleKeys(clean)) problems.push(`${label} saw key "${k}" in /${rel}`);
+    }
+    return { problems, checked, ownRole };
+  };
+
   const problems = [];
   const counts = [];
   for (const label of Object.keys(frames)) {
     if (label === "storyteller") continue;
-    const r = scan(label, forbiddenFor(label));
+    const uid = ownUid(label);
+    if (!uid) problems.push(`${label}: own sign-in id not found in its traffic`);
+    const r = scan(label, uid, frames[label]);
     problems.push(...r.problems);
-    if (label !== "display" && r.own === 0) problems.push(`${label} never received its own player view, so the capture is not working`);
-    if (r.messages === 0) problems.push(`${label}: no Firebase data messages captured`);
-    counts.push(`${label} ${r.messages}`);
+    if (r.checked === 0) problems.push(`${label}: no Firebase data captured`);
+    if (label !== "display" && !r.ownRole) problems.push(`${label} never received its own character, so the capture is not working`);
+    counts.push(`${label} ${r.checked}`);
   }
-  // Control: the same check over the Storyteller's own traffic must flag it (it legitimately receives
-  // Storyteller data). If it does not, the check could not see a leak either.
-  const control = scan("storyteller", forbiddenFor("Alice"));
-  if (control.problems.length === 0) problems.push("control failed: the check did not flag the Storyteller's own data");
+
+  // Controls: plant one leak of each kind into Alice's real traffic and the Display's; every one must be flagged.
+  const aliceUid = ownUid("Alice");
+  const plant = (label, extra) => scan(label, label === "display" ? ownUid("display") : aliceUid, [...(frames[label] ?? []), ...extra]).problems.length;
+  const base = { Alice: plant("Alice", []), display: plant("display", []) };
+  const msg = (dir, conn, d) => ({ dir, conn, text: JSON.stringify({ t: "d", d }) });
+  const controls = {
+    "role in a public player entry": plant("Alice", [msg("in", 0, { a: "d", b: { p: `${lobby}/public/players/x`, d: { name: "Bob", seat: 2, role: "imp" } } })]) > base.Alice,
+    "a character id in a public value": plant("Alice", [msg("in", 0, { a: "d", b: { p: `${lobby}/public`, d: { note: "poisoner" } } })]) > base.Alice,
+    "another player's view in a read reply": plant("Alice", [msg("out", 999, { r: 1, a: "g", b: { p: `/${lobby}/player/${ids.Bob}` } }), msg("in", 999, { r: 1, b: { s: "ok", d: { seat: 2 } } })]) > base.Alice,
+    "game data in a reply to an unseen request": plant("Alice", [msg("in", 998, { r: 5, b: { s: "ok", d: { seat: 2, name: "Bob" } } })]) > base.Alice,
+    "Storyteller data": plant("Alice", [msg("in", 0, { a: "d", b: { p: `${lobby}/storyteller`, d: { phase: "day" } } })]) > base.Alice,
+    "another phone's records": plant("Alice", [msg("in", 0, { a: "d", b: { p: `${lobby}/roster/some-other-uid`, d: "x" } })]) > base.Alice,
+    "a player view on the Display": plant("display", [msg("in", 0, { a: "d", b: { p: `${lobby}/player/${ids.Carol}`, d: { seat: 3 } } })]) > base.display,
+  };
+  for (const [what, caught] of Object.entries(controls)) if (!caught) problems.push(`control failed: a planted leak (${what}) was not flagged`);
+
   const ok = problems.length === 0;
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}${problems.length ? `: ${problems.slice(0, 5).join("; ")}` : ""}`);
   const note = ok
-    ? `data messages checked per device: ${counts.join(", ")}; every phone received its own view; control flagged the Storyteller's ${control.problems.length} private messages`
+    ? `data messages checked (pushes and read replies): ${counts.join(", ")}; every phone received its own character; all ${Object.keys(controls).length} planted leaks were flagged`
     : problems.slice(0, 10).join("; ");
   return { name, why, ok, note, ms: 0, files: [] };
 }
@@ -386,4 +492,17 @@ function writeReport(code) {
   writeFileSync(join(OUT, "report.json"), JSON.stringify({ code, base: BASE, results }, null, 2));
 }
 
-main().catch((e) => { console.error(e); process.exitCode = 1; });
+if (args.recheck) {
+  // Re-run only the privacy check over a finished run's saved traffic (frames-*.jsonl, ids.json).
+  const { readFileSync, readdirSync } = await import("node:fs");
+  const dir = args.recheck;
+  const { code, ids } = JSON.parse(readFileSync(join(dir, "ids.json"), "utf8"));
+  for (const file of readdirSync(dir).filter((f) => /^frames-.*\.jsonl$/.test(f))) {
+    frames[file.slice(7, -6)] = readFileSync(join(dir, file), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  }
+  const r = privacyCheck(code, ids);
+  console.log(r.note);
+  process.exitCode = r.ok ? 0 : 1;
+} else {
+  main().catch((e) => { console.error(e); process.exitCode = 1; });
+}

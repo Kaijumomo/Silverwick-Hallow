@@ -73,13 +73,21 @@ sign-in, play a short Trouble Brewing game against the local Firebase emulators 
 Database) running the production Rules. Steps: create the lobby, open the Display, five joins, seating, a fixed
 deal (Chef, Imp, Empath, Poisoner, Washerwoman), reveals, Night 1 and Day 1, a death and its Undo, a phone that
 goes offline and catches up, a phone refresh, a Storyteller refresh, and Good wins on the Display and phones. A
-final check reads every Firebase message each phone and the Display received and fails if any of them carried
-Storyteller data or another player's view.
+final check reads every Firebase data message each phone and the Display received (listener pushes and replies to
+one-off reads). It fails on any path outside that device's allowlist (public data, the session, and its own
+records), on any assigned character id or role/alignment key outside the device's own player view (the public
+script list excepted), or if a phone never received its own character. It also plants seven kinds of leak into the
+captured traffic and fails unless every one is flagged.
+
+The harness tests the Rules file in this repository. It says nothing about the Rules deployed to a hosted project;
+check those with `npm run rules:verify`.
 
 How it reaches the emulators: `vite.config.ts` defines `__SILVERWICK_EMULATOR_HOST__` from the
 `SILVERWICK_EMULATOR_HOST` environment variable, which only the harness sets (loopback hosts only, and only in a
-test-mode build). In every other build it is empty, the bundler removes the emulator code, and the harness first
-checks that a production build contains none of it. It uses the demo project `demo-silverwick-harness`, so nothing
+test-mode build). When that variable is not set, which is every ordinary build (Cloudflare production, Codex's
+preview builds, `npm run build`), the constant is empty, the bundler removes the emulator code, and the production
+bundle is byte-identical to one built without this feature. The harness first checks that a production build
+contains none of it. Never set `SILVERWICK_EMULATOR_HOST` for a build that will be uploaded. It uses the demo project `demo-silverwick-harness`, so nothing
 leaves the machine.
 
 It does not cover real phone hardware and browsers (iOS Safari, the installed app), real mobile networks, QR

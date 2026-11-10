@@ -37,7 +37,7 @@ function jsFiles(dir) {
 }
 
 /** Strings only the emulator branch of src/firebase/emulator.ts would put in a bundle. */
-const EMULATOR_MARKERS = ["127.0.0.1:9099", "must be a loopback host", "SILVERWICK_EMULATOR_HOST"];
+const EMULATOR_MARKERS = ["must be a loopback host", "SILVERWICK_EMULATOR_HOST"];
 
 function productionCheck() {
   const dir = mkdtempSync(join(tmpdir(), "silverwick-prod-check-"));
@@ -73,7 +73,7 @@ async function main() {
   let server;
   try {
     run("harness build", [vite, "build", "--mode", "development", "--outDir", build, "--emptyOutDir", "--logLevel", "error"], { SILVERWICK_EMULATOR_HOST: "127.0.0.1" });
-    const harnessHits = jsFiles(build).some((f) => readFileSync(f, "utf8").includes("127.0.0.1:9099") || readFileSync(f, "utf8").includes("must be a loopback host"));
+    const harnessHits = jsFiles(build).some((f) => readFileSync(f, "utf8").includes("must be a loopback host"));
     if (!harnessHits) throw new Error("harness build does not contain the emulator connection; it would not reach the emulators");
 
     server = spawn(process.execPath, [vite, "preview", "--outDir", build, "--port", String(PORT), "--strictPort", "--host", "127.0.0.1"], { cwd: root, stdio: "ignore" });
