@@ -73,9 +73,13 @@ describe("Town Square view model (Package 4G)", () => {
     expect(v.glow.every((g) => g.src.length > 0)).toBe(true);
   });
 
-  it("names the script from the built-in list and omits a custom one", () => {
+  it("names the script from the built-in list, or by the published name for a custom one", () => {
     expect(buildTownSquareView({ lobby: lobby(), status: "live" }).scriptName).toBe("Trouble Brewing");
+    expect(buildTownSquareView({ lobby: lobby({ scriptId: "custom-xyz", scriptName: "Treacherous 30th" }), status: "live" }).scriptName).toBe("Treacherous 30th");
+    // An older writer publishes no name: nothing is invented.
     expect(buildTownSquareView({ lobby: lobby({ scriptId: "custom-xyz" }), status: "live" }).scriptName).toBeNull();
+    // The built-in name wins over a published one.
+    expect(buildTownSquareView({ lobby: lobby({ scriptName: "Other" }), status: "live" }).scriptName).toBe("Trouble Brewing");
   });
 });
 
