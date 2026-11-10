@@ -330,9 +330,10 @@ async function main() {
       await st.reload();
       await st.getByLabel(/^Seat 5, Eve/).first().waitFor({ timeout: 20000 });
       const reloadedAt = Date.now();
-      // WP 4-3a: the closing page hands its writer lease back (pagehide), so the reloaded tab takes control at once:
-      // no "Multiplayer is not live" banner and no Retry. (Before 4-3a it waited about 30 s for the old lease to
-      // expire and the Storyteller had to press Retry.) Retry is never pressed here.
+      // WP 4-3a: the closing page hands its writer lease back (beforeunload/pagehide), so the reloaded tab usually
+      // takes control at once. The hand-back is best effort; when it is lost, the new tab retries by itself until the
+      // old lease expires (at most about 40 s). Either way: no "Multiplayer is not live" banner and no Retry, which is
+      // never pressed here. (Before 4-3a the banner showed and the Storyteller had to press Retry after ~30 s.)
       await st.keyboard.press("Escape");
       await click(st, /^Undo$/); // Eve's death, undone right after the reload
       const notLive = async () => (await st.getByText(/Multiplayer is not live/i).count()) > 0;
@@ -340,12 +341,13 @@ async function main() {
       await until(async () => {
         if (await notLive()) bannerSeen = true;
         return (await alive("Eve")) === true;
-      }, "after the reload, Eve's undone death did not reach the server within 15 seconds (without Retry)", 15000);
+      }, "after the reload, Eve's undone death did not reach the server within 45 seconds (without Retry)", 45000);
       const secs = ((Date.now() - reloadedAt) / 1000).toFixed(1);
+      const path = Number(secs) < 8 ? "the old page's hand-back arrived" : "the hand-back was lost; the automatic retry took control when the old lease expired";
       await snap(["storyteller", "Alice"], "after-reload");
       expect(!bannerSeen, '"Multiplayer is not live" appeared after the reload');
       expect(!(await button(st, /^Retry$/).isVisible().catch(() => false)), "a Retry button is showing after the reload");
-      return `no "not live" banner and no Retry; the Undo made right after the reload reached the server ${secs} s after the reload`;
+      return `no "not live" banner and no Retry; the Undo made right after the reload reached the server ${secs} s after the reload (${path})`;
     }, ["storyteller", "display"]);
 
     await step("Storyteller ends the game; the Display shows the winner", "The online winner screen (deferred from Milestone 3)", async () => {

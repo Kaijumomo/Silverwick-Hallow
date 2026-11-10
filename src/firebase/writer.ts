@@ -113,6 +113,13 @@ export class SessionWriter implements RoomBackend {
    * this writer's hold was not continuous since that handle was issued,
    * even if `isStopped()` has not (yet) caught up. */
   private leaseEpoch = 0;
+  /** F-14: the exact JSON of each whole public and player view this writer has committed, by path. A view whose
+   * new value is identical is left out of the next commit instead of being uploaded again. Only this writer's own
+   * confirmed commits fill it, and it is per writer, so every new writer (reconnect, reload, retry) starts empty and
+   * writes everything once. Any other write touching a remembered path, any failed commit and close() clear it.
+   * Sound because only the lease holder can write these paths (the Rules require this writer's writeGuard token),
+   * and a writer that loses its lease stops. */
+  private committedViews = new Map<string, string>();
   readonly token = crypto.randomUUID();
   readonly root: string;
   private readonly direct: RoomBackend;
@@ -337,8 +344,10 @@ export class SessionWriter implements RoomBackend {
   releaseOnExit(): boolean {
     if (this.leaseExpiresAt === 0 || this.closing || this.exitReleased) return false;
     this.exitReleased = true;
-    this.stop();
+    // The release goes out first: stop() then sends a burst of unsubscribes, and the less is queued ahead of the
+    // release the more likely it leaves before the page is torn down. Nothing can be sent in between (synchronous).
     this.raw.set(`${this.root}/writer`, { token: this.token, expiresAt: 0 }).catch(() => {});
+    this.stop();
     return true;
   }
   private exitReleased = false;
@@ -374,6 +383,8 @@ export class SessionWriter implements RoomBackend {
   }
   async close(_playerIds: string[], terminal?: TerminalPublicationBuilder) {
     this.closing = true;
+    this.committedViews.clear(); // close writes public/status directly below
+
     this.abort.abort(); // Cancel pending retries before draining the queue.
     clearInterval(this.renewal);
     this.abort = new AbortController();
@@ -447,10 +458,11 @@ export class SessionWriter implements RoomBackend {
   private async commit(updates: Record<string, Json>) {
     if (this.stopped) throw new LifecycleError("cancelled", "Session stopped.");
     if (Object.keys(updates).some(path => !path.startsWith(this.root + "/"))) throw new LifecycleError("invalid", "A write targeted another lobby.");
+    const { sending, views } = this.withoutUnchangedViews(updates);
     const revision = ++this.revision;
     const guardPath = `${this.root}/writeGuard`;
     const stamp: GuardStamp = { token: this.token, revision };
-    const payload = { ...updates, [guardPath]: stamp };
+    const payload = { ...sending, [guardPath]: stamp };
     this.onAttempt?.(stamp);
     try { await retryTransient(async () => {
       // Read the receipt on retry: an acknowledged server write with a lost
@@ -463,12 +475,15 @@ export class SessionWriter implements RoomBackend {
       await this.raw.update(payload);
     }, this.abort.signal, attempt => this.report(new Error(`Network unavailable; retry ${attempt} of 3 scheduled.`))); }
     catch (error) {
+      // The server may or may not hold this commit's views: remember nothing.
+      this.committedViews.clear();
       // Close cancels old retries intentionally, without abandoning its own
       // final terminal write. All other exhausted/permanent failures stop
       // automatic writers until explicit reconnect.
       if (!this.closing) this.stop();
       throw error;
     }
+    for (const [path, json] of views) this.committedViews.set(path, json);
     // A commit sent before a terminal stop (e.g. a real lease-renewal denial)
     // can still land successfully afterward. That belated success belongs to
     // this one write, not to the writer's lifetime — it must not clear an
@@ -476,6 +491,34 @@ export class SessionWriter implements RoomBackend {
     // Once stopped, only a genuine restart (a new writer/session) may clear
     // the "write" error or the acknowledgement state.
     if (!this.stopped) { this.report(null); this.onAck?.(stamp); }
+  }
+  /** Whole public and player views: `lobbies/{code}/public` and `lobbies/{code}/player/{id}`. */
+  private isViewPath(path: string): boolean {
+    if (!path.startsWith(this.root + "/")) return false;
+    const rest = path.slice(this.root.length + 1);
+    return rest === "public" || /^player\/[^/]+$/.test(rest);
+  }
+  /** F-14: drops whole views identical to this writer's last committed copy (never a removal). Any other path,
+   * including a removal, that overlaps a
+   * remembered view (a field inside it, or a parent of it) forgets that view, so it is written in full next time. */
+  private withoutUnchangedViews(updates: Record<string, Json>): { sending: Record<string, Json>; views: [string, string][] } {
+    const sending: Record<string, Json> = {};
+    const views: [string, string][] = [];
+    for (const [path, value] of Object.entries(updates)) {
+      // A removal (null) is always sent: it is tiny, and it is how a revoked or cleared seat loses its view.
+      if (this.isViewPath(path) && value !== null) {
+        const json = JSON.stringify(value);
+        if (this.committedViews.get(path) === json) continue;
+        this.committedViews.delete(path);
+        views.push([path, json]);
+      } else {
+        for (const key of [...this.committedViews.keys()]) {
+          if (key === path || key.startsWith(path + "/") || path.startsWith(key + "/")) this.committedViews.delete(key);
+        }
+      }
+      sending[path] = value;
+    }
+    return { sending, views };
   }
   get(path: string) { return this.raw.get(path); }
   subscribe(path: string, cb: (raw: unknown) => void, error?: (error: unknown) => void) { return this.raw.subscribe(path, cb, error); }
