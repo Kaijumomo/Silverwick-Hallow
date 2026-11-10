@@ -86,7 +86,8 @@ function seatViews(lobby: PublicLobbyRecord, total: number): SeatView[] {
 export function buildTownSquareView(input: TownSquareInput): TownSquareView {
   const { lobby, status } = input;
   const base = {
-    scriptName: lobby ? getBuiltinScript(lobby.scriptId)?.name ?? null : null,
+    // A built-in script is named from the catalogue; an imported one by the name its lobby publishes.
+    scriptName: lobby ? getBuiltinScript(lobby.scriptId)?.name ?? lobby.scriptName ?? null : null,
     compactTitle: false,
     seatCount: 0,
     layoutCount: DEFAULT_LAYOUT_COUNT,

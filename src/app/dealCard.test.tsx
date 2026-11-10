@@ -8,6 +8,9 @@ import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { useV6Ui } from "@/features/grimoire-v6/v6Store";
 import { useSetupFlow } from "@/features/grimoire-v6/setup/flow";
 
+// These tests mount the whole app and click through setup; on a loaded machine a step can pass the 5 s default.
+vi.setConfig({ testTimeout: 20_000 });
+
 vi.mock("@/firebase/config", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/firebase/config")>();
   return { ...actual, isFirebaseConfigured: () => false };
