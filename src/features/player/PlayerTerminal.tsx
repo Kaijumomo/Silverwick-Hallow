@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { usePlayerStore, type PlayerTerminalResult, type SeatVerdict } from "@/stores/playerStore";
 import { iconUrlFor } from "@/data/iconUrl";
 import { lookupOfficialRole } from "@/data/officialRoles";
-import { getBuiltinScript } from "@/data/scripts";
+import { publicScriptOf } from "@/data/publicScript";
 import { MoonEmblem } from "./phone/PhoneParts";
 import { StatusScreen } from "./phone/StatusScreen";
 import { EndingScreen, formatCode } from "./phone/PhoneStates";
@@ -114,7 +114,8 @@ function TownNotesReview() {
   const publicLobby = usePlayerStore((s) => s.publicLobby);
   const [open, setOpen] = useState(false);
   const scriptId = publicLobby?.scriptId;
-  const roles = useMemo(() => new Map((scriptId ? getBuiltinScript(scriptId)?.characters ?? [] : []).map((role) => [role.id, role])), [scriptId]);
+  const scriptCharacters = publicLobby?.scriptCharacters;
+  const roles = useMemo(() => new Map(publicScriptOf(publicLobby).characters.map((role) => [role.id, role])), [scriptId, scriptCharacters]); // eslint-disable-line react-hooks/exhaustive-deps
   const roleOf = (id: string) => roles.get(id) ?? lookupOfficialRole(id);
   const prefix = code ? `${code}:` : null;
   const seatOf = (seatId: string) => publicLobby?.players[seatId]?.seat ?? Number.POSITIVE_INFINITY;

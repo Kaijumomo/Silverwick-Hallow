@@ -5,7 +5,7 @@ import {
   type OnlineMap,
 } from "@/stores/projections";
 import type { RoleRegistry } from "@/data/roleRegistry";
-import type { StorytellerLobbyRecord } from "@/stores/types";
+import type { Script, StorytellerLobbyRecord } from "@/stores/types";
 import type { Json, RoomBackend } from "./backend";
 import { serializeCheckpoint } from "./checkpoint";
 import { validateFirebaseWritableValue } from "./firebaseWriteCompatibility";
@@ -42,6 +42,8 @@ export type WriteContext = {
   online: OnlineMap;
   /** Package 3 (A1): public arrival names (Setup only), see arrivals.ts. */
   arrivals?: readonly string[];
+  /** The active script: only its name and verified character ids are published. */
+  script?: Script;
   membership?: Record<string, string>;
 };
 
@@ -53,7 +55,8 @@ export async function writeProjections(ctx: WriteContext): Promise<void> {
   updates[publicPath(code)] = projectLobbyToPublic(
     stState,
     online,
-    ctx.arrivals
+    ctx.arrivals,
+    ctx.script
   ) as unknown as Json;
 
   const selfMap = projectLobbyToSelfMap(stState, registry);
