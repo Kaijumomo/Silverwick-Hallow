@@ -74,7 +74,7 @@ export function CharacterTab({ self, role, isTraveller, art, dead, roleOf = look
                 <span style={{ color: TYPE_COLOUR[typeKey] }}>{TYPE_LABEL[typeKey]}</span>
                 {team && (<><span className="swp-reveal-dot">·</span><span className={`swp-team-${team.toLowerCase()}`}>{team}</span></>)}
               </span>
-              <span className="swp-ctl-wake">{wakeLine(role, isTraveller)}</span>
+              {wakeLine(role, isTraveller) && <span className="swp-ctl-wake">{wakeLine(role, isTraveller)}</span>}
             </div>
             {role?.ability && <p className={`swp-ctl-ability${hide}`} aria-hidden={flipped}>{role.ability}</p>}
           </>

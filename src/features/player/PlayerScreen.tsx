@@ -123,7 +123,7 @@ function PlayerScreenContent({ initialCode, goHome = defaultGoHome }: Props) {
   // Script characters — used by Town note popup and Almanac tab.
   const scriptCharacters = useMemo((): RoleDef[] => {
     return publicScriptOf(publicLobby).characters;
-  }, [publicLobby?.scriptId, publicLobby?.scriptCharacters]);
+  }, [publicLobby?.scriptId, publicLobby?.scriptCharacters, publicLobby?.scriptHomebrew]);
 
   // Almanac roles: script + active Fabled + active Lorics + seated Travelers.
   const playerAlmanacRoles = useMemo((): RoleDef[] => {

@@ -93,5 +93,7 @@ describe("custom script on the player phone", () => {
     expect(await screen.findByText("Clockwinder")).toBeInTheDocument();
     expect(screen.queryByText("clockwinder")).toBeNull();
     expect(screen.getByText("Each night, you learn the hour.")).toBeInTheDocument();
+    // Its night order is the Storyteller's and is not published, so the phone says nothing about waking.
+    expect(screen.queryByText(/wake/i)).toBeNull();
   });
 });
