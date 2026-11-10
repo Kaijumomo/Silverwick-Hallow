@@ -17,6 +17,7 @@ import { getAuth, signInAnonymously, type Auth } from "firebase/auth";
 import type { FirebaseAppConfig } from "./config";
 import { assertFirebaseConnectionAllowed, isDevelopmentFirebaseEnvironment } from "./config";
 import { DEVELOPMENT_FIREBASE_APP_NAME } from "./development";
+import { BUILD_EMULATOR_HOST, connectLocalEmulators, localEmulatorHost } from "./emulator";
 import type { Json, RoomBackend, Unsubscribe } from "./backend";
 
 let cachedApp: FirebaseApp | null = null;
@@ -47,6 +48,11 @@ export function initFirebase(cfg: FirebaseAppConfig): {
   const app = development ? initializeApp(cfg, DEVELOPMENT_FIREBASE_APP_NAME) : initializeApp(cfg);
   const db = getDatabase(app);
   const auth = getAuth(app);
+  // Local multi-device harness build only; BUILD_EMULATOR_HOST is "" in every ordinary build.
+  if (BUILD_EMULATOR_HOST && development) {
+    const host = localEmulatorHost(BUILD_EMULATOR_HOST);
+    if (host) connectLocalEmulators(db, auth, host);
+  }
   // Publish the cache together, only after every SDK component initializes.
   cachedApp = app;
   cachedDb = db;
