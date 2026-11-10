@@ -61,16 +61,19 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); clearFirebaseConfig(); __setEnvOverrideForTests(null); });
 
-describe("PhoneHome (D9): Player and Character Reference only", () => {
-  it("offers exactly the two player paths and no Storyteller", () => {
+describe("PhoneHome (D9, v7): Player, Character Reference and How to Play", () => {
+  it("offers exactly the three player paths and no Storyteller", () => {
     const onPick = vi.fn();
     render(<PhoneHome onPick={onPick} />);
     expect(screen.getByRole("button", { name: /Player/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Character Reference/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /How to Play/ })).toBeInTheDocument();
     expect(screen.queryByText("Storyteller")).toBeNull();
-    expect(screen.getAllByRole("button")).toHaveLength(2);
+    expect(screen.getAllByRole("button")).toHaveLength(3);
     fireEvent.click(screen.getByRole("button", { name: /Player/ }));
     expect(onPick).toHaveBeenCalledWith("player");
+    fireEvent.click(screen.getByRole("button", { name: /How to Play/ }));
+    expect(onPick).toHaveBeenCalledWith("howto");
   });
 });
 

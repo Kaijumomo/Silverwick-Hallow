@@ -29,10 +29,11 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("tablet Home entry paths", () => {
-  it("offers Storyteller and Character Reference; joining is by invitation link or QR, so there is no join form", () => {
+  it("offers Storyteller, Character Reference and How to Play; joining is by invitation link or QR, so there is no join form", () => {
     render(<HomeV6 navigate={vi.fn()} />);
     expect(screen.getByRole("button", { name: /^Storyteller/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Character Reference/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^How to Play/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Player/ })).toBeNull();
     expect(screen.queryByPlaceholderText("Write it here")).toBeNull();
   });
@@ -140,6 +141,48 @@ describe("tablet Home Character Reference", () => {
     fireEvent.click(screen.getByRole("button", { name: /Home/ }));
     fireEvent.click(scripts()[0]!);
     expect(screen.getByRole("button", { name: /^Townsfolk/ })).toHaveAttribute("aria-pressed", "true");
+  });
+});
+
+describe("tablet Home How to Play (design v7)", () => {
+  const openHow = () => fireEvent.click(screen.getByRole("button", { name: /^How to Play/ }));
+
+  it("the How to Play row shows the seven-step rail and Begin", () => {
+    render(<HomeV6 navigate={vi.fn()} />);
+    openHow();
+    expect(screen.getByText("Seven steps through a game, from the first night to the final vote.")).toBeInTheDocument();
+    for (const s of ["Gather", "Night", "Dawn", "Nominate", "Vote", "The dead", "Victory"]) {
+      expect(screen.getByRole("button", { name: s })).toBeInTheDocument();
+    }
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("Begin opens the walk-through at step 1, and Home closes it", () => {
+    render(<HomeV6 navigate={vi.fn()} />);
+    openHow();
+    fireEvent.click(screen.getByRole("button", { name: "Begin" }));
+    const dialog = screen.getByRole("dialog", { name: "How to Play" });
+    expect(within(dialog).getByText("Step 1 of 7")).toBeInTheDocument();
+    expect(within(dialog).getByRole("heading", { name: "The town gathers" })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: /Home/ }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("a step on the Home rail opens the walk-through at that step", () => {
+    render(<HomeV6 navigate={vi.fn()} />);
+    openHow();
+    fireEvent.click(screen.getByRole("button", { name: "Victory" }));
+    const dialog = screen.getByRole("dialog", { name: "How to Play" });
+    expect(within(dialog).getByText("Step 7 of 7")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("the footer carries the Community Created Content badge and the design's links", () => {
+    render(<HomeV6 navigate={vi.fn()} />);
+    expect(screen.getByRole("link", { name: /Community Created Content/ })).toHaveAttribute("href", expect.stringContaining("bloodontheclocktower.com"));
+    expect(screen.getByRole("link", { name: "Buy Blood on the Clocktower" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "GitHub" })).toBeInTheDocument();
   });
 });
 

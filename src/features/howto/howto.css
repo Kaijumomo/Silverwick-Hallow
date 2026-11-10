@@ -1,0 +1,3 @@
+/* How to Play (Claude Design v7): hover and focus states the inline styles cannot carry. */
+.hw-home { color: rgba(236, 230, 218, .7); }
+.hw-home:hover, .hw-home:focus-visible { color: #ece6da; }

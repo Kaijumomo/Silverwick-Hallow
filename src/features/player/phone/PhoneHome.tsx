@@ -3,6 +3,7 @@ import { PhoneFrame } from "./PhoneParts";
 const PATHS = [
   { id: "player", title: "Player", desc: "Join with your name and a code.", primary: true },
   { id: "reference", title: "Character Reference", desc: "Scripts, abilities, night order.", primary: false },
+  { id: "howto", title: "How to Play", desc: "Night, day, voting and how to win.", primary: false },
 ] as const;
 
 export type PhonePath = (typeof PATHS)[number]["id"];

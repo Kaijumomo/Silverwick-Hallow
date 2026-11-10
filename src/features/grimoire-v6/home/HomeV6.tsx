@@ -19,12 +19,14 @@ import { useV6Ui } from "../v6Store";
 import { startWizard } from "../setup/flow";
 import { HomeBackdrop } from "./HomeBackdrop";
 import { HomeV6View } from "./HomeV6View";
+import { howRail, HowToPlayTablet } from "@/features/howto/HowToPlay";
 
-type HomePath = "storyteller" | "reference";
+type HomePath = "storyteller" | "reference" | "howto";
 
 const PATHS: readonly [HomePath, string, string][] = [
   ["storyteller", "Storyteller", "Run the Grimoire and guide the night."],
   ["reference", "Character Reference", "Browse scripts and abilities."],
+  ["howto", "How to Play", "Night, day, voting and how to win."],
 ];
 const STAGE_W = 1480;
 const STAGE_H = 924;
@@ -65,6 +67,8 @@ function HomeTablet({ navigate = defaultNavigate }: Props) {
   // The tablet Home offers Storyteller and Character Reference (as designed); joining is by the invitation link or QR,
   // so the design's Player panel (name and code) is never shown and has no view-model (streamlining review F-06).
   const [configOpen, setConfigOpen] = useState(false);
+  // How to Play overlay step (null = closed). Opening it always starts at the step tapped (Begin = step 1).
+  const [howStep, setHowStep] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const fit = useFit();
   const configSource = getConfigSource();
@@ -92,13 +96,15 @@ function HomeTablet({ navigate = defaultNavigate }: Props) {
   const vm = {
     homeBg: <HomeBackdrop />,
     oC: {
-      isS: path === "storyteller", isR: path === "reference",
+      isS: path === "storyteller", isR: path === "reference", isH: path === "howto",
       paths: PATHS.map(([k, title, desc]) => ({
-        title, desc, titleColor: path === k ? "#f0d590" : "rgba(234,220,184,.7)", arrowColor: path === k ? "#e0b96a" : "rgba(216,201,164,.3)",
+        title, desc, titleColor: path === k ? "#ffb4a6" : "rgba(236,230,218,.7)", arrowColor: path === k ? "#e8584a" : "rgba(222,216,204,.3)",
         pick: () => setPath(k),
       })),
     },
     newGame: () => startWizard(),
+    howSteps: howRail(0, setHowStep),
+    howBegin: () => setHowStep(0),
     resumeRows,
     openDisplay: (e?: { preventDefault?: () => void }) => {
       e?.preventDefault?.();
@@ -127,6 +133,12 @@ function HomeTablet({ navigate = defaultNavigate }: Props) {
           title={configSource === "localStorage" ? "Reconfigure Firebase" : "Configure Firebase"}>Online settings</button>
       )}
       {toast && <div className="toast" role="status">{toast}</div>}
+      {howStep !== null && (
+        // Same 1480x924 stage and fit as the Home, so the overlay matches the design at any tablet size.
+        <div className="hv-stage" style={{ position: "absolute", left: "50%", top: "50%", width: STAGE_W, height: STAGE_H, overflow: "hidden", transform: "translate(-50%, -50%) scale(var(--home-fit, 1))", transformOrigin: "center center", zIndex: 26, fontFamily: "'Source Sans 3', system-ui, sans-serif", fontVariantNumeric: "lining-nums tabular-nums", color: "#ddd6c8" }}>
+          <HowToPlayTablet step={howStep} onStep={setHowStep} onClose={() => setHowStep(null)} />
+        </div>
+      )}
       {reference && (
         <ReferenceOverlay category={reference} team={referenceTeam} onTeamChange={setReferenceTeam} onClose={() => setReference(null)} />
       )}
