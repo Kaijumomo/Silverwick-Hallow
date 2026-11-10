@@ -230,3 +230,7 @@ them is the project owner's decision under the same caveat as every file above, 
 | `characters/carousel/marionette.png` | resources/characters/carousel/marionette_e.webp | `aa47c2dd91b9fa88a064e63a9db4caedf035fa51` | `e2b846cf7a6f6b1f` | 71964 |
 | `characters/carousel/variants/golem-evil.png` | resources/characters/carousel/golem_e.webp | `beb642f4be328339bd1ba427f04867bdfff362bb` | `1b2ec88a2b63d827` | 110403 |
 | `characters/carousel/variants/marionette-good.png` | resources/characters/carousel/marionette_g.webp | `023b541e37953bf90634061218f76a92b4c9a17f` | `4ce65ef405804e26` | 76788 |
+
+
+## Brand badge
+The Community Created Content badge lives in `public/brand/` with its own note (`public/brand/PROVENANCE.md`).
