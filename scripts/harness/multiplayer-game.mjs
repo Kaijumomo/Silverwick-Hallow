@@ -595,22 +595,24 @@ function privacyCheck(code, ids) {
   }
 
 
-  // Controls: plant one leak of each kind into Alice's real traffic and the Display's; every one must be flagged.
-  const aliceUid = ownUid("Alice");
+  // Controls: plant one leak of each kind into the first phone's real traffic and the Display's; every one must be flagged.
+  // Planted into the first phone's traffic; the other cast members are the players whose data must not reach it.
+  const [first, second, third, fourth] = CAST;
+  const aliceUid = ownUid(first.name);
   const plant = (label, extra) => scan(label, label === "display" ? ownUid("display") : aliceUid, [...(frames[label] ?? []), ...extra]).problems.length;
-  const base = { Alice: plant("Alice", []), display: plant("display", []) };
+  const base = { [first.name]: plant(first.name, []), display: plant("display", []) };
   const msg = (dir, conn, d) => ({ dir, conn, text: JSON.stringify({ t: "d", d }) });
   const controls = {
-    "an unknown key with a harmless value on a public player": plant("Alice", [msg("in", 0, { a: "d", b: { p: `${lobby}/public/players/x`, d: { name: "Bob", seat: 2, mood: "calm" } } })]) > base.Alice,
-    "a character named inside a sentence under a public key": plant("Alice", [msg("in", 0, { a: "d", b: { p: `${lobby}/public/players/x/name`, d: "Bob is the Imp" } })]) > base.Alice,
+    "an unknown key with a harmless value on a public player": plant(first.name, [msg("in", 0, { a: "d", b: { p: `${lobby}/public/players/x`, d: { name: second.name, seat: 2, mood: "calm" } } })]) > base[first.name],
+    "a character named inside a sentence under a public key": plant(first.name, [msg("in", 0, { a: "d", b: { p: `${lobby}/public/players/x/name`, d: `${second.name} is the ${second.role}` } })]) > base[first.name],
     "an alignment under a public key": plant("display", [msg("in", 0, { a: "d", b: { p: `${lobby}/public/arrivals`, d: ["Evil"] } })]) > base.display,
-    "another player's view in a read reply": plant("Alice", [msg("out", 999, { r: 1, a: "g", b: { p: `/${lobby}/player/${ids.Bob}` } }), msg("in", 999, { r: 1, b: { s: "ok", d: { seat: 2 } } })]) > base.Alice,
-    "game data in a reply to an unseen request": plant("Alice", [msg("in", 998, { r: 99999, b: { s: "ok", d: { seat: 2, name: "Bob" } } })]) > base.Alice,
-    "another player's view over long polling": plant("Alice", [{ dir: "lp", url: "http://127.0.0.1/.lp?id=1", text: `pRTLPCB(9,[${JSON.stringify({ t: "d", d: { a: "d", b: { p: `${lobby}/player/${ids.Dan}`, d: { seat: 4 } } } })}]);` }]) > base.Alice,
-    "Storyteller data": plant("Alice", [msg("in", 0, { a: "d", b: { p: `${lobby}/storyteller`, d: { phase: "day" } } })]) > base.Alice,
-    "another phone's records": plant("Alice", [msg("in", 0, { a: "d", b: { p: `${lobby}/roster/some-other-uid`, d: "x" } })]) > base.Alice,
+    "another player's view in a read reply": plant(first.name, [msg("out", 999, { r: 1, a: "g", b: { p: `/${lobby}/player/${ids[second.name]}` } }), msg("in", 999, { r: 1, b: { s: "ok", d: { seat: 2 } } })]) > base[first.name],
+    "game data in a reply to an unseen request": plant(first.name, [msg("in", 998, { r: 99999, b: { s: "ok", d: { seat: 2, name: second.name } } })]) > base[first.name],
+    "another player's view over long polling": plant(first.name, [{ dir: "lp", url: "http://127.0.0.1/.lp?id=1", text: `pRTLPCB(9,[${JSON.stringify({ t: "d", d: { a: "d", b: { p: `${lobby}/player/${ids[fourth.name]}`, d: { seat: 4 } } } })}]);` }]) > base[first.name],
+    "Storyteller data": plant(first.name, [msg("in", 0, { a: "d", b: { p: `${lobby}/storyteller`, d: { phase: "day" } } })]) > base[first.name],
+    "another phone's records": plant(first.name, [msg("in", 0, { a: "d", b: { p: `${lobby}/roster/some-other-uid`, d: "x" } })]) > base[first.name],
     "a night-order field on a public homebrew character": plant("display", [msg("in", 0, { a: "d", b: { p: `${lobby}/public/scriptHomebrew`, d: [{ id: "x", name: "X", type: "demon", ability: "A.", firstNight: 3 }] } })]) > base.display,
-    "a player view on the Display": plant("display", [msg("in", 0, { a: "d", b: { p: `${lobby}/player/${ids.Carol}`, d: { seat: 3 } } })]) > base.display,
+    "a player view on the Display": plant("display", [msg("in", 0, { a: "d", b: { p: `${lobby}/player/${ids[third.name]}`, d: { seat: 3 } } })]) > base.display,
   };
   for (const [what, caught] of Object.entries(controls)) if (!caught) problems.push(`control failed: a planted leak (${what}) was not flagged`);
 
