@@ -61,10 +61,11 @@ export function iconUrlFor(roleOrId: string | RoleDef): string {
     if (roleOrId.iconUrl) return roleOrId.iconUrl;
     // Package 3: self-hosted official art wins; the CDN is only the fallback
     // for characters with no local file.
-    // A homebrew character with no art of its own (an id no official file answers to) wears its team's
-    // generic icon, as it does on the phone, rather than a CDN address that cannot resolve.
+    // A homebrew character (an imported definition, even one that reuses an official id) wears its team's
+    // generic icon, exactly as it does on the phone: never the art of an official character it may differ
+    // from, and never a CDN address that cannot resolve.
     const generic = roleOrId.provenance?.status === "homebrew" ? genericTeamArt(roleOrId.type) : undefined;
-    return localCharacterArt(roleOrId.id) ?? generic ?? cdnUrlForRole(roleOrId);
+    return generic ?? localCharacterArt(roleOrId.id) ?? cdnUrlForRole(roleOrId);
   }
   // String-only path: no RoleDef available (e.g. unknown custom role).
   // Fall back to a best-guess TB townsfolk path; the img's onError hides it.

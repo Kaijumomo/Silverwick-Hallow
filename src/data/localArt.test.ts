@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { listBuiltinScripts } from "@/data/scripts";
+import { publicScriptOf } from "@/data/publicScript";
 import { listOfficialRoles } from "@/data/officialRoles";
 import { TRAVELERS } from "@/data/travelers";
 import { iconUrlFor } from "./iconUrl";
@@ -69,8 +70,17 @@ describe("homebrew characters with no art of their own (custom scripts, Stage 3)
     }
   });
 
-  it("keep an author's own image address, and an official id keeps its official art", () => {
+  it("do so even when they reuse an official id, as on the phone, while the official character keeps its own art", () => {
+    expect(iconUrlFor(homebrew({ id: "empath" }))).toBe("/art/characters/generic/townsfolk.png");
+    expect(iconUrlFor("empath")).toBe("/art/characters/tb/empath.png");
+  });
+
+  it("use the very file the phone is given for the same character", () => {
+    const entry = { id: "clockwinder", name: "Clockwinder", type: "demon" as const };
+    expect(iconUrlFor(homebrew({ type: "demon" }))).toBe(publicScriptOf({ scriptId: "x", scriptHomebrew: [entry] }).characters[0]!.iconUrl);
+  });
+
+  it("keep an author's own image address on the grimoire (a phone never loads one)", () => {
     expect(iconUrlFor(homebrew({ iconUrl: "https://example.test/own.png" }))).toBe("https://example.test/own.png");
-    expect(iconUrlFor(homebrew({ id: "empath" }))).toBe("/art/characters/tb/empath.png");
   });
 });
