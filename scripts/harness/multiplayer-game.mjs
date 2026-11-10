@@ -46,7 +46,8 @@ const SCRIPT = args.script ? resolve(args.script) : null;
 const SCRIPT_OBJECTS = SCRIPT
   ? Object.fromEntries(JSON.parse(readFileSync(SCRIPT, "utf8")).filter((e) => e && typeof e === "object" && e.id !== "_meta").map((e) => [e.id, e]))
   : {};
-for (const [i, c] of CAST.entries()) if (!c.name || !c.role) throw new Error(`--cast entry ${i + 1} must be Name:Role`);
+// The steps address the phones by these five names.
+if (CAST.map((c) => c.name).join() !== "Alice,Bob,Carol,Dan,Eve") throw new Error("--cast must name Alice, Bob, Carol, Dan and Eve, in that order, each as Name:Role");
 
 const results = [];
 let shot = 0;
@@ -75,11 +76,17 @@ function track(label, page) {
     ws.on("framereceived", reader("in"));
     ws.on("framesent", reader("out"));
   });
-  page.on("request", (req) => { if (/[?&]start=t|\/\.lp\?/.test(req.url())) longPolls[label] = (longPolls[label] ?? 0) + 1; });
+  // Long polling: what a phone sends is in the request address, recorded when the request leaves (its response can
+  // finish after the reply has already come back over a new websocket); what it receives is in the response body.
+  page.on("request", (req) => {
+    if (!/[?&]start=t|\/\.lp\?/.test(req.url())) return;
+    longPolls[label] = (longPolls[label] ?? 0) + 1;
+    if (/[?&]seg\d+=/.test(req.url())) frames[label].push({ dir: "lp", text: "", url: req.url() });
+  });
   page.on("response", async (res) => {
     if (!/\/\.lp\?/.test(res.url())) return;
     const body = await res.text().catch(() => null);
-    frames[label].push({ dir: "lp", text: body ?? "", url: res.url() });
+    frames[label].push({ dir: "lp", text: body ?? "", responseTo: res.url() });
   });
   page.on("pageerror", (e) => console.log(`[${label}] page error: ${e.message}`));
 }
@@ -314,8 +321,9 @@ async function main() {
       const text = (await phones.Dan.locator("body").innerText()).toUpperCase();
       expect(!text.includes("YOUR NAME"), "Dan's phone fell back to the join screen");
       await click(phones.Dan, /Turn your token over/i);
-      await until(async () => /POISONER/i.test(await phones.Dan.locator("body").innerText()), "Dan's token did not show the Poisoner");
-      return "Dan's phone came back to his face-down token; one tap shows the Poisoner again";
+      const dans = CAST.find((c) => c.name === "Dan").role;
+      await until(async () => (await phones.Dan.locator("body").innerText()).toUpperCase().includes(dans.toUpperCase()), `Dan's token did not show the ${dans}`);
+      return `Dan's phone came back to his face-down token; one tap shows the ${dans} again`;
     }, ["Dan"]);
 
     await step("The Storyteller tab refreshes and still runs the game", "A Storyteller reload must get control back and publish what changed meanwhile", async () => {

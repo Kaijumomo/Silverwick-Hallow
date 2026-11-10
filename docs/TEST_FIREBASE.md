@@ -66,23 +66,30 @@ deploy it to production (`--project mobile-botc`) only with the owner's approval
 ```
 npm run harness:multiplayer                 # report and screenshots in harness-output/<time>/
 npm run harness:multiplayer -- --out=<dir>
+npm run harness:multiplayer -- --script=<custom-script.json> --cast=Alice:Clockwinder,Bob:Dread,Carol:Empath,Dan:Poisoner,Eve:Washerwoman
 ```
+
+With `--script` and `--cast` the same game is played with an imported custom script, and an extra step checks that
+each phone's character and Script tab show the script's own names and ability text, with no wake line for homebrew
+characters. The cast keeps the names Alice, Bob, Carol, Dan and Eve, in that order, and must be a legal five-player
+setup (three Townsfolk, one Minion, one Demon) with no character that changes the setup.
 
 One Storyteller tablet, five phones and a Public Display, each in its own browser context with its own anonymous
 sign-in, play a short Trouble Brewing game against the local Firebase emulators (Authentication and Realtime
 Database) running the production Rules. Steps: create the lobby, open the Display, five joins, seating, a fixed
 deal (Chef, Imp, Empath, Poisoner, Washerwoman), reveals, Night 1 and Day 1, a death and its Undo, a phone that
 goes offline and catches up, a phone refresh, a Storyteller refresh, and Good wins on the Display and phones. A
-final check reads every Firebase data message each phone and the Display received over the websocket (listener
-pushes and replies to one-off reads). It fails when:
+final check reads every Firebase data message each phone and the Display received over the websocket or, after a
+fallback, over long polling (listener pushes and replies to one-off reads). It fails when:
 - a path is outside that device's allowlist (public data, the session, and its own records);
 - the public node or the session carries a key that is not in the schema allowlist (a new public field fails
   until it is reviewed and added to the list in `scripts/harness/multiplayer-game.mjs`);
 - outside the device's own player view, a key names a role, alignment, reminder or note, or a text value names one
   of the five assigned characters or the words good or evil (a declared winner excepted; the public script list is
-  removed first, because it is the public script sheet);
-- a phone never received its own character, a message cannot be read, or a device fell back to long polling;
-- any of eight planted leaks is not flagged.
+  removed first, because it is the public script sheet; each homebrew entry on it may carry only id, name, team and
+  ability);
+- a phone never received its own character, or a message cannot be read;
+- any of ten planted leaks is not flagged.
 
 Limits: a device's own player view is not scanned, because it may rightly name other characters (for example
 Minion information). Text that reveals a secret without a character name or an alignment word, under an allowed
