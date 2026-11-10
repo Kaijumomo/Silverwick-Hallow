@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { App } from "@/app/App";
 import "@/styles/fonts.css";
 import "@/styles/theme.css";
+import "@/styles/tokens-v7.css";
 import "@/styles/components.css";
 import "@/styles/home-reference.css";
 import "@/styles/newgame.css";

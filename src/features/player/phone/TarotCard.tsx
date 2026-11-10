@@ -19,7 +19,7 @@ export function TarotCard({ role, onClose }: { role: RoleDef; onClose: () => voi
   const ref = useRef<HTMLDivElement>(null);
   useDialogFocus(ref, onClose);
   const team = teamOf(role.type);
-  const colour = team?.color ?? "#e0b96a";
+  const colour = team?.color ?? "#e8584a";
   const tokens = reminderLabels(role);
   const jinxes = jinxesOf(role.id);
   const nights: [string, string][] = [];
@@ -73,7 +73,7 @@ export function TarotCard({ role, onClose }: { role: RoleDef; onClose: () => voi
               )}
               {nights.map(([label, text]) => (
                 <div key={label} className="swp-tarot-sec swp-tarot-night">
-                  <svg className="swp-moon-ico" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e0b96a" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4 6.5 6.5 0 0 0 20 14.5z" /></svg>
+                  <svg className="swp-moon-ico" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e8584a" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4 6.5 6.5 0 0 0 20 14.5z" /></svg>
                   <div className="swp-tarot-night-text">
                     <span className="swp-tarot-label">{label}</span>
                     <p className="swp-tarot-text">{cleanReminder(text)}</p>

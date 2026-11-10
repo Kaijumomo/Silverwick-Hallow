@@ -7,8 +7,8 @@
   inset: 0;
   display: flex;
   flex-direction: column;
-  background: #0a0806;
-  color: #d8c9a4;
+  background: #0b0909;
+  color: #ddd6c8;
   animation: refRise 0.35s ease-out;
   -webkit-font-smoothing: antialiased;
   font-variant-numeric: lining-nums tabular-nums;
@@ -27,7 +27,7 @@
 .ref-veil {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse 70% 50% at 50% 40%, rgba(232, 168, 88, 0.12), transparent 70%), rgba(8, 6, 4, 0.88);
+  background: radial-gradient(ellipse 70% 50% at 50% 40%, rgba(232, 88, 74, 0.12), transparent 70%), rgba(9, 10, 15, 0.88);
 }
 
 /* ---- Header ---- */
@@ -47,25 +47,25 @@
   min-height: 48px;
   padding: 0 18px 0 12px;
   border-radius: 24px;
-  border: 1px solid rgba(196, 158, 80, 0.3);
+  border: 1px solid rgba(176, 186, 204, 0.3);
   background: transparent;
-  color: rgba(234, 220, 184, 0.7);
+  color: rgba(236, 230, 218, 0.7);
   font: inherit;
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
 }
 .ref-back span { font-size: 22px; line-height: 1; }
-.ref-back:hover { color: #ecd9a8; }
+.ref-back:hover { color: #ece6da; }
 .ref-head-mid { display: flex; justify-content: center; align-items: center; gap: 28px; min-width: 0; }
 .ref-title {
   margin: 0;
-  font-family: "Cormorant Garamond", serif;
+  font-family: "IM Fell English", serif;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-size: 30px;
-  font-weight: 700;
-  color: #ecd9a8;
+  font-weight: 400;
+  color: #ece6da;
   white-space: nowrap;
 }
 /* Team tab row: one row under the logo, Night order last after a divider. */
@@ -75,7 +75,7 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 36px;
-  border-bottom: 1px solid rgba(196, 158, 80, 0.18);
+  border-bottom: 1px solid rgba(176, 186, 204, 0.18);
 }
 .ref-tabs button {
   display: flex;
@@ -88,18 +88,18 @@
   border-bottom: 2px solid transparent;
   border-radius: 0;
   background: transparent;
-  color: rgba(234, 220, 184, 0.55);
-  font-family: "Cormorant Garamond", serif;
+  color: rgba(236, 230, 218, 0.55);
+  font-family: "IM Fell English", serif;
   font-size: 21px;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.04em;
   white-space: nowrap;
   cursor: pointer;
 }
-.ref-tabs button:hover { color: #ecd9a8; }
-.ref-tabs button[aria-pressed="true"] { color: #f0d590; border-bottom-color: #e0b96a; }
+.ref-tabs button:hover { color: #ece6da; }
+.ref-tabs button[aria-pressed="true"] { color: #ffb4a6; border-bottom-color: #e8584a; }
 .ref-tab-n { font-family: "Source Sans 3", sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0; opacity: 0.55; }
-.ref-tab-sep { align-self: center; width: 1px; height: 22px; background: rgba(196, 158, 80, 0.3); }
+.ref-tab-sep { align-self: center; width: 1px; height: 22px; background: rgba(176, 186, 204, 0.3); }
 .ref-back:focus-visible,
 .ref-tabs button:focus-visible,
 .ref-card:focus-visible,
@@ -113,13 +113,13 @@
 .ref-shelf-head { display: flex; align-items: center; gap: 16px; }
 .ref-shelf-head h3 {
   margin: 0;
-  font-family: "Cormorant Garamond", serif;
+  font-family: "IM Fell English", serif;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-size: 24px;
-  font-weight: 700;
+  font-weight: 400;
 }
-.ref-shelf-n { font-size: 14px; color: rgba(234, 220, 184, 0.45); }
+.ref-shelf-n { font-size: 14px; color: rgba(236, 230, 218, 0.45); }
 .ref-shelf-rule { flex: 1; height: 1px; }
 .ref-cards {
   list-style: none;
@@ -141,7 +141,7 @@
   font: inherit;
   color: inherit;
   background: linear-gradient(170deg, #2a1712, #140b09);
-  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.65), inset 0 0 0 1px rgba(224, 185, 106, 0.5), inset 0 0 0 6px #1a0f0c, inset 0 0 0 7px rgba(224, 185, 106, 0.26);
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.65), inset 0 0 0 1px rgba(232, 88, 74, 0.5), inset 0 0 0 6px #1a0f0c, inset 0 0 0 7px rgba(232, 88, 74, 0.26);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -152,11 +152,11 @@
 .ref-card:hover { transform: translateY(-6px); }
 .ref-card-bar { width: 100%; height: 2px; border-radius: 1px; opacity: 0.7; flex: none; }
 .ref-card-icon { flex: none; width: 96px; height: 96px; object-fit: contain; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.7)); }
-.ref-card-name { font-family: "Cormorant Garamond", serif; font-size: 20px; font-weight: 700; line-height: 1.05; color: #f0dfb2; }
+.ref-card-name { font-family: "IM Fell English", serif; font-size: 20px; font-weight: 400; line-height: 1.05; color: #ece6da; }
 .ref-card-ability {
   font-size: 12px;
   line-height: 1.38;
-  color: rgba(234, 220, 184, 0.62);
+  color: rgba(236, 230, 218, 0.62);
   display: -webkit-box;
   -webkit-line-clamp: 5;
   -webkit-box-orient: vertical;
@@ -167,17 +167,17 @@
 /* ---- Night order ---- */
 .ref-night { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px; align-items: start; }
 .ref-night-col { display: flex; flex-direction: column; gap: 4px; }
-.ref-night-head { display: flex; align-items: baseline; gap: 14px; padding-bottom: 10px; border-bottom: 1px solid rgba(196, 158, 80, 0.25); }
+.ref-night-head { display: flex; align-items: baseline; gap: 14px; padding-bottom: 10px; border-bottom: 1px solid rgba(176, 186, 204, 0.25); }
 .ref-night-head h3 {
   margin: 0;
-  font-family: "Cormorant Garamond", serif;
+  font-family: "IM Fell English", serif;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-size: 26px;
-  font-weight: 700;
-  color: #ecd9a8;
+  font-weight: 400;
+  color: #ece6da;
 }
-.ref-night-head span { font-size: 14px; color: rgba(234, 220, 184, 0.45); }
+.ref-night-head span { font-size: 14px; color: rgba(236, 230, 218, 0.45); }
 .ref-night-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .ref-night-row {
   width: 100%;
@@ -189,32 +189,32 @@
   min-height: 62px;
   padding: 6px 8px 6px 0;
   border: none;
-  border-bottom: 1px solid rgba(196, 158, 80, 0.1);
+  border-bottom: 1px solid rgba(176, 186, 204, 0.1);
   background: transparent;
   text-align: left;
   font: inherit;
   color: inherit;
 }
 button.ref-night-row { cursor: pointer; }
-button.ref-night-row:hover { background: rgba(196, 158, 80, 0.06); }
+button.ref-night-row:hover { background: rgba(176, 186, 204, 0.06); }
 li.ref-night-step { cursor: default; }
 .ref-night-num {
-  font-family: "Cormorant Garamond", serif;
+  font-family: "IM Fell English", serif;
   letter-spacing: 0.06em;
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 400;
   text-align: right;
-  color: rgba(224, 185, 106, 0.6);
+  color: rgba(232, 88, 74, 0.6);
 }
 .ref-night-ico { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; }
 .ref-night-icon { width: 48px; height: 48px; object-fit: contain; }
 .ref-night-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.ref-night-name { font-family: "Cormorant Garamond", serif; font-size: 20px; font-weight: 700; line-height: 1.1; color: #ecd9a8; }
-.ref-night-step .ref-night-name { color: #e0b96a; }
+.ref-night-name { font-family: "IM Fell English", serif; font-size: 20px; font-weight: 400; line-height: 1.1; color: #ece6da; }
+.ref-night-step .ref-night-name { color: #e8584a; }
 .ref-night-desc {
   font-size: 13px;
   line-height: 1.35;
-  color: rgba(234, 220, 184, 0.6);
+  color: rgba(236, 230, 218, 0.6);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -241,7 +241,7 @@ li.ref-night-step { cursor: default; }
   box-sizing: border-box;
   border-radius: 20px;
   background: linear-gradient(170deg, #2a1712, #140b09);
-  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.75), inset 0 0 0 1px rgba(224, 185, 106, 0.55), inset 0 0 0 9px #1a0f0c, inset 0 0 0 10px rgba(224, 185, 106, 0.3);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.75), inset 0 0 0 1px rgba(232, 88, 74, 0.55), inset 0 0 0 9px #1a0f0c, inset 0 0 0 10px rgba(232, 88, 74, 0.3);
   padding: 40px 48px;
   display: flex;
   flex-direction: column;
@@ -258,9 +258,9 @@ li.ref-night-step { cursor: default; }
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  border: 1px solid rgba(224, 185, 106, 0.4);
+  border: 1px solid rgba(232, 88, 74, 0.4);
   background: transparent;
-  color: #e0b96a;
+  color: #e8584a;
   font-size: 22px;
   cursor: pointer;
 }
@@ -269,21 +269,21 @@ li.ref-night-step { cursor: default; }
 .ref-detail-team { font-size: 12px; letter-spacing: 0.34em; text-transform: uppercase; font-weight: 700; }
 .ref-detail-name {
   margin: 0;
-  font-family: "Cormorant Garamond", serif;
+  font-family: "IM Fell English", serif;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-size: 40px;
-  font-weight: 700;
+  font-weight: 400;
   line-height: 1;
-  color: #f0dfb2;
+  color: #ece6da;
 }
-.ref-detail-ability { margin: 0; font-family: "Cormorant Garamond", serif; font-size: 24px; font-weight: 600; line-height: 1.3; color: #ecd9a8; text-wrap: pretty; }
-.ref-detail-flavor { margin: 0; font-family: "IM Fell English", serif; font-style: italic; font-size: 16px; line-height: 1.45; color: rgba(234, 220, 184, 0.55); text-wrap: pretty; }
-.ref-detail-sec { width: 100%; display: flex; flex-direction: column; gap: 6px; padding-top: 14px; border-top: 1px solid rgba(224, 185, 106, 0.2); text-align: left; }
+.ref-detail-ability { margin: 0; font-family: "IM Fell English", serif; font-size: 24px; font-weight: 400; line-height: 1.3; color: #ece6da; text-wrap: pretty; }
+.ref-detail-flavor { margin: 0; font-family: "IM Fell English", serif; font-style: italic; font-size: 16px; line-height: 1.45; color: rgba(236, 230, 218, 0.55); text-wrap: pretty; }
+.ref-detail-sec { width: 100%; display: flex; flex-direction: column; gap: 6px; padding-top: 14px; border-top: 1px solid rgba(232, 88, 74, 0.2); text-align: left; }
 .ref-detail-sec-centre { align-items: center; gap: 10px; text-align: center; }
 .ref-detail-sec-jinx { gap: 10px; }
-.ref-detail-label { font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; font-weight: 700; color: rgba(224, 185, 106, 0.7); }
-.ref-detail-text { margin: 0; font-size: 15px; line-height: 1.45; color: rgba(234, 220, 184, 0.8); }
+.ref-detail-label { font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; font-weight: 700; color: rgba(232, 88, 74, 0.7); }
+.ref-detail-text { margin: 0; font-size: 15px; line-height: 1.45; color: rgba(236, 230, 218, 0.8); }
 
 .ref-tokens { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
 .ref-token {
@@ -291,8 +291,8 @@ li.ref-night-step { cursor: default; }
   width: 104px;
   height: 104px;
   border-radius: 50%;
-  background: radial-gradient(circle at 38% 30%, #f3e8cc 0%, #dccaa0 52%, #b39869 100%);
-  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.55), 0 2px 3px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 240, 210, 0.45), inset 0 -6px 12px rgba(90, 60, 25, 0.35);
+  background: radial-gradient(circle at 38% 30%, #f3e8cc 0%, #ddd6c8 52%, #b39869 100%);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.55), 0 2px 3px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(236, 230, 218, 0.45), inset 0 -6px 12px rgba(90, 60, 25, 0.35);
 }
 .ref-token-ring { position: absolute; inset: 5px; border-radius: 50%; border: 1px solid rgba(90, 62, 30, 0.28); }
 .ref-token-icon { position: absolute; left: 22px; top: 12px; width: 60px; height: 60px; object-fit: contain; filter: drop-shadow(0 1px 1px rgba(60, 35, 10, 0.3)); }
@@ -307,8 +307,8 @@ li.ref-night-step { cursor: default; }
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: "Cormorant Garamond", serif;
-  font-weight: 700;
+  font-family: "IM Fell English", serif;
+  font-weight: 400;
   line-height: 1;
   color: #3b2a17;
 }
@@ -317,8 +317,8 @@ li.ref-night-step { cursor: default; }
 .ref-jinxes li { display: flex; gap: 12px; align-items: flex-start; }
 .ref-jinx-icon { flex: none; width: 40px; height: 40px; object-fit: contain; }
 .ref-jinxes li > span:last-child { display: flex; flex-direction: column; gap: 2px; }
-.ref-jinx-name { font-size: 15px; font-weight: 700; color: #ecd9a8; }
-.ref-jinx-reason { font-size: 14px; line-height: 1.4; color: rgba(234, 220, 184, 0.7); }
+.ref-jinx-name { font-size: 15px; font-weight: 700; color: #ece6da; }
+.ref-jinx-reason { font-size: 14px; line-height: 1.4; color: rgba(236, 230, 218, 0.7); }
 
 /* TEMPORARY: shown only when a character icon cannot be loaded. A marked
    monogram, not artwork (see PACKAGE1_HANDOFF_REPORT.md, Reference section). */
@@ -328,10 +328,10 @@ li.ref-night-step { cursor: default; }
   justify-content: center;
   box-sizing: border-box;
   border-radius: 50%;
-  border: 1px dashed rgba(224, 185, 106, 0.4);
+  border: 1px dashed rgba(232, 88, 74, 0.4);
   background: rgba(12, 9, 8, 0.45);
   font-family: "Cinzel Decorative", serif;
-  color: rgba(224, 185, 106, 0.7);
+  color: rgba(232, 88, 74, 0.7);
   filter: none;
 }
 .ref-card-icon.ref-icon-fallback { font-size: 40px; }

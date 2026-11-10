@@ -1,60 +1,91 @@
 /* eslint-disable */
-// Hand-maintained. First converted from the Claude Design handoff (home.dc.html) by the importer now archived in
-// docs/archive/design-import; that importer is no longer run, so edit this file directly.
+// Hand-maintained port of the Claude Design v7 tablet Home ("New Design/design_handoff_silverwick_v7/design_files/
+// Silverwick Home v7.dc.html"), value for value. The prototype's 1524x968 bezel is a device mock: the product is its
+// 1480x924 screen. The design's Player panel (name and game code) is not shown on the tablet: players join by the
+// invitation link or QR (streamlining review F-06), so it has no view-model here.
 import { Fragment } from 'react';
 import { css, T } from './designRuntime';
 
-const S0: React.CSSProperties = { "position": "absolute", "left": "50%", "top": "50%", "width": "1480px", "height": "924px", "overflow": "hidden", "background": "#0a0806", "transform": "translate(-50%, -50%) scale(var(--home-fit, 1))", "transformOrigin": "center center", "fontFamily": "'Source Sans 3', system-ui, sans-serif", "fontVariantNumeric": "lining-nums tabular-nums", "color": "#d8c9a4" };
-const S1: React.CSSProperties = { "position": "absolute", "inset": "0", "background": "linear-gradient(90deg, rgba(10,8,6,.85) 0%, rgba(10,8,6,.5) 42%, rgba(10,8,6,.2) 70%, rgba(10,8,6,.3) 100%), linear-gradient(180deg, rgba(10,8,6,0) 50%, rgba(10,8,6,.8) 100%)" };
+const RED = '#e8584a';
+const LINE = 'rgba(176,186,204,.18)';
+const FELL = "'IM Fell English', serif";
+const BUY_URL = 'https://bloodontheclocktower.com/products/blood-on-the-clocktower-the-game';
+const SITE_URL = 'https://bloodontheclocktower.com/';
+const GITHUB_URL = 'https://github.com/Kaijumomo/Silverwick-Hallow';
+
+const S0: React.CSSProperties = { "position": "absolute", "left": "50%", "top": "50%", "width": "1480px", "height": "924px", "overflow": "hidden", "transform": "translate(-50%, -50%) scale(var(--home-fit, 1))", "transformOrigin": "center center", "fontFamily": "'Source Sans 3', system-ui, sans-serif", "fontVariantNumeric": "lining-nums tabular-nums", "color": "#ddd6c8" };
+const SBG: React.CSSProperties = { "position": "absolute", "left": "50%", "top": "50%", "width": "1480px", "height": "924px", "overflow": "hidden", "background": "#0b0909", "transform": "translate(-50%, -50%) scale(var(--home-cover, 1))", "transformOrigin": "center center" };
+const S1: React.CSSProperties = { "position": "absolute", "inset": "0", "background": "linear-gradient(90deg, rgba(9,10,15,.85) 0%, rgba(9,10,15,.5) 42%, rgba(9,10,15,.2) 70%, rgba(9,10,15,.3) 100%), linear-gradient(180deg, rgba(9,10,15,0) 50%, rgba(9,10,15,.8) 100%)" };
 const S2: React.CSSProperties = { "position": "absolute", "inset": "0", "pointerEvents": "none", "background": "radial-gradient(ellipse 100% 90% at 50% 50%, transparent 55%, rgba(0,0,0,.6) 100%)" };
 const S3: React.CSSProperties = { "position": "absolute", "left": "96px", "top": "166px", "width": "560px", "display": "flex", "flexDirection": "column", "justifyContent": "flex-start", "gap": "52px" };
 const S4: React.CSSProperties = { "display": "flex", "flexDirection": "column", "justifyContent": "flex-end", "gap": "16px", "height": "240px" };
-const S5: React.CSSProperties = { "fontSize": "12px", "letterSpacing": ".5em", "textTransform": "uppercase", "fontWeight": "600", "color": "rgba(216,201,164,.6)" };
-const S6: React.CSSProperties = { "fontFamily": "'Cinzel Decorative', serif", "fontSize": "80px", "fontWeight": "400", "lineHeight": ".98", "color": "#ecd9a8", "letterSpacing": ".03em", "textShadow": "0 0 40px rgba(224,185,106,.25), 0 2px 0 rgba(0,0,0,.6)" };
-const S7: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "22px", "color": "rgba(234,220,184,.75)" };
-const S8: React.CSSProperties = { "display": "flex", "flexDirection": "column", "borderBottom": "1px solid rgba(196,158,80,.18)" };
-const S9: React.CSSProperties = { "display": "flex", "alignItems": "center", "justifyContent": "space-between", "gap": "20px", "minHeight": "84px", "padding": "0 4px", "border": "none", "borderTop": "1px solid rgba(196,158,80,.18)", "background": "transparent", "textAlign": "left", "fontFamily": "inherit", "cursor": "pointer" };
+const S5: React.CSSProperties = { "fontSize": "12px", "letterSpacing": ".5em", "textTransform": "uppercase", "fontWeight": "600", "color": "rgba(222,216,204,.6)" };
+const S6: React.CSSProperties = { "fontFamily": "'Cinzel Decorative', serif", "fontSize": "80px", "fontWeight": "400", "lineHeight": ".98", "color": "#ece6da", "letterSpacing": ".03em", "textShadow": "0 0 40px rgba(232,88,74,.25), 0 2px 0 rgba(0,0,0,.6)" };
+const S7: React.CSSProperties = { "fontFamily": FELL, "fontStyle": "italic", "fontSize": "22px", "color": "rgba(236,230,218,.75)" };
+const S8: React.CSSProperties = { "display": "flex", "flexDirection": "column", "borderBottom": `1px solid ${LINE}` };
+const S9: React.CSSProperties = { "display": "flex", "alignItems": "center", "justifyContent": "space-between", "gap": "20px", "minHeight": "84px", "padding": "0 4px", "border": "none", "borderTop": `1px solid ${LINE}`, "background": "transparent", "textAlign": "left", "fontFamily": "inherit", "cursor": "pointer" };
 const S10: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "2px", "minWidth": "0" };
-const S11: React.CSSProperties = { "fontSize": "15px", "color": "rgba(216,201,164,.6)" };
-const S12: React.CSSProperties = { "position": "absolute", "right": "40px", "top": "0", "bottom": "0", "width": "760px", "pointerEvents": "none", "background": "radial-gradient(ellipse 50% 46% at 50% 52%, rgba(232,168,88,.26), rgba(232,168,88,.08) 55%, transparent 75%)", "animation": "swFlicker 4s ease-in-out infinite" };
+const S11: React.CSSProperties = { "fontSize": "15px", "color": "rgba(222,216,204,.6)" };
+const S12: React.CSSProperties = { "position": "absolute", "right": "40px", "top": "0", "bottom": "0", "width": "760px", "pointerEvents": "none", "background": "radial-gradient(ellipse 50% 46% at 50% 52%, rgba(232,88,74,.26), rgba(232,88,74,.08) 55%, transparent 75%)", "animation": "swFlicker 4s ease-in-out infinite" };
 const S13: React.CSSProperties = { "position": "absolute", "right": "150px", "top": "310px", "bottom": "70px", "width": "520px", "display": "flex", "flexDirection": "column", "alignItems": "center", "justifyContent": "flex-start", "gap": "30px" };
 const S14: React.CSSProperties = { "display": "flex", "alignItems": "center", "gap": "14px", "width": "260px" };
-const S15: React.CSSProperties = { "flex": "1", "height": "1px", "background": "linear-gradient(90deg, transparent, rgba(224,185,106,.7))" };
-const S16: React.CSSProperties = { "width": "8px", "height": "8px", "transform": "rotate(45deg)", "border": "1px solid #e0b96a" };
-const S17: React.CSSProperties = { "flex": "1", "height": "1px", "background": "linear-gradient(270deg, transparent, rgba(224,185,106,.7))" };
+const S15: React.CSSProperties = { "flex": "1", "height": "1px", "background": "linear-gradient(90deg, transparent, rgba(232,88,74,.7))" };
+const S16: React.CSSProperties = { "width": "8px", "height": "8px", "transform": "rotate(45deg)", "border": `1px solid ${RED}` };
+const S17: React.CSSProperties = { "flex": "1", "height": "1px", "background": "linear-gradient(270deg, transparent, rgba(232,88,74,.7))" };
 const S18: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "8px", "alignItems": "center", "textAlign": "center" };
-const S19: React.CSSProperties = { "fontFamily": "'Cormorant Garamond', serif", "textTransform": "uppercase", "fontVariantNumeric": "lining-nums", "letterSpacing": ".06em", "fontSize": "40px", "fontWeight": "700", "color": "#ecd9a8" };
-const S20: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "18px", "color": "rgba(234,220,184,.65)" };
-const S21: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "6px", "alignItems": "center", "textAlign": "center" };
-const S22: React.CSSProperties = { "fontSize": "11px", "letterSpacing": ".24em", "textTransform": "uppercase", "fontWeight": "600", "color": "rgba(216,201,164,.6)" };
-const S23: React.CSSProperties = { "width": "100%", "height": "58px", "border": "none", "borderBottom": "1px solid rgba(224,185,106,.5)", "background": "transparent", "padding": "0 4px", "color": "#f0e2bc", "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "34px", "outline": "none", "textAlign": "center" };
-const S24: React.CSSProperties = { "display": "flex", "gap": "8px" };
-const S25: React.CSSProperties = { "display": "flex", "alignItems": "center", "justifyContent": "center", "minHeight": "60px", "padding": "0 40px", "borderRadius": "30px", "border": "1px solid rgba(240,213,144,.7)", "background": "linear-gradient(180deg, rgba(224,185,106,.28), rgba(150,100,40,.18))", "boxShadow": "0 0 30px rgba(224,185,106,.22), inset 0 1px 0 rgba(255,240,200,.25)", "fontFamily": "'Cormorant Garamond', serif", "textTransform": "uppercase", "fontVariantNumeric": "lining-nums", "letterSpacing": ".14em", "fontSize": "24px", "fontWeight": "700", "color": "#f6dfa0", "whiteSpace": "nowrap" };
-const S26: React.CSSProperties = { "fontFamily": "'IM Fell English', serif", "fontStyle": "italic", "fontSize": "15px", "color": "rgba(234,220,184,.55)" };
+const S19: React.CSSProperties = { "fontFamily": FELL, "textTransform": "uppercase", "fontVariantNumeric": "lining-nums", "letterSpacing": ".06em", "fontSize": "40px", "fontWeight": "400", "color": "#ece6da" };
+const S20: React.CSSProperties = { "fontFamily": FELL, "fontStyle": "italic", "fontSize": "18px", "color": "rgba(236,230,218,.65)" };
 const S27: React.CSSProperties = { "display": "flex", "flexDirection": "column", "justifyContent": "center", "gap": "8px", "height": "80px", "alignItems": "center", "textAlign": "center" };
-const S28: React.CSSProperties = { "fontFamily": "'Cormorant Garamond', serif", "textTransform": "uppercase", "fontVariantNumeric": "lining-nums", "letterSpacing": ".06em", "fontSize": "40px", "lineHeight": "1.2", "fontWeight": "700", "color": "#ecd9a8" };
-const S29: React.CSSProperties = { "display": "flex", "flexDirection": "column", "width": "100%", "borderTop": "1px solid rgba(196,158,80,.18)" };
-const S30: React.CSSProperties = { "display": "flex", "justifyContent": "space-between", "alignItems": "center", "gap": "12px", "minHeight": "84px", "padding": "0 4px", "border": "none", "borderBottom": "1px solid rgba(196,158,80,.18)", "background": "transparent", "textAlign": "left", "fontFamily": "inherit", "cursor": "pointer" };
+const S28: React.CSSProperties = { ...S19, "lineHeight": "1.2" };
+const S29: React.CSSProperties = { "display": "flex", "flexDirection": "column", "width": "100%", "borderTop": `1px solid ${LINE}` };
+const S30: React.CSSProperties = { "display": "flex", "justifyContent": "space-between", "alignItems": "center", "gap": "12px", "minHeight": "84px", "padding": "0 4px", "border": "none", "borderBottom": `1px solid ${LINE}`, "background": "transparent", "textAlign": "left", "fontFamily": "inherit", "cursor": "pointer" };
 const S31: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "2px" };
-const S32: React.CSSProperties = { "fontFamily": "'Cormorant Garamond', serif", "fontSize": "26px", "fontWeight": "700", "color": "#f0d590" };
-const S33: React.CSSProperties = { "fontSize": "22px", "color": "#e0b96a" };
-const S34: React.CSSProperties = { "display": "flex", "justifyContent": "space-between", "alignItems": "center", "gap": "12px", "minHeight": "84px", "padding": "0 4px", "borderBottom": "1px solid rgba(196,158,80,.18)", "textAlign": "left" };
-const S35: React.CSSProperties = { "fontFamily": "'Cormorant Garamond', serif", "fontSize": "26px", "fontWeight": "700", "color": "#eadcb8" };
+const S32: React.CSSProperties = { "fontFamily": FELL, "fontSize": "26px", "fontWeight": "400", "color": "#ffb4a6" };
+const S33: React.CSSProperties = { "fontSize": "22px", "color": RED };
+const S34: React.CSSProperties = { "display": "flex", "justifyContent": "space-between", "alignItems": "center", "gap": "12px", "minHeight": "84px", "padding": "0 4px", "borderBottom": `1px solid ${LINE}`, "textAlign": "left" };
+const S35: React.CSSProperties = { "fontFamily": FELL, "fontSize": "26px", "fontWeight": "400", "color": "#ece6da" };
 const S36: React.CSSProperties = { "width": "640px", "display": "grid", "gridTemplateColumns": "repeat(4, minmax(0,1fr))", "gap": "14px", "paddingTop": "6px" };
-const S37: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "10px", "padding": "14px 8px 16px", "border": "1px solid rgba(196,158,80,.16)", "borderRadius": "12px", "background": "rgba(12,9,8,.35)", "cursor": "pointer", "fontFamily": "inherit" };
-const S38: React.CSSProperties = { "fontSize": "13px", "color": "rgba(216,201,164,.6)" };
+const S37: React.CSSProperties = { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "10px", "padding": "14px 8px 16px", "border": "1px solid rgba(176,186,204,.16)", "borderRadius": "12px", "background": "rgba(12,9,8,.35)", "cursor": "pointer", "fontFamily": "inherit" };
+const S38: React.CSSProperties = { "fontSize": "13px", "color": "rgba(222,216,204,.6)" };
 const S39: React.CSSProperties = { "position": "relative", "width": "128px", "height": "128px", "display": "flex", "alignItems": "center", "justifyContent": "center" };
 const S40: React.CSSProperties = { "position": "absolute", "inset": "0", "animation": "swSpin 40s linear infinite" };
-const S41: React.CSSProperties = { "position": "relative", "fontFamily": "'Cormorant Garamond', serif", "fontSize": "11px", "fontWeight": "700", "lineHeight": "1.1", "letterSpacing": ".08em", "textTransform": "uppercase", "textAlign": "center", "color": "#ecd9a8", "textShadow": "0 1px 3px rgba(0,0,0,.9)" };
-const S42: React.CSSProperties = { "position": "absolute", "left": "96px", "bottom": "40px", "fontSize": "12px", "color": "rgba(216,201,164,.4)" };
+const S41: React.CSSProperties = { "position": "relative", "fontFamily": FELL, "fontSize": "11px", "fontWeight": "400", "lineHeight": "1.1", "letterSpacing": ".08em", "textTransform": "uppercase", "textAlign": "center", "color": "#ece6da", "textShadow": "0 1px 3px rgba(0,0,0,.9)" };
+// How to Play panel (the Home's fourth right-hand view)
+const SH0: React.CSSProperties = { ...S20, "maxWidth": "420px" };
+const SH1: React.CSSProperties = { "position": "relative", "width": "100%", "display": "grid", "gridTemplateColumns": "repeat(7, minmax(0,1fr))" };
+const SH2: React.CSSProperties = { "position": "absolute", "left": "7%", "right": "7%", "top": "21px", "height": "1px", "background": "rgba(176,186,204,.25)" };
+const SH3: React.CSSProperties = { "position": "relative", "minHeight": "44px", "display": "flex", "flexDirection": "column", "alignItems": "center", "justifyContent": "flex-start", "gap": "10px", "padding": "16px 0 0", "border": "none", "background": "transparent", "cursor": "pointer", "fontFamily": "inherit" };
+const SH4: React.CSSProperties = { "minHeight": "60px", "padding": "0 44px", "fontSize": "22px", "borderRadius": "28px", "border": "1px solid rgba(255,122,104,.7)", "background": "linear-gradient(180deg, rgba(232,88,74,.28), rgba(192,57,46,.18))", "boxShadow": "0 0 30px rgba(232,88,74,.22), inset 0 1px 0 rgba(236,230,218,.25)", "fontFamily": FELL, "textTransform": "uppercase", "letterSpacing": ".14em", "fontWeight": "400", "color": "#ffb4a6", "whiteSpace": "nowrap", "cursor": "pointer" };
+// Community Created Content footer
+const SF0: React.CSSProperties = { "position": "absolute", "left": "96px", "bottom": "28px", "display": "flex", "alignItems": "center", "gap": "18px" };
+const SF1: React.CSSProperties = { "flex": "none", "display": "block", "width": "150px" };
+const SF2: React.CSSProperties = { "display": "block", "width": "150px", "height": "auto" };
+const SF3: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "6px" };
+const SF4: React.CSSProperties = { "fontSize": "12px", "color": "rgba(222,216,204,.55)" };
+const SF5: React.CSSProperties = { "display": "flex", "gap": "18px" };
+const SF6: React.CSSProperties = { "fontSize": "13px", "color": "rgba(236,230,218,.7)", "textDecoration": "underline", "textDecorationColor": "rgba(232,88,74,.5)", "textUnderlineOffset": "3px" };
+
+function Rule() {
+  return (
+    <div style={S14}>
+      <span style={S15} />
+      <span style={S16} />
+      <span style={S17} />
+    </div>
+  );
+}
 
 export function HomeV6View({ vm }: { vm: any }) {
   return (
     <>
-      <div id="home-screen" style={S0}>
+      {/* Full-bleed backdrop: the design's 1480x924 scene scaled to COVER the screen, so no device ever shows bars at
+          the edges. The content stage below stays contain-fitted, so at the design's ratio both are identical. */}
+      <div aria-hidden="true" style={SBG}>
         {T(vm.homeBg)}
         <div style={S1} />
         <div style={S2} />
+      </div>
+      <div id="home-screen" style={S0}>
         <div style={S3}>
           <div style={S4}>
             <div style={S5}>
@@ -72,9 +103,9 @@ export function HomeV6View({ vm }: { vm: any }) {
           <div data-left-list="1" style={S8}>
             {(vm.oC?.paths ?? []).map((p: any, p$i: number) => (
               <Fragment key={p$i}>
-                <button onClick={p?.pick} className={["", "hh-h0"].filter(Boolean).join(' ')} style={S9}>
+                <button onClick={p?.pick} className="hh-h0" style={S9}>
                   <span style={S10}>
-                    <span style={css(`font-family:'Cormorant Garamond', serif; font-size:30px; font-weight:700; line-height:1.05; color:${p?.titleColor ?? ''}; transition:color .3s;`)}>
+                    <span style={css(`font-family:'IM Fell English', serif; font-size:30px; font-weight:400; line-height:1.05; color:${p?.titleColor ?? ''}; transition:color .3s;`)}>
                       {T(p?.title)}
                     </span>
                     <span style={S11}>
@@ -91,51 +122,7 @@ export function HomeV6View({ vm }: { vm: any }) {
         </div>
         <div style={S12} />
         <div style={S13}>
-          <div style={S14}>
-            <span style={S15} />
-            <span style={S16} />
-            <span style={S17} />
-          </div>
-          {vm.oC?.isP && (
-            <>
-            <div style={S18}>
-              <div style={S19}>
-                Join the town
-              </div>
-              <div style={S20}>
-                Give your name and the Storyteller's code.
-              </div>
-            </div>
-            <label style={S21}>
-              <span style={S22}>
-                Your name
-              </span>
-              <input value={vm.nameD} onInput={vm.onNameD} placeholder="Write it here" maxLength={16} style={S23} />
-            </label>
-            <div style={S18}>
-              <span style={S22}>
-                Game code
-              </span>
-              <div style={S24}>
-                {(vm.codeCells ?? []).map((c: any, c$i: number) => (
-                  <Fragment key={c$i}>
-                    <div style={css(`width:42px; height:58px; border-radius:6px; border:1px solid ${c?.border ?? ''}; background:linear-gradient(180deg, rgba(0,0,0,.5), rgba(30,16,12,.55)); box-shadow:inset 0 2px 6px rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; font-family:'Cormorant Garamond', serif; text-transform:uppercase; font-variant-numeric:lining-nums; letter-spacing:.06em; font-size:30px; font-weight:700; color:#f0d590;`)}>
-                      {T(c?.ch)}
-                    </div>
-                  </Fragment>
-                ))}
-              </div>
-            </div>
-            <a href="#" onClick={vm.joinGo} style={css(`margin-top:8px; align-self:center; display:flex; flex-direction:column; align-items:center; gap:10px; opacity:${vm.joinD?.opacity ?? ''}; pointer-events:${vm.joinD?.events ?? ''}; transition:opacity .3s;`)}>
-              <span className={["", "hh-h1"].filter(Boolean).join(' ')} style={S25}>
-                Enter the Town
-              </span>
-              <span style={S26}>
-                {T(vm.joinD?.hint)}
-              </span>
-            </a>
-            </>
-          )}
+          <Rule />
           {vm.oC?.isS && (
             <>
             <div style={S27}>
@@ -147,7 +134,7 @@ export function HomeV6View({ vm }: { vm: any }) {
               </div>
             </div>
             <div data-right-list="1" style={S29}>
-              <button onClick={vm.newGame} className={["", "hh-h2"].filter(Boolean).join(' ')} style={S30}>
+              <button onClick={vm.newGame} className="hh-h2" style={S30}>
                 <span style={S31}>
                   <span style={S32}>
                     New game
@@ -206,7 +193,7 @@ export function HomeV6View({ vm }: { vm: any }) {
             <div style={S36}>
               {(vm.scriptsL ?? []).map((sc: any, sc$i: number) => (
                 <Fragment key={sc$i}>
-                  <button onClick={sc?.open} className={["", "hh-h3"].filter(Boolean).join(' ')} style={S37}>
+                  <button onClick={sc?.open} className="hh-h3" style={S37}>
                     <span role="img" aria-label={sc?.name} style={css(`width:128px; height:128px; background-image:url(${sc?.logo ?? ''}); background-size:contain; background-position:center; background-repeat:no-repeat; filter:drop-shadow(0 6px 10px rgba(0,0,0,.6));`)} />
                     <span style={S38}>
                       {T(sc?.count)}
@@ -214,7 +201,7 @@ export function HomeV6View({ vm }: { vm: any }) {
                   </button>
                 </Fragment>
               ))}
-              <button onClick={vm.openCarousel} className={["", "hh-h3"].filter(Boolean).join(' ')} style={S37}>
+              <button onClick={vm.openCarousel} className="hh-h3" style={S37}>
                 <span role="img" aria-label="The Carousel" style={S39}>
                   <span style={S40}>
                     {(vm.carouselIcons ?? []).map((ci: any, ci$i: number) => (
@@ -236,25 +223,50 @@ export function HomeV6View({ vm }: { vm: any }) {
             </div>
             </>
           )}
-          <div style={S14}>
-            <span style={S15} />
-            <span style={S16} />
-            <span style={S17} />
+          {vm.oC?.isH && (
+            <>
+            <div style={S18}>
+              <div style={S19}>
+                How to Play
+              </div>
+              <div style={SH0}>
+                Seven steps through a game, from the first night to the final vote.
+              </div>
+            </div>
+            <div style={SH1}>
+              <span style={SH2} />
+              {(vm.howSteps ?? []).map((sp: any, sp$i: number) => (
+                <Fragment key={sp$i}>
+                  <button onClick={sp?.go} aria-label={sp?.title} style={SH3}>
+                    <span style={css(`width:11px; height:11px; transform:rotate(45deg); background:${sp?.dia ?? ''}; border:1px solid ${sp?.border ?? ''}; box-shadow:${sp?.glow ?? ''};`)} />
+                    <span style={css(`font-size:12px; letter-spacing:.14em; text-transform:uppercase; font-weight:600; color:${sp?.lab ?? ''}; white-space:nowrap;`)}>
+                      {T(sp?.title)}
+                    </span>
+                  </button>
+                </Fragment>
+              ))}
+            </div>
+            <button onClick={vm.howBegin} style={SH4}>
+              Begin
+            </button>
+            </>
+          )}
+          <Rule />
+        </div>
+        <div style={SF0}>
+          <a href={SITE_URL} target="_blank" rel="noopener" aria-label="Community Created Content. Blood on the Clocktower website" style={SF1}>
+            <img src="/brand/CommunityCreatedContentParchment.png" alt="Community Created Content" style={SF2} />
+          </a>
+          <div style={SF3}>
+            <span style={SF4}>
+              Unofficial fan companion. Not affiliated with The Pandemonium Institute.
+            </span>
+            <span style={SF5}>
+              <a href={BUY_URL} target="_blank" rel="noopener" style={SF6}>Buy Blood on the Clocktower</a>
+              <a href={GITHUB_URL} target="_blank" rel="noopener" style={SF6}>GitHub</a>
+            </span>
           </div>
         </div>
-        <div style={S42}>
-          Unofficial fan companion. Not affiliated with The Pandemonium Institute.
-        </div>
-        {vm.refOn && (
-          <>
-
-          </>
-        )}
-        {vm.flowOn && (
-          <>
-
-          </>
-        )}
       </div>
     </>
   );

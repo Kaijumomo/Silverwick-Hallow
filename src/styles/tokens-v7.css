@@ -1,0 +1,31 @@
+/* Design v7 tokens (Claude Design handoff "New Design / design_handoff_silverwick_v7").
+ * Values are copied from the v7 prototype files (Home v7, Player Flow v2, Launch Orbit); the v7 README is the
+ * secondary source. Defined here and applied surface by surface (Packages 1-4); until a surface is restyled it
+ * keeps its previous colours. */
+:root {
+  /* accent: blood red replaces gold */
+  --sw-red: #e8584a;
+  --sw-red-light: #ffb4a6;
+  --sw-red-deep: #c0392e;
+  --sw-red-hover: #ff8a78;
+  --sw-red-rgb: 232, 88, 74;
+  /* ink and lines */
+  --sw-ink: #ece6da;
+  --sw-ink-2: rgba(222, 216, 204, .55);
+  --sw-ink-3: rgba(222, 216, 204, .75);
+  --sw-line: rgba(176, 186, 204, .18);
+  --sw-line-strong: rgba(176, 186, 204, .45);
+  /* surfaces */
+  --sw-page: #0b0909;
+  --sw-veil: rgba(9, 10, 15, .86);
+  --sw-splash-night: #05080e;
+  /* teams */
+  --sw-team-townsfolk: #86b7d4;
+  --sw-team-outsider: #94c29a;
+  --sw-team-minion: #d97a6c;
+  --sw-team-demon: #e3894c;
+  --sw-team-traveller: #b994d4;
+  /* How to Play rims */
+  --sw-good: #86b7d4;
+  --sw-evil: #e8584a;
+}

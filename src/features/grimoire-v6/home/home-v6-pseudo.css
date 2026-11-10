@@ -1,5 +1,4 @@
-/* Hand-maintained. First converted from home.dc.html by the archived importer (docs/archive/design-import). */
-.hh-h0:hover { background:rgba(196,158,80,.04) !important; }
-.hh-h1:hover { background:linear-gradient(180deg, rgba(224,185,106,.4), rgba(150,100,40,.26)) !important; }
-.hh-h2:hover { background:rgba(196,158,80,.06) !important; }
-.hh-h3:hover { background:rgba(196,158,80,.08) !important; border-color:rgba(224,185,106,.4) !important; }
+/* Hover states of the v7 tablet Home (Claude Design style-hover values). */
+.hh-h0:hover { background:rgba(176,186,204,.04) !important; }
+.hh-h2:hover { background:rgba(176,186,204,.06) !important; }
+.hh-h3:hover { background:rgba(176,186,204,.08) !important; border-color:rgba(232,88,74,.4) !important; }

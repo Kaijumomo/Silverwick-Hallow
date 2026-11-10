@@ -78,11 +78,11 @@ describe("Package 3 (D9): phone Home", () => {
     vi.stubGlobal("matchMedia", (query: string) => ({ matches: matches && query.includes("760"), media: query, addEventListener() {}, removeEventListener() {} }));
   afterEach(() => { vi.unstubAllGlobals(); });
 
-  it("on a phone shows only Player and Character Reference, and Player opens the join screen", () => {
+  it("on a phone shows only Player, Character Reference and How to Play, and Player opens the join screen", () => {
     phone(true);
     const navigate = vi.fn();
     render(<HomeScreen navigate={navigate} />);
-    expect(screen.getAllByRole("button")).toHaveLength(2);
+    expect(screen.getAllByRole("button")).toHaveLength(3);
     expect(screen.queryByText("Storyteller")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /^Player/ }));
     expect(navigate).toHaveBeenCalledWith("?join=");

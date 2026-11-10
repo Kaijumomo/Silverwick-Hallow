@@ -61,16 +61,31 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); clearFirebaseConfig(); __setEnvOverrideForTests(null); });
 
-describe("PhoneHome (D9): Player and Character Reference only", () => {
-  it("offers exactly the two player paths and no Storyteller", () => {
+describe("PhoneHome (D9, v7): Player, Character Reference and How to Play", () => {
+  it("offers exactly the three player paths and no Storyteller", () => {
     const onPick = vi.fn();
     render(<PhoneHome onPick={onPick} />);
     expect(screen.getByRole("button", { name: /Player/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Character Reference/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /How to Play/ })).toBeInTheDocument();
     expect(screen.queryByText("Storyteller")).toBeNull();
-    expect(screen.getAllByRole("button")).toHaveLength(2);
+    expect(screen.getAllByRole("button")).toHaveLength(3);
     fireEvent.click(screen.getByRole("button", { name: /Player/ }));
     expect(onPick).toHaveBeenCalledWith("player");
+    fireEvent.click(screen.getByRole("button", { name: /How to Play/ }));
+    expect(onPick).toHaveBeenCalledWith("howto");
+  });
+});
+
+describe("PhoneHome footer (design v7)", () => {
+  it("carries the Community Created Content badge and the design's links", () => {
+    render(<PhoneHome onPick={() => {}} />);
+    // The badge goes to the official website; the buy link goes to the board game itself (PO, 2026-11-10).
+    expect(screen.getByRole("link", { name: /Community Created Content/ })).toHaveAttribute("href", "https://bloodontheclocktower.com/");
+    expect(screen.getByRole("link", { name: "Buy the game" })).toHaveAttribute("href", "https://bloodontheclocktower.com/products/blood-on-the-clocktower-the-game");
+    expect(screen.getByRole("link", { name: "Buy the game" })).toHaveAttribute("rel", "noopener");
+    expect(screen.getByRole("link", { name: "GitHub" })).toHaveAttribute("href", "https://github.com/Kaijumomo/Silverwick-Hallow");
+    expect(screen.getByText(/Not affiliated with The Pandemonium Institute/)).toBeInTheDocument();
   });
 });
 

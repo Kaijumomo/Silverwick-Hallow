@@ -19,12 +19,14 @@ import { useV6Ui } from "../v6Store";
 import { startWizard } from "../setup/flow";
 import { HomeBackdrop } from "./HomeBackdrop";
 import { HomeV6View } from "./HomeV6View";
+import { HOW_VEIL, howRail, HowToPlayTablet } from "@/features/howto/HowToPlay";
 
-type HomePath = "storyteller" | "reference";
+type HomePath = "storyteller" | "reference" | "howto";
 
 const PATHS: readonly [HomePath, string, string][] = [
   ["storyteller", "Storyteller", "Run the Grimoire and guide the night."],
   ["reference", "Character Reference", "Browse scripts and abilities."],
+  ["howto", "How to Play", "Night, day, voting and how to win."],
 ];
 const STAGE_W = 1480;
 const STAGE_H = 924;
@@ -41,8 +43,12 @@ export function resumeSummary(game: StorytellerLobbyRecord, scriptName: string |
   return parts.join(" · ");
 }
 
-function useFit(): number {
-  const read = () => Math.min(1.6, window.innerWidth / STAGE_W, window.innerHeight / STAGE_H);
+/** Contain-fit for the content stage, and cover-fit for the backdrop so it always reaches every screen edge. */
+function useFit(): { fit: number; cover: number } {
+  const read = () => ({
+    fit: Math.min(1.6, window.innerWidth / STAGE_W, window.innerHeight / STAGE_H),
+    cover: Math.max(window.innerWidth / STAGE_W, window.innerHeight / STAGE_H),
+  });
   const [fit, setFit] = useState(read);
   useEffect(() => {
     const on = () => setFit(read());
@@ -65,8 +71,10 @@ function HomeTablet({ navigate = defaultNavigate }: Props) {
   // The tablet Home offers Storyteller and Character Reference (as designed); joining is by the invitation link or QR,
   // so the design's Player panel (name and code) is never shown and has no view-model (streamlining review F-06).
   const [configOpen, setConfigOpen] = useState(false);
+  // How to Play overlay step (null = closed). Opening it always starts at the step tapped (Begin = step 1).
+  const [howStep, setHowStep] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const fit = useFit();
+  const { fit, cover } = useFit();
   const configSource = getConfigSource();
 
   // A hand-off left behind by an abandoned join must never reach a later one.
@@ -92,13 +100,15 @@ function HomeTablet({ navigate = defaultNavigate }: Props) {
   const vm = {
     homeBg: <HomeBackdrop />,
     oC: {
-      isS: path === "storyteller", isR: path === "reference",
+      isS: path === "storyteller", isR: path === "reference", isH: path === "howto",
       paths: PATHS.map(([k, title, desc]) => ({
-        title, desc, titleColor: path === k ? "#f0d590" : "rgba(234,220,184,.7)", arrowColor: path === k ? "#e0b96a" : "rgba(216,201,164,.3)",
+        title, desc, titleColor: path === k ? "#ffb4a6" : "rgba(236,230,218,.7)", arrowColor: path === k ? "#e8584a" : "rgba(222,216,204,.3)",
         pick: () => setPath(k),
       })),
     },
     newGame: () => startWizard(),
+    howSteps: howRail(0, setHowStep),
+    howBegin: () => setHowStep(0),
     resumeRows,
     openDisplay: (e?: { preventDefault?: () => void }) => {
       e?.preventDefault?.();
@@ -117,7 +127,7 @@ function HomeTablet({ navigate = defaultNavigate }: Props) {
     }),
   };
 
-  const root: CSSProperties & Record<"--home-fit", number> = { "--home-fit": fit };
+  const root: CSSProperties & Record<"--home-fit" | "--home-cover", number> = { "--home-fit": fit, "--home-cover": cover };
   return (
     <main className="hv-root" style={root} data-path={path}>
       <HomeV6View vm={vm} />
@@ -127,6 +137,16 @@ function HomeTablet({ navigate = defaultNavigate }: Props) {
           title={configSource === "localStorage" ? "Reconfigure Firebase" : "Configure Firebase"}>Online settings</button>
       )}
       {toast && <div className="toast" role="status">{toast}</div>}
+      {howStep !== null && (
+        // Full-bleed backdrop (cover), then the same 1480x924 contain-fitted stage as the Home for the content.
+        <div style={{ position: "absolute", inset: 0, zIndex: 26, background: "#0b0909" }}>
+        <img src="/bg/BackgroundMenuTablet.png" alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+        <div style={{ position: "absolute", inset: 0, background: HOW_VEIL }} />
+        <div className="hv-stage" style={{ position: "absolute", left: "50%", top: "50%", width: STAGE_W, height: STAGE_H, overflow: "hidden", transform: "translate(-50%, -50%) scale(var(--home-fit, 1))", transformOrigin: "center center", zIndex: 26, fontFamily: "'Source Sans 3', system-ui, sans-serif", fontVariantNumeric: "lining-nums tabular-nums", color: "#ddd6c8" }}>
+          <HowToPlayTablet step={howStep} onStep={setHowStep} onClose={() => setHowStep(null)} backdrop={false} />
+        </div>
+        </div>
+      )}
       {reference && (
         <ReferenceOverlay category={reference} team={referenceTeam} onTeamChange={setReferenceTeam} onClose={() => setReference(null)} />
       )}
