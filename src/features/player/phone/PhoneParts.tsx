@@ -16,8 +16,9 @@ export function PhoneFrame({ dark, evil, reference, glow, glowColor, children, l
   const glowStyle = glowColor ? ({ "--swp-glow": glowColor } as CSSProperties) : undefined;
   return (
     <div className="swp-root" data-screen={label}>
-      <img className="swp-bg" src="/bg/BackgroundMenuPhone.png" alt="" />
+      <img className="swp-bg" src="/bg/BackgroundBloodMoonPhone.png" alt="" />
       <div className="swp-wash" />
+      <div className="swp-wash-fade" />
       {dark && <div className="swp-wash-dark" />}
       {evil && <div className="swp-wash-evil" />}
       {reference && <div className="swp-wash-ref" />}

@@ -105,13 +105,13 @@ export function EvilTeamScreen({ me, mates, bluffs, evilOf, onContinue }: {
               }}>
                 <div className="swp-evt-token" style={{
                   width: n.size, height: n.size,
-                  boxShadow: `0 0 0 ${n.me ? 2 : 1}px ${n.me ? "#e0b96a" : n.demon ? "rgba(227,137,76,.75)" : "rgba(217,122,108,.6)"}, 0 0 ${n.demon ? 46 : 26}px rgba(210,50,42,.55), 0 16px 30px rgba(0,0,0,.65), inset 0 -10px 20px rgba(90,60,25,.35)`,
+                  boxShadow: `0 0 0 ${n.me ? 2 : 1}px ${n.me ? "#e8584a" : n.demon ? "rgba(227,137,76,.75)" : "rgba(217,122,108,.6)"}, 0 0 ${n.demon ? 46 : 26}px rgba(210,50,42,.55), 0 16px 30px rgba(0,0,0,.65), inset 0 -10px 20px rgba(90,60,25,.35)`,
                 }}>
                   <span role="img" aria-label="" className="swp-evt-art" style={{ backgroundImage: `url(${n.art})` }} />
                 </div>
                 <span className="swp-evt-label">
                   <span className="swp-evt-type" style={{ color: n.type === "Demon" ? "#e3894c" : "#d97a6c" }}>{n.type}</span>
-                  <span className="swp-evt-name" style={{ fontSize: n.demon ? 26 : 22, color: n.me ? "#f0d590" : "#f2e6c8" }}>{n.name}</span>
+                  <span className="swp-evt-name" style={{ fontSize: n.demon ? 26 : 22, color: n.me ? "#ffb4a6" : "#ece6da" }}>{n.name}</span>
                   <span className="swp-evt-sub">{n.sub}</span>
                 </span>
               </div>

@@ -77,6 +77,16 @@ describe("PhoneHome (D9, v7): Player, Character Reference and How to Play", () =
   });
 });
 
+describe("PhoneHome footer (design v7)", () => {
+  it("carries the Community Created Content badge and the design's links", () => {
+    render(<PhoneHome onPick={() => {}} />);
+    expect(screen.getByRole("link", { name: /Community Created Content/ })).toHaveAttribute("href", expect.stringContaining("bloodontheclocktower.com"));
+    expect(screen.getByRole("link", { name: "Buy the game" })).toHaveAttribute("rel", "noopener");
+    expect(screen.getByRole("link", { name: "GitHub" })).toHaveAttribute("href", "https://github.com/Kaijumomo/Silverwick-Hallow");
+    expect(screen.getByText(/Not affiliated with The Pandemonium Institute/)).toBeInTheDocument();
+  });
+});
+
 describe("waiting lobby rows (A1)", () => {
   it("marks the player's own row once, keeps arrival order, and always shows the player", () => {
     expect(arrivalRows(["Ada", "Bram", "Cleo"], "Bram")).toEqual([

@@ -7,7 +7,7 @@ export type StatusTone = "neutral" | "warm" | "error" | "seal" | "good" | "evil"
 
 const GLOW: Record<StatusTone, string | undefined> = {
   neutral: undefined,
-  warm: "rgba(232, 168, 88, .2)",
+  warm: "rgba(232, 88, 74, .2)",
   error: "rgba(200, 80, 70, .16)",
   seal: "rgba(200, 60, 55, .2)",
   good: "rgba(134, 183, 212, .3)",

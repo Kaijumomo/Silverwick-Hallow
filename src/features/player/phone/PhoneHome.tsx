@@ -1,5 +1,8 @@
 import { PhoneFrame } from "./PhoneParts";
 
+const BUY_URL = "https://bloodontheclocktower.com/products/blood-on-the-clocktower-the-game";
+const GITHUB_URL = "https://github.com/Kaijumomo/Silverwick-Hallow";
+
 const PATHS = [
   { id: "player", title: "Player", desc: "Join with your name and a code.", primary: true },
   { id: "reference", title: "Character Reference", desc: "Scripts, abilities, night order.", primary: false },
@@ -8,9 +11,9 @@ const PATHS = [
 
 export type PhonePath = (typeof PATHS)[number]["id"];
 
-/** Phone Home (design screen 01). Per the Package 3 decision the phone shows
- * only the two player paths; the Storyteller remains part of the app, just not
- * offered on a phone Home. */
+/** Phone Home (Player Flow v2, design v7). The phone shows only player paths (Player, Character Reference,
+ * How to Play, and Rejoin game when this phone has a saved game); the Storyteller remains part of the app,
+ * just not offered on a phone Home. */
 export function PhoneHome({ onPick, trial, rejoin }: { onPick: (path: PhonePath) => void; trial?: boolean; rejoin?: { label: string; onRejoin: () => void } }) {
   return (
     <PhoneFrame glow="join" label="home">
@@ -40,7 +43,19 @@ export function PhoneHome({ onPick, trial, rejoin }: { onPick: (path: PhonePath)
             </button>
           ))}
         </nav>
-        <div className="swp-home-foot">Unofficial fan companion. Not affiliated with The Pandemonium Institute.</div>
+        {/* Community Created Content footer (TPI community content policy; design v7). */}
+        <div className="swp-home-foot">
+          <a className="swp-home-badge" href={BUY_URL} target="_blank" rel="noopener" aria-label="Community Created Content. Buy Blood on the Clocktower">
+            <img src="/brand/CommunityCreatedContentParchment.png" alt="Community Created Content" />
+          </a>
+          <div className="swp-home-credit">
+            <span className="swp-home-disclaimer">Unofficial fan companion. Not affiliated with The Pandemonium Institute.</span>
+            <span className="swp-home-links">
+              <a href={BUY_URL} target="_blank" rel="noopener">Buy the game</a>
+              <a href={GITHUB_URL} target="_blank" rel="noopener">GitHub</a>
+            </span>
+          </div>
+        </div>
       </main>
     </PhoneFrame>
   );
