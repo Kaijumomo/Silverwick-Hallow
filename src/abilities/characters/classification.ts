@@ -63,6 +63,6 @@ export const REVIEWED_MANUAL: Readonly<Record<RoleId, string>> = {
   seamstress: "Reviewed: once per game, compares two players' alignment and changes nothing. No Ability is Storyteller notation after use.",
   artist: "Reviewed: once per game, a private yes/no question answered by the Storyteller. Changes nothing; it has no night wake. No Ability is Storyteller notation after use.",
   juggler: "Reviewed: counts correct day-one guesses and changes nothing. The Correct reminders are Storyteller notation; the Cannibal jinx stays a Storyteller judgment.",
-  mutant: "Reviewed: an Outsider with no information or effect on others. A Mutant breaking madness is executed through the ordinary execution record, which the Undertaker reads like any other execution.",
+  mutant: "Reviewed: an Outsider with no information or effect on others. The official rules let the Storyteller execute a Mutant who breaks madness at any time, even at night or outside a nomination. A daytime one goes through the ordinary execution record, which the Undertaker reads like any other execution, and uses that day's one execution (the Storyteller keeps count; the app does not block a second). The app records executions only in the Day phase, so a night-time one is recorded as an ordinary death.",
   chambermaid: "Reviewed: counts who woke tonight because of their ability and changes nothing. The Mathematician jinx stays a Storyteller judgment.",
 };
