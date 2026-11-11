@@ -5,6 +5,13 @@ import { CANONICAL_MODIFIER_SCOPES, type HookScope } from "./modifiers";
 import { CANONICAL_ABILITY_SEMANTICS, type AbilitySemanticsRegistry } from "./semantics";
 import { COVERAGE_NOTES, OWNED_ELSEWHERE, REVIEWED_MANUAL, VERIFIED_MANUAL } from "./characters/classification";
 import { hasCountPolicy, hasUncertainComposition } from "@/rules/setup/setupPolicies";
+import { REVIEWED_INTERACTION_ROLES } from "./characters/passiveRules";
+import {
+  COVERAGE_CAVEATS, ENDING_EVIDENCE_ROLES, MODIFIER_ENDING_CAVEAT, PARTIAL_SUPPORT, TEST_EVIDENCE,
+  type CoverageEvidence, type CoverageLevel,
+} from "./coverageEvidence";
+
+export type { CoverageEvidence, CoverageLevel } from "./coverageEvidence";
 
 /**
  * Phase 10F: the canonical ability COVERAGE MANIFEST (PHASE10F Section 18,
@@ -33,6 +40,11 @@ import { hasCountPolicy, hasUncertainComposition } from "@/rules/setup/setupPoli
  *    reviewed (it is in REVIEWED_INTERACTION_ROLES) while its own ability stays
  *    Storyteller-resolved. Presentation only: it changes no gate;
  *  - unclassified: Phase 11 work.
+ *
+ * Stage 5A-1: every CHARACTER entry also carries a `level` and `evidence` (see
+ * coverageEvidence.ts for what each level means and does not mean).
+ * `status` describes the ability DESCRIPTOR; `level` describes what the
+ * repository actually does for the character. Neither authorizes any action.
  */
 export type CoverageStatus = "supported" | "verifiedManual" | "setupOwned" | "modifierScoped" | "gatedJudgment" | "ownedElsewhere" | "reviewedManual" | "unclassified";
 export type CoverageKind = "townsfolk" | "outsider" | "minion" | "demon" | "traveler" | "fabled" | "loric" | "jinx";
@@ -49,6 +61,14 @@ export type CoverageEntry = {
   /** Orthogonal ownership inventory. Legacy status is descriptor-oriented,
    * not a whole-character automation claim. Never used to authorize actions. */
   capabilities?: readonly CoverageCapability[];
+  /** Stage 5A-1: what is built for this character today. Characters only (no jinxes). */
+  level?: CoverageLevel;
+  /** True when the character is on REVIEWED_INTERACTION_ROLES (having it in play does not push other automation to Manual). */
+  reviewedInteraction?: boolean;
+  /** Files that show the level, each with one sentence. Verified by tests. */
+  evidence?: readonly CoverageEvidence[];
+  /** Known gaps against the official rules, read from code or from the Stage 4 review. */
+  caveats?: readonly string[];
 };
 
 export type CoverageCapability = {
@@ -103,6 +123,37 @@ function waveOf(role: RawRole): CoverageWave {
   return WAVE_BY_EDITION[role.edition] ?? "11D";
 }
 
+const isModifier = (kind: CoverageKind) => kind === "fabled" || kind === "loric";
+
+/** Stage 5A-1. Derived from the same facts the gates read (the descriptor registry and the reviewed list), plus the
+ * hand-read support pieces in coverageEvidence.ts. Presentation only: it changes no gate. */
+function levelOf(entry: CoverageEntry, capabilities: readonly CoverageCapability[], semantics: AbilitySemanticsRegistry) {
+  const id = entry.id;
+  const reviewedInteraction = REVIEWED_INTERACTION_ROLES.has(id);
+  const pieces = Object.prototype.hasOwnProperty.call(PARTIAL_SUPPORT, id) ? PARTIAL_SUPPORT[id]! : [];
+  const inEnding = ENDING_EVIDENCE_ROLES.includes(id);
+  const evidence: CoverageEvidence[] = [];
+  const addCode = (path: string, what: string) => { if (!evidence.some(e => e.path === path && e.what === what)) evidence.push({ kind: "code", path, what }); };
+  const guided = semantics.has(id);
+  if (guided) addCode("src/abilities/characters/index.ts", "Registered ability descriptor; each action must also pass automation eligibility.");
+  if (reviewedInteraction) addCode("src/abilities/characters/passiveRules.ts", "On the reviewed-interaction list: in play, it does not push other automation to Manual.");
+  for (const c of capabilities) addCode(c.evidence, c.boundary);
+  for (const piece of pieces) addCode(piece.path, piece.what);
+  if (inEnding) addCode("src/stores/victoryEvidence.ts", "Listed in the game-ending evidence allow-list (a character outside it makes the ending Manual).");
+  if (entry.status === "verifiedManual") addCode("src/abilities/characters/classification.ts", "Verified-manual classification: the Storyteller resolves it by design.");
+  if (isModifier(entry.kind) && entry.scopes) addCode("src/abilities/modifiers.ts", `Hook scopes classified as [${entry.scopes.join(", ")}]; semantics are not modelled.`);
+  const tests = Object.prototype.hasOwnProperty.call(TEST_EVIDENCE, id) ? TEST_EVIDENCE[id]! : [];
+  if (guided || reviewedInteraction) for (const path of tests) evidence.push({ kind: "test", path, what: "Test file that names or loops over this character; it does not by itself prove every behaviour above." });
+
+  const hasPiece = pieces.length > 0 || capabilities.length > 0 || inEnding || entry.status === "verifiedManual";
+  const level: CoverageLevel = guided ? "guided" : reviewedInteraction && !isModifier(entry.kind) ? "reviewed" : hasPiece ? "partial" : "generic";
+  const caveats = [
+    ...(Object.prototype.hasOwnProperty.call(COVERAGE_CAVEATS, id) ? COVERAGE_CAVEATS[id]! : []),
+    ...(isModifier(entry.kind) ? [MODIFIER_ENDING_CAVEAT] : []),
+  ];
+  return { level, reviewedInteraction, evidence, ...(caveats.length ? { caveats } : {}) };
+}
+
 export function buildCoverageManifest(semantics: AbilitySemanticsRegistry = CANONICAL_ABILITY_SEMANTICS): CoverageEntry[] {
   const entries: CoverageEntry[] = (rawRoles as RawRole[]).map((role) => {
     const kind = (role.team === "traveller" ? "traveler" : role.team) as CoverageKind;
@@ -132,16 +183,19 @@ export function buildCoverageManifest(semantics: AbilitySemanticsRegistry = CANO
   const rolesById = new Map((rawRoles as RawRole[]).map(role => [role.id, role]));
   return entries.map(entry => {
     const role = rolesById.get(entry.id);
-    return role ? { ...entry, capabilities: capabilitiesOf(role, semantics) } : entry;
+    if (!role) return entry;
+    const capabilities = capabilitiesOf(role, semantics);
+    return { ...entry, capabilities, ...levelOf(entry, capabilities, semantics) };
   });
 }
 
-export type CoverageSummary = { revision: string; total: number; characterTotal: number; jinxTotal: number; byStatus: Record<CoverageStatus, number> };
+export type CoverageSummary = { revision: string; total: number; characterTotal: number; jinxTotal: number; byStatus: Record<CoverageStatus, number>; byLevel: Record<CoverageLevel, number> };
 
 export function coverageSummary(manifest: readonly CoverageEntry[] = buildCoverageManifest()): CoverageSummary {
   const byStatus: Record<CoverageStatus, number> = { supported: 0, verifiedManual: 0, setupOwned: 0, modifierScoped: 0, gatedJudgment: 0, ownedElsewhere: 0, reviewedManual: 0, unclassified: 0 };
-  for (const entry of manifest) byStatus[entry.status]++;
+  const byLevel: Record<CoverageLevel, number> = { guided: 0, reviewed: 0, partial: 0, generic: 0 };
+  for (const entry of manifest) { byStatus[entry.status]++; if (entry.level) byLevel[entry.level]++; }
   return { revision: CANONICAL_REVISION, total: manifest.length,
     characterTotal: manifest.filter(entry => entry.kind !== "jinx").length,
-    jinxTotal: manifest.filter(entry => entry.kind === "jinx").length, byStatus };
+    jinxTotal: manifest.filter(entry => entry.kind === "jinx").length, byStatus, byLevel };
 }
