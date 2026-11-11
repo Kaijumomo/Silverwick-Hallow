@@ -2384,12 +2384,11 @@ describe("Phase 9R.1 Finding F1 Proof: expanded Firebase compatibility gate agai
 
     await expect(startStorytellerSession(rawBackend, lobby, writer)).rejects.toThrow(SnapshotValidationError);
     expect(useStorytellerStore.getState().game).toBeNull();
-    // Directly observed against the real emulator, not inferred: the
-    // Storyteller-private projection path was never written -- still
-    // absent, exactly as a lobby that never got past checkpoint recovery
-    // would leave it.
-    const storytellerAfter = await ref(st, "storyteller").once("value");
-    expect(storytellerAfter.exists()).toBe(false);
+    // Directly observed against the real emulator, not inferred: no
+    // projection was committed -- every projection carries this writer's
+    // guard stamp in the same update, and none exists (WP 4-4: the old
+    // storyteller/ node is never written, so its absence proved nothing).
+    expect((await ref(st, "writeGuard").once("value")).exists()).toBe(false);
 
     await writer.dispose();
   });
@@ -2437,8 +2436,9 @@ describe("Phase 9R.1 Finding F1 Proof: expanded Firebase compatibility gate agai
 
     await expect(startStorytellerSession(rawBackend, lobby, writer)).rejects.toThrow(SnapshotValidationError);
     expect(useStorytellerStore.getState().game).toBeNull();
-    const storytellerAfter = await ref(st, "storyteller").once("value");
-    expect(storytellerAfter.exists()).toBe(false);
+    // No projection was committed: every projection carries a guard stamp
+    // in the same update, and none exists (WP 4-4).
+    expect((await ref(st, "writeGuard").once("value")).exists()).toBe(false);
 
     await writer.dispose();
   });
@@ -2561,8 +2561,9 @@ describe("Phase 9R.1 Finding F2 Proof: reserved '.value' structure gate against 
 
     await expect(startStorytellerSession(rawBackend, lobby, writer)).rejects.toThrow(SnapshotValidationError);
     expect(useStorytellerStore.getState().game).toBeNull();
-    const storytellerAfter = await ref(st, "storyteller").once("value");
-    expect(storytellerAfter.exists()).toBe(false);
+    // No projection was committed: every projection carries a guard stamp
+    // in the same update, and none exists (WP 4-4).
+    expect((await ref(st, "writeGuard").once("value")).exists()).toBe(false);
 
     await writer.dispose();
   });
@@ -2678,8 +2679,9 @@ describe("Phase 9R.1 Finding F3 Proof: Firebase-exact string-length accounting a
 
     await expect(startStorytellerSession(rawBackend, lobby, writer)).rejects.toThrow(SnapshotValidationError);
     expect(useStorytellerStore.getState().game).toBeNull();
-    const storytellerAfter = await ref(st, "storyteller").once("value");
-    expect(storytellerAfter.exists()).toBe(false);
+    // No projection was committed: every projection carries a guard stamp
+    // in the same update, and none exists (WP 4-4).
+    expect((await ref(st, "writeGuard").once("value")).exists()).toBe(false);
 
     await writer.dispose();
   });
@@ -2824,8 +2826,7 @@ describe("Phase 9R.1 residual F2 Proof: nested '.priority' validation against th
         target === path("storyteller") || target === path("public") || target === path("checkpoint") || target.startsWith(path("player/"))
       );
       expect(projectionWrites).toEqual([]);
-      const storytellerAfter = await ref(st, "storyteller").once("value");
-      expect(storytellerAfter.exists()).toBe(false);
+      expect((await ref(st, "writeGuard").once("value")).exists()).toBe(false);
     } finally {
       useStorytellerStore.setState({ restoreRemoteCheckpoint: originalRestore });
       await writer.dispose();

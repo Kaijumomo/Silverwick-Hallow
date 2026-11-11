@@ -7,9 +7,9 @@ import { MAX_ROOM_CODE_SHAPE } from "./roomCode";
 /**
  * PHASE10F Section 44, SOL-10F-E1: the derived recovery checkpoint.
  *
- * Besides the structured Storyteller game, every projection writes
- * `lobbies/{code}/checkpoint` -- ONE string leaf holding the whole game and
- * the live UID -> PlayerId roster. Firebase limits a string leaf to 10 MiB
+ * Every projection writes `lobbies/{code}/checkpoint` -- ONE string leaf
+ * holding the whole game and the live UID -> PlayerId roster (since WP 4-4
+ * the only stored copy of the game). Firebase limits a string leaf to 10 MiB
  * (mirrored by validateFirebaseWritableValue, SOL-10F-D1), so individually
  * valid game leaves can still add up to a checkpoint Firebase refuses.
  *

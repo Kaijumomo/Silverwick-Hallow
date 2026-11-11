@@ -1431,8 +1431,10 @@ let currentConflict: PendingConflict | null = null;
  * a checkpoint as Current State would only surface the problem later, at
  * the next real Firebase projection, after it is already authoritative.
  * validateFirebaseWritableValue (firebaseWriteCompatibility.ts) -- run
- * against the real destination paths production actually writes this data
- * to (storytellerPath/rosterPath) -- is the final gate here, after schema
+ * against the structured destinations (storytellerPath/rosterPath; since
+ * WP 4-4 the game itself is no longer written as a structured node, so this
+ * is a deliberately conservative check, unchanged in what it refuses) -- is
+ * the final gate here, after schema
  * and lobby-code validation and before this checkpoint is ever reported
  * "valid": never a speculative Firebase write just to find out.
  */

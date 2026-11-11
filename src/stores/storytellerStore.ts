@@ -1102,8 +1102,10 @@ export function checkPlannedGame(planned: StorytellerLobbyRecord, current: Story
  * SOL-10F-C3 / E1 proofs resolveAbility performs inline (unchanged). A
  * planned game becomes authoritative only if the production writer can
  * project it: the SAME Firebase write-compatibility check checkpoint recovery
- * uses, against the SAME Storyteller destination the writer writes (the live
- * lobby's, or -- before a room exists -- the canonical maximum code shape),
+ * uses, against the SAME structured Storyteller destination (the live
+ * lobby's, or -- before a room exists -- the canonical maximum code shape;
+ * since WP 4-4 nothing is written there, and the check is kept as a
+ * deliberately conservative gate, unchanged in what it refuses),
  * and the derived recovery checkpoint proven against the conservative
  * supported-roster envelope with the writer's own serializer. Null when safe;
  * otherwise the Storyteller-facing reason (nothing may be committed).

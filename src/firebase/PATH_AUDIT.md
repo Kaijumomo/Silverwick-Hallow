@@ -15,7 +15,7 @@ roster entries are not evidence of valid membership.
 | `membershipRevocations/{uid}` | `revokePlayerMembership` (with a local completion: `revokePlayerAndCommit`, `acceptLeaveRequest`), cleared by `seatPlayer` and `SessionWriter.close`; read by reconnect reconciliation (Phase 9R.6) | ST only — never the revoked UID or any player/display | Fenced Storyteller writer only; exactly `{playerId, participantId, action}` (nonempty strings; action `unseat` or `remove`) or deletion |
 | `public` | Projections, player/public hooks | ST, own pending request, or own roster membership | ST only |
 | `player/{playerId}` | Projections, `seatPlayer`, player hook | ST or exact same-lobby UID→playerId binding | ST only |
-| `storyteller` | Projections | ST | ST only |
+| `storyteller` | No longer written (WP 4-4, owner-approved 2026-11-10); only cleared by `SessionWriter.close` and `endLobby` for lobbies from older builds. The game travels in `checkpoint` | ST | ST only |
 | `session` | Lifecycle identity/state | Authenticated clients | Owner creates active v2 record; writer-fenced owner transitions it to ended |
 | `writer` / `writeGuard` | Single-writer lease and monotonic fence | Owner | Lease token/revision rules reject stale tabs and revisions |
 | `outcomes/{uid}` | Durable rejected/revoked result | That UID | Storyteller writer only |
@@ -87,8 +87,8 @@ is never sufficient; every display and enrollment rule also requires
 
 ## What writes go where (verified by `sync.test.ts`)
 
-`writeProjections` is the **single chokepoint** for any write outside
-`storyteller/`. The MemoryBackend `writeLog` is asserted in tests to never
+`writeProjections` is the **single chokepoint** for game projections
+(`public/`, `player/*` and `checkpoint`). The MemoryBackend `writeLog` is asserted in tests to never
 contain forbidden fields on `public/*` or `player/*`:
 
 - `public/` forbidden: `actualRole`, `shownRole`, `shownAlignment`,
