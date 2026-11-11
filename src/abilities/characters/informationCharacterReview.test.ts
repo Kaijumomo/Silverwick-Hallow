@@ -148,7 +148,7 @@ describe("clues and registration with the reviewed characters", () => {
     const g = night1(["washerwoman", "clockmaker", "empath", "imp", "poisoner"]);
     const result = planPreparedInformation(g, { character: "washerwoman", source: bind(g, "p0"), expected: preparedInformationContext(g, proofScript),
       clue: { kind: "pair", candidates: [bind(g, "p1"), bind(g, "p2")], shownCharacter: "dreamer", qualifyingParticipantId: g.players.p1!.participantId! } }, env);
-    expect(result).toMatchObject({ ok: false });
+    expect(result).toMatchObject({ ok: false, message: "The qualifying player does not register as the selected character." });
   });
 
   it("the Mutant counts as an Outsider: a Librarian clue can show it and zero Outsiders is refused", () => {
@@ -177,9 +177,10 @@ describe("jinxes with the reviewed characters stay Storyteller judgments", () =>
     expect(modifiers(["mathematician", "lunatic", "empath"])).toContain("jinx:mathematician+lunatic");
   });
 
-  it("an active jinx gates its own two characters' evaluations to a judgment", () => {
+  it("the jinx is active and unverified, so it would gate the Mathematician if it ever gained an evaluator (it has none today)", () => {
     const g = proofGame(["mathematician", "drunk", "empath", "imp", "chef"]);
     expect(proofQuery(g).modifierGate("mathematician", ["information"]).kind).toBe("gated");
+    expect(CANONICAL_ABILITY_SEMANTICS.has("mathematician")).toBe(false);
   });
 
   it("Clockmaker with Summoner and Juggler with Cannibal still send the table to Manual (those characters are not reviewed)", () => {
