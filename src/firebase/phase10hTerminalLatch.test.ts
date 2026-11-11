@@ -25,6 +25,7 @@ import { LEASE_MS, SessionWriter } from "./writer";
 import { setupGame, setupScript } from "@/test/setupFixtures";
 import { buildRegistry } from "@/data/roleRegistry";
 import type { StorytellerLobbyRecord } from "@/stores/types";
+import { checkpointGame } from "@/test/checkpointGame";
 
 const firebase = vi.hoisted(() => ({ backend: null as RoomBackend | null }));
 vi.mock("./session", () => ({
@@ -136,7 +137,7 @@ async function expectTerminalOnly(ctx: Awaited<ReturnType<typeof goLive>>, start
   expect(st().recordDeath(victim)).toMatchObject({ ok: true });
   await settle();
   expect(updatesSince(ops, start)).toEqual([]);
-  expect(await get(`${root}/storyteller/players/${victim}/alive`)).toBe(true);
+  expect(await checkpointGame(get, code, `players/${victim}/alive`)).toBe(true);
   // The ordinary writer path itself refuses.
   await expect(writerOf().update({ [`${root}/public/phase`]: "night" })).rejects.toThrow(/closing/);
   // Server: still the half-way terminal state, never a projection over it.
@@ -248,7 +249,7 @@ describe("R3-CLOSURE-001 Sequence C: a FIRST-EVER pre-signal failure still reope
     // Ordinary synchronized gameplay resumes.
     const victim = game().seatOrder[3]!;
     expect(st().recordDeath(victim)).toMatchObject({ ok: true });
-    await waitFor(async () => expect(await ctx.get(`${root}/storyteller/players/${victim}/alive`)).toBe(false));
+    await waitFor(async () => expect(await checkpointGame(ctx, code, `players/${victim}/alive`)).toBe(false));
     // A. The join seen during the failed close is re-synced exactly once, not seated.
     await waitFor(() => expect(game().pendingPlayers["uid-dave"]).toBeTruthy());
     await settle();

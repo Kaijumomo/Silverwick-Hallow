@@ -1149,9 +1149,10 @@ describe("Phase 9R.1 residual F2: nested '.priority' validation before checkpoin
     expect(recovered.outcome).toBe("live");
     expect(restore.calls).toBe(1);
     expect(useStorytellerStore.getState().game!.history[0]!.change).toEqual({ kind: "added", item });
-    const storytellerWrites = b.writeLog.slice(writeLogBefore).filter((entry) => entry.path === `${root}/storyteller`);
-    expect(storytellerWrites.length).toBeGreaterThan(0);
-    const projected = storytellerWrites.at(-1)!.value as { history: { change: unknown }[] };
+    // WP 4-4: the game is projected only inside the checkpoint string.
+    const checkpointWrites = b.writeLog.slice(writeLogBefore).filter((entry) => entry.path === `${root}/checkpoint`);
+    expect(checkpointWrites.length).toBeGreaterThan(0);
+    const projected = (JSON.parse(checkpointWrites.at(-1)!.value as string) as { game: { history: { change: unknown }[] } }).game;
     expect(projected.history[0]!.change).toEqual({ kind: "added", item });
   });
 });

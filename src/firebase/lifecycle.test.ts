@@ -11,6 +11,7 @@ import { lifecycleMessage, requireActiveSession, retryTransient, sessionPath } f
 import { acceptLeaveRequest, rejectLeaveRequest, revokePlayerAndCommit, seatPlayerAndCommit, storytellerOccupancyCompletion } from "./membershipCommands";
 import { tbScript } from "@/test/fixtures";
 import { withoutSelfEnvelope } from "@/test/revealTokens";
+import { checkpointGame } from "@/test/checkpointGame";
 
 const code = "BCDF2345";
 const root = `lobbies/${code}`;
@@ -62,7 +63,7 @@ describe("multiplayer lifecycle", () => {
     // deal/reveal gating (covered in setupCommands.test.ts) -- record the
     // initial reveal directly so the Phase 9C.4 barrier doesn't withhold it.
     store.setState({ game: { ...store.getState().game!, setupRolesRevealed: true } });
-    await waitFor(async () => expect(await b.get(`${root}/storyteller/players/${id}/actualRole`)).toBe(actual));
+    await waitFor(async () => expect(await checkpointGame(b, code, `players/${id}/actualRole`)).toBe(actual));
     expect(await b.get(`${root}/roster/alice`)).toBe(id);
     expect(await b.get(`${root}/outcomes/alice`)).toBeUndefined();
     expect(usePlayerStore.getState().status).toBe("seated");

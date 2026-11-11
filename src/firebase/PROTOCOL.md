@@ -43,7 +43,7 @@ authorization claim.
 | `leaveRequests/{uid}` | A seated UID requests departure; that UID creates, Storyteller consumes |
 | `public` | Storyteller projection; active request holders and members may read |
 | `player/{playerId}` | Storyteller private projection; only a UID bound to exactly that ID may read |
-| `storyteller` | Full Storyteller state; owner only |
+| `storyteller` | Formerly the full Storyteller state, written on every action. No longer written since WP 4-4 (nothing read it; `checkpoint` carries the same game). Rules unchanged: owner only; still cleared at session close so lobbies from older builds are cleaned up |
 | `checkpoint` | Acknowledged game plus roster snapshot for takeover recovery; owner only |
 | `presence` | Parent read by the Storyteller; each UID reads/writes only its own child |
 
@@ -136,8 +136,8 @@ as v19 and never migrated -- a malformed window fails validation rather than
 being mistaken for v18 and replaced. A checkpoint without it is v18 or older;
 migration adds an empty window whose coverage starts at the phase after the
 checkpoint's own, and never reconstructs Life Events from History. The window
-is Storyteller-private: it travels only in the `storyteller` projection and the
-owner-only checkpoint, never in `public` or `player` views.
+is Storyteller-private: it travels only in the owner-only checkpoint, never in
+`public` or `player` views.
 
 ## Presence
 
@@ -201,7 +201,7 @@ performed by the test suite.
 ## Phase 5: actual, shown, and published identity (AUD-004)
 
 Actual role and behavior mode are authoritative Storyteller-only state in
-`storyteller` and `checkpoint`. Neither is read by the self projection.
+`checkpoint` (owner only). It is never read by the self projection.
 `shownRole` is explicit intended perception. A null shown role produces no
 self record, no alignment, and no private packet; the player sees the existing
 waiting card. A null shown alignment derives solely from the explicit shown

@@ -17,6 +17,7 @@ import { packetKey, usePacketDeliveryState } from "./packetDeliveryState";
 import { revokePlayerAndCommit, storytellerOccupancyCompletion } from "./membershipCommands";
 import { withoutSelfEnvelope } from "@/test/revealTokens";
 import { usePrivacyStore } from "@/stores/privacyStore";
+import { checkpointGame, remoteGame } from "@/test/checkpointGame";
 
 /** Package 3 (C10): a seating binds the participation the game records at the seat. */
 const seatedAs = (playerId: string) => { const p = store.getState().game!.players[playerId]!; return { participantId: p.participantId!, name: p.name }; };
@@ -162,7 +163,7 @@ describe("explicit publication through the session writer", () => {
     await waitFor(() => expect(withoutSelfEnvelope(usePlayerStore.getState().self)).toEqual(published.payload));
     store.getState().setPrivateText(id, "Unpublished second packet");
     store.getState().setView("home");
-    await waitFor(async () => expect(await b.get(`${root}/storyteller/players/${id}/privateInfo/extraText`)).toBe("Unpublished second packet"));
+    await waitFor(async () => expect(await checkpointGame(b, code, `players/${id}/privateInfo/extraText`)).toBe("Unpublished second packet"));
     off(); usePlayerStore.getState().reset(); listen();
     await waitFor(() => expect(withoutSelfEnvelope(usePlayerStore.getState().self)).toEqual(published.payload));
     manager!.stop(); await writer.dispose();
@@ -182,7 +183,7 @@ describe("explicit publication through the session writer", () => {
 
   it("host reconnect never publishes a configured-only preview", async () => {
     const { b, id, writer, manager, session, lobby, p } = await setup(true);
-    await waitFor(async () => expect(await b.get(`${root}/storyteller/players/${id}/privateInfo`)).toBeDefined());
+    await waitFor(async () => expect(await checkpointGame(b, code, `players/${id}/privateInfo`)).toBeDefined());
     manager!.stop(); await writer.dispose();
     const replacement = new SessionWriter(b, code, session.id);
     const recovered = await startStorytellerSession(b, lobby, replacement);
@@ -274,7 +275,7 @@ describe("Package 3: the player information log is written with the packet", () 
       packetId: p().publishedPacket!.id, recipient: { participantId: p().participantId, playerId: id },
       shown: { text: "First information" }, versions: [],
     });
-    const stored = (await b.get(`${root}/storyteller`)) as { playerInfoLog?: unknown[] };
+    const stored = (await remoteGame(b, code)) as { playerInfoLog?: unknown[] };
     expect(stored.playerInfoLog).toHaveLength(1);
     const node = (await b.get(`${root}/player/${id}`)) as { infoHistory?: Record<string, unknown>[] };
     expect(node.infoHistory).toHaveLength(1);
