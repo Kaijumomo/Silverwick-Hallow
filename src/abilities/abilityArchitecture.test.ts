@@ -21,6 +21,8 @@ import rawRoles from "@/data/canonical/roles.json";
 import jinxData from "@/data/canonical/jinxes.json";
 import { stripCommentsForGuard as stripComments } from "@/test/writerGuard";
 import { buildCoverageManifest, coverageSummary, PROOF_SET } from "./coverage";
+import { OWNED_ELSEWHERE } from "./characters/classification";
+import { REVIEWED_INTERACTION_ROLES } from "./characters/passiveRules";
 import { CANONICAL_ABILITY_SEMANTICS } from "./semantics";
 import { CANONICAL_MODIFIER_SCOPES } from "./modifiers";
 import { FIXTURE_SEMANTICS } from "@/test/abilityFixtures";
@@ -167,7 +169,7 @@ describe("10F-AC-34: canonical coverage manifest", () => {
     expect(JSON.stringify(manifest)).not.toMatch(/proofPending|Manual until its rules matrix/);
     expect(manifest.find((e) => e.id === "empath")).toMatchObject({ status: "supported", note: expect.stringMatching(/Support semantic/) });
     for (const id of ["cultleader", "pithag"]) expect(manifest.find((e) => e.id === id)!.note, id).toMatch(/GUIDED-PARTIAL/);
-    expect(manifest.find((e) => e.id === "scarletwoman")).toMatchObject({ status: "unclassified", note: expect.stringMatching(/star-pass/) });
+    expect(manifest.find((e) => e.id === "scarletwoman")).toMatchObject({ status: "ownedElsewhere", note: expect.stringMatching(/star-pass/) });
     for (const entry of manifest.filter((e) => e.kind === "fabled" || e.kind === "loric")) {
       expect(entry.status).toBe(entry.id === "toymaker" ? "verifiedManual" : "modifierScoped");
       expect(entry.scopes).toEqual(CANONICAL_MODIFIER_SCOPES[entry.id]);
@@ -183,6 +185,22 @@ describe("10F-AC-34: canonical coverage manifest", () => {
     expect(summary.total).toBe(manifest.length);
     expect(summary.byStatus.unclassified).toBeGreaterThan(0); // Phase 11 work remains
     expect(Object.values(summary.byStatus).reduce((a, b) => a + b, 0)).toBe(summary.total);
+  });
+
+  it("Trouble Brewing characters owned by dedicated modules are ownedElsewhere, never supported or unclassified", () => {
+    const ids = Object.keys(OWNED_ELSEWHERE).sort();
+    expect(ids).toEqual(["butler", "investigator", "librarian", "mayor", "recluse", "saint", "scarletwoman", "soldier", "spy", "virgin", "washerwoman"]);
+    for (const id of ids) {
+      const entry = manifest.find((e) => e.id === id)!;
+      expect(entry.status, id).toBe("ownedElsewhere");
+      expect(entry.note, id).toBeTruthy();
+      expect(entry.capabilities?.length, id).toBeGreaterThan(0);
+      // The label is bookkeeping only: it claims no descriptor and the interaction gate already knew these roles.
+      expect(CANONICAL_ABILITY_SEMANTICS.has(id), id).toBe(false);
+      expect(REVIEWED_INTERACTION_ROLES.has(id), id).toBe(true);
+      for (const capability of entry.capabilities!) expect(() => statSync(resolve(__dirname, "../..", capability.evidence)), `${id}: ${capability.evidence}`).not.toThrow();
+    }
+    expect(coverageSummary(manifest).byStatus.ownedElsewhere).toBe(ids.length);
   });
 
   it("every Fabled and Loric in the canonical data has a reviewed scope classification", () => {

@@ -96,4 +96,7 @@ export const REVIEWED_INTERACTION_ROLES: ReadonlySet<string> = new Set([
   "innkeeper", "nodashii", "vigormortis", "gambler", "shabaloth", "witch", "godfather", "moonchild", "golem", "towncrier", "oracle", "professor",
   // Marionette has no ability effects of its own: it is an evil Minion who believes they are good, and every query reads its ACTUAL role and alignment.
   "marionette",
+  // Information-only characters (Sects & Violets / Bad Moon Rising): each only reads game state and changes none, so it has no
+  // passive effect on another character's ability. Their own answers stay with the Storyteller (REVIEWED_MANUAL, classification.ts).
+  "clockmaker", "dreamer", "mathematician", "flowergirl", "savant", "seamstress", "artist", "juggler", "mutant", "chambermaid",
 ]);

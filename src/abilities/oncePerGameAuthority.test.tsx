@@ -33,7 +33,7 @@ function game(phase: "night" | "day"): StorytellerLobbyRecord {
 }
 
 describe("SOL-10F-L6: oncePerGame authority", () => {
-  it("an unverified character whose prose says 'Once per game' stays visible / manual after abilityUsed = true", () => {
+  it("a character without a descriptor (the Seamstress; reviewed, but Storyteller-resolved) whose prose says 'Once per game' stays visible / manual after abilityUsed = true", () => {
     expect(registry.get("seamstress")!.oncePerGame).toBe(true); // the prose-derived reference flag
     const g = game("night");
     const steps = computeNightOrder(g.players, g.seatOrder, script, false, g);
