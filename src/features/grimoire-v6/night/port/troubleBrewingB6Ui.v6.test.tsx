@@ -65,7 +65,7 @@ it("cancels stale Setup callbacks and concealed chooser content", () => {
 });
 
 it("keeps unsupported Setup actions manual without offering a preparation picker", () => {
-  initial("washerwoman", "clockmaker");
+  initial("washerwoman", "klutz"); // an unreviewed character; the information characters (Clockmaker etc.) were reviewed in Stage 4
   render(<StrictMode><Setup /></StrictMode>);
   expect(screen.queryByRole("button", { name: "Prepare Washerwoman" })).toBeNull();
   expect(useTargetPicker.getState().active).toBeNull();

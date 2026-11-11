@@ -3,7 +3,7 @@ import jinxData from "@/data/canonical/jinxes.json";
 import { CANONICAL_REVISION } from "@/data/canonical";
 import { CANONICAL_MODIFIER_SCOPES, type HookScope } from "./modifiers";
 import { CANONICAL_ABILITY_SEMANTICS, type AbilitySemanticsRegistry } from "./semantics";
-import { COVERAGE_NOTES, OWNED_ELSEWHERE, VERIFIED_MANUAL } from "./characters/classification";
+import { COVERAGE_NOTES, OWNED_ELSEWHERE, REVIEWED_MANUAL, VERIFIED_MANUAL } from "./characters/classification";
 import { hasCountPolicy, hasUncertainComposition } from "@/rules/setup/setupPolicies";
 
 /**
@@ -29,9 +29,12 @@ import { hasCountPolicy, hasUncertainComposition } from "@/rules/setup/setupPoli
  *  - ownedElsewhere: no AbilityDescriptor, but a dedicated reviewed module owns
  *    the behaviour (the Trouble Brewing work, B0-B9); its note names the owner
  *    and the Storyteller boundary. Presentation only: it changes no gate;
+ *  - reviewedManual: an information-only character whose interactions were
+ *    reviewed (it is in REVIEWED_INTERACTION_ROLES) while its own ability stays
+ *    Storyteller-resolved. Presentation only: it changes no gate;
  *  - unclassified: Phase 11 work.
  */
-export type CoverageStatus = "supported" | "verifiedManual" | "setupOwned" | "modifierScoped" | "gatedJudgment" | "ownedElsewhere" | "unclassified";
+export type CoverageStatus = "supported" | "verifiedManual" | "setupOwned" | "modifierScoped" | "gatedJudgment" | "ownedElsewhere" | "reviewedManual" | "unclassified";
 export type CoverageKind = "townsfolk" | "outsider" | "minion" | "demon" | "traveler" | "fabled" | "loric" | "jinx";
 export type CoverageWave = "11A" | "11B" | "11C" | "11D" | "11E" | "11F";
 
@@ -111,6 +114,8 @@ export function buildCoverageManifest(semantics: AbilitySemanticsRegistry = CANO
     }
     const owned = Object.prototype.hasOwnProperty.call(OWNED_ELSEWHERE, role.id) ? OWNED_ELSEWHERE[role.id]! : undefined;
     if (owned && !VERIFIED_MANUAL.has(role.id)) return { id: role.id, kind, status: "ownedElsewhere", wave, note: note.note ?? owned };
+    const reviewed = Object.prototype.hasOwnProperty.call(REVIEWED_MANUAL, role.id) ? REVIEWED_MANUAL[role.id]! : undefined;
+    if (reviewed && !VERIFIED_MANUAL.has(role.id)) return { id: role.id, kind, status: "reviewedManual", wave, note: note.note ?? reviewed };
     const scopes = kind === "fabled" || kind === "loric" ? { scopes: CANONICAL_MODIFIER_SCOPES[role.id] ?? ["global" as const] } : {};
     const manual = VERIFIED_MANUAL.get(role.id);
     if (manual) return { id: role.id, kind, status: "verifiedManual", wave, ...scopes, note: manual };
@@ -134,7 +139,7 @@ export function buildCoverageManifest(semantics: AbilitySemanticsRegistry = CANO
 export type CoverageSummary = { revision: string; total: number; characterTotal: number; jinxTotal: number; byStatus: Record<CoverageStatus, number> };
 
 export function coverageSummary(manifest: readonly CoverageEntry[] = buildCoverageManifest()): CoverageSummary {
-  const byStatus: Record<CoverageStatus, number> = { supported: 0, verifiedManual: 0, setupOwned: 0, modifierScoped: 0, gatedJudgment: 0, ownedElsewhere: 0, unclassified: 0 };
+  const byStatus: Record<CoverageStatus, number> = { supported: 0, verifiedManual: 0, setupOwned: 0, modifierScoped: 0, gatedJudgment: 0, ownedElsewhere: 0, reviewedManual: 0, unclassified: 0 };
   for (const entry of manifest) byStatus[entry.status]++;
   return { revision: CANONICAL_REVISION, total: manifest.length,
     characterTotal: manifest.filter(entry => entry.kind !== "jinx").length,
