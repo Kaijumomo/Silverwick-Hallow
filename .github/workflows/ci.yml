@@ -7,8 +7,11 @@
 #     download from Google; it has not been proven in CI yet).
 name: CI
 
+# Pushes to main (after a merge) and every pull request. Other branch pushes are
+# checked through their pull request, so a branch with an open PR is not run twice.
 on:
   push:
+    branches: [main]
   pull_request:
 
 # One run per branch at a time; a newer push cancels the older run.
@@ -40,6 +43,7 @@ jobs:
   # (the Trouble Brewing character, setup, store and Grimoire suites). It also runs
   # inside the full suite below; this job gives it its own named check so a
   # Trouble Brewing regression is visible at a glance and can be made a required check.
+  # Any skipped/todo test, or an empty set, fails the job.
   trouble-brewing:
     name: Trouble Brewing protected suites
     runs-on: ubuntu-latest
@@ -51,12 +55,17 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - name: Fail if the protected set is empty
+      - name: Run protected suites
+        run: npx vitest run troubleBrewing --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/tb.json"
+      - name: Fail if the protected set is empty or has skipped tests
         run: |
-          count=$(git ls-files 'src/**/troubleBrewing*.test.ts' 'src/**/troubleBrewing*.test.tsx' | wc -l)
-          echo "Trouble Brewing test files found: $count"
-          test "$count" -ge 20
-      - run: npx vitest run troubleBrewing
+          node -e '
+            const r = JSON.parse(require("fs").readFileSync(process.env.RUNNER_TEMP + "/tb.json", "utf8"));
+            const tests = r.testResults.flatMap((f) => f.assertionResults);
+            const bad = tests.filter((t) => t.status !== "passed");
+            console.log(`Trouble Brewing: ${r.testResults.length} files, ${tests.length} tests, ${bad.length} not passed`);
+            if (!r.success || tests.length === 0 || bad.length > 0) process.exit(1);
+          '
 
   tests:
     name: Tests (full suite)
