@@ -44,6 +44,9 @@ type Piece = { path: string; what: string };
 
 /** Support pieces for characters without a descriptor. Each entry was read in the cited file. */
 export const PARTIAL_SUPPORT: Readonly<Record<RoleId, readonly Piece[]>> = {
+  thief: [
+    { path: "src/features/grimoire-v6/night/t30Verbs.ts", what: "The night guide shows a one-line prompt for its night choice (wording only; no ability logic)." },
+  ],
   bonecollector: [
     { path: "src/features/grimoire-v6/night/t30Verbs.ts", what: "The night guide shows a one-line prompt for its night choice (wording only; no ability logic)." },
   ],
@@ -343,7 +346,7 @@ export const PARTIAL_CAVEATS: Readonly<Record<RoleId, string>> = {
   lleech: "Partial because the app REFUSES to automate: an attack on a functioning Lleech sends the whole action to Manual (death-target gap). No Lleech ability is modelled.",
   zombuul: "Partial because the app REFUSES to automate: an attack on a functioning Zombuul sends the whole action to Manual (death-target gap); it only gets a night-list slot after a death night.",
   tealady: "Partial because the app REFUSES to automate: with a Tea Lady in play, Demon protection is not modelled and the whole action goes Manual. No Tea Lady ability is modelled.",
-  thief: "Partial for one narrow reason only: it is on the game-ending allow-list. Its own ability is not supported.",
+  thief: "Partial for two narrow reasons only: it is on the game-ending allow-list and the night guide shows a one-line prompt. Its own ability (negative vote) is not supported.",
   gunslinger: "Partial for one narrow reason only: it is on the game-ending allow-list. Its own ability is not supported.",
   scapegoat: "Partial for one narrow reason only: it is on the game-ending allow-list. Its own ability is not supported.",
   beggar: "Partial for one narrow reason only: it is on the game-ending allow-list. Its own ability is not supported.",
