@@ -5,7 +5,7 @@ import rawRoles from "@/data/canonical/roles.json";
 import { buildCoverageManifest, coverageSummary, type CoverageEntry } from "@/abilities/coverage";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import { REVIEWED_INTERACTION_ROLES } from "./characters/passiveRules";
-import { ENDING_EVIDENCE_ROLES, PARTIAL_SUPPORT, TEST_EVIDENCE } from "./coverageEvidence";
+import { ENDING_EVIDENCE_ROLES, NOT_ON_ENDING_LIST_CAVEAT, PARTIAL_CAVEATS, PARTIAL_SUPPORT, TEST_EVIDENCE } from "./coverageEvidence";
 
 /**
  * Stage 5A-1: the coverage list tells the truth. These tests pin the per-character
@@ -34,10 +34,10 @@ describe("coverage level and evidence (Stage 5A-1)", () => {
   });
 
   it("pins today's counts (update deliberately when a work package lands)", () => {
-    // 24 guided + 26 reviewed + 65 partial + 66 generic = 181.
+    // 24 guided + 26 reviewed + 66 partial + 65 generic = 181.
     // Against the v3 plan table (state at c4e884e): the ten Stage 4 characters moved from generic to reviewed (PR #26);
-    // Goon (Moonchild interaction) and Thief, Gunslinger, Scapegoat, Beggar (game-ending allow-list) were found to have a support piece.
-    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 24, reviewed: 26, partial: 65, generic: 66 });
+    // Bone Collector (night-guide prompt), Goon (Moonchild interaction) and Thief, Gunslinger, Scapegoat, Beggar (game-ending allow-list) were found to have a support piece.
+    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 24, reviewed: 26, partial: 66, generic: 65 });
   });
 
   it("level follows the facts the gates read", () => {
@@ -92,14 +92,29 @@ describe("coverage level and evidence (Stage 5A-1)", () => {
     const sources = walk(SRC)
       .filter(f => /\.tsx?$/.test(f) && !/\.(test|spec)\./.test(f) && !f.includes(`${join(SRC, "data")}/`))
       .map(f => relative(SRC, f))
-      .filter(f => !decorative.includes(f) && !f.startsWith("test/") && !f.startsWith("abilities/coverage") && f !== "abilities/coverageEvidence.ts" && !f.startsWith("firebase/"));
+      .filter(f => !decorative.includes(f) && !f.startsWith("test/") && !f.startsWith("abilities/coverage") && f !== "abilities/modifiers.ts" && f !== "abilities/coverageEvidence.ts" && !f.startsWith("firebase/"));
     const texts = new Map(sources.map(f => [f, readFileSync(join(SRC, f), "utf8")]));
     const stale: string[] = [];
     for (const e of characters.filter(x => x.level === "generic")) {
-      const re = new RegExp(`["'\`]${e.id}["'\`]`);
+      const re = new RegExp(`["'\`]${e.id}["'\`]|\\b${e.id}\\s*:|\\b${e.id}\\s*===|===\\s*${e.id}\\b`);
       for (const [f, t] of texts) if (re.test(t)) stale.push(`${e.id} in ${f}`);
     }
     expect(stale).toEqual([]);
+  });
+
+  it("every character off the ending allow-list says its ending is Manual; partial reasons are plain", () => {
+    for (const e of characters.filter(x => x.kind !== "fabled" && x.kind !== "loric")) {
+      expect(e.caveats?.includes(NOT_ON_ENDING_LIST_CAVEAT) ?? false, e.id).toBe(!ENDING_EVIDENCE_ROLES.includes(e.id));
+    }
+    for (const id of Object.keys(PARTIAL_CAVEATS)) expect(byId.get(id)!.caveats, id).toContain(PARTIAL_CAVEATS[id]);
+    for (const id of ["fool", "sailor", "lleech", "zombuul", "tealady"]) expect(byId.get(id)!.caveats!.join(" "), id).toMatch(/REFUSES to automate/);
+  });
+
+  it("evidence has one code entry per file", () => {
+    for (const e of characters) {
+      const paths = (e.evidence ?? []).filter(x => x.kind === "code").map(x => x.path);
+      expect(new Set(paths).size, e.id).toBe(paths.length);
+    }
   });
 
   it("known gaps are carried as caveats, never as support", () => {

@@ -44,6 +44,9 @@ type Piece = { path: string; what: string };
 
 /** Support pieces for characters without a descriptor. Each entry was read in the cited file. */
 export const PARTIAL_SUPPORT: Readonly<Record<RoleId, readonly Piece[]>> = {
+  bonecollector: [
+    { path: "src/features/grimoire-v6/night/t30Verbs.ts", what: "The night guide shows a one-line prompt for its night choice (wording only; no ability logic)." },
+  ],
   alchemist: [
     { path: "src/rules/setup/setupAnalyzer.ts", what: "In the setup analyzer's manual-review list: setup shows a 'Review character setup' check and the Storyteller resolves the special choices by hand." },
     { path: "src/rules/setup/setupPolicies.ts", what: "Marked as an uncertain composition: random setup and composition checks fall back to manual review." },
@@ -332,6 +335,25 @@ export const COVERAGE_CAVEATS: Readonly<Record<RoleId, readonly string[]>> = {
   juggler: ["Official wiki: wakes once. The night list shows the row every later night; the Storyteller skips it."],
   mutant: ["Official wiki: the Storyteller may execute a madness-breaking Mutant at any time, even at night. The app records executions only in Day and does not block a second daytime execution."],
 };
+
+/** Why a "partial" character is partial, where the reason is NOT "a general support piece". Plain statements, no UI. */
+export const PARTIAL_CAVEATS: Readonly<Record<RoleId, string>> = {
+  fool: "Partial because the app REFUSES to automate: an attack on a functioning Fool sends the whole action to Manual (death-target gap). No Fool ability is modelled.",
+  sailor: "Partial because the app REFUSES to automate: an attack on a functioning Sailor sends the whole action to Manual (death-target gap). No Sailor ability is modelled.",
+  lleech: "Partial because the app REFUSES to automate: an attack on a functioning Lleech sends the whole action to Manual (death-target gap). No Lleech ability is modelled.",
+  zombuul: "Partial because the app REFUSES to automate: an attack on a functioning Zombuul sends the whole action to Manual (death-target gap); it only gets a night-list slot after a death night.",
+  tealady: "Partial because the app REFUSES to automate: with a Tea Lady in play, Demon protection is not modelled and the whole action goes Manual. No Tea Lady ability is modelled.",
+  thief: "Partial for one narrow reason only: it is on the game-ending allow-list. Its own ability is not supported.",
+  gunslinger: "Partial for one narrow reason only: it is on the game-ending allow-list. Its own ability is not supported.",
+  scapegoat: "Partial for one narrow reason only: it is on the game-ending allow-list. Its own ability is not supported.",
+  beggar: "Partial for one narrow reason only: it is on the game-ending allow-list. Its own ability is not supported.",
+  bonecollector: "Partial for one narrow reason only: the night guide shows a one-line prompt. Its ability (a dead player regains their ability) is not supported.",
+  goon: "Partial for one narrow reason only: Moonchild's pick of a Goon is sent to the Storyteller. The Goon's own ability is not supported.",
+  bureaucrat: "The voting engine implements the three-votes modifier and an action card, so more is built than 'partial' suggests, but it is not on the reviewed-interaction list: in play, other automation still goes Manual.",
+};
+
+/** Applies to every character without a place on the game-ending allow-list (src/stores/victoryEvidence.ts). */
+export const NOT_ON_ENDING_LIST_CAVEAT = "Not on the game-ending allow-list: a game with this character seated gets a Manual ending (victoryCoverageEligibility).";
 
 /** Applies to every Fabled and Loric: game-ending automation is forced to Manual when one is in play. */
 export const MODIFIER_ENDING_CAVEAT = "Any Fabled or Loric in play forces a manual game ending (src/stores/victoryEvidence.ts).";

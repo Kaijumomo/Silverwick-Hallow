@@ -7,7 +7,7 @@ import { COVERAGE_NOTES, OWNED_ELSEWHERE, REVIEWED_MANUAL, VERIFIED_MANUAL } fro
 import { hasCountPolicy, hasUncertainComposition } from "@/rules/setup/setupPolicies";
 import { REVIEWED_INTERACTION_ROLES } from "./characters/passiveRules";
 import {
-  COVERAGE_CAVEATS, ENDING_EVIDENCE_ROLES, MODIFIER_ENDING_CAVEAT, PARTIAL_SUPPORT, TEST_EVIDENCE,
+  COVERAGE_CAVEATS, ENDING_EVIDENCE_ROLES, MODIFIER_ENDING_CAVEAT, NOT_ON_ENDING_LIST_CAVEAT, PARTIAL_CAVEATS, PARTIAL_SUPPORT, TEST_EVIDENCE,
   type CoverageEvidence, type CoverageLevel,
 } from "./coverageEvidence";
 
@@ -133,7 +133,12 @@ function levelOf(entry: CoverageEntry, capabilities: readonly CoverageCapability
   const pieces = Object.prototype.hasOwnProperty.call(PARTIAL_SUPPORT, id) ? PARTIAL_SUPPORT[id]! : [];
   const inEnding = ENDING_EVIDENCE_ROLES.includes(id);
   const evidence: CoverageEvidence[] = [];
-  const addCode = (path: string, what: string) => { if (!evidence.some(e => e.path === path && e.what === what)) evidence.push({ kind: "code", path, what }); };
+  // One entry per file: several reasons in the same file are joined into one entry.
+  const addCode = (path: string, what: string) => {
+    const same = evidence.findIndex(e => e.kind === "code" && e.path === path);
+    if (same < 0) evidence.push({ kind: "code", path, what });
+    else if (!evidence[same]!.what.includes(what)) evidence[same] = { ...evidence[same]!, what: `${evidence[same]!.what} ${what}` };
+  };
   const guided = semantics.has(id);
   if (guided) addCode("src/abilities/characters/index.ts", "Registered ability descriptor; each action must also pass automation eligibility.");
   if (reviewedInteraction) addCode("src/abilities/characters/passiveRules.ts", "On the reviewed-interaction list: in play, it does not push other automation to Manual.");
@@ -149,7 +154,8 @@ function levelOf(entry: CoverageEntry, capabilities: readonly CoverageCapability
   const level: CoverageLevel = guided ? "guided" : reviewedInteraction && !isModifier(entry.kind) ? "reviewed" : hasPiece ? "partial" : "generic";
   const caveats = [
     ...(Object.prototype.hasOwnProperty.call(COVERAGE_CAVEATS, id) ? COVERAGE_CAVEATS[id]! : []),
-    ...(isModifier(entry.kind) ? [MODIFIER_ENDING_CAVEAT] : []),
+    ...(Object.prototype.hasOwnProperty.call(PARTIAL_CAVEATS, id) ? [PARTIAL_CAVEATS[id]!] : []),
+    ...(isModifier(entry.kind) ? [MODIFIER_ENDING_CAVEAT] : inEnding ? [] : [NOT_ON_ENDING_LIST_CAVEAT]),
   ];
   return { level, reviewedInteraction, evidence, ...(caveats.length ? { caveats } : {}) };
 }
