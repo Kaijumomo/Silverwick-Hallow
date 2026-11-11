@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { writeProjections } from "./sync";
 import { MemoryRoomBackend } from "@/test/memoryBackend";
+import { checkpointGame } from "@/test/checkpointGame";
 import { buildRegistry } from "@/data/roleRegistry";
 import { tbScript, makePublishedSTPlayer } from "@/test/fixtures";
 import { StorytellerGamePersistedSchema } from "@/stores/schemas";
@@ -104,7 +105,7 @@ function makeLobby(): StorytellerLobbyRecord {
 }
 
 describe("writeProjections — privacy chokepoint", () => {
-  it("writes public/, player/{id}/ for each player, and storyteller/", async () => {
+  it("writes public/, player/{id}/ for each player and the checkpoint, and no structured storyteller/ copy (WP 4-4)", async () => {
     const backend = new MemoryRoomBackend();
     await writeProjections({
       backend,
@@ -118,13 +119,14 @@ describe("writeProjections — privacy chokepoint", () => {
     const p1 = await backend.get("lobbies/ABCD/player/p1");
     const p2 = await backend.get("lobbies/ABCD/player/p2");
     const p3 = await backend.get("lobbies/ABCD/player/p3");
-    const st = await backend.get("lobbies/ABCD/storyteller");
+    const checkpoint = await backend.get("lobbies/ABCD/checkpoint");
 
     expect(pub).toBeDefined();
     expect(p1).toBeDefined();
     expect(p2).toBeDefined();
     expect(p3).toBeDefined();
-    expect(st).toBeDefined();
+    expect(JSON.parse(checkpoint as string).game).toEqual(JSON.parse(JSON.stringify(makeLobby())));
+    expect(await backend.get("lobbies/ABCD/storyteller")).toBeUndefined();
   });
 
   it("public path never contains any forbidden private field", async () => {
@@ -227,7 +229,8 @@ describe("writeProjections — privacy chokepoint", () => {
     expect(paths).toContain("lobbies/ABCD/player/p1");
     expect(paths).toContain("lobbies/ABCD/player/p2");
     expect(paths).toContain("lobbies/ABCD/player/p3");
-    expect(paths).toContain("lobbies/ABCD/storyteller");
+    expect(paths).toContain("lobbies/ABCD/checkpoint");
+    expect(paths).not.toContain("lobbies/ABCD/storyteller");
   });
 
   it("unassigned players (no actualRole) are skipped — no projection written", async () => {
@@ -282,7 +285,7 @@ describe("writeProjections — privacy chokepoint", () => {
     });
     // p1's projection is now removed
     expect(await backend.get("lobbies/ABCD/player/p1")).toBeUndefined();
-    expect(await backend.get("lobbies/ABCD/storyteller/players/p1/actualRole")).toBe("imp");
+    expect(await checkpointGame(backend, "ABCD", "players/p1/actualRole")).toBe("imp");
   });
 
   it("a Lunatic with an unpublished draft gets identity but no private information", async () => {
@@ -418,7 +421,7 @@ describe("writeProjections — Phase 9C.4 setup barrier atomicity", () => {
     return calls;
   }
 
-  it("a barred setup flush is one update: every ordinary path null/absent, Traveler/public/storyteller/checkpoint still land", async () => {
+  it("a barred setup flush is one update: every ordinary path null/absent, Traveler/public/checkpoint still land", async () => {
     const backend = new MemoryRoomBackend();
     // Pre-seed p1's path to prove the barrier actively withdraws it, not merely omits a new write.
     await backend.set("lobbies/SETP/player/p1", { shownRole: "chef", shownAlignment: "good" });
@@ -434,7 +437,7 @@ describe("writeProjections — Phase 9C.4 setup barrier atomicity", () => {
     expect(update["lobbies/SETP/player/p2"]).toBeNull();
     expect(withoutSelfEnvelope(update["lobbies/SETP/player/t1"])).toEqual({ shownRole: "thief" });
     expect(update["lobbies/SETP/public"]).toBeDefined();
-    expect(update["lobbies/SETP/storyteller"]).toBeDefined();
+    expect(update["lobbies/SETP/storyteller"]).toBeUndefined();
     expect(update["lobbies/SETP/checkpoint"]).toBeDefined();
 
     expect(await backend.get("lobbies/SETP/player/p1")).toBeUndefined();

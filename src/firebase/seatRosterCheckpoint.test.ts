@@ -22,6 +22,7 @@ import { SessionWriter } from "./writer";
 import { writeProjections } from "./sync";
 import { SnapshotValidationError } from "./snapshots";
 import { reportRuntimeError, resolveReconnectConflict, startStorytellerSession, useSessionRuntime } from "./storytellerSync";
+import { remoteGame } from "@/test/checkpointGame";
 
 const code = "SEAT2345";
 const root = `lobbies/${code}`;
@@ -215,7 +216,7 @@ describe("Phase 9R.5 C: a malformed raw v17 checkpoint is invalid and never rest
     // A genuinely separate device commits a valid, different game.
     const foreign = writerFor(b, session.id);
     await foreign.start();
-    const foreignGame = { ...clone(await b.get(`${root}/storyteller`) as unknown as StorytellerLobbyRecord), day: 5 };
+    const foreignGame = { ...clone(await remoteGame(b, code)), day: 5 };
     await writeProjections({ backend: foreign, code, stState: foreignGame, registry: buildRegistry(troubleBrewing), online: {}, membership: {} });
     await foreign.dispose();
     const writer = writerFor(b, session.id);

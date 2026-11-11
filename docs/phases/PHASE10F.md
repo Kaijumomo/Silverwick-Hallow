@@ -1496,6 +1496,8 @@ The production projection writer writes both:
 - the structured Storyteller game at `lobbies/{code}/storyteller`; and
 - one derived checkpoint STRING at `lobbies/{code}/checkpoint` equal to `JSON.stringify({ game, roster })`.
 
+> Later change (Milestone 4, WP 4-4, approved by the product owner 2026-11-10): the structured copy at `lobbies/{code}/storyteller` is no longer written, because nothing read it; the checkpoint string is the only stored copy of the game. The E1 checkpoint preflight below is unchanged, and the C3 structured-destination check is kept as a conservative gate.
+
 D1 now correctly validates Firebase's 10 MiB limit on every string leaf inside the structured game. That is insufficient for the derived checkpoint leaf: several individually valid leaves can aggregate into a checkpoint string larger than Firebase permits. Reproduced through the real store and real `writeProjections`: two Manual Information deliveries of roughly 6 MB each pass the ability-store game preflight and commit locally, then the installed SDK rejects the writer update because the checkpoint leaf is roughly 12 MB.
 
 Freeze:

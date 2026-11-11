@@ -45,7 +45,8 @@ npm run build        # production build into dist/
 The web client is hosted on Cloudflare Pages, built with `npm run build` and served from `dist/`
 (`public/_redirects` handles client-side routes). Firebase Rules live in `src/firebase/rules.json` and are deployed
 with `npm run rules:deploy`, then checked with `npm run rules:verify`. Deploy Rules before the client that needs
-them.
+them. Multiplayer is tested on a separate Firebase test project first: see
+[docs/TEST_FIREBASE.md](docs/TEST_FIREBASE.md).
 
 ## Where things live
 

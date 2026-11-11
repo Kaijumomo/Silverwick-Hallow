@@ -16,7 +16,6 @@ import {
   checkpointPathSegments,
   playerPath,
   publicPath,
-  storytellerPath,
 } from "./paths";
 
 // ---------------------------------------------------------------------------
@@ -76,14 +75,18 @@ export async function writeProjections(ctx: WriteContext): Promise<void> {
     }
   }
 
-  // ST-private state. Only the ST can read this path (Firebase rules enforce).
-  updates[storytellerPath(code)] = stState as unknown as Json;
+  // WP 4-4 follow-up (PO approved 2026-11-10): the structured Storyteller copy
+  // at `storyteller/` is no longer written. Nothing ever read it; the
+  // checkpoint below already carries the same game (with the roster) and is
+  // what reconnect and takeover restore from. The Rules for that path and its
+  // clearing at session close stay, so lobbies written by older builds are
+  // still cleaned up.
   // JSON preserves empty arrays/maps for a fully validated writer takeover.
   const checkpoint = serializeCheckpoint(stState, ctx.membership ?? {});
   // SOL-10F-E1 defense in depth: the store already refuses an ability result
   // whose checkpoint could not fit, but THIS exact string (real roster, real
   // destination) is what Firebase will judge. Refused before any write, so no
-  // public/player/Storyteller path is projected without its checkpoint.
+  // public or player path is projected without its checkpoint.
   const writable = validateFirebaseWritableValue(checkpoint, checkpointPathSegments(code));
   if (!writable.ok) {
     throw new LifecycleError("invalid", `This game cannot be saved online: its recovery checkpoint ${writable.message.replace(/\.$/, "")}. Nothing was written; undo the most recent change, then retry.`);

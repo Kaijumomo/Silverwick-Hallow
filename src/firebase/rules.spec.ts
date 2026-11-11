@@ -40,6 +40,7 @@ import { SnapshotValidationError } from "./snapshots";
 import { validateFirebaseWritableValue } from "./firebaseWriteCompatibility";
 import { asV19 } from "@/test/v20Migration";
 import { withoutSelfEnvelope } from "@/test/revealTokens";
+import { checkpointGame } from "@/test/checkpointGame";
 
 let env: RulesTestEnvironment;
 beforeAll(async () => {
@@ -991,7 +992,7 @@ describe("Firebase RTDB membership authorization", () => {
       await seatPlayer(writer, code, alice, "p-alice", null);
       await publish();
       expect((await ref(alice, "player/p-alice").once("value")).val()).toBeNull();
-      expect((await ref(st, "storyteller/players/p-alice/actualRole").once("value")).val()).toBe(actual);
+      expect(await checkpointGame((p) => db(st).ref(p).once("value").then((snap) => snap.val()), code, "players/p-alice/actualRole")).toBe(actual);
       game.players["p-alice"]!.shownRole = shown!;
       game.players["p-alice"]!.shownAlignment = null;
       await publish();
@@ -1141,7 +1142,7 @@ describe("Firebase RTDB membership authorization", () => {
       expect(payload.minions).toEqual([{ id: other, name: "Bob", seat: 1 }]);
       for (const secret of ["actualRole", "actualAlignment", "lunatic", "behaviorMode", "stNotes", "packetPreview", "publishedPacket"])
         expect(JSON.stringify(payload)).not.toContain(secret);
-      expect((await ref(st, `storyteller/players/${id}/actualRole`).once("value")).val()).toBe("lunatic");
+      expect(await checkpointGame((p) => db(st).ref(p).once("value").then((snap) => snap.val()), code, `players/${id}/actualRole`)).toBe("lunatic");
       await assertFails(ref(bob, `player/${id}`).once("value"));
       await assertFails(ref(alice, `player/${id}/extraText`).set("forged delivery"));
       await assertFails(ref(alice, `storyteller/players/${id}/publishedPacket`).once("value"));
@@ -1899,9 +1900,10 @@ describe("Phase 9D.5 Proof E: writer replacement / stale-writer protection for a
     expect(parsed.game.lifeEventWindow).toEqual(richGame.lifeEventWindow);
     expect(parsed.game.lifeEventWindow.events.map((e) => e.kind)).toEqual(["death", "execution", "exile"]);
     expect(StorytellerGamePersistedSchema.safeParse(parsed.game).success).toBe(true);
-    // The Storyteller-private RTDB projection holds it too (owner-readable
-    // only), while the public projection carries only public life fields.
-    expect((await ref(st, "storyteller/lifeEventWindow/events/0/kind").once("value")).val()).toBe("death");
+    // WP 4-4: the checkpoint above is the only Storyteller-private copy (no
+    // structured storyteller/ projection is written), while the public
+    // projection carries only public life fields.
+    expect((await ref(st, "storyteller").once("value")).exists()).toBe(false);
     const publicTraveler = (await ref(st, `public/players/${handles.travelerId}`).once("value")).val();
     expect(publicTraveler).toMatchObject({ alive: false, ghostVote: true, exiled: true });
     const publicTree = JSON.stringify((await ref(st, "public").once("value")).val());
@@ -2059,12 +2061,11 @@ describe("Phase 9R.1 Finding B5: Firebase-safe optional serialization for a rich
     expect("note" in parsedReminder).toBe(false);
     expect(parsedReminder).toEqual({ id: "b5-reminder", label: "Marked", createdAt: { phase: "day", day: 1 } });
 
-    // The ST-private raw projection (the OTHER path B5 names as sending the
-    // object directly) also wrote successfully -- confirming the fix holds
-    // for both write targets the checkpoint and the raw storyteller
-    // projection share the same `stState` input for.
+    // WP 4-4: the raw storyteller projection (the OTHER path B5 named as
+    // sending the object directly) is no longer written at all, so the
+    // checkpoint above is the one write target that carries `stState`.
     const rawStoryteller = await ref(st, "storyteller").once("value");
-    expect(rawStoryteller.val()).toBeTruthy();
+    expect(rawStoryteller.exists()).toBe(false);
 
     await writer.dispose();
   });
@@ -2258,7 +2259,7 @@ describe("Phase 10A: Life Event Window checkpoints through the real writer and e
       expect(recovered.outcome).toBe("live");
       const window = useStorytellerStore.getState().game!.lifeEventWindow;
       expect(window).toEqual({ coverageFrom: { phase: "night", day: 2 }, events: [] }); // Day 1 -> Night 2; never backfilled
-      const projected = (await db(st).ref(path("storyteller/lifeEventWindow/coverageFrom")).once("value")).val();
+      const projected = await checkpointGame((p) => db(st).ref(p).once("value").then((snap) => snap.val()), code, "lifeEventWindow/coverageFrom");
       expect(projected).toEqual({ phase: "night", day: 2 });
       recovered.stop();
     } finally { await writer.dispose(); }
@@ -2383,12 +2384,11 @@ describe("Phase 9R.1 Finding F1 Proof: expanded Firebase compatibility gate agai
 
     await expect(startStorytellerSession(rawBackend, lobby, writer)).rejects.toThrow(SnapshotValidationError);
     expect(useStorytellerStore.getState().game).toBeNull();
-    // Directly observed against the real emulator, not inferred: the
-    // Storyteller-private projection path was never written -- still
-    // absent, exactly as a lobby that never got past checkpoint recovery
-    // would leave it.
-    const storytellerAfter = await ref(st, "storyteller").once("value");
-    expect(storytellerAfter.exists()).toBe(false);
+    // Directly observed against the real emulator, not inferred: no
+    // projection was committed -- every projection carries this writer's
+    // guard stamp in the same update, and none exists (WP 4-4: the old
+    // storyteller/ node is never written, so its absence proved nothing).
+    expect((await ref(st, "writeGuard").once("value")).exists()).toBe(false);
 
     await writer.dispose();
   });
@@ -2436,8 +2436,9 @@ describe("Phase 9R.1 Finding F1 Proof: expanded Firebase compatibility gate agai
 
     await expect(startStorytellerSession(rawBackend, lobby, writer)).rejects.toThrow(SnapshotValidationError);
     expect(useStorytellerStore.getState().game).toBeNull();
-    const storytellerAfter = await ref(st, "storyteller").once("value");
-    expect(storytellerAfter.exists()).toBe(false);
+    // No projection was committed: every projection carries a guard stamp
+    // in the same update, and none exists (WP 4-4).
+    expect((await ref(st, "writeGuard").once("value")).exists()).toBe(false);
 
     await writer.dispose();
   });
@@ -2480,11 +2481,14 @@ describe("Phase 9R.1 Finding F1 Proof: expanded Firebase compatibility gate agai
 
     expect(recovered.outcome).toBe("live");
     expect(useStorytellerStore.getState().game).not.toBeNull();
-    // The initial flush actually reached the real emulator and wrote the
-    // real Storyteller-private projection path -- a genuine successful
-    // write, not merely an in-memory acceptance.
-    const storytellerAfter = await ref(st, "storyteller").once("value");
-    expect(storytellerAfter.exists()).toBe(true);
+    // The initial flush actually reached the real emulator -- a genuine
+    // successful write, not merely an in-memory acceptance: this writer's
+    // guard stamp (written in the same update as the checkpoint; the seed
+    // had none) and the adopted game in the checkpoint. WP 4-4: there is no
+    // structured storyteller/ projection any more.
+    expect((await ref(st, "writeGuard").once("value")).val()).toMatchObject({ token: writer.token });
+    expect(await checkpointGame((p) => db(st).ref(p).once("value").then((snap) => snap.val()), code, "notes")).toBe("ordinary notes");
+    expect((await ref(st, "storyteller").once("value")).exists()).toBe(false);
 
     recovered.stop();
     await writer.dispose();
@@ -2557,8 +2561,9 @@ describe("Phase 9R.1 Finding F2 Proof: reserved '.value' structure gate against 
 
     await expect(startStorytellerSession(rawBackend, lobby, writer)).rejects.toThrow(SnapshotValidationError);
     expect(useStorytellerStore.getState().game).toBeNull();
-    const storytellerAfter = await ref(st, "storyteller").once("value");
-    expect(storytellerAfter.exists()).toBe(false);
+    // No projection was committed: every projection carries a guard stamp
+    // in the same update, and none exists (WP 4-4).
+    expect((await ref(st, "writeGuard").once("value")).exists()).toBe(false);
 
     await writer.dispose();
   });
@@ -2674,8 +2679,9 @@ describe("Phase 9R.1 Finding F3 Proof: Firebase-exact string-length accounting a
 
     await expect(startStorytellerSession(rawBackend, lobby, writer)).rejects.toThrow(SnapshotValidationError);
     expect(useStorytellerStore.getState().game).toBeNull();
-    const storytellerAfter = await ref(st, "storyteller").once("value");
-    expect(storytellerAfter.exists()).toBe(false);
+    // No projection was committed: every projection carries a guard stamp
+    // in the same update, and none exists (WP 4-4).
+    expect((await ref(st, "writeGuard").once("value")).exists()).toBe(false);
 
     await writer.dispose();
   });
@@ -2820,8 +2826,7 @@ describe("Phase 9R.1 residual F2 Proof: nested '.priority' validation against th
         target === path("storyteller") || target === path("public") || target === path("checkpoint") || target.startsWith(path("player/"))
       );
       expect(projectionWrites).toEqual([]);
-      const storytellerAfter = await ref(st, "storyteller").once("value");
-      expect(storytellerAfter.exists()).toBe(false);
+      expect((await ref(st, "writeGuard").once("value")).exists()).toBe(false);
     } finally {
       useStorytellerStore.setState({ restoreRemoteCheckpoint: originalRestore });
       await writer.dispose();
@@ -2849,10 +2854,12 @@ describe("Phase 9R.1 residual F2 Proof: nested '.priority' validation against th
 
     expect(recovered.outcome).toBe("live");
     expect(useStorytellerStore.getState().game!.history[0]!.change).toEqual({ kind: "added", item: { ".priority": 1, child: true } });
-    // The real Storyteller-private projection reached the emulator, with the
-    // nested priority stored as genuine Firebase priority metadata.
-    const item = await ref(st, "storyteller/history/0/change/item").once("value");
-    expect(item.exportVal()).toEqual({ ".priority": 1, child: true });
+    // The initial flush reached the emulator (this writer's guard stamp is
+    // written in the same update as the checkpoint; the seed had none), and
+    // the checkpoint keeps the nested priority as plain JSON. WP 4-4: there is
+    // no structured storyteller/ projection any more.
+    expect((await ref(st, "writeGuard").once("value")).val()).toMatchObject({ token: writer.token });
+    expect(await checkpointGame((p) => db(st).ref(p).once("value").then((snap) => snap.val()), code, "history/0/change/item")).toEqual({ ".priority": 1, child: true });
 
     recovered.stop();
     await writer.dispose();

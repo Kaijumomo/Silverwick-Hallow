@@ -16,7 +16,7 @@ import type { OnlineMap } from "@/stores/projections";
 import { decodeMembershipRevocations, decodePresence, decodeRoster, decodeRosterParticipants, decodeJoinRequests, SnapshotValidationError, type MembershipRevocationRecord, type RosterParticipantRecord } from "./snapshots";
 import { membershipRevocationsPath, rosterParticipantsPath, storytellerPathSegments } from "./paths";
 import type { RevocationAction } from "./lobby";
-import { SessionWriter, FENCE_MARGIN_MS, type AuthorityHandle, type TerminalPublicationBuilder } from "./writer";
+import { SessionWriter, FENCE_MARGIN_MS, LEASE_MS, LeaseHeldError, type AuthorityHandle, type TerminalPublicationBuilder } from "./writer";
 import { registerVotingAuthorityReader } from "./votingAuthority";
 import { readPublishedResult } from "./terminalResults";
 import { revealAcksPath } from "./paths";
@@ -173,6 +173,23 @@ function noteFailure(error: unknown, phase: "startup" | "live", access?: "read" 
   warnFailure(failure);
   useSessionRuntime.setState({ failure });
   return failure;
+}
+
+/** Automatic retries after a startup found another writer's lease still valid (LeaseHeldError), per lobby scope.
+ * After a reload whose release did not reach Firebase, the tablet's own previous lease expires within LEASE_MS, so
+ * a few retries a renewal interval apart take control back without the Storyteller pressing Retry. A tab that
+ * really is open elsewhere keeps renewing, so the retries run out and the usual "not live" status with Retry
+ * appears. Reset when the scope goes live. */
+export const RECLAIM_DELAY_MS = LEASE_MS / 3;
+export const RECLAIM_ATTEMPTS = 4;
+/** After handing the lease back on beforeunload/pagehide, a page still running this much later was not unloaded. */
+export const EXIT_RECOVERY_MS = 5000;
+const reclaimAttempts = new Map<string, number>();
+function takeReclaimAttempt(lobby: LobbyScope): boolean {
+  const used = reclaimAttempts.get(scopeKey(lobby)) ?? 0;
+  if (used >= RECLAIM_ATTEMPTS) return false;
+  reclaimAttempts.set(scopeKey(lobby), used + 1);
+  return true;
 }
 
 /** A startup that never reached live, kept only so End Game can still close
@@ -411,6 +428,7 @@ export function useStorytellerSync(backend: RoomBackend | null) {
     if (!backend || !lobby) return;
     let cancelled = false;
     let stop: (() => void) | undefined;
+    let reclaimTimer: ReturnType<typeof setTimeout> | undefined;
     const writer = new SessionWriter(backend, lobby.code, lobby.sessionId ?? "", error =>
       reportRuntimeError("write", error ? noteFailure(error, liveWriters.has(writer) ? "live" : "startup").message : null));
     useSessionRuntime.setState({ backend: null, errors: {}, error: null, presence: "unknown", online: {}, joined: [], pending: 0, reconnect: { status: "live" }, leaveRequests: {}, travelerChoices: {}, revealAcks: {}, status: initialConnectionStatus(lobby), failure: null, closeFailed: false, leaveOffer: null });
@@ -425,10 +443,22 @@ export function useStorytellerSync(backend: RoomBackend | null) {
       if (useSessionRuntime.getState().backend !== writer || !writer.leaseMayHaveLapsed()) return;
       retryStorytellerSession();
     };
+    // Reload or close: hand the lease back at once (best effort) so the reloaded tab need not wait for it to
+    // expire. beforeunload comes first, while the connection can still send (in Chromium a write made in pagehide
+    // is dropped as the page unloads); pagehide covers browsers without beforeunload, such as iOS Safari. A page
+    // that stays after all (a cancelled navigation, a link that only downloads) takes control back through the
+    // exitRecovery timer below; so does a page restored from the back-forward cache, whose timers were frozen
+    // while it was hidden. The delay is long enough that an ordinary slow navigation unloads first.
+    let exitRecovery: ReturnType<typeof setTimeout> | undefined;
+    const onExit = () => {
+      if (writer.releaseOnExit()) exitRecovery = setTimeout(retryStorytellerSession, EXIT_RECOVERY_MS);
+    };
     if (typeof window !== "undefined") {
       document.addEventListener("visibilitychange", onResume);
       window.addEventListener("pageshow", onResume);
       window.addEventListener("online", onResume);
+      window.addEventListener("beforeunload", onExit);
+      window.addEventListener("pagehide", onExit);
     }
     const previousDisposal = disposalBarrier.current;
     const started = previousDisposal.then(() => {
@@ -444,6 +474,7 @@ export function useStorytellerSync(backend: RoomBackend | null) {
         // outcome — it is deliberately not touched here.
         stop = session.stop;
         closeCurrent = session.close;
+        if (session.outcome === "live") reclaimAttempts.delete(scopeKey(lobby));
         if (session.outcome !== "live") {
           const reason = useSessionRuntime.getState().reconnect;
           const failure: SessionFailure = reason.status === "conflict"
@@ -455,6 +486,15 @@ export function useStorytellerSync(backend: RoomBackend | null) {
       });
     }).catch(error => {
       writer.stop();
+      if (!cancelled && error instanceof LeaseHeldError && takeReclaimAttempt(lobby)) {
+        // Usually this tablet's own lease from before a reload: wait for it to expire, then retry by itself.
+        warnFailure(classifyStorytellerError(error, "startup"));
+        // Kept like any failed startup, so End multiplayer can still close the lobby authoritatively meanwhile.
+        failedStart = { backend, lobby, writer };
+        useSessionRuntime.setState({ backend: null, status: initialConnectionStatus(lobby), failure: null, errors: {}, error: null });
+        reclaimTimer = setTimeout(retryStorytellerSession, RECLAIM_DELAY_MS);
+        return;
+      }
       if (!cancelled) {
         // Startup never reached live: nothing was exposed as the runtime
         // backend. Keep the failed startup so End Game can still close the
@@ -468,11 +508,15 @@ export function useStorytellerSync(backend: RoomBackend | null) {
     return () => {
       cancelled = true;
       closeCurrent = null;
+      clearTimeout(reclaimTimer);
+      clearTimeout(exitRecovery);
       if (failedStart?.writer === writer) failedStart = null;
       if (typeof window !== "undefined") {
         document.removeEventListener("visibilitychange", onResume);
         window.removeEventListener("pageshow", onResume);
         window.removeEventListener("online", onResume);
+        window.removeEventListener("beforeunload", onExit);
+        window.removeEventListener("pagehide", onExit);
       }
       writer.stop();
       stop?.();
@@ -1387,8 +1431,10 @@ let currentConflict: PendingConflict | null = null;
  * a checkpoint as Current State would only surface the problem later, at
  * the next real Firebase projection, after it is already authoritative.
  * validateFirebaseWritableValue (firebaseWriteCompatibility.ts) -- run
- * against the real destination paths production actually writes this data
- * to (storytellerPath/rosterPath) -- is the final gate here, after schema
+ * against the structured destinations (storytellerPath/rosterPath; since
+ * WP 4-4 the game itself is no longer written as a structured node, so this
+ * is a deliberately conservative check, unchanged in what it refuses) -- is
+ * the final gate here, after schema
  * and lobby-code validation and before this checkpoint is ever reported
  * "valid": never a speculative Firebase write just to find out.
  */

@@ -279,9 +279,18 @@ describe("Package 4 final integration: privacy across Storyteller, Player and Pu
     await expect(server(stranger, `lobbies/${code}/public`)).rejects.toThrow(denied);
     // A seated phone can read public (it is a member) but never the Storyteller's data.
     await expect(server(alice, `lobbies/${code}/storyteller`)).rejects.toThrow(denied);
-    // Roles in the Storyteller's real game never leak through the public node's values either.
-    const text = JSON.stringify(seen);
-    for (const role of ["imp", "poisoner"]) expect(text).not.toContain(`"${role}"`);
+    // The script sheet is public by design (PR #18: phones and the Display show the script), so
+    // `scriptCharacters` lists every character id on the script, assigned or not. It must be exactly
+    // the script's list and nothing more. Outside it, no value may name a character: no player entry is
+    // ever linked to a role.
+    const { scriptCharacters, ...rest } = seen as Record<string, unknown>;
+    expect(scriptCharacters).toEqual([
+      "washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "monk",
+      "ravenkeeper", "virgin", "slayer", "soldier", "mayor", "butler", "drunk", "recluse", "saint",
+      "poisoner", "spy", "scarletwoman", "baron", "imp",
+    ]);
+    const text = JSON.stringify(rest);
+    for (const [, role] of ROLES) expect(text).not.toContain(`"${role}"`);
   });
 
   test("at Night the public node withholds every life field", async () => {

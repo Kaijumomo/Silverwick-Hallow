@@ -19,6 +19,7 @@
     "rules:development:verify": "node scripts/verify-development-firebase.mjs",
     "rules:development:prepare": "node scripts/prepare-development-rules.mjs",
     "emulator": "firebase emulators:start --only database",
+    "harness:multiplayer": "node scripts/harness/run-multiplayer.mjs",
     "test:full": "npm run typecheck && npm test && npm run test:rules"
   },
   "dependencies": {

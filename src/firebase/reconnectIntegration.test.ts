@@ -14,6 +14,7 @@ import { troubleBrewing } from "@/data/scripts/troubleBrewing";
 import { setupScript, standardRoles } from "@/test/setupFixtures";
 import { buildRichPhase9Game } from "@/test/phase9RichState";
 import { MemoryRoomBackend } from "@/test/memoryBackend";
+import { remoteGame } from "@/test/checkpointGame";
 import { createLobby, revokePlayerMembership } from "./lobby";
 import { writeProjections } from "./sync";
 import { SessionWriter, LEASE_MS, FENCE_MARGIN_MS } from "./writer";
@@ -80,7 +81,7 @@ async function hostRich(b: MemoryRoomBackend) {
 async function foreignDeviceAdvance(b: MemoryRoomBackend, sessionId: string, mutate: (game: StorytellerLobbyRecord) => StorytellerLobbyRecord) {
   const foreignWriter = writerFor(b, sessionId);
   await foreignWriter.start();
-  const baseGameRaw = await b.get(`${root}/storyteller`);
+  const baseGameRaw = await remoteGame(b, code);
   const baseGame = baseGameRaw as unknown as StorytellerLobbyRecord;
   const foreignGame = mutate(structuredClone(baseGame));
   await writeProjections({
@@ -126,8 +127,8 @@ describe("Phase 9C.2A reconnect integration: same-lineage", () => {
     expect(recovered.outcome).toBe("live");
     expect(useStorytellerStore.getState().game!.seatOrder.length).toBe(3); // 2 planned + Zara
     expect(useStorytellerStore.getState().localSeq).toBe(useStorytellerStore.getState().sync!.ackedGameSeq); // the initial flush caught up
-    const remoteGame = await b.get(`${root}/storyteller`) as unknown as StorytellerLobbyRecord;
-    expect(remoteGame.seatOrder.length).toBe(3);
+    const serverGame = await remoteGame(b, code) as unknown as StorytellerLobbyRecord;
+    expect(serverGame.seatOrder.length).toBe(3);
   });
 
   it("reload with unacknowledged local work: a real localStorage persist/rehydrate cycle preserves sync/localSeq, and the post-reload reconnect still KEEP_LOCALs", async () => {
@@ -300,7 +301,7 @@ describe("Phase 9C.2A reconnect integration: foreign-lineage (second device)", (
     // Neither side was written: local keeps its own dirty edit...
     expect(useStorytellerStore.getState().game).toEqual(localGameBefore);
     // ...and the remote still shows the foreign device's own content.
-    expect(await b.get(`${root}/storyteller`)).toEqual(foreignGame);
+    expect(await remoteGame(b, code)).toEqual(foreignGame);
     // No listeners were installed, no flush ran: the writer's lease is the
     // only thing still alive, still renewing, holding the compared remote
     // state frozen while the Storyteller decides.
@@ -342,7 +343,7 @@ describe("Phase 9C.2A reconnect integration: foreign-lineage (second device)", (
     const result = await resolveReconnectConflict("keepLocal");
     expect(result).toBe("applied");
     expect(useStorytellerStore.getState().game).toEqual(localGame); // untouched — this IS "keep mine"
-    await waitFor(async () => expect(await b.get(`${root}/storyteller`)).toEqual(localGame)); // published via the normal path
+    await waitFor(async () => expect(await remoteGame(b, code)).toEqual(localGame)); // published via the normal path
   });
 
   it("explicit resolution is stale when the remote moved on again after CONFLICT was raised — the choice is not applied", async () => {
@@ -725,7 +726,7 @@ describe("Phase 9C.2A.2A remediation — H1 continuous authority through destruc
     nowSpy.mockRestore();
     expect(result).toBe("stale");
     expect(useStorytellerStore.getState().game).toEqual(localGameBefore);
-    expect(await b.get(`${root}/storyteller`)).toEqual(takeoverGame); // the takeover's content stands, untouched by us
+    expect(await remoteGame(b, code)).toEqual(takeoverGame); // the takeover's content stands, untouched by us
   });
 
   it("keepLocal is also stale when authority lapses during the reads — no reconciliation, no projection", async () => {
@@ -822,7 +823,7 @@ describe("Phase 9C.2A.2A remediation — B1 durable lost-ack promotion", () => {
     // writer's own retry budget does not retry.
     let c2Attempted = false;
     b.update = async updates => {
-      if (!c2Attempted && `${root}/storyteller` in updates) {
+      if (!c2Attempted && `${root}/checkpoint` in updates) {
         c2Attempted = true;
         throw new Error("PERMISSION_DENIED");
       }
@@ -939,7 +940,7 @@ describe("Phase 9C.2A.2A remediation — H1 follow-up: membership reconciliation
 
     const foreignWriter = writerFor(b, session.id);
     await foreignWriter.start();
-    const baseGame = await foreignWriter.get(`${root}/storyteller`) as unknown as StorytellerLobbyRecord;
+    const baseGame = await remoteGame(foreignWriter, code) as unknown as StorytellerLobbyRecord;
     const [vanishSeatId, recoverSeatId] = baseGame.seatOrder as [string, string];
     const foreignGame: StorytellerLobbyRecord = {
       ...structuredClone(baseGame),
@@ -1132,7 +1133,7 @@ describe("Phase 9C.2B.1 remediation — automatic startup authority fence", () =
     const takeoverWriter = writerFor(b, session.id);
     disposals.push(() => takeoverWriter.dispose());
     await takeoverWriter.start(); // legitimately reclaims — A's recorded expiry has genuinely lapsed
-    const baseGameRaw = await b.get(`${root}/storyteller`);
+    const baseGameRaw = await remoteGame(b, code);
     const takeoverGame = { ...(baseGameRaw as unknown as StorytellerLobbyRecord), day: 77, notes: "a real takeover's own content" };
     await writeProjections({ backend: takeoverWriter, code, stState: takeoverGame, registry: buildRegistry(troubleBrewing), online: {}, membership: {} });
 
@@ -1145,7 +1146,7 @@ describe("Phase 9C.2B.1 remediation — automatic startup authority fence", () =
     expect(useStorytellerStore.getState().game).toEqual(localGameBefore); // never restored to anything
     expect(useStorytellerStore.getState().undoStack).toEqual(undoBefore); // never cleared
     expect(useStorytellerStore.getState().sync).toEqual(syncBefore); // never committed a stale baseline
-    expect(await b.get(`${root}/storyteller`)).toEqual(takeoverGame); // B's state remains intact, untouched by A
+    expect(await remoteGame(b, code)).toEqual(takeoverGame); // B's state remains intact, untouched by A
   });
 
   it("delayed roster/membership takeover: authority lost after the checkpoint is processed but before membership reconciliation must not mutate local membership or revoke remotely", async () => {
@@ -1155,7 +1156,7 @@ describe("Phase 9C.2B.1 remediation — automatic startup authority fence", () =
 
     const foreignWriter = writerFor(b, session.id);
     await foreignWriter.start();
-    const baseGame = await b.get(`${root}/storyteller`) as unknown as StorytellerLobbyRecord;
+    const baseGame = await remoteGame(b, code) as unknown as StorytellerLobbyRecord;
     const [vanishSeatId] = baseGame.seatOrder as [string];
     const foreignGame: StorytellerLobbyRecord = {
       ...structuredClone(baseGame),
@@ -1226,7 +1227,7 @@ describe("Phase 9C.2B.1 remediation — automatic startup authority fence", () =
 
     const foreignWriter = writerFor(b, session.id);
     await foreignWriter.start();
-    const baseGame = await b.get(`${root}/storyteller`) as unknown as StorytellerLobbyRecord;
+    const baseGame = await remoteGame(b, code) as unknown as StorytellerLobbyRecord;
     const [vanishSeatId] = baseGame.seatOrder as [string];
     const foreignGame: StorytellerLobbyRecord = {
       ...structuredClone(baseGame),
@@ -1333,7 +1334,7 @@ describe("Phase 9C.2B.1 revision — startup guard/authority coherence (G1 -> G2
     const takeoverWriter = writerFor(b, session.id);
     disposals.push(() => takeoverWriter.dispose());
     await takeoverWriter.start();
-    const baseGameRaw = await b.get(`${root}/storyteller`);
+    const baseGameRaw = await remoteGame(b, code);
     const takeoverGame = { ...(baseGameRaw as unknown as StorytellerLobbyRecord), day: 77, notes: "B's newer G2 content" };
     await writeProjections({ backend: takeoverWriter, code, stState: takeoverGame, registry: buildRegistry(troubleBrewing), online: {}, membership: {} });
     const g2Guard = await b.get(`${root}/writeGuard`);
@@ -1364,7 +1365,7 @@ describe("Phase 9C.2B.1 revision — startup guard/authority coherence (G1 -> G2
     expect(useSessionRuntime.getState().reconnect.status).not.toBe("conflict");
     // B's newer G2 game AND guard survive intact — A's older local game was
     // never uploaded over them.
-    expect(await b.get(`${root}/storyteller`)).toEqual(takeoverGame);
+    expect(await remoteGame(b, code)).toEqual(takeoverGame);
     expect(await b.get(`${root}/writeGuard`)).toEqual(g2Guard);
   });
 
@@ -1424,7 +1425,7 @@ describe("Phase 9C.2B.1 revision — startup guard/authority coherence (G1 -> G2
     // Neither side was written: A kept its own dirty local, and the remote
     // still shows the foreign device's own content.
     expect(useStorytellerStore.getState().game).toEqual(localGameBefore);
-    expect(await b.get(`${root}/storyteller`)).toEqual(foreignGame);
+    expect(await remoteGame(b, code)).toEqual(foreignGame);
   });
 });
 
@@ -1507,7 +1508,7 @@ describe("Phase 9C.2B.2B revision — RESTORE local-evidence coherence (edit dur
     // No stale RESTORE-derived membership mutation; the newer remote
     // checkpoint/guard/game remain untouched.
     expect(useStorytellerStore.getState().game).not.toEqual(foreignGame);
-    expect(await b.get(`${root}/storyteller`)).toEqual(foreignGame);
+    expect(await remoteGame(b, code)).toEqual(foreignGame);
     expect(await b.get(`${root}/writeGuard`)).toEqual(foreignGuard);
   });
 
@@ -1551,7 +1552,7 @@ describe("Phase 9C.2B.2B revision — RESTORE local-evidence coherence (edit dur
     // Neither side written: local keeps its edit, remote keeps its own content.
     expect(useStorytellerStore.getState().game!.seatOrder.some(
       id => useStorytellerStore.getState().game!.players[id]!.name === "Recovered-into-conflict edit")).toBe(true);
-    expect(await b.get(`${root}/storyteller`)).toEqual(foreignGame);
+    expect(await remoteGame(b, code)).toEqual(foreignGame);
   });
 
   it("KEEP_LOCAL positive control: a local edit during the roster await is NOT cancelled — the RESTORE gate is narrow, so KEEP_LOCAL keeps the current (edited) local game and goes live", async () => {
@@ -1670,10 +1671,10 @@ describe("Phase 9D.5 Proof C: same-lineage reconnect integrity for a rich Phase 
     expect(gameAfter.players[handles.chefId]!.stNotes).toBe("SENTINEL-PRIVATE-CHEF-NOTE");
     expect(useStorytellerStore.getState().localSeq).toBe(useStorytellerStore.getState().sync!.ackedGameSeq); // the initial flush caught up
 
-    const remoteGame = await b.get(`${root}/storyteller`) as unknown as StorytellerLobbyRecord;
-    expect(remoteGame.players[handles.investigatorId]!.reminders.map(r => r.label)).toEqual(["Dirty edit reminder"]);
-    expect(remoteGame.history.length).toBe(dirtyGame.history.length);
-    expect(remoteGame.informationDeliveries.length).toBe(2);
+    const serverGame = await remoteGame(b, code) as unknown as StorytellerLobbyRecord;
+    expect(serverGame.players[handles.investigatorId]!.reminders.map(r => r.label)).toEqual(["Dirty edit reminder"]);
+    expect(serverGame.history.length).toBe(dirtyGame.history.length);
+    expect(serverGame.informationDeliveries.length).toBe(2);
   });
 });
 

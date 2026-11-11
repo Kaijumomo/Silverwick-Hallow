@@ -24,6 +24,7 @@ import { LEASE_MS, SessionWriter } from "./writer";
 import { setupGame, setupScript } from "@/test/setupFixtures";
 import { buildRegistry } from "@/data/roleRegistry";
 import type { StorytellerLobbyRecord } from "@/stores/types";
+import { checkpointGame } from "@/test/checkpointGame";
 
 const firebase = vi.hoisted(() => ({ backend: null as RoomBackend | null }));
 vi.mock("./session", () => ({
@@ -126,7 +127,7 @@ async function expectNothingTerminal(read: (path: string) => Promise<unknown>, s
   expect(await b.get(`${root}/rosterParticipants`)).toBeTruthy();
   expect(await b.get(`${root}/joinRequests/uid-carol`)).toBe("Carol");
   expect(await b.get(`${root}/player`)).toBeTruthy();
-  expect(await b.get(`${root}/storyteller`)).toBeTruthy();
+  expect(await b.get(`${root}/storyteller`)).toBeUndefined(); // WP 4-4: the structured copy is never written
   expect(await b.get(`${root}/checkpoint`)).toBeTruthy();
   expect(await b.get(`${root}/revealAcks/uid-alice`)).toBeTruthy();
 }
@@ -158,7 +159,7 @@ describe("PR-10H-001: a failed declared-result preflight writes nothing terminal
     // Ordinary synchronized gameplay resumes: a mutation reaches the server.
     const victim = game().seatOrder[3]!;
     expect(st().recordDeath(victim)).toMatchObject({ ok: true });
-    await waitFor(async () => expect(await b.get(`${root}/storyteller/players/${victim}/alive`)).toBe(false));
+    await waitFor(async () => expect(await checkpointGame(b, code, `players/${victim}/alive`)).toBe(false));
     expect(await b.get(`${root}/public/status`)).not.toBe("ended");
 
     // Repair the injected failure and retry the same intent.

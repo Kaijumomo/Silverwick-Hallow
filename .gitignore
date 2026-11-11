@@ -44,3 +44,4 @@ database-debug.log
 
 # TypeScript incremental build state (rewritten by every typecheck)
 *.tsbuildinfo
+harness-output/

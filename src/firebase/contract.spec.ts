@@ -46,6 +46,7 @@ import { subscribeToPublicLobby } from "./publicSync";
 import { authorizePublicDisplay, ensurePublicDisplayAccess, rotatePublicDisplayAccess } from "./publicDisplayAuth";
 import type { PublicLobbyRecord } from "@/stores/types";
 import { withoutSelfEnvelope } from "@/test/revealTokens";
+import { remoteGame } from "@/test/checkpointGame";
 
 let env: RulesTestEnvironment;
 beforeAll(async () => {
@@ -374,7 +375,6 @@ describe("OPUS-007 contract: real client pathways against enforced Firebase rule
     expect(await stBackend.get(`lobbies/${code}/roster/${bob}`)).toBeUndefined();
     expect(await stBackend.get(`lobbies/${code}/public`)).toMatchObject({ code });
     expect(withoutSelfEnvelope(await stBackend.get(`lobbies/${code}/player/${id}`))).toEqual({ shownRole: "chef", shownAlignment: "good" });
-    expect(await stBackend.get(`lobbies/${code}/storyteller`)).toBeTruthy();
     expect(await stBackend.get(`lobbies/${code}/checkpoint`)).toBeTruthy();
   });
 
@@ -748,7 +748,7 @@ describe("OPUS-007 contract: real client pathways against enforced Firebase rule
     // array node simply doesn't exist), so a raw read is compared on the
     // discriminating content fields rather than a full deep-equal against
     // an in-memory (never round-tripped) object.
-    const remoteAfterConflict = await deviceA3.get(`lobbies/${code}/storyteller`) as { day: number; notes: string };
+    const remoteAfterConflict = await remoteGame(deviceA3, code); // WP 4-4: the checkpoint is the only remote copy
     expect(remoteAfterConflict.day).toBe(foreignGame2.day); // untouched
     expect(remoteAfterConflict.notes).toBe(foreignGame2.notes); // untouched
     await expect(managerA3.close()).rejects.toThrow(/conflict/i);
