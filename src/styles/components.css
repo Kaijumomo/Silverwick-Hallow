@@ -14,6 +14,8 @@
   height: 100vh;
   height: 100dvh;
   min-height: 0;
+  /* Installed iOS app: the translucent status bar overlays the page, so keep content below it. */
+  padding-top: var(--safe-top);
   background:
     radial-gradient(circle at 50% 50%, rgba(196, 158, 80, 0.05), transparent 60%),
     var(--bg);
