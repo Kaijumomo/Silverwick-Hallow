@@ -1,0 +1,88 @@
+# Continuous checks: typecheck, tests, production build.
+#
+# Deliberately NOT here:
+#   - any deploy step (Cloudflare Pages deploys main by itself, outside this repo);
+#   - any secret or VITE_FIREBASE_* value (the build and tests need none);
+#   - the Firebase rules suite (`npm run test:rules` needs the emulator, Java and a
+#     download from Google; it has not been proven in CI yet).
+name: CI
+
+# Pushes to main (after a merge) and every pull request. Other branch pushes are
+# checked through their pull request, so a branch with an open PR is not run twice.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# One run per branch at a time; a newer push cancels the older run.
+concurrency:
+  group: ci-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+
+  # Protected set: every test file whose name contains "troubleBrewing"
+  # (the Trouble Brewing character, setup, store and Grimoire suites). It also runs
+  # inside the full suite below; this job gives it its own named check so a
+  # Trouble Brewing regression is visible at a glance and can be made a required check.
+  # .github/trouble-brewing-protected.json lists each protected file with a minimum test
+  # count; a deleted/renamed file, fewer tests, or any skipped/todo/failed test fails the job.
+  trouble-brewing:
+    name: Trouble Brewing protected suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Run protected suites
+        run: npx vitest run troubleBrewing --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/tb.json"
+      - name: Check against the protected manifest
+        run: node .github/scripts/check-trouble-brewing.mjs "$RUNNER_TEMP/tb.json" .github/trouble-brewing-protected.json
+
+  tests:
+    name: Tests (full suite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
