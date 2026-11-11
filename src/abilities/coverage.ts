@@ -3,7 +3,7 @@ import jinxData from "@/data/canonical/jinxes.json";
 import { CANONICAL_REVISION } from "@/data/canonical";
 import { CANONICAL_MODIFIER_SCOPES, type HookScope } from "./modifiers";
 import { CANONICAL_ABILITY_SEMANTICS, type AbilitySemanticsRegistry } from "./semantics";
-import { COVERAGE_NOTES, VERIFIED_MANUAL } from "./characters/classification";
+import { COVERAGE_NOTES, OWNED_ELSEWHERE, VERIFIED_MANUAL } from "./characters/classification";
 import { hasCountPolicy, hasUncertainComposition } from "@/rules/setup/setupPolicies";
 
 /**
@@ -26,9 +26,12 @@ import { hasCountPolicy, hasUncertainComposition } from "@/rules/setup/setupPoli
  *    classified (gating stays narrow) but whose semantics are unverified;
  *  - gatedJudgment: a canonical jinx -- it gates its two characters'
  *    evaluations to an explicit Storyteller judgment;
+ *  - ownedElsewhere: no AbilityDescriptor, but a dedicated reviewed module owns
+ *    the behaviour (the Trouble Brewing work, B0-B9); its note names the owner
+ *    and the Storyteller boundary. Presentation only: it changes no gate;
  *  - unclassified: Phase 11 work.
  */
-export type CoverageStatus = "supported" | "verifiedManual" | "setupOwned" | "modifierScoped" | "gatedJudgment" | "unclassified";
+export type CoverageStatus = "supported" | "verifiedManual" | "setupOwned" | "modifierScoped" | "gatedJudgment" | "ownedElsewhere" | "unclassified";
 export type CoverageKind = "townsfolk" | "outsider" | "minion" | "demon" | "traveler" | "fabled" | "loric" | "jinx";
 export type CoverageWave = "11A" | "11B" | "11C" | "11D" | "11E" | "11F";
 
@@ -46,7 +49,7 @@ export type CoverageEntry = {
 };
 
 export type CoverageCapability = {
-  owner: "abilities" | "setup" | "voting" | "identity" | "rules";
+  owner: "abilities" | "setup" | "voting" | "identity" | "rules" | "information" | "selection" | "victory";
   boundary: string;
   evidence: string;
 };
@@ -60,6 +63,12 @@ const OWNED_CAPABILITIES: Readonly<Record<string, readonly CoverageCapability[]>
   legion: [{ owner: "setup", boundary: "Duplicate allowance; composition manual", evidence: "src/rules/setup/setupAnalyzer.ts" }],
   pope: [{ owner: "setup", boundary: "Good character duplicate allowance only", evidence: "src/rules/setup/setupAnalyzer.ts" }],
   marionette: [{ owner: "setup", boundary: "Bounded Demon adjacency validation", evidence: "src/rules/setup/setupAnalyzer.ts" }],
+  washerwoman: [{ owner: "information", boundary: "Storyteller-chosen clue validated against actual roles and registration; one delivery; no clue suggestion", evidence: "src/stores/preparedInformation.ts" }],
+  librarian: [{ owner: "information", boundary: "Outsider clue or explicit zero validated against the actual roster; impaired content is the Storyteller's choice", evidence: "src/stores/preparedInformation.ts" }],
+  investigator: [{ owner: "information", boundary: "Minion clue validated against actual roles and registration; impaired content is the Storyteller's choice", evidence: "src/stores/preparedInformation.ts" }],
+  butler: [{ owner: "selection", boundary: "Master choice recorded as reminder notation; voting compliance is player-owned and not enforced", evidence: "src/stores/butlerSelection.ts" }],
+  mayor: [{ owner: "victory", boundary: "No-execution Day-end win evidence; attack redirection stays Storyteller-controlled", evidence: "src/stores/victoryEvidence.ts" }],
+  saint: [{ owner: "victory", boundary: "Functioning Saint execution evidence; Storyteller declares the result", evidence: "src/stores/victoryEvidence.ts" }],
   scarletwoman: [{ owner: "abilities", boundary: "B4 supported Imp death, star-pass, Slayer and execution succession; exceptional interactions manual", evidence: "src/abilities/characters/scarletWoman.ts" }],
   soldier: [{ owner: "rules", boundary: "Canonical functioning Soldier Demon death protection only", evidence: "src/abilities/characters/passiveRules.ts" }],
   vortox: [{ owner: "rules", boundary: "Relevant Townsfolk information goes wholly Manual; no Vortox resolver", evidence: "src/abilities/characters/passiveRules.ts" }],
@@ -100,6 +109,8 @@ export function buildCoverageManifest(semantics: AbilitySemanticsRegistry = CANO
     if (role.id === "baron") {
       return { id: role.id, kind, status: "setupOwned", wave, note: "Setup composition (Outsider count) stays Setup-owned; no ability-engine mechanic (PHASE10F Section 11; matrix 17)." };
     }
+    const owned = Object.prototype.hasOwnProperty.call(OWNED_ELSEWHERE, role.id) ? OWNED_ELSEWHERE[role.id]! : undefined;
+    if (owned && !VERIFIED_MANUAL.has(role.id)) return { id: role.id, kind, status: "ownedElsewhere", wave, note: note.note ?? owned };
     const scopes = kind === "fabled" || kind === "loric" ? { scopes: CANONICAL_MODIFIER_SCOPES[role.id] ?? ["global" as const] } : {};
     const manual = VERIFIED_MANUAL.get(role.id);
     if (manual) return { id: role.id, kind, status: "verifiedManual", wave, ...scopes, note: manual };
@@ -123,7 +134,7 @@ export function buildCoverageManifest(semantics: AbilitySemanticsRegistry = CANO
 export type CoverageSummary = { revision: string; total: number; characterTotal: number; jinxTotal: number; byStatus: Record<CoverageStatus, number> };
 
 export function coverageSummary(manifest: readonly CoverageEntry[] = buildCoverageManifest()): CoverageSummary {
-  const byStatus: Record<CoverageStatus, number> = { supported: 0, verifiedManual: 0, setupOwned: 0, modifierScoped: 0, gatedJudgment: 0, unclassified: 0 };
+  const byStatus: Record<CoverageStatus, number> = { supported: 0, verifiedManual: 0, setupOwned: 0, modifierScoped: 0, gatedJudgment: 0, ownedElsewhere: 0, unclassified: 0 };
   for (const entry of manifest) byStatus[entry.status]++;
   return { revision: CANONICAL_REVISION, total: manifest.length,
     characterTotal: manifest.filter(entry => entry.kind !== "jinx").length,

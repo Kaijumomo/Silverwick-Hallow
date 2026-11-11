@@ -29,3 +29,22 @@ export const COVERAGE_NOTES: Readonly<Record<RoleId, string>> = {
   scarletwoman: "B4: supported Imp death and star-pass succession, Slayer and execution, using pre-death functioning and five living non-Travellers. No invokable descriptor; exceptional succession remains manual.",
   harlot: "Information Action 'harlot-other-night' is Silverwick-authored with explicit owner authorization (no pinned action existed).",
 };
+
+/** Trouble Brewing characters whose behaviour is owned by a dedicated, reviewed
+ * module rather than an AbilityDescriptor (docs/ai/TROUBLE_BREWING_B9_ACCEPTANCE.md).
+ * Presentation only -- never mechanics, never read by any gate: "unclassified"
+ * means "no descriptor", not "handled by hand". Every id here is also in
+ * REVIEWED_INTERACTION_ROLES (asserted in abilityArchitecture.test.ts). */
+export const OWNED_ELSEWHERE: Readonly<Record<RoleId, string>> = {
+  washerwoman: "Owned by prepared information (src/stores/preparedInformation.ts): the Storyteller chooses the clue, the app validates it against actual roles and registration, places the linked reminders and delivers once. Impaired content is the Storyteller's free choice; no clue is suggested.",
+  librarian: "Owned by prepared information (src/stores/preparedInformation.ts): Outsider clue or an explicit zero, validated against the actual roster (Drunk, Baron) with Spy/Recluse registration as the Storyteller's choice. Impaired content is the Storyteller's free choice.",
+  investigator: "Owned by prepared information (src/stores/preparedInformation.ts): Minion clue validated against actual roles with Spy/Recluse registration as the Storyteller's choice; one validated delivery. Impaired content is the Storyteller's free choice.",
+  butler: "Owned by Master selection (src/stores/butlerSelection.ts): other-player choice, exact reminder ownership, expiry and source retirement. Voting compliance is player-owned and deliberately not enforced.",
+  virgin: "Owned by Voting (src/stores/voting.ts): first legal nomination consumes the ability once; the execution outcome stays an approved Storyteller confirmation.",
+  soldier: "Owned by passive protection (src/abilities/characters/passiveRules.ts): a functioning Soldier blocks Demon harm in the supported envelope; poisoning disables it.",
+  mayor: "Owned by victory evidence (src/stores/victoryEvidence.ts) for the no-execution Day-end win; attack redirection stays Storyteller-controlled.",
+  saint: "Owned by victory evidence (src/stores/victoryEvidence.ts): a functioning Saint's execution; the Storyteller declares the result.",
+  recluse: "Owned by the rules query (src/stores/rulesQuery.ts, passiveRules.ts): optional evil/Minion/Demon registration, decided by the Storyteller per interaction.",
+  spy: "Owned by the rules query and night order (src/stores/rulesQuery.ts, src/rules/night/nightOrder.ts): optional registration per interaction; the Spy views the existing Storyteller Grimoire directly.",
+  scarletwoman: "Owned by succession (src/abilities/characters/scarletWoman.ts) and recorded deaths (src/stores/deathResolution.ts).",
+};
