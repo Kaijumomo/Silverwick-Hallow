@@ -1,0 +1,25 @@
+{
+  "_comment": "Trouble Brewing protected suites: every file listed must exist and run at least this many passing tests. Raise a number when tests are added; lowering or removing an entry is a deliberate, reviewable change.",
+  "files": {
+    "src/abilities/characters/troubleBrewingB0.independent.test.ts": 19,
+    "src/abilities/characters/troubleBrewingB0.test.ts": 1,
+    "src/abilities/characters/troubleBrewingB1.independent.test.ts": 26,
+    "src/abilities/characters/troubleBrewingB2Interactions.test.ts": 22,
+    "src/abilities/characters/troubleBrewingB2MonkIndependent.test.ts": 4,
+    "src/abilities/characters/troubleBrewingB4.test.ts": 15,
+    "src/abilities/characters/troubleBrewingB5aCommands.test.ts": 16,
+    "src/abilities/characters/troubleBrewingB5b.test.ts": 27,
+    "src/features/grimoire-v6/night/port/troubleBrewingB2Independent.v6.test.tsx": 7,
+    "src/features/grimoire-v6/night/port/troubleBrewingB5aUi.v6.test.tsx": 15,
+    "src/features/grimoire-v6/night/port/troubleBrewingB5aUiIndependent.v6.test.tsx": 7,
+    "src/features/grimoire-v6/night/port/troubleBrewingB5bUi.v6.test.tsx": 11,
+    "src/features/grimoire-v6/night/port/troubleBrewingB5bUiIndependent.v6.test.tsx": 7,
+    "src/features/grimoire-v6/night/port/troubleBrewingB6Ui.v6.test.tsx": 11,
+    "src/features/setup/troubleBrewingB3BaronDrunk.test.ts": 47,
+    "src/features/setup/troubleBrewingB3Independent.test.ts": 10,
+    "src/stores/troubleBrewingB4Death.test.ts": 23,
+    "src/stores/troubleBrewingB4Independent.test.ts": 19,
+    "src/stores/troubleBrewingB5aIndependent.test.ts": 27,
+    "src/stores/troubleBrewingB5bIndependent.test.ts": 29
+  }
+}
