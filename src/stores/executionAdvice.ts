@@ -1,4 +1,4 @@
-import { REVIEWED_INTERACTION_ROLES } from "@/abilities/characters/passiveRules";
+import { interactionCoverageEligibility } from "@/abilities/automationEligibility";
 import { createRulesQuery, type RulesQueryEnvironment } from "./rulesQuery";
 import type { PlayerId, StorytellerLobbyRecord } from "./types";
 
@@ -19,9 +19,9 @@ export type ExecutionAdvice = { kind: "survives"; spends: boolean; note: string 
 export function executionAdvice(game: StorytellerLobbyRecord, playerId: PlayerId, environment?: RulesQueryEnvironment): ExecutionAdvice | null {
   const player = game.players[playerId];
   if (!environment || !player || player.isEmpty || !player.participantId || !player.alive) return null;
-  // Only characters whose interactions are reviewed get advice, the same line automation draws (a Sailor's nightly drunk choice is not modelled).
-  if (!REVIEWED_INTERACTION_ROLES.has(player.actualRole)) return null;
+  // Advice follows the same line automation draws: every character in play must be reviewed (a Sailor's nightly drunk choice, a Devil's Advocate's protection and the like are not modelled).
   const query = createRulesQuery(game, environment);
+  if (interactionCoverageEligibility(query, ["pacifist"]).kind === "manual") return null; // the Pacifist is handled below
   const outcome = query.deathOutcome({ playerId, participantId: player.participantId }, "any");
   if (!outcome.known || outcome.value.kind !== "survives") return null;
   const pacifist = Object.values(game.players).some(p => !p.isEmpty && p.alive && p.actualRole === "pacifist");

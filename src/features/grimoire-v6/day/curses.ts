@@ -1,3 +1,4 @@
+import { interactionCoverageEligibility } from "@/abilities/automationEligibility";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import { livingNonTravellers } from "@/abilities/characters/witch";
 import { createRulesQuery } from "@/stores/rulesQuery";
@@ -95,7 +96,9 @@ export function golemNotice(
   const demon = query.registersAsType(targetBinding, "demon", "golem");
   if (demon.known && demon.value) return certain(`${target.name} is the Demon: nothing happens. This is the Golem's one nomination.`, spendIntents, spendDone);
   if (!demon.known) return { note: inRound ? `Does ${target.name} die? They may register as the Demon (${demon.reason}).` : "", actions: inRound ? [kill(`${target.name} dies`), spend(`${target.name} survives`)] : [] };
-  const safe = query.protectedFrom(targetBinding, "any");
+  // A Sailor's drunk choice is not modelled, so while the Sailor is outside the reviewed roster the Storyteller decides (as before LS-1).
+  const rosterManual = target.actualRole === "sailor" ? interactionCoverageEligibility(query) : null;
+  const safe = rosterManual?.kind === "manual" ? { known: false as const, reason: rosterManual.reason } : query.protectedFrom(targetBinding, "any");
   if (safe.known && safe.value) return certain(`${target.name} cannot die right now: they are protected. Nothing happens, but this is the Golem's one nomination.`, spendIntents, spendDone);
   if (!safe.known) return { note: inRound ? `Does ${target.name} die? They may be protected (${safe.reason}).` : "", actions: inRound ? [kill(`${target.name} dies`), spend(`${target.name} survives`)] : [] };
   return certain(`${golem.name} nominated ${target.name}, who is not the Demon: they die when the vote begins. The nomination still counts.`, killIntents, killDone);
