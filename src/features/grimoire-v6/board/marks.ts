@@ -1,4 +1,6 @@
+import { getFabled } from "@/data/fabled";
 import { iconUrlFor } from "@/data/iconUrl";
+import { getLoric } from "@/data/lorics";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { captureVotingContext, useStorytellerStore } from "@/stores/storytellerStore";
 import type { RulesQuery } from "@/stores/rulesQuery";
@@ -168,20 +170,26 @@ export function removeMark(playerId: PlayerId, participantId: string | undefined
 
 export type PaletteEntry = { role: RoleDef; label: string };
 
-/** The official reminder tokens a Storyteller can place: this script plus the Travellers actually seated. */
+/**
+ * The official reminder tokens a Storyteller can place: this script, the Fabled and Loric chosen for the game, and the
+ * Travellers actually seated. A Fabled or Loric chosen at setup lives on the game record, not on the script, and a Fabled is
+ * not in a script's role registry unless a custom script declares it, so those two catalogues are read directly (the
+ * registry's own definition still wins, so a custom script's version of the same id is the one offered).
+ */
 export function reminderPalette(env: MarkEnv): { inPlay: PaletteEntry[]; all: PaletteEntry[] } {
   const { game, script, registry } = env;
   if (!script) return { inPlay: [], all: [] };
   const present = new Set(Object.values(game.players).filter((p) => !p.isEmpty).map((p) => p.actualRole));
+  const chosen = new Set([...(game.fabled ?? []), ...(game.lorics ?? [])]);
   const ids = new Set([
-    ...script.characters.map((r) => r.id), ...(script.fabled ?? []).map((r) => r.id),
+    ...script.characters.map((r) => r.id), ...(script.fabled ?? []).map((r) => r.id), ...chosen,
     ...Object.values(game.players).filter((p) => !p.isEmpty && p.isTraveler).map((p) => p.actualRole),
   ]);
   const all = [...ids].flatMap((id) => {
-    const role = registry.get(id);
+    const role = registry.get(id) ?? (chosen.has(id) ? getFabled(id) ?? getLoric(id) : undefined);
     return role ? [...new Set([...(role.reminders ?? []), ...(role.remindersGlobal ?? [])])].map((label) => ({ role, label })) : [];
   });
-  return { all, inPlay: all.filter((entry) => present.has(entry.role.id) || game.fabled.includes(entry.role.id)) };
+  return { all, inPlay: all.filter((entry) => present.has(entry.role.id) || chosen.has(entry.role.id)) };
 }
 
 /** Places one reminder (notation only) with the source character that owns its artwork. */
