@@ -37,7 +37,9 @@ export const passiveRegistrationOptions = (roleId: RoleId) =>
  *    the first row that uses them.
  *  - decision: "auto" (the gate answers) or "storyteller" (modelled only as a gap: the whole action stays Manual).
  *  - onSurvive: "nothing" (the death simply does not happen) or "spend" (the ability is used up: abilityUsed + NO ABILITY).
- *    Shaped as a union so a later "hiddenLife" value can be added without reworking the gate.
+ *    A union so "hiddenLife" can be added as a value; NOTE the gate's RESULT types (DeathOutcomeAnswer in rulesQuery.ts, DeathDecision
+ *    in shared.ts) still carry only a yes/no spend, so LS-3 must widen them and their readers (survivedOutcome, executionAdvice, voting).
+ *    `decision: "storyteller"` currently means "not modelled, whole action Manual"; a real Storyteller-choice row (LS-2) needs its own value.
  *  - alsoCreditedTo: roles whose own protection could equally be the reason for a survival; a spending survival then becomes
  *    ambiguous and nothing is spent automatically (the Storyteller chooses).
  *  - earlyProtection: a named helper for a reviewed rule that cannot be plain data (checked before the row applies).
