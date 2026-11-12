@@ -17,8 +17,8 @@ const wrapper = ({ children }: { children: ReactNode }) => <VotingProvider>{chil
 const died = (g: StorytellerLobbyRecord, id: string, phase: "day" | "night", day: number): LifeEvent =>
   ({ id: `d-${id}-${phase}${day}`, kind: "death", moment: { phase, day }, subject: { kind: "participant", playerId: id, participantId: g.players[id]!.participantId!, nameAtTime: id }, actualRoleAtEvent: g.players[id]!.actualRole }) as LifeEvent;
 
-function setup(phase: "day" | "night", day: number, events: (g: StorytellerLobbyRecord) => LifeEvent[], dead: string[] = ["p1"], godfatherAlive = true) {
-  let g = proofGame(ROLES, phase, day);
+function setup(phase: "day" | "night", day: number, events: (g: StorytellerLobbyRecord) => LifeEvent[], dead: string[] = ["p1"], godfatherAlive = true, roles: string[] = ROLES) {
+  let g = proofGame(roles, phase, day);
   for (const id of dead) g = patchPlayer(g, id, { alive: false });
   if (!godfatherAlive) g = patchPlayer(g, "p0", { alive: false });
   g = { ...g, lifeEventWindow: { ...g.lifeEventWindow, events: events(g) } };
@@ -55,5 +55,121 @@ describe("Godfather DIED TODAY token", () => {
     expect(label("p1")).not.toContain("Died Today");
     setup("day", 2, (g) => [died(g, "p1", "day", 2)], ["p1"], false);
     expect(label("p1")).not.toContain("Died Today");
+  });
+});
+
+// The Undertaker's official DIED TODAY token: derived from the execution record while a living, real Undertaker is in play.
+// p0 undertaker, p1 saint, p2 chef, p3 imp, p4 poisoner, p5 monk, p6 baron
+const UT = ["undertaker", "saint", "chef", "imp", "poisoner", "monk", "baron"];
+const executed = (g: StorytellerLobbyRecord, id: string, day: number, outcome: "died" | "survived" | "alreadyDead" = "died"): LifeEvent =>
+  ({ id: `x-${id}-${day}`, kind: "execution", outcome, moment: { phase: "day", day }, subject: { kind: "participant", playerId: id, participantId: g.players[id]!.participantId!, nameAtTime: id }, actualRoleAtEvent: g.players[id]!.actualRole }) as LifeEvent;
+const exiled = (g: StorytellerLobbyRecord, id: string, day: number): LifeEvent =>
+  ({ ...executed(g, id, day), id: `e-${id}-${day}`, kind: "exile" }) as LifeEvent;
+const utSetup = (phase: "day" | "night", day: number, events: (g: StorytellerLobbyRecord) => LifeEvent[], dead: string[] = ["p1"], roles: string[] = UT) =>
+  setup(phase, day, events, dead, true, roles);
+const titles = (id: string) => renderHook(() => {
+  const g = store((s) => s.game)!;
+  const ctx = useV6Ctx(g);
+  const query = createRulesQuery(g, { script: ctx.script!, registry: ctx.registry });
+  return playerMarks({ game: g, script: ctx.script, registry: ctx.registry, query }, g.players[id]!).map((m) => m.title);
+}, { wrapper }).result.current;
+
+describe("Undertaker DIED TODAY token", () => {
+  it("marks a player executed to death, on that Day and through the Night that follows, and not by the next Day", () => {
+    utSetup("day", 2, (g) => [executed(g, "p1", 2)]);
+    expect(titles("p1")).toEqual(["Undertaker: Died Today"]);
+    utSetup("night", 3, (g) => [executed(g, "p1", 2)]);
+    expect(titles("p1")).toEqual(["Undertaker: Died Today"]);
+    utSetup("day", 3, (g) => [executed(g, "p1", 2)]);
+    expect(label("p1")).not.toContain("Died Today");
+  });
+
+  it("is not drawn on Night 1 or for an execution that did not kill", () => {
+    utSetup("night", 1, () => []);
+    expect(label("p1")).not.toContain("Died Today");
+    utSetup("day", 2, (g) => [executed(g, "p1", 2, "survived")], []);
+    expect(label("p1")).not.toContain("Died Today");
+    utSetup("day", 2, (g) => [executed(g, "p1", 2, "alreadyDead")]);
+    expect(label("p1")).not.toContain("Died Today");
+  });
+
+  it("is not drawn for a Day death that is not an execution, a night death, or a Traveller exile", () => {
+    utSetup("day", 2, (g) => [died(g, "p1", "day", 2)]);
+    expect(label("p1")).not.toContain("Died Today");
+    utSetup("day", 2, (g) => [died(g, "p1", "night", 2)]);
+    expect(label("p1")).not.toContain("Died Today");
+    utSetup("day", 2, (g) => [exiled(g, "p1", 2)]);
+    expect(label("p1")).not.toContain("Died Today");
+  });
+
+  it("needs a living, real Undertaker: none, a Drunk who believes it is one, a dead one, or an empty seat draw nothing", () => {
+    utSetup("day", 2, (g) => [executed(g, "p1", 2)], ["p1"], ["monk", "saint", "chef", "imp", "poisoner", "empath", "baron"]);
+    expect(label("p1")).not.toContain("Died Today");
+    utSetup("day", 2, (g) => [executed(g, "p1", 2)], ["p1"], ["drunk", "saint", "chef", "imp", "poisoner", "monk", "baron"]);
+    store.setState({ game: patchPlayer(store.getState().game!, "p0", { shownRole: "undertaker" } as never) });
+    expect(label("p1")).not.toContain("Died Today");
+    utSetup("day", 2, (g) => [executed(g, "p1", 2)], ["p1", "p0"]);
+    expect(label("p1")).not.toContain("Died Today");
+    utSetup("day", 2, (g) => [executed(g, "p1", 2)]);
+    store.setState({ game: patchPlayer(store.getState().game!, "p0", { isEmpty: true } as never) });
+    expect(label("p1")).not.toContain("Died Today");
+  });
+
+  it("is still drawn while the Undertaker is poisoned", () => {
+    utSetup("day", 2, (g) => [executed(g, "p1", 2)]);
+    const g = store.getState().game!;
+    const target = { playerId: "p0", participantId: g.players.p0!.participantId! };
+    expect(store.getState().resolveEffects({ intents: [{ kind: "apply", target, effect: { id: "poison", type: "poisoned", sourceCharacter: "poisoner", source: { playerId: "p4", participantId: g.players.p4!.participantId! }, lifetime: { kind: "manual" } } }] } as never).ok).toBe(true);
+    expect(titles("p1")).toEqual(["Undertaker: Died Today"]);
+  });
+
+  it("sits beside the Godfather's token on an executed Outsider, and alone on an executed Townsfolk", () => {
+    const withGodfather = ["undertaker", "saint", "chef", "imp", "godfather", "monk", "baron"];
+    utSetup("day", 2, (g) => [executed(g, "p1", 2)], ["p1"], withGodfather);
+    expect(titles("p1")).toEqual(["Godfather: Died Today", "Undertaker: Died Today"]);
+    utSetup("day", 2, (g) => [executed(g, "p2", 2)], ["p2"], withGodfather);
+    expect(titles("p2")).toEqual(["Undertaker: Died Today"]);
+  });
+
+  it("is drawn for an executed Spy or Recluse whatever they register as", () => {
+    utSetup("day", 2, (g) => [executed(g, "p1", 2)], ["p1"], ["undertaker", "recluse", "chef", "imp", "poisoner", "monk", "baron"]);
+    expect(label("p1")).toContain("Died Today");
+    utSetup("day", 2, (g) => [executed(g, "p1", 2)], ["p1"], ["undertaker", "spy", "chef", "imp", "poisoner", "monk", "baron"]);
+    expect(label("p1")).toContain("Died Today");
+  });
+
+  it("marks every player executed to death that Day", () => {
+    utSetup("day", 2, (g) => [executed(g, "p1", 2), executed(g, "p2", 2)], ["p1", "p2"]);
+    expect(label("p1")).toContain("Died Today");
+    expect(label("p2")).toContain("Died Today");
+  });
+
+  it("draws nothing when the event window does not cover the Day", () => {
+    utSetup("day", 2, (g) => [executed(g, "p1", 2)]);
+    const g = store.getState().game!;
+    store.setState({ game: { ...g, lifeEventWindow: { ...g.lifeEventWindow, coverageFrom: { phase: "night", day: 3 } } } });
+    expect(label("p1")).not.toContain("Died Today");
+  });
+
+  it("follows the real execution command: drawn after it, gone after Undo, and the same after a reload of the record", () => {
+    store.setState({ game: proofGame(UT, "day", 2), lobby: null, undoStack: [], localSeq: 0, customScripts: { [proofScript.id]: proofScript } });
+    expect(store.getState().recordExecution("p1", "died").ok).toBe(true);
+    expect(label("p1")).toContain("Died Today");
+    store.setState({ game: JSON.parse(JSON.stringify(store.getState().game)) });
+    expect(label("p1")).toContain("Died Today");
+    store.getState().undo();
+    expect(label("p1")).not.toContain("Died Today");
+    store.getState().recordExecution("p1", "survived");
+    expect(label("p1")).not.toContain("Died Today");
+  });
+
+  it("is a derived mark the Storyteller cannot remove by hand", () => {
+    utSetup("day", 2, (g) => [executed(g, "p1", 2)]);
+    const g = store.getState().game!;
+    const mark = renderHook(() => {
+      const ctx = useV6Ctx(g);
+      return playerMarks({ game: g, script: ctx.script, registry: ctx.registry, query: createRulesQuery(g, { script: ctx.script!, registry: ctx.registry }) }, g.players.p1!)[0]!;
+    }, { wrapper }).result.current;
+    expect(mark.removal.type).toBe("derived");
   });
 });

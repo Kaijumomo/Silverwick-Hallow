@@ -60,6 +60,28 @@ function diedToday({ game, registry, query }: MarkEnv, player: STPlayerRecord): 
   return deaths.status === "known" && deaths.events.length > 0;
 }
 
+/** The Day whose deaths a "Died Today" token follows: this Day, or the Day just ended once Night falls (none before Day 1). */
+function diedTodayDay(query: RulesQuery): number {
+  const moment = query.moment();
+  if (!moment) return 0;
+  return moment.phase === "day" ? moment.day : moment.phase === "night" ? moment.day - 1 : 0;
+}
+
+/**
+ * The Undertaker's official DIED TODAY token: a dead player who died by execution during the Day the token follows, while a
+ * living, real Undertaker (actual character Undertaker, so never a Drunk who believes it is one) is in play. An impaired
+ * (drunk/poisoned) Undertaker still wakes, so the token is still drawn. Executions that do not kill, other deaths and exiles
+ * do not count. Drawn from the Life Event Window, never stored.
+ */
+function undertakerDiedToday({ game, query }: MarkEnv, player: STPlayerRecord): boolean {
+  if (!query || player.alive) return false;
+  if (!Object.values(game.players).some((other) => !other.isEmpty && other.alive && other.actualRole === "undertaker")) return false;
+  const day = diedTodayDay(query);
+  if (day < 1) return false;
+  const executions = query.lifeEvents({ phase: "day", day }, (event) => event.kind === "execution" && event.outcome === "died" && event.subject.participantId === player.participantId);
+  return executions.status === "known" && executions.events.length > 0;
+}
+
 /**
  * The Town Crier's official tokens, drawn from the Day's nomination record: "Minions Not Nominated" from dawn, swapped for
  * "Minion Nominated" once a Minion has nominated. Only for a living, real Town Crier. A nomination whose nominator's
@@ -104,6 +126,12 @@ export function playerMarks(env: MarkEnv, player: STPlayerRecord): Mark[] {
     const source = officialNotationRole("godfather", "Died Today") ?? registry.get("godfather");
     marks.push({ key: "derived:godfather-died-today", kind: "effect", label: "Died Today", title: "Godfather: Died Today", src: source ? iconUrlFor(source) : "", size: ROLE_SIZE,
       removal: { type: "derived", reason: "This follows the Day's deaths. It ends at dawn." } });
+  }
+  // The Undertaker's official DIED TODAY token: the player executed to death while a living Undertaker is in play. Derived like the Godfather's.
+  if (undertakerDiedToday(env, player)) {
+    const source = officialNotationRole("undertaker", "Died Today") ?? registry.get("undertaker");
+    marks.push({ key: "derived:undertaker-died-today", kind: "effect", label: "Died Today", title: "Undertaker: Died Today", src: source ? iconUrlFor(source) : "", size: ROLE_SIZE,
+      removal: { type: "derived", reason: "This follows the Day's execution. It ends at dawn." } });
   }
   const crier = townCrierToken(env, player);
   if (crier) {
