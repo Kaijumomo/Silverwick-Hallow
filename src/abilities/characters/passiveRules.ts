@@ -130,7 +130,7 @@ export function passiveProtection(query: RulesQuery, target: ParticipantBinding,
     if (!rule || rule.holder === "self") continue;
     const definition = query.roleOf(other.actualRole);
     if (!definition || !isCanonicalRole(definition)) continue;
-    const functioning = query.abilityFunctions({ playerId: other.id, participantId: other.participantId });
+    const functioning = query.abilityFunctions({ playerId: other.id, participantId: other.participantId! });
     if (!functioning.known || functioning.value) return { known: false, reason: `${definition.name} protection is not modeled. Resolve the whole action manually.` };
   }
   if (!player.alive) return { known: true, value: false };
