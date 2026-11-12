@@ -1,5 +1,5 @@
 import { isCanonicalRole } from "@/data/canonical";
-import { isNeighbourPoisoner, passiveProtection, passiveInformationModifiers, passiveRegistrationOptions } from "@/abilities/characters/passiveRules";
+import { isNeighbourPoisoner, passiveProtection, passiveInformationModifiers, passiveRegistrationOptions, survivesFirstDeath } from "@/abilities/characters/passiveRules";
 import { isInnkeeperSelfEffect, isPoisonerSelfEffect } from "@/abilities/characters/poisonerRules";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { activeModifiers, gateEvaluation, type HookScope, type ModifierDefinition, type ModifierGate } from "@/abilities/modifiers";
@@ -53,6 +53,7 @@ const unknown = <T,>(reason: string): QueryAnswer<T> => ({ known: false, reason 
  *    any source functioning; only the evaluator that owns the fact decides
  *    when it matters. It is never a Reminder.
  */
+export type DeathOutcomeAnswer = { kind: "dies" } | { kind: "survives"; spends: boolean };
 export type EffectSemantics = "impairment" | "noAbility" | "demonProtection" | "deathImmunity" | "genericProtection" | "judgment" | "storytellerFact" | "curse" | "retainedAbility";
 export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>> = {
   drunk: "impairment",
@@ -139,6 +140,10 @@ export type RulesQuery = {
   /** Protection against a death of `cause`. `generic` Protected never answers
    * "protected" automatically. */
   protectedFrom: (binding: ParticipantBinding, cause: "demon" | "any") => QueryAnswer<boolean>;
+  /** LS-1: what a death attempt of `cause` does to this player, INCLUDING a character that survives its first death at a cost
+   * (the Fool). Other protection is checked first and spends nothing. `spends` says the survival uses up the player's own
+   * ability; the caller records that use. Unknown stays a Storyteller judgment, exactly as for `protectedFrom`. */
+  deathOutcome: (binding: ParticipantBinding, cause: "demon" | "any") => QueryAnswer<DeathOutcomeAnswer>;
   /** SOL-10F-C2: a deterministic, EXACT (never hashed) stamp of every piece of
    * authoritative Current State this query can consult when answering
    * `protectedFrom(binding, cause)` -- under THIS query's state, hypothetical
@@ -396,7 +401,7 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     Object.keys(game.players).sort().flatMap((playerId) => {
       const player = game.players[playerId];
       if (!player || player.isEmpty || !player.participantId) return [];
-      return [[playerId, player.participantId, player.alive, player.actualRole, (player.effects ?? []).map((effect) => [
+      return [[playerId, player.participantId, player.alive, player.abilityUsed, player.actualRole, (player.effects ?? []).map((effect) => [
         effect.id, effect.type, effect.state, effect.sourceCharacter ?? null, sourceIdentity(effect.sourceParticipant),
         sortedKeys(effect.expiry), sortedKeys(effect.parameters), declarationOf(effect)])]];
     })]);
@@ -442,6 +447,26 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     return actual;
   };
 
+  const protection = (binding: ParticipantBinding, cause: "demon" | "any", spendHandled: boolean): QueryAnswer<boolean> => require(binding, (player) => {
+      const passive = passiveProtection(self, binding, cause, spendHandled);
+      if (!passive.known || passive.value) return passive;
+      let undetermined: string | null = null;
+      for (const effect of player.effects) {
+        const semantics = effectSemanticsOf(effect.type);
+        if (semantics !== "deathImmunity" && semantics !== "demonProtection" && semantics !== "genericProtection") continue;
+        if (semantics === "demonProtection" && cause !== "demon") continue;
+        const answer = applies(player, effect, new Set());
+        if (!answer.known) { undetermined ??= answer.reason; continue; }
+        if (!answer.value) continue;
+        if (semantics === "genericProtection") {
+          undetermined ??= "A generic Protected marker never decides death automatically: the Storyteller decides.";
+          continue;
+        }
+        return known(true);
+      }
+      return undetermined ? unknown(undetermined) : known(false);
+    });
+
   const self: RulesQuery = {
     game,
     moment: () => currentLiveMoment(game),
@@ -459,25 +484,14 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     retainsAbility: (binding) => require(binding, (player) => retained(player, new Set())),
     abilityFunctions: (binding) => require(binding, (player) => functions(player, new Set())),
     noDashiiPoisoned: (binding) => require(binding, (player) => noDashiiPoison(player, new Set())),
-    protectedFrom: (binding, cause) => require(binding, (player) => {
-      const passive = passiveProtection(self, binding, cause);
-      if (!passive.known || passive.value) return passive;
-      let undetermined: string | null = null;
-      for (const effect of player.effects) {
-        const semantics = effectSemanticsOf(effect.type);
-        if (semantics !== "deathImmunity" && semantics !== "demonProtection" && semantics !== "genericProtection") continue;
-        if (semantics === "demonProtection" && cause !== "demon") continue;
-        const answer = applies(player, effect, new Set());
-        if (!answer.known) { undetermined ??= answer.reason; continue; }
-        if (!answer.value) continue;
-        if (semantics === "genericProtection") {
-          undetermined ??= "A generic Protected marker never decides death automatically: the Storyteller decides.";
-          continue;
-        }
-        return known(true);
-      }
-      return undetermined ? unknown(undetermined) : known(false);
-    }),
+    protectedFrom: (binding, cause) => protection(binding, cause, false),
+    deathOutcome: (binding, cause) => {
+      const survives = survivesFirstDeath(self, binding);
+      if (!survives.known) return survives;
+      const other = protection(binding, cause, true);
+      if (!other.known) return other;
+      return known<DeathOutcomeAnswer>(other.value ? { kind: "survives", spends: false } : survives.value ? { kind: "survives", spends: true } : { kind: "dies" });
+    },
     protectionDependencyStamp: () => protectionDependencies(),
     registration: (binding, observer) => {
       const { character, alignment } = registrationAnswers(binding, observer);

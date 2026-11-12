@@ -2,7 +2,7 @@ import { isDeathEvent } from "@/stores/lifeEvents";
 import { passiveRegistrationOptions } from "./passiveRules";
 import type { AbilityDescriptor } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
-import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, nothing, subjectId, tokenOutcome, requireLivingActor } from "./shared";
+import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, nothing, survivedOutcome, subjectId, tokenOutcome, requireLivingActor } from "./shared";
 
 /**
  * Godfather -- GUIDED-PARTIAL (Treacherous 30th, owner-authorized; shared protection
@@ -70,7 +70,7 @@ export const GODFATHER: AbilityDescriptor = {
     if (!query.participant(target)?.alive) return nothing();
     const death = deathAttempt(context, target, "any");
     if (death.kind === "ask") return ask(death.message, death.requirement);
-    if (death.kind === "survives") return nothing();
+    if (death.kind === "survives") return survivedOutcome(death);
     return tokenOutcome(context, "godfather", [lifeOperation([{ kind: "death", target }])]);
   },
 };

@@ -80,7 +80,7 @@ export const MOONCHILD: AbilityDescriptor = {
     if (death.kind === "ask") return ask(death.message, death.requirement);
     // The choice is spent tonight whatever happens to it (protected, or not killed): it never lingers into another night.
     const spent: AbilityOperation[] = [{ domain: "effect", intents: [{ kind: "remove", target: pending.target, effectId: pending.effectId }] }];
-    if (death.kind === "survives") return outcome(spent);
+    if (death.kind === "survives") return outcome(death.spend ? [lifeOperation([{ kind: "useAbility", target: death.spend }]), ...spent] : spent, !!death.spend);
     return tokenOutcome(context, "moonchild", [lifeOperation([{ kind: "death", target }]), ...spent], true);
   },
 };

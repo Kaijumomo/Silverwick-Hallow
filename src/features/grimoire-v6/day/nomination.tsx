@@ -1,3 +1,4 @@
+import { executionAdvice } from "@/stores/executionAdvice";
 import { captureVotingContext } from "@/stores/storytellerStore";
 import { executionsAt } from "@/stores/lifeEvents";
 import { currentVotingState, virginNominationOutcome, votingContextChanged } from "@/stores/voting";
@@ -184,7 +185,8 @@ function buildFinish(ctx: V6Ctx, finish: FinishFn, extra: (actions?: ExtraAction
     // The question and its answers sit together like every other prompt: the heading above, the answers on one row.
     if (!player.alive) return extra([{ label: "Record execution", onClick: record("alreadyDead") }, { label: "No execution", onClick: begin }], null, `${player.name} is already dead`);
     return extra([{ label: "Yes · died", onClick: record("died") }, { label: "No · survived", onClick: record("survived") }, { label: "No execution", onClick: begin }],
-      pacifist ? "Pacifist may apply: you decide whether an executed good player survives." : null, `Did ${player.name} die?`);
+      [pacifist ? "Pacifist may apply: you decide whether an executed good player survives." : null,
+        executionAdvice(game, player.id, ctx.script ? { script: ctx.script, registry: ctx.registry } : undefined)?.note ?? null].filter(Boolean).join(" ") || null, `Did ${player.name} die?`);
   }
   return finish("No execution", query.status === "unknown" ? "Earlier execution coverage is unknown. Confirm the actual outcome." : "No one will be executed today.", "#ddd6c8", `No execution · Begin Night ${game.day + 1}`, begin);
 }

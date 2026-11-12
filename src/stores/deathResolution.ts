@@ -19,7 +19,12 @@ export function planRecordedLifeOutcome(
   transaction: LifeTransaction,
   environment?: RulesQueryEnvironment,
 ): RecordedLifePlanResult {
-  const intent = Array.isArray(transaction?.intents) && transaction.intents.length === 1 ? transaction.intents[0] : undefined;
+  // LS-1: an execution may carry the executee's own ability use (the Fool's survival) in the same transaction; it never changes the
+  // death ruling below. Any other pairing keeps the old rule: only a lone intent is ruled on.
+  const list = Array.isArray(transaction?.intents) ? transaction.intents : [];
+  const lead = list[0];
+  const ownUse = list.length === 2 && lead?.kind === "execution" && list[1]?.kind === "useAbility" && list[1].playerId === lead.playerId;
+  const intent = list.length === 1 || ownUse ? lead : undefined;
   const deathIntent = intent && (intent.kind === "death" || intent.kind === "execution" && intent.outcome === "died") ? intent : undefined;
   const dying = deathIntent ? game.players[deathIntent.playerId] : undefined;
   const ruling = dying?.participantId && dying.alive

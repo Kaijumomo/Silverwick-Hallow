@@ -1,6 +1,6 @@
 import type { AbilityDescriptor, AbilityEvaluationContext } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
-import { answerOf, ask, deathAttempt, lifeOperation, nameOf, nothing, outcome, participantsOf, requireLivingActor, subjectId, type DeathAttemptScope } from "./shared";
+import { answerOf, ask, deathAttempt, FOOL_SPEND_MANUAL, lifeOperation, nameOf, nothing, outcome, participantsOf, requireLivingActor, subjectId, type DeathAttemptScope } from "./shared";
 
 /**
  * Al-Hadikhia -- GUIDED. docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md Section 13
@@ -110,12 +110,14 @@ export const AL_HADIKHIA: AbilityDescriptor = {
       if (!isAlive(who)) continue;
       const attempt = kill(who, "initial", index);
       if (attempt.kind === "ask") return ask(attempt.message, attempt.requirement);
+      if (attempt.kind === "survives" && attempt.spend) return { kind: "unsupported", message: FOOL_SPEND_MANUAL };
     }
     if (!mechanics) return nothing();
     if (chosen.every(isAlive)) {
       for (const [index, who] of chosen.entries()) {
         const attempt = kill(who, "final", index);
         if (attempt.kind === "ask") return ask(attempt.message, attempt.requirement);
+        if (attempt.kind === "survives" && attempt.spend) return { kind: "unsupported", message: FOOL_SPEND_MANUAL };
       }
     }
     return intents.length ? outcome([lifeOperation(intents)]) : nothing();

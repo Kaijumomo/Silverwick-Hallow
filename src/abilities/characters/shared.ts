@@ -1,3 +1,4 @@
+import { survivesFirstDeath } from "./passiveRules";
 import type { AbilityEvaluation, AbilityEvaluationContext, AbilityInputRequirement, AbilityInputs, AbilityInputValue } from "../semantics";
 import type { AbilityOperation, AbilityOutcome, ParticipantBinding } from "@/stores/abilityResolution";
 import type { ReminderIntent } from "@/stores/reminderResolution";
@@ -141,7 +142,8 @@ export const arbitraryDeathJudgmentId = (cause: DeathCause, binding: Participant
 
 export type DeathDecision =
   | { kind: "dies" }
-  | { kind: "survives" }
+  /** `spend`: the survival uses up this player's own ability (the Fool). Absent for every prevented death. */
+  | { kind: "survives"; spend?: ParticipantBinding }
   | { kind: "ask"; requirement: AbilityInputRequirement; message: string };
 
 /**
@@ -180,12 +182,17 @@ export function deathAttempt(
         label: `${nameOf(context, target)} does not die from this${attempt?.label ? ` (${attempt.label})` : ""} -- deaths are arbitrary tonight (Yes: they do not die)` },
     };
   }
-  const answer = query.protectedFrom(target, cause);
-  if (answer.known) return answer.value ? { kind: "survives" } : { kind: "dies" };
+  const answer = query.deathOutcome(target, cause);
+  if (answer.known) return answer.value.kind === "survives" ? (answer.value.spends ? { kind: "survives", spend: target } : { kind: "survives" }) : { kind: "dies" };
   // SOL-10F-C2: the id binds the dependency stamp of the queried state.
   const id = protectionJudgmentId(cause, target, query.protectionDependencyStamp(target, cause), attempt);
   const judged = answerOf(context.judgments, id, "boolean");
-  if (judged) return judged.value ? { kind: "survives" } : { kind: "dies" };
+  if (judged) {
+    if (judged.value) return { kind: "survives" };
+    // "Not protected by the unknown thing" still leaves a Fool's own first-death survival to apply.
+    const own = survivesFirstDeath(query, target);
+    return own.known && own.value ? { kind: "survives", spend: target } : { kind: "dies" };
+  }
   return {
     kind: "ask",
     message: answer.reason,
@@ -193,6 +200,14 @@ export function deathAttempt(
       label: `${nameOf(context, target)} is protected from this ${cause === "demon" ? "Demon " : ""}death${attempt?.label ? ` (${attempt.label})` : ""} (Yes: they do not die)` },
   };
 }
+
+/** For killers whose later steps depend on the Fool's ability state (Al-Hadikhia's rounds, the Harlot's pair): the survival would spend it,
+ * and that state is not carried through their hypothetical steps, so the whole action stays Manual. */
+export const FOOL_SPEND_MANUAL = "A Fool survives this death and its ability is used up. This action does not track that yet -- resolve it manually.";
+
+/** The outcome of a death attempt that did not happen: nothing changes, except that a Fool-style survival spends the ability. */
+export const survivedOutcome = (death: Extract<DeathDecision, { kind: "survives" }>): AbilityEvaluation =>
+  death.spend ? outcome([lifeOperation([{ kind: "useAbility", target: death.spend }])]) : nothing();
 
 export const lifeOperation = (intents: { kind: "death" | "resurrection" | "useAbility"; target: ParticipantBinding }[]): AbilityOperation =>
   ({ domain: "life", intents });

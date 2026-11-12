@@ -1,5 +1,6 @@
 import { applyLifePlan, planLifeTransaction, type LifeIntent, type LifeRefusal } from "./lifeResolution";
 import { planRecordedLifeOutcome } from "./deathResolution";
+import { executionSpendsAbility } from "./executionAdvice";
 import { participantRefOf } from "./participants";
 import { boundParticipant, createRulesQuery, type QueryAnswer, type RulesQueryEnvironment } from "./rulesQuery";
 import type { CurrentParticipantRef, StorytellerLobbyRecord } from "./types";
@@ -151,7 +152,12 @@ function snapshot(game: StorytellerLobbyRecord, binding: VotingBinding): Current
 }
 function life(game: StorytellerLobbyRecord, intents: LifeIntent[], environment?: RulesQueryEnvironment): VotingPlanResult {
   if (!intents.length) return { ok: true, changed: false, game };
-  if (intents.length === 1 && intents[0]?.kind === "execution") return planRecordedLifeOutcome(game, { intents }, environment);
+  if (intents.length === 1 && intents[0]?.kind === "execution") {
+    const only = intents[0];
+    // LS-1: a Fool that survives its first death spends its ability, recorded in the same transaction as the execution.
+    const spend = only.outcome === "survived" && executionSpendsAbility(game, only.playerId, environment);
+    return planRecordedLifeOutcome(game, { intents: spend ? [only, { kind: "useAbility", playerId: only.playerId }] : [only] }, environment);
+  }
   const result = planLifeTransaction(game, { intents }, undefined, environment);
   return !result.ok ? result : { ok: true, changed: result.changed, game: result.changed ? applyLifePlan(game, result.plan) : game };
 }

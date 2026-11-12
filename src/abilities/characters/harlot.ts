@@ -1,7 +1,7 @@
 import type { AbilityDescriptor, AbilityEvaluation, AbilityEvaluationContext } from "../semantics";
 import type { AbilityOperation, ParticipantBinding } from "@/stores/abilityResolution";
 import type { RoleId } from "@/stores/types";
-import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, nothing, outcome, protectionDiffers, requireLivingActor, subjectId } from "./shared";
+import { answerOf, ask, deathAttempt, firstParticipant, FOOL_SPEND_MANUAL, lifeOperation, nameOf, nothing, outcome, protectionDiffers, requireLivingActor, subjectId } from "./shared";
 
 /**
  * Harlot -- GUIDED (Traveller). docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md
@@ -94,6 +94,7 @@ export const HARLOT: AbilityDescriptor = {
     for (const [index, who] of pair.entries()) {
       const alone = deathAttempt(context, who, "any");
       if (alone.kind === "ask") return ask(alone.message, alone.requirement);
+      if (alone.kind === "survives" && alone.spend) return { kind: "unsupported", message: FOOL_SPEND_MANUAL };
       const other = pair[1 - index];
       // SOL-10F-C2: the order probe compares protection itself (never a
       // judgment): the judgment answered above settles only this real attempt.

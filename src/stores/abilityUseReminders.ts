@@ -4,7 +4,7 @@ import { applyReminderPlan, planReminderTransaction, type ReminderIntent } from 
 import type { ReminderRecord, STPlayerRecord, StorytellerLobbyRecord } from "./types";
 
 /** The once-per-game characters whose spent ability is noted with their own official reminder token. */
-const USED_LABEL: Record<string, string> = { virgin: "No Ability", slayer: "No Ability", professor: "No Ability", golem: "May Not Nominate" };
+const USED_LABEL: Record<string, string> = { virgin: "No Ability", slayer: "No Ability", professor: "No Ability", fool: "No Ability", golem: "May Not Nominate" };
 const supported = (role: string) => role in USED_LABEL;
 export const abilityUseReminderId = (player: STPlayerRecord) =>
   `ability-use:${JSON.stringify([player.participantId, player.actualRole, player.packetEpoch ?? null])}`;

@@ -1,6 +1,6 @@
 import type { AbilityDescriptor } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
-import { ask, deathAttempt, firstParticipant, followUpParticipant, lifeOperation, nameOf, nothing, tokenOutcome, requireLivingActor, subjectId } from "./shared";
+import { ask, deathAttempt, firstParticipant, followUpParticipant, lifeOperation, nameOf, nothing, survivedOutcome, tokenOutcome, requireLivingActor, subjectId } from "./shared";
 import { scarletWomanSuccession } from "./scarletWoman";
 
 /**
@@ -47,7 +47,7 @@ export const VIGORMORTIS: AbilityDescriptor = {
     if (!victim?.alive) return nothing();
     const death = deathAttempt(context, target, "demon");
     if (death.kind === "ask") return ask(death.message, death.requirement);
-    if (death.kind === "survives") return nothing();
+    if (death.kind === "survives") return survivedOutcome(death);
     const succession = scarletWomanSuccession(query, target);
     if (succession.kind !== "none") return { kind: "unsupported", message: succession.kind === "manual" ? succession.reason : "A Scarlet Woman succession for this Demon is not modeled -- resolve manually." };
     const kill = lifeOperation([{ kind: "death", target }]);
