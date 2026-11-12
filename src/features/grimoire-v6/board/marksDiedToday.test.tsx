@@ -10,6 +10,7 @@ import { patchPlayer, proofGame, proofScript } from "@/test/proofFixtures";
 import type { LifeEvent, StorytellerLobbyRecord } from "@/stores/types";
 import { useV6Ctx } from "../ctx";
 import { playerMarks } from "./marks";
+import { useBoardVm } from "../vm/board";
 
 // p0 godfather, p1 saint (outsider), p2 chef, p3 imp, p4 empath, p5 monk, p6 baron
 const ROLES = ["godfather", "saint", "chef", "imp", "empath", "monk", "baron"];
@@ -171,5 +172,19 @@ describe("Undertaker DIED TODAY token", () => {
       return playerMarks({ game: g, script: ctx.script, registry: ctx.registry, query: createRulesQuery(g, { script: ctx.script!, registry: ctx.registry }) }, g.players.p1!)[0]!;
     }, { wrapper }).result.current;
     expect(mark.removal.type).toBe("derived");
+  });
+
+  it("is a Storyteller-only mark: the board draws it, and Privacy Mode draws no reminder discs at all", () => {
+    utSetup("day", 2, (g) => [executed(g, "p1", 2)]);
+    const board = () => renderHook(() => {
+      const g = store((s) => s.game)!;
+      return useBoardVm(useV6Ctx(g)).vm as Record<string, any>;
+    }, { wrapper }).result.current;
+    const token = (vm: Record<string, any>) => vm.tokens.find((t: any) => t.id === "p1");
+    expect(token(board()).rems.map((r: any) => r.label)).toContain("Died Today");
+    usePrivacyStore.setState({ enabled: true });
+    const hidden = token(board());
+    expect(hidden.rems).toEqual([]);
+    expect(hidden.aria).not.toMatch(/Died Today|reminder/);
   });
 });
