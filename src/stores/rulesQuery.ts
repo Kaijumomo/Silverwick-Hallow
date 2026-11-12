@@ -447,8 +447,8 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     return actual;
   };
 
-  const protection = (binding: ParticipantBinding, cause: "demon" | "any", foolHandled: boolean): QueryAnswer<boolean> => require(binding, (player) => {
-      const passive = passiveProtection(self, binding, cause, foolHandled);
+  const protection = (binding: ParticipantBinding, cause: "demon" | "any", spendHandled: boolean): QueryAnswer<boolean> => require(binding, (player) => {
+      const passive = passiveProtection(self, binding, cause, spendHandled);
       if (!passive.known || passive.value) return passive;
       let undetermined: string | null = null;
       for (const effect of player.effects) {

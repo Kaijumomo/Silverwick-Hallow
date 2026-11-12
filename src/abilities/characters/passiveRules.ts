@@ -23,8 +23,73 @@ export const passiveRegistrationOptions = (roleId: RoleId) =>
  * https://wiki.bloodontheclocktower.com/Vortox
  * Other protections below deliberately have NO resolver. No token text is read.
  */
-const TARGET_DEATH_GAPS = new Set(["mayor", "lleech", "zombuul"]);
-const EXTERNAL_PROTECTION_GAPS = new Set(["tealady"]);
+
+/**
+ * LS-1b: the life-rules table (proposal section 5.2). One row per character whose own ability changes whether a death happens;
+ * the death gate (`passiveProtection`, `survivesFirstDeath`, `deathOutcome`) reads these rows and names no character. Adding a
+ * character is adding a row (plus, where a rule cannot be plain data, one named helper the row points to).
+ *
+ * Knobs read today:
+ *  - holder: "self" (the holder's own death), "neighbours" (protects the alive neighbours: only ever a Storyteller gap for now).
+ *  - duration: "permanent" (always on) or "once" (used up by the first survival).
+ *  - needsFunctioning: the holder must be sober and healthy.
+ *  - causes: "demon" (the Demon's attack only) or "any" (every cause). Further causes (execution, exile, assassin) are added with
+ *    the first row that uses them.
+ *  - decision: "auto" (the gate answers) or "storyteller" (modelled only as a gap: the whole action stays Manual).
+ *  - onSurvive: "nothing" (the death simply does not happen) or "spend" (the ability is used up: abilityUsed + NO ABILITY).
+ *    Shaped as a union so a later "hiddenLife" value can be added without reworking the gate.
+ *  - alsoCreditedTo: roles whose own protection could equally be the reason for a survival; a spending survival then becomes
+ *    ambiguous and nothing is spent automatically (the Storyteller chooses).
+ *  - earlyProtection: a named helper for a reviewed rule that cannot be plain data (checked before the row applies).
+ * Knobs from the proposal not read yet (bypassedBy, shownAs, abilityAfter, holder "chosen") arrive with the first behaviour that uses them.
+ * https://wiki.bloodontheclocktower.com/Fool
+ * https://wiki.bloodontheclocktower.com/Sailor
+ * https://wiki.bloodontheclocktower.com/Soldier
+ */
+export type LifeRuleCause = "demon" | "any";
+export type LifeRule = {
+  readonly holder: "self" | "neighbours";
+  readonly duration: "permanent" | "once";
+  readonly needsFunctioning: boolean;
+  readonly causes: LifeRuleCause;
+  readonly decision: "auto" | "storyteller";
+  readonly onSurvive: "nothing" | "spend";
+  readonly alsoCreditedTo?: readonly RoleId[];
+  readonly earlyProtection?: (query: RulesQuery, target: ParticipantBinding, cause: LifeRuleCause) => boolean;
+};
+
+/** Official Monk example: a protected Mayor cannot bounce the Imp's attack. A reviewed exception for that interaction, not general
+ * precedence over other unresolved protections; uncertain or suppressed Safe stays Manual. https://wiki.bloodontheclocktower.com/Monk */
+const monkProtectsFromDemon = (query: RulesQuery, target: ParticipantBinding, cause: LifeRuleCause): boolean => {
+  const player = query.participant(target);
+  if (!player || cause !== "demon") return false;
+  return player.effects.some(effect => {
+    if (effect.type !== "safeFromDemon") return false;
+    const applies = query.effectApplies(target, effect);
+    return applies.known && applies.value;
+  });
+};
+
+const GAP = { holder: "self", duration: "permanent", needsFunctioning: true, causes: "any", decision: "storyteller", onSurvive: "nothing" } as const;
+export const LIFE_RULES: Readonly<Record<RoleId, LifeRule>> = {
+  soldier: { holder: "self", duration: "permanent", needsFunctioning: true, causes: "demon", decision: "auto", onSurvive: "nothing" },
+  sailor: { holder: "self", duration: "permanent", needsFunctioning: true, causes: "any", decision: "auto", onSurvive: "nothing" },
+  fool: { holder: "self", duration: "once", needsFunctioning: true, causes: "any", decision: "auto", onSurvive: "spend", alsoCreditedTo: ["pacifist"] },
+  // Not modelled: the whole action stays Manual while the holder's ability may be working.
+  mayor: { ...GAP, earlyProtection: monkProtectsFromDemon },
+  lleech: GAP,
+  zombuul: GAP,
+  tealady: { ...GAP, holder: "neighbours" },
+};
+export const lifeRuleOf = (roleId: RoleId): LifeRule | undefined =>
+  Object.prototype.hasOwnProperty.call(LIFE_RULES, roleId) ? LIFE_RULES[roleId] : undefined;
+
+/** An automatic life rule whose holder is not on the reviewed list (a Sailor's nightly drunk choice is not modelled): wherever the
+ * whole roster must be reviewed before automating, this is the row-driven version of "the Sailor keeps it Manual". */
+export const lifeRuleNeedsRosterReview = (roleId: RoleId): boolean => {
+  const rule = lifeRuleOf(roleId);
+  return !!rule && rule.decision === "auto" && !REVIEWED_INTERACTION_ROLES.has(roleId);
+};
 
 /** Characters whose ability passively poisons their nearest Townsfolk neighbours
  * (derived by the Rules Query from the seating, never stored).
@@ -32,61 +97,54 @@ const EXTERNAL_PROTECTION_GAPS = new Set(["tealady"]);
 export const isNeighbourPoisoner = (roleId: RoleId): boolean => roleId === "nodashii";
 
 /**
- * LS-1 (life rules): the Fool's "survives its first death" row. The Fool is genuinely alive and shown alive, so nothing is hidden:
- * the row only says "this death does not happen and the ability is spent". It applies when the Fool has not yet used the ability and
- * the ability functions (a drunk or poisoned Fool dies for real). Another character's protection is checked FIRST by the caller:
- * "If another character's ability protects the Fool from death, the Fool does not use their ability."
+ * LS-1: a "survives once" row (the Fool). The holder is genuinely alive and shown alive, so nothing is hidden: the row only says
+ * "this death does not happen and the ability is spent". It applies when the ability has not been used and (if the row needs it)
+ * functions; a drunk or poisoned holder dies for real. Another character's protection is checked FIRST by the caller: "If another
+ * character's ability protects the Fool from death, the Fool does not use their ability."
  * https://wiki.bloodontheclocktower.com/Fool
- * `known(false)` for every other character, a spent Fool, or an impaired one; UNKNOWN when sobriety cannot be established.
+ * known(false) for every other character, a spent holder, or an impaired one; UNKNOWN when sobriety cannot be established.
  */
 export function survivesFirstDeath(query: RulesQuery, target: ParticipantBinding): QueryAnswer<boolean> {
   const player = query.participant(target);
   const role = player && query.roleOf(player.actualRole);
-  if (!player || !role || !isCanonicalRole(role) || player.actualRole !== "fool") return { known: true, value: false };
-  if (player.abilityUsed) return { known: true, value: false };
-  return query.abilityFunctions(target);
+  const rule = player && lifeRuleOf(player.actualRole);
+  if (!player || !role || !isCanonicalRole(role) || !rule || rule.onSurvive !== "spend") return { known: true, value: false };
+  if (rule.duration === "once" && player.abilityUsed) return { known: true, value: false };
+  return rule.needsFunctioning ? query.abilityFunctions(target) : { known: true, value: true };
 }
 
-/** `foolHandled`: the caller (the death gate) resolves the Fool's own survival itself, after other protection, so the old
- * "Fool is not modelled" gap must not fire. Every other caller keeps the Manual fallback for an unspent, functioning Fool. */
-export function passiveProtection(query: RulesQuery, target: ParticipantBinding, cause: "demon" | "any", foolHandled = false): QueryAnswer<boolean> {
+/** `spendHandled`: the caller (the death gate) resolves a spending survival itself, after other protection, so the "spending rows
+ * are not modelled here" gap must not fire. Every other caller keeps the Manual fallback for a spending row that would apply. */
+export function passiveProtection(query: RulesQuery, target: ParticipantBinding, cause: LifeRuleCause, spendHandled = false): QueryAnswer<boolean> {
   const player = query.participant(target);
   const role = player && query.roleOf(player.actualRole);
   if (!player || !role || !isCanonicalRole(role)) return { known: false, reason: "This character's protection rules are not verified. Resolve the whole action manually." };
   for (const other of Object.values(query.game.players)) {
-    if (other.isEmpty || !other.participantId || !other.alive || !EXTERNAL_PROTECTION_GAPS.has(other.actualRole)) continue;
+    const rule = !other.isEmpty && other.participantId && other.alive ? lifeRuleOf(other.actualRole) : undefined;
+    if (!rule || rule.holder === "self" || rule.decision !== "storyteller") continue;
     const definition = query.roleOf(other.actualRole);
     if (!definition || !isCanonicalRole(definition)) continue;
-    const functioning = query.abilityFunctions({ playerId: other.id, participantId: other.participantId });
+    const functioning = query.abilityFunctions({ playerId: other.id, participantId: other.participantId! });
     if (!functioning.known || functioning.value) return { known: false, reason: `${definition.name} protection is not modeled. Resolve the whole action manually.` };
   }
   if (!player.alive) return { known: true, value: false };
   const functioning = query.abilityFunctions(target);
-  // Official Monk example: a protected Mayor cannot bounce the Imp's attack.
-  // This is a reviewed exception for that interaction, not general precedence
-  // over other unresolved protections. Canonical ownership and external gaps
-  // have already been checked above; uncertain/suppressed Safe stays Manual.
-  // https://wiki.bloodontheclocktower.com/Monk
-  if (player.actualRole === "mayor" && cause === "demon") {
-    for (const effect of player.effects) {
-      if (effect.type !== "safeFromDemon") continue;
-      const applies = query.effectApplies(target, effect);
-      if (applies.known && applies.value) return { known: true, value: true };
-    }
+  const rule = lifeRuleOf(player.actualRole);
+  if (!rule || rule.holder !== "self") return { known: true, value: false };
+  if (rule.earlyProtection?.(query, target, cause)) return { known: true, value: true };
+  if (rule.decision === "storyteller") {
+    if (!functioning.known || functioning.value) return { known: false, reason: `${role.name} death interactions are not modeled. Resolve the whole action manually.` };
+    return { known: true, value: false };
   }
-  if (TARGET_DEATH_GAPS.has(player.actualRole) && (!functioning.known || functioning.value)) {
-    return { known: false, reason: `${role.name} death interactions are not modeled. Resolve the whole action manually.` };
-  }
-  // LS-1: the Fool is not a prevention row. Callers that cannot spend its ability (curses, direct protection questions) keep asking.
-  if (player.actualRole === "fool" && !foolHandled) {
+  // A spending row is not a prevention row: callers that cannot spend the ability (curses, direct protection questions) keep asking.
+  if (rule.onSurvive === "spend") {
+    if (spendHandled) return { known: true, value: false };
     const survives = survivesFirstDeath(query, target);
-    if (!survives.known || survives.value) return { known: false, reason: "The Fool survives its first death and then loses its ability: this attempt must go through the death gate. Resolve manually." };
+    if (!survives.known || survives.value) return { known: false, reason: `${role.name} survives and then loses the ability: this attempt must go through the death gate. Resolve manually.` };
+    return { known: true, value: false };
   }
-  // LS-1: the Sailor "can't die" while sober (not while drunk or poisoned); every cause.
-  // https://wiki.bloodontheclocktower.com/Sailor
-  if (player.actualRole === "sailor") return functioning;
-  if (player.actualRole !== "soldier" || cause !== "demon") return { known: true, value: false };
-  return functioning;
+  if (rule.causes !== "any" && rule.causes !== cause) return { known: true, value: false };
+  return rule.needsFunctioning ? functioning : { known: true, value: true };
 }
 
 /** Vortox's false-information rule includes impaired Townsfolk. Selecting

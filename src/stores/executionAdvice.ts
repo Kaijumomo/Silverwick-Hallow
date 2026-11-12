@@ -1,4 +1,5 @@
 import { interactionCoverageEligibility } from "@/abilities/automationEligibility";
+import { lifeRuleOf } from "@/abilities/characters/passiveRules";
 import { createRulesQuery, type RulesQueryEnvironment } from "./rulesQuery";
 import type { PlayerId, StorytellerLobbyRecord } from "./types";
 
@@ -21,15 +22,19 @@ export function executionAdvice(game: StorytellerLobbyRecord, playerId: PlayerId
   if (!environment || !player || player.isEmpty || !player.participantId || !player.alive) return null;
   // Advice follows the same line automation draws: every character in play must be reviewed (a Sailor's nightly drunk choice, a Devil's Advocate's protection and the like are not modelled).
   const query = createRulesQuery(game, environment);
-  if (interactionCoverageEligibility(query, ["pacifist"]).kind === "manual") return null; // the Pacifist is handled below
+  // Roles the row names as equally able to be the reason for the survival are handled below, so they do not force Manual here.
+  const credited = lifeRuleOf(player.actualRole)?.alsoCreditedTo ?? [];
+  if (interactionCoverageEligibility(query, credited).kind === "manual") return null;
   const outcome = query.deathOutcome({ playerId, participantId: player.participantId }, "any");
   if (!outcome.known || outcome.value.kind !== "survives") return null;
-  const pacifist = Object.values(game.players).some(p => !p.isEmpty && p.alive && p.actualRole === "pacifist");
-  if (outcome.value.spends && pacifist) {
-    return { kind: "ambiguous", note: `${player.name} is a Fool whose ability is unused, and a Pacifist is in play: if the Fool survives, you decide whether the Fool's ability or the Pacifist did it. Nothing is spent automatically.` };
+  const rivals = credited.filter(id => Object.values(game.players).some(p => !p.isEmpty && p.alive && p.actualRole === id));
+  const name = query.roleOf(player.actualRole)?.name ?? player.actualRole;
+  if (outcome.value.spends && rivals.length) {
+    const rival = query.roleOf(rivals[0]!)?.name ?? rivals[0];
+    return { kind: "ambiguous", note: `${player.name} is a ${name} whose ability is unused, and a ${rival} is in play: if the ${name} survives, you decide whether the ${name}'s ability or the ${rival} did it. Nothing is spent automatically.` };
   }
   if (outcome.value.spends) {
-    return { kind: "survives", spends: true, note: `${player.name} is a Fool with the ability unused: the Fool survives this execution, and recording "survived" also uses up the ability.` };
+    return { kind: "survives", spends: true, note: `${player.name} is a ${name} with the ability unused: the ${name} survives this execution, and recording "survived" also uses up the ability.` };
   }
   return { kind: "survives", spends: false, note: `${player.name} is protected from this death: they survive the execution.` };
 }
