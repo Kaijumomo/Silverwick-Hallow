@@ -2,7 +2,7 @@ import type { AbilityDescriptor } from "../semantics";
 import { toldRoleChangeIntents } from "@/stores/roleResolution";
 import { scarletWomanSuccession } from "./scarletWoman";
 import { recluseRegistrationChoice } from "./informationSupport";
-import { answerOf, ask, deathAttempt, firstParticipant, lifeOperation, nameOf, outcome } from "./shared";
+import { answerOf, ask, deathAttempt, firstParticipant, FOOL_SPEND_MANUAL, lifeOperation, nameOf, outcome } from "./shared";
 
 /**
  * Slayer -- GUIDED Day public claim. docs/ai/PHASE10F_CHARACTER_RULES_MATRIX.md
@@ -50,7 +50,7 @@ export const SLAYER: AbilityDescriptor = {
       // the same result. Reuse the death query without accepting judgments:
       // arbitrary-death facts must still leave the whole action Manual.
       const possibleDeath = deathAttempt({ ...context, judgments: {} }, target, "any");
-      if (possibleDeath.kind === "survives") return spent();
+      if (possibleDeath.kind === "survives") return possibleDeath.spend ? { kind: "unsupported", message: FOOL_SPEND_MANUAL } : spent();
       if (possibleDeath.kind === "ask") return { kind: "unsupported", message: possibleDeath.message };
       if (!recluseRegistrationChoice(context.query, target)) return { kind: "unsupported", message: registration.reason };
       // The official Recluse choice is local to this target and this shot.
@@ -63,6 +63,7 @@ export const SLAYER: AbilityDescriptor = {
     if (!demon) return spent();
     const death = deathAttempt(context, target, "any");
     if (death.kind === "ask") return ask(death.message, death.requirement);
+    if (death.kind === "survives" && death.spend) return { kind: "unsupported", message: FOOL_SPEND_MANUAL };
     if (death.kind !== "dies") return spent();
     const succession = scarletWomanSuccession(context.query, target, "slayer");
     if (succession.kind === "manual") return { kind: "unsupported", message: succession.reason };

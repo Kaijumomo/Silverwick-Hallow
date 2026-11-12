@@ -1,3 +1,4 @@
+import { survivesFirstDeath } from "./passiveRules";
 import type { AbilityEvaluation, AbilityEvaluationContext, AbilityInputRequirement, AbilityInputs, AbilityInputValue } from "../semantics";
 import type { AbilityOperation, AbilityOutcome, ParticipantBinding } from "@/stores/abilityResolution";
 import type { ReminderIntent } from "@/stores/reminderResolution";
@@ -186,7 +187,12 @@ export function deathAttempt(
   // SOL-10F-C2: the id binds the dependency stamp of the queried state.
   const id = protectionJudgmentId(cause, target, query.protectionDependencyStamp(target, cause), attempt);
   const judged = answerOf(context.judgments, id, "boolean");
-  if (judged) return judged.value ? { kind: "survives" } : { kind: "dies" };
+  if (judged) {
+    if (judged.value) return { kind: "survives" };
+    // "Not protected by the unknown thing" still leaves a Fool's own first-death survival to apply.
+    const own = survivesFirstDeath(query, target);
+    return own.known && own.value ? { kind: "survives", spend: target } : { kind: "dies" };
+  }
   return {
     kind: "ask",
     message: answer.reason,
@@ -194,6 +200,10 @@ export function deathAttempt(
       label: `${nameOf(context, target)} is protected from this ${cause === "demon" ? "Demon " : ""}death${attempt?.label ? ` (${attempt.label})` : ""} (Yes: they do not die)` },
   };
 }
+
+/** For killers whose later steps depend on the Fool's ability state (Al-Hadikhia's rounds, the Harlot's pair): the survival would spend it,
+ * and that state is not carried through their hypothetical steps, so the whole action stays Manual. */
+export const FOOL_SPEND_MANUAL = "A Fool survives this death and its ability is used up. This action does not track that yet -- resolve it manually.";
 
 /** The outcome of a death attempt that did not happen: nothing changes, except that a Fool-style survival spends the ability. */
 export const survivedOutcome = (death: Extract<DeathDecision, { kind: "survives" }>): AbilityEvaluation =>

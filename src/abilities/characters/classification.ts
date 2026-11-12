@@ -43,7 +43,6 @@ export const OWNED_ELSEWHERE: Readonly<Record<RoleId, string>> = {
   virgin: "Owned by Voting (src/stores/voting.ts): first legal nomination consumes the ability once; the execution outcome stays an approved Storyteller confirmation.",
   soldier: "Owned by passive protection (src/abilities/characters/passiveRules.ts): a functioning Soldier blocks Demon harm in the supported envelope; poisoning disables it.",
   fool: "Owned by the death gate (src/abilities/characters/passiveRules.ts, rulesQuery.deathOutcome): the first death a functioning Fool would suffer does not happen and the ability is spent (NO ABILITY); other protection is checked first and spends nothing. A drunk or poisoned Fool dies. The Storyteller still records executions and can override.",
-  sailor: "Owned by the death gate (src/abilities/characters/passiveRules.ts): a sober, healthy Sailor cannot die. The Sailor's nightly choice of who is drunk stays Storyteller-resolved (the Storyteller chooses which player is drunk).",
   mayor: "Owned by victory evidence (src/stores/victoryEvidence.ts) for the no-execution Day-end win; attack redirection stays Storyteller-controlled.",
   saint: "Owned by victory evidence (src/stores/victoryEvidence.ts): a functioning Saint's execution; the Storyteller declares the result.",
   recluse: "Owned by the rules query (src/stores/rulesQuery.ts, passiveRules.ts): optional evil/Minion/Demon registration, decided by the Storyteller per interaction.",

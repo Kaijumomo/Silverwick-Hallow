@@ -189,7 +189,7 @@ describe("10F-AC-34: canonical coverage manifest", () => {
 
   it("Trouble Brewing characters owned by dedicated modules are ownedElsewhere, never supported or unclassified", () => {
     const ids = Object.keys(OWNED_ELSEWHERE).sort();
-    expect(ids).toEqual(["butler", "fool", "investigator", "librarian", "mayor", "recluse", "sailor", "saint", "scarletwoman", "soldier", "spy", "virgin", "washerwoman"]);
+    expect(ids).toEqual(["butler", "fool", "investigator", "librarian", "mayor", "recluse", "saint", "scarletwoman", "soldier", "spy", "virgin", "washerwoman"]);
     for (const id of ids) {
       const entry = manifest.find((e) => e.id === id)!;
       expect(entry.status, id).toBe("ownedElsewhere");

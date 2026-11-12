@@ -80,7 +80,7 @@ describe("Character Intelligence bounded automation", () => {
     expect(eligible(game, "imp", { target: pick(game, "p2") }).kind).toBe("automated");
   });
 
-  it.each(["tealady", "lleech", "nodashii", "amnesiac"])("unreviewed %s interaction requires the whole action Manual", role => {
+  it.each(["sailor", "tealady", "lleech", "nodashii", "amnesiac"])("unreviewed %s interaction requires the whole action Manual", role => {
     const game = proofGame(["imp", role, "chef"]);
     expect(eligible(game, "imp", { target: pick(game, "p2") }).kind).toBe("manual");
   });

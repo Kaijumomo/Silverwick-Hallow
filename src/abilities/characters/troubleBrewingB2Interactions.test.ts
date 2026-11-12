@@ -105,14 +105,20 @@ describe("B2c: supported protection does not broaden unverified interactions", (
     expect(attack(game, "p3")).toMatchObject({ ok: false, code: "unsupported" });
   });
 
-  // LS-1 replaces the former "does not infer protection precedence" pins for the Fool and the Sailor: both are now modelled by the shared
-  // death gate. Monk protection and the character's own survival agree, and only the Fool's own survival would spend its ability, so
-  // Monk protection (checked first) spends nothing.
-  it.each(["fool", "sailor"])("LS-1: Monk-protected %s survives the Imp and spends nothing", role => {
-    const game = patchPlayer(protect(proofGame(roles), "p3"), "p3", { actualRole: role });
+  // LS-1 replaces the former "does not infer protection precedence" pins for the Fool and the Sailor. The Fool is now modelled by the
+  // shared death gate: Monk protection (checked first) agrees and spends nothing. The Sailor's gate rule is modelled, but its nightly drunk
+  // choice is not, so a Sailor in play still keeps the whole action Manual (the roster gate), exactly as the old pin asserted.
+  it("LS-1: Monk-protected fool survives the Imp and spends nothing", () => {
+    const game = patchPlayer(protect(proofGame(roles), "p3"), "p3", { actualRole: "fool" });
     expect(proofQuery(game).deathOutcome(bind(game, "p3"), "demon")).toEqual({ known: true, value: { kind: "survives", spends: false } });
     expect(attack(game, "p3")).toEqual({ ok: true, changed: false });
     expect(game.players.p3!.abilityUsed).toBe(false);
+  });
+
+  it("LS-1: a Sailor in play keeps the whole action Manual (its nightly drunk choice is not modelled)", () => {
+    const game = patchPlayer(protect(proofGame(roles), "p3"), "p3", { actualRole: "sailor" });
+    expect(proofQuery(game).deathOutcome(bind(game, "p3"), "demon")).toEqual({ known: true, value: { kind: "survives", spends: false } });
+    expect(attack(game, "p3")).toMatchObject({ ok: false, code: "unsupported" });
   });
 
   it("Safe does not settle non-Demon attacks on the Mayor", () => {

@@ -33,14 +33,19 @@ describe("Fool: NO ABILITY is placed with the spend", () => {
     expect(game()).toEqual(before);
   });
 
-  it("an execution recorded as survived places the token with the spend; a second survival is not offered again", () => {
+  it("an execution recorded as survived places the token with the spend, and Undo removes both", () => {
     openInStore(proofGame(["imp", "fool", "monk", "chef"], "day", 2, { voting: freshVotingDay(2) }));
     const intent = { kind: "execution", target: { playerId: "p1", participantId: game().players.p1!.participantId! }, outcome: "survived",
       code: game().code, day: game().day, expectedRevision: currentVotingState(game()).revision } as VotingIntent;
+    const before = game();
     expect(state().resolveVoting(intent, captureVotingContext())).toMatchObject({ ok: true });
     expect(game().players.p1!.alive).toBe(true);
     expect(game().players.p1!.abilityUsed).toBe(true);
     expect(tokens()).toHaveLength(1);
+    state().undo();
+    expect(game().players.p1!.abilityUsed).toBe(false);
+    expect(tokens()).toEqual([]);
+    expect(game().lifeEventWindow.events).toEqual(before.lifeEventWindow.events);
   });
 
   it("nothing about the Fool's hidden survival or the advice reaches the public or player projections", () => {
