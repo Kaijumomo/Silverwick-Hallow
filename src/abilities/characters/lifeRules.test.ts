@@ -165,3 +165,39 @@ describe("LS-1 second review: roster gate", () => {
     expect(executionAdvice(proofGame(["imp", "fool", "chef", "empath"], "day", 2), "p1", environment)).toMatchObject({ kind: "survives", spends: true });
   });
 });
+
+describe("LS-1 second review: a Fool meets each killer", () => {
+  const fool = (roles: string[], index: number, phase: "night" | "day" = "night", day = 1) => proofGame(roles.map((r, i) => (i === index ? "fool" : r)), phase, day);
+
+  it("Vigormortis: the Fool survives and the ability is spent", () => {
+    const g = fool(["vigormortis", "chef", "empath", "baron", "monk", "saint", "poisoner"], 2, "night", 2);
+    const next = planned(plan(g, request(g, "p0", "vigormortis", { target: pick(g, "p2") })));
+    expect(next.players.p2).toMatchObject({ alive: true, abilityUsed: true });
+  });
+
+  it("No Dashii: the Fool survives and the ability is spent", () => {
+    const g = fool(["nodashii", "chef", "empath", "saint", "baron", "monk", "poisoner"], 2, "night", 2);
+    const next = planned(plan(g, request(g, "p0", "nodashii", { target: pick(g, "p2") })));
+    expect(next.players.p2).toMatchObject({ alive: true, abilityUsed: true });
+  });
+
+  it("Godfather: the Fool survives the kill and the ability is spent", () => {
+    const base = fool(["godfather", "saint", "chef", "monk", "imp", "empath", "baron"], 2, "night", 3);
+    const sub = { kind: "participant" as const, playerId: "p1", participantId: base.players.p1!.participantId!, nameAtTime: base.players.p1!.name };
+    const ev = { id: "e1", kind: "execution", moment: { phase: "day", day: 2 }, outcome: "died", subject: sub, actualRoleAtEvent: "saint" };
+    const g = { ...patchPlayer(base, "p1", { alive: false }), lifeEventWindow: { ...base.lifeEventWindow, events: [ev] } } as StorytellerLobbyRecord;
+    const next = planned(plan(g, request(g, "p0", "godfather", { target: pick(g, "p2") })));
+    expect(next.players.p2).toMatchObject({ alive: true, abilityUsed: true });
+  });
+
+  it("Moonchild: the chosen Fool survives, the ability is spent and the choice is consumed", () => {
+    const base = patchPlayer(fool(["godfather", "saint", "chef", "moonchild", "imp", "empath", "baron"], 2, "night", 3), "p3", { alive: false });
+    const g = patchPlayer(base, "p2", { effects: [{
+      id: "mc1", type: "moonchildChoice", sourceCharacter: "moonchild", lifetime: { kind: "untilDawn" }, state: "active",
+      sourceParticipant: { kind: "participant", playerId: "p3", participantId: base.players.p3!.participantId!, nameAtTime: "Player 3" },
+      expiry: { kind: "at", moment: { phase: "day", day: 4 } }, appliedAt: { phase: "day", day: 3 } } as never] });
+    const next = planned(plan(g, request(g, "p3", "moonchild", { target: pick(g, "p2") })));
+    expect(next.players.p2).toMatchObject({ alive: true, abilityUsed: true });
+    expect(next.players.p2!.effects.filter((e) => e.type === "moonchildChoice" && e.state === "active")).toEqual([]);
+  });
+});
