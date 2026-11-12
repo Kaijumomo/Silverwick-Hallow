@@ -6,6 +6,9 @@ import { isCanonicalRole } from "@/data/canonical";
 import type { QueryAnswer, RulesQuery } from "@/stores/rulesQuery";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import { LIFE_RULES, lifeRuleNeedsRosterReview, lifeRuleOf, passiveProtection, survivesFirstDeath } from "./passiveRules";
+import { executionAdvice } from "@/stores/executionAdvice";
+import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
+import { proofRegistry, proofScript } from "@/test/proofFixtures";
 import { bind, impair, patchPlayer, pick, plan, planned, proofGame, proofQuery, request } from "@/test/proofFixtures";
 import type { StorytellerLobbyRecord } from "@/stores/types";
 
@@ -105,5 +108,25 @@ describe("LS-1b: the rows themselves", () => {
   });
   it("only an automatic row whose holder is unreviewed asks for roster review (the Sailor)", () => {
     expect(["sailor", "fool", "soldier", "mayor", "tealady", "chef"].filter(lifeRuleNeedsRosterReview)).toEqual(["sailor"]);
+  });
+});
+
+describe("LS-1b: no change to the advice and the reasons users read", () => {
+  const environment = { registry: proofRegistry, script: proofScript, semantics: CANONICAL_ABILITY_SEMANTICS };
+  const guarded = (roles: string[]) => {
+    const g = proofGame(roles, "day", 2);
+    return patchPlayer(g, "p1", { effects: [{ id: "inn", type: "cannotDie", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "day", day: 2 } } as never] });
+  };
+  it("a protected non-Fool still gets the protection note while a Pacifist is seated, alive or dead", () => {
+    for (const alive of [true, false]) {
+      const g = patchPlayer(guarded(["imp", "chef", "pacifist", "empath"]), "p2", { alive });
+      expect(executionAdvice(g, "p1", environment)).toEqual({ kind: "survives", spends: false, note: "Player 1 is protected from this death: they survive the execution." });
+    }
+  });
+  it("the Fool's manual-fallback reason keeps its wording", () => {
+    const g = proofGame(["imp", "fool", "chef", "empath"]);
+    const answer = passiveProtection(proofQuery(g), bind(g, "p1"), "any");
+    expect(answer).toMatchObject({ known: false });
+    expect((answer as { reason: string }).reason).toMatch(/^The Fool survives its first death and then loses its ability/);
   });
 });

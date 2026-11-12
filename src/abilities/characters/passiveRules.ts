@@ -41,6 +41,8 @@ export const passiveRegistrationOptions = (roleId: RoleId) =>
  *  - alsoCreditedTo: roles whose own protection could equally be the reason for a survival; a spending survival then becomes
  *    ambiguous and nothing is spent automatically (the Storyteller chooses).
  *  - earlyProtection: a named helper for a reviewed rule that cannot be plain data (checked before the row applies).
+ * Monk and Innkeeper protection are deliberately NOT rows: they are Effects (safeFromDemon, cannotDie) with approved semantics, read by
+ * the Rules Query for every holder; the table is for what a character's OWN ability does to its own death.
  * Knobs from the proposal not read yet (bypassedBy, shownAs, abilityAfter, holder "chosen") arrive with the first behaviour that uses them.
  * https://wiki.bloodontheclocktower.com/Fool
  * https://wiki.bloodontheclocktower.com/Sailor
@@ -71,7 +73,7 @@ const monkProtectsFromDemon = (query: RulesQuery, target: ParticipantBinding, ca
 };
 
 const GAP = { holder: "self", duration: "permanent", needsFunctioning: true, causes: "any", decision: "storyteller", onSurvive: "nothing" } as const;
-export const LIFE_RULES: Readonly<Record<RoleId, LifeRule>> = {
+export const LIFE_RULES: Readonly<Partial<Record<RoleId, LifeRule>>> = Object.freeze({
   soldier: { holder: "self", duration: "permanent", needsFunctioning: true, causes: "demon", decision: "auto", onSurvive: "nothing" },
   sailor: { holder: "self", duration: "permanent", needsFunctioning: true, causes: "any", decision: "auto", onSurvive: "nothing" },
   fool: { holder: "self", duration: "once", needsFunctioning: true, causes: "any", decision: "auto", onSurvive: "spend", alsoCreditedTo: ["pacifist"] },
@@ -80,9 +82,12 @@ export const LIFE_RULES: Readonly<Record<RoleId, LifeRule>> = {
   lleech: GAP,
   zombuul: GAP,
   tealady: { ...GAP, holder: "neighbours" },
-};
+});
 export const lifeRuleOf = (roleId: RoleId): LifeRule | undefined =>
   Object.prototype.hasOwnProperty.call(LIFE_RULES, roleId) ? LIFE_RULES[roleId] : undefined;
+
+/** Every role some row names as an equally possible reason for a survival (the Pacifist for the Fool). */
+export const lifeRuleCreditedRoles: ReadonlySet<RoleId> = new Set(Object.values(LIFE_RULES).flatMap(rule => rule?.alsoCreditedTo ?? []));
 
 /** An automatic life rule whose holder is not on the reviewed list (a Sailor's nightly drunk choice is not modelled): wherever the
  * whole roster must be reviewed before automating, this is the row-driven version of "the Sailor keeps it Manual". */
@@ -121,10 +126,11 @@ export function passiveProtection(query: RulesQuery, target: ParticipantBinding,
   if (!player || !role || !isCanonicalRole(role)) return { known: false, reason: "This character's protection rules are not verified. Resolve the whole action manually." };
   for (const other of Object.values(query.game.players)) {
     const rule = !other.isEmpty && other.participantId && other.alive ? lifeRuleOf(other.actualRole) : undefined;
-    if (!rule || rule.holder === "self" || rule.decision !== "storyteller") continue;
+    // A row that protects others is only ever a gap today: until its neighbour logic exists, it fails closed (Manual) whatever its decision.
+    if (!rule || rule.holder === "self") continue;
     const definition = query.roleOf(other.actualRole);
     if (!definition || !isCanonicalRole(definition)) continue;
-    const functioning = query.abilityFunctions({ playerId: other.id, participantId: other.participantId! });
+    const functioning = query.abilityFunctions({ playerId: other.id, participantId: other.participantId });
     if (!functioning.known || functioning.value) return { known: false, reason: `${definition.name} protection is not modeled. Resolve the whole action manually.` };
   }
   if (!player.alive) return { known: true, value: false };
@@ -140,7 +146,7 @@ export function passiveProtection(query: RulesQuery, target: ParticipantBinding,
   if (rule.onSurvive === "spend") {
     if (spendHandled) return { known: true, value: false };
     const survives = survivesFirstDeath(query, target);
-    if (!survives.known || survives.value) return { known: false, reason: `${role.name} survives and then loses the ability: this attempt must go through the death gate. Resolve manually.` };
+    if (!survives.known || survives.value) return { known: false, reason: `The ${role.name} survives its first death and then loses its ability: this attempt must go through the death gate. Resolve manually.` };
     return { known: true, value: false };
   }
   if (rule.causes !== "any" && rule.causes !== cause) return { known: true, value: false };

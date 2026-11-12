@@ -1,5 +1,5 @@
 import { interactionCoverageEligibility } from "@/abilities/automationEligibility";
-import { lifeRuleOf } from "@/abilities/characters/passiveRules";
+import { lifeRuleCreditedRoles, lifeRuleOf } from "@/abilities/characters/passiveRules";
 import { createRulesQuery, type RulesQueryEnvironment } from "./rulesQuery";
 import type { PlayerId, StorytellerLobbyRecord } from "./types";
 
@@ -22,9 +22,9 @@ export function executionAdvice(game: StorytellerLobbyRecord, playerId: PlayerId
   if (!environment || !player || player.isEmpty || !player.participantId || !player.alive) return null;
   // Advice follows the same line automation draws: every character in play must be reviewed (a Sailor's nightly drunk choice, a Devil's Advocate's protection and the like are not modelled).
   const query = createRulesQuery(game, environment);
-  // Roles the row names as equally able to be the reason for the survival are handled below, so they do not force Manual here.
+  // Roles any row names as equally able to be the reason for a survival are handled below, so they do not force Manual here.
+  if (interactionCoverageEligibility(query, [...lifeRuleCreditedRoles]).kind === "manual") return null;
   const credited = lifeRuleOf(player.actualRole)?.alsoCreditedTo ?? [];
-  if (interactionCoverageEligibility(query, credited).kind === "manual") return null;
   const outcome = query.deathOutcome({ playerId, participantId: player.participantId }, "any");
   if (!outcome.known || outcome.value.kind !== "survives") return null;
   const rivals = credited.filter(id => Object.values(game.players).some(p => !p.isEmpty && p.alive && p.actualRole === id));
