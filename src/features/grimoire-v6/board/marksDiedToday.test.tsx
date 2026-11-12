@@ -1,14 +1,15 @@
 // The Godfather's official DIED TODAY token: derived from the Life Event Window for a dead Outsider, never stored.
 import type { ReactNode } from "react";
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { VotingProvider } from "@/features/voting/VotingWorkspace";
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { usePrivacyStore } from "@/stores/privacyStore";
-import { patchPlayer, proofGame, proofScript } from "@/test/proofFixtures";
+import { patchPlayer, proofGame, proofScript, reseat } from "@/test/proofFixtures";
 import type { LifeEvent, StorytellerLobbyRecord } from "@/stores/types";
 import { useV6Ctx } from "../ctx";
+import { useV6Ui } from "../v6Store";
 import { playerMarks } from "./marks";
 import { useBoardVm } from "../vm/board";
 
@@ -186,5 +187,49 @@ describe("Undertaker DIED TODAY token", () => {
     const hidden = token(board());
     expect(hidden.rems).toEqual([]);
     expect(hidden.aria).not.toMatch(/Died Today|reminder/);
+  });
+
+  it("also hides the disc from the Details card under Privacy Mode", () => {
+    utSetup("day", 2, (g) => [executed(g, "p1", 2)]);
+    const card = (privacy: boolean) => {
+      usePrivacyStore.setState({ enabled: privacy });
+      useV6Ui.getState().reset();
+      const { result } = renderHook(() => {
+        const g = store((st) => st.game)!;
+        return useBoardVm(useV6Ctx(g)).vm as Record<string, any>;
+      }, { wrapper });
+      act(() => { store.getState().selectPlayer("p1"); useV6Ui.getState().set({ card: true }); });
+      return result.current.pop;
+    };
+    expect(card(false).rems.map((r: any) => r.label)).toContain("Died Today");
+    const hidden = card(true);
+    expect(hidden.open).toBe(true);
+    expect(hidden.rems).toEqual([]);
+  });
+
+  it("follows the participant, not the seat: a replacement in the executed player's seat gets no disc", () => {
+    utSetup("day", 2, (g) => [executed(g, "p1", 2)]);
+    expect(label("p1")).toContain("Died Today");
+    store.setState({ game: reseat(store.getState().game!, "p1") });
+    expect(label("p1")).not.toContain("Died Today");
+  });
+
+  it("is still drawn while the Undertaker is drunk (a Drunk-type Effect on the real Undertaker)", () => {
+    utSetup("day", 2, (g) => [executed(g, "p1", 2)]);
+    const g = store.getState().game!;
+    const target = { playerId: "p0", participantId: g.players.p0!.participantId! };
+    expect(store.getState().resolveEffects({ intents: [{ kind: "apply", target, effect: { id: "drunk", type: "drunk", sourceCharacter: "innkeeper", source: { playerId: "p5", participantId: g.players.p5!.participantId! }, lifetime: { kind: "manual" } } }] } as never).ok).toBe(true);
+    expect(titles("p1")).toEqual(["Undertaker: Died Today"]);
+  });
+
+  it("is not drawn on Night 1 even when an execution is on record for Day 1", () => {
+    utSetup("night", 1, (g) => [executed(g, "p1", 1)]);
+    expect(label("p1")).not.toContain("Died Today");
+  });
+
+  it("is drawn for an executed Mutant recorded through the real execution command", () => {
+    store.setState({ game: proofGame(["undertaker", "mutant", "chef", "imp", "poisoner", "monk", "baron"], "day", 2), lobby: null, undoStack: [], localSeq: 0, customScripts: { [proofScript.id]: proofScript } });
+    expect(store.getState().recordExecution("p1", "died").ok).toBe(true);
+    expect(titles("p1")).toEqual(["Undertaker: Died Today"]);
   });
 });
