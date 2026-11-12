@@ -57,17 +57,17 @@ describe("Fool: NO ABILITY is placed with the spend", () => {
 });
 
 describe("execution advice is Storyteller-only", () => {
-  it("only the two Storyteller day components import it; no phone, player or Public Display file does", () => {
+  it("only the two Storyteller day components and the voting plan import it; no phone, player or Public Display file does", () => {
     const root = join(__dirname, "..");
     const hits: string[] = [];
     const walk = (dir: string) => {
       for (const name of readdirSync(dir)) {
         const path = join(dir, name);
         if (statSync(path).isDirectory()) walk(path);
-        else if (/\.(ts|tsx)$/.test(name) && !/\.test\./.test(name) && /executionAdvice/.test(readFileSync(path, "utf8"))) hits.push(relative(root, path));
+        else if (/\.(ts|tsx)$/.test(name) && !/\.test\./.test(name) && /from\s+["'][^"']*executionAdvice["']/.test(readFileSync(path, "utf8"))) hits.push(relative(root, path));
       }
     };
     walk(root);
-    expect(hits.sort()).toEqual(["features/grimoire-v6/day/nomination.tsx", "features/voting/VotingWorkspace.tsx", "stores/executionAdvice.ts", "stores/voting.ts"]);
+    expect(hits.sort()).toEqual(["features/grimoire-v6/day/nomination.tsx", "features/voting/VotingWorkspace.tsx", "stores/voting.ts"]);
   });
 });
