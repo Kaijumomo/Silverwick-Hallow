@@ -80,13 +80,21 @@ export const SHABALOTH: AbilityDescriptor = {
     if (context.simulated || !context.functioning) return nothing();
     const [first, second] = participantsOf(context.inputs, "targets")!;
     const deaths: { kind: "death"; target: NonNullable<typeof first> }[] = [];
+    // LS-1: a Fool that survives an attack spends its ability (a life "useAbility" ahead of the deaths).
+    const spends: { kind: "useAbility"; target: NonNullable<typeof first> }[] = [];
     let query = context.query;
     for (const [index, target] of [first!, second!].entries()) {
       if (!query.participant(target)?.alive) continue;
       const scope = { id: `shabaloth:${index + 1}:${JSON.stringify([first!.participantId, second!.participantId])}`, label: `attack ${index + 1}` };
       const death = deathAttempt(context, target, "demon", query, scope);
       if (death.kind === "ask") return ask(death.message, death.requirement);
-      if (death.kind === "survives") continue;
+      if (death.kind === "survives") {
+        if (death.spend) {
+          if (first!.participantId === second?.participantId) return { kind: "unsupported", message: "A Fool chosen twice: the second attack meets a Fool whose ability the first attack used up -- resolve it manually." };
+          spends.push({ kind: "useAbility", target });
+        }
+        continue;
+      }
       const succession = scarletWomanSuccession(query, target);
       if (succession.kind !== "none") return { kind: "unsupported", message: succession.kind === "manual" ? succession.reason : "A Scarlet Woman succession for this Demon is not modeled -- resolve manually." };
       deaths.push({ kind: "death", target });
@@ -110,7 +118,7 @@ export const SHABALOTH: AbilityDescriptor = {
         effect: { type: SHABALOTH_CHOSEN, source: context.actor.binding, sourceCharacter: "shabaloth", lifetime: { kind: "manual" as const } } })),
     ];
     // Both chosen players survived (protected) with none already dead and no earlier tokens: there is no token to move, so no effect step.
-    const operations: AbilityOperation[] = [...(deaths.length ? [lifeOperation(deaths)] : []), ...(intents.length ? [{ domain: "effect" as const, intents }] : [])];
+    const operations: AbilityOperation[] = [...(deaths.length || spends.length ? [lifeOperation([...spends, ...deaths])] : []), ...(intents.length ? [{ domain: "effect" as const, intents }] : [])];
     if (!operations.length) return nothing();
     return outcome(operations, operations.length > 1);
   },

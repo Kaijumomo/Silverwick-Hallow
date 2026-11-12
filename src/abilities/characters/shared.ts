@@ -141,7 +141,8 @@ export const arbitraryDeathJudgmentId = (cause: DeathCause, binding: Participant
 
 export type DeathDecision =
   | { kind: "dies" }
-  | { kind: "survives" }
+  /** `spend`: the survival uses up this player's own ability (the Fool). Absent for every prevented death. */
+  | { kind: "survives"; spend?: ParticipantBinding }
   | { kind: "ask"; requirement: AbilityInputRequirement; message: string };
 
 /**
@@ -180,8 +181,8 @@ export function deathAttempt(
         label: `${nameOf(context, target)} does not die from this${attempt?.label ? ` (${attempt.label})` : ""} -- deaths are arbitrary tonight (Yes: they do not die)` },
     };
   }
-  const answer = query.protectedFrom(target, cause);
-  if (answer.known) return answer.value ? { kind: "survives" } : { kind: "dies" };
+  const answer = query.deathOutcome(target, cause);
+  if (answer.known) return answer.value.kind === "survives" ? (answer.value.spends ? { kind: "survives", spend: target } : { kind: "survives" }) : { kind: "dies" };
   // SOL-10F-C2: the id binds the dependency stamp of the queried state.
   const id = protectionJudgmentId(cause, target, query.protectionDependencyStamp(target, cause), attempt);
   const judged = answerOf(context.judgments, id, "boolean");
@@ -193,6 +194,10 @@ export function deathAttempt(
       label: `${nameOf(context, target)} is protected from this ${cause === "demon" ? "Demon " : ""}death${attempt?.label ? ` (${attempt.label})` : ""} (Yes: they do not die)` },
   };
 }
+
+/** The outcome of a death attempt that did not happen: nothing changes, except that a Fool-style survival spends the ability. */
+export const survivedOutcome = (death: Extract<DeathDecision, { kind: "survives" }>): AbilityEvaluation =>
+  death.spend ? outcome([lifeOperation([{ kind: "useAbility", target: death.spend }])]) : nothing();
 
 export const lifeOperation = (intents: { kind: "death" | "resurrection" | "useAbility"; target: ParticipantBinding }[]): AbilityOperation =>
   ({ domain: "life", intents });

@@ -23,7 +23,7 @@ export const passiveRegistrationOptions = (roleId: RoleId) =>
  * https://wiki.bloodontheclocktower.com/Vortox
  * Other protections below deliberately have NO resolver. No token text is read.
  */
-const TARGET_DEATH_GAPS = new Set(["fool", "sailor", "mayor", "lleech", "zombuul"]);
+const TARGET_DEATH_GAPS = new Set(["mayor", "lleech", "zombuul"]);
 const EXTERNAL_PROTECTION_GAPS = new Set(["tealady"]);
 
 /** Characters whose ability passively poisons their nearest Townsfolk neighbours
@@ -31,7 +31,25 @@ const EXTERNAL_PROTECTION_GAPS = new Set(["tealady"]);
  * https://wiki.bloodontheclocktower.com/No_Dashii */
 export const isNeighbourPoisoner = (roleId: RoleId): boolean => roleId === "nodashii";
 
-export function passiveProtection(query: RulesQuery, target: ParticipantBinding, cause: "demon" | "any"): QueryAnswer<boolean> {
+/**
+ * LS-1 (life rules): the Fool's "survives its first death" row. The Fool is genuinely alive and shown alive, so nothing is hidden:
+ * the row only says "this death does not happen and the ability is spent". It applies when the Fool has not yet used the ability and
+ * the ability functions (a drunk or poisoned Fool dies for real). Another character's protection is checked FIRST by the caller:
+ * "If another character's ability protects the Fool from death, the Fool does not use their ability."
+ * https://wiki.bloodontheclocktower.com/Fool
+ * `known(false)` for every other character, a spent Fool, or an impaired one; UNKNOWN when sobriety cannot be established.
+ */
+export function survivesFirstDeath(query: RulesQuery, target: ParticipantBinding): QueryAnswer<boolean> {
+  const player = query.participant(target);
+  const role = player && query.roleOf(player.actualRole);
+  if (!player || !role || !isCanonicalRole(role) || player.actualRole !== "fool") return { known: true, value: false };
+  if (player.abilityUsed) return { known: true, value: false };
+  return query.abilityFunctions(target);
+}
+
+/** `foolHandled`: the caller (the death gate) resolves the Fool's own survival itself, after other protection, so the old
+ * "Fool is not modelled" gap must not fire. Every other caller keeps the Manual fallback for an unspent, functioning Fool. */
+export function passiveProtection(query: RulesQuery, target: ParticipantBinding, cause: "demon" | "any", foolHandled = false): QueryAnswer<boolean> {
   const player = query.participant(target);
   const role = player && query.roleOf(player.actualRole);
   if (!player || !role || !isCanonicalRole(role)) return { known: false, reason: "This character's protection rules are not verified. Resolve the whole action manually." };
@@ -59,6 +77,14 @@ export function passiveProtection(query: RulesQuery, target: ParticipantBinding,
   if (TARGET_DEATH_GAPS.has(player.actualRole) && (!functioning.known || functioning.value)) {
     return { known: false, reason: `${role.name} death interactions are not modeled. Resolve the whole action manually.` };
   }
+  // LS-1: the Fool is not a prevention row. Callers that cannot spend its ability (curses, direct protection questions) keep asking.
+  if (player.actualRole === "fool" && !foolHandled) {
+    const survives = survivesFirstDeath(query, target);
+    if (!survives.known || survives.value) return { known: false, reason: "The Fool survives its first death and then loses its ability: this attempt must go through the death gate. Resolve manually." };
+  }
+  // LS-1: the Sailor "can't die" while sober (not while drunk or poisoned); every cause.
+  // https://wiki.bloodontheclocktower.com/Sailor
+  if (player.actualRole === "sailor") return functioning;
   if (player.actualRole !== "soldier" || cause !== "demon") return { known: true, value: false };
   return functioning;
 }
@@ -93,7 +119,7 @@ export const REVIEWED_INTERACTION_ROLES: ReadonlySet<string> = new Set([
   "butler", "drunk", "recluse", "saint", "poisoner", "spy", "scarletwoman", "baron", "imp",
   "cultleader", "pithag", "alhadikhia", "harlot", "vortox",
   // Treacherous 30th: Innkeeper -- its cannotDie / drunk Effects are read through the shared protection and impairment queries.
-  "innkeeper", "nodashii", "vigormortis", "gambler", "shabaloth", "witch", "godfather", "moonchild", "golem", "towncrier", "oracle", "professor",
+  "innkeeper", "fool", "sailor", "nodashii", "vigormortis", "gambler", "shabaloth", "witch", "godfather", "moonchild", "golem", "towncrier", "oracle", "professor",
   // Marionette has no ability effects of its own: it is an evil Minion who believes they are good, and every query reads its ACTUAL role and alignment.
   "marionette",
   // Information-only characters (Sects & Violets / Bad Moon Rising): each only reads game state and changes none, so it has no

@@ -4,7 +4,7 @@ import { toldRoleChangeIntents } from "@/stores/roleResolution";
 import type { AbilityDescriptor, AbilityEvaluation, AbilityEvaluationContext } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
-import { ask, deathAttempt, firstParticipant, followUpParticipant, lifeOperation, nameOf, nothing, tokenOutcome, requireLivingActor } from "./shared";
+import { ask, deathAttempt, firstParticipant, followUpParticipant, lifeOperation, nameOf, nothing, survivedOutcome, tokenOutcome, requireLivingActor } from "./shared";
 import { scarletWomanSuccession } from "./scarletWoman";
 
 /**
@@ -109,7 +109,7 @@ export const IMP: AbilityDescriptor = {
     if (!context.query.participant(target)?.alive) return nothing();
     const death = deathAttempt(context, target, "demon");
     if (death.kind === "ask") return ask(death.message, death.requirement);
-    if (death.kind === "survives") return nothing();
+    if (death.kind === "survives") return survivedOutcome(death);
     const kill = lifeOperation([{ kind: "death", target }]);
     if (!self) {
       const succession = scarletWomanSuccession(context.query, target);

@@ -99,10 +99,20 @@ describe("B2c: supported protection does not broaden unverified interactions", (
     expect(plan(game, request(game, "p2", "imp", { target: pick(game, "p3") }), environment)).toMatchObject({ ok: false, code: "unsupported" });
   });
 
-  it.each(["fool", "sailor", "lleech", "zombuul"])("does not infer protection precedence for %s", role => {
+  it.each(["lleech", "zombuul"])("does not infer protection precedence for %s", role => {
     const game = patchPlayer(protect(proofGame(roles), "p3"), "p3", { actualRole: role });
     expect(proofQuery(game).protectedFrom(bind(game, "p3"), "demon")).toMatchObject({ known: false });
     expect(attack(game, "p3")).toMatchObject({ ok: false, code: "unsupported" });
+  });
+
+  // LS-1 replaces the former "does not infer protection precedence" pins for the Fool and the Sailor: both are now modelled by the shared
+  // death gate. Monk protection and the character's own survival agree, and only the Fool's own survival would spend its ability, so
+  // Monk protection (checked first) spends nothing.
+  it.each(["fool", "sailor"])("LS-1: Monk-protected %s survives the Imp and spends nothing", role => {
+    const game = patchPlayer(protect(proofGame(roles), "p3"), "p3", { actualRole: role });
+    expect(proofQuery(game).deathOutcome(bind(game, "p3"), "demon")).toEqual({ known: true, value: { kind: "survives", spends: false } });
+    expect(attack(game, "p3")).toEqual({ ok: true, changed: false });
+    expect(game.players.p3!.abilityUsed).toBe(false);
   });
 
   it("Safe does not settle non-Demon attacks on the Mayor", () => {

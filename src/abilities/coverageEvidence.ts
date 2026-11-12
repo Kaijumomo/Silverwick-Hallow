@@ -119,9 +119,6 @@ export const PARTIAL_SUPPORT: Readonly<Record<RoleId, readonly Piece[]>> = {
   farmer: [
     { path: "src/rules/night/nightOrder.ts", what: "Death-check wake slot: the night list shows this character after a death night with a 'check the death condition' advisory; historical triggers are not tracked." },
   ],
-  fool: [
-    { path: "src/abilities/characters/passiveRules.ts", what: "Death-target gap: when an attack targets a functioning one, the app does not model it and the whole action goes manual." },
-  ],
   fortuneteller: [
     { path: "src/rules/setup/setupAnalyzer.ts", what: "In the setup analyzer's manual-review list: setup shows a 'Review character setup' check and the Storyteller resolves the special choices by hand." },
   ],
@@ -225,9 +222,6 @@ export const PARTIAL_SUPPORT: Readonly<Record<RoleId, readonly Piece[]>> = {
   sage: [
     { path: "src/rules/night/nightOrder.ts", what: "Death-check wake slot: the night list shows this character after a death night with a 'check the death condition' advisory; historical triggers are not tracked." },
   ],
-  sailor: [
-    { path: "src/abilities/characters/passiveRules.ts", what: "Death-target gap: when an attack targets a functioning one, the app does not model it and the whole action goes manual." },
-  ],
   scarletwoman: [
     { path: "src/stores/endGameEligibility.ts", what: "Game-end advisory: Demon dead but Scarlet Woman alive." },
   ],
@@ -299,6 +293,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   golem: ["src/stores/publicScript.test.ts", "src/features/grimoire-v6/day/day.test.tsx"],
   harlot: ["src/abilities/characters/harlot.test.ts", "src/abilities/characters/astraRemediation.test.ts"],
   imp: ["src/features/grimoire-v6/night/nightGuide.port.test.tsx", "src/stores/projections.test.ts"],
+  fool: ["src/abilities/characters/lifeRules.test.ts"],
   innkeeper: ["src/abilities/characters/innkeeper.test.ts", "src/features/nightOrder/nightWork.test.ts"],
   investigator: ["src/features/setup/postR3ReclusePreparation.test.tsx", "src/stores/b6Independent.test.ts"],
   juggler: ["src/abilities/characters/informationCharacterReview.test.ts"],
@@ -316,6 +311,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   professor: ["src/abilities/characters/townCrierOraclePro.test.ts", "src/abilities/characters/concealedSameAsPoisoned.test.ts"],
   ravenkeeper: ["src/stores/troubleBrewingB5bIndependent.test.ts", "src/abilities/characters/troubleBrewingB5b.test.ts"],
   recluse: ["src/abilities/characters/troubleBrewingB1.independent.test.ts", "src/features/grimoire-v6/night/nightGuide.port.test.tsx"],
+  sailor: ["src/abilities/characters/lifeRules.test.ts"],
   saint: ["src/stores/roleResolution.test.ts", "src/stores/projections.test.ts"],
   savant: ["src/abilities/characters/informationCharacterReview.test.ts"],
   scarletwoman: ["src/stores/troubleBrewingB4Death.test.ts", "src/stores/troubleBrewingB4Independent.test.ts"],
@@ -335,14 +331,14 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
 
 /** Caveats read from code or from the Stage 4 review (src/abilities/characters/classification.ts REVIEWED_MANUAL notes). */
 export const COVERAGE_CAVEATS: Readonly<Record<RoleId, readonly string[]>> = {
+  fool: ["LS-1: the death gate applies the Fool's survival to Demon and ability kills and to a recorded execution (the Storyteller still records the outcome). A Tea Lady in play, a Witch curse and a Pacifist in play still send the question to the Storyteller."],
+  sailor: ["LS-1: only the 'cannot die while sober' half is modelled. The Sailor's nightly choice of who is drunk stays Storyteller-resolved."],
   juggler: ["Official wiki: wakes once. The night list shows the row every later night; the Storyteller skips it."],
   mutant: ["Official wiki: the Storyteller may execute a madness-breaking Mutant at any time, even at night. The app records executions only in Day and does not block a second daytime execution."],
 };
 
 /** Why a "partial" character is partial, where the reason is NOT "a general support piece". Plain statements, no UI. */
 export const PARTIAL_CAVEATS: Readonly<Record<RoleId, string>> = {
-  fool: "Partial because the app REFUSES to automate: an attack on a functioning Fool sends the whole action to Manual (death-target gap). No Fool ability is modelled.",
-  sailor: "Partial because the app REFUSES to automate: an attack on a functioning Sailor sends the whole action to Manual (death-target gap). No Sailor ability is modelled.",
   lleech: "Partial because the app REFUSES to automate: an attack on a functioning Lleech sends the whole action to Manual (death-target gap). No Lleech ability is modelled.",
   zombuul: "Partial because the app REFUSES to automate: an attack on a functioning Zombuul sends the whole action to Manual (death-target gap); it only gets a night-list slot after a death night.",
   tealady: "Partial because the app REFUSES to automate: with a Tea Lady in play, Demon protection is not modelled and the whole action goes Manual. No Tea Lady ability is modelled.",
