@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, useRef, useState, type ReactNode, type RefObject } from "react";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import { AbilityWorkspace } from "@/features/abilities/AbilityWorkspace";
 import { MAX_NIGHT_STEP_NOTES } from "@/stores/schemas";
@@ -18,6 +18,8 @@ import { INFO_TOKENS } from "../info/tokens";
 import { guardGesture } from "./gestureGuard";
 import { newImpToWake } from "./newImp";
 import type { NightEngine } from "./useNightEngine";
+import { isCanonicalRole } from "@/data/canonical";
+import type { NightStep } from "@/rules/night/nightOrder";
 import { isDeathEvent } from "@/stores/lifeEvents";
 import { createRulesQuery } from "@/stores/rulesQuery";
 import { passiveRegistrationOptions } from "@/abilities/characters/passiveRules";
@@ -63,27 +65,35 @@ function revealHost(abilityName: string): RevealHost {
 }
 
 /** Manual Night (a character in play or a Spy/Recluse keeps the action by hand): the Undertaker and Ravenkeeper still get the
- * Night card's own Reveal a Token row. The Undertaker's row previews the executed character when exactly one died by execution
- * the previous Day and it cannot register falsely; otherwise the Storyteller picks the token on the board. Nothing is recorded. */
-function manualReveal(game: StorytellerLobbyRecord, script: Script, registry: RoleRegistry, roleId: string, deceived: boolean, participantId?: string): ReactNode {
+ * Night card's own Reveal a Token row, with the shared board picker and player view. The Undertaker's row previews the executed
+ * character only when exactly one died by execution the previous Day, the Undertaker is working, and the registration is certain;
+ * otherwise the Storyteller picks the token on the board. Nothing is recorded. */
+function manualReveal(game: StorytellerLobbyRecord, script: Script, registry: RoleRegistry, step: Extract<NightStep, { kind: "player" }>): ReactNode {
+  const roleId = step.effectiveRoleId;
   const host = revealHost(registry.get(roleId)?.name ?? "This character");
+  const query = createRulesQuery(game, { script, registry, semantics: SEMANTICS });
   let known: RoleDef | undefined;
   if (roleId === "undertaker") {
-    // Nobody died by execution the previous Day (or it is the first Night): the Undertaker learns nothing, so no row.
+    // First Night, or nobody died by execution the previous Day: the Undertaker learns nothing, so no row.
     if (game.day <= 1) return null;
-    const deaths = createRulesQuery(game, { script, registry, semantics: SEMANTICS })
-      .lifeEvents({ phase: "day", day: game.day - 1 }, (event) => event.kind === "execution" && event.outcome === "died");
+    const deaths = query.lifeEvents({ phase: "day", day: game.day - 1 }, (event) => event.kind === "execution" && event.outcome === "died");
     if (deaths.status === "known" && !deaths.events.length) return null;
-    const at = !deceived && deaths.status === "known" && deaths.events.length === 1 ? deaths.events[0]!.actualRoleAtEvent : undefined;
-    if (at && !passiveRegistrationOptions(at)) known = registry.get(at);
+    const event = deaths.status === "known" && deaths.events.length === 1 ? deaths.events[0]! : undefined;
+    const actor = game.players[step.playerId];
+    const working = !step.isDeceived && actor?.participantId ? query.abilityFunctions({ playerId: actor.id, participantId: actor.participantId }) : undefined;
+    if (event?.actualRoleAtEvent && working?.known && working.value && !passiveRegistrationOptions(event.actualRoleAtEvent)) {
+      const registered = query.registration({ playerId: event.subject.playerId, participantId: event.subject.participantId }, "undertaker").character;
+      const shown = registered.known ? registry.get(registered.value) : undefined;
+      if (shown && isCanonicalRole(shown) && shown.id === event.actualRoleAtEvent) known = shown;
+    }
   }
-  if (roleId === "ravenkeeper" && !deceived) {
+  if (roleId === "ravenkeeper" && !step.isDeceived) {
     // Only a Ravenkeeper who died tonight wakes to learn something.
-    const died = createRulesQuery(game, { script, registry, semantics: SEMANTICS }).lifeEvents({ phase: "night", day: game.day },
-      (event) => isDeathEvent(event) && event.subject.participantId === participantId && event.actualRoleAtEvent === "ravenkeeper");
+    const died = query.lifeEvents({ phase: "night", day: game.day },
+      (event) => isDeathEvent(event) && event.subject.participantId === step.participantId && event.actualRoleAtEvent === "ravenkeeper");
     if (died.status === "known" && !died.events.length) return null;
   }
-  return host.button({ role: known, onClick: () => known ? host.show(known.id) : host.choose(() => undefined) });
+  return host.button({ role: known, onClick: () => known ? host.show(known.id) : host.choose((id) => presentCharacter(REVEAL.title ?? REVEAL.label, id)) });
 }
 
 /**
@@ -133,10 +143,8 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
           ability={engine.ability} visible={engine.visible} resolved={done} onResolved={engine.finish} onManual={engine.requireManual}
           reveal={revealHost(registry.get(current.effectiveRoleId)?.name ?? "This character")} />);
       } else if (!done && !engine.skipReason && (current.effectiveRoleId === "undertaker" || current.effectiveRoleId === "ravenkeeper")) {
-        {
-        const row = manualReveal(game, script, registry, current.effectiveRoleId, current.isDeceived, current.participantId);
-        if (row) rows.push(<div key="manual-reveal">{row}</div>);
-      }
+        const row = manualReveal(game, script, registry, current);
+        if (row) rows.push(<Fragment key="manual-reveal">{row}</Fragment>);
       } else if (!done && engine.bureaucrat && engine.actor?.participantId) {
         rows.push(<BureaucratAction key={`${engine.actor.participantId}:${current.stepKey}`} source={{ playerId: engine.actor.id, participantId: engine.actor.participantId }}
           visible={engine.visible} completeStep={{ day: game.day, stepKey: current.stepKey }} onResolved={engine.finish} />);

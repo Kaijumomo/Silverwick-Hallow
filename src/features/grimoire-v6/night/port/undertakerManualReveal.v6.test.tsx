@@ -9,7 +9,7 @@ import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { participantStepKey } from "@/stores/nightProgress";
 import { useTargetPicker } from "@/features/abilities/abilityUi";
-import { openInStore, proofGame, proofRegistry, proofScript } from "@/test/proofFixtures";
+import { impair, openInStore, proofGame, proofRegistry, proofScript } from "@/test/proofFixtures";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 
 const game = () => store.getState().game!;
@@ -47,8 +47,15 @@ it("manual game: an executed Recluse or Spy is the Storyteller's choice on the b
   for (const role of ["recluse", "spy"]) {
     cleanup(); undertaker(["undertaker", role, "imp", "monk", "baron"]); expect(hasReveal()).toBe(true);
     reveal(); expect(screen.getByText(/choose a character to show/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Sage" }));
+    expect(screen.getByRole("dialog", { name: "This Character" })).toHaveTextContent("Sage");
     expect(game().informationDeliveries).toHaveLength(0);
   }
+});
+it("manual game: a poisoned Undertaker gets no preview, only the picker", () => {
+  undertaker(["undertaker", "chef", "imp", "monk", "sage"]); cleanup(); store.setState({ game: impair(game(), "p0") }); show();
+  expect(hasReveal()).toBe(true); expect(screen.queryByText("Chef")).toBeNull(); reveal();
+  expect(screen.getByText(/choose a character to show/)).toBeInTheDocument();
 });
 it("manual game: no execution means no reveal row", () => {
   undertaker(["undertaker", "chef", "imp", "monk", "sage"], false); expect(hasReveal()).toBe(false);
@@ -56,6 +63,8 @@ it("manual game: no execution means no reveal row", () => {
 it("manual game: the Ravenkeeper gets the board picker", () => {
   ravenkeeper(["ravenkeeper", "imp", "chef", "monk", "sage"]); expect(hasReveal()).toBe(true);
   reveal(); expect(screen.getByText(/choose a character to show/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Mayor" }));
+  expect(screen.getByRole("dialog", { name: "This Character" })).toHaveTextContent("Mayor");
 });
 it("manual game: a living Ravenkeeper has no reveal row", () => {
   ravenkeeper(["ravenkeeper", "imp", "chef", "monk", "sage"], false); expect(hasReveal()).toBe(false);
