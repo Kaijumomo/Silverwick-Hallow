@@ -142,6 +142,10 @@ export const LIFE_RULES: Readonly<Partial<Record<RoleId, LifeRule>>> = Object.fr
   soldier: { holder: "self", duration: "permanent", needsFunctioning: true, causes: "demon", bypassedBy: ASSASSIN, decision: "auto", onSurvive: "nothing" },
   sailor: { holder: "self", duration: "permanent", needsFunctioning: true, causes: "any", bypassedBy: ASSASSIN, decision: "auto", onSurvive: "nothing" },
   fool: { holder: "self", duration: "once", needsFunctioning: true, causes: "any", bypassedBy: ASSASSIN, decision: "auto", onSurvive: "spend", alsoCreditedTo: ["pacifist"] },
+  // LS-2d: "When a good player is executed, the Storyteller chooses whether they die or live." A Storyteller-choice row: the gate never
+  // answers from it; the execution prompt shows its note (executionChoiceNames) while a Pacifist is alive, impaired or not, as before.
+  // https://wiki.bloodontheclocktower.com/Pacifist
+  pacifist: { holder: "anyGood", duration: "permanent", needsFunctioning: true, causes: "execution", bypassedBy: ASSASSIN, decision: "choice", onSurvive: "nothing" },
   // Not modelled: the whole action stays Manual while the holder's ability may be working.
   mayor: { ...GAP, earlyProtection: monkProtectsFromDemon },
   lleech: GAP,

@@ -99,7 +99,7 @@ describe("LS-1b: the life-rules table equals the LS-1 branches", () => {
 
 describe("LS-1b: the rows themselves", () => {
   it("the table holds exactly the characters the old branches and gap lists named", () => {
-    expect(Object.keys(LIFE_RULES).sort()).toEqual(["fool", "lleech", "mayor", "sailor", "soldier", "tealady", "zombuul"]);
+    expect(Object.keys(LIFE_RULES).sort()).toEqual(["fool", "lleech", "mayor", "pacifist", "sailor", "soldier", "tealady", "zombuul"]);
   });
   it("rows read as the proposal's examples", () => {
     expect(lifeRuleOf("soldier")).toMatchObject({ holder: "self", duration: "permanent", needsFunctioning: true, causes: "demon", decision: "auto", onSurvive: "nothing" });

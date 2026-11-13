@@ -202,8 +202,7 @@ export const PARTIAL_SUPPORT: Readonly<Record<RoleId, readonly Piece[]>> = {
     { path: "src/stores/endGameEligibility.ts", what: "Game-end advisory: Demon dead but Mastermind alive, check before ending." },
   ],
   pacifist: [
-    { path: "src/features/grimoire-v6/day/nomination.tsx", what: "The execution prompt reminds the Storyteller that the Pacifist may apply (nomination and voting screens)." },
-    { path: "src/features/voting/VotingWorkspace.tsx", what: "The voting workspace repeats the Pacifist reminder." },
+    { path: "src/abilities/characters/passiveRules.ts", what: "Life-rules Storyteller-choice row (LS-2d): while a Pacifist is alive, the execution prompt on the nomination and voting screens reminds the Storyteller that the Pacifist may apply; the Storyteller decides, the gate never does." },
   ],
   philosopher: [
     { path: "src/rules/night/nightOrder.ts", what: "Flagged as a complex ability in the night list: the Storyteller resolves it by hand." },

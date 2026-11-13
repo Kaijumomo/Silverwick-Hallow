@@ -188,10 +188,11 @@ describe("LS-2a: the gate is unchanged for the causes demon and any", () => {
 });
 
 describe("LS-2a: rows", () => {
-  it("every automatic or spending row is bypassed by the Assassin; gap rows are unmodelled; no row is a choice yet", () => {
+  it("every automatic or spending row is bypassed by the Assassin; gap rows are unmodelled; the Pacifist is the one choice row", () => {
     for (const id of ["soldier", "sailor", "fool", "tealady"]) expect(lifeRuleOf(id)?.bypassedBy, id).toEqual(["assassin"]);
     for (const id of ["mayor", "lleech", "zombuul"]) expect(lifeRuleOf(id)?.decision, id).toBe("unmodelled");
-    for (const rule of Object.values(LIFE_RULES)) expect(["auto", "unmodelled"]).toContain(rule!.decision);
+    expect(Object.entries(LIFE_RULES).filter(([, rule]) => rule!.decision === "choice").map(([id]) => id)).toEqual(["pacifist"]);
+    expect(lifeRuleOf("pacifist")).toMatchObject({ holder: "anyGood", causes: "execution", bypassedBy: ["assassin"], onSurvive: "nothing" });
   });
   it("a row stops only its own causes", () => {
     const soldier = lifeRuleOf("soldier")!, sailor = lifeRuleOf("sailor")!;
