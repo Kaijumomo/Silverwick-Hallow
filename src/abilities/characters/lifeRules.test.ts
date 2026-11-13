@@ -159,8 +159,8 @@ describe("review fixes", () => {
 });
 
 describe("LS-1 second review: roster gate", () => {
-  it("execution advice is silent while an unreviewed character (a Devil's Advocate) is in play", () => {
-    const g = proofGame(["imp", "fool", "devilsadvocate", "chef"], "day", 2);
+  it("execution advice is silent while an unreviewed character (an Amnesiac) is in play", () => {
+    const g = proofGame(["imp", "fool", "amnesiac", "chef"], "day", 2);
     expect(executionAdvice(g, "p1", environment)).toBeNull();
     expect(executionAdvice(proofGame(["imp", "fool", "chef", "empath"], "day", 2), "p1", environment)).toMatchObject({ kind: "survives", spends: true });
   });

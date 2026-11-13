@@ -28,6 +28,7 @@ const EFFECT_TOKENS = [
   { source: "vigormortis", type: "retainsAbility", label: "Has Ability" },
   { source: "shabaloth", type: "shabalothChosen", label: "Dead" },
   { source: "shabaloth", type: "shabalothAlive", label: "Alive" },
+  { source: "devilsadvocate", type: "survivesExecution", label: "Survives Execution" },
   // This existing Storyteller fact deliberately has no functioning source.
   { source: "fortuneteller", type: "fortuneTellerRedHerring", label: "Red Herring" },
 ] as const;

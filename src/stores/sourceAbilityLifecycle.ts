@@ -81,7 +81,8 @@ export function planSourceAbilityLoss(
       // the source changes back to the recorded character.
       const supported = effect.sourceCharacter === "poisoner" && effect.type === "poisoned" || effect.sourceCharacter === "monk" && effect.type === "safeFromDemon" ||
         effect.sourceCharacter === "innkeeper" && (effect.type === "cannotDie" || effect.type === "drunk") ||
-        effect.sourceCharacter === "vigormortis" && (effect.type === "poisoned" || effect.type === "retainsAbility") || effect.sourceCharacter === "witch" && effect.type === "witchCurse";
+        effect.sourceCharacter === "vigormortis" && (effect.type === "poisoned" || effect.type === "retainsAbility") || effect.sourceCharacter === "witch" && effect.type === "witchCurse" ||
+        effect.sourceCharacter === "devilsadvocate" && effect.type === "survivesExecution";
       const definition = effect.sourceCharacter ? environment?.registry.get(effect.sourceCharacter) : undefined;
       if (!supported || !definition || !isCanonicalRole(definition)) continue;
       const result = planEffectTransaction(working, { intents: [{ kind: "remove", target: { playerId: player.id, participantId: player.participantId }, effectId: effect.id }],

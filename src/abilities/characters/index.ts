@@ -1,6 +1,7 @@
 import type { AbilityDescriptor } from "../semantics";
 import { AL_HADIKHIA } from "./alhadikhia";
 import { CULT_LEADER } from "./cultleader";
+import { DEVILS_ADVOCATE } from "./devilsadvocate";
 import { CHEF } from "./chef";
 import { EMPATH } from "./empath";
 import { FORTUNE_TELLER } from "./fortuneteller";
@@ -30,4 +31,4 @@ import { VIGORMORTIS } from "./vigormortis";
  * production Ability Semantics Registry (semantics.ts); it is only ever
  * consulted through the canonical ownership gate (resolveAbilitySemantics).
  */
-export const VERIFIED_DESCRIPTORS: readonly AbilityDescriptor[] = [POISONER, MONK, CHEF, EMPATH, FORTUNE_TELLER, SLAYER, CULT_LEADER, HARLOT, AL_HADIKHIA, IMP, RAVENKEEPER, UNDERTAKER, PIT_HAG, INNKEEPER, NO_DASHII, VIGORMORTIS, GAMBLER, SHABALOTH, WITCH, GODFATHER, MOONCHILD, TOWN_CRIER, ORACLE, PROFESSOR];
+export const VERIFIED_DESCRIPTORS: readonly AbilityDescriptor[] = [POISONER, MONK, CHEF, EMPATH, FORTUNE_TELLER, SLAYER, CULT_LEADER, HARLOT, AL_HADIKHIA, IMP, RAVENKEEPER, UNDERTAKER, PIT_HAG, INNKEEPER, NO_DASHII, VIGORMORTIS, GAMBLER, SHABALOTH, WITCH, GODFATHER, MOONCHILD, TOWN_CRIER, ORACLE, PROFESSOR, DEVILS_ADVOCATE];

@@ -271,10 +271,12 @@ export const REVIEWED_INTERACTION_ROLES: ReadonlySet<string> = new Set([
   "butler", "drunk", "recluse", "saint", "poisoner", "spy", "scarletwoman", "baron", "imp",
   "cultleader", "pithag", "alhadikhia", "harlot", "vortox",
   // Treacherous 30th: Innkeeper -- its cannotDie / drunk Effects are read through the shared protection and impairment queries.
-  "innkeeper", "fool", "nodashii",
+  "innkeeper", "fool", "nodashii", "vigormortis", "gambler", "shabaloth", "witch", "godfather", "moonchild", "golem", "towncrier", "oracle", "professor",
   // LS-2b: the Tea Lady's protection is a life-rules row (neighbours, registration TO the Tea Lady with the setup decisions); an
   // unknown registration goes to the Storyteller through the death gate's existing question.
-  "tealady", "vigormortis", "gambler", "shabaloth", "witch", "godfather", "moonchild", "golem", "towncrier", "oracle", "professor",
+  "tealady",
+  // LS-2c: the Devil's Advocate's protection is a sourced survivesExecution Effect read by the death gate for executions only.
+  "devilsadvocate",
   // Marionette has no ability effects of its own: it is an evil Minion who believes they are good, and every query reads its ACTUAL role and alignment.
   "marionette",
   // Information-only characters (Sects & Violets / Bad Moon Rising): each only reads game state and changes none, so it has no

@@ -43,6 +43,8 @@ const unknown = <T,>(reason: string): QueryAnswer<T> => ({ known: false, reason 
  *  - noAbility: the bearer's ability is lost.
  *  - demonProtection / deathImmunity: distinct protection semantics (Safe
  *    from the Demon vs Cannot die) -- never conflated (10F-AC-14).
+ *  - executionProtection (LS-2c): protects from an EXECUTION only (the Devil's
+ *    Advocate's SURVIVES EXECUTION); never from the Demon or any other death.
  *  - genericProtection: the generic manual "Protected" marker. It NEVER means
  *    "cannot die" automatically; any death question needs a Storyteller
  *    decision.
@@ -54,7 +56,7 @@ const unknown = <T,>(reason: string): QueryAnswer<T> => ({ known: false, reason 
  *    when it matters. It is never a Reminder.
  */
 export type DeathOutcomeAnswer = { kind: "dies" } | { kind: "survives"; spends: boolean };
-export type EffectSemantics = "impairment" | "noAbility" | "demonProtection" | "deathImmunity" | "genericProtection" | "judgment" | "storytellerFact" | "curse" | "retainedAbility";
+export type EffectSemantics = "impairment" | "noAbility" | "demonProtection" | "deathImmunity" | "executionProtection" | "genericProtection" | "judgment" | "storytellerFact" | "curse" | "retainedAbility";
 export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>> = {
   drunk: "impairment",
   poisoned: "impairment",
@@ -83,6 +85,10 @@ export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>
    * Read only by registrationAnswers for that observer; never a Reminder. */
   registersGoodToTeaLady: "storytellerFact",
   registersEvilToTeaLady: "storytellerFact",
+  /** LS-2c: the Devil's Advocate's chosen player survives an execution until dusk (applies while its source functions). */
+  survivesExecution: "executionProtection",
+  /** LS-2c: the Devil's Advocate's choice, remembered (no source; the chooser is a parameter) so it cannot repeat the next night. */
+  devilsAdvocateChoice: "storytellerFact",
 };
 export const effectSemanticsOf = (type: string): EffectSemantics | undefined =>
   Object.prototype.hasOwnProperty.call(APPROVED_EFFECT_SEMANTICS, type) ? APPROVED_EFFECT_SEMANTICS[type] : undefined;
@@ -474,8 +480,9 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
       let undetermined: string | null = null;
       for (const effect of player.effects) {
         const semantics = effectSemanticsOf(effect.type);
-        if (semantics !== "deathImmunity" && semantics !== "demonProtection" && semantics !== "genericProtection") continue;
+        if (semantics !== "deathImmunity" && semantics !== "demonProtection" && semantics !== "genericProtection" && semantics !== "executionProtection") continue;
         if (semantics === "demonProtection" && cause !== "demon") continue;
+        if (semantics === "executionProtection" && cause !== "execution") continue;
         const answer = applies(player, effect, new Set());
         if (!answer.known) { undetermined ??= answer.reason; continue; }
         if (!answer.value) continue;

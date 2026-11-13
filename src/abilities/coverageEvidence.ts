@@ -286,6 +286,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   chef: ["src/stores/roleResolution.test.ts", "src/stores/projections.test.ts"],
   clockmaker: ["src/abilities/characters/informationCharacterReview.test.ts"],
   cultleader: ["src/abilities/characters/cultleader.test.ts", "src/abilities/abilityArchitecture.test.ts"],
+  devilsadvocate: ["src/abilities/characters/devilsAdvocate.test.ts"],
   dreamer: ["src/abilities/characters/informationCharacterReview.test.ts"],
   drunk: ["src/features/setup/troubleBrewingB3BaronDrunk.test.ts", "src/stores/effectLifecycle.test.ts"],
   empath: ["src/abilities/characters/informationCharacterReview.test.ts", "src/stores/roleResolution.test.ts"],
