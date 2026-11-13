@@ -56,7 +56,7 @@ describe("Tea Lady setup step", () => {
     const rows = teaTasks();
     expect(rows.map((t) => t.key)).toEqual([`tealady:${ids[0]}`]);
     expect(rows.map((t) => t.req)).toEqual([true]);
-    expect(rows[0]).toMatchObject({ roleId: "tealady", roleName: "Tea Lady", done: false, sub: "Required · Does P1 register as good or evil?", actLabel: "Good", altLabel: "Evil", type: "townsfolk" });
+    expect(rows[0]).toMatchObject({ roleId: "tealady", roleName: "Tea Lady", done: false, sub: "Required · Does P1 register as good or evil?", actLabel: "Good", altLabel: "Evil", altBoxed: true, type: "townsfolk" });
   });
 
   it("no row when no Spy or Recluse is beside the Tea Lady; a Recluse who is a neighbour gets the same required row", () => {

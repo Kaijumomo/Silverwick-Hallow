@@ -38,6 +38,8 @@ export type PrepTask = {
   actLabel: string;
   act: () => void;
   altLabel?: string;
+  /** The two answers are equal choices (Good / Evil): the second is drawn as the same boxed button as the first. */
+  altBoxed?: boolean;
   alt?: () => void;
   undo: () => void;
 };
@@ -174,7 +176,7 @@ export function buildPrepTasks(game: StorytellerLobbyRecord, script: Script | un
         key: `tealady:${p.id}`, roleId: "tealady", roleName: nameOf("tealady"), who: seatName(game, p.id), img: iconOf("tealady"), type: "townsfolk",
         done: decided === "good" || decided === "evil", req: true,
         sub: decided === "good" ? `${question} · Good` : decided === "evil" ? `${question} · Evil` : `Required · ${question}`,
-        open: true, actLabel: "Good", act: () => setTeaLadyDecision(p.id, "good"), altLabel: "Evil", alt: () => setTeaLadyDecision(p.id, "evil"),
+        open: true, actLabel: "Good", act: () => setTeaLadyDecision(p.id, "good"), altLabel: "Evil", altBoxed: true, alt: () => setTeaLadyDecision(p.id, "evil"),
         undo: () => setTeaLadyDecision(p.id, null),
       });
     }
@@ -185,7 +187,7 @@ export function buildPrepTasks(game: StorytellerLobbyRecord, script: Script | un
     if (!p.actualRole) continue;
     const base = { roleId: p.actualRole, roleName: nameOf(p.actualRole), who: seatName(game, p.id), img: iconOf(p.actualRole), type: "traveler" as const, done: false, req: true, open: true, undo: () => openCard(p.id) };
     if (!p.actualAlignment) {
-      tasks.push({ ...base, key: `traveller:${p.id}`, sub: "Required · choose their alignment", actLabel: "Good", act: () => setAlignment(p.id, "good"), altLabel: "Evil", alt: () => setAlignment(p.id, "evil") });
+      tasks.push({ ...base, key: `traveller:${p.id}`, sub: "Required · choose their alignment", actLabel: "Good", act: () => setAlignment(p.id, "good"), altLabel: "Evil", altBoxed: true, alt: () => setAlignment(p.id, "evil") });
       continue;
     }
     if (!travelerHasUnresolvedArrival(p)) continue;

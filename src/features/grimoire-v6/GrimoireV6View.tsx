@@ -2616,7 +2616,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                         )}
                         {vm.town?.cur?.altOn && (
                           <>
-                          <button onClick={vm.town?.cur?.alt} style={S331}>
+                          <button onClick={vm.town?.cur?.alt} style={vm.town?.cur?.altBoxed ? css(`min-height:40px; padding:0 16px; border-radius:10px; border:1px solid ${vm.town?.cur?.btnBorder ?? ''}; background:${vm.town?.cur?.btnBg ?? ''}; color:${vm.town?.cur?.btnColor ?? ''}; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer;`) : S331}>
                             {T(vm.town?.cur?.altLabel)}
                           </button>
                           </>
