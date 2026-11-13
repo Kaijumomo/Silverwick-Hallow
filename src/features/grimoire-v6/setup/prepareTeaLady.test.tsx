@@ -50,14 +50,30 @@ const labels = (id: string) => {
 beforeEach(() => { useV6Ui.getState().reset(); usePrivacyStore.setState({ enabled: false }); });
 
 describe("Tea Lady setup step", () => {
-  it("one row per Spy and Recluse while a Tea Lady is in play; required only for a living neighbour", () => {
-    // Seats: Spy, Tea Lady, Chef, Recluse, Imp, Empath
+  it("a row only for a Spy or Recluse who is a living neighbour of the Tea Lady, and it is required", () => {
+    // Seats: Spy, Tea Lady, Chef, Recluse, Imp, Empath. The Recluse is not beside her, so it gets no row.
     const ids = dealt(["spy", "tealady", "chef", "recluse", "imp", "empath"]);
     const rows = teaTasks();
-    expect(rows.map((t) => t.key)).toEqual([`tealady:${ids[0]}`, `tealady:${ids[3]}`]);
-    expect(rows.map((t) => t.req)).toEqual([true, false]);
-    expect(rows[0]).toMatchObject({ roleId: "tealady", roleName: "Tea Lady", done: false, sub: "Does P1 register as good or evil?", actLabel: "Good", altLabel: "Evil", type: "townsfolk" });
-    expect(rows[1]!.sub).toBe("Does P4 register as good or evil?");
+    expect(rows.map((t) => t.key)).toEqual([`tealady:${ids[0]}`]);
+    expect(rows.map((t) => t.req)).toEqual([true]);
+    expect(rows[0]).toMatchObject({ roleId: "tealady", roleName: "Tea Lady", done: false, sub: "Required · Does P1 register as good or evil?", actLabel: "Good", altLabel: "Evil", type: "townsfolk" });
+  });
+
+  it("no row when no Spy or Recluse is beside the Tea Lady; a Recluse who is a neighbour gets the same required row", () => {
+    // Seats: Chef, Tea Lady, Empath, Imp, Spy, Recluse (neither is next to her).
+    dealt(["chef", "tealady", "empath", "imp", "spy", "recluse"]);
+    expect(teaTasks()).toEqual([]);
+    // Seats: Recluse, Tea Lady, Chef, Imp, Spy: only the Recluse is beside her (Spy is across the table).
+    const ids = dealt(["recluse", "tealady", "chef", "imp", "spy"]);
+    expect(teaTasks().map((t) => [t.key, t.req, t.sub])).toEqual([[`tealady:${ids[0]}`, true, "Required · Does P1 register as good or evil?"]]);
+  });
+
+  it("an unanswered row blocks the reveal like the other required rows, and answering it clears the block", () => {
+    dealt(["spy", "tealady", "chef", "recluse", "imp", "empath"]);
+    const left = () => tasks().filter((t) => t.req && !t.done).length;
+    expect(left()).toBe(1);
+    teaTasks()[0]!.act();
+    expect(left()).toBe(0);
   });
 
   it("no row without a Tea Lady", () => {

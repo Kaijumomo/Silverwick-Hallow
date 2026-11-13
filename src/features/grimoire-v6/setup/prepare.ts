@@ -150,9 +150,10 @@ export function buildPrepTasks(game: StorytellerLobbyRecord, script: Script | un
     }
   }
 
-  // Tea Lady (PO design, LS-2b): how each Spy or Recluse in play registers FOR THE TEA LADY'S ABILITY, kept for the game as a
-  // Storyteller fact. Required only while that player is one of a Tea Lady's living neighbours; optional otherwise, because deaths can
-  // make them a neighbour later. The same Good / Evil row as a Traveller's alignment.
+  // Tea Lady (PO design, LS-2b; PO ruling 2026-11-13 13:42Z): how a Spy or Recluse registers FOR THE TEA LADY'S ABILITY, kept for the game
+  // as a Storyteller fact. Asked only for a Spy or Recluse who is one of a Tea Lady's living neighbours right now, and then it is
+  // required (otherwise she would not register them properly). With no such neighbour there is no row. The same Good / Evil row as a
+  // Traveller's alignment.
   const teaLadies = context.ordinary.filter((p) => {
     const role = p.actualRole === "tealady" && p.participantId ? registry.get(p.actualRole) : undefined;
     return !!role && isCanonicalRole(role);
@@ -165,14 +166,14 @@ export function buildPrepTasks(game: StorytellerLobbyRecord, script: Script | un
     }));
     for (const p of context.ordinary) {
       const role = registry.get(p.actualRole ?? "");
-      if (!p.participantId || !p.actualRole || !role || !isCanonicalRole(role) || !passiveRegistrationOptions(p.actualRole)) continue;
+      if (!p.participantId || !p.actualRole || !role || !isCanonicalRole(role) || !passiveRegistrationOptions(p.actualRole) || !neighbours.has(p.participantId)) continue;
       const decided = observerRegistrationDecision("tealady", p.effects);
       const name = p.name || `Seat ${p.seat + 1}`;
       const question = `Does ${name} register as good or evil?`;
       tasks.push({
         key: `tealady:${p.id}`, roleId: "tealady", roleName: nameOf("tealady"), who: seatName(game, p.id), img: iconOf("tealady"), type: "townsfolk",
-        done: decided === "good" || decided === "evil", req: neighbours.has(p.participantId),
-        sub: decided === "good" ? `${question} · Good` : decided === "evil" ? `${question} · Evil` : question,
+        done: decided === "good" || decided === "evil", req: true,
+        sub: decided === "good" ? `${question} · Good` : decided === "evil" ? `${question} · Evil` : `Required · ${question}`,
         open: true, actLabel: "Good", act: () => setTeaLadyDecision(p.id, "good"), altLabel: "Evil", alt: () => setTeaLadyDecision(p.id, "evil"),
         undo: () => setTeaLadyDecision(p.id, null),
       });
