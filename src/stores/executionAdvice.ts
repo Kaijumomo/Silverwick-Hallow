@@ -1,7 +1,8 @@
 import { interactionCoverageEligibility } from "@/abilities/automationEligibility";
 import { lifeRuleCreditedRoles, lifeRuleOf } from "@/abilities/characters/passiveRules";
+import { canonicalRoles, isCanonicalRole } from "@/data/canonical";
 import { createRulesQuery, type RulesQueryEnvironment } from "./rulesQuery";
-import type { PlayerId, StorytellerLobbyRecord } from "./types";
+import type { PlayerId, STPlayerRecord, StorytellerLobbyRecord } from "./types";
 
 /**
  * LS-1: what the shared death gate says about an EXECUTION of one player. Advice for the Storyteller, never a decision: the
@@ -13,7 +14,8 @@ import type { PlayerId, StorytellerLobbyRecord } from "./types";
  *   use its ability when someone else protects it), so nothing is spent automatically and the note says so.
  * - Unknown protection (custom or generic Protected markers) gives no advice here: the Storyteller decides, as before.
  *
- * Causes: "any". The Soldier and the Monk protect from the Demon only, so they never advise on an execution.
+ * Cause: "execution" (LS-2a; it was "any", which answers the same for every character built before LS-2). The Soldier and the
+ * Monk protect from the Demon only, so they never advise on an execution.
  */
 export type ExecutionAdvice = { kind: "survives"; spends: boolean; note: string } | { kind: "ambiguous"; note: string };
 
@@ -25,7 +27,7 @@ export function executionAdvice(game: StorytellerLobbyRecord, playerId: PlayerId
   // Roles any row names as equally able to be the reason for a survival are handled below, so they do not force Manual here.
   if (interactionCoverageEligibility(query, [...lifeRuleCreditedRoles]).kind === "manual") return null;
   const credited = lifeRuleOf(player.actualRole)?.alsoCreditedTo ?? [];
-  const outcome = query.deathOutcome({ playerId, participantId: player.participantId }, "any");
+  const outcome = query.deathOutcome({ playerId, participantId: player.participantId }, "execution");
   if (!outcome.known || outcome.value.kind !== "survives") return null;
   const rivals = credited.filter(id => Object.values(game.players).some(p => !p.isEmpty && p.alive && p.actualRole === id));
   const name = query.roleOf(player.actualRole)?.name ?? player.actualRole;
@@ -37,6 +39,23 @@ export function executionAdvice(game: StorytellerLobbyRecord, playerId: PlayerId
     return { kind: "survives", spends: true, note: `${player.name} is a ${name} with the ability unused: the ${name} survives this execution, and recording "survived" also uses up the ability.` };
   }
   return { kind: "survives", spends: false, note: `${player.name} is protected from this death: they survive the execution.` };
+}
+
+/**
+ * LS-2d: the characters whose Storyteller-choice life rule concerns an executed good player (the Pacifist), while one is alive. Their
+ * note in the execution prompt is produced from the table: the two Storyteller screens no longer name a character for it. Shown while
+ * the holder is alive, impaired or not (unchanged): the Storyteller decides anyway. Canonical names, one per character.
+ */
+export function executionChoiceNames(players: Readonly<Record<string, STPlayerRecord>>): string[] {
+  const names = new Set<string>();
+  for (const player of Object.values(players)) {
+    if (player.isEmpty || !player.alive || !player.actualRole) continue;
+    const rule = lifeRuleOf(player.actualRole);
+    if (!rule || rule.decision !== "choice" || rule.holder !== "anyGood" || rule.causes !== "execution") continue;
+    const role = canonicalRoles([player.actualRole])[0];
+    if (role && isCanonicalRole(role)) names.add(role.name);
+  }
+  return [...names];
 }
 
 /** Whether recording `survived` for this execution also records the player's own ability use (the Fool). Pure; used by the voting plan. */

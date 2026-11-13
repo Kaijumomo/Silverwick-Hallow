@@ -192,3 +192,18 @@ describe("voting card uses the authoritative participant-bound workflow", () => 
     } finally { store.setState({ advancePhase }); }
   });
 });
+
+// LS-2d: the Pacifist note comes from the life-rules table; its words are unchanged. The trial town seats a Pacifist (seat 2).
+describe("the Pacifist note in the voting workspace", () => {
+  const NOTE = "Pacifist may apply. You decide whether an executed good player survives.";
+  it("is shown while the Pacifist is alive and not once it is dead", () => {
+    openTable();
+    fireEvent.click(screen.getByRole("button", { name: "Review day" }));
+    fireEvent.click(screen.getByText("Execution outcome · No execution"));
+    fireEvent.click(screen.getByRole("button", { name: "Dmitri" }));
+    expect(screen.getAllByText(NOTE)).toHaveLength(1);
+    const pacifist = Object.values(game().players).find(p => p.actualRole === "pacifist")!;
+    act(() => { store.setState({ game: { ...game(), players: { ...game().players, [pacifist.id]: { ...pacifist, alive: false } } } }); });
+    expect(screen.queryByText(NOTE)).toBeNull();
+  });
+});

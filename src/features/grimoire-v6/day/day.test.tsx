@@ -487,3 +487,30 @@ describe("Witch's curse (WP-9)", () => {
     expect(Object.values(game().players).filter((p) => !p.alive)).toHaveLength(0);
   });
 });
+
+// LS-2d: the Pacifist note comes from the life-rules table; its words are unchanged. https://wiki.bloodontheclocktower.com/Pacifist
+describe("the Pacifist note in the execution prompt", () => {
+  const setRole = (name: string, patch: object) => useStorytellerStore.setState({ game: { ...game(), players: { ...game().players,
+    [town.ids[name]!]: { ...game().players[town.ids[name]!]!, ...patch } } } });
+  const asked = (m: Mounted) => (ns(m).extra as { props: { contextNote: string | null } }).props.contextNote;
+  const prompt = () => {
+    const m = mount();
+    runVote(m, "Bram", "Greta", (i) => i < 7);
+    act(() => { ns(m).next(); });
+    act(() => { m.result.current.day.advance!.run(); });
+    return m;
+  };
+
+  it("shows the same words while a Pacifist is alive, drunk or poisoned included, once for two Pacifists, and none when dead", () => {
+    setRole("Ada", { actualRole: "pacifist" });
+    const m = prompt();
+    expect(asked(m)).toBe("Pacifist may apply: you decide whether an executed good player survives.");
+    act(() => {
+      setRole("Ada", { effects: [{ id: "fx", type: "poisoned", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "day", day: 2 } }] });
+      setRole("Cleo", { actualRole: "pacifist" });
+    });
+    expect(asked(m)).toBe("Pacifist may apply: you decide whether an executed good player survives.");
+    act(() => { setRole("Ada", { alive: false }); setRole("Cleo", { alive: false }); });
+    expect(asked(m)).toBeNull();
+  });
+});

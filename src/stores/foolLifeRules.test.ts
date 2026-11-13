@@ -57,6 +57,22 @@ describe("Fool: NO ABILITY is placed with the spend", () => {
 });
 
 describe("execution advice is Storyteller-only", () => {
+  // LS-2a: any way of loading the module counts: a static import, a side-effect import, a dynamic import(), a re-export
+  // (`export ... from`), an explicit extension and a query suffix such as ?raw. Comments do not count (stripped first).
+  const LOADS_ADVICE = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)["'`][^"'`]*\bexecutionAdvice(?:\.[cm]?[jt]sx?)?(?:\?[^"'`]*)?["'`]/;
+  const strip = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
+  const code = (path: string) => strip(readFileSync(path, "utf8"));
+
+  it("the pattern catches every way of loading the module (self-check)", () => {
+    for (const line of [
+      'import { executionAdvice } from "@/stores/executionAdvice";', "import '../stores/executionAdvice';", 'const m = await import("./executionAdvice");',
+      'export { executionAdvice } from "./executionAdvice";', 'export * from "./executionAdvice.ts";', 'import raw from "./executionAdvice.ts?raw";',
+      "const m = import(`@/stores/executionAdvice`);",
+    ]) expect(LOADS_ADVICE.test(line), line).toBe(true);
+    for (const line of ['// see import("./executionAdvice") for the note', '/* from "./executionAdvice" */', 'const name = "executionAdviceNote";', 'import { x } from "./executionAdviceExtra";'])
+      expect(LOADS_ADVICE.test(strip(line)), line).toBe(false);
+  });
+
   it("only the two Storyteller day components and the voting plan import it; no phone, player or Public Display file does", () => {
     const root = join(__dirname, "..");
     const hits: string[] = [];
@@ -64,10 +80,20 @@ describe("execution advice is Storyteller-only", () => {
       for (const name of readdirSync(dir)) {
         const path = join(dir, name);
         if (statSync(path).isDirectory()) walk(path);
-        else if (/\.(ts|tsx)$/.test(name) && !/\.test\./.test(name) && /from\s+["'][^"']*executionAdvice["']/.test(readFileSync(path, "utf8"))) hits.push(relative(root, path));
+        else if (/\.(ts|tsx|js|jsx|mts|cts)$/.test(name) && !/\.test\./.test(name) && LOADS_ADVICE.test(code(path))) hits.push(relative(root, path));
       }
     };
     walk(root);
     expect(hits.sort()).toEqual(["features/grimoire-v6/day/nomination.tsx", "features/voting/VotingWorkspace.tsx", "stores/voting.ts"]);
+  });
+
+  it("barrel guard: no index file gathers the stores, and none of the three readers passes the advice on", () => {
+    for (const name of ["index.ts", "index.tsx", "index.js"]) expect(() => statSync(join(__dirname, name)), name).toThrow();
+    const root = join(__dirname, "..");
+    for (const file of ["features/grimoire-v6/day/nomination.tsx", "features/voting/VotingWorkspace.tsx", "stores/voting.ts"]) {
+      const text = code(join(root, file));
+      expect(text, file).not.toMatch(/export\s*\*\s*from/);
+      expect(text, file).not.toMatch(/export\s*\{[^}]*\b(executionAdvice|ExecutionAdvice|executionSpendsAbility)\b[^}]*\}/);
+    }
   });
 });

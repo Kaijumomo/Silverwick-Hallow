@@ -8,6 +8,9 @@ import { concealedRedHerringHolder, concealedRedHerringIntents } from "@/stores/
 import { captureCharacterActionContext, selectScriptById, useStorytellerStore } from "@/stores/storytellerStore";
 import { bindingOf } from "@/features/abilities/abilityUi";
 import { initialRevealReadiness } from "@/rules/setup/revealReadiness";
+import { createRulesQuery } from "@/stores/rulesQuery";
+import { isCanonicalRole } from "@/data/canonical";
+import { observerRegistrationDecision, passiveRegistrationOptions, TEA_LADY_REGISTRATION_FACTS } from "@/abilities/characters/passiveRules";
 import { redHerringSetup } from "@/rules/setup/redHerringSetup";
 import { FIRST_INFORMATION_CHARACTERS, informationCategory } from "@/features/setup/FirstInformationPreparation";
 import type { SetupContext } from "@/rules/setup/setupContext";
@@ -35,6 +38,8 @@ export type PrepTask = {
   actLabel: string;
   act: () => void;
   altLabel?: string;
+  /** The two answers are equal choices (Good / Evil): the second is drawn as the same boxed button as the first. */
+  altBoxed?: boolean;
   alt?: () => void;
   undo: () => void;
 };
@@ -147,12 +152,42 @@ export function buildPrepTasks(game: StorytellerLobbyRecord, script: Script | un
     }
   }
 
+  // Tea Lady (PO design, LS-2b; PO ruling 2026-11-13 13:42Z): how a Spy or Recluse registers FOR THE TEA LADY'S ABILITY, kept for the game
+  // as a Storyteller fact. Asked only for a Spy or Recluse who is one of a Tea Lady's living neighbours right now, and then it is
+  // required (otherwise she would not register them properly). With no such neighbour there is no row. The same Good / Evil row as a
+  // Traveller's alignment.
+  const teaLadies = context.ordinary.filter((p) => {
+    const role = p.actualRole === "tealady" && p.participantId ? registry.get(p.actualRole) : undefined;
+    return !!role && isCanonicalRole(role);
+  });
+  if (teaLadies.length) {
+    const query = createRulesQuery(game, { registry, script: script ?? null });
+    const neighbours = new Set(teaLadies.flatMap((teaLady) => {
+      const sides = query.aliveNeighbours(bindingOf(teaLady));
+      return sides.known ? [sides.value.left?.participantId, sides.value.right?.participantId] : [];
+    }));
+    for (const p of context.ordinary) {
+      const role = registry.get(p.actualRole ?? "");
+      if (!p.participantId || !p.actualRole || !role || !isCanonicalRole(role) || !passiveRegistrationOptions(p.actualRole) || !neighbours.has(p.participantId)) continue;
+      const decided = observerRegistrationDecision("tealady", p.effects);
+      const name = p.name || `Seat ${p.seat + 1}`;
+      const question = `Does ${name} register as good or evil?`;
+      tasks.push({
+        key: `tealady:${p.id}`, roleId: "tealady", roleName: nameOf("tealady"), who: seatName(game, p.id), img: iconOf("tealady"), type: "townsfolk",
+        done: decided === "good" || decided === "evil", req: true,
+        sub: decided === "good" ? `${question} · Good` : decided === "evil" ? `${question} · Evil` : `Required · ${question}`,
+        open: true, actLabel: "Good", act: () => setTeaLadyDecision(p.id, "good"), altLabel: "Evil", altBoxed: true, alt: () => setTeaLadyDecision(p.id, "evil"),
+        undo: () => setTeaLadyDecision(p.id, null),
+      });
+    }
+  }
+
   // Travellers: alignment is chosen privately; each required arrival is resolved by the Storyteller's explicit confirmation.
   for (const p of context.travelers) {
     if (!p.actualRole) continue;
     const base = { roleId: p.actualRole, roleName: nameOf(p.actualRole), who: seatName(game, p.id), img: iconOf(p.actualRole), type: "traveler" as const, done: false, req: true, open: true, undo: () => openCard(p.id) };
     if (!p.actualAlignment) {
-      tasks.push({ ...base, key: `traveller:${p.id}`, sub: "Required · choose their alignment", actLabel: "Good", act: () => setAlignment(p.id, "good"), altLabel: "Evil", alt: () => setAlignment(p.id, "evil") });
+      tasks.push({ ...base, key: `traveller:${p.id}`, sub: "Required · choose their alignment", actLabel: "Good", act: () => setAlignment(p.id, "good"), altLabel: "Evil", altBoxed: true, alt: () => setAlignment(p.id, "evil") });
       continue;
     }
     if (!travelerHasUnresolvedArrival(p)) continue;
@@ -182,6 +217,22 @@ function setAlignment(id: PlayerId, alignment: "good" | "evil") {
   if (!player) return;
   const result = store().resolveAlignments({ intents: [changeAlignmentIntent(player, alignment)] });
   if (!result.ok) flash(result.message ?? "Could not set the alignment.");
+}
+
+/** Stores (or, with null, clears) how a Spy or Recluse registers for the Tea Lady: one Storyteller fact Effect, through the generic
+ * Effect command. Any earlier decision is removed in the same step, so there is only ever one. */
+function setTeaLadyDecision(id: PlayerId, alignment: "good" | "evil" | null) {
+  const player = store().game?.players[id];
+  if (!player?.participantId) return;
+  const target = bindingOf(player);
+  const types: readonly string[] = [TEA_LADY_REGISTRATION_FACTS.good, TEA_LADY_REGISTRATION_FACTS.evil];
+  const intents = [
+    ...player.effects.filter((effect) => effect.state === "active" && types.includes(effect.type)).map((effect) => ({ kind: "remove" as const, target, effectId: effect.id })),
+    ...(alignment ? [{ kind: "apply" as const, target, effect: { type: TEA_LADY_REGISTRATION_FACTS[alignment], lifetime: { kind: "manual" as const } } }] : []),
+  ];
+  if (!intents.length) return;
+  const result = store().resolveEffects({ intents }, captureCharacterActionContext());
+  if (!result.ok) flash(result.message ?? "Could not store the decision.");
 }
 
 /** The Drunk-style picker: a character the player thinks they are. */

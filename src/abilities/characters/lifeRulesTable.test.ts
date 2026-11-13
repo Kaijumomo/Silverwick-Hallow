@@ -75,6 +75,8 @@ describe("LS-1b: the life-rules table equals the LS-1 branches", () => {
   it("passiveProtection and survivesFirstDeath agree for every role x cause x spendHandled x state", () => {
     let checked = 0;
     for (const role of ROLES) for (const dead of bools) for (const used of bools) for (const safe of bools) for (const poisoned of bools) for (const tea of bools) {
+      // LS-2b models the Tea Lady on purpose: games with a Tea Lady seated are compared in teaLady.test.ts instead.
+      if (tea || role === "tealady") { checked += 4; continue; }
       const g = make(role, { dead, used, safe, poisoned, tea });
       const query = proofQuery(g);
       const target = bind(g, "p3");
@@ -97,7 +99,7 @@ describe("LS-1b: the life-rules table equals the LS-1 branches", () => {
 
 describe("LS-1b: the rows themselves", () => {
   it("the table holds exactly the characters the old branches and gap lists named", () => {
-    expect(Object.keys(LIFE_RULES).sort()).toEqual(["fool", "lleech", "mayor", "sailor", "soldier", "tealady", "zombuul"]);
+    expect(Object.keys(LIFE_RULES).sort()).toEqual(["fool", "lleech", "mayor", "pacifist", "sailor", "soldier", "tealady", "zombuul"]);
   });
   it("rows read as the proposal's examples", () => {
     expect(lifeRuleOf("soldier")).toMatchObject({ holder: "self", duration: "permanent", needsFunctioning: true, causes: "demon", decision: "auto", onSurvive: "nothing" });

@@ -8,6 +8,8 @@ import { currentVotingState } from "@/stores/voting";
 import { ownsAbilityUseReminder } from "@/stores/abilityUseReminders";
 import { butlerReminderOrigin } from "@/stores/butlerSelection";
 import { isDeathEvent } from "@/stores/lifeEvents";
+import { teaLadyCovers } from "@/abilities/characters/passiveRules";
+import { isCanonicalRole } from "@/data/canonical";
 import {
   firstInformationReminderGroups, officialEffectPresentation, officialNotationRole, redHerringNotationCovered,
   type OfficialEffectToken,
@@ -104,6 +106,23 @@ function townCrierToken({ game, query }: MarkEnv, player: STPlayerRecord): "Mini
   return "Minions Not Nominated";
 }
 
+/**
+ * The Tea Lady's official CANNOT DIE token: on each of a living, real Tea Lady's two alive neighbours while both register as good to
+ * her ("updated immediately... throughout the entire game"). Derived from seating, life and alignment on every draw, never stored.
+ * Still drawn while she is drunk or poisoned (PO ruling 2026-11-12 22:51Z): the app then does not honour the protection, the
+ * Storyteller sees the reminder. Unknown registration (no setup decision for a Spy or Recluse) draws nothing.
+ */
+function teaLadyGuards({ game, query }: MarkEnv, player: STPlayerRecord): STPlayerRecord[] {
+  if (!query || !player.alive || !player.participantId) return [];
+  return Object.values(game.players).filter((teaLady) => {
+    if (teaLady.isEmpty || !teaLady.alive || !teaLady.participantId || teaLady.actualRole !== "tealady") return false;
+    const role = query.roleOf(teaLady.actualRole);
+    if (!role || !isCanonicalRole(role)) return false;
+    const covered = teaLadyCovers(query, { playerId: teaLady.id, participantId: teaLady.participantId }, { playerId: player.id, participantId: player.participantId! });
+    return covered.known && covered.value;
+  });
+}
+
 export function playerMarks(env: MarkEnv, player: STPlayerRecord): Mark[] {
   const { game, script, registry, query } = env;
   if (player.isEmpty || !player.participantId || !script || !query) return [];
@@ -132,6 +151,12 @@ export function playerMarks(env: MarkEnv, player: STPlayerRecord): Mark[] {
     const source = officialNotationRole("undertaker", "Died Today") ?? registry.get("undertaker");
     marks.push({ key: "derived:undertaker-died-today", kind: "effect", label: "Died Today", title: "Undertaker: Died Today", src: source ? iconUrlFor(source) : "", size: ROLE_SIZE,
       removal: { type: "derived", reason: "This follows the Day's execution. It ends at dawn." } });
+  }
+  // The Tea Lady's official CANNOT DIE token, derived like the Godfather's and the Undertaker's DIED TODAY.
+  for (const teaLady of teaLadyGuards(env, player)) {
+    const source = officialNotationRole("tealady", "Cannot Die") ?? registry.get("tealady");
+    marks.push({ key: `derived:tealady-cannot-die:${teaLady.participantId}`, kind: "effect", label: "Cannot Die", title: "Tea Lady: Cannot Die", src: source ? iconUrlFor(source) : "", size: ROLE_SIZE,
+      removal: { type: "derived", reason: "This follows the Tea Lady's alive neighbours. It ends when one of them is evil or the Tea Lady dies." } });
   }
   const crier = townCrierToken(env, player);
   if (crier) {

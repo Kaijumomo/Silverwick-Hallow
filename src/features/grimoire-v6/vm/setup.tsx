@@ -160,7 +160,7 @@ export function useSetupVm(ctx: V6Ctx): SliceResult {
       cur: cur ? {
         role: cur.roleName, who: cur.who, color: accent(cur), sub: cur.sub, subColor: cur.done ? "rgba(207,230,210,.8)" : cur.req ? "#f4a595" : "rgba(222,216,204,.55)",
         open: !cur.done && cur.open, done: cur.done, act: cur.act, actLabel: cur.actLabel, btnBorder: tone(cur).b, btnBg: tone(cur).bg, btnColor: tone(cur).c,
-        altOn: !!cur.altLabel && !cur.done, altLabel: cur.altLabel ?? "", alt: cur.alt, undo: cur.undo,
+        altOn: !!cur.altLabel && !cur.done, altLabel: cur.altLabel ?? "", altBoxed: !!cur.altBoxed, alt: cur.alt, undo: cur.undo,
       } : {},
       idle: !hasT, distLabel: !dealt ? "Deal roles" : "Redistribute", compOn: !gathering, addOn: !gathering && !ctx.ended,
       idleText,
