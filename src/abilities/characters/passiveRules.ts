@@ -2,7 +2,7 @@ import { isCanonicalRole } from "@/data/canonical";
 import type { ModifierDefinition } from "../modifiers";
 import type { RulesQuery, QueryAnswer } from "@/stores/rulesQuery";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
-import type { Alignment, RoleId, RoleType } from "@/stores/types";
+import type { Alignment, EffectRecord, RoleId, RoleType } from "@/stores/types";
 
 /** Official Spy/Recluse almanacs: optional registration per interaction,
  * including while dead. These are possible forms, never an identity choice.
@@ -30,8 +30,8 @@ export const passiveRegistrationOptions = (roleId: RoleId) =>
  * character is adding a row (plus, where a rule cannot be plain data, one named helper the row points to).
  *
  * Knobs read today:
- *  - holder: "self" (the holder's own death), "neighbours" (protects the alive neighbours: a gap until its helper exists),
- *    "anyGood" (concerns any good player: only ever a Storyteller-choice row).
+ *  - holder: "self" (the holder's own death), "neighbours" (protects others through the row's `covers` helper; without one it
+ *    fails closed), "anyGood" (concerns any good player: only ever a Storyteller-choice row).
  *  - duration: "permanent" (always on) or "once" (used up by the first survival).
  *  - needsFunctioning: the holder must be sober and healthy.
  *  - causes: which death the row stops: "demon" (the Demon's attack only), "execution" (an execution only) or "any" (every cause).
@@ -45,6 +45,8 @@ export const passiveRegistrationOptions = (roleId: RoleId) =>
  *  - alsoCreditedTo: roles whose own protection could equally be the reason for a survival; a spending survival then becomes
  *    ambiguous and nothing is spent automatically (the Storyteller chooses).
  *  - earlyProtection: a named helper for a reviewed rule that cannot be plain data (checked before the row applies).
+ *  - covers (LS-2b): for a row that protects OTHER players, the named helper that says whether the holder's ability covers this
+ *    target right now, leaving out the holder's own sobriety (the gate adds that through needsFunctioning).
  * Monk and Innkeeper protection are deliberately NOT rows (PO ruling 2026-11-12 21:36Z): they are Effects (safeFromDemon, cannotDie)
  * with approved semantics, read by the Rules Query for every holder; the table is for what a character's OWN ability does to a death.
  * Knobs from the proposal not read yet (shownAs, abilityAfter, holder "chosen") arrive with the first behaviour that uses them.
@@ -65,6 +67,7 @@ export type LifeRule = {
   readonly onSurvive: "nothing" | "spend";
   readonly alsoCreditedTo?: readonly RoleId[];
   readonly earlyProtection?: (query: RulesQuery, target: ParticipantBinding, cause: LifeRuleCause) => boolean;
+  readonly covers?: (query: RulesQuery, holder: ParticipantBinding, target: ParticipantBinding) => QueryAnswer<boolean>;
 };
 
 /** Causes that go around EVERY prevention, Effects included (the Assassin: "they die, even if for some reason they could not").
@@ -88,6 +91,51 @@ const monkProtectsFromDemon = (query: RulesQuery, target: ParticipantBinding, ca
   });
 };
 
+/**
+ * LS-2b: how a Spy or Recluse registers FOR THE TEA LADY'S ABILITY, decided by the Storyteller during setup (the PO's design,
+ * 2026-11-12 23:56Z): a Storyteller fact Effect with no source on that player, set from the Prepare checklist. It never changes the
+ * player's real alignment or how they register to anyone else; the Rules Query reads it for the observer "tealady" only, and only
+ * while the Spy or Recluse is sober and healthy. No official token, so it is drawn nowhere.
+ */
+export const TEA_LADY_REGISTRATION_FACTS = { good: "registersGoodToTeaLady", evil: "registersEvilToTeaLady" } as const;
+const OBSERVER_REGISTRATION_FACTS: Readonly<Record<RoleId, { readonly good: string; readonly evil: string }>> = { tealady: TEA_LADY_REGISTRATION_FACTS };
+
+/** The stored registration decision for `observer` on these Effects: the alignment, "conflict" if both are stored, or undefined. */
+export function observerRegistrationDecision(observer: RoleId | undefined, effects: readonly EffectRecord[]): Alignment | "conflict" | undefined {
+  const facts = observer && Object.prototype.hasOwnProperty.call(OBSERVER_REGISTRATION_FACTS, observer) ? OBSERVER_REGISTRATION_FACTS[observer]! : undefined;
+  if (!facts) return undefined;
+  const good = effects.some(effect => effect.state === "active" && effect.type === facts.good);
+  const evil = effects.some(effect => effect.state === "active" && effect.type === facts.evil);
+  return good && evil ? "conflict" : good ? "good" : evil ? "evil" : undefined;
+}
+
+/**
+ * LS-2b: whether this Tea Lady's ability covers `target` right now, leaving out her own sobriety: the target is one of her two alive
+ * neighbours (the dead are skipped; never herself) and both alive neighbours are good, read as each registers TO THE TEA LADY (a Spy or
+ * Recluse uses its stored setup decision). Unknown when a registration is the Storyteller's. Derived on every call, never stored, so a
+ * neighbour dying or changing alignment changes the answer at once. https://wiki.bloodontheclocktower.com/Tea_Lady
+ */
+export function teaLadyCovers(query: RulesQuery, teaLady: ParticipantBinding, target: ParticipantBinding): QueryAnswer<boolean> {
+  const sides = query.aliveNeighbours(teaLady);
+  if (!sides.known) return sides;
+  const neighbours = [sides.value.left, sides.value.right].filter((side): side is ParticipantBinding => !!side);
+  if (!neighbours.some(side => side.participantId === target.participantId)) return { known: true, value: false };
+  let undetermined: string | null = null;
+  for (const neighbour of neighbours) {
+    const alignment = query.registration(neighbour, "tealady").alignment;
+    if (alignment.known) {
+      if (alignment.value !== "good") return { known: true, value: false };
+      continue;
+    }
+    const player = query.participant(neighbour);
+    const role = player && query.roleOf(player.actualRole);
+    // A Spy or Recluse with no setup decision: the reason names the missing decision (proposal section 8b, point 2).
+    undetermined ??= player && role && isCanonicalRole(role) && passiveRegistrationOptions(player.actualRole) && !observerRegistrationDecision("tealady", player.effects)
+      ? `Choose how the ${role.name} registers for the Tea Lady.` : alignment.reason;
+  }
+  return undetermined ? { known: false, reason: undetermined } : { known: true, value: true };
+}
+
 const ASSASSIN = ["assassin"] as const;
 const GAP = { holder: "self", duration: "permanent", needsFunctioning: true, causes: "any", decision: "unmodelled", onSurvive: "nothing" } as const;
 export const LIFE_RULES: Readonly<Partial<Record<RoleId, LifeRule>>> = Object.freeze({
@@ -98,10 +146,15 @@ export const LIFE_RULES: Readonly<Partial<Record<RoleId, LifeRule>>> = Object.fr
   mayor: { ...GAP, earlyProtection: monkProtectsFromDemon },
   lleech: GAP,
   zombuul: GAP,
-  tealady: { ...GAP, holder: "neighbours" },
+  // LS-2b: "If both your alive neighbors are good, they can't die." Every cause but the Assassin. Not the Tea Lady herself.
+  tealady: { holder: "neighbours", duration: "permanent", needsFunctioning: true, causes: "any", bypassedBy: ASSASSIN, decision: "auto", onSurvive: "nothing", covers: teaLadyCovers },
 });
 export const lifeRuleOf = (roleId: RoleId): LifeRule | undefined =>
   Object.prototype.hasOwnProperty.call(LIFE_RULES, roleId) ? LIFE_RULES[roleId] : undefined;
+
+/** Whether a row's answer follows the seating (a row that protects neighbours): the protection-dependency stamp then includes the
+ * seating and every alignment. */
+export const lifeRuleReadsSeating = (roleId: RoleId): boolean => lifeRuleOf(roleId)?.holder === "neighbours";
 
 /** Every role some row names as an equally possible reason for a survival (the Pacifist for the Fool). */
 export const lifeRuleCreditedRoles: ReadonlySet<RoleId> = new Set(Object.values(LIFE_RULES).flatMap(rule => rule?.alsoCreditedTo ?? []));
@@ -150,8 +203,20 @@ export function passiveProtection(query: RulesQuery, target: ParticipantBinding,
     if (!rule || rule.holder === "self" || rule.decision === "choice") continue;
     const definition = query.roleOf(other.actualRole);
     if (!definition || !isCanonicalRole(definition)) continue;
-    // A row that protects others is only ever a gap today: until its neighbour logic exists, it fails closed (Manual) whatever its decision.
-    const functioning = query.abilityFunctions({ playerId: other.id, participantId: other.participantId! });
+    const holder = { playerId: other.id, participantId: other.participantId! };
+    // LS-2b: a modelled row that protects others (the Tea Lady) asks its helper; an unknown answer goes to the Storyteller.
+    if (rule.decision === "auto" && rule.covers) {
+      if (!lifeRuleStops(rule, cause)) continue;
+      const covered = rule.covers(query, holder, target);
+      if (!covered.known) return covered;
+      if (!covered.value) continue;
+      if (!rule.needsFunctioning) return { known: true, value: true };
+      const working = query.abilityFunctions(holder);
+      if (!working.known || working.value) return working;
+      continue;
+    }
+    // Any other row that protects others fails closed (Manual) while its holder's ability may be working.
+    const functioning = query.abilityFunctions(holder);
     if (!functioning.known || functioning.value) return { known: false, reason: `${definition.name} protection is not modeled. Resolve the whole action manually.` };
   }
   if (!player.alive) return { known: true, value: false };
@@ -206,7 +271,10 @@ export const REVIEWED_INTERACTION_ROLES: ReadonlySet<string> = new Set([
   "butler", "drunk", "recluse", "saint", "poisoner", "spy", "scarletwoman", "baron", "imp",
   "cultleader", "pithag", "alhadikhia", "harlot", "vortox",
   // Treacherous 30th: Innkeeper -- its cannotDie / drunk Effects are read through the shared protection and impairment queries.
-  "innkeeper", "fool", "nodashii", "vigormortis", "gambler", "shabaloth", "witch", "godfather", "moonchild", "golem", "towncrier", "oracle", "professor",
+  "innkeeper", "fool", "nodashii",
+  // LS-2b: the Tea Lady's protection is a life-rules row (neighbours, registration TO the Tea Lady with the setup decisions); an
+  // unknown registration goes to the Storyteller through the death gate's existing question.
+  "tealady", "vigormortis", "gambler", "shabaloth", "witch", "godfather", "moonchild", "golem", "towncrier", "oracle", "professor",
   // Marionette has no ability effects of its own: it is an evil Minion who believes they are good, and every query reads its ACTUAL role and alignment.
   "marionette",
   // Information-only characters (Sects & Violets / Bad Moon Rising): each only reads game state and changes none, so it has no

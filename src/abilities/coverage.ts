@@ -95,6 +95,7 @@ const OWNED_CAPABILITIES: Readonly<Record<string, readonly CoverageCapability[]>
   scarletwoman: [{ owner: "abilities", boundary: "B4 supported Imp death, star-pass, Slayer and execution succession; exceptional interactions manual", evidence: "src/abilities/characters/scarletWoman.ts" }],
   soldier: [{ owner: "rules", boundary: "Canonical functioning Soldier Demon death protection only", evidence: "src/abilities/characters/passiveRules.ts" }],
   fool: [{ owner: "rules", boundary: "First death of a functioning Fool does not happen and spends the ability (death gate); executions advised, Storyteller records them", evidence: "src/abilities/characters/passiveRules.ts" }],
+  tealady: [{ owner: "rules", boundary: "Both alive neighbours good (as they register to the Tea Lady) and a functioning Tea Lady: neither can die except to the Assassin (death gate); derived CANNOT DIE tokens", evidence: "src/abilities/characters/passiveRules.ts" }],
   vortox: [{ owner: "rules", boundary: "Relevant Townsfolk information goes wholly Manual; no Vortox resolver", evidence: "src/abilities/characters/passiveRules.ts" }],
 };
 

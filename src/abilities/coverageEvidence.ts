@@ -245,9 +245,6 @@ export const PARTIAL_SUPPORT: Readonly<Record<RoleId, readonly Piece[]>> = {
   sweetheart: [
     { path: "src/rules/night/nightOrder.ts", what: "Death-check wake slot: the night list shows this character after a death night with a 'check the death condition' advisory; historical triggers are not tracked." },
   ],
-  tealady: [
-    { path: "src/abilities/characters/passiveRules.ts", what: "External-protection gap: with a Tea Lady in play, Demon protection is not modelled and the whole action goes manual." },
-  ],
   tinker: [
     { path: "src/rules/night/nightOrder.ts", what: "Death-check wake slot: the night list shows this character after a death night with a 'check the death condition' advisory; historical triggers are not tracked." },
   ],
@@ -300,6 +297,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   harlot: ["src/abilities/characters/harlot.test.ts", "src/abilities/characters/astraRemediation.test.ts"],
   imp: ["src/features/grimoire-v6/night/nightGuide.port.test.tsx", "src/stores/projections.test.ts"],
   fool: ["src/abilities/characters/lifeRules.test.ts"],
+  tealady: ["src/abilities/characters/teaLady.test.ts", "src/abilities/characters/troubleBrewingB2Interactions.test.ts"],
   innkeeper: ["src/abilities/characters/innkeeper.test.ts", "src/features/nightOrder/nightWork.test.ts"],
   investigator: ["src/features/setup/postR3ReclusePreparation.test.tsx", "src/stores/b6Independent.test.ts"],
   juggler: ["src/abilities/characters/informationCharacterReview.test.ts"],
@@ -336,7 +334,8 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
 
 /** Caveats read from code or from the Stage 4 review (src/abilities/characters/classification.ts REVIEWED_MANUAL notes). */
 export const COVERAGE_CAVEATS: Readonly<Record<RoleId, readonly string[]>> = {
-  fool: ["LS-1: the death gate applies the Fool's survival to Demon and ability kills and to a recorded execution (the Storyteller still records the outcome). A Tea Lady in play, a Witch curse, a Golem nomination (its \"survives\" button spends only the Golem) and a Pacifist in play still send the question to the Storyteller. Al-Hadikhia, the Harlot and the Slayer stay Manual when a Fool would be spent."],
+  fool: ["LS-1: the death gate applies the Fool's survival to Demon and ability kills and to a recorded execution (the Storyteller still records the outcome). A Witch curse, a Golem nomination (its \"survives\" button spends only the Golem) and a Pacifist in play still send the question to the Storyteller. Al-Hadikhia, the Harlot and the Slayer stay Manual when a Fool would be spent."],
+  tealady: ["LS-2b: Spy and Recluse neighbours use the Storyteller's setup decision (Prepare the town), and the decision can be set or changed only during setup; a Spy or Recluse with no decision (a later neighbour, or a character created mid-game) sends the question to the Storyteller. Exile is not modelled: the exile flow stays the Storyteller's. The CANNOT DIE tokens are still drawn while the Tea Lady is drunk or poisoned (PO ruling); the app does not honour them then."],
   juggler: ["Official wiki: wakes once. The night list shows the row every later night; the Storyteller skips it."],
   mutant: ["Official wiki: the Storyteller may execute a madness-breaking Mutant at any time, even at night. The app records executions only in Day and does not block a second daytime execution."],
 };
@@ -346,7 +345,6 @@ export const PARTIAL_CAVEATS: Readonly<Record<RoleId, string>> = {
   sailor: "Partial because the app REFUSES to automate: the Sailor's nightly choice of who is drunk is not modelled (a DRUNK reminder is notation only), so a Sailor in play keeps the whole action Manual. The Sailor's 'cannot die while sober' rule IS modelled in the death gate.",
   lleech: "Partial because the app REFUSES to automate: an attack on a functioning Lleech sends the whole action to Manual (death-target gap). No Lleech ability is modelled.",
   zombuul: "Partial because the app REFUSES to automate: an attack on a functioning Zombuul sends the whole action to Manual (death-target gap); it only gets a night-list slot after a death night.",
-  tealady: "Partial because the app REFUSES to automate: with a Tea Lady in play, Demon protection is not modelled and the whole action goes Manual. No Tea Lady ability is modelled.",
   thief: "Partial for two narrow reasons only: it is on the game-ending allow-list and the night guide shows a one-line prompt. Its own ability (negative vote) is not supported.",
   gunslinger: "Partial for one narrow reason only: it is on the game-ending allow-list. Its own ability is not supported.",
   scapegoat: "Partial for one narrow reason only: it is on the game-ending allow-list. Its own ability is not supported.",

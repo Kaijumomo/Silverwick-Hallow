@@ -129,10 +129,21 @@ describe("B2c: supported protection does not broaden unverified interactions", (
     expect(proofQuery(game).protectedFrom(bind(game, "p3"), "any")).toMatchObject({ known: false });
   });
 
-  it.each(["tealady"])("preserves the existing external %s protection boundary", role => {
-    const game = patchPlayer(protect(proofGame(roles), "p3"), "p5", { actualRole: role });
-    expect(proofQuery(game).protectedFrom(bind(game, "p3"), "demon")).toMatchObject({ known: false });
-    expect(attack(game, "p3")).toMatchObject({ ok: false, code: "unsupported" });
+  // LS-2b replaces the external Tea Lady boundary pin: the Tea Lady is now modelled. https://wiki.bloodontheclocktower.com/Tea_Lady
+  it("LS-2b: a sober Tea Lady protects both alive neighbours while both are good, and nobody else", () => {
+    // p5 Tea Lady: her alive neighbours are p4 (Soldier) and p6 (Slayer), both good. p3 (Mayor) is Monk-protected and not her neighbour.
+    const game = patchPlayer(protect(proofGame(roles), "p3"), "p5", { actualRole: "tealady" });
+    expect(proofQuery(game).protectedFrom(bind(game, "p6"), "demon")).toEqual({ known: true, value: true });
+    expect(proofQuery(game).protectedFrom(bind(game, "p6"), "any")).toEqual({ known: true, value: true });
+    expect(attack(game, "p6")).toEqual({ ok: true, changed: false });
+    // Not a neighbour: the Monk-protected Mayor keeps the Monk's protection only, and the Monk himself dies.
+    expect(proofQuery(game).protectedFrom(bind(game, "p3"), "demon")).toEqual({ known: true, value: true });
+    expect(proofQuery(game).protectedFrom(bind(game, "p0"), "demon")).toEqual({ known: true, value: false });
+    expect(planned(attack(game, "p0")).players.p0!.alive).toBe(false);
+    // An evil alive neighbour: neither neighbour is protected.
+    const evil = patchPlayer(game, "p4", { actualRole: "baron", actualAlignment: "evil" });
+    expect(proofQuery(evil).protectedFrom(bind(evil, "p6"), "demon")).toEqual({ known: true, value: false });
+    expect(planned(attack(evil, "p6")).players.p6!.alive).toBe(false);
   });
 
   it("generic Protected notation is not effective Monk protection", () => {

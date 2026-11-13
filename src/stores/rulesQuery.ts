@@ -1,5 +1,5 @@
 import { isCanonicalRole } from "@/data/canonical";
-import { causeBypassesEffectProtection, isNeighbourPoisoner, passiveProtection, passiveInformationModifiers, passiveRegistrationOptions, survivesFirstDeath, type LifeRuleCause } from "@/abilities/characters/passiveRules";
+import { causeBypassesEffectProtection, isNeighbourPoisoner, lifeRuleReadsSeating, observerRegistrationDecision, passiveProtection, passiveInformationModifiers, passiveRegistrationOptions, survivesFirstDeath, type LifeRuleCause } from "@/abilities/characters/passiveRules";
 import { isInnkeeperSelfEffect, isPoisonerSelfEffect } from "@/abilities/characters/poisonerRules";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { activeModifiers, gateEvaluation, type HookScope, type ModifierDefinition, type ModifierGate } from "@/abilities/modifiers";
@@ -79,6 +79,10 @@ export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>
    * record last night's choice; the Dusk regurgitation reads them through factHolders. They move or end only when the Shabaloth acts. */
   shabalothChosen: "storytellerFact",
   shabalothAlive: "storytellerFact",
+  /** LS-2b: the Storyteller's setup decision of how a Spy or Recluse registers for the Tea Lady's ability (no source, no token).
+   * Read only by registrationAnswers for that observer; never a Reminder. */
+  registersGoodToTeaLady: "storytellerFact",
+  registersEvilToTeaLady: "storytellerFact",
 };
 export const effectSemanticsOf = (type: string): EffectSemantics | undefined =>
   Object.prototype.hasOwnProperty.call(APPROVED_EFFECT_SEMANTICS, type) ? APPROVED_EFFECT_SEMANTICS[type] : undefined;
@@ -398,14 +402,22 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
   };
   const protectionDependencies = (): string => dependencySnapshot ??= JSON.stringify(["protection-dependency-v1",
     // The No Dashii's poison follows the seating, so a seating change is a relevant change.
-    Object.values(game.players).some((p) => !p.isEmpty && isNeighbourPoisoner(p.actualRole)) ? game.seatOrder : null,
+    Object.values(game.players).some((p) => !p.isEmpty && (isNeighbourPoisoner(p.actualRole) || lifeRuleReadsSeating(p.actualRole))) ? game.seatOrder : null,
     Object.keys(game.players).sort().flatMap((playerId) => {
       const player = game.players[playerId];
       if (!player || player.isEmpty || !player.participantId) return [];
       return [[playerId, player.participantId, player.alive, player.abilityUsed, player.actualRole, (player.effects ?? []).map((effect) => [
         effect.id, effect.type, effect.state, effect.sourceCharacter ?? null, sourceIdentity(effect.sourceParticipant),
         sortedKeys(effect.expiry), sortedKeys(effect.parameters), declarationOf(effect)])]];
-    })]);
+    }),
+    // LS-2b: a row that protects neighbours reads every alignment too (a neighbour turning evil changes the answer). Appended only
+    // while such a holder is seated, so every other game's stamp is byte-identical to before.
+    ...(Object.values(game.players).some((p) => !p.isEmpty && lifeRuleReadsSeating(p.actualRole))
+      ? [Object.keys(game.players).sort().flatMap((playerId) => {
+        const player = game.players[playerId];
+        return player && !player.isEmpty && player.participantId ? [[playerId, player.actualAlignment ?? null]] : [];
+      })] : []),
+  ]);
 
   const require = <T,>(binding: ParticipantBinding, run: (player: STPlayerRecord) => QueryAnswer<T>): QueryAnswer<T> => {
     const player = participant(binding);
@@ -438,9 +450,15 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
       const functioning = functions(player, new Set());
       if (functioning.known && !functioning.value) return actual;
       const reason = functioning.known ? `The ${role.name} may register falsely: the Storyteller decides.` : functioning.reason;
+      // LS-2b: a registration decision the Storyteller stored for THIS observer (the Tea Lady's setup step) settles the alignment
+      // for that observer only. Unknown sobriety keeps it known only where the impaired answer (the actual alignment) agrees.
+      const decided = observerRegistrationDecision(observer, player.effects);
       return {
         character: unknown(reason),
-        alignment: player.actualAlignment === optional.alignment ? known(optional.alignment) : unknown(reason),
+        alignment: decided === "good" || decided === "evil"
+          ? (functioning.known || player.actualAlignment === decided ? known(decided) : unknown(reason))
+          : decided === "conflict" ? unknown("Both registration decisions are stored: the Storyteller decides.")
+          : player.actualAlignment === optional.alignment ? known(optional.alignment) : unknown(reason),
         types: known([role.type, ...optional.types]),
       };
     }
