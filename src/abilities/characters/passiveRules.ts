@@ -30,37 +30,51 @@ export const passiveRegistrationOptions = (roleId: RoleId) =>
  * character is adding a row (plus, where a rule cannot be plain data, one named helper the row points to).
  *
  * Knobs read today:
- *  - holder: "self" (the holder's own death), "neighbours" (protects the alive neighbours: only ever a Storyteller gap for now).
+ *  - holder: "self" (the holder's own death), "neighbours" (protects the alive neighbours: a gap until its helper exists),
+ *    "anyGood" (concerns any good player: only ever a Storyteller-choice row).
  *  - duration: "permanent" (always on) or "once" (used up by the first survival).
  *  - needsFunctioning: the holder must be sober and healthy.
- *  - causes: "demon" (the Demon's attack only) or "any" (every cause). Further causes (execution, exile, assassin) are added with
- *    the first row that uses them.
- *  - decision: "auto" (the gate answers) or "storyteller" (modelled only as a gap: the whole action stays Manual).
+ *  - causes: which death the row stops: "demon" (the Demon's attack only), "execution" (an execution only) or "any" (every cause).
+ *  - bypassedBy (LS-2a): causes that go around the row ("assassin": "they die, even if for some reason they could not"). A bypassed
+ *    row answers "no protection" without asking anything, and a spending row spends nothing.
+ *  - decision: "auto" (the gate answers), "choice" (the Storyteller chooses; the app only shows the row's advice and the gate
+ *    never answers from it) or "unmodelled" (not modelled: the whole action stays Manual while the holder's ability may work).
  *  - onSurvive: "nothing" (the death simply does not happen) or "spend" (the ability is used up: abilityUsed + NO ABILITY).
  *    A union so "hiddenLife" can be added as a value; NOTE the gate's RESULT types (DeathOutcomeAnswer in rulesQuery.ts, DeathDecision
  *    in shared.ts) still carry only a yes/no spend, so LS-3 must widen them and their readers (survivedOutcome, executionAdvice, voting).
- *    `decision: "storyteller"` currently means "not modelled, whole action Manual"; a real Storyteller-choice row (LS-2) needs its own value.
  *  - alsoCreditedTo: roles whose own protection could equally be the reason for a survival; a spending survival then becomes
  *    ambiguous and nothing is spent automatically (the Storyteller chooses).
  *  - earlyProtection: a named helper for a reviewed rule that cannot be plain data (checked before the row applies).
- * Monk and Innkeeper protection are deliberately NOT rows: they are Effects (safeFromDemon, cannotDie) with approved semantics, read by
- * the Rules Query for every holder; the table is for what a character's OWN ability does to its own death.
- * Knobs from the proposal not read yet (bypassedBy, shownAs, abilityAfter, holder "chosen") arrive with the first behaviour that uses them.
+ * Monk and Innkeeper protection are deliberately NOT rows (PO ruling 2026-11-12 21:36Z): they are Effects (safeFromDemon, cannotDie)
+ * with approved semantics, read by the Rules Query for every holder; the table is for what a character's OWN ability does to a death.
+ * Knobs from the proposal not read yet (shownAs, abilityAfter, holder "chosen") arrive with the first behaviour that uses them.
+ * `duration: "once"` only acts through spending rows (the Fool).
  * https://wiki.bloodontheclocktower.com/Fool
  * https://wiki.bloodontheclocktower.com/Sailor
  * https://wiki.bloodontheclocktower.com/Soldier
+ * https://wiki.bloodontheclocktower.com/Assassin
  */
-export type LifeRuleCause = "demon" | "any";
+export type LifeRuleCause = "demon" | "execution" | "assassin" | "any";
 export type LifeRule = {
-  readonly holder: "self" | "neighbours";
+  readonly holder: "self" | "neighbours" | "anyGood";
   readonly duration: "permanent" | "once";
   readonly needsFunctioning: boolean;
-  readonly causes: LifeRuleCause;
-  readonly decision: "auto" | "storyteller";
+  readonly causes: "demon" | "execution" | "any";
+  readonly bypassedBy?: readonly LifeRuleCause[];
+  readonly decision: "auto" | "choice" | "unmodelled";
   readonly onSurvive: "nothing" | "spend";
   readonly alsoCreditedTo?: readonly RoleId[];
   readonly earlyProtection?: (query: RulesQuery, target: ParticipantBinding, cause: LifeRuleCause) => boolean;
 };
+
+/** Causes that go around EVERY prevention, Effects included (the Assassin: "they die, even if for some reason they could not").
+ * The Rules Query reads this instead of naming the cause, so it stays free of character names. */
+const BYPASSES_EVERY_PROTECTION: ReadonlySet<LifeRuleCause> = new Set(["assassin"]);
+export const causeBypassesEffectProtection = (cause: LifeRuleCause): boolean => BYPASSES_EVERY_PROTECTION.has(cause);
+
+/** Whether a row stops a death of `cause`: not bypassed by it, and the row's causes cover it. */
+export const lifeRuleStops = (rule: LifeRule, cause: LifeRuleCause): boolean =>
+  !rule.bypassedBy?.includes(cause) && (rule.causes === "any" || rule.causes === cause);
 
 /** Official Monk example: a protected Mayor cannot bounce the Imp's attack. A reviewed exception for that interaction, not general
  * precedence over other unresolved protections; uncertain or suppressed Safe stays Manual. https://wiki.bloodontheclocktower.com/Monk */
@@ -74,11 +88,12 @@ const monkProtectsFromDemon = (query: RulesQuery, target: ParticipantBinding, ca
   });
 };
 
-const GAP = { holder: "self", duration: "permanent", needsFunctioning: true, causes: "any", decision: "storyteller", onSurvive: "nothing" } as const;
+const ASSASSIN = ["assassin"] as const;
+const GAP = { holder: "self", duration: "permanent", needsFunctioning: true, causes: "any", decision: "unmodelled", onSurvive: "nothing" } as const;
 export const LIFE_RULES: Readonly<Partial<Record<RoleId, LifeRule>>> = Object.freeze({
-  soldier: { holder: "self", duration: "permanent", needsFunctioning: true, causes: "demon", decision: "auto", onSurvive: "nothing" },
-  sailor: { holder: "self", duration: "permanent", needsFunctioning: true, causes: "any", decision: "auto", onSurvive: "nothing" },
-  fool: { holder: "self", duration: "once", needsFunctioning: true, causes: "any", decision: "auto", onSurvive: "spend", alsoCreditedTo: ["pacifist"] },
+  soldier: { holder: "self", duration: "permanent", needsFunctioning: true, causes: "demon", bypassedBy: ASSASSIN, decision: "auto", onSurvive: "nothing" },
+  sailor: { holder: "self", duration: "permanent", needsFunctioning: true, causes: "any", bypassedBy: ASSASSIN, decision: "auto", onSurvive: "nothing" },
+  fool: { holder: "self", duration: "once", needsFunctioning: true, causes: "any", bypassedBy: ASSASSIN, decision: "auto", onSurvive: "spend", alsoCreditedTo: ["pacifist"] },
   // Not modelled: the whole action stays Manual while the holder's ability may be working.
   mayor: { ...GAP, earlyProtection: monkProtectsFromDemon },
   lleech: GAP,
@@ -109,13 +124,16 @@ export const isNeighbourPoisoner = (roleId: RoleId): boolean => roleId === "noda
  * functions; a drunk or poisoned holder dies for real. Another character's protection is checked FIRST by the caller: "If another
  * character's ability protects the Fool from death, the Fool does not use their ability."
  * https://wiki.bloodontheclocktower.com/Fool
- * known(false) for every other character, a spent holder, or an impaired one; UNKNOWN when sobriety cannot be established.
+ * known(false) for every other character, a spent holder, an impaired one, or a cause that bypasses the row; UNKNOWN when sobriety
+ * cannot be established.
  */
-export function survivesFirstDeath(query: RulesQuery, target: ParticipantBinding): QueryAnswer<boolean> {
+export function survivesFirstDeath(query: RulesQuery, target: ParticipantBinding, cause?: LifeRuleCause): QueryAnswer<boolean> {
   const player = query.participant(target);
   const role = player && query.roleOf(player.actualRole);
   const rule = player && lifeRuleOf(player.actualRole);
   if (!player || !role || !isCanonicalRole(role) || !rule || rule.onSurvive !== "spend") return { known: true, value: false };
+  // LS-2a: a bypassing cause (the Assassin) kills a Fool for real and spends nothing.
+  if (cause !== undefined && rule.bypassedBy?.includes(cause)) return { known: true, value: false };
   if (rule.duration === "once" && player.abilityUsed) return { known: true, value: false };
   return rule.needsFunctioning ? query.abilityFunctions(target) : { known: true, value: true };
 }
@@ -128,10 +146,11 @@ export function passiveProtection(query: RulesQuery, target: ParticipantBinding,
   if (!player || !role || !isCanonicalRole(role)) return { known: false, reason: "This character's protection rules are not verified. Resolve the whole action manually." };
   for (const other of Object.values(query.game.players)) {
     const rule = !other.isEmpty && other.participantId && other.alive ? lifeRuleOf(other.actualRole) : undefined;
-    // A row that protects others is only ever a gap today: until its neighbour logic exists, it fails closed (Manual) whatever its decision.
-    if (!rule || rule.holder === "self") continue;
+    // A Storyteller-choice row only advises (the execution prompt); the gate never answers from it.
+    if (!rule || rule.holder === "self" || rule.decision === "choice") continue;
     const definition = query.roleOf(other.actualRole);
     if (!definition || !isCanonicalRole(definition)) continue;
+    // A row that protects others is only ever a gap today: until its neighbour logic exists, it fails closed (Manual) whatever its decision.
     const functioning = query.abilityFunctions({ playerId: other.id, participantId: other.participantId! });
     if (!functioning.known || functioning.value) return { known: false, reason: `${definition.name} protection is not modeled. Resolve the whole action manually.` };
   }
@@ -140,18 +159,20 @@ export function passiveProtection(query: RulesQuery, target: ParticipantBinding,
   const rule = lifeRuleOf(player.actualRole);
   if (!rule || rule.holder !== "self") return { known: true, value: false };
   if (rule.earlyProtection?.(query, target, cause)) return { known: true, value: true };
-  if (rule.decision === "storyteller") {
+  if (rule.decision === "unmodelled") {
     if (!functioning.known || functioning.value) return { known: false, reason: `${role.name} death interactions are not modeled. Resolve the whole action manually.` };
     return { known: true, value: false };
   }
+  // A Storyteller-choice row is advice only (see above), and a bypassing cause goes around the row without asking anything.
+  if (rule.decision === "choice" || rule.bypassedBy?.includes(cause)) return { known: true, value: false };
   // A spending row is not a prevention row: callers that cannot spend the ability (curses, direct protection questions) keep asking.
   if (rule.onSurvive === "spend") {
     if (spendHandled) return { known: true, value: false };
-    const survives = survivesFirstDeath(query, target);
+    const survives = survivesFirstDeath(query, target, cause);
     if (!survives.known || survives.value) return { known: false, reason: `The ${role.name} survives its first death and then loses its ability: this attempt must go through the death gate. Resolve manually.` };
     return { known: true, value: false };
   }
-  if (rule.causes !== "any" && rule.causes !== cause) return { known: true, value: false };
+  if (!lifeRuleStops(rule, cause)) return { known: true, value: false };
   return rule.needsFunctioning ? functioning : { known: true, value: true };
 }
 

@@ -1,4 +1,4 @@
-import { survivesFirstDeath } from "./passiveRules";
+import { survivesFirstDeath, type LifeRuleCause } from "./passiveRules";
 import type { AbilityEvaluation, AbilityEvaluationContext, AbilityInputRequirement, AbilityInputs, AbilityInputValue } from "../semantics";
 import type { AbilityOperation, AbilityOutcome, ParticipantBinding } from "@/stores/abilityResolution";
 import type { ReminderIntent } from "@/stores/reminderResolution";
@@ -90,7 +90,9 @@ export function requireLivingActor(context: AbilityEvaluationContext): AbilityEv
   return { kind: "notApplicable", message: "Dead players have no ability -- this cannot be resolved for a dead player." };
 }
 
-export type DeathCause = "demon" | "any";
+/** LS-2a: "demon", "execution", "assassin" (goes around every prevention) and "any" (any other death). The strings "demon" and
+ * "any" are part of saved judgment ids (protectionJudgmentId) and never change. */
+export type DeathCause = LifeRuleCause;
 
 /**
  * SOL-10F-B2: the explicit identity of ONE death attempt within a resolution
@@ -190,7 +192,7 @@ export function deathAttempt(
   if (judged) {
     if (judged.value) return { kind: "survives" };
     // "Not protected by the unknown thing" still leaves a Fool's own first-death survival to apply.
-    const own = survivesFirstDeath(query, target);
+    const own = survivesFirstDeath(query, target, cause);
     return own.known && own.value ? { kind: "survives", spend: target } : { kind: "dies" };
   }
   return {

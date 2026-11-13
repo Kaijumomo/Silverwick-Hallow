@@ -66,6 +66,9 @@ export const PARTIAL_SUPPORT: Readonly<Record<RoleId, readonly Piece[]>> = {
   apprentice: [
     { path: "src/rules/night/nightOrder.ts", what: "Flagged as a complex ability in the night list: the Storyteller resolves it by hand." },
   ],
+  assassin: [
+    { path: "src/abilities/characters/passiveRules.ts", what: "Death gate cause 'assassin' (LS-2a): it goes around every prevention row and Effect and around the Fool, so the gate is ready for the Assassin. The Assassin's own ability (once per game, NO ABILITY) is not built." },
+  ],
   atheist: [
     { path: "src/rules/setup/setupAnalyzer.ts", what: "In the setup analyzer's manual-review list: setup shows a 'Review character setup' check and the Storyteller resolves the special choices by hand." },
     { path: "src/rules/setup/setupPolicies.ts", what: "Marked as an uncertain composition: random setup and composition checks fall back to manual review." },

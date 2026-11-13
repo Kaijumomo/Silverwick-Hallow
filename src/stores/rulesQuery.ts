@@ -1,5 +1,5 @@
 import { isCanonicalRole } from "@/data/canonical";
-import { isNeighbourPoisoner, passiveProtection, passiveInformationModifiers, passiveRegistrationOptions, survivesFirstDeath } from "@/abilities/characters/passiveRules";
+import { causeBypassesEffectProtection, isNeighbourPoisoner, passiveProtection, passiveInformationModifiers, passiveRegistrationOptions, survivesFirstDeath, type LifeRuleCause } from "@/abilities/characters/passiveRules";
 import { isInnkeeperSelfEffect, isPoisonerSelfEffect } from "@/abilities/characters/poisonerRules";
 import type { RoleRegistry } from "@/data/roleRegistry";
 import { activeModifiers, gateEvaluation, type HookScope, type ModifierDefinition, type ModifierGate } from "@/abilities/modifiers";
@@ -138,12 +138,13 @@ export type RulesQuery = {
   /** Whether a living, functioning No Dashii poisons this player through its passive (derived, never stored). */
   noDashiiPoisoned: (binding: ParticipantBinding) => QueryAnswer<boolean>;
   /** Protection against a death of `cause`. `generic` Protected never answers
-   * "protected" automatically. */
-  protectedFrom: (binding: ParticipantBinding, cause: "demon" | "any") => QueryAnswer<boolean>;
+   * "protected" automatically. LS-2a causes: "demon", "execution", "assassin"
+   * (goes around every prevention, Effects included) and "any" (any other death). */
+  protectedFrom: (binding: ParticipantBinding, cause: LifeRuleCause) => QueryAnswer<boolean>;
   /** LS-1: what a death attempt of `cause` does to this player, INCLUDING a character that survives its first death at a cost
    * (the Fool). Other protection is checked first and spends nothing. `spends` says the survival uses up the player's own
    * ability; the caller records that use. Unknown stays a Storyteller judgment, exactly as for `protectedFrom`. */
-  deathOutcome: (binding: ParticipantBinding, cause: "demon" | "any") => QueryAnswer<DeathOutcomeAnswer>;
+  deathOutcome: (binding: ParticipantBinding, cause: LifeRuleCause) => QueryAnswer<DeathOutcomeAnswer>;
   /** SOL-10F-C2: a deterministic, EXACT (never hashed) stamp of every piece of
    * authoritative Current State this query can consult when answering
    * `protectedFrom(binding, cause)` -- under THIS query's state, hypothetical
@@ -152,7 +153,7 @@ export type RulesQuery = {
    * protection applicability changes it. A conservative superset: it may also
    * change after an unrelated mechanical change, never miss a relevant one.
    * Transient workflow identity only; never persisted. */
-  protectionDependencyStamp: (binding: ParticipantBinding, cause: "demon" | "any") => string;
+  protectionDependencyStamp: (binding: ParticipantBinding, cause: LifeRuleCause) => string;
   /** What the participant registers as, to an `observer` character. */
   registration: (binding: ParticipantBinding, observer?: RoleId) => RegistrationAnswer;
   /** Whether every possible registration gives the same answer to THIS type
@@ -447,9 +448,11 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     return actual;
   };
 
-  const protection = (binding: ParticipantBinding, cause: "demon" | "any", spendHandled: boolean): QueryAnswer<boolean> => require(binding, (player) => {
+  const protection = (binding: ParticipantBinding, cause: LifeRuleCause, spendHandled: boolean): QueryAnswer<boolean> => require(binding, (player) => {
       const passive = passiveProtection(self, binding, cause, spendHandled);
       if (!passive.known || passive.value) return passive;
+      // LS-2a: a cause that goes around every prevention (the Assassin) is not stopped by any Effect either.
+      if (causeBypassesEffectProtection(cause)) return known(false);
       let undetermined: string | null = null;
       for (const effect of player.effects) {
         const semantics = effectSemanticsOf(effect.type);
@@ -486,7 +489,7 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     noDashiiPoisoned: (binding) => require(binding, (player) => noDashiiPoison(player, new Set())),
     protectedFrom: (binding, cause) => protection(binding, cause, false),
     deathOutcome: (binding, cause) => {
-      const survives = survivesFirstDeath(self, binding);
+      const survives = survivesFirstDeath(self, binding, cause);
       if (!survives.known) return survives;
       const other = protection(binding, cause, true);
       if (!other.known) return other;

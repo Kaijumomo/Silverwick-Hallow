@@ -34,10 +34,11 @@ describe("coverage level and evidence (Stage 5A-1)", () => {
   });
 
   it("pins today's counts (update deliberately when a work package lands)", () => {
-    // 24 guided + 27 reviewed + 65 partial + 65 generic = 181 (LS-1 moved the Fool from partial to reviewed; the Sailor stays partial until its nightly drunk choice is modelled).
+    // 24 guided + 27 reviewed + 66 partial + 64 generic = 181 (LS-1 moved the Fool from partial to reviewed; the Sailor stays partial until its nightly drunk choice is modelled).
+    // LS-2a moved the Assassin from generic to partial: the death gate has its cause, its own ability is not built.
     // Against the v3 plan table (state at c4e884e): the ten Stage 4 characters moved from generic to reviewed (PR #26);
     // Bone Collector (night-guide prompt), Goon (Moonchild interaction) and Thief, Gunslinger, Scapegoat, Beggar (game-ending allow-list) were found to have a support piece.
-    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 24, reviewed: 27, partial: 65, generic: 65 });
+    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 24, reviewed: 27, partial: 66, generic: 64 });
   });
 
   it("level follows the facts the gates read", () => {
