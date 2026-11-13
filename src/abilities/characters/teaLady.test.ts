@@ -105,7 +105,7 @@ describe("Tea Lady: Spy and Recluse neighbours (setup decision)", () => {
   it("no stored decision: the question goes to the Storyteller with a reason that names the decision", () => {
     for (const [role, name] of [["spy", "Spy"], ["recluse", "Recluse"]] as const) {
       const g = withNeighbour(role);
-      expect(guarded(g, "p3"), role).toEqual({ known: false, reason: `Decide how the ${name} registers for the Tea Lady, then record the death by hand.` });
+      expect(guarded(g, "p3"), role).toEqual({ known: false, reason: `Decide how the ${name} registers for the Tea Lady, then record the result by hand.` });
       expect(attack(g, "p3"), role).toMatchObject({ ok: false });
     }
   });

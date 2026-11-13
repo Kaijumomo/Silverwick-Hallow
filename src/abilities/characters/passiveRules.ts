@@ -131,7 +131,7 @@ export function teaLadyCovers(query: RulesQuery, teaLady: ParticipantBinding, ta
     const role = player && query.roleOf(player.actualRole);
     // A Spy or Recluse with no setup decision: the reason names the missing decision (proposal section 8b, point 2).
     undetermined ??= player && role && isCanonicalRole(role) && passiveRegistrationOptions(player.actualRole) && !observerRegistrationDecision("tealady", player.effects)
-      ? `Decide how the ${role.name} registers for the Tea Lady, then record the death by hand.` : alignment.reason;
+      ? `Decide how the ${role.name} registers for the Tea Lady, then record the result by hand.` : alignment.reason;
   }
   return undetermined ? { known: false, reason: undetermined } : { known: true, value: true };
 }
