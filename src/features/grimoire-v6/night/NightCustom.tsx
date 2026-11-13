@@ -81,7 +81,8 @@ function manualReveal(game: StorytellerLobbyRecord, script: Script, registry: Ro
     const event = deaths.status === "known" && deaths.events.length === 1 ? deaths.events[0]! : undefined;
     const actor = game.players[step.playerId];
     const working = !step.isDeceived && actor?.participantId ? query.abilityFunctions({ playerId: actor.id, participantId: actor.participantId }) : undefined;
-    if (event?.actualRoleAtEvent && working?.known && working.value && !passiveRegistrationOptions(event.actualRoleAtEvent)) {
+    // A rule that bends Townsfolk information (the Vortox) is not modelled here, so the Storyteller picks.
+    if (event?.actualRoleAtEvent && working?.known && working.value && query.modifierGate("undertaker", ["information", "registration"]).kind === "clear" && !passiveRegistrationOptions(event.actualRoleAtEvent)) {
       const registered = query.registration({ playerId: event.subject.playerId, participantId: event.subject.participantId }, "undertaker").character;
       const shown = registered.known ? registry.get(registered.value) : undefined;
       if (shown && isCanonicalRole(shown) && shown.id === event.actualRoleAtEvent) known = shown;

@@ -33,7 +33,8 @@ function ravenkeeper(roles: string[], dies = true) {
   store.setState({ undoStack: [] }); return show();
 }
 const reveal = () => fireEvent.click(screen.getByRole("button", { name: "Reveal a Token" }));
-beforeEach(() => { localStorage.clear(); store.setState({ game: null, lobby: null, terminalClose: null, undoStack: [] }); useSessionRuntime.setState({ backend: null, status: "idle" }); useShellStore.getState().reset(); usePrivacyStore.setState({ enabled: false }); useTargetPicker.getState().cancel(); });
+import { useV6Ui } from "../../v6Store";
+beforeEach(() => { useV6Ui.getState().set({ picker: null }); localStorage.clear(); store.setState({ game: null, lobby: null, terminalClose: null, undoStack: [] }); useSessionRuntime.setState({ backend: null, status: "idle" }); useShellStore.getState().reset(); usePrivacyStore.setState({ enabled: false }); useTargetPicker.getState().cancel(); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 const hasReveal = () => !!screen.queryByRole("button", { name: "Reveal a Token" });
@@ -55,6 +56,10 @@ it("manual game: an executed Recluse or Spy is the Storyteller's choice on the b
 it("manual game: a poisoned Undertaker gets no preview, only the picker", () => {
   undertaker(["undertaker", "chef", "imp", "monk", "sage"]); cleanup(); store.setState({ game: impair(game(), "p0") }); show();
   expect(hasReveal()).toBe(true); expect(screen.queryByText("Chef")).toBeNull(); reveal();
+  expect(screen.getByText(/choose a character to show/)).toBeInTheDocument();
+});
+it("manual game: a Vortox in play means no preview, only the picker", () => {
+  undertaker(["undertaker", "chef", "vortox", "monk", "baron"]); expect(hasReveal()).toBe(true); expect(screen.queryByText("Chef")).toBeNull(); reveal();
   expect(screen.getByText(/choose a character to show/)).toBeInTheDocument();
 });
 it("manual game: no execution means no reveal row", () => {
