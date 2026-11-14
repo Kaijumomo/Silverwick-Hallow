@@ -19,6 +19,7 @@ import { POISONER } from "./poisoner";
 import { PROFESSOR } from "./professor";
 import { RAVENKEEPER } from "./ravenkeeper";
 import { SAGE } from "./sage";
+import { SWEETHEART } from "./sweetheart";
 import { SHABALOTH } from "./shabaloth";
 import { SLAYER } from "./slayer";
 import { TOWN_CRIER } from "./towncrier";
@@ -32,4 +33,4 @@ import { VIGORMORTIS } from "./vigormortis";
  * production Ability Semantics Registry (semantics.ts); it is only ever
  * consulted through the canonical ownership gate (resolveAbilitySemantics).
  */
-export const VERIFIED_DESCRIPTORS: readonly AbilityDescriptor[] = [POISONER, MONK, CHEF, EMPATH, FORTUNE_TELLER, SLAYER, CULT_LEADER, HARLOT, AL_HADIKHIA, IMP, RAVENKEEPER, UNDERTAKER, PIT_HAG, INNKEEPER, NO_DASHII, VIGORMORTIS, GAMBLER, SHABALOTH, WITCH, GODFATHER, MOONCHILD, TOWN_CRIER, ORACLE, PROFESSOR, DEVILS_ADVOCATE, SAGE];
+export const VERIFIED_DESCRIPTORS: readonly AbilityDescriptor[] = [POISONER, MONK, CHEF, EMPATH, FORTUNE_TELLER, SLAYER, CULT_LEADER, HARLOT, AL_HADIKHIA, IMP, RAVENKEEPER, UNDERTAKER, PIT_HAG, INNKEEPER, NO_DASHII, VIGORMORTIS, GAMBLER, SHABALOTH, WITCH, GODFATHER, MOONCHILD, TOWN_CRIER, ORACLE, PROFESSOR, DEVILS_ADVOCATE, SAGE, SWEETHEART];

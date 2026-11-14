@@ -707,7 +707,7 @@ export function planRoleTransaction(
     }
   }
   const lost = new Set(actualRoleChanges.map(c => game.players[c.playerId]!.participantId!));
-  const loss = planSourceAbilityLoss(game, lost, script ? { registry, script } : undefined, ids.historyId, resolutionId);
+  const loss = planSourceAbilityLoss(game, lost, script ? { registry, script } : undefined, ids.historyId, resolutionId, true);
   if (!loss.ok) return refuse("invalid", loss.message);
   return { ok: true, changed: true, plan: { players, nightProgressRemove, history, actualRoleChanges, sourceAbilityLoss: loss.plan } };
 }

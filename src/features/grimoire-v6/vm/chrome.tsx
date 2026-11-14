@@ -1,4 +1,4 @@
-import { moonchildAwaitingChoice } from "../day/moonchild";
+import { dayActionRows } from "../day/dayCard";
 import { createElement as E, useMemo, type ReactNode } from "react";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
@@ -75,8 +75,8 @@ export function useChromeVm(ctx: V6Ctx, slices: { advance?: SliceResult["advance
   const rail = ([["players", "Players", ICON.users], ["night", isNight || setupPhase ? "Night" : "Day", isNight || setupPhase ? ICON.moon : ICON.sun], ["info", "Info", ICON.info], ["reference", "Reference", ICON.book]] as const).map(([k, label, icon]) => {
     const locked = (k === "night" && (privacy || ended)) || ((k === "info" || k === "reference") && privacy);
     const active = ui.panel === k;
-    // The Day button carries the same discreet "!" as End while a dead Moonchild still has to choose (their choice is a Day action).
-    const badge = k === "night" && !isNight && !setupPhase && Object.values(game.players).some((p) => moonchildAwaitingChoice(ctx, p));
+    // The Day button carries the same discreet "!" as End while a Day action is waiting (a dead Moonchild's or Sweetheart's choice).
+    const badge = k === "night" && !isNight && !setupPhase && dayActionRows(ctx).length > 0;
     return { label, icon, active, bg: active ? "rgba(176,186,204,.12)" : "transparent", color: active ? "#e8584a" : "rgba(222,216,204,.6)", onClick: openPanel(k), opacity: locked ? 0.38 : 1,
       badge, badgeLabel: badge ? "A Day action is waiting" : "" };
   });

@@ -1,7 +1,7 @@
 import type { AbilityDescriptor, AbilityInvocation, AbilityTiming, NightTriggerKind } from "./semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
-import { isDeathEvent } from "@/stores/lifeEvents";
+import { isDeathEvent, previousLiveMoment } from "@/stores/lifeEvents";
 import { PIT_HAG_ARBITRARY_DEATHS } from "@/stores/gameRuleFactRegistry";
 import { encodeNightProgressComponent, nightTriggerStepKey } from "@/stores/nightProgress";
 import type { LifeEvent, StorytellerLobbyRecord } from "@/stores/types";
@@ -44,7 +44,8 @@ export type InvocationEligibility = { eligible: true } | { eligible: false; reas
 const PATH_INVOCATIONS: Readonly<Record<InvocationPath, readonly AbilityInvocation[]>> = {
   dayEntry: ["publicClaim", "procedure"],
   nightOrder: ["wake", "procedure"],
-  nightTrigger: ["wake"],
+  // SV-1b: a trigger may also start a Storyteller procedure (the Sweetheart wakes nobody; the Barber's step wakes the Demon).
+  nightTrigger: ["wake", "procedure"],
 };
 
 /** The single explicit timing a path serves at this Game Moment, or null when
@@ -122,6 +123,9 @@ export const nightTriggerProgressKey = (day: number, actor: ParticipantBinding, 
  * recorded cause is a character that is not a Demon (recordedDeathCause). An
  * unrecorded cause, or any death on a night a Pit-Hag made deaths arbitrary,
  * still opens the step: the ability then asks the Storyteller first.
+ * actorDiedTodayOrTonight (SV-1b): the same as actorDiedTonight over the Day
+ * just ended and this Night. A Day death the ability resolved in the Day is
+ * consumed by the same key (its Day action marks it).
  * An event with no Role evidence is UNKNOWN (judgment). For a simulated wake
  * (a Drunk or Marionette currently shown this character) an event recorded
  * under the actor's unchanged Actual Role is TRIGGERED: the Storyteller shows
@@ -142,10 +146,12 @@ export function nightTriggerStatus(
     return status === "done" || status === "skipped";
   };
   /** The first open death of this participant tonight that `counts` for the trigger (actorDiedTonight counts every one). */
-  const diedTonight = (counts: (event: LifeEvent) => boolean, skipped: string): NightTriggerStatus => {
-    const deaths = query.lifeEvents(moment, (event) => isDeathEvent(event) && event.subject.participantId === actor.participantId);
-    const events = deaths.status === "known" ? deaths.events : deaths.recorded;
-    if (deaths.status === "unknown") {
+  const diedTonight = (counts: (event: LifeEvent) => boolean, skipped: string, today = false): NightTriggerStatus => {
+    // SV-1b: "today or tonight" also reads the Day just ended (the previous live moment), Day deaths first.
+    const day = today ? previousLiveMoment(moment) : null;
+    const windows = [...(day ? [day] : []), moment].map((at) => query.lifeEvents(at, (event) => isDeathEvent(event) && event.subject.participantId === actor.participantId));
+    const events = windows.flatMap((deaths) => deaths.status === "known" ? deaths.events : deaths.recorded);
+    if (windows.some((deaths) => deaths.status === "unknown")) {
       const event = events.find(candidate => !consumed(candidate.id));
       if (!event && (consumed(null) || events.length > 0)) return { kind: "notTriggered", reason: "This trigger was already resolved tonight." };
       return { kind: "unknown", eventId: event?.id ?? null, reason: "Silverwick cannot confirm who died tonight. Check whether this player died, then resolve it by hand." };
@@ -172,7 +178,8 @@ export function nightTriggerStatus(
       }
     }
     return { kind: "notTriggered", reason: resolved ? "This trigger was already resolved tonight."
-      : passed ? skipped : events.length ? "This player did not die tonight as this character." : "This player has not died tonight." };
+      : passed ? skipped : events.length ? `This player did not die ${today ? "today or tonight" : "tonight"} as this character.`
+        : today ? "This player has not died today or tonight." : "This player has not died tonight." };
   };
   switch (descriptor.nightTrigger) {
     case "actorDiedTonight":
@@ -180,6 +187,8 @@ export function nightTriggerStatus(
     case "actorKilledByDemonTonight": {
       return diedTonight((event) => recordedDeathCause(query, event).kind !== "other", "This player was not killed by the Demon tonight.");
     }
+    case "actorDiedTodayOrTonight":
+      return diedTonight(() => true, "", true);
   }
   return { kind: "unknown", eventId: null, reason: "Unknown trigger: the Storyteller decides." };
 }

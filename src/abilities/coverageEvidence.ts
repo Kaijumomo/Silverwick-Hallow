@@ -238,9 +238,6 @@ export const PARTIAL_SUPPORT: Readonly<Record<RoleId, readonly Piece[]>> = {
     { path: "src/rules/setup/setupAnalyzer.ts", what: "In the setup analyzer's manual-review list: setup shows a 'Review character setup' check and the Storyteller resolves the special choices by hand." },
     { path: "src/rules/setup/setupPolicies.ts", what: "Marked as an uncertain composition: random setup and composition checks fall back to manual review." },
   ],
-  sweetheart: [
-    { path: "src/rules/night/nightOrder.ts", what: "Death-check wake slot: the night list shows this character after a death night with a 'check the death condition' advisory; historical triggers are not tracked." },
-  ],
   tinker: [
     { path: "src/rules/night/nightOrder.ts", what: "Death-check wake slot: the night list shows this character after a death night with a 'check the death condition' advisory; historical triggers are not tracked." },
   ],
@@ -321,6 +318,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   slayer: ["src/abilities/characters/pithag.test.ts", "src/stores/abilityResolution.test.ts"],
   soldier: ["src/features/grimoire-v6/night/port/troubleBrewingB5aUi.v6.test.tsx", "src/stores/b8Independent.test.ts"],
   spy: ["src/abilities/characters/troubleBrewingB1.independent.test.ts", "src/abilities/characters/contextualRegistration.test.ts"],
+  sweetheart: ["src/abilities/characters/sweetheart.test.ts", "src/features/grimoire-v6/day/sweetheartDay.test.tsx"],
   towncrier: ["src/abilities/characters/townCrierOraclePro.test.ts", "src/rules/night/canonicalNightOrder.test.ts"],
   undertaker: ["src/stores/troubleBrewingB5bIndependent.test.ts", "src/stores/b9WholeGames.test.ts"],
   vigormortis: ["src/abilities/characters/vigormortis.test.ts", "src/rules/setup/setupAnalyzer.test.ts"],

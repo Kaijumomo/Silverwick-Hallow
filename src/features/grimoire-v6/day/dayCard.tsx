@@ -6,6 +6,28 @@ import { roman } from "../ringLayout";
 import { blockNominee } from "./advance";
 import { nominationsToday, toExecute } from "./dayModel";
 import { moonchildAwaitingChoice, startMoonchildChoice } from "./moonchild";
+import { startSweetheartChoice, sweetheartAwaitingChoice } from "./sweetheart";
+import type { STPlayerRecord } from "@/stores/types";
+
+/** One Day actions row in the Moonchild row's markup: a dead character's public or Storyteller choice still to make (SV-1). */
+export type DayActionRow = { key: string; name: string; img: string; text: string; status: string; button: string; act: () => void };
+
+/** Every character waiting on a Day action, in seat order. The Day button's "!" reads the same list. */
+export function dayActionRows(ctx: V6Ctx): DayActionRow[] {
+  const { game, registry } = ctx;
+  const rows: DayActionRow[] = [];
+  const row = (player: STPlayerRecord, roleId: string, text: string, start: (ctx: V6Ctx, player: STPlayerRecord) => void) => {
+    const def = registry.get(roleId);
+    rows.push({ key: `${roleId}:${player.id}`, name: def?.name ?? roleId, img: def ? iconUrlFor(def) : "", text, status: "Awaiting choice", button: "Choose a player",
+      act: () => { ctx.ui.set({ panel: ctx.ui.panel === "night" ? "night" : null }); start(ctx, player); } });
+  };
+  for (const id of game.seatOrder) {
+    const player = game.players[id];
+    if (moonchildAwaitingChoice(ctx, player)) row(player!, "moonchild", `${player!.name || "The Moonchild"} learned they died`, startMoonchildChoice);
+    if (sweetheartAwaitingChoice(ctx, player)) row(player!, "sweetheart", `${player!.name || "The Sweetheart"} died`, startSweetheartChoice);
+  }
+  return rows;
+}
 
 /** The Day card (Day I / "N nominated today" / who is on the block), opened from the dock's Day button. */
 export function buildDayCard(ctx: V6Ctx): Record<string, unknown> {
@@ -17,6 +39,7 @@ export function buildDayCard(ctx: V6Ctx): Record<string, unknown> {
   const nominated = nominationsToday(currentVotingState(game)).length;
   const moonchild = Object.values(game.players).find((p) => moonchildAwaitingChoice(ctx, p));
   const moonDef = registry.get("moonchild");
+  const rows = dayActionRows(ctx);
   return {
     on: true,
     w: Math.round(Math.max(360, Math.min(520, 2 * (layout.rx - layout.S / 2 - 60)))),
@@ -28,6 +51,8 @@ export function buildDayCard(ctx: V6Ctx): Record<string, unknown> {
     moonOn: !!moonchild, moonImg: moonDef ? iconUrlFor(moonDef) : "",
     moonText: moonchild ? `${moonchild.name || "The Moonchild"} learned they died` : "", moonStatus: "Awaiting choice",
     moonAct: () => { if (!moonchild) return; ctx.ui.set({ panel: ctx.ui.panel === "night" ? "night" : null }); startMoonchildChoice(ctx, moonchild); },
+    // SV-1: the Day actions rows (the Moonchild's, the Sweetheart's), each drawn with the Moonchild row's markup.
+    rows,
   };
 }
 

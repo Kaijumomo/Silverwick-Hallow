@@ -29,6 +29,8 @@ const EFFECT_TOKENS = [
   { source: "shabaloth", type: "shabalothChosen", label: "Dead" },
   { source: "shabaloth", type: "shabalothAlive", label: "Alive" },
   { source: "devilsadvocate", type: "survivesExecution", label: "Survives Execution" },
+  // SV-1b: the Sweetheart's lasting drunkenness.
+  { source: "sweetheart", type: "drunk", label: "Drunk" },
   // This existing Storyteller fact deliberately has no functioning source.
   { source: "fortuneteller", type: "fortuneTellerRedHerring", label: "Red Herring" },
 ] as const;
