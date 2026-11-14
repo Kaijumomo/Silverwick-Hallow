@@ -51,7 +51,7 @@ describe("Character Intelligence bounded automation", () => {
       expect(manifest.find(entry => entry.id === id)?.capabilities).toContainEqual(expect.objectContaining({ owner: "setup", boundary: expect.stringContaining("count policy") }));
     }
     for (const id of ["bureaucrat", "virgin"]) expect(manifest.find(entry => entry.id === id)?.capabilities).toContainEqual(expect.objectContaining({ owner: "voting" }));
-    expect(CANONICAL_ABILITY_SEMANTICS.size).toBe(27); // B5a adds Chef; Treacherous 30th adds Innkeeper, No Dashii, Vigormortis, Gambler, Shabaloth, Witch, Godfather, Moonchild, Town Crier, Oracle and Professor; LS-2c adds the Devil's Advocate; SV-1a adds the Sage; SV-1b the Sweetheart.
+    expect(CANONICAL_ABILITY_SEMANTICS.size).toBe(28); // B5a adds Chef; Treacherous 30th adds Innkeeper, No Dashii, Vigormortis, Gambler, Shabaloth, Witch, Godfather, Moonchild, Town Crier, Oracle and Professor; LS-2c adds the Devil's Advocate; SV-1a adds the Sage; SV-1b the Sweetheart; SV-1c the Klutz.
     expect(CANONICAL_ABILITY_SEMANTICS.has("soldier")).toBe(false);
     expect(CANONICAL_ABILITY_SEMANTICS.has("vortox")).toBe(false);
   });

@@ -7,6 +7,7 @@ import { blockNominee } from "./advance";
 import { nominationsToday, toExecute } from "./dayModel";
 import { moonchildAwaitingChoice, startMoonchildChoice } from "./moonchild";
 import { startSweetheartChoice, sweetheartAwaitingChoice } from "./sweetheart";
+import { klutzAwaitingChoice, startKlutzChoice } from "./klutz";
 import type { STPlayerRecord } from "@/stores/types";
 
 /** One Day actions row in the Moonchild row's markup: a dead character's public or Storyteller choice still to make (SV-1). */
@@ -25,6 +26,7 @@ export function dayActionRows(ctx: V6Ctx): DayActionRow[] {
     const player = game.players[id];
     if (moonchildAwaitingChoice(ctx, player)) row(player!, "moonchild", `${player!.name || "The Moonchild"} learned they died`, startMoonchildChoice);
     if (sweetheartAwaitingChoice(ctx, player)) row(player!, "sweetheart", `${player!.name || "The Sweetheart"} died`, startSweetheartChoice);
+    if (klutzAwaitingChoice(ctx, player)) row(player!, "klutz", `${player!.name || "The Klutz"} learned they died`, startKlutzChoice);
   }
   return rows;
 }
@@ -51,7 +53,7 @@ export function buildDayCard(ctx: V6Ctx): Record<string, unknown> {
     moonOn: !!moonchild, moonImg: moonDef ? iconUrlFor(moonDef) : "",
     moonText: moonchild ? `${moonchild.name || "The Moonchild"} learned they died` : "", moonStatus: "Awaiting choice",
     moonAct: () => { if (!moonchild) return; ctx.ui.set({ panel: ctx.ui.panel === "night" ? "night" : null }); startMoonchildChoice(ctx, moonchild); },
-    // SV-1: the Day actions rows (the Moonchild's, the Sweetheart's), each drawn with the Moonchild row's markup.
+    // SV-1: the Day actions rows (the Moonchild's, the Sweetheart's, the Klutz's), each drawn with the Moonchild row's markup.
     rows,
   };
 }

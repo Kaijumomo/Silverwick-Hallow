@@ -43,6 +43,11 @@ export const SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED = "saintExecutionEvilTeamNo
 export const MAYOR_DAY_END_GOOD_TEAM_WON = "mayorDayEndGoodTeamWon";
 export const MAYOR_DAY_END_EVIL_TEAM_WON = "mayorDayEndEvilTeamWon";
 export const RESOLVED_DEMON_DEATH_NO_SUCCESSOR = "resolvedDemonDeathNoSuccessor";
+/** SV-1c: the Klutz's public choice (https://wiki.bloodontheclocktower.com/Klutz), recorded with the Klutz as its source. Not game-ending
+ * evidence yet (SV-5): the End control only carries an advisory line. A good choice, or a drunk or poisoned Klutz, records no fact. */
+export const KLUTZ_GOOD_TEAM_LOST = "klutzGoodTeamLost";
+export const KLUTZ_EVIL_TEAM_LOST = "klutzEvilTeamLost";
+export const KLUTZ_CHOICE_RULING = "klutzChoiceRuling";
 export const VICTORY_EVIDENCE_TYPES = [SAINT_EXECUTION_GOOD_TEAM_LOST, SAINT_EXECUTION_EVIL_TEAM_LOST, SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED, SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED, MAYOR_DAY_END_GOOD_TEAM_WON, MAYOR_DAY_END_EVIL_TEAM_WON, RESOLVED_DEMON_DEATH_NO_SUCCESSOR] as const;
 export const isVictoryEvidenceType = (type: string): boolean => (VICTORY_EVIDENCE_TYPES as readonly string[]).includes(type);
 export const isSaintNonqualifyingEvidenceType = (type: string): boolean => type === SAINT_EXECUTION_GOOD_TEAM_NOT_QUALIFIED || type === SAINT_EXECUTION_EVIL_TEAM_NOT_QUALIFIED;
@@ -79,6 +84,21 @@ export const GAME_RULE_FACT_REGISTRY: ReadonlyMap<GameRuleFactType, GameRuleFact
   [RESOLVED_DEMON_DEATH_NO_SUCCESSOR, {
     type: RESOLVED_DEMON_DEATH_NO_SUCCESSOR, label: "Demon death resolved", description: "A verified complete death resolution left no living Demon and no unresolved successor.",
     applicablePhases: ["night", "day"], expiry: "lifeEventWindow", captureOnly: true,
+  }],
+  [KLUTZ_GOOD_TEAM_LOST, {
+    type: KLUTZ_GOOD_TEAM_LOST, label: "The Klutz chose an evil player",
+    description: "A sober and healthy good Klutz publicly chose an evil player: the good team loses. The Storyteller ends the game.",
+    applicablePhases: ["day"], expiry: "none",
+  }],
+  [KLUTZ_EVIL_TEAM_LOST, {
+    type: KLUTZ_EVIL_TEAM_LOST, label: "The evil Klutz chose an evil player",
+    description: "A sober and healthy evil Klutz publicly chose an evil player: the evil team loses and good wins. The Storyteller ends the game.",
+    applicablePhases: ["day"], expiry: "none",
+  }],
+  [KLUTZ_CHOICE_RULING, {
+    type: KLUTZ_CHOICE_RULING, label: "The Klutz's choice is your ruling",
+    description: "The Klutz publicly chose a player who may register as good or evil: the Storyteller rules whether the Klutz's team loses.",
+    applicablePhases: ["day"], expiry: "none",
   }],
 ]);
 

@@ -106,7 +106,7 @@ describe("with one of them in play, other automation is no longer pushed to Manu
   });
 
   it("negative control: an unreviewed character still sends the table to Manual", () => {
-    for (const id of ["klutz", "snakecharmer", "exorcist"]) {
+    for (const id of ["banshee", "snakecharmer", "exorcist"]) {
       const g = proofGame(["empath", "imp", "chef", "monk", id]);
       expect(interactionCoverageEligibility(proofQuery(g)), id).toMatchObject({ kind: "manual", reason: "A character in play has interactions outside verified coverage." });
     }
@@ -202,7 +202,7 @@ describe("Pit-Hag can create the reviewed characters, and jinxes still stop it",
 
   it("negative control: an unreviewed character is still refused as a transformation target", () => {
     const g = proofGame(["pithag", "chef", "imp", "monk", "empath", "saint", "washerwoman"]);
-    expect(hag(g, "p1", "klutz")).toMatchObject({ ok: false });
+    expect(hag(g, "p1", "banshee")).toMatchObject({ ok: false });
   });
 
   it("creating a Mathematician beside a Drunk brings an unverified jinx into play, so the whole change is refused", () => {

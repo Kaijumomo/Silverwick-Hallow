@@ -40,9 +40,10 @@ describe("coverage level and evidence (Stage 5A-1)", () => {
     // LS-2c moved the Devil's Advocate from generic to guided (a registered descriptor).
     // SV-1a moved the Sage from partial to guided (a verified Night trigger: killed by the Demon tonight).
     // SV-1b moved the Sweetheart from partial to guided (a Day action and a Night trigger; a lasting sourced drunk Effect).
+    // SV-1c moved the Klutz from generic to guided (a public Day choice recorded as a game-rule fact).
     // Against the v3 plan table (state at c4e884e): the ten Stage 4 characters moved from generic to reviewed (PR #26);
     // Bone Collector (night-guide prompt), Goon (Moonchild interaction) and Thief, Gunslinger, Scapegoat, Beggar (game-ending allow-list) were found to have a support piece.
-    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 27, reviewed: 28, partial: 63, generic: 63 });
+    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 28, reviewed: 28, partial: 63, generic: 62 });
   });
 
   it("level follows the facts the gates read", () => {

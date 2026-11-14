@@ -127,7 +127,7 @@ describe("10F architecture guards", () => {
 
   it("production semantics are EXACTLY the matrix-authorized guided proof / support characters (Slice 7)", () => {
     expect([...CANONICAL_ABILITY_SEMANTICS.keys()].sort()).toEqual(
-      ["alhadikhia", "chef", "cultleader", "devilsadvocate", "empath", "fortuneteller", "gambler", "godfather", "harlot", "imp", "innkeeper", "monk", "moonchild", "nodashii", "oracle", "pithag", "poisoner", "professor", "ravenkeeper", "sage", "shabaloth", "slayer", "sweetheart", "towncrier", "undertaker", "vigormortis", "witch"]);
+      ["alhadikhia", "chef", "cultleader", "devilsadvocate", "empath", "fortuneteller", "gambler", "godfather", "harlot", "imp", "innkeeper", "klutz", "monk", "moonchild", "nodashii", "oracle", "pithag", "poisoner", "professor", "ravenkeeper", "sage", "shabaloth", "slayer", "sweetheart", "towncrier", "undertaker", "vigormortis", "witch"]);
     // Negative proofs: Setup-owned, verified-Manual and dependency-only ids are never live semantics.
     for (const id of ["baron", "tinker", "toymaker", "drunk", "scarletwoman"]) expect(CANONICAL_ABILITY_SEMANTICS.has(id), id).toBe(false);
   });

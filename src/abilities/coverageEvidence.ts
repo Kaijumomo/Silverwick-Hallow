@@ -295,6 +295,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   innkeeper: ["src/abilities/characters/innkeeper.test.ts", "src/features/nightOrder/nightWork.test.ts"],
   investigator: ["src/features/setup/postR3ReclusePreparation.test.tsx", "src/stores/b6Independent.test.ts"],
   juggler: ["src/abilities/characters/informationCharacterReview.test.ts"],
+  klutz: ["src/abilities/characters/klutz.test.ts", "src/features/grimoire-v6/day/klutzDay.test.tsx"],
   librarian: ["src/stores/roleResolution.test.ts", "src/stores/b6Independent.test.ts"],
   marionette: ["src/stores/projections.test.ts", "src/features/grimoire-v6/setup/prepareConcealed.test.tsx"],
   mathematician: ["src/abilities/characters/informationCharacterReview.test.ts"],
