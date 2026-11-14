@@ -11,7 +11,7 @@ import { useShellStore } from "@/stores/shellStore";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { useTargetPicker } from "@/features/abilities/abilityUi";
-import { bind, openInStore, proofGame, proofRegistry, proofScript, request } from "@/test/proofFixtures";
+import { bind, impair, openInStore, proofGame, proofRegistry, proofScript, request } from "@/test/proofFixtures";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 
 const game = () => store.getState().game!;
@@ -96,4 +96,43 @@ it("a living player who becomes the Clockmaker: the step is on the Night list ri
   render(<StrictMode><Guide /></StrictMode>);
   expect(screen.getByText("Player 3 · Seat 4")).toBeInTheDocument();
   expect(screen.getByText("You start knowing how many steps from the Demon to its nearest Minion.")).toBeInTheDocument();
+});
+
+it("a refused choice says why in the card (another Demon; a drunk or poisoned Barber), and the Demon's nobody still closes the step", () => {
+  openInStore(proofGame([...ROLES, "nodashii"]));
+  store.setState({ game: { ...game(), players: { ...game().players, p5: { ...game().players.p5!, alive: false } } } });
+  expect(store.getState().resolveAbility(request(game(), "p1", "imp", { target: { kind: "participant", participants: [bind(game(), "p0")] } }))).toMatchObject({ ok: true, changed: true });
+  store.setState({ undoStack: [] });
+  show();
+  fireEvent.click(screen.getByRole("button", { name: "Continue action" }));
+  choose("The two players whose characters swap 1", "p5", workspace());
+  choose("The two players whose characters swap 2", "p2", workspace());
+  expect(within(workspace()).getByRole("alert")).toHaveTextContent("The Demon may not choose another Demon.");
+  expect(roles()).toEqual([...ROLES, "nodashii"]);
+  fireEvent.click(within(workspace()).getByRole("checkbox", { name: "The Demon chooses nobody" }));
+  expect(Object.values(game().nightProgress).some(record => record.status === "done")).toBe(true);
+});
+
+it("a poisoned Barber: the card says no swap happens", () => {
+  demonKill();
+  store.setState({ game: impair(game(), "p0", "poisoned") });
+  show();
+  fireEvent.click(screen.getByRole("button", { name: "Continue action" }));
+  choose("The two players whose characters swap 1", "p2", workspace());
+  choose("The two players whose characters swap 2", "p3", workspace());
+  expect(within(workspace()).getByRole("alert")).toHaveTextContent("Player 0 is drunk or poisoned: no swap happens. Choose “The Demon chooses nobody”.");
+  expect(roles()).toEqual(ROLES);
+});
+
+it("two living Demons: the card asks which Demon makes the swap, then swaps", () => {
+  openInStore(proofGame([...ROLES, "chef"]));
+  expect(store.getState().resolveAbility(request(game(), "p1", "imp", { target: { kind: "participant", participants: [bind(game(), "p0")] } }))).toMatchObject({ ok: true, changed: true });
+  store.setState({ undoStack: [], game: { ...game(), players: { ...game().players, p5: { ...game().players.p5!, actualRole: "nodashii", shownRole: "nodashii", actualAlignment: "evil" } } } });
+  show();
+  fireEvent.click(screen.getByRole("button", { name: "Continue action" }));
+  choose("The two players whose characters swap 1", "p5", workspace());
+  choose("The two players whose characters swap 2", "p2", workspace());
+  expect(within(workspace()).getAllByText("The Demon who makes the swap").length).toBeGreaterThan(0);
+  choose("The Demon who makes the swap", "p5", workspace());
+  expect(roles()).toEqual(["barber", "imp", "nodashii", "dreamer", "witch", "clockmaker"]);
 });

@@ -257,6 +257,8 @@ export function AbilityWorkspace({ game, script, registry, semantics, target, de
       hidden={hidden} onHide={onHide} onClose={onClose} className={`ability-workspace${picking ? " action-card-picking" : ""}`}>
       <div className="ability-workspace-body">
         {strictGameplay && commitError && <p className="behavior-help" role="alert">{commitError} Close and reopen this action to try again.</p>}
+        {strictGameplay && !commitError && descriptor?.presentation.showsRefusal && planned && !planned.ok && planned.code === "illegal" &&
+          <p className="behavior-help" role="alert">{planned.message}</p>}
         {(guidance?.ability || guidance?.prompt || guidance?.reminder) && (
           <details className="action-guidance">
             <summary>Ability &amp; guidance</summary>

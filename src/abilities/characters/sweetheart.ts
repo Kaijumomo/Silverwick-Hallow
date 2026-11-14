@@ -52,7 +52,7 @@ export const SWEETHEART: AbilityDescriptor = {
   inputs: [{ id: SWEETHEART_PLAYER, kind: "participant", source: "storyteller", allowNone: true, label: "The player who becomes drunk" }],
   hooks: ["targeting"],
   sourcedEffects: [{ type: "drunk", persistence: "whileSourceHasAbility" }],
-  presentation: { complexity: "simple", action: "Choose a player to be drunk from now on" },
+  presentation: { complexity: "simple", action: "Choose a player to be drunk from now on", showsRefusal: true },
   evaluator: (context): AbilityEvaluation => {
     const { query } = context;
     const me = context.actor.binding;

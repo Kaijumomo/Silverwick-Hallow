@@ -54,3 +54,11 @@ it("the Night list shows her step only on the night she died (or after a Day dea
   expect(store.getState().resolveLife({ intents: [{ kind: "execution", playerId: "p0", outcome: "died" }] }).ok).toBe(true);
   store.getState().setPhase("night"); expect(rows()).toHaveLength(1);
 });
+
+it("nobody while she has her ability: the card says why it is refused", () => {
+  demonKill(); show();
+  fireEvent.click(screen.getByRole("button", { name: "Continue action" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Nobody" }));
+  expect(screen.getByRole("alert")).toHaveTextContent("Choose the player who becomes drunk.");
+  expect(drunk()).toHaveLength(0);
+});

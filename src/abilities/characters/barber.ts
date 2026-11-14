@@ -74,7 +74,7 @@ export const BARBER: AbilityDescriptor = {
   inputs: [{ id: BARBER_PLAYERS, kind: "participant", source: "player", count: 2, allowNone: true, noneLabel: BARBER_NOBODY, constraints: ["distinct"],
     label: "The two players whose characters swap" }],
   hooks: ["role", "targeting"],
-  presentation: { complexity: "complex", action: "The Demon may choose 2 players to swap characters" },
+  presentation: { complexity: "complex", action: "The Demon may choose 2 players to swap characters", showsRefusal: true },
   evaluator: (context): AbilityEvaluation => {
     const { query } = context;
     if (!context.trigger) return { kind: "notApplicable", message: "The Barber's swap happens only on the night the Barber died, or after a Day death." };

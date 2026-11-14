@@ -91,6 +91,9 @@ export type AbilityPresentation = {
   complexity: "simple" | "complex";
   /** Short imperative for the Night row ("Choose a player to poison"). */
   action: string;
+  /** SV-1d: in the Night card, the reason a complete answer is refused ("The Demon may not choose another Demon.") is shown in
+   * the card's existing alert line. Absent for every character built before SV-1, whose Night card is unchanged. */
+  showsRefusal?: true;
 };
 
 /**
