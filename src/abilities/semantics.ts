@@ -77,6 +77,8 @@ export type AbilityInputRequirement = {
    * be NOBODY -- an explicit empty choice -- instead of exactly `count`
    * (e.g. "you may choose 3 players"). Never a sentinel player. */
   allowNone?: boolean;
+  /** SV-1d: the words for that explicit NOBODY answer (default "Nobody"), e.g. "The Demon chooses nobody". Presentation only. */
+  noneLabel?: string;
   constraints?: readonly InputConstraint[];
   label: string;
 };

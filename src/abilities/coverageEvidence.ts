@@ -80,9 +80,6 @@ export const PARTIAL_SUPPORT: Readonly<Record<RoleId, readonly Piece[]>> = {
   banshee: [
     { path: "src/rules/night/nightOrder.ts", what: "Death-check wake slot: the night list shows this character after a death night with a 'check the death condition' advisory; historical triggers are not tracked." },
   ],
-  barber: [
-    { path: "src/rules/night/nightOrder.ts", what: "Death-check wake slot: the night list shows this character after a death night with a 'check the death condition' advisory; historical triggers are not tracked." },
-  ],
   bigwig: [
     { path: "src/rules/setup/setupAnalyzer.ts", what: "Setup shows the ability as an information note only." },
   ],
@@ -274,6 +271,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   alhadikhia: ["src/abilities/characters/alhadikhia.test.ts", "src/abilities/characters/astraReverification.test.ts"],
   artist: ["src/abilities/characters/informationCharacterReview.test.ts"],
   baron: ["src/features/grimoire-v6/night/nightGuide.port.test.tsx", "src/features/setup/setupRefinementCommands.test.ts"],
+  barber: ["src/abilities/characters/barber.test.ts", "src/features/grimoire-v6/night/port/barberUi.v6.test.tsx"],
   butler: ["src/stores/butlerSelection.test.ts", "src/stores/b7IndependentButler.test.ts"],
   chambermaid: ["src/abilities/characters/informationCharacterReview.test.ts"],
   chef: ["src/stores/roleResolution.test.ts", "src/stores/projections.test.ts"],

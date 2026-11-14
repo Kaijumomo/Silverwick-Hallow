@@ -169,8 +169,13 @@ export function computeNightOrder(
     // (no other-night wake) is listed at its first-night position with its first-night instruction.
     const reborn = !isFirstNight && !!roleDef.firstNight && !roleDef.otherNight && player.alive && hasEffect(player, "shabalothAlive") &&
       player.effects.some((effect) => effect.type === "shabalothAlive" && effect.appliedAt?.phase === "night" && effect.appliedAt.day === context.day);
-    const firstPass = isFirstNight || reborn;
-    let order = firstPass ? roleDef.firstNight : roleDef.otherNight;
+    // SV-1d (https://wiki.bloodontheclocktower.com/Barber): a living player the Barber's swap made a character whose ability works only on
+    // the first night learns "at that point" (Glossary). The swap marks that step for tonight; it is listed right after the Barber's step
+    // with its first-night instruction, and answered by hand.
+    const swappedIn = !isFirstNight && !reborn && canonical && !!roleDef.firstNight && !roleDef.otherNight && player.alive &&
+      !FIRST_NIGHT_ADMIN.has(roleId) && context.day !== undefined && !!context.nightProgress?.[`${context.day}:${participantStepKey(player.participantId, roleId)}`];
+    const firstPass = isFirstNight || reborn || swappedIn;
+    let order = swappedIn ? at("barber") + 0.01 : firstPass ? roleDef.firstNight : roleDef.otherNight;
     if (!canonical && order === undefined && (isFirstNight ? roleDef.firstNightPrompt : roleDef.otherNightPrompt)) {
       global(participantScopedStepKey("missingOrder", player.participantId), "Night reference — Storyteller check required",
         player.name + ": instruction has no night position. Place a custom step manually.", 0.3, { participantId: player.participantId });

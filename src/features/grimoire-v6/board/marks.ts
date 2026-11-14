@@ -9,6 +9,7 @@ import { ownsAbilityUseReminder } from "@/stores/abilityUseReminders";
 import { butlerReminderOrigin } from "@/stores/butlerSelection";
 import { isDeathEvent } from "@/stores/lifeEvents";
 import { teaLadyCovers } from "@/abilities/characters/passiveRules";
+import { haircutsTonight } from "@/abilities/characters/barber";
 import { isCanonicalRole } from "@/data/canonical";
 import {
   firstInformationReminderGroups, officialEffectPresentation, officialNotationRole, redHerringNotationCovered,
@@ -157,6 +158,13 @@ export function playerMarks(env: MarkEnv, player: STPlayerRecord): Mark[] {
     const source = officialNotationRole("tealady", "Cannot Die") ?? registry.get("tealady");
     marks.push({ key: `derived:tealady-cannot-die:${teaLady.participantId}`, kind: "effect", label: "Cannot Die", title: "Tea Lady: Cannot Die", src: source ? iconUrlFor(source) : "", size: ROLE_SIZE,
       removal: { type: "derived", reason: "This follows the Tea Lady's alive neighbours. It ends when one of them is evil or the Tea Lady dies." } });
+  }
+  // The Barber's official HAIRCUTS TONIGHT token: on the dead Barber from their death (that Day or that Night) until the Demon has
+  // chosen, or dawn. Derived from the death and the Night step, never stored; still drawn while the Barber was drunk or poisoned.
+  if (haircutsTonight(query, { playerId: player.id, participantId: player.participantId })) {
+    const source = officialNotationRole("barber", "Haircuts Tonight") ?? registry.get("barber");
+    marks.push({ key: "derived:barber-haircuts", kind: "effect", label: "Haircuts Tonight", title: "Barber: Haircuts Tonight", src: source ? iconUrlFor(source) : "", size: ROLE_SIZE,
+      removal: { type: "derived", reason: "This follows the Barber's death. It ends when the Demon has chosen, or at dawn." } });
   }
   const crier = townCrierToken(env, player);
   if (crier) {

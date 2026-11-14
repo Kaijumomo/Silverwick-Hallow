@@ -287,6 +287,8 @@ export const REVIEWED_INTERACTION_ROLES: ReadonlySet<string> = new Set([
   "sweetheart",
   // SV-1c: the Klutz's public Day choice reads registration through the shared query and records a fact; it changes no other ability.
   "klutz",
+  // SV-1d: the Barber's swap is one Role resolution through the Pit-Hag's seam, after the Barber died; it changes no other ability.
+  "barber",
   // Marionette has no ability effects of its own: it is an evil Minion who believes they are good, and every query reads its ACTUAL role and alignment.
   "marionette",
   // Information-only characters (Sects & Violets / Bad Moon Rising): each only reads game state and changes none, so it has no

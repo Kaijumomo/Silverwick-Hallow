@@ -69,7 +69,7 @@ describe("Slice 7 guards: authority boundaries", () => {
     expect(offenders(invocation, TRUTH_SOURCES)).toEqual([]);
     expect(invocation).toMatch(/path === "nightTrigger" && !descriptor\.nightTrigger/);
     // Exactly one verified descriptor declares a Night trigger: the Ravenkeeper.
-    expect(VERIFIED_DESCRIPTORS.filter((d) => d.nightTrigger).map((d) => d.roleId)).toEqual(["ravenkeeper", "sage", "sweetheart"]);
+    expect(VERIFIED_DESCRIPTORS.filter((d) => d.nightTrigger).map((d) => d.roleId)).toEqual(["ravenkeeper", "sage", "sweetheart", "barber"]);
   });
 
   it("SOL-10F-S7-F2: independent Storyteller facts -- declared only by the Fortune Teller and (LS-2c) the Devil's Advocate, only storytellerFact types, guarded generically", () => {
