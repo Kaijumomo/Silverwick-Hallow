@@ -4,10 +4,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { SAGE, SAGE_PLAYERS, sageCauseId, sageCauseQuestion } from "./sage";
 import { nightTriggerStatus } from "@/abilities/invocation";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
-import { bind, impair, openInStore, patchPlayer, plan, planned, proofEnv, proofGame, proofQuery, request, requirementIds, yes } from "@/test/proofFixtures";
+import { bind, impair, openInStore, patchPlayer, plan, planned, proofEnv, proofGame, proofQuery, proofRegistry, request, requirementIds, yes } from "@/test/proofFixtures";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { participantStepKey } from "@/stores/nightProgress";
 import { PIT_HAG_ARBITRARY_DEATHS } from "@/stores/gameRuleFacts";
+import { projectLobbyToPublic, projectLobbyToSelfEnvelopeMap } from "@/stores/projections";
 import type { AbilityInputs } from "@/abilities/semantics";
 import type { LifeEvent, StorytellerLobbyRecord } from "@/stores/types";
 
@@ -177,6 +178,14 @@ describe("Sage -- one commit and Undo", () => {
     expect(store.getState().undoStack).toHaveLength(1);
     store.getState().undo();
     expect(store.getState().game).toEqual(g);
+  });
+
+  it("privacy: the Sage's information reaches no other player's view and not the public view", () => {
+    const g = demonKill();
+    const next = planned(plan(g, request(g, "p0", "sage", { [SAGE_PLAYERS]: players(g, "p1", "p2") }, { invocationPath: "nightTrigger", withStep: true, completeStep: true })));
+    expect(projectLobbyToPublic(next, {})).toEqual(projectLobbyToPublic(g, {}));
+    const before = projectLobbyToSelfEnvelopeMap(g, proofRegistry), after = projectLobbyToSelfEnvelopeMap(next, proofRegistry);
+    for (const id of g.seatOrder.filter((id) => id !== "p0")) expect(after[id], id).toEqual(before[id]);
   });
 
   it("Undo of the Imp's kill removes the death and its recorded cause together", () => {

@@ -43,8 +43,9 @@ export function klutzVerdict(query: RulesQuery, klutz: ParticipantBinding, targe
   if (!functioning) return { verdict: "impaired" };
   const team = query.participant(klutz)?.actualAlignment;
   const chosen = query.registration(target, "klutz").alignment;
-  if (!chosen.known || (team !== "good" && team !== "evil")) return { verdict: "ruling", fact: KLUTZ_CHOICE_RULING };
+  if (!chosen.known) return { verdict: "ruling", fact: KLUTZ_CHOICE_RULING };
   if (chosen.value !== "evil") return { verdict: "nothing" };
+  if (team !== "good" && team !== "evil") return { verdict: "ruling", fact: KLUTZ_CHOICE_RULING };
   return { verdict: "loses", fact: team === "good" ? KLUTZ_GOOD_TEAM_LOST : KLUTZ_EVIL_TEAM_LOST };
 }
 

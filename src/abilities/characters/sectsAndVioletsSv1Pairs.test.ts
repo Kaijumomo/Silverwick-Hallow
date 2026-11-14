@@ -126,6 +126,13 @@ describe("SV-1 pairs: among the four", () => {
       .toMatchObject({ ok: false, code: "illegal", message: expect.stringContaining("no swap happens") });
   });
 
+  it("the Klutz chooses the Sage or the Sweetheart (good): nothing happens", () => {
+    for (const good of ["sage", "sweetheart"]) {
+      const g = at(["klutz", "imp", good, "dreamer"], "day");
+      expect(planned(plan(g, request(g, "p0", "klutz", { [KLUTZ_TARGET]: pick(g, "p2") }, klutzDay))).gameRuleFacts ?? [], good).toEqual([]);
+    }
+  });
+
   it("the Barber's swap gives a used Klutz ability back fresh; a living Klutz still acts only after learning they died", () => {
     const g = patchPlayer(at(["barber", "imp", "klutz", "dreamer"], "night"), "p2", { alive: false, abilityUsed: true });
     const next = planned(plan(g, request(g, "p0", "barber", { [BARBER_PLAYERS]: pick(g, "p2", "p3") }, night)));

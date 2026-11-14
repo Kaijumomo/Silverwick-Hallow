@@ -59,9 +59,10 @@ export function demonGoneAdvisory(game: StorytellerLobbyRecord, environment: Rul
  * recorded public choice: "if they are evil, your team loses" -- or, for an evil Klutz, good wins. A choice that may register either
  * way is the Storyteller's ruling. https://wiki.bloodontheclocktower.com/Klutz
  */
-export function klutzAdvisory(game: Pick<StorytellerLobbyRecord, "phase" | "gameRuleFacts">): string | null {
-  if (game.phase !== "day" && game.phase !== "night") return null;
-  const has = (type: string) => (game.gameRuleFacts ?? []).some((fact) => fact.type === type);
+export function klutzAdvisory(game: Pick<StorytellerLobbyRecord, "phase" | "day" | "gameRuleFacts">): string | null {
+  // Only during the Day the Klutz chose: once the Storyteller lets play go on into the night, the line goes (the fact stays).
+  if (game.phase !== "day") return null;
+  const has = (type: string) => (game.gameRuleFacts ?? []).some((fact) => fact.type === type && fact.recordedAt?.phase === "day" && fact.recordedAt.day === game.day);
   if (has(KLUTZ_CHOICE_RULING)) return "The Klutz chose a player who may register as evil. Your ruling";
   if (has(KLUTZ_GOOD_TEAM_LOST)) return "The Klutz chose an evil player. Evil wins. Check before ending the game";
   if (has(KLUTZ_EVIL_TEAM_LOST)) return "The Klutz chose an evil player. Good wins. Check before ending the game";

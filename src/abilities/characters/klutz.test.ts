@@ -1,8 +1,9 @@
 // SV-1c -- Klutz: "When you learn that you died, publicly choose 1 alive player: if they are evil, your team loses."
 // https://wiki.bloodontheclocktower.com/Klutz -- production semantics, the real coordinator and the real store.
 import { beforeEach, describe, expect, it } from "vitest";
-import { KLUTZ_TARGET } from "./klutz";
-import { bind, impair, openInStore, patchPlayer, plan, planned, proofGame, request } from "@/test/proofFixtures";
+import { KLUTZ_TARGET, klutzVerdict } from "./klutz";
+import { bind, impair, openInStore, patchPlayer, plan, planned, proofGame, proofQuery, proofRegistry, request } from "@/test/proofFixtures";
+import { projectLobbyToPublic, projectLobbyToSelfMap } from "@/stores/projections";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { KLUTZ_CHOICE_RULING, KLUTZ_EVIL_TEAM_LOST, KLUTZ_GOOD_TEAM_LOST } from "@/stores/gameRuleFactRegistry";
 import { klutzAdvisory } from "@/stores/endGameEligibility";
@@ -92,5 +93,28 @@ describe("Klutz -- the public choice", () => {
     store.getState().undo();
     expect(game().players.p0!.abilityUsed).toBe(false);
     expect(game().gameRuleFacts ?? []).toEqual(g.gameRuleFacts ?? []);
+  });
+
+  it("the End line shows only on the Day of the choice: once play goes on into the night it goes, and the fact stays", () => {
+    const next = planned(choose(dead(), "p1"));
+    expect(klutzAdvisory(next)).not.toBeNull();
+    expect(klutzAdvisory({ ...next, phase: "night", day: 3 })).toBeNull();
+    expect(klutzAdvisory({ ...next, day: 3 })).toBeNull();
+    expect(facts({ ...next, phase: "night", day: 3 })).toEqual([KLUTZ_GOOD_TEAM_LOST]);
+  });
+
+  it("a good pick is nothing even when the Klutz's own alignment is not set; an evil pick then is the Storyteller's ruling", () => {
+    const unset = (g: StorytellerLobbyRecord) => patchPlayer(g, "p0", { actualAlignment: null as never });
+    const g = dead(unset);
+    expect(klutzVerdict(proofQuery(g), bind(g, "p0"), bind(g, "p2"), true)).toEqual({ verdict: "nothing" });
+    expect(klutzVerdict(proofQuery(g), bind(g, "p0"), bind(g, "p1"), true)).toEqual({ verdict: "ruling", fact: KLUTZ_CHOICE_RULING });
+  });
+
+  it("privacy: the recorded choice reaches no player view and not the public view", () => {
+    const g = dead();
+    const next = planned(choose(g, "p1"));
+    expect(projectLobbyToPublic(next, {})).toEqual(projectLobbyToPublic(g, {}));
+    const before = projectLobbyToSelfMap(g, proofRegistry), after = projectLobbyToSelfMap(next, proofRegistry);
+    for (const id of g.seatOrder) expect(after[id]).toEqual(before[id]);
   });
 });

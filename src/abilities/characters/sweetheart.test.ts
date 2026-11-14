@@ -3,7 +3,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { SWEETHEART, SWEETHEART_PLAYER, sweetheartOpenDayDeath } from "./sweetheart";
 import { nightTriggerStatus } from "@/abilities/invocation";
-import { bind, impair, openInStore, patchPlayer, plan, planned, proofGame, proofQuery, request } from "@/test/proofFixtures";
+import { bind, impair, openInStore, patchPlayer, plan, planned, proofGame, proofQuery, proofRegistry, request } from "@/test/proofFixtures";
+import { projectLobbyToPublic, projectLobbyToSelfEnvelopeMap } from "@/stores/projections";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { nightTriggerStepKey } from "@/stores/nightProgress";
 import { toldRoleChangeIntents } from "@/stores/roleResolution";
@@ -79,6 +80,16 @@ describe("Sweetheart -- the Night step", () => {
     expect(triggerOf(g)).toMatchObject({ kind: "notTriggered" });
     const dead = nightDeath();
     expect(plan(dead, request(dead, "p0", "sweetheart", { [SWEETHEART_PLAYER]: one(dead, "p2") }, { invocationPath: "nightOrder" }))).toMatchObject({ ok: false });
+  });
+});
+
+describe("Sweetheart -- privacy", () => {
+  it("her DRUNK reaches no player's view (the drunk player included) and not the public view", () => {
+    const g = nightDeath();
+    const next = planned(atNight(g));
+    expect(projectLobbyToPublic(next, {})).toEqual(projectLobbyToPublic(g, {}));
+    const before = projectLobbyToSelfEnvelopeMap(g, proofRegistry), after = projectLobbyToSelfEnvelopeMap(next, proofRegistry);
+    for (const id of g.seatOrder) expect(after[id], id).toEqual(before[id]);
   });
 });
 
