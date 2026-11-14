@@ -2,8 +2,9 @@ import type { AbilityDescriptor, AbilityInvocation, AbilityTiming, NightTriggerK
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
 import { isDeathEvent } from "@/stores/lifeEvents";
+import { PIT_HAG_ARBITRARY_DEATHS } from "@/stores/gameRuleFactRegistry";
 import { encodeNightProgressComponent, nightTriggerStepKey } from "@/stores/nightProgress";
-import type { StorytellerLobbyRecord } from "@/stores/types";
+import type { LifeEvent, StorytellerLobbyRecord } from "@/stores/types";
 
 /**
  * Phase 10F (SOL-10F-L3-R1, PHASE10F Section 23): the ONE rules-neutral
@@ -117,6 +118,10 @@ export const nightTriggerProgressKey = (day: number, actor: ParticipantBinding, 
  *
  * actorDiedTonight: the first not-yet-consumed death event of this
  * participant tonight whose `actualRoleAtEvent` is this ability's character.
+ * actorKilledByDemonTonight (SV-1a): the same, passing over a death whose
+ * recorded cause is a character that is not a Demon (recordedDeathCause). An
+ * unrecorded cause, or any death on a night a Pit-Hag made deaths arbitrary,
+ * still opens the step: the ability then asks the Storyteller first.
  * An event with no Role evidence is UNKNOWN (judgment). For a simulated wake
  * (a Drunk or Marionette currently shown this character) an event recorded
  * under the actor's unchanged Actual Role is TRIGGERED: the Storyteller shows
@@ -136,33 +141,70 @@ export function nightTriggerStatus(
     const status = query.game.nightProgress[nightTriggerProgressKey(moment.day, actor, descriptor.roleId, eventId)]?.status;
     return status === "done" || status === "skipped";
   };
-  switch (descriptor.nightTrigger) {
-    case "actorDiedTonight": {
-      const deaths = query.lifeEvents(moment, (event) => isDeathEvent(event) && event.subject.participantId === actor.participantId);
-      const events = deaths.status === "known" ? deaths.events : deaths.recorded;
-      if (deaths.status === "unknown") {
-        const event = events.find(candidate => !consumed(candidate.id));
-        if (!event && (consumed(null) || events.length > 0)) return { kind: "notTriggered", reason: "This trigger was already resolved tonight." };
-        return { kind: "unknown", eventId: event?.id ?? null, reason: "Silverwick cannot confirm who died tonight. Check whether this player died, then resolve it by hand." };
+  /** The first open death of this participant tonight that `counts` for the trigger (actorDiedTonight counts every one). */
+  const diedTonight = (counts: (event: LifeEvent) => boolean, skipped: string): NightTriggerStatus => {
+    const deaths = query.lifeEvents(moment, (event) => isDeathEvent(event) && event.subject.participantId === actor.participantId);
+    const events = deaths.status === "known" ? deaths.events : deaths.recorded;
+    if (deaths.status === "unknown") {
+      const event = events.find(candidate => !consumed(candidate.id));
+      if (!event && (consumed(null) || events.length > 0)) return { kind: "notTriggered", reason: "This trigger was already resolved tonight." };
+      return { kind: "unknown", eventId: event?.id ?? null, reason: "Silverwick cannot confirm who died tonight. Check whether this player died, then resolve it by hand." };
+    }
+    const holder = query.participant(actor);
+    const current = holder?.actualRole;
+    let resolved = false, passed = false;
+    for (const event of events) {
+      if (consumed(event.id)) { resolved = true; continue; }
+      const evidence = event.actualRoleAtEvent;
+      if (!evidence) return { kind: "unknown", eventId: event.id, reason: "This death has no recorded character evidence: the Storyteller decides whether it triggered this ability." };
+      if (evidence === descriptor.roleId) {
+        if (!counts(event)) { passed = true; continue; }
+        return { kind: "triggered", eventId: event.id };
       }
-      const holder = query.participant(actor);
-      const current = holder?.actualRole;
-      let resolved = false;
-      for (const event of events) {
-        if (consumed(event.id)) { resolved = true; continue; }
-        const evidence = event.actualRoleAtEvent;
-        if (!evidence) return { kind: "unknown", eventId: event.id, reason: "This death has no recorded character evidence: the Storyteller decides whether it triggered this ability." };
-        if (evidence === descriptor.roleId) return { kind: "triggered", eventId: event.id };
-        if (current !== descriptor.roleId && evidence === current) {
-          // A simulated wake (a Drunk or Marionette shown this character, like a poisoned holder) is triggered by the
-          // death of that exact participant tonight. What it shows is the Storyteller's choice, so it needs no recorded evidence.
-          if (holder?.shownRole === descriptor.roleId) return { kind: "triggered", eventId: event.id };
-          return { kind: "unknown", eventId: event.id, reason: "A simulated wake: what this player was shown when they died is not recorded -- the Storyteller decides." };
+      if (current !== descriptor.roleId && evidence === current) {
+        // A simulated wake (a Drunk or Marionette shown this character, like a poisoned holder) is triggered by the
+        // death of that exact participant tonight. What it shows is the Storyteller's choice, so it needs no recorded evidence.
+        if (holder?.shownRole === descriptor.roleId) {
+          if (!counts(event)) { passed = true; continue; }
+          return { kind: "triggered", eventId: event.id };
         }
+        return { kind: "unknown", eventId: event.id, reason: "A simulated wake: what this player was shown when they died is not recorded -- the Storyteller decides." };
       }
-      return { kind: "notTriggered", reason: resolved ? "This trigger was already resolved tonight."
-        : events.length ? "This player did not die tonight as this character." : "This player has not died tonight." };
+    }
+    return { kind: "notTriggered", reason: resolved ? "This trigger was already resolved tonight."
+      : passed ? skipped : events.length ? "This player did not die tonight as this character." : "This player has not died tonight." };
+  };
+  switch (descriptor.nightTrigger) {
+    case "actorDiedTonight":
+      return diedTonight(() => true, "");
+    case "actorKilledByDemonTonight": {
+      return diedTonight((event) => recordedDeathCause(query, event).kind !== "other", "This player was not killed by the Demon tonight.");
     }
   }
   return { kind: "unknown", eventId: null, reason: "Unknown trigger: the Storyteller decides." };
+}
+
+/** SV-1a: what a recorded death says about its cause. A guided resolution records the character whose ability caused the death
+ * (and that player) on the death's existing provenance; a death entered by hand records none. */
+export type RecordedDeathCause =
+  /** A Demon's ability. `killer` is the player recorded as its source, or null if none was recorded. */
+  | { kind: "demon"; killer: ParticipantBinding | null }
+  /** Another character's ability (an execution is a Day event and never a night death). */
+  | { kind: "other" }
+  /** Nothing recorded (a death entered by hand, or a manual resolution), or `arbitrary`: a Pit-Hag made deaths arbitrary
+   * tonight, so no recorded cause is trusted ("Because the Sage died due to the Pit-Hag, not the Demon, the Sage does not
+   * wake"). Either way the Storyteller knows. */
+  | { kind: "unrecorded"; arbitrary: boolean };
+
+export function recordedDeathCause(query: Pick<RulesQuery, "roleOf" | "gameRuleFact">, event: LifeEvent): RecordedDeathCause {
+  const arbitrary = query.gameRuleFact(PIT_HAG_ARBITRARY_DEATHS);
+  if (arbitrary.known && arbitrary.value) return { kind: "unrecorded", arbitrary: true };
+  const provenance = event.provenance;
+  const character = provenance?.sourceCharacter;
+  if (!provenance || !character || provenance.reason === "manual") return { kind: "unrecorded", arbitrary: false };
+  const role = query.roleOf(character);
+  if (!role) return { kind: "unrecorded", arbitrary: false };
+  if (role.type !== "demon") return { kind: "other" };
+  const source = provenance.sourceParticipant;
+  return { kind: "demon", killer: source?.kind === "participant" ? { playerId: source.playerId, participantId: source.participantId } : null };
 }

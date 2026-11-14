@@ -39,7 +39,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 const hasReveal = () => !!screen.queryByRole("button", { name: "Reveal a Token" });
 it("manual game (an unreviewed character in play): the Undertaker still reveals the executed token", () => {
-  undertaker(["undertaker", "chef", "imp", "monk", "sage"]); expect(hasReveal()).toBe(true);
+  undertaker(["undertaker", "chef", "imp", "monk", "banshee"]); expect(hasReveal()).toBe(true);
   expect(screen.getByText("Chef")).toBeInTheDocument(); reveal();
   expect(screen.getByRole("dialog", { name: "This Character" })).toHaveTextContent("Chef");
   expect(game().informationDeliveries).toHaveLength(0);
@@ -54,7 +54,7 @@ it("manual game: an executed Recluse or Spy is the Storyteller's choice on the b
   }
 });
 it("manual game: a poisoned Undertaker gets no preview, only the picker", () => {
-  undertaker(["undertaker", "chef", "imp", "monk", "sage"]); cleanup(); store.setState({ game: impair(game(), "p0") }); show();
+  undertaker(["undertaker", "chef", "imp", "monk", "banshee"]); cleanup(); store.setState({ game: impair(game(), "p0") }); show();
   expect(hasReveal()).toBe(true); expect(screen.queryByText("Chef")).toBeNull(); reveal();
   expect(screen.getByText(/choose a character to show/)).toBeInTheDocument();
 });
@@ -63,14 +63,14 @@ it("manual game: a Vortox in play means no preview, only the picker", () => {
   expect(screen.getByText(/choose a character to show/)).toBeInTheDocument();
 });
 it("manual game: no execution means no reveal row", () => {
-  undertaker(["undertaker", "chef", "imp", "monk", "sage"], false); expect(hasReveal()).toBe(false);
+  undertaker(["undertaker", "chef", "imp", "monk", "banshee"], false); expect(hasReveal()).toBe(false);
 });
 it("manual game: the Ravenkeeper gets the board picker", () => {
-  ravenkeeper(["ravenkeeper", "imp", "chef", "monk", "sage"]); expect(hasReveal()).toBe(true);
+  ravenkeeper(["ravenkeeper", "imp", "chef", "monk", "banshee"]); expect(hasReveal()).toBe(true);
   reveal(); expect(screen.getByText(/choose a character to show/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Mayor" }));
   expect(screen.getByRole("dialog", { name: "This Character" })).toHaveTextContent("Mayor");
 });
 it("manual game: a living Ravenkeeper has no reveal row", () => {
-  ravenkeeper(["ravenkeeper", "imp", "chef", "monk", "sage"], false); expect(hasReveal()).toBe(false);
+  ravenkeeper(["ravenkeeper", "imp", "chef", "monk", "banshee"], false); expect(hasReveal()).toBe(false);
 });

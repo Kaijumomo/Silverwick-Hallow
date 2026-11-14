@@ -221,9 +221,6 @@ export const PARTIAL_SUPPORT: Readonly<Record<RoleId, readonly Piece[]>> = {
   puzzlemaster: [
     { path: "src/rules/setup/setupAnalyzer.ts", what: "In the setup analyzer's manual-review list: setup shows a 'Review character setup' check and the Storyteller resolves the special choices by hand." },
   ],
-  sage: [
-    { path: "src/rules/night/nightOrder.ts", what: "Death-check wake slot: the night list shows this character after a death night with a 'check the death condition' advisory; historical triggers are not tracked." },
-  ],
   sailor: [
     { path: "src/abilities/characters/passiveRules.ts", what: "Death gate: a sober, healthy Sailor cannot die (when asked directly); the nightly drunk choice is not modelled, so any game with a Sailor stays Manual." },
   ],
@@ -315,6 +312,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   professor: ["src/abilities/characters/townCrierOraclePro.test.ts", "src/abilities/characters/concealedSameAsPoisoned.test.ts"],
   ravenkeeper: ["src/stores/troubleBrewingB5bIndependent.test.ts", "src/abilities/characters/troubleBrewingB5b.test.ts"],
   recluse: ["src/abilities/characters/troubleBrewingB1.independent.test.ts", "src/features/grimoire-v6/night/nightGuide.port.test.tsx"],
+  sage: ["src/abilities/characters/sage.test.ts", "src/features/grimoire-v6/night/port/sageUi.v6.test.tsx"],
   saint: ["src/stores/roleResolution.test.ts", "src/stores/projections.test.ts"],
   savant: ["src/abilities/characters/informationCharacterReview.test.ts"],
   scarletwoman: ["src/stores/troubleBrewingB4Death.test.ts", "src/stores/troubleBrewingB4Independent.test.ts"],

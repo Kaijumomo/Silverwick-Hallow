@@ -98,8 +98,11 @@ export type AbilityPresentation = {
  *  - actorDiedTonight: the actor's exact participation instance died during
  *    the CURRENT Night, as recorded in the Life Event Window with known
  *    coverage (matrix Section 9). History and Reminders are never consulted.
+ *  - actorKilledByDemonTonight (SV-1a, the Sage): the same death, unless its
+ *    recorded cause is a character that is not a Demon. An unrecorded cause
+ *    stays open; the ability asks the Storyteller.
  */
-export type NightTriggerKind = "actorDiedTonight";
+export type NightTriggerKind = "actorDiedTonight" | "actorKilledByDemonTonight";
 
 export type AbilityDescriptor = {
   roleId: RoleId;
@@ -170,6 +173,9 @@ export type AbilityEvaluationContext = {
    * information modifier allowing only certain values). The coordinator
    * also ENFORCES information constraints on the delivered values. */
   constraints: readonly InformationConstraint[];
+  /** SV-1a: on the verified Night-trigger path, the exact Life Event that
+   * fired it (as revalidated by the coordinator). Absent on every other path. */
+  trigger?: { eventId: string | null };
 };
 
 /**

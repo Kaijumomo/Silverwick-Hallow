@@ -99,13 +99,13 @@ describe("Ravenkeeper -- the verified trigger", () => {
   });
 
   it("a generic triggered / passive descriptor WITHOUT a verified trigger never gains the path", () => {
-    const generic: AbilityDescriptor = { ...RAVENKEEPER, roleId: "sage" };
+    const generic: AbilityDescriptor = { ...RAVENKEEPER, roleId: "banshee" };
     delete (generic as { nightTrigger?: unknown }).nightTrigger;
     expect(invocationEligibility(generic, "nightTrigger", { phase: "night", day: 2 })).toMatchObject({ eligible: false });
     expect(invocationEligibility({ timing: ["passive"], invocation: "none" }, "nightTrigger", { phase: "night", day: 2 })).toMatchObject({ eligible: false });
-    const semantics: AbilitySemanticsRegistry = new Map([...CANONICAL_ABILITY_SEMANTICS, ["sage", generic]]);
-    const g = patchPlayer(killedTonight(), "p0", { actualRole: "sage", shownRole: "sage" });
-    expect(plan(g, request(g, "p0", "sage", { target: pick(g, "p2") }, { invocationPath: "nightTrigger", withStep: true }), proofEnv({ semantics })))
+    const semantics: AbilitySemanticsRegistry = new Map([...CANONICAL_ABILITY_SEMANTICS, ["banshee", generic]]);
+    const g = patchPlayer(killedTonight(), "p0", { actualRole: "banshee", shownRole: "banshee" });
+    expect(plan(g, request(g, "p0", "banshee", { target: pick(g, "p2") }, { invocationPath: "nightTrigger", withStep: true }), proofEnv({ semantics })))
       .toMatchObject({ ok: false, code: "notApplicable" });
   });
 });
