@@ -87,3 +87,22 @@ it("Privacy Mode hides the row, the '!' and the End line", () => {
   act(() => { usePrivacyStore.setState({ enabled: true }); });
   expect(screen.queryByTitle(/The Klutz chose/)).toBeNull();
 });
+
+it("touch: tapping End shows the Klutz line in the End dialog (no hover needed); only the Storyteller's choice there ends the game", () => {
+  open(klutzDied("day"));
+  pick("p1");
+  // The Klutz's choice alone ends nothing: the game runs on until the Storyteller ends it.
+  expect(game().phase).toBe("day");
+  act(() => { vi.advanceTimersByTime(60_000); });
+  expect(game().phase).toBe("day");
+  fireEvent.click(screen.getByTitle(/^End game · The Klutz chose/));
+  const dialog = screen.getByRole("dialog", { name: "End game" });
+  expect(dialog).toHaveTextContent("The Klutz chose an evil player. Evil wins. Check before ending the game.");
+  expect(game().phase).toBe("day");
+});
+
+it("the End dialog carries no Klutz line when there is none", () => {
+  open(klutzDied("day"));
+  fireEvent.click(screen.getByTitle("End game"));
+  expect(screen.getByRole("dialog", { name: "End game" })).not.toHaveTextContent(/Klutz/);
+});

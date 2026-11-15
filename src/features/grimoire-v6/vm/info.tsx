@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useStorytellerStore } from "@/stores/storytellerStore";
+import { klutzAdvisory } from "@/stores/endGameEligibility";
 import { infoStatistics, seatedPlayers, type SetupView } from "@/features/info/infoModel";
 import type { V6Ctx } from "../ctx";
 import { TEAM_COLOR } from "../icons";
@@ -89,9 +90,12 @@ export function useInfoVm(ctx: V6Ctx): SliceResult {
   const ref = refOn ? buildRefVm(ctx, (id) => ui.set({ refSel: id })) : null;
 
   // ── End game ────────────────────────────────────────────────────────────────
+  // PO review 2026-11-15 (R1): the End control's "!" line is a tooltip, which a touch screen never shows. The Klutz's line is
+  // repeated in the End dialog's existing notice, so tapping End explains it.
+  const klutz = !privacy ? klutzAdvisory(game) : null;
   const notice = recovery
     ? terminal?.confirmedRecovery ? "The online game has ended. Save its confirmed result here to finish." : "An ending was interrupted. Retry to recover the recorded result."
-    : lobby ? "The declared result will also be shared with seated players." : "";
+    : [klutz ? `${klutz}.` : "", lobby ? "The declared result will also be shared with seated players." : ""].filter(Boolean).join(" ");
   const endDlg = {
     open: endOpen,
     close: () => { if (!endInFlight() && !recoveryChoice()) ui.set({ endOpen: false }); },
