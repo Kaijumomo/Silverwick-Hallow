@@ -152,6 +152,11 @@ export function nightTriggerStatus(
     const windows = [...(day ? [day] : []), moment].map((at) => query.lifeEvents(at, (event) => isDeathEvent(event) && event.subject.participantId === actor.participantId));
     const events = windows.flatMap((deaths) => deaths.status === "known" ? deaths.events : deaths.recorded);
     if (windows.some((deaths) => deaths.status === "unknown")) {
+      // PO review 2026-11-15: a Sage who is alive was not killed tonight (Silverwick's life state is what the table sees), even
+      // where the life record does not reach back this far (a game saved before it existed): no step.
+      if (descriptor.nightTrigger === "actorKilledByDemonTonight" && query.participant(actor)?.alive) {
+        return { kind: "notTriggered", reason: "The Sage is alive, so they do not wake." };
+      }
       const event = events.find(candidate => !consumed(candidate.id));
       if (!event && (consumed(null) || events.length > 0)) return { kind: "notTriggered", reason: "This trigger was already resolved tonight." };
       return { kind: "unknown", eventId: event?.id ?? null, reason: "Silverwick cannot confirm who died tonight. Check whether this player died, then resolve it by hand." };

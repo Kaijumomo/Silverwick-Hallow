@@ -42,10 +42,10 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 it("killed by the Demon: the board picker asks for two players and refuses a pair without the Demon", () => {
   demonKill();
-  expect(useTargetPicker.getState().active?.label ?? "").toContain("Point at two players, one of them the Demon");
-  expect(screen.getByText("Point at two players, one of them the Demon")).toBeInTheDocument();
+  expect(useTargetPicker.getState().active?.label ?? "").toContain("Tap the two players you point to");
+  expect(screen.getByText("Tap the two players you point to")).toBeInTheDocument();
   tap("p2"); tap("p3");
-  expect(screen.getByRole("alert")).toHaveTextContent("One of the two must be the Demon that killed the Sage.");
+  expect(screen.getByRole("alert")).toHaveTextContent("One of them must be the Demon who killed the Sage.");
   expect(game().informationDeliveries).toHaveLength(0);
   tap("p2"); tap("p1");
   expect(game().informationDeliveries).toHaveLength(1);
@@ -62,7 +62,7 @@ it("a poisoned Sage: any two players are accepted", () => {
 it("a death entered by hand: the Storyteller answers first; No closes the step with nothing delivered", () => {
   handDeath();
   expect(screen.getByText(`Did the Demon kill ${game().players.p0!.name}?`)).toBeInTheDocument();
-  expect(screen.getByText("Silverwick did not record what killed the Sage. The Sage wakes only if the Demon killed them.")).toBeInTheDocument();
+  expect(screen.getByText("Entered by hand, so the cause is not recorded. No: the Sage does not wake.")).toBeInTheDocument();
   expect(useTargetPicker.getState().active).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "No" }));
   expect(game().informationDeliveries).toHaveLength(0);
@@ -75,7 +75,7 @@ it("a death entered by hand: Yes opens the board picker; one of the two must be 
   fireEvent.click(screen.getByRole("button", { name: "Yes" }));
   expect(useTargetPicker.getState().active).not.toBeNull();
   tap("p2"); tap("p3");
-  expect(screen.getByRole("alert")).toHaveTextContent("One of the two must be the Demon that killed the Sage.");
+  expect(screen.getByRole("alert")).toHaveTextContent("One of them must be the Demon who killed the Sage.");
   expect(screen.queryByText(`Did the Demon kill ${game().players.p0!.name}?`)).toBeNull();
   tap("p1"); tap("p2");
   expect(game().informationDeliveries).toHaveLength(1);

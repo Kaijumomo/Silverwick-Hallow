@@ -27,7 +27,11 @@ import { informationAbilityRefusal } from "./informationSupport";
 export const SAGE_PLAYERS = "players";
 const SAGE_DEMON_KILLED = "sage:demonKilled";
 export const sageCauseId = (eventId: string | null) => `${SAGE_DEMON_KILLED}:${JSON.stringify(eventId)}`;
-const WRONG_PAIR = "One of the two must be the Demon that killed the Sage.";
+const WRONG_PAIR = "One of them must be the Demon who killed the Sage.";
+/** PO review 2026-11-15: the cause is unknown only for a death entered or resolved by hand (Silverwick records the cause of every
+ * death it resolves itself), or on a night a Pit-Hag made deaths arbitrary. Each fact is said once: the rule is the ability line. */
+const HAND_NOTE = "Entered by hand, so the cause is not recorded. No: the Sage does not wake.";
+const ARBITRARY_NOTE = "Deaths tonight are arbitrary. No: the Sage does not wake.";
 
 /** The Sage's death tonight that fired the trigger, and what its record says about the cause (a Pit-Hag night asks every time). */
 function deathCause(query: RulesQuery, eventId: string | null): RecordedDeathCause | null {
@@ -45,8 +49,7 @@ export function sageCauseQuestion(query: RulesQuery, sage: ParticipantBinding, e
   const player = query.participant(sage);
   const name = player?.name || (player ? `Seat ${player.seat + 1}` : "the Sage");
   return { id: sageCauseId(eventId), heading: `Did the Demon kill ${name}?`,
-    note: cause.arbitrary ? "Deaths tonight are arbitrary. The Sage wakes only if the Demon killed them."
-      : "Silverwick did not record what killed the Sage. The Sage wakes only if the Demon killed them." };
+    note: cause.arbitrary ? ARBITRARY_NOTE : HAND_NOTE };
 }
 
 const inform = (context: AbilityEvaluationContext, players: ParticipantBinding[]): AbilityEvaluation =>
@@ -63,7 +66,7 @@ export const SAGE: AbilityDescriptor = {
   inputs: [{ id: SAGE_PLAYERS, kind: "participant", source: "storyteller", count: 2, allowNone: true, constraints: ["distinct"], label: "The two players shown to the Sage" }],
   hooks: ["information", "registration", "wake"],
   informationActions: ["sage-triggered"],
-  presentation: { complexity: "simple", action: "Point at two players, one of them the Demon" },
+  presentation: { complexity: "simple", action: "Tap the two players you point to" },
   evaluator: (context) => {
     const refusal = informationAbilityRefusal(context);
     if (refusal) return refusal;
@@ -74,12 +77,12 @@ export const SAGE: AbilityDescriptor = {
       const id = sageCauseId(context.trigger.eventId);
       const answer = answerOf(context.inputs, id, "boolean");
       const name = nameOf(context, context.actor.binding);
-      if (!answer) return ask(`Silverwick did not record what killed ${name}. The Sage wakes only if the Demon killed them.`,
+      if (!answer) return ask(cause.arbitrary ? ARBITRARY_NOTE : HAND_NOTE,
         { id, kind: "boolean", source: "storyteller", label: `The Demon killed ${name}` });
       if (!answer.value) return nothing();
     }
     const players = participantsOf(context.inputs, SAGE_PLAYERS) ?? [];
-    if (players.length !== 2) return { kind: "illegal", message: "Point at two players, one of them the Demon." };
+    if (players.length !== 2) return { kind: "illegal", message: "Tap two players." };
     // Drunk, poisoned or only shown the Sage: the Storyteller shows any two players.
     if (context.simulated || !context.functioning) return inform(context, players);
     const killer = cause.kind === "demon" && cause.killer && context.query.participant(cause.killer) ? cause.killer : null;

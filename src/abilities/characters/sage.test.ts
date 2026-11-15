@@ -61,7 +61,7 @@ describe("Sage -- the trigger", () => {
   it("killed by the Demon tonight: the step opens; one of the two must be the killer", () => {
     const g = demonKill();
     expect(status(g)).toMatchObject({ kind: "triggered" });
-    expect(sage(g, { [SAGE_PLAYERS]: players(g, "p2", "p3") })).toMatchObject({ ok: false, code: "illegal", message: "One of the two must be the Demon that killed the Sage." });
+    expect(sage(g, { [SAGE_PLAYERS]: players(g, "p2", "p3") })).toMatchObject({ ok: false, code: "illegal", message: "One of them must be the Demon who killed the Sage." });
     expect(sage(g, { [SAGE_PLAYERS]: players(g, "p2") })).toMatchObject({ ok: false });
     const next = planned(sage(g, { [SAGE_PLAYERS]: players(g, "p2", "p1") }));
     expect(next.informationDeliveries.at(-1)).toMatchObject({ actualRole: "sage", informationActionId: "sage-triggered",
@@ -133,10 +133,38 @@ describe("Sage -- a death with no recorded cause asks the Storyteller", () => {
     expect(status(g)).toMatchObject({ kind: "triggered" });
     const id = sageCauseId(eventOf(g).id);
     expect(requirementIds(sage(g, { [SAGE_PLAYERS]: players(g, "p2", "p1") }))).toEqual([id]);
-    expect(sageCauseQuestion(proofQuery(g), bind(g, "p0"), eventOf(g).id)?.note).toBe("Deaths tonight are arbitrary. The Sage wakes only if the Demon killed them.");
+    expect(sageCauseQuestion(proofQuery(g), bind(g, "p0"), eventOf(g).id)?.note).toBe("Deaths tonight are arbitrary. No: the Sage does not wake.");
     // Even a non-Demon cause asks on that night: the Storyteller decides who killed whom.
     const other = arbitraryNight(recordedDeath(proofGame(ROLES, "night", 2), "p0", "assassin"));
     expect(status(other)).toMatchObject({ kind: "triggered" });
+  });
+});
+
+describe("Sage -- PO review 2026-11-15: when is the cause unknown, and a living Sage", () => {
+  it("every Demon kill Silverwick resolves records its cause, so the Storyteller is never asked (Imp, Vigormortis, No Dashii)", () => {
+    // The Vortox's and Fang Gu's kills are entered by hand today; with either in play the Sage's step is the Storyteller's anyway.
+    for (const demon of ["imp", "vigormortis", "nodashii"]) {
+      const g0 = proofGame(["sage", demon, "clockmaker", "dreamer", "mathematician"], "night", 2);
+      const g = planned(plan(g0, request(g0, "p1", demon, { target: { kind: "participant", participants: [bind(g0, "p0")] } })));
+      expect(eventOf(g).provenance, demon).toMatchObject({ sourceCharacter: demon, sourceParticipant: { kind: "participant", playerId: "p1" } });
+      expect(sageCauseQuestion(proofQuery(g), bind(g, "p0"), eventOf(g).id), demon).toBeNull();
+      expect(status(g).kind, demon).toBe("triggered");
+    }
+  });
+
+  it("only a death entered by hand, or a Pit-Hag night, asks; the note says which", () => {
+    const hand = handDeath(proofGame(ROLES, "night", 2));
+    expect(sageCauseQuestion(proofQuery(hand), bind(hand, "p0"), eventOf(hand).id)?.note).toBe("Entered by hand, so the cause is not recorded. No: the Sage does not wake.");
+    const arbitrary = arbitraryNight(demonKill());
+    expect(sageCauseQuestion(proofQuery(arbitrary), bind(arbitrary, "p0"), eventOf(arbitrary).id)?.note).toBe("Deaths tonight are arbitrary. No: the Sage does not wake.");
+  });
+
+  it("a living Sage gets no step, even in a game whose life record does not reach tonight; a dead one there is the Storyteller's check", () => {
+    const uncovered = (g: StorytellerLobbyRecord): StorytellerLobbyRecord => ({ ...g, lifeEventWindow: { coverageFrom: { phase: "night", day: 3 }, events: [] } });
+    const alive = uncovered(proofGame(ROLES, "night", 2));
+    expect(status(alive)).toMatchObject({ kind: "notTriggered", reason: "The Sage is alive, so they do not wake." });
+    expect(status(proofGame(ROLES, "night", 2)).kind).toBe("notTriggered");
+    expect(status(uncovered(patchPlayer(proofGame(ROLES, "night", 2), "p0", { alive: false }))).kind).toBe("unknown");
   });
 });
 
