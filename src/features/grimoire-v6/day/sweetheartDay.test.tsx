@@ -92,6 +92,8 @@ it("E6 (PO review 2026-11-14): the board tap changes exactly the tapped player's
   act(() => { pickSeatIfPicking(game(), "p2"); });
   expect(drunk()).toEqual([expect.objectContaining({ type: "drunk", sourceCharacter: "sweetheart", state: "active",
     sourceParticipant: expect.objectContaining({ playerId: "p0", participantId: before.p0!.participantId }) })]);
-  for (const id of ["p0", "p1", "p3", "p4"]) expect(game().players[id]!.effects, id).toEqual(before[id]!.effects);
-  expect(game().players.p2!.actualRole).toBe("chef");
+  for (const id of ["p0", "p1", "p3", "p4"]) expect(game().players[id], id).toEqual(before[id]);
+  const { effects: _after, ...restAfter } = game().players.p2!;
+  const { effects: _before, ...restBefore } = before.p2!;
+  expect(restAfter).toEqual(restBefore);
 });

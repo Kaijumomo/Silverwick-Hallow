@@ -15,7 +15,7 @@ import type { Script, StorytellerLobbyRecord } from "@/stores/types";
 type Props = {
   game: StorytellerLobbyRecord; script: Script; step: Extract<NightStep, { kind: "player" }>;
   ability: Extract<StepAbility, { kind: "guided" }>; visible: boolean;
-  onResolved: (game: StorytellerLobbyRecord) => void; onManual: () => void;
+  onResolved: (game: StorytellerLobbyRecord) => void; onManual: (reason?: string) => void;
 };
 type Draft = { game: StorytellerLobbyRecord; demon: ParticipantBinding | null; picks: ParticipantBinding[]; rulings: AbilityInputs };
 const RULING_PREFIX = "barber:registersAsDemon:";
@@ -68,7 +68,8 @@ export function BarberNightAction({ game, script, step, ability, visible, onReso
     onResolved(useStorytellerStore.getState().game!);
   };
   const nobody = () => commit(inputs([], {}));
-  const restart = (message: string | null) => { setError(message); setDraft({ game, demon: current.demon, picks: [], rulings: {} }); };
+  /** A refused pair keeps the Demon already chosen; "Choose again" starts over, the Demon included (two living Demons). */
+  const restart = (message: string | null, demon = current.demon) => { setError(message); setDraft({ game, demon, picks: [], rulings: {} }); };
 
   // Two players chosen: what the rules say before anything changes.
   const plan = current.picks.length === 2 && fingerprint ? planAbilityResolution(game, request(inputs(current.picks)), environment) : null;
@@ -77,7 +78,7 @@ export function BarberNightAction({ game, script, step, ability, visible, onReso
   useEffect(() => {
     if (!plan || plan.ok || ruling) return;
     if (plan.code === "illegal") restart(plan.message);
-    else onManual();
+    else onManual(plan.message);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan?.ok, plan && !plan.ok ? plan.code : null, ruling?.id]);
 
@@ -103,7 +104,7 @@ export function BarberNightAction({ game, script, step, ability, visible, onReso
   if (!visible || privacy) return null;
   const chips = (list: ParticipantBinding[]) => list.map((p) => <span key={p.participantId} className="night-pick-chip">{nameOf(p)}</span>);
   const roleName = (binding: ParticipantBinding) => registry.get(game.players[binding.playerId]?.actualRole ?? "")?.name ?? "";
-  const nobodyButton = <div className="night-information-choices" role="group" aria-label="The Demon's choice">
+  const nobodyButton = <div className="night-information-choices night-decline" role="group" aria-label="The Demon's choice">
     <button className="btn" type="button" onClick={nobody}>{BARBER_NOBODY}</button></div>;
   return <div className="night-information">
     {blocked && <QuestionBlock heading="No swap happens" note={blocked} actions={[{ label: "Continue without swap", onClick: nobody }]} />}
@@ -129,7 +130,7 @@ export function BarberNightAction({ game, script, step, ability, visible, onReso
       const [a, b] = current.picks as [ParticipantBinding, ParticipantBinding];
       const note = plan.changed ? `${nameOf(a)} becomes the ${roleName(b)}; ${nameOf(b)} becomes the ${roleName(a)}.` : "They have the same character: nothing changes.";
       return <QuestionBlock heading={`Swap ${nameOf(a)} and ${nameOf(b)}?`} note={note}
-        actions={[{ label: "Swap", onClick: () => commit(inputs(current.picks)) }, { label: "Choose again", onClick: () => restart(null) }]} />;
+        actions={[{ label: "Swap", onClick: () => commit(inputs(current.picks)) }, { label: "Choose again", onClick: () => restart(null, null) }]} />;
     })()}
     {error && <p role="alert" className="behavior-help">{error}</p>}
   </div>;

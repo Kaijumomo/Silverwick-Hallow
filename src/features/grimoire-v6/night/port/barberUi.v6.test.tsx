@@ -200,3 +200,28 @@ it("a Recluse chosen: the Storyteller rules whether they register as a Demon; Ye
   fireEvent.click(screen.getByRole("button", { name: "Swap" }));
   expect(roles()).toEqual(["barber", "imp", "recluse", "dreamer", "clockmaker"]);
 });
+
+it("two living Demons: Choose again starts over from the Demon, so a mis-tapped Demon can be changed", () => {
+  openInStore(proofGame([...ROLES, "chef"]));
+  expect(store.getState().resolveAbility(request(game(), "p1", "imp", { target: { kind: "participant", participants: [bind(game(), "p0")] } }))).toMatchObject({ ok: true, changed: true });
+  store.setState({ undoStack: [], game: patchPlayer(game(), "p5", { actualRole: "nodashii", shownRole: "nodashii", actualAlignment: "evil" }) });
+  show();
+  tap("p5"); tap("p2"); tap("p3");
+  expect(screen.getByText("Swap Player 2 and Player 3?")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Choose again" }));
+  expect(screen.getByText("Tap the Demon who makes the swap")).toBeInTheDocument();
+  expect([...picker()!.eligible!].sort()).toEqual([game().players.p1!.participantId!, game().players.p5!.participantId!].sort());
+  tap("p1");
+  expect(screen.getByText("Player 1 swaps")).toBeInTheDocument();
+  expect(roles()).toEqual(["barber", "imp", "clockmaker", "dreamer", "witch", "nodashii"]);
+});
+
+it("a pair the app cannot swap (a Drunk who thinks they are the Chef): the step goes by hand and the card says why", () => {
+  demonKill();
+  store.setState({ game: patchPlayer(game(), "p4", { actualRole: "drunk", shownRole: "chef", actualAlignment: "good" }) });
+  show();
+  tap("p4"); tap("p2");
+  expect(screen.getByRole("alert")).toHaveTextContent("A concealed identity is involved: what these players are shown is not modeled. Swap their characters by hand.");
+  expect(screen.queryByText("Tap two players on the board")).toBeNull();
+  expect(roles()).toEqual(["barber", "imp", "clockmaker", "dreamer", "drunk"]);
+});

@@ -213,7 +213,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     if (current) setManualAction(current.stepKey);
     useTargetPicker.getState().cancel(); setWorkspace(null); setError(reason ?? null); setPaused(true);
   };
-  const requireManual = () => stopAutomation();
+  const requireManual = (reason?: string) => stopAutomation(reason);
   const finish = (committed: StorytellerLobbyRecord) => {
     setSuccessorChoice(null);
     if (!current || !stepResolved(committed, current)) return;

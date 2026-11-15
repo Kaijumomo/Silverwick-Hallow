@@ -253,7 +253,7 @@ describe("Barber -- one commit, Undo, and what the phones see", () => {
 });
 
 describe("Barber -- PO review 2026-11-14 evidence (E1, E2)", () => {
-  it("E1: the step opens on the night of the death after every guided Demon kill (Imp, Vigormortis, No Dashii), and after a Day death", () => {
+  it("E1: the step opens on the night of the death after every guided Demon kill (Imp, Vigormortis, No Dashii); a Day death is covered in barberUi.v6.test.tsx", () => {
     for (const demon of ["imp", "vigormortis", "nodashii"]) {
       const g0 = proofGame(["barber", demon, "clockmaker", "dreamer", "witch", "mathematician"], "night", 2);
       const g = planned(plan(g0, request(g0, "p1", demon, { target: pick(g0, "p0") })));
