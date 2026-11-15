@@ -106,3 +106,13 @@ it("the End dialog carries no Klutz line when there is none", () => {
   fireEvent.click(screen.getByTitle("End game"));
   expect(screen.getByRole("dialog", { name: "End game" })).not.toHaveTextContent(/Klutz/);
 });
+
+it("E6 (PO review 2026-11-14): the board tap records exactly the Klutz's use and the fact naming the Klutz; nothing else changes", () => {
+  open(klutzDied("day"));
+  const before = structuredClone(game());
+  pick("p1");
+  expect(game().players.p0!.abilityUsed).toBe(true);
+  expect(game().gameRuleFacts).toEqual([expect.objectContaining({ type: "klutzGoodTeamLost",
+    provenance: expect.objectContaining({ sourceCharacter: "klutz", sourceParticipant: expect.objectContaining({ playerId: "p0" }) }) })]);
+  for (const id of ["p1", "p2", "p3", "p4"]) expect(game().players[id], id).toEqual(before.players[id]);
+});

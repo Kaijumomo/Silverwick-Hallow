@@ -251,3 +251,25 @@ describe("Barber -- one commit, Undo, and what the phones see", () => {
     expect(JSON.stringify(projectLobbyToPublic(next, {}))).not.toMatch(/clockmaker|imp"|dreamer/);
   });
 });
+
+describe("Barber -- PO review 2026-11-14 evidence (E1, E2)", () => {
+  it("E1: the step opens on the night of the death after every guided Demon kill (Imp, Vigormortis, No Dashii), and after a Day death", () => {
+    for (const demon of ["imp", "vigormortis", "nodashii"]) {
+      const g0 = proofGame(["barber", demon, "clockmaker", "dreamer", "witch", "mathematician"], "night", 2);
+      const g = planned(plan(g0, request(g0, "p1", demon, { target: pick(g0, "p0") })));
+      expect(triggerOf(g).kind, demon).toBe("triggered");
+      expect(haircuts(g), demon).toBe(true);
+      expect(swap(g, ["p2", "p3"]), demon).toMatchObject({ ok: true, changed: true });
+      // Not the next night.
+      expect(triggerOf({ ...g, day: 3 }).kind, demon).toBe("notTriggered");
+    }
+  });
+
+  it("E2: a living player swapped into the Clockmaker on Night 3 is listed right after the Barber that night, and not on Night 4", () => {
+    const g = nightDeath(proofGame(ROLES, "night", 3));
+    const next = planned(swap(g, ["p2", "p3"]));
+    const listed = order(next);
+    expect(listed.indexOf("p3:clockmaker")).toBe(listed.indexOf("p0:barber") + 1);
+    expect(order({ ...next, day: 4 })).not.toContain("p3:clockmaker");
+  });
+});

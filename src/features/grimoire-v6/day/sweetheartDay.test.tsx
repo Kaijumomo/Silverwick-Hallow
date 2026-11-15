@@ -83,3 +83,15 @@ it("Privacy Mode hides the row and the '!'", () => {
   open(sweetheartDied());
   expect(badge()).toBeNull();
 });
+
+it("E6 (PO review 2026-11-14): the board tap changes exactly the tapped player's state: a lasting DRUNK sourced from the Sweetheart; nobody else changes", () => {
+  open(sweetheartDied());
+  const before = structuredClone(game().players);
+  openDayCard();
+  fireEvent.click(screen.getByRole("button", { name: "Choose a player" }));
+  act(() => { pickSeatIfPicking(game(), "p2"); });
+  expect(drunk()).toEqual([expect.objectContaining({ type: "drunk", sourceCharacter: "sweetheart", state: "active",
+    sourceParticipant: expect.objectContaining({ playerId: "p0", participantId: before.p0!.participantId }) })]);
+  for (const id of ["p0", "p1", "p3", "p4"]) expect(game().players[id]!.effects, id).toEqual(before[id]!.effects);
+  expect(game().players.p2!.actualRole).toBe("chef");
+});
