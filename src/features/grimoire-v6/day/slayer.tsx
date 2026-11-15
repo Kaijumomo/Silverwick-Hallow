@@ -169,15 +169,25 @@ function confirm(ctx: V6Ctx, ev: Evaluation, dies: boolean): void {
 }
 
 /** The Slayer's row in the Day card and the shot's own face-off card. */
+/**
+ * PO 2026-11-14: the Slayer's Day action belongs to scripts that have the Slayer (official or custom). A Slayer seated off the
+ * script (by hand) keeps it, so a real ability is never lost. An unknown script keeps the row, as before.
+ */
+export function slayerRowShown(ctx: Pick<V6Ctx, "script">, holder: STPlayerRecord | null): boolean {
+  return !ctx.script || ctx.script.characters.some((role) => role.id === "slayer") || !!holder;
+}
+
 export function buildSlayer(ctx: V6Ctx): Record<string, unknown> {
   const { game, ui, registry } = ctx;
   const sl = ui.slay;
   const holder = slayerHolder(ctx);
+  const shown = slayerRowShown(ctx, holder);
+  if (!shown) return { shown: false, open: false };
   const { status, color, unused } = slayerStatus(holder);
   const slayerDef = registry.get("slayer");
   const imgOf = (id?: string) => iconUrlFor(id ? registry.get(id) ?? id : "slayer");
   const base = {
-    img: imgOf("slayer"), ability: slayerDef?.ability ?? SLAYER_TEXT,
+    shown: true, img: imgOf("slayer"), ability: slayerDef?.ability ?? SLAYER_TEXT,
     toggle: () => (sl ? ui.set({ slay: null }) : openSlayer(ctx)),
     pillColor: sl ? "#ff7a68" : unused ? "rgba(222,216,204,.7)" : "rgba(222,216,204,.4)",
     dayOn: game.phase === "day", holderText: holder ? holder.name : "Any shot is a bluff", status, statusColor: color,

@@ -2950,10 +2950,13 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                     </div>
                   </div>
                 </div>
+                {/* PO 2026-11-14: the Slayer row only where the script has the Slayer; the heading only when a row is shown. */}
+                {(vm.sv?.shown || (vm.dayC?.rows ?? []).length > 0) && (
                 <div style={S370}>
                   <span style={S371}>
                     Day actions
                   </span>
+                  {vm.sv?.shown && (
                   <div style={S372}>
                     <div role="img" aria-hidden="true" style={css(`width:44px; height:44px; flex:none; border-radius:50%; background:url(${vm.sv?.img ?? ''}) center/78% no-repeat, radial-gradient(circle at 38% 30%, #f1e6c9, #b09566); box-shadow:0 0 0 2px #14151d, 0 0 0 3px rgba(176,186,204,.35); filter:${vm.sv?.rowFilter ?? ''};`)} />
                     <div style={S350}>
@@ -2973,6 +2976,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                       {T(vm.sv?.btnText)}
                     </button>
                   </div>
+                  )}
                   {/* SV-1: one row per waiting Day action (the Moonchild's, the Sweetheart's), each in the Moonchild row's markup. */}
                   {(vm.dayC?.rows ?? []).map((row: any) => (
                     <div key={row.key} style={S372}>
@@ -2996,6 +3000,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
                     </div>
                   ))}
                 </div>
+                )}
               </div>
             </div>
             </>
