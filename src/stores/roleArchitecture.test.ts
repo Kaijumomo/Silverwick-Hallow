@@ -202,7 +202,9 @@ describe("Phase 10D architecture guard: no writer bypasses the Role seam", () =>
     const list = /export const ROLE_PLAN_FIELDS = \[([\s\S]*?)\] as const;/.exec(source)![1]!;
     const fields = [...list.matchAll(/"(\w+)"/g)].map((m) => m[1]);
     expect(fields.sort()).toEqual(["abilityUsed", "actualRole", "behaviorMode", "isTraveler", "packetEpoch", "privateInfo",
-      "publicDisplayRole", "publishedPacket", "shownAlignment", "shownRole", "travelerArrival"].sort());
+      "publicDisplayRole", "publishedPacket", "shownAlignment", "shownRole", "travelerArrival",
+      // SV-1 (PO 2026-11-15): when the current character began -- Storyteller-private timing, not identity or life state.
+      "characterSince"].sort());
     for (const forbidden of ["alive", "ghostVote", "exiled", "effects", "reminders", "actualAlignment", "participantId", "statuses"]) {
       expect(fields).not.toContain(forbidden);
     }

@@ -885,6 +885,12 @@ export type STPlayerRecord = {
   alive: boolean;
   ghostVote: boolean;
   abilityUsed: boolean;
+  /** SV-1 character timing: Storyteller-private. The Night or Day this player's current
+   * character began through a real change in play (a Barber swap, the
+   * Pit-Hag, a change by hand) -- never a correction or a perception change.
+   * Absent: since the deal when the game's `characterSinceFrom` reaches back to
+   * Night 1; otherwise not known. Never projected. */
+  characterSince?: LiveGameMoment;
   statuses: Statuses;
   /** Phase 10C: Storyteller-private, non-authoritative notation belonging
    * to THIS participation instance (see ReminderRecord). An empty seat owns
@@ -1062,6 +1068,11 @@ export type StorytellerLobbyRecord = {
    * meaningful. Not History (see LifeEventWindow). Required from v19;
    * migration adds it with honest coverage and never backfills events. */
   lifeEventWindow: LifeEventWindow;
+  /** SV-1 character timing: Storyteller-private. The moment from which every real
+   * character change in play is recorded on the player (`characterSince`).
+   * A game created from now on: Night 1. Absent (a game saved before it):
+   * not known. Never projected. */
+  characterSinceFrom?: LiveGameMoment;
   /** Phase 10G (store v25): Storyteller-private, authoritative GAME-SCOPED
    * mechanical facts (see GameRuleFactRecord) -- one record per singleton
    * type. Changed only by the Game Rule Fact seam (gameRuleFacts.ts), inside

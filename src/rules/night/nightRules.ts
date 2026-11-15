@@ -6,7 +6,9 @@ import { wakeIdentity } from "@/stores/wakeIdentity";
  * the Toymaker skip is recorded; it never gates a mechanic here. */
 export type NightContext = { fabled?: string[]; lorics?: string[]; day?: number; gameRuleFacts?: GameRuleFactRecord[];
   /** SV-1d: tonight's step records (a Barber's swap marks the step of a swapped-in "you start knowing" character). */
-  nightProgress?: Readonly<Record<string, { status: string }>> };
+  nightProgress?: Readonly<Record<string, { status: string }>>;
+  /** SV-1 character timing: from which moment character changes are recorded (see the Juggler in nightOrder). */
+  characterSinceFrom?: { phase: "night" | "day"; day: number } };
 
 export function evilInformationPolicy(players: STPlayerRecord[], registry: RoleRegistry, context: NightContext = {}) {
   const seated = players.filter(p => !p.isEmpty);

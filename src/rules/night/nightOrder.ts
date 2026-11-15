@@ -193,6 +193,14 @@ export function computeNightOrder(
       continue;
     }
     if (!isFirstNight && roleId === "poppygrower" && !isDeceived) continue;
+    // SV-1 (https://wiki.bloodontheclocktower.com/Juggler): "On your 1st day, publicly guess ... That night, you learn how many you got
+    // correct." The Juggler wakes once: on the night after the first Day as the Juggler -- Night 2 from the deal, or the night after a
+    // change (a Barber swap, the Pit-Hag, by hand; becoming the Juggler again is a fresh start). Where that is not known (a game saved
+    // before character timing existed), the row stays on every later night, as before, and the Storyteller decides.
+    if (!isFirstNight && roleId === "juggler" && canonical && context.day !== undefined) {
+      const firstDay = jugglerFirstDay(player, context);
+      if (firstDay !== null && context.day !== firstDay + 1) continue;
+    }
     // https://wiki.bloodontheclocktower.com/Vigormortis : a Minion the Vigormortis kills at night keeps its
     // ability while the Vigormortis lives. Which Minions were killed that way is not tracked, so the row is
     // shown for any dead Minion and the Storyteller is told exactly when to wake it.
@@ -243,6 +251,14 @@ export function computeNightOrder(
   }
   return steps.sort((a, b) => a.order - b.order ||
     (a.kind === "player" && b.kind === "player" ? a.seat - b.seat : a.kind === b.kind ? 0 : a.kind === "global" ? -1 : 1));
+}
+
+/** The Day number of this player's first Day with their current character, or null when that is not known. */
+function jugglerFirstDay(player: STPlayerRecord, context: NightContext): number | null {
+  if (player.characterSince) return player.characterSince.day;
+  const from = context.characterSinceFrom;
+  // Recorded from Night 1 (a game started with character timing): no change means since the deal, so Day 1.
+  return from && from.phase === "night" && from.day === 1 ? 1 : null;
 }
 
 function canonicalRolesIfKnown(id: string) {

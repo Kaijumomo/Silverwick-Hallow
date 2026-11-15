@@ -1182,7 +1182,9 @@ describe("ASTRA-10D-002: perception invalidation follows original vs FINAL perce
     const planned = planRoleTransaction(game(), { intents }, { script: setupScript, ids });
     expect(planned).toMatchObject({ ok: true, changed: true });
     if (!planned.ok || !planned.changed) return;
-    expect(planned.plan.players[id]).toEqual({ set: { actualRole: "empath", packetEpoch: "epoch-1" }, remove: ["privateInfo", "publishedPacket"] });
+    // SV-1: a real change in play also starts the new character's timing (Night/Day of the change).
+    expect(planned.plan.players[id]).toEqual({ set: { actualRole: "empath", packetEpoch: "epoch-1", characterSince: { phase: game().phase, day: game().day } },
+      remove: ["privateInfo", "publishedPacket"] });
     expect(ids.packetEpoch()).toBe("epoch-2"); // exactly one epoch was drawn
     const b = baseline();
     expect(resolve(intents)).toEqual({ ok: true, changed: true });

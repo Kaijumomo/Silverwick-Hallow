@@ -331,7 +331,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
 export const COVERAGE_CAVEATS: Readonly<Record<RoleId, readonly string[]>> = {
   fool: ["LS-1: the death gate applies the Fool's survival to Demon and ability kills and to a recorded execution (the Storyteller still records the outcome). A Witch curse, a Golem nomination (its \"survives\" button spends only the Golem) and a Pacifist in play still send the question to the Storyteller. Al-Hadikhia, the Harlot and the Slayer stay Manual when a Fool would be spent."],
   tealady: ["LS-2b: Spy and Recluse neighbours use the Storyteller's setup decision (Prepare the town), and the decision can be set or changed only during setup; a Spy or Recluse with no decision (a later neighbour, or a character created mid-game) sends the question to the Storyteller. Exile is not modelled: the exile flow stays the Storyteller's. The CANNOT DIE tokens are still drawn while the Tea Lady is drunk or poisoned (PO ruling); the app does not honour them then."],
-  juggler: ["Official wiki: wakes once. The night list shows the row every later night; the Storyteller skips it."],
+  juggler: ["Official wiki: wakes once, on the night after the first Day as the Juggler (Night 2 from the deal, or the night after a change). A game saved before character timing existed shows the row every later night; the Storyteller skips it."],
   mutant: ["Official wiki: the Storyteller may execute a madness-breaking Mutant at any time, even at night. The app records executions only in Day and does not block a second daytime execution."],
 };
 
