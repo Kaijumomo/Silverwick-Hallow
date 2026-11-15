@@ -9,7 +9,7 @@ import type { RoleDef, STPlayerRecord } from "@/stores/types";
 import type { AbilityDescriptor, AbilityEvaluation } from "../semantics";
 import { nightTriggerStatus } from "../invocation";
 import { CONCEALED_MODES } from "./pithag";
-import { ask, followUpParticipant, nameOf, nothing, outcome, participantsOf } from "./shared";
+import { answerOf, ask, followUpParticipant, nameOf, nothing, outcome, participantsOf } from "./shared";
 
 /**
  * Barber -- GUIDED (SV-1d, Sects & Violets). https://wiki.bloodontheclocktower.com/Barber (saved revision 1757)
@@ -30,6 +30,7 @@ import { ask, followUpParticipant, nameOf, nothing, outcome, participantsOf } fr
  *    shows it right after the Barber's (Glossary: such a character created mid-game learns "at that point");
  *  - a character whose place tonight has already passed (the Demon, the Pit-Hag, ...): that step is marked skipped, as the Imp's
  *    star-pass does for the new Imp. A character later tonight wakes as usual.
+ * A chosen player who might register as a Demon (a Recluse) is the Storyteller's ruling (PO review 2026-11-15): Yes refuses the pair.
  * By hand (Manual): a Traveller or a concealed identity on either side (as for the Pit-Hag); a character that is not a verified official one.
  * Drunk or poisoned when the step runs, or no living Demon: no swap happens; the step is closed with "nobody".
  * The official HAIRCUTS TONIGHT token is derived (haircutsTonight), never stored, and drawn even when the Barber was drunk or poisoned.
@@ -38,6 +39,9 @@ export const BARBER_PLAYERS = "players";
 export const BARBER_DEMON = "barber:demon";
 export const BARBER_NOBODY = "The Demon chooses nobody";
 const CHOOSE_NOBODY = `Choose “${BARBER_NOBODY}”.`;
+const ANOTHER_DEMON = "The Demon may not choose another Demon.";
+/** The Storyteller's ruling whether this chosen player registers as a Demon to the Barber (a Recluse). */
+export const barberRegistersAsDemonId = (participantId: string) => `barber:registersAsDemon:${JSON.stringify(participantId)}`;
 
 const livingDemons = (query: RulesQuery): STPlayerRecord[] =>
   Object.values(query.game.players).filter((p) => !p.isEmpty && !!p.participantId && p.alive && query.roleOf(p.actualRole)?.type === "demon");
@@ -103,7 +107,20 @@ export const BARBER: AbilityDescriptor = {
     const [a, b] = players as [STPlayerRecord, STPlayerRecord];
     // "The Demon may not choose another Demon player to swap."
     if ([a, b].some((p) => p.participantId !== demon.participantId && query.roleOf(p.actualRole)?.type === "demon")) {
-      return { kind: "illegal", message: "The Demon may not choose another Demon." };
+      return { kind: "illegal", message: ANOTHER_DEMON };
+    }
+    // PO review 2026-11-15 (C4): a player who might register as a Demon (the Recluse) is the Storyteller's ruling, asked once per player.
+    for (const p of [a, b]) {
+      if (p.participantId === demon.participantId) continue;
+      const registers = query.registersAsType(bindingOf(p), "demon", "barber");
+      if (registers.known && !registers.value) continue;
+      if (registers.known) return { kind: "illegal", message: ANOTHER_DEMON };
+      const id = barberRegistersAsDemonId(p.participantId!);
+      const answer = answerOf(context.inputs, id, "boolean");
+      const name = nameOf(context, bindingOf(p));
+      if (!answer) return ask(`${name} might register as a Demon, and the Demon may not choose another Demon.`,
+        { id, kind: "boolean", source: "storyteller", label: `${name} registers as a Demon` });
+      if (answer.value) return { kind: "illegal", message: ANOTHER_DEMON };
     }
     if (a.isTraveler || b.isTraveler) return { kind: "unsupported", message: "A Traveller is one of the two: swap their characters by hand." };
     if ([a, b].some((p) => p.shownRole !== p.actualRole || needsShownIdentity(p.actualRole) || CONCEALED_MODES.includes(p.behaviorMode))) {

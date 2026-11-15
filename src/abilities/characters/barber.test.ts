@@ -1,7 +1,7 @@
 // SV-1d -- Barber: "If you died today or tonight, the Demon may choose 2 players (not another Demon) to swap characters."
 // https://wiki.bloodontheclocktower.com/Barber -- production semantics, the real coordinator and the real store.
 import { beforeEach, describe, expect, it } from "vitest";
-import { BARBER, BARBER_DEMON, BARBER_NOBODY, BARBER_PLAYERS, haircutsTonight } from "./barber";
+import { BARBER, BARBER_DEMON, BARBER_NOBODY, BARBER_PLAYERS, barberRegistersAsDemonId, haircutsTonight } from "./barber";
 import { nightTriggerStatus } from "@/abilities/invocation";
 import { bind, homebrewEnv, impair, openInStore, patchPlayer, pick, plan, planned, proofGame, proofQuery, proofRegistry, proofScript, request, requirementIds } from "@/test/proofFixtures";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
@@ -86,6 +86,18 @@ describe("Barber -- the Night step", () => {
     // A dead Demon is still another Demon.
     const two = patchPlayer(nightDeath(), "p5", { actualRole: "vortox", shownRole: "vortox", actualAlignment: "evil", alive: false });
     expect(swap(two, ["p5", "p2"])).toMatchObject({ ok: false, code: "illegal", message: "The Demon may not choose another Demon." });
+  });
+
+  it("a Recluse (who might register as a Demon): the Storyteller's ruling; Yes refuses the pair, No swaps; a sober Spy is never asked", () => {
+    const g = patchPlayer(nightDeath(), "p4", { actualRole: "recluse", shownRole: "recluse", actualAlignment: "good" });
+    const id = barberRegistersAsDemonId(pid(g, "p4"));
+    expect(requirementIds(swap(g, ["p4", "p2"]))).toEqual([id]);
+    expect(swap(g, ["p4", "p2"], { [id]: { kind: "boolean", value: true } })).toMatchObject({ ok: false, code: "illegal", message: "The Demon may not choose another Demon." });
+    expect(roles(planned(swap(g, ["p4", "p2"], { [id]: { kind: "boolean", value: false } }))).slice(2, 5)).toEqual(["recluse", "dreamer", "clockmaker"]);
+    // A drunk Recluse registers truly: no ruling.
+    expect(swap(impair(g, "p4", "drunk"), ["p4", "p2"])).toMatchObject({ ok: true, changed: true });
+    const spy = patchPlayer(nightDeath(), "p4", { actualRole: "spy", shownRole: "spy", actualAlignment: "evil" });
+    expect(swap(spy, ["p4", "p2"])).toMatchObject({ ok: true, changed: true });
   });
 
   it("more than one living Demon: the Storyteller chooses which Demon makes the swap", () => {

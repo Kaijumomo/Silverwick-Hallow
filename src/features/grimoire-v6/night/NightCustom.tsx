@@ -1,3 +1,4 @@
+import { BarberNightAction } from "@/features/nightOrder/BarberNightAction";
 import { Fragment, useRef, useState, type ReactNode, type RefObject } from "react";
 import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import { AbilityWorkspace } from "@/features/abilities/AbilityWorkspace";
@@ -143,6 +144,9 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
         rows.push(<NightInformationAction key={current.stepKey} ref={information} game={game} script={script} step={current}
           ability={engine.ability} visible={engine.visible} resolved={done} onResolved={engine.finish} onManual={engine.requireManual}
           reveal={revealHost(registry.get(current.effectiveRoleId)?.name ?? "This character")} />);
+      } else if (engine.barberTurn && engine.ability?.kind === "guided") {
+        if (!done) rows.push(<BarberNightAction key={current.stepKey} game={game} script={script} step={current} ability={engine.ability}
+          visible={engine.visible} onResolved={engine.finish} onManual={engine.requireManual} />);
       } else if (!done && !engine.skipReason && (current.effectiveRoleId === "undertaker" || current.effectiveRoleId === "ravenkeeper")) {
         const row = manualReveal(game, script, registry, current);
         if (row) rows.push(<Fragment key="manual-reveal">{row}</Fragment>);
