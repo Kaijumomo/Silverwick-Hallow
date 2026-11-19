@@ -41,12 +41,14 @@ export function klutzEligible(ctx: V6Ctx): Set<string> {
 export function confirmKlutzChoice(ctx: V6Ctx): void {
   const { game, ui } = ctx;
   const player = ui.klutz ? game.players[ui.klutz.playerId] : undefined;
-  const chosen = ui.klutz?.target ? game.players[ui.klutz.target] : undefined;
   if (!player || !klutzAwaitingChoice(ctx, player)) { ui.set({ klutz: null }); return; }
   if (useStorytellerStore.getState().game !== game) { flash("The game changed. Choose again."); return; }
-  if (!chosen?.participantId || !chosen.alive) { flash("Choose a living player."); return; }
+  const tapped = ui.klutz?.target;
+  const chosen = klutzChosen(ctx);
+  // The tapped participant, not just the seat: a seat that now holds someone else (or a player who has died since) is refused.
+  if (!tapped || !chosen) { ui.set({ klutz: { playerId: player.id } }); flash(tapped ? "The game changed. Choose again." : "Choose a living player."); return; }
   const klutz = { playerId: player.id, participantId: player.participantId! };
-  const target = { playerId: chosen.id, participantId: chosen.participantId };
+  const target = { playerId: chosen.id, participantId: chosen.participantId! };
   const fingerprint = captureFingerprint(game, player.id);
   if (!fingerprint) { flash("The game changed. Choose again."); return; }
   const query = queryOf(ctx);
@@ -66,12 +68,19 @@ export function confirmKlutzChoice(ctx: V6Ctx): void {
       : verdict === "loses" ? `${name} is evil: the Klutz’s team loses.` : `${name} is good: nothing happens.`);
 }
 
+/** The player in the card's slot: still in that seat (same participant) and alive; otherwise nobody. */
+function klutzChosen(ctx: V6Ctx): STPlayerRecord | undefined {
+  const tapped = ctx.ui.klutz?.target;
+  const chosen = tapped ? ctx.game.players[tapped.playerId] : undefined;
+  return chosen && chosen.participantId === tapped!.participantId && chosen.alive ? chosen : undefined;
+}
+
 /** The Klutz's card: whose choice, the prompt, the one slot, Confirm and Dismiss. Storyteller-only (off in Privacy Mode). */
 export function buildKlutzCard(ctx: V6Ctx): Record<string, unknown> {
   const { game, ui, registry, layout } = ctx;
   const player = ui.klutz ? game.players[ui.klutz.playerId] : undefined;
-  if (!player || !klutzAwaitingChoice(ctx, player)) return { on: false };
-  const chosen = ui.klutz?.target ? game.players[ui.klutz.target] : undefined;
+  if (ctx.privacy || !player || !klutzAwaitingChoice(ctx, player)) return { on: false };
+  const chosen = klutzChosen(ctx);
   const role = chosen ? registry.get(chosen.actualRole) : undefined;
   const name = player.name || "The Klutz";
   return {
@@ -81,7 +90,7 @@ export function buildKlutzCard(ctx: V6Ctx): Record<string, unknown> {
     filled: !!chosen, slotLabel: chosen ? chosen.name || `Seat ${chosen.seat + 1}` : "Player",
     slotSub: chosen ? role?.name ?? "" : "Tap on the board", slotImg: role ? iconUrlFor(role) : undefined,
     eligible: klutzEligible(ctx),
-    pick: (playerId: string) => ui.set({ klutz: { playerId: player.id, target: playerId } }),
+    pick: (target: { playerId: string; participantId: string }) => ui.set({ klutz: { playerId: player.id, target } }),
     confirm: () => confirmKlutzChoice(ctx),
     dismiss: () => { useTargetPicker.getState().cancel(); ui.set({ klutz: null }); },
   };

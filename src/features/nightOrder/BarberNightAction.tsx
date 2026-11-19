@@ -113,7 +113,7 @@ export function BarberNightAction({ game, script, step, ability, visible, onReso
     ? <ChoiceSlot filled label={nameOf(pick)} img={imgOf(pick)} sub={swap?.changed && other ? `becomes the ${roleName(other)}` : roleName(pick)} />
     : <ChoiceSlot filled={false} label={`Player ${n}`} sub="Tap on the board" />;
   const slots = <div className="gv-choice-slots">{slot(a, 1, b)}<ChoiceSwapIcon />{slot(b, 2, a)}</div>;
-  const nobodyPill = <button className="gv-choice-pill" type="button" onClick={nobody}>{BARBER_NOBODY}</button>;
+  const nobodyPill = <div role="group" aria-label="The Demon's choice"><button className="gv-choice-pill" type="button" onClick={nobody}>{BARBER_NOBODY}</button></div>;
   const demonNote = demons.length > 1 && current.demon ? <p className="gv-choice-note">{`${nameOf(current.demon)} makes the swap.`}</p> : null;
   const ruled = ruling ? current.picks.find((p) => ruling.id === `${RULING_PREFIX}${JSON.stringify(p.participantId)}`) : undefined;
   const answer = (value: boolean) => { if (!ruling) return; setError(null);

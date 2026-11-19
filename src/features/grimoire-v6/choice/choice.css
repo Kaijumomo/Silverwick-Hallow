@@ -88,7 +88,7 @@
 .gv-choice-answer:hover { border-color: #e8584a; }
 .gv-choice-link {
   align-self: flex-start;
-  min-height: 32px;
+  min-height: 44px;
   padding: 0;
   border: none;
   background: transparent;
@@ -163,3 +163,7 @@
 .gv-choice-title-name { font-family: "IM Fell English", serif; font-size: 26px; line-height: 1; color: #f2ece0; }
 .gv-choice-title-meta { font-size: 13px; color: rgba(222, 216, 204, .6); }
 .gv-choice-pickrow { display: flex; align-items: center; gap: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .gv-choice-prompt-text::before, .gv-choice-card { animation: none; }
+}

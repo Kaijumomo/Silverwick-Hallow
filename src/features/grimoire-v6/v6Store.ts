@@ -73,7 +73,7 @@ export type V6UiState = {
   shownNumber: number | null;
   slay: { stage: "shooter" | "target" | "result"; shooter?: PlayerId; target?: PlayerId; override?: boolean } | null;
   /** The Klutz's card (PO design direction 2026-11-19): whose choice, and the player tapped so far (nothing is recorded until Confirm). */
-  klutz: { playerId: PlayerId; target?: PlayerId } | null;
+  klutz: { playerId: PlayerId; target?: { playerId: PlayerId; participantId: string } } | null;
   // ── info, reference, end (4F) ─────────────────────────────────────────────
   show: ShowState | null;
   refQuery: string;

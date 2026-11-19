@@ -1,11 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useTargetPicker } from "@/features/abilities/abilityUi";
 import { ChoicePrompt, ChoiceSlot } from "../choice/ChoiceParts";
 
 export type KlutzCardVm = {
   on: boolean; owner: string; cx: number; cy: number; title: string; meta: string; prompt: string;
   filled: boolean; slotLabel: string; slotSub: string; slotImg?: string; eligible: ReadonlySet<string>;
-  pick: (playerId: string) => void; confirm: () => void; dismiss: () => void;
+  pick: (target: { playerId: string; participantId: string }) => void; confirm: () => void; dismiss: () => void;
 };
 
 /**
@@ -16,13 +16,15 @@ export type KlutzCardVm = {
 export function KlutzCard({ kl }: { kl: KlutzCardVm }) {
   const { owner, eligible, pick, filled } = kl;
   const eligibleKey = [...eligible].sort().join(",");
+  // Every tap re-arms the board (the picker is one-shot), even a second tap on the player already in the slot.
+  const [taps, setTaps] = useState(0);
   useEffect(() => {
     let active = true;
-    useTargetPicker.getState().start("the Klutz's choice", (target) => { if (active) pick(target.playerId); }, { owner, eligible });
+    useTargetPicker.getState().start("the Klutz's choice", (target) => { if (!active) return; pick(target); setTaps((n) => n + 1); }, { owner, eligible });
     return () => { active = false; if (useTargetPicker.getState().active?.owner === owner) useTargetPicker.getState().cancel(); };
     // A new pick (or a new game) re-arms the board, so the Storyteller can tap again to change the choice.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [owner, eligibleKey, kl.slotLabel, filled]);
+  }, [owner, eligibleKey, taps, filled]);
   return <div role="dialog" aria-label={`${kl.title}'s choice`} className="gv-choice-card" style={{ left: kl.cx, top: kl.cy }}>
     <div className="gv-choice-title">
       <span className="gv-choice-title-name">{kl.title}</span>

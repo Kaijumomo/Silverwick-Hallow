@@ -171,7 +171,34 @@ it("End dialog (PO design direction 2026-11-19): any line the End '!' carries si
   fireEvent.click(screen.getByTitle(/^End game · The Demon is dead/));
   const note = screen.getByRole("note", { name: "Possible game end" });
   expect(note.textContent).toMatch(/^Possible game endThe Demon is dead\./);
-  fireEvent.click(screen.getByRole("button", { name: "Keep playing" }));
   act(() => { usePrivacyStore.setState({ enabled: true }); });
+  expect(screen.queryByRole("dialog", { name: "End game" })).toBeNull();
   expect(screen.queryByRole("note", { name: "Possible game end" })).toBeNull();
 });
+
+it("Klutz's card (independent check S1): tapping the same player again keeps the board live, so the next tap still changes the slot", () => {
+  open(klutzDied("day"));
+  openCard(); tap("p2"); tap("p2");
+  expect(useTargetPicker.getState().active).not.toBeNull();
+  tap("p4");
+  expect(card()).toHaveTextContent(`${game().players.p4!.name}Empath`);
+});
+
+it("Klutz's card (independent check S2): a seat that now holds someone else is refused at Confirm; nothing is recorded", () => {
+  open(klutzDied("day"));
+  openCard(); tap("p1");
+  act(() => { store.setState({ game: patchPlayer(game(), "p1", { participantId: "someone-else" }) }); });
+  expect(screen.getByRole("button", { name: "Confirm" })).toBeDisabled();
+  expect(game().players.p0!.abilityUsed).toBe(false);
+  expect(game().gameRuleFacts).toEqual([]);
+});
+
+it("Klutz's card (independent check S3): opening Players closes it, records nothing and stops the taps", () => {
+  open(klutzDied("day"));
+  openCard(); tap("p1");
+  fireEvent.click(screen.getByRole("button", { name: /^Players/ }));
+  expect(card()).toBeNull();
+  expect(useTargetPicker.getState().active).toBeNull();
+  expect(game().players.p0!.abilityUsed).toBe(false);
+});
+

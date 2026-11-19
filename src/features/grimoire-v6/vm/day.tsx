@@ -26,7 +26,9 @@ export function useDayVm(ctx: V6Ctx): SliceResult {
   useEffect(() => { if (privacy && ui.slay) ui.set({ slay: null }); }, [privacy, ui.slay]);
   // The Klutz's card (PO design direction 2026-11-19) closes the same way, and when its choice is no longer owed (Undo, a recorded choice).
   const kl = day ? buildKlutzCard(ctx) : { on: false };
-  useEffect(() => { if (ui.klutz && (!day || privacy || !kl.on)) ui.set({ klutz: null }); }, [day, privacy, ui.klutz, kl.on]);
+  // It also closes (nothing recorded) when another card takes the centre: Players, Info, Reference, a token picker or a reveal.
+  const covered = (!!ui.panel && ui.panel !== "night") || !!ui.picker || !!ui.show || !!voting?.open;
+  useEffect(() => { if (ui.klutz && (!day || privacy || !kl.on || covered)) ui.set({ klutz: null }); }, [day, privacy, ui.klutz, kl.on, covered]);
 
   // The Day's marks and seat taps reach the board through its two overlay seams.
   usePublishTokenDecorations("day", day ? dayTokenDecor(ctx) : null);
