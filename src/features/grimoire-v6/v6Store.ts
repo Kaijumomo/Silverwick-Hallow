@@ -72,6 +72,8 @@ export type V6UiState = {
   // ── night / day (4D, 4E) ──────────────────────────────────────────────────
   shownNumber: number | null;
   slay: { stage: "shooter" | "target" | "result"; shooter?: PlayerId; target?: PlayerId; override?: boolean } | null;
+  /** The Klutz's card (PO design direction 2026-11-19): whose choice, and the player tapped so far (nothing is recorded until Confirm). */
+  klutz: { playerId: PlayerId; target?: PlayerId } | null;
   // ── info, reference, end (4F) ─────────────────────────────────────────────
   show: ShowState | null;
   refQuery: string;
@@ -92,7 +94,7 @@ const INITIAL: V6UiState = {
   popMode: "main", card: false, swapFrom: null, remAll: false, remArm: null,
   picker: null, pickSel: [], deal: null, pickHover: null, gfMod: 1,
   wiz: null, townCur: null, seatMode: false, seatCur: 0, lobbyName: "", prepEdit: null,
-  shownNumber: null, slay: null,
+  shownNumber: null, slay: null, klutz: null,
   show: null, refQuery: "", refSel: null, endOpen: false, winScene: false, ask: null,
 };
 

@@ -19,8 +19,8 @@ import type { SliceResult } from "./types";
 
 const EXTRA_COLOR = { fabled: "#e0c070", loric: "#7fc4b4" } as const;
 
-/** The hint shown on the End control when the rules already settle the game. */
-function endHint(ctx: V6Ctx): string {
+/** The hint shown on the End control when the rules already settle the game (and, PO design direction 2026-11-19, in the End dialog). */
+export function endHint(ctx: V6Ctx): string {
   const { game, script, registry } = ctx;
   if (!script || game.phase === "setup" || game.phase === "ended") return "";
   const e = endGameEligibility(game, { registry, script });

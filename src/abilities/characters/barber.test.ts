@@ -66,7 +66,7 @@ describe("Barber -- the Night step", () => {
     expect(triggerOf(next)).toMatchObject({ kind: "notTriggered" });
     expect(haircuts(next)).toBe(false);
     expect(BARBER.inputs[0]).toMatchObject({ allowNone: true, noneLabel: BARBER_NOBODY, count: 2 });
-    expect(BARBER_NOBODY).toBe("The Demon chooses nobody");
+    expect(BARBER_NOBODY).toBe("Demon chooses nobody");
     expect(BARBER.presentation?.action).toBe("The Demon may choose 2 players to swap characters");
   });
 

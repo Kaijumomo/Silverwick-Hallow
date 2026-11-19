@@ -91,7 +91,7 @@ export function useV6Ctx(game: StorytellerLobbyRecord): V6Ctx {
   const cards = {
     town: panel === "players" && !ui.picker && !ui.seatMode && !ui.prepEdit && !dealingNow(ui, game),
     strip: panel === "night" && phase === "night" && !privacy,
-    day: panel === "night" && phase === "day" && !privacy && !voting?.open && !ui.slay && noOverlay,
+    day: panel === "night" && phase === "day" && !privacy && !voting?.open && !ui.slay && !ui.klutz && noOverlay,
     info: panel === "info" && noOverlay,
     reference: panel === "reference" && noOverlay,
     any: false,

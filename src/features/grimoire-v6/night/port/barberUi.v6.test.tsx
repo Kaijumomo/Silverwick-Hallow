@@ -1,5 +1,5 @@
 // SV-1d -- the Barber's Night step, the HAIRCUTS TONIGHT disc and Undo. PO review 2026-11-14 (C1, C4): the two players are tapped on the
-// grimoire in the Night card (no workspace), the swap waits for "Swap" or "Choose again", "The Demon chooses nobody" is separate from
+// grimoire in the Night card (no workspace), the swap waits for "Swap" or "Choose again", "Demon chooses nobody" is separate from
 // "Continue without swap" (a drunk or poisoned Barber, or no living Demon), the Demon is chosen first only when two are alive, and a
 // player who might register as a Demon (the Recluse) is the Storyteller's ruling.
 import { StrictMode } from "react";
@@ -51,14 +51,14 @@ it("killed tonight: the official disc; the two players are tapped on the board, 
   expect(screen.queryByRole("button", { name: "Continue action" })).toBeNull();
   expect(document.querySelector(".ability-workspace")).toBeNull();
   expect(screen.getByText("Tap two players on the board")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "The Demon chooses nobody" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Demon chooses nobody" })).toBeInTheDocument();
   expect(picker()?.label).toBe("Choose player 1 of 2");
   tap("p2");
-  expect(screen.getByText("Tap one more player on the board")).toBeInTheDocument();
-  expect(document.querySelector(".night-pick-chip")).toHaveTextContent("Player 2");
+  // PO design direction 2026-11-19: each chosen player fills a slot (name and character); the second slot still waits.
+  expect([...document.querySelectorAll(".gv-choice-slot")].map((slot) => slot.textContent)).toEqual(["Player 2Clockmaker", "Player 2Tap on the board"]);
   tap("p3");
   expect(screen.getByText("Swap Player 2 and Player 3?")).toBeInTheDocument();
-  expect(screen.getByText("Player 2 becomes the Dreamer; Player 3 becomes the Clockmaker.")).toBeInTheDocument();
+  expect([...document.querySelectorAll(".gv-choice-slot")].map((slot) => slot.textContent)).toEqual(["Player 2becomes the Dreamer", "Player 3becomes the Clockmaker"]);
   expect(roles()).toEqual(ROLES);
   expect(store.getState().undoStack).toHaveLength(0);
   fireEvent.click(screen.getByRole("button", { name: "Swap" }));
@@ -86,7 +86,7 @@ it("Choose again clears both picks before anything changes, and the taps start o
 
 it("the Demon chooses nobody: the step closes, nothing changes, and the disc goes; Undo reopens it", () => {
   demonKill(); show();
-  fireEvent.click(screen.getByRole("button", { name: "The Demon chooses nobody" }));
+  fireEvent.click(screen.getByRole("button", { name: "Demon chooses nobody" }));
   expect(roles()).toEqual(ROLES);
   expect(stepDone()).toBe(true);
   expect(haircuts()).toHaveLength(0);
@@ -111,7 +111,7 @@ it("privacy: the disc and the confirmation are in no player's view or the public
   expect(text).not.toMatch(/Haircuts/i);
   show();
   tap("p2"); tap("p3");
-  expect(screen.getByText("Player 2 becomes the Dreamer; Player 3 becomes the Clockmaker.")).toBeInTheDocument();
+  expect(screen.getByText("becomes the Dreamer")).toBeInTheDocument();
   act(() => { usePrivacyStore.setState({ enabled: true }); });
   expect(screen.queryByText(/becomes the/)).toBeNull();
   expect(screen.queryByRole("button", { name: "Swap" })).toBeNull();
@@ -143,7 +143,7 @@ it("another Demon cannot be tapped (a dead No Dashii here): the board refuses it
   expect(picker()?.eligible?.has(game().players.p1!.participantId!)).toBe(true);
   tap("p5");
   expect(useTargetPicker.getState().refused).toMatch(/can't be chosen/);
-  expect(document.querySelector(".night-pick-chip")).toBeNull();
+  expect(document.querySelector(".gv-choice-slot.is-filled")).toBeNull();
 });
 
 it("a poisoned Barber: no taps; the card says no swap happens and offers only Continue without swap, which closes the step", () => {
@@ -152,7 +152,7 @@ it("a poisoned Barber: no taps; the card says no swap happens and offers only Co
   show();
   expect(screen.getByText("No swap happens")).toBeInTheDocument();
   expect(screen.getByText("Player 0 is drunk or poisoned.")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "The Demon chooses nobody" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Demon chooses nobody" })).toBeNull();
   expect(picker()).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Continue without swap" }));
   expect(stepDone()).toBe(true);
@@ -177,7 +177,7 @@ it("two living Demons: the Demon who swaps is tapped first, then the two players
   expect(screen.getByText("Tap the Demon who makes the swap")).toBeInTheDocument();
   expect([...picker()!.eligible!].sort()).toEqual([game().players.p1!.participantId!, game().players.p5!.participantId!].sort());
   tap("p5");
-  expect(screen.getByText("Player 5 swaps")).toBeInTheDocument();
+  expect(screen.getByText("Player 5 makes the swap.")).toBeInTheDocument();
   // The swapping Demon may choose itself; the other Demon (the Imp) is not offered.
   expect(picker()?.eligible?.has(game().players.p1!.participantId!)).toBe(false);
   tap("p5"); tap("p2");
@@ -212,7 +212,7 @@ it("two living Demons: Choose again starts over from the Demon, so a mis-tapped 
   expect(screen.getByText("Tap the Demon who makes the swap")).toBeInTheDocument();
   expect([...picker()!.eligible!].sort()).toEqual([game().players.p1!.participantId!, game().players.p5!.participantId!].sort());
   tap("p1");
-  expect(screen.getByText("Player 1 swaps")).toBeInTheDocument();
+  expect(screen.getByText("Player 1 makes the swap.")).toBeInTheDocument();
   expect(roles()).toEqual(["barber", "imp", "clockmaker", "dreamer", "witch", "nodashii"]);
 });
 

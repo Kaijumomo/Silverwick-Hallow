@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { useStorytellerStore } from "@/stores/storytellerStore";
-import { klutzAdvisory } from "@/stores/endGameEligibility";
 import { infoStatistics, seatedPlayers, type SetupView } from "@/features/info/infoModel";
 import type { V6Ctx } from "../ctx";
 import { TEAM_COLOR } from "../icons";
@@ -10,6 +9,7 @@ import { bluffRecipient, closeShow, confirmEnd, endInFlight, presentMessage, pre
 import { useInfoShow } from "../info/showStore";
 import { INFO_TOKENS, SETUP_ICON, SETUP_LABEL, SETUP_ORDER } from "../info/tokens";
 import { EMPTY, type SliceResult } from "./types";
+import { endHint } from "./chrome";
 
 const SETUP_SUB: Record<SetupView, string> = {
   traveler: "Demon only",
@@ -90,12 +90,14 @@ export function useInfoVm(ctx: V6Ctx): SliceResult {
   const ref = refOn ? buildRefVm(ctx, (id) => ui.set({ refSel: id })) : null;
 
   // ── End game ────────────────────────────────────────────────────────────────
-  // PO review 2026-11-15 (R1): the End control's "!" line is a tooltip, which a touch screen never shows. The Klutz's line is
-  // repeated in the End dialog's existing notice, so tapping End explains it.
-  const klutz = !privacy ? klutzAdvisory(game) : null;
+  // PO review 2026-11-15 (R1): the End control's "!" line is a tooltip, which a touch screen never shows, so the End dialog repeats it.
+  // PO design direction 2026-11-19: it sits in its own "Possible game end" box (every "!" line, not only the Klutz's). The dialog
+  // opens only outside Privacy Mode; the line is the same one the "!" already carries.
+  const hint = !privacy && !recovery ? endHint(ctx) : "";
+  const possibleEnd = hint ? `${hint}.` : "";
   const notice = recovery
     ? terminal?.confirmedRecovery ? "The online game has ended. Save its confirmed result here to finish." : "An ending was interrupted. Retry to recover the recorded result."
-    : [klutz ? `${klutz}.` : "", lobby ? "The declared result will also be shared with seated players." : ""].filter(Boolean).join(" ");
+    : lobby ? "The declared result will also be shared with seated players." : "";
   const endDlg = {
     open: endOpen,
     close: () => { if (!endInFlight() && !recoveryChoice()) ui.set({ endOpen: false }); },
@@ -104,7 +106,7 @@ export function useInfoVm(ctx: V6Ctx): SliceResult {
     evil: () => void confirmEnd(recovery ?? "evil"),
     noResult: () => void confirmEnd(recovery ?? "noResult"),
     retry: () => { if (recovery) void confirmEnd(recovery); },
-    recovery: !!recovery, choices: !recovery, notice, error: status.error ?? "", busy: status.busy,
+    recovery: !!recovery, choices: !recovery, notice, possibleEnd, error: status.error ?? "", busy: status.busy,
   };
 
   return {

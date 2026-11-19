@@ -37,7 +37,7 @@ import { answerOf, ask, followUpParticipant, nameOf, nothing, outcome, participa
  */
 export const BARBER_PLAYERS = "players";
 export const BARBER_DEMON = "barber:demon";
-export const BARBER_NOBODY = "The Demon chooses nobody";
+export const BARBER_NOBODY = "Demon chooses nobody";
 const CHOOSE_NOBODY = `Choose “${BARBER_NOBODY}”.`;
 const ANOTHER_DEMON = "The Demon may not choose another Demon.";
 /** The Storyteller's ruling whether this chosen player registers as a Demon to the Barber (a Recluse). */

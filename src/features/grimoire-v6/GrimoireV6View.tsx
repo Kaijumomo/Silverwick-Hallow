@@ -2,6 +2,7 @@
 // Hand-maintained. First converted from the Claude Design handoff (grimoire.dc.html) by the importer now archived in
 // docs/archive/design-import; that importer is no longer run, so edit this file directly.
 import { Fragment } from 'react';
+import { KlutzCard } from "./day/KlutzCard";
 import { css, T } from './designRuntime';
 import { REVEAL_BACKDROP } from './revealGrain';
 import { useBoardRest } from './boardRest';
@@ -425,6 +426,11 @@ const S418: React.CSSProperties = { "minHeight": "52px", "borderRadius": "14px",
 const S419: React.CSSProperties = { "alignSelf": "center", "marginTop": "-4px", "minHeight": "44px", "padding": "0 18px", "border": "none", "background": "transparent", "color": "rgba(222,216,204,.6)", "fontFamily": "inherit", "fontSize": "14px", "cursor": "pointer" };
 const S420: React.CSSProperties = { "position": "absolute", "inset": "0", "zIndex": "90", "background": "rgba(6,4,5,.6)", "backdropFilter": "blur(3px)", "display": "flex", "alignItems": "center", "justifyContent": "center", "animation": "swRise .25s ease-out" };
 const S421: React.CSSProperties = { "fontSize": "13px", "lineHeight": "1.45", "color": "rgba(222,216,204,.65)" };
+// PO design direction 2026-11-19: the End dialog wider and rectangular; a met end condition in its own box (the Night card's red).
+const S414_END: React.CSSProperties = { ...S414, "width": "560px", "padding": "26px 30px 22px" };
+const S421_END: React.CSSProperties = { "display": "flex", "flexDirection": "column", "gap": "6px", "padding": "14px 18px", "borderRadius": "12px", "border": "1px solid rgba(232,88,74,.35)", "background": "rgba(192,57,46,.12)", "textAlign": "left" };
+const S421_END_LABEL: React.CSSProperties = { "fontSize": "11px", "fontWeight": "700", "letterSpacing": ".24em", "textTransform": "uppercase", "color": "#ff8a78" };
+const S421_END_TEXT: React.CSSProperties = { "fontSize": "15px", "lineHeight": "1.45", "color": "#ece6da" };
 const S422: React.CSSProperties = { "minHeight": "52px", "borderRadius": "14px", "border": "1px solid rgba(134,183,212,.4)", "background": "rgba(134,183,212,.08)", "color": "#a9cde3", "fontFamily": "'IM Fell English', serif", "fontSize": "22px", "fontWeight": "400", "cursor": "pointer" };
 const S423: React.CSSProperties = { "minHeight": "52px", "borderRadius": "14px", "border": "1px solid rgba(224,200,140,.5)", "background": "rgba(224,200,140,.08)", "color": "#ecd9a8", "fontFamily": "'IM Fell English', serif", "fontSize": "22px", "fontWeight": "400", "cursor": "pointer" };
 const S424: React.CSSProperties = { "fontSize": "13px", "lineHeight": "1.4", "color": "#f4a595" };
@@ -1314,6 +1320,7 @@ export function GrimoireV6View({ vm }: { vm: any }) {
             </div>
             </>
           )}
+          {vm.kl?.on && <KlutzCard kl={vm.kl} />}
           {vm.ns?.cardOn && (
             <>
             <div style={css(`position:absolute; left:${vm.ring?.cx ?? ''}px; top:${vm.ring?.cy ?? ''}px; translate:-50% -50%; z-index:35; width:${vm.ns?.cardW ?? ''}px; transition:left .5s, top .5s;`)}>
@@ -3274,15 +3281,24 @@ export function GrimoireV6View({ vm }: { vm: any }) {
         {vm.endDlg?.open && (
           <>
           <div onClick={vm.endDlg?.close} style={S420}>
-            <div role="dialog" aria-label="End game" onClick={vm.stop} style={S414}>
+            <div role="dialog" aria-label="End game" onClick={vm.stop} style={S414_END}>
               <div style={S324}>
                 <div style={S415}>
                   End the game
                 </div>
-                <div style={S416}>
-                  Choose the winning team. The Grimoire stays open for review.
-                </div>
               </div>
+              {vm.endDlg?.possibleEnd && (
+                <>
+                <div role="note" aria-label="Possible game end" style={S421_END}>
+                  <span style={S421_END_LABEL}>
+                    Possible game end
+                  </span>
+                  <span style={S421_END_TEXT}>
+                    {T(vm.endDlg?.possibleEnd)}
+                  </span>
+                </div>
+                </>
+              )}
               {vm.endDlg?.notice && (
                 <>
                 <div style={S421}>
