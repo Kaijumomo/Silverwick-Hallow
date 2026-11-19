@@ -25,11 +25,14 @@ import { firstParticipant, lifeOperation, outcome } from "./shared";
  */
 export const KLUTZ_TARGET = "target";
 
-/** The dead Klutz learned they died during last night or today (an unverifiable window is the Storyteller's call: kept open). */
+/** The dead Klutz learned they died during last night or today (an unverifiable window is the Storyteller's call: kept open). Only a
+ * death AS the Klutz counts (its recorded character evidence): a player who died as another character and became the Klutz afterwards
+ * (a Barber swap, the Pit-Hag) has no choice (SV-1 pairs 059, 090). */
 export function klutzLearnedDeath(query: RulesQuery, klutz: ParticipantBinding): boolean {
   const moment = query.moment();
   if (!moment || moment.phase !== "day") return false;
-  const mine = (event: { subject: { participantId: string } }) => event.subject.participantId === klutz.participantId;
+  const mine = (event: { subject: { participantId: string }; actualRoleAtEvent?: string }) =>
+    event.subject.participantId === klutz.participantId && event.actualRoleAtEvent === "klutz";
   return (["night", "day"] as const).some((phase) => {
     const window = query.lifeEvents({ phase, day: moment.day }, (event) => isDeathEvent(event) && mine(event));
     return window.status !== "known" || window.events.length > 0;

@@ -26,6 +26,16 @@ const facts = (g: StorytellerLobbyRecord) => (g.gameRuleFacts ?? []).map((fact) 
 beforeEach(() => store.setState({ game: null, undoStack: [], localSeq: 0 }));
 
 describe("Klutz -- the public choice", () => {
+  it("only a death as the Klutz counts: a player who died as another character and became the Klutz since has no choice (pairs 059, 090)", () => {
+    const g = dead();
+    expect(choose(g, "p1")).toMatchObject({ ok: true, changed: true });
+    const asChef = { ...g, lifeEventWindow: { ...g.lifeEventWindow, events: [{ ...g.lifeEventWindow.events[0]!, actualRoleAtEvent: "chef" }] } };
+    expect(choose(asChef, "p1")).toMatchObject({ ok: false, code: "notApplicable" });
+    // A life record that does not reach the death is still the Storyteller's call.
+    const uncovered = { ...asChef, lifeEventWindow: { coverageFrom: { phase: "day" as const, day: 3 }, events: [] } };
+    expect(choose(uncovered, "p1")).toMatchObject({ ok: true, changed: true });
+  });
+
   it("a sober good Klutz chooses an evil player: the ability is used, the good team's loss is recorded with the Klutz as its source, and End is flagged", () => {
     const g = dead();
     const next = planned(choose(g, "p1"));
