@@ -1,7 +1,7 @@
 import type { AbilityDescriptor, AbilityEvaluation } from "../semantics";
 import type { ParticipantBinding } from "@/stores/abilityResolution";
 import type { RulesQuery } from "@/stores/rulesQuery";
-import { isDeathEvent } from "@/stores/lifeEvents";
+import { isDeathEvent, mayBeDeathAs } from "@/stores/lifeEvents";
 import { KLUTZ_CHOICE_RULING, KLUTZ_EVIL_TEAM_LOST, KLUTZ_GOOD_TEAM_LOST } from "@/stores/gameRuleFactRegistry";
 import { firstParticipant, lifeOperation, outcome } from "./shared";
 
@@ -27,12 +27,13 @@ export const KLUTZ_TARGET = "target";
 
 /** The dead Klutz learned they died during last night or today (an unverifiable window is the Storyteller's call: kept open). Only a
  * death AS the Klutz counts (its recorded character evidence): a player who died as another character and became the Klutz afterwards
- * (a Barber swap, the Pit-Hag) has no choice (SV-1 pairs 059, 090). */
+ * (a Barber swap, the Pit-Hag) has no choice (SV-1 pairs 059, 090). A death with no evidence (recorded late) keeps the choice open
+ * (mayBeDeathAs): the Storyteller decides. */
 export function klutzLearnedDeath(query: RulesQuery, klutz: ParticipantBinding): boolean {
   const moment = query.moment();
   if (!moment || moment.phase !== "day") return false;
   const mine = (event: { subject: { participantId: string }; actualRoleAtEvent?: string }) =>
-    event.subject.participantId === klutz.participantId && event.actualRoleAtEvent === "klutz";
+    event.subject.participantId === klutz.participantId && mayBeDeathAs(event, "klutz");
   return (["night", "day"] as const).some((phase) => {
     const window = query.lifeEvents({ phase, day: moment.day }, (event) => isDeathEvent(event) && mine(event));
     return window.status !== "known" || window.events.length > 0;

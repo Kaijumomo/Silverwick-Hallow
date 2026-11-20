@@ -1,6 +1,6 @@
 import { canonicalOrder, isCanonicalRole } from "@/data/canonical";
 import { needsShownIdentity } from "@/stores/identity";
-import { isDeathEvent } from "@/stores/lifeEvents";
+import { isDeathEvent, mayBeDeathAs } from "@/stores/lifeEvents";
 import { nightTriggerStepKey, participantStepKey } from "@/stores/nightProgress";
 import { toldRoleChangeIntents } from "@/stores/roleResolution";
 import type { AbilityOperation, ParticipantBinding } from "@/stores/abilityResolution";
@@ -58,7 +58,7 @@ export function haircutsTonight(query: RulesQuery, barber: ParticipantBinding, d
   if (!role || !isCanonicalRole(role)) return false;
   if (moment.phase === "night") return nightTriggerStatus(descriptor, barber, query).kind === "triggered";
   if (moment.phase !== "day") return false;
-  const deaths = query.lifeEvents(moment, (event) => isDeathEvent(event) && event.subject.participantId === barber.participantId && event.actualRoleAtEvent === "barber");
+  const deaths = query.lifeEvents(moment, (event) => isDeathEvent(event) && event.subject.participantId === barber.participantId && mayBeDeathAs(event, "barber"));
   if (deaths.status !== "known") return false;
   return deaths.events.some((event) => {
     const status = query.game.nightProgress[`${moment.day + 1}:${nightTriggerStepKey(barber.participantId, "barber", event.id)}`]?.status;

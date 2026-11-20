@@ -176,6 +176,15 @@ export function lifeEventsAt(
 export const isDeathEvent = (event: LifeEvent): boolean =>
   event.kind === "death" || ("outcome" in event && event.outcome === "died");
 
+/**
+ * Whether this recorded death may be a death AS `roleId`: its recorded character is `roleId`, or it has no character evidence at all (a
+ * death recorded late through the correction path, an amend to another player, an old save). Such a death is never guessed either way
+ * (SOL-10F-A9): a Day action or token that reads it stays offered and the Storyteller decides. A death recorded as ANOTHER character
+ * never counts. Used by the Klutz, Sweetheart and Barber (SV-1 independent check, follow-up approved 2026-11-20).
+ */
+export const mayBeDeathAs = (event: Pick<LifeEvent, "actualRoleAtEvent">, roleId: string): boolean =>
+  !event.actualRoleAtEvent || event.actualRoleAtEvent === roleId;
+
 export const deathsAt = (game: Parameters<typeof lifeEventsAt>[0], moment: LiveGameMoment) =>
   lifeEventsAt(game, moment, isDeathEvent);
 export const executionsAt = (game: Parameters<typeof lifeEventsAt>[0], moment: LiveGameMoment) =>
