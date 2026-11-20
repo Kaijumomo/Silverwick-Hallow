@@ -69,7 +69,9 @@ it("Begin Day with unfinished work goes to Dawn first; continuing there is expli
 
 it("Begin Day with every step resolved advances at once", () => {
   const g = game();
-  for (const id of g.seatOrder) g.nightProgress[`2:${key(id)}`] = { status: "done", notes: "" };
+  // The Chef (p4) has no step on Night 2. A record for one is what the Barber's swap writes for a player who becomes the Chef
+  // tonight, and it lists that step (SV-1d), so only the listed steps are marked.
+  for (const id of g.seatOrder.filter((id) => id !== "p4")) g.nightProgress[`2:${key(id)}`] = { status: "done", notes: "" };
   store.setState({ game: { ...g, nightProgress: { ...g.nightProgress } } });
   render(<Screen />);
   expect(pos()).toBe("6 / 6");

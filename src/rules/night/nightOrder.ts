@@ -169,8 +169,13 @@ export function computeNightOrder(
     // (no other-night wake) is listed at its first-night position with its first-night instruction.
     const reborn = !isFirstNight && !!roleDef.firstNight && !roleDef.otherNight && player.alive && hasEffect(player, "shabalothAlive") &&
       player.effects.some((effect) => effect.type === "shabalothAlive" && effect.appliedAt?.phase === "night" && effect.appliedAt.day === context.day);
-    const firstPass = isFirstNight || reborn;
-    let order = firstPass ? roleDef.firstNight : roleDef.otherNight;
+    // SV-1d (https://wiki.bloodontheclocktower.com/Barber): a living player the Barber's swap made a character whose ability works only on
+    // the first night learns "at that point" (Glossary). The swap marks that step for tonight; it is listed right after the Barber's step
+    // with its first-night instruction, and answered by hand.
+    const swappedIn = !isFirstNight && !reborn && canonical && !!roleDef.firstNight && !roleDef.otherNight && player.alive &&
+      !FIRST_NIGHT_ADMIN.has(roleId) && context.day !== undefined && !!context.nightProgress?.[`${context.day}:${participantStepKey(player.participantId, roleId)}`];
+    const firstPass = isFirstNight || reborn || swappedIn;
+    let order = swappedIn ? at("barber") + 0.01 : firstPass ? roleDef.firstNight : roleDef.otherNight;
     if (!canonical && order === undefined && (isFirstNight ? roleDef.firstNightPrompt : roleDef.otherNightPrompt)) {
       global(participantScopedStepKey("missingOrder", player.participantId), "Night reference — Storyteller check required",
         player.name + ": instruction has no night position. Place a custom step manually.", 0.3, { participantId: player.participantId });
@@ -188,6 +193,14 @@ export function computeNightOrder(
       continue;
     }
     if (!isFirstNight && roleId === "poppygrower" && !isDeceived) continue;
+    // SV-1 (https://wiki.bloodontheclocktower.com/Juggler): "On your 1st day, publicly guess ... That night, you learn how many you got
+    // correct." The Juggler wakes once: on the night after the first Day as the Juggler -- Night 2 from the deal, or the night after a
+    // change (a Barber swap, the Pit-Hag, by hand; becoming the Juggler again is a fresh start). Where that is not known (a game saved
+    // before character timing existed), the row stays on every later night, as before, and the Storyteller decides.
+    if (!isFirstNight && roleId === "juggler" && canonical && context.day !== undefined) {
+      const firstDay = jugglerFirstDay(player, context);
+      if (firstDay !== null && context.day !== firstDay + 1) continue;
+    }
     // https://wiki.bloodontheclocktower.com/Vigormortis : a Minion the Vigormortis kills at night keeps its
     // ability while the Vigormortis lives. Which Minions were killed that way is not tracked, so the row is
     // shown for any dead Minion and the Storyteller is told exactly when to wake it.
@@ -238,6 +251,14 @@ export function computeNightOrder(
   }
   return steps.sort((a, b) => a.order - b.order ||
     (a.kind === "player" && b.kind === "player" ? a.seat - b.seat : a.kind === b.kind ? 0 : a.kind === "global" ? -1 : 1));
+}
+
+/** The Day number of this player's first Day with their current character, or null when that is not known. */
+function jugglerFirstDay(player: STPlayerRecord, context: NightContext): number | null {
+  if (player.characterSince) return player.characterSince.day;
+  const from = context.characterSinceFrom;
+  // Recorded from Night 1 (a game started with character timing): no change means since the deal, so Day 1.
+  return from && from.phase === "night" && from.day === 1 ? 1 : null;
 }
 
 function canonicalRolesIfKnown(id: string) {

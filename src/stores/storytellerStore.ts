@@ -62,7 +62,7 @@ import {
 import { CANONICAL_ABILITY_SEMANTICS, type AbilitySemanticsRegistry } from "@/abilities/semantics";
 import { detectLegacyGameVersion, migrateGameEntry } from "./gameMigration";
 import { compactUndoStack, SHARED_UNDO_KEY } from "./undoPersistence";
-import { freshLifeEventWindow, pruneLifeEventWindow } from "./lifeEvents";
+import { FIRST_LIVE_MOMENT, freshLifeEventWindow, pruneLifeEventWindow } from "./lifeEvents";
 import {
   applyLifePlan,
   canonicalizeStartingLife,
@@ -1290,6 +1290,8 @@ export function buildSetupGame(script: Script, opts: NewGameOpts = {}): Storytel
     playerInfoLog: [],
     // Phase 10A: a fresh game observes every Life Event from Night 1.
     lifeEventWindow: freshLifeEventWindow(),
+    // SV-1 character timing: every character change in play is recorded from Night 1, so a player with no characterSince has had theirs since the deal.
+    characterSinceFrom: { ...FIRST_LIVE_MOMENT },
     // Phase 10G: no game-scoped Rule Fact exists before Live Play.
     gameRuleFacts: [],
   };

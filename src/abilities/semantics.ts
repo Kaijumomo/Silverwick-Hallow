@@ -77,6 +77,8 @@ export type AbilityInputRequirement = {
    * be NOBODY -- an explicit empty choice -- instead of exactly `count`
    * (e.g. "you may choose 3 players"). Never a sentinel player. */
   allowNone?: boolean;
+  /** SV-1d: the words for that explicit NOBODY answer (default "Nobody"), e.g. "Demon chooses nobody". Presentation only. */
+  noneLabel?: string;
   constraints?: readonly InputConstraint[];
   label: string;
 };
@@ -89,6 +91,9 @@ export type AbilityPresentation = {
   complexity: "simple" | "complex";
   /** Short imperative for the Night row ("Choose a player to poison"). */
   action: string;
+  /** SV-1d: in the Night card, the reason a complete answer is refused ("The Demon may not choose another Demon.") is shown in
+   * the card's existing alert line. Absent for every character built before SV-1, whose Night card is unchanged. */
+  showsRefusal?: true;
 };
 
 /**
@@ -98,8 +103,14 @@ export type AbilityPresentation = {
  *  - actorDiedTonight: the actor's exact participation instance died during
  *    the CURRENT Night, as recorded in the Life Event Window with known
  *    coverage (matrix Section 9). History and Reminders are never consulted.
+ *  - actorKilledByDemonTonight (SV-1a, the Sage): the same death, unless its
+ *    recorded cause is a character that is not a Demon. An unrecorded cause
+ *    stays open; the ability asks the Storyteller.
+ *  - actorDiedTodayOrTonight (SV-1b, the Sweetheart and the Barber): the
+ *    actor died during the Day just ended or during the current Night. A Day
+ *    death's step may already be consumed by the ability's own Day action.
  */
-export type NightTriggerKind = "actorDiedTonight";
+export type NightTriggerKind = "actorDiedTonight" | "actorKilledByDemonTonight" | "actorDiedTodayOrTonight";
 
 export type AbilityDescriptor = {
   roleId: RoleId;
@@ -118,8 +129,10 @@ export type AbilityDescriptor = {
   informationActions?: readonly InformationActionId[];
   /** Effects this ability creates and whether each keeps applying when its
    * source stops functioning. Read by the Rules Query; an undeclared sourced
-   * Effect's applicability is unknown (Storyteller judgment), never assumed. */
-  sourcedEffects?: readonly { type: string; persistence: "independent" | "whileSourceFunctions" }[];
+   * Effect's applicability is unknown (Storyteller judgment), never assumed.
+   * `whileSourceHasAbility` (SV-1b, the Sweetheart): the source's ability keeps working while it is dead ("This ability works while
+   * the Sweetheart is dead"), pauses while it is drunk or poisoned, and ends when it changes character. */
+  sourcedEffects?: readonly { type: string; persistence: "independent" | "whileSourceFunctions" | "whileSourceHasAbility" }[];
   /** SOL-10F-S7-F2: authoritative Storyteller-FACT Effect types this ability's
    * workflow may initialize INDEPENDENTLY of whether the actor's ability is
    * functioning (e.g. setup bookkeeping the Storyteller establishes before the
@@ -170,6 +183,9 @@ export type AbilityEvaluationContext = {
    * information modifier allowing only certain values). The coordinator
    * also ENFORCES information constraints on the delivered values. */
   constraints: readonly InformationConstraint[];
+  /** SV-1a: on the verified Night-trigger path, the exact Life Event that
+   * fired it (as revalidated by the coordinator). Absent on every other path. */
+  trigger?: { eventId: string | null };
 };
 
 /**

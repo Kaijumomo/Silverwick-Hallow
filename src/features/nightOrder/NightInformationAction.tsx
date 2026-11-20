@@ -12,9 +12,10 @@ import { createRulesQuery } from "@/stores/rulesQuery";
 import { captureInfoContext, infoContextCurrent } from "@/features/info/infoCommands";
 import { isDeathEvent } from "@/stores/lifeEvents";
 import { QuestionBlock } from "@/features/grimoire-v6/day/NominationExtras";
+import { SAGE, SAGE_PLAYERS, sageCauseQuestion } from "@/abilities/characters/sage";
 
 export const CALCULATED_INFORMATION_ROLES = new Set(["chef", "empath", "fortuneteller", "towncrier", "oracle"]);
-export const NIGHT_INFORMATION_ROLES = new Set([...CALCULATED_INFORMATION_ROLES, "undertaker", "ravenkeeper"]);
+export const NIGHT_INFORMATION_ROLES = new Set([...CALCULATED_INFORMATION_ROLES, "undertaker", "ravenkeeper", "sage"]);
 const EMPTY_INPUTS: AbilityInputs = {};
 export type NightInformationHandle = { next: () => boolean };
 /** How a host screen reveals a character token: its own button, character picker and player view.
@@ -66,9 +67,14 @@ export const NightInformationAction = forwardRef<NightInformationHandle, Props>(
     return { mode: "guided", invocationPath: ability.invocationPath ?? "nightOrder",
       fingerprint: fingerprint!, roleId: step.effectiveRoleId, inputs: answers, completeStep: true };
   };
-  const targetId = step.effectiveRoleId === "ravenkeeper" ? "target" : "targets";
+  const sage = step.effectiveRoleId === "sage";
+  const targetId = step.effectiveRoleId === "ravenkeeper" ? "target" : sage ? SAGE_PLAYERS : "targets";
   const targetCount = step.effectiveRoleId === "ravenkeeper" ? 1 : 2;
-  const hasTargets = !["fortuneteller", "ravenkeeper"].includes(step.effectiveRoleId)
+  // SV-1a: when Silverwick did not record what killed the Sage, the Storyteller says first whether the Demon did.
+  const causeQuestion = sage && trigger && !resolved ? sageCauseQuestion(createRulesQuery(game, environment), { playerId: step.playerId, participantId: step.participantId }, trigger.eventId) : null;
+  const causeAnswer = causeQuestion ? inputs[causeQuestion.id] : undefined;
+  const awaitingCause = !!causeQuestion && causeAnswer?.kind !== "boolean";
+  const hasTargets = !["fortuneteller", "ravenkeeper", "sage"].includes(step.effectiveRoleId)
     || inputs[targetId]?.kind === "participant" && inputs[targetId].participants.length === targetCount;
   const preview = useMemo(() => !resolved && !simulatedRavenkeeper && fingerprint && hasTargets ? planAbilityResolution(game, request(inputs), environment) : null,
     [game, inputs, resolved, step.stepKey, environment]);
@@ -116,11 +122,11 @@ export const NightInformationAction = forwardRef<NightInformationHandle, Props>(
   }, [preview?.ok, preview && !preview.ok ? preview.code : undefined, requirement?.source]);
   const targetInput = inputs[targetId];
   const targets = targetInput?.kind === "participant" ? targetInput.participants : [];
-  const needsTargets = !resolved && ["fortuneteller", "ravenkeeper"].includes(step.effectiveRoleId) && targets.length < targetCount
-    && (!simulatedRavenkeeper || manualWake);
+  const needsTargets = !resolved && ["fortuneteller", "ravenkeeper", "sage"].includes(step.effectiveRoleId) && targets.length < targetCount
+    && (!simulatedRavenkeeper || manualWake) && !awaitingCause;
   const choose = (target: ParticipantBinding) => {
     if (!safe() || targets.some(other => other.participantId === target.participantId)) return;
-    const next: AbilityInputs = { [targetId]: { kind: "participant", participants: [...targets, target] } };
+    const next: AbilityInputs = { ...(causeQuestion && causeAnswer ? { [causeQuestion.id]: causeAnswer } : {}), [targetId]: { kind: "participant", participants: [...targets, target] } };
     setDraft({ game, inputs: next });
     if (targets.length + 1 < targetCount) return;
     useTargetPicker.getState().cancel();
@@ -134,13 +140,15 @@ export const NightInformationAction = forwardRef<NightInformationHandle, Props>(
     else if (plan.code === "needsInput" && plan.requirements?.length === 1 && plan.requirements[0]?.source === "storyteller" && plan.requirements[0].kind === "character") {
       openChooser(next, plan.requirements[0].id);
     }
+    // The Sage's pair must include the Demon that killed them: say so and let the Storyteller choose again.
+    else if (sage && plan.code === "illegal") { setError(plan.message); setDraft({ game, inputs: causeQuestion && causeAnswer ? { [causeQuestion.id]: causeAnswer } : {} }); }
     else if (plan.code !== "needsInput" || plan.requirements?.some(item => item.source === "judgment")) onManual();
   };
   useEffect(() => {
     if (!visible || paused || !needsTargets) return;
     let active = true;
     const eligible = new Set(seatedParticipants(game).filter(player => !targets.some(target => target.participantId === player.participantId)).map(player => player.participantId!));
-    useTargetPicker.getState().start(targetCount === 1 ? "Choose a player" : `Choose player ${targets.length + 1} of 2`, target => { if (active) choose(target); }, { owner, eligible });
+    useTargetPicker.getState().start(targetCount === 1 ? "Choose a player" : sage && !targets.length ? SAGE.presentation.action : `Choose player ${targets.length + 1} of 2`, target => { if (active) choose(target); }, { owner, eligible });
     return () => { active = false; if (useTargetPicker.getState().active?.owner === owner) useTargetPicker.getState().cancel(); };
   }, [visible, paused, needsTargets, game, inputs]);
   useEffect(() => {
@@ -208,9 +216,12 @@ export const NightInformationAction = forwardRef<NightInformationHandle, Props>(
     </>}
     {needsTargets && <>
       {/* PO review C04/C12: chosen players sit inline beside the prompt, as in V2; no cancel control. */}
-      <p className="modern-night-pick">{targetCount === 1 ? "Choose a player on the board" : targets.length ? "Choose one more player on the board" : "Choose two players on the board"}
+      <p className="modern-night-pick">{targetCount === 1 ? "Choose a player on the board" : targets.length ? "Choose one more player on the board" : sage ? SAGE.presentation.action : "Choose two players on the board"}
         {targets.map(target => <span key={target.participantId} className="night-pick-chip">{game.players[target.playerId]?.name}</span>)}</p>
     </>}
+    {awaitingCause && causeQuestion && <QuestionBlock heading={causeQuestion.heading} note={causeQuestion.note}
+      actions={[{ label: "Yes", onClick: () => { setError(null); setDraft({ game, inputs: { [causeQuestion.id]: { kind: "boolean", value: true } } }); } },
+        { label: "No", onClick: () => { commit({ [causeQuestion.id]: { kind: "boolean", value: false }, [SAGE_PLAYERS]: { kind: "participant", participants: [] } }); } }]} />}
     {resolved && <p className="modern-night-result">Completed</p>}
     {error && <p role="alert" className="behavior-help">{error}</p>}
   </div>;

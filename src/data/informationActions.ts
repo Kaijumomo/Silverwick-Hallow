@@ -185,4 +185,16 @@ export const INFORMATION_ACTIONS: Record<RoleId, InformationAction[]> = {
       ],
     },
   ],
+
+  // "If the Demon kills you, you learn that it is 1 of 2 players." (SV-1a) -- two players, one of them the Demon that killed the Sage.
+  sage: [
+    {
+      id: "sage-triggered",
+      timing: { kind: "triggered" },
+      instruction: "If the Demon killed the Sage, wake the Sage and point to 2 players, 1 of which is the Demon.",
+      requirements: [
+        { id: "players", kind: "player", cardinality: { kind: "exactly", count: 2 }, label: "The two players shown" },
+      ],
+    },
+  ],
 };

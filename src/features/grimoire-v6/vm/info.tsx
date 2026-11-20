@@ -9,6 +9,8 @@ import { bluffRecipient, closeShow, confirmEnd, endInFlight, presentMessage, pre
 import { useInfoShow } from "../info/showStore";
 import { INFO_TOKENS, SETUP_ICON, SETUP_LABEL, SETUP_ORDER } from "../info/tokens";
 import { EMPTY, type SliceResult } from "./types";
+import { endHint } from "./chrome";
+import { klutzAdvisory } from "@/stores/endGameEligibility";
 
 const SETUP_SUB: Record<SetupView, string> = {
   traveler: "Demon only",
@@ -89,6 +91,12 @@ export function useInfoVm(ctx: V6Ctx): SliceResult {
   const ref = refOn ? buildRefVm(ctx, (id) => ui.set({ refSel: id })) : null;
 
   // ── End game ────────────────────────────────────────────────────────────────
+  // PO review 2026-11-15 (R1): the End control's "!" line is a tooltip, which a touch screen never shows, so the End dialog repeats it.
+  // PO design direction 2026-11-19: it sits in its own "Possible game end" box (every "!" line, not only the Klutz's). The dialog
+  // opens only outside Privacy Mode; the line is the same one the "!" already carries.
+  // A verified ending takes the "!" over the Klutz's line; the box keeps both, as the dialog did before.
+  const lines = !privacy && !recovery ? [endHint(ctx), klutzAdvisory(game) ?? ""] : [];
+  const possibleEnd = [...new Set(lines.filter(Boolean))].map((line) => `${line}.`).join(" ");
   const notice = recovery
     ? terminal?.confirmedRecovery ? "The online game has ended. Save its confirmed result here to finish." : "An ending was interrupted. Retry to recover the recorded result."
     : lobby ? "The declared result will also be shared with seated players." : "";
@@ -100,7 +108,7 @@ export function useInfoVm(ctx: V6Ctx): SliceResult {
     evil: () => void confirmEnd(recovery ?? "evil"),
     noResult: () => void confirmEnd(recovery ?? "noResult"),
     retry: () => { if (recovery) void confirmEnd(recovery); },
-    recovery: !!recovery, choices: !recovery, notice, error: status.error ?? "", busy: status.busy,
+    recovery: !!recovery, choices: !recovery, notice, possibleEnd, error: status.error ?? "", busy: status.busy,
   };
 
   return {

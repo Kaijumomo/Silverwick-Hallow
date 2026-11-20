@@ -281,6 +281,14 @@ export const REVIEWED_INTERACTION_ROLES: ReadonlySet<string> = new Set([
   "tealady",
   // LS-2c: the Devil's Advocate's protection is a sourced survivesExecution Effect read by the death gate for executions only.
   "devilsadvocate",
+  // SV-1a: the Sage only receives information when the Demon killed them (a verified Night trigger); it changes no other character.
+  "sage",
+  // SV-1b: the Sweetheart's DRUNK is a sourced drunk Effect read through the shared impairment query (whileSourceHasAbility).
+  "sweetheart",
+  // SV-1c: the Klutz's public Day choice reads registration through the shared query and records a fact; it changes no other ability.
+  "klutz",
+  // SV-1d: the Barber's swap is one Role resolution through the Pit-Hag's seam, after the Barber died; it changes no other ability.
+  "barber",
   // Marionette has no ability effects of its own: it is an evil Minion who believes they are good, and every query reads its ACTUAL role and alignment.
   "marionette",
   // Information-only characters (Sects & Violets / Bad Moon Rising): each only reads game state and changes none, so it has no

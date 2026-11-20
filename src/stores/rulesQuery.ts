@@ -255,7 +255,7 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
       ? descriptor.descriptor.sourcedEffects?.find((entry) => entry.type === effect.type)?.persistence
       : undefined;
     if (declared === "independent") return known(true);
-    if (declared !== "whileSourceFunctions") return unknown(`Whether this ${effect.type} Effect still applies depends on its source: the Storyteller decides.`);
+    if (declared !== "whileSourceFunctions" && declared !== "whileSourceHasAbility") return unknown(`Whether this ${effect.type} Effect still applies depends on its source: the Storyteller decides.`);
     const sourcePlayer = boundParticipant(game, { playerId: source.playerId, participantId: source.participantId });
     if (!sourcePlayer) return unknown("The Effect's source is no longer in play: the Storyteller decides.");
     // Matrix Section 1 / 4: a persistent ability effect ends when its source
@@ -266,7 +266,8 @@ export function createRulesQuery(game: StorytellerLobbyRecord, environment: Rule
     // before any impairment / functioning uncertainty is even consulted. (A
     // departed / unseated source stays unknown, above.)
     const next = new Set(visiting).add(key);
-    if (!sourcePlayer.alive) {
+    // SV-1b: an ability that works while its holder is dead (the Sweetheart) does not end at death; impairment still pauses it below.
+    if (!sourcePlayer.alive && declared === "whileSourceFunctions") {
       // A dead Minion the Vigormortis killed keeps its ability, so what it sourced still applies.
       const kept = retained(sourcePlayer, next);
       if (!kept.known || !kept.value) return kept.known ? known(false) : kept;

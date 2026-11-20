@@ -114,6 +114,8 @@
   text-transform: uppercase;
   color: var(--gvn-faint);
 }
+/* A decline (the Demon chooses nobody) is not information shown to anyone: no "Show" label. */
+.gv-night-custom .night-information-choices.night-decline::before { content: none; }
 .gv-night-custom .night-information-choices .btn {
   min-width: 48px;
   height: 48px;

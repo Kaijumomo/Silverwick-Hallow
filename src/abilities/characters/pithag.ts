@@ -30,7 +30,7 @@ import { answerOf, firstParticipant, nothing, outcome, requireLivingActor } from
  *    destination, or a concealed identity on either side -> Manual.
  *  - impaired / simulated: the choices are simulated; nothing changes.
  */
-const CONCEALED_MODES = ["drunk_fake_role_behavior", "marionette_fake_good_behavior", "fake_demon_behavior"];
+export const CONCEALED_MODES = ["drunk_fake_role_behavior", "marionette_fake_good_behavior", "fake_demon_behavior"];
 
 export const PIT_HAG: AbilityDescriptor = {
   roleId: "pithag",

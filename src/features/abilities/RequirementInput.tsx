@@ -157,7 +157,7 @@ export function RequirementInput({ requirement, game, script, actor, onChange, i
                 setNobody(e.target.checked);
                 onChange(e.target.checked ? { kind: "participant", participants: [] } : toValue(participantSlots));
               }} />
-              Nobody
+              {requirement.noneLabel ?? "Nobody"}
             </label>
           )}
           {participantSlots.map((binding, index) => (

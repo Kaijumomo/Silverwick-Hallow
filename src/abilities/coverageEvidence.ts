@@ -80,9 +80,6 @@ export const PARTIAL_SUPPORT: Readonly<Record<RoleId, readonly Piece[]>> = {
   banshee: [
     { path: "src/rules/night/nightOrder.ts", what: "Death-check wake slot: the night list shows this character after a death night with a 'check the death condition' advisory; historical triggers are not tracked." },
   ],
-  barber: [
-    { path: "src/rules/night/nightOrder.ts", what: "Death-check wake slot: the night list shows this character after a death night with a 'check the death condition' advisory; historical triggers are not tracked." },
-  ],
   bigwig: [
     { path: "src/rules/setup/setupAnalyzer.ts", what: "Setup shows the ability as an information note only." },
   ],
@@ -221,9 +218,6 @@ export const PARTIAL_SUPPORT: Readonly<Record<RoleId, readonly Piece[]>> = {
   puzzlemaster: [
     { path: "src/rules/setup/setupAnalyzer.ts", what: "In the setup analyzer's manual-review list: setup shows a 'Review character setup' check and the Storyteller resolves the special choices by hand." },
   ],
-  sage: [
-    { path: "src/rules/night/nightOrder.ts", what: "Death-check wake slot: the night list shows this character after a death night with a 'check the death condition' advisory; historical triggers are not tracked." },
-  ],
   sailor: [
     { path: "src/abilities/characters/passiveRules.ts", what: "Death gate: a sober, healthy Sailor cannot die (when asked directly); the nightly drunk choice is not modelled, so any game with a Sailor stays Manual." },
   ],
@@ -240,9 +234,6 @@ export const PARTIAL_SUPPORT: Readonly<Record<RoleId, readonly Piece[]>> = {
   summoner: [
     { path: "src/rules/setup/setupAnalyzer.ts", what: "In the setup analyzer's manual-review list: setup shows a 'Review character setup' check and the Storyteller resolves the special choices by hand." },
     { path: "src/rules/setup/setupPolicies.ts", what: "Marked as an uncertain composition: random setup and composition checks fall back to manual review." },
-  ],
-  sweetheart: [
-    { path: "src/rules/night/nightOrder.ts", what: "Death-check wake slot: the night list shows this character after a death night with a 'check the death condition' advisory; historical triggers are not tracked." },
   ],
   tinker: [
     { path: "src/rules/night/nightOrder.ts", what: "Death-check wake slot: the night list shows this character after a death night with a 'check the death condition' advisory; historical triggers are not tracked." },
@@ -280,6 +271,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   alhadikhia: ["src/abilities/characters/alhadikhia.test.ts", "src/abilities/characters/astraReverification.test.ts"],
   artist: ["src/abilities/characters/informationCharacterReview.test.ts"],
   baron: ["src/features/grimoire-v6/night/nightGuide.port.test.tsx", "src/features/setup/setupRefinementCommands.test.ts"],
+  barber: ["src/abilities/characters/barber.test.ts", "src/features/grimoire-v6/night/port/barberUi.v6.test.tsx"],
   butler: ["src/stores/butlerSelection.test.ts", "src/stores/b7IndependentButler.test.ts"],
   chambermaid: ["src/abilities/characters/informationCharacterReview.test.ts"],
   chef: ["src/stores/roleResolution.test.ts", "src/stores/projections.test.ts"],
@@ -301,6 +293,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   innkeeper: ["src/abilities/characters/innkeeper.test.ts", "src/features/nightOrder/nightWork.test.ts"],
   investigator: ["src/features/setup/postR3ReclusePreparation.test.tsx", "src/stores/b6Independent.test.ts"],
   juggler: ["src/abilities/characters/informationCharacterReview.test.ts"],
+  klutz: ["src/abilities/characters/klutz.test.ts", "src/features/grimoire-v6/day/klutzDay.test.tsx"],
   librarian: ["src/stores/roleResolution.test.ts", "src/stores/b6Independent.test.ts"],
   marionette: ["src/stores/projections.test.ts", "src/features/grimoire-v6/setup/prepareConcealed.test.tsx"],
   mathematician: ["src/abilities/characters/informationCharacterReview.test.ts"],
@@ -315,6 +308,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   professor: ["src/abilities/characters/townCrierOraclePro.test.ts", "src/abilities/characters/concealedSameAsPoisoned.test.ts"],
   ravenkeeper: ["src/stores/troubleBrewingB5bIndependent.test.ts", "src/abilities/characters/troubleBrewingB5b.test.ts"],
   recluse: ["src/abilities/characters/troubleBrewingB1.independent.test.ts", "src/features/grimoire-v6/night/nightGuide.port.test.tsx"],
+  sage: ["src/abilities/characters/sage.test.ts", "src/features/grimoire-v6/night/port/sageUi.v6.test.tsx"],
   saint: ["src/stores/roleResolution.test.ts", "src/stores/projections.test.ts"],
   savant: ["src/abilities/characters/informationCharacterReview.test.ts"],
   scarletwoman: ["src/stores/troubleBrewingB4Death.test.ts", "src/stores/troubleBrewingB4Independent.test.ts"],
@@ -323,6 +317,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   slayer: ["src/abilities/characters/pithag.test.ts", "src/stores/abilityResolution.test.ts"],
   soldier: ["src/features/grimoire-v6/night/port/troubleBrewingB5aUi.v6.test.tsx", "src/stores/b8Independent.test.ts"],
   spy: ["src/abilities/characters/troubleBrewingB1.independent.test.ts", "src/abilities/characters/contextualRegistration.test.ts"],
+  sweetheart: ["src/abilities/characters/sweetheart.test.ts", "src/features/grimoire-v6/day/sweetheartDay.test.tsx"],
   towncrier: ["src/abilities/characters/townCrierOraclePro.test.ts", "src/rules/night/canonicalNightOrder.test.ts"],
   undertaker: ["src/stores/troubleBrewingB5bIndependent.test.ts", "src/stores/b9WholeGames.test.ts"],
   vigormortis: ["src/abilities/characters/vigormortis.test.ts", "src/rules/setup/setupAnalyzer.test.ts"],
@@ -336,7 +331,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
 export const COVERAGE_CAVEATS: Readonly<Record<RoleId, readonly string[]>> = {
   fool: ["LS-1: the death gate applies the Fool's survival to Demon and ability kills and to a recorded execution (the Storyteller still records the outcome). A Witch curse, a Golem nomination (its \"survives\" button spends only the Golem) and a Pacifist in play still send the question to the Storyteller. Al-Hadikhia, the Harlot and the Slayer stay Manual when a Fool would be spent."],
   tealady: ["LS-2b: Spy and Recluse neighbours use the Storyteller's setup decision (Prepare the town), and the decision can be set or changed only during setup; a Spy or Recluse with no decision (a later neighbour, or a character created mid-game) sends the question to the Storyteller. Exile is not modelled: the exile flow stays the Storyteller's. The CANNOT DIE tokens are still drawn while the Tea Lady is drunk or poisoned (PO ruling); the app does not honour them then."],
-  juggler: ["Official wiki: wakes once. The night list shows the row every later night; the Storyteller skips it."],
+  juggler: ["Official wiki: wakes once, on the night after the first Day as the Juggler (Night 2 from the deal, or the night after a change). A game saved before character timing existed shows the row every later night; the Storyteller skips it."],
   mutant: ["Official wiki: the Storyteller may execute a madness-breaking Mutant at any time, even at night. The app records executions only in Day and does not block a second daytime execution."],
 };
 

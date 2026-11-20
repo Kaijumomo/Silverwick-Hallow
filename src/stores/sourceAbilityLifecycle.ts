@@ -51,6 +51,8 @@ export function planRemovedVotingReminders(game: StorytellerLobbyRecord, removed
 /** Official Abilities: death and changing character end these persistent
  * abilities; temporary impairment only changes derived applicability. This
  * narrow policy intentionally covers no other character or effect type.
+ * `characterChange`: the loss is a change of character (not a death or a resurrection). The Sweetheart's DRUNK ends only then:
+ * "This ability works while the Sweetheart is dead" (SV-1b).
  * https://wiki.bloodontheclocktower.com/Abilities */
 export function planSourceAbilityLoss(
   game: StorytellerLobbyRecord,
@@ -58,6 +60,7 @@ export function planSourceAbilityLoss(
   environment: RulesQueryEnvironment | undefined,
   nextHistoryId: () => string,
   resolutionId?: string,
+  characterChange = false,
 ): { ok: true; plan: SourceAbilityLossPlan } | { ok: false; message: string } {
   let working = game;
   const effects: EffectPlan[] = [];
@@ -82,7 +85,8 @@ export function planSourceAbilityLoss(
       const supported = effect.sourceCharacter === "poisoner" && effect.type === "poisoned" || effect.sourceCharacter === "monk" && effect.type === "safeFromDemon" ||
         effect.sourceCharacter === "innkeeper" && (effect.type === "cannotDie" || effect.type === "drunk") ||
         effect.sourceCharacter === "vigormortis" && (effect.type === "poisoned" || effect.type === "retainsAbility") || effect.sourceCharacter === "witch" && effect.type === "witchCurse" ||
-        effect.sourceCharacter === "devilsadvocate" && effect.type === "survivesExecution";
+        effect.sourceCharacter === "devilsadvocate" && effect.type === "survivesExecution" ||
+        characterChange && effect.sourceCharacter === "sweetheart" && effect.type === "drunk";
       const definition = effect.sourceCharacter ? environment?.registry.get(effect.sourceCharacter) : undefined;
       if (!supported || !definition || !isCanonicalRole(definition)) continue;
       const result = planEffectTransaction(working, { intents: [{ kind: "remove", target: { playerId: player.id, participantId: player.participantId }, effectId: effect.id }],

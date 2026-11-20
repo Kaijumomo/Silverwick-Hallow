@@ -178,6 +178,8 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     && (current.kind === "player" ? current.effectiveRoleId === "bureaucrat"
       : current.stepKey === travelerArrivalStepKey(actor.participantId, "bureaucrat")));
   const manual = !bureaucrat && !eligible;
+  // PO review 2026-11-14 (C1): the Barber's verified step is tapped on the board in the Night card (BarberNightAction), not the workspace.
+  const barberTurn = !!eligible && current?.kind === "player" && current.effectiveRoleId === "barber" && ability?.kind === "guided";
   const owner = current ? `night-guide:${game.code}:${game.day}:${current.stepKey}` : "night-guide";
   const live = useRef({ visible, current, game, successorChoice });
   live.current = { visible, current, game, successorChoice };
@@ -211,7 +213,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     if (current) setManualAction(current.stepKey);
     useTargetPicker.getState().cancel(); setWorkspace(null); setError(reason ?? null); setPaused(true);
   };
-  const requireManual = () => stopAutomation();
+  const requireManual = (reason?: string) => stopAutomation(reason);
   const finish = (committed: StorytellerLobbyRecord) => {
     setSuccessorChoice(null);
     if (!current || !stepResolved(committed, current)) return;
@@ -440,7 +442,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     if (!visible) { ui.set({ panel: "night" }); return; }
     lastRequest.current = actionRequest;
     if (resolved) return;
-    if (direct || bureaucrat || inlineInformation) setPaused(false); else if (!workspace) openWorkspace();
+    if (direct || bureaucrat || inlineInformation || barberTurn) setPaused(false); else if (!workspace) openWorkspace();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actionRequest, visible, active]);
 
@@ -496,7 +498,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
 
   return {
     active, visible, work, steps, unfinished, pos, current, currentIndex, resolved, actor, role, ability, query,
-    eligible, direct, canTarget, question, answerQuestion, skipReason, settled, moonchildChoice, regurgitation, needed, picks, guessFor, inlineInformation, preparedInformation, butlerTurn, bureaucrat, manual, manualRavenkeeper, correction,
+    eligible, direct, canTarget, question, answerQuestion, skipReason, settled, moonchildChoice, regurgitation, needed, picks, guessFor, inlineInformation, preparedInformation, butlerTurn, barberTurn, bureaucrat, manual, manualRavenkeeper, correction,
     workspace, setWorkspace, setPaused, error, setError, success, successorChoice, picker, refused, owner, actionContext,
     navigate, gotoCheckpoint, prev, next, beginDay, openWorkspace, openTrigger, requireManual, finish,
   };

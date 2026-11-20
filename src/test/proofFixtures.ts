@@ -45,6 +45,7 @@ export function proofGame(roles: RoleId[], phase: "night" | "day" = "night", day
     notes: "", nightProgress: {}, pendingPlayers: {}, history: [], informationDeliveries: [],
     setupRolesDealt: true, setupRolesRevealed: true,
     lifeEventWindow: { coverageFrom: { phase: "night", day: 1 }, events: [] },
+    characterSinceFrom: { phase: "night", day: 1 },
     ...over,
   };
 }

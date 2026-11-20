@@ -1162,6 +1162,9 @@ export const STPlayerRecordSchema = z.object({
   packetEpoch: z.string().optional(),
   participantId: z.string().min(1).optional(),
   revealToken: RevealTokenSchema.optional(),
+  // SV-1 character timing (optional, no version bump): the Night or Day this player's current character began (a real change in
+  // play). Absent: since the deal when the game's characterSinceFrom is Night 1; otherwise not known. Storyteller-only; never projected.
+  characterSince: LiveGameMomentSchema.optional(),
 });
 
 /** Phase 10F (v24): a public player record. Life State (`alive`, `ghostVote`,
@@ -1254,6 +1257,10 @@ export const StorytellerLobbyRecordSchema = z.object({
   // incomplete current-version data and fails here; genuine v18 data gets it
   // from migration (gameMigration.ts), never from this schema.
   lifeEventWindow: LifeEventWindowSchema,
+  // SV-1 character timing (optional, no version bump): from which moment character changes are recorded (characterSince). A game
+  // created from now on: Night 1. A game saved before it: absent, which only ever means "not known" -- nothing is assumed, and an
+  // earlier app version still opens the game (it drops the two fields, which again reads as "not known").
+  characterSinceFrom: LiveGameMomentSchema.optional(),
   // Phase 10G (v25): the game-scoped Rule Facts. REQUIRED, with NO default
   // (ASTRA-10G-003): a current-version game missing the collection is
   // malformed authoritative data and fails here -- never silently repaired to

@@ -217,13 +217,13 @@ export type RoleRefusalCode =
 export type RoleRefusal = { ok: false; code: RoleRefusalCode; message: string; intentIndex?: number };
 
 /** The removable optional player fields a Role plan may clear. */
-export type RoleRemovableField = "privateInfo" | "publishedPacket" | "travelerArrival";
+export type RoleRemovableField = "privateInfo" | "publishedPacket" | "travelerArrival" | "characterSince";
 /** The ONLY player fields a Role plan may set. Never alive, ghostVote,
  * exiled, effects, reminders, actualAlignment, participantId or anything else
  * (see ROLE_PLAN_FIELDS). */
 export type RolePlayerSet = Partial<Pick<STPlayerRecord,
   "actualRole" | "isTraveler" | "abilityUsed" | "shownRole" | "shownAlignment" | "behaviorMode" |
-  "publicDisplayRole" | "privateInfo" | "packetEpoch" | "travelerArrival">>;
+  "publicDisplayRole" | "privateInfo" | "packetEpoch" | "travelerArrival" | "characterSince">>;
 /** A partial-field patch of ONE participant: fields to set and fields to
  * remove. Never a whole player record. */
 export type RolePlayerPatch = { set: RolePlayerSet; remove: RoleRemovableField[] };
@@ -270,6 +270,8 @@ const MAX_RESOLUTION_ID_LENGTH = 200;
 export const ROLE_PLAN_FIELDS = [
   "actualRole", "isTraveler", "abilityUsed", "shownRole", "shownAlignment", "behaviorMode",
   "publicDisplayRole", "privateInfo", "publishedPacket", "packetEpoch", "travelerArrival",
+  // SV-1 character timing: when the current character began (a real change in play).
+  "characterSince",
 ] as const;
 type RolePlanField = (typeof ROLE_PLAN_FIELDS)[number];
 
@@ -540,6 +542,12 @@ export function planRoleTransaction(
       delete next.publishedPacket;
       invalidated.add(original.id);
       if (!isCorrection) next.abilityUsed = false;
+      // SV-1 character timing: a real change in play starts a fresh character instance now. A correction fixes WHICH character, not when, so it
+      // keeps the timing; Setup records none (the deal is the start).
+      if (!isCorrection) {
+        if (game.phase === "night" || game.phase === "day") next.characterSince = { phase: game.phase, day: game.day };
+        else delete next.characterSince;
+      }
       if (toTraveler) {
         // Traveler character is public: Actual / Shown / public stay together.
         next.shownRole = destination || null;
@@ -656,8 +664,10 @@ export function planRoleTransaction(
     const patch: RolePlayerPatch = { set: {}, remove: [] };
     for (const field of ROLE_PLAN_FIELDS as readonly RolePlanField[]) {
       if (sameSnapshot(original[field], final[field])) continue;
+      // A participant whose Actual Role ends where it began did not start a new character.
+      if (field === "characterSince" && final.actualRole === original.actualRole) continue;
       if (final[field] === undefined) {
-        if (field === "privateInfo" || field === "publishedPacket" || field === "travelerArrival") patch.remove.push(field);
+        if (field === "privateInfo" || field === "publishedPacket" || field === "travelerArrival" || field === "characterSince") patch.remove.push(field);
       } else {
         (patch.set as Record<string, unknown>)[field] = cloneOwned(final[field]);
       }
@@ -707,7 +717,7 @@ export function planRoleTransaction(
     }
   }
   const lost = new Set(actualRoleChanges.map(c => game.players[c.playerId]!.participantId!));
-  const loss = planSourceAbilityLoss(game, lost, script ? { registry, script } : undefined, ids.historyId, resolutionId);
+  const loss = planSourceAbilityLoss(game, lost, script ? { registry, script } : undefined, ids.historyId, resolutionId, true);
   if (!loss.ok) return refuse("invalid", loss.message);
   return { ok: true, changed: true, plan: { players, nightProgressRemove, history, actualRoleChanges, sourceAbilityLoss: loss.plan } };
 }

@@ -433,6 +433,15 @@ type ComposeOptions = {
   manualWorkflow?: { roleId?: RoleId; actor?: ParticipantBinding };
 };
 
+/** SV-1a: the Mutation Context of a guided resolution's Life operation. When it contains a death and nothing more specific was given,
+ * the provenance names the acting player and the character whose ability is performed. Every other case is the caller's own context. */
+function guidedDeathContext(intents: readonly AbilityLifeIntent[], options: ComposeOptions): MutationContext | undefined {
+  const { automaticAction: action, context } = options;
+  if (!action || options.simulated || options.manualWorkflow || !intents.some((intent) => isObject(intent) && intent.kind === "death")) return context;
+  if (context?.provenance?.sourcePlayer !== undefined || context?.provenance?.sourceCharacter !== undefined) return context;
+  return { ...(context ?? {}), provenance: { ...(context?.provenance ?? {}), sourcePlayer: action.actor.playerId, sourceCharacter: action.roleId } };
+}
+
 /** Plans an ordered outcome against one evolving working snapshot. Pure. */
 export function composeAbilityOutcome(
   game: StorytellerLobbyRecord,
@@ -488,7 +497,10 @@ export function composeAbilityOutcome(
           if ("ok" in translated) return { ...translated, operationIndex, intentIndex };
           intents.push(translated);
         }
-        const result = planLifeTransaction(working, { intents, resolutionId, ...(context ? { context } : {}) }, ids.life, environment);
+        // SV-1a: a guided death records the character whose ability caused it, and that player, on the death's existing provenance
+        // (no new field), so a later trigger can tell a Demon's kill from any other death. A manual resolution records none.
+        const lifeContext = guidedDeathContext(operation.intents, options);
+        const result = planLifeTransaction(working, { intents, resolutionId, ...(lifeContext ? { context: lifeContext } : {}) }, ids.life, environment);
         if (!result.ok) return domainRefusal("life", result);
         const next = result.changed ? applyLifePlan(working, result.plan) : working;
         if (options.automaticAction) {
@@ -994,7 +1006,7 @@ function plan(game: StorytellerLobbyRecord, request: AbilityResolutionRequest, e
   }
   if (!descriptor.evaluator) return refuse("unsupported", "This ability's outcome is not modeled -- resolve it manually.");
   const evaluation = descriptor.evaluator({ actor: { binding: actorBinding, player: actor }, roleId: request.roleId, simulated, functioning,
-    inputs, judgments, query, constraints });
+    inputs, judgments, query, constraints, ...(consumeTrigger ? { trigger: { eventId: request.fingerprint.trigger!.eventId } } : {}) });
   switch (evaluation.kind) {
     case "needsInput": return evaluation.requirements.some(requirement => requirement.source === "judgment")
       ? refuse("unsupported", evaluation.message)
