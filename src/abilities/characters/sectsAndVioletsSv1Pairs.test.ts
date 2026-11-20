@@ -37,8 +37,8 @@ const actions = (other: string) => {
 };
 
 describe("SV-1 pairs: the reviewed-list gate", () => {
-  it("with the Snake Charmer, Philosopher, Evil Twin, Cerenovus or Fang Gu in play, every SV-1 action is the Storyteller's (Manual)", () => {
-    for (const other of ["snakecharmer", "philosopher", "eviltwin", "cerenovus", "fanggu"]) {
+  it("with the Philosopher, Evil Twin, Cerenovus or Fang Gu in play, every SV-1 action is the Storyteller's (Manual)", () => {
+    for (const other of ["philosopher", "eviltwin", "cerenovus", "fanggu"]) {
       for (const [name, result] of Object.entries(actions(other))) {
         expect(result, `${name} + ${other}`).toMatchObject({ ok: false, code: "unsupported" });
       }

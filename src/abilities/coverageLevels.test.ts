@@ -42,9 +42,10 @@ describe("coverage level and evidence (Stage 5A-1)", () => {
     // SV-1b moved the Sweetheart from partial to guided (a Day action and a Night trigger; a lasting sourced drunk Effect).
     // SV-1c moved the Klutz from generic to guided (a public Day choice recorded as a game-rule fact).
     // SV-1d moved the Barber from partial to guided (a Night trigger after a Day or Night death; the swap is one Role resolution).
+    // SV-2a moved the Snake Charmer from generic to guided (a wake: characters, alignments and a permanent poison in one resolution).
     // Against the v3 plan table (state at c4e884e): the ten Stage 4 characters moved from generic to reviewed (PR #26);
     // Bone Collector (night-guide prompt), Goon (Moonchild interaction) and Thief, Gunslinger, Scapegoat, Beggar (game-ending allow-list) were found to have a support piece.
-    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 29, reviewed: 28, partial: 62, generic: 62 });
+    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 30, reviewed: 28, partial: 62, generic: 61 });
   });
 
   it("level follows the facts the gates read", () => {

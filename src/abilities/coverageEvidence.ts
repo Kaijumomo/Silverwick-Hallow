@@ -309,6 +309,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   ravenkeeper: ["src/stores/troubleBrewingB5bIndependent.test.ts", "src/abilities/characters/troubleBrewingB5b.test.ts"],
   recluse: ["src/abilities/characters/troubleBrewingB1.independent.test.ts", "src/features/grimoire-v6/night/nightGuide.port.test.tsx"],
   sage: ["src/abilities/characters/sage.test.ts", "src/features/grimoire-v6/night/port/sageUi.v6.test.tsx"],
+  snakecharmer: ["src/abilities/characters/snakecharmer.test.ts", "src/features/grimoire-v6/night/port/snakeCharmerUi.v6.test.tsx"],
   saint: ["src/stores/roleResolution.test.ts", "src/stores/projections.test.ts"],
   savant: ["src/abilities/characters/informationCharacterReview.test.ts"],
   scarletwoman: ["src/stores/troubleBrewingB4Death.test.ts", "src/stores/troubleBrewingB4Independent.test.ts"],

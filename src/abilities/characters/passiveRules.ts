@@ -289,6 +289,9 @@ export const REVIEWED_INTERACTION_ROLES: ReadonlySet<string> = new Set([
   "klutz",
   // SV-1d: the Barber's swap is one Role resolution through the Pit-Hag's seam, after the Barber died; it changes no other ability.
   "barber",
+  // SV-2a: the Snake Charmer's swap is one Role and Alignment resolution through the Pit-Hag's and the Cult Leader's seams; the
+  // permanent POISONED it gives the old Demon is a sourced poisoned Effect read through the shared impairment query.
+  "snakecharmer",
   // Marionette has no ability effects of its own: it is an evil Minion who believes they are good, and every query reads its ACTUAL role and alignment.
   "marionette",
   // Information-only characters (Sects & Violets / Bad Moon Rising): each only reads game state and changes none, so it has no

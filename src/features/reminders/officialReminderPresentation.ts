@@ -31,6 +31,8 @@ const EFFECT_TOKENS = [
   { source: "devilsadvocate", type: "survivesExecution", label: "Survives Execution" },
   // SV-1b: the Sweetheart's lasting drunkenness.
   { source: "sweetheart", type: "drunk", label: "Drunk" },
+  // SV-2a: the Snake Charmer's permanent poison on the old Demon.
+  { source: "snakecharmer", type: "poisoned", label: "Poisoned" },
   // This existing Storyteller fact deliberately has no functioning source.
   { source: "fortuneteller", type: "fortuneTellerRedHerring", label: "Red Herring" },
 ] as const;
