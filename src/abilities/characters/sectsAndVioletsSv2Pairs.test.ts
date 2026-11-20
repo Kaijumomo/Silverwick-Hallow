@@ -5,6 +5,7 @@ import { SNAKE_CHARMER_TARGET } from "./snakecharmer";
 import { FANG_GU_TARGET } from "./fanggu";
 import { BARBER } from "./barber";
 import { klutzLearnedDeath } from "./klutz";
+import { SWEETHEART_PLAYER } from "./sweetheart";
 import { nightTriggerStatus } from "@/abilities/invocation";
 import { bind, pick, plan, planned, proofGame, proofQuery, request, requirementIds } from "@/test/proofFixtures";
 import { FANG_GU_ONCE } from "@/stores/gameRuleFactRegistry";
@@ -55,6 +56,39 @@ describe("SV-2 pairs: the No Dashii's poison", () => {
   });
 });
 
+describe("SV-2 pairs: the Snake Charmer with the Sweetheart, Pit-Hag and No Dashii", () => {
+  it("Sweetheart: the Sweetheart is not the Demon; a Snake Charmer her death made drunk chooses the Demon and nothing happens", () => {
+    const g0 = proofGame(["snakecharmer", "imp", "sweetheart", "chef", "empath"]);
+    expect(planned(charm(g0, "p0", "p2")).players).toEqual(g0.players);
+    const killed = planned(plan(g0, request(g0, "p1", "imp", { target: pick(g0, "p2") })));
+    const drunk = planned(plan(killed, request(killed, "p2", "sweetheart", { [SWEETHEART_PLAYER]: pick(killed, "p0") }, { invocationPath: "nightTrigger", withStep: true, completeStep: true })));
+    expect(proofQuery(drunk).abilityFunctions(bind(drunk, "p0"))).toEqual({ known: true, value: false });
+    const next = { ...drunk, day: drunk.day + 1 };
+    const result = charm(next, "p0", "p1");
+    expect(result).toMatchObject({ ok: true });
+    if (result.ok && result.changed) expect(result.plan.game.players.p0!.actualRole).toBe("snakecharmer");
+  });
+
+  it("Pit-Hag: the old Demon's poison belongs to the player and outlasts the Pit-Hag changing their character", () => {
+    const g0 = proofGame(["snakecharmer", "imp", "pithag", "chef", "empath", "monk"]);
+    const swapped = planned(charm(g0, "p0", "p1"));
+    expect(proofQuery(swapped).abilityFunctions(bind(swapped, "p1"))).toEqual({ known: true, value: false });
+    const next = { ...swapped, day: swapped.day + 1 };
+    const hagged = planned(plan(next, request(next, "p2", "pithag", { target: pick(next, "p1"), character: { kind: "character", roleIds: ["dreamer"] } })));
+    expect(hagged.players.p1!.actualRole).toBe("dreamer");
+    expect(proofQuery(hagged).abilityFunctions(bind(hagged, "p1"))).toEqual({ known: true, value: false });
+  });
+
+  it("No Dashii: its poison follows where the No Dashii sits, so after the swap it falls on the new No Dashii's nearest Townsfolk", () => {
+    const g = proofGame(["snakecharmer", "chef", "nodashii", "monk", "empath"]);
+    const fn = (game: StorytellerLobbyRecord, id: string) => { const a = proofQuery(game).abilityFunctions(bind(game, id)); return a.known ? a.value : null; };
+    expect([fn(g, "p1"), fn(g, "p3"), fn(g, "p4")]).toEqual([false, false, true]);
+    const next = planned(charm(g, "p0", "p2"));
+    expect(next.players.p0!.actualRole).toBe("nodashii");
+    expect([fn(next, "p1"), fn(next, "p3"), fn(next, "p4")]).toEqual([false, true, false]);
+  });
+});
+
 describe("SV-2 pairs: the Fang Gu and the SV-1 Outsiders", () => {
   it("Klutz: becoming the Fang Gu is not a death, so no choice; killed after ONCE, the Klutz learns they died", () => {
     const g = proofGame(["fanggu", "klutz", "chef", "monk", "empath"]);
@@ -90,7 +124,7 @@ describe("SV-2 pairs: the Snake Charmer and the Minions", () => {
     }
   });
 
-  it("Vigormortis: the swapped-out Vigormortis loses its ability, so its kept-ability Minion and poison end", () => {
+  it("Vigormortis: the swapped-out Vigormortis is no longer the Vigormortis, so its kept-ability Minion and poison end", () => {
     const g0 = proofGame(["snakecharmer", "vigormortis", "witch", "chef", "empath", "monk"]);
     // Night 2: the Vigormortis kills the Witch (a Minion keeps its ability; the Chef, its Townsfolk neighbour, is poisoned).
     const kill = { target: pick(g0, "p2") };

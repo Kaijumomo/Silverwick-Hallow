@@ -75,16 +75,16 @@ export const SNAKE_CHARMER: AbilityDescriptor = {
       if (!answer) return ask(`${name} might register as a Demon.`, { id, kind: "boolean", source: "storyteller", label: `${name} registers as a Demon` });
       if (!answer.value) return nothing();
     }
-    if (picked.isTraveler || me.isTraveler) return { kind: "unsupported", message: "A Traveller is involved: swap their characters by hand." };
+    if (picked.isTraveler || me.isTraveler) return { kind: "unsupported", message: "A Traveller is involved: swap their characters and alignments by hand, and place POISONED on the old Demon." };
     if (concealed(me) || concealed(picked)) {
-      return { kind: "unsupported", message: "A concealed identity is involved: what these players are shown is not modeled. Swap their characters by hand." };
+      return { kind: "unsupported", message: "A concealed identity is involved: what these players are shown is not modeled. Swap their characters and alignments by hand, and place POISONED on the old Demon." };
     }
     const mine = query.roleOf(me.actualRole), theirs = query.roleOf(picked.actualRole);
     if (!mine || !theirs || !isCanonicalRole(mine) || !isCanonicalRole(theirs)) {
-      return { kind: "unsupported", message: "A character that is not a verified official one is involved: swap them by hand." };
+      return { kind: "unsupported", message: "A character that is not a verified official one is involved: swap their characters and alignments by hand, and place POISONED on the old Demon." };
     }
     const myAlignment = me.actualAlignment, theirAlignment = picked.actualAlignment;
-    if (!myAlignment || !theirAlignment) return { kind: "unsupported", message: "An alignment is not recorded: swap them by hand." };
+    if (!myAlignment || !theirAlignment) return { kind: "unsupported", message: "An alignment is not recorded: swap their characters and alignments by hand, and place POISONED on the old Demon." };
     // 1. Characters, each player told their new character and new alignment. 2. Alignments ("swap their alignments as appropriate").
     const operations: AbilityOperation[] = [{ domain: "role", intents: [...told(me, theirs, theirAlignment), ...told(picked, mine, myAlignment)] }];
     if (myAlignment !== theirAlignment) {

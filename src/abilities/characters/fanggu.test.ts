@@ -1,7 +1,7 @@
 // SV-2b -- Fang Gu: "Each night*, choose a player: they die. The 1st Outsider this kills becomes an evil Fang Gu & you die instead.
 // [+1 Outsider]" https://wiki.bloodontheclocktower.com/Fang_Gu -- production semantics, the real coordinator and the real store.
 import { beforeEach, describe, expect, it } from "vitest";
-import { FANG_GU, FANG_GU_TARGET, fangGuRegistersAsOutsiderId } from "./fanggu";
+import { FANG_GU, FANG_GU_ONCE_BY_HAND, FANG_GU_TARGET, fangGuRegistersAsOutsiderId } from "./fanggu";
 import { SNAKE_CHARMER_TARGET } from "./snakecharmer";
 import { SAGE, SAGE_PLAYERS } from "./sage";
 import { SWEETHEART } from "./sweetheart";
@@ -154,6 +154,33 @@ describe("Fang Gu -- the first Outsider it kills", () => {
   it("a concealed identity (the Drunk, an Outsider who thinks they are a Townsfolk): the jump is by hand", () => {
     const g = patchPlayer(proofGame(ROLES), "p6", { actualRole: "drunk", shownRole: "dreamer", behaviorMode: "drunk_fake_role_behavior" });
     expect(attack(g, "p6")).toMatchObject({ ok: false, code: "unsupported" });
+  });
+
+  it("a jump done by hand records no ONCE: while a Fang Gu has died this game, the Storyteller says whether ONCE already happened; Yes kills and records ONCE in one commit, No jumps", () => {
+    // A jump resolved by hand last night: the old Fang Gu (p0) is dead, the Drunk (p6) is now the Fang Gu, ONCE was never recorded.
+    const g = patchPlayer(patchPlayer(proofGame(ROLES), "p0", { alive: false }), "p6", { actualRole: "fanggu", shownRole: "fanggu", actualAlignment: "evil" });
+    expect(once(g)).toEqual({ known: true, value: false });
+    expect(requirementIds(attack(g, "p5", {}, "p6"))).toEqual([FANG_GU_ONCE_BY_HAND]);
+    expect(attack(g, "p5", {}, "p6")).toMatchObject({ message: "A Fang Gu has died this game, but ONCE is not recorded." });
+    const yes = planned(attack(g, "p5", { [FANG_GU_ONCE_BY_HAND]: { kind: "boolean", value: true } }, "p6"));
+    expect(yes.players.p5).toMatchObject({ alive: false, actualRole: "mutant" });
+    expect(yes.players.p6!.alive).toBe(true);
+    expect(once(yes)).toEqual({ known: true, value: true });
+    expect(deadTokens(yes, "p5")).toHaveLength(1);
+    const no = planned(attack(g, "p5", { [FANG_GU_ONCE_BY_HAND]: { kind: "boolean", value: false } }, "p6"));
+    expect(no.players.p5).toMatchObject({ alive: true, actualRole: "fanggu", actualAlignment: "evil" });
+    expect(no.players.p6!.alive).toBe(false);
+    expect(once(no)).toEqual({ known: true, value: true });
+    // Not asked: a non-Outsider target, or no Fang Gu has died.
+    expect(planned(attack(g, "p2", {}, "p6")).players.p2!.alive).toBe(false);
+    expect(requirementIds(attack(proofGame(ROLES), "p5"))).toEqual([]);
+  });
+
+  it("a Traveller or an unrecorded alignment in the jump: by hand", () => {
+    const traveller = patchPlayer(proofGame(ROLES), "p5", { isTraveler: true });
+    expect(attack(traveller, "p5")).toMatchObject({ ok: false, code: "unsupported" });
+    const unrecorded = patchPlayer(proofGame(ROLES), "p5", { actualAlignment: undefined });
+    expect(attack(unrecorded, "p5")).toMatchObject({ ok: false, code: "unsupported" });
   });
 
   it("a Scarlet Woman in play: the official jinx keeps the Fang Gu's action by hand", () => {

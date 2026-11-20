@@ -133,6 +133,14 @@ describe("Snake Charmer -- the choice", () => {
     expect(charm(g, "p1", {}, homebrewEnv("snakecharmer"))).toMatchObject({ ok: false, code: "unsupported" });
   });
 
+  it("a Traveller or an unrecorded alignment: by hand, and the message names the whole swap", () => {
+    const traveller = patchPlayer(proofGame(ROLES), "p1", { isTraveler: true });
+    expect(charm(traveller, "p1")).toMatchObject({ ok: false, code: "unsupported" });
+    const unrecorded = patchPlayer(proofGame(ROLES), "p1", { actualAlignment: undefined });
+    expect(charm(unrecorded, "p1")).toMatchObject({ ok: false, code: "unsupported",
+      message: "An alignment is not recorded: swap their characters and alignments by hand, and place POISONED on the old Demon." });
+  });
+
   it("the first night: the swap happens after the Demon's information, with the same bookkeeping", () => {
     const g = proofGame(ROLES, "night", 1);
     const next = planned(charm(g, "p1"));
