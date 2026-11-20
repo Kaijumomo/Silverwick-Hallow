@@ -141,9 +141,9 @@ describe("Sage -- a death with no recorded cause asks the Storyteller", () => {
 });
 
 describe("Sage -- PO review 2026-11-15: when is the cause unknown, and a living Sage", () => {
-  it("every Demon kill Silverwick resolves records its cause, so the Storyteller is never asked (Imp, Vigormortis, No Dashii)", () => {
-    // The Vortox's and Fang Gu's kills are entered by hand today; with either in play the Sage's step is the Storyteller's anyway.
-    for (const demon of ["imp", "vigormortis", "nodashii"]) {
+  it("every Demon kill Silverwick resolves records its cause, so the Storyteller is never asked (Imp, Vigormortis, No Dashii, Fang Gu)", () => {
+    // The Vortox's kill is entered by hand today (SV-5); with it in play the Sage's step is the Storyteller's anyway.
+    for (const demon of ["imp", "vigormortis", "nodashii", "fanggu"]) {
       const g0 = proofGame(["sage", demon, "clockmaker", "dreamer", "mathematician"], "night", 2);
       const g = planned(plan(g0, request(g0, "p1", demon, { target: { kind: "participant", participants: [bind(g0, "p0")] } })));
       expect(eventOf(g).provenance, demon).toMatchObject({ sourceCharacter: demon, sourceParticipant: { kind: "participant", playerId: "p1" } });

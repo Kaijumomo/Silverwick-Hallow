@@ -292,6 +292,9 @@ export const REVIEWED_INTERACTION_ROLES: ReadonlySet<string> = new Set([
   // SV-2a: the Snake Charmer's swap is one Role and Alignment resolution through the Pit-Hag's and the Cult Leader's seams; the
   // permanent POISONED it gives the old Demon is a sourced poisoned Effect read through the shared impairment query.
   "snakecharmer",
+  // SV-2b: the Fang Gu's kill goes through the shared Demon death gate; its one jump into an Outsider is one Life, Role and Alignment
+  // resolution that records the ONCE game-rule fact. It changes no other ability.
+  "fanggu",
   // Marionette has no ability effects of its own: it is an evil Minion who believes they are good, and every query reads its ACTUAL role and alignment.
   "marionette",
   // Information-only characters (Sects & Violets / Bad Moon Rising): each only reads game state and changes none, so it has no
