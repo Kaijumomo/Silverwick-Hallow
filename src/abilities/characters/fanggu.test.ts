@@ -126,7 +126,7 @@ describe("Fang Gu -- the first Outsider it kills", () => {
 
   it("a Fang Gu who cannot die tonight (the Monk protects it) while the jump would happen: by hand", () => {
     const g = protect(proofGame(ROLES), "p0");
-    expect(attack(g, "p5")).toMatchObject({ ok: false, code: "unsupported", message: expect.stringContaining("cannot die tonight") });
+    expect(attack(g, "p5")).toMatchObject({ ok: false, code: "unsupported", message: expect.stringMatching(/cannot die tonight.*place the Fang Gu's ONCE token/) });
   });
 
   it("a Recluse or a Spy (who might register as an Outsider or not): the Storyteller's ruling; a drunk Recluse is an Outsider without a question", () => {
@@ -169,7 +169,7 @@ describe("Fang Gu -- the first Outsider it kills", () => {
 
   it("a Traveller or an unrecorded alignment in the jump: by hand", () => {
     const traveller = patchPlayer(proofGame(ROLES), "p5", { isTraveler: true });
-    expect(attack(traveller, "p5")).toMatchObject({ ok: false, code: "unsupported" });
+    expect(attack(traveller, "p5")).toMatchObject({ ok: false, code: "unsupported", message: expect.stringContaining("place the Fang Gu's ONCE token from the token list") });
     const unrecorded = patchPlayer(proofGame(ROLES), "p5", { actualAlignment: undefined });
     expect(attack(unrecorded, "p5")).toMatchObject({ ok: false, code: "unsupported" });
   });

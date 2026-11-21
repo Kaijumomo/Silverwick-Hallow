@@ -42,6 +42,8 @@ export const fangGuRegistersAsOutsiderId = (participantId: string) => `fanggu:re
 
 /** The official ONCE reminder (roles.json: Fang Gu "Once"). */
 export const FANG_GU_ONCE_LABEL = "Once";
+/** A jump resolved by hand: placing ONCE from the token list records the ONCE rule (PO decision 2026-11-21), so no second jump follows. */
+const PLACE_ONCE = " If the jump happens, place the Fang Gu's ONCE token from the token list: it records the ONCE rule.";
 
 const concealed = (p: STPlayerRecord) => p.shownRole !== p.actualRole || needsShownIdentity(p.actualRole) || CONCEALED_MODES.includes(p.behaviorMode);
 
@@ -91,19 +93,19 @@ export const FANG_GU: AbilityDescriptor = {
     if (!jump) return kill();
 
     // The 1st Outsider this kills becomes an evil Fang Gu & the Fang Gu dies instead.
-    if (victim.isTraveler) return { kind: "unsupported", message: "A Traveller is involved: resolve the Fang Gu's jump by hand." };
+    if (victim.isTraveler) return { kind: "unsupported", message: `A Traveller is involved: resolve the Fang Gu's jump by hand.${PLACE_ONCE}` };
     if (concealed(victim) || concealed(me)) {
-      return { kind: "unsupported", message: "A concealed identity is involved: what this player is shown is not modeled. Resolve the Fang Gu's jump by hand." };
+      return { kind: "unsupported", message: `A concealed identity is involved: what this player is shown is not modeled. Resolve the Fang Gu's jump by hand.${PLACE_ONCE}` };
     }
     const fanggu = query.roleOf("fanggu"), outsider = query.roleOf(victim.actualRole);
     if (!fanggu || !outsider || !isCanonicalRole(fanggu) || !isCanonicalRole(outsider)) {
-      return { kind: "unsupported", message: "A character that is not a verified official one is involved: resolve the Fang Gu's jump by hand." };
+      return { kind: "unsupported", message: `A character that is not a verified official one is involved: resolve the Fang Gu's jump by hand.${PLACE_ONCE}` };
     }
-    if (!victim.actualAlignment) return { kind: "unsupported", message: "An alignment is not recorded: resolve the Fang Gu's jump by hand." };
+    if (!victim.actualAlignment) return { kind: "unsupported", message: `An alignment is not recorded: resolve the Fang Gu's jump by hand.${PLACE_ONCE}` };
     const own = deathAttempt(context, context.actor.binding, "demon");
     if (own.kind === "ask") return ask(own.message, own.requirement);
     if (own.kind === "survives") {
-      return { kind: "unsupported", message: `${nameOf(context, context.actor.binding)} cannot die tonight, so the Fang Gu's jump is your ruling: resolve it by hand.` };
+      return { kind: "unsupported", message: `${nameOf(context, context.actor.binding)} cannot die tonight, so the Fang Gu's jump is your ruling: resolve it by hand.${PLACE_ONCE}` };
     }
     const operations: AbilityOperation[] = [
       lifeOperation([{ kind: "death", target: context.actor.binding }]),

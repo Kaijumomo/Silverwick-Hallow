@@ -132,3 +132,35 @@ it("a ONCE placed by hand during the Day records the rule too; another character
   expect(placeReminder("p2", game().players.p2!.participantId, { role: monk, label: monk.reminders![0]! })).toEqual({ ok: true });
   expect(game().gameRuleFacts).toEqual(before);
 });
+
+it("a Spy: the same compact card; Choose again re-arms the board; Yes jumps and the counter stays on the Fang Gu's row", () => {
+  const g = patchPlayer(proofGame(ROLES), "p3", { actualRole: "spy", shownRole: "spy", actualAlignment: "evil" });
+  show(g);
+  // The position on the strip; the total can shrink, since the Spy no longer has a Spy step.
+  const counter = () => screen.getByText(/^\d+ \/ \d+$/).textContent!.split(" / ")[0];
+  const before = counter();
+  tap("p3");
+  expect(screen.getByText("Does Player 3 register as an Outsider?")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Continue action" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Choose again" }));
+  expect(screen.queryByText("Does Player 3 register as an Outsider?")).toBeNull();
+  expect(useTargetPicker.getState().active?.label).toBe("Choose a player to kill");
+  expect(store.getState().undoStack).toHaveLength(0);
+  tap("p3");
+  fireEvent.click(within(screen.getByRole("group", { name: "Your ruling" })).getByRole("button", { name: "Yes" }));
+  expect(game().players.p3).toMatchObject({ alive: true, actualRole: "fanggu", actualAlignment: "evil" });
+  expect(game().players.p0!.alive).toBe(false);
+  expect(counter()).toBe(before);
+  expect(screen.getByRole("button", { name: "Wake Player 3: You Are" })).toBeInTheDocument();
+});
+
+it("a refused rule-token command changes nothing: neither the token nor the rule", () => {
+  openInStore(proofGame(ROLES));
+  const stale = { playerId: "p1", participantId: "not-this-player" };
+  const result = store.getState().resolveRuleReminder({ notation: { intents: [{ kind: "place", target: stale, reminder: { label: "Once", sourceCharacter: "fanggu" } }] },
+    facts: { intents: [{ kind: "apply", type: "fangGuOnce" }] } });
+  expect(result.ok).toBe(false);
+  expect(game().gameRuleFacts).toEqual([]);
+  expect(game().players.p1!.reminders).toEqual([]);
+  expect(store.getState().undoStack).toHaveLength(0);
+});
