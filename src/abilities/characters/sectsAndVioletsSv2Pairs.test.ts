@@ -17,18 +17,9 @@ const attack = (g: StorytellerLobbyRecord, actor: string, target: string) => pla
 const withOnce = (g: StorytellerLobbyRecord): StorytellerLobbyRecord => ({ ...g, gameRuleFacts: [{ type: FANG_GU_ONCE, recordedAt: { phase: "night", day: 1 } } as never] });
 
 describe("SV-2 pairs: the reviewed-list gate", () => {
-  it("with the Evil Twin in play, both steps are the Storyteller's (Manual); the Cerenovus joined the reviewed list in SV-4a", () => {
-    for (const other of ["eviltwin"]) {
-      const sc = proofGame(["snakecharmer", "imp", "clockmaker", "dreamer", other]);
-      expect(charm(sc, "p0", "p1"), `snakecharmer + ${other}`).toMatchObject({ ok: false, code: "unsupported" });
-      const fg = proofGame(["fanggu", "mutant", "clockmaker", "dreamer", other]);
-      expect(attack(fg, "p0", "p2"), `fanggu + ${other}`).toMatchObject({ ok: false, code: "unsupported" });
-    }
-  });
-
-  it("with any other character of the script in play, both steps are guided (the Philosopher since SV-3a, the Cerenovus since SV-4a)", () => {
+  it("with any other character of the script in play, both steps are guided (the Philosopher since SV-3a, the Cerenovus since SV-4a, the Evil Twin since SV-4c)", () => {
     for (const other of ["philosopher", "clockmaker", "dreamer", "mathematician", "flowergirl", "towncrier", "oracle", "savant", "seamstress", "artist", "juggler",
-      "sage", "mutant", "sweetheart", "barber", "klutz", "witch", "pithag", "cerenovus"]) {
+      "sage", "mutant", "sweetheart", "barber", "klutz", "witch", "pithag", "cerenovus", "eviltwin"]) {
       const sc = proofGame(["snakecharmer", "imp", "chef", "monk", other]);
       expect(charm(sc, "p0", "p1"), `snakecharmer + ${other}`).toMatchObject({ ok: true, changed: true });
       const fg = proofGame(["fanggu", "chef", "empath", "monk", other]);

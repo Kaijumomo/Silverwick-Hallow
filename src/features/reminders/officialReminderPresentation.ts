@@ -39,6 +39,8 @@ const EFFECT_TOKENS = [
   { source: "cerenovus", type: "mad", label: "Mad" },
   // This existing Storyteller fact deliberately has no functioning source.
   { source: "fortuneteller", type: "fortuneTellerRedHerring", label: "Red Herring" },
+  // SV-4c: the Evil Twin's TWIN reminder on the other Twin. A source-free Storyteller fact (the Red Herring's pattern): it names the Evil Twin.
+  { source: "eviltwin", type: "twin", label: "Twin" },
 ] as const;
 
 export function officialEffectPresentation(player: Pick<STPlayerRecord, "effects">, context?: { query: RulesQuery; target: ParticipantBinding }): {
@@ -50,7 +52,7 @@ export function officialEffectPresentation(player: Pick<STPlayerRecord, "effects
   for (const effect of player.effects) {
     if (!isEffectActive(effect) && !(context && effect.state === "suppressed")) continue;
     const mapping = EFFECT_TOKENS.find(item => item.type === effect.type &&
-      (item.type === "fortuneTellerRedHerring" || item.source === effect.sourceCharacter));
+      (item.type === "fortuneTellerRedHerring" || item.type === "twin" || item.source === effect.sourceCharacter));
     if (!mapping) { remaining.push(effect); continue; }
     const sourceRole = context?.query.roleOf(mapping.source);
     if (context && (!sourceRole || !isCanonicalRole(sourceRole))) { remaining.push(effect); continue; }
@@ -93,7 +95,9 @@ function madCharacters(instances: readonly EffectRecord[], query: RulesQuery): s
  * notation again; no label ever creates, moves or deletes an Effect. */
 export function redHerringNotationCovered(reminder: { sourceCharacter?: string; label: string }, tokens: readonly OfficialEffectToken[]): boolean {
   return reminder.sourceCharacter === "fortuneteller" && reminder.label === "Red Herring" &&
-    tokens.some(token => token.key === "fortuneteller:fortuneTellerRedHerring");
+    tokens.some(token => token.key === "fortuneteller:fortuneTellerRedHerring") ||
+    // SV-4c: a hand-placed TWIN notation yields to the authoritative TWIN token the same way.
+    reminder.sourceCharacter === "eviltwin" && reminder.label === "Twin" && tokens.some(token => token.key === "eviltwin:twin");
 }
 
 /** Exact publisher label/source lookup for existing inert notation. */

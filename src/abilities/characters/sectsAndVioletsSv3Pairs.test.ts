@@ -22,14 +22,8 @@ const GOOD = ["clockmaker", "dreamer", "snakecharmer", "mathematician", "flowerg
   "juggler", "sage", "mutant", "sweetheart", "barber", "klutz"];
 
 describe("SV-3 pairs: the reviewed-list gate", () => {
-  it("with the Evil Twin in play, the Philosopher's choice is the Storyteller's (Manual); the Cerenovus joined the reviewed list in SV-4a", () => {
-    for (const other of ["eviltwin"]) {
-      expect(choose(proofGame(["philosopher", "fanggu", "clockmaker", "dreamer", other]), "dreamer"), other).toMatchObject({ ok: false, code: "unsupported" });
-    }
-  });
-
   it("with any other character of the script in play, the choice is guided", () => {
-    for (const other of [...GOOD, "witch", "pithag", "nodashii", "vigormortis", "vortox", "fanggu", "cerenovus"]) {
+    for (const other of [...GOOD, "witch", "pithag", "nodashii", "vigormortis", "vortox", "fanggu", "cerenovus", "eviltwin"]) {
       expect(choose(proofGame(["philosopher", "imp", "chef", "monk", other]), "dreamer"), other).toMatchObject({ ok: true, changed: true });
     }
   });

@@ -8,6 +8,8 @@ import { buildRegistry, type RoleRegistry } from "@/data/roleRegistry";
 import { dealtIdentity, isInitialRevealComplete, needsShownIdentity } from "./identity";
 import { manualEffectId } from "./effects";
 import { redHerringSetup, RED_HERRING_EFFECT } from "@/rules/setup/redHerringSetup";
+import { twinSetup } from "@/rules/setup/twinSetup";
+import { goodTwinIntents } from "./twinPair";
 import { cloneOwned, historyId, type MutationContext, sameSnapshot } from "./history";
 import {
   applyEffectPlan,
@@ -508,6 +510,8 @@ export type StorytellerStore = {
    * completed the initial reveal step. See revealReadiness.ts. */
   revealRoles: (actionContext?: CharacterActionContext) => SetupCommandResult;
   setSetupRedHerring: (target: EffectParticipantBinding, actionContext?: CharacterActionContext) => EffectCommandResult;
+  /** SV-4c: the Evil Twin's Good Twin, chosen while setting up (the Red Herring's pattern): one source-free TWIN Effect naming the Evil Twin. */
+  setSetupGoodTwin: (target: EffectParticipantBinding, actionContext?: CharacterActionContext) => EffectCommandResult;
   // --- Pre-Reveal Setup refinement (Phase 9 Setup finalization B3) -------
   // Administration of the private Deal only — available strictly between a
   // completed initial Deal and a completed initial Reveal (see
@@ -1735,6 +1739,24 @@ export const useStorytellerStore = create<StorytellerStore>()(
             fortuneTeller: { kind: "participant", participants: [{ playerId: teller.id, participantId: teller.participantId! }] },
             fortuneTellerIdentityEpoch: { kind: "text", value: teller.packetEpoch ?? "" },
           } } }] }, actionContext);
+      },
+
+      setSetupGoodTwin: (target, actionContext) => {
+        const state = get();
+        const refusal = characterActionRefusal(state, actionContext);
+        if (refusal) return { ok: false, code: "stale", message: refusal };
+        const game = state.game!;
+        if (game.phase !== "setup" || game.day !== 0 || !isPostDeal(game))
+          return { ok: false, code: "invalid", message: "Prepare the Good Twin after dealing roles during initial setup." };
+        const preparation = twinSetup(selectSetupContext(game, selectScriptById(state, game.scriptId)));
+        if (!preparation.required || !preparation.evilTwin || preparation.status !== "missing")
+          return { ok: false, code: "invalid", message: "Use Undo or the existing effect controls to correct the Good Twin." };
+        if (!preparation.eligible.some(player => player.playerId === target?.playerId && player.participantId === target?.participantId))
+          return { ok: false, code: "invalid", message: "Choose a seated player of the opposing alignment who is not a Traveller." };
+        // One pair per game: any earlier TWIN marker (a redeal changed who the Evil Twin is) moves with this choice, in the same commit.
+        const chosen = goodTwinIntents(game, preparation.evilTwin, target);
+        if (!chosen.ok) return { ok: false, code: "invalid", message: chosen.message };
+        return get().resolveEffects({ intents: chosen.intents }, actionContext);
       },
 
       shuffleSetupRoles: () => {

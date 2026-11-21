@@ -10,6 +10,7 @@ import { FANG_GU_ONCE } from "@/stores/gameRuleFactRegistry";
 import { participantScopedStepKey, participantStepKey, stepParticipantOf, travelerArrivalStepKey } from "@/stores/nightProgress";
 import { gainedRecordOf, gainedRoleOf } from "@/stores/gainedAbility";
 import { isDeathEvent, lifeEventsAt } from "@/stores/lifeEvents";
+import { twinIntroduced, twinPairOf } from "@/stores/twinPair";
 
 export type NightStep =
   | {
@@ -183,7 +184,16 @@ export function computeNightOrder(
     // with its first-night instruction, and answered by hand.
     const swappedIn = !isFirstNight && !reborn && canonical && !!roleDef.firstNight && !roleDef.otherNight && player.alive &&
       !FIRST_NIGHT_ADMIN.has(roleId) && context.day !== undefined && !!context.nightProgress?.[`${context.day}:${participantStepKey(player.participantId, roleId)}`];
-    const firstPass = isFirstNight || reborn || swappedIn;
+    // SV-4c (https://wiki.bloodontheclocktower.com/Evil_Twin): the Twins are introduced on the first night. On a later night the row returns only
+    // when the pair needs it again: it broke (both the same alignment, a Pit-Hag-made Evil Twin with no Good Twin chosen) or was re-chosen
+    // since the Evil Twin's step was last done. Derived from the markers and the recorded steps, so Undo and reload need nothing.
+    const twinAgain = !isFirstNight && !reborn && !swappedIn && canonical && roleId === "eviltwin" && !isDeceived && player.alive && !player.isTraveler && context.day !== undefined && (() => {
+      const pair = twinPairOf(players);
+      // A row done tonight stays tonight (done), exactly as the Philosopher's does; it is gone from the next night.
+      const doneTonight = context.nightProgress?.[`${context.day}:${participantStepKey(player.participantId, roleId)}`]?.status === "done";
+      return pair.kind === "single" && pair.evil.participantId === player.participantId && (!pair.valid || doneTonight || !twinIntroduced(pair, context.nightProgress, context.day!));
+    })();
+    const firstPass = isFirstNight || reborn || swappedIn || twinAgain;
     let order = swappedIn ? at("barber") + 0.01 : firstPass ? roleDef.firstNight : roleDef.otherNight;
     if (!canonical && order === undefined && (isFirstNight ? roleDef.firstNightPrompt : roleDef.otherNightPrompt)) {
       global(participantScopedStepKey("missingOrder", player.participantId), "Night reference — Storyteller check required",

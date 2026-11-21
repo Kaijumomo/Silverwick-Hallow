@@ -86,6 +86,8 @@ const DEFINITIONS: Record<string, EffectDefinition> = {
   abilityLost: { type: "abilityLost", label: "No ability", indicator: "abilityLost" },
   mad: { type: "mad", label: "Mad", indicator: "mad",
     description: "The Cerenovus's choice: mad about being a character through tomorrow and the next night, while the Cerenovus functions. The Storyteller judges whether they tried." },
+  twin: { type: "twin", label: "Twin", indicator: "marked",
+    description: "The Evil Twin's other Twin, chosen by the Storyteller. Whether the pair stands is read from the two players' alignments; the reminder never moves by itself." },
   marked: { type: "marked", label: "Marked", indicator: "marked" },
   registersFalsely: { type: "registersFalsely", label: "Registers falsely", indicator: "registration" },
   fortuneTellerRedHerring: { type: "fortuneTellerRedHerring", label: "Red Herring", indicator: "redHerring",

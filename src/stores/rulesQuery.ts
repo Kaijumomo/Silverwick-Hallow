@@ -101,6 +101,9 @@ export const APPROVED_EFFECT_SEMANTICS: Readonly<Record<string, EffectSemantics>
    * the character the player is mad about being. It is its own meaning: the Witch's Day prompt reads `curse`, never this. Whether the
    * player tried is always the Storyteller's judgment. */
   mad: "madness",
+  /** SV-4c: the Evil Twin's TWIN reminder on the player the Storyteller chose as the other Twin (no source; it names the Evil Twin). It is a
+   * recorded Storyteller fact: whether the pair stands is derived from the two players' alignments (stores/twinPair.ts), never stored. */
+  twin: "storytellerFact",
 };
 export const effectSemanticsOf = (type: string): EffectSemantics | undefined =>
   Object.prototype.hasOwnProperty.call(APPROVED_EFFECT_SEMANTICS, type) ? APPROVED_EFFECT_SEMANTICS[type] : undefined;

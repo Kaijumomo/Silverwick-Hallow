@@ -48,7 +48,7 @@ describe("coverage level and evidence (Stage 5A-1)", () => {
     // Bone Collector (night-guide prompt), Goon (Moonchild interaction) and Thief, Gunslinger, Scapegoat, Beggar (game-ending allow-list) were found to have a support piece.
     // SV-3a moved the Philosopher from partial to guided (a wake: the choice, a gained-ability record and the derived DRUNK in one resolution).
     // SV-4a moved the Cerenovus from generic to guided (a wake: a player and a character, one sourced MAD Effect).
-    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 33, reviewed: 28, partial: 60, generic: 60 });
+    expect(coverageSummary(manifest).byLevel).toEqual({ guided: 34, reviewed: 28, partial: 59, generic: 60 });
   });
 
   it("level follows the facts the gates read", () => {
