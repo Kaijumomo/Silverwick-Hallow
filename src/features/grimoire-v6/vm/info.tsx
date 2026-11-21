@@ -97,7 +97,7 @@ export function useInfoVm(ctx: V6Ctx): SliceResult {
   // A verified ending takes the "!" over the Klutz's line; the box keeps both, as the dialog did before.
   // SV-4d: the Evil Twin's block and the Good Twin's execution join the box (the Klutz's good-win line carries the block).
   const twinEnv = script ? { registry, script } : null;
-  const lines = !privacy && !recovery ? [endHint(ctx), klutzAdvisory(game, !!twinEnv && twinGoodWinBlock(game, twinEnv)?.kind === "blocked") ?? "", (twinEnv && twinAdvisory(game, twinEnv)) || ""] : [];
+  const lines = !privacy && !recovery ? [endHint(ctx), klutzAdvisory(game, (twinEnv && twinGoodWinBlock(game, twinEnv)?.kind) || null) ?? "", (twinEnv && twinAdvisory(game, twinEnv)) || ""] : [];
   const possibleEnd = [...new Set(lines.filter(Boolean))].map((line) => `${line}.`).join(" ");
   const notice = recovery
     ? terminal?.confirmedRecovery ? "The online game has ended. Save its confirmed result here to finish." : "An ending was interrupted. Retry to recover the recorded result."

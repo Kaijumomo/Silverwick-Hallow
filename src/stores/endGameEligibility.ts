@@ -51,6 +51,12 @@ export function twinAdvisory(game: StorytellerLobbyRecord, environment: RulesQue
   const good = pair.good;
   const evil = pair.evil;
   const query = createRulesQuery(game, environment);
+  // The Evil Twin character may sit on the good-aligned player (the alignments swapped): their execution is the Storyteller's ruling.
+  if (good.id === evil.id) {
+    const own = executionsAt(game, { phase: "day", day: game.day });
+    return (own.status === "known" ? own.events : own.recorded).some((event) => event.kind === "execution" && event.subject.participantId === good.participantId)
+      ? "The Good Twin was executed, and holds the Evil Twin character. Your ruling" : null;
+  }
   // Dead without a retained ability: nothing left to fire. A Vigormortis-kept Evil Twin still has its ability.
   if (!evil.alive) { const kept = query.retainsAbility(bindingOf(evil)); if (!kept.known || !kept.value) return null; }
   const events = executionsAt(game, { phase: "day", day: game.day });
@@ -70,8 +76,10 @@ export function twinAdvisory(game: StorytellerLobbyRecord, environment: RulesQue
 export function withheldGoodWinLine(game: StorytellerLobbyRecord, environment: RulesQueryEnvironment): string | null {
   const base = baseEligibility(game, environment);
   if (base.kind !== "verified" || base.team !== "good" || base.reason === "demonDeath") return null;
-  if (twinGoodWinBlock(game, environment)?.kind !== "blocked") return null;
-  return `${base.reason === "saint" ? "The Saint was executed" : "The Mayor’s condition is met"}. ${TWINS_BLOCK_GOOD_WIN}`;
+  const block = twinGoodWinBlock(game, environment);
+  if (!block) return null;
+  const route = base.reason === "saint" ? "The Saint was executed" : "The Mayor’s condition is met";
+  return block.kind === "blocked" ? `${route}. ${TWINS_BLOCK_GOOD_WIN}` : `${route}. The Twins need your ruling: ${block.reason}`;
 }
 
 function baseEligibility(game: StorytellerLobbyRecord, environment: RulesQueryEnvironment): EndGameEligibility {
@@ -124,13 +132,14 @@ export function demonGoneAdvisory(game: StorytellerLobbyRecord, environment: Rul
  * recorded public choice: "if they are evil, your team loses" -- or, for an evil Klutz, good wins. A choice that may register either
  * way is the Storyteller's ruling. https://wiki.bloodontheclocktower.com/Klutz
  */
-export function klutzAdvisory(game: Pick<StorytellerLobbyRecord, "phase" | "day" | "gameRuleFacts">, goodCannotWin = false): string | null {
+export function klutzAdvisory(game: Pick<StorytellerLobbyRecord, "phase" | "day" | "gameRuleFacts">, block: GoodWinBlock["kind"] | null = null): string | null {
   // Only during the Day the Klutz chose: once the Storyteller lets play go on into the night, the line goes (the fact stays).
   if (game.phase !== "day") return null;
   const has = (type: string) => (game.gameRuleFacts ?? []).some((fact) => fact.type === type && fact.recordedAt?.phase === "day" && fact.recordedAt.day === game.day);
   if (has(KLUTZ_CHOICE_RULING)) return "The Klutz chose a player who may register as evil. Your ruling";
   if (has(KLUTZ_GOOD_TEAM_LOST)) return "The Klutz chose an evil player. Evil wins. Check before ending the game";
   // SV-4d: the Evil Twin's block on "good wins" (the caller reads it: it needs the whole game).
-  if (has(KLUTZ_EVIL_TEAM_LOST)) return goodCannotWin ? `The Klutz chose an evil player. ${TWINS_BLOCK_GOOD_WIN}. Check before ending the game` : "The Klutz chose an evil player. Good wins. Check before ending the game";
+  if (has(KLUTZ_EVIL_TEAM_LOST)) return block === "blocked" ? `The Klutz chose an evil player. ${TWINS_BLOCK_GOOD_WIN}. Check before ending the game`
+    : block === "unknown" ? "The Klutz chose an evil player. Good may win, but the Twins need your ruling. Check before ending the game" : "The Klutz chose an evil player. Good wins. Check before ending the game";
   return null;
 }

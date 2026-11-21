@@ -255,6 +255,9 @@ describe("SV-4b: Execute at night", () => {
     expect(nightExecutionWarning(game().players.p3!, game().players)).toBeNull();
     // With the Evil Twin dead the Good Twin's execution no longer wins anything.
     expect(nightExecutionWarning(game().players.p2!, patchPlayer(game(), "p1", { alive: false }).players)).toBeNull();
+    // ... unless a Vigormortis lets the dead Evil Twin keep its ability.
+    const kept = patchPlayer(patchPlayer(game(), "p1", { alive: false }), "p1", { alive: false, effects: [{ id: "fx-keeps", type: "retainsAbility", lifetime: { kind: "manual" }, state: "active", expiry: { kind: "none" }, appliedAt: { phase: "night", day: 2 } } as never] });
+    expect(nightExecutionWarning(game().players.p2!, kept.players)).toMatch(/Good Twin/);
     await run("p2");
     expect(useV6Ui.getState().toast).toContain("Player 2 is the Good Twin: an execution may end the game. Check before ending.");
   });

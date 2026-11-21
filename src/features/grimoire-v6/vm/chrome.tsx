@@ -31,7 +31,7 @@ export function endHint(ctx: V6Ctx): string {
       const twin = twinAdvisory(game, environment);
       if (twin) return twin;
       // SV-1c: the Klutz's recorded choice, hidden in Privacy Mode (it names who wins).
-      const klutz = klutzAdvisory(game, twinGoodWinBlock(game, environment)?.kind === "blocked");
+      const klutz = klutzAdvisory(game, twinGoodWinBlock(game, environment)?.kind ?? null);
       if (klutz) return klutz;
       const withheld = withheldGoodWinLine(game, environment);
       if (withheld) return withheld;

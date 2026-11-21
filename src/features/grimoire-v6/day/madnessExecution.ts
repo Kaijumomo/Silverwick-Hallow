@@ -43,7 +43,7 @@ export function nightExecutionWarning(player: STPlayerRecord, players: Readonly<
   if (player.actualRole === "saint") return `${player.name || "The Saint"} is the Saint: an execution may end the game. Check before ending.`;
   // SV-4d: "If the good player is executed, evil wins": the Good Twin of a standing pair.
   const pair = twinPairOf(players);
-  if (pair.kind === "single" && pair.valid && pair.good?.id === player.id && pair.evil.alive) return `${player.name || "The Good Twin"} is the Good Twin: an execution may end the game. Check before ending.`;
+  if (pair.kind === "single" && pair.valid && pair.good?.id === player.id && (pair.evil.alive || pair.evil.effects.some((effect) => effect.state === "active" && effect.type === "retainsAbility"))) return `${player.name || "The Good Twin"} is the Good Twin: an execution may end the game. Check before ending.`;
   return null;
 }
 

@@ -157,9 +157,11 @@ describe("every 'good wins' route is withheld while the block holds", () => {
     const klutzGame = (g: StorytellerLobbyRecord) => ({ ...g, gameRuleFacts: [{ id: "f", type: KLUTZ_EVIL_TEAM_LOST, recordedAt: { phase: "day" as const, day: 2 }, expiresAt: { phase: "day" as const, day: 3 } }] as never });
     it.each(VARIANTS)("$name", (variant) => {
       const g = variant.change(twinned(proofGame(["klutz", "eviltwin", "chef", "imp", "empath"], "day", 2), "p1", "p2"), { evil: "p1", good: "p2" });
-      const blocked = twinGoodWinBlock(g, env)?.kind === "blocked";
-      expect(blocked).toBe(variant.blocked);
-      expect(klutzAdvisory(klutzGame(g), blocked)).toBe(blocked ? `The Klutz chose an evil player. ${TWINS_BLOCK_GOOD_WIN}. Check before ending the game` : "The Klutz chose an evil player. Good wins. Check before ending the game");
+      const block = twinGoodWinBlock(g, env)?.kind ?? null;
+      expect(block === "blocked").toBe(variant.blocked);
+      const expected = block === "blocked" ? `The Klutz chose an evil player. ${TWINS_BLOCK_GOOD_WIN}. Check before ending the game`
+        : block === "unknown" ? "The Klutz chose an evil player. Good may win, but the Twins need your ruling. Check before ending the game" : "The Klutz chose an evil player. Good wins. Check before ending the game";
+      expect(klutzAdvisory(klutzGame(g), block)).toBe(expected);
     });
     it("the End control carries the block, not 'Good wins', and the Privacy Mode line carries neither", () => {
       const g = klutzGame(twinned(proofGame(["klutz", "eviltwin", "chef", "imp", "empath"], "day", 2), "p1", "p2"));
@@ -217,5 +219,23 @@ describe("the Good Twin's execution", () => {
     openInStore(retains(patchPlayer(twinned(proofGame(["imp", "eviltwin", "chef", "empath", "saint"], "day", 2), "p1", "p2"), "p1", { alive: false }), "p1"));
     state().recordExecution("p2", "died");
     expect(twinAdvisory(game(), env)).toBe("The Good Twin was executed. Evil wins. Check before ending the game");
+  });
+});
+
+describe("independent check follow-ups (2e82ad9)", () => {
+  it("a good-aligned Evil Twin character executed is the Storyteller's ruling, not silence", () => {
+    // The alignments swapped: the Evil Twin character holder (p1) is now the Good Twin.
+    let g = twinned(proofGame(["imp", "eviltwin", "chef", "empath", "saint"], "day", 2), "p1", "p2");
+    g = patchPlayer(patchPlayer(g, "p1", { actualAlignment: "good" }), "p2", { actualAlignment: "evil" });
+    openInStore(g);
+    expect(twinAdvisory(game(), env)).toBeNull();
+    expect(state().recordExecution("p1", "died")).toMatchObject({ ok: true });
+    expect(twinAdvisory(game(), env)).toBe("The Good Twin was executed, and holds the Evil Twin character. Your ruling");
+  });
+  it("a Mayor route the Twins leave to the Storyteller says so instead of going quiet", () => {
+    const before = patchPlayer(twinned(proofGame(["eviltwin", "mayor", "imp"], "day", 2), "p0", "p1"), "p0", { actualAlignment: "good" });
+    const captured = captureMayorQualification(before, { ...before, phase: "night", day: 3 }, env);
+    const after = captured.ok ? captured.game : before;
+    expect(withheldGoodWinLine(after, env)).toMatch(/^The Mayor’s condition is met\. The Twins need your ruling/);
   });
 });
