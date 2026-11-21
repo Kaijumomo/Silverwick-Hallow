@@ -106,7 +106,8 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
         result = targetName ? `${targetName} chosen.` : "";
         resultHint = engine.needed > 1 ? roleKey === "innkeeper" ? "Tap order sets who is drunk." : ""
           : canTarget ? "Tap another player to change." : correction?.message ?? "";
-      } else if (celebrated) {
+      } else if (celebrated && !engine.dreamerTurn) {
+        // SV-5c: the Dreamer's tokens wait for Next, so nothing is "continuing".
         resultHint = steps.slice(engine.currentIndex + 1).some((step) => !stepResolved(game, step, engine.settled)) ? "Continuing…" : "";
       }
     }

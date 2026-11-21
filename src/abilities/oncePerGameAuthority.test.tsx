@@ -18,12 +18,13 @@ import { usePrivacyStore } from "@/stores/privacyStore";
 import { stripCommentsForGuard as stripComments } from "@/test/writerGuard";
 import type { Script, StorytellerLobbyRecord } from "@/stores/types";
 
-const script: Script = { id: "opg", name: "Once per game", characters: canonicalRoles(["seamstress", "slayer", "chef", "imp"]) };
+const script: Script = { id: "opg", name: "Once per game", characters: canonicalRoles(["courtier", "slayer", "chef", "imp"]) };
 const registry = buildRegistry(script);
 afterEach(cleanup);
 
 function game(phase: "night" | "day"): StorytellerLobbyRecord {
-  const roles = ["seamstress", "slayer", "chef", "imp"];
+  // SV-5b made the Seamstress guided (its own descriptor stops it waking once used); the Courtier is still unverified.
+  const roles = ["courtier", "slayer", "chef", "imp"];
   const players = roles.map((actualRole, seat) => makeSTPlayer({ id: `p${seat}`, name: `P${seat}`, seat, actualRole, shownRole: actualRole,
     actualAlignment: registry.alignmentOf(actualRole), abilityUsed: true }));
   return { gameSchemaVersion: 29, preparedInformation: [], playerInfoLog: [], gameRuleFacts: [], code: "", storytellerUid: "local", scriptId: script.id, phase, day: 2,
@@ -33,11 +34,11 @@ function game(phase: "night" | "day"): StorytellerLobbyRecord {
 }
 
 describe("SOL-10F-L6: oncePerGame authority", () => {
-  it("a character without a descriptor (the Seamstress; reviewed, but Storyteller-resolved) whose prose says 'Once per game' stays visible / manual after abilityUsed = true", () => {
-    expect(registry.get("seamstress")!.oncePerGame).toBe(true); // the prose-derived reference flag
+  it("a character without a descriptor (the Courtier; Storyteller-resolved) whose prose says 'Once per game' stays visible / manual after abilityUsed = true", () => {
+    expect(registry.get("courtier")!.oncePerGame).toBe(true); // the prose-derived reference flag
     const g = game("night");
     const steps = computeNightOrder(g.players, g.seatOrder, script, false, g);
-    expect(steps).toContainEqual(expect.objectContaining({ kind: "player", effectiveRoleId: "seamstress", abilityUsed: true }));
+    expect(steps).toContainEqual(expect.objectContaining({ kind: "player", effectiveRoleId: "courtier", abilityUsed: true }));
     usePrivacyStore.setState({ enabled: false });
     // The unified Night card keeps the step visible and wholly manual: official text, no guided action.
     vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
@@ -45,7 +46,7 @@ describe("SOL-10F-L6: oncePerGame authority", () => {
     resetNightUi();
     render(<NightScreen />);
     selectNightStep("p0");
-    expect(screen.getByText(registry.get("seamstress")!.ability!)).toBeInTheDocument();
+    expect(screen.getByText(registry.get("courtier")!.ability!)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Continue action" })).toBeNull();
     vi.unstubAllGlobals();
   });

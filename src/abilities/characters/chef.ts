@@ -10,7 +10,8 @@ import { informationAbilityRefusal, recluseInformationChoice } from "./informati
  * Optional registration is contextual even for each edge: never choose it.
  */
 export const CHEF_COMMUNICATED = "communicated";
-const ringOf = (query: RulesQuery) => query.game.seatOrder.flatMap(id => {
+/** The seating ring: every seated participant (the dead and Travellers included), empty seats skipped. SV-5a: also the Clockmaker's. */
+export const ringOf = (query: RulesQuery) => query.game.seatOrder.flatMap(id => {
   const player = query.game.players[id];
   return player && !player.isEmpty && player.participantId ? [player] : [];
 });

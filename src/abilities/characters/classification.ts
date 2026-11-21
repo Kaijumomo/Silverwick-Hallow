@@ -57,12 +57,8 @@ export const OWNED_ELSEWHERE: Readonly<Record<RoleId, string>> = {
  * Their own ability stays Storyteller-resolved (there is no descriptor and no
  * evaluator). Presentation only -- never mechanics, never read by any gate. */
 export const REVIEWED_MANUAL: Readonly<Record<RoleId, string>> = {
-  clockmaker: "Reviewed: reads the Demon and nearest Minion seating and changes nothing. The number stays the Storyteller's (Spy/Recluse registration and the Summoner jinx are judgments).",
-  dreamer: "Reviewed: the Storyteller shows 1 good and 1 evil character, one of them the chosen player's. Changes nothing; impaired content is the Storyteller's choice.",
   mathematician: "Reviewed: counts abnormal abilities since dawn and changes nothing. The Abnormal reminders are Storyteller notation; the Chambermaid, Drunk, Marionette and Lunatic jinxes stay Storyteller judgments.",
-  flowergirl: "Reviewed: reads whether a Demon voted today and changes nothing. Demon Voted / Demon Not Voted are Storyteller notation; the Storyteller answers with a nod or a shake of the head.",
   savant: "Reviewed: day information (one true, one false) given in private by the Storyteller. Changes nothing; it has no night wake.",
-  seamstress: "Reviewed: once per game, compares two players' alignment and changes nothing. No Ability is Storyteller notation after use.",
   artist: "Reviewed: once per game, a private yes/no question answered by the Storyteller. Changes nothing; it has no night wake. No Ability is Storyteller notation after use.",
   juggler: "Reviewed: counts correct day-one guesses and changes nothing. The Correct reminders are Storyteller notation; the Cannibal jinx stays a Storyteller judgment.",
   mutant: "Reviewed: an Outsider with no information or effect on others. The official rules let the Storyteller execute a Mutant who breaks madness at any time, even at night or outside a nomination. A daytime one goes through the ordinary execution record, which the Undertaker reads like any other execution, and uses that day's one execution (the Storyteller keeps count; the app does not block a second). The app records executions only in the Day phase, so a night-time one is recorded as an ordinary death.",

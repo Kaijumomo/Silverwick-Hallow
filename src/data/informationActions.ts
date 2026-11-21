@@ -161,6 +161,18 @@ export const INFORMATION_ACTIONS: Record<RoleId, InformationAction[]> = {
     },
   ],
 
+  // "Each night*, you learn if a Demon voted today." (SV-5d) -- Boolean, other nights only.
+  flowergirl: [
+    {
+      id: "flowergirl-other-night",
+      timing: { kind: "otherNight" },
+      instruction: "Nod if a Demon voted today, shake your head if not.",
+      requirements: [
+        { id: "demonVoted", kind: "boolean", label: "Whether a Demon voted today" },
+      ],
+    },
+  ],
+
   // "Each night*, you learn how many dead players are evil." -- Number, other nights only.
   // Treacherous 30th (owner-authorized Silverwick-authored metadata; no pinned action existed).
   oracle: [
@@ -182,6 +194,66 @@ export const INFORMATION_ACTIONS: Record<RoleId, InformationAction[]> = {
       requirements: [
         { id: "chosenPlayer", kind: "player", label: "The player the Ravenkeeper chose" },
         { id: "role", kind: "role", label: "That player's character" },
+      ],
+    },
+  ],
+
+  // "You start knowing how many steps from the Demon to its nearest Minion." (SV-5a) -- Number, first night only.
+  clockmaker: [
+    {
+      id: "clockmaker-first-night",
+      timing: { kind: "firstNight" },
+      instruction: "Give a finger signal for the number of steps from the Demon to its nearest Minion.",
+      requirements: [
+        { id: "steps", kind: "number", label: "Steps from the Demon to its nearest Minion" },
+      ],
+    },
+  ],
+
+  // "Once per game, at night, choose 2 players (not yourself): you learn if they are the same alignment." (SV-5b) -- Players + Boolean,
+  // every night until used.
+  seamstress: [
+    {
+      id: "seamstress-first-night",
+      timing: { kind: "firstNight" },
+      instruction: "The Seamstress might choose 2 players. Nod if they are the same alignment, shake your head if not.",
+      requirements: [
+        { id: "players", kind: "player", cardinality: { kind: "exactly", count: 2 }, label: "The two players chosen" },
+        { id: "sameAlignment", kind: "boolean", label: "Whether they are the same alignment" },
+      ],
+    },
+    {
+      id: "seamstress-other-night",
+      timing: { kind: "otherNight" },
+      instruction: "The Seamstress might choose 2 players. Nod if they are the same alignment, shake your head if not.",
+      requirements: [
+        { id: "players", kind: "player", cardinality: { kind: "exactly", count: 2 }, label: "The two players chosen" },
+        { id: "sameAlignment", kind: "boolean", label: "Whether they are the same alignment" },
+      ],
+    },
+  ],
+
+  // "Each night, choose a player (not yourself or Travellers): you learn 1 good & 1 evil character, 1 of which is correct." (SV-5c)
+  // Player + two Roles (good first, evil second: PO Q4), both nights.
+  dreamer: [
+    {
+      id: "dreamer-first-night",
+      timing: { kind: "firstNight" },
+      instruction: "The Dreamer points to a player. Show 1 good & 1 evil character token, 1 of which is their character.",
+      requirements: [
+        { id: "player", kind: "player", cardinality: { kind: "exactly", count: 1 }, label: "The player the Dreamer chose" },
+        { id: "goodCharacter", kind: "role", label: "The good character shown" },
+        { id: "evilCharacter", kind: "role", label: "The evil character shown" },
+      ],
+    },
+    {
+      id: "dreamer-other-night",
+      timing: { kind: "otherNight" },
+      instruction: "The Dreamer points to a player. Show 1 good & 1 evil character token, 1 of which is their character.",
+      requirements: [
+        { id: "player", kind: "player", cardinality: { kind: "exactly", count: 1 }, label: "The player the Dreamer chose" },
+        { id: "goodCharacter", kind: "role", label: "The good character shown" },
+        { id: "evilCharacter", kind: "role", label: "The evil character shown" },
       ],
     },
   ],

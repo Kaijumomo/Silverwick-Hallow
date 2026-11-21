@@ -61,9 +61,9 @@ const FIRST_NIGHT_ADMIN = new Set(["king", "marionette", "snitch", "magician", "
 const DEATH_CHECKS = new Set(["ravenkeeper", "sage", "barber", "sweetheart", "moonchild",
   "grandmother", "banshee", "choirboy", "godfather", "gossip", "tinker", "hatter", "plaguedoctor", "farmer"]);
 const COMPLEX_ABILITIES = new Set(["alchemist", "cannibal", "amnesiac", "boffin", "apprentice"]);
-/** SV-3a: a once-per-game wake that stops waking once used (the Philosopher wakes "each night" until they choose). The night it is
- * used, its row stays (done). */
-const WAKES_UNTIL_USED = new Set(["philosopher"]);
+/** SV-3a: a once-per-game wake that stops waking once used (the Philosopher wakes "each night" until they choose; SV-5b the Seamstress,
+ * whose page says "remove their night token from the night sheet"). The night it is used, its row stays (done). */
+const WAKES_UNTIL_USED = new Set(["philosopher", "seamstress"]);
 
 export function computeNightOrder(
   players: Record<PlayerId, STPlayerRecord>,

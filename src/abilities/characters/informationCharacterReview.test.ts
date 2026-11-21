@@ -40,6 +40,8 @@ const OFFICIAL: Record<string, Official> = {
   chambermaid: { team: "townsfolk", ability: "Each night, choose 2 alive players (not yourself): you learn how many woke tonight due to their ability.", reminders: [], firstNight: true, otherNight: true },
 };
 const IDS = Object.keys(OFFICIAL);
+/** SV-5 part 1 made these guided (their own descriptor and tests); they stay on the reviewed interaction list. */
+const GUIDED_LATER = ["clockmaker", "seamstress", "dreamer", "flowergirl"];
 
 describe("the ten reviewed information characters match the official data", () => {
   it.each(IDS)("%s: team, ability text, reminder tokens and night wakes", (id) => {
@@ -53,17 +55,20 @@ describe("the ten reviewed information characters match the official data", () =
     expect(canonicalOrder(id, false) !== undefined).toBe(want.otherNight);
   });
 
-  it("the list of reviewed characters is exactly these ten, with matching coverage notes", () => {
-    expect(Object.keys(REVIEWED_MANUAL).sort()).toEqual([...IDS].sort());
+  it("the list of reviewed characters is exactly these ten, less those later made guided, with matching coverage notes", () => {
+    const reviewed = IDS.filter(id => !GUIDED_LATER.includes(id));
+    expect(Object.keys(REVIEWED_MANUAL).sort()).toEqual([...reviewed].sort());
     for (const id of IDS) expect(REVIEWED_INTERACTION_ROLES.has(id), id).toBe(true);
     const manifest = buildCoverageManifest();
-    for (const id of IDS) {
+    for (const id of reviewed) {
       const entry = manifest.find(e => e.id === id)!;
       expect(entry.status, id).toBe("reviewedManual");
       expect(entry.note, id).toMatch(/^Reviewed:/);
       expect(CANONICAL_ABILITY_SEMANTICS.has(id), `${id} gains no evaluator`).toBe(false);
     }
-    expect(coverageSummary(manifest).byStatus.reviewedManual).toBe(10);
+    // SV-5 part 1: each of these now has a registered descriptor (its own test file pins the behaviour).
+    for (const id of GUIDED_LATER) expect(CANONICAL_ABILITY_SEMANTICS.has(id), `${id} is guided`).toBe(true);
+    expect(coverageSummary(manifest).byStatus.reviewedManual).toBe(reviewed.length);
   });
 });
 

@@ -218,6 +218,8 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   const barberTurn = !!eligible && current?.kind === "player" && current.effectiveRoleId === "barber" && ability?.kind === "guided";
   // SV-3a (PO 2026-11-21): the Philosopher's choice is made on the Night card (PhilosopherNightAction), never in the workspace.
   const philosopherTurn = !!eligible && current?.kind === "player" && !current.gainedFrom && current.effectiveRoleId === "philosopher" && ability?.kind === "guided";
+  // SV-5c: the Dreamer's player and tokens are chosen on the Night card (DreamerNightAction), never in the workspace.
+  const dreamerTurn = !!eligible && current?.kind === "player" && !current.gainedFrom && current.effectiveRoleId === "dreamer" && ability?.kind === "guided";
   // SV-4c: the Evil Twin's reveals and Good Twin choice are made on the Night card (EvilTwinNightAction), never in the workspace.
   const twinTurn = !!eligible && current?.kind === "player" && !current.gainedFrom && current.effectiveRoleId === "eviltwin" && ability?.kind === "guided";
   const owner = current ? `night-guide:${game.code}:${game.day}:${current.stepKey}` : "night-guide";
@@ -479,12 +481,13 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
   }, []);
   // A guided success that is not a direct board pick (or an information action) moves on by itself.
   // A direct pick waits for Next: its target stays correctable without a timer racing the Storyteller.
+  // SV-5c: the Dreamer's two tokens are information to show, so like any information step they wait for Next.
   useEffect(() => {
-    if (direct || inlineInformation || !success || !visible || success.key !== current?.stepKey || success.game !== game) return;
+    if (direct || inlineInformation || dreamerTurn || !success || !visible || success.key !== current?.stepKey || success.game !== game) return;
     const timer = window.setTimeout(advance, 2200);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [direct, inlineInformation, success, visible, current?.stepKey, game]);
+  }, [direct, inlineInformation, dreamerTurn, success, visible, current?.stepKey, game]);
   useEffect(() => {
     if (successorChoice && (successorChoice.game !== game || successorChoice.stepKey !== current?.stepKey)) setSuccessorChoice(null);
     if (tapRuling && (tapRuling.game !== game || tapRuling.stepKey !== current?.stepKey)) setTapRuling(null);
@@ -513,7 +516,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
     if (!visible) { ui.set({ panel: "night" }); return; }
     lastRequest.current = actionRequest;
     if (resolved) return;
-    if (direct || bureaucrat || inlineInformation || barberTurn || philosopherTurn || twinTurn) setPaused(false); else if (!workspace) openWorkspace();
+    if (direct || bureaucrat || inlineInformation || barberTurn || philosopherTurn || dreamerTurn || twinTurn) setPaused(false); else if (!workspace) openWorkspace();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actionRequest, visible, active]);
 
@@ -569,7 +572,7 @@ export function useNightEngine(ctx: V6Ctx, information: RefObject<NightInformati
 
   return {
     active, visible, work, steps, unfinished, pos, current, currentIndex, positionIndex, resolved, actor, role, ability, query,
-    eligible, direct, canTarget, question, answerQuestion, skipReason, settled, moonchildChoice, regurgitation, needed, picks, guessFor, cerenovusChoice, inlineInformation, preparedInformation, butlerTurn, barberTurn, philosopherTurn, twinTurn, bureaucrat, manual, manualRavenkeeper, correction,
+    eligible, direct, canTarget, question, answerQuestion, skipReason, settled, moonchildChoice, regurgitation, needed, picks, guessFor, cerenovusChoice, inlineInformation, preparedInformation, butlerTurn, barberTurn, philosopherTurn, dreamerTurn, twinTurn, bureaucrat, manual, manualRavenkeeper, correction,
     workspace, setWorkspace, setPaused, error, setError, success, successorChoice, tapRuling: pendingRuling, answerTapRuling, picker, refused, owner, actionContext,
     navigate, gotoCheckpoint, prev, next, beginDay, openWorkspace, openTrigger, requireManual, finish,
   };
