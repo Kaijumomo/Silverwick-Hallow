@@ -57,7 +57,7 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
     stripItem({ label: "Dusk", img: "", marker: true, markerIcon: MARKER_ICON.dusk, done: false, index: 0, cursor: index, jump: () => engine.gotoCheckpoint("dusk") }),
     ...steps.map((step, i) => {
       const img = stepIcon(step, ctx.registry);
-      const item = stripItem({ label: stepLabel(step), img, marker: !img, markerIcon: MARKER_ICON.step, done: stepResolved(game, step, engine.settled), index: i + 1, cursor: index, jump: () => engine.navigate(step) });
+      const item = stripItem({ label: stepLabel(step), img, marker: !img, markerIcon: MARKER_ICON.step, done: stepResolved(game, step), index: i + 1, cursor: index, jump: () => engine.navigate(step) });
       // A step that does not wake tonight is dimmed along the strip (its reason shows when it is opened).
       return engine.settled.has(step.stepKey) && i + 1 !== index ? { ...item, op: Math.min(item.op, 0.4) } : item;
     }),
@@ -71,14 +71,16 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
     const targetName = correction?.target ? game.players[correction.target.playerId]?.name || "The chosen player" : "";
     const player = current.kind === "player";
     const roleKey = current.kind === "player" ? current.effectiveRoleId : "";
+    // PO 2026-11-21: why a step does not wake is shown on every script; the rest of these verbs are Treacherous 30th's own wording.
+    const idleVerb = player && engine.skipReason ? `${engine.skipReason.replace(/\.$/, "")}. This character does not wake.` : undefined;
     const t30Verb = ctx.script?.id === "treacherous-30th" && roleKey
-      ? engine.skipReason ? `${engine.skipReason.replace(/\.$/, "")}. This character does not wake.` : roleKey === "godfather" && game.day === 1 ? godfatherInfoVerb(game, ctx.registry)
+      ? roleKey === "godfather" && game.day === 1 ? godfatherInfoVerb(game, ctx.registry)
         : roleKey === "moonchild" && engine.moonchildChoice ? `${game.players[engine.moonchildChoice.target.playerId]?.name || "The chosen player"} was chosen. If they are good, they die tonight.`
         : !inlineInformation ? T30_VERBS[roleKey] : undefined
       : undefined;
     const verb = player
       ? successorChoice ? roleKey === "vigormortis" ? "Which neighbouring Townsfolk is poisoned? The Minion keeps their ability." : "Choose the Minion who becomes the new Imp."
-        : t30Verb ?? (engine.manual || inlineInformation ? engine.role?.ability ?? current.prompt
+        : idleVerb ?? t30Verb ?? (engine.manual || inlineInformation ? engine.role?.ability ?? current.prompt
         : engine.ability?.kind === "guided" ? engine.ability.descriptor.presentation.action : current.prompt)
       : current.prompt;
     // PO review A03/C07: an impaired player is named by the pill beside the name, and the routine procedure lines
@@ -101,14 +103,14 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
     let result = "", resultHint = "";
     if (!inlineInformation) {
       if (direct && resolved) {
-        result = targetName ? `${targetName} chosen.` : celebrated ? "Resolved." : "Completed";
+        result = targetName ? `${targetName} chosen.` : "";
         resultHint = engine.needed > 1 ? roleKey === "innkeeper" ? "Tap order sets who is drunk." : ""
           : canTarget ? "Tap another player to change." : correction?.message ?? "";
       } else if (celebrated) {
-        result = "Resolved.";
         resultHint = steps.slice(engine.currentIndex + 1).some((step) => !stepResolved(game, step, engine.settled)) ? "Continuing…" : "";
-      } else if (resolved) result = "Completed";
+      }
     }
+    const statePill = resolved ? { label: "Completed", kind: "done" } : engine.skipReason ? { label: "Not waking", kind: "idle" } : undefined;
     cur = {
       isRole: true, isMarker: false,
       role: stepLabel(current), who: stepWho(current, game),
@@ -119,7 +121,9 @@ export function useNightVm(ctx: V6Ctx): SliceResult {
         : engine.needed > 1 ? engine.picks.length ? "Choose one more player on the board" : "Tap two players on the board" : "Tap a player on the board",
       picks: engine.picks.map((pick) => ({ name: game.players[pick.playerId]?.name ?? "" })),
       hasNumber: false, numberOpts: [], hasToken: false,
-      hasResult: !!result, result, resultHint,
+      // PO 2026-11-21: one status pill beside the name (Completed / Not waking; a pending step shows none) replaces the big result box.
+      statePillOn: !!statePill, statePill: statePill?.label ?? "", statePillKind: statePill?.kind ?? "",
+      hasResult: !!(result || resultHint), result, resultHint,
       hasNote: !!note, note,
       showOn: false,
     };

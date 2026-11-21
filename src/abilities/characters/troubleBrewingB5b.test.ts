@@ -79,6 +79,12 @@ describe("B5b Undertaker authoritative event information", () => {
     openInStore({ ...g, lifeEventWindow: { ...g.lifeEventWindow, events: [event, { ...event, id: "second-execution" }] } });
     const before = store.getState(); expect(invoke("undertaker")).toMatchObject({ ok: false, code: "unsupported" }); expect(store.getState()).toBe(before);
   });
+  it("a death entered by hand during the Day, with no execution recorded, stays the Storyteller's to judge", () => {
+    openInStore(proofGame(["undertaker", "chef", "imp", "monk", "baron"], "day", 1));
+    expect(store.getState().resolveLife({ intents: [{ kind: "death", playerId: "p1" }] })).toMatchObject({ ok: true });
+    expect(store.getState().setPhase("night")).toMatchObject({ ok: true });
+    const before = store.getState(); expect(invoke("undertaker")).toMatchObject({ ok: false, code: "unsupported" }); expect(store.getState()).toBe(before);
+  });
   it("an exile cannot qualify as an execution death", () => {
     const g = executed(); const event = g.lifeEventWindow.events[0]!;
     openInStore({ ...g, lifeEventWindow: { ...g.lifeEventWindow, events: [{ ...event, kind: "exile", moment: { phase: "day", day: 1 }, outcome: "died" }] } });

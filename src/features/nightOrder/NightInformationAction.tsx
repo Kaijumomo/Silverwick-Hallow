@@ -222,7 +222,6 @@ export const NightInformationAction = forwardRef<NightInformationHandle, Props>(
     {awaitingCause && causeQuestion && <QuestionBlock heading={causeQuestion.heading} note={causeQuestion.note}
       actions={[{ label: "Yes", onClick: () => { setError(null); setDraft({ game, inputs: { [causeQuestion.id]: { kind: "boolean", value: true } } }); } },
         { label: "No", onClick: () => { commit({ [causeQuestion.id]: { kind: "boolean", value: false }, [SAGE_PLAYERS]: { kind: "participant", participants: [] } }); } }]} />}
-    {resolved && <p className="modern-night-result">Completed</p>}
     {error && <p role="alert" className="behavior-help">{error}</p>}
   </div>;
 });
