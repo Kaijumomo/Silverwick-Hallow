@@ -69,7 +69,7 @@ describe("Independent Character Intelligence rules review", () => {
   it("inventory reports all 181 characters independently of jinxes without expanding evaluators", () => {
     const entries = buildCoverageManifest();
     expect(coverageSummary(entries)).toMatchObject({ characterTotal: 181, jinxTotal: 131, total: 312 });
-    expect(entries.filter(entry => entry.kind !== "jinx" && entry.capabilities?.some(c => c.owner === "abilities" && c.boundary.startsWith("Registered")))).toHaveLength(32); // B5a adds Chef; Treacherous 30th adds Innkeeper, No Dashii, Vigormortis, Gambler, Shabaloth, Witch, Godfather, Moonchild, Town Crier, Oracle and Professor; LS-2c adds the Devil's Advocate; SV-1a adds the Sage; SV-1b the Sweetheart; SV-1c the Klutz; SV-1d the Barber; SV-2a the Snake Charmer; SV-2b the Fang Gu; SV-3a the Philosopher.
+    expect(entries.filter(entry => entry.kind !== "jinx" && entry.capabilities?.some(c => c.owner === "abilities" && c.boundary.startsWith("Registered")))).toHaveLength(34); // B5a adds Chef; Treacherous 30th adds Innkeeper, No Dashii, Vigormortis, Gambler, Shabaloth, Witch, Godfather, Moonchild, Town Crier, Oracle and Professor; LS-2c adds the Devil's Advocate; SV-1a adds the Sage; SV-1b the Sweetheart; SV-1c the Klutz; SV-1d the Barber; SV-2a the Snake Charmer; SV-2b the Fang Gu; SV-3a the Philosopher; SV-4a the Cerenovus; SV-4c the Evil Twin.
     expect(entries.find(entry => entry.id === "bureaucrat")?.capabilities?.map(c => c.owner)).toContain("voting");
   });
 });

@@ -6,6 +6,7 @@ import { friendlyFirebaseError } from "@/firebase/errors";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { pickSeatIfPicking, useTargetPicker } from "@/features/abilities/abilityUi";
 import { moonchildAwaitingChoice, startMoonchildChoice } from "../day/moonchild";
+import { executeOffered, runExecute } from "../day/madnessExecution";
 import { useStorytellerStore } from "@/stores/storytellerStore";
 import { useShellStore } from "@/stores/shellStore";
 import { litActorIdOf } from "@/features/grimoire/seatTap";
@@ -44,6 +45,7 @@ const RADIAL_ICON = {
   change: "M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5",
   show: "M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
   swap: "M7 16V4M3 8l4-4 4 4M17 8v12M21 16l-4 4-4-4",
+  execute: "M4 21l8-8M12 5l7 7-3 3-7-7zM9 8l-2-2",
   more: ICON.info,
 } as const;
 
@@ -279,6 +281,8 @@ export function useBoardVm(ctx: V6Ctx): SliceResult {
     if (!ended && live) list.push(sel.alive
       ? { label: "Kill", icon: RADIAL_ICON.kill, onClick: life("die"), color: "#ff8a78", border: "rgba(232,88,74,.6)" }
       : { label: "Revive", icon: RADIAL_ICON.revive, onClick: life("revive"), color: "#8fcf95", border: "rgba(143,207,149,.55)" });
+    // SV-4b: the Storyteller's own execution of a mad player (while the Cerenovus's MAD applies) or of a living Mutant; never Privacy Mode.
+    if (executeOffered(ctx, sel)) list.push({ label: "Execute", icon: RADIAL_ICON.execute, onClick: () => { selectPlayer(null); void runExecute(ctx, sel); }, color: "#ff8a78", border: "rgba(232,88,74,.6)" });
     if (!ended && live && !sel.alive) list.push({ label: sel.ghostVote ? "Spend vote" : "Give vote", icon: RADIAL_ICON.ghost, onClick: life(sel.ghostVote ? "spendVote" : "restoreVote"), color: "#e6ecf8", border: "rgba(230,236,248,.4)" });
     if (moonchildAwaitingChoice(ctx, sel)) list.push({ label: "Moonchild", icon: RADIAL_ICON.change, onClick: () => { selectPlayer(null); startMoonchildChoice(ctx, sel); }, color: "#f2c46a", border: "rgba(242,196,106,.5)" });
     if (!ended && !privacy) list.push({ label: "Character", icon: RADIAL_ICON.change, onClick: () => openChoosePicker(sel.id), ...plain });

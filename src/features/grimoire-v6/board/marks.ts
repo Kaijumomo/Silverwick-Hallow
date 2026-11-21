@@ -134,7 +134,9 @@ export function playerMarks(env: MarkEnv, player: STPlayerRecord): Mark[] {
   const marks: Mark[] = [];
   for (const token of effects.tokens) {
     const label = times(token.label, token.instances.length);
-    marks.push({ key: `effect:${token.key}`, kind: "effect", label, title: `${token.role.name}: ${label}`, src: iconUrlFor(token.role), size: ROLE_SIZE, removal: { type: "effect", token } });
+    // SV-4a: the MAD token's tooltip names the character ("Cerenovus: Mad about being the Sage"); every other token keeps "Character: Label".
+    const title = token.about ? `${token.role.name}: ${token.label} about being the ${token.about}` : `${token.role.name}: ${label}`;
+    marks.push({ key: `effect:${token.key}`, kind: "effect", label, title, src: iconUrlFor(token.role), size: ROLE_SIZE, removal: { type: "effect", token } });
   }
   // The No Dashii's neighbours are poisoned by its passive. Drawn with its official Poisoned token, but read-only.
   const poisoned = query.noDashiiPoisoned({ playerId: player.id, participantId: player.participantId });

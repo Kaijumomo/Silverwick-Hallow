@@ -106,7 +106,7 @@ describe("with one of them in play, other automation is no longer pushed to Manu
   });
 
   it("negative control: an unreviewed character still sends the table to Manual", () => {
-    for (const id of ["banshee", "cerenovus", "exorcist"]) {
+    for (const id of ["banshee", "exorcist"]) {
       const g = proofGame(["empath", "imp", "chef", "monk", id]);
       expect(interactionCoverageEligibility(proofQuery(g)), id).toMatchObject({ kind: "manual", reason: "A character in play has interactions outside verified coverage." });
     }

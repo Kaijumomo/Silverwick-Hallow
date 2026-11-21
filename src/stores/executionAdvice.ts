@@ -42,6 +42,20 @@ export function executionAdvice(game: StorytellerLobbyRecord, playerId: PlayerId
 }
 
 /**
+ * SV-4 (review finding): whether the rules POSITIVELY establish that an execution of this player kills them: the same coverage line as
+ * `executionAdvice`, and the shared death gate answers "dies" (not unknown protection, a custom or generic Protected marker, or an
+ * unreviewed character in play). Where it does not, the Storyteller is asked, as the ordinary execution prompt always does.
+ */
+export function executionDeathKnown(game: StorytellerLobbyRecord, playerId: PlayerId, environment?: RulesQueryEnvironment): boolean {
+  const player = game.players[playerId];
+  if (!environment || !player || player.isEmpty || !player.participantId || !player.alive) return false;
+  const query = createRulesQuery(game, environment);
+  if (interactionCoverageEligibility(query, [...lifeRuleCreditedRoles]).kind === "manual") return false;
+  const outcome = query.deathOutcome({ playerId, participantId: player.participantId }, "execution");
+  return outcome.known && outcome.value.kind === "dies";
+}
+
+/**
  * LS-2d: the characters whose Storyteller-choice life rule concerns an executed good player (the Pacifist), while one is alive. Their
  * note in the execution prompt is produced from the table: the two Storyteller screens no longer name a character for it. Shown while
  * the holder is alive, impaired or not (unchanged): the Storyteller decides anyway. Canonical names, one per character.

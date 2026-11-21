@@ -1,5 +1,6 @@
 import { isInitialRevealComplete } from "@/stores/identity";
 import { redHerringSetup } from "@/rules/setup/redHerringSetup";
+import { twinSetup } from "@/rules/setup/twinSetup";
 import { conflictingDrunkDisguise } from "@/rules/setup/revealReadiness";
 import { isPostDeal, type SetupAction, type SetupContext, type SetupFinding } from "@/rules/setup/setupContext";
 
@@ -42,6 +43,10 @@ export function readinessFindings(context: SetupContext): SetupFinding[] {
     const herring = redHerringSetup(context);
     if (herring.status === "missing" || herring.status === "invalid")
       block("red-herring", herring.message, ["begin"]);
+    // SV-4c: the Evil Twin's Good Twin is chosen while setting up, before Night 1, like the Red Herring.
+    const twin = twinSetup(context);
+    if (twin.status === "missing" || twin.status === "invalid")
+      block("good-twin", twin.message, ["begin"]);
   }
   return out;
 }

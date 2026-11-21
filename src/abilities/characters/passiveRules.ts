@@ -324,6 +324,12 @@ export const REVIEWED_INTERACTION_ROLES: ReadonlySet<string> = new Set([
   // SV-3a: the Philosopher's choice records a gained-ability Effect on itself; the player who truly holds the gained character is
   // drunk through the shared impairment query (derived, like the No Dashii's poison). It changes no other ability.
   "philosopher",
+  // SV-4a: the Cerenovus records a sourced MAD Effect (the character it is mad about being rides on the Effect); the mad player is executed
+  // only by the Storyteller's own judgment through the shared execution command. It changes no other ability.
+  "cerenovus",
+  // SV-4c: the Evil Twin's pair is a source-free TWIN fact the Storyteller chooses at setup; the pair and its ability are derived from the two
+  // players' alignments and impairment (stores/twinPair.ts), and the Night card only shows the reveals. It changes no other ability.
+  "eviltwin",
   // Marionette has no ability effects of its own: it is an evil Minion who believes they are good, and every query reads its ACTUAL role and alignment.
   "marionette",
   // Information-only characters (Sects & Violets / Bad Moon Rising): each only reads game state and changes none, so it has no

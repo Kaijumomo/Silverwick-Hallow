@@ -257,7 +257,7 @@ export const PARTIAL_SUPPORT: Readonly<Record<RoleId, readonly Piece[]>> = {
  * Mirrored here only to state it as evidence; a test compares it with the source. */
 export const ENDING_EVIDENCE_ROLES: readonly RoleId[] = [
   "washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "monk", "ravenkeeper", "virgin", "slayer", "soldier", "mayor",
-  "butler", "drunk", "recluse", "saint", "poisoner", "spy", "scarletwoman", "baron", "imp", "bureaucrat", "thief", "gunslinger", "scapegoat", "beggar",
+  "butler", "drunk", "recluse", "saint", "poisoner", "spy", "scarletwoman", "baron", "imp", "bureaucrat", "thief", "gunslinger", "scapegoat", "beggar", "cerenovus", "eviltwin",
 ];
 
 /** Test files for guided and reviewed characters (the two most-referenced, or the loop that reviews them). */
@@ -295,7 +295,7 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   mayor: ["src/stores/b8Independent.test.ts", "src/stores/victoryEvidence.test.ts"],
   monk: ["src/stores/abilityResolution.test.ts", "src/features/grimoire-v6/night/nightGuide.port.test.tsx"],
   moonchild: ["src/abilities/characters/godfatherMoonchild.test.ts", "src/features/grimoire-v6/night/nightGuide.port.test.tsx"],
-  mutant: ["src/abilities/characters/informationCharacterReview.test.ts"],
+  mutant: ["src/abilities/characters/informationCharacterReview.test.ts", "src/features/grimoire-v6/day/madnessExecution.test.tsx"],
   nodashii: ["src/abilities/characters/nodashii.test.ts", "src/rules/night/canonicalNightOrder.test.ts"],
   oracle: ["src/abilities/characters/townCrierOraclePro.test.ts", "src/rules/night/canonicalNightOrder.test.ts"],
   pithag: ["src/abilities/characters/astraReverification.test.ts", "src/abilities/characters/pithag.test.ts"],
@@ -303,6 +303,8 @@ export const TEST_EVIDENCE: Readonly<Record<RoleId, readonly string[]>> = {
   professor: ["src/abilities/characters/townCrierOraclePro.test.ts", "src/abilities/characters/concealedSameAsPoisoned.test.ts"],
   ravenkeeper: ["src/stores/troubleBrewingB5bIndependent.test.ts", "src/abilities/characters/troubleBrewingB5b.test.ts"],
   recluse: ["src/abilities/characters/troubleBrewingB1.independent.test.ts", "src/features/grimoire-v6/night/nightGuide.port.test.tsx"],
+  cerenovus: ["src/abilities/characters/cerenovus.test.ts", "src/features/grimoire-v6/night/port/cerenovusUi.v6.test.tsx", "src/features/grimoire-v6/day/madnessExecution.test.tsx"],
+  eviltwin: ["src/abilities/characters/eviltwin.test.ts", "src/features/grimoire-v6/night/port/eviltwinUi.v6.test.tsx", "src/stores/eviltwinEnding.test.ts", "src/abilities/characters/sectsAndVioletsSv4Pairs.test.ts"],
   philosopher: ["src/abilities/characters/philosopher.test.ts", "src/abilities/characters/philosopherGained.test.ts", "src/abilities/characters/sectsAndVioletsSv3Pairs.test.ts", "src/features/grimoire-v6/night/port/philosopherUi.v6.test.tsx"],
   sage: ["src/abilities/characters/sage.test.ts", "src/features/grimoire-v6/night/port/sageUi.v6.test.tsx"],
   snakecharmer: ["src/abilities/characters/snakecharmer.test.ts", "src/features/grimoire-v6/night/port/snakeCharmerUi.v6.test.tsx"],
@@ -330,7 +332,9 @@ export const COVERAGE_CAVEATS: Readonly<Record<RoleId, readonly string[]>> = {
   tealady: ["LS-2b: Spy and Recluse neighbours use the Storyteller's setup decision (Prepare the town), and the decision can be set or changed only during setup; a Spy or Recluse with no decision (a later neighbour, or a character created mid-game) sends the question to the Storyteller. Exile is not modelled: the exile flow stays the Storyteller's. The CANNOT DIE tokens are still drawn while the Tea Lady is drunk or poisoned (PO ruling); the app does not honour them then."],
   juggler: ["Official wiki: wakes once, on the night after the first Day as the Juggler (Night 2 from the deal, or the night after a change). A game saved before character timing existed shows the row every later night; the Storyteller skips it."],
   philosopher: ["SV-3a: the choice, the derived DRUNK on whoever truly holds the chosen character, and the IS THE PHILOSOPHER token swap on the Storyteller's board are guided. The gained ability wakes at the gained character's place; a gained Snake Charmer, Town Crier or Oracle runs exactly as the real character's step (SV-3b), every other gained ability is run by the Storyteller by hand. A drunk or poisoned Philosopher (or a Drunk shown the Philosopher) spends the ability and gains nothing; what such a player is later woken for is the Storyteller's. Choosing the Philosopher, or a character that is not a verified official one, goes by hand."],
-  mutant: ["Official wiki: the Storyteller may execute a madness-breaking Mutant at any time, even at night. The app records executions only in Day and does not block a second daytime execution."],
+  eviltwin: ["SV-4c: the Good Twin is chosen on the Prepare row before Night 1 (a TWIN reminder drawn from one source-free Effect); the first-night row shows the two reveals; the pair, its validity and whether the Evil Twin's ability works are derived, never stored. A Pit-Hag-made Evil Twin or a broken pair is re-chosen on the Night row. SV-4d: while both Twins live and the Evil Twin functions no ending proposes \"good wins\", and the Good Twin's execution raises an advisory line on the End control; the app never records a winner. A Traveller as a Twin, and more than one Evil Twin, are by hand."],
+  cerenovus: ["SV-4a: the choice (a player, then a Townsfolk or an Outsider), the MAD Effect with the character on it, the reveal row and the official MAD token are guided. Whether the mad player tried is always the Storyteller's: the app never executes anyone by itself. SV-4b: the mad player's seat menu offers Execute while the MAD applies (a Day execution through the ordinary command; at night an ordinary death). A drunk or poisoned Cerenovus makes the choice and nobody goes mad. MAD applies only while the Cerenovus functions (a Vigormortis-kept one still does). SV-4d: the Cerenovus is on the game-ending list, so a mad Saint's execution is captured like any Saint's."],
+  mutant: ["Official wiki: the Storyteller may execute a madness-breaking Mutant at any time, even at night. SV-4b: the seat menu's Execute does it (a Day execution through the ordinary command, with the additional-execution question). The app records executions only in Day, so at night Execute is an ordinary death that leaves the Day's execution free. The app still never decides that the Mutant broke madness."],
 };
 
 /** Why a "partial" character is partial, where the reason is NOT "a general support piece". Plain statements, no UI. */

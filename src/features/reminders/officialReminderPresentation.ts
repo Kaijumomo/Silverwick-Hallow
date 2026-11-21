@@ -11,6 +11,8 @@ export type OfficialEffectToken = {
   label: string;
   instances: EffectRecord[];
   detail: string;
+  /** SV-4a: the character(s) a MAD token says the player is mad about being ("Sage"), or "" for every other token. */
+  about: string;
 };
 
 // Presentation mappings only. A matching word in a notation record never
@@ -33,8 +35,12 @@ const EFFECT_TOKENS = [
   { source: "sweetheart", type: "drunk", label: "Drunk" },
   // SV-2a: the Snake Charmer's permanent poison on the old Demon.
   { source: "snakecharmer", type: "poisoned", label: "Poisoned" },
+  // SV-4a: the Cerenovus's MAD. Its detail line names the character the player is mad about being.
+  { source: "cerenovus", type: "mad", label: "Mad" },
   // This existing Storyteller fact deliberately has no functioning source.
   { source: "fortuneteller", type: "fortuneTellerRedHerring", label: "Red Herring" },
+  // SV-4c: the Evil Twin's TWIN reminder on the other Twin. A source-free Storyteller fact (the Red Herring's pattern): it names the Evil Twin.
+  { source: "eviltwin", type: "twin", label: "Twin" },
 ] as const;
 
 export function officialEffectPresentation(player: Pick<STPlayerRecord, "effects">, context?: { query: RulesQuery; target: ParticipantBinding }): {
@@ -46,7 +52,7 @@ export function officialEffectPresentation(player: Pick<STPlayerRecord, "effects
   for (const effect of player.effects) {
     if (!isEffectActive(effect) && !(context && effect.state === "suppressed")) continue;
     const mapping = EFFECT_TOKENS.find(item => item.type === effect.type &&
-      (item.type === "fortuneTellerRedHerring" || item.source === effect.sourceCharacter));
+      (item.type === "fortuneTellerRedHerring" || item.type === "twin" || item.source === effect.sourceCharacter));
     if (!mapping) { remaining.push(effect); continue; }
     const sourceRole = context?.query.roleOf(mapping.source);
     if (context && (!sourceRole || !isCanonicalRole(sourceRole))) { remaining.push(effect); continue; }
@@ -54,7 +60,7 @@ export function officialEffectPresentation(player: Pick<STPlayerRecord, "effects
     // Keep the catalogue as the authority for the official wording.
     if (!role.reminders?.includes(mapping.label)) { remaining.push(effect); continue; }
     const key = `${mapping.source}:${mapping.type}`;
-    const token = tokens.get(key) ?? { key, role, label: mapping.label, instances: [], detail: "" };
+    const token = tokens.get(key) ?? { key, role, label: mapping.label, instances: [], detail: "", about: "" };
     token.instances.push(effect);
     tokens.set(key, token);
   }
@@ -62,12 +68,26 @@ export function officialEffectPresentation(player: Pick<STPlayerRecord, "effects
     const states = token.instances.map(effect => context ? context.query.effectApplies(context.target, effect) : null);
     const active = states.filter(state => state?.known && state.value).length;
     const uncertain = states.some(state => state && !state.known);
-    token.detail = !context ? token.label : `${token.label}: ${uncertain ? "Storyteller decision required"
+    const status = uncertain ? "Storyteller decision required"
       : active === token.instances.length ? "Currently affecting this player"
       : active ? `${active} of ${token.instances.length} currently affecting this player`
-      : "Not currently affecting this player"}`;
+      : "Not currently affecting this player";
+    // SV-4a: the MAD token reads "Mad about being the Sage" (the character rides on the Effect, never on the official token).
+    token.about = context ? madCharacters(token.instances, context.query) : "";
+    token.detail = !context ? token.label : token.about ? `${token.label} about being the ${token.about}${active === token.instances.length ? "" : `: ${status}`}` : `${token.label}: ${status}`;
   }
   return { tokens: [...tokens.values()], fallback: effectIndicators({ effects: remaining }) };
+}
+
+/** The characters the MAD Effects of one token say the player is mad about being ("Sage", "Sage or Chef"), or "". */
+function madCharacters(instances: readonly EffectRecord[], query: RulesQuery): string {
+  const names = instances.flatMap(effect => {
+    const character = effect.type === "mad" ? effect.parameters?.character : undefined;
+    const roleId = character?.kind === "role" ? character.roleIds[0] : undefined;
+    const name = roleId ? query.roleOf(roleId)?.name : undefined;
+    return name ? [name] : [];
+  });
+  return [...new Set(names)].join(" or ");
 }
 
 /** Legacy notation stays stored and editable, but the authoritative fact has
@@ -75,7 +95,9 @@ export function officialEffectPresentation(player: Pick<STPlayerRecord, "effects
  * notation again; no label ever creates, moves or deletes an Effect. */
 export function redHerringNotationCovered(reminder: { sourceCharacter?: string; label: string }, tokens: readonly OfficialEffectToken[]): boolean {
   return reminder.sourceCharacter === "fortuneteller" && reminder.label === "Red Herring" &&
-    tokens.some(token => token.key === "fortuneteller:fortuneTellerRedHerring");
+    tokens.some(token => token.key === "fortuneteller:fortuneTellerRedHerring") ||
+    // SV-4c: a hand-placed TWIN notation yields to the authoritative TWIN token the same way.
+    reminder.sourceCharacter === "eviltwin" && reminder.label === "Twin" && tokens.some(token => token.key === "eviltwin:twin");
 }
 
 /** Exact publisher label/source lookup for existing inert notation. */

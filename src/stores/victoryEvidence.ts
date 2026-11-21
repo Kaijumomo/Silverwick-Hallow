@@ -10,7 +10,7 @@ import type { GameRuleFactRecord, STPlayerRecord, StorytellerLobbyRecord } from 
 
 export type VictoryEvidenceResult = { ok: true; game: StorytellerLobbyRecord } | { ok: false; message: string };
 const accepted = (game: StorytellerLobbyRecord): VictoryEvidenceResult => ({ ok: true, game });
-const supportedRoles = new Set(["washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "monk", "ravenkeeper", "virgin", "slayer", "soldier", "mayor", "butler", "drunk", "recluse", "saint", "poisoner", "spy", "scarletwoman", "baron", "imp", "bureaucrat", "thief", "gunslinger", "scapegoat", "beggar"]);
+const supportedRoles = new Set(["washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "monk", "ravenkeeper", "virgin", "slayer", "soldier", "mayor", "butler", "drunk", "recluse", "saint", "poisoner", "spy", "scarletwoman", "baron", "imp", "bureaucrat", "thief", "gunslinger", "scapegoat", "beggar", "cerenovus", "eviltwin"]);
 
 /** A finite reviewed interaction envelope, independent of script name/id. The
  * broader ability coverage list also contains non-TB game-ending abilities;

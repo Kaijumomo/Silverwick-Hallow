@@ -12,8 +12,9 @@ import { createRulesQuery } from "@/stores/rulesQuery";
 import { isCanonicalRole } from "@/data/canonical";
 import { observerRegistrationDecision, passiveRegistrationOptions, TEA_LADY_REGISTRATION_FACTS } from "@/abilities/characters/passiveRules";
 import { redHerringSetup } from "@/rules/setup/redHerringSetup";
+import { twinSetup } from "@/rules/setup/twinSetup";
 import { FIRST_INFORMATION_CHARACTERS, informationCategory } from "@/features/setup/FirstInformationPreparation";
-import type { SetupContext } from "@/rules/setup/setupContext";
+import { selectSetupContext, type SetupContext } from "@/rules/setup/setupContext";
 import type { PlayerId, PreparedInformationCharacter, RoleDef, Script, STPlayerRecord, StorytellerLobbyRecord } from "@/stores/types";
 import { flash, useV6Ui } from "../v6Store";
 
@@ -112,6 +113,21 @@ export function buildPrepTasks(game: StorytellerLobbyRecord, script: Script | un
       open: herring.status === "missing", actLabel: "Choose",
       act: () => startPrep("redherring", "fortuneteller"),
       undo: () => flash("The Red Herring is fixed once chosen. Use Undo to take it back."),
+    });
+  }
+
+  // SV-4c: the Evil Twin's Good Twin ("While setting up the game, choose a Good Twin by marking any good character with the TWIN reminder").
+  const twin = twinSetup(context);
+  if (twin.required) {
+    const evil = twin.evilTwin ? game.players[twin.evilTwin.playerId] : undefined;
+    const good = twin.target ? game.players[twin.target.playerId] : undefined;
+    tasks.push({
+      key: "goodtwin", roleId: "eviltwin", roleName: nameOf("eviltwin"), who: evil ? seatName(game, evil.id) : "", img: iconOf("eviltwin"), type: "minion",
+      done: twin.status === "ready", req: true,
+      sub: twin.status === "ready" ? `Good Twin: ${good?.name || "selected player"}` : twin.status === "missing" ? "Required · choose a good player as the Good Twin" : `Required · ${twin.message}`,
+      open: twin.status === "missing", actLabel: "Choose",
+      act: () => startPrep("goodtwin", "eviltwin"),
+      undo: () => flash("The Good Twin is fixed once chosen. Use Undo to take it back."),
     });
   }
 
@@ -290,6 +306,15 @@ export function commitPrep(): void {
     ui().set({ prepEdit: null });
     return;
   }
+  if (edit.key === "goodtwin") {
+    if (!edit.a) { flash("Tap a good player for the Good Twin."); return; }
+    const target = game.players[edit.a];
+    if (!target?.participantId) return;
+    const result = state.setSetupGoodTwin({ playerId: target.id, participantId: target.participantId }, captureCharacterActionContext());
+    if (!result.ok) { flash(result.message ?? "The setup changed. Choose again."); return; }
+    ui().set({ prepEdit: null });
+    return;
+  }
   if (edit.key.startsWith("fakeherring:")) {
     const holderOwner = game.players[edit.key.slice("fakeherring:".length)];
     const target = edit.a ? game.players[edit.a] : undefined;
@@ -327,6 +352,12 @@ export function prepTap(id: PlayerId): boolean {
   if (!tapped || tapped.isEmpty) return true;
   if (edit.key === "redherring") {
     if (tapped.actualAlignment !== "good") { flash("Choose a good player for the red herring."); return true; }
+    ui().set({ prepEdit: { ...edit, a: id } });
+    return true;
+  }
+  if (edit.key === "goodtwin") {
+    const eligible = twinSetup(selectSetupContext(game, scriptOf(game) ?? undefined)).eligible;
+    if (!eligible.some((player) => player.playerId === id)) { flash("Choose a good player, who is not the Evil Twin or a Traveller, for the Good Twin."); return true; }
     ui().set({ prepEdit: { ...edit, a: id } });
     return true;
   }
