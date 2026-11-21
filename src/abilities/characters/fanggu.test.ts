@@ -97,7 +97,7 @@ describe("Fang Gu -- the first Outsider it kills", () => {
     expect(once(next)).toEqual({ known: true, value: true });
     expect(step(next, "p5", "fanggu")).toBe("skipped");
     expect(plan(next, request(next, "p5", "fanggu", { [FANG_GU_TARGET]: pick(next, "p2") }))).toMatchObject({ ok: false, code: "notApplicable" });
-    expect(gameRuleFactDefinition(FANG_GU_ONCE)).toMatchObject({ label: "ONCE", expiry: "none", applicablePhases: ["night"] });
+    expect(gameRuleFactDefinition(FANG_GU_ONCE)).toMatchObject({ label: "ONCE", expiry: "none", applicablePhases: ["night", "day"] });
   });
 
   it("ONCE stays: the new Fang Gu's Outsider kill is an ordinary death, and the row says ONCE is recorded", () => {

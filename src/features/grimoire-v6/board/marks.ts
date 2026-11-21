@@ -11,6 +11,7 @@ import { isDeathEvent } from "@/stores/lifeEvents";
 import { teaLadyCovers } from "@/abilities/characters/passiveRules";
 import { haircutsTonight } from "@/abilities/characters/barber";
 import { isCanonicalRole } from "@/data/canonical";
+import { ruleFactForReminder } from "@/stores/reminderRuleFacts";
 import {
   firstInformationReminderGroups, officialEffectPresentation, officialNotationRole, redHerringNotationCovered,
   type OfficialEffectToken,
@@ -225,7 +226,14 @@ export function removeMark(playerId: PlayerId, participantId: string | undefined
     const result = current.resolveVoting({ kind: "removeModifier", modifierId, code: game.code, day: game.day, expectedRevision: voting.revision }, context);
     return result.ok ? { ok: true } : { ok: false, message: result.message };
   }
-  const result = current.resolveReminders({ intents: [{ kind: "remove", target, reminderId: intended.id }] }, context);
+  const remove = { intents: [{ kind: "remove" as const, target, reminderId: intended.id }] };
+  // SV-2c: a token that records a rule (the Fang Gu's ONCE) clears it when the last such token leaves the board.
+  const fact = ruleFactForReminder(intended.sourceCharacter, intended.label);
+  const another = !!fact && Object.values(game.players).some((other) => !other.isEmpty && other.reminders.some((reminder) =>
+    reminder.id !== intended.id && ruleFactForReminder(reminder.sourceCharacter, reminder.label) === fact));
+  const result = fact && !another
+    ? current.resolveRuleReminder({ notation: remove, facts: { intents: [{ kind: "remove", type: fact }] } }, context)
+    : current.resolveReminders(remove, context);
   return result.ok ? { ok: true } : { ok: false, message: result.message };
 }
 
@@ -253,10 +261,15 @@ export function reminderPalette(env: MarkEnv): { inPlay: PaletteEntry[]; all: Pa
   return { all, inPlay: all.filter((entry) => present.has(entry.role.id) || chosen.has(entry.role.id)) };
 }
 
-/** Places one reminder (notation only) with the source character that owns its artwork. */
+/** Places one reminder with the source character that owns its artwork: notation only, except a token that records a rule (reminderRuleFacts.ts). */
 export function placeReminder(playerId: PlayerId, participantId: string | undefined, entry: PaletteEntry): MarkResult {
   const ctx = bound(playerId, participantId);
   if (!ctx) return { ok: false, message: "The player changed. Reopen their details before continuing." };
-  const result = ctx.current.resolveReminders({ intents: [{ kind: "place", target: ctx.target, reminder: { label: entry.label, sourceCharacter: entry.role.id } }] }, captureVotingContext());
+  const place = { intents: [{ kind: "place" as const, target: ctx.target, reminder: { label: entry.label, sourceCharacter: entry.role.id } }] };
+  // SV-2c (PO decision 2026-11-21): a token that records a rule (the Fang Gu's ONCE) records it in the same commit.
+  const fact = ruleFactForReminder(entry.role.id, entry.label);
+  const result = fact
+    ? ctx.current.resolveRuleReminder({ notation: place, facts: { intents: [{ kind: "apply", type: fact }] } }, captureVotingContext())
+    : ctx.current.resolveReminders(place, captureVotingContext());
   return result.ok ? { ok: true } : { ok: false, message: result.message };
 }

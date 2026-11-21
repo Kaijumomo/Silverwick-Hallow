@@ -107,7 +107,8 @@ export const GAME_RULE_FACT_REGISTRY: ReadonlyMap<GameRuleFactType, GameRuleFact
   [FANG_GU_ONCE, {
     type: FANG_GU_ONCE, label: "ONCE",
     description: "A Fang Gu has taken an Outsider's place; it cannot happen again this game.",
-    applicablePhases: ["night"], expiry: "none",
+    // Night: the jump. Day too (SV-2c): the Storyteller may place the ONCE token by hand at any time, and it records this fact.
+    applicablePhases: ["night", "day"], expiry: "none",
   }],
 ]);
 
