@@ -8,7 +8,8 @@ import { CANONICAL_ABILITY_SEMANTICS } from "@/abilities/semantics";
 import { AbilityWorkspace } from "@/features/abilities/AbilityWorkspace";
 import { MAX_NIGHT_STEP_NOTES } from "@/stores/schemas";
 import { TextLimit } from "@/components/TextLimit";
-import { useStorytellerStore } from "@/stores/storytellerStore";
+import { captureCharacterActionContext, useStorytellerStore } from "@/stores/storytellerStore";
+import { useTargetPicker } from "@/features/abilities/abilityUi";
 import { BureaucratAction } from "@/features/voting/BureaucratAction";
 import { ButlerNightAction } from "@/features/nightOrder/ButlerNightAction";
 import { NightInformationAction, type NightInformationHandle, type RevealHost } from "@/features/nightOrder/NightInformationAction";
@@ -17,7 +18,7 @@ import { SetupInformationAction } from "@/features/nightOrder/SetupInformationAc
 import { CUSTOM_STEP_PREFIX, nightStepName } from "@/features/nightOrder/nightWork";
 import { TokenInformationAction } from "@/features/info/TokenInformationAction";
 import type { V6Ctx } from "../ctx";
-import { useV6Ui } from "../v6Store";
+import { flash, useV6Ui } from "../v6Store";
 import { presentCharacter, presentCharacters, presentMessage, presentSetup, report } from "../info/actions";
 import { INFO_TOKENS } from "../info/tokens";
 import { guardGesture } from "./gestureGuard";
@@ -187,8 +188,21 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
       } else if (!done && engine.bureaucrat && engine.actor?.participantId) {
         rows.push(<BureaucratAction key={`${engine.actor.participantId}:${current.stepKey}`} source={{ playerId: engine.actor.id, participantId: engine.actor.participantId }}
           visible={engine.visible} completeStep={{ day: game.day, stepKey: current.stepKey }} onResolved={engine.finish} />);
-      } else if (!done && !engine.manual && !engine.canTarget && !engine.tapRuling) {
+      } else if (!done && !engine.manual && !engine.canTarget && !engine.tapRuling && !engine.question) {
+        // T30 cleanup: not while the Godfather's own question is open (it is answered right there, with no further step).
         rows.push(<button key="continue" type="button" className="btn btn-gold" onClick={() => engine.openWorkspace()}>Continue action</button>);
+      }
+      // T30 cleanup (PO 2026-11-21): the Professor may shake their head instead, exactly as the Seamstress does: it closes tonight's step only and uses nothing.
+      if (current.effectiveRoleId === "professor" && !current.gainedFrom && !done && !engine.skipReason && engine.canTarget) {
+        rows.push(<div key="not-tonight" className="gv-choice-actions" role="group" aria-label="The Professor's choice">
+          <button className="gv-choice-pill" type="button" onClick={() => {
+            if (!engine.visible) return;
+            const result = useStorytellerStore.getState().setNightStepStatus(game.day, current.stepKey, "done", captureCharacterActionContext());
+            if (!result.ok) { flash(result.message); return; }
+            useTargetPicker.getState().cancel();
+            engine.finish(useStorytellerStore.getState().game!);
+          }}>Not Tonight</button>
+        </div>);
       }
       // SV-4a: the Cerenovus's choice is tapped on the board; the card shows what was chosen and the Wake row with the two reveal tokens.
       if (current.effectiveRoleId === "cerenovus" && !current.gainedFrom && engine.ability?.kind === "guided" && (engine.eligible || done)) {
