@@ -40,7 +40,8 @@ it("tapping the first Outsider: the Fang Gu dies, the Outsider becomes the evil 
   expect(game().gameRuleFacts.map((f) => f.type)).toEqual(["fangGuOnce"]);
   expect(game().players.p4!.reminders.map((r) => [r.label, r.sourceCharacter])).toEqual([["Once", "fanggu"]]);
   expect(screen.getByRole("button", { name: "Wake Player 4: You Are" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "You Are Evil" })).toBeInTheDocument();
+  expect(within(screen.getByRole("group", { name: "Wake Player 4" })).getAllByRole("button").map((b) => b.getAttribute("aria-label")))
+    .toEqual(["Wake Player 4: You Are", "Wake Player 4: You Are Evil"]);
   expect(store.getState().undoStack).toHaveLength(1);
   act(() => { store.getState().undo(); });
   expect(game().players.p4!.actualRole).toBe("mutant");
@@ -55,6 +56,10 @@ it("a Recluse: a compact Yes or No on the Night card (no workspace); Yes jumps, 
   tap("p2");
   expect(game().players.p2!.alive).toBe(true);
   expect(screen.getByText("Does Player 2 register as an Outsider?")).toBeInTheDocument();
+  const prompt = screen.getByText("Does Player 2 register as an Outsider?").closest(".gv-choice-prompt") as HTMLElement;
+  expect(within(prompt).getByRole("button", { name: "Choose again" })).toHaveClass("is-small");
+  expect(document.querySelector(".gv-choice-note")).toBeNull();
+  expect(screen.queryByText(/becomes the Fang Gu instead/)).toBeNull();
   expect(screen.queryByText("On Table")).toBeNull();
   expect(screen.queryByRole("button", { name: "Continue action" })).toBeNull();
   fireEvent.click(within(screen.getByRole("group", { name: "Your ruling" })).getByRole("button", { name: "No" }));

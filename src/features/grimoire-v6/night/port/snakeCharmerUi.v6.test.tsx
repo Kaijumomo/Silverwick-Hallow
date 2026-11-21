@@ -7,6 +7,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { ModernNightPanel } from "@/test/nightTestGuide";
 import { useStorytellerStore as store } from "@/stores/storytellerStore";
 import { useShellStore } from "@/stores/shellStore";
+import { useV6Ui } from "@/features/grimoire-v6/v6Store";
 import { usePrivacyStore } from "@/stores/privacyStore";
 import { useSessionRuntime } from "@/firebase/storytellerSync";
 import { participantStepKey } from "@/stores/nightProgress";
@@ -57,6 +58,11 @@ it("a Recluse: a compact Yes or No on the Night card (no workspace); nothing cha
   expect(screen.queryByRole("radiogroup")).toBeNull();
   expect(useTargetPicker.getState().active).toBeNull();
   expect(screen.queryByRole("button", { name: "Continue action" })).toBeNull();
+  // PO 2026-11-21: "Choose again" sits beside the question, and the card has no grey explanation line.
+  const prompt = screen.getByText("Does Player 4 register as a Demon?").closest(".gv-choice-prompt") as HTMLElement;
+  expect(within(prompt).getByRole("button", { name: "Choose again" })).toHaveClass("is-small");
+  expect(document.querySelector(".gv-choice-note")).toBeNull();
+  expect(screen.queryByText(/swaps characters and alignments/)).toBeNull();
   // Choose again: the tap is dropped and the board asks again.
   fireEvent.click(screen.getByRole("button", { name: "Choose again" }));
   expect(screen.queryByText("Does Player 4 register as a Demon?")).toBeNull();
@@ -78,10 +84,16 @@ it("after a swap: YOU ARE for the new Demon and the new Snake Charmer, each with
   const counter = () => screen.getByText(/^\d+ \/ \d+$/).textContent;
   const before = counter();
   tap("p1");
-  expect(screen.getByRole("button", { name: "Wake Player 0: You Are" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Wake Player 1: You Are" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "You Are Evil" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "You Are Good" })).toBeInTheDocument();
+  // PO 2026-11-21: one row per player, the YOU ARE character token and the alignment token side by side.
+  const newDemon = screen.getByRole("group", { name: "Wake Player 0" });
+  const newCharmer = screen.getByRole("group", { name: "Wake Player 1" });
+  expect(within(newDemon).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Wake Player 0: You Are", "Wake Player 0: You Are Evil"]);
+  expect(within(newCharmer).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Wake Player 1: You Are", "Wake Player 1: You Are Good"]);
+  // Each token opens the existing player-safe reveal, unchanged.
+  fireEvent.click(within(newDemon).getByRole("button", { name: "Wake Player 0: You Are" }));
+  expect(useV6Ui.getState().show).toMatchObject({ kind: "char", title: "You Are", roleId: game().players.p0!.actualRole });
+  fireEvent.click(within(newDemon).getByRole("button", { name: "Wake Player 0: You Are Evil" }));
+  expect(useV6Ui.getState().show).toMatchObject({ kind: "text", title: "You Are Evil" });
   expect(counter()).toBe(before);
   act(() => { store.getState().undo(); });
   expect(screen.queryByRole("button", { name: /^Wake Player 0: You Are/ })).toBeNull();

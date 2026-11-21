@@ -454,3 +454,80 @@
 .gv-night-custom .gvn-bluff.set { border-style: solid; border-color: rgba(232, 88, 74, 0.5); color: #f3e8d2; }
 .gv-night-custom .gvn-bluff.random { border-style: solid; background: rgba(232, 88, 74, 0.1); }
 .gv-night-custom .gvn-bluff:hover { border-color: rgba(232, 88, 74, 0.7); }
+
+/* ── PO review 2026-11-21 (SV-2c): one "Wake" row per player who changed character, the YOU ARE character token and the
+   YOU ARE GOOD/EVIL token side by side. The row and token wells are the "Show" row's own (above); the thumbs are the Info
+   tokens' own icons and colours. ──────────────────────────────────────────────────────────────────────────────────────── */
+.gv-night-custom .gv-you-are {
+  display: grid;
+  grid-template-columns: minmax(84px, .8fr) minmax(0, 1.25fr) minmax(0, 1.25fr);
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--gvn-line);
+  background: var(--gvn-field);
+  animation: swRise .3s ease-out;
+}
+.gv-night-custom .gv-you-are-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-left: 6px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--gvn-text);
+  overflow-wrap: anywhere;
+}
+.gv-night-custom .gv-you-are-name small,
+.gv-night-custom .gv-you-are-text small {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--gvn-faint);
+}
+.gv-night-custom .gv-you-are-name small { font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #ff8a78; }
+.gv-night-custom .gv-you-are-token {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 52px;
+  padding: 5px 12px 5px 5px;
+  border-radius: 10px;
+  border: 1px solid var(--gvn-line);
+  background: rgba(176, 186, 204, .05);
+  color: var(--gvn-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .2s, background .2s;
+}
+.gv-night-custom .gv-you-are-token:hover { border-color: rgba(232, 88, 74, .6); background: rgba(232, 88, 74, .08); }
+.gv-night-custom .gv-you-are-token:focus-visible { outline: 2px solid var(--gvn-hot); outline-offset: 2px; }
+.gv-night-custom .gv-you-are-disc {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 30%, #f1e6c9, #b09566);
+  box-shadow: 0 0 0 2px #14151d, 0 0 0 3px rgba(232, 88, 74, .5);
+}
+.gv-night-custom .gv-you-are-disc img { width: 80%; height: 80%; object-fit: contain; }
+.gv-night-custom .gv-you-are-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(176, 186, 204, .1);
+}
+.gv-night-custom .gv-you-are-mark svg { width: 20px; height: 20px; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.gv-night-custom .gv-you-are-token.is-good .gv-you-are-mark svg { stroke: #86b7d4; }
+.gv-night-custom .gv-you-are-token.is-evil .gv-you-are-mark svg { stroke: #e88a7a; }
+.gv-night-custom .gv-you-are-text { display: flex; flex-direction: column; min-width: 0; }
+.gv-night-custom .gv-you-are-text strong { font-size: 14px; font-weight: 700; line-height: 1.25; }
+.gv-night-custom .gv-you-are-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

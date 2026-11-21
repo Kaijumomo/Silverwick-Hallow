@@ -19,6 +19,7 @@ import { INFO_TOKENS } from "../info/tokens";
 import { guardGesture } from "./gestureGuard";
 import { newImpToWake } from "./newImp";
 import { charactersToReveal } from "./newCharacters";
+import { YouAreRow } from "./YouAreRow";
 import { ChoicePrompt, ChoiceSlot, ChoiceSwapIcon } from "../choice/ChoiceParts";
 import { iconUrlFor } from "@/data/iconUrl";
 import type { NightEngine } from "./useNightEngine";
@@ -142,15 +143,12 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
       const demon = held.kind === "demon";
       rows.push(<div key="tap-ruling" className="gv-choice">
         <hr className="gv-choice-divider" />
-        <ChoicePrompt text={`Does ${nameOf(held.target.playerId)} register as ${demon ? "a Demon" : "an Outsider"}?`} />
-        <p className="gv-choice-note">{demon ? "A chosen Demon swaps characters and alignments with the Snake Charmer." : "The first Outsider the Fang Gu kills becomes the Fang Gu instead."}</p>
+        <ChoicePrompt text={`Does ${nameOf(held.target.playerId)} register as ${demon ? "a Demon" : "an Outsider"}?`}
+          action={<button className="gv-choice-pill is-small" type="button" onClick={() => engine.answerTapRuling(null)}>Choose again</button>} />
         <div className="gv-choice-slots">{demon ? <>{slotOf(current.playerId)}<ChoiceSwapIcon />{slotOf(held.target.playerId)}</> : slotOf(held.target.playerId)}</div>
         <div className="gv-choice-actions" role="group" aria-label="Your ruling">
           <button className="gv-choice-answer" type="button" onClick={() => engine.answerTapRuling(true)}>Yes</button>
           <button className="gv-choice-answer" type="button" onClick={() => engine.answerTapRuling(false)}>No</button>
-        </div>
-        <div className="gv-choice-actions">
-          <button className="gv-choice-pill" type="button" onClick={() => engine.answerTapRuling(null)}>Choose again</button>
         </div>
       </div>);
     }
@@ -195,17 +193,17 @@ export function renderNightCustom(engine: NightEngine, ctx: V6Ctx, information: 
           onClick={() => report(presentCharacter("You Are", "imp"))} />);
       }
       // PO review 2026-11-21 (SV-2c): after a Snake Charmer swap or a Fang Gu jump, wake each changed player and show YOU ARE,
-      // their new character, then their alignment (the wiki's How to Run), through the same player-safe reveal as the new Imp.
+      // their new character, then their alignment (the wiki's How to Run), through the same player-safe reveals as the new Imp.
       if ((current.effectiveRoleId === "snakecharmer" || current.effectiveRoleId === "fanggu") && !current.isDeceived) {
         for (const woken of charactersToReveal(game, current.effectiveRoleId)) {
           const role = registry.get(woken.actualRole ?? "");
           const name = woken.name || `Seat ${woken.seat + 1}`;
           const alignment = woken.actualAlignment === "evil" ? "evil" : "good";
           if (!role) continue;
-          rows.push(<TokenInformationAction key={`you-are:${woken.id}`} role={role} label={`Wake ${name}: You Are`}
-            onClick={() => report(presentCharacter("You Are", role.id))} />);
-          rows.push(<TokenInformationAction key={`you-are-alignment:${woken.id}`} compact label={alignment === "evil" ? "You Are Evil" : "You Are Good"}
-            onClick={() => report(presentMessage(alignment, alignment === "evil" ? "You Are Evil" : "You Are Good"))} />);
+          // PO 2026-11-21: one row per player, the two tokens side by side; each opens the same player-safe reveal as before.
+          rows.push(<YouAreRow key={`you-are:${woken.id}`} name={name} role={role} alignment={alignment}
+            onCharacter={() => report(presentCharacter("You Are", role.id))}
+            onAlignment={() => report(presentMessage(alignment, alignment === "evil" ? "You Are Evil" : "You Are Good"))} />);
         }
       }
       // PO review C15: no "Give information" form in the Night card; the Storyteller tells the player in person.
